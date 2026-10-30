@@ -277,8 +277,35 @@ void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& mul
     multipliers.push_back(new AnubarakProtectSpikeKiteMultiplier(botAI));
 }
 
-// Lust waits for phase 3, where Leeching Swarm turns the fight into a race
+float AnubarakSwarmHealMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    auto cached = heals.find(action);
+    if (cached == heals.end())
+    {
+        bool const heal =
+            dynamic_cast<CastHealingSpellAction*>(action) || dynamic_cast<ReachPartyMemberToHealAction*>(action);
+        cached = heals.emplace(action, heal).first;
+    }
+
+    if (!cached->second || !AnubarakSwarmHealing(botAI))
+        return 1.0f;
+
+    if (dynamic_cast<CastAoeHealSpellAction*>(action))
+        return 0.0f;
+
+    Unit* target = action->GetTarget();
+    if (!target || target == bot)
+        return 1.0f;
+
+    return AnubarakSwarmHealWasted(target->ToPlayer()) ? 0.0f : 1.0f;
+}
+
+// Lust waits for phase 3, where Leeching Swarm turns the fight into a race; heroic holds the rest of the
+// burst for it too
 RaidBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI)
 {
-    return {true, GetAnubarakPhase(botAI) == AnubarakPhase::Swarm};
+    return {!AnubarakBurstHeld(botAI), AnubarakLustOpen(botAI)};
 }

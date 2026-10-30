@@ -1,6 +1,7 @@
 #ifndef PLAYERBOTS_RAID_TOCMULTIPLIERS_ANUBARAK_H
 #define PLAYERBOTS_RAID_TOCMULTIPLIERS_ANUBARAK_H
 
+#include <unordered_map>
 #include <vector>
 
 #include "Multiplier.h"
@@ -64,6 +65,18 @@ class AnubarakBurrowerThreatCapMultiplier : public Multiplier
 public:
     AnubarakBurrowerThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower threat cap") {}
     float GetValue(Action* action) override;
+};
+
+// Heroic phase 3: no heal on another player that only feeds Leeching Swarm, a non-tank without
+// Penetrating Cold above the floor, and no area heal. Self heals pass. Wired from the definition.
+class AnubarakSwarmHealMultiplier : public Multiplier
+{
+public:
+    AnubarakSwarmHealMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak swarm heal") {}
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, bool> heals;
 };
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

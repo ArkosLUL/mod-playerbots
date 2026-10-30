@@ -177,6 +177,20 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakSwarmHealUrgentTrigger : public Trigger
+{
+public:
+    AnubarakSwarmHealUrgentTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak swarm heal urgent") {}
+    bool IsActive() override;
+};
+
+class AnubarakSwarmHealTrigger : public Trigger
+{
+public:
+    AnubarakSwarmHealTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak swarm heal") {}
+    bool IsActive() override;
+};
+
 class ToCAnubarakTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -230,6 +244,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_engaged_by_main_tank;
         creators["anubarak penetrating cold on raid"] =
             &ToCAnubarakTriggerContext::anubarak_penetrating_cold_on_raid;
+        creators["anubarak swarm heal urgent"] =
+            &ToCAnubarakTriggerContext::anubarak_swarm_heal_urgent;
+        creators["anubarak swarm heal"] =
+            &ToCAnubarakTriggerContext::anubarak_swarm_heal;
     }
 
 private:
@@ -327,6 +345,14 @@ private:
 
     static Trigger* anubarak_penetrating_cold_on_raid(PlayerbotAI* botAI) {
         return new AnubarakPenetratingColdOnRaidTrigger(botAI);
+    }
+
+    static Trigger* anubarak_swarm_heal_urgent(PlayerbotAI* botAI) {
+        return new AnubarakSwarmHealUrgentTrigger(botAI);
+    }
+
+    static Trigger* anubarak_swarm_heal(PlayerbotAI* botAI) {
+        return new AnubarakSwarmHealTrigger(botAI);
     }
 };
 

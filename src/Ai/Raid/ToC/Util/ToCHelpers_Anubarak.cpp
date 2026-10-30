@@ -159,6 +159,22 @@ constexpr uint32 SPELL_SPIKE_SPEED3 = 65923;
 constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
 constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
 
+// Heroic phase 3: Leeching Swarm takes 30% of each player's current health a second and heals him by
+// what lands, so the raid sits low and the healing goes to the tanks and Penetrating Cold (user call,
+// 2026-10-30). A non-tank under the floor gets a small heal; at 10% the swarm alone takes about 7 s.
+constexpr float ANUBARAK_SWARM_TANK_URGENT_PCT = 50.0f;
+constexpr float ANUBARAK_SWARM_TANK_TOPOFF_PCT = 90.0f;
+constexpr float ANUBARAK_SWARM_COLD_URGENT_PCT = 30.0f;
+constexpr float ANUBARAK_SWARM_COLD_TOPOFF_PCT = 50.0f;
+constexpr float ANUBARAK_SWARM_FLOOR_PCT = 10.0f;
+constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
+// Heroic burst waits for phase 3 from this health (user call, 2026-10-30), unless at his pace since he
+// came up he would still be above 30% this close to the submerge
+constexpr float ANUBARAK_BURST_HOLD_PCT = 40.0f;
+constexpr float ANUBARAK_BURST_BEHIND_MARGIN_S = 5.0f;
+// Phase 3's lust and burst wait for the burrowers up at its start to die, at most this long
+constexpr uint32 ANUBARAK_SWARM_BURST_WAIT_MS = 15000;
+
 // The floor is about 60 yd round the room centre. The Web Door is 83 yd out, and anyone who never
 // landed is still up near z 395.
 constexpr float ANUBARAK_PIT_RADIUS = 60.0f;
@@ -557,8 +573,13 @@ struct AnubarakState
     uint32 lastEngagedMs = 0;
     uint32 pullMs = 0;
     bool swarm = false;
+    // Heroic phase 3 finishes the burrowers alive when the swarm latched and leaves newer ones to the side
+    // tanks (user call, 2026-10-30)
+    uint32 swarmMs = 0;
+    std::unordered_set<ObjectGuid> swarmBurrowers;
     // The pull or the last emerge: the script submerges him 80 s after either
     uint32 surfacedMs = 0;
+    float surfacedHpPct = 100.0f;
     uint32 submergedMs = 0;
     bool submergeSpotValid = false;
     Position submergeSpot;
@@ -865,6 +886,7 @@ bool InAnubarakPit(Player* player)
 void ClearPullLatches(AnubarakState& state)
 {
     state.swarm = false;
+    state.swarmBurrowers.clear();
     state.phaseValue = AnubarakPhase::None;
     state.phaseMemoValid = false;
     state.dutyMemoValid = false;
@@ -1588,7 +1610,13 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     else
     {
         if (!state->swarm && SwarmStarted(bot, boss))
+        {
             state->swarm = true;
+            state->swarmMs = now;
+            for (auto const& seen : state->exits)
+                if (Creature* burrower = ResolveCreature(bot, seen.first); burrower && burrower->IsAlive())
+                    state->swarmBurrowers.insert(seen.first);
+        }
 
         state->phaseValue = state->swarm ? AnubarakPhase::Swarm : AnubarakPhase::Surface;
     }
@@ -1597,6 +1625,7 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
         (before == AnubarakPhase::None || before == AnubarakPhase::Submerged))
     {
         state->surfacedMs = now;
+        state->surfacedHpPct = boss->GetHealthPct();
         state->submergeSpotValid = false;
         state->submergeDragStarted = false;
         state->kiteBudgetSet = false;
@@ -5018,6 +5047,12 @@ int8 DpsSide(Player* bot, AnubarakState& state)
     return it == state.dpsSide.end() ? -1 : static_cast<int8>(it->second);
 }
 
+// Heroic phase 3: one that came up after the swarm stays on its side tank and the DPS stay on him (guide)
+bool LeftToSideTank(Player* bot, AnubarakState const& state, Creature* burrower)
+{
+    return state.swarm && AnubarakHeroic(bot) && !state.swarmBurrowers.count(burrower->GetGUID());
+}
+
 // The side's burrower DPS focus, latched per side over the burrowers BurrowerOwners gives it: one off
 // Permafrost in its free time first, the one whose time ends first, then the lowest health. The latched
 // one stays while it qualifies and none of those outranks it.
@@ -5035,7 +5070,8 @@ Creature* SideFocus(Player* bot, AnubarakState& state, uint8 side)
     int32 bestFree = -1;
     for (Creature* burrower : ResolveAlive(bot, state.burrowers))
     {
-        if (!onSide(burrower) || !IsFocusableBurrower(bot, state, burrower, now))
+        if (!onSide(burrower) || LeftToSideTank(bot, state, burrower) ||
+            !IsFocusableBurrower(bot, state, burrower, now))
             continue;
 
         // Guid breaks a tie, so the pick never hangs on the sweep's order
@@ -5084,7 +5120,8 @@ Creature* LooseBurrowerNear(Player* bot, AnubarakState const& state)
     {
         Unit* victim = burrower->GetVictim();
         Player* player = victim ? victim->ToPlayer() : nullptr;
-        if (!player || IsAnubarakTankPlayer(player) || burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        if (!player || IsAnubarakTankPlayer(player) || burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ||
+            LeftToSideTank(bot, state, burrower))
             continue;
 
         float const dist = bot->GetExactDist2d(burrower);
@@ -5269,6 +5306,88 @@ AnubarakPhase GetAnubarakPhase(PlayerbotAI* botAI)
 bool AnubarakSubmerged(PlayerbotAI* botAI) { return GetAnubarakPhase(botAI) == AnubarakPhase::Submerged; }
 
 bool AnubarakLeechingSwarmActive(PlayerbotAI* botAI) { return GetAnubarakPhase(botAI) == AnubarakPhase::Swarm; }
+
+bool AnubarakSwarmHealing(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && AnubarakHeroic(bot) && AnubarakEngaged(botAI) && GetAnubarakPhase(botAI) == AnubarakPhase::Swarm;
+}
+
+// The burrowers up when the swarm began are dead, or the wait ran out
+static bool SwarmBurstOpen(Player* bot, AnubarakState const& state, uint32 now)
+{
+    if (getMSTimeDiff(state.swarmMs, now) >= ANUBARAK_SWARM_BURST_WAIT_MS)
+        return true;
+
+    return std::none_of(state.swarmBurrowers.begin(), state.swarmBurrowers.end(), [&](ObjectGuid const& guid)
+    {
+        Creature* burrower = ResolveCreature(bot, guid);
+        return burrower && burrower->IsAlive();
+    });
+}
+
+// At the pace he has lost health since he came up, he'd still be above 30% this close to the submerge
+static bool BurstBehind(AnubarakState const& state, Creature* boss, uint32 now)
+{
+    float const elapsedS = static_cast<float>(getMSTimeDiff(state.surfacedMs, now)) / IN_MILLISECONDS;
+    float const lost = state.surfacedHpPct - boss->GetHealthPct();
+    if (elapsedS <= 0.0f || lost <= 0.0f)
+        return true;
+
+    float const toThirtyS = (boss->GetHealthPct() - ANUBARAK_SWARM_HEALTH_PCT) * elapsedS / lost;
+    return toThirtyS > SurfacedLeftS(state, now) - ANUBARAK_BURST_BEHIND_MARGIN_S;
+}
+
+bool AnubarakBurstHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !AnubarakHeroic(bot) || !AnubarakEngaged(botAI))
+        return false;
+
+    AnubarakState* state = ReadPhase(botAI);
+    Creature* boss = state ? GetAnubarak(bot) : nullptr;
+    if (!boss)
+        return false;
+
+    uint32 const now = getMSTime();
+    char const* verdict = "open";
+    bool held = false;
+    switch (state->phaseValue)
+    {
+        case AnubarakPhase::Swarm:
+            held = !SwarmBurstOpen(bot, *state, now);
+            verdict = held ? "wait" : "open";
+            break;
+        case AnubarakPhase::Surface:
+            if (boss->GetHealthPct() <= ANUBARAK_BURST_HOLD_PCT)
+            {
+                held = !BurstBehind(*state, boss, now);
+                verdict = held ? "hold" : "behind";
+            }
+            break;
+        case AnubarakPhase::Submerged:
+            held = boss->GetHealthPct() <= ANUBARAK_BURST_HOLD_PCT;
+            verdict = held ? "hold" : "open";
+            break;
+        default:
+            break;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.burst", verdict);
+
+    return held;
+}
+
+bool AnubarakLustOpen(PlayerbotAI* botAI)
+{
+    AnubarakState* state = ReadPhase(botAI);
+    if (!state || state->phaseValue != AnubarakPhase::Swarm)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    return !AnubarakHeroic(bot) || SwarmBurstOpen(bot, *state, getMSTime());
+}
 
 Creature* GetPursuingSpike(Player* bot)
 {
@@ -6546,7 +6665,7 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     Group* group = bot->GetGroup();
-    if (!group)
+    if (!group || AnubarakSwarmHealing(botAI))
         return nullptr;
 
     uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
@@ -6570,6 +6689,76 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
     }
 
     return lowest;
+}
+
+// 0 the most urgent, SWARM_HEAL_TIERS for a heal that would only feed the swarm
+static constexpr uint8 SWARM_HEAL_TIERS = 5;
+
+static uint8 SwarmHealTier(Player* member, uint32 cold)
+{
+    float const pct = member->GetHealthPct();
+    bool const tank = IsAnubarakTankPlayer(member);
+    bool const carrier = member->HasAura(cold);
+    if (tank && pct < ANUBARAK_SWARM_TANK_URGENT_PCT)
+        return 0;
+    if (carrier && pct < ANUBARAK_SWARM_COLD_URGENT_PCT)
+        return 1;
+    if (!tank && pct < ANUBARAK_SWARM_FLOOR_PCT)
+        return 2;
+    if (tank && pct < ANUBARAK_SWARM_TANK_TOPOFF_PCT)
+        return 3;
+    if (carrier && pct < ANUBARAK_SWARM_COLD_TOPOFF_PCT)
+        return 4;
+
+    return SWARM_HEAL_TIERS;
+}
+
+AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
+{
+    AnubarakSwarmHealPick pick;
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !PlayerbotAI::IsHeal(bot) || !AnubarakSwarmHealing(botAI))
+        return pick;
+
+    uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+    float const range = botAI->GetRange("heal");
+    uint8 bestTier = SWARM_HEAL_TIERS;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (!member->IsAlive() || member->GetMapId() != bot->GetMapId() || !bot->IsWithinDistInMap(member, range))
+            return false;
+
+        uint8 const tier = SwarmHealTier(member, cold);
+        bool const lower = !pick.target || member->GetHealthPct() < pick.target->GetHealthPct();
+        if (tier > bestTier || (tier == bestTier && !lower))
+            return false;
+
+        if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
+            return false;
+
+        bestTier = tier;
+        pick.target = member;
+        return false;
+    });
+
+    char const* const labels[] = {"tank", "cold", "low", "tank", "cold"};
+    pick.urgent = bestTier <= 2;
+    pick.small = bestTier == 2;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.swarmheal", pick.target ? labels[bestTier] : "none");
+
+    return pick;
+}
+
+bool AnubarakSwarmHealWasted(Player* target)
+{
+    return target && !IsAnubarakTankPlayer(target) && target->GetHealthPct() >= ANUBARAK_SWARM_FLOOR_PCT &&
+           !target->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, target));
+}
+
+bool AnubarakSwarmShieldsTank(Player* bot, Player* target)
+{
+    return bot->getClass() == CLASS_PRIEST && IsAnubarakTankPlayer(target) && !target->HasAura(SPELL_WEAKENED_SOUL);
 }
 
 static AnubarakState* ResolveDuties(Player* bot)

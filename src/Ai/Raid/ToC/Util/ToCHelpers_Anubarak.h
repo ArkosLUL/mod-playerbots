@@ -317,6 +317,13 @@ bool AnubarakEngaged(PlayerbotAI* botAI);
 AnubarakPhase GetAnubarakPhase(PlayerbotAI* botAI);
 bool AnubarakSubmerged(PlayerbotAI* botAI);
 bool AnubarakLeechingSwarmActive(PlayerbotAI* botAI);
+// Heroic phase 3, where a heal on a healthy non-tank goes back to him through Leeching Swarm
+bool AnubarakSwarmHealing(PlayerbotAI* botAI);
+// Heroic burst other than lust waits for phase 3 from 40%, unless he's losing health too slowly to reach
+// 30% before he submerges; in phase 3 until the burrowers up at its start are dead, 15 s at most
+bool AnubarakBurstHeld(PlayerbotAI* botAI);
+// Phase 3; on heroic once those burrowers are dead too, 15 s at most
+bool AnubarakLustOpen(PlayerbotAI* botAI);
 
 // Unselectable, so only a grid search finds it
 Creature* GetPursuingSpike(Player* bot);
@@ -461,8 +468,23 @@ struct AnubarakRedirect
 // side tank owning a selectable burrower that isn't on it: one hunter a burrower by guid, and a rogue
 // only for the one it's hitting, within Tricks' 20 yd. False with no such duty.
 bool GetAnubarakRedirect(Player* bot, AnubarakRedirect& out);
-// Lowest health Penetrating Cold carrier under 90% this healer can reach
+// Lowest health Penetrating Cold carrier under 90% this healer can reach, none in heroic phase 3
 Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
+
+// Heroic phase 3's heal: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank under 10%,
+// then a tank under 90% and a carrier under 50%, the lowest in the first tier that has one. Urgent covers
+// the first three; small marks the non-tank, which gets no big hard cast.
+struct AnubarakSwarmHealPick
+{
+    Player* target = nullptr;
+    bool urgent = false;
+    bool small = false;
+};
+AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI);
+// A non-tank without Penetrating Cold at or above the floor: healing it only feeds the swarm
+bool AnubarakSwarmHealWasted(Player* target);
+// A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
+bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);

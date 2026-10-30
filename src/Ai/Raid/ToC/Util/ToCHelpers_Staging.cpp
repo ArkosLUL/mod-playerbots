@@ -77,6 +77,7 @@ constexpr Point2 LOC_ACIDMAW{549.93f, 171.5f};              // 3
 constexpr Point2 LOC_CENTER{563.672974f, 139.571f};         // 4
 // The intro walks him from LOC_CENTER to 10 yd south of it
 constexpr Point2 JARAXXUS_INTRO_SPOT{563.672974f, 129.571f};
+constexpr Point2 LOC_ANUBARAK{785.90f, 133.42f};            // 17, where he waits
 
 // FactionChampionLoc[10..19]: an Alliance raid's landing slots, mirrored about LOC_CENTER's x for Horde
 constexpr Point2 FACTION_CHAMPION_LANDING[] = {
@@ -125,12 +126,13 @@ constexpr float JARAXXUS_STACK_AHEAD = 20.0f;
 constexpr float JARAXXUS_STACK_RADIUS = 6.0f;
 constexpr float JARAXXUS_STACK_STEP = 3.0f;
 
-// Champions: detection_range 20 plus the level gap, centre to centre with no combat reach
-constexpr float CHAMPION_AGGRO = 23.0f;
-constexpr float CHAMPION_CLEARANCE = CHAMPION_AGGRO + STAGING_RELEASE_MARGIN;
+// Proximity pulls: detection_range 20 plus the level gap, centre to centre with no combat reach
+constexpr float PROXIMITY_AGGRO = 23.0f;
 // a parked tank drifts up to STAGING_UNPARK before it walks back
-constexpr float CHAMPION_TANK_CLEARANCE = CHAMPION_AGGRO + STAGING_UNPARK;
-constexpr float CHAMPION_TANK_SEARCH_STEP = 0.5f;
+constexpr float PROXIMITY_TANK_CLEARANCE = PROXIMITY_AGGRO + STAGING_UNPARK;
+constexpr float TANK_CLEARANCE_STEP = 0.5f;
+
+constexpr float CHAMPION_CLEARANCE = PROXIMITY_AGGRO + STAGING_RELEASE_MARGIN;
 constexpr float CHAMPION_TANK_SEARCH_MAX = 60.0f;
 constexpr float CHAMPION_SIDE_STEP = 3.0f;
 // the first engage sends every idle champion at its nearest player, so everyone else stands this much
@@ -508,12 +510,12 @@ float ChampionSideOffset(size_t index)
 Point2 ChampionTankStand(std::vector<Point2> const& landing, Point2 centroid, Vec2 inward, float side)
 {
     Point2 const base = Along(centroid, Rotate(inward, 90.0f), side);
-    int32 const steps = static_cast<int32>(CHAMPION_TANK_SEARCH_MAX / CHAMPION_TANK_SEARCH_STEP);
+    int32 const steps = static_cast<int32>(CHAMPION_TANK_SEARCH_MAX / TANK_CLEARANCE_STEP);
     for (int32 step = 0; step < steps; ++step)
     {
-        Point2 const stand = Along(base, inward, static_cast<float>(step) * CHAMPION_TANK_SEARCH_STEP);
+        Point2 const stand = Along(base, inward, static_cast<float>(step) * TANK_CLEARANCE_STEP);
         if (std::all_of(landing.begin(), landing.end(),
-                        [&](Point2 slot) { return Dist(stand, slot) >= CHAMPION_TANK_CLEARANCE; }))
+                        [&](Point2 slot) { return Dist(stand, slot) >= PROXIMITY_TANK_CLEARANCE; }))
             return stand;
     }
 
@@ -636,8 +638,24 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 {
     Point2 const centre = PointOf(ANUBARAK_ROOM_CENTER);
 
+    // Heroic's tank points by the east pair are 8-16 yd from where he waits, inside his aggro: walking onto
+    // one pulled him before the player did. Each steps toward the centre until clear; normal's already are.
+    auto const clearOfHim = [&](Point2 point)
+    {
+        Vec2 const in = Direction(point, centre);
+        int32 const steps = static_cast<int32>(Dist(point, centre) / TANK_CLEARANCE_STEP);
+        for (int32 step = 0; step < steps; ++step)
+        {
+            Point2 const stand = Along(point, in, static_cast<float>(step) * TANK_CLEARANCE_STEP);
+            if (Dist(stand, LOC_ANUBARAK) >= PROXIMITY_TANK_CLEARANCE)
+                return stand;
+        }
+
+        return centre;
+    };
+
     AnubarakPrepullTanks const tanks = GetAnubarakPrepullTanks(bot);
-    Point2 const pickup = PointOf(GetAnubarakPickupStand(bot));
+    Point2 const pickup = clearOfHim(PointOf(GetAnubarakPickupStand(bot)));
     if (!tanks.pickup.IsEmpty())
         duties.push_back({tanks.pickup, "pickup", At(pickup, ANUBARAK_STAND_Z), false, Position()});
 
@@ -645,8 +663,8 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
     for (uint8 side = 0; side < 2; ++side)
         if (!tanks.side[side].IsEmpty())
             duties.push_back({tanks.side[side], sideNames[side],
-                              At(PointOf(GetAnubarakPrepullSideStand(bot, side)), ANUBARAK_STAND_Z), false,
-                              Position()});
+                              At(clearOfHim(PointOf(GetAnubarakPrepullSideStand(bot, side))), ANUBARAK_STAND_Z),
+                              false, Position()});
 
     auto const addSlot = [&](Point2 point, std::initializer_list<StandRole> roles)
     {

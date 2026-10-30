@@ -217,6 +217,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakSwarmHealAction : public Action
+{
+public:
+    AnubarakSwarmHealAction(PlayerbotAI* botAI, std::string const name = "anubarak swarm heal") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class ToCAnubarakActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -270,6 +277,8 @@ public:
             &ToCAnubarakActionContext::anubarak_main_tank_hold_boss;
         creators["anubarak heal penetrating cold"] =
             &ToCAnubarakActionContext::anubarak_heal_penetrating_cold;
+        creators["anubarak swarm heal"] =
+            &ToCAnubarakActionContext::anubarak_swarm_heal;
     }
 
 private:
@@ -368,6 +377,10 @@ private:
 
     static Action* anubarak_heal_penetrating_cold(PlayerbotAI* botAI) {
         return new AnubarakHealPenetratingColdAction(botAI);
+    }
+
+    static Action* anubarak_swarm_heal(PlayerbotAI* botAI) {
+        return new AnubarakSwarmHealAction(botAI);
     }
 };
 

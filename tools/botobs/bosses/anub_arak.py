@@ -3,7 +3,9 @@
 
     anub_arak.py <file>              every section
     anub_arak.py <file> --phases     anub.phase spans, his health at each edge, deaths per phase
-    anub_arak.py <file> --pull       who was locked out or never landed, and stage 9 to the pull
+    anub_arak.py <file> --pull       who was locked out or never landed, stage 9 to the pull, and at the
+                                     engage the player nearest his wait point and each bot tank's yards from
+                                     it, one inside his 23 yd aggro flagged
     anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome, protection,
                                      time in each kite stage, the kiter's boosts, its own immunities and
                                      whether anub.protect asked for them, a kiter marked inside a patch's slow,
@@ -81,7 +83,13 @@
                                      walked by move order and damage by target kind; his health lost per
                                      phase 1, under 20% flagged; anub.dps rows per role; each anub.dside group
                                      per wave, and melee walks across the midline between the side spots
-    anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust, Penetrating Cold, deaths
+    anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust; per 5 s his health, the median
+                                     tank and non-tank health, the swarm on each and the healers' heals onto
+                                     tanks, carriers and others; bot heals it cast onto a non-tank with no
+                                     Penetrating Cold at 10%+; DPS bot samples on him, on burrowers up as it
+                                     began and on newer ones; when those burrowers went against lust and
+                                     anub.burst open; bot burst cast from his 40% to phase 3, flagged unless
+                                     anub.burst read behind; Penetrating Cold, deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
                                      acts in the pull, its engine passes, anub.hstand; per side tank and the
@@ -181,6 +189,21 @@ PENETRATING_COLD = (66013, 67700, 68509, 68510)
 LEECHING_SWARM = (66118, 67630, 68646, 68647)
 # Bloodlust, Heroism
 LUST_SPELLS = (2825, 32182)
+# What the burst gate holds (BurstCooldowns.cpp names), by the spell each name casts; trinkets and
+# Killing Machine are procs with no one id
+BURST_SPELLS = {26297: "Berserking", 20572: "Blood Fury", 33697: "Blood Fury", 33702: "Blood Fury",
+                54758: "Hyperspeed Acceleration", 1719: "Recklessness", 12292: "Death Wish",
+                13750: "Adrenaline Rush", 13877: "Blade Flurry", 51690: "Killing Spree", 12042: "Arcane Power",
+                12472: "Icy Veins", 11129: "Combustion", 55342: "Mirror Image", 12043: "Presence of Mind",
+                47241: "Metamorphosis", 3045: "Rapid Fire", 19574: "Bestial Wrath", 23989: "Readiness",
+                10060: "Power Infusion", 50334: "Berserk", 33831: "Force of Nature", 31884: "Avenging Wrath",
+                42650: "Army of the Dead", 49206: "Summon Gargoyle", 2894: "Fire Elemental Totem",
+                16166: "Elemental Mastery", 53908: "Potion of Speed", 53909: "Potion of Wild Magic"}
+# The stem's heroic phase 3 numbers: burst waits from BURST_HOLD_PCT, and a non-tank without Penetrating
+# Cold gets a heal only under SWARM_FLOOR_PCT
+BURST_HOLD_PCT = 40.0
+SWARM_FLOOR_PCT = 10.0
+SWARM_BIN_MS = 5000
 SPELL_RIGHTEOUS_DEFENSE = 31789
 # what CastClassTaunt casts, plus Righteous Defense, which targets the friend he is hitting
 TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl",
@@ -284,6 +307,9 @@ BURROWER_PERMAFROST_REACH = 6.0 + 0.389
 # breaks the raid stands near z 395, the pit floor is 142. Spheres fly at 155.67 and land at 142.7.
 WEB_DOOR_X = 661.6
 LANDED_Z = 200.0
+# Locs[17], where he waits before the pull, and his proximity aggro: detection_range 20 plus the level gap
+ANUB_WAIT = (785.90, 133.42)
+AGGRO_YD = 23.0
 SPHERE_FLYING_Z = 150.0
 SPHERE_PATCH_Z = 146.0
 # a patch's Permafrost dynobject sits on the sphere itself
@@ -879,6 +905,27 @@ def pull_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def engage_spread(trace: Trace, samples: Samples | None = None) -> dict | None:
+    """At the engage, the living roster player nearest his wait point and each bot tank, 2D yards from it,
+    off the snapshot at or before it."""
+    pulls = trace.of("pull")
+    if not pulls:
+        return None
+    samples = samples or Samples(trace)
+    when = pulls[0]["t"]
+    yards = {}
+    for guid in roster_guids(trace):
+        row = samples.row(guid, when)
+        if row is not None and row[5] > 0:
+            yards[guid] = dist2(row[1:3], ANUB_WAIT)
+    if not yards:
+        return None
+    nearest = min(yards, key=yards.get)
+    tanks = sorted(((guid, gap) for guid, gap in yards.items()
+                    if trace.role(guid) == "tank" and guid not in trace.humans), key=lambda pair: pair[1])
+    return {"t": when, "nearest": nearest, "yards": yards[nearest], "tanks": tanks}
+
+
 def show_pull(trace: Trace) -> None:
     print("PULL")
     if not is_toc_anubarak(trace):
@@ -893,6 +940,16 @@ def show_pull(trace: Trace) -> None:
     else:
         print(f"  toc.progress read 9 on its first row at {clock(when)}: a restate, the floor broke"
               " before the trace opened")
+
+    spread = engage_spread(trace)
+    if spread is not None:
+        nearest = spread["nearest"]
+        tanks = ", ".join(f"{trace.name(guid)} {gap:.1f}" for guid, gap in spread["tanks"]) or "none"
+        inside = [trace.name(guid) for guid, gap in spread["tanks"] if gap < AGGRO_YD]
+        print(f"  at the engage {clock(spread['t'])}: nearest his wait point {trace.name(nearest)}"
+              f" ({'human' if nearest in trace.humans else 'bot'} {trace.role(nearest)}) {spread['yards']:.1f} yd;"
+              f" bot tanks {tanks} yd"
+              + (f"; inside his {AGGRO_YD:.0f} yd aggro: {', '.join(inside)}" if inside else ""))
 
     rows = pull_rows(trace)
     if not rows:
@@ -4754,6 +4811,182 @@ def cold_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return sorted(out, key=lambda row: row["start"])
 
 
+def carrying(spans: dict[int, list[tuple[int, int, bool]]], guid, when: int) -> bool:
+    return any(start <= when <= stop for start, stop, _ in spans.get(guid, ()))
+
+
+def swarm_bins(trace: Trace, start: int, stop: int, samples: Samples | None = None) -> list[dict]:
+    """Phase 3 in SWARM_BIN_MS steps: his health at the step's last sample, the median health of the
+    living tanks and non-tanks, the swarm on each, and the healers' effective healing onto tanks,
+    Penetrating Cold carriers and everyone else."""
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    roster = roster_guids(trace)
+    cold = aura_spans(trace, PENETRATING_COLD)
+    out = []
+    for low in range(start, stop, SWARM_BIN_MS):
+        high = min(low + SWARM_BIN_MS, stop)
+        row = {"t": low, "boss": None, "tank": None, "other": None, "swarm_tank": 0, "swarm_other": 0,
+               "heal_tank": 0, "heal_cold": 0, "heal_other": 0}
+        hp = samples.between(boss, low, high - 1) if boss else []
+        if hp:
+            row["boss"] = hp[-1][5]
+        health: dict[str, list[float]] = {"tank": [], "other": []}
+        for guid in roster:
+            group = "tank" if trace.role(guid) == "tank" else "other"
+            health[group] += [sample[5] for sample in samples.between(guid, low, high - 1) if sample[5] > 0]
+        for group, values in health.items():
+            row[group] = statistics.median(values) if values else None
+        out.append(row)
+
+    def step(when: int) -> dict | None:
+        return out[(when - start) // SWARM_BIN_MS] if start <= when < stop else None
+
+    for rec in trace.of("dmg"):
+        row = step(rec["t"])
+        if row is not None and rec.get("sp") == SPELL_LEECHING_SWARM_DMG and rec.get("d") in roster:
+            row["swarm_tank" if trace.role(rec["d"]) == "tank" else "swarm_other"] += rec.get("a", 0)
+    for rec in trace.of("heal"):
+        row, target = step(rec["t"]), rec.get("d")
+        if row is None or trace.role(rec.get("s")) != "heal" or target not in roster:
+            continue
+        kind = ("heal_tank" if trace.role(target) == "tank"
+                else "heal_cold" if carrying(cold, target, rec["t"]) else "heal_other")
+        row[kind] += rec.get("a", 0) - rec.get("oh", 0)
+    return out
+
+
+def swarm_heal_breaches(trace: Trace, start: int, stop: int,
+                        samples: Samples | None = None) -> dict[tuple[int, int], list[int]]:
+    """Per bot and heal spell, `[heals, effective]` landing in phase 3 on another non-tank with no
+    Penetrating Cold at SWARM_FLOOR_PCT or more by the snapshot before. Only spells the bot cast itself, so
+    procs and passive heals (Vampiric Embrace, Judgement of Light, Earthliving) stay out."""
+    samples = samples or Samples(trace)
+    roster = roster_guids(trace)
+    cold = aura_spans(trace, PENETRATING_COLD)
+    cast = {(rec.get("s"), rec.get("sp")) for rec in trace.of("cast") if not rec.get("tr")}
+    out: dict[tuple[int, int], list[int]] = collections.defaultdict(lambda: [0, 0])
+    for rec in trace.of("heal"):
+        source, target, when = rec.get("s"), rec.get("d"), rec["t"]
+        if (not start <= when < stop or source not in roster or source in trace.humans or target == source
+                or target not in roster or trace.role(target) == "tank" or carrying(cold, target, when)
+                or (source, rec.get("sp")) not in cast):
+            continue
+        before = samples.row(target, when)
+        if before is None or before[5] < SWARM_FLOOR_PCT:
+            continue
+        out[(source, rec.get("sp"))][0] += 1
+        out[(source, rec.get("sp"))][1] += rec.get("a", 0) - rec.get("oh", 0)
+    return dict(out)
+
+
+def swarm_burrowers(trace: Trace, start: int, samples: Samples) -> tuple[set[int], set[int], int | None]:
+    """The burrowers alive as phase 3 began, those first seen after, and when the last of the first went."""
+    old, new, last = set(), set(), None
+    for guid in guids_of_entry(trace, NPC_BURROWER):
+        stamps, rows = samples.track(guid)
+        alive = [when for when, row in zip(stamps, rows) if row[5] > 0]
+        if not alive:
+            continue
+        if alive[0] > start:
+            new.add(guid)
+        elif alive[-1] >= start:
+            old.add(guid)
+            last = alive[-1] if last is None else max(last, alive[-1])
+    return old, new, last
+
+
+def swarm_dps_targets(trace: Trace, start: int, stop: int, samples: Samples | None = None) -> dict[str, float]:
+    """Share of the living DPS bots' phase 3 samples by target: him, a burrower alive as it began, a newer
+    one, anything else."""
+    samples = samples or Samples(trace)
+    old, new, _ = swarm_burrowers(trace, start, samples)
+    boss = boss_guid(trace)
+    counts: collections.Counter = collections.Counter()
+    for guid in roster_guids(trace):
+        if trace.role(guid) not in ("melee", "ranged") or guid in trace.humans:
+            continue
+        for row in samples.between(guid, start, stop - 1):
+            if row[5] <= 0:
+                continue
+            target = row[7] if len(row) > 7 else 0
+            counts["boss" if target == boss else "old" if target in old else "new" if target in new
+                   else "other"] += 1
+    total = sum(counts.values())
+    return {kind: counts[kind] / total for kind in ("boss", "old", "new", "other")} if total else {}
+
+
+def burst_before_swarm(trace: Trace, start: int, samples: Samples | None = None) -> tuple[int | None, list[dict]]:
+    """His first sample at or under BURST_HOLD_PCT before phase 3, and each bot burst cast from it to phase 3
+    with the caster's anub.burst then."""
+    samples = samples or Samples(trace)
+    stamps, rows = samples.track(boss_guid(trace))
+    crossed = next((when for when, row in zip(stamps, rows) if when < start and 0 < row[5] <= BURST_HOLD_PCT),
+                   None)
+    if crossed is None:
+        return None, []
+    readings: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "anub.burst"):
+        readings[rec.get("g")].append((rec["t"], rec.get("txt", "")))
+    roster = roster_guids(trace)
+    out = []
+    for rec in trace.of("cast"):
+        source, when = rec.get("s"), rec["t"]
+        if (rec.get("tr") or rec.get("sp") not in BURST_SPELLS or not crossed <= when < start
+                or source not in roster or source in trace.humans):
+            continue
+        held = [txt for at, txt in readings.get(source, ()) if at <= when]
+        out.append({"t": when, "guid": source, "spell": rec["sp"], "reading": held[-1] if held else None})
+    return crossed, out
+
+
+def show_swarm_race(trace: Trace, start: int, stop: int, samples: Samples) -> None:
+    """Phase 3's race against the swarm: the 5 s steps, heals that only fed it, the DPS on burrowers, when
+    the burst opened, and the burst spent between 40% and phase 3."""
+    def pct(value):
+        return "    -" if value is None else f"{value:5.1f}"
+
+    print(f"  per {SWARM_BIN_MS // 1000} s: his health, median tank and non-tank health, the swarm on tanks and"
+          " others (k), healer heals onto tanks, Penetrating Cold carriers and others (k)")
+    for row in swarm_bins(trace, start, stop, samples):
+        print(f"    {clock(row['t']):>9} boss {pct(row['boss'])}  tank {pct(row['tank'])}  other {pct(row['other'])}"
+              f"  swarm {row['swarm_tank'] / 1000:6.1f} {row['swarm_other'] / 1000:6.1f}"
+              f"  heals {row['heal_tank'] / 1000:6.1f} {row['heal_cold'] / 1000:6.1f} {row['heal_other'] / 1000:6.1f}")
+
+    breaches = swarm_heal_breaches(trace, start, stop, samples)
+    print(f"  bot heals cast onto a non-tank with no Penetrating Cold at {SWARM_FLOOR_PCT:.0f}%+: "
+          + (", ".join(f"{trace.name(guid)} {trace.spell(spell)} {count} ({amount / 1000:.0f}k)"
+                       for (guid, spell), (count, amount) in sorted(breaches.items(), key=lambda item: -item[1][1]))
+             or "none"))
+
+    shares = swarm_dps_targets(trace, start, stop, samples)
+    if shares:
+        print(f"  DPS bot samples by target: him {shares['boss']:.0%}, a burrower up as it began"
+              f" {shares['old']:.0%}, a newer burrower {shares['new']:.0%}, else {shares['other']:.0%}")
+
+    old, _, last = swarm_burrowers(trace, start, samples)
+    lust = next((row for row in lust_casts(trace, start) if row["rel"] >= 0), None)
+    opened = next((rec["t"] for rec in notes(trace, "anub.burst")
+                   if rec["t"] >= start and rec.get("txt") == "open"), None)
+    parts = [f"{len(old)} burrower(s) up as it began"
+             + ("" if last is None else f", the last gone {clock(last)} ({(last - start) / 1000:+.1f} s)")]
+    if lust:
+        parts.append(f"lust {lust['rel'] / 1000:+.1f} s")
+    if opened is not None:
+        parts.append(f"anub.burst open {(opened - start) / 1000:+.1f} s")
+    print("  " + "; ".join(parts))
+
+    crossed, casts = burst_before_swarm(trace, start, samples)
+    if crossed is None:
+        print(f"  he never sat at {BURST_HOLD_PCT:.0f}% or under before phase 3")
+    else:
+        spent = [row for row in casts if row["reading"] != "behind"]
+        print(f"  burst cast from his {BURST_HOLD_PCT:.0f}% at {clock(crossed)} to phase 3: {len(casts)}"
+              + (f", {len(spent)} not released as behind: " + ", ".join(
+                  f"{trace.name(row['guid'])} {BURST_SPELLS[row['spell']]} {clock(row['t'])}" for row in spent)
+                 if spent else ""))
+
+
 def show_swarm(trace: Trace) -> None:
     print("PHASE 3")
     span = swarm_span(trace)
@@ -4776,6 +5009,7 @@ def show_swarm(trace: Trace) -> None:
                   f" ({row['rel'] / 1000:+.1f} s from phase 3)")
         if not lust:
             print("  no lust cast")
+        show_swarm_race(trace, start, stop, Samples(trace))
 
     windows = cold_windows(trace)
     if windows:
@@ -5550,7 +5784,8 @@ def show_pursuit(trace: Trace) -> None:
 
 SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
-    ("pull", "locked out past the Web Door or never landed, stage 9 to the pull", show_pull),
+    ("pull", "locked out past the Web Door or never landed, stage 9 to the pull, the nearest player to his wait"
+     " point and each bot tank at the engage", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, kite stages, boosts,"
      " a kiter marked in a patch, the tank patch spent and one spent in the run stage, the spike's approach to"
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
@@ -5583,7 +5818,10 @@ SECTIONS = (
      " tank in a patch, submerge spot to the tank patches, the longest stretch held 10+ yd off the side spots'"
      " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows, when the submerge drag left",
      show_threat),
-    ("swarm", "phase 3: Leeching Swarm, lust, Penetrating Cold heals, defensives, deaths", show_swarm),
+    ("swarm", "phase 3: Leeching Swarm, lust, per 5 s his health and the raid's, the swarm and the healers'"
+     " heals by who took them, bot heals onto healthy non-carriers, DPS on burrowers up at its start and newer"
+     " ones, when the burst opened, burst spent from 40%, Penetrating Cold heals, defensives, deaths",
+     show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand; side tanks and the main tank with no healer in reach; raid healer"
      " engine coverage",

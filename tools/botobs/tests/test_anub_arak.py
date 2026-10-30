@@ -17,8 +17,9 @@ kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers o
 two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
 dodge walks, a thirteenth the escort at the boost, at the end and in Permafrost, an own kite dead to a scarab,
 kite tools spent off the mark and the main tank out of the healers' reach, a fourteenth a Demonic Circle
-teleport, a kite sphere spent early and a Feign Death back before the submerge, and the shared fixture shows
-every section reads empty on a trace that is not Anub'arak rather than raising.
+teleport, a kite sphere spent early and a Feign Death back before the submerge, the first one again phase 3's
+race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads
+empty on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -3876,6 +3877,115 @@ class CirclePull(unittest.TestCase):
         self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000\n", text)
         self.assertIn(" down -15.0 s, never spent; ", text)
         self.assertIn("down +21.0 s, spent +30.0 s by Pyro 4.0 s into its kite, early\n", text)
+
+
+B3 = CREATURE | 923
+B4 = CREATURE | 924
+
+
+def swarm_pull() -> list[dict]:
+    """The synthetic pull plus a phase 3 race: he sits at 39% from 45 s, B4 is up from 45 to 53 s and B3
+    from 52 s; Trueshot hits him, Straggler B4 and then B3. Mercy casts Flash Heal onto Trueshot at full
+    health and Justice's Judgement of Light heals it unasked. Trueshot spends Rapid Fire held, Straggler
+    Icy Veins released as behind, and Arkos, human, Rapid Fire."""
+    records = anub_pull()
+    for rec in records:
+        if rec.get("e") != "snap":
+            continue
+        when = rec["t"]
+        for row in rec["u"]:
+            if row[0] == BOSS and 45000 <= when < 50000:
+                row[5] = 39.0
+            elif row[0] == KITE and when >= 50000:
+                row[7] = BOSS
+            elif row[0] == LATE and when >= 50000:
+                row[7] = B4 if when < 53000 else B3
+        if 45000 <= when <= 53000:
+            rec["u"].append([B4, X - 5.0, Y, Z, 0.0, 80.0, 0.0, TANK, 0, 0, 0, 0])
+        if when >= 52000:
+            rec["u"].append([B3, X - 6.0, Y, Z, 0.0, 100.0, 0.0, TANK, 0, 0, 0, 0])
+    records += [
+        {"t": 45000, "e": "unit", "g": B4, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 52000, "e": "unit", "g": B3, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        cast(56000, HEAL, 48071, KITE),
+        {"t": 56000, "e": "heal", "s": HEAL, "d": KITE, "sp": 48071, "a": 6000, "oh": 0},
+        {"t": 57000, "e": "heal", "s": PALADIN, "d": KITE, "sp": 20267, "a": 2000, "oh": 0},
+        note(46000, KITE, "anub.burst", "hold"),
+        cast(47000, KITE, 3045, KITE),
+        note(47500, LATE, "anub.burst", "behind"),
+        cast(48000, LATE, 12472, LATE),
+        cast(48500, MELEE, 3045, MELEE),
+        note(50300, KITE, "anub.burst", "wait"),
+        note(53500, KITE, "anub.burst", "open"),
+    ]
+    return records
+
+
+class SwarmRace(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_4_anub-arak_1789500100.ndjson", swarm_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_steps_split_the_swarm_and_the_healing_by_who_takes_it(self):
+        first, second = ab.swarm_bins(self.trace, 50000, 60000, self.samples)
+        self.assertEqual((first["boss"], first["tank"], first["other"]), (46.0, 100.0, 100.0))
+        self.assertEqual((first["swarm_tank"], first["swarm_other"]), (3000, 2000))
+        self.assertEqual((first["heal_tank"], first["heal_cold"], first["heal_other"]), (3000, 5000, 0))
+        self.assertEqual((second["boss"], second["heal_cold"], second["heal_other"]), (41.0, 3000, 8000))
+
+    def test_only_a_bot_heal_it_cast_onto_a_healthy_non_carrier_is_a_breach(self):
+        self.assertEqual(ab.swarm_heal_breaches(self.trace, 50000, 60000, self.samples),
+                         {(HEAL, 48071): [1, 6000]})
+
+    def test_burrowers_up_as_phase_3_began_part_from_newer_ones(self):
+        self.assertEqual(ab.swarm_burrowers(self.trace, 50000, self.samples), ({B4}, {B3}, 53000))
+        shares = ab.swarm_dps_targets(self.trace, 50000, 60000, self.samples)
+        self.assertEqual({kind: round(share, 2) for kind, share in shares.items()},
+                         {"boss": 0.5, "old": 0.15, "new": 0.35, "other": 0.0})
+
+    def test_burst_from_40_percent_counts_bots_with_their_reading(self):
+        crossed, casts = ab.burst_before_swarm(self.trace, 50000, self.samples)
+        self.assertEqual(crossed, 45000)
+        self.assertEqual([(row["guid"], row["spell"], row["reading"]) for row in casts],
+                         [(KITE, 3045, "hold"), (LATE, 12472, "behind")])
+
+    def test_the_race_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_swarm(self.trace)
+        text = out.getvalue()
+        self.assertIn("bot heals cast onto a non-tank with no Penetrating Cold at 10%+: Mercy", text)
+        self.assertIn("1 burrower(s) up as it began, the last gone 0:53.000 (+3.0 s); lust +1.5 s;"
+                      " anub.burst open +3.5 s", text)
+        self.assertIn("burst cast from his 40% at 0:45.000 to phase 3: 2, 1 not released as behind:"
+                      " Trueshot Rapid Fire 0:47.000", text)
+
+    def test_the_engage_names_the_nearest_and_each_bot_tank(self):
+        spread = ab.engage_spread(self.trace, self.samples)
+        self.assertEqual(spread["nearest"], TANK)
+        self.assertAlmostEqual(spread["yards"], 31.24, places=2)
+        self.assertEqual([guid for guid, _ in spread["tanks"]], [TANK])
+
+    def test_a_bot_tank_inside_his_aggro_at_the_engage_is_flagged(self):
+        records = anub_pull()
+        for rec in records:
+            if rec.get("e") == "snap" and rec["t"] <= 0:
+                for row in rec["u"]:
+                    if row[0] == TANK:
+                        row[1], row[2] = ab.ANUB_WAIT[0] - 20.0, ab.ANUB_WAIT[1]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_4_anub-arak_1789500200.ndjson", records)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                ab.show_pull(trace)
+        self.assertIn("nearest his wait point Bulwark (bot tank) 20.0 yd; bot tanks Bulwark 20.0 yd;"
+                      " inside his 23 yd aggro: Bulwark", out.getvalue())
 
 
 class EveryView(unittest.TestCase):

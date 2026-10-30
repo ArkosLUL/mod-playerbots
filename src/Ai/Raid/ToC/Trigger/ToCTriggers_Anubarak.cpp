@@ -211,6 +211,18 @@ bool AnubarakPenetratingColdOnRaidTrigger::IsActive()
     return AnubarakEngaged(botAI) && PlayerbotAI::IsHeal(bot) && GetAnubarakPenetratingColdHealTarget(botAI);
 }
 
+bool AnubarakSwarmHealUrgentTrigger::IsActive()
+{
+    AnubarakSwarmHealPick const pick = GetAnubarakSwarmHealPick(botAI);
+    return pick.target && pick.urgent;
+}
+
+bool AnubarakSwarmHealTrigger::IsActive()
+{
+    AnubarakSwarmHealPick const pick = GetAnubarakSwarmHealPick(botAI);
+    return pick.target && !pick.urgent;
+}
+
 void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("anubarak kiter needs immunity", {
@@ -287,4 +299,11 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak penetrating cold on raid", {
         NextAction("anubarak heal penetrating cold", ACTION_MEDIUM_HEAL + 5) }));
+
+    // Heroic phase 3: the urgent tiers above every class heal, the top-offs under the mana tools
+    triggers.push_back(new TriggerNode("anubarak swarm heal urgent", {
+        NextAction("anubarak swarm heal", ACTION_CRITICAL_HEAL + 12) }));
+
+    triggers.push_back(new TriggerNode("anubarak swarm heal", {
+        NextAction("anubarak swarm heal", ACTION_MEDIUM_HEAL + 0.75f) }));
 }

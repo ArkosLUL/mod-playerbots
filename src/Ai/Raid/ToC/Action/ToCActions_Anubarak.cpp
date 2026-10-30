@@ -10,6 +10,7 @@
 #include "LastMovementValue.h"
 #include "Player.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidObs.h"
 #include "RaidTankDefensive.h"
 #include "Spell.h"
@@ -709,4 +710,24 @@ bool AnubarakHealPenetratingColdAction::Execute(Event /*event*/)
     }
 
     return false;
+}
+
+bool AnubarakSwarmHealAction::Execute(Event /*event*/)
+{
+    AnubarakSwarmHealPick const pick = GetAnubarakSwarmHealPick(botAI);
+    if (!pick.target)
+        return false;
+
+    if (AnubarakSwarmShieldsTank(bot, pick.target) && botAI->CanCastSpell("power word: shield", pick.target))
+        return botAI->CastSpell("power word: shield", pick.target);
+
+    // Wild Growth heals five around the target, and a big hard cast lifts a non-tank far past the floor:
+    // the swarm hands both back to him
+    bool const small = pick.small;
+    return CastRaidThroughputHeal(botAI, pick.target, [small](std::string const& heal)
+    {
+        return heal == "wild growth" ||
+               (small && (heal == "holy light" || heal == "greater heal" || heal == "healing wave" ||
+                          heal == "healing touch" || heal == "nourish"));
+    });
 }

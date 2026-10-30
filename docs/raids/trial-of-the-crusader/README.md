@@ -113,7 +113,7 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 | `twin valkyr pact interrupt duty` | Twin's Pact cast |
 | `anubarak dps target` | Permafrost on the burrower |
 | `anubarak penetrating cold on raid` | Penetrating Cold |
-| Anub'arak burst row | Leeching Swarm, lust only in phase 3, latched per instance |
+| Anub'arak burst row | Leeching Swarm, lust only in phase 3, latched per instance; heroic holds the rest from 40% |
 
 ## Code layout
 
@@ -336,7 +336,8 @@ park within 1 yd, walk back past 2.5.
     follow the player through the speech; a bot due an essence walk gets no stand until it has it.
   - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he stands at): `pickup` (the main tank, else the first bot side tank)
     on `GetAnubarakPickupStand`, `side0`/`side1` on the side points; melee 8 yd west of
-    `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him.
+    `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him. Each tank
+    stand steps toward the centre to `PROXIMITY_TANK_CLEARANCE` (23 + 2.5) off him: only heroic's move.
 
 **Hold.** `toc staging stand` → `toc move to staging stand` (`ACTION_RAID`) walks at
 `MOVEMENT_NORMAL`, latched, never attacks, and returns false once parked, so lower nodes buff and

@@ -189,11 +189,16 @@ void DefineAnubarak(EncounterBuilder& e)
     // the side tanks' pickups; from the main tank they pull the burrowers walking past onto him
     e.Block("anubarak main tank shout guard", Role::Any, AnubarakMainTankEngaged, 0,
             {"challenging roar", "challenging shout"});
+    // heroic phase 3: a group heal tops up the non-tanks, and Leeching Swarm hands it all back to him
+    e.Block("anubarak swarm group heal guard", Role::Any, AnubarakSwarmHealing, 0,
+            {"chain heal on party", "prayer of healing on party", "circle of healing on party",
+             "wild growth on party", "wild growth blanket", "divine hymn", "tranquility"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakBurrowerThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
     e.Multiplier<AnubarakBurrowerGuardMultiplier>(Family::Spell | Family::Attack);
+    e.Multiplier<AnubarakSwarmHealMultiplier>(Family::Spell | Family::ReachHeal);
 }
 }  // namespace
 

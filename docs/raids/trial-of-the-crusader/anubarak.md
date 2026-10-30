@@ -253,9 +253,12 @@ east and stops on the anchor.
 **Heroic's tank pair is the east one** (user call, 2026-10-29), homes 1 (north, side 0) and 0
 (south): pulled in like a refill pair (`PairSpots`, pure, nativetest) to (789.6, 141.1) / (786.4, 117.5),
 anchor (788.0, 129.3), R (770.2, 131.7), from the engage. Its grips and shots take only spheres homed
-there while one flies, so the four nearer the centre are left for the kites; the pre-pull side stands
-are those spots (`GetAnubarakPrepullSideStand`) and the pickup stand 10 yd west of that anchor, (778.0,
-129.3), navprobe-clean (bot filter, 16/16 at 3 yd). Burrowers walk 64-105 yd from the west exits to
+there while one flies, so the four nearer the centre are left for the kites; the pre-pull side points
+are those spots (`GetAnubarakPrepullSideStand`) and the pickup point 10 yd west of that anchor, (778.0,
+129.3). All three lie 8-16 yd from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
+him at 21-23 yd in Z and AA (2026-10-30), before the player. So `LayoutAnubarak` steps each toward the
+centre to 23 + `STAGING_UNPARK` yd off `Locs[17]`: (760.3, 132.4), (760.4, 137.1), (760.7, 128.4),
+navprobe-clean (bot filter, 16/16 at 3 yd). Normal's are already clear. Burrowers walk 64-105 yd from the west exits to
 them (41-63 to the old centre spots). **Heroic refills follow the spheres left** (`anub.spot0`/`anub.spot1`), from once both sides have
 held a patch: each sphere's home is its nearest spawn (AnubLocs 5-10) at its first sample, and heroic
 never respawns one. After the first pair the four left hover 38-57 yd from the centre, the fixed spots
@@ -932,10 +935,33 @@ Silencing Shot or Spell Lock. The guide uses AoE stuns (Shockwave, Holy Wrath), 
 paladins. Out of reach, it walks to the spell's DBC range less 2 yd with line of sight, or to melee
 for a melee or self-range one (War Stomp, Shockwave, Holy Wrath).
 
-**Phase 3.** The main tank chains `NextTankDefensive`. Healers lead with Penetrating Cold carriers
-below 90% in heal range and line of sight (guide: "1-3 healers assigned solely to" it). Lust
-waits for `Swarm`, latched per instance (Anub'arak row of `ToCBurstWindowMultiplier`), since
-phase 3 is where the raid takes its damage (guide); personal burst is unrestricted.
+**Phase 3.** The main tank chains `NextTankDefensive`. Leeching Swarm heals him by what lands, after
+resists and absorbs, so every heal on a healthy non-tank goes back to him: in 2026-10-30 AA healers put
+1.98M into non-tanks and 0.96M into the three tanks, who all died. Heroic (user calls, 2026-10-30, guide):
+
+- **DPS** finish the burrowers alive as `Swarm` latches (`swarmBurrowers`); a newer one is no focus,
+  loose or other-side pick (`LeftToSideTank`), so it stays on its side tank and the DPS on him. In AA
+  35-48% of phase 3 damage went on burrowers.
+- **Burst** (`ToCAnubarakBurstWindow`): in `Swarm` lust and the rest open once those burrowers are dead,
+  15 s at most (AA's Heroism spent 21 of its 40 s on wave 6). Before it the rest wait from his 40%,
+  released while he is behind: at his health loss since he came up (`surfacedHpPct`), 30% falls later
+  than 5 s before the submerge.
+- **Healing** (`GetAnubarakSwarmHealPick`), every healer bot: the first tier with anyone in heal range
+  and sight, the lowest health in it: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank
+  under 10% (there the swarm alone takes about 7 s), a tank under 90%, a carrier under 50%. The first
+  three at `ACTION_CRITICAL_HEAL + 12`, over every class heal, the rest at `ACTION_MEDIUM_HEAL + 0.75`,
+  under the mana tools. A priest shields a tank first; then `CastRaidThroughputHeal`, never Wild Growth,
+  and for the non-tank no Holy Light, Greater Heal, Healing Wave, Healing Touch or Nourish. `anubarak
+  swarm group heal guard` blocks Chain Heal, Prayer of Healing, Circle of Healing, Wild Growth (both
+  nodes), Divine Hymn and Tranquility (only Tranquility is a `CastAoeHealSpellAction`), and
+  `AnubarakSwarmHealMultiplier` zeroes, for every bot, an area heal and a heal on another player who is
+  no tank, no carrier and at 10%+.
+- The guide's Fortitude and Commanding Shout cancel is skipped (user call): about 0.2% of his health,
+  once.
+
+Otherwise healers lead with Penetrating Cold carriers below 90% in heal range and line of sight
+(guide: "1-3 healers assigned solely to" it), lust waits for `Swarm`, latched per instance, and
+personal burst is unrestricted.
 
 ## Known gaps
 
@@ -985,6 +1011,13 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 - The direct-heal list is a copy of `JaraxxusHealIncinerateTargetAction`'s with "lesser healing
   wave" for "greater healing wave", not a 3.3.5 spell; one in `Shared` would keep them in step.
 - A heroic dodge with no spot clear of Permafrost lands in its 80% slow.
+- A side tank's rim (7 yd) is inside the 7.5 yd slow, so on heroic it carries the 80% slow most of the
+  time it's up (AA 329 s): Bulwark crawled as AA's wave 7 landed.
+- Healer threat pulls a new burrower off its side tank 3-4 s in (AA: Elemena 9, Holylight 3; wave 7's
+  at +3.6 s).
+- Judgement of Light comes only from the holy paladin's rotation (AA: 8 casts).
+- The 40% burst hold kept 7 of AA's 42 last-phase-1 casts: the cluster (Icy Veins, Arcane Power, Death
+  Wish, Bestial Wrath, Killing Spree, Force of Nature) went at 40.0-42.6% as wave 6 landed; 45% keeps 19.
 - Sphere and Shadow Strike duty are memoised for one group per instance per ms, kiter protection per
   instance per ms; two groups in one instance recompute the duties on every switch and share the
   first reader's protection claim. Side tanks are latched per instance.
@@ -1046,6 +1079,8 @@ phase 3 is where the raid takes its damage (guide); personal burst is unrestrict
 | `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg), `subhold` (submerge window, no leg to the spot or round a patch) |
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
+| `burst` | Heroic burst gate: `hold` (40% or under), `behind` (released), `wait` (phase 3, its burrowers up), `open` |
+| `swarmheal` | Heroic phase 3 healer's pick: `tank`, `cold`, `low`, `none` |
 | `focus0`, `focus1` | Each side's focus burrower, 0 when none; kept current under a skull. Per instance. Traces before 2026-10-27 carry one raid-wide `focus` and `focusdue` |
 | `dps` | A DPS bot's pick: `skull`, `loose`, `burrower`, `boss`, `scarab`, `none` (a sphere shooter too) |
 
@@ -1056,7 +1091,8 @@ The per-bot keys are change only: a bot that takes the same branch twice writes 
 `tools/botobs/bosses/anub_arak.py` reads the rest, keying him on entry 34564 since the spike shares
 his name and boss flag, and checking map 649 since Azjol-Nerub's boss shares the `anub-arak` slug.
 `--phases` (spans, his health at each edge, deaths per phase), `--pull` (who stood west of the Web
-Door or above z 200 at the pull and when each got in, stage 9 to the pull), `--spike` (each 67574
+Door or above z 200 at the pull and when each got in, stage 9 to the pull, the player nearest his wait
+point and each bot tank's yards at the engage, one inside 23 yd flagged), `--spike` (each 67574
 window: kiter, `kite` branches, seconds, outcome, when the spike first came within 12 yd, Hand of
 Protection on the kiter, its own Divine Shield, Ice Block, Feign Death or Vanish, `protect` rows; Impale on anyone else;
 `dodge`, `protect`), `--spheres` (flying above z 150 and patches below 146 from the 34606 rows, a low
@@ -1071,8 +1107,12 @@ from each emerge to a tank; his legs, runs of samples flagged moving of 2 yd or 
 their yards and reversals past 120°; his median distance from the drag anchor over samples with both
 tank patches latched, before the window's first `submerge` row; taunts on him, Righteous Defense
 counted when its friend was his victim, split bot and human; `pickup` and `anubarak threat cap` veto
-rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start, Penetrating
-Cold windows and heals onto the carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
+rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start; per 5 s his
+health, the median tank and non-tank health, the swarm and the healers' heals onto tanks, carriers and
+others; bot heals cast onto a non-tank with no Penetrating Cold at 10%+; DPS samples on him and on
+burrowers up at its start or newer; those burrowers' last death against lust and `burst` `open`; bot
+burst cast from his 40% to phase 3, flagged unless `behind`; Penetrating Cold windows and heals onto the
+carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
 exit, side at the spawn then each owner after (a dead side tank moves them all, so the last says
 little), seconds to the first tank and to its owning side's tank, the spawn side tank's distance from
 its spot, per wave the focus start against the next wave, DPS bot casts at a burrower other than the
@@ -1209,6 +1249,11 @@ human, 4 healers): boss at the third submerge 47.3% (phases 1 -23.2/-17.3/-12.1)
 3 in the 40 s drag; no tank patch spent by a kite; no kite patch down as P2's and P2c's spikes came
 up; flip-flops Justice 6:06.9, Tree 6:34.3; Hellflame's teleport at 4:25.8 landed 25.6 yd off the
 spike.
+Baseline, the 2026-10-30 25H wipe AA 7:05.6 in P3 at 15.7% (`f87f49475`; as Z): two submerges, phases 1
+-26.0/-22.1/-21.9, phase 3 at 5:56.5; Bulwark pulled him at 21.2 yd; in phase 3 his net loss 0.14%/s
+for 25 s, then 0.42%/s, swarm 3.61M (non-tanks 2.89M), healer heals onto non-tanks 1.98M against 0.96M
+onto tanks, DPS on burrowers 35% melee / 48% ranged, 42 burst casts in P1c, the three tanks dead
+6:35-6:43, 31 deaths.
 Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
 slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
 players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the
