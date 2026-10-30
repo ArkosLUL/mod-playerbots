@@ -102,11 +102,13 @@ enum class LkTankRole : uint8
 {
     None = 0,
     Holder = 1,
-    Free = 2
+    Free = 2,
+    StandIn = 3
 };
 
 // From the last duty pass. The holder is his victim when a group tank, else the last holder while it
 // lives, else the group's main tank, and can be a player. The free tank is the first other bot tank by guid.
+// With no other tank player in phase one, a DK or paladin damage dealer stands in to hold the ghouls.
 LkTankRole GetLkTankRole(PlayerbotAI* botAI, Player* player);
 Player* GetLkHolder(PlayerbotAI* botAI);
 Player* GetLkFreeTank(PlayerbotAI* botAI);
@@ -142,6 +144,7 @@ bool IsLkTankDefensiveHeld(PlayerbotAI* botAI);
 bool GetLkQuakeWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkTrapWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkPlagueWalk(PlayerbotAI* botAI, Position& spot);
+// The stand walk, or a melee damage dealer's walk round a trap to its pick
 bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot);
 // The stand is a winter slot or a spirit spot: walked forced, with Nitro Boosts
 bool IsLkStandUrgent(PlayerbotAI* botAI);
@@ -163,6 +166,8 @@ Unit* GetLkSilenceDispelTarget(PlayerbotAI* botAI, uint32& spellId);
 bool IsLkBraked(PlayerbotAI* botAI);
 // A plague carrier is on the map: no cure but the elected one may reach it
 bool IsLkCureHeld(PlayerbotAI* botAI);
+// A shaman bot's Cleansing Totem is down while a carrier lives: the water totem that replaces it
+char const* GetLkTotemSwap(PlayerbotAI* botAI);
 bool IsLkPlagueCarrier(Unit* unit);
 // Every live phase one add while phase one runs, for the splash hold
 void GetLkSplashAdds(PlayerbotAI* botAI, std::vector<Position>& out);

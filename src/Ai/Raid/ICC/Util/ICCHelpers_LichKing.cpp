@@ -123,6 +123,9 @@ constexpr float PICKUP_REACH = 22.0f;
 // A ranged pick in a winter has to be in spell range from the bot's slot: reach is held there, since it
 // would walk the bot into Remorseless Winter, and 30 yd is every caster's base nuke range
 constexpr float RANGED_REACH = 30.0f;
+// Off 10N the ranged cluster sits 44 yd or more off a sphere's path to the tank cluster, so one ranged DPS
+// bot in this many, hunters first, guards the tank cluster from its middle
+constexpr size_t SPHERE_GUARD_SHARE = 3;
 
 constexpr float QUAKE_FROM = 40.0f;
 constexpr float QUAKE_TO = 38.0f;
@@ -146,6 +149,9 @@ constexpr int32 PLAGUE_TICK_MARGIN_MS = 1000;
 constexpr float PLAGUE_LOW_PCT = 35.0f;
 constexpr float CURE_RANGE = 30.0f;
 constexpr float DISPEL_RANGE = 30.0f;
+// Water totems, the first one known replaces a Cleansing Totem: it strips a disease every 3 s
+constexpr uint32 SPELL_CLEANSING_TOTEM = 8170;
+constexpr char const* WATER_TOTEM_SWAPS[] = {"mana spring totem", "healing stream totem"};
 
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
@@ -179,6 +185,12 @@ constexpr float FM_FLOOR_SNAP_RANGE = 38.0f;
 constexpr int32 EMPOWERED_BLOOD_FROM = 60;
 constexpr int32 EMPOWERED_BLOOD_TO = 40;
 
+// The winters a pull has seen, as bits: the first, the second. Without a pull state the phase reads as
+// if both had run.
+constexpr uint8 WINTER_FIRST = 1;
+constexpr uint8 WINTER_SECOND = 2;
+constexpr uint8 WINTERS_UNKNOWN = WINTER_FIRST | WINTER_SECOND;
+
 struct ControlSpell
 {
     // 0 for every class
@@ -210,6 +222,8 @@ enum class WalkKind : uint8
     Quake,
     Trap,
     Plague,
+    // A melee walk round a trap to its pick, not a dodge: walked on the stand row
+    Reach,
     Stand
 };
 
@@ -298,6 +312,8 @@ struct WinterSlot
 {
     bool ranged = false;
     uint8 index = 0;
+    // A ranged DPS bot in the tank cluster for its spheres
+    bool guard = false;
 };
 
 struct FloorContext
@@ -339,6 +355,16 @@ struct LkBotState
     Position trapSpot;
     uint32 trapBlockedMs = 0;
 
+    // A melee walk to its pick round a trap, or a hold when no spot round the pick clears the traps
+    bool reach = false;
+    bool reachValid = false;
+    ObjectGuid reachTrap;
+    ObjectGuid reachPick;
+    // Where the pick stood when the spot was found
+    Position reachBasis;
+    Position reachSpot;
+    uint32 reachBlockedMs = 0;
+
     PlagueMode plague = PlagueMode::None;
     ObjectGuid plagueAdd;
     // The add the plague would jump to now
@@ -377,6 +403,7 @@ struct LkState
     bool dutiesRan = false;
     IccLichKingPhaseId phase = IccLichKingPhaseId::One;
     bool reachedThree = false;
+    uint8 winters = 0;
     bool heroic = false;
     bool tenNormal = false;
     bool ringStandable = true;
@@ -385,7 +412,9 @@ struct LkState
 
     ObjectGuid holder;
     ObjectGuid freeTank;
-    // LkTankRole per tank: the holder, players included, and the free bot tank
+    // Phase one with no other tank player: the damage dealer that holds the ghouls
+    ObjectGuid standIn;
+    // LkTankRole per tank: the holder, players included, the free bot tank and the stand-in
     RaidObs::ObsGuidMap<uint8> tank{"lk.tank"};
     RaidObs::ObsGuidSet brake{"lk.brake"};
     std::unordered_map<ObjectGuid, TauntDuty> taunts;
@@ -513,10 +542,11 @@ bool Harvested(Player* bot)
     return false;
 }
 
-// Stunned on the platform by Harvest Soul, before its 6.25 s teleport
+// Stunned on the platform by Harvest Soul, before its 6.25 s teleport. Heroic's Harvest Souls has no
+// duration and ends only with his channel, so the stun itself is what counts.
 bool HarvestStunned(Player* bot)
 {
-    if (IccLichKingInFrostmourne(bot))
+    if (IccLichKingInFrostmourne(bot) || !bot->HasUnitState(UNIT_STATE_STUNNED))
         return false;
 
     for (uint32 const spellId : ICC_LK_HARVEST_SOUL)
@@ -531,8 +561,8 @@ bool HarvestStunned(Player* bot)
 }
 
 // `pastThree`: phase three has run this pull, so a passive stretch with no winter is the heroic Frostmourne
-// return, never the second winter's walk
-IccLichKingPhaseId PhaseOf(Unit* boss, bool harvested, bool pastThree)
+// return, never the second winter's walk. `winters`: the WINTER_* bits this pull has seen.
+IccLichKingPhaseId PhaseOf(Unit* boss, bool harvested, bool pastThree, uint8 winters)
 {
     // The Lich King voice in Valithria's room shares his name
     if (!boss || boss->GetEntry() != NPC_THE_LICH_KING)
@@ -555,8 +585,16 @@ IccLichKingPhaseId PhaseOf(Unit* boss, bool harvested, bool pastThree)
     if (boss->HealthAbovePct(70))
         return IccLichKingPhaseId::One;
 
+    // Under a threshold he turns passive on the first hit he takes while not casting, so a cast in flight
+    // keeps the phase before it for up to 2 s
     if (!passive)
-        return boss->HealthAbovePct(40) ? IccLichKingPhaseId::Two : IccLichKingPhaseId::Three;
+    {
+        if (!(winters & WINTER_FIRST))
+            return IccLichKingPhaseId::One;
+
+        return boss->HealthAbovePct(40) || !(winters & WINTER_SECOND) ? IccLichKingPhaseId::Two
+                                                                       : IccLichKingPhaseId::Three;
+    }
 
     if (boss->HealthAbovePct(40))
         return IccLichKingPhaseId::Winter1;
@@ -764,6 +802,10 @@ uint32 SilenceDispelFor(Player* dispeller, Player* member)
     char const* name = dispeller->getClass() == CLASS_PRIEST    ? "dispel magic"
                        : dispeller->getClass() == CLASS_PALADIN ? "cleanse"
                                                                 : nullptr;
+    // Cleanse would take Necrotic Plague with the silence, and it jumps from wherever the carrier stands
+    if (dispeller->getClass() == CLASS_PALADIN && HasPlague(member))
+        return 0;
+
     if (!name || (member != dispeller &&
                   (dispeller->GetExactDist(member) > DISPEL_RANGE || !dispeller->IsWithinLOSInMap(member))))
         return 0;
@@ -1136,13 +1178,13 @@ bool IsolateMode(LkState const& st)
     return st.phase != IccLichKingPhaseId::One || st.adds.empty();
 }
 
-IccLichKingPhaseId RaidPhaseOf(Creature* boss, std::vector<Player*> const& members, bool pastThree)
+IccLichKingPhaseId RaidPhaseOf(Creature* boss, std::vector<Player*> const& members, bool pastThree, uint8 winters)
 {
     bool harvested = false;
     for (Player* member : members)
         harvested = harvested || Harvested(member);
 
-    return PhaseOf(boss, harvested, pastThree);
+    return PhaseOf(boss, harvested, pastThree, winters);
 }
 
 void UpdateQuake(LkState& st, Creature* boss)
@@ -1152,6 +1194,43 @@ void UpdateQuake(LkState& st, Creature* boss)
         st.quake = false;
     else if (boss->FindCurrentSpellBySpellId(SPELL_QUAKE))
         st.quake = true;
+}
+
+// Phase one with no tank player but the holder: a DK, then a paladin damage dealer holds the ghouls by its
+// class taunt and plate. Taunt needs Defensive Stance and Growl bear form, and a Shambling's swings kill a
+// non-tank.
+void AssignStandIn(LkState& st, std::vector<Player*> const& members)
+{
+    ObjectGuid const previous = st.standIn;
+    st.standIn.Clear();
+    if (st.freeTank || st.phase != IccLichKingPhaseId::One)
+        return;
+
+    for (Player* member : members)
+        if (IsLkTankPlayer(member) && member->GetGUID() != st.holder)
+            return;
+
+    Player* best = nullptr;
+    for (Player* member : members)
+    {
+        bool const dk = member->getClass() == CLASS_DEATH_KNIGHT;
+        if (!IsLkDutyBot(member) || !IsRaidDpsBot(member) || UnableToAct(member) ||
+            (!dk && member->getClass() != CLASS_PALADIN))
+            continue;
+
+        if (member->GetGUID() == previous)
+        {
+            best = member;
+            break;
+        }
+
+        bool const bestDk = best && best->getClass() == CLASS_DEATH_KNIGHT;
+        if (!best || (dk != bestDk ? dk : member->GetGUID() < best->GetGUID()))
+            best = member;
+    }
+
+    if (best)
+        st.standIn = best->GetGUID();
 }
 
 void AssignTanks(LkState& st, Player* bot, std::vector<Player*> const& members, Creature* boss)
@@ -1188,9 +1267,11 @@ void AssignTanks(LkState& st, Player* bot, std::vector<Player*> const& members, 
             break;
         }
 
+    AssignStandIn(st, members);
+
     std::vector<ObjectGuid> dropped;
     for (auto const& entry : st.tank)
-        if (entry.first != st.holder && entry.first != st.freeTank)
+        if (entry.first != st.holder && entry.first != st.freeTank && entry.first != st.standIn)
             dropped.push_back(entry.first);
 
     for (ObjectGuid const& guid : dropped)
@@ -1200,6 +1281,8 @@ void AssignTanks(LkState& st, Player* bot, std::vector<Player*> const& members, 
         st.tank[st.holder] = static_cast<uint8>(LkTankRole::Holder);
     if (st.freeTank)
         st.tank[st.freeTank] = static_cast<uint8>(LkTankRole::Free);
+    if (st.standIn)
+        st.tank[st.standIn] = static_cast<uint8>(LkTankRole::StandIn);
 }
 
 // The holder bot and the free tank hold the Raging Spirits. A winter's new spirit goes to the one holding
@@ -1304,7 +1387,25 @@ void AssignTaunts(LkState& st, Player* bot, Creature* boss)
         if (spirit.rooted || spirit.passive || itr == st.spiritTank.end() || spirit.victim == itr->second)
             continue;
 
+        // A human tank holding one plays its own part
+        Player* held = PlayerOf(bot, spirit.victim);
+        if (held && IsLkTankPlayer(held) && !IsLkDutyBot(held))
+            continue;
+
         elect(PlayerOf(bot, itr->second), "spirit", spirit.guid, false);
+    }
+
+    // The stand-in takes the ghouls alone, by its class taunt
+    if (Player* standIn = PlayerOf(bot, st.standIn))
+    {
+        AddInfo const* nearest = nullptr;
+        for (AddInfo const& add : st.adds)
+            if (add.entry == NPC_LK_DRUDGE_GHOUL && add.emerged && add.inCombat && add.victim != st.standIn &&
+                (!nearest || standIn->GetExactDist2d(add.pos) < standIn->GetExactDist2d(nearest->pos)))
+                nearest = &add;
+
+        if (nearest)
+            elect(standIn, "add", nearest->guid, false);
     }
 
     // The adds end their emerge on whoever has threat or a random non-tank
@@ -1354,7 +1455,8 @@ CureRule DueRule(LkState const& st, Player* carrier, std::vector<Player*> const&
 {
     JumpPick const jump = NearestJumpUnit(st, carrier, members);
     if (jump.found && jump.add)
-        return carrier->GetGUID() == st.freeTank ? CureRule::AddTank : CureRule::Delivered;
+        return carrier->GetGUID() == st.freeTank || carrier->GetGUID() == st.standIn ? CureRule::AddTank
+                                                                                      : CureRule::Delivered;
 
     if (!jump.found && IsolateMode(st))
         return CureRule::Isolated;
@@ -1592,8 +1694,9 @@ void AssignRangedNodes(LkState& st, std::vector<Player*> const& members)
     }
 }
 
-// Laid out once per winter: the tank cluster takes the tanks off the spirits, melee and half the healers
-// (all of them on 10N), the ranged cluster the rest. A bot joining later takes the next slot.
+// Laid out once per winter: the tank cluster takes the tanks off the spirits, melee, half the healers (all
+// of them on 10N) and the sphere guards, the ranged cluster the rest. A bot joining later takes the next
+// slot.
 void AssignWinterSlots(LkState& st, std::vector<Player*> const& members)
 {
     if (!IsWinter(st.phase))
@@ -1633,25 +1736,44 @@ void AssignWinterSlots(LkState& st, std::vector<Player*> const& members)
     for (auto* list : {&tanks, &melee, &healers, &ranged})
         std::sort(list->begin(), list->end(), IccGuidLess());
 
+    std::vector<Player*> guards;
+    if (!st.tenNormal)
+    {
+        std::stable_sort(ranged.begin(), ranged.end(), [](Player* a, Player* b)
+                         { return a->getClass() == CLASS_HUNTER && b->getClass() != CLASS_HUNTER; });
+        size_t const count = (ranged.size() + SPHERE_GUARD_SHARE - 1) / SPHERE_GUARD_SHARE;
+        guards.assign(ranged.begin(), ranged.begin() + count);
+        ranged.erase(ranged.begin(), ranged.begin() + count);
+    }
+
+    // The tank cluster in slot order, the guards in its middle columns so every path to it passes in reach
     size_t const tankHealers = st.tenNormal ? healers.size() : (healers.size() + 1) / 2;
-    auto const place = [&](Player* member, bool rangedCluster)
+    std::vector<Player*> cluster(tanks);
+    cluster.insert(cluster.end(), melee.begin(), melee.end());
+    cluster.insert(cluster.end(), healers.begin(), healers.begin() + tankHealers);
+    size_t const middle = (cluster.size() / 2) & ~size_t{1};
+    cluster.insert(cluster.begin() + middle, guards.begin(), guards.end());
+
+    auto const place = [&](Player* member, bool rangedCluster, bool guard)
     {
         if (st.winterSlots.count(member->GetGUID()))
             return;
 
         uint8& next = st.winterNext[rangedCluster ? 1 : 0];
-        st.winterSlots[member->GetGUID()] = {rangedCluster, next};
+        st.winterSlots[member->GetGUID()] = {rangedCluster, next, guard};
         ++next;
     };
 
-    for (Player* member : tanks)
-        place(member, false);
-    for (Player* member : melee)
-        place(member, false);
-    for (size_t i = 0; i < healers.size(); ++i)
-        place(healers[i], i >= tankHealers);
+    std::unordered_set<ObjectGuid> guardOf;
+    for (Player* member : guards)
+        guardOf.insert(member->GetGUID());
+
+    for (Player* member : cluster)
+        place(member, false, guardOf.count(member->GetGUID()) != 0);
+    for (size_t i = tankHealers; i < healers.size(); ++i)
+        place(healers[i], true, false);
     for (Player* member : ranged)
-        place(member, true);
+        place(member, true, false);
 }
 
 void ApplyHeroicBuffs(LkState const& st, Player* bot, Creature* boss, std::vector<Player*> const& members)
@@ -1682,8 +1804,12 @@ void RefreshDuties(LkState& st, Player* bot, Creature* boss, uint32 now)
     Difficulty const difficulty = GetRaidMapDifficulty(bot);
     st.heroic = IsHeroic(bot);
     st.tenNormal = difficulty == RAID_DIFFICULTY_10MAN_NORMAL;
-    st.phase = RaidPhaseOf(boss, members, st.reachedThree);
+    st.phase = RaidPhaseOf(boss, members, st.reachedThree, st.winters);
     st.reachedThree = st.reachedThree || st.phase == IccLichKingPhaseId::Three;
+    if (st.phase == IccLichKingPhaseId::Winter1)
+        st.winters |= WINTER_FIRST;
+    else if (st.phase == IccLichKingPhaseId::Winter2)
+        st.winters |= WINTER_FIRST | WINTER_SECOND;
     st.ringStandable = RingStandable(bot);
 
     UpdateQuake(st, boss);
@@ -1788,6 +1914,76 @@ void UpdateTrap(LkState const& st, LkBotState& bs, Player* bot, Creature* boss, 
     bs.trapBlockedMs = 0;
 }
 
+// The trap whose dodge trigger a straight walk from `from` to `to` passes through, if any
+TrapInfo const* TrapOnApproach(LkState const& st, Position const& from, Position const& to)
+{
+    for (TrapInfo const& trap : st.traps)
+        if (trap.pos.GetExactDist2d(to) < TRAP_TRIGGER ||
+            SegmentCrossesCircle(from, to, HazardCircle(trap.pos, TRAP_TRIGGER)))
+            return &trap;
+
+    return nullptr;
+}
+
+// Generic reach walks a melee bot straight at its pick, and a line through a trap's dodge trigger bounces
+// it off the dodge: it walks to the clear spot in melee reach of the pick nearest it instead, else holds
+void UpdateTrapReach(LkState const& st, LkBotState& bs, Player* bot, Unit* pick, uint32 now)
+{
+    if (bs.trap || !pick || bs.stand != StandKind::None || st.traps.empty() || bot->IsWithinMeleeRange(pick))
+    {
+        bs.reach = false;
+        bs.reachValid = false;
+        bs.reachBlockedMs = 0;
+        return;
+    }
+
+    float const range = bot->GetMeleeRange(pick);
+    // Short of the edge, so a bot parked within PARK of the spot still swings
+    float const ring = std::max(range - PARK - 0.5f, 1.0f);
+    Position const from = bot->GetPosition();
+    Position const at = pick->GetPosition();
+    TrapInfo const* fouling = TrapOnApproach(st, from, Toward(at, from, ring));
+    if (!fouling)
+    {
+        bs.reach = false;
+        bs.reachValid = false;
+        bs.reachBlockedMs = 0;
+        return;
+    }
+
+    bs.reach = true;
+    bs.reachTrap = fouling->guid;
+    bool const kept = bs.reachValid && bs.reachPick == pick->GetGUID() && at.GetExactDist2d(bs.reachBasis) <= RELATCH &&
+                      NearestTrap(st, bs.reachSpot) >= TRAP_CLEAR + PARK;
+    if (kept || (!bs.reachValid && bs.reachBlockedMs && getMSTimeDiff(bs.reachBlockedMs, now) < SWEEP_RETRY_MS))
+        return;
+
+    FloorContext const ctx = FloorContextOf(bot);
+    bs.reachValid = false;
+    float best = 0.0f;
+    for (int k = 0; k < RELATCH_SWEEP_ANGLES; ++k)
+    {
+        float const angle = static_cast<float>(k) * 2.0f * static_cast<float>(M_PI) / RELATCH_SWEEP_ANGLES;
+        Position const spot(at.GetPositionX() + ring * std::cos(angle), at.GetPositionY() + ring * std::sin(angle),
+                            FLOOR_Z);
+        if (NearestTrap(st, spot) < TRAP_CLEAR + PARK || TrapOnApproach(st, from, spot) ||
+            !FloorAccepts(bot, spot.GetPositionX(), spot.GetPositionY(), ctx))
+            continue;
+
+        float const distance = from.GetExactDist2d(spot);
+        if (!bs.reachValid || distance < best)
+        {
+            bs.reachValid = true;
+            bs.reachSpot = spot;
+            best = distance;
+        }
+    }
+
+    bs.reachPick = pick->GetGUID();
+    bs.reachBasis = at;
+    bs.reachBlockedMs = bs.reachValid ? 0 : now;
+}
+
 // The pile add nearest the carrier whose far side from the add tank is clear to walk to
 bool PlagueWalkSpot(LkState const& st, Player* bot, ObjectGuid& add, Position& basis, Position& spot)
 {
@@ -1822,7 +2018,8 @@ bool PlagueWalkSpot(LkState const& st, Player* bot, ObjectGuid& add, Position& b
 
 void UpdatePlague(LkState const& st, LkBotState& bs, Player* bot, std::vector<Player*> const& members, uint32 now)
 {
-    if (!HasPlague(bot) || IsLkTankPlayer(bot))
+    // The add tanks stand in the pile already
+    if (!HasPlague(bot) || IsLkTankPlayer(bot) || bot->GetGUID() == st.standIn)
     {
         bs.plague = PlagueMode::None;
         bs.plagueValid = false;
@@ -1965,7 +2162,7 @@ void StandFor(LkState const& st, Player* bot, Creature* boss, StandKind& kind, P
             wanted = PolarSpot(live ? HOLDER_SPOT : OPENING_SPOT);
             note = "holder";
         }
-        else if (bot->GetGUID() == st.freeTank)
+        else if (bot->GetGUID() == st.freeTank || bot->GetGUID() == st.standIn)
         {
             kind = StandKind::AddTank;
             wanted = PolarSpot(ADD_TANK_SPOT);
@@ -2013,7 +2210,8 @@ void StandFor(LkState const& st, Player* bot, Creature* boss, StandKind& kind, P
 
     kind = StandKind::Winter;
     wanted = WinterSlotSpot(itr->second, st.tenNormal, st.ringStandable);
-    note = std::string("winter ") + (itr->second.ranged ? "ranged " : "tank ") + std::to_string(itr->second.index + 1);
+    char const* cluster = itr->second.ranged ? "ranged " : itr->second.guard ? "guard " : "tank ";
+    note = std::string("winter ") + cluster + std::to_string(itr->second.index + 1);
 }
 
 void UpdateStand(LkState const& st, LkBotState& bs, Player* bot, Creature* boss, uint32 now)
@@ -2126,7 +2324,7 @@ std::string PlagueNote(LkBotState const& bs)
 }
 
 // The walk the bot owes now, highest first, and whether anything of this fight owns its feet
-void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, uint32 now)
+void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, Unit* pick, uint32 now)
 {
     if (UnableToAct(bot))
     {
@@ -2139,6 +2337,7 @@ void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, uint3
     UpdateTrap(st, bs, bot, boss, now);
     UpdatePlague(st, bs, bot, members, now);
     UpdateStand(st, bs, bot, boss, now);
+    UpdateTrapReach(st, bs, bot, pick, now);
 
     bool const plagueWalk = bs.plague != PlagueMode::None && bs.plagueValid;
     bool const standWalk = bs.stand != StandKind::None && !bs.standHeld && !StandResting(bs);
@@ -2150,12 +2349,35 @@ void UpdateWalks(LkState& st, LkBotState& bs, Player* bot, Creature* boss, uint3
         SetWalk(bs, bot, WalkKind::Trap, bs.trapSpot);
     else if (plagueWalk)
         SetWalk(bs, bot, WalkKind::Plague, bs.plagueSpot);
+    else if (bs.reach && bs.reachValid)
+        SetWalk(bs, bot, WalkKind::Reach, bs.reachSpot);
     else if (standWalk)
         SetWalk(bs, bot, WalkKind::Stand, bs.standSpot);
     else
         SetWalk(bs, bot, WalkKind::None, Position());
 
-    bs.owned = bs.walk != WalkKind::None || st.quake || (bs.stand != StandKind::None && !StandResting(bs));
+    bs.owned = bs.walk != WalkKind::None || st.quake || bs.reach ||
+               (bs.stand != StandKind::None && !StandResting(bs));
+}
+
+// A shaman bot's Cleansing Totem strips a disease every 3 s: while a carrier lives, the water totem that
+// replaces it
+char const* TotemSwapFor(LkState const& st, Player* bot)
+{
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai || st.carriers.empty() || bot->getClass() != CLASS_SHAMAN || !IsLkDutyBot(bot))
+        return nullptr;
+
+    ObjectGuid const guid = bot->m_SummonSlot[SUMMON_SLOT_TOTEM_WATER];
+    Creature* totem = guid.IsEmpty() ? nullptr : bot->GetMap()->GetCreature(guid);
+    if (!totem || totem->GetUInt32Value(UNIT_CREATED_BY_SPELL) != SPELL_CLEANSING_TOTEM)
+        return nullptr;
+
+    for (char const* name : WATER_TOTEM_SWAPS)
+        if (ai->CanCastSpell(name, bot))
+            return name;
+
+    return nullptr;
 }
 
 void NoteBot(LkState const& st, LkBotState const& bs, Player* bot)
@@ -2165,18 +2387,27 @@ void NoteBot(LkState const& st, LkBotState const& bs, Player* bot)
 
     NoteDerived(bot, "lk.stand", st.quake ? "quake" : bs.stand != StandKind::None ? bs.standNote : "none");
     if (st.heroic)
-        NoteDerived(bot, "lk.trap", bs.trap ? Tag("dodge", bs.trapGuid) : "none");
+    {
+        std::string trap = "none";
+        if (bs.trap)
+            trap = Tag("dodge", bs.trapGuid);
+        else if (bs.reach)
+            trap = Tag(bs.reachValid ? "reach" : "hold", bs.reachTrap);
+
+        NoteDerived(bot, "lk.trap", trap);
+    }
 
     NoteDerived(bot, "lk.plague", PlagueNote(bs));
 
-    if (IsLkTankPlayer(bot))
+    uint8 const cls = bot->getClass();
+    // A DK or paladin damage dealer can stand in for the add tank
+    if (IsLkTankPlayer(bot) || cls == CLASS_DEATH_KNIGHT || cls == CLASS_PALADIN)
     {
         auto const itr = st.taunts.find(bot->GetGUID());
         NoteDerived(bot, "lk.taunt",
                     itr != st.taunts.end() ? Tag(itr->second.rule, itr->second.unit) : std::string("none"));
     }
 
-    uint8 const cls = bot->getClass();
     if (cls == CLASS_PRIEST || cls == CLASS_PALADIN || cls == CLASS_SHAMAN)
     {
         auto const itr = st.cures.find(bot->GetGUID());
@@ -2200,7 +2431,11 @@ void NoteBot(LkState const& st, LkBotState const& bs, Player* bot)
                     break;
             }
 
-        NoteDerived(bot, "lk.cure", rule ? Tag(rule, itr->second.carrier) : std::string("none"));
+        std::string cure = rule ? Tag(rule, itr->second.carrier) : std::string("none");
+        if (!rule && TotemSwapFor(st, bot))
+            cure = "totem";
+
+        NoteDerived(bot, "lk.cure", cure);
     }
 
     if (cls == CLASS_PRIEST || cls == CLASS_PALADIN)
@@ -2424,6 +2659,33 @@ Unit* PhaseOnePick(Player* bot, LkState const& st, Creature* boss, char const*& 
                 return unit;
             }
     }
+    else if (bot->GetGUID() == st.standIn)
+    {
+        // Its swings on its own healthiest ghoul keep the threat and the plague's fodder alive longest
+        ObjectGuid const own = bot->GetGUID();
+        AddInfo const* loose = nullptr;
+        AddInfo const* held = nullptr;
+        for (AddInfo const& add : st.adds)
+        {
+            if (add.entry != NPC_LK_DRUDGE_GHOUL || !add.emerged || !add.inCombat)
+                continue;
+
+            if (add.victim != own)
+            {
+                if (!loose || bot->GetExactDist2d(add.pos) < bot->GetExactDist2d(loose->pos))
+                    loose = &add;
+            }
+            else if (!held || add.healthPct > held->healthPct)
+                held = &add;
+        }
+
+        if (AddInfo const* pick = loose ? loose : held)
+            if (Unit* unit = FoeOf(bot, pick->guid))
+            {
+                rule = loose ? "loose" : "add";
+                return unit;
+            }
+    }
     else if (bot->GetGUID() != st.holder && st.heroic && IsRaidDpsBot(bot) && PlayerbotAI::IsMelee(bot))
     {
         if (AddInfo const* add = Lowest<AddInfo>(st.adds, [](AddInfo const& a) { return a.frenzied && a.inCombat; }))
@@ -2562,7 +2824,8 @@ bool IccLichKingInFrostmourne(Unit const* unit)
 IccLichKingPhaseId IccLichKingPhase(Player* bot, Unit* boss)
 {
     LkState const* st = bot->GetInstanceId() ? lkStates.Find(bot->GetInstanceId()) : nullptr;
-    IccLichKingPhaseId const phase = PhaseOf(boss, Harvested(bot), st && st->reachedThree);
+    IccLichKingPhaseId const phase =
+        PhaseOf(boss, Harvested(bot), st && st->reachedThree, st ? st->winters : WINTERS_UNKNOWN);
     if (RaidObs::Active() && boss && boss->GetEntry() == NPC_THE_LICH_KING)
     {
         static char const* const NAMES[] = {"one", "winter1", "two", "winter2", "three", "frostmourne", "outro"};
@@ -2794,7 +3057,10 @@ bool WalkOf(PlayerbotAI* botAI, WalkKind kind, Position& spot)
 bool GetLkQuakeWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Quake, spot); }
 bool GetLkTrapWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Trap, spot); }
 bool GetLkPlagueWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Plague, spot); }
-bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Stand, spot); }
+bool GetLkStandWalk(PlayerbotAI* botAI, Position& spot)
+{
+    return WalkOf(botAI, WalkKind::Stand, spot) || WalkOf(botAI, WalkKind::Reach, spot);
+}
 
 bool IsLkStandUrgent(PlayerbotAI* botAI)
 {
@@ -2846,7 +3112,7 @@ Unit* GetLkTauntTarget(PlayerbotAI* botAI, uint32& aoeSpell)
     Creature* boss = nullptr;
     LkState* st = LiveStateOf(botAI, &boss);
     Player* bot = botAI->GetBot();
-    if (!st || !IsLkDutyBot(bot) || !IsLkTankPlayer(bot) || UnableToAct(bot))
+    if (!st || !IsLkDutyBot(bot) || (!IsLkTankPlayer(bot) && st->standIn != bot->GetGUID()) || UnableToAct(bot))
         return nullptr;
 
     auto const itr = st->taunts.find(bot->GetGUID());
@@ -2952,6 +3218,12 @@ bool IsLkCureHeld(PlayerbotAI* botAI)
     return st && !st->carriers.empty();
 }
 
+char const* GetLkTotemSwap(PlayerbotAI* botAI)
+{
+    LkState* st = LiveStateOf(botAI);
+    return st ? TotemSwapFor(*st, botAI->GetBot()) : nullptr;
+}
+
 bool IsLkPlagueCarrier(Unit* unit) { return unit && HasPlague(unit); }
 
 void GetLkSplashAdds(PlayerbotAI* botAI, std::vector<Position>& out)
@@ -2994,7 +3266,14 @@ void TickLkEncounter(PlayerbotAI* botAI)
     LkState& st = lkStates.For(bot->GetInstanceId());
     uint32 const now = getMSTime();
     if (live && !st.pullMs)
+    {
         st.pullMs = now;
+        // Bots that reach the room after the pull find his thresholds already behind him
+        if (!boss->HealthAbovePct(70))
+            st.winters |= WINTER_FIRST;
+        if (!boss->HealthAbovePct(40))
+            st.winters |= WINTER_SECOND;
+    }
 
     Scan(st, boss, now);
     RefreshDuties(st, bot, boss, now);
@@ -3007,7 +3286,13 @@ void TickLkEncounter(PlayerbotAI* botAI)
     CallHumanTank(st, bot, boss, now);
     LkBotState& bs = st.bots[bot->GetGUID()];
     UpdateBrake(st, bot, boss);
-    UpdateWalks(st, bs, bot, boss, now);
+    // Melee damage dealers hold no stand in phase one, so generic reach is the walk that meets a trap
+    Unit* pick = nullptr;
+    if (live && st.phase == IccLichKingPhaseId::One && !st.traps.empty() && IsRaidDpsBot(bot) &&
+        PlayerbotAI::IsMelee(bot))
+        pick = GetLkTarget(botAI);
+
+    UpdateWalks(st, bs, bot, boss, pick, now);
     NoteBot(st, bs, bot);
 
     if (live)
@@ -3017,8 +3302,10 @@ void TickLkEncounter(PlayerbotAI* botAI)
 RaidBurstWindow IccLichKingBurstWindow(PlayerbotAI* botAI)
 {
     RaidBurstWindow window;
-    Creature* boss = GetLkBoss(botAI);
-    window.allowLust = boss && boss->IsInCombat() && PhaseOf(boss, false, false) == IccLichKingPhaseId::One;
+    Creature* boss = nullptr;
+    LkState const* st = StateOf(botAI, &boss);
+    window.allowLust = boss && boss->IsInCombat() &&
+                       PhaseOf(boss, false, false, st ? st->winters : WINTERS_UNKNOWN) == IccLichKingPhaseId::One;
     return window;
 }
 

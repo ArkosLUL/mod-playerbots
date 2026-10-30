@@ -113,6 +113,8 @@ constexpr uint32 CONTROL_LEAD_MS = 500;
 constexpr uint32 CONTROL_FLIGHT_MS = 1000;
 constexpr float RANGED_REACH = 30.0f;
 constexpr float TAUNT_RANGE = 30.0f;
+// A leftover Raging Spirit this close to him is tanked on him, where melee cleave it
+constexpr float SPIRIT_NEAR_HIM = 12.0f;
 
 constexpr float SOAK_OFFSET = 10.0f;
 constexpr float SOAK_REACH = 8.0f;
@@ -153,6 +155,8 @@ enum class WalkKind : uint8
     FrostmourneLead,
     FrostmourneFollow,
     Stack,
+    // A melee chaser's waypoint round the puddle between it and its Val'kyr
+    Round,
 };
 
 struct ValkyrInfo
@@ -193,6 +197,8 @@ struct LateBot
     Position walkSpot;
     bool walkParked = false;
     bool owned = false;
+    // Generic reach would walk it off the Frostmourne stack or through a puddle
+    bool reachHeld = false;
 
     // The Defile cast its clear spot was found for
     uint32 defileFor = 0;
@@ -207,6 +213,9 @@ struct LateBot
 
     // The carrier it chases off the stack
     ObjectGuid chase;
+    // Latched until reached or no longer clear, so the walk doesn't swap sides as the Val'kyr moves
+    bool roundValid = false;
+    Position roundStep;
 
     uint32 guard = 0;
     bool trapDue = false;
@@ -374,10 +383,12 @@ Unit* Pickable(Player* bot, Creature* unit)
                : nullptr;
 }
 
+// Heroic's Harvest Souls has no duration and ends only with his channel, so the stun itself is what counts
 bool HarvestStunned(Player* player, Unit* boss)
 {
-    return player->HasAura(sSpellMgr->GetSpellIdForDifficulty(ICC_LK_HARVEST_SOUL[0], boss)) ||
-           player->HasAura(sSpellMgr->GetSpellIdForDifficulty(ICC_LK_HARVEST_SOULS[0], boss));
+    return player->HasUnitState(UNIT_STATE_STUNNED) &&
+           (player->HasAura(sSpellMgr->GetSpellIdForDifficulty(ICC_LK_HARVEST_SOUL[0], boss)) ||
+            player->HasAura(sSpellMgr->GetSpellIdForDifficulty(ICC_LK_HARVEST_SOULS[0], boss)));
 }
 
 bool InReach(Player* bot, Unit* unit)
@@ -1664,7 +1675,8 @@ bool VileWalk(LateState const& st, LateBot& bs, PlayerbotAI* botAI, WalkKind& ki
 }
 
 // Chases its carrier on generic reach while the line to it clears every puddle and it is out of reach of
-// it, until the Val'kyr drops or a puddle comes in between
+// it, until the Val'kyr drops. With a puddle in between, a melee chaser walks round it and a ranged one
+// shoots only from where it stands.
 void UpdateChase(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhaseId phase)
 {
     Creature* valkyr = nullptr;
@@ -1672,14 +1684,51 @@ void UpdateChase(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhase
     if (phase == IccLichKingPhaseId::Two && bucket != st.bucket.end())
         valkyr = CarrierOf(st, bot, bucket->second);
 
-    if (!valkyr || !SegmentClear(st.puddles, bot->GetPosition(), valkyr->GetPosition()))
+    Position const from = bot->GetPosition();
+    if (!valkyr || PlayerbotAI::IsRanged(bot) || SegmentClear(st.puddles, from, valkyr->GetPosition()))
+        bs.roundValid = false;
+
+    if (!valkyr)
     {
         bs.chase.Clear();
         return;
     }
 
-    if (bs.chase != valkyr->GetGUID() && !InReach(bot, valkyr))
+    if (SegmentClear(st.puddles, from, valkyr->GetPosition()))
+    {
+        if (bs.chase != valkyr->GetGUID() && !InReach(bot, valkyr))
+            bs.chase = valkyr->GetGUID();
+
+        return;
+    }
+
+    bool const kept = bs.roundValid && bot->GetExactDist2d(bs.roundStep) > PARK &&
+                      SegmentClear(st.puddles, from, bs.roundStep) && !PuddleTrips(st, bs.roundStep);
+    if (!kept && !PlayerbotAI::IsRanged(bot))
+    {
+        Position const dest(valkyr->GetPositionX(), valkyr->GetPositionY(), FloorZ());
+        Position step;
+        bs.roundValid = PlanStep(st, bot, dest, step) && step.GetExactDist2d(dest) > SPOT_MOVED;
+        if (bs.roundValid)
+            bs.roundStep = step;
+    }
+
+    if (bs.roundValid)
         bs.chase = valkyr->GetGUID();
+    else
+        bs.chase.Clear();
+}
+
+// A melee damage dealer whose pick is a leftover Raging Spirit tanked by him leaves its node, which would
+// otherwise walk it back out of reach
+bool OnLeftoverSpirit(PlayerbotAI* botAI, LateState const& st)
+{
+    Player* bot = botAI->GetBot();
+    if (!st.stackValid || !IsRaidDpsBot(bot) || PlayerbotAI::IsRanged(bot))
+        return false;
+
+    Unit* pick = GetLkTarget(botAI);
+    return pick && pick->GetEntry() == NPC_LK_RAGING_SPIRIT && pick->GetExactDist2d(st.anchor) <= SPIRIT_NEAR_HIM;
 }
 
 void ValkyrDuty(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhaseId phase, std::string& note)
@@ -1708,7 +1757,7 @@ void ValkyrDuty(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhaseI
 
     auto const bucket = st.bucket.find(bot->GetGUID());
     if (bucket != st.bucket.end())
-        note = "dps " + Counter(bucket->second);
+        note = std::string(bs.roundValid ? "round " : "dps ") + Counter(bucket->second);
 }
 
 void SetWalk(LateBot& bs, Player* bot, WalkKind kind, Position const& spot, float unpark)
@@ -1808,8 +1857,21 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
             !(phase == IccLichKingPhaseId::Three && VileWalk(st, bs, botAI, kind, spot)))
         {
             UpdateChase(st, bs, bot, phase);
+            // A plague carrier isolating from the raid keeps its walk
+            if (bs.roundValid && IsLkMovementOwned(botAI))
+                bs.roundValid = false;
+
+            if (bs.roundValid)
+            {
+                kind = WalkKind::Round;
+                spot = bs.roundStep;
+            }
+            else if (assigned && OnLeftoverSpirit(botAI, st))
+                stackNote = phase == IccLichKingPhaseId::Two
+                                ? std::string("p2 spirit")
+                                : std::string("p3 ") + SideName(st.side.Get()) + " spirit";
             // A Necrotic Plague carrier isolating from the raid would be walked straight back into it
-            if (!bs.chase && assigned && !IsLkMovementOwned(botAI))
+            else if (!bs.chase && assigned && !IsLkMovementOwned(botAI))
             {
                 Position step;
                 if (PlanStep(st, bot, want, step))
@@ -1821,15 +1883,24 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
                     hold = true;
             }
         }
+        else
+        {
+            // Planned again from wherever the Defile or Vile Spirits walk leaves it
+            bs.roundValid = false;
+        }
 
         ValkyrDuty(st, bs, bot, phase, valkyrNote);
     }
 
     if (stuck || !platformPhase || inFm)
+    {
         bs.chase.Clear();
+        bs.roundValid = false;
+    }
 
     SetWalk(bs, bot, kind, spot, unpark);
     bs.owned = kind != WalkKind::None || hold;
+    bs.reachHeld = kind == WalkKind::Round || (inFm && bot->IsAlive() && IsHeroicMap(bot));
 
     bool const siphoning = phase == IccLichKingPhaseId::Two && bot->GetGUID() == st.freeTank &&
                            std::any_of(st.valkyrs.begin(), st.valkyrs.end(),
@@ -1860,6 +1931,7 @@ Unit* Resolve(PlayerbotAI* botAI, LateState const& st, Creature* boss, char cons
         if (!dps || !ranged)
             return nullptr;
 
+        // Reach is held inside, so a pick has to be in range from the stack
         Player* leader = PlayerOf(bot, st.leader);
         Position const from = leader ? leader->GetPosition() : bot->GetPosition();
         Unit* best = nullptr;
@@ -1873,7 +1945,8 @@ Unit* Resolve(PlayerbotAI* botAI, LateState const& st, Creature* boss, char cons
             if (best && distance >= bestDistance)
                 continue;
 
-            if (Unit* unit = Pickable(bot, CreatureOf(bot, spirit.guid)))
+            Unit* unit = Pickable(bot, CreatureOf(bot, spirit.guid));
+            if (unit && bot->IsWithinCombatRange(unit, RANGED_REACH))
             {
                 best = unit;
                 bestDistance = distance;
@@ -2059,7 +2132,17 @@ bool GetLkFrostmourneWalk(PlayerbotAI* botAI, Position& spot)
     return WalkOf(botAI, {WalkKind::FrostmourneLead, WalkKind::FrostmourneFollow}, spot);
 }
 
-bool GetLkStackWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, {WalkKind::Stack}, spot); }
+bool IsLkLateReachHeld(PlayerbotAI* botAI)
+{
+    LateState* st = StateOf(botAI);
+    LateBot const* bs = st ? BotOf(*st, botAI->GetBot()) : nullptr;
+    return bs && bs->reachHeld;
+}
+
+bool GetLkStackWalk(PlayerbotAI* botAI, Position& spot)
+{
+    return WalkOf(botAI, {WalkKind::Stack, WalkKind::Round}, spot);
+}
 
 bool IsLkDefileRun(PlayerbotAI* botAI)
 {

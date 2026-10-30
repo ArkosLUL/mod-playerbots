@@ -92,6 +92,15 @@ public:
     bool IsActive() override;
 };
 
+class IccLichKingTotemTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc lich king totem";
+
+    IccLichKingTotemTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccLichKingTargetTrigger : public IccDirectTargetTrigger
 {
 public:

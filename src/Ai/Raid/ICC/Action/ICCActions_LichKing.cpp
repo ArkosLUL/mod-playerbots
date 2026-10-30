@@ -169,6 +169,12 @@ bool IccLichKingSilenceDispelAction::Execute(Event /*event*/)
     return member && botAI->CastSpell(spellId, member);
 }
 
+bool IccLichKingTotemAction::Execute(Event /*event*/)
+{
+    char const* totem = GetLkTotemSwap(botAI);
+    return totem && botAI->CastSpell(totem, bot);
+}
+
 bool IccLichKingBrakeStopAction::Execute(Event /*event*/)
 {
     Creature* boss = IsLkBraked(botAI) ? GetLkBoss(botAI) : nullptr;

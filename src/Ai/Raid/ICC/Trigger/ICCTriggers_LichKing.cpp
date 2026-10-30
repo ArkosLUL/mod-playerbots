@@ -56,6 +56,8 @@ bool IccLichKingSilenceDispelTrigger::IsActive()
     return GetLkSilenceDispelTarget(botAI, spellId) != nullptr;
 }
 
+bool IccLichKingTotemTrigger::IsActive() { return GetLkTotemSwap(botAI) != nullptr; }
+
 bool IccLichKingBrakeTrigger::IsActive()
 {
     Creature* boss = IsLkBraked(botAI) ? GetLkBoss(botAI) : nullptr;

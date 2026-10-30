@@ -26,11 +26,15 @@ Unit* GetLkLateTarget(PlayerbotAI* botAI, char const*& rule);
 bool IsLkLateTargetHeld(PlayerbotAI* botAI);
 // A walk of this stem, a parked stack spot, or Frostmourne owns the bot's feet
 bool IsLkLateMovementOwned(PlayerbotAI* botAI);
+// Inside heroic Frostmourne, or on a walk round a puddle to its Val'kyr: generic reach would walk the bot
+// off the stack or into the puddle
+bool IsLkLateReachHeld(PlayerbotAI* botAI);
 
 // Each walk answers true with its spot while it is the bot's current walk and the bot has not parked
 bool GetLkDefileWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkVileWalk(PlayerbotAI* botAI, Position& spot);
 bool GetLkFrostmourneWalk(PlayerbotAI* botAI, Position& spot);
+// The stack walk, or a melee chaser's waypoint round a puddle to its Val'kyr
 bool GetLkStackWalk(PlayerbotAI* botAI, Position& spot);
 // The Defile target's own run, which spends Nitro Boosts
 bool IsLkDefileRun(PlayerbotAI* botAI);
