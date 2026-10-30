@@ -149,6 +149,8 @@ def phase_one() -> list[dict]:
         note(47000, SHIV, "lk.plague", "none"),
         note(50000, MEND, "lk.cure", f"addtank {BASTION}"),
         note(50500, MEND, "lk.cure", "none"),
+        note(51500, MEND, "lk.cure", "totem"),
+        note(52000, MEND, "lk.cure", "none"),
         dmg(51000, BASTION, 73914),
         # Adds: two Enrages called to Arcane, one Tranquilizing Shot, Shiv on the Frenzied Shambling.
         aura(20000, SHAMBLING, 72148),
@@ -178,6 +180,10 @@ def heroic_one() -> list[dict]:
         note(41000, ARCANE, "lk.trap", "none"),
         note(41500, ARCANE, "lk.trap", tag("dodge", TRAP)),
         note(42500, ARCANE, "lk.trap", "none"),
+        # Shiv's reach to him crosses the trap: it walks round, then waits with no clear spot
+        note(43000, SHIV, "lk.trap", tag("reach", TRAP)),
+        note(44500, SHIV, "lk.trap", tag("hold", TRAP)),
+        note(46000, SHIV, "lk.trap", "none"),
         dmg(44000, ARKOS, 73529, TRAP),
         cheat(1000, BULWARK, "lk.heroicbuff", 4, ARKOS),
     ]
@@ -190,7 +196,7 @@ def winter_one() -> list[dict]:
         note(60500, BASTION, "lk.stand", "winter tank 4"),
         note(60500, MEND, "lk.stand", "winter tank 2"),
         note(60500, SHIV, "lk.stand", "winter tank 3"),
-        note(60500, ARCANE, "lk.stand", "winter ranged 1"),
+        note(60500, ARCANE, "lk.stand", "winter guard 5"),
         note(61200, ARCANE, "lk.plague", "isolate"),
         note(64000, MEND, "lk.cure", f"isolated {ARCANE}"),
         note(64500, MEND, "lk.cure", "none"),
@@ -228,6 +234,8 @@ def phase_two() -> list[dict]:
         note(125500, MEND, "lk.stack", "p2 2"),
         note(125500, SHIV, "lk.stack", "p2 3"),
         note(130000, ARCANE, "lk.target", tag("spirit", RAGING)),
+        note(131000, SHIV, "lk.stack", "p2 spirit"),
+        note(135000, SHIV, "lk.stack", "p2 3"),
         note(140000, ARCANE, "lk.brake", "1"),
         note(140000, ARCANE, "lk.target", tag("boss", LICH_KING)),
         note(141500, ARCANE, "lk.brake", "0"),
@@ -244,6 +252,7 @@ def phase_two() -> list[dict]:
         note(152000, SHIV, "lk.valkyr", tag("dps", VALKYR_A)),
         note(152500, ARCANE, "lk.valkyr", tag("dps", VALKYR_A)),
         note(153000, BASTION, "lk.valkyr", tag("stun", VALKYR_B)),
+        note(153500, SHIV, "lk.valkyr", tag("round", VALKYR_A)),
         note(154000, BASTION, "lk.valkyr", tag("dps", VALKYR_B)),
         *(note(160000, guid, "lk.valkyr", "none") for guid in (ARCANE, SHIV, BASTION)),
         note(160000, ARCANE, "lk.target", tag("boss", LICH_KING)),
@@ -283,7 +292,7 @@ def winter_two_and_three() -> list[dict]:
     return [
         note(300000, BULWARK, "lk.phase", "winter2"),
         *(note(300000, guid, "lk.stack", "none") for guid in (ARCANE, MEND, SHIV)),
-        note(300500, ARCANE, "lk.stand", "winter ranged 2"),
+        note(300500, ARCANE, "lk.stand", "winter guard 5"),
         note(305000, ARCANE, "lk.target", tag("sphere", SPHERE)),
         note(310000, BASTION, "lk.silence", str(MEND)),
         note(310500, BASTION, "lk.silence", "none"),
@@ -351,6 +360,16 @@ def normal_harvest() -> list[dict]:
         note(465000, MEND, "lk.harvest", "dispel"),
         note(466000, MEND, "lk.harvest", "heal"),
         note(475000, MEND, "lk.harvest", "none"),
+    ]
+
+
+def stand_in() -> list[dict]:
+    """One tank player: Shiv holds the ghouls through phase one."""
+    return [
+        note(55000, SHIV, "lk.tank", "3"),
+        note(56000, SHIV, "lk.taunt", tag("add", GHOUL)),
+        note(56500, SHIV, "lk.taunt", "none"),
+        note(60000, SHIV, "lk.tank", "0"),
     ]
 
 
@@ -435,13 +454,18 @@ class Tanks(unittest.TestCase):
             "    0:50.000  Bulwark     0:03.000  offered shield wall; cast Shield Wall +0.5s\n"
             "  calls to a human tank  Shield Wall 0:50.000\n"))
 
+    def test_a_stand_in_holds_the_ghouls(self):
+        out = printed(lk.show_tanks, load(pull() + stand_in()))
+        self.assertIn("    Shiv  stand-in 0:55.000, off 1:00.000\n", out)
+        self.assertIn("    Shiv  add 1  on Drudge Ghoul\n", out)
+
 
 class Stands(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(lk.show_stands, load(pull())), (
             "STANDS\n"
             "  lk.stand per bot: the phase one and winter stands held in order (moves between two)\n"
-            "    Arcane  opening/ranged 2/winter ranged 1/quake/winter ranged 2 (moved 4)\n"
+            "    Arcane  opening/ranged 2/winter guard 5/quake (moved 4)\n"
             "    Bastion  opening/addtank/winter tank 4/spirit (moved 3)\n"
             "    Bulwark  opening/holder/winter tank 1/spirit/quake (moved 4)\n"
             "    Mend  opening/ranged 1/winter tank 2 (moved 2)\n"
@@ -449,7 +473,7 @@ class Stands(unittest.TestCase):
             "  lk.stack per bot: the phase two, three and Frostmourne stacks held in order (moves between two)\n"
             "    Arcane  p2 1/p3 1 1/p3 2 1/fm (moved 3)\n"
             "    Mend  p2 2/p3 1 2/fm (moved 1)\n"
-            "    Shiv  p2 3/fm (moved 0)\n"
+            "    Shiv  p2 3/p2 spirit/fm (moved 2)\n"
             "  lk.side, the phase three side: east 5:58.000 -> west 6:10.500 -> east 7:00.000\n"))
 
 
@@ -463,7 +487,7 @@ class Plague(unittest.TestCase):
             "    Shiv  walk Shambling Horror\n"
             "  lk.cure per bot: cures by rule, the carriers\n"
             "    Bastion  delivered 1  on Mend\n"
-            "    Mend  addtank 1, emergency 1, isolated 1  on Shiv, Bastion, Arcane\n"
+            "    Mend  addtank 1, emergency 1, isolated 1, totem 1  on Shiv, Bastion, Arcane\n"
             "  Necrotic Plague ticks taken: Bastion 1, Shiv 1\n"))
 
 
@@ -486,9 +510,10 @@ class Traps(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(lk.show_traps, load(pull())), (
             "TRAPS\n"
-            "  lk.trap per bot: dodges, the traps\n"
+            "  lk.trap per bot: dodges, reach walks and holds, the traps\n"
             "    Arcane  dodge 2  on Shadow Trap\n"
             "    Mend  dodge 1  on Shadow Trap\n"
+            "    Shiv  hold 1, reach 1  on Shadow Trap\n"
             "  Shadow Trap hits: Arkos human 1\n"))
 
     def test_normal_has_none(self):
@@ -499,15 +524,18 @@ class Winters(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(lk.show_winters, load(pull())), (
             "WINTERS\n"
-            "  2 winter(s): sphere and spirit picks per bot from lk.target, silence dispels, the Quake hold\n"
+            "  2 winter(s): sphere guards, sphere and spirit picks per bot from lk.target, silence dispels, "
+            "the Quake hold\n"
             "\n"
             "  winter1  1:00.000  held 1:05.000\n"
+            "    sphere guards  Arcane\n"
             "    sphere picks  Arcane 2\n"
             "    spirit picks  Shiv 2, Bulwark 1\n"
             "    silence dispels  Mend on Arcane, Shiv\n"
             "    Quake hold  Bulwark 1:58.000, Shiv 1:58.000, Arcane 1:58.200\n"
             "\n"
             "  winter2  5:00.000  held 1:05.000\n"
+            "    sphere guards  Arcane\n"
             "    sphere picks  Arcane 1\n"
             "    spirit picks  none\n"
             "    silence dispels  Bastion on Mend\n"
@@ -518,9 +546,10 @@ class Valkyrs(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(lk.show_valkyrs, load(pull())), (
             "VALKYRS\n"
-            "  lk.valkyr, each Val'kyr from its first call: its DPS bucket, then the stuns and slows called per bot\n"
-            "     2:30.000  Val'kyr Shadowguard 976  dps Arcane, Shiv  stun Shiv 1  slow Arcane 1\n"
-            "     2:30.000  Val'kyr Shadowguard 977  dps Bastion  stun Bastion 1  slow -\n"
+            "  lk.valkyr, each Val'kyr from its first call: its DPS bucket, then the walks round puddles, stuns and "
+            "slows per bot\n"
+            "     2:30.000  Val'kyr Shadowguard 976  dps Arcane, Shiv  round Shiv 1  stun Shiv 1  slow Arcane 1\n"
+            "     2:30.000  Val'kyr Shadowguard 977  dps Bastion  round -  stun Bastion 1  slow -\n"
             "  lk.siphon per bot: siphon taunts, the Val'kyrs\n"
             "    Bastion  2  on Val'kyr Shadowguard\n"))
 

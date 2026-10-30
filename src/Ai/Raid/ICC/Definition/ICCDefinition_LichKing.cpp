@@ -38,6 +38,7 @@ void DefineLichKing(EncounterBuilder& e)
     e.Node<IccLichKingDefileTrigger, IccLichKingDefileAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     e.Node<IccLichKingVileSpiritsTrigger, IccLichKingVileSpiritsAction>(ACTION_EMERGENCY + 3, EncounterRow::Mover);
     e.Node<IccLichKingFrostmourneTrigger, IccLichKingFrostmourneAction>(ACTION_EMERGENCY + 2, EncounterRow::Mover);
+    e.Node<IccLichKingTotemTrigger, IccLichKingTotemAction>(ACTION_RAID + 15);
     e.Node<IccLichKingTankDefensiveTrigger, IccLichKingCastTankDefensiveAction>(ACTION_RAID + 14);
     e.Node<IccLichKingTauntTrigger, IccLichKingTauntAction>(ACTION_RAID + 13);
     e.Node<IccLichKingSiphonTauntTrigger, IccLichKingSiphonTauntAction>(ACTION_RAID + 12);
@@ -70,6 +71,8 @@ void DefineLichKing(EncounterBuilder& e)
     e.OwnMovement("icc lich king movement", Role::Any, &IsLkMovementOwned, Family::Attack);
     // Keeps reach: a Harvest Soul victim walks to the Spirit Warden, far stack nodes step into melee
     e.OwnMovement("icc lich king late movement", Role::Any, &IsLkLateMovementOwned);
+    // Heroic Frostmourne moves as one stack, and a chaser's straight reach would cross the puddle it walks round
+    e.OwnMovement("icc lich king late reach hold", Role::Any, &IsLkLateReachHeld, Family::Attack);
     e.Block("icc lich king spell movers", Role::Any, &IsLkAnyMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
     // avoid aoe flees a few yards at most, against the forced runs

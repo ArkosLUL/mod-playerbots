@@ -120,6 +120,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccLichKingTotemAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc lich king totem";
+
+    IccLichKingTotemAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccLichKingTargetAction : public IccDirectAttackAction
 {
 public:

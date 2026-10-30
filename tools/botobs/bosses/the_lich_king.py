@@ -8,8 +8,8 @@
     the_lich_king.py <file> --plague       Necrotic Plague: each carrier's steps, cures by rule, ticks taken
     the_lich_king.py <file> --adds         Shamblings: Enrage and Tranquilizing Shot, the Frenzy stuns
     the_lich_king.py <file> --traps        heroic Shadow Traps: dodges and hits
-    the_lich_king.py <file> --winters      each winter: sphere and spirit picks, silence dispels, the Quake hold
-    the_lich_king.py <file> --valkyrs      each Val'kyr: its bucket, stuns and slows; heroic siphon taunts
+    the_lich_king.py <file> --winters      each winter: guards, sphere and spirit picks, silence dispels, the Quake hold
+    the_lich_king.py <file> --valkyrs      each Val'kyr: its bucket, walks round puddles, stuns and slows; siphon taunts
     the_lich_king.py <file> --defile       each Defile: its target and the runs, puddle step-outs and hits
     the_lich_king.py <file> --vile         Vile Spirits: soakers, Frost Traps, side flips, bursts taken
     the_lich_king.py <file> --frostmourne  Harvest Soul duties, heroic bomb rules and hits
@@ -24,15 +24,18 @@ What the generic views miss here:
   phases the pull reached, spares `lk.trap`, `lk.stun`, `lk.siphon` and `lk.bombdodge` off heroic and
   `lk.harvest` on it, and never names `lk.winterinbound`, `lk.mtinbound`, `lk.rangedinbound` or
   `lk.sharedslot`, which no code writes.
-- **`lk.tank` is a role per tank**: `1` the holder, `2` free, `0` off. `lk.brake` is `1` while braked,
-  past 90% of the holder's threat until under 80%. `lk.side` is the raid's phase three side, `1` east,
-  `2` west.
+- **`lk.tank` is a role per tank**: `1` the holder, `2` free, `3` the damage dealer standing in for the
+  ghouls with no other tank player, `0` off. `lk.brake` is `1` while braked, past 90% of the holder's
+  threat until under 80%. `lk.side` is the raid's phase three side, `1` east, `2` west.
 - **The other per-bot keys note `none` when their duty ends**, and a value leads with its rule, which
   this reader counts. A unit in a value is its guid counter or its whole guid. `lk.stun`, `lk.enrage`,
   `lk.silence` and `lk.siphon` name the unit alone: the stunned add, the enraged Shambling, the
   silenced member, the Val'kyr.
 - **Winter picks come from `lk.target`** by the picked unit's entry, Ice Sphere or Raging Spirit,
-  whatever the rule is called. The Quake hold is `lk.stand` `quake`.
+  whatever the rule is called. The sphere guards are `lk.stand` `winter guard`, the Quake hold `quake`.
+- **`lk.trap` also carries melee reach** round a trap: `reach` walks to a clear spot by the pick,
+  `hold` waits with none. `lk.valkyr` `round` is a melee chaser walking round a puddle, still in the
+  bucket.
 - **`lk.defile` is the Defile listener's**, one note per cast on its target; `lk.defilerun` is what
   each bot did about it.
 - **`lk.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window. `lk.humancall`
@@ -86,7 +89,7 @@ KEY_PHASES = {
 OFF = ("none", "0")
 LIST_LIMIT = 8
 COUNTER_MASK = 0xFFFFFFFF
-TANK_ROLES = {"1": "holder", "2": "free", "0": "off"}
+TANK_ROLES = {"1": "holder", "2": "free", "3": "stand-in", "0": "off"}
 SIDES = {"1": "east", "2": "west"}
 DEFENSIVE_OFF = "idle"
 # a button counts for a window from this long before it opens until this long after it closes
@@ -477,14 +480,14 @@ def show_traps(trace: Trace) -> None:
     if not heroic(trace) and "lk.trap" not in emitted_keys(trace):
         print("  Shadow Traps are heroic only")
         return
-    show_duty(trace, "lk.trap", "dodges, the traps")
+    show_duty(trace, "lk.trap", "dodges, reach walks and holds, the traps")
     print(f"  Shadow Trap hits: {icc.ranked(trace, hits(trace, SHADOW_TRAP)) or 'none'}")
 
 
 def winter_rows(trace: Trace) -> list[dict]:
     """Per winter in lk.phase: `phase`, `start`, `stop`, the lk.target spans started on a `sphere` and on
-    a `spirit` per bot, `silence` as (dispeller, members) from lk.silence, and `quake` as (from, bot) per
-    bot whose lk.stand took `quake`."""
+    a `spirit` per bot, `silence` as (dispeller, members) from lk.silence, `guard`, the bots whose
+    lk.stand took `winter guard`, and `quake` as (from, bot) per bot whose lk.stand took `quake`."""
     targets = spans_of(trace, "lk.target")
     stands = spans_of(trace, "lk.stand")
     rows = []
@@ -504,12 +507,17 @@ def winter_rows(trace: Trace) -> list[dict]:
             members = [unit_of(trace, word, creature=False) for value in values for word in value.split()]
             silence.append((guid, [unit for unit in members if unit is not None]))
         quake = []
+        guard = []
         for guid, spans in stands.items():
+            inside = [value for value, at, _ in spans if start <= at < stop]
             at = next((at for value, at, _ in spans if start <= at < stop and rule_of(value) == "quake"), None)
             if at is not None:
                 quake.append((at, guid))
+            if any(value.startswith("winter guard") for value in inside):
+                guard.append(guid)
         rows.append({"phase": phase, "start": start, "stop": stop, "sphere": picks[ICE_SPHERE],
                      "spirit": picks[RAGING_SPIRIT], "silence": sorted(silence, key=lambda pair: trace.name(pair[0])),
+                     "guard": sorted(guard, key=trace.name),
                      "quake": sorted(quake, key=lambda pair: (pair[0], trace.name(pair[1])))})
     return rows
 
@@ -521,9 +529,11 @@ def show_winters(trace: Trace) -> None:
     if not rows:
         print(f"  no winter in {PHASE}")
         return
-    print(f"  {len(rows)} winter(s): sphere and spirit picks per bot from lk.target, silence dispels, the Quake hold")
+    print(f"  {len(rows)} winter(s): sphere guards, sphere and spirit picks per bot from lk.target, silence dispels, "
+          "the Quake hold")
     for row in rows:
         print(f"\n  {row['phase']}  {clock(row['start'])}  held {clock(row['stop'] - row['start'])}")
+        print(f"    sphere guards  {', '.join(icc.who(trace, guid) for guid in row['guard']) or 'none'}")
         print(f"    sphere picks  {icc.ranked(trace, row['sphere']) or 'none'}")
         print(f"    spirit picks  {icc.ranked(trace, row['spirit']) or 'none'}")
         dispels = "; ".join(f"{icc.who(trace, guid)} on {unit_names(trace, members) or '-'}"
@@ -535,7 +545,8 @@ def show_winters(trace: Trace) -> None:
 
 def valkyr_rows(trace: Trace) -> list[dict]:
     """Per Val'kyr lk.valkyr named, first named first: `t`, `valkyr` (its guid, else the word naming it),
-    `dps`, the bots bucketed on it, and `stun` and `slow`, per bot the spans of each it was handed."""
+    `dps`, the bots bucketed on it, and `round`, `stun` and `slow`, per bot the spans of each it was
+    handed. A bot walking round a puddle is in the bucket too."""
     rows: dict = {}
     for guid, spans in spans_of(trace, "lk.valkyr").items():
         for value, at, _ in spans:
@@ -543,12 +554,12 @@ def valkyr_rows(trace: Trace) -> list[dict]:
             if off(value) or not word:
                 continue
             valkyr = unit_of(trace, word) or word
-            row = rows.setdefault(valkyr, {"t": at, "valkyr": valkyr, "dps": set(),
+            row = rows.setdefault(valkyr, {"t": at, "valkyr": valkyr, "dps": set(), "round": collections.Counter(),
                                            "stun": collections.Counter(), "slow": collections.Counter()})
             row["t"] = min(row["t"], at)
-            if rule == "dps":
+            if rule in ("dps", "round"):
                 row["dps"].add(guid)
-            elif rule in ("stun", "slow"):
+            if rule in ("round", "stun", "slow"):
                 row[rule][guid] += 1
     return sorted(rows.values(), key=lambda row: (row["t"], str(row["valkyr"])))
 
@@ -563,10 +574,12 @@ def show_valkyrs(trace: Trace) -> None:
         return
     rows = valkyr_rows(trace)
     if rows:
-        print("  lk.valkyr, each Val'kyr from its first call: its DPS bucket, then the stuns and slows called per bot")
+        print("  lk.valkyr, each Val'kyr from its first call: its DPS bucket, then the walks round puddles, stuns and "
+              "slows per bot")
         for row in rows:
             bucket = ", ".join(sorted(icc.who(trace, guid) for guid in row["dps"])) or "-"
             print(f"    {clock(row['t']):>9}  {valkyr_label(trace, row['valkyr'])}  dps {bucket}  "
+                  f"round {icc.ranked(trace, row['round']) or '-'}  "
                   f"stun {icc.ranked(trace, row['stun']) or '-'}  slow {icc.ranked(trace, row['slow']) or '-'}")
     else:
         print("  lk.valkyr never named a Val'kyr")
@@ -679,8 +692,8 @@ SECTIONS = (
     ("plague", "Necrotic Plague: each carrier's steps, cures by rule, ticks taken", show_plague),
     ("adds", "Shamblings: Enrage and Tranquilizing Shot, the Frenzy stuns", show_adds),
     ("traps", "heroic Shadow Traps: dodges and hits", show_traps),
-    ("winters", "each winter: sphere and spirit picks, silence dispels, the Quake hold", show_winters),
-    ("valkyrs", "each Val'kyr: its bucket, stuns and slows; heroic siphon taunts", show_valkyrs),
+    ("winters", "each winter: guards, sphere and spirit picks, silence dispels, the Quake hold", show_winters),
+    ("valkyrs", "each Val'kyr: its bucket, walks round puddles, stuns and slows; siphon taunts", show_valkyrs),
     ("defile", "each Defile: its target and the runs, puddle step-outs and hits", show_defile),
     ("vile", "Vile Spirits: soakers, Frost Traps, side flips, bursts taken", show_vile),
     ("frostmourne", "Harvest Soul duties, heroic bomb rules and hits", show_frostmourne),
