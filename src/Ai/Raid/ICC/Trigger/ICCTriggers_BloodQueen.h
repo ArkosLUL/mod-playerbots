@@ -81,9 +81,19 @@ public:
     static constexpr char const* Name = "icc bql anti fear";
 
     IccBqlAntiFearTrigger(PlayerbotAI* botAI) : RaidAntiFearTrigger(botAI, Name) {}
+    bool IsActive() override;
 
 protected:
     bool FearWindowActive() override;
+};
+
+class IccBqlMassDispelTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc bql mass dispel";
+
+    IccBqlMassDispelTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
 };
 
 class IccBqlFrenzyCcTrigger : public Trigger

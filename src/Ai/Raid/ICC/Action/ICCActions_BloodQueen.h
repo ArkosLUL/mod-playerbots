@@ -30,7 +30,13 @@ protected:
     // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast.
     // A walk of its own still in flight at MOVEMENT_FORCED gives way to the new one.
     bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
-    void DropWalk() { walking = false; }
+    void DropWalk()
+    {
+        walking = false;
+        detouring = false;
+    }
+    // The next point on the way to `goal`, round any shadow in the way
+    Position NextLeg(Position const& goal);
 
 private:
     bool BookedOnWalkSpot();
@@ -38,6 +44,8 @@ private:
     Position walkSpot;
     uint32 walkIssuedMs = 0;
     bool walking = false;
+    Position detour;
+    bool detouring = false;
 };
 
 class IccBqlDodgeAction : public IccBqlWalkAction
@@ -103,15 +111,27 @@ public:
     bool Execute(Event event) override;
 };
 
+// Priests ward themselves first, so they can Mass Dispel the rest
 class IccBqlAntiFearAction : public RaidAntiFearAction
 {
 public:
     static constexpr char const* Name = "icc bql anti fear";
 
     IccBqlAntiFearAction(PlayerbotAI* botAI) : RaidAntiFearAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
 
 protected:
     bool FearWindowActive() override;
+};
+
+class IccBqlMassDispelAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc bql mass dispel";
+
+    IccBqlMassDispelAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
 };
 
 class IccBqlFrenzyCcAction : public Action

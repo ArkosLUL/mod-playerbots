@@ -23,8 +23,8 @@ namespace
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
 // A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// The bite walk re-aims once its target has moved this far
-constexpr float BITE_REAIM = 1.5f;
+// A walk to a player re-aims once the player has moved this far
+constexpr float PLAYER_REAIM = 1.5f;
 constexpr float BITE_REACH = 3.0f;
 // Nitro Boosts for a Pact walk this long
 constexpr float PACT_NITRO_FROM = 12.0f;
@@ -76,6 +76,16 @@ bool IccBqlWalkAction::WalkTo(Position const& spot, MovementPriority priority, b
     return false;
 }
 
+Position IccBqlWalkAction::NextLeg(Position const& goal)
+{
+    Position const next = GetBqlWalkVia(botAI, goal, detouring ? &detour : nullptr);
+    detouring = next.GetExactDist2d(goal) > WALK_SPOT_TOLERANCE;
+    if (detouring)
+        detour = next;
+
+    return next;
+}
+
 bool IccBqlWalkAction::BookedOnWalkSpot()
 {
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
@@ -117,11 +127,13 @@ bool IccBqlBiteAction::Execute(Event /*event*/)
 
     if (bot->GetExactDist2d(target) > BITE_REACH)
     {
+        Position const leg = NextLeg(target->GetPosition());
+        float const reaim = leg.GetExactDist2d(target) <= WALK_SPOT_TOLERANCE ? PLAYER_REAIM : WALK_SPOT_TOLERANCE;
         if (Position const* inFlight = WalkInFlight())
-            if (inFlight->GetExactDist2d(target) <= BITE_REAIM)
+            if (inFlight->GetExactDist2d(leg) <= reaim)
                 return true;
 
-        return WalkTo(target->GetPosition(), MovementPriority::MOVEMENT_FORCED, true);
+        return WalkTo(leg, MovementPriority::MOVEMENT_FORCED, true);
     }
 
     DropWalk();
@@ -156,12 +168,15 @@ bool IccBqlPactAction::Execute(Event /*event*/)
         return false;
     }
 
+    // The spot is a human member once he doesn't come
+    Position const leg = NextLeg(spot);
+    float const reaim = leg.GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE ? PLAYER_REAIM : WALK_SPOT_TOLERANCE;
     if (Position const* inFlight = WalkInFlight())
-        if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
+        if (inFlight->GetExactDist2d(leg) <= reaim)
             return true;
 
     // Nitro Boosts refuse a bot mid-cast, so they go after the walk drops it
-    bool const walked = WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
+    bool const walked = WalkTo(leg, MovementPriority::MOVEMENT_FORCED, true);
     if (walked && bot->GetExactDist2d(spot) > PACT_NITRO_FROM && EncounterHelpers::NitroBoostsReady(bot))
         EncounterHelpers::UseNitroBoosts(bot);
 
@@ -212,7 +227,31 @@ bool IccBqlCastTankDefensiveAction::Execute(Event /*event*/)
     return spellId && botAI->CastSpell(spellId, bot);
 }
 
+bool IccBqlAntiFearAction::Execute(Event event)
+{
+    if (IsBqlSelfWardDue(botAI))
+        return botAI->CastSpell("fear ward", bot);
+
+    return RaidAntiFearAction::Execute(event);
+}
+
+bool IccBqlAntiFearAction::isUseful() { return IsBqlSelfWardDue(botAI) || RaidAntiFearAction::isUseful(); }
+
 bool IccBqlAntiFearAction::FearWindowActive() { return IsBqlFearWindow(botAI); }
+
+bool IccBqlMassDispelAction::Execute(Event /*event*/)
+{
+    Player* centre = GetBqlMassDispelTarget(botAI);
+    if (!centre)
+        return false;
+
+    // A moving bot can't start a cast, and the fear lasts 4 s
+    if (bot->isMoving())
+        bot->StopMoving();
+
+    // Aimed at the ground under the player
+    return botAI->CastSpell("mass dispel", centre);
+}
 
 bool IccBqlFrenzyCcAction::Execute(Event /*event*/)
 {

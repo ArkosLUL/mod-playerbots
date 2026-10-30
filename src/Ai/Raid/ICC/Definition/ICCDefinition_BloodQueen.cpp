@@ -27,6 +27,7 @@ void DefineBloodQueen(EncounterBuilder& e)
     e.Node<IccBqlBiteTrigger, IccBqlBiteAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
     e.Node<IccBqlShadowsTrigger, IccBqlShadowsAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     e.Node<IccBqlPactTrigger, IccBqlPactAction>(ACTION_EMERGENCY + 3, EncounterRow::Mover);
+    e.Node<IccBqlMassDispelTrigger, IccBqlMassDispelAction>(ACTION_RAID + 12);
     e.Node<IccBqlWhirlDefensiveTrigger, IccBqlCastWhirlDefensiveAction>(ACTION_RAID + 11);
     e.Node<IccBqlWhirlCoverTrigger, IccBqlCastWhirlCoverAction>(ACTION_RAID + 10);
     e.Node<IccBqlTankDefensiveTrigger, IccBqlCastTankDefensiveAction>(ACTION_RAID + 9);
@@ -60,8 +61,9 @@ void DefineBloodQueen(EncounterBuilder& e)
     // healer node covers the tank spot and her.
     e.OwnMovement("icc bql stand hold", Role::Any, &IsBqlHoldingStand, Family::Attack,
                   {IccBqlStandAction::Name, IccBqlDodgeAction::Name, "reach party member to resurrect"});
-    // She comes to the main tank on the tank spot, and the mirror tank stays on him
-    e.OwnMovement("icc bql tank hold", Role::Tank, &IsBqlHoldingTankStand, Family::Attack,
+    // She comes to the main tank on the tank spot, and the mirror stays on him, a damage dealer too when the
+    // raid has one tank
+    e.OwnMovement("icc bql tank hold", Role::Any, &IsBqlHoldingTankStand, Family::Attack,
                   {IccBqlStandAction::Name, IccBqlDodgeAction::Name});
     e.Block("icc bql spell movers", Role::Any, &IsBqlMovementOwned, Family::Charge | Family::Blink | Family::Disengage);
     // avoid aoe flees a shadow 5 yd at most, against the dodge

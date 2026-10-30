@@ -6,10 +6,11 @@
     blood_queen_lana_thel.py <file> --targets     per bot: the resolver branches it was handed, its brake
     blood_queen_lana_thel.py <file> --tanks       per tank: its role, from when
     blood_queen_lana_thel.py <file> --bites       each Frenzied Bloodthirst: who the biter was handed, how it ended
-    blood_queen_lana_thel.py <file> --cc          each mind-controlled vampire: the bots set to control it
+    blood_queen_lana_thel.py <file> --cc          each mind-controlled vampire: the bots set to control it, a kill
+    blood_queen_lana_thel.py <file> --fear        each Incite Terror: how many it feared, the Mass Dispels on them
     blood_queen_lana_thel.py <file> --pact        each Pact of the Darkfallen member: the spot it walked to
     blood_queen_lana_thel.py <file> --shadows     each Swarming Shadows carrier: the lanes it walked
-    blood_queen_lana_thel.py <file> --spread      per bot: ground and air nodes, melee group, shadow dodges
+    blood_queen_lana_thel.py <file> --spread      per bot: ground and air nodes, melee group, shadow dodges, detours
     blood_queen_lana_thel.py <file> --defensives  tank buttons and calls to a human tank
     blood_queen_lana_thel.py <file> --cheats      this encounter's cheat uses
 
@@ -19,25 +20,31 @@ What the generic views miss here:
   middle of the room (Incite Terror there), `air` from takeoff, gravity off, until she lands, `ground`
   otherwise. Per bot, so a step starts at the first bot to note it.
 - **`bql.target` is the resolver branch**: `boss`, `skull`, `brake` (held off her by the threat
-  brake) or `bite` (frenzied: the bite is all it does). `bql.brake` is `1` while braked: past 90% of
-  her holder's threat until under 80%, and every tank but the main one until the first vampire.
+  brake), `bite` (frenzied: the bite is all it does) or `kill` (a mind-controlled vampire no bot can
+  control). `bql.brake` is `1` while braked: past 90% of her holder's threat until under 80%, and every
+  tank but the main one until the first vampire.
 - **`bql.tank` is a role per tank**: `1` main (holds her on the tank spot), `2` mirror (stands on the
-  main tank, so Blood Mirror takes it), `3` spare (fights in a melee group); `0` off the roster.
+  main tank, so Blood Mirror takes it; a damage dealer when the raid has one tank), `3` spare (fights in
+  a melee group); `0` off the roster.
 - **`bql.bite` is the player a frenzied bot was handed**, `0` once its Frenzy ends. Frenzied
   Bloodthirst is row 2083 (70877, 71474 on 25-man). A window ends `bit` on an Essence of the Blood
   Queen (row 2087) within 1 s, `frenzy` on Uncontrollable Frenzy 70923, the mind control for a bite
   never made.
-- **`bql.cc` is the mind-controlled vampire a CC bot holds**, `0` once released.
+- **`bql.cc` is the mind-controlled vampire a CC bot holds**, `0` once released. **`bql.kill`** is `1`
+  on a vampire no bot could control for 2 s, which the damage dealers then kill.
+- **`bql.massdispel` is the feared player a priest centres Mass Dispel on**, `0` once none is worth
+  it. Incite Terror is 73070, Mass Dispel 32375.
 - **`bql.pact` is a Pact member's spot**: `spot 1` 6 yd south of the centre, `2` and `3` 8 yd either
-  side of it, `none` outside a Pact.
+  side of it, `human` once the bots walk to a human member who didn't come, `none` outside a Pact.
 - **`bql.curve` is a carrier's lane**: `1` outer rising, `2` outer falling, `3` inner rising, `4`
   inner falling; `0` once its trail ends.
-- **`bql.slot`** is a ground node 1-27 (healers, ranged), **`bql.airslot`** a node 1-42 from her walk to
+- **`bql.slot`** is a ground node 1-30 (healers, ranged), **`bql.airslot`** a node 1-45 from her walk to
   the centre until Bloodbolt Whirl ends, **`bql.group`** a melee group 1-3; `0` given up.
-  **`bql.dodge`** is a bot stepping off a shadow: `melee`, `clear`, `blocked`, `none`.
-- **`bql.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: any tank under
-  40%, and the last minute before Berserk for her holder and the mirror tank. `bql.humancall` is a
-  call to a human tank.
+  **`bql.dodge`** is a bot stepping off a shadow: `melee`, `clear`, `blocked`, `none`. **`bql.detour`**
+  is a bite or Pact walk round shadows: `via` a point clear of them, `blocked` straight through, `none`.
+- **`bql.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: any tank or
+  damage-dealer mirror under 40%, and the last minute before Berserk for her holder and the mirror.
+  `bql.humancall` is a call to a human tank.
 """
 from __future__ import annotations
 
@@ -61,9 +68,16 @@ ESSENCE_OF_THE_BLOOD_QUEEN = (70879, 71525, 71530, 71531)
 UNCONTROLLABLE_FRENZY = 70923
 PACT_OF_THE_DARKFALLEN = 71340
 SWARMING_SHADOWS = (71264, 71265)
+INCITE_TERROR = 73070
+MASS_DISPEL = 32375
+# her fear lasts 4 s; one removed this long before that was dispelled
+FEAR_MS = 4000
+FEAR_EARLY_MS = 500
+# fear auras starting this close together are one Incite Terror
+FEAR_WAVE_MS = 1000
 OUTCOME_SLACK_MS = 1000
 MERGE_GAP_MS = 500
-TARGET_BRANCHES = ("boss", "skull", "brake", "bite")
+TARGET_BRANCHES = ("boss", "skull", "brake", "bite", "kill")
 TANK_ROLES = {"1": "main", "2": "mirror", "3": "spare", "0": "off"}
 LANES = {"1": "outer rising", "2": "outer falling", "3": "inner rising", "4": "inner falling"}
 DEFENSIVE = "bql.defensive"
@@ -248,15 +262,66 @@ def show_cc(trace: Trace) -> None:
     if not windows:
         print("  no Uncontrollable Frenzy landed")
         return
-    holders = holder_spans(trace, "bql.cc", icc.pull_end(trace))
-    print(f"  {len(windows)} mind-controlled vampire(s): the bots bql.cc set on each\n")
+    end = icc.pull_end(trace)
+    holders = holder_spans(trace, "bql.cc", end)
+    kills = holder_spans(trace, "bql.kill", end)
+    print(f"  {len(windows)} mind-controlled vampire(s): the bots bql.cc set on each, when bql.kill marked it\n")
     for victim, start, stop in windows:
         set_on = [guid for guid, spans in holders.items()
                   if any(value == str(victim) and held_from <= stop and start <= held_to
                          for value, held_from, held_to in spans)]
         bots = ", ".join(trace.name(guid) for guid in sorted(set_on, key=trace.name)) or "nobody"
         human = " human" if victim in trace.humans else ""
-        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {trace.name(victim)}{human}  {bots}")
+        marked = [held_from for value, held_from, _ in kills.get(victim, [])
+                  if value == "1" and start <= held_from <= stop]
+        killed = f"  kill {clock(marked[0])}" if marked else ""
+        print(f"    {clock(start):>9}  {clock(stop - start):>9}  {trace.name(victim)}{human}  {bots}{killed}")
+
+
+def fear_waves(trace: Trace) -> list[dict]:
+    """Per Incite Terror: `start`, the `feared` players, how many lost the fear `early`, and per priest the
+    centres bql.massdispel handed it and the times it cast Mass Dispel."""
+    windows = aura_windows(trace, (INCITE_TERROR,))
+    waves: list[dict] = []
+    for player, start, stop in sorted(windows, key=lambda window: window[1]):
+        if not waves or start - waves[-1]["start"] > FEAR_WAVE_MS:
+            waves.append({"start": start, "stop": stop, "feared": [], "early": 0})
+        wave = waves[-1]
+        wave["feared"].append(player)
+        wave["stop"] = max(wave["stop"], stop)
+        wave["early"] += stop - start < FEAR_MS - FEAR_EARLY_MS
+
+    casts = [(rec["t"], rec.get("s")) for rec in trace.of("cast") if rec.get("sp") == MASS_DISPEL]
+    for wave in waves:
+        priests: dict[int, dict] = {}
+        for rec in notes(trace, "bql.massdispel"):
+            if wave["start"] <= rec["t"] <= wave["stop"] and str(rec.get("txt", "0")) != "0":
+                priests.setdefault(rec["g"], {"centres": [], "casts": []})
+        for guid, row in priests.items():
+            row["centres"] = values_inside(trace, "bql.massdispel", guid, wave["start"], wave["stop"])
+        for when, guid in casts:
+            if wave["start"] <= when <= wave["stop"]:
+                priests.setdefault(guid, {"centres": [], "casts": []})["casts"].append(when)
+        wave["priests"] = priests
+    return waves
+
+
+def show_fear(trace: Trace) -> None:
+    if refuse(trace, "FEAR"):
+        return
+    waves = fear_waves(trace)
+    if not waves:
+        print("  no Incite Terror landed")
+        return
+    print(f"  {len(waves)} Incite Terror(s): players feared and freed early, each priest's Mass Dispel centres"
+          " and casts\n")
+    for wave in waves:
+        print(f"    {clock(wave['start']):>9}  feared {len(wave['feared'])}, freed early {wave['early']}")
+        for guid in sorted(wave["priests"], key=trace.name):
+            row = wave["priests"][guid]
+            centres = " -> ".join(picked(trace, pick) for pick in row["centres"]) or "-"
+            casts = ", ".join(f"{(when - wave['start']) / 1000:+.1f}s" for when in row["casts"]) or "none"
+            print(f"      {trace.name(guid)}  on {centres}  cast {casts}")
 
 
 def show_pact(trace: Trace) -> None:
@@ -306,16 +371,17 @@ def held_values(spans: list[tuple[str, int, int]]) -> tuple[list[str], int]:
 
 
 def spread_rows(trace: Trace) -> list[dict]:
-    """Per bot: ground nodes held and node-to-node moves, air nodes held, groups held, and shadow dodges
-    by value."""
+    """Per bot: ground nodes held and node-to-node moves, air nodes held, groups held, shadow dodges by
+    value, and bite or Pact walks round shadows by value."""
     end = icc.pull_end(trace)
     rows: dict[int, dict] = {}
     for key, label in (("bql.slot", "ground"), ("bql.airslot", "air"), ("bql.group", "group")):
         for guid, spans in holder_spans(trace, key, end).items():
             rows.setdefault(guid, {"guid": guid})[label] = held_values(spans)
-    for guid, counts in value_counts(trace, "bql.dodge").items():
-        dodges = collections.Counter({value: n for value, n in counts.items() if value != "none"})
-        rows.setdefault(guid, {"guid": guid})["dodges"] = dodges
+    for key, label in (("bql.dodge", "dodges"), ("bql.detour", "detours")):
+        for guid, counts in value_counts(trace, key).items():
+            moves = collections.Counter({value: n for value, n in counts.items() if value != "none"})
+            rows.setdefault(guid, {"guid": guid})[label] = moves
     return sorted(rows.values(), key=lambda row: trace.name(row["guid"]))
 
 
@@ -324,9 +390,9 @@ def show_spread(trace: Trace) -> None:
         return
     rows = spread_rows(trace)
     if not rows:
-        print("  bql.slot, bql.airslot, bql.group and bql.dodge never written")
+        print("  bql.slot, bql.airslot, bql.group, bql.dodge and bql.detour never written")
         return
-    print("  per bot: ground nodes (moves), air nodes, melee group, shadow dodges\n")
+    print("  per bot: ground nodes (moves), air nodes, melee group, shadow dodges, walks round shadows\n")
     for row in rows:
         parts = []
         if "ground" in row:
@@ -337,6 +403,8 @@ def show_spread(trace: Trace) -> None:
         if "group" in row:
             parts.append(f"group {'/'.join(row['group'][0]) or '-'}")
         parts.append(f"dodges {counted(row.get('dodges', collections.Counter()))}")
+        if "detours" in row:
+            parts.append(f"detours {counted(row['detours'])}")
         print(f"    {trace.name(row['guid'])}  {'  '.join(parts)}")
 
 
@@ -406,10 +474,11 @@ SECTIONS = (
     ("targets", "per bot: resolver branches and threat brake", show_targets),
     ("tanks", "per tank: its role, from when", show_tanks),
     ("bites", "each Frenzied Bloodthirst: the player handed and how it ended", show_bites),
-    ("cc", "each mind-controlled vampire: the bots set to control it", show_cc),
+    ("cc", "each mind-controlled vampire: the bots set to control it, a kill", show_cc),
+    ("fear", "each Incite Terror: how many it feared, the Mass Dispels on them", show_fear),
     ("pact", "each Pact of the Darkfallen member: the spot it walked to", show_pact),
     ("shadows", "each Swarming Shadows carrier: the lanes it walked", show_shadows),
-    ("spread", "per bot: ground and air nodes, melee group, shadow dodges", show_spread),
+    ("spread", "per bot: ground and air nodes, melee group, shadow dodges, detours", show_spread),
     ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "this encounter's cheat uses", show_cheats),
 )

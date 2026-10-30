@@ -45,6 +45,8 @@ constexpr uint32 SPELL_BQL_BLOOD_MIRROR_LINK = 70838;
 constexpr uint32 SPELL_BQL_BLOODBOLT_WHIRL = 71772;
 // Heroic: a stack on her per bite, +5% damage each
 constexpr uint32 SPELL_BQL_PRESENCE = 70995;
+// Her 4 s magic fear on everyone within 99 yd, no difficulty row
+constexpr uint32 SPELL_BQL_INCITE_TERROR = 73070;
 
 // Where she walks for the air phase, on the floor
 inline Position const ICC_BQL_ROOM_CENTER(4595.709f, 2769.419f, 400.138f);
@@ -59,11 +61,12 @@ inline Position const ICC_BQL_PACT_SPOTS[] = {
 constexpr uint8 BQL_PACT_SPOT_COUNT = sizeof(ICC_BQL_PACT_SPOTS) / sizeof(ICC_BQL_PACT_SPOTS[0]);
 
 // One triangular lattice with 7.5 yd sides, 6 yd Bloodbolt Splash plus two 0.75 yd park tolerances, within
-// 25 yd of the room centre so a shadow on the inner lane misses it. The first BQL_GROUND_NODES keep 12 yd
-// off the first Pact spot and 9 yd off her three melee group spots, nearest her first; the rest are air
-// nodes only. navprobe --nav 0x09 settles every node within 0.1 yd of its Z, and a 3x3 grid at 1 yd round
-// each sees her ramp spot and her air spot 22 yd above the centre; those in 38 yd of the tank spot see it
-// and the group spots too.
+// 25 yd of the room centre so a shadow on the inner lane misses it, plus three of its points on the dais
+// edge 33-35 yd north, where no lane runs, each 8 yd or more off both lanes. The first BQL_GROUND_NODES
+// keep 12 yd off the first Pact spot and 9 yd off her melee group spots, the lattice's nearest her first,
+// then the dais three; the rest are air nodes only. navprobe --nav 0x09 settles every node within 0.1 yd
+// of its Z, and a 3x3 grid at 1 yd round each sees her ramp spot and her air spot 22 yd above the centre;
+// those in 38 yd of the tank spot see it and the group spots too.
 inline Position const ICC_BQL_NODES[] = {
     {4608.709f, 2777.664f, 400.138f}, {4604.959f, 2771.169f, 400.136f}, {4612.459f, 2784.159f, 400.139f},
     {4604.959f, 2758.179f, 400.138f}, {4601.209f, 2764.674f, 400.137f}, {4608.709f, 2751.683f, 400.138f},
@@ -74,6 +77,7 @@ inline Position const ICC_BQL_NODES[] = {
     {4589.959f, 2745.188f, 400.138f}, {4582.459f, 2758.179f, 400.138f}, {4586.209f, 2790.655f, 400.135f},
     {4582.459f, 2784.159f, 400.137f}, {4578.709f, 2777.664f, 400.139f}, {4578.709f, 2751.683f, 400.138f},
     {4574.959f, 2771.169f, 400.138f}, {4574.959f, 2758.179f, 400.138f}, {4571.209f, 2764.674f, 400.138f},
+    {4627.459f, 2758.179f, 401.748f}, {4627.459f, 2784.159f, 400.673f}, {4623.709f, 2751.683f, 400.138f},
     {4619.959f, 2771.169f, 400.734f}, {4616.209f, 2764.674f, 400.138f}, {4612.459f, 2771.169f, 400.138f},
     {4616.209f, 2777.664f, 400.138f}, {4608.709f, 2764.674f, 400.137f}, {4612.459f, 2758.179f, 400.138f},
     {4597.459f, 2771.169f, 400.138f}, {4593.709f, 2764.674f, 400.138f}, {4593.709f, 2777.664f, 400.137f},
@@ -81,7 +85,7 @@ inline Position const ICC_BQL_NODES[] = {
     {4586.209f, 2777.664f, 400.135f}, {4582.459f, 2771.169f, 400.136f}, {4578.709f, 2764.674f, 400.139f},
 };
 constexpr uint8 BQL_NODE_COUNT = sizeof(ICC_BQL_NODES) / sizeof(ICC_BQL_NODES[0]);
-constexpr uint8 BQL_GROUND_NODES = 27;
+constexpr uint8 BQL_GROUND_NODES = 30;
 constexpr float BQL_NODE_SPACING = 7.5f;
 
 // Swarming Shadows lanes, arcs of 35.5 and 30.5 yd round the room centre from 40 degrees west of north round
@@ -141,8 +145,9 @@ IccBqlPhase IccBqlPhaseOf(Player* bot, Unit* boss);
 bool IsBqlLive(PlayerbotAI* botAI);
 Creature* GetBqlQueen(PlayerbotAI* botAI);
 
-// Tanks and DPS: a player's skull on her or a mind-controlled vampire, else her. Nothing for a frenzied bot,
-// nor for a braked one but a skulled vampire. Notes bql.target.
+// Tanks and DPS: a player's skull on her or a mind-controlled vampire, then for a damage dealer no vampire
+// a mind-controlled vampire nobody can control, else her. Nothing for a frenzied bot, nor for a braked one
+// but a vampire. Notes bql.target.
 Unit* GetBqlTarget(PlayerbotAI* botAI);
 // Her, for the main tank she has left, its taunt ready and her below taunt DR level 3
 Unit* GetBqlTauntTarget(PlayerbotAI* botAI);
@@ -154,7 +159,8 @@ bool IsBqlBiting(PlayerbotAI* botAI);
 Player* GetBqlBiteTarget(PlayerbotAI* botAI);
 // The mind-controlled vampire this bot keeps under control, and the spell, when one is due now
 Unit* GetBqlFrenzyCc(PlayerbotAI* botAI, uint32& spellId);
-// A mind-controlled vampire within range of the bot or its target, where area damage would break its CC
+// A mind-controlled vampire kept under control within range of the bot or its target, where area damage
+// would break its CC
 bool IsBqlVampireInSplash(PlayerbotAI* botAI, float range);
 
 // A Pact member walks to the Pact spot, unless frenzied or carrying shadows. Notes bql.pact.
@@ -166,6 +172,9 @@ bool GetBqlShadowsWalk(PlayerbotAI* botAI, Position& spot);
 // Anyone else standing on a shadow. Notes bql.dodge.
 bool IsBqlInShadow(PlayerbotAI* botAI);
 bool FindBqlDodgeSpot(PlayerbotAI* botAI, Position& spot);
+// The next point of a walk to `goal`: the goal while the straight line misses every shadow, else the nearest
+// point both legs of which miss them, kept as `held` while its legs stay clear. Notes bql.detour.
+Position GetBqlWalkVia(PlayerbotAI* botAI, Position const& goal, Position const* held);
 
 bool IsBqlHoldingStand(PlayerbotAI* botAI);
 bool IsBqlHoldingTankStand(PlayerbotAI* botAI);
@@ -175,19 +184,23 @@ bool IsBqlMovementOwned(PlayerbotAI* botAI);
 
 // From 8 s before her walk to the centre until she takes off: Incite Terror lands as she arrives
 bool IsBqlFearWindow(PlayerbotAI* botAI);
+// A priest knowing Mass Dispel wards itself in the fear window, so it is free to cast it on the others
+bool IsBqlSelfWardDue(PlayerbotAI* botAI);
+// The feared player an unfeared priest centres Mass Dispel on, from its tick's pick
+Player* GetBqlMassDispelTarget(PlayerbotAI* botAI);
 
 // Bloodbolt Whirl while she channels it: what is left of a bolt per player plus Shroud of Sorrow's ticks
 bool GetBqlWhirlHit(PlayerbotAI* botAI, RaidPredictedHit& hit);
 RaidCover GetBqlWhirlCover(PlayerbotAI* botAI);
 bool IsBqlWhirlCoverHeld(PlayerbotAI* botAI);
 
-// The button this tank spends now, 0 for none: under BQL_TANK_DEFENSIVE_PCT, or in the last minute while
-// she or her mirror hits it
+// The button this tank or damage-dealer mirror spends now, 0 for none: under BQL_TANK_DEFENSIVE_PCT, or in
+// the last minute while she or her mirror hits it
 uint32 GetBqlTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 bool IsBqlTankDefensiveHeld(PlayerbotAI* botAI);
 
-// The scan, the tank roster, the nodes, groups, bites and CC, the brake, the Shadows lanes, the stand
-// latch, the calls to a human tank, the reset after a wipe
+// The scan, the tank roster, the nodes, groups, bites, CC and kills, the brake, the Shadows lanes, the
+// Mass Dispel pick, the stand latch, the calls to a human tank, the reset after a wipe
 void TickBqlEncounter(PlayerbotAI* botAI);
 
 // Lust waits for the most vampires the fight reaches before Berserk
