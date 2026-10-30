@@ -3,7 +3,7 @@
 
     sindragosa.py <file>              every section
     sindragosa.py <file> --phases     sg.phase: ground, air, last
-    sindragosa.py <file> --tanks      tank roles, the breath count, swaps, the brake, tank buttons
+    sindragosa.py <file> --tanks      tank roles, the breath count, swaps, externals, the brake, tank buttons
     sindragosa.py <file> --stands     per bot: the ground stands it held
     sindragosa.py <file> --cold       each Blistering Cold: who ran where, whom it hit
     sindragosa.py <file> --unchained  each Unchained Magic carrier: its rules, peak Instability
@@ -23,8 +23,10 @@ What the generic views miss here:
 - **`sg.phase` is her script's own state**, per bot: `air` from takeoff to touchdown, `last` at 35%
   or under on the ground, `ground` otherwise.
 - **`sg.tank` is a role per tank**: `1` the holder at her tank stand, `2` free at the melee stand,
-  `0` off. The roles flip at each last-phase swap, and `sg.swap` is the free tank's steps through it.
-  `sg.breath` counts her breaths, the swap's clock.
+  `0` off. The roles flip at each last-phase swap, and `sg.swap` is the free tank's steps through it,
+  `missed` when she stayed on the holder a second past its taunt. `sg.breath` counts her breaths, the
+  swap's clock. `sg.cover` is the external a healer owes a holder no swap relieves before a last-phase
+  breath, at 5 Mystic Buffet stacks or more.
 - **`sg.brake` is `1` while braked**, past 90% of the holder's threat until under 80%;
   `sg.drake.brake` the same against the drake's holder, for a tank holding no drake all fight and for
   anyone else while Rimefang is up (`sg.drake.air` `1`). `sg.drake.tank` is the drake a tank holds:
@@ -33,9 +35,11 @@ What the generic views miss here:
   last phase's A and B, `0` once it ends. `sg.bombs` counts an air phase's Frost Bomb markers and
   `sg.tombhold` is `1` while its tombs are held at 20%. `sg.hide` is `bomb <tomb>` behind a tomb from
   a marker, `buffet <tomb>` from Mystic Buffet.
-- **The other per-bot keys note `none` when their duty ends**: `sg.stand`, `sg.cold`, `sg.unchained`,
-  `sg.chilled`, `sg.splash` (a beacon dodge, `blocked` when no spot was clear), and the drakes'
-  `sg.drake.stand` and `sg.drake.dodge`. A value leads with its rule, and this reader counts rules.
+- **The other per-bot keys note `none` when their duty ends**: `sg.stand` (`wait` while its walk would
+  cut through a beacon's splash), `sg.cold`, `sg.unchained` (`spot N`, N a node of the heroic carrier
+  grid), `sg.chilled`, `sg.splash` (a beacon dodge, `blocked` when no spot was clear), and the drakes'
+  `sg.drake.stand` (` alt` on a ranged stand moved off a puddle) and `sg.drake.dodge`. A value leads
+  with its rule, and this reader counts rules.
   `sg.target` and `sg.drake.target` lead with the resolver's rule, `none` counted as a rule; a tomb
   pick carries the tomb's guid counter, a drake pick the drake's name.
 - **`sg.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window
@@ -376,6 +380,15 @@ def show_tanks(trace: Trace) -> None:
             print(f"    {trace.name(guid)}  {joined(steps, ' -> ')}")
     else:
         print("  sg.swap never written")
+    covers = {guid: [f"{value} {clock(start)}" for value, start, _ in spans if not off(value)]
+              for guid, spans in spans_of(trace, "sg.cover").items()}
+    covers = {guid: steps for guid, steps in covers.items() if steps}
+    if covers:
+        print("  sg.cover per healer: each external it owed the holder, from when")
+        for guid in sorted(covers, key=trace.name):
+            print(f"    {trace.name(guid)}  {joined(covers[guid], ', ')}")
+    else:
+        print("  sg.cover never owed an external")
     show_brakes(trace, "sg.brake")
     show_buttons(trace, "sg.defensive", "sg.humancall")
 
@@ -619,7 +632,7 @@ def show_cheats(trace: Trace) -> None:
 
 SECTIONS = (
     ("phases", "sg.phase: ground, air, last", show_phases),
-    ("tanks", "tank roles, the breath count, swaps, the brake, tank buttons", show_tanks),
+    ("tanks", "tank roles, the breath count, swaps, externals, the brake, tank buttons", show_tanks),
     ("stands", "per bot: the ground stands it held", show_stands),
     ("cold", "each Blistering Cold: who ran where, whom it hit", show_cold),
     ("unchained", "each Unchained Magic carrier: its rules, peak Instability", show_unchained),

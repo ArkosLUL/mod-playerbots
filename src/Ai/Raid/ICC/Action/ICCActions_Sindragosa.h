@@ -120,6 +120,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccSindragosaCoverAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc sindragosa holder cover";
+
+    IccSindragosaCoverAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccSindragosaBeaconHealAction : public Action
 {
 public:

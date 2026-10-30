@@ -51,8 +51,8 @@ SAMPLES = {CHAMPION: (0, 20000), WEBWEAVER: (1000, 22000), WARDEN: (30000, 50000
 
 # Sindragosa's own keys are declared under the same prefix, and the banner must not name them.
 DECLARED = {key: (probes.HOLDER, "ICCHelpers_SindragosaAdds.cpp:1") for key in (
-    "sg.gauntlet.target", "sg.gauntlet.taunt", "sg.gauntlet.dodge", "sg.phase", "sg.tank", "sg.drake.tank",
-    "sg.group")}
+    "sg.gauntlet.target", "sg.gauntlet.taunt", "sg.gauntlet.dodge", "sg.gauntlet.kick", "sg.gauntlet.free",
+    "sg.phase", "sg.tank", "sg.drake.tank", "sg.group")}
 
 
 def note(when: int, guid: int, key: str, value: str) -> dict:
@@ -61,6 +61,10 @@ def note(when: int, guid: int, key: str, value: str) -> dict:
 
 def blade_hit(when: int, guid: int) -> dict:
     return {"t": when, "e": "dmg", "s": BLADE, "d": guid, "sp": 70305, "a": 3000}
+
+
+def aura(when: int, guid: int, spell: int, source: int) -> dict:
+    return {"t": when, "e": "aura", "d": guid, "s": source, "sp": spell, "r": 0, "st": 1}
 
 
 def snaps() -> list[dict]:
@@ -97,6 +101,17 @@ def pull(boss: str = "sindragosa-gauntlet") -> list[dict]:
         note(45000, MEND, "sg.gauntlet.dodge", "none"),
         note(46000, SHIV, "sg.gauntlet.dodge", "melee"),
         note(47000, SHIV, "sg.gauntlet.dodge", "none"),
+        # Shiv kicks the first Ice Tomb; nobody owes the second, which lands on Bulwark.
+        {"t": 35000, "e": "cast", "s": SORCERESS, "sp": 71330, "tgt": BULWARK, "ct": 1500},
+        note(35200, SHIV, "sg.gauntlet.kick", "sorceress"),
+        note(35600, SHIV, "sg.gauntlet.kick", "none"),
+        {"t": 39000, "e": "cast", "s": SORCERESS, "sp": 71330, "tgt": BULWARK, "ct": 1500},
+        aura(40500, BULWARK, 71330, SORCERESS),
+        # A Web pins Shiv in the second whirl, and Mend frees him; the Frost Nova on Bulwark is outside one.
+        aura(45900, SHIV, 71327, WEBWEAVER),
+        note(46100, MEND, "sg.gauntlet.free", "hand of freedom"),
+        note(46600, MEND, "sg.gauntlet.free", "none"),
+        aura(36000, BULWARK, 71320, SORCERESS),
         {"t": 90000, "e": "end", "out": "kill"},
     ]
 
@@ -172,6 +187,30 @@ class Dodges(unittest.TestCase):
             "    Bulwark  dodges -  hits 1\n"
             "    Mend  dodges clear 1  hits 0\n"
             "    Shiv  dodges melee 2  hits 2\n"))
+
+
+class Kicks(unittest.TestCase):
+    def test_rows_read_kickers_and_landing(self):
+        rows = gauntlet.kick_rows(load(pull()))
+        self.assertEqual([(row["start"], row["kickers"], row["landed"]) for row in rows],
+                         [(35000, [SHIV], False), (39000, [], True)])
+
+    def test_section(self):
+        self.assertEqual(printed(gauntlet.show_kicks, load(pull())), (
+            "KICKS\n"
+            "  2 Ice Tomb cast(s): who owed the kick, whether the tomb landed\n"
+            "\n"
+            "     0:35.000  kick Shiv  stopped\n"
+            "     0:39.000  kick nobody  landed\n"))
+
+
+class Freedom(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(gauntlet.show_freedom, load(pull())), (
+            "FREEDOM\n"
+            "  sg.gauntlet.free per bot: each freeing spell it owed, from when\n"
+            "    Mend  hand of freedom 0:46.100\n"
+            "  Frost Nova and Web roots taken: Bulwark 1, Shiv 1\n"))
 
 
 class Cheats(unittest.TestCase):

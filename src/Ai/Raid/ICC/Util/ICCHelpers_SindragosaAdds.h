@@ -7,6 +7,8 @@
 #ifndef PLAYERBOTS_ICCHELPERS_SINDRAGOSAADDS_H
 #define PLAYERBOTS_ICCHELPERS_SINDRAGOSAADDS_H
 
+#include <string>
+
 #include "Define.h"
 #include "Position.h"
 
@@ -62,13 +64,18 @@ constexpr uint32 NPC_SG_GAUNTLET_CHAMPION = 37501;
 constexpr uint32 NPC_SG_GAUNTLET_WEBWEAVER = 37502;
 // A Frostwarden Warrior's sword, whirling 70305 within 12 yd every second for most of its 14 s
 constexpr uint32 NPC_SG_GAUNTLET_FROSTBLADE = 38199;
+// The Sorceress's 1.5 s cast stuns her victim for 5 s, remapped at the call. Frost Nova (magic) and the
+// Webweaver's Web root, which pins a bot inside a Frostblade's whirl.
+constexpr uint32 SPELL_SG_GAUNTLET_ICE_TOMB = 71330;
+constexpr uint32 SPELL_SG_GAUNTLET_FROST_NOVA = 71320;
+constexpr uint32 SPELL_SG_GAUNTLET_WEB = 71327;
 
 // A drake in combat with the bot's group, from the encounter gate
 Creature* GetSgDrake(PlayerbotAI* botAI);
 bool IsSgDrakesLive(PlayerbotAI* botAI);
 
 // Tanks and DPS: a player's skull on a drake, a tank's own drake, else the first fighting drake, Rimefang
-// first. Nothing for a braked bot. Notes sg.drake.target.
+// first, though melee take Spinestalker while Rimefang flies. Nothing for a braked bot. Notes sg.drake.target.
 Unit* GetSgDrakeTarget(PlayerbotAI* botAI);
 // Past the threat brake on its drake: a tank holding none, or anyone not holding Rimefang while he flies
 bool IsSgDrakeBraked(PlayerbotAI* botAI);
@@ -113,6 +120,11 @@ bool IsSgGauntletInBlade(PlayerbotAI* botAI);
 bool FindSgGauntletDodgeSpot(PlayerbotAI* botAI, Position& spot);
 // A melee bot whose target stands in a Frostblade's whirl: reaching it would walk the bot in
 bool IsSgGauntletBladeReachHeld(PlayerbotAI* botAI);
+// The Sorceress this bot interrupts out of Ice Tomb, and the interrupt, or null. Notes sg.gauntlet.kick.
+Unit* GetSgGauntletKickTarget(PlayerbotAI* botAI, std::string& spell);
+// The member this paladin or priest frees from a root inside a Frostblade's whirl, and the spell, or null.
+// Notes sg.gauntlet.free.
+Unit* GetSgGauntletFreeTarget(PlayerbotAI* botAI, std::string& spell);
 
 // The scan, the reset once the gauntlet stops
 void TickSgGauntletEncounter(PlayerbotAI* botAI);

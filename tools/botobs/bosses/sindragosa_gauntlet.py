@@ -6,6 +6,8 @@
     sindragosa_gauntlet.py <file> --targets  per bot: the resolver rules it was handed
     sindragosa_gauntlet.py <file> --taunts   per tank: each rescue taunt it owed, from when
     sindragosa_gauntlet.py <file> --dodges   per player: Frostblade dodges and hits
+    sindragosa_gauntlet.py <file> --kicks    each Sorceress Ice Tomb cast: who owed the kick, did it land
+    sindragosa_gauntlet.py <file> --freedom  per bot: each root it owed a freeing spell on; roots taken
     sindragosa_gauntlet.py <file> --cheats   cheat uses in this pull
 
 The gauntlet has no phase, and its keys share Sindragosa's `sg.` prefix, so the banner names only the
@@ -25,6 +27,11 @@ silent `sg.gauntlet.*` ones. What the generic views miss here:
 - **`sg.gauntlet.dodge` is a bot leaving a Frostblade 38199's whirl** for 14.5 yd off it: `melee` to a
   spot that keeps its target in reach, `clear` to any clear spot, `blocked` with none, `none` once
   out. The blade's whirlwind hits are Frostblade 70305 `dmg` rows.
+- **`sg.gauntlet.kick` is `sorceress` while a bot owes the interrupt** on a Sorceress casting Ice Tomb,
+  the lowest guid whose interrupt reaches her. A cast landed when an Ice Tomb 71330/71331 `aura` row
+  shows up before its cast time is out.
+- **`sg.gauntlet.free` is the spell a paladin or priest owes** a member rooted by Frost Nova 71320 or
+  Web 71327 inside a Frostblade's whirl: `hand of freedom`, or `dispel magic` on Frost Nova.
 - **No gauntlet code cheats.** Any `cheat` row here is another encounter's code.
 """
 from __future__ import annotations
@@ -50,6 +57,11 @@ SPIDERS = (37501, 37502)
 FROSTWARDENS = (37228, 37229)
 BROODLINGS = (37232,)
 FROSTBLADE = 70305
+ICE_TOMB = (71330, 71331)
+ICE_TOMB_CAST_MS = 1500
+# an aura row can trail the cast's end by a tick
+LAND_SLACK_MS = 500
+ROOTS = (71320, 71327)
 OFF = ("none", "0")
 
 
@@ -171,6 +183,58 @@ def show_dodges(trace: Trace) -> None:
               f"  hits {taken[guid]}")
 
 
+def kick_rows(trace: Trace) -> list[dict]:
+    """Per Ice Tomb cast: `start`, `land`, `kickers` (bots that noted the kick inside it) and `landed` (an
+    Ice Tomb aura showed up before it was out)."""
+    owed = holder_spans(trace, "sg.gauntlet.kick", icc.pull_end(trace))
+    tombed = [rec["t"] for rec in trace.of("aura") if rec.get("sp") in ICE_TOMB and not rec.get("r")]
+    rows = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") not in ICE_TOMB:
+            continue
+        start = rec["t"]
+        land = start + (rec.get("ct") or ICE_TOMB_CAST_MS)
+        kickers = sorted((guid for guid, spans in owed.items()
+                          if any(value not in OFF and low <= land and high >= start for value, low, high in spans)),
+                         key=trace.name)
+        landed = any(start <= when <= land + LAND_SLACK_MS for when in tombed)
+        rows.append({"start": start, "land": land, "kickers": kickers, "landed": landed})
+    return rows
+
+
+def show_kicks(trace: Trace) -> None:
+    if refuse(trace, "KICKS"):
+        return
+    rows = kick_rows(trace)
+    if not rows:
+        print("  no Ice Tomb cast")
+        return
+    print(f"  {len(rows)} Ice Tomb cast(s): who owed the kick, whether the tomb landed\n")
+    for row in rows:
+        kickers = ", ".join(trace.name(guid) for guid in row["kickers"]) or "nobody"
+        print(f"    {clock(row['start']):>9}  kick {kickers}  {'landed' if row['landed'] else 'stopped'}")
+
+
+def show_freedom(trace: Trace) -> None:
+    if refuse(trace, "FREEDOM"):
+        return
+    owed = holder_spans(trace, "sg.gauntlet.free", icc.pull_end(trace))
+    roster = roster_guids(trace)
+    roots = collections.Counter(rec["d"] for rec in trace.of("aura")
+                                if rec.get("sp") in ROOTS and not rec.get("r") and rec.get("d") in roster)
+    if not owed and not roots:
+        print("  no sg.gauntlet.free note and no Frost Nova or Web root")
+        return
+    if owed:
+        print("  sg.gauntlet.free per bot: each freeing spell it owed, from when")
+        for guid in sorted(owed, key=trace.name):
+            frees = ", ".join(f"{value} {clock(start)}" for value, start, _ in owed[guid] if value not in OFF)
+            print(f"    {trace.name(guid)}  {frees or '-'}")
+    else:
+        print("  sg.gauntlet.free never written")
+    print(f"  Frost Nova and Web roots taken: {icc.ranked(trace, roots) or 'none'}")
+
+
 def show_cheats(trace: Trace) -> None:
     if refuse(trace, "CHEATS"):
         return
@@ -189,6 +253,8 @@ SECTIONS = (
     ("targets", "per bot: the resolver rules it was handed", show_targets),
     ("taunts", "per tank: each rescue taunt it owed, from when", show_taunts),
     ("dodges", "per player: Frostblade dodges and hits", show_dodges),
+    ("kicks", "each Sorceress Ice Tomb cast: who owed the kick, did it land", show_kicks),
+    ("freedom", "per bot: each root it owed a freeing spell on; roots taken", show_freedom),
     ("cheats", "cheat uses in this pull", show_cheats),
 )
 

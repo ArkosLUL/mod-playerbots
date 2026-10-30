@@ -21,6 +21,10 @@ namespace
 void DefineSindragosaGauntlet(EncounterBuilder& e)
 {
     e.Node<IccSgGauntletDodgeTrigger, IccSgGauntletDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    // The Sorceress's Ice Tomb stuns her victim, mostly a tank, for 5 s
+    e.Node<IccSgGauntletKickTrigger, IccSgGauntletKickAction>(ACTION_RAID + 8);
+    // A root inside a Frostblade's whirl holds the bot there for its 3.5k a second
+    e.Node<IccSgGauntletFreeTrigger, IccSgGauntletFreeAction>(ACTION_RAID + 7);
     e.Node<IccSgGauntletTauntTrigger, IccSgGauntletTauntAction>(ACTION_RAID + 6);
     e.Node<IccSgGauntletTargetTrigger, IccSgGauntletTargetAction>(ACTION_RAID + 5);
 

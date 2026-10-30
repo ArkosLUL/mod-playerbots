@@ -113,6 +113,24 @@ public:
     bool Execute(Event event) override;
 };
 
+class IccSgGauntletKickAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc sindragosa gauntlet kick";
+
+    IccSgGauntletKickAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class IccSgGauntletFreeAction : public Action
+{
+public:
+    static constexpr char const* Name = "icc sindragosa gauntlet free";
+
+    IccSgGauntletFreeAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class IccSgGauntletTargetAction : public IccDirectAttackAction
 {
 public:

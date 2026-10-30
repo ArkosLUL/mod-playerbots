@@ -43,8 +43,8 @@ ARKOS = 7706    # human melee
 ROSTER = ((BULWARK, "Bulwark", "tank", 0), (AEGIS, "Aegis", "tank", 0), (MEND, "Mend", "heal", 0),
           (SHIV, "Shiv", "melee", 0), (ARCANE, "Arcane", "ranged", 0), (ARKOS, "Arkos", "melee", 1))
 
-BOSS_KEYS = ("sg.phase", "sg.tank", "sg.breath", "sg.swap", "sg.stand", "sg.cold", "sg.unchained", "sg.chilled",
-             "sg.brake", "sg.beacon", "sg.splash", "sg.hide", "sg.bombs", "sg.tombhold", "sg.target",
+BOSS_KEYS = ("sg.phase", "sg.tank", "sg.breath", "sg.swap", "sg.cover", "sg.stand", "sg.cold", "sg.unchained",
+             "sg.chilled", "sg.brake", "sg.beacon", "sg.splash", "sg.hide", "sg.bombs", "sg.tombhold", "sg.target",
              "sg.defensive", "sg.humancall")
 DRAKE_KEYS = ("sg.drake.target", "sg.drake.tank", "sg.drake.stand", "sg.drake.air", "sg.drake.brake",
               "sg.drake.dodge", "sg.drake.defensive", "sg.drake.humancall")
@@ -121,6 +121,13 @@ def boss_pull() -> list[dict]:
         note(212000, AEGIS, "sg.swap", "walk"),
         note(216000, AEGIS, "sg.swap", "taunt"),
         note(217000, AEGIS, "sg.swap", "none"),
+        # Bulwark's swap back misses, so Mend puts an external on Aegis before the breath.
+        note(232000, BULWARK, "sg.swap", "walk"),
+        note(236000, BULWARK, "sg.swap", "taunt"),
+        note(237000, BULWARK, "sg.swap", "missed"),
+        note(238000, MEND, "sg.cover", "pain suppression"),
+        note(239000, MEND, "sg.cover", "none"),
+        note(240000, BULWARK, "sg.swap", "none"),
         note(60, AEGIS, "sg.brake", "1"),
         note(15000, AEGIS, "sg.brake", "0"),
         note(40000, SHIV, "sg.brake", "1"),
@@ -139,6 +146,9 @@ def boss_pull() -> list[dict]:
         note(120, MEND, "sg.stand", "S"),
         note(50000, ARCANE, "sg.stand", "none"),
         note(92500, ARCANE, "sg.stand", "S"),
+        # Mend's walk to the stage would cut past a beacon spot, so it waits.
+        note(56200, MEND, "sg.stand", "wait"),
+        note(63000, MEND, "sg.stand", "none"),
         note(216500, BULWARK, "sg.stand", "M"),
         note(216500, AEGIS, "sg.stand", "T"),
         # One Blistering Cold: three bots run, the human stays and is hit.
@@ -249,6 +259,8 @@ def drakes_pull() -> list[dict]:
         note(39000, SHIV, "sg.drake.dodge", "none"),
         note(40000, MEND, "sg.drake.dodge", "puddle"),
         note(41000, MEND, "sg.drake.dodge", "none"),
+        # The puddle stays on Mend's stand, which moves off it.
+        note(41000, MEND, "sg.drake.stand", "ranged rimefang alt"),
         dmg(42000, ARCANE, 71381, RIMEFANG),
         dmg(43000, ARCANE, 71381, RIMEFANG),
         note(45000, AEGIS, "sg.drake.air", "0"),
@@ -304,6 +316,9 @@ class Tanks(unittest.TestCase):
             "  sg.breath counted 3 breath(s), her Frost Breath casts 3\n"
             "  sg.swap per bot: each step, from when\n"
             "    Aegis  walk 3:32.000 -> taunt 3:36.000\n"
+            "    Bulwark  walk 3:52.000 -> taunt 3:56.000 -> missed 3:57.000\n"
+            "  sg.cover per healer: each external it owed the holder, from when\n"
+            "    Mend  pain suppression 3:58.000\n"
             "  sg.brake per bot: times braked, time held\n"
             "    Aegis  1, 0:14.940\n"
             "    Shiv  2, 0:03.500\n"
@@ -321,7 +336,7 @@ class Stands(unittest.TestCase):
             "    Aegis  M/T (moved 1)\n"
             "    Arcane  S (moved 0)\n"
             "    Bulwark  T/M (moved 1)\n"
-            "    Mend  S (moved 0)\n"
+            "    Mend  S/wait (moved 1)\n"
             "    Shiv  M (moved 0)\n"))
 
 
@@ -415,7 +430,7 @@ class Drakes(unittest.TestCase):
             "    Mend  dodges puddle 1  hit -\n"
             "    Shiv  dodges blast 1, puddle 1  hit blast 1\n"
             "  sg.drake.stand per bot: the stands held in order (moves between two)\n"
-            "    Mend  ranged rimefang (moved 0)\n"
+            "    Mend  ranged rimefang/ranged rimefang alt (moved 1)\n"
             "    Shiv  melee rimefang/melee spinestalker (moved 1)\n"
             "  sg.drake.target per bot: spans of each resolver rule\n"
             "    Bulwark  owned 1\n"

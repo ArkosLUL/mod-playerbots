@@ -85,6 +85,24 @@ public:
     bool IsActive() override;
 };
 
+class IccSgGauntletKickTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa gauntlet kick";
+
+    IccSgGauntletKickTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class IccSgGauntletFreeTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa gauntlet free";
+
+    IccSgGauntletFreeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccSgGauntletTargetTrigger : public IccDirectTargetTrigger
 {
 public:
