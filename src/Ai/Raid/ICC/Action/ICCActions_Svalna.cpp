@@ -140,7 +140,7 @@ bool IccSvalnaGauntletDodgeAction::Execute(Event /*event*/)
     if (!FindSsGauntletDodgeSpot(botAI, spot))
         return false;
 
-    // Whirlwind swings a full weapon hit at everyone it reaches and Frozen Orb lands 15k: worth any cast
+    // Whirlwind swings a full weapon hit at everyone it reaches and Frozen Orb lands 15-20k: worth any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
 }
 

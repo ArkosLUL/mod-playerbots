@@ -58,11 +58,18 @@ constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
 
 // The hall's packs stand within 40 yd of each other, so one pull reaches this far round its first add
 constexpr float GAUNTLET_SCAN_RANGE = 60.0f;
-// Whirlwind's 41057 hits 8 yd round the Warlord as its 2 s cast ends. Frozen Orb ticks once as its 10 s
-// aura runs out, into 71286 6 yd round the Frostbinder itself.
+// Whirlwind's 41057 hits 8 yd round the Warlord as its 2 s cast ends. Frozen Orb's channel aura sits on
+// the Frostbinder's nearest player (the core retargets 71274); as it runs out, an orb flies at 5 yd/s to
+// where that player stood and 71286 bursts 6 yd round the spot.
 constexpr float WHIRLWIND_RADIUS = 8.0f;
 constexpr float ORB_RADIUS = 6.0f;
 constexpr int32 ORB_LEAD_MS = 3000;
+constexpr float ORB_SPEED = 5.0f;
+// A channel last seen this close to its end ran out and launched; one gone sooner was broken
+constexpr int32 ORB_LAUNCH_MS = 600;
+constexpr uint32 ORB_LAND_GRACE_MS = 500;
+// Difficulty row: remap at the call
+constexpr uint32 SPELL_SS_FROZEN_ORB_BLAST = 71286;
 // A dodge fires a little past a radius and clears it by the park tolerance and a margin
 constexpr float DANGER_PAD = 0.75f;
 constexpr float CLEAR_PAD = 2.5f;
@@ -76,6 +83,21 @@ constexpr uint8 CAPTAIN_ORDER[SS_CAPTAINS] = {0, 3, 2, 1};
 // Interrupts first, then silences where the caster takes them
 constexpr char const* KICKS[] = {"kick", "pummel", "shield bash", "mind freeze", "counterspell", "wind shear"};
 constexpr char const* SILENCES[] = {"silencing shot", "silence", "strangulate"};
+// Summon Undead and Frozen Orb have no prevention type, so no kick or silence stops them. A stun does.
+constexpr char const* STUNS[] = {"hammer of justice", "concussion blow", "bash"};
+
+enum class Stop : uint8
+{
+    Kick,  // an interrupt, else a silence
+    Stun
+};
+
+struct CastToStop
+{
+    uint8 order = 0;
+    char const* note = nullptr;
+    Stop stop = Stop::Kick;
+};
 
 // Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
 // one ms
@@ -102,14 +124,32 @@ struct SsState
     bool humanCallRan = false;
 };
 
+struct OrbMark
+{
+    Position spot;
+    ObjectGuid caster;
+    int32 leftMs = 0;
+};
+
+struct OrbBlast
+{
+    Position spot;
+    uint32 launchMs = 0;
+    uint32 lifeMs = 0;
+};
+
 struct GauntletState
 {
     uint32 scanMs = 0;
     bool scanned = false;
     // Every live Ymirjar and summon round the pull in combat; who it fights is read at use
     std::vector<ObjectGuid> adds;
-    // Kicker -> the Deathbringer it kicks
+    // Kicker or stunner -> the Deathbringer or Frostbinder it stops
     std::unordered_map<ObjectGuid, ObjectGuid> kicks;
+    // Frozen Orb holder -> where it stood at the last scan, and its channel
+    std::unordered_map<ObjectGuid, OrbMark> orbs;
+    // Orbs in flight to a holder's spot
+    std::vector<OrbBlast> blasts;
     std::unordered_map<ObjectGuid, TargetMemo> targets;
     // The reach hold is asked for every action a bot weighs: per bot, the ms it was read and the answer
     std::unordered_map<ObjectGuid, std::pair<uint32, bool>> reachHeld;
@@ -259,9 +299,9 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// The first kick the member can land on the caster right now. A false ready here holds every other kicker
-// back from the election, so power and form are checked too.
-char const* ReadyKick(Player* member, Unit* caster, bool silences)
+// The first kick or stun the member can land on the caster right now. A false ready here holds every other
+// kicker back from the election, so power and form are checked too.
+char const* ReadyKick(Player* member, Unit* caster, Stop stop)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
     if (!memberAI || member->HasUnitState(UNIT_STATE_CASTING) || member->GetExactDist(caster) > SCAN_RANGE)
@@ -280,31 +320,39 @@ char const* ReadyKick(Player* member, Unit* caster, bool silences)
         return inReach && memberAI->CanCastSpell(spellId, caster) && member->IsWithinLOSInMap(caster);
     };
 
+    if (stop == Stop::Stun)
+    {
+        for (char const* stun : STUNS)
+            if (ready(stun))
+                return stun;
+
+        return nullptr;
+    }
+
     for (char const* kick : KICKS)
         if (ready(kick))
             return kick;
 
-    if (silences)
-        for (char const* silence : SILENCES)
-            if (ready(silence))
-                return silence;
+    for (char const* silence : SILENCES)
+        if (ready(silence))
+            return silence;
 
     return nullptr;
 }
 
-// Each caster, in the order given, to the nearest bot with a kick ready that no earlier caster took
-void AssignKicks(std::unordered_map<ObjectGuid, ObjectGuid>& kicks, std::vector<Creature*> const& casters,
-                 std::vector<Player*> const& members)
+// Each caster, in the order given, to the nearest bot with the right stop ready that no earlier caster took
+void AssignKicks(std::unordered_map<ObjectGuid, ObjectGuid>& kicks,
+                 std::vector<std::pair<Creature*, Stop>> const& casters, std::vector<Player*> const& members)
 {
     kicks.clear();
-    for (Creature* caster : casters)
+    for (auto const& [caster, stop] : casters)
     {
         Player* best = nullptr;
         std::tuple<float, ObjectGuid> bestKey;
         for (Player* member : members)
         {
             if (!IsDutyBot(member) || kicks.count(member->GetGUID()) || member->HasAura(SPELL_SS_IMPALING_SPEAR) ||
-                member->IsCharmed() || !ReadyKick(member, caster, true))
+                member->IsCharmed() || !ReadyKick(member, caster, stop))
                 continue;
 
             auto const key = std::make_tuple(member->GetExactDist(caster), member->GetGUID());
@@ -458,12 +506,18 @@ bool ArnathKickable(Creature* arnath)
 
 void AssignArnathKicks(SsState& st, Player* bot, std::vector<Player*> const& members)
 {
-    std::vector<Creature*> casters;
+    std::vector<std::pair<Creature*, Stop>> casters;
     if (Creature* arnath = FightingCaptain(bot, 0))
         if (ArnathKickable(arnath))
-            casters.push_back(arnath);
+            casters.emplace_back(arnath, Stop::Kick);
 
-    AssignKicks(st.kicks, casters, members);
+    // A puller spends its ticks on the spear, so it would hold the kick through the 2 s cast
+    std::vector<Player*> kickers;
+    for (Player* member : members)
+        if (!st.spear.count(member->GetGUID()))
+            kickers.push_back(member);
+
+    AssignKicks(st.kicks, casters, kickers);
 }
 
 // A human tank has no trigger, so it gets told when a captain has it low
@@ -649,6 +703,63 @@ std::vector<Creature*> EngagedAdds(GauntletState const& st, Player* bot)
     return adds;
 }
 
+// What the add casts that a bot stops. Summon Undead raises five Corrupted Ymirjar and a Frozen Orb bursts
+// for 15-20k, so their stuns are handed out before the kicks on the bolts.
+bool CastToStopOf(Creature* add, CastToStop& cast)
+{
+    switch (add ? add->GetEntry() : 0)
+    {
+        case NPC_SS_DEATHBRINGER:
+            if (Casting(add, SPELL_SS_SUMMON_UNDEAD))
+                cast = {0, "summon", Stop::Stun};
+            else if (CastingShadowBolt(add))
+                cast = {2, "bolt", Stop::Kick};
+            else
+                return false;
+
+            return true;
+        case NPC_SS_FROSTBINDER:
+            if (!Casting(add, SPELL_SS_FROZEN_ORB))
+                return false;
+
+            cast = {1, "orb", Stop::Stun};
+            return true;
+        default:
+            return false;
+    }
+}
+
+// An orb launches only when the channel runs out: a stun or the holder's death ends it with nothing sent
+void TrackOrbs(GauntletState& st, Player* bot, uint32 now)
+{
+    std::unordered_map<ObjectGuid, OrbMark> orbs;
+    for (Player* member : MembersOnMap(bot))
+        if (Aura* orb = member->GetAura(SPELL_SS_FROZEN_ORB))
+            orbs[member->GetGUID()] = {member->GetPosition(), orb->GetCasterGUID(), orb->GetDuration()};
+
+    for (auto const& [holder, mark] : st.orbs)
+    {
+        Player* player = ObjectAccessor::GetPlayer(*bot, holder);
+        if (orbs.count(holder) || mark.leftMs > ORB_LAUNCH_MS || !player || !player->IsAlive())
+            continue;
+
+        Creature* caster = bot->GetMap()->GetCreature(mark.caster);
+        float const flightMs = caster ? caster->GetExactDist(mark.spot) / ORB_SPEED * IN_MILLISECONDS : 0.0f;
+        uint32 const lifeMs = static_cast<uint32>(flightMs) + ORB_LAND_GRACE_MS;
+        st.blasts.push_back({mark.spot, now, lifeMs});
+        if (RaidObs::Active())
+            RaidObs::NoteHazardCircle(bot->GetMap(),
+                                      sSpellMgr->GetSpellIdForDifficulty(SPELL_SS_FROZEN_ORB_BLAST, bot),
+                                      mark.spot, ORB_RADIUS, lifeMs);
+    }
+    st.orbs.swap(orbs);
+
+    st.blasts.erase(std::remove_if(st.blasts.begin(), st.blasts.end(),
+                                   [now](OrbBlast const& blast)
+                                   { return getMSTimeDiff(blast.launchMs, now) >= blast.lifeMs; }),
+                    st.blasts.end());
+}
+
 void ScanGauntlet(GauntletState& st, Creature* source, Player* bot, uint32 now)
 {
     if (st.scanned && getMSTimeDiff(st.scanMs, now) < SCAN_MS)
@@ -666,29 +777,26 @@ void ScanGauntlet(GauntletState& st, Creature* source, Player* bot, uint32 now)
         if (add->IsAlive() && add->IsInCombat())
             st.adds.push_back(add->GetGUID());
 
-    // Summon Undead raises five Corrupted Ymirjar, so it goes before the bolts
-    std::vector<std::pair<uint8, Creature*>> casting;
+    TrackOrbs(st, bot, now);
+
+    std::vector<std::pair<CastToStop, Creature*>> casting;
     for (ObjectGuid const& guid : st.adds)
     {
+        CastToStop cast;
         Creature* add = source->GetMap()->GetCreature(guid);
-        if (!add || add->GetEntry() != NPC_SS_DEATHBRINGER)
-            continue;
-
-        if (Casting(add, SPELL_SS_SUMMON_UNDEAD))
-            casting.emplace_back(0, add);
-        else if (CastingShadowBolt(add))
-            casting.emplace_back(1, add);
+        if (CastToStopOf(add, cast))
+            casting.emplace_back(cast, add);
     }
     std::sort(casting.begin(), casting.end(),
               [](auto const& a, auto const& b)
               {
-                  return std::make_tuple(a.first, a.second->GetGUID()) <
-                         std::make_tuple(b.first, b.second->GetGUID());
+                  return std::make_tuple(a.first.order, a.second->GetGUID()) <
+                         std::make_tuple(b.first.order, b.second->GetGUID());
               });
 
-    std::vector<Creature*> casters;
-    for (auto const& [order, add] : casting)
-        casters.push_back(add);
+    std::vector<std::pair<Creature*, Stop>> casters;
+    for (auto const& [cast, add] : casting)
+        casters.emplace_back(add, cast.stop);
     AssignKicks(st.kicks, casters, MembersOnMap(bot));
 }
 
@@ -806,47 +914,54 @@ Unit* ResolveGauntletTarget(PlayerbotAI* botAI, GauntletState const& st)
     return best;
 }
 
-// Hazards about to land round the bot; a tank the Warlord hits takes its Whirlwind like any swing
-std::vector<HazardCircle> GauntletHazards(GauntletState const& st, Player* bot, float pad)
+struct GauntletHazard
 {
-    std::vector<HazardCircle> hazards;
-    bool const tank = IsTankPlayer(bot);
-    for (ObjectGuid const& guid : st.adds)
-    {
-        Creature* add = bot->GetMap()->GetCreature(guid);
-        if (!add || !add->IsAlive())
-            continue;
+    Position centre;
+    float radius;
+    char const* kind;
+};
 
-        if (add->GetEntry() == NPC_SS_WARLORD && !tank && Casting(add, SPELL_SS_WHIRLWIND))
-            hazards.emplace_back(add->GetPosition(), WHIRLWIND_RADIUS + pad);
-        else if (add->GetEntry() == NPC_SS_FROSTBINDER)
-            if (Aura* orb = add->GetAura(SPELL_SS_FROZEN_ORB))
-                if (orb->GetDuration() <= ORB_LEAD_MS)
-                    hazards.emplace_back(add->GetPosition(), ORB_RADIUS + pad);
+// Hazards about to land round the bot, unpadded. Tanks stay in a Whirlwind. An orb's holder can't leave a
+// circle round itself, only the spot the orb flies to.
+std::vector<GauntletHazard> GauntletHazardsAround(GauntletState const& st, Player* bot)
+{
+    std::vector<GauntletHazard> hazards;
+    if (!IsTankPlayer(bot))
+        for (ObjectGuid const& guid : st.adds)
+            if (Creature* add = bot->GetMap()->GetCreature(guid))
+                if (add->IsAlive() && add->GetEntry() == NPC_SS_WARLORD && Casting(add, SPELL_SS_WHIRLWIND))
+                    hazards.push_back({add->GetPosition(), WHIRLWIND_RADIUS, "whirlwind"});
+
+    for (auto const& entry : st.orbs)
+    {
+        Player* holder = entry.first != bot->GetGUID() ? ObjectAccessor::GetPlayer(*bot, entry.first) : nullptr;
+        Aura* orb = holder && holder->IsAlive() ? holder->GetAura(SPELL_SS_FROZEN_ORB) : nullptr;
+        if (orb && orb->GetDuration() <= ORB_LEAD_MS)
+            hazards.push_back({holder->GetPosition(), ORB_RADIUS, "orb"});
     }
+
+    uint32 const now = getMSTime();
+    for (OrbBlast const& blast : st.blasts)
+        if (getMSTimeDiff(blast.launchMs, now) < blast.lifeMs)
+            hazards.push_back({blast.spot, ORB_RADIUS, "orb"});
 
     return hazards;
 }
 
+std::vector<HazardCircle> GauntletHazards(GauntletState const& st, Player* bot, float pad)
+{
+    std::vector<HazardCircle> circles;
+    for (GauntletHazard const& hazard : GauntletHazardsAround(st, bot))
+        circles.emplace_back(hazard.centre, hazard.radius + pad);
+
+    return circles;
+}
+
 char const* GauntletDanger(GauntletState const& st, Player* bot)
 {
-    bool const tank = IsTankPlayer(bot);
-    for (ObjectGuid const& guid : st.adds)
-    {
-        Creature* add = bot->GetMap()->GetCreature(guid);
-        if (!add || !add->IsAlive())
-            continue;
-
-        float const distance = bot->GetExactDist2d(add);
-        if (add->GetEntry() == NPC_SS_WARLORD && !tank && distance < WHIRLWIND_RADIUS + DANGER_PAD &&
-            Casting(add, SPELL_SS_WHIRLWIND))
-            return "whirlwind";
-
-        if (add->GetEntry() == NPC_SS_FROSTBINDER && distance < ORB_RADIUS + DANGER_PAD)
-            if (Aura* orb = add->GetAura(SPELL_SS_FROZEN_ORB))
-                if (orb->GetDuration() <= ORB_LEAD_MS)
-                    return "orb";
-    }
+    for (GauntletHazard const& hazard : GauntletHazardsAround(st, bot))
+        if (bot->GetExactDist2d(hazard.centre) < hazard.radius + DANGER_PAD)
+            return hazard.kind;
 
     return nullptr;
 }
@@ -971,7 +1086,7 @@ Unit* GetSsInterrupt(PlayerbotAI* botAI, char const*& spell)
         return nullptr;
 
     Creature* arnath = KickFor(st->kicks, bot);
-    spell = arnath && ArnathKickable(arnath) ? ReadyKick(bot, arnath, true) : nullptr;
+    spell = arnath && ArnathKickable(arnath) ? ReadyKick(bot, arnath, Stop::Kick) : nullptr;
     if (!spell)
     {
         NoteDerived(bot, "ss.interrupt", "none");
@@ -1091,17 +1206,10 @@ Unit* GetSsGauntletInterrupt(PlayerbotAI* botAI, char const*& spell)
         return nullptr;
 
     Creature* caster = KickFor(st->kicks, bot);
-    bool const summon = caster && Casting(caster, SPELL_SS_SUMMON_UNDEAD);
-    bool const bolt = caster && CastingShadowBolt(caster);
-    spell = summon || bolt ? ReadyKick(bot, caster, true) : nullptr;
-    if (!spell)
-    {
-        NoteDerived(bot, "ss.gauntlet.interrupt", "none");
-        return nullptr;
-    }
-
-    NoteDerived(bot, "ss.gauntlet.interrupt", summon ? "summon" : "bolt");
-    return caster;
+    CastToStop cast;
+    spell = caster && CastToStopOf(caster, cast) ? ReadyKick(bot, caster, cast.stop) : nullptr;
+    NoteDerived(bot, "ss.gauntlet.interrupt", spell ? cast.note : "none");
+    return spell ? caster : nullptr;
 }
 
 bool IsSsGauntletInDanger(PlayerbotAI* botAI)

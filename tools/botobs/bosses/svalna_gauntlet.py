@@ -5,7 +5,7 @@
     svalna_gauntlet.py <file> --packs       each kind of Ymirjar and summon: how many were seen, how many died
     svalna_gauntlet.py <file> --targets     per bot: the resolver rules it was handed
     svalna_gauntlet.py <file> --taunts      per tank: each rescue taunt it owed, from when
-    svalna_gauntlet.py <file> --kicks       per bot: the Deathbringer casts it was elected to kick
+    svalna_gauntlet.py <file> --kicks       per bot: the casts it was elected to stun or kick
     svalna_gauntlet.py <file> --dodges      per bot: Whirlwind and Frozen Orb dodges
     svalna_gauntlet.py <file> --defensives  tank buttons and calls to a human tank
     svalna_gauntlet.py <file> --cheats      cheat uses in this pull
@@ -22,11 +22,13 @@ while a Ymirjar fights the raid, and Svalna's own state replaces it once she eng
   it was handed, `deathbringer` first for ranged and `frostbinder` first for melee, then `huntress`,
   `battlemaiden`, `warlord`, `corrupted`, `warhawk`, or `none`.
 - **`ss.gauntlet.taunt` is the kind of melee add a tank's rescue taunt is due on**, `none` once not.
-- **`ss.gauntlet.interrupt` is the bot elected to kick a Deathbringer**: `summon` (Summon Undead) or
-  `bolt` (Empowered Shadow Bolt) while it holds the kick, `none` otherwise.
+- **`ss.gauntlet.interrupt` is the bot elected to stop a cast**: a stun on `summon` (a Deathbringer's
+  Summon Undead) or `orb` (a Frostbinder's Frozen Orb channel), which no kick or silence stops, or a kick
+  on `bolt` (Empowered Shadow Bolt), while it holds the duty, `none` otherwise.
 - **`ss.gauntlet.dodge` is a bot leaving a hazard about to land**: `whirlwind` (a Warlord's 2 s cast,
-  8 yd, tanks stay), `orb` (a Frostbinder's Frozen Orb in its last 3 s, 6 yd), `blocked` with no clear
-  spot, `none` once out.
+  8 yd, tanks stay), `orb` (6 yd round a Frozen Orb holder in its last 3 s, the holder itself aside, then
+  round the spot the orb flies to), `blocked` with no clear spot, `none` once out. Each orb's landing is
+  a 6 yd `hazard` circle (71286) for its flight.
 - **`ss.gauntlet.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: a tank a
   Ymirjar hits under 40%. `ss.gauntlet.humancall` is a call to a human tank.
 - **No gauntlet code cheats.** Any `cheat` row here is another encounter's code.
@@ -142,7 +144,7 @@ def show_taunts(trace: Trace) -> None:
 
 
 def show_kicks(trace: Trace) -> None:
-    show_rules(trace, "KICKS", "ss.gauntlet.interrupt", "per bot: spans of each Deathbringer cast it was to kick")
+    show_rules(trace, "KICKS", "ss.gauntlet.interrupt", "per bot: spans of each cast it was to stun or kick")
 
 
 def show_dodges(trace: Trace) -> None:
@@ -182,7 +184,7 @@ SECTIONS = (
     ("packs", "each kind of Ymirjar and summon: how many were seen, how many died", show_packs),
     ("targets", "per bot: the resolver rules it was handed", show_targets),
     ("taunts", "per tank: each rescue taunt it owed, from when", show_taunts),
-    ("kicks", "per bot: the Deathbringer casts it was elected to kick", show_kicks),
+    ("kicks", "per bot: the casts it was elected to stun or kick", show_kicks),
     ("dodges", "per bot: Whirlwind and Frozen Orb dodges", show_dodges),
     ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "cheat uses in this pull", show_cheats),

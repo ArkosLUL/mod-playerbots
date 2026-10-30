@@ -76,7 +76,7 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
 - **Kite**: a bot a zombie chases within 45 yd, unless it is a tank holding its abomination. It drops
   its cast, uses Nitro Boosts and walks forced along the ring, two points (30°) at a time away from
   the zombie, else three, one, or back the other way; legs stay 6 yd off the zombie and clear of
-  live columns and other zombies' bursts. It does nothing else meanwhile.
+  live columns and other zombies' bursts. Meanwhile it only kites, dodges and frees itself.
 - **Snare**: per chasing unslowed zombie, the nearest non-healer bot with Chains of Ice (20 yd),
   Concussive Shot (30) or Frost Shock (20) ready and in sight.
 - **Kicker** (`vd.interrupt`): per archmage casting Frostbolt Volley, the nearest bot not casting,

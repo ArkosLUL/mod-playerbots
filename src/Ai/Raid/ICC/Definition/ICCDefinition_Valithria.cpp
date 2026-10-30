@@ -23,9 +23,10 @@ namespace
 void DefineValithria(EncounterBuilder& e)
 {
     e.Node<IccValithriaDodgeTrigger, IccValithriaDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    // Above the kite, which wins every tick a kiter walks, so a slowed kiter can free itself
+    e.Node<IccValithriaFreedomTrigger, IccValithriaFreedomAction>(ACTION_EMERGENCY + 5.5f);
     e.Node<IccValithriaKiteTrigger, IccValithriaKiteAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
     e.Node<IccValithriaInterruptTrigger, IccValithriaInterruptAction>(ACTION_RAID + 15);
-    e.Node<IccValithriaFreedomTrigger, IccValithriaFreedomAction>(ACTION_RAID + 14);
     e.Node<IccValithriaTankDefensiveTrigger, IccValithriaCastTankDefensiveAction>(ACTION_RAID + 13);
     e.Node<IccValithriaLustTrigger, IccValithriaLustAction>(ACTION_RAID + 12);
     e.Node<IccValithriaGuardianSpiritTrigger, IccValithriaGuardianSpiritAction>(ACTION_RAID + 11);

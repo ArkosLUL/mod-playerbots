@@ -66,9 +66,11 @@ def pull(boss: str = "svalna-gauntlet") -> list[dict]:
         note(2500, BULWARK, "ss.gauntlet.target", "held"),
         note(2000, BULWARK, "ss.gauntlet.taunt", "warlord"),
         note(2400, BULWARK, "ss.gauntlet.taunt", "none"),
-        # Shiv kicks a Summon Undead; Arcane a bolt later.
+        # Shiv stuns a Summon Undead and Bulwark a Frozen Orb channel; Arcane kicks a bolt later.
         note(5000, SHIV, "ss.gauntlet.interrupt", "summon"),
         note(5300, SHIV, "ss.gauntlet.interrupt", "none"),
+        note(6000, BULWARK, "ss.gauntlet.interrupt", "orb"),
+        note(6200, BULWARK, "ss.gauntlet.interrupt", "none"),
         note(7000, ARCANE, "ss.gauntlet.interrupt", "bolt"),
         note(7200, ARCANE, "ss.gauntlet.interrupt", "none"),
         # Shiv leaves the Frozen Orb, Mend a Whirlwind.
@@ -141,9 +143,10 @@ class Kicks(unittest.TestCase):
     def test_section(self):
         self.assertEqual(printed(sgt.show_kicks, load(pull())), (
             "KICKS\n"
-            "  per bot: spans of each Deathbringer cast it was to kick\n"
+            "  per bot: spans of each cast it was to stun or kick\n"
             "\n"
             "    Arcane          bolt 1\n"
+            "    Bulwark         orb 1\n"
             "    Shiv            summon 1\n"))
 
 

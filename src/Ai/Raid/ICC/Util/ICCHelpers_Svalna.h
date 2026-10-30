@@ -92,10 +92,12 @@ bool IsSsGauntletLive(PlayerbotAI* botAI);
 Unit* GetSsGauntletTarget(PlayerbotAI* botAI);
 // A melee add on a non-tank this tank is the nearest to with its taunt ready. Notes ss.gauntlet.taunt.
 Unit* GetSsGauntletTauntTarget(PlayerbotAI* botAI);
-// A Deathbringer casting Summon Undead or Empowered Shadow Bolt this bot is elected to kick, and the
-// kick. Notes ss.gauntlet.interrupt.
+// The add this bot is elected to stop, and the spell: a stun on a Deathbringer's Summon Undead or a
+// Frostbinder's Frozen Orb channel, a kick or silence on an Empowered Shadow Bolt. Notes
+// ss.gauntlet.interrupt.
 Unit* GetSsGauntletInterrupt(PlayerbotAI* botAI, char const*& spell);
-// A Warlord's Whirlwind or a Frostbinder's Frozen Orb is about to hit the bot. Notes ss.gauntlet.dodge.
+// A Warlord's Whirlwind, a Frozen Orb holder near the end of its channel or the spot its orb flies to is
+// about to hit the bot. Notes ss.gauntlet.dodge.
 bool IsSsGauntletInDanger(PlayerbotAI* botAI);
 bool FindSsGauntletDodgeSpot(PlayerbotAI* botAI, Position& spot);
 // A melee bot's target stands inside one, so reaching it walks the bot back in
@@ -103,7 +105,8 @@ bool IsSsGauntletReachHeld(PlayerbotAI* botAI);
 // The button this tank spends now, 0 for none: a Ymirjar hits it under SS_TANK_DEFENSIVE_PCT
 uint32 GetSsGauntletTankDefensive(PlayerbotAI* botAI, char const* noteKind);
 bool IsSsGauntletTankDefensiveHeld(PlayerbotAI* botAI);
-// The trace, the scan, the kick duties, the human tank call, the reset once the hall goes quiet
+// The trace, the scan, the Frozen Orbs in flight, the kick and stun duties, the human tank call, the reset
+// once the hall goes quiet
 void TickSsGauntletEncounter(PlayerbotAI* botAI);
 
 #endif
