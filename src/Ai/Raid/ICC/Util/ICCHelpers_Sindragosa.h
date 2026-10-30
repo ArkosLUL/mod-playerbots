@@ -74,6 +74,8 @@ IccSindragosaPhaseId IccSindragosaPhase(Player* bot, Unit const* boss);
 Creature* GetSgBoss(PlayerbotAI* botAI);
 // The same, in combat with the raid
 bool IsSgLive(PlayerbotAI* botAI);
+// In combat, or flying in to land
+bool IsSgPresent(PlayerbotAI* botAI);
 
 // Tanks and DPS: a player's skull on her or a tomb, then tombs and her per the phase. Nothing for a bot
 // holding its spells or hiding from Mystic Buffet, nor on her for a braked or chilled bot. Notes sg.target.
@@ -91,6 +93,8 @@ bool GetSgUnchainedWalk(PlayerbotAI* botAI, Position& spot);
 bool GetSgStandWalk(PlayerbotAI* botAI, Position& spot);
 // A walk, a parked walk or the air phase's hold owns the bot's feet
 bool IsSgMovementOwned(PlayerbotAI* botAI);
+// The bot's stand waits out a beacon whose splash its walk would cut through
+bool IsSgStandHalted(PlayerbotAI* botAI);
 
 // Her, when this bot's taunt is due: the holder's taunt back off a non-tank, or the last phase swap.
 // `swap` says which.
@@ -129,6 +133,9 @@ bool IsSgTankDefensiveHeld(PlayerbotAI* botAI);
 
 // The tank this paladin frees from Frost Breath's slow now, or null
 Unit* GetSgFreedomTarget(PlayerbotAI* botAI);
+// The holder this healer puts an external on before a last phase breath no swap takes, and the spell, or null.
+// Notes sg.cover.
+Unit* GetSgCoverTarget(PlayerbotAI* botAI, std::string& spell);
 // The beaconed member this healer covers before the tomb, and the spell, or null
 Unit* GetSgBeaconHealTarget(PlayerbotAI* botAI, std::string& spell);
 

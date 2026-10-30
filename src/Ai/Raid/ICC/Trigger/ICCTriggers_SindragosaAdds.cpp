@@ -6,6 +6,8 @@
 
 #include "ICCTriggers_SindragosaAdds.h"
 
+#include <string>
+
 #include "Creature.h"
 #include "Playerbots.h"
 #include "Position.h"
@@ -31,3 +33,15 @@ bool IccSgDrakeStandTrigger::IsActive()
 bool IccSgGauntletDodgeTrigger::IsActive() { return IsSgGauntletInBlade(botAI); }
 
 bool IccSgGauntletTauntTrigger::IsActive() { return GetSgGauntletTauntTarget(botAI) != nullptr; }
+
+bool IccSgGauntletKickTrigger::IsActive()
+{
+    std::string spell;
+    return GetSgGauntletKickTarget(botAI, spell) != nullptr;
+}
+
+bool IccSgGauntletFreeTrigger::IsActive()
+{
+    std::string spell;
+    return GetSgGauntletFreeTarget(botAI, spell) != nullptr;
+}

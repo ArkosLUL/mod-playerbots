@@ -68,6 +68,17 @@ constexpr float BRAKE_RELEASE = 0.8f;
 
 // The melee and ranged stands sit round the landing spot, so they hold only while the drake is near it
 constexpr float DRAKE_ANCHOR = 8.0f;
+// A ranged stand under a puddle moves this far off, keeping out of Bellowing Roar's 35 yd and in sight of the
+// drake's tank
+constexpr float ALT_STEPS[] = {5.0f, 10.0f};
+constexpr uint8 ALT_HEADINGS = 8;
+constexpr float ROAR_KEEP = 37.0f;
+// The stand hold blocks reach: a 30 yd spell gets to a drake from here, both combat reaches counted
+constexpr float ALT_CAST_REACH = 40.0f;
+constexpr float ALT_HEAL_REACH = 38.0f;
+constexpr float FLOOR_TOLERANCE = 1.5f;
+constexpr float SIGHT_EYE = 2.0f;
+constexpr uint32 ALT_RETRY_MS = 1000;
 
 // Bellowing Roar comes 20-25 s into the pull, then 25-30 s after each one
 constexpr uint32 ROAR_FIRST_MS = 20000;
@@ -82,6 +93,10 @@ constexpr float BLADE_CLEAR = 14.5f;
 static_assert(BLADE_CLEAR >= BLADE_RADIUS + 2.0f, "a dodge must clear the whirl with room to park");
 constexpr float BLADE_SWEEP = 25.0f;
 constexpr float TAUNT_RANGE = 30.0f;
+// Interrupts that reach only this far need melee range
+constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
+constexpr float FREE_RANGE = 30.0f;
+constexpr uint32 SPELL_SG_HAND_OF_FREEDOM = 1044;
 
 constexpr uint8 DRAKE_COUNT = 2;
 // Kill order. sg.drake.tank holds the index plus one.
@@ -100,6 +115,7 @@ constexpr char const* GAUNTLET_NAMES[GAUNTLET_TIERS] = {"sorceress", "webweaver"
 // The Champion and the Warrior, by their place in GAUNTLET_ORDER: the adds a tank takes off a player who is
 // no tank
 constexpr uint8 GAUNTLET_RESCUE_TIERS[] = {2, 3};
+constexpr uint8 SORCERESS_TIER = 0;
 
 enum class StandRole : uint8
 {
@@ -115,6 +131,9 @@ struct Stand
     StandRole role = StandRole::None;
     Position spot;
     bool parked = false;
+    // A spot off a puddle on its own stand
+    bool alt = false;
+    uint32 altTriedMs = 0;
 };
 
 enum class IcyKind : uint8
@@ -155,6 +174,8 @@ struct DrakeState
     bool dutiesRan = false;
     // Bot tank -> the drake it holds, index plus one
     RaidObs::ObsGuidMap<uint8> tank{"sg.drake.tank"};
+    // Both drakes up: healer -> the drake whose ranged stand it takes
+    std::unordered_map<ObjectGuid, uint8> healerDrake;
     RaidObs::ObsGuidSet brake{"sg.drake.brake"};
     // 1 while Rimefang flies for his Icy Blasts
     RaidObs::ObsValue<uint8> air{"sg.drake.air"};
@@ -380,7 +401,8 @@ bool HoldsDrake(DrakeState const& st, Player* tank)
     return false;
 }
 
-// The drake a bot holding none fights: a player's skull on one, else the first in the kill order
+// The drake a bot holding none fights: a player's skull on one, else the first in the kill order. Melee can't
+// reach Rimefang while he flies, so they take Spinestalker meanwhile.
 Creature* FocusDrake(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -389,7 +411,12 @@ Creature* FocusDrake(PlayerbotAI* botAI)
             if (Fights(bot, drake))
                 return drake;
 
-    return FirstFighting(bot);
+    Creature* first = FirstFighting(bot);
+    if (DrakeIndex(first) == RIMEFANG && RimefangUp(first) && !PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
+        if (Creature* spinestalker = FightingDrake(bot, SPINESTALKER))
+            return spinestalker;
+
+    return first;
 }
 
 DrakeState* LiveDrakes(PlayerbotAI* botAI)
@@ -537,6 +564,24 @@ void UpdateRoarClock(DrakeState& st, Player* bot, uint32 now)
     st.roarCasting = casting;
 }
 
+// With both drakes pulled, their tanks stand about 78 yd apart: healers split between the two ranged stands by
+// guid, Rimefang's first, so each tank keeps one in reach
+void AssignHealers(DrakeState& st, Player* bot, std::vector<Player*> const& members)
+{
+    st.healerDrake.clear();
+    if (!FightingDrake(bot, RIMEFANG) || !FightingDrake(bot, SPINESTALKER))
+        return;
+
+    std::vector<Player*> healers;
+    for (Player* member : members)
+        if (IsDutyBot(member) && PlayerbotAI::IsHeal(member) && !IsTankPlayer(member))
+            healers.push_back(member);
+
+    std::sort(healers.begin(), healers.end(), IccGuidLess());
+    for (size_t index = 0; index < healers.size(); ++index)
+        st.healerDrake[healers[index]->GetGUID()] = static_cast<uint8>(index % DRAKE_COUNT);
+}
+
 void RefreshDrakeDuties(DrakeState& st, Player* bot, uint32 now)
 {
     if (st.dutiesRan && getMSTimeDiff(st.dutyMs, now) < DUTY_MS)
@@ -544,7 +589,9 @@ void RefreshDrakeDuties(DrakeState& st, Player* bot, uint32 now)
 
     st.dutiesRan = true;
     st.dutyMs = now;
-    AssignTanks(st, bot, MembersOnMap(bot));
+    std::vector<Player*> const members = MembersOnMap(bot);
+    AssignTanks(st, bot, members);
+    AssignHealers(st, bot, members);
     st.air = static_cast<uint8>(RimefangUp(FightingDrake(bot, RIMEFANG)) ? 1 : 0);
     UpdateRoarClock(st, bot, now);
 }
@@ -621,18 +668,60 @@ IcyKind StandingIn(DrakeState const& st, Player* bot)
     return IcyKind::None;
 }
 
-void UpdateStand(DrakeState& st, PlayerbotAI* botAI)
+bool StaticSight(Player* bot, Position const& from, Position const& to)
+{
+    return bot->GetMap()->isInLineOfSight(from.GetPositionX(), from.GetPositionY(), from.GetPositionZ() + SIGHT_EYE,
+                                          to.GetPositionX(), to.GetPositionY(), to.GetPositionZ() + SIGHT_EYE,
+                                          bot->GetPhaseMask(), LINEOFSIGHT_CHECK_VMAP,
+                                          VMAP::ModelIgnoreFlags::Nothing);
+}
+
+// The nearest spot round a fouled ranged stand that is clear of every puddle and impact, on the floor, out of
+// Bellowing Roar, in spell reach of the drake (a healer's in heal reach of its tank stand) and in sight of that
+bool AltStand(DrakeState const& st, Player* bot, uint8 index, Position const& stand, Position& out)
+{
+    Position const& tank = StandSpot(index, StandRole::Tank);
+    bool const healer = PlayerbotAI::IsHeal(bot);
+    for (float step : ALT_STEPS)
+        for (uint8 heading = 0; heading < ALT_HEADINGS; ++heading)
+        {
+            float const angle = static_cast<float>(heading) * 2.0f * static_cast<float>(M_PI) / ALT_HEADINGS;
+            Position const wanted(stand.GetPositionX() + step * std::cos(angle),
+                                  stand.GetPositionY() + step * std::sin(angle), stand.GetPositionZ());
+            if (Fouled(st, wanted) || wanted.GetExactDist2d(LandSpot(index)) > ALT_CAST_REACH ||
+                (healer && wanted.GetExactDist2d(tank) > ALT_HEAL_REACH) ||
+                (index == SPINESTALKER && wanted.GetExactDist2d(ICC_SG_SPINESTALKER_LAND) < ROAR_KEEP))
+                continue;
+
+            Position const floor = ValidateStaticFloorPoint(bot, wanted);
+            if (floor.GetExactDist2d(wanted) > FLOOR_TOLERANCE || !StaticSight(bot, floor, tank))
+                continue;
+
+            out = floor;
+            return true;
+        }
+
+    return false;
+}
+
+void UpdateStand(DrakeState& st, PlayerbotAI* botAI, uint32 now)
 {
     Player* bot = botAI->GetBot();
     Stand& stand = st.stands[bot->GetGUID()];
     int index = -1;
     StandRole role = StandRole::None;
+    auto const split = st.healerDrake.find(bot->GetGUID());
     if (IsDutyBot(bot))
     {
         if (uint8 const owned = OwnedIndex(st, bot))
         {
             index = owned - 1;
             role = StandRole::Tank;
+        }
+        else if (split != st.healerDrake.end())
+        {
+            index = split->second;
+            role = StandRole::Ranged;
         }
         else if (Creature* focus = FocusDrake(botAI))
         {
@@ -642,26 +731,50 @@ void UpdateStand(DrakeState& st, PlayerbotAI* botAI)
         }
     }
 
+    uint8 const slot = static_cast<uint8>(index + 1);
     Creature* drake = index >= 0 ? FightingDrake(bot, static_cast<uint8>(index)) : nullptr;
     Position spot;
+    bool alt = false;
     if (drake)
     {
         spot = StandSpot(static_cast<uint8>(index), role);
         bool const anchored =
             role == StandRole::Tank || drake->GetExactDist2d(LandSpot(static_cast<uint8>(index))) <= DRAKE_ANCHOR;
-        if (!Landed(drake) || !anchored || Fouled(st, spot))
+        if (!Landed(drake) || !anchored)
             drake = nullptr;
+        else if (Fouled(st, spot))
+        {
+            // Melee and the tank stay on their drake wherever it is; a ranged stand moves off the puddle
+            bool const same = stand.role == role && stand.drake == slot;
+            if (same && stand.alt && !Fouled(st, stand.spot))
+            {
+                spot = stand.spot;
+                alt = true;
+            }
+            // Each try asks the navmesh up to 16 times, so a failed one waits before the next
+            else if (role == StandRole::Ranged &&
+                     (!stand.altTriedMs || getMSTimeDiff(stand.altTriedMs, now) >= ALT_RETRY_MS))
+            {
+                stand.altTriedMs = now;
+                Position const own = spot;
+                alt = AltStand(st, bot, static_cast<uint8>(index), own, spot);
+                if (!alt)
+                    drake = nullptr;
+            }
+            else
+                drake = nullptr;
+        }
     }
 
     if (!drake)
     {
         stand.role = StandRole::None;
+        stand.alt = false;
         Note(bot, "sg.drake.stand", "none");
         return;
     }
 
-    uint8 const slot = static_cast<uint8>(index + 1);
-    if (stand.role != role || stand.drake != slot)
+    if (stand.role != role || stand.drake != slot || stand.spot.GetExactDist2d(spot) > 0.5f)
     {
         stand.role = role;
         stand.drake = slot;
@@ -669,9 +782,10 @@ void UpdateStand(DrakeState& st, PlayerbotAI* botAI)
         stand.parked = false;
     }
 
+    stand.alt = alt;
     float const distance = bot->GetExactDist2d(stand.spot);
     stand.parked = stand.parked ? distance <= SG_DRAKE_STAND_UNPARK : distance <= SG_DRAKE_STAND_PARK;
-    Note(bot, "sg.drake.stand", std::string(RoleName(role)) + " " + DRAKE_NAMES[index]);
+    Note(bot, "sg.drake.stand", std::string(RoleName(role)) + " " + DRAKE_NAMES[index] + (alt ? " alt" : ""));
 }
 
 Stand const* HeldStand(PlayerbotAI* botAI)
@@ -921,6 +1035,59 @@ bool NearBlade(GauntletState const& st, Position const& pos, float reach)
     return std::any_of(st.blades.begin(), st.blades.end(),
                        [&](Position const& blade) { return blade.GetExactDist2d(pos) < reach; });
 }
+
+bool CanPayFor(Player* bot, SpellInfo const* info)
+{
+    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
+    if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
+        return true;
+
+    return static_cast<int32>(bot->GetPower(Powers(info->PowerType))) >=
+           info->CalcPowerCost(bot, info->GetSchoolMask());
+}
+
+// An interrupt this member can cast on the caster now, or null. A false ready would hold the real kicker back
+// from the election.
+char const* ReadyInterrupt(Player* member, Unit* caster)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    if (!memberAI || member->HasUnitState(UNIT_STATE_CASTING))
+        return nullptr;
+
+    static char const* const interrupts[] = {"kick",        "pummel",       "shield bash",
+                                             "mind freeze", "counterspell", "wind shear"};
+    for (char const* interrupt : interrupts)
+    {
+        uint32 const spellId = memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", interrupt)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || !CanPayFor(member, info) || info->CheckShapeshift(member->GetShapeshiftForm()) != SPELL_CAST_OK)
+            continue;
+
+        float const range = member->GetSpellMaxRangeForTarget(caster, info);
+        bool const inReach = range <= MELEE_INTERRUPT_RANGE ? member->IsWithinMeleeRange(caster)
+                                                            : member->IsWithinCombatRange(caster, range);
+        if (inReach && memberAI->CanCastSpell(spellId, caster))
+            return interrupt;
+    }
+
+    return nullptr;
+}
+
+// Hand of Freedom breaks either root, a priest's Dispel Magic only Frost Nova's
+char const* FreeSpell(Player* member, Unit* rooted, bool nova)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    if (!memberAI)
+        return nullptr;
+
+    if (member->getClass() == CLASS_PALADIN && memberAI->CanCastSpell("hand of freedom", rooted))
+        return "hand of freedom";
+
+    if (nova && member->getClass() == CLASS_PRIEST && memberAI->CanCastSpell("dispel magic", rooted))
+        return "dispel magic";
+
+    return nullptr;
+}
 }  // namespace
 
 Creature* GetSgDrake(PlayerbotAI* botAI)
@@ -1103,7 +1270,7 @@ void TickSgDrakesEncounter(PlayerbotAI* botAI)
     RefreshDrakeDuties(st, bot, now);
     CallDrakeHumanTank(st, bot, now);
     UpdateBrake(st, botAI);
-    UpdateStand(st, botAI);
+    UpdateStand(st, botAI, now);
 }
 
 uint8 IccSindragosaDrakesResistSchools(PlayerbotAI* /*botAI*/, uint8 /*previous*/) { return RAID_RESIST_FROST; }
@@ -1201,6 +1368,92 @@ bool IsSgGauntletBladeReachHeld(PlayerbotAI* botAI)
 
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     return target && NearBlade(*st, target->GetPosition(), BLADE_CLEAR);
+}
+
+Unit* GetSgGauntletKickTarget(PlayerbotAI* botAI, std::string& spell)
+{
+    GauntletState* st = LiveGauntlet(botAI);
+    Player* bot = botAI->GetBot();
+    if (!st || !IsDutyBot(bot))
+        return nullptr;
+
+    // One kick per cast: the lowest guid with an interrupt that reaches her
+    for (ObjectGuid const& guid : st->adds[SORCERESS_TIER])
+    {
+        Creature* sorceress = bot->GetMap()->GetCreature(guid);
+        if (!sorceress || !sorceress->IsAlive() ||
+            !Casting(sorceress, sSpellMgr->GetSpellIdForDifficulty(SPELL_SG_GAUNTLET_ICE_TOMB, sorceress)))
+            continue;
+
+        char const* interrupt = ReadyInterrupt(bot, sorceress);
+        if (!interrupt)
+            continue;
+
+        std::vector<Player*> const members = MembersOnMap(bot);
+        bool const first = std::none_of(members.begin(), members.end(),
+                                        [&](Player* member)
+                                        {
+                                            return member->GetGUID() < bot->GetGUID() && IsDutyBot(member) &&
+                                                   ReadyInterrupt(member, sorceress);
+                                        });
+        if (!first)
+            continue;
+
+        Note(bot, "sg.gauntlet.kick", "sorceress");
+        spell = interrupt;
+        return sorceress;
+    }
+
+    Note(bot, "sg.gauntlet.kick", "none");
+    return nullptr;
+}
+
+Unit* GetSgGauntletFreeTarget(PlayerbotAI* botAI, std::string& spell)
+{
+    GauntletState* st = LiveGauntlet(botAI);
+    Player* bot = botAI->GetBot();
+    if (!st || !IsDutyBot(bot) || (bot->getClass() != CLASS_PALADIN && bot->getClass() != CLASS_PRIEST))
+        return nullptr;
+
+    if (!st->blades.empty())
+    {
+        std::vector<Player*> const members = MembersOnMap(bot);
+        for (Player* rooted : members)
+        {
+            bool const nova = rooted->HasAura(SPELL_SG_GAUNTLET_FROST_NOVA);
+            if ((!nova && !rooted->HasAura(SPELL_SG_GAUNTLET_WEB)) || rooted->HasAura(SPELL_SG_HAND_OF_FREEDOM) ||
+                !NearBlade(*st, rooted->GetPosition(), BLADE_TRIGGER))
+                continue;
+
+            Player* elected = nullptr;
+            char const* electedSpell = nullptr;
+            float electedDistance = 0.0f;
+            for (Player* member : members)
+            {
+                float const distance = member->GetExactDist(rooted);
+                if (!IsDutyBot(member) || distance > FREE_RANGE || (elected && distance >= electedDistance))
+                    continue;
+
+                char const* name = FreeSpell(member, rooted, nova);
+                if (!name || !member->IsWithinLOSInMap(rooted))
+                    continue;
+
+                elected = member;
+                electedSpell = name;
+                electedDistance = distance;
+            }
+
+            if (elected == bot)
+            {
+                Note(bot, "sg.gauntlet.free", electedSpell);
+                spell = electedSpell;
+                return rooted;
+            }
+        }
+    }
+
+    Note(bot, "sg.gauntlet.free", "none");
+    return nullptr;
 }
 
 void TickSgGauntletEncounter(PlayerbotAI* botAI)

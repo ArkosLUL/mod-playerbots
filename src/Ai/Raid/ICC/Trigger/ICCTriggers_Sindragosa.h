@@ -92,6 +92,15 @@ public:
     bool IsActive() override;
 };
 
+class IccSindragosaCoverTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "icc sindragosa holder cover";
+
+    IccSindragosaCoverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class IccSindragosaBeaconHealTrigger : public Trigger
 {
 public:

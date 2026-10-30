@@ -7,6 +7,7 @@
 #include "ICCActions_SindragosaAdds.h"
 
 #include <cmath>
+#include <string>
 
 #include "Creature.h"
 #include "ICCHelpers_Shared.h"
@@ -156,6 +157,20 @@ bool IccSgGauntletDodgeAction::Execute(Event /*event*/)
 
     // The whirl hits every second for 6 s and comes back 9 s later, which costs more than any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool IccSgGauntletKickAction::Execute(Event /*event*/)
+{
+    std::string spell;
+    Unit* sorceress = GetSgGauntletKickTarget(botAI, spell);
+    return sorceress && botAI->CastSpell(spell, sorceress);
+}
+
+bool IccSgGauntletFreeAction::Execute(Event /*event*/)
+{
+    std::string spell;
+    Unit* rooted = GetSgGauntletFreeTarget(botAI, spell);
+    return rooted && botAI->CastSpell(spell, rooted);
 }
 
 bool IccSgGauntletTauntAction::Execute(Event /*event*/)

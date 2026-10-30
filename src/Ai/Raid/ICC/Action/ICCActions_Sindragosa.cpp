@@ -160,6 +160,13 @@ bool IccSindragosaFreedomAction::Execute(Event /*event*/)
     return target && botAI->CastSpell("hand of freedom", target);
 }
 
+bool IccSindragosaCoverAction::Execute(Event /*event*/)
+{
+    std::string spell;
+    Unit* holder = GetSgCoverTarget(botAI, spell);
+    return holder && botAI->CastSpell(spell, holder);
+}
+
 bool IccSindragosaBeaconHealAction::Execute(Event /*event*/)
 {
     std::string spell;
@@ -219,5 +226,16 @@ bool IccSindragosaHoldAction::Execute(Event /*event*/)
 
 bool IccSindragosaStandAction::Execute(Event /*event*/)
 {
+    if (IsSgStandHalted(botAI))
+    {
+        if (!bot->isMoving())
+            return false;
+
+        // A stopped walk keeps its booking, which would refuse the next one
+        bot->StopMoving();
+        AI_VALUE(LastMovement&, "last movement").clear();
+        return true;
+    }
+
     return WalkFor(&GetSgStandWalk, MovementPriority::MOVEMENT_COMBAT, false, false);
 }

@@ -71,6 +71,7 @@ void DefineSindragosa(EncounterBuilder& e)
     e.Node<IccSindragosaSplashTrigger, IccSindragosaSplashAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
     e.Node<IccSindragosaBombHideTrigger, IccSindragosaBombHideAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
     e.Node<IccSindragosaBeaconTrigger, IccSindragosaBeaconAction>(ACTION_EMERGENCY + 3, EncounterRow::Mover);
+    e.Node<IccSindragosaCoverTrigger, IccSindragosaCoverAction>(ACTION_RAID + 11);
     e.Node<IccSindragosaTankDefensiveTrigger, IccSindragosaCastTankDefensiveAction>(ACTION_RAID + 10);
     e.Node<IccSindragosaTauntTrigger, IccSindragosaTauntAction>(ACTION_RAID + 9);
     e.Node<IccSindragosaBuffetHideTrigger, IccSindragosaBuffetHideAction>(ACTION_RAID + 8, EncounterRow::Mover);
@@ -95,7 +96,7 @@ void DefineSindragosa(EncounterBuilder& e)
                 Family::MoveRandom | Family::PetAttack);
     // Every spell a carrier finishes stacks Instability, and Backlash goes off when it drops
     e.Block("icc sindragosa unchained hold", Role::Any, &IsSgUnchainedHeld, Family::Spell,
-            {IccSindragosaFreedomAction::Name, IccSindragosaBeaconHealAction::Name});
+            {IccSindragosaFreedomAction::Name, IccSindragosaCoverAction::Name, IccSindragosaBeaconHealAction::Name});
     // The stands are in reach of her and of the holder, and reach would walk a bot off its spot
     e.OwnMovement("icc sindragosa movement", Role::Any, &IsSgMovementOwned, Family::Attack);
     e.Block("icc sindragosa spell movers", Role::Any, &IsSgMovementOwned,
@@ -104,8 +105,9 @@ void DefineSindragosa(EncounterBuilder& e)
     e.Block("icc sindragosa avoid aoe", Role::Any, &IsSgLive, Family::AvoidAoe);
     // Only the holder's taunt back and the elected swap move her
     e.Block("icc sindragosa taunts", Role::Tank, &IsSgLive, Family::Taunt);
-    // A braked tank has no target, and a druid's non-combat nodes drop bear form
-    e.Block("icc sindragosa tank form", Role::Tank, &IsSgLive, 0, {"caster form"});
+    // A braked tank has no target, and a druid's non-combat nodes drop bear form, out of combat through her
+    // fly-in too
+    e.Block("icc sindragosa tank form", Role::Tank, &IsSgPresent, 0, {"caster form"});
     // The tank buttons wait for the breath windows or a low tank
     e.Block("icc sindragosa tank defensive hold", Role::Tank, &IsSgTankDefensiveHeld, 0, HeldTankDefensiveNames());
 

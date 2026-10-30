@@ -71,6 +71,19 @@ constexpr float COLD_RANGE = 29.5f;
 constexpr uint32 UNCHAINED_HOLD_STACKS = 3;
 // Backlash's 20 yd plus a margin
 constexpr float BACKLASH_KEEP = 23.0f;
+// A carrier's node keeps Backlash off the raid's spots and off every other carrier with both parked a yard or two
+// out, and stays outside Blistering Cold
+constexpr float UNCHAINED_RAID_KEEP = 24.0f;
+constexpr float UNCHAINED_CARRIER_APART = 25.0f;
+constexpr float UNCHAINED_HER_KEEP = 28.0f;
+// A 30 yd spell reaches her from here: both combat reaches count
+constexpr float UNCHAINED_CAST_REACH = 46.0f;
+// Heroic Frost Breath is a 24 degree cone out to 60 yd, and Tail Smash hits 20 yd round a point 20 yd behind her
+constexpr float BREATH_REACH = 62.0f;
+constexpr float BREATH_KEEP_DEG = 22.0f;
+constexpr float TAIL_KEEP = 23.0f;
+// navprobe's default collision height, the eye of a sight ray
+constexpr float SIGHT_EYE = 2.0f;
 constexpr uint32 CHILLED_STOP_STACKS = 6;
 
 constexpr float BRAKE_CAP = 0.9f;
@@ -93,15 +106,29 @@ constexpr uint32 FREE_TANK_HIDE_STACKS = 1;
 constexpr float HEAL_REACH = 38.0f;
 // A live tomb this close to a last phase tomb spot fouls it
 constexpr float TOMB_SPOT_FOUL = 6.0f;
+// A Blistering Cold run past a tomb this close paths round it
+constexpr float ESCAPE_TOMB_KEEP = 8.0f;
 constexpr float PRISONER_MATCH = 3.0f;
 
-constexpr float TOMB_FLOOR_PCT = 20.0f;
+// 20% of a 25-man tomb is 90k, enough for damage still in flight. A 10-man tomb has 113k, so it stops at 45k.
+constexpr float TOMB_FLOOR_PCT_25 = 20.0f;
+constexpr float TOMB_FLOOR_PCT_10 = 40.0f;
 constexpr float PRISONER_LOW_PCT = 40.0f;
 
 constexpr uint32 SWAP_WALK_MS = 12000;
 constexpr uint32 SWAP_TAUNT_MS = 16000;
+// A taunt lands at once: still not her victim this long after it, the swapper missed
+constexpr uint32 SWAP_MISS_MS = 1000;
 constexpr uint32 SWAP_BUFFET_MAX = 1;
 constexpr float TAUNT_RANGE = 30.0f;
+
+// Her next breath comes 20-25 s after the last, and every external below lasts 8 s or more
+constexpr uint32 COVER_FROM_MS = 18000;
+constexpr uint32 COVER_BUFFET_STACKS = 5;
+constexpr float COVER_RANGE = 40.0f;
+constexpr uint32 SPELL_SG_PAIN_SUPPRESSION = 33206;
+constexpr uint32 SPELL_SG_GUARDIAN_SPIRIT = 47788;
+constexpr uint32 SPELL_SG_HAND_OF_SACRIFICE = 6940;
 
 constexpr uint32 FREEDOM_AIR_MS = 6000;
 constexpr uint32 FREEDOM_HOLDER_STACKS = 3;
@@ -128,14 +155,25 @@ constexpr Polar COLD_HOLDER{90.0f, 30.0f};
 constexpr Polar STAND_MELEE{170.0f, 14.0f};
 constexpr Polar STAND_RANGED{180.0f, 30.0f};
 constexpr Polar COLD_ESCAPES[] = {{150.0f, 30.0f}, {180.0f, 30.0f}, {210.0f, 30.0f}};
-// Heroic carriers 23 yd off the raid: healers north-west in heal reach of the holder, the rest north-east past
-// the tail. Some of these leave the floor once she has drifted west, so each is floor-checked where it is used.
-constexpr Polar UNCHAINED_HEALERS[] = {{15.0f, 29.0f}, {35.0f, 30.0f}, {25.0f, 38.0f}};
-constexpr Polar UNCHAINED_OTHERS[] = {{325.0f, 34.0f}, {315.0f, 40.0f}, {340.0f, 40.0f}};
-constexpr uint8 UNCHAINED_SET = 3;
 // Last phase tombs, alternating, outside her 21.6 yd melee and 25 yd Blistering Cold
 constexpr Polar TOMB_SPOTS[] = {{140.0f, 31.0f}, {215.0f, 31.0f}};
 constexpr uint8 BEACON_SPOT_A = 7;
+constexpr Polar TAIL_SMASH{270.0f, 20.0f};
+
+// Heroic Unchained Magic nodes: a 5 yd grid round her landing spot, row i at x + 5 (i + UNCHAINED_GRID_I0), bit j
+// at y + 5 (j + UNCHAINED_GRID_J0). navprobe --nav 0x09 settles every set node within 0.01 of 203.38, with static
+// sight to her at her landing spot and 15 and 30 yd west of it. A carrier picks its node live, since she drifts.
+constexpr int UNCHAINED_GRID_I0 = -13;
+constexpr int UNCHAINED_GRID_J0 = -11;
+constexpr int UNCHAINED_GRID_COLS = 25;
+constexpr float UNCHAINED_GRID_STEP = 5.0f;
+constexpr float UNCHAINED_GRID_Z = 203.38f;
+constexpr uint32 UNCHAINED_GRID[] = {
+    0x01F80FC, 0x01FFFFC, 0x01FFFFC, 0x03FFFFE, 0x07FFFFF, 0x0FFFFFF, 0x1FFFFFF, 0x1FFFFFF, 0x1FFFFFF,
+    0x0FFFFFF, 0x07FFFFF, 0x07FFFFF, 0x1FFFFFF, 0x1FFFFFF, 0x0FFFFFF, 0x07FFFFF, 0x003FFE0, 0x001FFC0,
+    0x001FFE0, 0x001FFE0, 0x001FFE0, 0x001FFC0, 0x000FF80, 0x0007F00, 0x0001C00};
+constexpr int UNCHAINED_GRID_ROWS = static_cast<int>(sizeof(UNCHAINED_GRID) / sizeof(UNCHAINED_GRID[0]));
+constexpr uint8 HOLDER_SIGHT_TRIES = 8;
 
 enum class TankRole : uint8
 {
@@ -202,6 +240,8 @@ struct SgBotState
     Position walkSpot;
     bool walkParked = false;
     bool owned = false;
+    // Its stand waits out a beacon, so a stand walk still in flight has to stop
+    bool halt = false;
 
     bool cold = false;
     // Outside Blistering Cold while she casts it: nothing may walk the bot in
@@ -224,9 +264,8 @@ struct SgBotState
     Position buffetSpot;
     ObjectGuid buffetTried;
 
-    // The unchained spot this bot walks to, floor-checked for this anchor and index
-    uint8 unchainedFor = 0;
-    Position unchainedAnchor;
+    // The unchained node this bot walks to
+    uint16 unchainedFor = 0;
     Position unchainedSpot;
     bool unchainedValid = false;
     bool unchainedLatch = false;
@@ -274,6 +313,9 @@ struct SgState
     ObjectGuid swapper;
     uint32 swapBreath = 0;
     bool swapTaunted = false;
+    uint32 swapTauntMs = 0;
+    // Its taunt went out and she stayed on the holder, who then takes the breath
+    bool swapMissed = false;
     // The breath whose swap has gone out
     uint32 swappedBreath = 0;
 
@@ -292,10 +334,12 @@ struct SgState
     // Living members carrying neither Unchained Magic nor Instability, for heroic Backlash
     std::vector<Position> nonCarriers;
 
-    // Heroic carrier -> 1-3 a healer spot, 4-6 another
-    std::unordered_map<ObjectGuid, uint8> unchained;
+    // Heroic carrier -> its unchained node
+    std::unordered_map<ObjectGuid, uint16> unchained;
     // Paladin -> the tank it frees
     std::unordered_map<ObjectGuid, ObjectGuid> freedom;
+    // The healer spending an external on a holder no swap relieves
+    ObjectGuid coverBy;
     // The newest tomb formed in the last phase, which the raid hides behind
     ObjectGuid newestTomb;
     // Air tombs some bot hides behind from a live bomb
@@ -371,6 +415,49 @@ bool FloorSpot(Player* bot, Position const& wanted, Position& out)
     out = floor;
     return true;
 }
+
+// The straight walk from `from` to `to` keeps `keep` off every hazard, or at least never gets closer to one
+// than `from` already is
+bool SegmentClear(std::vector<Position> const& hazards, Position const& from, Position const& to, float keep)
+{
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    float const length2 = dx * dx + dy * dy;
+    for (Position const& hazard : hazards)
+    {
+        float const hx = hazard.GetPositionX() - from.GetPositionX();
+        float const hy = hazard.GetPositionY() - from.GetPositionY();
+        float const along = length2 > 0.0f ? std::clamp((hx * dx + hy * dy) / length2, 0.0f, 1.0f) : 0.0f;
+        float const closest = std::hypot(hx - along * dx, hy - along * dy);
+        if (closest < std::min(keep, std::hypot(hx, hy) - 0.1f))
+            return false;
+    }
+
+    return true;
+}
+
+bool StaticSight(Player* bot, Position const& from, Position const& to)
+{
+    return bot->GetMap()->isInLineOfSight(from.GetPositionX(), from.GetPositionY(), from.GetPositionZ() + SIGHT_EYE,
+                                          to.GetPositionX(), to.GetPositionY(), to.GetPositionZ() + SIGHT_EYE,
+                                          bot->GetPhaseMask(), LINEOFSIGHT_CHECK_VMAP,
+                                          VMAP::ModelIgnoreFlags::Nothing);
+}
+
+bool UnchainedNode(uint16 index, Position& out)
+{
+    int const row = index / UNCHAINED_GRID_COLS;
+    int const col = index % UNCHAINED_GRID_COLS;
+    if (row >= UNCHAINED_GRID_ROWS || !((UNCHAINED_GRID[row] >> col) & 1u))
+        return false;
+
+    out = Position(ICC_SG_LAND.GetPositionX() + static_cast<float>(row + UNCHAINED_GRID_I0) * UNCHAINED_GRID_STEP,
+                   ICC_SG_LAND.GetPositionY() + static_cast<float>(col + UNCHAINED_GRID_J0) * UNCHAINED_GRID_STEP,
+                   UNCHAINED_GRID_Z);
+    return true;
+}
+
+float TombFloorPct(Map const* map) { return map && map->Is25ManRaid() ? TOMB_FLOOR_PCT_25 : TOMB_FLOOR_PCT_10; }
 
 Creature* BossUnit(Player* bot)
 {
@@ -727,10 +814,16 @@ void UpdateSwap(SgState& st, Player* bot, std::vector<Player*> const& tanks, Cre
         bool const done = st.swapper == st.holder;
         bool const stale = !swapper || st.breath.Get() != st.swapBreath || st.phase != IccSindragosaPhaseId::Last;
         if (!done && !stale)
+        {
+            // It goes back to the melee stand rather than share the breath with the holder
+            if (st.swapTaunted && getMSTimeDiff(st.swapTauntMs, now) >= SWAP_MISS_MS)
+                st.swapMissed = true;
             return;
+        }
 
         st.swapper.Clear();
         st.swapTaunted = false;
+        st.swapMissed = false;
     }
 
     if (st.phase != IccSindragosaPhaseId::Last || !st.lastBreathMs || st.swappedBreath == st.breath.Get() ||
@@ -750,6 +843,7 @@ void UpdateSwap(SgState& st, Player* bot, std::vector<Player*> const& tanks, Cre
         st.swapper = tank->GetGUID();
         st.swapBreath = st.breath.Get();
         st.swapTaunted = false;
+        st.swapMissed = false;
         return;
     }
 }
@@ -845,6 +939,105 @@ void AssignBeacons(SgState& st, Player* bot, std::vector<Player*> const& members
     }
 }
 
+// Where the raid stands or runs, which a carrier's Backlash must not reach: the stands, the Blistering Cold
+// runs and, in the last phase, both tomb spots and the hides behind them
+std::vector<Position> UnchainedRaidSpots(SgState const& st)
+{
+    std::vector<Position> spots = {PolarSpot(st.anchor, STAND_HOLDER), PolarSpot(st.anchor, COLD_HOLDER),
+                                   PolarSpot(st.anchor, STAND_MELEE), PolarSpot(st.anchor, STAND_RANGED)};
+    for (Polar const& escape : COLD_ESCAPES)
+        spots.push_back(PolarSpot(st.anchor, escape));
+
+    if (st.phase == IccSindragosaPhaseId::Last)
+        for (Polar const& tomb : TOMB_SPOTS)
+        {
+            spots.push_back(PolarSpot(st.anchor, tomb));
+            spots.push_back(PolarSpot(st.anchor, {tomb.deg, tomb.r + BUFFET_HIDE_BEHIND}));
+        }
+
+    return spots;
+}
+
+// Outside Blistering Cold, her breath toward the holder, Tail Smash and the raid
+bool UnchainedNodeClear(Position const& anchor, std::vector<Position> const& raid, Position const& node)
+{
+    float const her = node.GetExactDist2d(anchor);
+    if (her < UNCHAINED_HER_KEEP)
+        return false;
+
+    float const dx = node.GetPositionX() - anchor.GetPositionX();
+    float const dy = node.GetPositionY() - anchor.GetPositionY();
+    float const deg = std::atan2(dy, dx) * 180.0f / static_cast<float>(M_PI);
+    if (her <= BREATH_REACH && std::fabs(std::remainder(deg - STAND_HOLDER.deg, 360.0f)) < BREATH_KEEP_DEG)
+        return false;
+
+    if (node.GetExactDist2d(PolarSpot(anchor, TAIL_SMASH)) < TAIL_KEEP)
+        return false;
+
+    return std::none_of(raid.begin(), raid.end(),
+                        [&](Position const& spot) { return spot.GetExactDist2d(node) < UNCHAINED_RAID_KEEP; });
+}
+
+// A node clear of her, the raid and the other carriers' nodes, or -1. Others need her within spell reach and
+// take the node nearest the ranged stand. Healers want the holder in heal reach and sight, else the ranged
+// stand in reach, else the node nearest it.
+int PickUnchainedNode(SgState const& st, Player* bot, std::vector<Position> const& raid, bool healer)
+{
+    std::vector<Position> taken;
+    for (auto const& entry : st.unchained)
+        if (Position node; UnchainedNode(entry.second, node))
+            taken.push_back(node);
+
+    auto const crowded = [&](Position const& node)
+    {
+        return std::any_of(taken.begin(), taken.end(),
+                           [&](Position const& other) { return other.GetExactDist2d(node) < UNCHAINED_CARRIER_APART; });
+    };
+
+    Position const holder = PolarSpot(st.anchor, STAND_HOLDER);
+    Position const ranged = PolarSpot(st.anchor, STAND_RANGED);
+    // reach tier, distance to the ranged stand, node
+    std::vector<std::tuple<uint8, float, uint16>> ranked;
+    for (int row = 0; row < UNCHAINED_GRID_ROWS; ++row)
+        for (int col = 0; col < UNCHAINED_GRID_COLS; ++col)
+        {
+            uint16 const index = static_cast<uint16>(row * UNCHAINED_GRID_COLS + col);
+            Position node;
+            if (!UnchainedNode(index, node) || !UnchainedNodeClear(st.anchor, raid, node) || crowded(node))
+                continue;
+
+            float const toRanged = node.GetExactDist2d(ranged);
+            if (!healer)
+            {
+                if (node.GetExactDist2d(st.anchor) <= UNCHAINED_CAST_REACH)
+                    ranked.emplace_back(0, toRanged, index);
+                continue;
+            }
+
+            uint8 const tier = node.GetExactDist2d(holder) <= HEAL_REACH ? 0 : toRanged <= HEAL_REACH ? 1 : 2;
+            ranked.emplace_back(tier, toRanged, index);
+        }
+
+    std::sort(ranked.begin(), ranked.end());
+    // The holder counts only where sight reaches it: the north wall hides the holder once she has drifted west
+    uint8 tries = 0;
+    for (auto& entry : ranked)
+    {
+        if (std::get<0>(entry) != 0)
+            break;
+
+        Position node;
+        UnchainedNode(std::get<2>(entry), node);
+        if (tries++ < HOLDER_SIGHT_TRIES && StaticSight(bot, node, holder))
+            return std::get<2>(entry);
+
+        std::get<0>(entry) = std::get<1>(entry) <= HEAL_REACH ? 1 : 2;
+    }
+
+    std::sort(ranked.begin(), ranked.end());
+    return ranked.empty() ? -1 : std::get<2>(ranked.front());
+}
+
 void AssignUnchained(SgState& st, Player* bot, std::vector<Player*> const& members)
 {
     st.nonCarriers.clear();
@@ -868,43 +1061,34 @@ void AssignUnchained(SgState& st, Player* bot, std::vector<Player*> const& membe
         (IsHealer(member) ? healers : others).push_back(member);
     }
 
+    std::sort(healers.begin(), healers.end(), IccGuidLess());
+    std::sort(others.begin(), others.end(), IccGuidLess());
     std::unordered_set<ObjectGuid> roster;
     for (Player* member : healers)
         roster.insert(member->GetGUID());
     for (Player* member : others)
         roster.insert(member->GetGUID());
 
+    // Nodes never move, so two kept nodes stay apart: a node goes only when her drift fouls it
+    std::vector<Position> const raid = UnchainedRaidSpots(st);
     for (auto itr = st.unchained.begin(); itr != st.unchained.end();)
-        itr = roster.count(itr->first) ? std::next(itr) : st.unchained.erase(itr);
-
-    auto const place = [&](std::vector<Player*>& carriers, uint8 base)
     {
-        std::sort(carriers.begin(), carriers.end(), IccGuidLess());
-        bool used[UNCHAINED_SET] = {};
-        for (Player* member : carriers)
-        {
-            auto const itr = st.unchained.find(member->GetGUID());
-            if (itr != st.unchained.end() && itr->second > base && itr->second <= base + UNCHAINED_SET)
-                used[itr->second - base - 1] = true;
-        }
+        Position node;
+        bool const keep = roster.count(itr->first) && UnchainedNode(itr->second, node) &&
+                          UnchainedNodeClear(st.anchor, raid, node);
+        itr = keep ? std::next(itr) : st.unchained.erase(itr);
+    }
 
-        for (Player* member : carriers)
-        {
-            if (st.unchained.count(member->GetGUID()))
-                continue;
+    // Others first: they need her within spell reach, which leaves them fewer nodes
+    for (Player* member : others)
+        if (!st.unchained.count(member->GetGUID()))
+            if (int const node = PickUnchainedNode(st, bot, raid, false); node >= 0)
+                st.unchained[member->GetGUID()] = static_cast<uint16>(node);
 
-            for (uint8 index = 0; index < UNCHAINED_SET; ++index)
-                if (!used[index])
-                {
-                    used[index] = true;
-                    st.unchained[member->GetGUID()] = static_cast<uint8>(base + index + 1);
-                    break;
-                }
-        }
-    };
-
-    place(healers, 0);
-    place(others, UNCHAINED_SET);
+    for (Player* member : healers)
+        if (!st.unchained.count(member->GetGUID()))
+            if (int const node = PickUnchainedNode(st, bot, raid, true); node >= 0)
+                st.unchained[member->GetGUID()] = static_cast<uint16>(node);
 }
 
 // One paladin per tank: each tank slowed by Frost Breath in the first seconds of an air phase, and the
@@ -961,6 +1145,74 @@ void AssignFreedom(SgState& st, Player* bot, std::vector<Player*> const& members
     }
 }
 
+bool Covered(Player* holder)
+{
+    return holder->HasAura(SPELL_SG_PAIN_SUPPRESSION) || holder->HasAura(SPELL_SG_GUARDIAN_SPIRIT) ||
+           holder->HasAura(SPELL_SG_HAND_OF_SACRIFICE);
+}
+
+// The external this healer can put on the holder from where it stands, or null
+char const* CoverSpell(Player* healer, Unit* holder)
+{
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(healer);
+    if (!ai)
+        return nullptr;
+
+    std::vector<char const*> names;
+    if (healer->getClass() == CLASS_PRIEST)
+        names = {"pain suppression", "guardian spirit"};
+    else if (healer->getClass() == CLASS_PALADIN)
+        names = {"hand of sacrifice"};
+
+    // CanCastSpell passes an out of range target, and Hand of Sacrifice's 30 yd doesn't reach the holder from
+    // the ranged stand
+    for (char const* name : names)
+    {
+        uint32 const spellId = ai->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (info && healer->IsWithinCombatRange(holder, healer->GetSpellMaxRangeForTarget(holder, info)) &&
+            ai->CanCastSpell(spellId, holder))
+            return name;
+    }
+
+    return nullptr;
+}
+
+// A holder no swap relieves takes the next breath on all its Mystic Buffet stacks, so from COVER_FROM_MS after
+// the last breath, or through one, the nearest healer puts an external on it from COVER_BUFFET_STACKS
+void AssignCover(SgState& st, Player* bot, std::vector<Player*> const& members, Creature* boss, uint32 now)
+{
+    st.coverBy.Clear();
+    Player* holder = PlayerOf(bot, st.holder);
+    bool const swapDue = st.swapper && !st.swapMissed;
+    bool const window =
+        CastingBreath(boss) || (st.lastBreathMs && getMSTimeDiff(st.lastBreathMs, now) >= COVER_FROM_MS);
+    if (st.phase != IccSindragosaPhaseId::Last || !holder || swapDue || !window ||
+        BuffetStacks(holder, boss) < COVER_BUFFET_STACKS || Covered(holder))
+        return;
+
+    Player* best = nullptr;
+    float bestDistance = 0.0f;
+    for (Player* member : members)
+    {
+        auto const bs = st.bots.find(member->GetGUID());
+        if (!IsDutyBot(member) || !IsHealer(member) || IsTombed(member) ||
+            (bs != st.bots.end() && bs->second.unchainedHeld))
+            continue;
+
+        float const distance = member->GetExactDist(holder);
+        if (distance > COVER_RANGE || (best && distance >= bestDistance) || !member->IsWithinLOSInMap(holder) ||
+            !CoverSpell(member, holder))
+            continue;
+
+        best = member;
+        bestDistance = distance;
+    }
+
+    if (best)
+        st.coverBy = best->GetGUID();
+}
+
 void UpdateNewestTomb(SgState& st)
 {
     st.newestTomb.Clear();
@@ -989,6 +1241,7 @@ void RefreshDuties(SgState& st, Player* bot, Creature* boss, uint32 now)
     AssignBeacons(st, bot, members);
     AssignUnchained(st, bot, members);
     AssignFreedom(st, bot, members, boss, now);
+    AssignCover(st, bot, members, boss, now);
     UpdateNewestTomb(st);
 
     st.coverTombs.clear();
@@ -1002,7 +1255,7 @@ void UpdateBrake(SgState& st, Player* bot, Creature* boss)
 {
     bool hold = false;
     Player* holder = PlayerOf(bot, st.holder);
-    bool const swapping = st.swapper == bot->GetGUID() && st.swapTaunted;
+    bool const swapping = st.swapper == bot->GetGUID() && st.swapTaunted && !st.swapMissed;
     if (boss->IsInCombat() && st.phase != IccSindragosaPhaseId::Air && !PlayerbotAI::IsHeal(bot) && holder &&
         holder != bot && !swapping)
     {
@@ -1046,7 +1299,43 @@ void UpdateHolds(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
 
 bool IsHolderOrSwapper(SgState const& st, Player* bot)
 {
-    return st.holder == bot->GetGUID() || st.swapper == bot->GetGUID();
+    return st.holder == bot->GetGUID() || (st.swapper == bot->GetGUID() && !st.swapMissed);
+}
+
+std::vector<Position> BeaconHazards(SgState const& st, Player* bot)
+{
+    std::vector<Position> hazards;
+    for (ObjectGuid const& guid : st.beaconed)
+    {
+        if (guid == bot->GetGUID())
+            continue;
+
+        if (Player* member = PlayerOf(bot, guid))
+            hazards.push_back(member->GetPosition());
+
+        auto const spot = st.beaconSpots.find(guid);
+        if (spot != st.beaconSpots.end())
+            hazards.push_back(spot->second);
+    }
+
+    return hazards;
+}
+
+float NearestHazard(std::vector<Position> const& hazards, Position const& pos)
+{
+    float nearest = 1000.0f;
+    for (Position const& hazard : hazards)
+        nearest = std::min(nearest, hazard.GetExactDist2d(pos));
+
+    return nearest;
+}
+
+// A run past a tomb paths round it, and one into a beacon's splash ends in a tomb of its own
+bool EscapeFouled(SgState const& st, std::vector<Position> const& hazards, Position const& spot)
+{
+    return NearestHazard(hazards, spot) < SPLASH_TRIGGER ||
+           std::any_of(st.tombs.begin(), st.tombs.end(),
+                       [&](TombInfo const& tomb) { return tomb.pos.GetExactDist2d(spot) < ESCAPE_TOMB_KEEP; });
 }
 
 void UpdateCold(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
@@ -1080,48 +1369,23 @@ void UpdateCold(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
         return;
     }
 
+    // The nearest clear escape, else the nearest
+    std::vector<Position> const hazards = BeaconHazards(st, bot);
     size_t best = 0;
-    float bestDistance = 0.0f;
+    std::pair<bool, float> bestKey;
     for (size_t i = 0; i < sizeof(COLD_ESCAPES) / sizeof(COLD_ESCAPES[0]); ++i)
     {
-        float const distance = bot->GetExactDist2d(PolarSpot(her, COLD_ESCAPES[i]));
-        if (!i || distance < bestDistance)
+        Position const spot = PolarSpot(her, COLD_ESCAPES[i]);
+        std::pair<bool, float> const key(EscapeFouled(st, hazards, spot), bot->GetExactDist2d(spot));
+        if (!i || key < bestKey)
         {
             best = i;
-            bestDistance = distance;
+            bestKey = key;
         }
     }
 
     bs.coldSpot = PolarSpot(her, COLD_ESCAPES[best]);
     bs.coldNote = "escape " + std::to_string(best + 1);
-}
-
-std::vector<Position> BeaconHazards(SgState const& st, Player* bot)
-{
-    std::vector<Position> hazards;
-    for (ObjectGuid const& guid : st.beaconed)
-    {
-        if (guid == bot->GetGUID())
-            continue;
-
-        if (Player* member = PlayerOf(bot, guid))
-            hazards.push_back(member->GetPosition());
-
-        auto const spot = st.beaconSpots.find(guid);
-        if (spot != st.beaconSpots.end())
-            hazards.push_back(spot->second);
-    }
-
-    return hazards;
-}
-
-float NearestHazard(std::vector<Position> const& hazards, Position const& pos)
-{
-    float nearest = 1000.0f;
-    for (Position const& hazard : hazards)
-        nearest = std::min(nearest, hazard.GetExactDist2d(pos));
-
-    return nearest;
 }
 
 // Out of every beacon's 10 yd: to where the bot is going when that is clear, else the nearest clear spot
@@ -1145,7 +1409,9 @@ void UpdateSplash(SgBotState& bs, Player* bot, std::vector<Position> const& haza
     if (bs.splash && NearestHazard(hazards, bs.splashSpot) >= SPLASH_CLEAR)
         return;
 
-    if (destination && NearestHazard(hazards, *destination) >= SPLASH_CLEAR)
+    // Only where the straight walk there doesn't cut past another beacon
+    if (destination && NearestHazard(hazards, *destination) >= SPLASH_CLEAR &&
+        SegmentClear(hazards, bot->GetPosition(), *destination, SPLASH_TRIGGER))
     {
         bs.splash = true;
         bs.splashSpot = *destination;
@@ -1273,39 +1539,8 @@ void UpdateBuffetHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
 void UpdateUnchainedSpot(SgState& st, SgBotState& bs, Player* bot)
 {
     auto const itr = st.unchained.find(bot->GetGUID());
-    if (itr == st.unchained.end() || IsTombed(bot))
-    {
-        bs.unchainedFor = 0;
-        bs.unchainedValid = false;
-        return;
-    }
-
-    if (bs.unchainedFor == itr->second && bs.unchainedAnchor.GetExactDist2d(st.anchor) < 0.1f)
-        return;
-
-    bs.unchainedFor = itr->second;
-    bs.unchainedAnchor = st.anchor;
-    bs.unchainedValid = false;
-
-    Polar const* set = itr->second <= UNCHAINED_SET ? UNCHAINED_HEALERS : UNCHAINED_OTHERS;
-    uint8 const own = static_cast<uint8>((itr->second - 1) % UNCHAINED_SET);
-    Position const wanted = PolarSpot(st.anchor, set[own]);
-
-    // Its own spot, else the nearest other of its set on the floor
-    std::vector<std::pair<float, Position>> candidates;
-    for (uint8 index = 0; index < UNCHAINED_SET; ++index)
-    {
-        Position const spot = PolarSpot(st.anchor, set[index]);
-        candidates.emplace_back(index == own ? -1.0f : spot.GetExactDist2d(wanted), spot);
-    }
-
-    std::sort(candidates.begin(), candidates.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
-    for (auto const& candidate : candidates)
-        if (FloorSpot(bot, candidate.second, bs.unchainedSpot))
-        {
-            bs.unchainedValid = true;
-            return;
-        }
+    bs.unchainedValid = itr != st.unchained.end() && !IsTombed(bot) && UnchainedNode(itr->second, bs.unchainedSpot);
+    bs.unchainedFor = bs.unchainedValid ? itr->second : 0;
 }
 
 StandKind StandFor(SgState const& st, Player* bot, Creature* boss, uint32 now)
@@ -1325,7 +1560,7 @@ StandKind StandFor(SgState const& st, Player* bot, Creature* boss, uint32 now)
         return IsBeaconed(bot) || hid ? StandKind::None : StandKind::Stage;
     }
 
-    bool const swapWalk = st.swapper == bot->GetGUID() && st.lastBreathMs &&
+    bool const swapWalk = st.swapper == bot->GetGUID() && !st.swapMissed && st.lastBreathMs &&
                           getMSTimeDiff(st.lastBreathMs, now) >= SWAP_WALK_MS;
     if (st.holder == bot->GetGUID() || swapWalk)
         return StandKind::Tank;
@@ -1413,7 +1648,7 @@ void NoteSwap(SgState const& st, Player* bot)
 
     char const* value = "none";
     if (st.swapper == bot->GetGUID())
-        value = st.swapTaunted ? "taunt" : "walk";
+        value = st.swapMissed ? "missed" : st.swapTaunted ? "taunt" : "walk";
 
     NoteDerived(bot, "sg.swap", value);
 }
@@ -1453,9 +1688,11 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
 
     auto const beaconSpot = st.beaconSpots.find(bot->GetGUID());
     bool const beaconWalk = live && IsBeaconed(bot) && !IsTombed(bot) && beaconSpot != st.beaconSpots.end();
-    // A stand inside a beacon's splash waits where the dodge left the bot
+    // A stand inside a beacon's splash, or one whose straight walk cuts through it (the stair foot spots sit on the
+    // way to the stage), waits where the bot is or where the dodge left it
     bool const standYields = stand != StandKind::None && !hazards.empty() &&
-                             NearestHazard(hazards, standSpot) < SPLASH_TRIGGER;
+                             (NearestHazard(hazards, standSpot) < SPLASH_TRIGGER ||
+                              !SegmentClear(hazards, bot->GetPosition(), standSpot, SPLASH_TRIGGER));
 
     if (bs.cold)
         SetWalk(bs, bot, WalkKind::Cold, bs.coldSpot);
@@ -1480,8 +1717,9 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
     bool const airHold = live && st.phase == IccSindragosaPhaseId::Air && !st.released && bs.hidThisAir &&
                          !IsTombed(bot);
     bs.owned = bs.walk != WalkKind::None || bs.coldHold || standYields || airHold;
+    bs.halt = bs.walk == WalkKind::None && standYields;
 
-    NoteDerived(bot, "sg.stand", bs.walk == WalkKind::Stand ? StandName(stand) : "none");
+    NoteDerived(bot, "sg.stand", bs.walk == WalkKind::Stand ? StandName(stand) : bs.halt ? "wait" : "none");
     NoteDerived(bot, "sg.cold", bs.coldNote);
     if (bs.hideTomb && bs.hideMarker)
         NoteDerived(bot, "sg.hide", Tag("bomb", bs.hideTomb));
@@ -1502,17 +1740,23 @@ Unit* TombUnit(Player* bot, TombInfo const& tomb)
     return unit && unit->IsAlive() && bot->IsValidAttackTarget(unit) ? unit : nullptr;
 }
 
-// Prisoners in danger first, then tank prisoners, healers, anyone else, the lowest tomb first in each
-TombInfo const* BestTomb(SgState const& st, bool (*wanted)(SgState const&, TombInfo const&))
+// The first tomb `wanted` lets through that the bot can attack: prisoners in danger first, then tank prisoners,
+// healers, anyone else, the lowest tomb first in each
+Unit* PickTomb(SgState const& st, Player* bot, bool (*wanted)(SgState const&, TombInfo const&))
 {
-    TombInfo const* best = nullptr;
-    auto const key = [](TombInfo const& tomb)
-    { return std::make_tuple(tomb.danger ? 0 : 1, tomb.tier, tomb.healthPct); };
+    std::vector<TombInfo const*> ranked;
     for (TombInfo const& tomb : st.tombs)
-        if (wanted(st, tomb) && (!best || key(tomb) < key(*best)))
-            best = &tomb;
+        if (wanted(st, tomb))
+            ranked.push_back(&tomb);
 
-    return best;
+    auto const key = [](TombInfo const* tomb)
+    { return std::make_tuple(tomb->danger ? 0 : 1, tomb->tier, tomb->healthPct); };
+    std::sort(ranked.begin(), ranked.end(), [&](TombInfo const* a, TombInfo const* b) { return key(a) < key(b); });
+    for (TombInfo const* tomb : ranked)
+        if (Unit* unit = TombUnit(bot, *tomb))
+            return unit;
+
+    return nullptr;
 }
 
 bool AnyTomb(SgState const&, TombInfo const&) { return true; }
@@ -1529,22 +1773,21 @@ Unit* AirTombPick(PlayerbotAI* botAI, SgState const& st, SgBotState const* bs, s
     bool const ranged = IsRaidDpsBot(bot) && PlayerbotAI::IsRanged(bot);
     if (st.released)
     {
-        TombInfo const* tomb = BestTomb(st, &AnyTomb);
         rule = "release";
-        return tomb ? TombUnit(bot, *tomb) : nullptr;
+        return PickTomb(st, bot, &AnyTomb);
     }
 
     if (ranged)
-        if (TombInfo const* tomb = BestTomb(st, &AirBreakable))
-            if (Unit* unit = TombUnit(bot, *tomb))
-            {
-                rule = "break";
-                return unit;
-            }
+        if (Unit* unit = PickTomb(st, bot, &AirBreakable))
+        {
+            rule = "break";
+            return unit;
+        }
 
+    float const floorPct = TombFloorPct(bot->GetMap());
     if (bs && bs->coverTomb)
         if (TombInfo const* tomb = FindTomb(st, bs->coverTomb))
-            if (TombHeld(st, *tomb) && tomb->healthPct > TOMB_FLOOR_PCT)
+            if (TombHeld(st, *tomb) && tomb->healthPct > floorPct)
                 if (Unit* unit = TombUnit(bot, *tomb))
                 {
                     rule = "hide";
@@ -1554,13 +1797,20 @@ Unit* AirTombPick(PlayerbotAI* botAI, SgState const& st, SgBotState const* bs, s
     if (!ranged)
         return nullptr;
 
-    TombInfo const* highest = nullptr;
+    // The highest held tomb the bot can attack
+    std::vector<TombInfo const*> held;
     for (TombInfo const& tomb : st.tombs)
-        if (TombHeld(st, tomb) && tomb.healthPct > TOMB_FLOOR_PCT && (!highest || tomb.healthPct > highest->healthPct))
-            highest = &tomb;
+        if (TombHeld(st, tomb) && tomb.healthPct > floorPct)
+            held.push_back(&tomb);
 
+    std::sort(held.begin(), held.end(),
+              [](TombInfo const* a, TombInfo const* b) { return a->healthPct > b->healthPct; });
     rule = "tomb";
-    return highest ? TombUnit(bot, *highest) : nullptr;
+    for (TombInfo const* tomb : held)
+        if (Unit* unit = TombUnit(bot, *tomb))
+            return unit;
+
+    return nullptr;
 }
 
 Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
@@ -1595,12 +1845,11 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
     }
 
     if (IsRaidDpsBot(bot) && PlayerbotAI::IsRanged(bot))
-        if (TombInfo const* tomb = BestTomb(st, &Breakable))
-            if (Unit* unit = TombUnit(bot, *tomb))
-            {
-                NoteDerived(bot, "sg.target", Tag("break", unit));
-                return unit;
-            }
+        if (Unit* unit = PickTomb(st, bot, &Breakable))
+        {
+            NoteDerived(bot, "sg.target", Tag("break", unit));
+            return unit;
+        }
 
     if (restrained)
     {
@@ -1678,6 +1927,12 @@ bool IsSgLive(PlayerbotAI* botAI)
     return boss && boss->IsInCombat();
 }
 
+bool IsSgPresent(PlayerbotAI* botAI)
+{
+    Creature* boss = GetSgBoss(botAI);
+    return boss && (boss->IsInCombat() || boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE));
+}
+
 Unit* GetSgTarget(PlayerbotAI* botAI)
 {
     Creature* boss = nullptr;
@@ -1732,6 +1987,13 @@ bool IsSgMovementOwned(PlayerbotAI* botAI)
     return bs && bs->owned;
 }
 
+bool IsSgStandHalted(PlayerbotAI* botAI)
+{
+    SgState* st = StateOf(botAI);
+    SgBotState const* bs = st ? BotOf(*st, botAI->GetBot()) : nullptr;
+    return bs && bs->halt;
+}
+
 Unit* GetSgTauntTarget(PlayerbotAI* botAI, bool& swap)
 {
     swap = false;
@@ -1768,7 +2030,29 @@ void NoteSgSwapTaunt(PlayerbotAI* botAI)
         return;
 
     st->swapTaunted = true;
+    st->swapTauntMs = getMSTime();
     st->swappedBreath = st->swapBreath;
+}
+
+Unit* GetSgCoverTarget(PlayerbotAI* botAI, std::string& spell)
+{
+    Creature* boss = nullptr;
+    SgState* st = LiveStateOf(botAI, &boss);
+    Player* bot = botAI->GetBot();
+    if (!st || !IsHealer(bot) || !IsDutyBot(bot))
+        return nullptr;
+
+    // Held since the last duty pass: another cast stacks Instability
+    SgBotState const* bs = BotOf(*st, bot);
+    bool const held = bs && bs->unchainedHeld;
+    Player* holder = st->coverBy == bot->GetGUID() && !held ? PlayerOf(bot, st->holder) : nullptr;
+    char const* name = holder && !Covered(holder) ? CoverSpell(bot, holder) : nullptr;
+    NoteDerived(bot, "sg.cover", name ? name : "none");
+    if (!name)
+        return nullptr;
+
+    spell = name;
+    return holder;
 }
 
 bool IsSgUnchainedHeld(PlayerbotAI* botAI)
@@ -1830,7 +2114,7 @@ bool IsSgHeldTomb(PlayerbotAI* botAI, Unit* unit)
     return tomb && TombHeld(*st, *tomb);
 }
 
-bool IsSgAtTombFloor(Unit* tomb) { return tomb && tomb->GetHealthPct() <= TOMB_FLOOR_PCT; }
+bool IsSgAtTombFloor(Unit* tomb) { return tomb && tomb->GetHealthPct() <= TombFloorPct(tomb->GetMap()); }
 
 void GetSgHeldTombs(PlayerbotAI* botAI, std::vector<SgHeldTomb>& out)
 {

@@ -57,6 +57,12 @@ bool IccSindragosaUnchainedTrigger::IsActive()
 
 bool IccSindragosaFreedomTrigger::IsActive() { return GetSgFreedomTarget(botAI) != nullptr; }
 
+bool IccSindragosaCoverTrigger::IsActive()
+{
+    std::string spell;
+    return GetSgCoverTarget(botAI, spell) != nullptr;
+}
+
 bool IccSindragosaBeaconHealTrigger::IsActive()
 {
     std::string spell;
@@ -68,5 +74,5 @@ bool IccSindragosaHoldTrigger::IsActive() { return GetSgHoldDue(botAI) != 0; }
 bool IccSindragosaStandTrigger::IsActive()
 {
     Position spot;
-    return GetSgStandWalk(botAI, spot);
+    return GetSgStandWalk(botAI, spot) || (IsSgStandHalted(botAI) && bot->isMoving());
 }
