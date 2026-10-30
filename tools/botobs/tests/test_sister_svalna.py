@@ -72,6 +72,15 @@ def pull(boss: str = "sister-svalna") -> list[dict]:
         {"t": 24900, "e": "cast", "s": SHIV, "sp": 71466, "tgt": SVALNA, "tr": 1},
         note(25000, SHIV, "down"),
         note(25100, BULWARK, "down"),
+        # Shiv kicks Arnath's Dominate Mind, then a Flash Heal; Arnath has Bulwark low once.
+        note(30000, SHIV, "dominate", "ss.interrupt"),
+        note(30400, SHIV, "none", "ss.interrupt"),
+        note(36000, SHIV, "heal", "ss.interrupt"),
+        note(36300, SHIV, "none", "ss.interrupt"),
+        note(38000, BULWARK, "idle", "ss.defensive"),
+        note(40000, BULWARK, "shield wall", "ss.defensive"),
+        note(41000, BULWARK, "idle", "ss.defensive"),
+        note(42000, SHIV, "Shield Wall", "ss.humancall"),
         # Mend is never freed and dies on the spear; the shield holds to the end.
         impale(44000, MEND),
         note(45000, BULWARK, "up"),
@@ -130,9 +139,19 @@ class Duties(unittest.TestCase):
             "    Bulwark         Captain Arnath 0:00.050\n"
             "  ss.hurl per bot: spans of each rule\n"
             "    Shiv            throw 1, walk 1, hold 1\n"
+            "  ss.interrupt per bot: spans of each rule\n"
+            "    Shiv            dominate 1, heal 1, none 2\n"
             "  ss.target per bot: spans of each rule\n"
             "    Bulwark         owned 1\n"
             "    Shiv            captain 1, svalna 1\n"))
+
+
+class Defensives(unittest.TestCase):
+    def test_section(self):
+        self.assertEqual(printed(ss.show_defensives, load(pull())), (
+            "DEFENSIVES\n"
+            "    Bulwark         shield wall 0:40.000\n"
+            "  calls to a human tank  Shield Wall 0:42.000\n"))
 
 
 class Cheats(unittest.TestCase):
@@ -152,6 +171,9 @@ class Banner(unittest.TestCase):
     def test_a_missing_probe_is_named(self):
         records = [rec for rec in pull() if rec.get("k") != "ss.shield"]
         self.assertIn("probes absent from this trace: ss.shield", printed(ss.show_banner, load(records)))
+
+    def test_gauntlet_keys_are_left_out(self):
+        self.assertNotIn("ss.gauntlet.", printed(ss.show_banner, load(pull())))
 
 
 class EveryView(unittest.TestCase):

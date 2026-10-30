@@ -4,10 +4,12 @@
     sister_svalna.py <file>            every section
     sister_svalna.py <file> --shield   each Aether Shield and how long it held
     sister_svalna.py <file> --spears   each Impaling Spear victim, and who threw the Infernal Spears
-    sister_svalna.py <file> --duties   spear pullers, throw rules, captain tanks and targets per bot
+    sister_svalna.py <file> --duties   spear pullers, throw rules, kicks, captain tanks and targets per bot
+    sister_svalna.py <file> --defensives  tank buttons and calls to a human tank
     sister_svalna.py <file> --cheats   cheat uses in this pull
 
-Svalna has no phase. What the generic views miss here:
+Svalna has no phase, and her gauntlet's keys share her `ss.` prefix, so the banner leaves out the silent
+`ss.gauntlet.*` ones (`svalna_gauntlet.py` reads those). What the generic views miss here:
 
 - **No trace records an aura on a creature**, so `ss.shield` carries her Aether Shield 71463: `up`
   or `down`, per bot within 30 yd of her. A shield starts at the first bot to note `up` and ends at
@@ -19,6 +21,10 @@ Svalna has no phase. What the generic views miss here:
   rule: `throw`, `walk` (into 24 yd), `wait` (another holder throws), `hold` (she is unshielded).
 - **`ss.tank` is the raised captain each bot tank holds**, `0` once it lapses. `ss.target` is the
   resolver's branch: `skull`, `owned`, `captain`, `svalna`, `none`.
+- **`ss.interrupt` is the bot elected to kick Arnath**: `dominate` (Dominate Mind, 25-man) or `heal`
+  (Flash Heal) while it holds the kick, `none` otherwise.
+- **`ss.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: a tank a captain
+  hits under 40%. `ss.humancall` is a call to a human tank.
 - **Svalna has no cheat site.** Any `cheat` row here is another encounter's code running in her pull.
 """
 from __future__ import annotations
@@ -34,15 +40,19 @@ from bosses import icecrown_citadel as icc  # noqa: E402
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, latch_spans, resolve_guids, silent_keys  # noqa: E402
-from raidobs.trace import Trace, clock, first_deaths  # noqa: E402
+from raidobs.trace import Trace, clock, first_deaths, notes  # noqa: E402
 
 ENCOUNTER = "sister-svalna"
 TITLE = "Sister Svalna"
+GAUNTLET_PREFIX = "ss.gauntlet."
 IMPALING_SPEAR = 71443
 HURL_SPEAR = 71466
 RELEASED = "0"
 HURLS = ("throw", "walk", "wait", "hold")
+INTERRUPTS = ("dominate", "heal", "none")
 TARGETS = ("skull", "owned", "captain", "svalna", "none")
+DEFENSIVE = "ss.defensive"
+HUMAN_CALL = "ss.humancall"
 
 
 def mine(trace: Trace) -> bool:
@@ -64,7 +74,7 @@ def show_banner(trace: Trace) -> None:
     if not mine(trace):
         print(f"  not a {TITLE} pull, every section below reads empty")
         return
-    gone = [key for key, _, _ in silent_keys(emitted_keys(trace), ENCOUNTER)]
+    gone = [key for key, _, _ in silent_keys(emitted_keys(trace), ENCOUNTER) if not key.startswith(GAUNTLET_PREFIX)]
     print(f"probes absent from this trace: {', '.join(gone)}" if gone else "all ss.* probes present")
 
 
@@ -156,7 +166,7 @@ def show_duties(trace: Trace) -> None:
         print(f"  {key}, {title}: each unit held, from when")
         for guid, spans in sorted(rows.items(), key=lambda item: trace.name(item[0])):
             print(f"    {trace.name(guid):<14}  " + ", ".join(f"{name} {clock(start)}" for name, start in spans))
-    for key, order in (("ss.hurl", HURLS), ("ss.target", TARGETS)):
+    for key, order in (("ss.hurl", HURLS), ("ss.interrupt", INTERRUPTS), ("ss.target", TARGETS)):
         rows = value_counts(trace, key)
         if not rows:
             print(f"  {key} never written")
@@ -164,6 +174,22 @@ def show_duties(trace: Trace) -> None:
         print(f"  {key} per bot: spans of each rule")
         for guid, counts in sorted(rows.items(), key=lambda item: trace.name(item[0])):
             print(f"    {trace.name(guid):<14}  {counted(counts, order)}")
+
+
+def show_defensives(trace: Trace) -> None:
+    if refuse(trace, "DEFENSIVES"):
+        return
+    rows = holder_spans(trace, DEFENSIVE, icc.pull_end(trace))
+    offered = {guid: [(value, start) for value, start, _ in spans if value != "idle"] for guid, spans in rows.items()}
+    offered = {guid: picks for guid, picks in offered.items() if picks}
+    if not offered:
+        print(f"  {DEFENSIVE} never offered a button")
+    for guid, picks in sorted(offered.items(), key=lambda item: trace.name(item[0])):
+        print(f"    {trace.name(guid):<14}  " + ", ".join(f"{value} {clock(start)}" for value, start in picks))
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{resolve_guids(trace, str(rec['txt']))} {clock(rec['t'])}"
+                                                    for rec in calls))
 
 
 def show_cheats(trace: Trace) -> None:
@@ -182,7 +208,8 @@ def show_cheats(trace: Trace) -> None:
 SECTIONS = (
     ("shield", "each Aether Shield and how long it held", show_shield),
     ("spears", "each Impaling Spear victim and the Hurl Spear casts", show_spears),
-    ("duties", "spear pullers, throw rules, captain tanks and targets per bot", show_duties),
+    ("duties", "spear pullers, throw rules, kicks, captain tanks and targets per bot", show_duties),
+    ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "cheat uses in this pull", show_cheats),
 )
 

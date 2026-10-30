@@ -11,6 +11,7 @@
 #include "ICCHelpers_Svalna.h"
 #include "ICCSeams.h"
 #include "ICCTriggers_Svalna.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -21,12 +22,17 @@ namespace
 void DefineSvalna(EncounterBuilder& e)
 {
     e.Node<IccSvalnaSpearTrigger, IccSvalnaSpearAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
+    e.Node<IccSvalnaInterruptTrigger, IccSvalnaInterruptAction>(ACTION_RAID + 9);
+    e.Node<IccSvalnaTankDefensiveTrigger, IccSvalnaCastTankDefensiveAction>(ACTION_RAID + 8);
     e.Node<IccSvalnaHurlTrigger, IccSvalnaHurlAction>(ACTION_RAID + 7, EncounterRow::Mover);
     e.Node<IccSvalnaTauntTrigger, IccSvalnaTauntAction>(ACTION_RAID + 6);
     e.Node<IccSvalnaTargetTrigger, IccSvalnaTargetAction>(ACTION_RAID + 5);
 
     e.OwnTargeting("icc sister svalna targeting", Role::Any, &IccResolverPicks<&GetSsTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
+    // The tank buttons wait for a captain to have the tank low
+    e.Block("icc sister svalna tank defensive hold", Role::Tank, &IsSsTankDefensiveHeld, 0,
+            HeldTankDefensiveNames());
 
     e.Tick(&TickSsEncounter);
 }

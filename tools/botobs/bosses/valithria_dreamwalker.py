@@ -6,7 +6,9 @@
     valithria_dreamwalker.py <file> --dream    each Dream State window, the flight rules and the shared cloud
     valithria_dreamwalker.py <file> --heal     which healers heal the raid and which take portals
     valithria_dreamwalker.py <file> --adds     the resolver's tiers per bot and the abominations' tanks
-    valithria_dreamwalker.py <file> --zombies  kites, snares, dodges and Mana Void steps per bot
+    valithria_dreamwalker.py <file> --zombies  kites, snares, kicks, freedom, dodges and void steps per bot
+    valithria_dreamwalker.py <file> --push     the push window, lust, Guardian Spirit and Beacon of Light
+    valithria_dreamwalker.py <file> --defensives  tank buttons and calls to a human tank
     valithria_dreamwalker.py <file> --cheats   cheat uses in this pull
 
 Valithria has no boss phase, so the portal waves stand in for one. What the generic views miss here:
@@ -26,8 +28,16 @@ Valithria has no boss phase, so the portal waves stand in for one. What the gene
   abomination), the tier (`skeleton`, `archmage`, `worm`, `suppresser`, `zombie`, `abomination`) or
   `none`. `vd.tank` is the abomination each bot tank holds, `0` once it lapses.
 - **Zombies**: `vd.kite` (`ring ccw`, `ring cw`, `reverse`, `blocked`, `none`) per kiter, `vd.snare`
-  (the spell, or `none`) per elected snarer, `vd.dodge` (`column`, `burst`, `blocked`, `none`) and
-  `vd.void` (`step`, `blocked`, `none`) per bot.
+  (the spell, or `none`) per elected snarer, `vd.interrupt` (`volley` while elected to kick an
+  archmage's Frostbolt Volley, `none`), `vd.freedom` (`hand` or `dispel` while elected to free a kiter
+  the Volley slowed, `none`), `vd.dodge` (`column`, `burst`, `blocked`, `none`) and `vd.void` (`step`,
+  `blocked`, `none`) per bot.
+- **The push**: `vd.push` is `open` once she is at 80% with no bot healer in Dream State and a healer
+  carrying Emerald Vigor, else `closed`, from the first shaman or priest to note each edge. Lust
+  (2825/32182), Guardian Spirit 47788 and Beacon of Light 53563 are `cast` rows; `vd.beacon` is `her`
+  per paladin healer whose beacon belongs on her (raid duty, or any duty on heroic), else `none`.
+- **`vd.defensive` is the tank ladder's pick**, a cast name, `idle` outside a window: the abomination's
+  tank under 40%, 50% under Gut Spray. `vd.humancall` is a call to a human tank.
 - **Valithria has no cheat site.** Any `cheat` row here is another encounter's code running in her pull.
 """
 from __future__ import annotations
@@ -52,6 +62,10 @@ NO_CLAIM = "0"
 HEALER_DUTIES = {"1": "raid", "2": "portal", "0": "released"}
 FLIGHTS = ("refresh", "gather", "cloud", "human", "hover", "descend", "land", "none")
 TIERS = ("skull", "owned", "skeleton", "archmage", "worm", "suppresser", "zombie", "abomination", "none")
+ZOMBIE_KEYS = ("vd.kite", "vd.snare", "vd.interrupt", "vd.freedom", "vd.dodge", "vd.void")
+PUSH_CASTS = {2825: "Bloodlust", 32182: "Heroism", 47788: "Guardian Spirit", 53563: "Beacon of Light"}
+DEFENSIVE = "vd.defensive"
+HUMAN_CALL = "vd.humancall"
 
 
 def mine(trace: Trace) -> bool:
@@ -225,16 +239,15 @@ def show_adds(trace: Trace) -> None:
 
 def zombie_rows(trace: Trace) -> list[dict]:
     """Per bot that noted any zombie or hazard key: its counts of each value but `none`."""
-    keys = ("vd.kite", "vd.snare", "vd.dodge", "vd.void")
-    counts = {key: value_counts(trace, key) for key in keys}
+    counts = {key: value_counts(trace, key) for key in ZOMBIE_KEYS}
     guids = set().union(*(rows.keys() for rows in counts.values()))
     rows = []
     for guid in guids:
         row = {"guid": guid}
-        for key in keys:
+        for key in ZOMBIE_KEYS:
             found = counts[key].get(guid, collections.Counter())
             row[key] = collections.Counter({value: n for value, n in found.items() if value != "none"})
-        if any(row[key] for key in keys):
+        if any(row[key] for key in ZOMBIE_KEYS):
             rows.append(row)
     return sorted(rows, key=lambda row: trace.name(row["guid"]))
 
@@ -244,12 +257,64 @@ def show_zombies(trace: Trace) -> None:
         return
     rows = zombie_rows(trace)
     if not rows:
-        print("  no kite, snare, dodge or void step in this pull")
+        print("  no kite, snare, kick, freedom, dodge or void step in this pull")
         return
-    print("  per bot: spans of each kite leg rule, snare spell, dodge and void step\n")
+    print("  per bot: spans of each kite leg rule, snare spell, kick, freedom, dodge and void step\n")
     for row in rows:
         print(f"    {trace.name(row['guid']):<14}  kite {counted(row['vd.kite'])}; snare {counted(row['vd.snare'])}; "
+              f"kick {counted(row['vd.interrupt'])}; free {counted(row['vd.freedom'])}; "
               f"dodge {counted(row['vd.dodge'])}; void {counted(row['vd.void'])}")
+
+
+def push_windows(trace: Trace) -> list[tuple[int, int]]:
+    """`(start, stop)` per open push window, from the first bot to note each edge."""
+    return [(start, stop) for value, start, stop in latch_spans(trace, "vd.push", icc.pull_end(trace))
+            if value == "open"]
+
+
+def push_casts(trace: Trace) -> list[tuple[int, int, str, int | None]]:
+    """`(when, caster, spell, target)` per lust, Guardian Spirit or Beacon of Light a bot cast."""
+    return [(rec["t"], rec.get("s"), PUSH_CASTS[rec["sp"]], rec.get("tgt")) for rec in trace.of("cast")
+            if rec.get("sp") in PUSH_CASTS and rec.get("s") not in trace.humans]
+
+
+def show_push(trace: Trace) -> None:
+    if refuse(trace, "PUSH"):
+        return
+    windows = push_windows(trace)
+    if windows:
+        print("  vd.push open: " + ", ".join(f"{clock(start)} for {clock(stop - start)}" for start, stop in windows))
+    else:
+        print("  vd.push never open")
+    casts = push_casts(trace)
+    if casts:
+        print("\n  casts")
+        for when, caster, spell, target in casts:
+            on = f" on {trace.name(target)}" if target else ""
+            print(f"    {clock(when):>9}  {trace.name(caster):<14}  {spell}{on}")
+    else:
+        print("\n  no lust, Guardian Spirit or Beacon of Light cast")
+    beacons = value_counts(trace, "vd.beacon")
+    if beacons:
+        print("\n  vd.beacon per paladin healer: spans of each rule")
+        for guid, counts in by_name(trace, beacons):
+            print(f"    {trace.name(guid):<14}  {counted(counts, ('her', 'none'))}")
+
+
+def show_defensives(trace: Trace) -> None:
+    if refuse(trace, "DEFENSIVES"):
+        return
+    rows = holder_spans(trace, DEFENSIVE, icc.pull_end(trace))
+    offered = {guid: [(value, start) for value, start, _ in spans if value != "idle"] for guid, spans in rows.items()}
+    offered = {guid: picks for guid, picks in offered.items() if picks}
+    if not offered:
+        print(f"  {DEFENSIVE} never offered a button")
+    for guid, picks in by_name(trace, offered):
+        print(f"    {trace.name(guid):<14}  " + ", ".join(f"{value} {clock(start)}" for value, start in picks))
+    calls = notes(trace, HUMAN_CALL)
+    if calls:
+        print("  calls to a human tank  " + ", ".join(f"{resolve_guids(trace, str(rec['txt']))} {clock(rec['t'])}"
+                                                    for rec in calls))
 
 
 def show_cheats(trace: Trace) -> None:
@@ -276,7 +341,9 @@ SECTIONS = (
     ("dream", "each Dream State window, the flight rules and the shared cloud", show_dream),
     ("heal", "which healers heal the raid and which take portals", show_heal),
     ("adds", "the resolver's tiers per bot and the abominations' tanks", show_adds),
-    ("zombies", "kites, snares, dodges and Mana Void steps per bot", show_zombies),
+    ("zombies", "kites, snares, kicks, freedom, dodges and void steps per bot", show_zombies),
+    ("push", "the push window, lust, Guardian Spirit and Beacon of Light", show_push),
+    ("defensives", "tank buttons and calls to a human tank", show_defensives),
     ("cheats", "cheat uses in this pull", show_cheats),
 )
 

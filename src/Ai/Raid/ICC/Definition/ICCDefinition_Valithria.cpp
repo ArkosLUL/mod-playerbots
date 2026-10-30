@@ -12,6 +12,7 @@
 #include "ICCMultipliers_Valithria.h"
 #include "ICCSeams.h"
 #include "ICCTriggers_Valithria.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 
 namespace Family = RaidEncounterRules::Family;
@@ -23,6 +24,12 @@ void DefineValithria(EncounterBuilder& e)
 {
     e.Node<IccValithriaDodgeTrigger, IccValithriaDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<IccValithriaKiteTrigger, IccValithriaKiteAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
+    e.Node<IccValithriaInterruptTrigger, IccValithriaInterruptAction>(ACTION_RAID + 15);
+    e.Node<IccValithriaFreedomTrigger, IccValithriaFreedomAction>(ACTION_RAID + 14);
+    e.Node<IccValithriaTankDefensiveTrigger, IccValithriaCastTankDefensiveAction>(ACTION_RAID + 13);
+    e.Node<IccValithriaLustTrigger, IccValithriaLustAction>(ACTION_RAID + 12);
+    e.Node<IccValithriaGuardianSpiritTrigger, IccValithriaGuardianSpiritAction>(ACTION_RAID + 11);
+    e.Node<IccValithriaBeaconTrigger, IccValithriaBeaconAction>(ACTION_RAID + 10);
     e.Node<IccValithriaDreamTrigger, IccValithriaDreamAction>(ACTION_RAID + 9, EncounterRow::Mover);
     e.Node<IccValithriaPortalTrigger, IccValithriaPortalAction>(ACTION_RAID + 8, EncounterRow::Mover);
     e.Node<IccValithriaTauntTrigger, IccValithriaTauntAction>(ACTION_RAID + 7);
@@ -53,6 +60,11 @@ void DefineValithria(EncounterBuilder& e)
     e.Block("icc valithria taunts", Role::Tank, &IsVdLive, Family::Taunt);
     // Follow would walk a bot to its master across the room
     e.Block("icc valithria follow", Role::Any, &IsVdLive, Family::Follow);
+    // The tank buttons wait for an abomination to have the tank low
+    e.Block("icc valithria tank defensive hold", Role::Tank, &IsVdTankDefensiveHeld, 0, HeldTankDefensiveNames());
+    // Beacon of Light sits on one target per paladin, so the generic nodes would take it back to the tank
+    e.Block("icc valithria beacon hold", Role::Heal, &IsVdBeaconOnHer, 0,
+            {"beacon of light on main tank", "beacon of light on tank"});
 
     e.Tick(&TickVdEncounter);
 }
@@ -60,7 +72,7 @@ void DefineValithria(EncounterBuilder& e)
 
 EncounterDefinition const& IccValithriaDefinition()
 {
-    static EncounterDefinition const definition(ICC_BOSS_VALITHRIA_DREAMWALKER, BossStateGate,
-                                                "valithria-dreamwalker", &DefineValithria);
+    static EncounterDefinition const definition(ICC_BOSS_VALITHRIA_DREAMWALKER, VdGate, "valithria-dreamwalker",
+                                                &DefineValithria);
     return definition;
 }

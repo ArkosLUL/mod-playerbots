@@ -33,11 +33,14 @@
 #include "RaidCombatHelpers.h"
 #include "RaidDifficulty.h"
 #include "RaidDirectTargeting.h"
+#include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "RaidResistAura.h"
+#include "RaidTankDefensive.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 
@@ -92,6 +95,25 @@ constexpr float LAND_HEIGHT = 1.0f;
 
 constexpr uint8 HEALER_RAID = 1;
 constexpr uint8 HEALER_PORTAL = 2;
+
+constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
+constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
+// Hand of Freedom, Cleanse and Dispel Magic reach 30 yd, Guardian Spirit 40, Beacon of Light 60
+constexpr float FREEDOM_RANGE = 30.0f;
+constexpr float GUARDIAN_RANGE = 40.0f;
+constexpr float BEACON_RANGE = 60.0f;
+constexpr int32 BEACON_REFRESH_MS = 5000;
+
+// Archmages are silence immune, so only these stop a Frostbolt Volley
+constexpr char const* KICKS[] = {"kick", "pummel", "shield bash", "mind freeze", "counterspell", "wind shear"};
+
+struct Freedom
+{
+    char const* spell;
+    char const* label;
+};
+// What frees a kiter from Frostbolt Volley's magic snare, best first
+constexpr Freedom FREEDOMS[] = {{"hand of freedom", "hand"}, {"cleanse", "dispel"}, {"dispel magic", "dispel"}};
 
 struct Snare
 {
@@ -164,6 +186,12 @@ struct VdState
     // Kiter -> +1 counter-clockwise, -1 clockwise round her
     std::unordered_map<ObjectGuid, int8> kiteDir;
     std::unordered_map<ObjectGuid, Stand> stands;
+    // Kicker -> the archmage it kicks
+    std::unordered_map<ObjectGuid, ObjectGuid> kicks;
+    // Helper -> the slowed kiter it frees
+    std::unordered_map<ObjectGuid, ObjectGuid> freers;
+    uint32 humanCallMs = 0;
+    bool humanCallRan = false;
 
     ObjectGuid dreamLeader;
     ObjectGuid dreamCloud;
@@ -912,6 +940,238 @@ Unit* ResolveTarget(PlayerbotAI* botAI, VdState const& st, Creature* valithria)
     NoteDerived(bot, "vd.target", best ? TierName(best->GetEntry()) : "none");
     return best;
 }
+
+bool CanPayFor(Player* bot, SpellInfo const* info)
+{
+    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
+    if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
+        return true;
+
+    return static_cast<int32>(bot->GetPower(Powers(info->PowerType))) >=
+           info->CalcPowerCost(bot, info->GetSchoolMask());
+}
+
+// The first kick the member can land on the archmage right now. A false ready here holds every other
+// kicker back from the election, so power and form are checked too.
+char const* ReadyKick(Player* member, Unit* caster)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    if (!memberAI || member->HasUnitState(UNIT_STATE_CASTING) || member->GetExactDist(caster) > SCAN_RANGE)
+        return nullptr;
+
+    for (char const* kick : KICKS)
+    {
+        uint32 const spellId = memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", kick)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || !CanPayFor(member, info) || info->CheckShapeshift(member->GetShapeshiftForm()) != SPELL_CAST_OK)
+            continue;
+
+        float const range = member->GetSpellMaxRangeForTarget(caster, info);
+        bool const inReach = range <= MELEE_INTERRUPT_RANGE ? member->IsWithinMeleeRange(caster)
+                                                            : member->IsWithinCombatRange(caster, range);
+        if (inReach && memberAI->CanCastSpell(spellId, caster) && member->IsWithinLOSInMap(caster))
+            return kick;
+    }
+
+    return nullptr;
+}
+
+bool CastingVolley(Creature* archmage)
+{
+    Spell* spell = archmage->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return spell && spell->GetSpellInfo() &&
+           spell->GetSpellInfo()->Id == sSpellMgr->GetSpellIdForDifficulty(SPELL_VD_FROSTBOLT_VOLLEY, archmage);
+}
+
+// Each archmage casting Frostbolt Volley to the nearest bot with a kick ready that no other archmage took
+void AssignKicks(VdState& st, Player* bot, std::vector<Player*> const& members)
+{
+    st.kicks.clear();
+    std::vector<Creature*> casters;
+    for (Creature* add : Resolve(bot, st.adds))
+        if (add->GetEntry() == NPC_RISEN_ARCHMAGE && CastingVolley(add))
+            casters.push_back(add);
+    std::sort(casters.begin(), casters.end(), IccGuidLess());
+
+    for (Creature* caster : casters)
+    {
+        Player* best = nullptr;
+        std::tuple<float, ObjectGuid> bestKey;
+        for (Player* member : members)
+        {
+            if (!IsDutyBot(member) || Dreaming(member) || Kiting(st, member) || st.kicks.count(member->GetGUID()) ||
+                !ReadyKick(member, caster))
+                continue;
+
+            auto const key = std::make_tuple(member->GetExactDist(caster), member->GetGUID());
+            if (!best || key < bestKey)
+            {
+                best = member;
+                bestKey = key;
+            }
+        }
+
+        if (best)
+            st.kicks[best->GetGUID()] = caster->GetGUID();
+    }
+}
+
+bool Slowed(Player* kiter)
+{
+    return kiter->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_VD_FROSTBOLT_VOLLEY, kiter));
+}
+
+// The spell the member can free the kiter with right now
+Freedom const* ReadyFreedom(Player* member, Player* kiter)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    if (!memberAI || member->HasUnitState(UNIT_STATE_CASTING) ||
+        (member != kiter && (member->GetExactDist(kiter) > FREEDOM_RANGE || !member->IsWithinLOSInMap(kiter))))
+        return nullptr;
+
+    for (Freedom const& freedom : FREEDOMS)
+        if (memberAI->CanCastSpell(freedom.spell, kiter))
+            return &freedom;
+
+    return nullptr;
+}
+
+// Per slowed kiter: itself where it can, else the nearest paladin bot with Hand of Freedom, else the
+// nearest bot that can dispel the snare
+void AssignFreedom(VdState& st, std::vector<Player*> const& members)
+{
+    st.freers.clear();
+    for (Player* kiter : members)
+    {
+        if (!Kiting(st, kiter) || !Slowed(kiter))
+            continue;
+
+        if (IsDutyBot(kiter) && ReadyFreedom(kiter, kiter))
+        {
+            st.freers[kiter->GetGUID()] = kiter->GetGUID();
+            continue;
+        }
+
+        Player* best = nullptr;
+        std::tuple<bool, float, ObjectGuid> bestKey;
+        for (Player* member : members)
+        {
+            if (member == kiter || !IsDutyBot(member) || Dreaming(member) || Kiting(st, member) ||
+                st.freers.count(member->GetGUID()))
+                continue;
+
+            Freedom const* freedom = ReadyFreedom(member, kiter);
+            if (!freedom)
+                continue;
+
+            auto const key = std::make_tuple(freedom != &FREEDOMS[0], member->GetExactDist(kiter), member->GetGUID());
+            if (!best || key < bestKey)
+            {
+                best = member;
+                bestKey = key;
+            }
+        }
+
+        if (best)
+            st.freers[best->GetGUID()] = kiter->GetGUID();
+    }
+}
+
+float TankDefensivePct(Player* tank)
+{
+    return tank->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_VD_GUT_SPRAY, tank)) ? VD_TANK_SPRAYED_PCT
+                                                                                      : VD_TANK_DEFENSIVE_PCT;
+}
+
+bool AbominationHits(VdState const& st, Player* bot, Player* member)
+{
+    for (Creature* abomination : Resolve(bot, st.abominations))
+        if (abomination->GetVictim() == member)
+            return true;
+
+    return false;
+}
+
+// A human tank has no trigger, so it gets told when an abomination has it low
+void CallHumanTank(VdState& st, Player* sender, std::vector<Player*> const& members, uint32 now)
+{
+    if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
+        return;
+
+    st.humanCallRan = true;
+    st.humanCallMs = now;
+    for (Player* member : members)
+    {
+        if (IsDutyBot(member) || !IsTankPlayer(member) || member->GetHealthPct() >= TankDefensivePct(member) ||
+            !AbominationHits(st, sender, member))
+            continue;
+
+        if (uint32 const spellId = ReadyTankDefensiveSpell(member, true, 0, 0))
+            CallHumanTankDefensive(sender, member, spellId, 0, "you are low", "vd.humancall");
+    }
+}
+
+// Pure read: the publishing wrapper is IsVdPushWindow
+bool PushWindow(Creature* valithria, Player* bot)
+{
+    if (valithria->GetHealthPct() < VD_PUSH_PCT)
+        return false;
+
+    bool vigor = false;
+    for (Player* member : MembersOnMap(bot))
+    {
+        if (!IsHealer(member))
+            continue;
+
+        if (IsDutyBot(member) && Dreaming(member))
+            return false;
+
+        vigor = vigor || member->HasAura(VigorId(member));
+    }
+
+    return vigor;
+}
+
+bool LustRunning(Player* bot)
+{
+    for (Player* member : MembersOnMap(bot))
+        if (member->HasAura(SPELL_VD_BLOODLUST) || member->HasAura(SPELL_VD_HEROISM))
+            return true;
+
+    return false;
+}
+
+char const* ReadyLust(Player* shaman)
+{
+    PlayerbotAI* shamanAI = GET_PLAYERBOT_AI(shaman);
+    // The DBC lets a Sated or Exhausted shaman cast it; the script then strips every Sated target
+    if (!shamanAI || shaman->getClass() != CLASS_SHAMAN || shaman->HasAura(SPELL_VD_EXHAUSTION) ||
+        shaman->HasAura(SPELL_VD_SATED))
+        return nullptr;
+
+    for (char const* lust : {"heroism", "bloodlust"})
+        if (shamanAI->CanCastSpell(lust, shaman))
+            return lust;
+
+    return nullptr;
+}
+
+bool CanGuardSpirit(Player* priest, Creature* valithria)
+{
+    PlayerbotAI* priestAI = GET_PLAYERBOT_AI(priest);
+    return priestAI && priest->getClass() == CLASS_PRIEST && priest->GetExactDist(valithria) <= GUARDIAN_RANGE &&
+           priestAI->CanCastSpell("guardian spirit", valithria) && priest->IsWithinLOSInMap(valithria);
+}
+
+// A bot still flagged in the air by the dream mover once Dream State is gone, within her room
+bool LandingPending(Player* bot)
+{
+    if (!bot->HasUnitMovementFlag(MOVEMENTFLAG_FLYING | MOVEMENTFLAG_DISABLE_GRAVITY) || bot->HasFlyAura() ||
+        bot->HasAura(SPELL_DREAM_STATE))
+        return false;
+
+    return bot->GetMapId() == ICC_MAP_ID && bot->GetExactDist2d(VD_HOME_X, VD_HOME_Y) <= LIVE_RANGE;
+}
 }  // namespace
 
 Creature* GetVdValithria(PlayerbotAI* botAI)
@@ -1211,6 +1471,13 @@ Creature* GetVdHealTarget(PlayerbotAI* botAI)
 VdFlight GetVdFlight(PlayerbotAI* botAI, Position& dest)
 {
     Player* bot = botAI->GetBot();
+    // Her place, not her: she despawns 4 s after the win, while a dreamer may still be up
+    if (LandingPending(bot))
+    {
+        NoteDerived(bot, "vd.dream", "land");
+        return VdFlight::Land;
+    }
+
     Creature* valithria = GetVdValithria(botAI);
     if (!valithria)
         return VdFlight::None;
@@ -1218,12 +1485,6 @@ VdFlight GetVdFlight(PlayerbotAI* botAI, Position& dest)
     Aura* dream = bot->GetAura(SPELL_DREAM_STATE);
     if (!dream)
     {
-        if (bot->HasUnitMovementFlag(MOVEMENTFLAG_FLYING | MOVEMENTFLAG_DISABLE_GRAVITY) && !bot->HasFlyAura())
-        {
-            NoteDerived(bot, "vd.dream", "land");
-            return VdFlight::Land;
-        }
-
         if (IsDutyBot(bot) && IsHealer(bot))
             NoteDerived(bot, "vd.dream", "none");
         return VdFlight::None;
@@ -1289,6 +1550,165 @@ VdFlight GetVdFlight(PlayerbotAI* botAI, Position& dest)
     dest = bot->GetPosition();
     NoteDerived(bot, "vd.dream", "hover");
     return VdFlight::Hover;
+}
+
+bool VdGateOpen(PlayerbotAI* botAI, uint32 encounterId)
+{
+    if (BossStateGateOpen(botAI, encounterId))
+        return true;
+
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !LandingPending(bot))
+        return false;
+
+    InstanceScript* instance = IccInstance(bot);
+    return instance && instance->GetBossState(ICC_BOSS_VALITHRIA_DREAMWALKER) == DONE;
+}
+
+bool IsVdPushWindow(PlayerbotAI* botAI)
+{
+    Creature* valithria = nullptr;
+    VdState* st = LiveState(botAI, &valithria);
+    if (!st)
+        return false;
+
+    bool const open = PushWindow(valithria, botAI->GetBot());
+    NoteDerived(botAI->GetBot(), "vd.push", open ? "open" : "closed");
+    return open;
+}
+
+char const* GetVdLust(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_SHAMAN || !IsDutyBot(bot) || Dreaming(bot))
+        return nullptr;
+
+    VdState* st = LiveState(botAI);
+    char const* lust = st && !Kiting(*st, bot) ? ReadyLust(bot) : nullptr;
+    if (!lust || !IsVdPushWindow(botAI) || LustRunning(bot))
+        return nullptr;
+
+    // One lust a push: the lowest-guid shaman able to cast it
+    for (Player* member : MembersOnMap(bot))
+        if (member->GetGUID() < bot->GetGUID() && IsDutyBot(member) && !Dreaming(member) && !Kiting(*st, member) &&
+            ReadyLust(member))
+            return nullptr;
+
+    return lust;
+}
+
+Creature* GetVdGuardianSpiritTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PRIEST || !IsDutyBot(bot) || !IsHealer(bot) || Dreaming(bot))
+        return nullptr;
+
+    Creature* valithria = nullptr;
+    VdState* st = LiveState(botAI, &valithria);
+    if (!st || Kiting(*st, bot) || valithria->HasAura(SPELL_VD_GUARDIAN_SPIRIT) || !CanGuardSpirit(bot, valithria) ||
+        !IsVdPushWindow(botAI))
+        return nullptr;
+
+    // The priests take turns: the lowest-guid one able casts, the next once hers has run out
+    for (Player* member : MembersOnMap(bot))
+        if (member->GetGUID() < bot->GetGUID() && IsDutyBot(member) && IsHealer(member) && !Dreaming(member) &&
+            !Kiting(*st, member) && CanGuardSpirit(member, valithria))
+            return nullptr;
+
+    return valithria;
+}
+
+bool IsVdBeaconOnHer(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN || !IsDutyBot(bot) || !IsHealer(bot))
+        return false;
+
+    VdState* st = LiveState(botAI);
+    if (!st)
+        return false;
+
+    auto const duty = st->healer.find(bot->GetGUID());
+    return duty != st->healer.end() && (duty->second == HEALER_RAID || IsHeroic(bot));
+}
+
+Creature* GetVdBeaconTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN || !IsDutyBot(bot) || !IsHealer(bot))
+        return nullptr;
+
+    bool const onHer = IsVdBeaconOnHer(botAI);
+    NoteDerived(bot, "vd.beacon", onHer ? "her" : "none");
+    Creature* valithria = onHer ? GetVdValithria(botAI) : nullptr;
+    if (!valithria || Dreaming(bot) || bot->GetExactDist(valithria) > BEACON_RANGE)
+        return nullptr;
+
+    Aura* beacon = valithria->GetAura(SPELL_VD_BEACON_OF_LIGHT, bot->GetGUID());
+    if (beacon && beacon->GetDuration() > BEACON_REFRESH_MS)
+        return nullptr;
+
+    return botAI->CanCastSpell("beacon of light", valithria) && bot->IsWithinLOSInMap(valithria) ? valithria
+                                                                                                 : nullptr;
+}
+
+Unit* GetVdInterrupt(PlayerbotAI* botAI, char const*& spell)
+{
+    VdState* st = LiveState(botAI);
+    Player* bot = botAI->GetBot();
+    spell = nullptr;
+    if (!st || !IsDutyBot(bot))
+        return nullptr;
+
+    auto const itr = st->kicks.find(bot->GetGUID());
+    Creature* archmage = itr != st->kicks.end() ? bot->GetMap()->GetCreature(itr->second) : nullptr;
+    spell = archmage && archmage->IsAlive() && CastingVolley(archmage) ? ReadyKick(bot, archmage) : nullptr;
+    NoteDerived(bot, "vd.interrupt", spell ? "volley" : "none");
+    return spell ? archmage : nullptr;
+}
+
+Unit* GetVdFreedom(PlayerbotAI* botAI, char const*& spell)
+{
+    VdState* st = LiveState(botAI);
+    Player* bot = botAI->GetBot();
+    spell = nullptr;
+    if (!st || !IsDutyBot(bot))
+        return nullptr;
+
+    auto const itr = st->freers.find(bot->GetGUID());
+    Player* kiter = itr != st->freers.end() ? ObjectAccessor::GetPlayer(*bot, itr->second) : nullptr;
+    Freedom const* freedom = kiter && kiter->IsAlive() && Slowed(kiter) ? ReadyFreedom(bot, kiter) : nullptr;
+    NoteDerived(bot, "vd.freedom", freedom ? freedom->label : "none");
+    if (!freedom)
+        return nullptr;
+
+    spell = freedom->spell;
+    return kiter;
+}
+
+uint32 GetVdTankDefensive(PlayerbotAI* botAI, char const* noteKind)
+{
+    VdState* st = LiveState(botAI);
+    Player* bot = botAI->GetBot();
+    if (!st || !bot->IsAlive() || !IsDutyBot(bot) || !IsTankPlayer(bot))
+        return 0;
+
+    if (bot->GetHealthPct() >= TankDefensivePct(bot) || !HoldsAbomination(*st, bot))
+    {
+        // Change-latched, so the way out of a window is written too
+        if (noteKind)
+            NoteDerived(bot, noteKind, "idle");
+
+        return 0;
+    }
+
+    // Its swings are physical; Gut Spray's nature ticks are small
+    return NextTankDefensive(botAI, bot, noteKind, true);
+}
+
+bool IsVdTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return LiveState(botAI) && botAI->GetBot()->GetHealthPct() >= VD_TANK_LAST_RESORT_PCT;
 }
 
 namespace
@@ -1384,6 +1804,9 @@ void TickVdEncounter(PlayerbotAI* botAI)
         AssignSnares(st, bot, members);
         UpdateKites(st, valithria, members);
         UpdateDream(st, bot, members, now);
+        AssignKicks(st, bot, members);
+        AssignFreedom(st, members);
+        CallHumanTank(st, bot, members, now);
 
         if (!st.dutiesRan || getMSTimeDiff(st.dutyMs, now) >= DUTY_MS)
         {

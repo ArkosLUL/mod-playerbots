@@ -43,3 +43,23 @@ bool IccValithriaVoidTrigger::IsActive()
 }
 
 bool IccValithriaHealTrigger::IsActive() { return GetVdHealTarget(botAI) != nullptr; }
+
+bool IccValithriaInterruptTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return GetVdInterrupt(botAI, spell) != nullptr;
+}
+
+bool IccValithriaFreedomTrigger::IsActive()
+{
+    char const* spell = nullptr;
+    return GetVdFreedom(botAI, spell) != nullptr;
+}
+
+bool IccValithriaTankDefensiveTrigger::IsActive() { return GetVdTankDefensive(botAI, "vd.defensive") != 0; }
+
+bool IccValithriaLustTrigger::IsActive() { return GetVdLust(botAI) != nullptr; }
+
+bool IccValithriaGuardianSpiritTrigger::IsActive() { return GetVdGuardianSpiritTarget(botAI) != nullptr; }
+
+bool IccValithriaBeaconTrigger::IsActive() { return GetVdBeaconTarget(botAI) != nullptr; }

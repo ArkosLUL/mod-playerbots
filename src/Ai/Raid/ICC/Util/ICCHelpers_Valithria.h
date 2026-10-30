@@ -9,6 +9,7 @@
 
 #include "Define.h"
 #include "Position.h"
+#include "RaidEncounter.h"
 
 class Creature;
 class PlayerbotAI;
@@ -19,11 +20,31 @@ class Unit;
 constexpr uint32 VD_DATA_VALITHRIA_GUID = 10;
 constexpr uint32 VD_DATA_COMBAT_TRIGGER_GUID = 35;
 
+// Her spawn, where she stays all fight; she despawns 4 s after the win
+constexpr float VD_HOME_X = 4203.65f;
+constexpr float VD_HOME_Y = 2483.89f;
+
 // No difficulty row: one id on every difficulty
 constexpr uint32 SPELL_VD_DREAM_PORTAL_VISUAL_PRE = 71304;
 constexpr uint32 SPELL_VD_NIGHTMARE_PORTAL_VISUAL_PRE = 71986;
-// Difficulty row: remap at the call
+constexpr uint32 SPELL_VD_GUARDIAN_SPIRIT = 47788;
+constexpr uint32 SPELL_VD_BEACON_OF_LIGHT = 53563;
+constexpr uint32 SPELL_VD_BLOODLUST = 2825;
+constexpr uint32 SPELL_VD_HEROISM = 32182;
+constexpr uint32 SPELL_VD_EXHAUSTION = 57723;
+constexpr uint32 SPELL_VD_SATED = 57724;
+// Difficulty rows: remap at the call
 constexpr uint32 SPELL_VD_COLUMN_OF_FROST = 70702;
+constexpr uint32 SPELL_VD_FROSTBOLT_VOLLEY = 70759;
+constexpr uint32 SPELL_VD_GUT_SPRAY = 70633;
+
+// The push: lust and Guardian Spirit once she is this healthy and the dreamers are back with their stacks
+constexpr float VD_PUSH_PCT = 80.0f;
+// An abomination's tank spends a button under this, under the higher one while Gut Spray adds 25% physical
+// taken, and the class nodes keep theirs until the last resort
+constexpr float VD_TANK_DEFENSIVE_PCT = 40.0f;
+constexpr float VD_TANK_SPRAYED_PCT = 50.0f;
+constexpr float VD_TANK_LAST_RESORT_PCT = 25.0f;
 
 // navprobe --nav 0x09 settles every point within 30 yd of her at 364.86-364.88, 11 rings of up to 48
 // headings, each in sight of her; every derived stand stays inside this disc
@@ -52,6 +73,11 @@ enum class VdFlight : uint8
     Descend,  // low before Dream State ends
     Land      // Dream State is over and the bot is still in the air
 };
+
+// The boss state gate, held open past DONE for a bot the dream left flagged in the air near her place:
+// the win comes while Dream State still runs, and the bot has to land
+bool VdGateOpen(PlayerbotAI* botAI, uint32 encounterId);
+inline constexpr EncounterGate VdGate{&VdGateOpen, &BossStateGateLive};
 
 // Her boss state is IN_PROGRESS and the bot is in her room
 bool IsVdLive(PlayerbotAI* botAI);
@@ -88,6 +114,26 @@ Creature* GetVdHealTarget(PlayerbotAI* botAI);
 // Where a bot in or just out of Dream State flies. Notes vd.dream.
 VdFlight GetVdFlight(PlayerbotAI* botAI, Position& dest);
 
+// She is past VD_PUSH_PCT, no bot healer is in Dream State and a healer carries Emerald Vigor. Notes vd.push.
+bool IsVdPushWindow(PlayerbotAI* botAI);
+// The lust this shaman casts now, null for none: the lowest-guid shaman bot able to, in the push window,
+// with no lust running
+char const* GetVdLust(PlayerbotAI* botAI);
+// Valithria while this priest puts Guardian Spirit on her: the push window, hers has run out, and no
+// lower-guid priest bot can cast it
+Creature* GetVdGuardianSpiritTarget(PlayerbotAI* botAI);
+// This paladin keeps its Beacon of Light on her: a bot healer on the raid duty, or on any duty on heroic
+bool IsVdBeaconOnHer(PlayerbotAI* botAI);
+// Valithria while that beacon needs a cast. Notes vd.beacon.
+Creature* GetVdBeaconTarget(PlayerbotAI* botAI);
+// The archmage casting Frostbolt Volley this bot is elected to kick, and the kick. Notes vd.interrupt.
+Unit* GetVdInterrupt(PlayerbotAI* botAI, char const*& spell);
+// The kiter Frostbolt Volley slowed that this bot frees, and the spell. Notes vd.freedom.
+Unit* GetVdFreedom(PlayerbotAI* botAI, char const*& spell);
+// The button this tank spends now, 0 for none: its own abomination hits it under VD_TANK_DEFENSIVE_PCT
+uint32 GetVdTankDefensive(PlayerbotAI* botAI, char const* noteKind);
+bool IsVdTankDefensiveHeld(PlayerbotAI* botAI);
+
 // A dream, a kite, a portal claim, a dodge or a void step owns the bot's feet
 bool IsVdMovementOwned(PlayerbotAI* botAI);
 // IsVdKiting without the note, for the rule that holds a kiter's feet
@@ -96,7 +142,8 @@ bool IsVdKiteHeld(PlayerbotAI* botAI);
 // A zombie on somebody else stands near the bot or its target: area damage would put the zombie on the bot
 bool IsVdSplashHeld(PlayerbotAI* botAI);
 
-// The scans, the healer split, portal claims, abomination owners, snares, the dream group, the reset
+// The scans, the healer split, portal claims, abomination owners, snares, kicks, freedom, the dream group,
+// the human tank call, the reset
 void TickVdEncounter(PlayerbotAI* botAI);
 
 // Fire (Lay Waste), frost (Frostbolt Volley, Column of Frost), nature (Acid Burst, Corrosion, Gut Spray)
