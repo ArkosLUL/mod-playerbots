@@ -12,10 +12,13 @@ changes so the user can pick which to port. Tactics come from the guides in
 
 `src/Ai/Raid/ICC/` splits per encounter stem, in dispatch order: `Marrowgar`, `Deathwhisper`,
 `FrostGiant` (Rotting Frost Giants), `Gunship`, `Saurfang`, `Dogs` (Stinky and Precious), `Festergut`,
-`Rotface`, `Putricide`, `BloodPrinces` (council and trash), `BloodQueen`, `Svalna`, `Valithria`,
-`SindragosaAdds` (two definitions: `SindragosaDrakes` for Rimefang and Spinestalker,
-`SindragosaGauntlet`), `Sindragosa`, `LichKing` (phases two and three and Frostmourne in `LichKingLate`
-files, under the one definition). A stem owns:
+`Rotface`, `Putricide`, `BloodPrinces` (council and trash), `BloodQueen`, `Svalna` (two definitions:
+`Svalna`, `SvalnaGauntlet` for the Ymirjar), `Valithria`, `SindragosaAdds` (two definitions:
+`SindragosaDrakes` for Rimefang and Spinestalker, `SindragosaGauntlet`), `Sindragosa`, `LichKing`
+(phases two and three and Frostmourne in `LichKingLate` files, under the one definition; its
+`OwnMovement` rules are `icc lich king movement` (Attack only), `icc lich king late movement` (Attack
+and Reach) and `icc lich king late reach hold` (Attack only, in heroic Frostmourne and on a Val'kyr
+chase round a puddle)). A stem owns:
 
 - `Action/ICCActions_<Stem>`, `Trigger/ICCTriggers_<Stem>`, `Multiplier/ICCMultipliers_<Stem>`;
 - `Util/ICCHelpers_<Stem>`: its positions, constants, phase readers and other helpers;
@@ -47,10 +50,12 @@ Raid-wide parts:
 
 **Gates.** An encounter's definition carries its slug from the table below as trace name. A boss
 definition takes `BossStateGate` with its `IccEncounterId` (Svalna 9): open unless that boss is done
-or another is in progress, so pre-pull steps run; live while `IN_PROGRESS`. `Dogs`, `FrostGiant` and
-`SindragosaDrakes` (`ICC_BOSS_NONE`, 255) take `UnitGate<entries>` (`RaidEncounter.h`) on Stinky 37025
-and Precious 37217, on the giant's 38490 (10) and 38494 (25), and on Rimefang 37533 and Spinestalker
-37534 (trace `sindragosa`): open while one is alive on the bot's
+or another is in progress, so pre-pull steps run; live while `IN_PROGRESS`. Valithria's `VdGate` also
+stays open past `DONE` for a bot still flagged in the air within 100 yd of her spawn, so it lands with
+fall damage. `Dogs`, `FrostGiant`, `SvalnaGauntlet` and `SindragosaDrakes` (`ICC_BOSS_NONE`, 255) take
+`UnitGate<entries>` (`RaidEncounter.h`) on Stinky 37025 and Precious 37217, on the giant's 38490 (10)
+and 38494 (25), on the Ymirjar 37132, 38125, 37127, 37134, 37133, 38184 and 38154, and on Rimefang
+37533 and Spinestalker 37534 (trace `sindragosa`): open while one is alive on the bot's
 map, live while it is in combat with a victim in the bot's group (a pet counts as its owner) or with
 the bot. A per-instance guid cache, rescanned at most once a second, finds it, so one in an unloaded
 grid leaves the gate closed. Their ticks open the trace through `IccMarkPull` while live. Each trigger
@@ -71,8 +76,8 @@ point, about 7 s into the pull (~102 and ~104 yd at 15 yd/s). What acts before l
 | Festergut | every row, rule and the tick from his engage, keyed on his combat; only the multiplier `icc festergut brake` waits for live |
 | Rotface | every row and rule, keyed on him being in combat; the multipliers `icc rotface ooze splash` and `icc rotface self cure` wait for live |
 | Gunship | for bots aboard the raid's ship: the definition tick, `icc gunship rocket pack setup` (no pack equipped, Zafod within 150 yd), `icc gunship cannon near` (a cannoneer with its pack), `icc in cannon`; `icc gunship tank defensive` is asked now but returns false until live; `icc gunship rocket jump`, every rule and the multiplier wait for live |
-| Valithria | `icc valithria dream`'s landing (she is within 100 yd) and the tick's once-per-instance `cross` to `skull` `rti` reset; every other node waits for `IN_PROGRESS`, which comes once the first archmage pulls the combat trigger |
-| Sindragosa | through her fly-in (unattackable, out of combat): the tick, with its once-per-instance `cross` or `star` to `skull` `rti` reset, and `icc sindragosa stand` round her landing spot; every other node and rule waits for her combat |
+| Valithria | `icc valithria dream`'s landing (she is within 100 yd, and past `DONE` through `VdGate`) and the tick's once-per-instance `cross` to `skull` `rti` reset; every other node waits for `IN_PROGRESS`, which comes once the first archmage pulls the combat trigger |
+| Sindragosa | through her fly-in (unattackable, out of combat): the tick, with its once-per-instance `cross` or `star` to `skull` `rti` reset, `icc sindragosa stand` round her landing spot and the `icc sindragosa tank form` caster-form block; every other node and rule waits for her combat |
 | Lich King | the tick, with the same `rti` reset, and `icc lich king stand`'s opening stands while he walks the intro |
 
 Nothing else: Marrowgar's nodes key on his boss state, the giant's and the dogs' on their gate being
@@ -96,7 +101,8 @@ definition alone:
   pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`), Saurfang (`GetDbsTarget`),
   Stinky and Precious (`GetDogsTarget`), Festergut (`GetFgTarget`), Rotface (`GetRfTarget`),
   Putricide (`GetPpTarget`), the Blood Prince Council (`GetBpcTarget`), the Blood-Queen
-  (`GetBqlTarget`), Svalna (`GetSsTarget`), Valithria (`GetVdTarget`), Sindragosa (`GetSgTarget`), her
+  (`GetBqlTarget`), Svalna (`GetSsTarget`), her gauntlet (`GetSsGauntletTarget`), Valithria
+  (`GetVdTarget`), Sindragosa (`GetSgTarget`), her
   drakes (`GetSgDrakeTarget`), gauntlet (`GetSgGauntletTarget`) and the Lich King (`GetLkTarget`)
   use it, with no icon writes or `rti` use. `RaidRestoreLegacyRti` stays unwired
   until no ICC code writes `rti`, and it never resets `star`. The Marrowgar, Sindragosa and Lich King ticks reset
@@ -117,7 +123,8 @@ definition alone:
   burst window (lust waits for phase 3) and resist schools (shadow), the council's opener (Valanar
   37970), burst window (lust in Keleseth's empowered phase) and resist schools (shadow and fire), the
   Blood-Queen's opener (boss 37955), burst window (lust at the vampire peak, 8 on 10-man and 16 on
-  25-man, or at 280 s) and resist schools (shadow), Valithria's resist schools (fire, frost and nature),
+  25-man, or at 280 s) and resist schools (shadow), Valithria's resist schools (fire, frost and nature;
+  her lust is the `icc valithria lust` node, which the burst gate never sees),
   the drakes' resist schools (frost: Rimefang's Frost Aura), Sindragosa's opener (boss 36853), burst
   window (lust in the last phase) and resist schools (frost), the Lich King's opener (boss 36597),
   burst window (lust in phase one) and resist schools (shadow and frost).
@@ -155,15 +162,24 @@ definition alone:
     `icc bpc flame defensive` (the Inferno victim's magic row, never Cloak of Shadows, or Dispersion;
     never an immunity; `bpc.flame`), plus `icc bpc brake`, a `LiveMultiplier` holding non-owners at
     90% of the empowered prince's owner's threat (frees at 80%);
-  - Blood-Queen: `icc bql tank defensive` (any tank under 40%, her holder and the mirror tank in the
-    last minute before Berserk, class buttons held to 25%, `bql.defensive`, `bql.humancall`), `icc bql
-    whirl cover` and `icc bql whirl defensive` (raid cover and personal buttons on Bloodbolt Whirl),
-    plus `icc bql brake`, a `LiveMultiplier` holding non-holders at 90% of the holder's threat (frees
-    at 80%), and `icc bql splash`, holding area damage within 15 yd of a mind-controlled vampire;
+  - Blood-Queen: `icc bql tank defensive` (any tank or damage-dealer mirror under 40%, her holder and
+    the mirror in the last minute before Berserk, a damage dealer through `NextPhysicalDefensive`,
+    class buttons held to 25%, `bql.defensive`, `bql.humancall`), `icc bql whirl cover` and `icc bql
+    whirl defensive` (raid cover and personal buttons on Bloodbolt Whirl), plus `icc bql brake`, a
+    `LiveMultiplier` holding non-holders at 90% of the holder's threat (frees at 80%), and `icc bql
+    splash`, holding area damage within 15 yd of a mind-controlled vampire kept under control (not one
+    marked `bql.kill`);
+  - Svalna: `icc sister svalna tank defensive` (a captain's tank under 40%, `ss.defensive`,
+    `ss.humancall`) and, in her gauntlet, `icc sister svalna gauntlet tank defensive` (a Ymirjar's
+    tank under 40%, `ss.gauntlet.defensive`, `ss.gauntlet.humancall`), class buttons held to 25%;
+  - Valithria: `icc valithria tank defensive` (an abomination's tank under 40%, 50% under Gut Spray,
+    class buttons held to 25%, `vd.defensive`, `vd.humancall`);
   - Sindragosa: `icc sindragosa tank defensive` (the holder on each breath cast at 3 Mystic Buffet
     stacks in the last phase or under 50%, any tank under 40%, class buttons held to 25%,
-    `sg.defensive`, `sg.humancall`), plus `icc sindragosa brake`, a `LiveMultiplier` holding
-    non-holders but healers at 90% of the holder's threat (frees at 80%);
+    `sg.defensive`, `sg.humancall`), `icc sindragosa holder cover` (a healer bot's Pain Suppression,
+    Guardian Spirit or Hand of Sacrifice on a holder no swap relieves, from 5 Mystic Buffet stacks,
+    `sg.cover`), plus `icc sindragosa brake`, a `LiveMultiplier` holding non-holders but healers at
+    90% of the holder's threat (frees at 80%);
   - her drakes: `icc sindragosa drake tank defensive` (a drake's tank under 40%, physical only;
     Rimefang's on each Frost Breath under 60%; `sg.drake.defensive`, `sg.drake.humancall`), plus `icc
     sindragosa drake brake` (free tanks all fight, everyone but healers while Rimefang flies);
@@ -177,9 +193,8 @@ definition alone:
 **The root only dispatches.** `ICCStrategy.cpp` adds nodes and runs `OnTick` in
 `IccEncounterDefinitions()` order, and adds multipliers in its own: Marrowgar, Deathwhisper,
 FrostGiant, Saurfang, Dogs, Festergut, Rotface, Putricide, BloodPrinces, BloodQueen, Svalna,
-Valithria, Sindragosa, SindragosaDrakes, SindragosaGauntlet, LichKing, Gunship, RaidWide, then `icc
-burst window`. **Both orders are
-behaviour**: equal relevances pop in insertion order, and the engine stops at the first multiplier
+SvalnaGauntlet, Valithria, Sindragosa, SindragosaDrakes, SindragosaGauntlet, LichKing, Gunship,
+RaidWide, then `icc burst window`. **Both orders are behaviour**: equal relevances pop in insertion order, and the engine stops at the first multiplier
 that zeroes an action, crediting it with the veto, while several ICC multipliers act inside
 `GetValue`. `ICCActionContext.h` and `ICCTriggerContext.h` register every definition's rows. The
 registration sites name only these root files: `RaidStrategyContext.h`,
@@ -215,12 +230,13 @@ pull. Nothing renames a slug-named trace afterwards.
 | 14 | [Blood Prince trash](blood-prince-council.md#blood-prince-trash) | never: `NOT_STARTED`, then `DONE` once its four door guards die | `blood-prince-trash` | `bpc.` |
 | — | [Stinky and Precious](stinky-and-precious.md) | no boss state | `stinky-and-precious` | `dogs.` |
 | — | [Rotting Frost Giant](rotting-frost-giant.md) | no boss state | `rotting-frost-giant` | `rfg.` |
+| — | [Svalna gauntlet](sister-svalna.md#svalna-gauntlet) | no boss state | `svalna-gauntlet` | `ss.` |
 
 `icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
 read silent on every other ICC pull. An encounter with a phase publishes it as `<prefix>.phase`;
 `tools/botobs/bosses/icecrown_citadel.py --phases` reads it as one raid-wide timeline, each step from
 the first bot to note it. Festergut and Rotface engage before their state moves, so their traces open
-on the engage, named by the DBC encounter credit, which matches the slug. The last two rows open
+on the engage, named by the DBC encounter credit, which matches the slug. The last three rows open
 through `IccMarkPull` from their definitions' ticks while the gate is live, the Blood Prince trash
 through a hook in `Util/ICCScripts.cpp` ([its section](blood-prince-council.md#blood-prince-trash)).
 Rimefang and Spinestalker's tick opens a `sindragosa` trace the same way.
@@ -290,11 +306,16 @@ and taunt one back only below DR level 3, generic taunts blocked; with one tank 
 dealer stands in for Keleseth (a Death Knight or paladin by its class taunt, others by direct hits
 on nuclei), its threat dumps (Soulshatter, Fade, Feign Death, Invisibility, Misdirection on the
 main tank) blocked by `icc bpc stand-in threat`. So does the Blood-Queen's main
-tank, with Death Grip blocked too. Svalna's captains go to bot tanks by roster, taunted back when
-lost. Valithria's tanks taunt worms and zombies off healers, generic taunts blocked. Sindragosa's
-holder taunts her back off a non-tank and her last-phase swap is one elected taunt, generic taunts
-blocked; the drakes' free tanks have generic taunts blocked; the gauntlet elects one rescue taunt per
-Champion or Warrior on a non-tank, generic taunts free. The gunship's board tank taunts the captain.
+tank, with Death Grip blocked too; with one tank player in the raid her mirror is a damage dealer
+(plate melee first). Svalna's captains go to bot tanks by roster, taunted back when lost; her
+gauntlet elects one rescue taunt per Warlord, Battle-Maiden or Corrupted Ymirjar on a non-tank,
+generic taunts free. Valithria's tanks taunt worms and zombies off healers, generic taunts blocked.
+Sindragosa's holder taunts her back off a non-tank and her last-phase swap is one elected taunt,
+generic taunts blocked; a swapper she isn't on 1 s after its taunt goes back to the melee stand. The
+drakes' free tanks have generic taunts blocked; the Sindragosa gauntlet elects one rescue taunt per
+Champion or Warrior on a non-tank, generic taunts free. With one tank player the Lich King's phase one
+ghouls go to a Death Knight, else a paladin damage dealer (`lk.tank` 3), and a Raging Spirit a human
+tank holds is never taunted off it. The gunship's board tank taunts the captain.
 
 Each boss doc says what its callers risk.
 
@@ -313,7 +334,8 @@ traced containers, unordered, and no loop over one depends on its order. Saurfan
 `rf.freedom` (`ObsValue`), Putricide `pp.spot`, `pp.slot`, `pp.rings` (`ObsValue`), `pp.driver`,
 `pp.receiver` and `pp.brake`, the council `bpc.tank`, `bpc.slot`, `bpc.bomb`, `bpc.petbomb`,
 `bpc.dispel` (`ObsGuidMap`), `bpc.soak` and `bpc.brake` (`ObsGuidSet`), the Blood-Queen `bql.tank`, `bql.slot`, `bql.airslot`,
-`bql.group`, `bql.bite`, `bql.cc`, `bql.curve` and `bql.brake`, Svalna `ss.spear` and `ss.tank`,
+`bql.group`, `bql.bite`, `bql.cc`, `bql.curve`, `bql.brake`, `bql.kill` (`ObsGuidSet`) and
+`bql.massdispel`, Svalna `ss.spear` and `ss.tank`,
 Valithria `vd.healer`, `vd.portalclaim` and `vd.tank`, Sindragosa `sg.tank`, `sg.brake`, `sg.breath`,
 `sg.bombs`, `sg.tombhold` and `sg.beacon`, her drakes `sg.drake.tank`, `sg.drake.brake` and
 `sg.drake.air`; Deathwhisper's stem latches `ldw.brake`
@@ -366,19 +388,23 @@ brake, target and stand; the council's `icc bpc` dodge, tank defensive, ball, pr
 soak, lance defensive, flame defensive, dispel, brake (action `icc bpc brake stop`), target and
 stand; the
 Blood-Queen's `icc bql` dodge, vampiric bite, swarming shadows, pact of darkfallen, whirl defensive,
-whirl cover, tank defensive, anti fear, frenzy cc, taunt, brake, target and stand; Valithria's `icc
-valithria` dodge, kite, dream, portal, taunt, snare, void, target and heal; Sindragosa's `icc
-sindragosa` blistering cold, splash, bomb hide, frost beacon, tank defensive, taunt, buffet hide,
-unchained magic, hand of freedom, beacon heal, hold, target and stand, her drakes' `icc sindragosa
-drake` dodge, tank defensive, anti fear, brake, target and stand, her gauntlet's `icc sindragosa
-gauntlet` dodge, taunt and target (prefix row ahead of `icc sindragosa` in `ICC_PREFIXES`); the Lich
+whirl cover, tank defensive, anti fear, mass dispel, frenzy cc, taunt, brake, target and stand;
+Valithria's `icc valithria` dodge, kite, dream, portal, taunt, snare, void, target, heal, interrupt,
+freedom, tank defensive, lust, guardian spirit and beacon; Sindragosa's `icc sindragosa` blistering
+cold, splash, bomb hide, frost beacon, tank defensive, taunt, buffet hide, unchained magic, hand of
+freedom, holder cover, beacon heal, hold, target and stand, her drakes' `icc sindragosa drake` dodge,
+tank defensive, anti fear, brake, target and stand, her gauntlet's `icc sindragosa gauntlet` dodge,
+taunt, kick, free and target (prefix row ahead of `icc sindragosa` in `ICC_PREFIXES`); the Lich
 King's `icc lich king` quake, shadow trap, defile, vile spirits, frostmourne, tank defensive, taunt,
-siphon taunt, plague cure, plague walk, tranquilize, stun, valkyr control, silence dispel, harvest
-soul, target, stack, stand and brake. The others:
+siphon taunt, plague cure, plague walk, tranquilize, stun, valkyr control, silence dispel, totem,
+harvest soul, target, stack, stand and brake. The others:
 `icc dark reckoning` (Deathwhisper), `icc in cannon` and the `icc gunship` ones (Gunship), `icc
 rotting frost giant plague`, `icc dogs` tank defensive, decimate cover, swap, zombie taunt, yield and target
-(Stinky and Precious), `icc valkyre spear` and `icc sister svalna` hurl, taunt and target (Svalna). The raid-wide `icc opener swing`, `icc opener redirect` and `icc resistance
-aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
+(Stinky and Precious), `icc valkyre spear` and `icc sister svalna` hurl, interrupt, tank defensive,
+taunt and target (Svalna), and her gauntlet's `icc sister svalna gauntlet` dodge, interrupt (a stun
+on Summon Undead and Frozen Orb channels, a kick on Empowered Shadow Bolt), tank defensive, taunt and
+target (prefix row ahead of `icc sister svalna`). The raid-wide `icc opener swing`, `icc opener
+redirect` and `icc resistance aura` belong to no encounter. Rows register classes under their `Name`, so two classes sharing one leave
 one unbuilt.
 
 ## Known gaps

@@ -81,7 +81,9 @@ tank holds a boss somewhere else.
 
 **Exhaustion and Sated outlive a pull**, so a lust spent on one boss is missing on the next within
 10 min. In a trace, one applied before it began shows only as its removal; a fresh lust writes the
-caster's copy as a removal with full time left, then the member's apply ~10 ms later.
+caster's copy as a removal with full time left, then the member's apply ~10 ms later. Nothing in the
+DBC stops a Sated or Exhausted shaman (no `ExcludeCasterAuraSpell`), so `CanCastSpell` passes and the
+cast is wasted: check 57723/57724 on the caster.
 
 **`holdState` carries the boss GUID and must be `Reset()` on every path that skips
 `TankHasHeldBoss`** — without that, the previous boss's timer satisfies the dwell instantly on

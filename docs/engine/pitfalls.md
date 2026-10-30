@@ -199,7 +199,8 @@ portal this way.
   of `Map::isInLineOfSight`; `ring ... --los-from X Y Z` adds a sight column to a slot sweep — the
   real question is "which of these slots can see the boss". With no coordinates `los` reads 6-tuples
   from stdin, one verdict a line: loading the vmap tree dominates, so batch the rays in one
-  invocation. The eye is `--collision` above both endpoints, matching `IsWithinLOSInMap`.
+  invocation. `point` takes about 0.2 s each inside one throwaway container whose `sh` entrypoint
+  loops a command file, so a whole-room grid (625 points, 4000 rays) takes about two minutes. The eye is `--collision` above both endpoints, matching `IsWithinLOSInMap`.
   **GameObject collision needs a live server**, and a map with no vmap tree reads every ray as clear
   (`coverage` warns). The worldserver build never re-tags `acore/ac-wotlk-build:master`, so its
   navprobe can trail the source: if its usage lacks `los`, rebuild the `ac-navprobe` service, capped
@@ -366,7 +367,9 @@ portal this way.
 - **A dodge's straight walk can cross another hazard.** The clearance check tests the destination
   only. Pass `FindNearestPositionClearOfHazards` an accept callback that tests the segment
   (`SegmentCrossesCircle`) and run a ladder of attempts, the last ones allowing a crossing: crossing
-  a line beats standing in one (Marrowgar's Coldflame).
+  a line beats standing in one (Marrowgar's Coldflame). A stand walk has the same blind spot; a
+  segment test that never lets the walker get closer to a hazard than it already is catches it with
+  no navmesh sweep (Sindragosa's beacons).
 
 - **A sweep that moves for the sake of moving needs a travel floor.** `FindNearestPositionClearOfHazards`
   re-checks each spot against the hazards after the collision check pulls it back, which protects a
@@ -589,7 +592,8 @@ Related traps:
   row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
   the debuff is Burning Bile 66869.
 - **A boss cast's slot is not always `CURRENT_GENERIC_SPELL`**: a channel sits in
-  `CURRENT_CHANNELED_SPELL`. Read a scripted cast with `FindCurrentSpellBySpellId`, which walks every
+  `CURRENT_CHANNELED_SPELL`, and so does a `SPELL_ATTR1_IS_SELF_CHANNELED` spell with a cast time
+  (Ymirjar Warlord's Whirlwind 41056). Read a scripted cast with `FindCurrentSpellBySpellId`, which walks every
   slot
   ([Hodir's Flash Freeze](../raids/ulduar/hodir.md#the-flash-freeze-window-is-the-nine-second-cast-and-the-shelter-exists-for-five)).
 - **`Unit::IsImmunedToDamage(mask)` wants one aura covering the whole mask.** Ice Block is a
@@ -634,7 +638,8 @@ Related traps:
     appears nowhere and no referenced member is handled: in the first argument of a
     `GetSpellIdForDifficulty` call, declared and never used, named as a non-spell (`npc`, `entry`, …;
     a brace list's name counts), or marked `// pblint: spell-difficulty-ok` on its line or the one
-    above.
+    above. A helper remapping its parameter inside itself reads as never remapped: remap where the
+    constant is named.
 - **A spell listener sees every cast on the server.** `AllSpellScript::OnSpellCast`/`OnSpellPrepare`
   fire for all of them, so test the caster entry or a constant id before a lookup like
   `GetSpellIdForDifficulty`. A trigger-missile child takes its caster as unit target

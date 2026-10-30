@@ -283,7 +283,9 @@ Onyxia from her phase 3 descent on (Bellowing Roar 18431), Auriaya (Terrifying S
 35s cycle so the totem stays up all fight), Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
 Deafening Roar 64189), the Blood-Queen (Incite Terror 73070, from 8 s before each air phase walk
 until takeoff), and Spinestalker (Bellowing Roar 36922, from 8 s before the next roar can come until
-he casts).
+he casts). A subclass overriding `IsActive`, `Execute` or `isUseful` gives a raid-local change without
+touching the shared files: the Blood-Queen's priests that know Mass Dispel ward themselves, then Mass
+Dispel the feared (`icc bql mass dispel`).
 
 **Two defects this design exists to avoid:**
 

@@ -112,6 +112,12 @@ movement lock that decides which of two movers' orders is accepted is in
   once the anchor's own `isMoving()` has been false a short while (500 ms), not by widening the
   deadband. A "victim in melee range" test misses the walk, since a boss chasing a knocked-back tank
   catches it in flight and keeps it mostly in reach.
+- **A boss that drifts breaks fixed polar spot sets.** Navprobe an absolute floor grid once offline
+  (stored as row bitmasks) and pick a live node per bot under the fight's constraints
+  ([Sindragosa](../raids/icecrown-citadel/sindragosa.md)'s heroic Unchained Magic carriers).
+- **A stand that yields must stop the bot.** The spline already issued keeps it walking, so the
+  stand's mover calls `StopMoving` and clears the `last movement` booking, or the bot walks on into
+  the hazard.
 - **A stand held round a boss who moves off.** Hold a boss-relative stand only while he is within a
   few yards of where it latched; past that, release it so reach follows him, or he drags stale stands
   along ([Lord Marrowgar](../raids/icecrown-citadel/lord-marrowgar.md)).
@@ -379,6 +385,12 @@ What lands on a raid add is not what PvP experience predicts.
   taunt, and retarget a holder that got the boss by threat.
 - **A redirect's fallback target can be what pulls aggro**: Tricks of the Trade falls back to the
   strongest melee DPS ([pitfalls.md](pitfalls.md#detection-that-never-fires)).
+- **A cast with `PreventionType` 0 takes no kick.** `EffectInterruptCast` needs
+  `SPELL_PREVENTION_TYPE_SILENCE` and no silence aura stops it; only a stun does (`SetStunned` calls
+  `CastStop`). Check the prevention type before electing a kicker (Summon Undead 69516, Frozen Orb
+  71274).
+- **A charmed player is a valid direct-attack target**: `AttackAction`'s player guard checks only the
+  PvP-prohibited zone and area lists, and no raid is on them.
 - **Mocking Blow is a taunt**, though a `MELEE_ACTION`: `ClassifyAction` counts it in `Family::Taunt`,
   so a taunt guard has to cover every role, not tanks. No strategy wires it; Arms' `piercing howl` falls back
   to `hamstring` instead, since a damage dealer that taunts a raid add dies to it.
@@ -644,8 +656,9 @@ encounters.
 - **A summon lives as long as its summon spell's duration** (`DurationIndex`). A script's
   `DespawnOrUnsummon(30s)` only queues a delayed unsummon and doesn't extend it, so read the index
   before sizing a chase (Deathwhisper's shade lives 7 s and closes only 1.75 yd on a slowed victim).
-- **`SpellInfoCorrections.cpp` can rewrite a DBC value.** Fire Bomb 66320's radius is 5 yd in the
-  DBC and 2 yd in play, so read it before sizing a hazard.
+- **`SpellInfoCorrections.cpp` can rewrite a DBC value or retarget an effect.** Fire Bomb 66320's
+  radius is 5 yd in the DBC and 2 yd in play, and Frozen Orb 71274's aura moves from its caster to
+  the target, so read it before sizing a hazard or keying on which unit carries an aura.
 - **A hardcoded aura handler can scale a trigger spell's radius every tick**, beyond both the DBC and
   the corrections: `SpellAuraEffects.cpp` casts Slime Pool 66881 and Grobbulus' Poison with a growing
   `SPELLVALUE_RADIUS_MOD`.
@@ -719,3 +732,10 @@ encounters.
 - **Read which unit a link aura sits on before keying an exclusion on it.** Blood Mirror's 70821 is
   cast by the linked player onto the boss's victim, so "not the Blood Mirror player" excluded the
   victim twice and left the off-tank biteable.
+- **A damage-share link copies each hit in that hit's own school.** `SPELL_AURA_SHARE_DAMAGE_PCT`
+  (`Unit::DealDamage`) passes the copy through `CalcAbsorbResist` only: armour and percent
+  damage-taken auras don't cut it, absorbs and school immunity do. A guide calling Blood Mirror's
+  share "shadow damage" is wrong for this core.
+- **An aura with duration -1 on a channelled spell lasts until the caster's channel ends**, often at
+  its next non-triggered cast. Read the effect it applies (`UNIT_STATE_STUNNED` for `MOD_STUN`), not
+  the aura's presence (heroic Harvest Souls 73654).

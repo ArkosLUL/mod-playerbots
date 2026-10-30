@@ -40,7 +40,9 @@ riders boarded and then sat still for a phase. Name the boss's own actions as ex
 2. `Engine::PushDefaultActions` pushes every active strategy's `getDefaultActions()` **ungated by any
    trigger**, with `forceRelevance = 0.0f` so the listed value is kept verbatim.
 3. Pop in descending relevance; **break on the first action returning `true`**.
-4. Ties break by insertion order, which reads as nondeterministic in-game.
+4. Ties break by insertion order, which reads as nondeterministic in-game. That holds across two
+   definitions live at once (a gauntlet's leftover adds and its boss): give the subordinate one
+   strictly lower priorities.
 
 Two rules follow from 3; breaking either silently disables every node below:
 
@@ -221,6 +223,8 @@ off the pick.
   Taunt or Hamstring, or a cat or Tree of Life druid's Cyclone wins the pick and fails every tick. A
   known pet spell (Spell Lock) answers true before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
   cooldown and range.
+- `CastSpell(spell, unit)` on a `TARGET_FLAG_DEST_LOCATION` spell sets the destination to the unit's
+  position, so a bot casts a ground-target spell (Mass Dispel) by picking a player.
 - `CastSpell` selects and faces the target before it fails, and restores the old selection only on
   success, so a taunt or other cooldown cast not gated on `CanCastSpell` plus the DBC range re-faces
   the bot every tick and leaves it holding an aim it cannot reach
@@ -258,6 +262,8 @@ off the pick.
 - The four party health bands are **nested, not exclusive** — all pass `minValue = 0`
   (`PartyMemberLowHealthTrigger` and its subclasses, `src/Ai/Base/Trigger/HealthTriggers.h`). A target
   at 20% fires critical, low, medium *and* almost-full at once; only relevance separates them.
+- A creature with `CREATURE_TYPE_FLAG_TREAT_AS_RAID_UNIT` (Valithria) passes `Unit::IsInRaidWith`,
+  so raid-targeted helpful spells (Beacon of Light, `TARGET_UNIT_TARGET_RAID`) can be cast on it.
 - Config defaults (`PlayerbotAIConfig::Initialize`): critical 25, low 45, medium 65, almostFull 85,
   lowMana 15, mediumMana 40, highMana 65, saveManaThreshold 60, healDistance 38.5. Note `"high mana"`
   tests mana **< 65%** despite the name; `"target critical health"` is 20%, not 25%.
