@@ -17,9 +17,12 @@ kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers o
 two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
 dodge walks, a thirteenth the escort at the boost, at the end and in Permafrost, an own kite dead to a scarab,
 kite tools spent off the mark and the main tank out of the healers' reach, a fourteenth a Demonic Circle
-teleport, a kite sphere spent early and a Feign Death back before the submerge, the first one again phase 3's
-race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads
-empty on a trace that is not Anub'arak rather than raising.
+teleport, a kite sphere spent early and a Feign Death back before the submerge, a fifteenth a boost after the
+Hand, a patch kite turning on its boost, the escort waiting by the patch and both kite patches down as he went
+under, a sixteenth the side tanks' area casts and anub.saoe, the seconds a Penetrating Cold carrier went with no
+HoT or shield, the healers' walk behind the tank patches and burrowers reaching a healer past no patch, the first
+one again phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
+section reads empty on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
 
@@ -2949,12 +2952,15 @@ class TurnPull(unittest.TestCase):
                          [(BUR1, 4000, DEATH, 1, 1500, ARMS, 1000, 1, False),
                           (BUR1, 7500, DEATH, 1, 7000, WOLF, 1000, 1, False)])
         self.assertEqual([[(rec["t"], rec["sp"]) for rec in row["casts"]] for row in rows],
-                         [[(1500, SPELL_CHARGE), (3500, SPELL_SUNDER)], [(7200, SPELL_CLAW)]])
+                         [[(1500, SPELL_CHARGE), (2000, SPELL_CHARGE_STUN), (3500, SPELL_SUNDER)],
+                          [(7200, SPELL_CLAW)]])
 
     def test_the_burrower_section_prints_each_pull(self):
         text = self.text(self.trace, ab.show_burrowers)
+        self.assertIn("triggered ones marked *:\n", text)
         self.assertIn(f"    #{BUR1 & 0xFFFFFFFF}      wave 1 sight 0:01.000: Felesta (side 1) > Mighty (melee) +3.0 s,"
-                      " 2.5 s on the side tank; casts on it: Charge 11578 +0.5 s, Sunder Armor 7386 +2.5 s\n", text)
+                      " 2.5 s on the side tank; casts on it: Charge 11578 +0.5 s, spell 7922* +1.0 s, Sunder Armor 7386"
+                      " +2.5 s\n", text)
         self.assertIn(f"    #{BUR1 & 0xFFFFFFFF}      wave 1 sight 0:01.000: Felesta (side 1) > Wolf (Trueshot)"
                       " (ranged) +6.5 s, 0.5 s on the side tank; casts on it: Claw 52476 +6.2 s\n", text)
         self.assertIn("  pulls per puller: Mighty 1, Wolf (Trueshot) 1\n", text)
@@ -3454,6 +3460,7 @@ class ReworkPull(unittest.TestCase):
         self.assertAlmostEqual(near["yards"], math.sqrt(50.0))
         self.assertEqual([(rec["sp"], gap) for rec, gap in window["own_after_hand"]], [(SPELL_ICE_BLOCK, 500)])
         self.assertEqual([rec["sp"] for rec in window["hand_boosts"]], [SPELL_BLINK])
+        self.assertEqual([(rec["t"], rec["sp"]) for rec in window["after_hand"]], [(22000, SPELL_BLINK)])
         self.assertEqual(window["second"], [29000])
 
     def test_per_submerge_the_kite_and_idle_seconds_and_the_terminals(self):
@@ -3471,7 +3478,10 @@ class ReworkPull(unittest.TestCase):
         self.assertIn("            under the Hand 7.1 yd from the side 0 tank patch +13.5 s, inside 15.5 yd\n"
                       "            Ice Block 0.5 s after the Hand ran out\n"
                       "            boost in a Hand's first 8 s: Blink +10.0 s\n"
+                      "            boost after the Hand: Blink +10.0 s\n"
                       "            anub.second grant +17.0 s\n", text)
+        self.assertIn("  Hand of Protection with a boost the kiter cast later in its kite: Smartface 0:12.000 Blink"
+                      " 2.0 s after the Hand\n", text)
         self.assertIn("  ready is a bot paladin alive and unmarked, its last Hand of Protection 180 s or more back, the\n"
                       "  cooldown read off anub.hands, with no Forbearance on the kiter\n", text)
         self.assertIn("  escort within 30 yd of the kiter at the claim: 0 of 1; further: Smartface 0:12.000 34.1 yd\n", text)
@@ -3653,8 +3663,8 @@ class EscortPull(unittest.TestCase):
         self.assertAlmostEqual(escort["boost_yd"], 20.0)
         self.assertAlmostEqual(escort["end_yd"], 45.0)
         self.assertAlmostEqual(escort["frost_s"], 3.0)
-        self.assertTrue(ab.boost_in_reach(self.windows[0]))
-        self.assertFalse(ab.boost_in_reach(self.windows[1]))
+        # no Hand went out and the escort only walked
+        self.assertEqual((self.windows[0]["after_hand"], self.windows[0]["patch_escort"]), ([], None))
 
     def test_a_kiter_dead_to_a_scarab_with_its_own_unused(self):
         own = self.windows[1]
@@ -3679,8 +3689,12 @@ class EscortPull(unittest.TestCase):
         text = out.getvalue()
         self.assertIn("; 20.0 yd at the boost +8.0 s; 45.0 yd at the end; carried Permafrost 3.0 s\n", text)
         self.assertIn("            died to Swarm Scarab with its own immunity unused\n", text)
-        self.assertIn("  hand kite boosted before its Hand with the escort within 30 yd: Agony 0:12.000 20.0 yd,"
-                      " 45.0 at the end\n", text)
+        self.assertIn("  Hand of Protection with a boost the kiter cast later in its kite: none\n", text)
+        self.assertIn("  patch kites turned within 3 s of a boost going out: none\n", text)
+        self.assertIn("  escort waiting by the patch (anub.escort patch), at the Hand or the kite's end: none\n", text)
+        self.assertIn("  under 1.5 yd in 1 s: none\n", text)
+        self.assertIn("  burrowers within 5 yd of a healer in phase 3: 0; with no step from the exit or the emerge\n"
+                      "  within 7.5 yd of a Permafrost centre: none\n", text)
         self.assertIn("  escort carrying Permafrost in the kite: Agony 0:12.000 3.0 s\n", text)
         self.assertIn("  kiter dead to anything but the spike with its own immunity unused: Holylight 0:40.000 by"
                       " Swarm Scarab\n", text)
@@ -3848,7 +3862,7 @@ class CirclePull(unittest.TestCase):
 
     def test_a_kite_sphere_spent_early_in_its_kite(self):
         [row] = ab.kite_sphere_rows(self.trace)
-        self.assertEqual((row["label"], row["start"], row["ready"]), ("P2", 40000, 1))
+        self.assertEqual((row["label"], row["start"], row["ready"], row["down"]), ("P2", 40000, 1, [CPRESHOT]))
         self.assertEqual(row["spheres"], [{"guid": CPRESHOT, "killed": 25000, "spent": None, "kiter": None,
                                            "into": None},
                                           {"guid": CSPHERE, "killed": 61000, "spent": 70000, "kiter": CKITER,
@@ -3860,11 +3874,12 @@ class CirclePull(unittest.TestCase):
         [row] = ab.circle_teleports(trace, ab.mark_windows(trace))
         self.assertEqual((row["circle"], row["stood"]), (CIRCLE, 1500))
         [spheres] = ab.kite_sphere_rows(trace)
-        self.assertEqual(spheres["ready"], 0)
+        self.assertEqual((spheres["ready"], spheres["down"]), (0, []))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             ab.show_spheres(trace)
         self.assertIn("into its kite, early  no kite patch down as the spike came up\n", out.getvalue())
+        self.assertIn("  kite patches on the floor as he went down, under 2 flagged: P2 0 under\n", out.getvalue())
 
     def test_the_sections_print_them(self):
         out = io.StringIO()
@@ -3877,6 +3892,7 @@ class CirclePull(unittest.TestCase):
         self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000\n", text)
         self.assertIn(" down -15.0 s, never spent; ", text)
         self.assertIn("down +21.0 s, spent +30.0 s by Pyro 4.0 s into its kite, early\n", text)
+        self.assertIn("  kite patches on the floor as he went down, under 2 flagged: P2 1 under\n", text)
 
 
 B3 = CREATURE | 923
@@ -3988,6 +4004,354 @@ class SwarmRace(unittest.TestCase):
                       " inside his 23 yd aggro: Bulwark", out.getvalue())
 
 
+JTANK, JPALADIN, JPYRO, JSHADOW, JDRUID = range(9701, 9706)
+JBOSS = CREATURE | 1801
+JSPIKE = CREATURE | 1802
+JTP0, JTP1, JKP1, JKP2 = (CREATURE | n for n in range(1811, 1815))
+JPATCHES = {JTP0: (X + 5.0, Y + 20.0), JTP1: (X + 5.0, Y - 20.0), JKP1: (X - 30.0, Y + 10.0),
+            JKP2: (X - 30.0, Y - 10.0)}
+JKITERS = {JPYRO: (X - 45.0, Y + 40.0), JSHADOW: (X + 20.0, Y), JDRUID: (X - 30.0, Y - 48.0)}
+# (start, stop, kiter) per mark under him
+JMARKS = ((12000, 22000, JPYRO), (25000, 35000, JSHADOW), (40000, 50000, JDRUID))
+SPELL_DASH, SPELL_CAT_FORM = 33357, 768
+
+
+def boost_snap(when: int) -> dict:
+    """The escort 15 yd west of the north kite patch until 38 s, then 18 yd south of the south one."""
+    paladin = (X - 45.0, Y + 10.0) if when < 38000 else (X - 30.0, Y - 28.0)
+    units = [[JTANK, X - 5.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [JPALADIN, *paladin, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             *([guid, *spot, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0] for guid, spot in JKITERS.items()),
+             [JBOSS, X, Y, Z, 0.0, 70.0, 0.0, JTANK, 0, 0, 0, 0]]
+    kiter = next((guid for start, stop, guid in JMARKS if start <= when <= stop), None)
+    if kiter:
+        units.append([JSPIKE, JKITERS[kiter][0] + 6.0, JKITERS[kiter][1], Z, 0.0, 100.0, 0.0, kiter, 1, 0, 0, 0])
+    hz = []
+    for guid, spot in JPATCHES.items():
+        units.append([guid, *spot, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def boost_pull() -> list[dict]:
+    """A 25H submerge from 10 s to 70 s with both kite patches down as he goes under. Pyro's Hand kite Blinks
+    before its Hand and Nitros 3 s after it, its escort waiting by the patch; Shadow's patch kite turns 2 s after
+    its Sprint; Druidica's turns 5 s after its Dash, Cat Form just before the turn counting for nothing, the escort
+    by the patch to the end with no Hand."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790000000000, "map": ab.MAP_TOC, "inst": 20, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": JTANK, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 1},
+                    {"g": JPALADIN, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+                    {"g": JPYRO, "n": "Pyro", "r": "ranged", "c": 8, "h": 0},
+                    {"g": JSHADOW, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+                    {"g": JDRUID, "n": "Druidica", "r": "ranged", "c": 11, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": JBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": JSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"} for guid in JPATCHES),
+        *(note(when, JTANK, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (70000, 1))),
+        note(0, JTANK, "anub.patch0", JTP0),
+        note(0, JTANK, "anub.patch1", JTP1),
+        *(aura(when, kiter, ab.SPELL_MARK, removed, JSPIKE) for start, stop, kiter in JMARKS
+          for when, removed in ((start, False), (stop, True))),
+        note(12100, JPYRO, "anub.kiteplan", "hand"),
+        note(25100, JSHADOW, "anub.kiteplan", "patch"),
+        note(40100, JDRUID, "anub.kiteplan", "patch"),
+        *(note(when, guid, "anub.kitestage", stage) for when, guid, stage in (
+            (25000, JSHADOW, "run"), (28000, JSHADOW, "patch"), (35000, JSHADOW, "none"),
+            (40000, JDRUID, "run"), (46000, JDRUID, "patch"), (50000, JDRUID, "none"))),
+        *(note(when, JPALADIN, "anub.escort", value) for when, value in (
+            (12500, "patch"), (22000, "none"), (40500, "patch"), (50000, "none"))),
+        cast(13000, JPYRO, SPELL_BLINK, JPYRO),
+        cast(15000, JPALADIN, SPELL_HOP3, JPYRO),
+        cast(18000, JPYRO, SPELL_NITRO_USE, JPYRO),
+        cast(26000, JSHADOW, SPELL_SPRINT, JSHADOW),
+        cast(41000, JDRUID, SPELL_DASH, JDRUID),
+        cast(45500, JDRUID, SPELL_CAT_FORM, JDRUID),
+        {"t": 75000, "e": "end", "out": "wipe"},
+    ]
+    records += [boost_snap(when) for when in range(-500, 75000, 500)]
+    return records
+
+
+class BoostPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_20_anub-arak_1790000000.ndjson", boost_pull())
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(self.trace)
+        return out.getvalue()
+
+    def test_a_boost_cast_after_the_hand_counts_and_one_before_it_does_not(self):
+        self.assertEqual([[(rec["t"], rec["sp"]) for rec in window["after_hand"]] for window in self.windows],
+                         [[(18000, SPELL_NITRO_USE)], [], []])
+
+    def test_a_patch_kite_turning_within_3_s_of_a_run_boost(self):
+        shadow, druid = self.windows[1:]
+        self.assertEqual((shadow["turn"], shadow["boost_turn"]["sp"]), (28000, SPELL_SPRINT))
+        self.assertEqual((druid["turn"], druid["boost_turn"]), (46000, None))
+        self.assertIsNone(self.windows[0]["boost_turn"])
+        window = {"turn": 5000, "boost_turn": {"t": 5100, "sp": SPELL_DASH}}
+        self.assertEqual(ab.boost_turn_text(window), "turned with Dash")
+        self.assertEqual(ab.boost_turn_text({**window, "boost_turn": {"t": 7500, "sp": SPELL_DASH}}),
+                         "turned 2.5 s before Dash")
+
+    def test_the_escort_by_the_patch_reads_at_the_hand_else_at_the_end(self):
+        pyro, shadow, druid = (window["patch_escort"] for window in self.windows)
+        self.assertIsNone(shadow)
+        self.assertEqual((pyro["guid"], pyro["t"], pyro["hand"], pyro["spot"]),
+                         (JPALADIN, 15000, True, (X - 45.0, Y + 10.0)))
+        self.assertAlmostEqual(pyro["kiter_yd"], 30.0)
+        self.assertAlmostEqual(pyro["patch_yd"], 15.0)
+        self.assertEqual((druid["t"], druid["hand"]), (50000, False))
+        self.assertAlmostEqual(druid["kiter_yd"], 20.0)
+        self.assertAlmostEqual(druid["patch_yd"], 18.0)
+
+    def test_both_kite_patches_down_as_he_went_under(self):
+        [row] = ab.kite_sphere_rows(self.trace)
+        self.assertEqual(row["down"], [JKP1, JKP2])
+
+    def test_the_sections_print_them(self):
+        text = self.text(ab.show_spike, ab.show_spheres)
+        self.assertIn("            boost after the Hand: Nitro Boosts +6.0 s\n"
+                      "            escort by the patch: Justice at 700.0,145.0, 15.0 yd off the kite patch, 30.0 yd"
+                      " from the kiter at the Hand +3.0 s\n", text)
+        self.assertIn("            turned 2.0 s after Sprint\n", text)
+        self.assertIn("  Hand of Protection with a boost the kiter cast later in its kite: Pyro 0:12.000 Nitro Boosts"
+                      " 3.0 s after the Hand\n", text)
+        self.assertIn("  patch kites turned within 3 s of a boost going out: Shadow 0:25.000 turned 2.0 s after"
+                      " Sprint\n", text)
+        self.assertIn("  escort waiting by the patch (anub.escort patch), at the Hand or the kite's end: Pyro 0:12.000"
+                      " Justice at 700.0,145.0, 15.0 yd off the kite patch, 30.0 yd from the kiter at the Hand +3.0 s,"
+                      " Druidica 0:40.000 Justice at 715.0,107.0, 18.0 yd off the kite patch, 20.0 yd from the kiter"
+                      " at the end +10.0 s\n", text)
+        self.assertIn("  kite patches on the floor as he went down, under 2 flagged: P2 2\n", text)
+
+    def test_every_section_prints(self):
+        self.assertIn("TANKS\n", self.text(ab.show_banner, *(section for _, _, section in ab.SECTIONS)))
+
+
+VMAIN, VFELESTA, VBULWARK, VTREE, VPRAYER, VELEMENA = range(9801, 9807)
+VBOSS = CREATURE | 1901
+VTP0, VTP1 = CREATURE | 1911, CREATURE | 1912
+VB1, VB2, VB3, VB4 = (CREATURE | n for n in range(1921, 1925))
+VPATCHES = {VTP0: (X + 5.0, Y + 20.0), VTP1: (X + 5.0, Y - 20.0)}
+COLD_25H = 68510
+SPELL_DND, SPELL_DND_TICK, SPELL_PESTILENCE, SPELL_BLOOD_BOIL = 49938, 52212, 50842, 49941
+SPELL_CONSECRATION, SPELL_JUDGEMENT = 48819, 20271
+SPELL_RENEW, SPELL_PWS, SPELL_UNHOLY_STRENGTH = 48068, 48066, 53365
+VSPELLS = {SPELL_DND: "Death and Decay", SPELL_DND_TICK: "Death and Decay", SPELL_PESTILENCE: "Pestilence",
+           SPELL_BLOOD_BOIL: "Blood Boil", SPELL_CONSECRATION: "Consecration", SPELL_JUDGEMENT: "Judgement of Light",
+           SPELL_SWIPE: "Swipe (Bear)", SPELL_RENEW: "Renew", SPELL_PWS: "Power Word: Shield",
+           SPELL_UNHOLY_STRENGTH: "Unholy Strength"}
+
+
+def off_centre(spot: tuple[float, float]) -> tuple[float, float]:
+    return spot[0] - X, spot[1] - Y
+
+
+# Per burrower: its path off the room centre, its sampled stretches, and its target. VB4 submerges from 34 s to
+# 40 s and comes back up full where it went down.
+VBURROWERS = {
+    VB1: ([(30000, *off_centre(EXIT_S1)), (34000, -20.0, -14.0)], ((30000, 60000),), VELEMENA),
+    VB2: ([(30000, *off_centre(EXIT_S1)), (35000, 17.0, 0.0)], ((30000, 60000),), VTREE),
+    VB3: ([(40000, 5.0, -10.0), (42000, 17.0, 0.0)], ((40000, 60000),), VTREE),
+    VB4: ([(10000, *off_centre(EXIT_N1)), (14000, 8.0, -5.0), (40000, 8.0, -5.0), (42000, 16.0, 10.0)],
+          ((10000, 34000), (40000, 60000)), VPRAYER),
+}
+
+
+def behind_healer(guid: int, when: int) -> tuple[float, float]:
+    """Tree walks behind the patches from 15 to 19 s, Prayer from 22 to 25 s; Elemena never moves."""
+    if guid == VTREE:
+        return lerp([(15000, -20.0, 0.0), (19000, 20.0, 0.0)], when)
+    if guid == VPRAYER:
+        return lerp([(22000, -20.0, 10.0), (25000, 20.0, 10.0)], when)
+    return X - 20.0, Y - 10.0
+
+
+def behind_snap(when: int) -> dict:
+    units = [[VMAIN, X - 5.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [VFELESTA, X + 5.0, Y + 25.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [VBULWARK, X + 5.0, Y - 25.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             *([guid, *behind_healer(guid, when), Z, 0.0, 0.0 if guid == VPRAYER and when >= 50000 else 100.0,
+                100.0, 0, 0, 0, 0, 0] for guid in (VTREE, VPRAYER, VELEMENA)),
+             [VBOSS, X, Y, Z, 0.0, 50.0 - max(when, 0) / 2000.0, 0.0, VMAIN, 0, 0, 0, 0]]
+    for guid, (path, stretches, target) in VBURROWERS.items():
+        if any(low <= when <= high for low, high in stretches):
+            hp = 100.0 - (when - (40000 if guid == VB4 and when >= 40000 else path[0][0])) / 800.0
+            units.append([guid, *lerp(path, when), Z, 0.0, hp, 0.0, target, 1, 0, 0, 0])
+    hz = []
+    for guid, spot in VPATCHES.items():
+        units.append([guid, *spot, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def behind_pull(new_rows: bool = True) -> list[dict]:
+    """A 25H pull, phase 1 to 20 s and phase 3 after. Felesta and Bulwark cast area spells, a Death and Decay tick,
+    one before the pull and the main tank's Swipe left out. Three healers set off behind the tank patches: Tree
+    and Prayer reach their stands, Elemena never holds one. Felesta carries Penetrating Cold into phase 3 under
+    Unholy Strength, which is no cover; Tree carries it with Renew then Power Word: Shield on it for 8 of 15 s;
+    Prayer dies under it. Four burrowers reach a healer in phase 3: VB1 past no patch, VB2 through one, VB3 with
+    only its walk from the exit through one, VB4 through one before it submerged and past none after it emerged.
+    `new_rows` False drops anub.saoe, anub.hbehind, the area casts and Penetrating Cold."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790100000000, "map": ab.MAP_TOC, "inst": 21, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": VMAIN, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 1},
+                    {"g": VFELESTA, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": VBULWARK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": VTREE, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+                    {"g": VPRAYER, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+                    {"g": VELEMENA, "n": "Elemena", "r": "heal", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": VBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"} for guid in VPATCHES),
+        *({"t": 10000, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in VBURROWERS),
+        *({"e": "spell", "sp": spell, "n": name} for spell, name in VSPELLS.items()),
+        *(note(when, VMAIN, "anub.phase", value) for when, value in ((0, 1), (20000, 3))),
+        note(0, VMAIN, "anub.side0", VFELESTA),
+        note(0, VMAIN, "anub.side1", VBULWARK),
+        note(0, VFELESTA, "anub.patch0", VTP0),
+        note(0, VBULWARK, "anub.patch1", VTP1),
+
+        cast(-1000, VFELESTA, SPELL_DND, 0),
+        cast(2000, VFELESTA, SPELL_DND, 0),
+        triggered(3000, VFELESTA, SPELL_DND_TICK, VB4),
+        cast(8000, VFELESTA, SPELL_DND, 0),
+        cast(9000, VFELESTA, SPELL_PESTILENCE, VB4),
+        cast(30000, VFELESTA, SPELL_BLOOD_BOIL, 0),
+        cast(4000, VBULWARK, SPELL_CONSECRATION, 0),
+        cast(5000, VBULWARK, SPELL_JUDGEMENT, VBOSS),
+        cast(12000, VBULWARK, SPELL_CONSECRATION, 0),
+        cast(6000, VMAIN, SPELL_SWIPE, 0),
+        *(note(when, VFELESTA, "anub.saoe", value) for when, value in (
+            (1000, "death and decay"), (3000, "none"), (5000, "cap"), (7000, "death and decay"))),
+        *(note(when, VBULWARK, "anub.saoe", value) for when, value in ((2000, "consecration"), (4000, "other"))),
+
+        *(note(when, guid, "anub.hbehind", value) for when, guid, value in (
+            (12000, VTREE, "wait"), (15000, VTREE, "go"), (15000, VPRAYER, "wait"), (22000, VPRAYER, "go"),
+            (15000, VELEMENA, "wait"), (26000, VELEMENA, "go"))),
+        *(note(when, guid, "anub.hstand", value) for when, guid, value in (
+            (0, VTREE, "hold"), (15000, VTREE, "walk"), (19000, VTREE, "hold"),
+            (0, VPRAYER, "hold"), (22000, VPRAYER, "walk"), (25000, VPRAYER, "hold"),
+            (0, VELEMENA, "hold"), (26000, VELEMENA, "walk"))),
+
+        aura(10000, VBULWARK, COLD_25H, False),
+        aura(15000, VBULWARK, COLD_25H, True),
+        aura(18000, VFELESTA, COLD_25H, False),
+        aura(19000, VFELESTA, SPELL_UNHOLY_STRENGTH, False, VFELESTA),
+        {"t": 19000, "e": "heal", "s": VFELESTA, "d": VFELESTA, "sp": SPELL_UNHOLY_STRENGTH, "a": 500, "oh": 0},
+        aura(23000, VFELESTA, COLD_25H, True),
+        aura(25000, VTREE, COLD_25H, False),
+        aura(30000, VTREE, SPELL_RENEW, False, VPRAYER),
+        aura(33000, VTREE, SPELL_PWS, False, VPRAYER),
+        {"t": 34000, "e": "abs", "d": VTREE, "s": VPRAYER, "sp": SPELL_PWS, "a": 2000},
+        aura(35000, VTREE, SPELL_RENEW, True, VPRAYER),
+        aura(38000, VTREE, SPELL_PWS, True, VPRAYER),
+        aura(40000, VTREE, COLD_25H, True),
+        aura(45000, VPRAYER, COLD_25H, False),
+        aura(50000, VPRAYER, COLD_25H, True),
+        {"t": 50000, "e": "death", "g": VPRAYER, "killer": VBOSS, "x": X + 20.0, "y": Y + 10.0, "z": Z},
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    if not new_rows:
+        dropped = {SPELL_DND, SPELL_DND_TICK, SPELL_PESTILENCE, SPELL_BLOOD_BOIL, SPELL_CONSECRATION, COLD_25H}
+        records = [rec for rec in records if rec.get("k") not in ("anub.saoe", "anub.hbehind")
+                   and not (rec.get("e") in ("cast", "aura") and rec.get("sp") in dropped)]
+    records += [behind_snap(when) for when in range(-500, 60000, 500)]
+    return records
+
+
+class BehindPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_21_anub-arak_1790100000.ndjson", behind_pull())
+        cls.bare = write_trace(cls.folder.name, "649_21_anub-arak_1790100001.ndjson", behind_pull(False))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(trace)
+        return out.getvalue()
+
+    def test_side_tank_area_casts_per_surfaced_phase(self):
+        self.assertEqual({key: dict(counts) for key, counts in ab.side_tank_area_casts(self.trace).items()},
+                         {(VFELESTA, "P1"): {"Death and Decay": 2, "Pestilence": 1},
+                          (VFELESTA, "P3"): {"Blood Boil": 1}, (VBULWARK, "P1"): {"Consecration": 2}})
+        self.assertEqual(ab.side_tank_area_casts(self.bare), {})
+
+    def test_the_tank_section_prints_the_area_casts_and_anub_saoe(self):
+        self.assertIn("  side tank area casts per surfaced phase, anub.saoe's spells, triggered ones left out:\n"
+                      "    Felesta        P1    Death and Decay 2, Pestilence 1\n"
+                      "    Felesta        P3    Blood Boil 1\n"
+                      "    Bulwark        P1    Consecration 2\n"
+                      "  anub.saoe: Bulwark consecration 1, other 1; Felesta death and decay 2, none 1, cap 1\n",
+                      self.text(self.trace, ab.show_tanks))
+        self.assertIn("  side tank area casts per surfaced phase, anub.saoe's spells, triggered ones left out: none\n"
+                      "  anub.saoe: no rows\n", self.text(self.bare, ab.show_tanks))
+
+    def test_a_carriers_bare_seconds_leave_out_a_hot_a_shield_and_what_is_neither(self):
+        self.assertEqual(ab.cold_bare(self.trace, 20000, 60000),
+                         [{"guid": VFELESTA, "start": 20000, "carried": 3000, "bare": 3000, "died": False},
+                          {"guid": VTREE, "start": 25000, "carried": 15000, "bare": 7000, "died": False},
+                          {"guid": VPRAYER, "start": 45000, "carried": 5000, "bare": 5000, "died": True}])
+        self.assertEqual(ab.cover_spans(self.trace), {VTREE: [(30000, 38000)]})
+        self.assertEqual(ab.cold_bare(self.bare, 20000, 60000), [])
+
+    def test_the_swarm_section_prints_the_bare_seconds(self):
+        line = "  Penetrating Cold carriers in phase 3, seconds with no HoT or shield on them of those carried: "
+        self.assertIn(line + "Felesta 0:20.000 3.0 of 3.0 s, Tree 0:25.000 7.0 of 15.0 s, Prayer 0:45.000 5.0 of"
+                      " 5.0 s died\n", self.text(self.trace, ab.show_swarm))
+        self.assertIn(line + "none\n", self.text(self.bare, ab.show_swarm))
+
+    def test_each_healers_walk_behind_the_patches_to_standing_still(self):
+        self.assertEqual([(row["guid"], row["go"], row["arrived"]) for row in ab.behind_walks(self.trace)],
+                         [(VELEMENA, 26000, None), (VPRAYER, 22000, 25000), (VTREE, 15000, 19000)])
+        self.assertEqual(ab.behind_walks(self.bare), [])
+
+    def test_a_burrower_reaching_a_healer_reads_whether_its_path_crossed_a_patch(self):
+        self.assertEqual([(row["guid"], row["t"], row["healer"], row["emerged"], row["crossed"])
+                          for row in ab.healer_reaches(self.trace)],
+                         [(VB1, 34000, VELEMENA, False, False), (VB2, 35000, VTREE, False, True),
+                          (VB3, 42000, VTREE, False, True), (VB4, 42000, VPRAYER, True, False)])
+
+    def test_the_healer_section_prints_them(self):
+        text = self.text(self.trace, ab.show_healers)
+        self.assertIn("  anub.hbehind, each healer's first go and the seconds until it stood still at its stand,"
+                      " anub.hstand hold and\n  under 1.5 yd in 1 s: Elemena 0:26.000 never, Prayer 0:22.000 3.0 s,"
+                      " Tree 0:15.000 4.0 s\n", text)
+        self.assertIn("  burrowers within 5 yd of a healer in phase 3: 4; with no step from the exit or the emerge\n"
+                      "  within 7.5 yd of a Permafrost centre: #1921 Elemena 0:34.000 on it, #1924 Prayer 0:42.000"
+                      " after an emerge on it\n", text)
+        self.assertIn("  under 1.5 yd in 1 s: none\n", self.text(self.bare, ab.show_healers))
+
+    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+        for key in ("anub.saoe", "anub.hbehind"):
+            self.assertNotIn(key, ab.missing_probes(self.trace))
+            self.assertIn(key, ab.missing_probes(self.bare))
+
+    def test_every_section_prints(self):
+        self.assertIn("TANKS\n", self.text(self.trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS)))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -4002,6 +4366,15 @@ class EveryView(unittest.TestCase):
         self.assertIn("TANKS\n  not an Anub'arak pull\n", out.getvalue())
         for title in ("SCARABS", "REDIRECTS", "PURSUIT", "DPS"):
             self.assertIn(f"{title}\n  not an Anub'arak pull\n", out.getvalue())
+
+    def test_the_help_builds(self):
+        # argparse formats each help with %, so a bare "40%," kills the reader before it opens a trace.
+        out = io.StringIO()
+        with unittest.mock.patch.object(sys, "argv", ["anub_arak.py", "--help"]), \
+                contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as stop:
+            ab.main()
+        self.assertEqual(stop.exception.code, 0)
+        self.assertIn("--swarm", out.getvalue())
 
     def test_azjol_nerubs_anubarak_is_not_this_one(self):
         with tempfile.TemporaryDirectory() as folder:

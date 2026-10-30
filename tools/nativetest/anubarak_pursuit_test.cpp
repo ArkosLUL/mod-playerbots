@@ -239,7 +239,7 @@ KiteOutcome PlayKite(Spike spike, KiterPath const& run, Point patch, float speed
                 walk = LegPath();
                 walk.start = kiter;
                 walk.legs = legs;
-                walk.speed = speed;
+                walk.pace = speed;
                 walk.Slow(patch, rules.slowReach, rules.slowFactor, 40.0f);
             }
 
@@ -270,7 +270,7 @@ KiteOutcome PlayKite(Spike spike, KiterPath const& run, Point patch, float speed
             LegPath step;
             step.start = kiter;
             step.legs = {StandPast(patch, spike.pos)};
-            step.speed = speed;
+            step.pace = speed;
             kiter = step.At(AnubarakPursuit::TICK_S);
         }
 
@@ -332,7 +332,7 @@ float ArriveS(Spike const& spike, Point kiter, float speed, Point patch, std::ve
     LegPath walk;
     walk.start = kiter;
     walk.legs = legs;
-    walk.speed = speed;
+    walk.pace = speed;
     walk.Slow(patch, 7.5f, HEROIC_SLOW, 20.0f);
     return Simulate(spike, walk, 20.0f, {patch}, IMPALE_REACH, PATCH_REACH).spikeArriveS[0];
 }
@@ -874,6 +874,83 @@ void RingWayTakesTheCircleThenThePatch()
         CHECK((patched.entry.y - 135.0f) * side > 0.0f);
     }
 }
+
+// Sprint, Dash and Nitro Boosts run out: boosted for boostS, then at the kiter's own speed, and a pace
+// read later keeps only what's left of the boost
+void BoostLegRunsOut()
+{
+    AnubarakPursuit::Pace const dash(7.0f, 11.9f, 15.0f);
+    KiterPath const run = MakeKiterPath({0.0f, 0.0f}, {1.0f, 0.0f}, dash, {0.0f, 0.0f}, 1000.0f, 1.0f);
+    CHECK(Near(run.At(10.0f).x, 119.0f, 0.01f));
+    CHECK(Near(run.At(20.0f).x, 11.9f * 15.0f + 7.0f * 5.0f, 0.01f));
+    CHECK(Near(dash.After(10.0f).boostS, 5.0f, 0.001f));
+    CHECK(Near(dash.After(20.0f).Length(3.0f), 21.0f, 0.001f));
+
+    AnubarakPursuit::LegPath walk;
+    walk.start = {0.0f, 0.0f};
+    walk.legs = {{200.0f, 0.0f}};
+    walk.pace = AnubarakPursuit::Pace(7.0f, 17.5f, 5.0f);
+    CHECK(Near(walk.At(2.0f).x, 35.0f, 0.01f));
+    walk.Slow({500.0f, 0.0f}, 1.0f, 0.2f, 10.0f);
+    CHECK(Near(walk.At(6.0f).x, 17.5f * 5.0f + 7.0f, 0.2f));
+}
+
+// Marked 1.9 yd from a spike at its base speed, which tests every 1.5 s: at 7 yd/s the kiter is still in
+// Impale's reach at that test, on Dash it's long gone and only caught well after the boost runs out
+void DashOutrunsTheBaseSpike()
+{
+    Spike spike;
+    spike.pos = {-1.9f, 0.0f};
+    AnubarakPursuit::CatchRule grace;
+    grace.fromS = 1.5f;
+    KiterPath const plain = MakeKiterPath({0.0f, 0.0f}, {1.0f, 0.0f}, 7.0f, {0.0f, 0.0f}, 1000.0f, 1.0f);
+    CHECK(Near(Simulate(spike, plain, 40.0f, {}, IMPALE_REACH, {}, grace).catchS, 1.5f, AnubarakPursuit::TICK_S));
+
+    KiterPath const dash = MakeKiterPath({0.0f, 0.0f}, {1.0f, 0.0f}, AnubarakPursuit::Pace(7.0f, 11.9f, 15.0f),
+                                         {0.0f, 0.0f}, 1000.0f, 1.0f);
+    // 101.65 yd apart as Dash ends at 15 s, closed at 4.375 yd/s to Impale's reach
+    CHECK(Near(Simulate(spike, dash, 40.0f, {}, IMPALE_REACH, {}, grace).catchS, 36.5f, 0.3f));
+}
+
+// The same mark 30 yd short of a patch: walked in at 7 yd/s the first test catches it, on Dash it makes the
+// patch, but only with the catch before that first test left out
+void DashMakesThePatch()
+{
+    Spike spike;
+    spike.pos = {-1.9f, 0.0f};
+    Point const patch = {30.0f, 0.0f};
+    std::vector<Point> const in = {patch};
+    AnubarakPursuit::PatchRules rules;
+    rules.catchFromS = 1.5f;
+    AnubarakPursuit::Pace const dash(7.0f, 11.9f, 15.0f);
+    CHECK(AnubarakPursuit::PatchWalkMargin(spike, {0.0f, 0.0f}, 7.0f, patch, in, rules, 0.0f) < 0.0f);
+    CHECK(AnubarakPursuit::PatchWalkMargin(spike, {0.0f, 0.0f}, dash, patch, in, rules, 0.0f) >= 0.0f);
+
+    rules.catchFromS = 0.0f;
+    CHECK(AnubarakPursuit::PatchWalkMargin(spike, {0.0f, 0.0f}, dash, patch, in, rules, 0.0f) < 0.0f);
+}
+
+// On the ring, headed clockwise, judged on a counter-clockwise member: the kiter walks its 10 yd step
+// straight before the turn, not back the other way round the ring at once
+void LaneStepWalksStraightFirst()
+{
+    using AnubarakPursuit::Dist;
+    using AnubarakPursuit::PathMember;
+
+    Point const start = {ROOM_CENTER.x + 40.0f, ROOM_CENTER.y};
+    PathMember const ccw = {40.0f, 1.0f, 1e9f};
+    KiterPath const turnsBack = MakeKiterPath(start, Heading(-90.0f), 7.0f, ROOM_CENTER, ccw);
+    CHECK(turnsBack.At(10.0f / 7.0f).y > ROOM_CENTER.y);
+
+    KiterPath const walked = MakeKiterPath(start, Heading(-90.0f), 7.0f, ROOM_CENTER, ccw, 10.0f);
+    CHECK(Near(walked.At(10.0f / 7.0f).x, start.x, 0.01f));
+    CHECK(Near(walked.At(10.0f / 7.0f).y, start.y - 10.0f, 0.01f));
+    CHECK(Near(Dist(walked.At(3.0f), ROOM_CENTER), std::hypot(40.0f, 10.0f), 0.01f));
+
+    // A straight leg capped under the step still walks the step
+    PathMember const cut = {45.0f, -1.0f, 5.0f};
+    CHECK(Near(MakeKiterPath(ROOM_CENTER, Heading(0.0f), 7.0f, ROOM_CENTER, cut, 10.0f).straight, 10.0f, 0.01f));
+}
 }  // namespace
 
 int main()
@@ -904,6 +981,10 @@ int main()
     BoostLeadClearsImpaleAtTheHandsEnd();
     RingWayCommitsFromTheGather();
     RingWayTakesTheCircleThenThePatch();
+    BoostLegRunsOut();
+    DashOutrunsTheBaseSpike();
+    DashMakesThePatch();
+    LaneStepWalksStraightFirst();
     std::printf("anubarak_pursuit_test: ok\n");
     return 0;
 }

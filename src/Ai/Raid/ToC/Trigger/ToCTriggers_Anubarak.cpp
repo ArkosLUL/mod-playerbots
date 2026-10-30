@@ -83,14 +83,15 @@ bool AnubarakHopEscortTrigger::IsActive()
         return false;
 
     bool post = false;
-    if (!GetAnubarakEscortSpot(bot, spot, &post))
+    bool patchPost = false;
+    if (!GetAnubarakEscortSpot(bot, spot, &post, &patchPost))
     {
         RaidObs::NoteDerived(bot, "anub.escort", "none");
         return false;
     }
 
     bool const off = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ANUBARAK_ESCORT_HOLD;
-    RaidObs::NoteDerived(bot, "anub.escort", post ? "post" : off ? "walk" : "hold");
+    RaidObs::NoteDerived(bot, "anub.escort", patchPost ? "patch" : post ? "post" : off ? "walk" : "hold");
     return off;
 }
 
@@ -159,6 +160,14 @@ bool AnubarakSideTankReadyTrigger::IsActive()
 
     return !GetAnubarakBurrowerPick(botAI) && !AnubarakGathers(botAI) && !IsAnubarakEscort(botAI);
 }
+
+bool AnubarakSideTankAreaThreatTrigger::IsActive()
+{
+    AnubarakSideTankAoe aoe;
+    return AnubarakEngaged(botAI) && GetAnubarakSideTankAoe(botAI, aoe);
+}
+
+bool AnubarakCleaveBuffNearBurrowerTrigger::IsActive() { return GetAnubarakCleaveBuffToDrop(botAI) != nullptr; }
 
 bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
 {
@@ -266,6 +275,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak hop escort", {
         NextAction("anubarak hop escort", ACTION_RAID + 4.5f) }));
 
+    // Off the GCD, ahead of the next swing the buff would carry onto the burrower
+    triggers.push_back(new TriggerNode("anubarak cleave buff near burrower", {
+        NextAction("anubarak drop cleave buff", ACTION_RAID + 4.2f) }));
+
     triggers.push_back(new TriggerNode("anubarak dps target", {
         NextAction("anubarak dps target", ACTION_RAID + 4) }));
 
@@ -278,6 +291,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak scarab on raid", {
         NextAction("anubarak tank pick up scarab", ACTION_RAID + 2) }));
+
+    // Under the hold and pickup, over the class rotation's own area spells
+    triggers.push_back(new TriggerNode("anubarak side tank area threat", {
+        NextAction("anubarak side tank area threat", ACTION_RAID + 2.5f) }));
 
     triggers.push_back(new TriggerNode("anubarak side tank ready", {
         NextAction("anubarak side tank ready", ACTION_RAID + 1.5f) }));

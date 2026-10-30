@@ -249,12 +249,19 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
 
     // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
-    // Before its side tank has held it a while, a burrower takes the threat of whatever hits it
+    // Before its side tank has held it a while, a burrower takes the threat of whatever hits it. Melee
+    // stand next to the held ones, so theirs also waits near one they have 60% of its tank's threat on.
     if (IsRaidAreaDamage(botAI, action))
     {
         Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
-        if (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, true) ||
-            (aimed && AnubarakBurrowerNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, true)))
+        bool const melee = PlayerbotAI::IsMelee(bot);
+        auto const pulls = [&](Position const& at)
+        {
+            return AnubarakBurrowerNear(bot, at, ANUBARAK_BURROWER_AREA_REACH, true) ||
+                   (melee && AnubarakBurrowerAreaCappedNear(bot, at, ANUBARAK_BURROWER_AREA_REACH));
+        };
+
+        if (pulls(bot->GetPosition()) || (aimed && pulls(aimed->GetPosition())))
             return 0.0f;
     }
 
@@ -269,6 +276,18 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return burrower == GetAnubarakDpsTarget(botAI) ? 1.0f : 0.0f;
+}
+
+float AnubarakSideTankAreaGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || GetAnubarakBurrowerTankSide(bot) < 0 ||
+        !AnubarakEngaged(botAI))
+        return 1.0f;
+
+    return AnubarakSideTankAreaAllowed(botAI, action->getName(), action->GetTarget(),
+                                       IsRaidAreaDamage(botAI, action))
+               ? 1.0f
+               : 0.0f;
 }
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

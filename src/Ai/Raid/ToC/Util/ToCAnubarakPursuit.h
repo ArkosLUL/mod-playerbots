@@ -47,13 +47,37 @@ struct Spike
     float nextStepS = STEP_S;
 };
 
+// How fast a runner goes: boostSpeed for its first boostS seconds, then speed. Sprint, Dash and Nitro
+// Boosts run out mid-kite, so a boost read as the kiter's speed for good outruns a spike that catches it.
+struct Pace
+{
+    float speed = 7.0f;
+    float boostSpeed = 0.0f;
+    float boostS = 0.0f;
+
+    Pace() = default;
+    Pace(float runSpeed) : speed(runSpeed) {}
+    Pace(float runSpeed, float boost, float boostSeconds) : speed(runSpeed), boostSpeed(boost), boostS(boostSeconds) {}
+
+    float Length(float t) const
+    {
+        float const boosted = std::clamp(t, 0.0f, std::max(boostS, 0.0f));
+        return boostSpeed * boosted + speed * (t - boosted);
+    }
+
+    float SpeedAt(float t) const { return t < boostS ? boostSpeed : speed; }
+
+    // The same runner t seconds on
+    Pace After(float t) const { return Pace(speed, boostSpeed, std::max(boostS - t, 0.0f)); }
+};
+
 // Straight along dir from start until radius off centre, then round that circle: turn +1 is
 // counter-clockwise, -1 clockwise
 struct KiterPath
 {
     Point start;
     Point dir;
-    float speed = 7.0f;
+    Pace pace;
     Point centre;
     float radius = 40.0f;
     float turn = 1.0f;
@@ -61,7 +85,7 @@ struct KiterPath
 
     Point At(float t) const
     {
-        float const s = speed * t;
+        float const s = pace.Length(t);
         if (s <= straight || radius <= 0.0f)
             return {start.x + dir.x * s, start.y + dir.y * s};
 
@@ -73,12 +97,12 @@ struct KiterPath
 
 // dir is a unit vector. A start already outside radius runs the circle it stands on. A heading that
 // meets the circle square on, with no way round to follow, takes fallbackTurn.
-inline KiterPath MakeKiterPath(Point start, Point dir, float speed, Point centre, float radius, float fallbackTurn)
+inline KiterPath MakeKiterPath(Point start, Point dir, Pace pace, Point centre, float radius, float fallbackTurn)
 {
     KiterPath path;
     path.start = start;
     path.dir = dir;
-    path.speed = speed;
+    path.pace = pace;
     path.centre = centre;
 
     float const px = start.x - centre.x;
@@ -106,15 +130,18 @@ struct PathMember
 };
 
 // MakeKiterPath with the way round set, the straight leg cut short at straightCap: the kiter then rounds
-// the circle it stands on
-inline KiterPath MakeKiterPath(Point start, Point dir, float speed, Point centre, PathMember const& member)
+// the circle it stands on. The leg runs at least walkFirst, the straight step the kiter really walks,
+// else a heading that turns off sooner looks clear of a patch the kiter walks onto.
+inline KiterPath MakeKiterPath(Point start, Point dir, Pace pace, Point centre, PathMember const& member,
+                               float walkFirst = 0.0f)
 {
-    KiterPath path = MakeKiterPath(start, dir, speed, centre, member.radius, member.turn);
+    KiterPath path = MakeKiterPath(start, dir, pace, centre, member.radius, member.turn);
     path.turn = member.turn;
-    if (member.straightCap < path.straight)
+    float const straight = std::max({0.0f, std::min(member.straightCap, path.straight), walkFirst});
+    if (straight != path.straight)
     {
-        path.straight = std::max(0.0f, member.straightCap);
-        path.radius = Dist({start.x + dir.x * path.straight, start.y + dir.y * path.straight}, centre);
+        path.straight = straight;
+        path.radius = Dist({start.x + dir.x * straight, start.y + dir.y * straight}, centre);
     }
 
     return path;
@@ -142,16 +169,16 @@ struct LegPath
 {
     Point start;
     std::vector<Point> legs;
-    float speed = 7.0f;
+    Pace pace;
     // Where it stands every TICK_S from the start once Slow() ran, else empty
     std::vector<Point> track;
 
-    // Inside radius of centre it goes at speed * factor, judged where each tick starts: Permafrost's
+    // Inside radius of centre it goes at its pace * factor, judged where each tick starts: Permafrost's
     // slow. Set the legs first; the track runs until the last leg or horizonS.
     void Slow(Point centre, float radius, float factor, float horizonS)
     {
         track.assign(1, start);
-        if (speed <= 0.0f || legs.empty())
+        if ((pace.speed <= 0.0f && pace.boostS <= 0.0f) || legs.empty())
             return;
 
         Point at = start;
@@ -159,7 +186,8 @@ struct LegPath
         int const ticks = static_cast<int>(std::ceil(horizonS / TICK_S));
         for (int i = 0; i < ticks && leg < legs.size(); ++i)
         {
-            float left = speed * TICK_S * (Dist(at, centre) < radius ? factor : 1.0f);
+            float left = pace.SpeedAt(static_cast<float>(i) * TICK_S) * TICK_S *
+                         (Dist(at, centre) < radius ? factor : 1.0f);
             while (leg < legs.size() && left > 0.0f)
             {
                 float const length = Dist(at, legs[leg]);
@@ -190,7 +218,7 @@ struct LegPath
             return {track[i].x + (track[i + 1].x - track[i].x) * f, track[i].y + (track[i + 1].y - track[i].y) * f};
         }
 
-        float left = speed * t;
+        float left = pace.Length(t);
         Point at = start;
         for (Point const& next : legs)
         {
@@ -342,6 +370,8 @@ struct PatchRules
     float edgeRunOn = 15.0f;
     float horizonS = 20.0f;
     float leadS = 1.0f;
+    // No catch counts before this. Unlike immuneS it keeps the edge moves open.
+    float catchFromS = 0.0f;
 };
 
 struct PatchWalk
@@ -379,23 +409,24 @@ inline bool PatchMoveLegs(PatchMove move, Point from, Point patch, PatchRules co
     return true;
 }
 
-inline float PatchWalkMargin(Spike const& spike, Point from, float speed, Point patch, std::vector<Point> const& legs,
+inline float PatchWalkMargin(Spike const& spike, Point from, Pace pace, Point patch, std::vector<Point> const& legs,
                              PatchRules const& rules, float immuneS)
 {
     LegPath walk;
     walk.start = from;
     walk.legs = legs;
-    walk.speed = speed;
+    walk.pace = pace;
     if (rules.slowFactor < 1.0f)
         walk.Slow(patch, rules.slowReach, rules.slowFactor, rules.horizonS);
 
-    return PatchMargin(spike, walk, patch, rules.patchReach, rules.impaleReach, immuneS, rules.horizonS, rules.leadS);
+    return PatchMargin(spike, walk, patch, rules.patchReach, rules.impaleReach, std::max(immuneS, rules.catchFromS),
+                       rules.horizonS, rules.leadS);
 }
 
 // The move with the widest margin of those allow(move, legs) passes. Under Hand of Protection only In: the
 // spike sits on the kiter, so it has to be walked into its test.
 template <typename Allow>
-PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch, PatchRules const& rules,
+PatchWalk BestPatchWalk(Spike const& spike, Point from, Pace pace, Point patch, PatchRules const& rules,
                         float immuneS, Allow const& allow)
 {
     PatchWalk best;
@@ -408,7 +439,7 @@ PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch
             continue;
 
         walk.valid = true;
-        walk.marginS = PatchWalkMargin(spike, from, speed, patch, walk.legs, rules, immuneS);
+        walk.marginS = PatchWalkMargin(spike, from, pace, patch, walk.legs, rules, immuneS);
         if (!best.valid || walk.marginS > best.marginS)
             best = walk;
     }
@@ -416,10 +447,10 @@ PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch
     return best;
 }
 
-inline PatchWalk BestPatchWalk(Spike const& spike, Point from, float speed, Point patch, PatchRules const& rules,
+inline PatchWalk BestPatchWalk(Spike const& spike, Point from, Pace pace, Point patch, PatchRules const& rules,
                                float immuneS)
 {
-    return BestPatchWalk(spike, from, speed, patch, rules, immuneS,
+    return BestPatchWalk(spike, from, pace, patch, rules, immuneS,
                          [](PatchMove, std::vector<Point> const&) { return true; });
 }
 
@@ -443,21 +474,24 @@ float ChaseAlong(Spike& spike, Path const& run, float delayS, Point& kiter)
 }
 
 // The best patch walk once the kiter has run on along run for delayS: whether turning that much later
-// still makes it. The walk goes at walkSpeed.
+// still makes it. walkPace is the kiter's from the start of the run, its boost spent by delayS.
 template <typename Path, typename Allow>
-PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, float walkSpeed, Point patch,
+PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, Pace walkPace, Point patch,
                          PatchRules const& rules, float immuneS, Allow const& allow)
 {
     Point kiter;
     float const elapsed = ChaseAlong(spike, run, delayS, kiter);
-    return BestPatchWalk(spike, kiter, walkSpeed, patch, rules, std::max(immuneS - elapsed, 0.0f), allow);
+    PatchRules later = rules;
+    later.catchFromS = std::max(rules.catchFromS - elapsed, 0.0f);
+    return BestPatchWalk(spike, kiter, walkPace.After(elapsed), patch, later, std::max(immuneS - elapsed, 0.0f),
+                         allow);
 }
 
 template <typename Path>
-PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, float walkSpeed, Point patch,
+PatchWalk PatchWalkAfter(Spike spike, Path const& run, float delayS, Pace walkPace, Point patch,
                          PatchRules const& rules, float immuneS)
 {
-    return PatchWalkAfter(spike, run, delayS, walkSpeed, patch, rules, immuneS,
+    return PatchWalkAfter(spike, run, delayS, walkPace, patch, rules, immuneS,
                           [](PatchMove, std::vector<Point> const&) { return true; });
 }
 

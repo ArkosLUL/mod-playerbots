@@ -198,6 +198,7 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Multiplier<AnubarakBurrowerThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakSphereGuardMultiplier>(Family::Spell | Family::Attack);
     e.Multiplier<AnubarakBurrowerGuardMultiplier>(Family::Spell | Family::Attack);
+    e.Multiplier<AnubarakSideTankAreaGuardMultiplier>(Family::Spell);
     e.Multiplier<AnubarakSwarmHealMultiplier>(Family::Spell | Family::ReachHeal);
 }
 }  // namespace

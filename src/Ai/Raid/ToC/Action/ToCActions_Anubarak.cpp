@@ -31,6 +31,7 @@ constexpr uint32 SPELL_CAT_FORM = 768;
 constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 constexpr float ANUBARAK_ESCORT_REAIM = 3.0f;
+constexpr float ANUBARAK_SIDE_SHOUT_REACH = 10.0f;
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
@@ -119,7 +120,10 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
         InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
         return botAI->CastSpell("righteous defense", pick.rescue);
 
-    if (pick.looseNear >= 2 && !pick.otherNear)
+    // A shout takes in whatever stands within 10 yd plus its reach, his 10 among them
+    bool const bossClear =
+        !boss || bot->GetExactDist2d(boss) > ANUBARAK_SIDE_SHOUT_REACH + boss->GetCombatReach();
+    if (pick.looseNear >= 2 && !pick.otherNear && bossClear)
         for (char const* shout : BURROWER_SHOUTS)
             if (botAI->CanCastSpell(shout, bot))
                 return botAI->CastSpell(shout, bot);
@@ -435,6 +439,29 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
                   false, false, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool AnubarakSideTankAreaThreatAction::Execute(Event /*event*/)
+{
+    AnubarakSideTankAoe aoe;
+    if (!GetAnubarakSideTankAoe(botAI, aoe))
+        return false;
+
+    if (!aoe.point)
+        return botAI->CastSpell(aoe.spell, aoe.target);
+
+    uint32 const spellId = AI_VALUE2(uint32, "spell id", aoe.spell);
+    return spellId && botAI->CastSpell(spellId, aoe.pos.GetPositionX(), aoe.pos.GetPositionY(), aoe.pos.GetPositionZ());
+}
+
+bool AnubarakDropCleaveBuffAction::Execute(Event /*event*/)
+{
+    char const* buff = GetAnubarakCleaveBuffToDrop(botAI);
+    if (!buff)
+        return false;
+
+    botAI->RemoveAura(buff);
+    return true;
+}
+
 bool AnubarakSideTankReadyAction::Execute(Event /*event*/)
 {
     int8 const side = GetAnubarakBurrowerTankSide(bot);
@@ -703,6 +730,12 @@ bool AnubarakHealPenetratingColdAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    if (CastAnubarakColdCarrierCover(botAI, target))
+        return true;
+
+    if (target->GetHealthPct() >= ANUBARAK_PENETRATING_COLD_HEAL_PCT)
+        return false;
+
     for (char const* heal : PENETRATING_COLD_HEALS)
     {
         if (botAI->CanCastSpell(heal, target))
@@ -720,6 +753,9 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
 
     if (AnubarakSwarmShieldsTank(bot, pick.target) && botAI->CanCastSpell("power word: shield", pick.target))
         return botAI->CastSpell("power word: shield", pick.target);
+
+    if (CastAnubarakColdCarrierCover(botAI, pick.target))
+        return true;
 
     // Wild Growth heals five around the target, and a big hard cast lifts a non-tank far past the floor:
     // the swarm hands both back to him

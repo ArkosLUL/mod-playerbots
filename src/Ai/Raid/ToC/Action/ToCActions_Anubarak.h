@@ -135,6 +135,22 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakSideTankAreaThreatAction : public Action
+{
+public:
+    AnubarakSideTankAreaThreatAction(PlayerbotAI* botAI, std::string const name = "anubarak side tank area threat")
+        : Action(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
+class AnubarakDropCleaveBuffAction : public Action
+{
+public:
+    AnubarakDropCleaveBuffAction(PlayerbotAI* botAI, std::string const name = "anubarak drop cleave buff")
+        : Action(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
 class AnubarakGripFrostSphereAction : public AttackAction
 {
 public:
@@ -257,6 +273,10 @@ public:
             &ToCAnubarakActionContext::anubarak_assist_tank_hold_burrower;
         creators["anubarak side tank ready"] =
             &ToCAnubarakActionContext::anubarak_side_tank_ready;
+        creators["anubarak side tank area threat"] =
+            &ToCAnubarakActionContext::anubarak_side_tank_area_threat;
+        creators["anubarak drop cleave buff"] =
+            &ToCAnubarakActionContext::anubarak_drop_cleave_buff;
         creators["anubarak grip frost sphere"] =
             &ToCAnubarakActionContext::anubarak_grip_frost_sphere;
         creators["anubarak battle res side tank"] =
@@ -337,6 +357,14 @@ private:
 
     static Action* anubarak_side_tank_ready(PlayerbotAI* botAI) {
         return new AnubarakSideTankReadyAction(botAI);
+    }
+
+    static Action* anubarak_side_tank_area_threat(PlayerbotAI* botAI) {
+        return new AnubarakSideTankAreaThreatAction(botAI);
+    }
+
+    static Action* anubarak_drop_cleave_buff(PlayerbotAI* botAI) {
+        return new AnubarakDropCleaveBuffAction(botAI);
     }
 
     static Action* anubarak_grip_frost_sphere(PlayerbotAI* botAI) {

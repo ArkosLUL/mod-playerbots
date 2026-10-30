@@ -166,12 +166,21 @@ constexpr float ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN = ANUBARAK_SPIKE_PATCH_REA
 // DPS bots stop on him at this share of his tank victim's threat, resume under the release share
 constexpr float ANUBARAK_THREAT_CAP = 0.9f;
 constexpr float ANUBARAK_THREAT_RELEASE = 0.8f;
+// A side tank's area threat leaves him out at this share of his tank victim's threat, until under the
+// release share
+constexpr float ANUBARAK_SIDE_BOSS_CAP = 0.7f;
+constexpr float ANUBARAK_SIDE_BOSS_RELEASE = 0.6f;
+// A melee DPS bot's area damage stops near a burrower it has this share of the side tank's threat on,
+// until under the release share
+constexpr float ANUBARAK_MELEE_AREA_CAP = 0.6f;
+constexpr float ANUBARAK_MELEE_AREA_RELEASE = 0.5f;
 
 constexpr uint8 ANUBARAK_SHOOTERS_PER_NEED = 2;
 // Patches that aren't tank patches kept ready in phase 2, falling spheres counted. Heroic has six
-// spheres for the pull and never respawns one, so it keeps one down at a time, two a submerge at most.
+// spheres for the pull and never respawns one, so it keeps a submerge's two down together and shoots no
+// more once both are.
 constexpr uint8 ANUBARAK_P2_PATCH_STOCK = 2;
-constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 1;
+constexpr uint8 ANUBARAK_P2_PATCH_STOCK_HEROIC = 2;
 // A shooter reaches a sphere within its "spell" range less this, 3D, in line of sight
 constexpr float ANUBARAK_SHOOT_MARGIN = 2.0f;
 
@@ -286,6 +295,17 @@ struct AnubarakBurrowerPick
     explicit operator bool() const { return held || loose; }
 };
 
+// A side tank's area or chain cast that takes in both of its burrowers and none of the other side's
+struct AnubarakSideTankAoe
+{
+    char const* spell = nullptr;
+    // The cast's target: a burrower of its own, the one Pestilence spreads from
+    Unit* target = nullptr;
+    // Death and Decay goes down at pos
+    bool point = false;
+    Position pos;
+};
+
 enum class AnubarakGripStep : uint8
 {
     None,
@@ -386,10 +406,27 @@ bool IsAnubarakDragInFlight(PlayerbotAI* botAI);
 bool AnubarakTauntWouldSteal(PlayerbotAI* botAI);
 // Latched per bot: capped at ANUBARAK_THREAT_CAP of his tank victim's threat, freed under RELEASE
 bool AnubarakThreatCapped(Player* bot);
+// The same for a side tank's area threat on him: capped at ANUBARAK_SIDE_BOSS_CAP, freed under its release
+bool AnubarakSideTankBossCapped(Player* bot);
+// While he is up, a side tank with two of its burrowers near: the first ready spell whose hit set, read the
+// core's way, takes in two of its own, none of the other side's, and him only while not capped. Notes
+// anub.saoe: the spell, else cap, other or none.
+bool GetAnubarakSideTankAoe(PlayerbotAI* botAI, AnubarakSideTankAoe& out);
+// False for a side tank's area or chain spell aimed at target that fails the same test, or another area
+// spell with one of the other side's burrowers near
+bool AnubarakSideTankAreaAllowed(PlayerbotAI* botAI, std::string const& spell, Unit* target, bool area);
+// A melee DPS bot's running Blade Flurry or Sweeping Strikes, with a burrower in swing reach it is over
+// the area share on, else null
+char const* GetAnubarakCleaveBuffToDrop(PlayerbotAI* botAI);
 // The same per DPS bot and burrower, on a burrower a tank holds
 bool AnubarakBurrowerThreatCapped(Player* bot, Unit* burrower);
 // A selectable burrower within range of at that the bot is capped on
 bool AnubarakBurrowerThreatCappedNear(Player* bot, Position const& at, float range);
+// Latched per melee DPS bot and burrower a tank holds: at ANUBARAK_MELEE_AREA_CAP of the tank's threat,
+// freed under its release. Area damage, Blade Flurry and Sweeping Strikes wait while one is near.
+bool AnubarakBurrowerAreaCapped(Player* bot, Unit* burrower);
+// One such burrower within range plus its combat reach of at
+bool AnubarakBurrowerAreaCappedNear(Player* bot, Position const& at, float range);
 // 0 or 1 for the two side tanks latched for the pull, else -1. Bots go first; a human takes a side no
 // bot can, and his side is the tank spot he stands at.
 int8 GetAnubarakBurrowerTankSide(Player* player);
@@ -468,12 +505,15 @@ struct AnubarakRedirect
 // side tank owning a selectable burrower that isn't on it: one hunter a burrower by guid, and a rogue
 // only for the one it's hitting, within Tricks' 20 yd. False with no such duty.
 bool GetAnubarakRedirect(Player* bot, AnubarakRedirect& out);
-// Lowest health Penetrating Cold carrier under 90% this healer can reach, none in heroic phase 3
+constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
+// Lowest health Penetrating Cold carrier this healer can reach, under 90% or with no HoT or shield this
+// healer can give it; none in heroic phase 3
 Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 
-// Heroic phase 3's heal: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank under 10%,
-// then a tank under 90% and a carrier under 50%, the lowest in the first tier that has one. Urgent covers
-// the first three; small marks the non-tank, which gets no big hard cast.
+// Heroic phase 3's heal: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank under 10%, a
+// carrier with no HoT or shield this healer can give one, then a tank under 90% and a carrier under 50%,
+// the lowest in the first tier that has one. Urgent covers the first four; small marks the non-tank,
+// which gets no big hard cast.
 struct AnubarakSwarmHealPick
 {
     Player* target = nullptr;
@@ -483,6 +523,8 @@ struct AnubarakSwarmHealPick
 AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI);
 // A non-tank without Penetrating Cold at or above the floor: healing it only feeds the swarm
 bool AnubarakSwarmHealWasted(Player* target);
+// A HoT or shield on a Penetrating Cold carrier with none from anyone, when this healer has one ready
+bool CastAnubarakColdCarrierCover(PlayerbotAI* botAI, Player* member);
 // A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 
@@ -511,7 +553,8 @@ bool AnubarakGathers(PlayerbotAI* botAI);
 // While he is up, every difficulty: a healer bot's slot on the gather's ring round the raid point, clear
 // of every patch, not floor-checked. With the tank patches 40+ yd apart the healers split in two groups
 // by guid, each ring 17.5 yd off its side's patch toward the raid point, when that keeps it clear and in
-// reach of the main tank. False for anyone else or while marked.
+// reach of the main tank. Heroic, from his 35% in the last phase 1, a stand behind the tank patches,
+// one healer setting off at a time (anub.hbehind). False for anyone else or while marked.
 bool GetAnubarakHealerStand(Player* bot, Position& out);
 bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
 // A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
@@ -541,9 +584,9 @@ bool AnubarakWalkClearOfSpike(Player* bot, Position const& to);
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
 // Heroic: the spot of the paladin bot whose Hand of Protection the kite plan ends or bridges the kite
-// on: shadowing the kiter, then from 4 s before the catch a post by it (post set). False for every other
-// bot.
-bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr);
+// on: shadowing the kiter, then from 4 s before the catch a post by it (post set). A bot kiter with a
+// speed boost has it wait by the kite's patch instead (post and patchPost set). False for every other bot.
+bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr, bool* patchPost = nullptr);
 bool IsAnubarakEscort(PlayerbotAI* botAI);
 // Heroic: this paladin bot is the one planned or claimed for the kiter's Hand, within 2.5 s of the catch
 bool AnubarakHandReserved(PlayerbotAI* botAI);

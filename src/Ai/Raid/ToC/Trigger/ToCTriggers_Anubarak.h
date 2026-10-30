@@ -100,6 +100,21 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakSideTankAreaThreatTrigger : public Trigger
+{
+public:
+    AnubarakSideTankAreaThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak side tank area threat") {}
+    bool IsActive() override;
+};
+
+class AnubarakCleaveBuffNearBurrowerTrigger : public Trigger
+{
+public:
+    AnubarakCleaveBuffNearBurrowerTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "anubarak cleave buff near burrower") {}
+    bool IsActive() override;
+};
+
 class AnubarakSideTankNeedsDefensiveTrigger : public Trigger
 {
 public:
@@ -222,6 +237,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_burrower_needs_assist_tank;
         creators["anubarak side tank ready"] =
             &ToCAnubarakTriggerContext::anubarak_side_tank_ready;
+        creators["anubarak side tank area threat"] =
+            &ToCAnubarakTriggerContext::anubarak_side_tank_area_threat;
+        creators["anubarak cleave buff near burrower"] =
+            &ToCAnubarakTriggerContext::anubarak_cleave_buff_near_burrower;
         creators["anubarak side tank needs defensive"] =
             &ToCAnubarakTriggerContext::anubarak_side_tank_needs_defensive;
         creators["anubarak side tank dead"] =
@@ -301,6 +320,14 @@ private:
 
     static Trigger* anubarak_side_tank_ready(PlayerbotAI* botAI) {
         return new AnubarakSideTankReadyTrigger(botAI);
+    }
+
+    static Trigger* anubarak_side_tank_area_threat(PlayerbotAI* botAI) {
+        return new AnubarakSideTankAreaThreatTrigger(botAI);
+    }
+
+    static Trigger* anubarak_cleave_buff_near_burrower(PlayerbotAI* botAI) {
+        return new AnubarakCleaveBuffNearBurrowerTrigger(botAI);
     }
 
     static Trigger* anubarak_side_tank_needs_defensive(PlayerbotAI* botAI) {
