@@ -510,21 +510,43 @@ constexpr float ANUBARAK_PENETRATING_COLD_HEAL_PCT = 90.0f;
 // healer can give it; none in heroic phase 3
 Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI);
 
-// Heroic phase 3's heal: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank under 10%, a
-// carrier with no HoT or shield this healer can give one, then a tank under 90% and a carrier under 50%,
-// the lowest in the first tier that has one. Urgent covers the first four; small marks the non-tank,
-// which gets no big hard cast.
+// Heroic phase 3, set per healer bot as the phase starts (anub.healduty): priests and druids keep the
+// Penetrating Cold carriers alive, paladins and shamans the tanks, each side at least one healer
+enum class AnubarakHealDuty : uint8
+{
+    None,
+    Cold,
+    Tank
+};
+
+// Heroic phase 3's heal, the first row with someone in heal reach and sight:
+// - itself, when at risk at its next Penetrating Cold tick;
+// - cold duty: its assigned carrier (anub.coldheal), then a tank under 35%;
+// - tank duty: a tank under 50%, then a carrier at risk with no healer in reach;
+// - then a non-tank under 10%, a carrier with no HoT or shield this healer can give one, a tank under
+//   90% and a carrier under 50%, the lowest in the first that has one.
+// Urgent covers the first three rows, rescue the carriers at risk, small the non-tank, which gets no
+// big hard cast.
 struct AnubarakSwarmHealPick
 {
     Player* target = nullptr;
     bool urgent = false;
     bool small = false;
+    bool rescue = false;
 };
 AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI);
 // A non-tank without Penetrating Cold at or above the floor: healing it only feeds the swarm
 bool AnubarakSwarmHealWasted(Player* target);
 // A HoT or shield on a Penetrating Cold carrier with none from anyone, when this healer has one ready
 bool CastAnubarakColdCarrierCover(PlayerbotAI* botAI, Player* member);
+// For a carrier at risk: its own defensive when it's this healer, a shield, an instant, then a direct
+// heal that lands before the tick
+bool CastAnubarakColdRescue(PlayerbotAI* botAI, Player* member);
+// Heroic, while he is engaged: Aura Mastery waits for a deadly Penetrating Cold round
+bool AnubarakAuraMasteryReserved(PlayerbotAI* botAI);
+// Heroic phase 3, a paladin bot holding its own Frost Resistance Aura with Aura Mastery ready: a round
+// landed under 1.5 s ago and 2 or more of its carriers are under the tick (anub.mastery)
+bool AnubarakAuraMasteryDue(PlayerbotAI* botAI);
 // A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 

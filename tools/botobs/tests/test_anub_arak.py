@@ -20,8 +20,10 @@ kite tools spent off the mark and the main tank out of the healers' reach, a fou
 teleport, a kite sphere spent early and a Feign Death back before the submerge, a fifteenth a boost after the
 Hand, a patch kite turning on its boost, the escort waiting by the patch and both kite patches down as he went
 under, a sixteenth the side tanks' area casts and anub.saoe, the seconds a Penetrating Cold carrier went with no
-HoT or shield, the healers' walk behind the tank patches and burrowers reaching a healer past no patch, the first
-one again phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
+HoT or shield, the healers' walk behind the tank patches and burrowers reaching a healer past no patch, a
+seventeenth the phase 3 Penetrating Cold waves with the healer duties, Aura Mastery and a herd, the healing table
+per phase and a pulled burrower's way back to a tank, with and without the new keys, the first one again phase
+3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
 section reads empty on a trace that is not Anub'arak rather than raising.
 """
 from __future__ import annotations
@@ -4350,6 +4352,257 @@ class BehindPull(unittest.TestCase):
 
     def test_every_section_prints(self):
         self.assertIn("TANKS\n", self.text(self.trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS)))
+
+
+HMAIN, HSIDE, HHOLY, HPRAYER, HSHAMAN, HMAGE, HROGUE, HJUSTICE = range(9901, 9909)
+HBOSS = CREATURE | 2000
+HTOTEM = CREATURE | 2001
+HSTRAY = CREATURE | 2002  # heals with no unit row, so no owner
+HBUR = CREATURE | 2021
+HPOOLS = {HMAIN: 54000, HSIDE: 51000, HHOLY: 25000, HPRAYER: 25000, HSHAMAN: 24000, HMAGE: 20000, HROGUE: 28000,
+          HJUSTICE: 30000}
+SPELL_HOLY_LIGHT, SPELL_HEALING_WAVE, SPELL_HEALING_STREAM, SPELL_RECKONING = 48782, 49273, 52042, 62124
+
+
+def cold_hp(guid: int, when: int) -> float:
+    if when < 20000:
+        return 100.0
+    if guid == HMAGE:
+        return 0.0 if when > 28001 else 15.0
+    if guid == HROGUE:
+        return 0.0 if when > 27000 else 10.0
+    return {HMAIN: 50.0, HSIDE: 100.0, HHOLY: 20.0, HPRAYER: 8.0, HSHAMAN: 20.0, HJUSTICE: 10.0}[guid]
+
+
+def cold_snap(when: int) -> dict:
+    """HBUR is on Bulwark from 2 s, on Power from 5 to 7 s, back on Bulwark, then on Assasin from 10 s to its last
+    sample at 12 s."""
+    units = [[guid, X + index, Y - index, Z, 0.0, cold_hp(guid, when), 100.0, 0, 0, 0, 0, 0]
+             for index, guid in enumerate(HPOOLS)]
+    units.append([HBOSS, X, Y, Z, 0.0, 80.0, 0.0, HMAIN, 0, 0, 0, 0])
+    if 2000 <= when <= 12000:
+        target = HMAGE if 5000 <= when < 7000 else HROGUE if when >= 10000 else HSIDE
+        units.append([HBUR, X + 10.0, Y + 20.0, Z, 0.0, 100.0 - (when - 2000) / 1000.0, 0.0, target, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def heal_row(when: int, source: int, target: int, spell: int, amount: int, over: int = 0) -> dict:
+    return {"t": when, "e": "heal", "s": source, "d": target, "sp": spell, "a": amount, "oh": over}
+
+
+def absorb_row(when: int, source: int, target: int, amount: int) -> dict:
+    return {"t": when, "e": "abs", "d": target, "s": source, "sp": SPELL_PWS, "a": amount}
+
+
+def cold_tick(when: int, target: int, amount: int, resisted: int, hp: float, absorbed: int = 0,
+              overkill: int = 0) -> dict:
+    return {**dmg(when, HBOSS, target, COLD_25H, amount), "ab": absorbed, "rs": resisted, "ok": overkill, "hp": hp}
+
+
+def cold_pull(new_rows: bool = True) -> list[dict]:
+    """A 25H pull, phase 1 to 20 s and phase 3 to 50 s. In phase 1 a burrower comes off Bulwark to Power, is taunted
+    back, and goes to Assasin to its last sample with a Righteous Defense that never took it; Holylight heals, the
+    shaman's totem heals, Prayer shields and a source with no owner heals. Holylight takes frost from Justice as
+    phase 3 starts. Penetrating Cold lands on Justice, Assasin and Power at 25 s: Holylight and Elemena both heal
+    Justice, Prayer's carrier, and it lives; Assasin dies before the tick and Power at it with nothing from a healer;
+    Holylight's Aura Mastery covers the first two ticks. At 43 s it lands on Prayer, kept up by itself under its own
+    shield. `new_rows` False drops anub.healduty, anub.coldheal, anub.mastery and toc.aura."""
+    roster = ((HMAIN, "Ecoterrorist", "tank", 11), (HSIDE, "Bulwark", "tank", 2), (HHOLY, "Holylight", "heal", 2),
+              (HPRAYER, "Prayer", "heal", 5), (HSHAMAN, "Elemena", "heal", 7), (HMAGE, "Power", "ranged", 8),
+              (HROGUE, "Assasin", "melee", 4), (HJUSTICE, "Justice", "melee", 2))
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790200000000, "map": ab.MAP_TOC, "inst": 22, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": guid, "n": name, "r": role, "c": klass, "h": 0} for guid, name, role, klass in roster]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": HBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 2000, "e": "unit", "g": HBUR, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 0, "e": "unit", "g": HTOTEM, "en": 3527, "n": "Healing Stream Totem", "own": HSHAMAN},
+        *({"t": -500, "e": "unit", "g": guid, "n": name, "r": role, "c": klass, "mhp": HPOOLS[guid]}
+          for guid, name, role, klass in roster),
+        *(note(when, HMAIN, "anub.phase", value) for when, value in ((0, 1), (20000, 3))),
+        note(0, HMAIN, "anub.side0", HSIDE),
+        cast(6800, HSIDE, SPELL_RECKONING, HBUR),
+        triggered(11000, HSIDE, ab.SPELL_RIGHTEOUS_DEFENSE_TAUNT, HBUR),
+
+        heal_row(10000, HHOLY, HMAIN, SPELL_HOLY_LIGHT, 10000, 2000),
+        heal_row(11000, HTOTEM, HMAIN, SPELL_HEALING_STREAM, 1000),
+        absorb_row(12000, HPRAYER, HMAIN, 3000),
+        heal_row(13000, HSTRAY, HMAIN, SPELL_HOLY_LIGHT, 500),
+
+        *(note(when, guid, "toc.aura", value) for when, guid, value in (
+            (0, HJUSTICE, "frost"), (0, HHOLY, "none"), (20000, HHOLY, "frost"), (20000, HJUSTICE, "none"))),
+        *(note(when, guid, "anub.healduty", value) for when, guid, value in (
+            (20000, HHOLY, 2), (20000, HSHAMAN, 2), (20000, HPRAYER, 1), (40000, HSHAMAN, 1))),
+        *(note(when, HPRAYER, "anub.coldheal", value) for when, value in (
+            (25100, HJUSTICE), (27600, 0), (43000, HPRAYER), (44000, 0))),
+        *(note(when, HHOLY, "anub.mastery", value) for when, value in (
+            (25100, "hold 1"), (25600, "cast"), (26600, "none"))),
+        note(25100, HPRAYER, "anub.swarmheal", "risk"),
+        note(43000, HPRAYER, "anub.swarmheal", "self"),
+
+        aura(25000, HJUSTICE, COLD_25H, False),
+        aura(25001, HROGUE, COLD_25H, False),
+        aura(25002, HMAGE, COLD_25H, False),
+        {**dmg(25001, HBOSS, HMAGE, ab.SPELL_LEECHING_SWARM_DMG, 1000), "hp": 15.0},
+        aura(25600, HHOLY, ab.SPELL_AURA_MASTERY, False, HHOLY),
+        heal_row(26000, HHOLY, HJUSTICE, SPELL_HOLY_LIGHT, 16000),
+        heal_row(26500, HSHAMAN, HJUSTICE, SPELL_HEALING_WAVE, 8000, 1000),
+        {"t": 27000, "e": "death", "g": HROGUE, "killer": HBUR, "x": X, "y": Y, "z": Z},
+        aura(27000, HROGUE, COLD_25H, True),
+        absorb_row(27500, HPRAYER, HJUSTICE, 2000),
+        cold_tick(28000, HJUSTICE, 4656, 1164, 60.0),
+        cold_tick(28001, HMAGE, 4000, 1820, 12.5, overkill=1500),
+        {"t": 28001, "e": "death", "g": HMAGE, "killer": HBOSS, "x": X, "y": Y, "z": Z},
+        aura(28001, HMAGE, COLD_25H, True),
+        cold_tick(31000, HJUSTICE, 2910, 2910, 70.0),
+        aura(31600, HHOLY, ab.SPELL_AURA_MASTERY, True, HHOLY),
+        cold_tick(34000, HJUSTICE, 4656, 1164, 80.0),
+        aura(43000, HJUSTICE, COLD_25H, True),
+
+        aura(43000, HPRAYER, COLD_25H, False),
+        absorb_row(43500, HPRAYER, HPRAYER, 3000),
+        cold_tick(46000, HPRAYER, 0, 1164, 8.0, absorbed=4656),
+        {"t": 50000, "e": "end", "out": "wipe"},
+    ]
+    if not new_rows:
+        records = [rec for rec in records
+                   if rec.get("k") not in ("anub.healduty", "anub.coldheal", "anub.mastery", "toc.aura")]
+    records += [cold_snap(when) for when in range(-500, 50000, 500)]
+    return records
+
+
+class ColdPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_22_anub-arak_1790200000.ndjson", cold_pull())
+        cls.bare = write_trace(cls.folder.name, "649_22_anub-arak_1790200001.ndjson", cold_pull(False))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace, *sections) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            for section in sections:
+                section(trace)
+        return out.getvalue()
+
+    def test_each_wave_reads_its_carriers_at_the_landing_and_the_first_tick(self):
+        first, second = ab.cold_waves(self.trace)
+        self.assertEqual((first["t"], first["rel"], second["t"]), (25000, 5000, 43000))
+        rows = {row["guid"]: row for row in first["carriers"]}
+        self.assertEqual(list(rows), [HJUSTICE, HROGUE, HMAGE])
+        justice, rogue, mage = rows[HJUSTICE], rows[HROGUE], rows[HMAGE]
+        self.assertEqual((justice["pct"], justice["health"], justice["tick"], justice["amount"], justice["margin"],
+                          justice["fate"], justice["risk"]), (10.0, 3000.0, 28000, 5820, 13344, "survived", True))
+        self.assertEqual((dict(justice["heals"]), dict(justice["absorbs"]), justice["helped"], justice["coldheal"]),
+                         ({HHOLY: 16000, HSHAMAN: 7000}, {HPRAYER: 2000}, True, [HPRAYER]))
+        # Power's swarm tick lands after its last snapshot, so the tick sets its health at the landing
+        self.assertEqual((mage["pct"], mage["margin"], mage["fate"], mage["risk"], mage["helped"]),
+                         (10.0, -1500, "died", True, False))
+        self.assertEqual((rogue["tick"], rogue["amount"], rogue["margin"], rogue["fate"], rogue["risk"]),
+                         (None, None, None, "before", True))
+        [prayer] = second["carriers"]
+        self.assertEqual((prayer["margin"], prayer["fate"], prayer["coldheal"], dict(prayer["absorbs"])),
+                         (2000, "survived", [HPRAYER], {HPRAYER: 3000}))
+
+    def test_each_wave_reads_frost_aura_mastery_its_rows_and_the_resists_per_tick(self):
+        first, second = ab.cold_waves(self.trace)
+        self.assertEqual((first["frost"], first["mastery"]), ([HHOLY], {1: [HHOLY], 2: [HHOLY], 3: []}))
+        self.assertEqual(first["resists"], {1: [2984, 11640], 2: [2910, 5820], 3: [1164, 5820]})
+        self.assertEqual(first["rows"], [(25100, HHOLY, "hold 1"), (25600, HHOLY, "cast"), (26600, HHOLY, "none")])
+        self.assertEqual((second["mastery"], second["rows"]), ({1: [], 2: []}, []))
+        bare = ab.cold_waves(self.bare)[0]
+        self.assertEqual((bare["frost"], bare["rows"], bare["carriers"][0]["coldheal"]), (None, [], []))
+
+    def test_a_herd_is_two_healers_on_one_carrier_while_one_at_risk_got_nothing(self):
+        first, second = ab.cold_waves(self.trace)
+        self.assertEqual(first["herds"], [{"carrier": HJUSTICE, "start": 26000, "stop": 26500,
+                                           "healers": [HSHAMAN, HHOLY], "starved": [HROGUE, HMAGE]}])
+        self.assertEqual(second["herds"], [])
+        carriers = [{**row, "risk": False} if row["guid"] != HJUSTICE else row for row in first["carriers"]]
+        self.assertEqual(ab.wave_herds(self.trace, carriers, ab.rows_by_target(self.trace, "heal"),
+                                       {HHOLY, HPRAYER, HSHAMAN}), [])
+
+    def test_the_swarm_section_prints_the_waves_and_the_heal_duties(self):
+        text = self.text(self.trace, ab.show_swarm)
+        self.assertIn("  anub.swarmheal: Prayer risk 1, self 1\n", text)
+        self.assertIn("  anub.healduty, each healer bot's duty from phase 3: Elemena tank 0:20.000 > cold 0:40.000;"
+                      " Holylight tank 0:20.000; Prayer cold 0:20.000\n"
+                      "  anub.coldheal, the carrier at risk each healer bot kept up, self for itself:\n"
+                      "    Prayer         Justice 0:25.100-0:27.600, self 0:43.000-0:44.000\n", text)
+        self.assertIn("  first ticks survived per phase 3 Penetrating Cold wave: 1 of 3, 1 of 1 (2 of 4)\n", text)
+        self.assertIn("    0:25.000 (+5.0 s): 1 of 3 through the first tick; frost Holylight; Aura Mastery tick 1"
+                      " Holylight, tick 2 Holylight\n"
+                      "      anub.mastery Holylight hold 1 +0.1 s, Holylight cast +0.6 s, Holylight none +1.6 s;"
+                      " resisted per tick 26%* 50%* 20%\n"
+                      "      Justice        melee    3.0k  10.0% risk +13.3k survived       coldheal Prayer; Holylight"
+                      " 16.0k, Elemena 7.0k, Prayer abs 2.0k\n"
+                      "      Assasin        melee    2.8k  10.0% risk      - died before it coldheal none; none\n"
+                      "      Power          ranged   2.0k  10.0% risk  -1.5k died           coldheal none; none\n"
+                      "      herd: Elemena, Holylight on Justice 0:26.000-0:26.500; at risk with nothing from a healer:"
+                      " Assasin, Power\n", text)
+        self.assertIn("    0:43.000 (+23.0 s): 1 of 1 through the first tick; frost Holylight; Aura Mastery tick 1 no,"
+                      " tick 2 no\n      anub.mastery none; resisted per tick 20%\n"
+                      "      Prayer         heal     2.0k   8.0% risk  +2.0k survived       coldheal self; Prayer abs"
+                      " 3.0k\n", text)
+
+    def test_the_swarm_section_reads_a_trace_without_the_new_keys(self):
+        text = self.text(self.bare, ab.show_swarm)
+        self.assertIn("  anub.healduty: no rows\n  anub.coldheal: no rows\n", text)
+        self.assertIn("rows, the resisted share per tick (* under Aura Mastery) and herds; anub.coldheal: no rows\n"
+                      "    0:25.000 (+5.0 s): 1 of 3 through the first tick; toc.aura: no rows; Aura Mastery tick 1"
+                      " Holylight, tick 2 Holylight\n      anub.mastery no rows; resisted per tick 26%* 50%* 20%\n"
+                      "      Justice        melee    3.0k  10.0% risk +13.3k survived       Holylight 16.0k, Elemena"
+                      " 7.0k, Prayer abs 2.0k\n", text)
+
+    def test_healing_done_per_phase_folds_totems_and_counts_absorbs_for_the_shields_caster(self):
+        first, third = ab.healing_done(self.trace)
+        self.assertEqual((first["label"], first["ms"], third["label"], third["ms"]), ("P1", 20000, "P3", 30000))
+        self.assertEqual(dict(first["sources"]), {HHOLY: [8000, 0, 2000], HSHAMAN: [1000, 0, 0],
+                                                  HPRAYER: [0, 3000, 0], HSTRAY: [500, 0, 0]})
+        self.assertEqual(first["unowned"], {HSTRAY})
+        self.assertEqual(dict(third["sources"]), {HHOLY: [16000, 0, 0], HSHAMAN: [7000, 0, 1000],
+                                                  HPRAYER: [0, 5000, 0]})
+        self.assertEqual(third["unowned"], set())
+
+    def test_the_healer_section_prints_the_healing_table(self):
+        text = self.text(self.trace, ab.show_healers)
+        self.assertIn("    P1 20.0 s, raid 0.6k HPS\n"
+                      "      source         role     healing  absorbs  over    HPS share\n"
+                      "      Holylight      heal          8k       0k   20%   0.4k   64%\n"
+                      "      Prayer         heal          3k       3k    0%   0.1k   24%\n"
+                      "      Elemena        heal          1k       0k    0%   0.1k    8%\n"
+                      "      #1:2002        ?             0k       0k    0%   0.0k    4%\n"
+                      "      sources the trace names no owner for, kept as their own: #1:2002\n"
+                      "    P3 30.0 s, raid 0.9k HPS\n", text)
+        self.assertIn("      Elemena        heal          7k       0k   12%   0.2k   25%\n", text)
+
+    def test_a_pulled_burrower_reads_how_long_until_a_tank_had_it_back(self):
+        samples = ab.Samples(self.trace)
+        first, second = ab.pull_returns(self.trace, ab.burrower_pulls(self.trace, samples), samples)
+        self.assertEqual((first["t"], first["puller"], first["back"], first["on_tank"]), (5000, HMAGE, 7000, HSIDE))
+        self.assertEqual([(rec["t"], rec["sp"]) for rec in first["taunts"]], [(6800, SPELL_RECKONING)])
+        self.assertEqual((second["t"], second["puller"], second["back"], second["last"], second["under"]),
+                         (10000, HROGUE, None, 12000, False))
+        self.assertEqual([rec["t"] for rec in second["taunts"]], [11000])
+
+    def test_the_burrower_section_prints_each_way_back(self):
+        text = self.text(self.trace, ab.show_burrowers)
+        self.assertIn("      back on Bulwark after 2.0 s, taunted: Hand of Reckoning by Bulwark +1.8 s\n", text)
+        self.assertIn("      never back on a tank, on non-tanks 2.0 s to its last sample; taunts at it: Righteous"
+                      " Defense by Bulwark +1.0 s\n", text)
+
+    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+        for key in ("anub.healduty", "anub.coldheal", "anub.mastery", "toc.aura"):
+            self.assertNotIn(key, ab.missing_probes(self.trace))
+            self.assertIn(key, ab.missing_probes(self.bare))
+
+    def test_every_section_prints(self):
+        for trace in (self.trace, self.bare):
+            self.assertIn("TANKS\n", self.text(trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS)))
 
 
 class EveryView(unittest.TestCase):

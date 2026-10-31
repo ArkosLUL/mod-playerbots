@@ -58,6 +58,11 @@ bool ToCResistFireWantsMastery(PlayerbotAI* botAI)
     return staged == ToCStagingBoss::Jaraxxus || staged == ToCStagingBoss::Twins;
 }
 
+bool ToCResistFrostWantsMastery(PlayerbotAI* botAI)
+{
+    return ToCLiveEncounter(botAI) == ToCEncounter::Anubarak && AnubarakSwarmHealing(botAI);
+}
+
 uint8 ToCResistWantedSchools(PlayerbotAI* botAI, uint8 previous)
 {
     switch (ToCLiveEncounter(botAI))

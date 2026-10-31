@@ -150,12 +150,13 @@ struct ResistAuraState
     uint32 memoMs = 0;
     bool memoValid = false;  // 0 is a real getMSTime value
     uint8 wanted = 0;
-    bool fireWithMastery = false;
+    // schools whose holder should have Aura Mastery
+    uint8 withMastery = 0;
 
     bool elected = false;
     uint32 electMs = 0;
     uint8 electedFor = 0;
-    bool electedWithMastery = false;
+    uint8 electedWithMastery = 0;
     std::array<ObjectGuid, PALADIN_SCHOOL_COUNT> holder;
 };
 
@@ -227,7 +228,7 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
     state.elected = true;
     state.electMs = now;
     state.electedFor = state.wanted;
-    state.electedWithMastery = state.fireWithMastery;
+    state.electedWithMastery = state.withMastery;
 
     std::array<ObjectGuid, PALADIN_SCHOOL_COUNT> next{};
     if (!(state.wanted & PALADIN_MASK))
@@ -246,12 +247,12 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
     };
 
     auto const wantsMastery = [&](RaidResistSchool school)
-    { return state.fireWithMastery && school == RaidResistSchool::Fire; };
-    // a kept fire holder without Aura Mastery gives way to a free paladin with it
-    auto const masteryFree = [&](size_t keeper)
+    { return (state.withMastery & RaidResistBit(school)) != 0; };
+    // a kept holder without Aura Mastery gives way to a free paladin with it
+    auto const masteryFree = [&](size_t keeper, RaidResistSchool school)
     {
         for (size_t i = 0; i < paladins.size(); ++i)
-            if (i != keeper && paladins[i].mastery && paladins[i].knows[SchoolIndex(RaidResistSchool::Fire)])
+            if (i != keeper && !used[i] && paladins[i].mastery && paladins[i].knows[SchoolIndex(school)])
                 return true;
 
         return false;
@@ -267,7 +268,7 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
         for (size_t i = 0; i < paladins.size(); ++i)
         {
             if (!used[i] && paladins[i].knows[index] && paladins[i].player->GetGUID() == state.holder[index] &&
-                (!wantsMastery(school) || paladins[i].mastery || !masteryFree(i)))
+                (!wantsMastery(school) || paladins[i].mastery || !masteryFree(i, school)))
             {
                 next[index] = state.holder[index];
                 used[i] = true;
@@ -327,10 +328,20 @@ ResistAuraState const* ReadResist(PlayerbotAI* botAI, RaidResistAuraConfig const
     state.memoMs = now;
     state.memoValid = true;
     state.wanted = config.wantedSchools(botAI, state.wanted);
-    state.fireWithMastery =
-        (state.wanted & RAID_RESIST_FIRE) && config.fireWantsMastery && config.fireWantsMastery(botAI);
+    uint8 withMastery = 0;
+    if ((state.wanted & RAID_RESIST_FIRE) && config.fireWantsMastery && config.fireWantsMastery(botAI))
+        withMastery |= RAID_RESIST_FIRE;
+    if ((state.wanted & RAID_RESIST_FROST) && config.frostWantsMastery && config.frostWantsMastery(botAI))
+        withMastery |= RAID_RESIST_FROST;
 
-    if (!state.elected || state.wanted != state.electedFor || state.fireWithMastery != state.electedWithMastery ||
+    // Kept, the Aura Mastery paladin would hold the school on past the window that wanted it
+    uint8 const released = static_cast<uint8>(state.withMastery & ~withMastery);
+    for (RaidResistSchool school : PALADIN_SCHOOLS)
+        if (released & RaidResistBit(school))
+            state.holder[SchoolIndex(school)].Clear();
+
+    state.withMastery = withMastery;
+    if (!state.elected || state.wanted != state.electedFor || state.withMastery != state.electedWithMastery ||
         getMSTimeDiff(state.electMs, now) >= ELECT_INTERVAL_MS)
         Elect(bot, config.mapId, state, now);
 

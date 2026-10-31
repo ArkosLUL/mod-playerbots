@@ -206,6 +206,13 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakAuraMasteryDueTrigger : public Trigger
+{
+public:
+    AnubarakAuraMasteryDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak aura mastery due") {}
+    bool IsActive() override;
+};
+
 class ToCAnubarakTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -267,6 +274,8 @@ public:
             &ToCAnubarakTriggerContext::anubarak_swarm_heal_urgent;
         creators["anubarak swarm heal"] =
             &ToCAnubarakTriggerContext::anubarak_swarm_heal;
+        creators["anubarak aura mastery due"] =
+            &ToCAnubarakTriggerContext::anubarak_aura_mastery_due;
     }
 
 private:
@@ -380,6 +389,10 @@ private:
 
     static Trigger* anubarak_swarm_heal(PlayerbotAI* botAI) {
         return new AnubarakSwarmHealTrigger(botAI);
+    }
+
+    static Trigger* anubarak_aura_mastery_due(PlayerbotAI* botAI) {
+        return new AnubarakAuraMasteryDueTrigger(botAI);
     }
 };
 

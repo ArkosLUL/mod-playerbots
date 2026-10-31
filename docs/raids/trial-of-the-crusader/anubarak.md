@@ -1008,14 +1008,34 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   15 s at most (AA's Heroism spent 21 of its 40 s on wave 6). Before it the rest wait from his 40%,
   released while he is behind: at his health loss since he came up (`surfacedHpPct`), 30% falls later
   than 5 s before the submerge.
-- **Healing** (`GetAnubarakSwarmHealPick`), every healer bot: the first tier with anyone in heal range
-  and sight, the lowest health in it: a tank under 50%, a Penetrating Cold carrier under 30%, a non-tank
-  under 10% (there the swarm alone takes about 7 s), a carrier with no HoT or shield this healer can
-  cover (`bare`), a tank under 90%, a carrier under 50%. The first four at `ACTION_CRITICAL_HEAL + 12`,
-  over every class heal, the rest at `ACTION_MEDIUM_HEAL + 0.75`, under the mana tools. A priest
-  shields a tank first; a bare carrier gets the **cover**, the first of power word: shield (no Weakened
-  Soul), renew, rejuvenation, lifebloom and riptide `CanCastSpell` allows, none from a paladin (Sacred
-  Shield stays on the tank). Then `CastRaidThroughputHeal`, never Wild Growth,
+- **At risk** (`NextColdTick`): a Penetrating Cold carrier whose health plus frost absorbs at its next
+  tick, after the swarm ticks before it (30% of current health each, 250 minimum, absorbs first),
+  leaves 250 or less after that tick (`GetAmount()` × its frost damage taken, 0 when immune). No tick
+  left before the aura ends is no risk. Non-tanks sit at 1-4k, so a fresh carrier dies at its first
+  tick (3 s after landing) unless lifted; a shield survives the swarm, a heal mostly drains.
+- **Duty** (`anub.healduty`, latched as `Swarm` starts): priests and druids `cold`, paladins and
+  shamans `tank` (the guide's split); with 2+ healers all on one side, the lowest guid goes over. A
+  healer back from a res takes its class duty.
+- **Assignment** (`anub.coldheal`, healer → carrier, once per instance per ms): each carrier at risk,
+  earliest tick then least left first, to the nearest free `cold` healer in heal range and sight; a
+  healer at risk to itself. Kept until the carrier is safe, the aura ends or either dies.
+- **Healing** (`GetAnubarakSwarmHealPick`), every healer bot, the first row with someone in heal reach
+  and sight:
+  1. itself at risk (`self`);
+  2. `cold`: its assigned carrier (`risk`), then a tank under 35% (50% with no `tank` healer alive);
+     `tank`: a tank under 50%, then the most urgent carrier at risk no assigned healer reaches (`risk`);
+  3. the lowest in the first of: non-tank under 10% (the swarm alone takes about 7 s), a carrier this
+     healer can cover (`bare`), tank under 90%, carrier under 50%.
+
+  Rows 1-2 at `ACTION_CRITICAL_HEAL + 12`, over every class heal, the rest at `ACTION_MEDIUM_HEAL +
+  0.75`, under the mana tools. A carrier at risk gets the **rescue** (`CastAnubarakColdRescue`), the
+  first `CanCastSpell` allows: on itself divine shield, divine protection, barkskin, pain suppression
+  only under Weakened Soul; power word: shield (no Weakened Soul); holy shock, riptide, swiftmend (on
+  Rejuvenation or Regrowth); the first of flash of light, flash heal, lesser healing wave, nourish,
+  regrowth, holy light, greater heal, healing wave whose cast time + 0.3 s lands before the tick; else
+  the cover. Otherwise a priest shields a tank first; a bare carrier gets the **cover**, the first of
+  power word: shield (no Weakened Soul), renew, rejuvenation, lifebloom and riptide, none from a paladin
+  (Sacred Shield stays on the tank). Then `CastRaidThroughputHeal`, never Wild Growth,
   and for the non-tank no Holy Light, Greater Heal, Healing Wave, Healing Touch or Nourish. `anubarak
   swarm group heal guard` blocks Chain Heal, Prayer of Healing, Circle of Healing, Wild Growth (both
   nodes), Divine Hymn and Tranquility (only Tranquility is a `CastAoeHealSpellAction`), and
@@ -1023,6 +1043,16 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   no tank, no carrier and at 10%+. In 2026-10-30 BD Tree carried Penetrating Cold 12.4 of 15 s bare,
   cast 14 of 16 Nourishes on others and died, and Prayer died with no Renew and no shield on itself:
   `CastRaidThroughputHeal` tries HoTs last, and a carrier at 30-50% ranked under every tank under 90%.
+  In BG (below) the old pick killed the healers: all four herded on one carrier, tanks under 50%
+  outranked carriers at 4k, and Holylight (4.3k) never healed herself before her first tick.
+- **Aura Mastery** (user call, guide): `anubarak aura mastery reserve` blocks the class node all
+  heroic pull (it fired on any group damage, BG +4.5 s on Concentration). `anubarak aura mastery`
+  (`ACTION_CRITICAL_HEAL + 13`, off the GCD) casts it for a paladin in phase 3 holding its own Frost
+  Resistance Aura, when a Penetrating Cold round landed under 1.5 s ago and 2+ of its carriers are
+  under the tick (`anub.mastery`); its 6 s cover the first two ticks. Frost goes to that paladin only
+  in phase 3 (`frostWantsMastery`, [README](README.md)): before, Concentration Aura matters (user call),
+  and in phase 3 nothing pushes casts back (66240 is `SPELL_ATTR3_TREAT_AS_PERIODIC`, `Unit.cpp:1303`).
+  A swap only for Aura Mastery would cost two 1.5 s aura GCDs.
 - **Healers stand behind the tank patches** (user call; `anub.hbehind`): heroic keeps spawning
   burrowers in phase 3 (`boss_anubarak_trial.cpp:263-264`), and they go for the healers. Each healer
   bot by guid takes a stand 10-24 yd behind the tank patches' midpoint, away from the centroid of the
@@ -1111,7 +1141,7 @@ personal burst is unrestricted.
 - BA's phase 3 opened 7 s after wave 7 landed: those burrowers took 41 s with him at 30%, lust at +50 s
   (the rule kept by user call).
 - A human main tank off the anchor: in BA P1c 17 yd off, ranged put 54-61% on burrowers and he lost
-  19.5%, so a third submerge; in BB he went down 9.6 yd from tank patch 1.
+  19.5%, so a third submerge; in BB he went down 9.6 yd from tank patch 1, in BG 17.8 yd.
 - A rogue's Tricks waits until it hits a loose burrower, which its DPS pick rarely is.
 - Side tanks die to two frenzied burrowers at 9 Expose Weakness stacks (+225%, 5+ stacks 17-34 s of
   each 2026-10-26 wave), and most burrower submerges followed a side tank's death; no healer is
@@ -1120,7 +1150,12 @@ personal burst is unrestricted.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
 - A healer's heal threat still pulls burrowers off a side tank as the taunt's 3 s run out (Elemena
-  11-12 times a pull in the 2026-10-27 evening wipes).
+  11-12 times a pull in the 2026-10-27 evening wipes; BG 21 pull-offs, Elemena 15, most 3-4.6 s after
+  a wave landed).
+- Heroic boss health runs at 1.3× through the server's override; the real log's 37k healing on him is
+  unexplained.
+- A carrier further than 40 yd from the frost holder gets no Frost Resistance Aura, and Aura Mastery
+  counts it anyway.
 - A far grip with one DK bot, or with the side's DK tank's grip spent, has no relay.
 - Not handled: the phase 3 heal hold and stamina-buff cancel, Freezing Slash defensives, ignoring
   burrowers once he is low, scarab threat, normal's phase 2 raid positioning.
@@ -1168,7 +1203,10 @@ personal burst is unrestricted.
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
 | `burst` | Heroic burst gate: `hold` (40% or under), `behind` (released), `wait` (phase 3, its burrowers up), `open` |
-| `swarmheal` | Heroic phase 3 healer's pick: `tank`, `cold`, `low`, `bare` (a carrier it can cover), `none` |
+| `swarmheal` | Heroic phase 3 healer's pick: `self`, `risk` (a carrier at risk), `tank`, `low`, `bare` (a carrier it can cover), `cold`, `none` |
+| `healduty` | Heroic phase 3 healer bot's duty: 1 `cold`, 2 `tank` |
+| `coldheal` | Heroic phase 3 healer bot's carrier at risk, its own guid when itself, 0 when none |
+| `mastery` | Heroic phase 3 paladin bot: `cast`, `hold N` (a fresh round, N carriers under the tick), `none` |
 | `focus0`, `focus1` | Each side's focus burrower, 0 when none; kept current under a skull. Per instance. Traces before 2026-10-27 carry one raid-wide `focus` and `focusdue` |
 | `dps` | A DPS bot's pick: `skull`, `loose`, `burrower`, `boss`, `capped` (him, a melee bot capped on its focus), `scarab`, `none` (a sphere shooter too) |
 
@@ -1310,7 +1348,17 @@ or the kite's end. `--tanks` side tank area casts per surfaced phase by spell (t
 and `saoe` rows. `--swarm` per Penetrating Cold carrier in phase 3 its seconds with no HoT or shield of
 those carried, a death flagged. `--healers` each healer's first `hbehind` `go` and the seconds until it
 stood at its stand (`hstand` `hold`, under 1.5 yd in 1 s), and each burrower within 5 yd of a healer
-in phase 3 with no step from its exit or emerge within 7.5 yd of a Permafrost centre. Baseline, the 2026-10-27 25H wipes I,
+in phase 3 with no step from its exit or emerge within 7.5 yd of a Permafrost centre. `--swarm` the
+`swarmheal` counts per healer, `healduty` and `coldheal` spans, and per phase 3 Penetrating Cold wave
+its first ticks survived, the frost holder, Aura Mastery up at ticks 1-2, `mastery` rows, the resisted
+share per tick and per carrier its health at the landing, its margin at the first tick (the reader's
+own risk model: health × (1 − drain)³ against the tick, no absorbs or timers; a survived tick's margin
+clamped to 0, the pool read at first sight), fate, heals and absorbs before it by source and its
+`coldheal` healer; a herd is 2+ healers' heals on one carrier within 1.5 s while another at risk got
+none. `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
+shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
+heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
+had it back and the taunt that did it. Baseline, the 2026-10-27 25H wipes I,
 J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
 bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
 Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K
@@ -1353,6 +1401,19 @@ Baseline, the 2026-10-30 evening 25H wipes BA 8:29 in P3 at 26.8% (three submerg
 7:15 in P3 at 7.0% (`06fd22497`; Ecoterrorist and Deathsong human): BD phases 1 -27.3/-20.4/-22.1,
 phase 3 30 → 7.0% in 78.8 s, Heroism at +15.3 s; one kite patch down as he went under in each of BD's
 submerges.
+Baseline, the 2026-10-30 night 25H wipes BF 6:51 at 15.2% (`06fd22497`) and BG 6:55.8 at 14.3%
+(refine-17 without the 10 yd step; as BA): BG no death before phase 3, six kites, no kiter death,
+side tanks' area casts every phase, phases 1 -30.9/-20.4/-18.5; its first kite spent tank patch 1 (he
+went down 17.8 yd off it under the human main tank). Phase 3 from the Chronicle logs (`log_file`
+d242a72b BG, fd225ee8 BF): BG 66.4 s, 7.48M to him (113k/s), the swarm healing him 1.94M (29k/s); BF
+54.1 s, 7.45M (138k/s), 2.20M (41k/s); his phase 3 pool is 10.6M (35.35M = DB 27.19M ×
+`AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_HEROIC_BOSS_HEALTH` 1.3), so about 110-125 s at that damage. Raid
+healing the first 30 s 70k HPS (Holylight 22-24k, other healers 7-10k, non-healers 18-21k). BG's
+healers died to Penetrating Cold from +29 s (Holylight, Prayer, Elemena), then the tanks; carriers
+surviving their first tick 9 of 20 (5/2/2/0 a wave). BF's healers died to burrowers (6:30.8-6:34.8,
+refine-16's healer stand). A real 25H kill's healing table (Warcraft Logs, 90.8 s): five healers
+24.0/9.9/9.0/7.2/5.8k HPS at 1-16% overheal, non-healers 19.5k, 75.5k in all, so throughput matched;
+the gap was who got healed in the 3 s before a first tick.
 Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
 slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
 players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the

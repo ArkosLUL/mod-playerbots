@@ -751,6 +751,9 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
     if (!pick.target)
         return false;
 
+    if (pick.rescue && CastAnubarakColdRescue(botAI, pick.target))
+        return true;
+
     if (AnubarakSwarmShieldsTank(bot, pick.target) && botAI->CanCastSpell("power word: shield", pick.target))
         return botAI->CastSpell("power word: shield", pick.target);
 
@@ -767,3 +770,10 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
                           heal == "healing touch" || heal == "nourish"));
     });
 }
+
+bool AnubarakAuraMasteryAction::Execute(Event /*event*/)
+{
+    return botAI->CastSpell("aura mastery", bot);
+}
+
+bool AnubarakAuraMasteryAction::isUseful() { return AnubarakAuraMasteryDue(botAI); }

@@ -193,6 +193,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak swarm group heal guard", Role::Any, AnubarakSwarmHealing, 0,
             {"chain heal on party", "prayer of healing on party", "circle of healing on party",
              "wild growth on party", "wild growth blanket", "divine hymn", "tranquility"});
+    // the class node spends it on any group damage; the encounter's waits for a deadly Penetrating Cold
+    // round
+    e.Block("anubarak aura mastery reserve", Role::Any, AnubarakAuraMasteryReserved, 0, {"aura mastery"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakBurrowerThreatCapMultiplier>(Family::Spell | Family::Melee);

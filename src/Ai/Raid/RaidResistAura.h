@@ -49,6 +49,9 @@ struct RaidResistAuraConfig
     // fire goes to a paladin with Aura Mastery when it can: the cooldown doubles only its caster's own
     // aura. Null for never.
     bool (*fireWantsMastery)(PlayerbotAI* botAI);
+    // Same for frost. Once a school stops wanting it, its holder is elected again from scratch, so the
+    // Aura Mastery paladin hands it back and returns to its own aura.
+    bool (*frostWantsMastery)(PlayerbotAI* botAI) = nullptr;
 };
 
 // The aura this bot should hold right now. Notes the config's noteKey for paladin and hunter bots.

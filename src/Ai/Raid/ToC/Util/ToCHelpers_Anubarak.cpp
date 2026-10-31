@@ -11,11 +11,13 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "BossAuraTriggers.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "GameObject.h"
@@ -164,9 +166,19 @@ constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
 // 2026-10-30). A non-tank under the floor gets a small heal; at 10% the swarm alone takes about 7 s.
 constexpr float ANUBARAK_SWARM_TANK_URGENT_PCT = 50.0f;
 constexpr float ANUBARAK_SWARM_TANK_TOPOFF_PCT = 90.0f;
-constexpr float ANUBARAK_SWARM_COLD_URGENT_PCT = 30.0f;
 constexpr float ANUBARAK_SWARM_COLD_TOPOFF_PCT = 50.0f;
 constexpr float ANUBARAK_SWARM_FLOOR_PCT = 10.0f;
+// A cold duty healer leaves the tanks to the tank healers down to here, or to the tank line above with
+// none of them alive
+constexpr float ANUBARAK_SWARM_COLD_HEALER_TANK_PCT = 35.0f;
+// The swarm never takes less than this a tick (spell_gen_leeching_swarm_aura), so a carrier left with
+// less after a Penetrating Cold tick dies to the next swarm tick anyway
+constexpr int32 ANUBARAK_SWARM_MIN_DRAIN = 250;
+// A direct heal on a carrier at risk has to land this long before its next tick
+constexpr int32 ANUBARAK_COLD_RESCUE_MARGIN_MS = 300;
+// Aura Mastery goes on a Penetrating Cold round this fresh, so its 6 s cover the round's first two ticks
+constexpr int32 ANUBARAK_MASTERY_ROUND_MS = 1500;
+constexpr uint32 ANUBARAK_MASTERY_MIN_CARRIERS = 2;
 constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
 // Heroic burst waits for phase 3 from this health (user call, 2026-10-30), unless at his pace since he
 // came up he would still be above 30% this close to the submerge
@@ -712,6 +724,16 @@ struct AnubarakState
     bool behindSet = false;
     std::map<ObjectGuid, Position> behindStands;
     std::unordered_set<ObjectGuid> behindGone;
+    // Heroic phase 3: each healer bot's duty, and the Penetrating Cold carrier at risk each one keeps up
+    RaidObs::ObsGuidMap<AnubarakHealDuty> healDuty{"anub.healduty"};
+    RaidObs::ObsGuidMap<ObjectGuid> coldOf{"anub.coldheal"};
+    // Most urgent first
+    std::vector<ObjectGuid> coldAtRisk;
+    bool healDutySet = false;
+    bool coldMemoValid = false;
+    uint32 coldMemoMs = 0;
+    uint32 coldHealersAlive = 0;
+    uint32 tankHealersAlive = 0;
     ProtectClaim protect;
     EscortRead escort;
     FreedomRead freedom;
@@ -970,6 +992,11 @@ void ClearPullLatches(AnubarakState& state)
     state.behindSet = false;
     state.behindStands.clear();
     state.behindGone.clear();
+    state.healDuty.clear();
+    state.coldOf.clear();
+    state.coldAtRisk.clear();
+    state.healDutySet = false;
+    state.coldMemoValid = false;
     state.protect = ProtectClaim();
     state.escort = EscortRead();
     state.freedom = FreedomRead();
@@ -7270,28 +7297,247 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
     return lowest;
 }
 
-// 0 the most urgent, SWARM_HEAL_TIERS for a heal that would only feed the swarm. A carrier with no HoT
-// or shield that this healer can cover ranks ahead of the tanks' top-off: on direct heals alone,
-// carriers died to it.
-static constexpr uint8 SWARM_HEAL_TIERS = 6;
+// A carrier's next Penetrating Cold tick: what it deals before resists, and the health plus frost
+// absorbs the carrier has left when it lands
+struct ColdTick
+{
+    bool due = false;
+    int32 inMs = 0;
+    int32 damage = 0;
+    int64 left = 0;
+};
+
+// The swarm ticks before it take their share of current health, absorbs soaking it first. No tick left
+// before the aura runs out means not due.
+static ColdTick NextColdTick(Player* member)
+{
+    ColdTick tick;
+    Aura* cold = member->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, member));
+    AuraEffect* effect = cold ? cold->GetEffect(EFFECT_0) : nullptr;
+    if (!effect || effect->GetAuraType() != SPELL_AURA_PERIODIC_DAMAGE ||
+        (cold->GetDuration() >= 0 && cold->GetDuration() < effect->GetPeriodicTimer()))
+        return tick;
+
+    tick.due = true;
+    tick.inMs = std::max(0, effect->GetPeriodicTimer());
+    // Divine Shield, Pain Suppression and the like already cover it
+    float const taken =
+        member->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, SPELL_SCHOOL_MASK_FROST);
+    tick.damage = member->IsImmunedToDamage(SPELL_SCHOOL_MASK_FROST)
+                      ? 0
+                      : static_cast<int32>(static_cast<float>(effect->GetAmount()) * taken);
+
+    int64 health = member->GetHealth();
+    int64 absorb = 0;
+    for (AuraEffect const* shield : member->GetAuraEffectsByType(SPELL_AURA_SCHOOL_ABSORB))
+        if (shield->GetMiscValue() & SPELL_SCHOOL_MASK_FROST)
+            absorb += std::max(0, shield->GetAmount());
+
+    AuraEffect const* swarm =
+        member->GetAuraEffect(sSpellMgr->GetSpellIdForDifficulty(SPELL_LEECHING_SWARM, member), EFFECT_0);
+    if (swarm && swarm->GetAmplitude() > 0)
+    {
+        for (int32 at = swarm->GetPeriodicTimer(); at < tick.inMs && health > 0; at += swarm->GetAmplitude())
+        {
+            int64 const drain = std::max<int64>(ANUBARAK_SWARM_MIN_DRAIN, health * swarm->GetAmount() / 100);
+            int64 const soaked = std::min(absorb, drain);
+            absorb -= soaked;
+            health = std::max<int64>(0, health - (drain - soaked));
+        }
+    }
+
+    tick.left = health + absorb;
+    return tick;
+}
+
+static bool ColdTickDeadly(ColdTick const& tick)
+{
+    return tick.due && tick.left - tick.damage <= ANUBARAK_SWARM_MIN_DRAIN;
+}
+
+static AnubarakHealDuty ClassHealDuty(Player* healer)
+{
+    switch (healer->getClass())
+    {
+        case CLASS_PRIEST:
+        case CLASS_DRUID:
+            return AnubarakHealDuty::Cold;
+        default:
+            return AnubarakHealDuty::Tank;
+    }
+}
+
+static AnubarakHealDuty DutyOf(AnubarakState const& state, ObjectGuid const& healer)
+{
+    auto const duty = state.healDuty.find(healer);
+    return duty != state.healDuty.end() ? duty->second : AnubarakHealDuty::None;
+}
+
+// With two healers or more and every one on the same side, the lowest guid goes over
+static void SetHealDuties(AnubarakState& state, std::vector<Player*> healers)
+{
+    std::sort(healers.begin(), healers.end(),
+              [](Player* lhs, Player* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
+    size_t const cold = static_cast<size_t>(std::count_if(
+        healers.begin(), healers.end(),
+        [](Player* healer) { return ClassHealDuty(healer) == AnubarakHealDuty::Cold; }));
+
+    bool const oneSided = healers.size() >= 2 && (cold == 0 || cold == healers.size());
+    for (Player* healer : healers)
+    {
+        AnubarakHealDuty duty = ClassHealDuty(healer);
+        if (oneSided && healer == healers.front())
+            duty = duty == AnubarakHealDuty::Cold ? AnubarakHealDuty::Tank : AnubarakHealDuty::Cold;
+
+        state.healDuty[healer->GetGUID()] = duty;
+    }
+
+    state.healDutySet = true;
+}
+
+static bool HealerReaches(Player* healer, Player* member)
+{
+    if (healer == member)
+        return true;
+
+    PlayerbotAI* healerAI = GET_PLAYERBOT_AI(healer);
+    return healerAI && healer->IsWithinDistInMap(member, healerAI->GetRange("heal")) &&
+           healer->IsWithinLOSInMap(member);
+}
+
+struct ColdCarrierAtRisk
+{
+    Player* member;
+    ColdTick tick;
+};
+
+// Null outside heroic phase 3. Every healer asks each tick, so one read per instance per ms.
+static AnubarakState* RefreshColdHeals(PlayerbotAI* botAI)
+{
+    if (!AnubarakSwarmHealing(botAI))
+        return nullptr;
+
+    AnubarakState* state = ReadPhase(botAI);
+    if (!state)
+        return nullptr;
+
+    uint32 const now = getMSTime();
+    if (state->coldMemoValid && state->coldMemoMs == now)
+        return state;
+
+    state->coldMemoValid = true;
+    state->coldMemoMs = now;
+
+    Player* bot = botAI->GetBot();
+    std::vector<Player*> healers;
+    std::vector<ColdCarrierAtRisk> atRisk;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (!member->IsAlive())
+            return false;
+
+        if (PlayerbotAI::IsHeal(member) && GET_PLAYERBOT_AI(member))
+            healers.push_back(member);
+
+        ColdTick const tick = NextColdTick(member);
+        if (ColdTickDeadly(tick))
+            atRisk.push_back({member, tick});
+
+        return false;
+    });
+
+    if (!state->healDutySet)
+        SetHealDuties(*state, healers);
+
+    // A healer back from a battle res takes its class duty
+    state->coldHealersAlive = 0;
+    state->tankHealersAlive = 0;
+    for (Player* healer : healers)
+    {
+        state->healDuty.try_emplace(healer->GetGUID(), ClassHealDuty(healer));
+        ++(DutyOf(*state, healer->GetGUID()) == AnubarakHealDuty::Cold ? state->coldHealersAlive
+                                                                        : state->tankHealersAlive);
+    }
+
+    auto const living = [&healers](ObjectGuid const& guid)
+    {
+        return std::any_of(healers.begin(), healers.end(), [&guid](Player* healer) { return healer->GetGUID() == guid; });
+    };
+    auto const risky = [&atRisk](ObjectGuid const& guid)
+    {
+        return std::any_of(atRisk.begin(), atRisk.end(),
+                           [&guid](ColdCarrierAtRisk const& carrier) { return carrier.member->GetGUID() == guid; });
+    };
+
+    std::vector<ObjectGuid> ended;
+    for (auto const& [healer, carrier] : state->coldOf)
+        if (!living(healer) || !risky(carrier))
+            ended.push_back(healer);
+
+    for (ObjectGuid const& healer : ended)
+        state->coldOf.erase(healer);
+
+    for (ColdCarrierAtRisk const& carrier : atRisk)
+        if (living(carrier.member->GetGUID()))
+            state->coldOf[carrier.member->GetGUID()] = carrier.member->GetGUID();
+
+    // The earliest tick first, then the least left at it
+    std::sort(atRisk.begin(), atRisk.end(), [](ColdCarrierAtRisk const& lhs, ColdCarrierAtRisk const& rhs)
+    {
+        return std::make_tuple(lhs.tick.inMs, lhs.tick.left, lhs.member->GetGUID()) <
+               std::make_tuple(rhs.tick.inMs, rhs.tick.left, rhs.member->GetGUID());
+    });
+
+    state->coldAtRisk.clear();
+    for (ColdCarrierAtRisk const& carrier : atRisk)
+    {
+        ObjectGuid const guid = carrier.member->GetGUID();
+        state->coldAtRisk.push_back(guid);
+        if (std::any_of(state->coldOf.begin(), state->coldOf.end(),
+                        [&guid](auto const& duty) { return duty.second == guid; }))
+            continue;
+
+        Player* nearest = nullptr;
+        float nearestDist = 0.0f;
+        for (Player* healer : healers)
+        {
+            if (DutyOf(*state, healer->GetGUID()) != AnubarakHealDuty::Cold || state->coldOf.count(healer->GetGUID()) ||
+                !HealerReaches(healer, carrier.member))
+                continue;
+
+            float const dist = healer->GetExactDist(carrier.member);
+            if (!nearest || dist < nearestDist || (!(nearestDist < dist) && healer->GetGUID() < nearest->GetGUID()))
+            {
+                nearest = healer;
+                nearestDist = dist;
+            }
+        }
+
+        if (nearest)
+            state->coldOf[nearest->GetGUID()] = guid;
+    }
+
+    return state;
+}
+
+// For the rows under the urgent ones: SWARM_HEAL_TIERS for a heal that would only feed the swarm. A
+// carrier with no HoT or shield that this healer can cover ranks ahead of the tanks' top-off: on direct
+// heals alone, carriers died to it.
+static constexpr uint8 SWARM_HEAL_TIERS = 4;
 
 static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
 {
     float const pct = member->GetHealthPct();
     bool const tank = IsAnubarakTankPlayer(member);
     bool const carrier = member->HasAura(cold);
-    if (tank && pct < ANUBARAK_SWARM_TANK_URGENT_PCT)
-        return 0;
-    if (carrier && pct < ANUBARAK_SWARM_COLD_URGENT_PCT)
-        return 1;
     if (!tank && pct < ANUBARAK_SWARM_FLOOR_PCT)
-        return 2;
+        return 0;
     if (carrier && ColdCarrierCover(botAI, member))
-        return 3;
+        return 1;
     if (tank && pct < ANUBARAK_SWARM_TANK_TOPOFF_PCT)
-        return 4;
+        return 2;
     if (carrier && pct < ANUBARAK_SWARM_COLD_TOPOFF_PCT)
-        return 5;
+        return 3;
 
     return SWARM_HEAL_TIERS;
 }
@@ -7300,37 +7546,212 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
 {
     AnubarakSwarmHealPick pick;
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || !PlayerbotAI::IsHeal(bot) || !AnubarakSwarmHealing(botAI))
+    AnubarakState const* state = bot && PlayerbotAI::IsHeal(bot) ? RefreshColdHeals(botAI) : nullptr;
+    if (!state)
         return pick;
 
-    uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
     float const range = botAI->GetRange("heal");
-    uint8 bestTier = SWARM_HEAL_TIERS;
-    ForEachGroupMember(bot, [&](Player* member)
+    auto const reaches = [&](Player* member)
     {
-        if (!member->IsAlive() || member->GetMapId() != bot->GetMapId() || !bot->IsWithinDistInMap(member, range))
+        return member && member->IsAlive() && member->IsInMap(bot) && bot->IsWithinDistInMap(member, range) &&
+               bot->IsWithinLOSInMap(member);
+    };
+    auto const lowestTank = [&](float below)
+    {
+        Player* lowest = nullptr;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (IsAnubarakTankPlayer(member) && member->GetHealthPct() < below &&
+                (!lowest || member->GetHealthPct() < lowest->GetHealthPct()) && reaches(member))
+                lowest = member;
+
             return false;
+        });
 
-        uint8 const tier = SwarmHealTier(botAI, member, cold);
-        bool const lower = !pick.target || member->GetHealthPct() < pick.target->GetHealthPct();
-        if (tier > bestTier || (tier == bestTier && !lower))
+        return lowest;
+    };
+
+    char const* label = "none";
+    auto const take = [&](Player* target, char const* why, bool rescue)
+    {
+        pick.target = target;
+        pick.urgent = true;
+        pick.rescue = rescue;
+        label = why;
+    };
+
+    if (ColdTickDeadly(NextColdTick(bot)))
+        take(bot, "self", true);
+    else if (DutyOf(*state, bot->GetGUID()) == AnubarakHealDuty::Cold)
+    {
+        auto const assigned = state->coldOf.find(bot->GetGUID());
+        Player* carrier = assigned != state->coldOf.end() ? ObjectAccessor::GetPlayer(*bot, assigned->second) : nullptr;
+        float const tankLine =
+            state->tankHealersAlive ? ANUBARAK_SWARM_COLD_HEALER_TANK_PCT : ANUBARAK_SWARM_TANK_URGENT_PCT;
+        if (reaches(carrier))
+            take(carrier, "risk", true);
+        else if (Player* tank = lowestTank(tankLine))
+            take(tank, "tank", false);
+    }
+    else if (Player* tank = lowestTank(ANUBARAK_SWARM_TANK_URGENT_PCT))
+        take(tank, "tank", false);
+    else
+    {
+        // A carrier at risk that no healer in reach is assigned to
+        for (ObjectGuid const& guid : state->coldAtRisk)
+        {
+            Player* carrier = ObjectAccessor::GetPlayer(*bot, guid);
+            if (!reaches(carrier))
+                continue;
+
+            bool covered = false;
+            for (auto const& [healerGuid, carrierGuid] : state->coldOf)
+            {
+                Player* healer = carrierGuid == guid ? ObjectAccessor::GetPlayer(*bot, healerGuid) : nullptr;
+                covered = covered || (healer && healer->IsAlive() && HealerReaches(healer, carrier));
+            }
+
+            if (!covered)
+            {
+                take(carrier, "risk", true);
+                break;
+            }
+        }
+    }
+
+    if (!pick.target)
+    {
+        uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+        uint8 bestTier = SWARM_HEAL_TIERS;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (!member->IsAlive() || !bot->IsWithinDistInMap(member, range))
+                return false;
+
+            uint8 const tier = SwarmHealTier(botAI, member, cold);
+            bool const lower = !pick.target || member->GetHealthPct() < pick.target->GetHealthPct();
+            if (tier > bestTier || (tier == bestTier && !lower))
+                return false;
+
+            if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
+                return false;
+
+            bestTier = tier;
+            pick.target = member;
             return false;
+        });
 
-        if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
-            return false;
+        char const* const labels[] = {"low", "bare", "tank", "cold"};
+        pick.small = bestTier == 0;
+        if (pick.target)
+            label = labels[bestTier];
+    }
 
-        bestTier = tier;
-        pick.target = member;
-        return false;
-    });
-
-    char const* const labels[] = {"tank", "cold", "low", "bare", "tank", "cold"};
-    pick.urgent = bestTier <= 3;
-    pick.small = bestTier == 2;
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "anub.swarmheal", pick.target ? labels[bestTier] : "none");
+        RaidObs::NoteDerived(bot, "anub.swarmheal", label);
 
     return pick;
+}
+
+static bool TryCast(PlayerbotAI* botAI, char const* spell, Unit* target)
+{
+    return botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target);
+}
+
+static char const* const COLD_RESCUE_DEFENSIVES[] = {"divine shield", "divine protection", "barkskin"};
+static char const* const COLD_RESCUE_INSTANTS[] = {"holy shock", "riptide"};
+// Fastest first, each only when it lands before the tick
+static char const* const COLD_RESCUE_HEALS[] = {"flash of light", "flash heal",   "lesser healing wave",
+                                                "nourish",        "regrowth",     "holy light",
+                                                "greater heal",   "healing wave"};
+
+bool CastAnubarakColdRescue(PlayerbotAI* botAI, Player* member)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !member)
+        return false;
+
+    ColdTick const tick = NextColdTick(member);
+    if (!ColdTickDeadly(tick))
+        return false;
+
+    bool const shieldable = !member->HasAura(SPELL_WEAKENED_SOUL);
+    if (member == bot)
+    {
+        for (char const* defensive : COLD_RESCUE_DEFENSIVES)
+            if (TryCast(botAI, defensive, bot))
+                return true;
+
+        // the shield covers the tick for less, so Pain Suppression waits for Weakened Soul
+        if (!shieldable && TryCast(botAI, "pain suppression", bot))
+            return true;
+    }
+
+    if (shieldable && TryCast(botAI, "power word: shield", member))
+        return true;
+
+    for (char const* instant : COLD_RESCUE_INSTANTS)
+        if (TryCast(botAI, instant, member))
+            return true;
+
+    if (member->HasAuraState(AURA_STATE_SWIFTMEND) && TryCast(botAI, "swiftmend", member))
+        return true;
+
+    for (char const* heal : COLD_RESCUE_HEALS)
+    {
+        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", heal)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (info && static_cast<int32>(info->CalcCastTime(bot)) + ANUBARAK_COLD_RESCUE_MARGIN_MS < tick.inMs &&
+            TryCast(botAI, heal, member))
+            return true;
+    }
+
+    return CastAnubarakColdCarrierCover(botAI, member);
+}
+
+bool AnubarakAuraMasteryReserved(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && AnubarakHeroic(bot) && AnubarakEngaged(botAI);
+}
+
+bool AnubarakAuraMasteryDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_PALADIN || !AnubarakSwarmHealing(botAI))
+        return false;
+
+    std::string verdict = "none";
+    bool due = false;
+    if (bot->GetAuraOfRankedSpell(SPELL_FROST_RESISTANCE_AURA_RANK_1, bot->GetGUID()) &&
+        botAI->CanCastSpell("aura mastery", bot))
+    {
+        uint32 const coldId = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+        bool fresh = false;
+        uint32 under = 0;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            Aura* cold = member->IsAlive() ? member->GetAura(coldId) : nullptr;
+            AuraEffect* effect = cold ? cold->GetEffect(EFFECT_0) : nullptr;
+            if (!effect || cold->GetMaxDuration() - cold->GetDuration() >= ANUBARAK_MASTERY_ROUND_MS)
+                return false;
+
+            fresh = true;
+            if (static_cast<int64>(member->GetHealth()) < effect->GetAmount())
+                ++under;
+
+            return false;
+        });
+
+        due = under >= ANUBARAK_MASTERY_MIN_CARRIERS;
+        if (fresh)
+            verdict = due ? "cast" : "hold " + std::to_string(under);
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.mastery", verdict);
+
+    return due;
 }
 
 bool AnubarakSwarmHealWasted(Player* target)

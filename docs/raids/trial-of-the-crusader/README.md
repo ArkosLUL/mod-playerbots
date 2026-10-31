@@ -384,8 +384,10 @@ The `ResistAura` stem picks:
   that still qualify are kept first; each empty school then takes the lowest of: own aura strategy
   already that school, another unelected paladin on the same aura strategy (so the raid keeps
   Devotion), cost (resistance or `bspeed` 0, `baoe` or none 1, `bcast` 2, `barmor` 3), guid. On
-  Jaraxxus and the Twins fire goes first to a paladin who knows Aura Mastery, and a kept fire holder
-  without it gives way.
+  Jaraxxus and the Twins fire goes first to a paladin who knows Aura Mastery, heroic Anub'arak's phase
+  3 frost (`frostWantsMastery`), and a kept holder without it gives way. A school that stops wanting
+  Aura Mastery drops its kept holder once, so frost goes back to the cheaper aura (a Retribution
+  paladin over Concentration) instead of carrying into the next pull.
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the
   duty on by mana, through Viper. In 2026-10-22 traces it held the aura on the worms, Jaraxxus and
   Anub'arak only (nature 7%, 45% with Fel Lightning, 58% of damage taken).
@@ -403,7 +405,7 @@ The `ResistAura` stem picks:
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: no Barrett comes back.
 - Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
-  or normal Light Vortex cover; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
+  or normal Light Vortex cover and on heroic Anub'arak's Penetrating Cold; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
   and loses Viper (`GetNatureResistanceHunter`'s last fallback).
 - A holder already covered by another paladin's aura of its school fires its trigger every tick
   without casting (the class action reads that aura by name) and keeps its own aura meanwhile.

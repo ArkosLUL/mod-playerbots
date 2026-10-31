@@ -73,7 +73,9 @@
                                      opener and the three players nearest its exit at the spawn; each one pulled
                                      off its side tank by a non-tank within 15 s of coming up: who, the seconds
                                      since it came up and on the side tank, the puller's casts on it in the 3 s
-                                     before, triggered ones marked *; each Bladestorm with the nearest burrower,
+                                     before, triggered ones marked *, and the seconds until it was back on a tank
+                                     with the taunts at it, or those it stayed on non-tanks and never came back;
+                                     each Bladestorm with the nearest burrower,
                                      within 25 yd flagged, the burrower guard's Bladestorm vetoes and the burrower
                                      threat cap's per bot
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
@@ -95,7 +97,16 @@
                                      began and on newer ones; when those burrowers went against lust and
                                      anub.burst open; bot burst cast from his 40% to phase 3, flagged unless
                                      anub.burst read behind; Penetrating Cold, and per carrier window in phase 3
-                                     the seconds it carried it with no HoT or shield on it; deaths
+                                     the seconds it carried it with no HoT or shield on it; anub.swarmheal rows,
+                                     each healer bot's anub.healduty and the carriers its anub.coldheal kept up;
+                                     per phase 3 Penetrating Cold wave the first ticks survived, the living
+                                     toc.aura frost holders at the landing, Aura Mastery up at the first two
+                                     ticks, anub.mastery rows to the second tick, the resisted share per tick, and
+                                     per carrier its health at the landing, at risk when that less 3 s of the
+                                     swarm is under the tick, the first tick's margin and fate, its anub.coldheal
+                                     healers and the heals and absorbs on it before the tick by source; a herd,
+                                     two healers or more landing on one carrier within 1.5 s while another at
+                                     risk had nothing from a healer; deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
                                      acts in the pull, its engine passes, anub.hstand; per healer its first
@@ -103,7 +114,10 @@
                                      burrower within 5 yd of a healer in phase 3 with no step from its exit or
                                      emerge within 7.5 yd of a Permafrost centre; per side tank and the main tank
                                      the seconds alive with no healer within 40 yd; raid healer engine in the
-                                     coverage
+                                     coverage; per phase healing done on Warcraft Logs' rules, pets and totems
+                                     folded into their owner: effective healing plus the absorbs credited to the
+                                     shield's caster, overheal as a share of that plus overheal, HPS over the
+                                     phase and the share of the raid's, and the sources with no owner in the trace
     anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per run of it on the
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; per side
@@ -151,7 +165,15 @@ What the generic views get wrong here, and what this reads instead:
   `g` the burrower, and `anub.dside` per DPS bot, the burrower side it serves, written at a wave's split
   only for a bot whose side changed. `anub.hstand` is per healer, `walk` or `hold`, and so is
   `anub.hbehind`, `wait`, `go` or `none`. `anub.saoe` is per side tank: the spell its area threat node
-  cast, else `cap`, `other` or `none`.
+  cast, else `cap`, `other` or `none`. In heroic phase 3, `anub.swarmheal` is each healer's pick: `self`,
+  `risk`, `tank`, `low`, `bare`, `cold` or `none`, older traces never writing `self` or `risk`.
+  `anub.healduty` is per healer bot from the phase's start, `1` cold and `2` tank, and `anub.coldheal` is
+  keyed on the healer bot with the carrier it keeps up as its value, `0` when that ends. `anub.mastery` is
+  per paladin bot, `none`, `hold N` with N carriers under the tick, or `cast`, and `toc.aura` per paladin
+  and hunter bot, the resistance it holds or `none`.
+- **Health in points is read off the pool at first sight.** Snapshots and combat rows carry a percentage,
+  so a carrier under a health buff reads short. A first tick it lived through still reads a margin of 0
+  or more.
 - **No aura row says whether it heals over time or absorbs.** A HoT is read off a hand-kept list of
   names and a shield off the trace's `abs` rows, so a shield that never absorbed reads as no cover.
 - **No row carries a speed.** The spike's speed and the kiter's are the median of their moving
@@ -218,6 +240,18 @@ BURST_SPELLS = {26297: "Berserking", 20572: "Blood Fury", 33697: "Blood Fury", 3
 BURST_HOLD_PCT = 40.0
 SWARM_FLOOR_PCT = 10.0
 SWARM_BIN_MS = 5000
+# Leeching Swarm's share of current health a second, 10N, 25N, 10H, 25H
+SWARM_DRAIN = (0.1, 0.1, 0.2, 0.3)
+# Penetrating Cold's first tick lands COLD_TICK_MS after the aura and the rest COLD_TICK_MS apart. A wave's
+# carriers get it in the same server tick, and a stall can push a tick row up to COLD_TICK_SLACK_MS late.
+COLD_TICK_MS = 3000
+COLD_WAVE_MS = 1000
+COLD_TICK_SLACK_MS = 1000
+SPELL_AURA_MASTERY = 31821
+# two healers or more landing on one carrier this close together while another carrier at risk got nothing
+HERD_MS = 1500
+# AnubarakHealDuty, as anub.healduty writes it
+HEAL_DUTIES = {"0": "none", "1": "cold", "2": "tank"}
 # Hand-kept, since no aura row says whether it heals over time: the HoTs a Penetrating Cold carrier can wear,
 # any rank. A shield is any aura the trace shows absorbing.
 HOT_NAMES = {"Renew", "Rejuvenation", "Regrowth", "Lifebloom", "Wild Growth", "Riptide", "Earthliving",
@@ -297,7 +331,8 @@ READ_KEYS = ("toc.progress", "anub.phase", "anub.patch0", "anub.patch1", "anub.s
              "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip",
              "anub.bside", "anub.dside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.kiteplan",
              "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand", "anub.kitemove", "anub.bridge",
-             "anub.relay", "anub.subspot", "anub.saoe", "anub.hbehind")
+             "anub.relay", "anub.subspot", "anub.saoe", "anub.hbehind", "anub.swarmheal", "anub.healduty",
+             "anub.coldheal", "anub.mastery", "toc.aura")
 SPOT_KEYS = ("anub.spot0", "anub.spot1")
 
 # Read from the source so a retune shows up here without a second edit.
@@ -4010,8 +4045,55 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
             for label, _, held in side_tank_gather(trace)))
 
 
+def pull_returns(trace: Trace, pulls: list[dict], samples: Samples) -> list[dict]:
+    """Per burrower_pulls row: `back` the first snapshot after it with the burrower on a tank again, a side's
+    holder or a tank-role player, and `on_tank` that tank, else None with `last` its last sample off a tank before it
+    went under (`under`) or stopped being sampled; `taunts` the BURROWER_TAUNTS cast at it from the snapshot before
+    the pull to `back`, and an area taunt by the tank it came back to."""
+    sides = side_spans(trace)
+    taunts = [rec for rec in trace.of("cast") if rec.get("sp") in BURROWER_TAUNTS]
+    ups = {row["guid"]: row["ups"] for row in burrower_rows(trace, samples)}
+    out = []
+    for pull in pulls:
+        guid = pull["guid"]
+        stamps, rows = samples.track(guid)
+        index = bisect.bisect_left(stamps, pull["t"])
+        since = stamps[index - 1] if index else pull["t"]
+        later = [when for when in ups.get(guid, ()) if when > pull["t"]]
+        back = on = None
+        last = pull["t"]
+        for at in range(index + 1, len(stamps)):
+            when, unit = stamps[at], rows[at]
+            if later and when >= later[0]:
+                break
+            target = unit[7] if len(unit) > 7 else 0
+            if unit[5] <= 0:
+                break
+            if not target:
+                continue
+            if trace.role(target) == "tank" or held_side(sides, target, when) is not None:
+                back, on = when, target
+                break
+            last = when
+        stop = back if back is not None else last
+        out.append({**pull, "back": back, "on_tank": on, "last": last, "under": back is None and bool(later),
+                    "taunts": [rec for rec in taunts if since <= rec["t"] <= stop
+                               and (rec.get("tgt") == guid or (rec["sp"] in AREA_TAUNTS and rec.get("s") == on))]})
+    return out
+
+
+def pull_return_text(trace: Trace, row: dict) -> str:
+    taunts = ", ".join(f"{BURROWER_TAUNTS[rec['sp']]} by {trace.name(rec.get('s'))}"
+                       f" {(rec['t'] - row['t']) / 1000:+.1f} s" for rec in row["taunts"])
+    if row["back"] is None:
+        return (f"never back on a tank, on non-tanks {(row['last'] - row['t']) / 1000:.1f} s to its last sample"
+                + (" before it went under" if row["under"] else "") + (f"; taunts at it: {taunts}" if taunts else ""))
+    return (f"back on {trace.name(row['on_tank'])} after {(row['back'] - row['t']) / 1000:.1f} s, "
+            + (f"taunted: {taunts}" if taunts else "no taunt"))
+
+
 def show_pulls(trace: Trace, samples: Samples) -> None:
-    rows = burrower_pulls(trace, samples)
+    rows = pull_returns(trace, burrower_pulls(trace, samples), samples)
     print(f"\n  pulled off its side tank by a non-tank within {PULL_WINDOW_MS / 1000:.0f} s of coming up: the seconds"
           f" since it came up and\n  on the side tank, and the puller's casts on it in the {PULL_CASTS_MS / 1000:.0f} s"
           " before, triggered ones marked *:" + ("" if rows else " none"))
@@ -4022,6 +4104,7 @@ def show_pulls(trace: Trace, samples: Samples) -> None:
               f" {clock(row['up'])}: {trace.name(row['tank'])} (side {row['side']}) > {trace.name(row['puller'])}"
               f" ({trace.role(member_of(trace, row['puller']))}) +{(row['t'] - row['up']) / 1000:.1f} s,"
               f" {(row['t'] - row['on']) / 1000:.1f} s on the side tank; casts on it: {casts or 'none'}")
+        print(f"      {pull_return_text(trace, row)}")
     if rows:
         pullers = collections.Counter(row["puller"] for row in rows)
         print("  pulls per puller: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in pullers.most_common()))
@@ -5126,8 +5209,283 @@ def show_swarm_race(trace: Trace, start: int, stop: int, samples: Samples) -> No
                  if spent else ""))
 
 
+def rows_by_target(trace: Trace, event: str, spells=None) -> dict[int, list[dict]]:
+    """An event's rows per `d`, in time order, only `spells` when given."""
+    out: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of(event):
+        if spells is None or rec.get("sp") in spells:
+            out[rec.get("d")].append(rec)
+    return out
+
+
+def pct_at(samples: Samples, tables: dict, guid: int, pool: int | None, when: int) -> float | None:
+    """A player's health % at `when`, from whichever was written last: its snapshot, what a hit on it left
+    (off its pool) or what a heal left. The swarm drains it every second, so a snapshot alone runs a tick
+    behind."""
+    stamps, rows = samples.track(guid)
+    index = bisect.bisect_right(stamps, when)
+    latest = (stamps[index - 1], rows[index - 1][5]) if index else None
+    for rec in reversed(tables["damage"].get(guid, ())):
+        if rec["t"] <= when:
+            if pool and rec.get("hp") is not None and (latest is None or rec["t"] >= latest[0]):
+                latest = (rec["t"], max(0.0, rec["hp"] - rec.get("a", 0) * 100.0 / pool))
+            break
+    for rec in reversed(tables["heals"].get(guid, ())):
+        if rec["t"] <= when:
+            if rec.get("hp") is not None and (latest is None or rec["t"] >= latest[0]):
+                latest = (rec["t"], rec["hp"])
+            break
+    return latest[1] if latest else None
+
+
+def cold_carrier(trace: Trace, samples: Samples, guid: int, landing: int, tables: dict) -> dict:
+    """One carrier of a wave, as cold_waves describes it, before `risk`."""
+    pool = trace.maxhp.get(guid)
+    pct = pct_at(samples, tables, guid, pool, landing)
+    tick = next((rec for rec in tables["ticks"].get(guid, ())
+                 if landing < rec["t"] <= landing + COLD_TICK_MS + COLD_TICK_SLACK_MS), None)
+    due = tick["t"] if tick else landing + COLD_TICK_MS
+    died = any(landing <= when <= due + NOTE_TICK_MS for when in tables["deaths"].get(guid, ()))
+    margin = amount = None
+    if tick:
+        amount = tick.get("a", 0) + tick.get("ab", 0) + tick.get("rs", 0)
+        if tick.get("ok", 0) > 0:
+            margin = -tick["ok"]
+        elif pool and tick.get("hp") is not None:
+            # the pool is the one at first sight, so a carrier under a health buff can read short of a tick it lived
+            margin = max(0, round(tick["hp"] * pool / 100.0) - tick.get("a", 0))
+        fate = "died" if died or tick.get("ok", 0) > 0 else "survived"
+    else:
+        fate = "before" if died else "none"
+    heals: collections.Counter = collections.Counter()
+    absorbs: collections.Counter = collections.Counter()
+    helped = False
+    for rec in tables["heals"].get(guid, ()):
+        if landing <= rec["t"] < due:
+            heals[member_of(trace, rec.get("s"))] += rec.get("a", 0) - rec.get("oh", 0)
+            helped = helped or rec.get("s") in tables["healers"]
+    for rec in tables["absorbs"].get(guid, ()):
+        if landing <= rec["t"] <= due:
+            absorbs[member_of(trace, rec.get("s"))] += rec.get("a", 0)
+            helped = helped or member_of(trace, rec.get("s")) in tables["healers"]
+    coldheal = []
+    for healer, start, stop in tables["assigned"].get(guid, ()):
+        if start <= due and stop >= landing - NOTE_TICK_MS and healer not in coldheal:
+            coldheal.append(healer)
+    return {"guid": guid, "landing": landing, "pct": pct,
+            "health": None if pct is None or not pool else pct * pool / 100.0,
+            "tick": due if tick else None, "amount": amount, "margin": margin, "fate": fate,
+            "heals": heals, "absorbs": absorbs, "helped": helped, "coldheal": coldheal}
+
+
+def wave_herds(trace: Trace, carriers: list[dict], heals: dict[int, list[dict]], healers: set[int]) -> list[dict]:
+    """Per carrier, the first HERD_MS stretch before its tick with two healers or more landing heals on it, kept
+    while another carrier at risk had nothing from a healer before its own tick."""
+    starved = [row for row in carriers if row["risk"] and not row["helped"]]
+    out = []
+    for row in carriers:
+        due = row["tick"] or row["landing"] + COLD_TICK_MS
+        landed = sorted((rec["t"], rec.get("s")) for rec in heals.get(row["guid"], ())
+                        if rec.get("s") in healers and row["landing"] <= rec["t"] < due)
+        others = [other["guid"] for other in starved if other is not row]
+        for index, (first, _) in enumerate(landed):
+            inside = [(when, source) for when, source in landed[index:] if when - first <= HERD_MS]
+            if len({source for _, source in inside}) >= 2:
+                if others:
+                    out.append({"carrier": row["guid"], "start": first, "stop": inside[-1][0],
+                                "healers": sorted({source for _, source in inside}, key=trace.name),
+                                "starved": others})
+                break
+    return out
+
+
+def cold_waves(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Phase 3's Penetrating Cold waves, each the carriers landing within COLD_WAVE_MS of its first. Per carrier:
+    its health at the landing (`pct`, and `health` in points off its pool), its first tick and the `margin` it
+    left (health before it less the damage taken, the overkill as a negative), the effective heals before that
+    tick and the absorbs up to it per source with owners folded in, `helped` when one came from a healer, its
+    anub.coldheal healers and `fate`: survived, died at the tick, before it, or none with no tick row and alive.
+    `risk` is its health at the landing, less the swarm's share each second to the tick, under that tick before
+    resists or the wave's largest without one; None with either unknown. Per wave: the living toc.aura frost
+    holders at the landing (None with no toc.aura rows), `resists[tick] = [resisted, total]` over every tick of
+    the wave, `mastery[tick]` the Aura Mastery auras up at it, for those ticks and the first two, its anub.mastery
+    rows to the second tick, and its herds."""
+    span = swarm_span(trace)
+    if span is None:
+        return []
+    samples = samples or Samples(trace)
+    start, stop, _ = span
+    roster = roster_guids(trace)
+    landings = sorted((rec["t"], rec.get("d")) for rec in trace.of("aura")
+                      if rec.get("sp") in PENETRATING_COLD and not rec.get("r") and rec.get("d") in roster
+                      and start <= rec["t"] < stop)
+    groups: list[list[tuple[int, int]]] = []
+    for when, guid in landings:
+        if groups and when - groups[-1][0][0] <= COLD_WAVE_MS:
+            if all(guid != seen for _, seen in groups[-1]):
+                groups[-1].append((when, guid))
+        else:
+            groups.append([(when, guid)])
+    if not groups:
+        return []
+
+    end = pull_end(trace)
+    deaths: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in combat_deaths(trace):
+        deaths[rec.get("g")].append(rec["t"])
+    assigned: dict[int, list[tuple[int, int, int]]] = collections.defaultdict(list)
+    for healer, spans in holder_spans(trace, "anub.coldheal", end).items():
+        for value, low, high in spans:
+            if as_guid(value):
+                assigned[as_guid(value)].append((healer, low, high))
+    damage = rows_by_target(trace, "dmg")
+    tables = {"damage": damage, "heals": rows_by_target(trace, "heal"),
+              "ticks": {guid: [rec for rec in rows if rec.get("sp") in PENETRATING_COLD]
+                        for guid, rows in damage.items()},
+              "absorbs": rows_by_target(trace, "abs"), "deaths": deaths, "assigned": assigned,
+              "healers": {guid for guid in roster if trace.role(guid) == "heal"}}
+    diff = trace.header.get("diff")
+    drain = SWARM_DRAIN[diff] if diff in range(len(SWARM_DRAIN)) else SWARM_DRAIN[-1]
+    mastery = aura_spans(trace, (SPELL_AURA_MASTERY,))
+    frost = holder_spans(trace, "toc.aura", end)
+    mastery_rows = notes(trace, "anub.mastery")
+
+    out = []
+    for index, group in enumerate(groups):
+        first = group[0][0]
+        limit = groups[index + 1][0][0] if index + 1 < len(groups) else end + 1
+        carriers = [cold_carrier(trace, samples, guid, landing, tables) for landing, guid in group]
+        largest = max((row["amount"] for row in carriers if row["amount"]), default=None)
+        for row in carriers:
+            amount = row["amount"] or largest
+            row["risk"] = (None if row["health"] is None or not amount
+                           else row["health"] * (1.0 - drain) ** (COLD_TICK_MS // 1000) < amount)
+        resists: dict[int, list[int]] = {}
+        stamps: dict[int, int] = {}
+        for row in carriers:
+            for rec in tables["ticks"].get(row["guid"], ()):
+                tick = round((rec["t"] - row["landing"]) / COLD_TICK_MS)
+                if row["landing"] < rec["t"] < limit and tick >= 1:
+                    entry = resists.setdefault(tick, [0, 0])
+                    entry[0] += rec.get("rs", 0)
+                    entry[1] += rec.get("a", 0) + rec.get("ab", 0) + rec.get("rs", 0)
+                    stamps[tick] = min(stamps.get(tick, rec["t"]), rec["t"])
+        up = {}
+        for tick in sorted({1, 2} | set(resists)):
+            when = stamps.get(tick, first + tick * COLD_TICK_MS)
+            up[tick] = sorted((guid for guid, spans in mastery.items()
+                               if any(low <= when <= high for low, high, _ in spans)), key=trace.name)
+        holders = None
+        if frost:
+            holders = sorted((guid for guid, spans in frost.items()
+                              if any(value == "frost" and low <= first < high for value, low, high in spans)
+                              and (health(samples, guid, first) or 0.0) > 0.0), key=trace.name)
+        out.append({
+            "t": first, "rel": first - start, "carriers": carriers, "frost": holders, "mastery": up,
+            "resists": dict(sorted(resists.items())),
+            "rows": [(rec["t"], rec.get("g"), str(rec.get("txt", ""))) for rec in mastery_rows
+                     if first - NOTE_TICK_MS <= rec["t"] <= first + 2 * COLD_TICK_MS + COLD_TICK_SLACK_MS],
+            "herds": wave_herds(trace, carriers, tables["heals"], tables["healers"]),
+        })
+    return out
+
+
+def kilo(amount: float) -> str:
+    return f"{amount / 1000:.1f}k"
+
+
+def cold_sources(trace: Trace, row: dict) -> str:
+    parts = []
+    for guid in sorted(set(row["heals"]) | set(row["absorbs"]),
+                       key=lambda guid: -(row["heals"].get(guid, 0) + row["absorbs"].get(guid, 0))):
+        if row["heals"].get(guid, 0) <= 0 and not row["absorbs"].get(guid):
+            continue
+        text = trace.name(guid)
+        if row["heals"].get(guid):
+            text += f" {kilo(row['heals'][guid])}"
+        if row["absorbs"].get(guid):
+            text += f" abs {kilo(row['absorbs'][guid])}"
+        parts.append(text)
+    return ", ".join(parts) or "none"
+
+
+COLD_FATES = {"survived": "survived", "died": "died", "before": "died before it", "none": "no tick"}
+
+
+def show_cold_waves(trace: Trace, samples: Samples) -> None:
+    waves = cold_waves(trace, samples)
+    if not waves:
+        print("  no Penetrating Cold wave landed in phase 3")
+        return
+    survived = [sum(1 for row in wave["carriers"] if row["fate"] == "survived") for wave in waves]
+    carried = [len(wave["carriers"]) for wave in waves]
+    print("  first ticks survived per phase 3 Penetrating Cold wave: "
+          + ", ".join(f"{alive} of {total}" for alive, total in zip(survived, carried))
+          + f" ({sum(survived)} of {sum(carried)})")
+    coldheal = bool(notes(trace, "anub.coldheal"))
+    mastery_rows = bool(notes(trace, "anub.mastery"))
+    print(f"  per wave and carrier: health at the landing, at risk when that less {COLD_TICK_MS // 1000} s of the"
+          " swarm is under the tick,\n  the first tick's margin (health before it less the damage taken) and fate,"
+          + (" anub.coldheal healers," if coldheal else "") + " the heals and absorbs on it\n  before the tick by"
+          " source; per wave the living toc.aura frost holders, Aura Mastery at the first two\n  ticks, anub.mastery"
+          " rows, the resisted share per tick (* under Aura Mastery) and herds"
+          + ("" if coldheal else "; anub.coldheal: no rows"))
+    for wave, alive in zip(waves, survived):
+        frost = ("toc.aura: no rows" if wave["frost"] is None
+                 else "frost " + (", ".join(trace.name(guid) for guid in wave["frost"]) or "none"))
+        mastery = ", ".join(f"tick {tick} " + (", ".join(trace.name(guid) for guid in wave["mastery"][tick]) or "no")
+                            for tick in (1, 2))
+        if not mastery_rows:
+            rows = "no rows"
+        else:
+            rows = ", ".join(f"{trace.name(guid)} {value} {(when - wave['t']) / 1000:+.1f} s"
+                             for when, guid, value in wave["rows"]) or "none"
+        print(f"    {clock(wave['t'])} ({wave['rel'] / 1000:+.1f} s): {alive} of {len(wave['carriers'])} through the"
+              f" first tick; {frost}; Aura Mastery {mastery}")
+        print(f"      anub.mastery {rows}; resisted per tick " + (" ".join(
+            f"{resisted * 100 / total:.0f}%" + ("*" if wave["mastery"][tick] else "")
+            for tick, (resisted, total) in wave["resists"].items() if total) or "none"))
+        for row in wave["carriers"]:
+            health_text = "-" if row["health"] is None else kilo(row["health"])
+            pct = "-" if row["pct"] is None else f"{row['pct']:.1f}%"
+            risk = {True: "risk", False: "-", None: "?"}[row["risk"]]
+            margin = "-" if row["margin"] is None else f"{row['margin'] / 1000:+.1f}k"
+            healers = ""
+            if coldheal:
+                healers = "coldheal " + (", ".join("self" if guid == row["guid"] else trace.name(guid)
+                                                   for guid in row["coldheal"]) or "none") + "; "
+            print(f"      {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {health_text:>6} {pct:>6}"
+                  f" {risk:4} {margin:>6} {COLD_FATES[row['fate']]:14} {healers}{cold_sources(trace, row)}")
+        for herd in wave["herds"]:
+            print(f"      herd: {', '.join(trace.name(guid) for guid in herd['healers'])} on"
+                  f" {trace.name(herd['carrier'])} {clock(herd['start'])}-{clock(herd['stop'])}; at risk with"
+                  f" nothing from a healer: {', '.join(trace.name(guid) for guid in herd['starved'])}")
+
+
+def show_heal_duties(trace: Trace) -> None:
+    end = pull_end(trace)
+    duties = holder_spans(trace, "anub.healduty", end)
+    if not duties:
+        print("  anub.healduty: no rows")
+    else:
+        print("  anub.healduty, each healer bot's duty from phase 3: " + "; ".join(
+            f"{trace.name(guid)} " + " > ".join(f"{HEAL_DUTIES.get(value, value)} {clock(start)}"
+                                                for value, start, _ in spans)
+            for guid, spans in sorted(duties.items(), key=lambda item: trace.name(item[0]))))
+    assigned = holder_spans(trace, "anub.coldheal", end)
+    if not assigned:
+        print("  anub.coldheal: no rows")
+        return
+    print("  anub.coldheal, the carrier at risk each healer bot kept up, self for itself:")
+    for guid, spans in sorted(assigned.items(), key=lambda item: trace.name(item[0])):
+        parts = [f"{'self' if as_guid(value) == guid else trace.name(as_guid(value))} {clock(start)}-{clock(stop)}"
+                 for value, start, stop in spans if as_guid(value)]
+        print(f"    {trace.name(guid)[:14]:14} {', '.join(parts) or 'none'}")
+
+
 def show_swarm(trace: Trace) -> None:
     print("PHASE 3")
+    samples = Samples(trace)
     span = swarm_span(trace)
     if span is None:
         print("  never reached: no phase 3 in anub.phase and no Leeching Swarm on the raid")
@@ -5148,9 +5506,9 @@ def show_swarm(trace: Trace) -> None:
                   f" ({row['rel'] / 1000:+.1f} s from phase 3)")
         if not lust:
             print("  no lust cast")
-        show_swarm_race(trace, start, stop, Samples(trace))
+        show_swarm_race(trace, start, stop, samples)
 
-    windows = cold_windows(trace)
+    windows = cold_windows(trace, samples)
     if windows:
         print(f"\n  Penetrating Cold, whole pull: {len(windows)} carrier window(s),"
               f" {sum(row['heals'] for row in windows)} heal(s) onto them")
@@ -5169,6 +5527,9 @@ def show_swarm(trace: Trace) -> None:
               + (", ".join(f"{trace.name(row['guid'])} {clock(row['start'])} {row['bare'] / 1000:.1f} of"
                            f" {row['carried'] / 1000:.1f} s" + (" died" if row["died"] else "") for row in bare)
                  or "none"))
+        show_counts(trace, "anub.swarmheal")
+        show_heal_duties(trace)
+        show_cold_waves(trace, samples)
     show_counts(trace, "anub.defensive")
 
     if span is not None:
@@ -5393,6 +5754,64 @@ def show_healer_engines(trace: Trace, healers: list[int]) -> None:
         f" {entry['fires']} fires, {entry['won']} won" for engine, entry in sorted(coverage.items())))
 
 
+def healing_done(trace: Trace) -> list[dict]:
+    """Per phase, every span of it added up, healing done on Warcraft Logs' rules: per source with pets, guardians
+    and totems folded into their owner, `[effective, absorbed, overheal]`, the effective healing a heal's gross less
+    its overheal and the absorbs credited to the shield's caster. `unowned` holds the sources off the roster the
+    trace names no owner for, kept as their own. Heals onto pets never reach a trace."""
+    spans = [(start, stop, phase) for start, stop, phase, _ in phase_spans(trace) if phase]
+    out: dict[int, dict] = {}
+    for start, stop, phase in spans:
+        entry = out.setdefault(phase, {"label": PHASE_LABELS.get(phase, str(phase)), "ms": 0,
+                                       "sources": collections.defaultdict(lambda: [0, 0, 0]), "unowned": set()})
+        entry["ms"] += stop - start
+    if not out:
+        return []
+    roster = roster_guids(trace)
+
+    def phase_of(when: int) -> int | None:
+        return next((phase for start, stop, phase in spans if start <= when < stop), None)
+
+    for rec in trace.of("heal", "abs"):
+        phase = phase_of(rec["t"])
+        if phase is None:
+            continue
+        source = rec.get("s")
+        owner = member_of(trace, source)
+        entry = out[phase]
+        if owner not in roster and owner == source:
+            entry["unowned"].add(source)
+        totals = entry["sources"][owner]
+        if rec["e"] == "abs":
+            totals[1] += rec.get("a", 0)
+        else:
+            totals[0] += rec.get("a", 0) - rec.get("oh", 0)
+            totals[2] += rec.get("oh", 0)
+    return [out[phase] for phase in sorted(out)]
+
+
+def show_healing_done(trace: Trace) -> None:
+    phases = healing_done(trace)
+    print("  healing done per phase on Warcraft Logs' rules: effective healing (heals less overheal) plus the"
+          " absorbs\n  credited to the shield's caster, overheal as a share of that plus overheal, HPS over the"
+          " phase's length,\n  pets and totems folded into their owner; heals onto pets never reach the trace:"
+          + ("" if phases else " no anub.phase rows"))
+    for phase in phases:
+        seconds = phase["ms"] / 1000
+        rows = sorted(((guid, heal + absorbed, absorbed, over) for guid, (heal, absorbed, over)
+                       in phase["sources"].items() if heal + absorbed + over > 0), key=lambda row: -row[1])
+        total = sum(row[1] for row in rows)
+        print(f"    {phase['label']} {seconds:.1f} s, raid {total / seconds / 1000 if seconds else 0:.1f}k HPS")
+        print(f"      {'source':14} {'role':6} {'healing':>9} {'absorbs':>8} {'over':>5} {'HPS':>6} {'share':>5}")
+        for guid, done, absorbed, over in rows:
+            print(f"      {trace.name(guid)[:14]:14} {trace.role(guid):6} {done / 1000:8,.0f}k {absorbed / 1000:7,.0f}k"
+                  f" {over * 100 / (done + over) if done + over else 0:4.0f}%"
+                  f" {kilo(done / seconds if seconds else 0):>6} {done * 100 / total if total else 0:4.0f}%")
+        if phase["unowned"]:
+            print("      sources the trace names no owner for, kept as their own: "
+                  + ", ".join(trace.name(guid) for guid in sorted(phase["unowned"])))
+
+
 def show_healers(trace: Trace) -> None:
     print("HEALERS")
     if not is_toc_anubarak(trace):
@@ -5461,6 +5880,7 @@ def show_healers(trace: Trace) -> None:
         print(f"    side {side} {trace.name(tank)[:14]:14} {', '.join(parts)}")
     print(f"  main tank {trace.name(rows['main']) if rows['main'] else '-'} alive with no living healer within"
           f" {HEALER_REACH_YD:.0f} yd: " + (", ".join(main_bare) or "none"))
+    show_healing_done(trace)
 
 
 # ---------------------------------------------------------------------------------------------- tanks
@@ -6071,7 +6491,8 @@ SECTIONS = (
      " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
      " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
      " exit, each pulled off its side tank by a non-tank within 15 s of coming up with the puller's casts,"
-     " triggered ones marked *, Bladestorm with a burrower within 25 yd, burrower threat cap vetoes per bot",
+     " triggered ones marked *, and how long until it was back on a tank and the taunts that did it, Bladestorm"
+     " with a burrower within 25 yd, burrower threat cap vetoes per bot",
      show_burrowers),
     ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
      " target kind; his health lost per phase 1, flagged under 20 percent; anub.dps rows per role; each anub.dside"
@@ -6085,12 +6506,17 @@ SECTIONS = (
     ("swarm", "phase 3: Leeching Swarm, lust, per 5 s his health and the raid's, the swarm and the healers'"
      " heals by who took them, bot heals onto healthy non-carriers, DPS on burrowers up at its start and newer"
      " ones, when the burst opened, burst spent from 40%%, Penetrating Cold heals, the seconds each phase 3"
-     " carrier went with no HoT or shield, defensives, deaths",
+     " carrier went with no HoT or shield, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
+     " per phase 3 Penetrating Cold wave the first ticks survived, the frost holder, Aura Mastery at the first two"
+     " ticks, anub.mastery rows, the resisted share per tick, each carrier's health at the landing, risk, first"
+     " tick margin and fate, its anub.coldheal healers and the heals and absorbs on it before the tick, and herds"
+     " of healers on one carrier while another at risk got nothing, defensives, deaths",
      show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand, the walk behind the tank patches from anub.hbehind go to standing"
      " still, burrowers reaching a healer in phase 3 past no patch; side tanks and the main tank with no healer in"
-     " reach; raid healer engine coverage",
+     " reach; raid healer engine coverage; per phase healing done on Warcraft Logs' rules with pets and totems"
+     " folded into their owner: effective healing plus absorbs, overheal share, HPS and share of the raid's",
      show_healers),
     ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
      " before it, side tank area casts per surfaced phase and anub.saoe rows, each tank defensive cast with its"
