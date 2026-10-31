@@ -766,3 +766,13 @@ bool AnubarakAuraMasteryAction::Execute(Event /*event*/)
 }
 
 bool AnubarakAuraMasteryAction::isUseful() { return AnubarakAuraMasteryDue(botAI); }
+
+bool AnubarakInnervateHealerAction::Execute(Event /*event*/)
+{
+    Player* healer = GetAnubarakInnervateTarget(botAI);
+    return healer && botAI->CastSpell("innervate", healer);
+}
+
+bool AnubarakInnervateHealerAction::isUseful() { return AnubarakInnervateHealerDue(botAI); }
+
+std::vector<NextAction> AnubarakInnervateHealerAction::getPrerequisites() { return {NextAction("caster form")}; }

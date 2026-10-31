@@ -24,10 +24,12 @@ HoT or shield, the healers' walk behind the tank patches and burrowers reaching 
 seventeenth the phase 3 Penetrating Cold waves with the healer duties, Aura Mastery and a herd, the healing table
 per phase and a pulled burrower's way back to a tank, with and without the new keys, an eighteenth the kite
 replay's starts, each kite's anub.kitepred and anub.kitepath and its first hazard, a nineteenth each wave's focus
-pick per side, the side tanks' Expose Weakness and anub.p3wave, the first one again phase 3's race against the
-swarm and the bot tanks at the engage, and the shared fixture shows every section reads empty on a trace that
-is not Anub'arak rather than raising. The kite planner's port is checked against the native test's cases that
-need no Hand or own immunity.
+pick per side, the side tanks' Expose Weakness and anub.p3wave, a twentieth each speed boost against the spike's
+speed and its pick's +boost@ second, the standby escort at the claim, the spike's next leg past a patch, the
+healers' phase 3 mana and mana cooldowns and the melee on a burrower no tank holds, the first one again phase 3's
+race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads empty on
+a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native test's
+cases that need no Hand, an own immunity only through Finish.
 """
 from __future__ import annotations
 
@@ -4604,7 +4606,8 @@ def outcome(**fields) -> ab.PlanOutcome:
 
 
 class PlannerPort(unittest.TestCase):
-    """The kite planner's port against anubarak_planner_test.cpp's cases that need no Hand or own immunity."""
+    """The kite planner's port against anubarak_planner_test.cpp's cases that need no Hand, an own immunity only
+    through Finish."""
 
     rules = ab.planner_rules()
 
@@ -4628,7 +4631,9 @@ class PlannerPort(unittest.TestCase):
                 ab.planner_rules.cache_clear()
 
     def test_a_first_kite_runs_to_a_late_patch(self):
-        for kiter, spike, gather, patches in FIRST_KITES:
+        # BI's ends on a catch: every ending on its south kite patch restarts the spike toward the gather past the
+        # other one, a kite hazard
+        for kiter, spike, gather, patches in FIRST_KITES[:1]:
             world = fresh_world(kiter, spike, gather, patches)
             candidate, out, kept = ab.plan_kite(world, self.rules)
             self.assertFalse(kept)
@@ -4668,6 +4673,40 @@ class PlannerPort(unittest.TestCase):
         self.assertEqual(ab.kitepred_text(outcome(raid=30, caught=True)), "raid:3.0")
         self.assertEqual(ab.kitepred_text(outcome(caught=True, end_tick=153)), "catch:15.3")
         self.assertEqual(ab.kitepred_text(outcome(ending="patch", end_tick=141)), "patch:14.1")
+
+    def test_the_spike_runs_its_speed_steps_out_over_the_life_left(self):
+        base = (0.0, 0.0, ab.SPIKE_SPEEDS[0], 0, ab.SPIKE_STEP_S)
+        self.assertAlmostEqual(ab.run_length(base, 0.0, 10.0), 3.5 * 7.0 + ab.SPIKE_SPEEDS[1] * 3.0)
+        self.assertAlmostEqual(ab.run_length(base, 2.0, 5.0), 3.5 * 5.0)
+        top = (0.0, 0.0, ab.SPIKE_SPEEDS[2], 2, 0.0)
+        self.assertAlmostEqual(ab.run_length(top, 30.0, 4.0), ab.SPIKE_SPEEDS[2] * 4.0)
+
+    def test_a_patch_end_whose_restart_passes_another_kite_patch_is_a_kite_hazard(self):
+        def world(patches):
+            return ab.KiteWorld((735.0, 135.0), (735.0, 165.0, ab.SPIKE_SPEEDS[2], 2, ab.SPIKE_STEP_S), 59.5,
+                                patches, (790.0, 135.0))
+
+        alone = world([kite_patch(720.0, 135.0, False)])
+        walk = ab.PlanCandidate("arc")
+        walk.patch, walk.turn_tick, walk.ending = 0, 0, "patch"
+        walk.track = [(735.0 - min(0.7 * tick, 15.0), 135.0) for tick in range(ab.planner_ticks(alone, self.rules) + 1)]
+        clean = ab.judge(walk, alone, self.rules)
+        self.assertEqual((clean.ending, clean.tank, clean.kite, clean.raid), ("patch", -1, -1, -1))
+        crossed = ab.judge(walk, world([kite_patch(720.0, 135.0, False), kite_patch(760.0, 138.0, False)]), self.rules)
+        self.assertEqual((crossed.ending, crossed.tank, crossed.kite), ("patch", -1, crossed.end_tick))
+
+    def test_an_own_immunity_costs_more_mid_life_and_its_leg_passing_a_tank_patch_is_a_tank_hazard(self):
+        spike = (765.0, 135.0, ab.SPIKE_SPEEDS[2], 2, ab.SPIKE_STEP_S)
+        mid = ab.KiteWorld((760.0, 135.0), spike, 40.0, [kite_patch(790.0, 145.0, True)], (800.0, 135.0))
+        out = ab.planner_finish(mid, self.rules, ab.planner_ticks(mid, self.rules), 20, (758.0, 135.0), 5.0, -1, spike,
+                                own_used=True)
+        self.assertEqual((out.ending, out.caught, out.cost, out.tank, out.kite),
+                         ("own", False, self.rules["costOwnMid"], 20, -1))
+        self.assertAlmostEqual(out.end_gather, 42.0)
+        late = ab.KiteWorld((760.0, 135.0), spike, 6.0, [], (800.0, 135.0))
+        out = ab.planner_finish(late, self.rules, ab.planner_ticks(late, self.rules), 20, (758.0, 135.0), 5.0, -1,
+                                spike, own_used=True)
+        self.assertEqual((out.ending, out.cost, out.tank), ("own", self.rules["costOwn"], -1))
 
     def test_the_spike_step_reads_off_its_speed_and_times_the_next_off_the_restart(self):
         self.assertEqual(ab.spike_step(3.4, 0.5), (0, 6.5))
@@ -4978,6 +5017,204 @@ class WaveReads(unittest.TestCase):
     def test_p3wave_counts_as_present_and_absent_without_its_rows(self):
         self.assertNotIn("anub.p3wave", ab.missing_probes(self.trace))
         self.assertIn("anub.p3wave", ab.missing_probes(self.bare))
+
+
+NXTANK, NXASSASIN, NXANGRY, NXAGONY, NXHOLY, NXPRAYER, NXDRUID = range(9901, 9908)
+NXBOSS = CREATURE | 2001
+NXSPIKE = CREATURE | 2002
+NXPATCH = CREATURE | 2011
+NXBUG = CREATURE | 2021
+NXPATCH_AT = (X + 10.0, Y - 8.0)
+NXHOLY_AT = (X - 20.0, Y - 15.0)
+NXBUG_AT = (X + 5.0, Y + 30.0)
+SPELL_VANISH, SPELL_DIVINE_PLEA, SPELL_INNERVATE, SPELL_HYMN = 26889, 54428, 29166, 64901
+# (start, stop, kiter) per mark under him, and each kiter's path while marked
+NXMARKS = ((12000, 20000, NXASSASIN), (20200, 21000, NXANGRY), (26000, 34000, NXAGONY))
+NXKITERS = {NXASSASIN: [(12000, -28.0, -20.0), (20000, 28.0, -20.0)], NXANGRY: [(0, 10.0, 10.0)],
+           NXAGONY: [(28000, -20.0, 20.0), (34000, -20.0, -22.0)]}
+# base speed into Assasin's Sprint, fast to the Vanish, on through the kite patch's reach at Angry, idle where it
+# spent it, then fast at Agony
+NXSPIKE_PATH = [(12000, -40.0, -20.0), (16000, -26.0, -20.0), (20000, 18.0, -20.0), (21000, 10.0, -9.0),
+               (26000, 10.0, -9.0), (28000, -12.0, 12.0), (31000, -16.0, -21.0), (34000, -18.0, -23.0)]
+
+
+def nextleg_mana(guid: int, when: int) -> float:
+    """Holylight from 60 to 25 and Prayer from 90 to 70 over phase 3's first 30 s."""
+    start, end = {NXHOLY: (60.0, 25.0), NXPRAYER: (90.0, 70.0)}.get(guid, (100.0, 100.0))
+    return start + (end - start) * min(max(when - 40000, 0), 30000) / 30000
+
+
+def nextleg_snap(when: int) -> dict:
+    spots = {NXTANK: (X + 5.0, Y + 27.0) if when < 50000 else (X + 5.0, Y + 10.0), NXHOLY: NXHOLY_AT,
+             NXPRAYER: (X - 10.0, Y + 30.0), NXDRUID: (X - 25.0, Y + 5.0),
+             **{guid: lerp(path, when) for guid, path in NXKITERS.items()}}
+    units = [[guid, *spot, Z, 0.0, 100.0, nextleg_mana(guid, when),
+              NXBUG if guid == NXANGRY and 42000 <= when < 56000 else 0, 0, 0, 0, 0] for guid, spot in spots.items()]
+    units.append([NXBOSS, X, Y, Z, 0.0, 70.0, 0.0, NXTANK, 0, 0, 0, 0])
+    kiter = next((guid for start, stop, guid in NXMARKS if start <= when <= stop), 0)
+    if 12000 <= when <= 34000:
+        units.append([NXSPIKE, *lerp(NXSPIKE_PATH, when), Z, 0.0, 100.0, 0.0, kiter, 1, 0, 0, 0])
+    hz = []
+    if when <= 21000:
+        units.append([NXPATCH, *NXPATCH_AT, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+        hz.append([PERMAFROST_25H, *NXPATCH_AT, PATCH_Z, 6.0, 1])
+    if 41000 <= when <= 56000:
+        units.append([NXBUG, *NXBUG_AT, Z, 0.0, 100.0, 0.0, NXPRAYER if when < 46000 else NXTANK, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def nextleg_pull() -> list[dict]:
+    """A 25H pull, phase 2 from 10 s and phase 3 from 40 s. Assasin's kite plans its boost 2 s from its pick and
+    Sprints 0.7 s later on a base speed spike, then Vanishes; the spike runs on through a kite patch at Angry, who
+    spends it; Agony's kite plans no boost, Nitros on a fast spike and has Holylight on standby. In phase 3
+    Holylight goes from 60 to 25% mana and Prayer from 90 to 70%, and Angry targets a burrower on Prayer, then on
+    Felesta 3 yd off, then on her 20 yd off."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790500000000, "map": ab.MAP_TOC, "inst": 25, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": NXTANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": NXASSASIN, "n": "Assasin", "r": "melee", "c": 4, "h": 0},
+                    {"g": NXANGRY, "n": "Angry", "r": "melee", "c": 1, "h": 0},
+                    {"g": NXAGONY, "n": "Agony", "r": "ranged", "c": 3, "h": 0},
+                    {"g": NXHOLY, "n": "Holylight", "r": "heal", "c": 2, "h": 0},
+                    {"g": NXPRAYER, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+                    {"g": NXDRUID, "n": "Druidica", "r": "ranged", "c": 11, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": NXBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": NXSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        {"t": 0, "e": "unit", "g": NXPATCH, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"},
+        {"t": 41000, "e": "unit", "g": NXBUG, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        *(note(when, NXTANK, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (40000, 3))),
+        *(aura(when, kiter, ab.SPELL_MARK, removed, NXSPIKE) for start, stop, kiter in NXMARKS
+          for when, removed in ((start, False), (stop, True))),
+        note(12100, NXASSASIN, "anub.kitepath", "ring:90:ccw:40+boost@2.0"),
+        note(26100, NXAGONY, "anub.kitepath", "arc:180:12"),
+        *(note(when, NXHOLY, "anub.escort", value) for when, value in ((26500, "standby"), (34000, "none"))),
+        note(31000, NXHOLY, "anub.protect", "hop"),
+        *(note(when, NXANGRY, "anub.dps", value) for when, value in ((41500, "loose"), (50000, "burrower"))),
+        cast(14800, NXASSASIN, SPELL_SPRINT, NXASSASIN),
+        cast(19900, NXASSASIN, SPELL_VANISH, NXASSASIN),
+        cast(30000, NXAGONY, SPELL_NITRO_USE, NXAGONY),
+        cast(15000, NXHOLY, SPELL_DIVINE_PLEA, 0),
+        cast(45000, NXDRUID, SPELL_INNERVATE, NXHOLY),
+        cast(50000, NXPRAYER, SPELL_HYMN, 0),
+        {"t": 75000, "e": "end", "out": "wipe"},
+    ]
+    records += [nextleg_snap(when) for when in range(-500, 75001, 500)]
+    return records
+
+
+class NextLegPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_25_anub-arak_1790500000.ndjson", nextleg_pull())
+        cls.windows = ab.mark_windows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace)
+        return out.getvalue()
+
+    def test_each_speed_boost_reads_the_spikes_speed_against_the_kiters_run_before_it(self):
+        assasin, angry, agony = self.windows
+        self.assertEqual([(row["rec"]["sp"], round(row["spike"], 2), round(row["kiter"], 2), row["slow"])
+                          for row in assasin["boost_speeds"]], [(SPELL_SPRINT, 3.5, 7.0, True)])
+        self.assertEqual(angry["boost_speeds"], [])
+        [nitro] = agony["boost_speeds"]
+        self.assertEqual((nitro["rec"]["sp"], nitro["slow"]), (SPELL_NITRO_USE, False))
+        self.assertAlmostEqual(nitro["spike"], math.hypot(4.0, 33.0) / 3.0)
+
+    def test_the_first_boost_reads_against_its_picks_boost_second(self):
+        assasin, angry, agony = self.windows
+        self.assertEqual((assasin["boost_plan"]["cast"]["t"], assasin["boost_plan"]["planned"]), (14800, 14100))
+        self.assertIsNone(angry["boost_plan"])
+        self.assertEqual((agony["boost_plan"]["pick"]["at"], agony["boost_plan"]["planned"]), (26100, None))
+        self.assertEqual(ab.kitepath_boost("ring:180:cw:45>patch:1712@4.0:edge1+hand+boost@3.5"), 3.5)
+        self.assertIsNone(ab.kitepath_boost("arc:22:-24"))
+        unused = {"start": 0, "stop": 5000, "boosts": [], "kitepath": [{"at": 1000, "value": "arc:0:0+boost@1.5"}]}
+        unused["boost_plan"] = ab.boost_plan(unused)
+        self.assertEqual(ab.boost_plan_text(unused), "its pick's boost +2.5 s never cast")
+        self.assertTrue(ab.boost_plan_slip(unused))
+        self.assertIsNone(ab.boost_plan({**unused, "stop": 2000}))
+        cast = {**unused, "boosts": [{"t": 2900, "s": 1, "sp": SPELL_SPRINT}]}
+        cast["boost_plan"] = ab.boost_plan(cast)
+        self.assertEqual(ab.boost_plan_text(cast), "Sprint +2.9 s against its pick's +2.5 s, on time")
+        self.assertFalse(ab.boost_plan_slip(cast))
+
+    def test_the_standby_escort_reads_its_yards_at_the_claim(self):
+        standby = self.windows[2]["standby"]
+        self.assertEqual((standby["guid"], standby["t"], standby["claimer"]), (NXHOLY, 31000, NXHOLY))
+        self.assertAlmostEqual(standby["yards"], 14.0)
+        self.assertIsNone(self.windows[0]["standby"])
+
+    def test_the_spikes_next_leg_after_an_immunity_and_a_patch_end(self):
+        assasin, angry, agony = (window["next_leg"] for window in self.windows)
+        self.assertEqual((assasin["after"], assasin["next"]["guid"]), ("Vanish", NXANGRY))
+        self.assertEqual((assasin["pass"]["guid"], assasin["pass"]["t"], assasin["pass"]["side"],
+                          assasin["pass"]["spent"]), (NXPATCH, 20500, None, True))
+        self.assertAlmostEqual(assasin["pass"]["yards"], math.hypot(4.0, 6.5))
+        self.assertEqual((angry["after"], angry["next"]["guid"], angry["pass"]), ("patch", NXAGONY, None))
+        self.assertIsNone(agony)
+
+    def test_the_spike_section_prints_them(self):
+        text = self.text(ab.show_spike)
+        self.assertIn("            speeds at the boosts: Sprint +2.8 s: spike 3.5 yd/s, kiter run 7.0 yd/s,"
+                      " no faster\n", text)
+        self.assertIn("            speeds at the boosts: Nitro Boosts +4.0 s: spike 11.1 yd/s, kiter run 7.0 yd/s\n",
+                      text)
+        self.assertIn("            boost against the plan: Sprint +2.8 s against its pick's +2.1 s, 0.7 s late\n", text)
+        self.assertIn("            next leg after Vanish to Angry: kite patch #2011 (755.0,127.0) 7.6 yd +0.3 s into"
+                      " its mark, spent\n", text)
+        self.assertIn("            next leg after the patch to Agony: no patch within 11.5 yd\n", text)
+        self.assertIn("            boost against the plan: Nitro Boosts +4.0 s, its pick +0.1 s firing none\n"
+                      "            standby escort Holylight 14.0 yd off at the claim +5.0 s\n", text)
+        self.assertIn("  Sprint, Dash or Nitro Boosts on a spike no faster than the kiter's run over the 1.5 s before"
+                      " it: Assasin 0:14.800 Sprint (3.5 vs 7.0 yd/s)\n", text)
+        self.assertIn("  first speed boost against its anub.kitepath pick's +boost@ second, on time within 0.5 s: 0 of"
+                      " 2; else: Assasin 0:12.000 Sprint +2.8 s against its pick's +2.1 s, 0.7 s late, Agony 0:26.000"
+                      " Nitro Boosts +4.0 s, its pick +0.1 s firing none\n", text)
+        self.assertIn("  anub.escort standby within 30 yd of the kiter at the claim: 1 of 1\n", text)
+        self.assertIn("  the spike's next leg after an own immunity or a patch end, from the next mark to the spike"
+                      " within 12 yd\n  of its kiter or of its spot at the mark, past a patch: 1 of 2: Assasin 0:12.000"
+                      " next leg after Vanish to Angry: kite patch #2011 (755.0,127.0) 7.6 yd +0.3 s into its mark,"
+                      " spent\n", text)
+
+    def test_a_trace_with_no_boost_picks_or_standby_rows_says_so(self):
+        records = [rec for rec in nextleg_pull()
+                   if "+boost@" not in str(rec.get("txt")) and rec.get("txt") != "standby"]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_25_anub-arak_1790500001.ndjson", records)
+            self.assertEqual([window["boost_plan"] for window in ab.mark_windows(trace)], [None, None, None])
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                ab.show_spike(trace)
+        self.assertIn("  first speed boost against its anub.kitepath pick's +boost@ second: no +boost@ picks\n",
+                      out.getvalue())
+        self.assertIn("  anub.escort standby within 30 yd of the kiter at the claim: no standby rows\n", out.getvalue())
+
+    def test_each_healers_mana_in_phase_3_and_the_mana_cooldowns(self):
+        read = ab.healer_mana(self.trace)
+        self.assertEqual((read["start"], read["mana"]), (40000, {NXHOLY: (60.0, 25.0), NXPRAYER: (90.0, 70.0)}))
+        self.assertEqual({guid: casts for guid, casts in read["casts"].items()},
+                         {NXHOLY: [(15000, SPELL_DIVINE_PLEA, 0, "P2")],
+                          NXDRUID: [(45000, SPELL_INNERVATE, NXHOLY, "P3")], NXPRAYER: [(50000, SPELL_HYMN, 0, "P3")]})
+
+    def test_the_healer_section_prints_them(self):
+        self.assertIn("  mana at phase 3's start 0:40.000 and 30 s in, - dead or unsampled, and the Divine Plea,"
+                      " Innervate and Hymn of Hope\n  casts with their phase:\n"
+                      "    Holylight      60% > 25%; Divine Plea P2 0:15.000\n"
+                      "    Prayer         90% > 70%; Hymn of Hope P3 0:50.000\n"
+                      "    Druidica       Innervate on Holylight P3 0:45.000  (ranged)\n", self.text(ab.show_healers))
+
+    def test_melee_seconds_on_a_burrower_no_tank_holds_by_anub_dps(self):
+        self.assertEqual(ab.loose_burrower_time(self.trace), {NXANGRY: {"loose": 4000, "burrower": 6000}})
+        self.assertIn("  melee bot seconds on a burrower no tank within 5 yd held, by anub.dps then: Angry 10.0 s"
+                      " (burrower 6.0, loose 4.0)\n", self.text(ab.show_burrowers))
 
 
 class EveryView(unittest.TestCase):

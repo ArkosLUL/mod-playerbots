@@ -196,6 +196,8 @@ void DefineAnubarak(EncounterBuilder& e)
     // the class node spends it on any group damage; the encounter's waits for a deadly Penetrating Cold
     // round
     e.Block("anubarak aura mastery reserve", Role::Any, AnubarakAuraMasteryReserved, 0, {"aura mastery"});
+    // the druid's own Innervate goes to the healer with the least mana, through the encounter's node
+    e.Block("anubarak self innervate guard", Role::Any, AnubarakSelfInnervateHeld, 0, {"innervate"});
 
     e.Multiplier<AnubarakThreatCapMultiplier>(Family::Spell | Family::Melee);
     e.Multiplier<AnubarakBurrowerThreatCapMultiplier>(Family::Spell | Family::Melee);

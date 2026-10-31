@@ -72,6 +72,9 @@ struct KiteWorld
 {
     Point kiter;
     Pace pace;
+    // A speed boost the kiter can fire, the plan saying when: its run speed and seconds, 0 for none
+    float readyBoostSpeed = 0.0f;
+    float readyBoostS = 0.0f;
     Spike spike;
     // Seconds to the emerge, which despawns the spike
     float lifeS = 60.0f;
@@ -152,7 +155,14 @@ struct Rules
     // A fresh kite runs about this long, one handed a spike already fast this long
     float freshS = 15.0f;
     float fastS = 6.0f;
+    // A ready boost fires once a spike faster than the kiter's run comes this close
+    float boostRange = 15.0f;
+    float costBoost = 0.5f;
+    // An immunity hands the spike on at its speed, so it costs costOwnMid unless the spike's life is
+    // nearly out by then
+    float ownLateS = 6.0f;
     float costOwn = 1.0f;
+    float costOwnMid = 3.0f;
     float costPatch = 2.0f;
     float costHand = 2.0f;
     float costLastHand = 3.0f;
@@ -185,6 +195,8 @@ struct Candidate
     PatchMove move = PatchMove::In;
     // Tick the walk onto the patch starts
     int turnTick = -1;
+    // Tick the ready boost fires, -1 for none
+    int boostTick = -1;
     bool hand = false;
     bool own = false;
     // Where the kiter is every TICK_S from now
@@ -215,6 +227,8 @@ struct Outcome
     uint64_t handId = 0;
     float ownS = -1.0f;
     float turnS = -1.0f;
+    // The ready boost fires by the end, negative when it doesn't
+    float boostS = -1.0f;
 };
 
 struct Plan
@@ -258,16 +272,25 @@ inline int Ticks(KiteWorld const& w, Rules const& r)
     return static_cast<int>(std::ceil(span / TICK_S - 0.001f));
 }
 
+// The kiter's pace with the ready boost fired at boostTick, the world's own for -1
+inline Pace CandidatePace(KiteWorld const& w, int boostTick)
+{
+    if (boostTick < 0)
+        return w.pace;
+
+    return Pace(w.pace.speed, w.readyBoostSpeed, w.readyBoostS, static_cast<float>(boostTick) * TICK_S);
+}
+
 // Extends track to ticks + 1 points, each step its length by step(at, length, t)
 template <typename Step>
-void Walk(std::vector<Point>& track, int ticks, KiteWorld const& w, Rules const& r, Step&& step)
+void Walk(std::vector<Point>& track, int ticks, Pace const& pace, KiteWorld const& w, Rules const& r, Step&& step)
 {
     track.reserve(static_cast<size_t>(ticks) + 1);
     Point at = track.back();
     for (int i = static_cast<int>(track.size()) - 1; i < ticks; ++i)
     {
         float const t = static_cast<float>(i) * TICK_S;
-        float const length = w.pace.SpeedAt(t) * TICK_S * SlowAt(at, w, r);
+        float const length = pace.SpeedAt(t) * TICK_S * SlowAt(at, w, r);
         at = OnFloor(step(at, length, t), r);
         track.push_back(at);
     }
@@ -558,7 +581,67 @@ struct RunEnd
     bool caught = false;
     bool handUsed = false;
     bool ownUsed = false;
+    int boostTick = -1;
+    // The spike where it failed, else at the end
+    Spike spike;
 };
+
+// How far the spike runs in leftS from t seconds into the plan, its speed stepping up on time
+inline float RunLength(Spike spike, float t, float leftS)
+{
+    float length = 0.0f;
+    while (leftS > 0.0f)
+    {
+        float const span =
+            spike.step < AnubarakPursuit::LAST_STEP ? std::clamp(spike.nextStepS - t, 0.0f, leftS) : leftS;
+        length += spike.speed * span;
+        leftS -= span;
+        t += span;
+        if (leftS > 0.0f && spike.step < AnubarakPursuit::LAST_STEP)
+        {
+            ++spike.step;
+            spike.speed = AnubarakPursuit::SPEEDS[spike.step];
+            spike.nextStepS += AnubarakPursuit::STEP_S;
+        }
+    }
+
+    return length;
+}
+
+// The spike's leg after the kite, toward the gather: on at its speed after an immunity or a catch, from the
+// patch it failed on at its base speed after the idle. A patch it passes on the way is the kite's hazard, at
+// the kite's end.
+inline void NextLeg(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules const& r)
+{
+    bool const spent = end.failTick >= 0;
+    Spike spike = end.spike;
+    float t = out.endS;
+    float leftS = w.lifeS - out.endS;
+    if (spent)
+    {
+        t = 0.0f;
+        leftS = w.lifeS - static_cast<float>(end.failTick) * TICK_S - r.idleS;
+        spike = Spike();
+        spike.pos = end.spike.pos;
+    }
+
+    float const full = Dist(spike.pos, w.gatherPos);
+    if (leftS <= 0.0f || full < 0.01f)
+        return;
+
+    Point const to = Lerp(spike.pos, w.gatherPos, std::min(1.0f, RunLength(spike, t, leftS) / full));
+    for (size_t k = 0; k < w.patches.size(); ++k)
+    {
+        Patch const& patch = w.patches[k];
+        if ((spent && static_cast<int>(k) == end.failPatch) || (!patch.tank && !patch.usable) ||
+            AnubarakPursuit::SegmentDist(spike.pos, to, patch.pos) > r.patchReach)
+            continue;
+
+        float& hazard = patch.tank ? out.tankS : out.kiteS;
+        if (hazard < 0.0f)
+            hazard = out.endS;
+    }
+}
 
 // The hazards, ending, coverage and cost of a run that ended as end says. A run still going at the horizon
 // with life left counts as caught there: by then the spike runs at its top speed.
@@ -612,7 +695,16 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
         out.cost += w.spareHands > 0 ? r.costHand : r.costLastHand;
 
     if (end.ownUsed)
-        out.cost += r.costOwn;
+        out.cost += w.lifeS - out.endS <= r.ownLateS ? r.costOwn : r.costOwnMid;
+
+    if (end.boostTick >= 0 && end.boostTick <= end.endTick)
+    {
+        out.boostS = static_cast<float>(end.boostTick) * TICK_S;
+        out.cost += r.costBoost;
+    }
+
+    if (w.heroic && w.gather && (spent || end.ownUsed || out.caught))
+        NextLeg(out, end, w, r);
 
     if (w.gather && (end.ownUsed || out.caught))
         out.endGather = Dist(out.endPoint, w.gatherPos);
@@ -620,8 +712,8 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
 
 // A run's outcome, the run stopped at the first patch the spike fails on. hand lands a Hand a second before
 // the catch, own casts the immunity just before it, after the Hand when both.
-inline Outcome Score(std::vector<Point> const& track, int turnTick, bool hand, bool own, Run const& run,
-                     KiteWorld const& w, Rules const& r)
+inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTick, bool hand, bool own,
+                     Run const& run, KiteWorld const& w, Rules const& r)
 {
     Outcome out;
     out.turnS = turnTick >= 0 ? static_cast<float>(turnTick) * TICK_S : -1.0f;
@@ -671,6 +763,8 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, bool hand, b
     end.endPoint = track[static_cast<size_t>(end.endTick)];
     end.margin = run.margin[static_cast<size_t>(end.endTick)];
     end.raidTick = run.raidTick;
+    end.boostTick = boostTick;
+    end.spike = run.spikes[static_cast<size_t>(end.failTick >= 0 ? end.failTick : end.endTick)];
     Finish(out, end, w, r);
     return out;
 }
@@ -763,23 +857,26 @@ inline Outcome Judge(Candidate const& c, KiteWorld const& w, Rules const& r)
     Detail::Run run = Detail::StartRun(w, r);
     Detail::Chase(run, c.track, 0, std::min(ticks, static_cast<int>(c.track.size()) - 1), c.patch, c.turnTick, w, r,
                   watch);
-    return Detail::Score(c.track, c.turnTick, c.hand, c.own, run, w, r);
+    return Detail::Score(c.track, c.turnTick, c.boostTick, c.hand, c.own, run, w, r);
 }
 
 // A ring member: straight on headingDeg until radius off the centre, then round it, turn +1 counter-clockwise
-inline Candidate RingCandidate(KiteWorld const& w, Rules const& r, float headingDeg, float radius, float turn)
+inline Candidate RingCandidate(KiteWorld const& w, Rules const& r, float headingDeg, float radius, float turn,
+                               int boostTick = -1)
 {
     Candidate c;
     c.shape = Shape::Ring;
     c.headingDeg = headingDeg;
     c.radius = radius;
     c.turn = turn;
+    c.boostTick = boostTick;
+    Pace const pace = Detail::CandidatePace(w, boostTick);
     float const a = headingDeg * 0.0174532925f;
     AnubarakPursuit::KiterPath const path = AnubarakPursuit::MakeKiterPath(
-        w.kiter, {std::cos(a), std::sin(a)}, w.pace, r.centre, AnubarakPursuit::PathMember{radius, turn, 1e9f});
+        w.kiter, {std::cos(a), std::sin(a)}, pace, r.centre, AnubarakPursuit::PathMember{radius, turn, 1e9f});
     c.track.push_back(w.kiter);
     float s = 0.0f;
-    Detail::Walk(c.track, Detail::Ticks(w, r), w, r, [&path, &s](Point, float length, float)
+    Detail::Walk(c.track, Detail::Ticks(w, r), pace, w, r, [&path, &s](Point, float length, float)
                  {
                      s += length;
                      return Detail::AtLength(path, s);
@@ -787,29 +884,30 @@ inline Candidate RingCandidate(KiteWorld const& w, Rules const& r, float heading
     return c;
 }
 
-inline Candidate ArcCandidate(KiteWorld const& w, Rules const& r, float headingDeg, float turnDeg)
+inline Candidate ArcCandidate(KiteWorld const& w, Rules const& r, float headingDeg, float turnDeg,
+                              int boostTick = -1)
 {
     Candidate c;
     c.shape = Shape::Arc;
     c.headingDeg = headingDeg;
     c.turn = turnDeg;
+    c.boostTick = boostTick;
     float const a = headingDeg * 0.0174532925f;
     c.track.push_back(w.kiter);
-    Detail::Walk(c.track, Detail::Ticks(w, r), w, r,
+    Detail::Walk(c.track, Detail::Ticks(w, r), Detail::CandidatePace(w, boostTick), w, r,
                  Detail::ArcStep{{std::cos(a), std::sin(a)}, turnDeg, r.arcStraightS, &r});
     return c;
 }
 
 // Straight on at velocity, sliding along the rim: a human kiter's run
-inline Candidate MotionCandidate(KiteWorld w, Rules const& r, Point velocity)
+inline Candidate MotionCandidate(KiteWorld const& w, Rules const& r, Point velocity)
 {
     Candidate c;
     c.shape = Shape::Motion;
     float const speed = std::hypot(velocity.x, velocity.y);
     c.track.push_back(w.kiter);
-    w.pace = Pace(speed);
     Point const dir = speed > 0.01f ? Point{velocity.x / speed, velocity.y / speed} : Point{1.0f, 0.0f};
-    Detail::Walk(c.track, Detail::Ticks(w, r), w, r, Detail::ArcStep{dir, 0.0f, 0.0f, &r});
+    Detail::Walk(c.track, Detail::Ticks(w, r), Pace(speed), w, r, Detail::ArcStep{dir, 0.0f, 0.0f, &r});
     return c;
 }
 
@@ -827,7 +925,7 @@ inline int NearestTick(std::vector<Point> const& track, Point at, int from, int 
 
 // The held plan from the kiter's spot on: its track from the point nearest the kiter, searched slackTicks
 // either side of where elapsedS puts it. Past its end a patch walk stands on the patch and a run goes
-// straight on.
+// straight on. A boost still ready goes now once its tick has passed.
 inline Candidate HeldCandidate(Candidate const& held, float elapsedS, KiteWorld const& w, Rules const& r,
                                int slackTicks = 15)
 {
@@ -851,6 +949,7 @@ inline Candidate HeldCandidate(Candidate const& held, float elapsedS, KiteWorld 
         c.track.push_back(held.track[i]);
 
     c.turnTick = held.turnTick >= 0 ? std::max(held.turnTick - at, 0) : -1;
+    c.boostTick = held.boostTick >= 0 && w.readyBoostS > 0.0f ? std::max(held.boostTick - at, 0) : -1;
     if (c.patch >= 0 && c.turnTick >= 0)
     {
         Point const last = c.track.back();
@@ -868,7 +967,7 @@ inline Candidate HeldCandidate(Candidate const& held, float elapsedS, KiteWorld 
         dir = {(c.track[n - 1].x - c.track[n - 2].x) / d, (c.track[n - 1].y - c.track[n - 2].y) / d};
     }
 
-    Detail::Walk(c.track, ticks, w, r, Detail::ArcStep{dir, 0.0f, 0.0f, &r});
+    Detail::Walk(c.track, ticks, Detail::CandidatePace(w, c.boostTick), w, r, Detail::ArcStep{dir, 0.0f, 0.0f, &r});
     return c;
 }
 
@@ -897,6 +996,33 @@ inline AnubarakPursuit::PatchRules LegRules(Rules const& r)
     legs.edgeRadius = r.edgeRadius;
     legs.edgeRunOn = r.edgeRunOn;
     return legs;
+}
+
+inline bool CanBoost(KiteWorld const& w) { return w.readyBoostS > 0.0f && w.readyBoostSpeed > w.pace.speed; }
+
+// The first tick of an unboosted base's run with the spike faster than the kiter's run and within boostRange,
+// -1 when none comes by the run's end
+inline int BoostTick(Base const& base, KiteWorld const& w, Rules const& r)
+{
+    int const last = std::min({ToTick(base.none.endS), static_cast<int>(base.run.spikes.size()) - 1,
+                               static_cast<int>(base.candidate.track.size()) - 1});
+    for (int k = 0; k <= last; ++k)
+    {
+        Spike const& spike = base.run.spikes[static_cast<size_t>(k)];
+        if (spike.speed > w.pace.speed + 0.01f &&
+            Dist(spike.pos, base.candidate.track[static_cast<size_t>(k)]) <= r.boostRange)
+            return k;
+    }
+
+    return -1;
+}
+
+inline Candidate Boosted(Candidate const& c, KiteWorld const& w, Rules const& r, int boostTick)
+{
+    if (c.shape == Shape::Ring)
+        return RingCandidate(w, r, c.headingDeg, c.radius, c.turn, boostTick);
+
+    return ArcCandidate(w, r, c.headingDeg, c.turn, boostTick);
 }
 
 // The base shape to tick turn, then the move onto patch p, under a Hand landed a second before the base's
@@ -941,8 +1067,10 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     c.patch = p;
     c.move = move;
     c.turnTick = turn;
+    c.boostTick = base.candidate.boostTick;
     c.hand = hand;
     c.track.assign(base.candidate.track.begin(), base.candidate.track.begin() + turn + 1);
+    Pace const pace = CandidatePace(w, c.boostTick);
 
     Run run;
     run.spikes.push_back(base.run.spikes[static_cast<size_t>(turn)]);
@@ -961,7 +1089,7 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     for (int i = turn; i < ticks && (catchTick < 0 || i < catchTick + postCatch); ++i)
     {
         float const t = static_cast<float>(i) * TICK_S;
-        at = OnFloor(step(at, w.pace.SpeedAt(t) * TICK_S * SlowAt(at, w, r), t), r);
+        at = OnFloor(step(at, pace.SpeedAt(t) * TICK_S * SlowAt(at, w, r), t), r);
         c.track.push_back(at);
         if (!ChaseOne(run, c.track, i, p, turn, w, r, watch))
             break;
@@ -994,6 +1122,8 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
 
     end.endPoint = c.track[static_cast<size_t>(end.endTick)];
     end.raidTick = run.raidTick;
+    end.boostTick = c.boostTick;
+    end.spike = run.spikes[static_cast<size_t>((end.failTick >= 0 ? end.failTick : end.endTick) - turn)];
     out.turnS = static_cast<float>(turn) * TICK_S;
     Finish(out, end, w, r);
     return true;
@@ -1010,7 +1140,7 @@ inline void FullTrack(Candidate& c, KiteWorld const& w, Rules const& r)
     c.track.resize(static_cast<size_t>(c.turnTick) + 1);
     if (AnubarakPursuit::PatchMoveLegs(c.move, c.track.back(), w.patches[static_cast<size_t>(c.patch)].pos,
                                        LegRules(r), legs))
-        Walk(c.track, ticks, w, r, LegStep{&legs, 0});
+        Walk(c.track, ticks, CandidatePace(w, c.boostTick), w, r, LegStep{&legs, 0});
 
     while (static_cast<int>(c.track.size()) <= ticks)
         c.track.push_back(c.track.back());
@@ -1075,14 +1205,16 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
     Detail::Watch const watch = Detail::MakeWatch(w, r);
 
     std::vector<Detail::Base> bases;
-    bases.reserve(static_cast<size_t>(r.headings) * (4 + r.arcTurns.size()));
+    size_t const shapes = static_cast<size_t>(r.headings) * (4 + r.arcTurns.size());
+    bases.reserve(Detail::CanBoost(w) ? shapes * 2 : shapes);
     auto const addBase = [&](Candidate&& c)
     {
         Detail::Base base;
         base.candidate = std::move(c);
         base.run = Detail::StartRun(w, r);
         Detail::Chase(base.run, base.candidate.track, 0, ticks, -1, -1, w, r, watch);
-        base.none = Detail::Score(base.candidate.track, -1, false, false, base.run, w, r);
+        base.none =
+            Detail::Score(base.candidate.track, -1, base.candidate.boostTick, false, false, base.run, w, r);
         bases.push_back(std::move(base));
     };
 
@@ -1095,37 +1227,6 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
 
         for (float turn : r.arcTurns)
             addBase(ArcCandidate(w, r, deg, turn));
-    }
-
-    std::vector<Detail::Entry> entries;
-    std::vector<Candidate> endings;
-    entries.reserve(bases.size() * 4);
-    for (size_t i = 0; i < bases.size(); ++i)
-    {
-        Detail::Base const& base = bases[i];
-        auto const add = [&](bool hand, bool own, Outcome const& outcome)
-        {
-            Detail::Entry entry;
-            entry.base = static_cast<int>(i);
-            entry.hand = hand;
-            entry.own = own;
-            entry.outcome = outcome;
-            entries.push_back(entry);
-        };
-
-        add(false, false, base.none);
-        if (base.none.catchS < 0.0f)
-            continue;
-
-        if (w.own)
-            add(false, true, Detail::Score(base.candidate.track, -1, false, true, base.run, w, r));
-
-        if (!w.hands.empty() && w.handLeftS <= 0.0f)
-        {
-            add(true, false, Detail::Score(base.candidate.track, -1, true, false, base.run, w, r));
-            if (w.own)
-                add(true, true, Detail::Score(base.candidate.track, -1, true, true, base.run, w, r));
-        }
     }
 
     std::vector<size_t> order(bases.size());
@@ -1162,6 +1263,51 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
             ended[near[n].second] = 1;
     }
 
+    // The shapes given endings again with the ready boost fired where their own run first wants it
+    if (Detail::CanBoost(w))
+        for (size_t i = 0, plain = bases.size(); i < plain; ++i)
+        {
+            int const boostTick = ended[i] ? Detail::BoostTick(bases[i], w, r) : -1;
+            if (boostTick < 0)
+                continue;
+
+            addBase(Detail::Boosted(bases[i].candidate, w, r, boostTick));
+            ended.push_back(1);
+        }
+
+    std::vector<Detail::Entry> entries;
+    std::vector<Candidate> endings;
+    entries.reserve(bases.size() * 4);
+    for (size_t i = 0; i < bases.size(); ++i)
+    {
+        Detail::Base const& base = bases[i];
+        auto const add = [&](bool hand, bool own, Outcome const& outcome)
+        {
+            Detail::Entry entry;
+            entry.base = static_cast<int>(i);
+            entry.hand = hand;
+            entry.own = own;
+            entry.outcome = outcome;
+            entries.push_back(entry);
+        };
+
+        add(false, false, base.none);
+        if (base.none.catchS < 0.0f)
+            continue;
+
+        std::vector<Point> const& track = base.candidate.track;
+        int const boostTick = base.candidate.boostTick;
+        if (w.own)
+            add(false, true, Detail::Score(track, -1, boostTick, false, true, base.run, w, r));
+
+        if (!w.hands.empty() && w.handLeftS <= 0.0f)
+        {
+            add(true, false, Detail::Score(track, -1, boostTick, true, false, base.run, w, r));
+            if (w.own)
+                add(true, true, Detail::Score(track, -1, boostTick, true, true, base.run, w, r));
+        }
+    }
+
     for (size_t i = 0; i < bases.size(); ++i)
         if (ended[i])
             Detail::PatchEndings(bases[i], static_cast<int>(i), w, r, watch, endings, entries);
@@ -1179,6 +1325,9 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
     if (pick.ending >= 0)
     {
         plan.candidate = std::move(endings[static_cast<size_t>(pick.ending)]);
+        if (pick.outcome.boostS < 0.0f)
+            plan.candidate.boostTick = -1;
+
         Detail::FullTrack(plan.candidate, w, r);
     }
     else
@@ -1187,6 +1336,8 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
         plan.candidate.hand = pick.hand;
         plan.candidate.own = pick.own;
         plan.candidate.ending = pick.hand ? Ending::Hand : pick.own ? Ending::Own : Ending::None;
+        if (pick.outcome.boostS < 0.0f)
+            plan.candidate.boostTick = -1;
     }
 
     plan.valid = true;

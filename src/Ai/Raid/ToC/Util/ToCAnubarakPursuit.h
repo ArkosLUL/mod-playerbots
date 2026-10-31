@@ -47,28 +47,38 @@ struct Spike
     float nextStepS = STEP_S;
 };
 
-// How fast a runner goes: boostSpeed for its first boostS seconds, then speed. Sprint, Dash and Nitro
-// Boosts run out mid-kite, so a boost read as the kiter's speed for good outruns a spike that catches it.
+// How fast a runner goes: boostSpeed for boostS seconds from boostFromS, else speed. Sprint, Dash and
+// Nitro Boosts run out mid-kite, so a boost read as the kiter's speed for good outruns a spike that catches it.
 struct Pace
 {
     float speed = 7.0f;
     float boostSpeed = 0.0f;
     float boostS = 0.0f;
+    float boostFromS = 0.0f;
 
     Pace() = default;
     Pace(float runSpeed) : speed(runSpeed) {}
-    Pace(float runSpeed, float boost, float boostSeconds) : speed(runSpeed), boostSpeed(boost), boostS(boostSeconds) {}
+    Pace(float runSpeed, float boost, float boostSeconds, float fromS = 0.0f)
+        : speed(runSpeed), boostSpeed(boost), boostS(boostSeconds), boostFromS(fromS)
+    {
+    }
 
     float Length(float t) const
     {
-        float const boosted = std::clamp(t, 0.0f, std::max(boostS, 0.0f));
+        float const boosted = std::clamp(t - boostFromS, 0.0f, std::max(boostS, 0.0f));
         return boostSpeed * boosted + speed * (t - boosted);
     }
 
-    float SpeedAt(float t) const { return t < boostS ? boostSpeed : speed; }
+    float SpeedAt(float t) const { return t >= boostFromS && t < boostFromS + boostS ? boostSpeed : speed; }
 
     // The same runner t seconds on
-    Pace After(float t) const { return Pace(speed, boostSpeed, std::max(boostS - t, 0.0f)); }
+    Pace After(float t) const
+    {
+        if (boostFromS >= t)
+            return Pace(speed, boostSpeed, boostS, boostFromS - t);
+
+        return Pace(speed, boostSpeed, std::max(boostS - (t - boostFromS), 0.0f));
+    }
 };
 
 // Straight along dir from start until radius off centre, then round that circle: turn +1 is

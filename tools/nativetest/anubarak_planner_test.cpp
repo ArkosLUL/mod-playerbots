@@ -298,7 +298,7 @@ void SlowDecidesTheWalkIn()
     in.ending = Ending::Patch;
     in.track.push_back(w.kiter);
     std::vector<Point> const legs = {{780.0f, 135.0f}};
-    AnubarakKitePlanner::Detail::Walk(in.track, AnubarakKitePlanner::Detail::Ticks(w, r), w, r,
+    AnubarakKitePlanner::Detail::Walk(in.track, AnubarakKitePlanner::Detail::Ticks(w, r), w.pace, w, r,
                                       AnubarakKitePlanner::Detail::LegStep{&legs, 0});
 
     KiteWorld normal = w;
@@ -306,8 +306,8 @@ void SlowDecidesTheWalkIn()
     normal.heroic = false;
     Candidate normalIn = in;
     normalIn.track.resize(1);
-    AnubarakKitePlanner::Detail::Walk(normalIn.track, AnubarakKitePlanner::Detail::Ticks(normal, r), normal, r,
-                                      AnubarakKitePlanner::Detail::LegStep{&legs, 0});
+    AnubarakKitePlanner::Detail::Walk(normalIn.track, AnubarakKitePlanner::Detail::Ticks(normal, r), normal.pace,
+                                      normal, r, AnubarakKitePlanner::Detail::LegStep{&legs, 0});
     Outcome const normalOut = AnubarakKitePlanner::Judge(normalIn, normal, r);
     CHECK(normalOut.ending == Ending::Patch);
     CHECK(!normalOut.caught);
@@ -316,13 +316,148 @@ void SlowDecidesTheWalkIn()
     CHECK(heroicOut.caught);
 }
 
-// Four usable patches, Hands and an own immunity: the candidates stay bounded
+// A top speed spike 25 yd off and no patch: only Nitro outlasts it, fired once it is within 15 yd
+void BoostFiresWhenTheSpikeCloses()
+{
+    Rules const r;
+    KiteWorld w = Heroic({745.0f, 135.0f}, {745.0f, 160.0f}, {700.0f, 100.0f}, {});
+    w.gather = false;
+    w.hands.clear();
+    w.spareHands = 0;
+    w.lifeS = 9.0f;
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Plan const plain = PlanKite(w, nullptr, 0.0f, 0.0f, r);
+    CHECK(plain.valid && plain.outcome.caught);
+    CHECK(plain.candidate.boostTick < 0);
+
+    w.readyBoostSpeed = 17.5f;
+    w.readyBoostS = 5.0f;
+    Plan const boosted = PlanKite(w, nullptr, 0.0f, 0.0f, r);
+    CHECK(boosted.valid && !boosted.outcome.caught);
+    CHECK(boosted.outcome.endS > plain.outcome.endS);
+    int const tick = boosted.candidate.boostTick;
+    CHECK(tick > 0 && boosted.outcome.boostS >= 0.0f);
+
+    AnubarakPursuit::Spike spike = w.spike;
+    for (int i = 0; i < tick - 1; ++i)
+        AnubarakPursuit::ChaseTick(spike, boosted.candidate.track[static_cast<size_t>(i)],
+                                   static_cast<float>(i) * AnubarakPursuit::TICK_S);
+
+    CHECK(AnubarakPursuit::Dist(spike.pos, boosted.candidate.track[static_cast<size_t>(tick - 1)]) > r.boostRange);
+    AnubarakPursuit::ChaseTick(spike, boosted.candidate.track[static_cast<size_t>(tick - 1)],
+                               static_cast<float>(tick - 1) * AnubarakPursuit::TICK_S);
+    CHECK(AnubarakPursuit::Dist(spike.pos, boosted.candidate.track[static_cast<size_t>(tick)]) <= r.boostRange);
+}
+
+// A base speed spike 9 yd off is no faster than the kiter: the boost stays
+void NoBoostOnASlowSpike()
+{
+    KiteWorld w = Heroic({745.0f, 135.0f}, {745.0f, 144.0f}, {700.0f, 100.0f}, {MakePatch(747.0f, 113.2f, false, 3)});
+    w.gather = false;
+    w.lifeS = 13.0f;
+    w.readyBoostSpeed = 17.5f;
+    w.readyBoostS = 5.0f;
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plan.valid);
+    CHECK(plan.candidate.boostTick < 0 && plan.outcome.boostS < 0.0f);
+}
+
+// An immunity hands the spike on at its speed: mid-life it loses to a patch, in the last seconds it is cheap
+void OwnCostsByLifeLeft()
+{
+    Rules const r;
+    KiteWorld w = Heroic({775.0f, 135.0f}, {745.0f, 170.0f}, {700.0f, 100.0f},
+                         {MakePatch(747.0f, 113.2f, false, 3), MakePatch(720.0f, 150.0f, false, 4)});
+    w.gather = false;
+    w.lifeS = 40.0f;
+    w.hands.clear();
+    w.spareHands = 0;
+    w.own = true;
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f, r);
+    CHECK(plan.valid && !plan.outcome.caught);
+    CHECK(plan.outcome.ending == Ending::Patch);
+
+    KiteWorld run = Heroic({760.0f, 135.0f}, {775.0f, 135.0f}, {700.0f, 100.0f}, {});
+    run.gather = false;
+    run.own = true;
+    run.hands.clear();
+    run.spike.step = 2;
+    run.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Candidate own;
+    own.own = true;
+    own.ending = Ending::Own;
+    own.track.push_back(run.kiter);
+    AnubarakKitePlanner::Detail::Walk(own.track, AnubarakKitePlanner::Detail::Ticks(run, r), run.pace, run, r,
+                                      AnubarakKitePlanner::Detail::ArcStep{{-1.0f, 0.0f}, 0.0f, 0.0f, &r});
+    run.lifeS = 40.0f;
+    Outcome const mid = AnubarakKitePlanner::Judge(own, run, r);
+    CHECK(mid.ending == Ending::Own && mid.endS < 3.0f);
+    CHECK(std::fabs(mid.cost - r.costOwnMid) < 0.01f);
+
+    run.lifeS = mid.endS + 4.0f;
+    Outcome const late = AnubarakKitePlanner::Judge(own, run, r);
+    CHECK(late.ending == Ending::Own);
+    CHECK(std::fabs(late.cost - r.costOwn) < 0.01f);
+}
+
+// The spike's leg after the kite heads for the gather: a patch on it is the kite's hazard
+void NextLegPassesCount()
+{
+    Rules const r;
+    // The immunity at the catch, a tank patch on the spike's way to the gather
+    KiteWorld w = Heroic({760.0f, 135.0f}, {775.0f, 135.0f}, {800.0f, 135.0f}, {});
+    w.own = true;
+    w.hands.clear();
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Candidate own;
+    own.own = true;
+    own.ending = Ending::Own;
+    own.track.push_back(w.kiter);
+    AnubarakKitePlanner::Detail::Walk(own.track, AnubarakKitePlanner::Detail::Ticks(w, r), w.pace, w, r,
+                                      AnubarakKitePlanner::Detail::ArcStep{{-1.0f, 0.0f}, 0.0f, 0.0f, &r});
+    Outcome const clear = AnubarakKitePlanner::Judge(own, w, r);
+    CHECK(clear.ending == Ending::Own && Clean(clear));
+
+    w.patches.push_back(MakePatch(790.0f, 145.0f, true, 1));
+    Outcome const tank = AnubarakKitePlanner::Judge(own, w, r);
+    CHECK(tank.ending == Ending::Own);
+    CHECK(tank.tankS >= 0.0f && std::fabs(tank.tankS - tank.endS) < 0.01f);
+
+    // A planned patch end, the spike restarting toward the gather past another kite patch
+    KiteWorld patch = Heroic({735.0f, 135.0f}, {735.0f, 165.0f}, {790.0f, 135.0f},
+                             {MakePatch(720.0f, 135.0f, false, 1)});
+    patch.slowFactor = 1.0f;
+    patch.hands.clear();
+    patch.spike.step = 2;
+    patch.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Candidate in;
+    in.patch = 0;
+    in.turnTick = 0;
+    in.ending = Ending::Patch;
+    in.track.push_back(patch.kiter);
+    std::vector<Point> const legs = {{720.0f, 135.0f}};
+    AnubarakKitePlanner::Detail::Walk(in.track, AnubarakKitePlanner::Detail::Ticks(patch, r), patch.pace, patch, r,
+                                      AnubarakKitePlanner::Detail::LegStep{&legs, 0});
+    Outcome const alone = AnubarakKitePlanner::Judge(in, patch, r);
+    CHECK(alone.ending == Ending::Patch && Clean(alone));
+
+    patch.patches.push_back(MakePatch(760.0f, 138.0f, false, 2));
+    Outcome const kite = AnubarakKitePlanner::Judge(in, patch, r);
+    CHECK(kite.ending == Ending::Patch);
+    CHECK(kite.kiteS >= 0.0f && std::fabs(kite.kiteS - kite.endS) < 0.01f);
+}
+
+// Four usable patches, Hands, an own immunity and a ready boost: the candidates stay bounded
 void CandidatesStayBounded()
 {
     KiteWorld w = Heroic({775.0f, 135.0f}, {745.0f, 170.0f}, {776.0f, 136.0f},
                          {MakePatch(787.5f, 120.7f, false, 1), MakePatch(796.6f, 140.6f, false, 2),
                           MakePatch(748.1f, 155.3f, false, 3), MakePatch(747.0f, 113.2f, false, 4)});
     w.own = true;
+    w.readyBoostSpeed = 17.5f;
+    w.readyBoostS = 5.0f;
     for (int i = 0; i < 8; ++i)
         w.bystanders.push_back({745.0f + 5.0f * static_cast<float>(i), 100.0f});
 
@@ -331,7 +466,7 @@ void CandidatesStayBounded()
     auto const ms =
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count() / 1000.0;
     CHECK(plan.valid);
-    CHECK(plan.judged <= 2500);
+    CHECK(plan.judged <= 5000);
     std::printf("anubarak planner: %d candidates in %.1f ms\n", plan.judged, ms);
 }
 }  // namespace
@@ -345,6 +480,10 @@ int main()
     HandsWithoutPatches();
     OnePatchAndOwn();
     SlowDecidesTheWalkIn();
+    BoostFiresWhenTheSpikeCloses();
+    NoBoostOnASlowSpike();
+    OwnCostsByLifeLeft();
+    NextLegPassesCount();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;

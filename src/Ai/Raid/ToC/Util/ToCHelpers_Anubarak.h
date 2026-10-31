@@ -173,6 +173,9 @@ constexpr float ANUBARAK_MELEE_AREA_CAP = 0.6f;
 constexpr float ANUBARAK_MELEE_AREA_RELEASE = 0.5f;
 
 constexpr uint8 ANUBARAK_SHOOTERS_PER_NEED = 2;
+// A kite patch stocked while he's up has until the submerge, so the rest of the ranged stay on the burrower
+// wave landing then
+constexpr uint8 ANUBARAK_SHOOTERS_PER_STOCK_UP = 1;
 // Patches that aren't tank patches kept ready in phase 2, falling spheres counted. Heroic has six
 // spheres for the pull and never respawns one, so it keeps a submerge's two down together and shoots no
 // more once both are.
@@ -542,6 +545,15 @@ bool AnubarakAuraMasteryReserved(PlayerbotAI* botAI);
 // Heroic phase 3, a paladin bot holding its own Frost Resistance Aura with Aura Mastery ready: a round
 // landed under 1.5 s ago and 2 or more of its carriers are under the tick (anub.mastery)
 bool AnubarakAuraMasteryDue(PlayerbotAI* botAI);
+// Heroic before phase 3, an unmarked healer paladin bot under 80% mana with Divine Plea ready and no tank or
+// Penetrating Cold carrier under 50%
+bool AnubarakDivinePleaDue(PlayerbotAI* botAI);
+// Heroic, an unmarked druid bot with Innervate ready: the healer in reach with the least mana but this bot,
+// under 50% and under the bot's own, else null
+Player* GetAnubarakInnervateTarget(PlayerbotAI* botAI);
+bool AnubarakInnervateHealerDue(PlayerbotAI* botAI);
+// Heroic, a druid bot while another healer has less mana: its Innervate goes to that one
+bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI);
 // A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 
@@ -602,8 +614,10 @@ bool AnubarakWalkClearOfSpike(Player* bot, Position const& to);
 Player* GetAnubarakKiterToProtect(Player* bot);
 // Heroic: the spot of the paladin bot whose Hand of Protection the kite plan ends or bridges the kite
 // on: shadowing the kiter, then from 4 s before the catch a post by it (post set). A bot kiter with a
-// speed boost has it wait by the kite's patch instead (post and patchPost set). False for every other bot.
-bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr, bool* patchPost = nullptr);
+// speed boost has it wait by the kite's patch instead (post and patchPost set). A bot kiter whose plan lands
+// no other paladin's Hand gets a standby shadowing it (standby set). False for every other bot.
+bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr, bool* patchPost = nullptr,
+                           bool* standby = nullptr);
 bool IsAnubarakEscort(PlayerbotAI* botAI);
 // Heroic: this paladin bot is the one planned or claimed for the kiter's Hand, within 2.5 s of the catch
 bool AnubarakHandReserved(PlayerbotAI* botAI);

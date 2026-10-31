@@ -84,14 +84,16 @@ bool AnubarakHopEscortTrigger::IsActive()
 
     bool post = false;
     bool patchPost = false;
-    if (!GetAnubarakEscortSpot(bot, spot, &post, &patchPost))
+    bool standby = false;
+    if (!GetAnubarakEscortSpot(bot, spot, &post, &patchPost, &standby))
     {
         RaidObs::NoteDerived(bot, "anub.escort", "none");
         return false;
     }
 
     bool const off = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ANUBARAK_ESCORT_HOLD;
-    RaidObs::NoteDerived(bot, "anub.escort", patchPost ? "patch" : post ? "post" : off ? "walk" : "hold");
+    RaidObs::NoteDerived(bot, "anub.escort",
+                         standby ? "standby" : patchPost ? "patch" : post ? "post" : off ? "walk" : "hold");
     return off;
 }
 
@@ -234,6 +236,10 @@ bool AnubarakSwarmHealTrigger::IsActive()
 
 bool AnubarakAuraMasteryDueTrigger::IsActive() { return AnubarakAuraMasteryDue(botAI); }
 
+bool AnubarakDivinePleaTrigger::IsActive() { return AnubarakDivinePleaDue(botAI); }
+
+bool AnubarakInnervateHealerTrigger::IsActive() { return AnubarakInnervateHealerDue(botAI); }
+
 void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("anubarak kiter needs immunity", {
@@ -329,4 +335,11 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak swarm heal", {
         NextAction("anubarak swarm heal", ACTION_MEDIUM_HEAL + 0.75f) }));
+
+    // Above the medium heals. Divine Plea waits until no tank or carrier is low
+    triggers.push_back(new TriggerNode("anubarak divine plea", {
+        NextAction("divine plea", ACTION_MEDIUM_HEAL + 6) }));
+
+    triggers.push_back(new TriggerNode("anubarak innervate healer", {
+        NextAction("anubarak innervate healer", ACTION_MEDIUM_HEAL + 6) }));
 }

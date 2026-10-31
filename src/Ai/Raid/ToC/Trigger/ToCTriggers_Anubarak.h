@@ -213,6 +213,20 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakDivinePleaTrigger : public Trigger
+{
+public:
+    AnubarakDivinePleaTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak divine plea") {}
+    bool IsActive() override;
+};
+
+class AnubarakInnervateHealerTrigger : public Trigger
+{
+public:
+    AnubarakInnervateHealerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak innervate healer") {}
+    bool IsActive() override;
+};
+
 class ToCAnubarakTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -276,6 +290,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_swarm_heal;
         creators["anubarak aura mastery due"] =
             &ToCAnubarakTriggerContext::anubarak_aura_mastery_due;
+        creators["anubarak divine plea"] =
+            &ToCAnubarakTriggerContext::anubarak_divine_plea;
+        creators["anubarak innervate healer"] =
+            &ToCAnubarakTriggerContext::anubarak_innervate_healer;
     }
 
 private:
@@ -393,6 +411,14 @@ private:
 
     static Trigger* anubarak_aura_mastery_due(PlayerbotAI* botAI) {
         return new AnubarakAuraMasteryDueTrigger(botAI);
+    }
+
+    static Trigger* anubarak_divine_plea(PlayerbotAI* botAI) {
+        return new AnubarakDivinePleaTrigger(botAI);
+    }
+
+    static Trigger* anubarak_innervate_healer(PlayerbotAI* botAI) {
+        return new AnubarakInnervateHealerTrigger(botAI);
     }
 };
 

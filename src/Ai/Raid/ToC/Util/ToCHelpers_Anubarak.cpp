@@ -333,7 +333,7 @@ struct ProtectClaim
     bool selfDue = false;
 };
 
-// Heroic: the paladin bot keeping a kiter with no patch to end on inside Hand of Protection's reach
+// Heroic: the paladin bot keeping the kiter inside Hand of Protection's reach
 struct EscortRead
 {
     bool memoValid = false;
@@ -344,6 +344,8 @@ struct EscortRead
     // The spot is a post by the predicted catch or the kite's patch, not the shadow of the kiter
     bool post = false;
     bool patchPost = false;
+    // Shadowing a bot kiter whose plan lands no other paladin's Hand yet
+    bool standby = false;
 };
 
 // The paladin bot casting Hand of Freedom on a kiter marked in Permafrost
@@ -583,6 +585,9 @@ struct AnubarakState
     KitePlan kitePlan;
     EscortPostLatch escortPost;
     EscortPatchLatch escortPatch;
+    // The paladin bot shadowing standbyKiter while its plan lands no other paladin's Hand
+    ObjectGuid standby;
+    ObjectGuid standbyKiter;
     // Where he went down, for the heroic phase 2 gather
     bool submergePosValid = false;
     Position submergePos;
@@ -899,6 +904,8 @@ void ClearPullLatches(AnubarakState& state)
     state.kitePlan = KitePlan();
     state.escortPost = EscortPostLatch();
     state.escortPatch = EscortPatchLatch();
+    state.standby.Clear();
+    state.standbyKiter.Clear();
     state.submerges = 0;
     state.submergePosValid = false;
     state.needs[0] = SideNeed();
@@ -2076,6 +2083,12 @@ Aura const* RunningSpeedBoost(Player* kiter)
 
 bool SpeedBoostRunning(Player* kiter) { return RunningSpeedBoost(kiter) != nullptr; }
 
+bool IsSpeedBoostSpell(uint32 spell)
+{
+    return std::find(std::begin(SPRINT_RANKS), std::end(SPRINT_RANKS), spell) != std::end(SPRINT_RANKS) ||
+           std::find(std::begin(DASH_RANKS), std::end(DASH_RANKS), spell) != std::end(DASH_RANKS);
+}
+
 // Sprint, Dash or Nitro Boosts ready with none running. Dash gives no speed outside Cat Form, so heroic
 // shifts the druid into it first.
 bool ReadySpeedBoost(Player* kiter, AnubarakKiteBoost& out)
@@ -2238,10 +2251,8 @@ float BoostDurationS(AnubarakKiteBoost const& boost)
     return info ? static_cast<float>(std::max(info->GetMaxDuration(), 0)) / IN_MILLISECONDS : 0.0f;
 }
 
-// A running speed boost counts for what's left of it, the run slowing once it ends. withReady also counts a
-// bot's ready one, for its whole length as if cast now: the boost goes out before the Hand, so a catch read
-// without it spends the Hand early. A human boosts when it likes, so only its running one counts.
-AnubarakPursuit::Pace KiterPace(Player* kiter, bool withReady)
+// A running speed boost counts for what's left of it, the run slowing once it ends
+AnubarakPursuit::Pace KiterPace(Player* kiter)
 {
     float const now = KiterRunSpeed(kiter);
     if (Aura const* aura = RunningSpeedBoost(kiter))
@@ -2251,10 +2262,6 @@ AnubarakPursuit::Pace KiterPace(Player* kiter, bool withReady)
             std::max(now / (1.0f + SpeedBoostPct(aura) / 100.0f), std::min(now, playerBaseMoveSpeed[MOVE_RUN]));
         return AnubarakPursuit::Pace(after, now, static_cast<float>(std::max(aura->GetDuration(), 0)) / IN_MILLISECONDS);
     }
-
-    AnubarakKiteBoost boost;
-    if (withReady && GET_PLAYERBOT_AI(kiter) && ReadySpeedBoost(kiter, boost))
-        return AnubarakPursuit::Pace(now, BoostRunSpeed(kiter, boost), BoostDurationS(boost));
 
     return AnubarakPursuit::Pace(now);
 }
@@ -2534,7 +2541,15 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
     w.heroic = heroic;
     w.burrowers = AnyBurrower(kiter, state);
     w.kiter = ToPoint(kiter->GetPosition());
-    w.pace = KiterPace(kiter, false);
+    w.pace = KiterPace(kiter);
+    // A human boosts when it likes, so only a bot's ready boost is the plan's to time
+    AnubarakKiteBoost ready;
+    if (bot && ReadySpeedBoost(kiter, ready))
+    {
+        w.readyBoostSpeed = BoostRunSpeed(kiter, ready);
+        w.readyBoostS = BoostDurationS(ready);
+    }
+
     w.spike = PursuitSpike(spike);
     w.lifeS = std::max(AnubarakPursuit::TICK_S,
                        static_cast<float>(static_cast<int32>(state.submergedMs + ANUBARAK_SPIKE_LIFE_MS - getMSTime())) /
@@ -2588,10 +2603,13 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
     w.catchFromS = BaseTestGraceS(w.spike, w.pace, kiter, spike);
     w.handLeftS = HandLeftS(kiter);
 
-    // The held plan's paladin first, so the escort doesn't swap
+    // The held plan's paladin first, else the standby escort, so the escort doesn't swap
+    ObjectGuid const first = !plan.hand.IsEmpty()                     ? plan.hand
+                             : state.standbyKiter == kiter->GetGUID() ? state.standby
+                                                                      : ObjectGuid::Empty;
     std::vector<Player*> hands = ReadyHands(kiter);
     std::stable_partition(hands.begin(), hands.end(),
-                          [&plan](Player* paladin) { return paladin->GetGUID() == plan.hand; });
+                          [&first](Player* paladin) { return paladin->GetGUID() == first; });
     for (Player* paladin : hands)
         if (paladin == kiter || (paladin->IsAlive() && !paladin->HasAura(SPELL_MARK)))
             w.hands.push_back({paladin->GetGUID().GetRawValue(), ToPoint(paladin->GetPosition()), paladin == kiter});
@@ -2660,6 +2678,13 @@ std::string KitePathText(KitePlan const& plan)
 
     if (c.own)
         text += "+own";
+
+    if (c.boostTick >= 0)
+    {
+        char boost[16];
+        std::snprintf(boost, sizeof(boost), "%.1f", static_cast<float>(c.boostTick) * AnubarakPursuit::TICK_S);
+        text += std::string("+boost@") + boost;
+    }
 
     return text;
 }
@@ -2759,8 +2784,9 @@ KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
 }
 
 // Heroic only. The patch stage holds once the plan's walk onto its patch has begun, while the plan still
-// ends on a patch. A boost goes out once the spike, faster, gains within 15 yd, or is within 10 and catching
-// up; one that comes ready under a Hand goes as the Hand runs out.
+// ends on a patch. Sprint, Dash and Nitro go out at the plan's boost tick, or at the catch of a plan caught
+// anyway, and never on a spike no faster than the kiter. A jump goes once the spike, faster, gains within
+// 15 yd, or is within 10 and catching up. A boost that comes ready under a Hand goes as the Hand runs out.
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
     KiteStageRead& read = state.kiteStage;
@@ -2783,7 +2809,8 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
                           (handLeft <= 0.0f || handLeft <= BoostHandLeadS(kiter, spike, boost));
 
     bool const patch = plan.candidate.patch >= 0;
-    bool const walking = patch && PlanTick(plan, kiter) >= plan.candidate.turnTick;
+    int const tick = PlanTick(plan, kiter);
+    bool const walking = patch && tick >= plan.candidate.turnTick;
     if (patch && (walking || state.kitePatchKiter == kiter->GetGUID()))
         read.stage = AnubarakKiteStage::Patch;
     else if (AnubarakKiterImmune(kiter))
@@ -2792,7 +2819,15 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
         read.stage = AnubarakKiteStage::Run;
 
     bool const faster = spike->GetSpeed(MOVE_RUN) > KiterRunSpeed(kiter);
-    if (hasBoost && ((faster && dist <= ANUBARAK_KITE_BOOST_RANGE) || dist <= ANUBARAK_KITE_BOOST_CLOSE))
+    bool const speedBoost = boost.nitro || IsSpeedBoostSpell(boost.spellId);
+    bool fire = (faster && dist <= ANUBARAK_KITE_BOOST_RANGE) || dist <= ANUBARAK_KITE_BOOST_CLOSE;
+    if (speedBoost && handLeft <= 0.0f)
+        fire = faster && ((plan.candidate.boostTick >= 0 && tick >= plan.candidate.boostTick) ||
+                          (plan.outcome.caught && KiteCatchDue(kiter, spike)));
+    else if (speedBoost)
+        fire = fire && faster;
+
+    if (hasBoost && fire)
     {
         read.boost = boost;
         if (read.stage == AnubarakKiteStage::Run)
@@ -3777,6 +3812,11 @@ void ComputeDuties(Player* bot, AnubarakState& state)
         return std::count_if(state.duties.begin(), state.duties.end(), [label, sphere](SphereDuty const& duty)
                              { return duty.sphere == sphere && std::strcmp(duty.label, label) == 0; });
     };
+    auto const wanted = [surfaced](char const* label)
+    {
+        return surfaced && std::strcmp(label, "stock") == 0 ? ANUBARAK_SHOOTERS_PER_STOCK_UP
+                                                            : ANUBARAK_SHOOTERS_PER_NEED;
+    };
 
     // Latched shooters first, every need, so a vacancy further up never takes one from a need below
     for (auto const& [label, sphere] : needs)
@@ -3784,7 +3824,7 @@ void ComputeDuties(Player* bot, AnubarakState& state)
         ObjectGuid const sphereGuid = sphere->GetGUID();
         for (SphereDuty const& duty : previous)
         {
-            if (staffed(label, sphereGuid) >= ANUBARAK_SHOOTERS_PER_NEED)
+            if (staffed(label, sphereGuid) >= wanted(label))
                 break;
 
             if (duty.sphere != sphereGuid || std::strcmp(duty.label, label) != 0 || assigned(duty.shooter))
@@ -3800,7 +3840,7 @@ void ComputeDuties(Player* bot, AnubarakState& state)
     for (auto const& [label, sphere] : needs)
     {
         ObjectGuid const sphereGuid = sphere->GetGUID();
-        while (staffed(label, sphereGuid) < ANUBARAK_SHOOTERS_PER_NEED)
+        while (staffed(label, sphereGuid) < wanted(label))
         {
             // Sorted by guid, so a strict comparison leaves a tie on the lower guid
             SphereShooter const* nearest = nullptr;
@@ -3924,9 +3964,10 @@ std::vector<Player*> ProtectorOrder(Player* bot)
 
 // Once per instance per ms. The claim stands for the mark window: one paladin covers the kiter, and
 // passes it on only when its Hand of Protection hasn't landed 1.5 s in. It follows the kite plan: its Hand
-// 1 s before the catch, the planned paladin first, and any paladin in reach at the catch once the plan has
-// failed, with no patch ending ahead (or the spike within the immunity range anyway) and no Hand or
-// immunity of the kiter's own planned. The kiter's own goes 0.6 s before the catch, its Hand 1 s before.
+// 1 s before the catch, the planned paladin first, then the standby escort, and any paladin in reach at the
+// catch once the plan has failed, with no patch ending ahead (or the spike within the immunity range anyway)
+// and no Hand or immunity of the kiter's own planned. The kiter's own goes 0.6 s before the catch, its Hand
+// 1 s before.
 ProtectClaim const* DeriveProtection(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -3970,15 +4011,18 @@ ProtectClaim const* DeriveProtection(Player* bot)
 
     // A kiter that leaves the run its catch was read off isn't caught then, so the Hand also waits for the
     // spike to close. Never on a kiter outrunning the spike, a human on Dash at 19 yd/s among them, and a
-    // heroic bot spends every boost and jump first.
+    // heroic bot's speed boost goes first when the plan fires it before the Hand lands.
     AnubarakKiteBoost boost;
+    int const boostTick = plan->candidate.boostTick;
+    bool const boostFirst = GET_PLAYERBOT_AI(kiter) && claim.heroic && boostTick >= 0 &&
+                            (plan->outcome.handS < 0.0f ||
+                             static_cast<float>(boostTick) * AnubarakPursuit::TICK_S <= plan->outcome.handS) &&
+                            ReadySpeedBoost(kiter, boost);
     bool const handDue =
         caught && impaleMs <= ANUBARAK_KITE_HAND_LEAD_S * IN_MILLISECONDS &&
         spikeDist <= ANUBARAK_IMPALE_REACH +
                          std::max(0.0f, spike->GetSpeed(MOVE_RUN) - KiterRunSpeed(kiter)) * ANUBARAK_KITE_HAND_CLOSE_S &&
-        KiterRunSpeed(kiter) <= spike->GetSpeed(MOVE_RUN) &&
-        (!GET_PLAYERBOT_AI(kiter) || !claim.heroic ||
-         !NextKiteBoost(kiter, spike, *state, LaneObstacles(kiter, *state), boost));
+        KiterRunSpeed(kiter) <= spike->GetSpeed(MOVE_RUN) && !boostFirst;
     claim.spikeInImmunityRange = spikeDist <= ANUBARAK_KITE_IMMUNITY_RANGE;
     claim.spikeFaster = caught;
 
@@ -4018,6 +4062,9 @@ ProtectClaim const* DeriveProtection(Player* bot)
         };
 
         Player* pick = planned.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, planned);
+        if (!serves(pick) && state->standbyKiter == kiterGuid && !state->standby.IsEmpty())
+            pick = ObjectAccessor::GetPlayer(*bot, state->standby);
+
         if (!serves(pick))
         {
             pick = nullptr;
@@ -4212,16 +4259,17 @@ int32 FreeMsLeft(AnubarakState const& state, Creature* burrower, uint32 now)
 // Tanks right by it have held it ANUBARAK_FOCUS_SETTLE_MS, or nobody will: before that it is still walking
 // in from its exit, and the tank's threat on it is too thin for the raid's damage. The clock runs on across
 // a swap between tanks: restarted on each, a pair passed between the side tanks went 14 s unfocused. A tank
-// it has stacked deep in Expose Weakness can't wait for it.
+// it has stacked deep in Expose Weakness can't wait for the clock once it has reached that tank.
 bool BurrowerSettled(Player* bot, AnubarakState& state, Creature* burrower)
 {
     Unit* victim = burrower->GetVictim();
     Player* holder = victim ? victim->ToPlayer() : nullptr;
-    if (holder && IsAnubarakTankPlayer(holder) &&
+    bool const held = holder && IsAnubarakTankPlayer(holder) && burrower->GetExactDist2d(holder) <= ANUBARAK_FOCUS_SETTLE;
+    if (held &&
         holder->GetAuraCount(sSpellMgr->GetSpellIdForDifficulty(SPELL_EXPOSE_WEAKNESS, holder)) >= ANUBARAK_FOCUS_STACKS)
         return true;
 
-    if (holder && IsAnubarakTankPlayer(holder) && burrower->GetExactDist2d(holder) <= ANUBARAK_FOCUS_SETTLE)
+    if (held)
     {
         uint32 const now = getMSTime();
         auto const [watch, fresh] = state.settles.try_emplace(burrower->GetGUID());
@@ -4350,7 +4398,8 @@ Creature* SideFocus(Player* bot, AnubarakState& state, uint8 side)
     return best;
 }
 
-// A burrower on someone other than a tank within this of a melee bot is its target, whatever its side
+// A burrower on someone other than a tank within this of a melee bot is its target, whatever its side, while
+// that side has no side tank to taunt it back
 constexpr float ANUBARAK_MELEE_LOOSE_BURROWER = 10.0f;
 // A burrower stand counts as in his melee reach this far inside it, since he turns and steps
 constexpr float ANUBARAK_MELEE_BOSS_REACH_SLACK = 1.0f;
@@ -4359,16 +4408,19 @@ constexpr float ANUBARAK_MELEE_STAND_ARRIVE = 1.5f;
 // A held stand is picked again once its burrower moved this far from where it stood at the pick
 constexpr float ANUBARAK_MELEE_STAND_DRIFT = 1.5f;
 
-Creature* LooseBurrowerNear(Player* bot, AnubarakState const& state)
+Creature* LooseBurrowerNear(Player* bot, AnubarakState& state)
 {
+    std::unordered_map<ObjectGuid, uint8> const& owners = BurrowerOwners(bot, state);
     Creature* nearest = nullptr;
     float nearestDist = ANUBARAK_MELEE_LOOSE_BURROWER;
     for (Creature* burrower : ResolveAlive(bot, state.burrowers))
     {
         Unit* victim = burrower->GetVictim();
         Player* player = victim ? victim->ToPlayer() : nullptr;
+        auto const owner = owners.find(burrower->GetGUID());
         if (!player || IsAnubarakTankPlayer(player) || burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ||
-            LeftToSideTank(bot, state, burrower))
+            LeftToSideTank(bot, state, burrower) ||
+            (owner != owners.end() && UsableSideTank(bot, state, owner->second)))
             continue;
 
         float const dist = bot->GetExactDist2d(burrower);
@@ -6704,6 +6756,33 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         label = why;
     };
 
+    uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+    // The lowest member of the best tier in reach and sight, null with none below SWARM_HEAL_TIERS
+    auto const tierPick = [&](uint8& bestTier)
+    {
+        Player* best = nullptr;
+        bestTier = SWARM_HEAL_TIERS;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (!member->IsAlive() || !bot->IsWithinDistInMap(member, range))
+                return false;
+
+            uint8 const tier = SwarmHealTier(botAI, member, cold);
+            bool const lower = !best || member->GetHealthPct() < best->GetHealthPct();
+            if (tier > bestTier || (tier == bestTier && !lower))
+                return false;
+
+            if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
+                return false;
+
+            bestTier = tier;
+            best = member;
+            return false;
+        });
+
+        return best;
+    };
+
     if (ColdTickDeadly(NextColdTick(bot)))
         take(bot, "self", true);
     else if (DutyOf(*state, bot->GetGUID()) == AnubarakHealDuty::Cold)
@@ -6716,6 +6795,15 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
             take(carrier, "risk", true);
         else if (Player* tank = lowestTank(tankLine))
             take(tank, "tank", false);
+        // Two tank healers alone fall behind the swarm on three tanks, so with no carrier of its own at risk
+        // a cold healer tops the tanks up too, once nobody's dying and no carrier waits for its cover
+        else if (!carrier)
+        {
+            uint8 tier = SWARM_HEAL_TIERS;
+            Player* low = tierPick(tier);
+            if (low && tier == 2)
+                take(low, "tank", false);
+        }
     }
     else if (Player* tank = lowestTank(ANUBARAK_SWARM_TANK_URGENT_PCT))
         take(tank, "tank", false);
@@ -6745,26 +6833,8 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
 
     if (!pick.target)
     {
-        uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
         uint8 bestTier = SWARM_HEAL_TIERS;
-        ForEachGroupMember(bot, [&](Player* member)
-        {
-            if (!member->IsAlive() || !bot->IsWithinDistInMap(member, range))
-                return false;
-
-            uint8 const tier = SwarmHealTier(botAI, member, cold);
-            bool const lower = !pick.target || member->GetHealthPct() < pick.target->GetHealthPct();
-            if (tier > bestTier || (tier == bestTier && !lower))
-                return false;
-
-            if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
-                return false;
-
-            bestTier = tier;
-            pick.target = member;
-            return false;
-        });
-
+        pick.target = tierPick(bestTier);
         char const* const labels[] = {"low", "bare", "tank", "cold"};
         pick.small = bestTier == 0;
         if (pick.target)
@@ -6876,6 +6946,68 @@ bool AnubarakAuraMasteryDue(PlayerbotAI* botAI)
         RaidObs::NoteDerived(bot, "anub.mastery", verdict);
 
     return due;
+}
+
+// A healer that comes into phase 3 at half mana runs dry inside 45 s, so the mana tools go out before it
+constexpr float ANUBARAK_PLEA_MANA_PCT = 80.0f;
+// Divine Plea halves the paladin's healing for 15 s
+constexpr float ANUBARAK_PLEA_SAFE_PCT = 50.0f;
+constexpr float ANUBARAK_INNERVATE_MANA_PCT = 50.0f;
+
+static bool AnubarakManaWindow(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && AnubarakHeroic(bot) && AnubarakEngaged(botAI) && !bot->HasAura(SPELL_MARK);
+}
+
+bool AnubarakDivinePleaDue(PlayerbotAI* botAI)
+{
+    if (!AnubarakManaWindow(botAI) || GetAnubarakPhase(botAI) == AnubarakPhase::Swarm)
+        return false;
+
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN || !PlayerbotAI::IsHeal(bot) ||
+        bot->GetPowerPct(POWER_MANA) >= ANUBARAK_PLEA_MANA_PCT || !botAI->CanCastSpell("divine plea", bot))
+        return false;
+
+    uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+    bool hurt = false;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        hurt = member->IsAlive() && member->GetHealthPct() < ANUBARAK_PLEA_SAFE_PCT &&
+               (IsAnubarakTankPlayer(member) || member->HasAura(cold));
+        return hurt;
+    });
+
+    return !hurt;
+}
+
+Player* GetAnubarakInnervateTarget(PlayerbotAI* botAI)
+{
+    if (!AnubarakManaWindow(botAI) || botAI->GetBot()->getClass() != CLASS_DRUID)
+        return nullptr;
+
+    Player* bot = botAI->GetBot();
+    Unit* low = botAI->GetAiObjectContext()->GetValue<Unit*>("healer low mana")->Get();
+    Player* healer = low ? low->ToPlayer() : nullptr;
+    if (!healer || healer->GetPowerPct(POWER_MANA) >= ANUBARAK_INNERVATE_MANA_PCT ||
+        healer->GetPowerPct(POWER_MANA) >= bot->GetPowerPct(POWER_MANA) || botAI->HasAura("innervate", healer) ||
+        !bot->IsWithinDistInMap(healer, botAI->GetRange("spell")) || !bot->IsWithinLOSInMap(healer))
+        return nullptr;
+
+    uint32 const spell = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", "innervate")->Get();
+    return spell && !bot->HasSpellCooldown(spell) ? healer : nullptr;
+}
+
+bool AnubarakInnervateHealerDue(PlayerbotAI* botAI) { return GetAnubarakInnervateTarget(botAI) != nullptr; }
+
+bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI)
+{
+    if (!AnubarakManaWindow(botAI) || botAI->GetBot()->getClass() != CLASS_DRUID)
+        return false;
+
+    Unit* low = botAI->GetAiObjectContext()->GetValue<Unit*>("healer low mana")->Get();
+    return low && low->GetPowerPct(POWER_MANA) < botAI->GetBot()->GetPowerPct(POWER_MANA);
 }
 
 bool AnubarakSwarmHealWasted(Player* target)
@@ -7382,9 +7514,38 @@ static bool EscortSpot(Player* paladin, Player* kiter, Creature* spike, Anubarak
     return post || ShadowSpot(paladin, kiter, spike, patches, spikeClearance, reach.laneClearance, out);
 }
 
+// A bot kiter's standby escort: the one kept for this kite while it can still land a Hand and isn't holding
+// a burrower for its side, else the nearest such paladin bot
+static Player* StandbyEscort(Player* kiter, AnubarakState& state)
+{
+    auto const qualifies = [kiter](Player* paladin)
+    {
+        PlayerbotAI* ai = paladin && paladin != kiter && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
+        return ai && !paladin->HasAura(SPELL_MARK) && HandReady(paladin) &&
+               !(GetAnubarakBurrowerTankSide(paladin) >= 0 && GetAnubarakBurrowerPick(ai));
+    };
+
+    if (state.standbyKiter == kiter->GetGUID() && !state.standby.IsEmpty())
+    {
+        Player* kept = ObjectAccessor::GetPlayer(*kiter, state.standby);
+        if (qualifies(kept))
+            return kept;
+    }
+
+    Player* best = nullptr;
+    for (Player* paladin : ProtectorOrder(kiter))
+        if (qualifies(paladin) && (!best || kiter->GetExactDist2d(paladin) < kiter->GetExactDist2d(best)))
+            best = paladin;
+
+    state.standbyKiter = kiter->GetGUID();
+    state.standby = best ? best->GetGUID() : ObjectGuid::Empty;
+    return best;
+}
+
 // Heroic, once per instance per ms. The paladin bot whose Hand of Protection the kite plan lands, so the
-// one walking there is the one DeriveProtection claims first. It ends with the Hand, the mark, or the plan
-// dropping the Hand.
+// one walking there is the one DeriveProtection claims first. A bot kiter whose plan lands no other
+// paladin's Hand is shadowed by a standby, which the planner offers first, so a Hand is in reach whatever
+// the plan comes to. It ends with the Hand or the mark.
 static EscortRead const* DeriveEscort(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -7406,15 +7567,30 @@ static EscortRead const* DeriveEscort(Player* bot)
         return &escort;
 
     KitePlan const& plan = PlanKite(kiter, spike, *state);
-    if (!HandKite(plan) || plan.hand == kiter->GetGUID())
+    if (HandKite(plan) && plan.hand != kiter->GetGUID())
+    {
+        Player* paladin = ObjectAccessor::GetPlayer(*bot, plan.hand);
+        if (!paladin || !paladin->IsAlive())
+            return &escort;
+
+        escort.paladin = plan.hand;
+        escort.spotValid = EscortSpot(paladin, kiter, spike, *state, plan, escort.spot, escort.post, escort.patchPost);
+        return &escort;
+    }
+
+    Player* standby = GET_PLAYERBOT_AI(kiter) && !kiter->HasAura(SPELL_FORBEARANCE) ? StandbyEscort(kiter, *state)
+                                                                                    : nullptr;
+    if (!standby)
         return &escort;
 
-    Player* paladin = ObjectAccessor::GetPlayer(*bot, plan.hand);
-    if (!paladin || !paladin->IsAlive())
-        return &escort;
-
-    escort.paladin = plan.hand;
-    escort.spotValid = EscortSpot(paladin, kiter, spike, *state, plan, escort.spot, escort.post, escort.patchPost);
+    SpikeDodgeReach const reach = DodgeReach(standby, spike);
+    float const spikeClearance = spike->GetSpeed(MOVE_RUN) > standby->GetSpeed(MOVE_RUN)
+                                     ? ANUBARAK_ESCORT_SPIKE_CLEARANCE_FAST
+                                     : ANUBARAK_ESCORT_SPIKE_CLEARANCE;
+    escort.paladin = standby->GetGUID();
+    escort.standby = true;
+    escort.spotValid = ShadowSpot(standby, kiter, spike, PatchPositions(kiter, *state), spikeClearance,
+                                  reach.laneClearance, escort.spot);
     return &escort;
 }
 
@@ -7482,7 +7658,7 @@ static FreedomRead const* DeriveFreedom(Player* bot)
     return &freedom;
 }
 
-bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post, bool* patchPost)
+bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post, bool* patchPost, bool* standby)
 {
     EscortRead const* escort = bot && bot->getClass() == CLASS_PALADIN ? DeriveEscort(bot) : nullptr;
     if (!escort || escort->paladin != bot->GetGUID() || !escort->spotValid)
@@ -7494,6 +7670,9 @@ bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post, bool* patchPo
 
     if (patchPost)
         *patchPost = escort->patchPost;
+
+    if (standby)
+        *standby = escort->standby;
 
     return true;
 }

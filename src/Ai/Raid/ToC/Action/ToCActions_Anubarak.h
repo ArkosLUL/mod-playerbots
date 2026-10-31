@@ -242,6 +242,17 @@ public:
     bool isUseful() override;
 };
 
+// The class's "innervate on healer" runs under the name "innervate" too, which the self Innervate guard blocks
+class AnubarakInnervateHealerAction : public Action
+{
+public:
+    AnubarakInnervateHealerAction(PlayerbotAI* botAI, std::string const name = "anubarak innervate healer")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+    bool isUseful() override;
+    std::vector<NextAction> getPrerequisites() override;
+};
+
 class ToCAnubarakActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -303,6 +314,8 @@ public:
             &ToCAnubarakActionContext::anubarak_swarm_heal;
         creators["anubarak aura mastery"] =
             &ToCAnubarakActionContext::anubarak_aura_mastery;
+        creators["anubarak innervate healer"] =
+            &ToCAnubarakActionContext::anubarak_innervate_healer;
     }
 
 private:
@@ -417,6 +430,10 @@ private:
 
     static Action* anubarak_aura_mastery(PlayerbotAI* botAI) {
         return new AnubarakAuraMasteryAction(botAI);
+    }
+
+    static Action* anubarak_innervate_healer(PlayerbotAI* botAI) {
+        return new AnubarakInnervateHealerAction(botAI);
     }
 };
 
