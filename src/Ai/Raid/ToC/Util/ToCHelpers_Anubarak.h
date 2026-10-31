@@ -93,6 +93,9 @@ constexpr float ANUBARAK_FOCUS_OFF_FROST_PCT = 10.0f;
 // walking in from its exit and the raid would chase it there, or pull it off the tank
 constexpr float ANUBARAK_FOCUS_SETTLE = 5.0f;
 constexpr uint32 ANUBARAK_FOCUS_SETTLE_MS = 4000;
+// A burrower on a tank this deep in Expose Weakness is a pick at once: at 9 stacks (+225%) two of them
+// killed a side tank in a second (user call, 2026-10-31)
+constexpr uint32 ANUBARAK_FOCUS_STACKS = 6;
 // The script's first submerge check comes 30 s after a burrower spawns or emerges, so one off Permafrost
 // is still worth killing this long after either
 constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
@@ -108,8 +111,7 @@ constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
 // can reach a kiter standing here
 constexpr float ANUBARAK_KITE_STAND_OFFSET = 8.5f;
 constexpr float ANUBARAK_KITE_ARRIVE = 2.0f;
-constexpr float ANUBARAK_KITE_REAIM_DEGREES = 30.0f;
-// navprobe-clean all round; heroic's kite paths ring it or the 45 yd rim
+// navprobe-clean all round, as is the 45 yd rim; the kite planner's ring paths run on both
 constexpr float ANUBARAK_KITE_RING_RADIUS = 40.0f;
 // Heroic: the spike this close and faster than the kiter sends the next speed boost out, and at CLOSE
 // whatever its speed
@@ -119,12 +121,8 @@ constexpr float ANUBARAK_KITE_BOOST_CLOSE = 10.0f;
 constexpr float ANUBARAK_SPIKE_ROUTE_CLEARANCE = 14.5f;
 // Impale's 6 yd plus 1.5 reach
 constexpr float ANUBARAK_IMPALE_REACH = 7.5f;
-// Heroic, a patch the kite may end on and the spike faster: lane steps keep the kiter this close to its stand
-constexpr float ANUBARAK_KITE_STAND_LEASH = 25.0f;
 // The teleport back to the Demonic Circle only goes when the circle is this much farther from the spike
 constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
-// A warlock's run counts its teleport only from within this of the circle: the spell's 40 yd less a margin
-constexpr float ANUBARAK_CIRCLE_TELEPORT_REACH = 38.0f;
 // A circle with less left than this is cast again
 constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
 constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
@@ -135,7 +133,6 @@ constexpr float ANUBARAK_GATHER_SPREAD = 3.0f;
 constexpr float ANUBARAK_HEALER_STAND_LEAVE = 6.0f;
 // A gathered melee bot takes a scarab this close before the focus burrower
 constexpr float ANUBARAK_GATHER_MELEE_SCARAB = 10.0f;
-constexpr float ANUBARAK_KITE_RING_STEP_DEGREES = 40.0f;
 constexpr float ANUBARAK_SPIKE_DANGER_RADIUS = 10.0f;
 constexpr float ANUBARAK_SPIKE_CLEARANCE = 13.0f;
 constexpr float ANUBARAK_SPIKE_LANE_HALF_WIDTH = 7.0f;
@@ -193,8 +190,6 @@ constexpr uint32 ANUBARAK_DODGE_HOLD_MS = 8000;
 // scored alike and 5 s worse.
 constexpr float ANUBARAK_DODGE_TRACK_S = 3.0f;
 
-// Spike this close: a paladin HoPs the kiter
-constexpr float ANUBARAK_KITE_PROTECT_RANGE = 12.0f;
 // The escort walks back to its spot once further off it
 constexpr float ANUBARAK_ESCORT_HOLD = 4.0f;
 // Impale's 6 + 1.5 plus a margin: the kiter's own immunity
@@ -219,9 +214,11 @@ enum class AnubarakPhase : uint8
 enum class AnubarakKiteBranch : uint8
 {
     None,
+    // Walking the plan's patch ending
     Patch,
-    Detour,
+    // Running the plan's path
     Ring,
+    // At the end of the patch walk
     Hold
 };
 
@@ -229,13 +226,12 @@ enum class AnubarakKiteBranch : uint8
 enum class AnubarakKiteStage : uint8
 {
     None,
-    // Steps whose spike lane clears every patch
     Run,
     // Running, and the next speed boost goes out
     Boost,
     // Hand of Protection up, still running
     Immune,
-    // A patch kite whose walk to its stand would no longer beat the catch by the commit margin: to the patch
+    // The plan's walk onto its patch has begun
     Patch
 };
 
@@ -253,7 +249,6 @@ struct AnubarakKiteBoost
     ObjectGuid target;
 };
 
-// For Detour, stand is the waypoint round the patch, not the final stand
 struct AnubarakKiteStand
 {
     Position stand;
@@ -562,9 +557,9 @@ Creature* GetAnubarakDutySphere(Player* bot);
 bool AnubarakSphereInReach(Player* bot, Unit* sphere);
 // Floor point toward the sphere where it is in reach, off the spike and its lane. False when none.
 bool GetAnubarakSphereStand(Player* bot, Unit* sphere, Position& out);
-// Where the spike's target runs. previous is the stand the caller latched last time, may be null.
-// False while there's no spike. Heroic runs lane steps until the kite stage says patch.
-bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand const* previous, AnubarakKiteStand& out);
+// Where the spike's target runs: its kite plan's track 1.2 s past the point nearest it. False while there's
+// no spike.
+bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand& out);
 // Heroic only, None elsewhere and for an unmarked bot. boost is set to the speed boost to use now, if any,
 // whatever the stage.
 AnubarakKiteStage GetAnubarakKiteStage(Player* kiter, AnubarakKiteBoost* boost = nullptr);

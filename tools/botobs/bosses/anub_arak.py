@@ -21,7 +21,11 @@
                                      down, by role, his distance from the gather and the first kiter's distance
                                      from the spike at its mark;
                                      each kite's anub.kiteplan terminals and whether the last one was used
-                                     before the mark ended, and a kiter dead with it unused; each patch kite's
+                                     before the mark ended, and a kiter dead with it unused; its anub.kitepred
+                                     at the mark against the real end, its anub.kitepath picks with the seconds
+                                     each held, one turning over 90 degrees within 1 s of the pick before
+                                     flagged, and the first hazard anub.kitepred foresaw against the first real
+                                     one, as the kite planner counts them; each patch kite's
                                      turn for its patch, its anub.kitemove then, the patch it went for with the
                                      kiter's and the spike's closest approach after the turn, and whether the
                                      spike failed on it; for patch+hand whether the Hand landed at the turn, read
@@ -31,11 +35,10 @@
                                      Hand-ready paladin; the first snapshot before the turn with the spike within
                                      14.5 yd of a patch it was not already inside at the mark; Impale on a side
                                      tank flagged; per submerge the seconds into phase 2 its first tank patch went;
-                                     per kite an anub.lane step off the patches while another heading was clear,
-                                     the escort's distance at the claim, at the kiter's boost before any Hand
-                                     and at the end, its seconds in Permafrost and its walk and dodge swaps
+                                     per kite the escort's distance at the claim, at the kiter's boost before any
+                                     Hand and at the end, its seconds in Permafrost and its walk and dodge swaps
                                      within 1 s, a kiter dead to anything but the spike with its own immunity
-                                     unused, claim to cast for each Hand, the Hand against the held-heading catch, the
+                                     unused, claim to cast for each Hand, the
                                      kiter within 15.5 yd of a tank patch under a Hand, an own immunity after a
                                      Hand ran out, a boost in a Hand's first 8 s, a boost the kiter cast after its
                                      Hand, a patch kite turning within 3 s of a boost, and for an escort that noted
@@ -64,7 +67,10 @@
                                      the patches no side held on the floor as he went down, under 2 flagged
     anub_arak.py <file> --burrowers  each burrower: life, submerges, Permafrost, Shadow Strike, its exit, side
                                      and pickup, DPS focus per side, DPS casts at a burrower no focus held;
-                                     whether it died inside its first 30 s up; per wave those deaths, and on
+                                     whether it died inside its first 30 s up; per wave those deaths, per side
+                                     the seconds from its burrowers coming up to that side's first focus pick
+                                     and the side tank's peak Expose Weakness, in phase 3 its anub.p3wave rows
+                                     and whether the side tanks lived until it died; on
                                      older traces when the focus came due and each time it stopped with the
                                      focus alive; each focus pick against its tank and the patches, labelled
                                      by side, each burrower's distance from the patch centre while
@@ -131,6 +137,12 @@
                                      target, and a burrower's target 1 to 8 s after; totals per recipient
     anub_arak.py <file> --pursuit    pure pursuit replayed against the real spike per kite: end and patch-pass
                                      errors 3 and 6 s on, a p90 patch-pass error over 1.5 yd flagged
+    anub_arak.py <file> --kitesim    25H: a port of the kite planner replayed from each bot kite's start, closed
+                                     loop as the native test plays it, with no Hands and no own immunity: its
+                                     first pick as anub.kitepred, where the replay ended against where the real
+                                     kite did, and for the fresh-spike kites, base speed and over 2 s to the
+                                     replay's first event, the patch ends under 10 s, the tank patch passes and
+                                     the raid passes, real against replayed
 
 The banner names the probes the pull never wrote, a side left without a side tank, and a human on one.
 
@@ -150,12 +162,16 @@ What the generic views get wrong here, and what this reads instead:
   a bot that takes the same branch twice writes one row. `anub.kite` goes back to `none` when the mark
   moves on, so a window never opens on the branch the last one ended with. `anub.gather` never does,
   so a bot still reads `hold` while it kites, after it dies and into the next submerge: the gather
-  centre counts only living bots off the mark whose hold began in this submerge. `anub.kiteplan` never
-  resets either, so a kiter marked again on the same terminal writes nothing: a mark reads the value
-  carried in only when no row of its own lands within a second of it. `anub.kitemove` and `anub.bridge`
-  go back to `none` as the mark moves on, so a turn reads the kitemove held then and a bridge counts only
-  from rows inside the window. Older traces write a bridge `ask` at the turn and `hand` as the Hand lands
-  there; with no `ask`, `hand` is the Hand landing at the catch and the turn is the patch kitestage after it.
+  centre counts only living bots off the mark whose hold began in this submerge. `anub.kiteplan`,
+  `anub.kitepred` and `anub.kitepath` never reset either, so a kiter whose first pick reads the same as its
+  last writes nothing: a mark reads the value carried in only when no row of its own lands within a second
+  of it. A held plan writes no kitepath, so each kitepath row is a new pick. `anub.kitemove` goes back to
+  `none` as the mark moves on, so a turn reads the kitemove held then. Older traces also write
+  `anub.bridge`, back to `none` the same way, so a bridge counts only from rows inside the window: an `ask`
+  at the turn and `hand` as the Hand lands there; with no `ask`, `hand` is the Hand landing at the catch and
+  the turn is the patch kitestage after it. Newer ones have no bridge, and a turn is the patch kitestage.
+- **`anub.p3wave` is written by whichever bot reads the wave**, change-only per bot, so its rows are read as
+  one stream with a value two bots wrote counted once.
 - **`anub.focus0` and `anub.focus1` are raid-wide latches, one per side**, so the `g` on their rows is
   whichever bot's read moved them, and whether the DPS followed is read off their snapshot targets, not
   off `anub.dps`. So are `anub.side0`, `anub.side1`, `anub.wave`, `anub.grip`, `anub.allow`, and
@@ -189,8 +205,10 @@ from __future__ import annotations
 
 import bisect
 import collections
+import functools
 import math
 import pathlib
+import re
 import statistics
 import sys
 
@@ -200,6 +218,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of, map_of  # noqa: E402
 from raidobs.geometry import anchor, dist2, frames, guids_of_entry, radius  # noqa: E402
+from raidobs.paths import RAID_ROOT  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
 from raidobs.space import threat_share  # noqa: E402
 from raidobs.trace import COVERAGE_COLUMNS, Trace, clock, combat_deaths, notes, roster_guids  # noqa: E402
@@ -330,14 +349,13 @@ READ_KEYS = ("toc.progress", "anub.phase", "anub.patch0", "anub.patch1", "anub.s
              "anub.dodge", "anub.protect", "anub.interrupter", "anub.pickup", "anub.defensive", "anub.focus0",
              "anub.focus1", "anub.dps", "anub.side0", "anub.side1", "anub.wave", "anub.grip",
              "anub.bside", "anub.dside", "anub.gripstep", "anub.sidetank", "anub.kitestage", "anub.kiteplan",
-             "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand", "anub.kitemove", "anub.bridge",
-             "anub.relay", "anub.subspot", "anub.saoe", "anub.hbehind", "anub.swarmheal", "anub.healduty",
-             "anub.coldheal", "anub.mastery", "toc.aura")
+             "anub.gather", "anub.spot0", "anub.spot1", "anub.hstand", "anub.kitemove", "anub.kitepath",
+             "anub.kitepred", "anub.relay", "anub.subspot", "anub.saoe", "anub.hbehind", "anub.swarmheal",
+             "anub.healduty", "anub.coldheal", "anub.mastery", "anub.p3wave", "toc.aura")
 SPOT_KEYS = ("anub.spot0", "anub.spot1")
 
 # Read from the source so a retune shows up here without a second edit.
 ROOM_CENTER = anchor("ANUBARAK_ROOM_CENTER")
-KITE_PROTECT_RANGE = radius("ANUBARAK_KITE_PROTECT_RANGE")
 TANK_PATCH_OFFSET = radius("ANUBARAK_TANK_PATCH_OFFSET")
 PERMAFROST_SLOW_REACH = radius("ANUBARAK_PERMAFROST_SLOW_REACH")
 GRIP_LANDED = radius("ANUBARAK_GRIP_LANDED")
@@ -446,6 +464,11 @@ KITEPLAN_SETTLE_MS = 1000
 # what each anub.kiteplan terminal spends; `none` spends nothing
 PLAN_NEEDS = {"patch": ("patch",), "hand": ("hand",), "patch+hand": ("patch", "hand"), "own": ("own",)}
 PATCH_PLANS = ("patch", "patch+hand")
+# what an anub.kitepred pick names first when it foresees one, worst first
+KITEPRED_HAZARDS = ("tank", "kite", "raid", "catch")
+# the planner holds a turn this sharp until its plan is this old, else the kiter stands between two headings
+PICK_REVERSAL_DEGREES = 90.0
+PICK_REVERSAL_MS = 1000
 # what a kite runs on, any rank; 55004 is the Nitro Boosts use
 KITE_TOOLS = {11305: "Sprint", 8696: "Sprint", 2983: "Sprint", 33357: "Dash", 9821: "Dash", 1850: "Dash",
               55004: "Nitro Boosts", 642: "Divine Shield", 45438: "Ice Block", 26889: "Vanish", 1857: "Vanish",
@@ -482,12 +505,6 @@ HOP_RANGE = radius("ANUBARAK_HOP_RANGE")
 # HoP's base cooldown, for a trace with no anub.hands to read it off: a paladin bot read 180 s after its
 # last Hand stayed unclaimable for 277-293 s, so the bots carry no Guardian's Favor
 HOP_COOLDOWN_MS = 300000
-# anub.lane: its flags before the colon, the heading in degrees after it
-LANE_GOAL, LANE_CLEAR, LANE_HELD, LANE_ANY_CLEAR = "g", "p", "h", "c"
-# anub.lane's ring commit rows: `ring:<way>` as it latches, then `ring:<exit>` as it ends. A committed run
-# that stands still longer than RING_STILL_MS is flagged.
-RING_WAYS = ("cw", "ccw")
-RING_STILL_MS = 1500
 ESCORT_BY = "anubarak hop escort"
 DODGE_BY = "anubarak avoid spike"
 GATHER_BY = "anubarak gather"
@@ -505,7 +522,10 @@ CLAIM_CAST_FLAG_MS = 300
 HAND_BOOST_MS = 8000
 # a patch kite turning this close to a boost spent the boost on the walk in
 BOOST_TURN_MS = 3000
-HAND_PATCH_CLEARANCE = radius("ANUBARAK_KITE_HAND_PATCH_CLEARANCE")
+# the spike this close sends a paladin's Hand of Protection on older traces; under a Hand the spike trails
+# 2-3 yd, so a kiter this close to a tank patch walks it into its 11.5 yd test
+KITE_PROTECT_RANGE = 12.0
+HAND_PATCH_CLEARANCE = 15.5
 # heroic shoots a submerge's first kite sphere from this long before he goes down
 KITE_PRESHOT_MS = int(radius("ANUBARAK_KITE_PRESHOT_LEFT_S") * 1000)
 # ANUBARAK_KITE_SPHERES_PER_SUBMERGE, a uint32 radius() doesn't read
@@ -1075,17 +1095,23 @@ def branches_in(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]
     return out
 
 
-def plan_terminals(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]:
-    """A kite's `anub.kiteplan` terminals in turn. The value carried in from an earlier mark counts only
-    when no row lands within KITEPLAN_SETTLE_MS of this one."""
+def noted_in(rows: list[tuple[int, str]], start: int, stop: int) -> list[tuple[int, str]]:
+    """A kite's rows of a per-bot key written at each pick, `(when, value)` in turn. The pick is made at the
+    mark, so the value carried in from an earlier mark, stamped `start`, counts only when no row lands within
+    KITEPLAN_SETTLE_MS of this one: the key wrote nothing because the pick read the same."""
     fresh = [(when, value) for when, value in rows if start - KITEPLAN_SETTLE_MS <= when < stop]
-    out: list[str] = []
+    out: list[tuple[int, str]] = []
     if not fresh or fresh[0][0] > start + KITEPLAN_SETTLE_MS:
-        out = [value for when, value in rows if when < start - KITEPLAN_SETTLE_MS][-1:]
-    for _, value in fresh:
-        if not out or out[-1] != value:
-            out.append(value)
+        out = [(start, value) for when, value in rows if when < start - KITEPLAN_SETTLE_MS][-1:]
+    for when, value in fresh:
+        if not out or out[-1][1] != value:
+            out.append((when, value))
     return out
+
+
+def plan_terminals(rows: list[tuple[int, str]], start: int, stop: int) -> list[str]:
+    """A kite's `anub.kiteplan` terminals in turn."""
+    return [value for _, value in noted_in(rows, start, stop)]
 
 
 def spike_near(samples: Samples, spikes, guid: int, start: int, stop: int) -> int | None:
@@ -1553,65 +1579,102 @@ def hand_catches(samples: Samples, spikes, window: dict, marks, submerged, hands
     return out
 
 
-def lane_heading(rows: list[tuple[int, str]], when: int) -> tuple[float, float] | None:
-    """The unit heading of the kiter's last `anub.lane` row at or before `when`, None with none."""
-    held = [value for at, value in rows if at <= when]
-    degrees = held[-1].partition(":")[2] if held else ""
+def parse_kitepred(text) -> tuple[str, float] | None:
+    """An `anub.kitepred` value as `(what, seconds from its pick)`."""
+    what, _, seconds = str(text).rpartition(":")
     try:
-        radians = math.radians(float(degrees))
+        return what, float(seconds)
     except ValueError:
         return None
-    return math.cos(radians), math.sin(radians)
 
 
-def ring_commits(rows: list[tuple[int, str]], start: int, stop: int) -> list[dict]:
-    """The window's ring commits off `anub.lane`: each `ring:cw` or `ring:ccw` to the next row, whose
-    `ring:<exit>` names why it ended; `open` for one still running at the window's end. A `ring:none` is a
-    commit picked with no way holding."""
+def kitepath_heading(text) -> float | None:
+    """The heading in degrees an `anub.kitepath` pick runs on first, None for a human's `motion`."""
+    shape, _, rest = str(text).partition(":")
+    if shape not in ("ring", "arc"):
+        return None
+    try:
+        return float(rest.split(">")[0].split(":")[0])
+    except ValueError:
+        return None
+
+
+def kitepath_patch(text) -> int | None:
+    """The guid counter of the patch an `anub.kitepath` pick ends on, None for none."""
+    counter = str(text).partition(">patch:")[2].split("@")[0]
+    return int(counter) if counter.isdigit() else None
+
+
+def kitepath_changes(rows: list[tuple[int, str]], start: int, stop: int) -> list[dict]:
+    """A kite's `anub.kitepath` picks in turn: `at` its row, `held` from the mark or its row to the next pick or
+    the mark's end, and `reversal`, its heading over PICK_REVERSAL_DEGREES off the pick before it, that pick
+    under PICK_REVERSAL_MS old."""
+    picks = noted_in(rows, start, stop)
     out: list[dict] = []
-    for when, value in rows:
-        if not start <= when <= stop + NOTE_TICK_MS:
-            continue
-        kind, _, rest = value.partition(":")
-        if out and out[-1]["exit"] is None:
-            out[-1].update(stop=when, exit=rest if kind == "ring" else "lane")
-        if kind == "ring" and rest in RING_WAYS and when <= stop:
-            out.append({"start": when, "stop": stop, "way": rest, "exit": None})
-        elif kind == "ring" and rest == "none" and when <= stop:
-            out.append({"start": when, "stop": when, "way": "none", "exit": "none"})
-    for ring in out:
-        if ring["exit"] is None:
-            ring["exit"] = "open"
+    for index, (when, value) in enumerate(picks):
+        until = picks[index + 1][0] if index + 1 < len(picks) else stop
+        reversal = False
+        if out:
+            before, here = kitepath_heading(out[-1]["value"]), kitepath_heading(value)
+            reversal = (before is not None and here is not None and when - out[-1]["at"] < PICK_REVERSAL_MS
+                        and abs(math.remainder(here - before, 360.0)) > PICK_REVERSAL_DEGREES)
+        out.append({"at": when, "value": value, "held": until - max(when, start), "reversal": reversal})
     return out
 
 
-def ring_line(trace: Trace, window: dict) -> str | None:
-    """Each ring commit: its way, from when and for how long, its exit, and a stand-still past RING_STILL_MS or
-    a flip-flop while committed, flagged."""
-    parts = []
-    for ring in window["rings"]:
-        if ring["way"] == "none":
-            parts.append(f"none held {rel_s(window, ring['start'])}")
+def predicted_hazard(picks: list[tuple[int, str]]) -> tuple[str, int] | None:
+    """The first `anub.kitepred` pick of a kite that foresaw a hazard: what, and when it foresaw it landing."""
+    for when, value in picks:
+        parsed = parse_kitepred(value)
+        if parsed and parsed[0] in KITEPRED_HAZARDS:
+            return parsed[0], when + int(round(parsed[1] * 1000.0))
+    return None
+
+
+def formed_gather(holds, samples: Samples, submerged, when: int, kiter: int) -> tuple[float, float] | None:
+    """The gather as formed GATHER_FORMED_MS into the submerge, or at `when` once past that: bots still walking to
+    it at an early mark put its mean on the spike."""
+    under = next(((low, high) for low, high in submerged if low <= when <= high), None)
+    if under is None:
+        return None
+    return gather_centre(holds, samples, submerged, min(max(when, under[0] + GATHER_FORMED_MS), under[1]), {kiter})
+
+
+def real_hazard(samples: Samples, spikes, latches, window: dict, gather, marks, submerged,
+                rules: dict) -> tuple[str, int] | None:
+    """The real kite's first hazard as the kite planner counts them: the spike within its fail reach of a tank
+    patch, of a kite patch other than the one the `anub.kitepath` pick in force ends on or of that one under
+    earlyPatchS since the spike's restart, nearer the gather than its clearance, or nearer than its start less
+    the slack when it began nearer, or Impale or a death on the kiter. A patch the spike was inside at its first
+    sample counts once it got out. `(what, when)`, None with none."""
+    guid, start, stop = window["guid"], window["start"], window["stop"]
+    caught = min((when for when in (window["impale_at"], window["died"]) if when is not None), default=None)
+    paths = window["kitepath"]
+    need = spawned = None
+    for when in samples.stamps[bisect.bisect_left(samples.stamps, start):bisect.bisect_right(samples.stamps, stop)]:
+        if caught is not None and when >= caught:
+            break
+        spike = spike_at(samples, spikes, guid, when)
+        if spike is None:
             continue
-        text = (f"{ring['way']} {rel_s(window, ring['start'])} for {(ring['stop'] - ring['start']) / 1000:.1f} s,"
-                f" out on {ring['exit']}")
-        still, longest = ring["still"]
-        if longest > RING_STILL_MS:
-            text += f", stood still {still / 1000:.1f} s, longest {longest / 1000:.1f} s"
-        if ring["flips"]:
-            text += f", flip-flopped {sum(high - low for low, high, _ in ring['flips']) / 1000:.1f} s"
-        parts.append(text)
-    return "ring commit: " + "; ".join(parts) if parts else None
-
-
-def lane_offs(rows: list[tuple[int, str]], start: int, stop: int) -> list[int]:
-    """When the kiter's `anub.lane` step was off the patches while another heading was clear of them."""
-    out = []
-    for when, value in rows:
-        flags = value.partition(":")[0]
-        if start <= when <= stop and LANE_ANY_CLEAR in flags and LANE_CLEAR not in flags:
-            out.append(when)
-    return out
+        near = {patch for patch, spot in patch_spots(samples, when).items()
+                if dist2(spike[1:3], spot) <= rules["patchReach"]}
+        if spawned is None:
+            spawned = set(near)
+            if gather is not None:
+                need = min(rules["gatherClearance"], dist2(spike[1:3], gather) - rules["startSlack"])
+        spawned &= near
+        planned = next((kitepath_patch(pick["value"]) for pick in reversed(paths) if pick["at"] <= when), None)
+        restart = spike_restart(marks, submerged, when)
+        early = restart is None or when - restart < rules["earlyPatchS"] * 1000.0
+        for patch in sorted(near - spawned):
+            if patch_side(latches, patch, when) is not None:
+                return "tank", when
+            if planned != patch & 0xFFFFFFFF or early:
+                return "kite", when
+        if need is not None and dist2(spike[1:3], gather) < need:
+            return "raid", when
+    return None if caught is None else ("catch", caught)
 
 
 def alternations(moves: list[dict], start: int, stop: int) -> int:
@@ -1663,27 +1726,6 @@ def claim_casts(window: dict) -> list[tuple[dict, int | None]]:
                 if note.get("g") == rec.get("s") and str(note.get("txt")) == "hop"
                 and rec["t"] - CLAIM_LOOKBACK_MS <= note["t"] <= rec["t"]]
         out.append((rec, rec["t"] - rows[0] if rows else None))
-    return out
-
-
-def held_catches(samples: Samples, spikes, window: dict, marks, submerged, lanes) -> list[tuple[dict, float | None]]:
-    """Each Hand of Protection on the kiter against the catch predicted on its held `anub.lane` heading as it went
-    out, None with no heading or no catch within the horizon."""
-    guid = window["guid"]
-    out = []
-    for row in window["cover"]:
-        rec = row["rec"]
-        if rec.get("sp") not in HAND_OF_PROTECTION:
-            continue
-        when = rec["t"]
-        spike, unit = spike_at(samples, spikes, guid, when), samples.recent(guid, when)
-        heading = lane_heading(lanes, when)
-        before = None
-        if spike and unit and heading:
-            restart = spike_restart(marks, submerged, when)
-            before = predicted_catch(spike[1:3], (when - (restart or when)) / 1000.0, unit[1:3], heading,
-                                     row["kiter"] or BASE_RUN_YD_S)
-        out.append((rec, before))
     return out
 
 
@@ -1814,7 +1856,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     sides = side_spans(trace)
     marks = mark_spans(trace)
     hand_auras = aura_spans(trace, HAND_OF_PROTECTION)
-    lanes = per_bot(trace, "anub.lane")
+    preds = per_bot(trace, "anub.kitepred")
+    paths = per_bot(trace, "anub.kitepath")
     escorts = per_bot(trace, "anub.escort")
     seconds = per_bot(trace, "anub.second")
     frost_auras = aura_spans(trace, PERMAFROST)
@@ -1859,6 +1902,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "branches": branches_in(kite.get(guid, []), start, stop),
                     "plan": plan_terminals(plans.get(guid, []), start, stop),
                     "impales": len(hits), "damage": sum(rec.get("a", 0) for rec in hits),
+                    "impale_at": min((rec["t"] for rec in hits), default=None),
                     "outcome": outcome, "consumed": consumed, "died": died,
                     "killer": None if death is None else death.get("killer"),
                     "killer_spike": death is not None and death.get("killer") in spikes,
@@ -1904,13 +1948,10 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         window["turn_escort"] = (ready_paladin(samples, ready, guid, turn)
                                  if "turn" in window["bridge"] and turn is not None else None)
         window.update({
-            "lane_offs": lane_offs(lanes.get(guid, []), start, stop),
-            "rings": [dict(ring, still=stalled(samples, guid, ring["start"], ring["stop"]),
-                           flips=flip_flops(moves.get(guid, []), ring["start"], ring["stop"]))
-                      for ring in ring_commits(lanes.get(guid, []), start, stop)],
+            "kitepred": noted_in(preds.get(guid, []), start, stop),
+            "kitepath": kitepath_changes(paths.get(guid, []), start, stop),
             "escort_read": escort_read(samples, escorts, window, moves, frost_auras),
             "claim_casts": claim_casts(window),
-            "held_catches": held_catches(samples, spikes, window, marks, submerged, lanes.get(guid, [])),
             "hand_patch": hand_patch_pass(samples, latches, window, hand_auras),
             "own_after_hand": own_after_hand(window, hand_auras),
             "hand_boosts": hand_boosts(window, hand_auras),
@@ -1976,12 +2017,56 @@ def run_spend(row: dict | None) -> bool:
     return stage == "run" or stage.startswith("boost")
 
 
+def kite_hazards(trace: Trace, samples: Samples, windows: list[dict]) -> dict:
+    """Per kite with `anub.kitepred` picks, keyed `(kiter, mark)`: `(predicted, real)` first hazards, each
+    `(what, when)` or None. Empty when the kite planner's Rules can't be read."""
+    if not any(window["kitepred"] for window in windows):
+        return {}
+    try:
+        rules = planner_rules()
+    except LookupError:
+        return {}
+    spikes = guids_of_entry(trace, NPC_SPIKE)
+    latches = patch_latches(trace)
+    holds = holder_spans(trace, "anub.gather", pull_end(trace))
+    submerged = submerged_spans(trace)
+    marks = mark_spans(trace)
+    out = {}
+    for window in windows:
+        if window["kitepred"]:
+            gather = formed_gather(holds, samples, submerged, window["start"], window["guid"])
+            out[(window["guid"], window["start"])] = (
+                predicted_hazard(window["kitepred"]),
+                real_hazard(samples, spikes, latches, window, gather, marks, submerged, rules))
+    return out
+
+
+def planner_lines(window: dict, spend: dict | None, hazard) -> list[str]:
+    """A kite's `anub.kitepred` at the mark against the real end, its `anub.kitepath` picks with the seconds each
+    held, a reversal flagged, and the first predicted hazard against the first real one."""
+    def hazard_text(found) -> str:
+        return "none" if found is None else f"{found[0]} {rel_s(window, found[1])}"
+
+    lines = []
+    if window["kitepred"]:
+        lines.append(f"kitepred at the mark {window['kitepred'][0][1]}; real end {real_end(window, spend)}"
+                     f" {(window['stop'] - window['start']) / 1000:.1f} s")
+    if window["kitepath"]:
+        lines.append("kitepath " + ", ".join(
+            f"{pick['value']} {pick['held'] / 1000:.1f} s" + (" reversal" if pick["reversal"] else "")
+            for pick in window["kitepath"]))
+    if hazard is not None:
+        lines.append(f"first hazard: predicted {hazard_text(hazard[0])}, real {hazard_text(hazard[1])}")
+    return lines
+
+
 def show_spike(trace: Trace) -> None:
     print("PURSUING SPIKE")
     samples = Samples(trace)
     windows = mark_windows(trace, samples)
     spent = spent_patches(trace, samples)
     spends = {(row["kiter"], row["mark"]): row for row in spent if row["kiter"]}
+    hazards = kite_hazards(trace, samples, windows)
     if not windows:
         print("  nobody carried Pursued by Anub'arak")
     else:
@@ -2027,9 +2112,8 @@ def show_spike(trace: Trace) -> None:
             run = kite_line(trace, window)
             if run:
                 print(f"            {run}")
-            ring = ring_line(trace, window)
-            if ring:
-                print(f"            {ring}")
+            for line in planner_lines(window, spend, hazards.get((window["guid"], window["start"]))):
+                print(f"            {line}")
             approach = tank_line(window)
             if approach:
                 print(f"            spike to tank patch: {approach}")
@@ -2040,6 +2124,12 @@ def show_spike(trace: Trace) -> None:
         print(f"\n  {len(windows)} window(s): "
               + ", ".join(f"{name} {n}" for name, n in outcomes.most_common()))
         show_plans(trace, windows, spends)
+        turned = [(window, pick) for window in windows for pick in window["kitepath"] if pick["reversal"]]
+        print(f"  anub.kitepath picks turning over {PICK_REVERSAL_DEGREES:.0f} degrees within"
+              f" {PICK_REVERSAL_MS / 1000:.0f} s of the pick before: "
+              + (", ".join(f"{trace.name(window['guid'])} {clock(window['start'])} {rel_s(window, pick['at'])}"
+                           for window, pick in turned) or "none")
+              + ("" if notes(trace, "anub.kitepath") else ", no anub.kitepath rows"))
         show_turns(trace, windows)
         show_catches(trace, windows, spent)
         reached =sum(1 for window in windows
@@ -2317,15 +2407,10 @@ def patch_escort_text(trace: Trace, window: dict) -> str:
 
 
 def rework_lines(trace: Trace, window: dict) -> list[str]:
-    """One kite's anub.lane steps off the patches, its escort at the claim and its swaps, claim to cast, the
-    Hand against the held-heading catch, the kiter near a tank patch under a Hand, an own immunity after a
-    Hand, a boost early in a Hand, a boost after the Hand, a turn close to a boost, the escort waiting by the
-    patch, and anub.second grants."""
+    """One kite's escort at the claim and its swaps, claim to cast, the kiter near a tank patch under a Hand, an
+    own immunity after a Hand, a boost early in a Hand, a boost after the Hand, a turn close to a boost, the
+    escort waiting by the patch, and anub.second grants."""
     lines = []
-    offs = window["lane_offs"]
-    if offs:
-        lines.append(f"anub.lane step off the patches while another heading was clear of them: {len(offs)} time(s)"
-                     f" from {rel_s(window, offs[0])}")
     escort = window["escort_read"]
     if escort:
         yards = "-" if escort["yards"] is None else f"{escort['yards']:.1f}"
@@ -2348,10 +2433,6 @@ def rework_lines(trace: Trace, window: dict) -> list[str]:
              for rec, gap in window["claim_casts"]]
     if casts:
         lines.append("claim to cast: " + ", ".join(casts))
-    held = [f"{rel_s(window, rec['t'])} " + ("no held-heading catch" if before is None else f"{before:.1f} s before it")
-            for rec, before in window["held_catches"]]
-    if held:
-        lines.append("Hand against the held-heading catch: " + ", ".join(held))
     near = window["hand_patch"]
     if near:
         lines.append(f"under the Hand {near['yards']:.1f} yd from the side {near['side']} tank patch"
@@ -2378,11 +2459,7 @@ def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
     def who(window: dict) -> str:
         return f"{trace.name(window['guid'])} {clock(window['start'])}"
 
-    offs = [window for window in windows if window["lane_offs"]]
-    print("  anub.lane step off the patches while another heading was clear of them: "
-          + (", ".join(f"{who(window)} {len(window['lane_offs'])}" for window in offs) or "none")
-          + ("" if notes(trace, "anub.lane") else ", no anub.lane rows"))
-    escorted = [window for window in windows if window["escort_read"] and window["escort_read"]["yards"] is not None]
+    escorted =[window for window in windows if window["escort_read"] and window["escort_read"]["yards"] is not None]
     far = [window for window in escorted if window["escort_read"]["yards"] > HOP_RANGE]
     print(f"  escort within {HOP_RANGE:.0f} yd of the kiter at the claim: {len(escorted) - len(far)} of {len(escorted)}"
           + ("; further: " + ", ".join(f"{who(window)} {window['escort_read']['yards']:.1f} yd" for window in far)
@@ -2419,9 +2496,6 @@ def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
               f" over {CLAIM_CAST_FLAG_MS / 1000:.1f} s: "
               + (", ".join(f"{trace.name(rec.get('s'))} for {who(window)} {gap / 1000:.1f} s" for window, rec, gap in slow)
                  or "none"))
-    held = [(window, before) for window in windows for _, before in window["held_catches"] if before is not None]
-    print("  Hand against the held-heading catch: "
-          + (", ".join(f"{who(window)} {before:.1f} s before" for window, before in held) or "none"))
     near = [window for window in windows if window["hand_patch"]]
     print(f"  kiter within {HAND_PATCH_CLEARANCE} yd of a tank patch under a Hand: "
           + (", ".join(f"{who(window)} {window['hand_patch']['yards']:.1f} yd" for window in near) or "none"))
@@ -4189,6 +4263,89 @@ def show_side_tank_crowds(trace: Trace, samples: Samples) -> None:
           + (", ".join(f"{label} {close} of {both}" for label, both, close in frenzy) or "none"))
 
 
+def p3wave_rows(trace: Trace) -> list[tuple[int, str]]:
+    """`anub.p3wave` as one stream: whichever bot reads it writes it, so a value two bots wrote counts once."""
+    out: list[tuple[int, str]] = []
+    for rec in sorted(notes(trace, "anub.p3wave"), key=lambda rec: rec["t"]):
+        value = str(rec.get("txt", ""))
+        if not out or out[-1][1] != value:
+            out.append((rec["t"], value))
+    return out
+
+
+def wave_reads(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per burrower wave and side its burrowers came up on: the first of them up, the milliseconds from there to
+    that side's first focus pick of one, None with none, and the side tank then with its peak Expose Weakness
+    to the next wave. In phase 3 also the wave's `anub.p3wave` rows, when its last burrower died, None for one
+    alive at the end, and each side tank's death from the wave's spawn to then, None while it lived."""
+    samples = samples or Samples(trace)
+    waves = wave_starts(trace, samples)
+    if not waves:
+        return []
+    end = pull_end(trace)
+    pickups = pickup_rows(trace, samples)
+    died = {row["guid"]: row["died"] for row in burrower_rows(trace, samples)}
+    focus = dict(focus_latches(trace))
+    sides = side_spans(trace)
+    tracks = expose_tracks(trace)
+    phases = phase_spans(trace)
+    p3waves = p3wave_rows(trace)
+    deaths = combat_deaths(trace)
+    out = []
+    for index, (wave, spawn) in enumerate(waves):
+        upto = waves[index + 1][1] if index + 1 < len(waves) else end
+        mine = [row for row in pickups if row["wave"] == wave]
+        phase = next((number for low, high, number, _ in phases if low <= spawn < high), None)
+        row = {"wave": wave, "start": spawn, "phase": phase, "sides": []}
+        for side in (0, 1):
+            bugs = {pickup["guid"]: pickup["spawn"] for pickup in mine if pickup["side"] == side}
+            if not bugs:
+                continue
+            up = min(bugs.values())
+            picks = [start for value, start, _ in focus.get(side, focus.get(None, [])) if as_guid(value) in bugs]
+            tank = as_guid(held_at(sides[side], up)) or None
+            row["sides"].append({"side": side, "up": up, "pick": max(0, min(picks) - up) if picks else None,
+                                 "tank": tank,
+                                 "peak": stack_window(tracks.get(tank, []), spawn, upto)[0] if tank else None})
+        if phase == 3:
+            lasts = [died.get(pickup["guid"]) for pickup in mine]
+            gone = None if not lasts or None in lasts else max(lasts)
+            row["p3wave"] = [(when, value) for when, value in p3waves if spawn <= when < upto]
+            row["died"] = gone
+            for entry in row["sides"]:
+                entry["death"] = next((rec["t"] for rec in deaths if rec.get("g") == entry["tank"]
+                                       and spawn <= rec["t"] <= (gone if gone is not None else end)), None)
+        out.append(row)
+    return out
+
+
+def show_wave_reads(trace: Trace, samples: Samples) -> None:
+    rows = wave_reads(trace, samples)
+    if not rows:
+        return
+    print("\n  per wave and side: seconds from its burrowers coming up to that side's first focus pick of one, and the"
+          "\n  side tank's peak Expose Weakness to the next wave; in phase 3 the anub.p3wave rows and whether the side"
+          "\n  tanks lived until the wave died:")
+    for row in rows:
+        parts = []
+        for entry in row["sides"]:
+            pick = "no pick" if entry["pick"] is None else f"pick +{entry['pick'] / 1000:.1f} s"
+            tank = "no side tank" if entry["tank"] is None else f"{trace.name(entry['tank'])} peak {entry['peak']}"
+            parts.append(f"side {entry['side']} {pick}, {tank}")
+        text = f"    wave {row['wave']:<3} {clock(row['start']):>9}  " + ("; ".join(parts) or "no burrower read")
+        if row["phase"] == 3:
+            rows3 = ", ".join(f"{value} {(when - row['start']) / 1000:+.1f} s" for when, value in row["p3wave"])
+            gone = "outlived the pull" if row["died"] is None else f"died {clock(row['died'])}"
+            fates = ", ".join(f"{trace.name(entry['tank'])} " + (
+                "lived" if entry["death"] is None else f"died {(entry['death'] - row['start']) / 1000:+.1f} s")
+                for entry in row["sides"] if entry["tank"] is not None)
+            text += (f"\n          P3: anub.p3wave {rows3 or 'none'}; the wave {gone}"
+                     + (f"; {fates}" if fates else ""))
+        print(text)
+    if any(row["phase"] == 3 for row in rows) and not notes(trace, "anub.p3wave"):
+        print("  no anub.p3wave rows")
+
+
 def show_burrowers(trace: Trace) -> None:
     print("NERUBIAN BURROWERS")
     samples = Samples(trace)
@@ -4205,6 +4362,7 @@ def show_burrowers(trace: Trace) -> None:
         print(f"\n  on frost is the share of its samples within {BURROWER_PERMAFROST_REACH:.1f} yd of a"
               " Permafrost centre\n  a submerge is its health going back to full")
         show_burrower_windows(trace, samples)
+        show_wave_reads(trace, samples)
         show_pickups(trace, samples)
         show_burrower_submerges(trace, samples)
         show_side_tank_crowds(trace, samples)
@@ -6462,6 +6620,849 @@ def show_pursuit(trace: Trace) -> None:
           " start less the real spike's, bias that error's signed median")
 
 
+# -------------------------------------------------------------------------------------------- kitesim
+#
+# A port of AnubarakKitePlanner (ToCAnubarakKitePlanner.h): its candidates, outcome, Finish and Compare row
+# for row. The replay has no Hands, no own immunity and no bystanders, so their endings and checks are left
+# out, and its world is heroic's.
+
+KITE_PLANNER_HEADER = RAID_ROOT / "ToC" / "Util" / "ToCAnubarakKitePlanner.h"
+PLANNER_FIELDS = ("centre", "floorRadius", "ring", "rim", "headings", "arcStraightS", "arcTurns", "horizonS",
+                  "maxHorizonS", "patchReach", "fallingReach", "impaleReach", "slowReach", "edgeRadius", "edgeRunOn",
+                  "gatherClearance", "startSlack", "testS", "endingShapes", "nearShapes", "patchNear", "earlyPatchS",
+                  "patchWindowS", "edgeWindowS", "turnStepS", "catchMargin", "postCatchS", "idleS", "freshS", "fastS",
+                  "costPatch",
+                  "hazardBandS", "uncoveredBandS", "endBandS", "gatherBand", "marginCap", "marginBand", "keepEndS",
+                  "turnWaitDegrees", "turnWaitS")
+PLANNER_SCALAR = re.compile(r"\b(?:float|int)\s+(\w+)\s*=\s*(-?\d+(?:\.\d*)?)f?\s*;")
+PLANNER_LIST = re.compile(r"(?:std::array<float,\s*\d+>|Point)\s+(\w+)\s*=\s*\{([^}]*)\}\s*;")
+SPIKE_LAST_STEP = len(SPIKE_SPEEDS) - 1
+# KiteWorld's slowFactor in heroic
+KITESIM_SLOW = 0.2
+# The native test's Play; the game re-plans every 250 ms
+KITESIM_REPLAN_S = 0.3
+# the spike's speed step is read off its moving steps over this much from the replay's start
+KITESIM_SPEED_MS = 1500
+# a kite whose first replayed event came this soon started where no path leaves cleanly
+KITESIM_CLEAN_S = 2.0
+KITESIM_SHORT_S = 10.0
+PATCH_MOVES = ("in", "edge0", "edge1")
+
+
+@functools.lru_cache(maxsize=1)
+def planner_rules() -> dict:
+    """AnubarakKitePlanner::Rules' defaults off the header, so a retune shows up here without a second edit.
+    LookupError when the header is gone or lacks a field the port reads."""
+    try:
+        text = KITE_PLANNER_HEADER.read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise LookupError(f"can't read {KITE_PLANNER_HEADER.name}: {error}") from error
+    found = re.search(r"\bstruct Rules\s*\{(.*?)\n\};", text, re.S)
+    body = re.sub(r"//[^\n]*", "", found.group(1)) if found else ""
+    rules: dict = {name: float(value) for name, value in PLANNER_SCALAR.findall(body)}
+    for name, values in PLANNER_LIST.findall(body):
+        rules[name] = tuple(float(value.strip().rstrip("f")) for value in values.split(","))
+    missing = [name for name in PLANNER_FIELDS if name not in rules]
+    if missing:
+        raise LookupError(f"{KITE_PLANNER_HEADER.name} Rules lacks {', '.join(missing)}")
+    return rules
+
+
+class KiteWorld:
+    """KiteWorld as the replay fills it. `spike` is `(x, y, speed, step, next step s)`, each patch
+    `(x, y, tank, usable, falling)`, `gather` a point or None."""
+
+    def __init__(self, kiter, spike, life: float, patches, gather=None, speed: float = BASE_RUN_YD_S,
+                 catch_from: float = 0.0, budget: int | None = None):
+        self.kiter = kiter
+        self.spike = spike
+        self.life = life
+        self.patches = list(patches)
+        self.gather = gather
+        self.speed = speed
+        self.catch_from = catch_from
+        self.budget = sum(1 for patch in self.patches if patch[3]) if budget is None else budget
+
+    def moved(self, kiter, spike, seconds: float) -> "KiteWorld":
+        """The same world `seconds` on, the kiter and the spike where they got to."""
+        x, y, speed, step, due = spike
+        return KiteWorld(kiter, (x, y, speed, step, due - seconds), self.life - seconds, self.patches, self.gather,
+                         self.speed, max(0.0, self.catch_from - seconds), self.budget)
+
+
+class PlanOutcome:
+    """Outcome: ticks for its seconds, -1 for none, and `ending` `none` or `patch`."""
+
+    __slots__ = ("ending", "end_tick", "tank", "kite", "raid", "caught", "uncovered", "cost", "margin", "end_point",
+                 "end_gather", "catch_tick", "turn_tick")
+
+    @property
+    def end_s(self) -> float:
+        return self.end_tick * CATCH_TICK_S
+
+
+class PlanCandidate:
+    __slots__ = ("shape", "heading", "radius", "turn", "patch", "move", "turn_tick", "ending", "track")
+
+    def __init__(self, shape: str, heading: float = 0.0, radius: float = 0.0, turn: float = 0.0):
+        self.shape, self.heading, self.radius, self.turn = shape, heading, radius, turn
+        self.patch, self.move, self.turn_tick, self.ending = -1, "in", -1, "none"
+        self.track: list[tuple[float, float]] = []
+
+    def like(self, shape: str | None = None) -> "PlanCandidate":
+        out = PlanCandidate(shape or self.shape, self.heading, self.radius, self.turn)
+        out.patch, out.move, out.turn_tick, out.ending = self.patch, self.move, self.turn_tick, self.ending
+        return out
+
+
+class PlannerRun:
+    """Run: the spike and the closest pass per tick from where it began, the first patch fail and raid pass,
+    and per patch the spike began inside the tick it first left."""
+
+    __slots__ = ("spikes", "margin", "fail_tick", "fail_patch", "fail_planned", "raid_tick", "left")
+
+    def __init__(self, spike, margin: float, patches: int):
+        self.spikes = [spike]
+        self.margin = [margin]
+        self.fail_tick = self.fail_patch = self.raid_tick = -1
+        self.fail_planned = False
+        self.left = [-1] * patches
+
+
+def to_tick(seconds: float) -> int:
+    return int(math.floor(seconds / CATCH_TICK_S + 0.5))
+
+
+def planner_ticks(world: KiteWorld, rules: dict) -> int:
+    """To the spike's despawn when that comes by maxHorizonS, else to horizonS."""
+    span = max(world.life, CATCH_TICK_S) if world.life <= rules["maxHorizonS"] else rules["horizonS"]
+    return math.ceil(span / CATCH_TICK_S - 0.001)
+
+
+def on_floor(x: float, y: float, rules: dict) -> tuple[float, float]:
+    cx, cy = rules["centre"]
+    gap = math.hypot(x - cx, y - cy)
+    if gap <= rules["floorRadius"]:
+        return x, y
+    share = rules["floorRadius"] / gap
+    return cx + (x - cx) * share, cy + (y - cy) * share
+
+
+def chase_tick(spike: tuple, kx: float, ky: float, t: float) -> tuple:
+    """AnubarakPursuit's ChaseTick: the speed step due by `t`, then straight at the kiter."""
+    x, y, speed, step, due = spike
+    while step < SPIKE_LAST_STEP and t >= due:
+        step += 1
+        speed = SPIKE_SPEEDS[step]
+        due += SPIKE_STEP_S
+    gap = math.hypot(kx - x, ky - y)
+    if gap > 0.001:
+        share = min(speed * CATCH_TICK_S, gap) / gap
+        x, y = x + (kx - x) * share, y + (ky - y) * share
+    return x, y, speed, step, due
+
+
+def spike_age_s(spike: tuple) -> float:
+    """Seconds since the spike last restarted at its base speed, read off its speed step."""
+    _, _, _, step, due = spike
+    if step >= SPIKE_LAST_STEP:
+        return SPIKE_STEP_S * SPIKE_LAST_STEP
+    return max(0.0, SPIKE_STEP_S * (step + 1) - due)
+
+
+def planner_watch(world: KiteWorld, rules: dict) -> tuple:
+    """`(reach, inside, grace ticks, gather need)`: each patch's fail reach and whether the spike starts in it,
+    the ticks to its first patch test, and how near the gather it may come, less when it starts nearer."""
+    sx, sy = world.spike[0], world.spike[1]
+    reach = [rules["fallingReach"] if patch[4] else rules["patchReach"] for patch in world.patches]
+    inside = [math.hypot(sx - patch[0], sy - patch[1]) <= yards for patch, yards in zip(world.patches, reach)]
+    step = min(max(world.spike[3], 0), SPIKE_LAST_STEP)
+    grace = math.ceil(rules["testS"][step] / CATCH_TICK_S - 0.001)
+    need = 0.0
+    if world.gather is not None:
+        need = min(rules["gatherClearance"],
+                   math.hypot(sx - world.gather[0], sy - world.gather[1]) - rules["startSlack"])
+    return reach, inside, grace, need
+
+
+def catch_from_tick(world: KiteWorld) -> int:
+    return math.ceil(world.catch_from / CATCH_TICK_S - 0.001)
+
+
+def planner_walk(world: KiteWorld, rules: dict, track: list, ticks: int, mover) -> None:
+    """Walk: extends `track` to ticks + 1 points, each step its length by `mover`, slowed on a patch."""
+    slow = [(patch[0], patch[1]) for patch in world.patches if not patch[4]]
+    reach = rules["slowReach"]
+    while len(track) <= ticks:
+        x, y = track[-1]
+        length = world.speed * CATCH_TICK_S
+        if any(math.hypot(x - px, y - py) < reach for px, py in slow):
+            length *= KITESIM_SLOW
+        track.append(on_floor(*mover(x, y, length, (len(track) - 1) * CATCH_TICK_S), rules))
+
+
+def planner_chase(world: KiteWorld, rules: dict, watch: tuple, run: PlannerRun, track: list, first: int,
+                  ticks: int, planned: int, turn_tick: int, mover=None, catch_from: int | None = None,
+                  caught: int = -1) -> int:
+    """Ticks `first` to `ticks` of a run, ChaseOne each: the spike chases track[i], `mover` walking the kiter on
+    where `track` ends. Stops at the first patch the spike fails on and, with `catch_from` set, postCatchS past
+    the first catch counted from that tick on, or from `caught`, since Impale doesn't hand the spike on.
+    Returns that catch's tick, -1 with none."""
+    reach, inside, grace, need = watch
+    patches = world.patches
+    gather = world.gather
+    slow = [(patch[0], patch[1]) for patch in patches if not patch[4]]
+    slow_reach, cap, clearance = rules["slowReach"], rules["marginCap"], rules["gatherClearance"]
+    catch_yd = rules["impaleReach"] + rules["catchMargin"]
+    post = to_tick(rules["postCatchS"])
+    step_yd = world.speed * CATCH_TICK_S
+    spike, margin = run.spikes[-1], run.margin[-1]
+    for i in range(first, ticks):
+        if caught >= 0 and i >= caught + post:
+            break
+        kx, ky = track[i]
+        spike = chase_tick(spike, kx, ky, i * CATCH_TICK_S)
+        tick = i + 1
+        if tick >= len(track):
+            length = step_yd
+            if any(math.hypot(kx - px, ky - py) < slow_reach for px, py in slow):
+                length *= KITESIM_SLOW
+            track.append(on_floor(*mover(kx, ky, length, i * CATCH_TICK_S), rules))
+        run.spikes.append(spike)
+        sx, sy = spike[0], spike[1]
+        margin = min(margin, cap)
+        for k, patch in enumerate(patches):
+            gap = math.hypot(sx - patch[0], sy - patch[1])
+            if k != planned or tick < turn_tick:
+                margin = min(margin, gap - reach[k])
+            hit = gap <= reach[k]
+            if inside[k] and not hit and run.left[k] < 0:
+                run.left[k] = tick
+            if hit and run.fail_tick < 0 and (not inside[k] or run.left[k] >= 0 or tick >= grace):
+                run.fail_tick, run.fail_patch = tick, k
+                run.fail_planned = k == planned and tick >= turn_tick
+        if gather is not None:
+            gap = math.hypot(sx - gather[0], sy - gather[1])
+            margin = min(margin, gap - clearance)
+            if run.raid_tick < 0 and gap < need:
+                run.raid_tick = tick
+        run.margin.append(margin)
+        if run.fail_tick >= 0:
+            return caught
+        if caught < 0 and catch_from is not None and tick >= catch_from:
+            kx, ky = track[tick]
+            if math.hypot(sx - kx, sy - ky) <= catch_yd:
+                caught = tick
+    return caught
+
+
+def uncovered_s(rest: float, fast: bool, patches: int, rules: dict) -> float:
+    """Uncovered with no Hands: the spike's life after this kite that the patches left can't cover."""
+    if rest <= 0.0:
+        return 0.0
+    cover = (rules["fastS"] if fast else rules["freshS"]) + max(patches, 0) * (rules["idleS"] + rules["freshS"])
+    return max(0.0, rest - cover)
+
+
+def planner_finish(world: KiteWorld, rules: dict, ticks: int, end_tick: int, end_point, margin: float,
+                   raid_tick: int, fail_tick: int = -1, fail_patch: int = -1, planned: bool = False,
+                   caught: bool = False, catch_tick: int = -1, turn_tick: int = -1) -> PlanOutcome:
+    """Finish: a run still going at the horizon with life left counts as caught there. A fail after a catch is
+    still a hazard and spends the patch, but the kite ended at the catch."""
+    out = PlanOutcome()
+    opened = not caught and fail_tick < 0 and end_tick >= ticks
+    out.caught = caught or (opened and world.life > end_tick * CATCH_TICK_S + CATCH_TICK_S)
+    out.end_tick, out.end_point, out.margin = end_tick, end_point, margin
+    out.raid = raid_tick if 0 <= raid_tick <= end_tick else -1
+    out.tank = out.kite = -1
+    spent = fail_tick >= 0
+    failed = spent and not caught
+    ended = failed and planned
+    if spent:
+        tank = world.patches[fail_patch][2]
+        if tank and not ended:
+            out.tank = fail_tick
+        elif not tank and (not planned
+                           or spike_age_s(world.spike) + fail_tick * CATCH_TICK_S < rules["earlyPatchS"]):
+            out.kite = fail_tick
+    out.ending = "patch" if ended else "none"
+    left = world.budget - (1 if spent and world.patches[fail_patch][3] else 0)
+    rest = world.life - out.end_s
+    if failed:
+        rest -= rules["idleS"]
+    out.uncovered = uncovered_s(rest, not failed, left, rules)
+    out.cost = rules["costPatch"] if ended else 0.0
+    out.end_gather = -1.0
+    if world.gather is not None and out.caught:
+        out.end_gather = math.hypot(end_point[0] - world.gather[0], end_point[1] - world.gather[1])
+    out.catch_tick, out.turn_tick = catch_tick, turn_tick
+    return out
+
+
+def planner_score(world: KiteWorld, rules: dict, ticks: int, track: list, run: PlannerRun, catch: int,
+                  turn_tick: int = -1) -> PlanOutcome:
+    """Score of a run stopped at its first patch fail, or postCatchS past its first counted catch."""
+    if catch >= 0:
+        return planner_finish(world, rules, ticks, catch, track[catch], run.margin[catch], run.raid_tick,
+                              run.fail_tick, run.fail_patch, run.fail_planned, caught=True, catch_tick=catch,
+                              turn_tick=turn_tick)
+    if run.fail_tick >= 0:
+        return planner_finish(world, rules, ticks, run.fail_tick, track[run.fail_tick], run.margin[run.fail_tick],
+                              run.raid_tick, run.fail_tick, run.fail_patch, run.fail_planned, turn_tick=turn_tick)
+    last = len(run.spikes) - 1
+    return planner_finish(world, rules, ticks, last, track[last], run.margin[last], run.raid_tick,
+                          turn_tick=turn_tick)
+
+
+def first_catch(world: KiteWorld, rules: dict, track: list) -> int:
+    """0 when the catch already counts at the start, else -1."""
+    sx, sy = world.spike[0], world.spike[1]
+    reach = rules["impaleReach"] + rules["catchMargin"]
+    return 0 if catch_from_tick(world) <= 0 and math.hypot(sx - track[0][0], sy - track[0][1]) <= reach else -1
+
+
+def planner_compare(a: PlanOutcome, b: PlanOutcome, rules: dict, rows: int = 8) -> int:
+    """Compare: negative when `a` ranks first. Rows past `rows` aren't looked at."""
+    band = rules["hazardBandS"]
+    for x, y in ((a.tank, b.tank), (a.kite, b.kite), (a.raid, b.raid)):
+        if (x >= 0) != (y >= 0):
+            return 1 if x >= 0 else -1
+        if x >= 0:
+            bx = math.floor(x * CATCH_TICK_S / band)
+            by = math.floor(y * CATCH_TICK_S / band)
+            if bx != by:
+                return -1 if bx > by else 1
+    if a.caught != b.caught:
+        return 1 if a.caught else -1
+
+    def uncovered(outcome: PlanOutcome) -> float:
+        return -1.0 if outcome.uncovered <= 0.0 else math.floor(outcome.uncovered / rules["uncoveredBandS"])
+
+    if uncovered(a) != uncovered(b):
+        return -1 if uncovered(a) < uncovered(b) else 1
+    if rows <= 4:
+        return 0
+    if abs(a.cost - b.cost) > 0.01:
+        return -1 if a.cost < b.cost else 1
+    if rows <= 5:
+        return 0
+    end_a, end_b = math.floor(a.end_s / rules["endBandS"]), math.floor(b.end_s / rules["endBandS"])
+    if end_a != end_b:
+        return -1 if end_a > end_b else 1
+    if a.end_gather >= 0.0 and b.end_gather >= 0.0:
+        gather_a = math.floor(a.end_gather / rules["gatherBand"])
+        gather_b = math.floor(b.end_gather / rules["gatherBand"])
+        if gather_a != gather_b:
+            return -1 if gather_a > gather_b else 1
+    margin_a = math.floor(min(a.margin, rules["marginCap"]) / rules["marginBand"])
+    margin_b = math.floor(min(b.margin, rules["marginCap"]) / rules["marginBand"])
+    if margin_a != margin_b:
+        return -1 if margin_a > margin_b else 1
+    return 0
+
+
+def ring_mover(start, heading_deg: float, radius: float, turn: float, rules: dict):
+    """A ring member as a step function: straight on the heading until `radius` off the centre, or the circle
+    the kiter stands on when that's further, then round it, turn +1 counter-clockwise."""
+    cx, cy = rules["centre"]
+    angle = math.radians(heading_deg)
+    dx, dy = math.cos(angle), math.sin(angle)
+    px, py = start[0] - cx, start[1] - cy
+    ring = max(radius, math.hypot(px, py))
+    along = px * dx + py * dy
+    straight = max(0.0, -along + math.sqrt(max(0.0, along * along - (px * px + py * py) + ring * ring)))
+    hit = math.atan2(py + dy * straight, px + dx * straight)
+    walked = [0.0]
+
+    def step(x: float, y: float, length: float, t: float) -> tuple[float, float]:
+        walked[0] += length
+        run = walked[0]
+        if run <= straight:
+            return start[0] + dx * run, start[1] + dy * run
+        bearing = hit + turn * (run - straight) / ring
+        return cx + ring * math.cos(bearing), cy + ring * math.sin(bearing)
+
+    return step
+
+
+def arc_mover(heading, turn_deg: float, straight_s: float, rules: dict):
+    """ArcStep: straight on `heading`, a unit vector, turning `turn_deg` a second after `straight_s`; at the rim it
+    slides along it the way it turns, or the way nearer its heading."""
+    cx, cy = rules["centre"]
+    floor_radius = rules["floorRadius"]
+    turn = math.radians(turn_deg) * CATCH_TICK_S
+    cos_turn, sin_turn = math.cos(turn), math.sin(turn)
+    held = list(heading)
+
+    def step(x: float, y: float, length: float, t: float) -> tuple[float, float]:
+        hx, hy = held
+        if t >= straight_s and turn_deg != 0.0:
+            hx, hy = hx * cos_turn - hy * sin_turn, hx * sin_turn + hy * cos_turn
+        nx, ny = x + hx * length, y + hy * length
+        out = math.hypot(x - cx, y - cy)
+        if math.hypot(nx - cx, ny - cy) > floor_radius and out >= 0.01:
+            ux, uy = (x - cx) / out, (y - cy) / out
+            if turn_deg > 0.0 or (turn_deg == 0.0 and -uy * hx + ux * hy >= uy * hx - ux * hy):
+                hx, hy = -uy, ux
+            else:
+                hx, hy = uy, -ux
+            nx, ny = x + hx * length, y + hy * length
+        held[0], held[1] = hx, hy
+        return nx, ny
+
+    return step
+
+
+def leg_mover(legs: list):
+    """LegStep: through each leg's end in turn, then stands on the last."""
+    reached = [0]
+
+    def step(x: float, y: float, length: float, t: float) -> tuple[float, float]:
+        while reached[0] < len(legs) and length > 0.0:
+            tx, ty = legs[reached[0]]
+            gap = math.hypot(tx - x, ty - y)
+            if length < gap:
+                return x + (tx - x) * length / gap, y + (ty - y) * length / gap
+            length -= gap
+            x, y = tx, ty
+            reached[0] += 1
+        return x, y
+
+    return step
+
+
+def patch_move_legs(move: str, start, patch, rules: dict) -> list | None:
+    """PatchMoveLegs: straight to the centre, or past the edge ring on the kiter's left (`edge0`) or right and on
+    along the tangent. None for an edge move from inside the edge ring."""
+    if move == "in":
+        return [(patch[0], patch[1])]
+    edge = rules["edgeRadius"]
+    gap = math.hypot(start[0] - patch[0], start[1] - patch[1])
+    if gap <= edge + 0.01:
+        return None
+    base = math.atan2(start[1] - patch[1], start[0] - patch[0])
+    turn = math.acos(edge / gap) * (1.0 if move == "edge0" else -1.0)
+    tangent = (patch[0] + edge * math.cos(base + turn), patch[1] + edge * math.sin(base + turn))
+    along = math.hypot(tangent[0] - start[0], tangent[1] - start[1])
+    run_on = rules["edgeRunOn"]
+    return [tangent, (tangent[0] + (tangent[0] - start[0]) / along * run_on,
+                      tangent[1] + (tangent[1] - start[1]) / along * run_on)]
+
+
+def candidate_mover(candidate: PlanCandidate, start, rules: dict):
+    if candidate.shape == "ring":
+        return ring_mover(start, candidate.heading, candidate.radius, candidate.turn, rules)
+    angle = math.radians(candidate.heading)
+    return arc_mover((math.cos(angle), math.sin(angle)), candidate.turn, rules["arcStraightS"], rules)
+
+
+def base_run(world: KiteWorld, rules: dict, watch: tuple, ticks: int, candidate: PlanCandidate):
+    """A base shape walked and chased to its first patch fail or counted catch: `(candidate, run, outcome)`,
+    the candidate's track ending there too."""
+    candidate.track = [world.kiter]
+    run = PlannerRun(world.spike, rules["marginCap"], len(world.patches))
+    catch = planner_chase(world, rules, watch, run, candidate.track, 0, ticks, -1, -1,
+                          candidate_mover(candidate, world.kiter, rules), catch_from_tick(world),
+                          first_catch(world, rules, candidate.track))
+    return candidate, run, planner_score(world, rules, ticks, candidate.track, run, catch)
+
+
+def run_ending(world: KiteWorld, rules: dict, watch: tuple, ticks: int, base, turn: int, patch: int,
+               move: str):
+    """RunEnding with no Hand: the base shape to tick `turn`, then the move onto the patch, chased from the
+    base run's state there. `(candidate, outcome)`, None when it can't be planned."""
+    candidate, base_spikes, none = base
+    if (turn < 0 or turn >= ticks or (base_spikes.fail_tick >= 0 and turn >= base_spikes.fail_tick)
+            or 0 <= none.catch_tick <= turn):
+        return None
+    legs = patch_move_legs(move, candidate.track[turn], world.patches[patch], rules)
+    if legs is None:
+        return None
+    ending = candidate.like()
+    ending.ending, ending.patch, ending.move, ending.turn_tick = "patch", patch, move, turn
+    ending.track = candidate.track[:turn + 1]
+    run = PlannerRun(base_spikes.spikes[turn], base_spikes.margin[turn], 0)
+    run.raid_tick = base_spikes.raid_tick if 0 <= base_spikes.raid_tick <= turn else -1
+    run.left = [left if left <= turn else -1 for left in base_spikes.left]
+    catch = planner_chase(world, rules, watch, run, ending.track, turn, ticks, patch, turn, leg_mover(legs),
+                          catch_from_tick(world))
+    end_tick = len(ending.track) - 1
+    if catch >= 0:
+        out = planner_finish(world, rules, ticks, catch, ending.track[catch], run.margin[catch - turn],
+                             run.raid_tick, run.fail_tick, run.fail_patch, run.fail_planned, caught=True,
+                             catch_tick=catch, turn_tick=turn)
+    else:
+        out = planner_finish(world, rules, ticks, end_tick, ending.track[-1], run.margin[-1], run.raid_tick,
+                             run.fail_tick, run.fail_patch, run.fail_planned, turn_tick=turn)
+    return ending, out
+
+
+def patch_endings(world: KiteWorld, rules: dict, watch: tuple, ticks: int, base) -> list:
+    """PatchEndings with no Hand: onto each usable patch from each turn second, every move in the last
+    edgeWindowS before the base's end and straight in every 2 s before that."""
+    _, run, none = base
+    fail = run.fail_tick if run.fail_tick >= 0 else ticks
+    catch = none.catch_tick if none.catch_tick >= 0 else ticks
+    end = min(catch, fail) - 1
+    step = max(1, to_tick(rules["turnStepS"]))
+    every_move = end - to_tick(rules["edgeWindowS"])
+    first = max(0, end - to_tick(rules["patchWindowS"]))
+    out = []
+    for patch, spot in enumerate(world.patches):
+        if not spot[3]:
+            continue
+        turn = end
+        while turn >= first:
+            for move in PATCH_MOVES:
+                if move == "in" or turn > every_move:
+                    ending = run_ending(world, rules, watch, ticks, base, turn, patch, move)
+                    if ending:
+                        out.append(ending)
+            turn -= step if turn > every_move else 2 * step
+    return out
+
+
+def full_track(world: KiteWorld, rules: dict, candidate: PlanCandidate, ticks: int) -> None:
+    """The pick's track carried on to the horizon: a base shape walked again from the start, a patch ending
+    standing on its patch once its legs run out."""
+    if candidate.patch >= 0 and candidate.turn_tick >= 0:
+        del candidate.track[candidate.turn_tick + 1:]
+        legs = patch_move_legs(candidate.move, candidate.track[-1], world.patches[candidate.patch], rules)
+        if legs is not None:
+            planner_walk(world, rules, candidate.track, ticks, leg_mover(legs))
+        candidate.track += [candidate.track[-1]] * (ticks + 1 - len(candidate.track))
+        return
+    candidate.track = [world.kiter]
+    planner_walk(world, rules, candidate.track, ticks, candidate_mover(candidate, world.kiter, rules))
+
+
+def nearest_tick(track: list, at, start: int, span: int) -> int:
+    last = len(track) - 1
+    best = min(max(start, 0), last)
+    for index in range(max(start - span, 0), min(last, start + span) + 1):
+        if math.hypot(track[index][0] - at[0], track[index][1] - at[1]) < math.hypot(
+                track[best][0] - at[0], track[best][1] - at[1]):
+            best = index
+    return best
+
+
+def held_candidate(held: PlanCandidate, elapsed_s: float, world: KiteWorld, rules: dict,
+                   slack_ticks: int = 15) -> PlanCandidate:
+    """HeldCandidate: the held plan from the kiter's spot on. Past its end a patch walk stands on the patch and a
+    run goes straight on."""
+    keep = held.like("held")
+    keep.track = [world.kiter]
+    if len(held.track) < 2:
+        return keep
+    ticks = planner_ticks(world, rules)
+    at = nearest_tick(held.track, world.kiter, to_tick(elapsed_s), slack_ticks)
+    keep.track += held.track[at + 1:at + 1 + ticks]
+    keep.turn_tick = max(held.turn_tick - at, 0) if held.turn_tick >= 0 else -1
+    if keep.patch >= 0 and keep.turn_tick >= 0:
+        keep.track += [keep.track[-1]] * (ticks + 1 - len(keep.track))
+        return keep
+    heading = (1.0, 0.0)
+    if len(keep.track) >= 2:
+        (ax, ay), (bx, by) = keep.track[-2], keep.track[-1]
+        gap = math.hypot(bx - ax, by - ay)
+        if gap > 0.01:
+            heading = ((bx - ax) / gap, (by - ay) / gap)
+    planner_walk(world, rules, keep.track, ticks, arc_mover(heading, 0.0, 0.0, rules))
+    return keep
+
+
+def judge(candidate: PlanCandidate, world: KiteWorld, rules: dict) -> PlanOutcome:
+    ticks = planner_ticks(world, rules)
+    run = PlannerRun(world.spike, rules["marginCap"], len(world.patches))
+    catch = planner_chase(world, rules, planner_watch(world, rules), run, candidate.track, 0,
+                          min(ticks, len(candidate.track) - 1), candidate.patch, candidate.turn_tick,
+                          catch_from=catch_from_tick(world), caught=first_catch(world, rules, candidate.track))
+    return planner_score(world, rules, ticks, candidate.track, run, catch, candidate.turn_tick)
+
+
+def track_heading(track: list) -> tuple[float, float]:
+    (ax, ay), (bx, by) = track[0], track[min(10, len(track) - 1)]
+    gap = math.hypot(bx - ax, by - ay)
+    return ((bx - ax) / gap, (by - ay) / gap) if gap > 0.5 else (0.0, 0.0)
+
+
+def turn_degrees(a, b) -> float:
+    if a == (0.0, 0.0) or b == (0.0, 0.0):
+        return 0.0
+    return math.degrees(math.acos(min(1.0, max(-1.0, a[0] * b[0] + a[1] * b[1]))))
+
+
+def plan_kite(world: KiteWorld, rules: dict, held: PlanCandidate | None = None, held_age_s: float = 0.0,
+              held_elapsed_s: float = 0.0) -> tuple[PlanCandidate, PlanOutcome, bool]:
+    """PlanKite: every candidate judged, the best kept, `(candidate, outcome, kept)`. `held` is the last re-plan's
+    choice, held `held_age_s` so far, its track started `held_elapsed_s` ago."""
+    ticks = planner_ticks(world, rules)
+    watch = planner_watch(world, rules)
+    bases = []
+    headings = int(rules["headings"])
+    for index in range(headings):
+        degrees = 360.0 * index / headings
+        for radius in (rules["ring"], rules["rim"]):
+            for turn in (1.0, -1.0):
+                bases.append(base_run(world, rules, watch, ticks, PlanCandidate("ring", degrees, radius, turn)))
+        for turn in rules["arcTurns"]:
+            bases.append(base_run(world, rules, watch, ticks, PlanCandidate("arc", degrees, 0.0, turn)))
+
+    order = sorted(range(len(bases)), key=functools.cmp_to_key(
+        lambda a, b: planner_compare(bases[a][2], bases[b][2], rules)))
+    ended = set(order[:int(rules["endingShapes"])])
+    # the longest runs often end far from every patch, so each patch also gets the shapes that pass it latest
+    for spot in world.patches:
+        if not spot[3]:
+            continue
+        near = []
+        for index, (candidate, _, none) in enumerate(bases):
+            for tick in range(min(none.end_tick, len(candidate.track) - 1), 0, -1):
+                point = candidate.track[tick]
+                if math.hypot(point[0] - spot[0], point[1] - spot[1]) <= rules["patchNear"]:
+                    near.append((tick, index))
+                    break
+        near.sort(key=lambda item: -item[0])
+        ended.update(index for _, index in near[:int(rules["nearShapes"])])
+
+    entries = [(none, candidate) for candidate, _, none in bases]
+    for index in sorted(ended):
+        entries += [(out, candidate) for candidate, out in patch_endings(world, rules, watch, ticks, bases[index])]
+    best = 0
+    for index in range(1, len(entries)):
+        if planner_compare(entries[index][0], entries[best][0], rules) < 0:
+            best = index
+    outcome, pick = entries[best]
+    full_track(world, rules, pick, ticks)
+    if held is None or len(held.track) < 2:
+        return pick, outcome, False
+
+    keep = held_candidate(held, held_elapsed_s, world, rules)
+    kept = judge(keep, world, rules)
+    head = planner_compare(outcome, kept, rules, 5)
+    beaten = head < 0 or (head == 0 and outcome.end_s > kept.end_s + rules["keepEndS"])
+    waits = (turn_degrees(track_heading(keep.track), track_heading(pick.track)) > rules["turnWaitDegrees"]
+             and held_age_s < rules["turnWaitS"])
+    if not beaten or waits:
+        return keep, kept, True
+    return pick, outcome, False
+
+
+def kitepred_text(outcome: PlanOutcome) -> str:
+    """The pick as anub.kitepred writes it: the first present of a tank, kite or raid hazard and an uncovered
+    catch at its second, else the ending at its end second."""
+    for what, tick in (("tank", outcome.tank), ("kite", outcome.kite), ("raid", outcome.raid)):
+        if tick >= 0:
+            return f"{what}:{tick * CATCH_TICK_S:.1f}"
+    return f"{'catch' if outcome.caught else outcome.ending}:{outcome.end_s:.1f}"
+
+
+def kitesim_play(world: KiteWorld, rules: dict, replan_s: float = KITESIM_REPLAN_S) -> dict:
+    """The kite replayed as the native test's Play does it, re-planned every `replan_s`: the kiter walks the plan
+    and the spike chases it until it fails on a patch, catches the kiter, or despawns. `end` is `patch`, `tank`,
+    `catch` or `emerge` at `s`, `planned` whether the plan ended on that patch, `raid` the first second the spike
+    came nearer the gather than the planner's need, `pred` the first pick as anub.kitepred."""
+    per = max(1, to_tick(replan_s))
+    patch_reach, impale = rules["patchReach"], rules["impaleReach"]
+    need = planner_watch(world, rules)[3]
+    held, age, ticks, raid, pred = None, 0.0, 0, None, None
+    here = world
+    while True:
+        candidate, outcome, kept = plan_kite(here, rules, held, age, replan_s)
+        if pred is None:
+            pred = kitepred_text(outcome)
+        age = age + replan_s if kept else replan_s
+        held = candidate
+        kiter, spike = here.kiter, here.spike
+        for index in range(per):
+            spike = chase_tick(spike, kiter[0], kiter[1], index * CATCH_TICK_S)
+            kiter = candidate.track[min(index + 1, len(candidate.track) - 1)]
+            ticks += 1
+            seconds = ticks * CATCH_TICK_S
+            sx, sy = spike[0], spike[1]
+            for number, patch in enumerate(world.patches):
+                if math.hypot(sx - patch[0], sy - patch[1]) <= patch_reach:
+                    planned = candidate.ending == "patch" and candidate.patch == number
+                    return {"end": "tank" if patch[2] else "patch", "s": seconds, "planned": planned,
+                            "raid": raid, "pred": pred}
+            if (raid is None and world.gather is not None
+                    and math.hypot(sx - world.gather[0], sy - world.gather[1]) < need):
+                raid = seconds
+            if math.hypot(sx - kiter[0], sy - kiter[1]) <= impale:
+                return {"end": "catch", "s": seconds, "planned": False, "raid": raid, "pred": pred}
+            if seconds >= world.life - 1e-6:
+                return {"end": "emerge", "s": seconds, "planned": False, "raid": raid, "pred": pred}
+        here = here.moved(kiter, spike, per * CATCH_TICK_S)
+
+
+def spike_step(speed: float | None, elapsed_s: float | None) -> tuple[int, float]:
+    """The spike's speed step and the seconds to its next: the step whose speed is nearest the measured one, else
+    the restart clock's; the next step off the clock when the two agree, else a whole step at the base speed and
+    half of one at the second."""
+    clock_step = 0 if elapsed_s is None else min(SPIKE_LAST_STEP, int(elapsed_s // SPIKE_STEP_S))
+    step = clock_step
+    if speed:
+        step = min(range(len(SPIKE_SPEEDS)), key=lambda index: abs(SPIKE_SPEEDS[index] - speed))
+    if elapsed_s is not None and step == clock_step:
+        return step, SPIKE_STEP_S * (step + 1) - elapsed_s
+    return step, SPIKE_STEP_S if step == 0 else SPIKE_STEP_S / 2.0
+
+
+def kite_starts(trace: Trace, samples: Samples | None = None, windows: list[dict] | None = None) -> list[dict]:
+    """Each bot kiter's mark as the replay starts it: the first snapshot from the mark with the kiter and its spike
+    both sampled, the spike's speed step, every patch down then, a tank patch off the latches and a kite patch
+    within KITE_PATCH_TANK_YD of one not usable, the gather as formed, and the spike's life left, SPIKE_LIFE_MS
+    from the submerge."""
+    samples = samples or Samples(trace)
+    windows = mark_windows(trace, samples) if windows is None else windows
+    rules = planner_rules()
+    spikes = guids_of_entry(trace, NPC_SPIKE)
+    latches = patch_latches(trace)
+    lives = patch_lives(trace, samples)
+    holds = holder_spans(trace, "anub.gather", pull_end(trace))
+    submerged = submerged_spans(trace)
+    marks = mark_spans(trace)
+    out = []
+    for window in windows:
+        guid, start = window["guid"], window["start"]
+        under = next(((low, high) for low, high in submerged if low <= start <= high), None)
+        if guid in trace.humans or under is None:
+            continue
+        at = spike = kiter = None
+        for when in samples.stamps[bisect.bisect_left(samples.stamps, start):
+                                   bisect.bisect_right(samples.stamps, start + NEAR_MS)]:
+            spike, kiter = spike_at(samples, spikes, guid, when), samples.recent(guid, when)
+            if spike and kiter:
+                at = when
+                break
+        if at is None:
+            continue
+        restart = spike_restart(marks, submerged, at)
+        step, due = spike_step(unit_speed(samples, spike[0], at, at + KITESIM_SPEED_MS),
+                               None if restart is None else (at - restart) / 1000.0)
+        found = [(samples.row(patch, at), patch_side(latches, patch, at) is not None)
+                 for patch, (landed, seen) in lives.items() if landed <= at <= seen]
+        tanks = [row[1:3] for row, tank in found if tank]
+        patches = [(row[1], row[2], tank, not tank and all(dist2(row[1:3], spot) >= KITE_PATCH_TANK_YD
+                                                           for spot in tanks), False) for row, tank in found]
+        gap = dist2(spike[1:3], kiter[1:3])
+        out.append({"window": window, "at": at, "spike_guid": spike[0], "kiter": (kiter[1], kiter[2]),
+                    "spike": (spike[1], spike[2], SPIKE_SPEEDS[step], step, due),
+                    "life": (under[0] + SPIKE_LIFE_MS - at) / 1000.0, "patches": patches,
+                    "gather": formed_gather(holds, samples, submerged, at, guid),
+                    "catch_from": rules["testS"][0] if step == 0 and gap <= IMPALE_REACH else 0.0})
+    return out
+
+
+def real_end(window: dict, spend: dict | None) -> str:
+    """How the real kite ended in the replay's words, `+hand` when a Hand of Protection landed on the kiter."""
+    if window["outcome"] in ("death", "impale"):
+        kind = "catch"
+    elif window["ended"] in KITER_OWN.values():
+        kind = "own"
+    elif spend is not None:
+        kind = "tank"
+    else:
+        kind = window["outcome"]
+    return kind + ("+hand" if window["hop"] else "")
+
+
+def real_raid_s(samples: Samples, start: dict, need: float) -> float | None:
+    """Seconds from the replay's start to the real spike's first snapshot nearer the gather than `need`."""
+    window = start["window"]
+    stamps, rows = samples.track(start["spike_guid"])
+    for index in range(bisect.bisect_left(stamps, start["at"]), bisect.bisect_right(stamps, window["stop"])):
+        if dist2(rows[index][1:3], start["gather"]) < need:
+            return (stamps[index] - start["at"]) / 1000.0
+    return None
+
+
+def kitesim_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per bot kite of a 25H pull, its start, the replay, and the real end, tank pass and raid pass."""
+    if trace.header.get("diff") != 3:
+        return []
+    samples = samples or Samples(trace)
+    windows = mark_windows(trace, samples)
+    spends = {(row["kiter"], row["mark"]): row for row in spent_patches(trace, samples) if row["kiter"]}
+    rules = planner_rules()
+    out = []
+    for start in kite_starts(trace, samples, windows):
+        window = start["window"]
+        world = KiteWorld(start["kiter"], start["spike"], start["life"], start["patches"], start["gather"],
+                          catch_from=start["catch_from"])
+        played = kitesim_play(world, rules)
+        lead = (start["at"] - window["start"]) / 1000.0
+        need = planner_watch(world, rules)[3]
+        raid = real_raid_s(samples, start, need) if start["gather"] is not None else None
+        first = min(played["s"], played["raid"]) if played["raid"] is not None else played["s"]
+        out.append({**start, "played": played, "lead": lead,
+                    "real": real_end(window, spends.get((window["guid"], window["start"]))),
+                    "real_s": (window["stop"] - window["start"]) / 1000.0,
+                    "real_tank": any(yards < SPIKE_PATCH_REACH for yards in window["tank_near"].values()),
+                    "real_raid": None if raid is None else raid + lead,
+                    "fresh": start["spike"][3] == 0 and first > KITESIM_CLEAN_S})
+    return out
+
+
+def short_patch_end(kind: str, seconds: float) -> bool:
+    return kind.split("+")[0] in ("patch", "tank") and seconds < KITESIM_SHORT_S
+
+
+def show_kitesim(trace: Trace) -> None:
+    print("KITE PLANNER REPLAY")
+    if trace.header.get("diff") != 3:
+        print("  25H only")
+        return
+    try:
+        planner_rules()
+    except LookupError as error:
+        print(f"  {error}")
+        return
+    rows = kitesim_rows(trace)
+    if not rows:
+        print("  no bot kite with its spike sampled")
+        return
+    rules = planner_rules()
+    print(f"  each bot kite's start replayed through a port of the kite planner, re-planned every"
+          f" {KITESIM_REPLAN_S:.1f} s on {CATCH_TICK_S:.1f} s ticks;\n  the kiter runs {BASE_RUN_YD_S:.0f} yd/s"
+          " with no Hands and no own immunity, the patches and the gather fixed as at the start;\n  it ends at the"
+          f" first patch within its {rules['patchReach']} yd fail reach, the catch or the spike's despawn; a raid"
+          f" pass is\n  the spike nearer the gather than {rules['gatherClearance']:.0f} yd, or than its start less"
+          f" {rules['startSlack']} yd; pred is the first pick as anub.kitepred:")
+    print(f"  {'at':>9} {'kiter':14} {'step':>4} {'life':>5}  {'pred':12} {'replay':22} real")
+    for row in rows:
+        played = row["played"]
+        replay = f"{played['end']} {played['s'] + row['lead']:.1f} s"
+        if played["end"] == "patch" and not played["planned"]:
+            replay += " unplanned"
+        flags = []
+        if played["raid"] is not None:
+            flags.append(f"replay raid pass +{played['raid'] + row['lead']:.1f} s")
+        if row["real_raid"] is not None:
+            flags.append(f"real raid pass +{row['real_raid']:.1f} s")
+        if row["real_tank"]:
+            flags.append("real tank pass")
+        print(f"  {clock(row['window']['start']):>9} {trace.name(row['window']['guid'])[:14]:14}"
+              f" {row['spike'][3]:4} {row['life']:5.1f}  {played['pred']:12} {replay:22}"
+              f" {row['real']} {row['real_s']:.1f} s" + (f"; {', '.join(flags)}" if flags else ""))
+    fresh = [row for row in rows if row["fresh"]]
+    print(f"  fresh-spike kites, the spike at its base step and over {KITESIM_CLEAN_S:.0f} s to the replay's first"
+          f" event: {len(fresh)} of {len(rows)}")
+    if not fresh:
+        return
+    print(f"    patch ends under {KITESIM_SHORT_S:.0f} s: real"
+          f" {sum(1 for row in fresh if short_patch_end(row['real'], row['real_s']))}, replay"
+          f" {sum(1 for row in fresh if short_patch_end(row['played']['end'], row['played']['s'] + row['lead']))}")
+    print(f"    tank patch passes: real {sum(1 for row in fresh if row['real_tank'])}, replay"
+          f" {sum(1 for row in fresh if row['played']['end'] == 'tank')}")
+    print(f"    raid passes: real {sum(1 for row in fresh if row['real_raid'] is not None)}, replay"
+          f" {sum(1 for row in fresh if row['played']['raid'] is not None)}")
+    ends = collections.Counter(row["played"]["end"] for row in fresh)
+    print("    replay ends: " + ", ".join(f"{end} {n}" for end, n in ends.most_common())
+          + f"; median {statistics.median(row['played']['s'] + row['lead'] for row in fresh):.1f} s, real"
+            f" {statistics.median(row['real_s'] for row in fresh):.1f} s")
+
+
 SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull, the nearest player to his wait"
@@ -6471,7 +7472,9 @@ SECTIONS = (
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
      " each cover, the kiter standing still, a flip-flopping walk, the nearest HoP-ready paladin at 12 yd, Feign"
      " Death dropped at once, Impale on others, the crowd where he went down, each kite's anub.kiteplan"
-     " terminals and whether the last was used before the mark ended, each patch kite's turn with its"
+     " terminals and whether the last was used before the mark ended, its anub.kitepred at the mark against the"
+     " real end, its anub.kitepath picks with the seconds held and a reversal within 1 s, the first foreseen"
+     " hazard against the first real one, each patch kite's turn with its"
      " anub.kitemove and whether the spike failed on its patch, a patch+hand kite's Hand at the turn and against"
      " the predicted catch with the patch under it, the paladin nearest an anub.bridge turn, the spike within"
      " 14.5 yd of a patch before the turn, Impale on a side tank, each submerge's first tank patch gone, the"
@@ -6487,7 +7490,9 @@ SECTIONS = (
      " back, heroic's kite spheres per submerge and the kite patches down as he went under, flagged under two",
      show_spheres),
     ("burrowers", "each burrower: life, submerges, Permafrost, Shadow Strike, dead inside 30 s up, exit, side,"
-     " pickup, DPS focus per side, casts off every focus, on older traces focus due per wave and dropped with"
+     " pickup, DPS focus per side, casts off every focus, per wave and side the seconds from coming up to the"
+     " first focus pick and the side tank's peak Expose Weakness, in phase 3 the anub.p3wave rows and whether"
+     " the side tanks lived until the wave died, on older traces focus due per wave and dropped with"
      " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
      " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
      " exit, each pulled off its side tank by a non-tank within 15 s of coming up with the puller's casts,"
@@ -6528,6 +7533,9 @@ SECTIONS = (
      " after, totals per recipient", show_redirects),
     ("pursuit", "pure pursuit replayed against the real spike per kite, end and patch-pass errors at 3 and 6 s",
      show_pursuit),
+    ("kitesim", "25H: the kite planner replayed from each bot kite's start, its first pick's prediction and where the"
+     " replay ended against the real kite, and for fresh-spike kites the patch ends under 10 s, tank patch passes and"
+     " raid passes", show_kitesim),
 )
 
 

@@ -62,13 +62,6 @@ public:
                                         std::string const name = "anubarak kite spike to permafrost")
         : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
-
-private:
-    // Last tick's stand, handed back to the helper so the kite doesn't re-aim every tick. Only good
-    // for the spike it was picked against.
-    TrialOfTheCrusaderHelpers::AnubarakKiteStand latched;
-    ObjectGuid latchedSpike;
-    bool hasLatched = false;
 };
 
 class AnubarakAvoidSpikeAction : public MovementAction

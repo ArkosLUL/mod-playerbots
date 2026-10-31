@@ -12,7 +12,7 @@ stretch held off the anchor, an eighth each patch kite's turn, the bridge's Hand
 by a patch, Impale on a side tank, a burrower pulled off its side tank and the main tank's Expose
 Weakness, a ninth a Hand against its predicted catch, a turn with no Hand, the first tank patch per
 submerge, a relayed far grip, Bladestorm near a burrower, the burrower threat cap, the drag's pre-steps
-and the submerge spot search, a tenth the anub.lane, escort, claim, Hand, second patch and per submerge
+and the submerge spot search, a tenth the escort, claim, Hand, second patch and per submerge
 kite reads and the Hand's cooldown off anub.hands, an eleventh three burrowers on one side tank and the
 two sides' burrowers within Spider Frenzy's reach, a twelfth the bystanders' gather and dodge swaps and
 dodge walks, a thirteenth the escort at the boost, at the end and in Permafrost, an own kite dead to a scarab,
@@ -22,9 +22,12 @@ Hand, a patch kite turning on its boost, the escort waiting by the patch and bot
 under, a sixteenth the side tanks' area casts and anub.saoe, the seconds a Penetrating Cold carrier went with no
 HoT or shield, the healers' walk behind the tank patches and burrowers reaching a healer past no patch, a
 seventeenth the phase 3 Penetrating Cold waves with the healer duties, Aura Mastery and a herd, the healing table
-per phase and a pulled burrower's way back to a tank, with and without the new keys, the first one again phase
-3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
-section reads empty on a trace that is not Anub'arak rather than raising.
+per phase and a pulled burrower's way back to a tank, with and without the new keys, an eighteenth the kite
+replay's starts, each kite's anub.kitepred and anub.kitepath and its first hazard, a nineteenth each wave's focus
+pick per side, the side tanks' Expose Weakness and anub.p3wave, the first one again phase 3's race against the
+swarm and the bot tanks at the engage, and the shared fixture shows every section reads empty on a trace that
+is not Anub'arak rather than raising. The kite planner's port is checked against the native test's cases that
+need no Hand or own immunity.
 """
 from __future__ import annotations
 
@@ -2064,22 +2067,6 @@ class ChasePull(unittest.TestCase):
         self.assertEqual([window["flips"] for window in ab.mark_windows(self.trace)],
                          [[], [(26200, 26800, 4)], [], []])
 
-    def test_a_ring_commit_reads_its_way_exit_and_stand_stills(self):
-        rows = [(1000, "pc:248"), (2000, "ring:ccw"), (9000, "ring:fast"), (9200, "pc:45"), (12000, "ring:none"),
-                (14000, "ring:cw")]
-        self.assertEqual(ab.ring_commits(rows, 0, 15000),
-                         [{"start": 2000, "stop": 9000, "way": "ccw", "exit": "fast"},
-                          {"start": 12000, "stop": 12000, "way": "none", "exit": "none"},
-                          {"start": 14000, "stop": 15000, "way": "cw", "exit": "open"}])
-        window = {"start": 1000, "rings": [
-            {"start": 2000, "stop": 9000, "way": "ccw", "exit": "fast", "still": (1600, 1600), "flips": []},
-            {"start": 12000, "stop": 12000, "way": "none", "exit": "none", "still": (0, 0), "flips": []},
-            {"start": 14000, "stop": 15000, "way": "cw", "exit": "open", "still": (0, 0),
-             "flips": [(14200, 14800, 4)]}]}
-        self.assertEqual(ab.ring_line(None, window),
-                         "ring commit: ccw +1.0 s for 7.0 s, out on fast, stood still 1.6 s, longest 1.6 s;"
-                         " none held +11.0 s; cw +13.0 s for 1.0 s, out on open, flip-flopped 0.6 s")
-
     def test_a_feign_death_off_in_the_same_tick_is_dropped(self):
         self.assertEqual([window["feign_drops"] for window in ab.mark_windows(self.trace)], [[], [], [34000], []])
 
@@ -2940,12 +2927,11 @@ class TurnPull(unittest.TestCase):
         self.assertIn("  patch+hand kites at the turn: Hand at the turn 2; never turned 1: Mighty 0:44.000; no"
                       " anub.bridge rows, so read off Hand of Protection casts\n", text)
 
-    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+    def test_kitemove_counts_as_present_and_absent_without_its_rows_and_the_retired_bridge_never_missing(self):
         self.assertNotIn("anub.kitemove", ab.missing_probes(self.trace))
-        self.assertNotIn("anub.bridge", ab.missing_probes(self.trace))
         gone = ab.missing_probes(self.bare)
         self.assertIn("anub.kitemove", gone)
-        self.assertIn("anub.bridge", gone)
+        self.assertNotIn("anub.bridge", gone)
 
     def test_a_burrower_pulled_off_its_side_tank_reads_the_puller_and_its_casts(self):
         rows = ab.burrower_pulls(self.trace)
@@ -3372,9 +3358,9 @@ def rework_snap(when: int) -> dict:
 
 
 def rework_pull(with_hands: bool = True) -> list[dict]:
-    """A 25H submerge from 10 s to 72 s and one Hand kite in it, 12 s to 30 s: an anub.lane step off the
-    patches while another heading was clear, the escort walking and dodging, its claim 0.2 s before its Hand,
-    the kiter past the tank patch under the Hand, a Blink in it, Ice Block after it and a second patch grant.
+    """A 25H submerge from 10 s to 72 s and one Hand kite in it, 12 s to 30 s: the escort walking and dodging,
+    its claim 0.2 s before its Hand, the kiter past the tank patch under the Hand, a Blink in it, Ice Block
+    after it and a second patch grant.
     The paladin's earlier Hand and an anub.hands row put its cooldown at 180 s; `with_hands` False drops the
     row."""
     records = [
@@ -3391,8 +3377,6 @@ def rework_pull(with_hands: bool = True) -> list[dict]:
         aura(12000, WKITER, ab.SPELL_MARK, False, WSPIKE),
         aura(30000, WKITER, ab.SPELL_MARK, True, WSPIKE),
         note(12100, WKITER, "anub.kiteplan", "hand"),
-        *(note(when, WKITER, "anub.lane", value) for when, value in (
-            (12500, "prc:90"), (13000, "rc:270"), (14000, "pr:270"))),
         *(note(when, WPALADIN, "anub.escort", value) for when, value in (
             (12500, "walk"), (15000, "post"), (30000, "none"))),
         *(move_row(when, WPALADIN, WPALADIN_AT, by) for when, by in (
@@ -3437,26 +3421,14 @@ class ReworkPull(unittest.TestCase):
         self.assertEqual(ab.hop_cooldown(self.bare), (ab.HOP_COOLDOWN_MS, "default"))
         self.assertEqual(ab.hand_reads(self.trace), [(12100, WPALADIN, 170000, 25)])
 
-    def test_a_lane_row_reads_its_heading_and_a_step_off_the_patches(self):
-        rows = [(1000, "pr:90"), (2000, "rc:180"), (3000, "x:")]
-        self.assertEqual(ab.lane_heading(rows, 500), None)
-        heading = ab.lane_heading(rows, 1500)
-        self.assertAlmostEqual(heading[0], 0.0)
-        self.assertAlmostEqual(heading[1], 1.0)
-        self.assertIsNone(ab.lane_heading(rows, 3500))
-        self.assertEqual(ab.lane_offs(rows, 0, 5000), [2000])
-        self.assertEqual(self.window["lane_offs"], [13000])
-
     def test_the_escort_reads_its_distance_at_the_claim_and_its_swaps(self):
         escort = self.window["escort_read"]
         self.assertEqual((escort["guid"], escort["t"], escort["swaps"]), (WPALADIN, 19800, 2))
         self.assertAlmostEqual(escort["yards"], math.hypot(25.0, 23.125))
 
-    def test_each_hand_reads_its_claim_its_held_catch_and_what_followed(self):
+    def test_each_hand_reads_its_claim_and_what_followed(self):
         window = self.window
         self.assertEqual([(rec["s"], gap) for rec, gap in window["claim_casts"]], [(WPALADIN, 200)])
-        self.assertEqual(len(window["held_catches"]), 1)
-        self.assertIsNotNone(window["held_catches"][0][1])
         near = window["hand_patch"]
         self.assertEqual((near["t"], near["side"]), (25500, 0))
         self.assertAlmostEqual(near["yards"], math.sqrt(50.0))
@@ -3472,8 +3444,7 @@ class ReworkPull(unittest.TestCase):
 
     def test_the_spike_section_prints_the_rework_lines(self):
         text = self.text(self.trace)
-        self.assertIn("            anub.lane step off the patches while another heading was clear of them: 1 time(s)"
-                      " from +1.0 s\n"
+        self.assertIn("            at the end: nobody holding the gather; no kite patch\n"
                       "            escort Holylight 34.1 yd off at the claim +7.8 s, past its 30 yd reach; walk and dodge"
                       " swapped 2 time(s) within 1 s; 35.4 yd at the end\n"
                       "            claim to cast: Holylight 0.2 s\n", text)
@@ -3496,7 +3467,7 @@ class ReworkPull(unittest.TestCase):
 
     def test_the_new_keys_count_as_present(self):
         gone = ab.missing_probes(self.trace)
-        for key in ("anub.lane", "anub.second", "anub.hands"):
+        for key in ("anub.second", "anub.hands"):
             self.assertNotIn(key, gone)
         self.assertIn("anub.hands", ab.missing_probes(self.bare))
 
@@ -4603,6 +4574,410 @@ class ColdPull(unittest.TestCase):
     def test_every_section_prints(self):
         for trace in (self.trace, self.bare):
             self.assertIn("TANKS\n", self.text(trace, ab.show_banner, *(section for _, _, section in ab.SECTIONS)))
+
+
+def kite_patch(x: float, y: float, tank: bool) -> tuple:
+    return (x, y, tank, not tank, False)
+
+
+# anubarak_planner_test.cpp's FirstKitesEndLate starts, 2026-10-31 BH and BI at 1:22
+FIRST_KITES = [
+    ((774.2, 140.7), (763.5, 177.7), (775.1, 136.6),
+     [kite_patch(787.5, 120.7, True), kite_patch(796.6, 140.6, True), kite_patch(748.1, 155.3, False),
+      kite_patch(747.0, 113.2, False)]),
+    ((764.4, 140.8), (736.9, 168.5), (767.8, 141.0),
+     [kite_patch(775.8, 120.2, True), kite_patch(789.7, 142.5, True), kite_patch(752.8, 131.8, False),
+      kite_patch(721.2, 115.7, False)]),
+]
+
+
+def fresh_world(kiter, spike, gather, patches, life: float = 59.5) -> ab.KiteWorld:
+    return ab.KiteWorld(kiter, (spike[0], spike[1], ab.SPIKE_SPEEDS[0], 0, ab.SPIKE_STEP_S), life, patches, gather)
+
+
+def outcome(**fields) -> ab.PlanOutcome:
+    out = ab.PlanOutcome()
+    base = {"ending": "none", "end_tick": 150, "tank": -1, "kite": -1, "raid": -1, "caught": False}
+    for name, value in {**base, **fields}.items():
+        setattr(out, name, value)
+    return out
+
+
+class PlannerPort(unittest.TestCase):
+    """The kite planner's port against anubarak_planner_test.cpp's cases that need no Hand or own immunity."""
+
+    rules = ab.planner_rules()
+
+    def test_the_rules_come_off_the_planner_header(self):
+        self.assertTrue(set(ab.PLANNER_FIELDS) <= set(self.rules))
+        self.assertEqual(len(self.rules["arcTurns"]), 7)
+        self.assertEqual(len(self.rules["testS"]), ab.SPIKE_LAST_STEP + 1)
+        self.assertEqual(len(self.rules["centre"]), 2)
+
+    def test_a_header_missing_a_rule_is_refused(self):
+        with tempfile.TemporaryDirectory() as folder:
+            header = pathlib.Path(folder) / "ToCAnubarakKitePlanner.h"
+            header.write_text("struct Rules\n{\n    // float ring = 40.0f;\n    float rim = 45.0f;\n};\n",
+                              encoding="utf-8")
+            ab.planner_rules.cache_clear()
+            try:
+                with unittest.mock.patch.object(ab, "KITE_PLANNER_HEADER", header):
+                    with self.assertRaisesRegex(LookupError, r"Rules lacks centre, floorRadius, ring, headings"):
+                        ab.planner_rules()
+            finally:
+                ab.planner_rules.cache_clear()
+
+    def test_a_first_kite_runs_to_a_late_patch(self):
+        for kiter, spike, gather, patches in FIRST_KITES:
+            world = fresh_world(kiter, spike, gather, patches)
+            candidate, out, kept = ab.plan_kite(world, self.rules)
+            self.assertFalse(kept)
+            self.assertEqual((out.tank, out.kite, out.raid, out.caught, out.ending), (-1, -1, -1, False, "patch"))
+            self.assertGreaterEqual(out.end_s, 12.0)
+            self.assertFalse(patches[candidate.patch][2])
+            played = ab.kitesim_play(world, self.rules)
+            self.assertEqual((played["end"], played["planned"], played["raid"]), ("patch", True, None))
+            self.assertGreaterEqual(played["s"], 12.0)
+
+    def test_a_spike_restarted_by_a_tank_patch_is_a_tank_hazard_unless_led_out(self):
+        patches = [kite_patch(760.0, 135.0, True)]
+        _, trapped, _ = ab.plan_kite(fresh_world((735.0, 135.0), (771.0, 135.0), None, patches), self.rules)
+        self.assertGreaterEqual(trapped.tank, 0)
+        _, clear, _ = ab.plan_kite(fresh_world((785.0, 135.0), (771.0, 135.0), None, patches), self.rules)
+        self.assertEqual(clear.tank, -1)
+
+    def test_off_the_rim_no_pick_turns_back_within_a_second(self):
+        world = fresh_world((790.0, 135.0), (760.0, 135.0), None, [])
+        held, age, last, since = None, 0.0, (0.0, 0.0), 10.0
+        for step in range(16):
+            candidate, _, kept = ab.plan_kite(world, self.rules, held, age, 0.3 if held else 0.0)
+            heading = ab.track_heading(candidate.track)
+            turn = ab.turn_degrees(last, heading)
+            if step and turn > 90.0:
+                self.assertGreaterEqual(since, 1.0 - 1e-3)
+            since = 0.0 if turn > 90.0 else since + 0.3
+            last, age, held = heading, age + 0.3 if kept else 0.3, candidate
+            spike, kiter = world.spike, world.kiter
+            for index in range(3):
+                spike = ab.chase_tick(spike, kiter[0], kiter[1], index * ab.CATCH_TICK_S)
+                kiter = candidate.track[index + 1]
+            world = world.moved(kiter, spike, 0.3)
+
+    def test_kitepred_names_the_worst_hazard_first_else_a_catch_else_the_ending(self):
+        self.assertEqual(ab.kitepred_text(outcome(kite=42, raid=12, caught=True)), "kite:4.2")
+        self.assertEqual(ab.kitepred_text(outcome(raid=30, caught=True)), "raid:3.0")
+        self.assertEqual(ab.kitepred_text(outcome(caught=True, end_tick=153)), "catch:15.3")
+        self.assertEqual(ab.kitepred_text(outcome(ending="patch", end_tick=141)), "patch:14.1")
+
+    def test_the_spike_step_reads_off_its_speed_and_times_the_next_off_the_restart(self):
+        self.assertEqual(ab.spike_step(3.4, 0.5), (0, 6.5))
+        self.assertEqual(ab.spike_step(6.0, 8.0), (1, 6.0))
+        # the clock reads the base step, the speed the second: half a step left
+        self.assertEqual(ab.spike_step(6.0, 0.0), (1, 3.5))
+        self.assertEqual(ab.spike_step(None, 15.0), (2, 6.0))
+        self.assertEqual(ab.spike_step(0.0, None), (0, 7.0))
+
+
+PRUNNER, PSECOND, PHUMAN, PG1, PG2, PTANK = range(9601, 9607)
+PBOSS = CREATURE | 1700
+PSPIKE = CREATURE | 1701
+PTP, PKP, PSP = CREATURE | 1711, CREATURE | 1712, CREATURE | 1713
+PATCH_SPOTS = {PTP: (X + 20.0, Y + 30.0), PKP: (X - 25.0, Y - 25.0), PSP: (X + 20.0, Y + 15.0)}
+# at its base speed for its first 1.5 s, then on into the kite patch's reach at 26 s, 13.5 s after its restart
+PRUNNER_SPIKE = [(12500, 0.0, -38.0), (14000, 5.25, -38.0), (20000, 10.0, -10.0), (26000, -15.0, -20.0),
+                 (27500, -20.0, -24.0)]
+IMPALE_25H = 67860
+
+
+def planner_spike(when: int) -> tuple[tuple[float, float], int] | None:
+    """The runner's chase, then idle through the human's kite, then the second's at the second step's speed east
+    along y + 30: past the gather at 46 s and within the tank patch's reach from 49 s."""
+    if when < 12500:
+        return None
+    if when < 44000:
+        target = PRUNNER if when <= 27500 else PHUMAN if 31500 <= when <= 40000 else 0
+        return lerp(PRUNNER_SPIKE, when), target
+    return (X - 20.0 + 6.125 * (min(when, 50000) - 44000) / 1000.0, Y + 30.0), PSECOND if when <= 50000 else 0
+
+
+def planner_snap(when: int) -> dict:
+    spots = {PRUNNER: lerp([(12500, 30.0, 0.0), (27500, -10.0, -40.0)], when), PSECOND: (X + 35.0, Y + 10.0),
+             PHUMAN: (X - 35.0, Y), PG1: (X + 40.0, Y - 20.0) if when < 15000 else (X + 5.0, Y + 15.0),
+             PG2: (X + 5.0, Y + 19.0), PTANK: (X + 20.0, Y + 33.0)}
+    units = [[guid, *spot, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0] for guid, spot in spots.items()]
+    units.append([PBOSS, X, Y, Z, 0.0, 80.0, 0.0, 0, 0, 0, 0, 0])
+    hz = []
+    for guid, spot in PATCH_SPOTS.items():
+        if guid == PTP or (5000 <= when <= 28000 if guid == PKP else when >= 5000):
+            units.append([guid, *spot, PATCH_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+            hz.append([PERMAFROST_25H, *spot, PATCH_Z, 6.0, 1])
+    spike = planner_spike(when)
+    if spike:
+        units.append([PSPIKE, *spike[0], Z, 0.0, 100.0, 0.0, spike[1], 1, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def planner_pull(with_probes: bool = True, diff: int = 3) -> list[dict]:
+    """A 25H submerge from 10 s to 75 s, three kites in it: the runner's 12.5-27.5 s, ending on the kite patch
+    its kitepath picked; a human's 31.5-40 s; and the second's 44-50 s on a spike at its second step, past the
+    gather and a tank patch and impaled. The gatherers hold from 11 s, one still walking in until 15 s."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790300000000, "map": ab.MAP_TOC, "inst": 23, "diff": diff, "boss": "anub-arak",
+         "roster": [{"g": PRUNNER, "n": "Runner", "r": "ranged", "c": 3, "h": 0},
+                    {"g": PSECOND, "n": "Second", "r": "melee", "c": 4, "h": 0},
+                    {"g": PHUMAN, "n": "Arthas", "r": "melee", "c": 1, "h": 1},
+                    {"g": PG1, "n": "Gatherer", "r": "heal", "c": 5, "h": 0},
+                    {"g": PG2, "n": "Waiter", "r": "ranged", "c": 8, "h": 0},
+                    {"g": PTANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": PBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": PSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"} for guid in PATCH_SPOTS),
+        *(note(when, PTANK, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (75000, 1))),
+        note(0, PTANK, "anub.patch0", PTP),
+        note(11000, PG1, "anub.gather", "hold"),
+        note(11000, PG2, "anub.gather", "hold"),
+        *(aura(when, kiter, ab.SPELL_MARK, removed, PSPIKE) for kiter, start, stop in (
+            (PRUNNER, 12500, 27500), (PHUMAN, 31500, 40000), (PSECOND, 44000, 50000))
+          for when, removed in ((start, False), (stop, True))),
+        dmg(50000, PSPIKE, PSECOND, IMPALE_25H, 12000),
+        {"t": 80000, "e": "end", "out": "wipe"},
+    ]
+    if with_probes:
+        records += [
+            *(note(when, PRUNNER, "anub.kitepred", value) for when, value in ((12400, "catch:15.2"), (18000, "patch:9.0"))),
+            *(note(when, PRUNNER, "anub.kitepath", value) for when, value in (
+                (12400, "ring:90:ccw:40"), (13000, "arc:300:12"), (15000, "arc:300:12>patch:1712@9.5:in"),
+                (22000, "ring:180:cw:45>patch:1712@4.0:edge1"))),
+            # the second's first pick read the same as a pick before, so it wrote nothing at its mark
+            note(30000, PSECOND, "anub.kitepred", "raid:1.5"),
+            note(44100, PSECOND, "anub.kitepath", "arc:0:0"),
+            note(31600, PHUMAN, "anub.kitepath", "motion"),
+            note(31600, PHUMAN, "anub.kitepred", "catch:8.0"),
+        ]
+    records += [planner_snap(when) for when in range(-500, 80001, 500)]
+    return records
+
+
+class KitesimPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_23_anub-arak_1790300000.ndjson", planner_pull())
+        cls.bare = write_trace(cls.folder.name, "649_23_anub-arak_1790300001.ndjson", planner_pull(False))
+        cls.windows = ab.mark_windows(cls.trace)
+        cls.rows = ab.kitesim_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, trace=None) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(trace or self.trace)
+        return out.getvalue()
+
+    def test_each_bot_kite_starts_from_its_mark_the_human_left_out(self):
+        starts = {start["window"]["guid"]: start for start in ab.kite_starts(self.trace)}
+        self.assertEqual(sorted(starts), [PRUNNER, PSECOND])
+        runner, second = starts[PRUNNER], starts[PSECOND]
+        self.assertEqual((runner["at"], runner["kiter"], runner["life"], runner["catch_from"]),
+                         (12500, (X + 30.0, Y), 57.5, 0.0))
+        self.assertEqual(runner["spike"], (X, Y - 38.0, ab.SPIKE_SPEEDS[0], 0, 7.0))
+        # the stray patch sits 15 yd off the tank patch, so no kite ends on it
+        self.assertEqual(sorted(runner["patches"]), sorted([(*PATCH_SPOTS[PTP], True, False, False),
+                                                             (*PATCH_SPOTS[PKP], False, True, False),
+                                                             (*PATCH_SPOTS[PSP], False, False, False)]))
+        # as formed: at the mark the gatherer is still walking in from the east
+        self.assertEqual(runner["gather"], (X + 5.0, Y + 17.0))
+        self.assertEqual((second["at"], second["life"], len(second["patches"])), (44000, 26.0, 2))
+        # its speed reads the second step while the restart clock reads the first, so half a step is left
+        self.assertEqual(second["spike"], (X - 20.0, Y + 30.0, ab.SPIKE_SPEEDS[1], 1, 3.5))
+
+    def test_each_replay_reads_the_real_end_tank_pass_and_raid_pass(self):
+        self.assertEqual([(row["window"]["guid"], row["real"], row["real_s"], row["real_tank"], row["real_raid"],
+                           row["fresh"]) for row in self.rows],
+                         [(PRUNNER, "patch", 15.0, False, None, True), (PSECOND, "catch", 6.0, True, 2.0, False)])
+        for row in self.rows:
+            self.assertIn(row["played"]["end"], ("patch", "tank", "catch", "emerge"))
+            self.assertRegex(row["played"]["pred"], r"^(tank|kite|raid|catch|none|patch):\d+\.\d$")
+
+    def test_the_section_prints_each_kite_and_the_fresh_summary(self):
+        text = self.text(ab.show_kitesim)
+        self.assertIn("KITE PLANNER REPLAY\n  each bot kite's start replayed through a port of the kite planner,"
+                      " re-planned every 0.3 s on 0.1 s ticks;\n", text)
+        self.assertRegex(text, r"\n   0:12\.500 Runner            0  57\.5  \S+ +\w+ [\d.]+ s[ \w]* +patch 15\.0 s\n")
+        self.assertRegex(text, r"\n   0:44\.000 Second            1  26\.0  \S+ +\w+ [\d.]+ s[ \w]* +catch 6\.0 s;"
+                               r" (replay raid pass \+[\d.]+ s, )?real raid pass \+2\.0 s, real tank pass\n")
+        self.assertIn("  fresh-spike kites, the spike at its base step and over 2 s to the replay's first event:"
+                      " 1 of 2\n", text)
+        self.assertRegex(text, r"    patch ends under 10 s: real 0, replay [01]\n    tank patch passes: real 0,"
+                               r" replay [01]\n    raid passes: real 0, replay [01]\n")
+
+    def test_only_25h_replays(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = write_trace(folder, "649_23_anub-arak_1790300002.ndjson", planner_pull(diff=2))
+            self.assertEqual(ab.kitesim_rows(trace), [])
+            self.assertEqual(self.text(ab.show_kitesim, trace), "KITE PLANNER REPLAY\n  25H only\n")
+
+    def test_a_pick_carried_in_counts_only_with_no_row_near_the_mark(self):
+        rows = [(1000, "a"), (9500, "b"), (12000, "b"), (13000, "c")]
+        self.assertEqual(ab.noted_in(rows, 10000, 20000), [(9500, "b"), (13000, "c")])
+        self.assertEqual(ab.noted_in(rows, 3000, 20000), [(3000, "a"), (9500, "b"), (13000, "c")])
+        self.assertEqual(ab.plan_terminals(rows, 3000, 20000), ["a", "b", "c"])
+
+    def test_kitepath_and_kitepred_values_parse(self):
+        self.assertEqual(ab.kitepath_heading("ring:180:cw:45>patch:1712@4.0:edge1+hand"), 180.0)
+        self.assertEqual(ab.kitepath_heading("arc:22:-24"), 22.0)
+        self.assertIsNone(ab.kitepath_heading("motion"))
+        self.assertEqual(ab.kitepath_patch("arc:300:12>patch:1712@9.5:in+own"), 1712)
+        self.assertIsNone(ab.kitepath_patch("ring:90:ccw:40"))
+        self.assertEqual(ab.parse_kitepred("patch+hand:12.4"), ("patch+hand", 12.4))
+        self.assertIsNone(ab.parse_kitepred("none"))
+
+    def test_each_kite_reads_its_picks_held_and_a_reversal_within_a_second(self):
+        runner, human, second = self.windows
+        self.assertEqual([(pick["value"].split(">")[0], pick["held"], pick["reversal"]) for pick in runner["kitepath"]],
+                         [("ring:90:ccw:40", 500, False), ("arc:300:12", 2000, True), ("arc:300:12", 7000, False),
+                          ("ring:180:cw:45", 5500, False)])
+        self.assertEqual([(pick["value"], pick["held"]) for pick in human["kitepath"]], [("motion", 8400)])
+        self.assertEqual(second["kitepred"], [(44000, "raid:1.5")])
+
+    def test_the_first_hazard_foreseen_against_the_first_real_one(self):
+        hazards = ab.kite_hazards(self.trace, ab.Samples(self.trace), self.windows)
+        # the runner's spike reaches the kite patch its pick ends on 13.5 s after its restart: no hazard
+        self.assertEqual(hazards[(PRUNNER, 12500)], (("catch", 27600), None))
+        self.assertEqual(hazards[(PSECOND, 44000)], (("raid", 45500), ("raid", 46000)))
+        unplanned = {**self.windows[0], "kitepath": [{**pick, "value": pick["value"].split(">")[0]}
+                                                     for pick in self.windows[0]["kitepath"]]}
+        samples = ab.Samples(self.trace)
+        self.assertEqual(ab.real_hazard(samples, {PSPIKE}, ab.patch_latches(self.trace), unplanned,
+                                        (X + 5.0, Y + 17.0), ab.mark_spans(self.trace),
+                                        ab.submerged_spans(self.trace), ab.planner_rules()), ("kite", 26000))
+
+    def test_the_spike_section_prints_the_planner_lines(self):
+        text = self.text(ab.show_spike)
+        self.assertIn("            kitepred at the mark catch:15.2; real end patch 15.0 s\n"
+                      "            kitepath ring:90:ccw:40 0.5 s, arc:300:12 2.0 s reversal,"
+                      " arc:300:12>patch:1712@9.5:in 7.0 s, ring:180:cw:45>patch:1712@4.0:edge1 5.5 s\n"
+                      "            first hazard: predicted catch +15.1 s, real none\n", text)
+        self.assertIn("            kitepred at the mark raid:1.5; real end catch 6.0 s\n"
+                      "            kitepath arc:0:0 5.9 s\n"
+                      "            first hazard: predicted raid +1.5 s, real raid +2.0 s\n", text)
+        self.assertIn("  anub.kitepath picks turning over 90 degrees within 1 s of the pick before:"
+                      " Runner 0:12.500 +0.5 s\n", text)
+        self.assertNotIn("kitepred at the mark", self.text(ab.show_spike, self.bare))
+        self.assertIn("within 1 s of the pick before: none, no anub.kitepath rows\n", self.text(ab.show_spike, self.bare))
+
+    def test_the_new_keys_count_as_present_and_absent_without_their_rows(self):
+        gone = ab.missing_probes(self.trace)
+        self.assertNotIn("anub.kitepath", gone)
+        self.assertNotIn("anub.kitepred", gone)
+        self.assertTrue({"anub.kitepath", "anub.kitepred"} <= set(ab.missing_probes(self.bare)))
+
+
+WMAIN, WSIDE0, WSIDE1, WDPS1, WDPS2 = range(9701, 9706)
+WAVE_BOSS = CREATURE | 1800
+WB = {guid: CREATURE | guid for guid in range(1801, 1806)}
+# guid: (side, spawn, last sample, spot)
+WAVE_BUGS = {WB[1801]: (0, 2000, 30000, EXIT_N1), WB[1802]: (0, 2000, 30000, EXIT_N2),
+             WB[1803]: (1, 2000, 30000, EXIT_S1), WB[1804]: (0, 45000, 55000, EXIT_N1),
+             WB[1805]: (1, 45000, 56000, EXIT_S1)}
+
+
+def wave_reads_snap(when: int) -> dict:
+    units = [[guid, X + 2.0 * index, Y, Z, 0.0, 0.0 if guid == WSIDE0 and when >= 52000 else 100.0, 100.0,
+              0, 0, 0, 0, 0] for index, guid in enumerate((WMAIN, WSIDE0, WSIDE1, WDPS1, WDPS2))]
+    units.append([WAVE_BOSS, X, Y, Z, 0.0, 50.0, 0.0, WMAIN, 0, 0, 0, 0])
+    for guid, (side, spawn, last, spot) in WAVE_BUGS.items():
+        if spawn <= when <= last:
+            units.append([guid, *spot, Z, 0.0, 100.0 - (when - spawn) / 1000.0, 0.0, WSIDE0 if side == 0 else WSIDE1,
+                          0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def wave_reads_pull(new_rows: bool = True) -> list[dict]:
+    """A 25H pull, phase 1 from 0 and phase 3 from 40 s. Wave 1 comes up at 2 s, two burrowers on side 0 picked
+    at 9 s and one on side 1 picked at 4.5 s; wave 2 at 45 s, side 0's picked at 47 s, side 1's never. Side 0's
+    tank peaks at 6 Expose Weakness in wave 1 and 9 in wave 2, dying at 52 s before the wave dies at 56 s."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790400000000, "map": ab.MAP_TOC, "inst": 24, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": WMAIN, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": WSIDE0, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": WSIDE1, "n": "Bulwark", "r": "tank", "c": 1, "h": 0},
+                    {"g": WDPS1, "n": "Hellflame", "r": "ranged", "c": 9, "h": 0},
+                    {"g": WDPS2, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": WAVE_BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        *({"t": spawn, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid, (_, spawn, _, _) in WAVE_BUGS.items()),
+        *(note(when, WMAIN, "anub.phase", value) for when, value in ((0, 1), (40000, 3))),
+        note(0, WMAIN, "anub.side0", WSIDE0),
+        note(0, WMAIN, "anub.side1", WSIDE1),
+        *(note(when, WMAIN, "anub.wave", value) for when, value in ((2000, 1), (45000, 2))),
+        *(note(spawn, guid, "anub.bside", side) for guid, (side, spawn, _, _) in WAVE_BUGS.items()),
+        *(note(when, WDPS1, "anub.focus0", value) for when, value in ((9000, WB[1801]), (15000, 0), (47000, WB[1804]))),
+        note(4500, WDPS2, "anub.focus1", WB[1803]),
+        *(expose(when, WSIDE0, 67847, stacks) for when, stacks in ((5000, 3), (8000, 6), (20000, 0), (50000, 9))),
+        *(expose(when, WSIDE1, 67847, stacks) for when, stacks in ((6000, 2), (48000, 4))),
+        {"t": 52000, "e": "death", "g": WSIDE0, "killer": WB[1804], "x": X, "y": Y, "z": Z},
+        {"t": 70000, "e": "end", "out": "wipe"},
+    ]
+    if new_rows:
+        # two bots read the same wave, one a tick after the other
+        records += [note(45100, WDPS1, "anub.p3wave", "kill:44"), note(45200, WDPS2, "anub.p3wave", "kill:44"),
+                    note(51000, WDPS1, "anub.p3wave", "leave:8")]
+    records += [wave_reads_snap(when) for when in range(-500, 70001, 500)]
+    return records
+
+
+class WaveReads(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_24_anub-arak_1790400000.ndjson", wave_reads_pull())
+        cls.bare = write_trace(cls.folder.name, "649_24_anub-arak_1790400001.ndjson", wave_reads_pull(False))
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, trace) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_burrowers(trace)
+        return out.getvalue()
+
+    def test_p3wave_rows_from_two_bots_count_once(self):
+        self.assertEqual(ab.p3wave_rows(self.trace), [(45100, "kill:44"), (51000, "leave:8")])
+
+    def test_each_wave_reads_its_focus_pick_per_side_and_the_side_tanks_peak(self):
+        first, second = ab.wave_reads(self.trace)
+        self.assertEqual((first["wave"], first["start"], first["phase"]), (1, 2000, 1))
+        self.assertEqual([(side["side"], side["pick"], side["tank"], side["peak"]) for side in first["sides"]],
+                         [(0, 7000, WSIDE0, 6), (1, 2500, WSIDE1, 2)])
+        self.assertNotIn("p3wave", first)
+        self.assertEqual([(side["side"], side["pick"], side["peak"], side["death"]) for side in second["sides"]],
+                         [(0, 2000, 9, 52000), (1, None, 4, None)])
+        self.assertEqual((second["phase"], second["died"], second["p3wave"]),
+                         (3, 56000, [(45100, "kill:44"), (51000, "leave:8")]))
+
+    def test_the_burrower_section_prints_each_wave(self):
+        text = self.text(self.trace)
+        self.assertIn("    wave 1    0:02.000  side 0 pick +7.0 s, Felesta peak 6; side 1 pick +2.5 s, Bulwark peak 2\n"
+                      "    wave 2    0:45.000  side 0 pick +2.0 s, Felesta peak 9; side 1 no pick, Bulwark peak 4\n"
+                      "          P3: anub.p3wave kill:44 +0.1 s, leave:8 +6.0 s; the wave died 0:56.000;"
+                      " Felesta died +7.0 s, Bulwark lived\n", text)
+        self.assertNotIn("no anub.p3wave rows", text)
+        bare = self.text(self.bare)
+        self.assertIn("          P3: anub.p3wave none; the wave died 0:56.000; Felesta died +7.0 s, Bulwark lived\n",
+                      bare)
+        self.assertIn("  no anub.p3wave rows\n", bare)
+
+    def test_p3wave_counts_as_present_and_absent_without_its_rows(self):
+        self.assertNotIn("anub.p3wave", ab.missing_probes(self.trace))
+        self.assertIn("anub.p3wave", ab.missing_probes(self.bare))
 
 
 class EveryView(unittest.TestCase):

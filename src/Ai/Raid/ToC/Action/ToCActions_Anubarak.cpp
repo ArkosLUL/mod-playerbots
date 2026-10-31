@@ -273,20 +273,9 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
             return true;
     }
 
-    Creature* spike = GetPursuingSpike(bot);
-    ObjectGuid const spikeGuid = spike ? spike->GetGUID() : ObjectGuid::Empty;
-    bool const keep = hasLatched && latchedSpike == spikeGuid;
-
     AnubarakKiteStand next;
-    if (!GetAnubarakKiteStand(bot, keep ? &latched : nullptr, next))
-    {
-        hasLatched = false;
+    if (!GetAnubarakKiteStand(bot, next))
         return false;
-    }
-
-    latched = next;
-    latchedSpike = spikeGuid;
-    hasLatched = true;
 
     // Yields the tick on the stand: generic movers are vetoed for the marked bot, so it can cast here
     if (next.branch == AnubarakKiteBranch::Hold)
