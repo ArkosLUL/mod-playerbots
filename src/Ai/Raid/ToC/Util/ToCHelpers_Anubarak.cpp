@@ -3138,13 +3138,13 @@ bool GripperReady(Player* member, ObjectGuid const& pickup, std::vector<ObjectGu
 }
 
 Player* PickGripper(Player* bot, AnubarakState const& state, uint8 side, std::vector<ObjectGuid> const& busy,
-                    bool far = false)
+                    bool farGrip = false)
 {
     ObjectGuid const pickup = PickupGuid(bot, state);
     auto const eligible = [&](Player* member) { return GripperReady(member, pickup, busy); };
 
     Player* own = state.sideTanks[side].IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.sideTanks[side]);
-    if (eligible(own) && !far)
+    if (eligible(own) && !farGrip)
         return own;
 
     Player* best = nullptr;
@@ -3160,7 +3160,7 @@ Player* PickGripper(Player* bot, AnubarakState const& state, uint8 side, std::ve
     if (best)
         return best;
 
-    if (far)
+    if (farGrip)
         return eligible(own) ? own : nullptr;
 
     uint8 const otherSide = 1 - side;
@@ -4086,9 +4086,12 @@ ProtectClaim const* DeriveProtection(Player* bot)
     if (!immune)
     {
         bool const ownDue = caught && impaleMs <= ANUBARAK_KITE_OWN_LEAD_S * IN_MILLISECONDS;
-        bool const ownNow = ownPlanned && kiter->GetHealthPct() <= ANUBARAK_KITE_OWN_LOW_HEALTH_PCT;
-        claim.selfDue = (selfHand && handDue && !forbearance) || ownNow ||
-                        (ownDue && (ownPlanned || (claim.protector.IsEmpty() && !claim.standReachable)));
+        bool const low = kiter->GetHealthPct() <= ANUBARAK_KITE_OWN_LOW_HEALTH_PCT;
+        bool const ownNow = ownPlanned && low;
+        // Unplanned, the immunity waits for a spike the kiter can't outrun, unless one more Impale could kill
+        bool const ownForced = claim.protector.IsEmpty() && !claim.standReachable &&
+                               (low || KiterRunSpeed(kiter) <= spike->GetSpeed(MOVE_RUN));
+        claim.selfDue = (selfHand && handDue && !forbearance) || ownNow || (ownDue && (ownPlanned || ownForced));
     }
     // A Hand kite whose own immunity waits behind its Hand casts it before the Hand ends: cast after,
     // Impale's next tick could land first
@@ -6982,9 +6985,11 @@ bool AnubarakDivinePleaDue(PlayerbotAI* botAI)
     return !hurt;
 }
 
+// Never a tank: Innervate's caster form drops bear form mid-fight
 Player* GetAnubarakInnervateTarget(PlayerbotAI* botAI)
 {
-    if (!AnubarakManaWindow(botAI) || botAI->GetBot()->getClass() != CLASS_DRUID)
+    if (!AnubarakManaWindow(botAI) || botAI->GetBot()->getClass() != CLASS_DRUID ||
+        IsAnubarakTankPlayer(botAI->GetBot()))
         return nullptr;
 
     Player* bot = botAI->GetBot();
@@ -7005,6 +7010,9 @@ bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI)
 {
     if (!AnubarakManaWindow(botAI) || botAI->GetBot()->getClass() != CLASS_DRUID)
         return false;
+
+    if (IsAnubarakTankPlayer(botAI->GetBot()))
+        return true;
 
     Unit* low = botAI->GetAiObjectContext()->GetValue<Unit*>("healer low mana")->Get();
     return low && low->GetPowerPct(POWER_MANA) < botAI->GetBot()->GetPowerPct(POWER_MANA);

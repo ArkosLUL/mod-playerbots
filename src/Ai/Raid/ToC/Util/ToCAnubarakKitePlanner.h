@@ -608,6 +608,23 @@ inline float RunLength(Spike spike, float t, float leftS)
     return length;
 }
 
+// An immunity or a catch hands the spike on at its speed, mostly to someone at the gather: a raid pass at once
+// when it gets within the gather's clearance before it despawns
+inline bool HandedOnToGather(Outcome const& out, RunEnd const& end, KiteWorld const& w, Rules const& r)
+{
+    float const leftS = w.lifeS - out.endS;
+    float const full = Dist(end.spike.pos, w.gatherPos);
+    return leftS > 0.0f &&
+           (full <= r.gatherClearance || RunLength(end.spike, out.endS, leftS) >= full - r.gatherClearance);
+}
+
+// A Hand or immunity only pays against a spike the kiter can't outrun there
+inline bool OutrunsKiter(Spike const& spike, Point at, int tick, int boostTick, KiteWorld const& w, Rules const& r)
+{
+    float const t = static_cast<float>(tick) * TICK_S;
+    return spike.speed > CandidatePace(w, boostTick).SpeedAt(t) * SlowAt(at, w, r);
+}
+
 // The spike's leg after the kite, toward the gather: on at its speed after an immunity or a catch, from the
 // patch it failed on at its base speed after the idle. A patch it passes on the way is the kite's hazard, at
 // the kite's end.
@@ -703,6 +720,9 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
         out.cost += r.costBoost;
     }
 
+    if (w.heroic && w.gather && !spent && (end.ownUsed || out.caught) && HandedOnToGather(out, end, w, r))
+        out.raidS = 0.0f;
+
     if (w.heroic && w.gather && (spent || end.ownUsed || out.caught))
         NextLeg(out, end, w, r);
 
@@ -711,7 +731,8 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
 }
 
 // A run's outcome, the run stopped at the first patch the spike fails on. hand lands a Hand a second before
-// the catch, own casts the immunity just before it, after the Hand when both.
+// the catch, own casts the immunity just before it, after the Hand when both, each only on a spike faster than
+// the kiter there.
 inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTick, bool hand, bool own,
                      Run const& run, KiteWorld const& w, Rules const& r)
 {
@@ -725,8 +746,14 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTic
     if (catchTick >= 0)
         out.catchPoint = track[static_cast<size_t>(catchTick)];
 
+    auto const outruns = [&](int tick)
+    {
+        return OutrunsKiter(run.spikes[static_cast<size_t>(tick)], track[static_cast<size_t>(tick)], tick, boostTick,
+                            w, r);
+    };
+
     RunEnd end;
-    if (hand && catchTick >= 0 && w.handLeftS <= 0.0f)
+    if (hand && catchTick >= 0 && w.handLeftS <= 0.0f && outruns(catchTick))
     {
         int const land = std::max(catchTick - ToTick(r.handLeadS), 0);
         if (HandOffer const* offer = HandFor(w, r, track, land))
@@ -743,7 +770,7 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTic
     if (catchTick >= 0)
     {
         end.endTick = catchTick;
-        if (own && w.own && (!end.handUsed || w.ownAfterHand))
+        if (own && w.own && (!end.handUsed || w.ownAfterHand) && outruns(catchTick))
         {
             end.ownUsed = true;
             end.endTick = std::max(catchTick - ToTick(r.ownLeadS), 0);
@@ -1047,7 +1074,10 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     {
         int const land = baseCatch >= 0 ? std::max(baseCatch - ToTick(r.handLeadS), 0) : -1;
         HandOffer const* offer = land >= 0 ? HandFor(w, r, base.candidate.track, land) : nullptr;
-        if (!offer || turn < land)
+        if (!offer || turn < land ||
+            !OutrunsKiter(base.run.spikes[static_cast<size_t>(baseCatch)],
+                          base.candidate.track[static_cast<size_t>(baseCatch)], baseCatch, base.candidate.boostTick,
+                          w, r))
             return false;
 
         end.handUsed = true;
@@ -1246,21 +1276,21 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
         if (!patch.usable)
             continue;
 
-        std::vector<std::pair<int, size_t>> near;
+        std::vector<std::pair<int, size_t>> nearby;
         for (size_t i = 0; i < bases.size(); ++i)
         {
             int const last = static_cast<int>(bases[i].none.endS / TICK_S);
             for (int k = std::min(last, static_cast<int>(bases[i].candidate.track.size()) - 1); k > 0; --k)
                 if (Dist(bases[i].candidate.track[static_cast<size_t>(k)], patch.pos) <= r.patchNear)
                 {
-                    near.emplace_back(k, i);
+                    nearby.emplace_back(k, i);
                     break;
                 }
         }
 
-        std::sort(near.begin(), near.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
-        for (size_t n = 0; n < near.size() && n < static_cast<size_t>(r.nearShapes); ++n)
-            ended[near[n].second] = 1;
+        std::sort(nearby.begin(), nearby.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
+        for (size_t n = 0; n < nearby.size() && n < static_cast<size_t>(r.nearShapes); ++n)
+            ended[nearby[n].second] = 1;
     }
 
     // The shapes given endings again with the ready boost fired where their own run first wants it

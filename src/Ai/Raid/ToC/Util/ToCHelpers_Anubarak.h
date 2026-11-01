@@ -548,11 +548,11 @@ bool AnubarakAuraMasteryDue(PlayerbotAI* botAI);
 // Heroic before phase 3, an unmarked healer paladin bot under 80% mana with Divine Plea ready and no tank or
 // Penetrating Cold carrier under 50%
 bool AnubarakDivinePleaDue(PlayerbotAI* botAI);
-// Heroic, an unmarked druid bot with Innervate ready: the healer in reach with the least mana but this bot,
-// under 50% and under the bot's own, else null
+// Heroic, an unmarked druid bot but a tank with Innervate ready: the healer in reach with the least mana but
+// this bot, under 50% and under the bot's own, else null
 Player* GetAnubarakInnervateTarget(PlayerbotAI* botAI);
 bool AnubarakInnervateHealerDue(PlayerbotAI* botAI);
-// Heroic, a druid bot while another healer has less mana: its Innervate goes to that one
+// Heroic, a druid tank always, else a druid bot while another healer has less mana: its Innervate goes to that one
 bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI);
 // A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);

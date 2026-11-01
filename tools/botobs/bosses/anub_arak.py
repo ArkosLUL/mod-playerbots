@@ -58,7 +58,9 @@
                                      pick in force; the anub.escort standby paladin's yards to the kiter at the
                                      claim; after an own immunity or a patch end, the spike's next leg to the
                                      next kiter or its spot at the mark, and the first patch it passed within
-                                     11.5 yd, spent or not
+                                     11.5 yd, spent or not; per kite each stretch of 2 s or more its gap to a
+                                     spike no faster than itself shrank, ending within 12 yd, with the gap and
+                                     speeds over it, summed per pull
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -138,8 +140,11 @@
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; per side
                                      tank and surfaced phase its area casts by spell, anub.saoe rows; each tank
-                                     defensive cast with the stack then, from its cast row, each tank death with
-                                     the damage taken and the heals landed in the 12 s before
+                                     defensive cast with the stack then, from its cast row; each tank form or
+                                     stance (bear forms, Defensive Stance, Righteous Fury, Frost Presence) lost
+                                     while he was up, not to a death, with the act row that dropped it, the
+                                     action it ran for and when the form came back; each tank death with the
+                                     damage taken and the heals landed in the 12 s before
     anub_arak.py <file> --scarabs    the scarabs alive 0, 10, 20 and 30 s after each emerge with their targets,
                                      the main tank's Mandibles stack at the emerge, scarab lives per phase, and
                                      per phase each player's Mandibles peak stack and tick damage
@@ -149,8 +154,10 @@
                                      errors 3 and 6 s on, a p90 patch-pass error over 1.5 yd flagged
     anub_arak.py <file> --kitesim    25H: a port of the kite planner replayed from each bot kite's start, closed
                                      loop as the native test plays it, with no Hands, own immunity or speed
-                                     boost, and a patch on the spike's next leg toward the gather after a patch
-                                     end or a catch counted as the kite's hazard at its end: its
+                                     boost, a patch on the spike's next leg toward the gather after a patch
+                                     end or a catch counted as the kite's hazard at its end, and a catch whose
+                                     spike reaches the gather's clearance before it despawns as a raid pass at
+                                     once: its
                                      first pick as anub.kitepred, where the replay ended against where the real
                                      kite did, and for the fresh-spike kites, base speed and over 2 s to the
                                      replay's first event, the patch ends under 10 s, the tank patch passes and
@@ -334,6 +341,14 @@ EXPOSE_WEAKNESS = (67721, 67847)
 # ANUBARAK_SIDE_DEFENSIVE_STACKS, a uint32 radius() doesn't read
 DEFENSIVE_STACKS = 5
 MAGIC_ONLY_DEFENSIVES = ("anti magic shell", "cloak of shadows")
+TANK_FORMS = {9634: "Dire Bear Form", 5487: "Bear Form", 71: "Defensive Stance", 25780: "Righteous Fury",
+              48263: "Frost Presence"}
+# Dying strips every aura in the same tick
+FORM_DEATH_MS = 500
+# The act row that dropped a form lands within FORM_ACT_MS of the removal, and a PREREQ row naming the action
+# it ran for lands within PREREQ_MS before that
+FORM_ACT_MS = 500
+PREREQ_MS = 100
 # NextTankDefensive's tank rows, named the way anub.defensive writes them
 TANK_DEFENSIVES = {12975: "last stand", 871: "shield wall", 498: "divine protection", 22812: "barkskin",
                    22842: "frenzied regeneration", 61336: "survival instincts", 48707: "anti magic shell",
@@ -462,6 +477,8 @@ MOVING_YD_S = 1.0
 SPEED_SLACK = 0.2
 # playerBaseMoveSpeed[MOVE_RUN], for a kiter the snapshots never caught moving
 BASE_RUN_YD_S = 7.0
+# A kiter whose gap to a spike it outruns shrank this long, ending inside KITE_PROTECT_RANGE, walked into it
+CLOSING_MS = 2000
 CROWD_YD = (8.0, 12.0, 20.0)
 CROWD_ROLES = ("tank", "heal", "melee", "ranged")
 # Three burrowers on one side tank kill it at 9 Expose Weakness stacks; the taunts in the second before say
@@ -1277,6 +1294,45 @@ def cover_speeds(samples: Samples, spikes, window: dict) -> list[dict]:
     return out
 
 
+def closing_spans(samples: Samples, spikes, window: dict) -> list[dict]:
+    """Each stretch of CLOSING_MS or more the kiter's gap to its spike shrank at every snapshot step while the spike
+    ran no faster than the kiter's moving speed in the second either side, ending within KITE_PROTECT_RANGE.
+    `speeds` are the spike's speed steps over it in turn, `kiter` the kiter's moving speed over it."""
+    guid, start, stop = window["guid"], window["start"], window["stop"]
+    out: list[dict] = []
+    run: list[tuple[int, float, float | None]] = []
+
+    def flush() -> None:
+        if len(run) > 1 and run[-1][0] - run[0][0] >= CLOSING_MS and run[-1][1] <= KITE_PROTECT_RANGE:
+            steps = [min(SPIKE_SPEEDS, key=lambda speed: abs(speed - step)) for _, _, step in run[1:]]
+            out.append({"start": run[0][0], "stop": run[-1][0], "from": run[0][1], "to": run[-1][1],
+                        "speeds": list(dict.fromkeys(steps)),
+                        "kiter": unit_speed(samples, guid, run[0][0], run[-1][0])})
+        run.clear()
+
+    last = None
+    for index in range(bisect.bisect_left(samples.stamps, start), bisect.bisect_right(samples.stamps, stop)):
+        when = samples.stamps[index]
+        kiter = sampled_at(samples, guid, index)
+        rows = [row for row in (sampled_at(samples, spike, index) for spike in spikes) if row]
+        rows.sort(key=lambda row: len(row) <= 7 or row[7] != guid)
+        spike = rows[0] if rows and kiter else None
+        gap = dist2(kiter[1:3], spike[1:3]) if spike else None
+        step = pace = None
+        if spike and last and last[3] == spike[0] and 0 < when - last[0] <= MAX_STEP_MS:
+            step = dist2(spike[1:3], last[2]) * 1000.0 / (when - last[0])
+            pace = unit_speed(samples, guid, when - 1000, when + 1000)
+        if step is not None and pace and gap < last[1] and step <= pace + SPEED_SLACK:
+            if not run:
+                run.append((last[0], last[1], None))
+            run.append((when, gap, step))
+        else:
+            flush()
+        last = (when, gap, spike[1:3], spike[0]) if spike else None
+    flush()
+    return out
+
+
 def merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     out: list[tuple[int, int]] = []
     for start, stop in sorted(spans):
@@ -2067,6 +2123,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "stalled": stalled(samples, guid, start, stop)})
         window = out[-1]
         window["cover"] = cover_speeds(samples, spikes, window)
+        window["closing"] = closing_spans(samples, spikes, window)
         window["patch_kite"] = (any(terminal in PATCH_PLANS for terminal in window["plan"])
                                 or "patch" in window["stages"])
         # under the Hand a patch+hand kite walks its patch in the immune stage
@@ -2246,6 +2303,10 @@ def show_spike(trace: Trace) -> None:
                 print(f"            speeds at the cover: {speed_line(window)}")
             if window["boost_speeds"]:
                 print(f"            speeds at the boosts: {boost_speed_line(window)}")
+            for span in window["closing"]:
+                kiter = "-" if span["kiter"] is None else f"{span['kiter']:.1f}"
+                print(f"            closed on a spike no faster than it from {rel_s(window, span['start'])}:"
+                      f" {closing_text(span)}, kiter {kiter} yd/s")
             escort = escort_line(trace, window)
             if escort:
                 print(f"            {escort}")
@@ -2319,7 +2380,13 @@ def show_spike(trace: Trace) -> None:
               + (", ".join(f"{trace.name(window['guid'])} {clock(row['rec']['t'])} {KITE_BOOSTS[row['rec']['sp']]}"
                            f" ({row['spike']:.1f} vs {row['kiter']:.1f} yd/s)" for window, row in slow_boosts)
                  or "none"))
-        still = [window for window in windows if window["stalled"][0]]
+        closing = [(window, span) for window in windows for span in window["closing"]]
+        print(f"  kiter closing on a spike no faster than itself for {CLOSING_MS / 1000:.0f}+ s, ending within"
+              f" {KITE_PROTECT_RANGE:.0f} yd: {len(closing)} stretch(es),"
+              f" {sum(span['stop'] - span['start'] for _, span in closing) / 1000:.1f} s"
+              + "".join(f"; {trace.name(window['guid'])} {clock(span['start'])} {closing_text(span)}"
+                        for window, span in closing))
+        still =[window for window in windows if window["stalled"][0]]
         print(f"  stood still while marked, under {STALL_YD} yd in {STALL_MS / 1000:.0f} s and alive: "
               + (", ".join(f"{trace.name(window['guid'])} {clock(window['start'])}"
                            f" {window['stalled'][0] / 1000:.1f} s" for window in still) or "none"))
@@ -2369,6 +2436,11 @@ def show_spike(trace: Trace) -> None:
 
 def rel_s(window: dict, when: int) -> str:
     return f"{(when - window['start']) / 1000:+.1f} s"
+
+
+def closing_text(span: dict) -> str:
+    return (f"{(span['stop'] - span['start']) / 1000:.1f} s, gap {span['from']:.1f} to {span['to']:.1f} yd,"
+            f" spike {' to '.join(f'{speed:.1f}' for speed in span['speeds'])} yd/s")
 
 
 def own_unused_death(window: dict) -> bool:
@@ -6471,6 +6543,48 @@ def defensive_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def form_drops(trace: Trace) -> list[dict]:
+    """Each TANK_FORMS aura a tank lost while he was up, phase 1 or 3, not to a death: the tank's OK act row
+    nearest the removal, `parent` the other action a PREREQ row just before it ran it for, `back` when the form
+    went on again and `died` the tank's next death, each None for none."""
+    up = [(start, stop, label) for start, stop, phase, label in phase_spans(trace) if phase in (1, 3)]
+    deaths: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("death"):
+        deaths[rec.get("g")].append(rec["t"])
+    acts: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("act"):
+        acts[rec.get("g")].append(rec)
+    forms = [rec for rec in trace.of("aura") if rec.get("sp") in TANK_FORMS and trace.role(rec.get("d")) == "tank"]
+    out = []
+    for rec in forms:
+        guid, when = rec.get("d"), rec["t"]
+        label = next((label for start, stop, label in up if start <= when < stop), None)
+        if not rec.get("r") or label is None or any(0 <= dead - when <= FORM_DEATH_MS for dead in deaths[guid]):
+            continue
+        near = [act for act in acts[guid] if act.get("vd") == "OK" and abs(act["t"] - when) <= FORM_ACT_MS]
+        act = min(near, key=lambda act: abs(act["t"] - when), default=None)
+        parent = None if act is None else next(
+            (row.get("a") for row in reversed(acts[guid]) if row.get("vd") == "PREREQ"
+             and act["t"] - PREREQ_MS <= row["t"] <= act["t"] and row.get("a") != act.get("a")), None)
+        out.append({"t": when, "guid": guid, "spell": rec["sp"], "phase": label, "act": act, "parent": parent,
+                    "back": next((row["t"] for row in forms if row.get("d") == guid and row["sp"] == rec["sp"]
+                                  and not row.get("r") and row["t"] > when), None),
+                    "died": min((dead for dead in deaths[guid] if dead > when), default=None)})
+    return out
+
+
+def form_drop_text(row: dict) -> str:
+    act = row["act"]
+    text = (f"no OK act row within {FORM_ACT_MS / 1000:.1f} s" if act is None
+            else f"by {act.get('a')}" + (f", run for {row['parent']}" if row["parent"] else ""))
+    died = row["died"] is not None and (row["back"] is None or row["died"] < row["back"])
+    if died:
+        return text + f"; not back before its death {(row['died'] - row['t']) / 1000:.1f} s later"
+    if row["back"] is None:
+        return text + "; never back"
+    return text + f"; back after {(row['back'] - row['t']) / 1000:.1f} s"
+
+
 def magic_on_side_tank(row: dict) -> bool:
     """A magic-only defensive on a side tank before the swarm: burrowers hit physical."""
     return row["side"] is not None and row["spell"] in MAGIC_ONLY_DEFENSIVES and not row["phase"].startswith("P3")
@@ -6651,6 +6765,13 @@ def show_tanks(trace: Trace) -> None:
         print("  casts per tank: " + "; ".join(
             f"{trace.name(guid)} " + ", ".join(f"{spell} {n}" for spell, n in counts.most_common())
             for guid, counts in sorted(per_tank.items(), key=lambda item: trace.name(item[0]))))
+
+    drops = form_drops(trace)
+    print(f"\n  a tank's form or stance lost while he was up, deaths left out, with the act row within"
+          f" {FORM_ACT_MS / 1000:.1f} s that dropped it:" + ("" if drops else " none"))
+    for row in drops:
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])[:14]:14} {row['phase']:5}"
+              f" {TANK_FORMS[row['spell']]:16} {form_drop_text(row)}")
 
     deaths = tank_deaths(trace, samples)
     if not deaths:
@@ -6978,7 +7099,7 @@ PLANNER_FIELDS = ("centre", "floorRadius", "ring", "rim", "headings", "arcStraig
                   "maxHorizonS", "patchReach", "fallingReach", "impaleReach", "slowReach", "edgeRadius", "edgeRunOn",
                   "gatherClearance", "startSlack", "testS", "endingShapes", "nearShapes", "patchNear", "earlyPatchS",
                   "patchWindowS", "edgeWindowS", "turnStepS", "catchMargin", "postCatchS", "idleS", "freshS", "fastS",
-                  "ownLateS", "costOwn", "costOwnMid", "costPatch",
+                  "ownLateS", "ownLeadS", "costOwn", "costOwnMid", "costPatch",
                   "hazardBandS", "uncoveredBandS", "endBandS", "gatherBand", "marginCap", "marginBand", "keepEndS",
                   "turnWaitDegrees", "turnWaitS")
 PLANNER_SCALAR = re.compile(r"\b(?:float|int)\s+(\w+)\s*=\s*(-?\d+(?:\.\d*)?)f?\s*;")
@@ -7017,10 +7138,10 @@ def planner_rules() -> dict:
 
 class KiteWorld:
     """KiteWorld as the replay fills it. `spike` is `(x, y, speed, step, next step s)`, each patch
-    `(x, y, tank, usable, falling)`, `gather` a point or None."""
+    `(x, y, tank, usable, falling)`, `gather` a point or None, `own` the kiter's own immunity ready."""
 
     def __init__(self, kiter, spike, life: float, patches, gather=None, speed: float = BASE_RUN_YD_S,
-                 catch_from: float = 0.0, budget: int | None = None):
+                 catch_from: float = 0.0, budget: int | None = None, own: bool = False):
         self.kiter = kiter
         self.spike = spike
         self.life = life
@@ -7029,12 +7150,13 @@ class KiteWorld:
         self.speed = speed
         self.catch_from = catch_from
         self.budget = sum(1 for patch in self.patches if patch[3]) if budget is None else budget
+        self.own = own
 
     def moved(self, kiter, spike, seconds: float) -> "KiteWorld":
         """The same world `seconds` on, the kiter and the spike where they got to."""
         x, y, speed, step, due = spike
         return KiteWorld(kiter, (x, y, speed, step, due - seconds), self.life - seconds, self.patches, self.gather,
-                         self.speed, max(0.0, self.catch_from - seconds), self.budget)
+                         self.speed, max(0.0, self.catch_from - seconds), self.budget, self.own)
 
 
 class PlanOutcome:
@@ -7049,16 +7171,17 @@ class PlanOutcome:
 
 
 class PlanCandidate:
-    __slots__ = ("shape", "heading", "radius", "turn", "patch", "move", "turn_tick", "ending", "track")
+    __slots__ = ("shape", "heading", "radius", "turn", "patch", "move", "turn_tick", "ending", "own", "track")
 
     def __init__(self, shape: str, heading: float = 0.0, radius: float = 0.0, turn: float = 0.0):
         self.shape, self.heading, self.radius, self.turn = shape, heading, radius, turn
-        self.patch, self.move, self.turn_tick, self.ending = -1, "in", -1, "none"
+        self.patch, self.move, self.turn_tick, self.ending, self.own = -1, "in", -1, "none", False
         self.track: list[tuple[float, float]] = []
 
     def like(self, shape: str | None = None) -> "PlanCandidate":
         out = PlanCandidate(shape or self.shape, self.heading, self.radius, self.turn)
         out.patch, out.move, out.turn_tick, out.ending = self.patch, self.move, self.turn_tick, self.ending
+        out.own = self.own
         return out
 
 
@@ -7228,6 +7351,22 @@ def run_length(spike: tuple, t: float, left_s: float) -> float:
     return length
 
 
+def handed_on_to_gather(out: PlanOutcome, world: KiteWorld, rules: dict, spike: tuple) -> bool:
+    """HandedOnToGather: an immunity or a catch hands the spike on at its speed, mostly to someone at the gather,
+    so it passes the raid at once when it gets within the gather's clearance before it despawns."""
+    left = world.life - out.end_s
+    full = math.hypot(world.gather[0] - spike[0], world.gather[1] - spike[1])
+    clearance = rules["gatherClearance"]
+    return left > 0.0 and (full <= clearance or run_length(spike, out.end_s, left) >= full - clearance)
+
+
+def outruns_kiter(spike: tuple, at, world: KiteWorld, rules: dict) -> bool:
+    """OutrunsKiter with no boost: the spike runs faster than the kiter's pace at `at`, slowed on a patch."""
+    slowed = any(not patch[4] and math.hypot(at[0] - patch[0], at[1] - patch[1]) < rules["slowReach"]
+                 for patch in world.patches)
+    return spike[2] > world.speed * (KITESIM_SLOW if slowed else 1.0)
+
+
 def next_leg(out: PlanOutcome, world: KiteWorld, rules: dict, spike: tuple, fail_tick: int, fail_patch: int) -> None:
     """NextLeg: the spike's leg after the kite, toward the gather, on at its speed after an immunity or a catch,
     from the patch it failed on at its base speed after the idle. A tank patch or a usable kite patch within its
@@ -7260,7 +7399,8 @@ def planner_finish(world: KiteWorld, rules: dict, ticks: int, end_tick: int, end
                    own_used: bool = False) -> PlanOutcome:
     """Finish: a run still going at the horizon with life left counts as caught there. A fail after a catch is
     still a hazard and spends the patch, but the kite ended at the catch. `spike` is the spike at the fail, else at
-    the end, whose next leg counts after a fail, an immunity or a catch."""
+    the end, whose next leg counts after a fail, an immunity or a catch. An immunity or a catch with no fail
+    passes the raid at once when it hands the spike on to the gather."""
     out = PlanOutcome()
     opened = not caught and not own_used and fail_tick < 0 and end_tick >= ticks
     out.caught = caught or (opened and world.life > end_tick * CATCH_TICK_S + CATCH_TICK_S)
@@ -7286,6 +7426,9 @@ def planner_finish(world: KiteWorld, rules: dict, ticks: int, end_tick: int, end
     out.cost = rules["costPatch"] if ended else 0.0
     if own_used:
         out.cost += rules["costOwn"] if world.life - out.end_s <= rules["ownLateS"] else rules["costOwnMid"]
+    if (world.gather is not None and not spent and (own_used or out.caught)
+            and handed_on_to_gather(out, world, rules, spike)):
+        out.raid = 0
     if world.gather is not None and (spent or own_used or out.caught):
         next_leg(out, world, rules, spike, fail_tick, fail_patch)
     out.end_gather = -1.0
@@ -7296,8 +7439,13 @@ def planner_finish(world: KiteWorld, rules: dict, ticks: int, end_tick: int, end
 
 
 def planner_score(world: KiteWorld, rules: dict, ticks: int, track: list, run: PlannerRun, catch: int,
-                  turn_tick: int = -1) -> PlanOutcome:
-    """Score of a run stopped at its first patch fail, or postCatchS past its first counted catch."""
+                  turn_tick: int = -1, own: bool = False) -> PlanOutcome:
+    """Score of a run stopped at its first patch fail, or postCatchS past its first counted catch. `own` casts the
+    world's own immunity ownLeadS before the catch, only on a spike faster than the kiter there."""
+    if catch >= 0 and own and world.own and outruns_kiter(run.spikes[catch], track[catch], world, rules):
+        end = max(catch - to_tick(rules["ownLeadS"]), 0)
+        return planner_finish(world, rules, ticks, end, track[end], run.margin[end], run.raid_tick, run.spikes[end],
+                              catch_tick=catch, turn_tick=turn_tick, own_used=True)
     if catch >= 0:
         spike = run.spikes[run.fail_tick if run.fail_tick >= 0 else catch]
         return planner_finish(world, rules, ticks, catch, track[catch], run.margin[catch], run.raid_tick, spike,
@@ -7576,7 +7724,7 @@ def judge(candidate: PlanCandidate, world: KiteWorld, rules: dict) -> PlanOutcom
     catch = planner_chase(world, rules, planner_watch(world, rules), run, candidate.track, 0,
                           min(ticks, len(candidate.track) - 1), candidate.patch, candidate.turn_tick,
                           catch_from=catch_from_tick(world), caught=first_catch(world, rules, candidate.track))
-    return planner_score(world, rules, ticks, candidate.track, run, catch, candidate.turn_tick)
+    return planner_score(world, rules, ticks, candidate.track, run, catch, candidate.turn_tick, candidate.own)
 
 
 def track_heading(track: list) -> tuple[float, float]:
@@ -7593,8 +7741,8 @@ def turn_degrees(a, b) -> float:
 
 def plan_kite(world: KiteWorld, rules: dict, held: PlanCandidate | None = None, held_age_s: float = 0.0,
               held_elapsed_s: float = 0.0) -> tuple[PlanCandidate, PlanOutcome, bool]:
-    """PlanKite: every candidate judged, the best kept, `(candidate, outcome, kept)`. `held` is the last re-plan's
-    choice, held `held_age_s` so far, its track started `held_elapsed_s` ago."""
+    """PlanKite with no Hand or boost: every candidate judged, the best kept, `(candidate, outcome, kept)`. `held` is
+    the last re-plan's choice, held `held_age_s` so far, its track started `held_elapsed_s` ago."""
     ticks = planner_ticks(world, rules)
     watch = planner_watch(world, rules)
     bases = []
@@ -7624,7 +7772,13 @@ def plan_kite(world: KiteWorld, rules: dict, held: PlanCandidate | None = None, 
         near.sort(key=lambda item: -item[0])
         ended.update(index for _, index in near[:int(rules["nearShapes"])])
 
-    entries = [(none, candidate) for candidate, _, none in bases]
+    entries = []
+    for candidate, run, none in bases:
+        entries.append((none, candidate))
+        if world.own and none.catch_tick >= 0:
+            own = candidate.like()
+            own.own, own.ending, own.track = True, "own", candidate.track
+            entries.append((planner_score(world, rules, ticks, candidate.track, run, none.catch_tick, own=True), own))
     for index in sorted(ended):
         entries += [(out, candidate) for candidate, out in patch_endings(world, rules, watch, ticks, bases[index])]
     best = 0
@@ -7828,7 +7982,8 @@ def show_kitesim(trace: Trace) -> None:
           f" the first patch within its {rules['patchReach']} yd fail reach, the catch or the spike's despawn; a raid"
           f" pass is\n  the spike nearer the gather than {rules['gatherClearance']:.0f} yd, or than its start less"
           f" {rules['startSlack']} yd; a patch on its next leg toward the gather after a\n  patch end or a catch is the"
-          " kite's hazard at its end; pred is the first pick as anub.kitepred:")
+          " kite's hazard at its end, and the planner counts a catch whose spike goes on to reach the\n  gather's"
+          " clearance as a raid pass at once; pred is the first pick as anub.kitepred:")
     print(f"  {'at':>9} {'kiter':14} {'step':>4} {'life':>5}  {'pred':12} {'replay':22} real")
     for row in rows:
         played = row["played"]
@@ -7883,7 +8038,8 @@ SECTIONS = (
      " dead to anything but the spike with its own immunity unused, kite tools spent off the mark, Demonic Circle"
      " teleports, his distance from the gather, each speed boost with the spike's speed and one on a spike no faster"
      " flagged, a kite's first boost against its pick's +boost@, the standby escort at the claim, the spike's next"
-     " leg past a patch after an own immunity or a patch end",
+     " leg past a patch after an own immunity or a patch end, the kiter closing 2+ s on a spike no faster than"
+     " itself",
      show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, each far grip's links"
@@ -7929,7 +8085,8 @@ SECTIONS = (
      show_healers),
     ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
      " before it, side tank area casts per surfaced phase and anub.saoe rows, each tank defensive cast with its"
-     " stack, each tank death with the damage and heals before it",
+     " stack, a tank form or stance lost while he was up with the act row that dropped it, each tank death with"
+     " the damage and heals before it",
      show_tanks),
     ("scarabs", "scarabs alive after each emerge and their targets, the main tank's Mandibles stack then, scarab"
      " lives per phase, Mandibles peak stack and damage per player per phase", show_scarabs),

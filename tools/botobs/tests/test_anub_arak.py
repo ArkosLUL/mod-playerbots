@@ -26,10 +26,11 @@ per phase and a pulled burrower's way back to a tank, with and without the new k
 replay's starts, each kite's anub.kitepred and anub.kitepath and its first hazard, a nineteenth each wave's focus
 pick per side, the side tanks' Expose Weakness and anub.p3wave, a twentieth each speed boost against the spike's
 speed and its pick's +boost@ second, the standby escort at the claim, the spike's next leg past a patch, the
-healers' phase 3 mana and mana cooldowns and the melee on a burrower no tank holds, the first one again phase 3's
-race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads empty on
-a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native test's
-cases that need no Hand, an own immunity only through Finish.
+healers' phase 3 mana and mana cooldowns and the melee on a burrower no tank holds, a twenty-first the kiter
+closing on a spike no faster than itself and a tank's form or stance lost while he is up, the first one again
+phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads
+empty on a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native
+test's cases that need no Hand.
 """
 from __future__ import annotations
 
@@ -4582,7 +4583,7 @@ def kite_patch(x: float, y: float, tank: bool) -> tuple:
     return (x, y, tank, not tank, False)
 
 
-# anubarak_planner_test.cpp's FirstKitesEndLate starts, 2026-10-31 BH and BI at 1:22
+# anubarak_planner_test.cpp's FirstKitesEndLate starts, 2026-10-31 BH, BI and BJ at 1:22
 FIRST_KITES = [
     ((774.2, 140.7), (763.5, 177.7), (775.1, 136.6),
      [kite_patch(787.5, 120.7, True), kite_patch(796.6, 140.6, True), kite_patch(748.1, 155.3, False),
@@ -4590,11 +4591,38 @@ FIRST_KITES = [
     ((764.4, 140.8), (736.9, 168.5), (767.8, 141.0),
      [kite_patch(775.8, 120.2, True), kite_patch(789.7, 142.5, True), kite_patch(752.8, 131.8, False),
       kite_patch(721.2, 115.7, False)]),
+    ((775.5, 134.1), (762.6, 170.9), (776.2, 136.5),
+     [kite_patch(785.6, 116.2, True), kite_patch(798.7, 136.5, True), kite_patch(761.5, 150.2, False),
+      kite_patch(748.1, 114.0, False)]),
 ]
 
 
-def fresh_world(kiter, spike, gather, patches, life: float = 59.5) -> ab.KiteWorld:
-    return ab.KiteWorld(kiter, (spike[0], spike[1], ab.SPIKE_SPEEDS[0], 0, ab.SPIKE_STEP_S), life, patches, gather)
+def fresh_world(kiter, spike, gather, patches, life: float = 59.5, own: bool = False) -> ab.KiteWorld:
+    return ab.KiteWorld(kiter, (spike[0], spike[1], ab.SPIKE_SPEEDS[0], 0, ab.SPIKE_STEP_S), life, patches, gather,
+                        own=own)
+
+
+def top_speed(world: ab.KiteWorld) -> ab.KiteWorld:
+    x, y, _, _, due = world.spike
+    return ab.KiteWorld(world.kiter, (x, y, ab.SPIKE_SPEEDS[-1], ab.SPIKE_LAST_STEP, due), world.life, world.patches,
+                        world.gather, own=world.own)
+
+
+def straight(world: ab.KiteWorld, heading, rules: dict, own: bool = False) -> ab.PlanCandidate:
+    """anubarak_planner_test.cpp's Straight: the kiter walking on along `heading` to the plan's end."""
+    out = ab.PlanCandidate("arc")
+    out.own, out.ending, out.track = own, "own" if own else "none", [world.kiter]
+    ab.planner_walk(world, rules, out.track, ab.planner_ticks(world, rules), ab.arc_mover(heading, 0.0, 0.0, rules))
+    return out
+
+
+def into(world: ab.KiteWorld, patch: int, rules: dict) -> ab.PlanCandidate:
+    """Into: the kiter walking straight onto the patch and standing there."""
+    out = ab.PlanCandidate("arc")
+    out.patch, out.turn_tick, out.ending, out.track = patch, 0, "patch", [world.kiter]
+    ab.planner_walk(world, rules, out.track, ab.planner_ticks(world, rules),
+                    ab.leg_mover([world.patches[patch][:2]]))
+    return out
 
 
 def outcome(**fields) -> ab.PlanOutcome:
@@ -4606,8 +4634,7 @@ def outcome(**fields) -> ab.PlanOutcome:
 
 
 class PlannerPort(unittest.TestCase):
-    """The kite planner's port against anubarak_planner_test.cpp's cases that need no Hand, an own immunity only
-    through Finish."""
+    """The kite planner's port against anubarak_planner_test.cpp's cases that need no Hand."""
 
     rules = ab.planner_rules()
 
@@ -4631,17 +4658,18 @@ class PlannerPort(unittest.TestCase):
                 ab.planner_rules.cache_clear()
 
     def test_a_first_kite_runs_to_a_late_patch(self):
-        # BI's ends on a catch: every ending on its south kite patch restarts the spike toward the gather past the
-        # other one, a kite hazard
-        for kiter, spike, gather, patches in FIRST_KITES[:1]:
+        # with no Hand to plan, BI's and BJ's patch ends pass the raid on the way
+        for (kiter, spike, gather, patches), raid_free in zip(FIRST_KITES, (True, False, False)):
             world = fresh_world(kiter, spike, gather, patches)
             candidate, out, kept = ab.plan_kite(world, self.rules)
             self.assertFalse(kept)
-            self.assertEqual((out.tank, out.kite, out.raid, out.caught, out.ending), (-1, -1, -1, False, "patch"))
+            self.assertEqual((out.tank, out.kite, out.caught, out.ending), (-1, -1, False, "patch"))
+            self.assertTrue(out.raid < 0 or not raid_free)
             self.assertGreaterEqual(out.end_s, 12.0)
             self.assertFalse(patches[candidate.patch][2])
             played = ab.kitesim_play(world, self.rules)
-            self.assertEqual((played["end"], played["planned"], played["raid"]), ("patch", True, None))
+            self.assertEqual((played["end"], played["planned"]), ("patch", True))
+            self.assertTrue(played["raid"] is None or not raid_free)
             self.assertGreaterEqual(played["s"], 12.0)
 
     def test_a_spike_restarted_by_a_tank_patch_is_a_tank_hazard_unless_led_out(self):
@@ -4695,18 +4723,80 @@ class PlannerPort(unittest.TestCase):
         crossed = ab.judge(walk, world([kite_patch(720.0, 135.0, False), kite_patch(760.0, 138.0, False)]), self.rules)
         self.assertEqual((crossed.ending, crossed.tank, crossed.kite), ("patch", -1, crossed.end_tick))
 
-    def test_an_own_immunity_costs_more_mid_life_and_its_leg_passing_a_tank_patch_is_a_tank_hazard(self):
+    def test_an_own_immunity_costs_more_mid_life_passes_the_raid_at_once_and_its_leg_past_a_tank_patch_counts(self):
         spike = (765.0, 135.0, ab.SPIKE_SPEEDS[2], 2, ab.SPIKE_STEP_S)
         mid = ab.KiteWorld((760.0, 135.0), spike, 40.0, [kite_patch(790.0, 145.0, True)], (800.0, 135.0))
         out = ab.planner_finish(mid, self.rules, ab.planner_ticks(mid, self.rules), 20, (758.0, 135.0), 5.0, -1, spike,
                                 own_used=True)
-        self.assertEqual((out.ending, out.caught, out.cost, out.tank, out.kite),
-                         ("own", False, self.rules["costOwnMid"], 20, -1))
+        self.assertEqual((out.ending, out.caught, out.cost, out.tank, out.kite, out.raid),
+                         ("own", False, self.rules["costOwnMid"], 20, -1, 0))
         self.assertAlmostEqual(out.end_gather, 42.0)
         late = ab.KiteWorld((760.0, 135.0), spike, 6.0, [], (800.0, 135.0))
         out = ab.planner_finish(late, self.rules, ab.planner_ticks(late, self.rules), 20, (758.0, 135.0), 5.0, -1,
                                 spike, own_used=True)
-        self.assertEqual((out.ending, out.cost, out.tank), ("own", self.rules["costOwn"], -1))
+        self.assertEqual((out.ending, out.cost, out.tank, out.raid), ("own", self.rules["costOwn"], -1, 0))
+
+    def test_a_catch_or_immunity_passes_the_raid_at_once_only_when_its_spike_reaches_the_gather_unspent(self):
+        base = (765.0, 135.0, ab.SPIKE_SPEEDS[0], 0, ab.SPIKE_STEP_S)
+        def finish(life: float, patches=(), **ending) -> ab.PlanOutcome:
+            world = ab.KiteWorld((760.0, 135.0), base, life, patches, (800.0, 135.0))
+            return ab.planner_finish(world, self.rules, ab.planner_ticks(world, self.rules), 20, (758.0, 135.0), 5.0,
+                                     -1, base, **ending)
+
+        self.assertEqual(finish(40.0, caught=True).raid, 0)
+        # 2 s left at 3.5 yd/s leaves it 28 yd off the gather
+        self.assertEqual(finish(4.0, own_used=True).raid, -1)
+        # a patch spent after the catch keeps the old raid reading
+        self.assertEqual(finish(40.0, [kite_patch(770.0, 140.0, False)], fail_tick=25, fail_patch=0,
+                                caught=True).raid, -1)
+
+    def test_no_immunity_on_a_slow_spike(self):
+        # 2026-11-01 BO at 1:22: the mage at the gather blocked a base speed spike 26 yd off before it got there
+        world = fresh_world((777.55, 134.34), (774.61, 108.63), (774.96, 134.17),
+                            [kite_patch(795.73, 119.19, True), kite_patch(792.11, 148.68, True),
+                             kite_patch(769.09, 166.66, False), kite_patch(730.44, 111.3, False)], 57.3, own=True)
+        world.spike = (*world.spike[:4], 6.9)
+        candidate, out, _ = ab.plan_kite(world, self.rules)
+        self.assertEqual((out.ending, candidate.own), ("patch", False))
+        self.assertGreaterEqual(out.end_s, 12.0)
+
+    def test_only_a_spike_faster_than_the_kiter_takes_its_own_immunity(self):
+        slow = fresh_world((745.0, 135.0), (745.0, 150.0), None, [], own=True)
+        walk = straight(slow, (0.0, 1.0), self.rules, own=True)
+        caught = ab.judge(walk, slow, self.rules)
+        self.assertEqual((caught.ending, caught.caught), ("none", True))
+        self.assertEqual(ab.judge(walk, top_speed(slow), self.rules).ending, "own")
+
+    def test_no_walk_into_a_slow_spike(self):
+        # 2026-11-01 BP at 2:04: a side tank walked into a base speed spike, the catch reading raid-free though the
+        # spike walks on into the gather. Running off passes the raid later, so it wins.
+        world = fresh_world((770.0, 130.0), (770.0, 157.0), (768.0, 130.0),
+                            [kite_patch(782.32, 114.76, True), kite_patch(795.69, 140.62, True)], 19.0)
+        _, out, _ = ab.plan_kite(world, self.rules)
+        self.assertGreaterEqual(out.end_s, 7.0)
+        self.assertGreater(out.raid, 0)
+        self.assertGreaterEqual(ab.kitesim_play(world, self.rules)["s"], 7.0)
+
+    def test_a_late_immunity_still_passes_the_raid(self):
+        # it costs least in the spike's last seconds, so it beats a patch passing the raid as early and loses to one
+        # that never does
+        with unittest.mock.patch.object(ab, "KITESIM_SLOW", 1.0):
+            world = top_speed(fresh_world((735.0, 135.0), (735.0, 165.0), (765.0, 135.0),
+                                          [kite_patch(720.0, 135.0, False)], 7.0, own=True))
+            own, patch = straight(world, (0.0, -1.0), self.rules, own=True), into(world, 0, self.rules)
+            own_away, patch_away = ab.judge(own, world, self.rules), ab.judge(patch, world, self.rules)
+            self.assertEqual((own_away.ending, own_away.raid, own_away.cost), ("own", 0, self.rules["costOwn"]))
+            self.assertEqual((patch_away.ending, patch_away.tank, patch_away.kite, patch_away.raid),
+                             ("patch", -1, -1, -1))
+            self.assertLess(ab.planner_compare(patch_away, own_away, self.rules), 0)
+
+            # the spike starts by the gather and passes it within its first second either way
+            world.gather = (742.0, 150.0)
+            own_near, patch_near = ab.judge(own, world, self.rules), ab.judge(patch, world, self.rules)
+            band = ab.to_tick(self.rules["hazardBandS"])
+            self.assertEqual(own_near.ending, "own")
+            self.assertTrue(0 <= own_near.raid < band and 0 <= patch_near.raid < band)
+            self.assertLess(ab.planner_compare(own_near, patch_near, self.rules), 0)
 
     def test_the_spike_step_reads_off_its_speed_and_times_the_next_off_the_restart(self):
         self.assertEqual(ab.spike_step(3.4, 0.5), (0, 6.5))
@@ -5215,6 +5305,118 @@ class NextLegPull(unittest.TestCase):
         self.assertEqual(ab.loose_burrower_time(self.trace), {NXANGRY: {"loose": 4000, "burrower": 6000}})
         self.assertIn("  melee bot seconds on a burrower no tank within 5 yd held, by anub.dps then: Angry 10.0 s"
                       " (burrower 6.0, loose 4.0)\n", self.text(ab.show_burrowers))
+
+
+CLBEAR, CLDK, CLPAL, CLWAR, CLFEL = range(9951, 9956)
+CLBOSS = CREATURE | 2101
+CLSPIKE = CREATURE | 2102
+SPELL_DIRE_BEAR, SPELL_FROST_PRESENCE, SPELL_RIGHTEOUS_FURY, SPELL_DEFENSIVE_STANCE = 9634, 48263, 25780, 71
+# Fel walks 2.5 s at a far spike and turns away 33.5 yd off it, walks back into it from 4.5 s for 3 s, and runs
+# from 10 s while it closes at top speed
+CLFEL_PATH = [(12000, 0.0, 0.0), (14500, -17.5, 0.0), (16500, -3.5, 0.0), (19500, -24.5, 0.0), (22000, -7.0, 0.0),
+              (25000, 14.0, 0.0)]
+CLSPIKE_PATH = [(12000, -59.75, 0.0), (22000, -24.75, 0.0), (25000, 9.375, 0.0)]
+
+
+def closing_snap(when: int) -> dict:
+    units = [[guid, X + 3.0 * index, Y + 20.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+             for index, guid in enumerate((CLBEAR, CLDK, CLPAL, CLWAR))]
+    units.append([CLFEL, *lerp(CLFEL_PATH, when), Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0])
+    units.append([CLBOSS, X, Y + 25.0, Z, 0.0, 60.0, 0.0, CLBEAR, 0, 0, 0, 0])
+    if 12000 <= when <= 25000:
+        units.append([CLSPIKE, *lerp(CLSPIKE_PATH, when), Z, 0.0, 100.0, 0.0, CLFEL, 1, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def closing_pull() -> list[dict]:
+    """A 25H pull, phase 2 from 10 s and P1b from 40 s. Fel's mark from 12 s closes on a base speed spike twice,
+    ending 33.5 yd off and then 9 yd off, and on the top speed spike. Bulwark's Righteous Fury drops at 3 s with no
+    act row and at his death at 50 s, Felesta's Frost Presence at 5 s for unholy presence with a PREREQ row too
+    early to count, a melee warrior's Defensive Stance at 6 s, and Ecoterrorist's Dire Bear Form while he is down
+    and at 45 s for caster form, run for anubarak innervate healer, 1.2 s before his death."""
+    def form(when: int, guid: int, spell: int, removed: bool) -> dict:
+        return aura(when, guid, spell, removed, guid)
+
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790600000000, "map": ab.MAP_TOC, "inst": 26, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": CLBEAR, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": CLDK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+                    {"g": CLPAL, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": CLWAR, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+                    {"g": CLFEL, "n": "Fel", "r": "ranged", "c": 9, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": CLBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 10000, "e": "unit", "g": CLSPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak", "b": 1},
+        *(note(when, CLBEAR, "anub.phase", value) for when, value in ((0, 1), (10000, 2), (40000, 1))),
+        *(aura(when, CLFEL, ab.SPELL_MARK, removed, CLSPIKE) for when, removed in ((12000, False), (25000, True))),
+        *(form(when, CLPAL, SPELL_RIGHTEOUS_FURY, removed) for when, removed in (
+            (0, False), (3000, True), (3500, False), (50000, True))),
+        {"t": 50002, "e": "death", "g": CLPAL, "killer": CLBOSS, "x": X, "y": Y, "z": Z},
+        *(form(when, CLDK, SPELL_FROST_PRESENCE, removed) for when, removed in (
+            (0, False), (5000, True), (8000, False))),
+        act(4900, CLDK, "anubarak innervate healer", "PREREQ"),
+        act(5003, CLDK, "unholy presence"),
+        *(form(when, CLWAR, SPELL_DEFENSIVE_STANCE, removed) for when, removed in ((0, False), (6000, True))),
+        *(form(when, CLBEAR, SPELL_DIRE_BEAR, removed) for when, removed in (
+            (0, False), (12000, True), (14000, False), (45000, True))),
+        act(12002, CLBEAR, "caster form"),
+        act(44700, CLBEAR, "frenzied regeneration"),
+        act(44998, CLBEAR, "frenzied regeneration", "USELESS"),
+        act(44999, CLBEAR, "anubarak innervate healer", "PREREQ"),
+        act(45002, CLBEAR, "caster form"),
+        {"t": 46200, "e": "death", "g": CLBEAR, "killer": CLBOSS, "x": X, "y": Y, "z": Z},
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [closing_snap(when) for when in range(-500, 60001, 500)]
+    return records
+
+
+class ClosingPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_26_anub-arak_1790600000.ndjson", closing_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace)
+        return out.getvalue()
+
+    def test_only_the_kiters_close_on_a_slow_spike_ending_near_it_counts(self):
+        [window] = ab.mark_windows(self.trace)
+        [span] = window["closing"]
+        self.assertEqual((span["start"], span["stop"], span["speeds"]), (16500, 19500, [ab.SPIKE_SPEEDS[0]]))
+        for field, value in (("from", 40.5), ("to", 9.0), ("kiter", 7.0)):
+            self.assertAlmostEqual(span[field], value)
+
+    def test_the_spike_section_prints_it_per_kite_and_summed(self):
+        text = self.text(ab.show_spike)
+        self.assertIn("            closed on a spike no faster than it from +4.5 s: 3.0 s, gap 40.5 to 9.0 yd, spike"
+                      " 3.5 yd/s, kiter 7.0 yd/s\n", text)
+        self.assertIn("  kiter closing on a spike no faster than itself for 2+ s, ending within 12 yd: 1 stretch(es),"
+                      " 3.0 s; Fel 0:16.500 3.0 s, gap 40.5 to 9.0 yd, spike 3.5 yd/s\n", text)
+
+    def test_a_tank_form_lost_while_he_is_up_reads_the_act_row_that_dropped_it(self):
+        self.assertEqual([(row["t"], row["guid"], row["spell"], row["phase"], (row["act"] or {}).get("a"),
+                           row["parent"], row["back"], row["died"]) for row in ab.form_drops(self.trace)],
+                         [(3000, CLPAL, SPELL_RIGHTEOUS_FURY, "P1", None, None, 3500, 50002),
+                          (5000, CLDK, SPELL_FROST_PRESENCE, "P1", "unholy presence", None, 8000, None),
+                          (45000, CLBEAR, SPELL_DIRE_BEAR, "P1b", "caster form", "anubarak innervate healer", None,
+                           46200)])
+
+    def test_the_tank_section_prints_each_one(self):
+        self.assertIn("\n  a tank's form or stance lost while he was up, deaths left out, with the act row within 0.5 s"
+                      " that dropped it:\n"
+                      "     0:03.000 Bulwark        P1    Righteous Fury   no OK act row within 0.5 s;"
+                      " back after 0.5 s\n"
+                      "     0:05.000 Felesta        P1    Frost Presence   by unholy presence; back after 3.0 s\n"
+                      "     0:45.000 Ecoterrorist   P1b   Dire Bear Form   by caster form, run for anubarak innervate"
+                      " healer; not back before its death 1.2 s later\n", self.text(ab.show_tanks))
 
 
 class EveryView(unittest.TestCase):

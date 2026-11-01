@@ -676,7 +676,10 @@ top speed by then). What it sees (`KiteWorldFor`):
 **Candidates:** at 16 headings, straight to the 40 yd ring or the 45 yd rim and round it either way,
 and arcs: 1.5 s straight, then turning −40, −24, −12, 0, 12, 24 or 40°/s, sliding along the rim the
 way they turn (0 runs the wall, the guide's run). Each ends `none`, `own` 0.6 s before the catch,
-`hand` 1 s before it (no catch counting under the Hand), or Hand then own. The 6 best shapes, and per
+`hand` 1 s before it (no catch counting under the Hand), or Hand then own; a Hand or own (`patch+hand`
+too) only on a spike faster than the kiter's planned pace at the catch, else it stays a catch (user
+call, 2026-11-01: the claim never lands one on a slower spike, BO 4:05 Fel walked into a 6.1 yd/s
+spike for a planned `patch+hand` and died). The 6 best shapes, and per
 usable patch the 3 passing within 15 yd of it latest, also turn into a patch at each second: `in`,
 `edge0`, `edge1` (the tangent of the 8.5 yd ring, the patch on the left or right, then 15 yd on) in
 the last 6 s before the shape's catch or fail, `in` every 2 s back to 15 s; and `patch+hand`, the
@@ -691,6 +694,12 @@ after a patch it restarts at base speed from where it failed once the 4 s idle i
 gather either way, as far as its life lets it. A tank patch or another usable kite patch within 11.5 yd
 of that leg is a tank or kite hazard at the kite's end (2026-10-31 BM: two Vanishes handed a top speed
 spike over side 1's tank patch, then its kite patch; BL: a restart from #577 spent #576 3.1 s in).
+An own ending or a catch (a run still going at the horizon included, a patch fail excepted) whose leg
+reaches the gather's clearance passes the raid at once, row 3 at 0 s, a late immunity too (user call,
+2026-11-01: the spike marks someone next, mostly at the gather). Counted only up to the kite's end,
+BO and BP's immunities went out 1.5-3.6 s in on 3.5 yd/s spikes 25-35 yd off, and BP 2:04 Felesta
+walked into one, 6 Impales; replayed over 169 kites of 24 25H traces, fresh catches 50 → 43, patch
+ends 28 → 35.
 
 **Order**, the first difference wins, seconds in 1 s bands:
 
@@ -732,8 +741,9 @@ so the claim, the escort and the dodge still read its catch.
 Why (2026-10-31 BH, BI, BJ): the lane step and ring commit before it judged the spike's pass only
 against tank patches, so over BF-BJ 13 of 39 kites ended 1-9 s in on a patch nobody turned to (9 kite,
 4 tank), the kite patches 8-22 yd off the centre, where a base-speed spike cuts inside the 40 yd ring.
-Replayed closed loop at 0.3 s (nativetest), BH, BI and BJ 1:22 end on a kite patch 14.2, 14.5 and
-13.7 s in, no raid pass (BJ under a Hand from 4.6 s); they spent one at 7.9, 8.7 and 4.6. Over the 49
+Replayed closed loop at 0.3 s (nativetest), BH, BI and BJ 1:22 end on a kite patch 13.7, 14.0 and
+14.8 s in, BJ passing the raid at 7.2 s (its raid-free way needs a Hand on the base-speed spike); they
+spent one at 7.9, 8.7 and 4.6. Over the 49
 25H traces on disk (`--kitesim`, no Hands or own immunities), of 161 fresh-spike kites the real ones
 ended on a patch under 10 s 29 times and passed a tank patch 46 and the raid 95; the replay 2, 2
 (both from starts where every path passed a tank patch) and 15, its patch ends 13.2 s or later
@@ -745,6 +755,13 @@ tank patches lost, BN …483135 wipe P3 7:35 15.4%): fresh kites ended on a kite
 `--kitesim` matching (BK median 14.5 against 14.3), no bot kite passing a tank patch, patch ends under
 10 s 1, 2, 0, 0. Own immunities ended 8 kites at 13-18 s, 6 with 15+ s of life left; speed boosts went
 3 times on base-speed spikes; 13 kites planned a Hand, 2 landed; main tanks died 26-51 s into phase 3.
+
+Baseline 2026-11-01, 25H on refine-20 (`ce5fdfc39`; Ecoterrorist a bot; BO …524813 wipe P1c 6:04
+35.7%, side tank Felesta dead 2:54 to burrowers at 9 Expose Weakness, main tank 5:23; BP …525315 P1c
+ended at 30.4%, wipe P3 7:44 25.9%, P2c with no kite patch): fresh kites ended on a kite patch
+13.5-17.3 s in or `patch+hand` 18.6-21.3, no tank patch spent, no next leg past a patch, 5 Hands cast
+0.0 s after the claim; 4 of 5 own immunities 1.5-3.6 s in on base-speed spikes, BP Felesta's walk-in,
+BO Fel's refused Hand.
 
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
@@ -847,7 +864,9 @@ hands went out 0.2 s into a kite on a 3.5 yd/s spike. **The kiter's own**: its p
 before the catch, its planned immunity 0.6 s before or at once at 50% health (V Justice died 8.6 s
 into an `own` kite to 11 Mandibles stacks from escorting, 17.3k a tick), a non-paladin's behind its
 Hand with 0.8 s of the hand left (cast after, Impale's next tick can land first: P Nightwarrior), or
-0.6 s before the catch as the failed plan's last resort with no claim. Only Hand of Protection keeps
+0.6 s before the catch as the failed plan's last resort with no claim, that one only on a spike at
+least as fast as the kiter or at 50% health or lower (BP 1:58 Justice's Divine Shield after one Impale
+from a 3.5 yd/s spike). Only Hand of Protection keeps
 the spike on it; the others, like a death, hand it on at its current speed, so a paladin takes Divine
 Shield only with no patch ending ahead and the emerge over 10 s off, or for an `own` plan.
 
@@ -952,7 +971,9 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
 - **Burst** (`ToCAnubarakBurstWindow`): in `Swarm` lust and the rest open once those burrowers are dead,
   15 s at most (AA's Heroism spent 21 of its 40 s on wave 6). Before it the rest wait from his 40%,
   released while he is behind: at his health loss since he came up (`surfacedHpPct`), 30% falls later
-  than 5 s before the submerge.
+  than 5 s before the submerge. Heroism waits for phase 3 even then (user call, 2026-11-01): reaching
+  phase 3 before the third submerge needs about 70% in three phase 1s, a coin flip decided by P1b's
+  boss damage (BK 90k/s, BN 79, BP 72, BO 66; BN made it by 0.1 s, BP missed by 0.4%, about 1.4 s).
 - **At risk** (`NextColdTick`): a Penetrating Cold carrier whose health plus frost absorbs at its next
   tick, after the swarm ticks before it (30% of current health each, 250 minimum, absorbs first),
   leaves 250 or less after that tick (`GetAmount()` × its frost damage taken, 0 when immune). No tick
@@ -1016,10 +1037,11 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   later, Elemena 55% to 3-11%, the class Divine Plea firing twice in 7 min. At `ACTION_MEDIUM_HEAL + 6`,
   heroic, unmarked: `anubarak divine plea` for a healer paladin bot under 80% mana, not in `Swarm`, no
   tank or carrier under 50% (it halves healing 15 s); `anubarak innervate healer` (every phase) for a
-  druid bot, Innervate ready, on the healer in reach and sight with the least mana but itself, under
-  50% and under its own, from caster form. `anubarak self innervate guard` blocks the class
-  `innervate` while another healer has less mana: it blocks the class `innervate on healer` too, which
-  casts under that name.
+  druid bot but a tank, Innervate ready, on the healer in reach and sight with the least mana but
+  itself, under 50% and under its own, from caster form (BO 5:22.4: the bot bear main tank dropped
+  Dire Bear Form for it, took 57.6k and died 5 s later). `anubarak self innervate guard` blocks the
+  class `innervate` for a druid tank always, else while another healer has less mana: it blocks the
+  class `innervate on healer` too, which casts under that name.
 - The guide's Fortitude and Commanding Shout cancel is skipped (user call): about 0.2% of his health,
   once.
 
@@ -1306,9 +1328,13 @@ and each side tank's fate. `--kitesim` (25H) the planner ported (its `Rules` rea
 missing one refused) replayed from each bot kite's start (spike step off its measured speed, patches
 by kind off the latches, the gather as formed 10 s into the submerge, life from the submerge, 7 yd/s,
 the world frozen at the start; no Hands, own immunities, speed boosts or bystanders; the next leg
-ported), closed loop as the native
-test's: per kite the first pick as `kitepred`, the replay's end and the real one, raid and tank
-passes; for fresh-spike kites patch ends under 10 s, tank and raid passes. `--spheres`
+and the hand-on raid pass ported, the own immunity's faster-spike rule only in its tests), closed loop
+as the native test's: per kite the first pick as `kitepred`, the replay's end and the real one, raid
+and tank passes; for fresh-spike kites patch ends under 10 s, tank and raid passes. `--spike` per kite
+the kiter closing 2+ s on a spike no faster than itself (its speed within 1 s), ending within 12 yd,
+with the gap, summed per pull. `--tanks` a tank form or stance (Dire Bear, Bear, Defensive Stance,
+Righteous Fury, Frost Presence) lost while he is up and not at a death, with the `act` row and
+prerequisite that dropped it and when it came back. `--spheres`
 heroic, per submerge each kite sphere downed from 30 s before he went down, its spend and the kite it
 ended, under 15 s in flagged, a spike that came up with no kite patch down flagged, the kite patches on
 the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows. `--threat` when the submerge drag left. `--healers` also the main tank's seconds with no healer within 40 yd.

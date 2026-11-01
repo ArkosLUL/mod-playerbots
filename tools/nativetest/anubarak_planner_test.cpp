@@ -130,7 +130,8 @@ Played Play(KiteWorld w, Rules const& r = Rules())
     return out;
 }
 
-// 2026-10-31 BH, BI and BJ at 1:22: each first kiter spent a kite patch in 4.6-8.7 s while running the ring
+// 2026-10-31 BH, BI and BJ at 1:22: each first kiter spent a kite patch in 4.6-8.7 s while running the ring.
+// BJ's only raid-free way needs a Hand on a catch by the base speed spike, which never lands.
 void FirstKitesEndLate()
 {
     struct Start
@@ -139,18 +140,22 @@ void FirstKitesEndLate()
         Point spike;
         Point gather;
         std::vector<Patch> patches;
+        bool raidFree;
     };
 
     std::vector<Start> const starts = {
         {{774.2f, 140.7f}, {763.5f, 177.7f}, {775.1f, 136.6f},
          {MakePatch(787.5f, 120.7f, true, 1), MakePatch(796.6f, 140.6f, true, 2), MakePatch(748.1f, 155.3f, false, 3),
-          MakePatch(747.0f, 113.2f, false, 4)}},
+          MakePatch(747.0f, 113.2f, false, 4)},
+         true},
         {{764.4f, 140.8f}, {736.9f, 168.5f}, {767.8f, 141.0f},
          {MakePatch(775.8f, 120.2f, true, 1), MakePatch(789.7f, 142.5f, true, 2), MakePatch(752.8f, 131.8f, false, 3),
-          MakePatch(721.2f, 115.7f, false, 4)}},
+          MakePatch(721.2f, 115.7f, false, 4)},
+         true},
         {{775.5f, 134.1f}, {762.6f, 170.9f}, {776.2f, 136.5f},
          {MakePatch(785.6f, 116.2f, true, 1), MakePatch(798.7f, 136.5f, true, 2), MakePatch(761.5f, 150.2f, false, 3),
-          MakePatch(748.1f, 114.0f, false, 4)}},
+          MakePatch(748.1f, 114.0f, false, 4)},
+         false},
     };
 
     for (Start const& start : starts)
@@ -158,12 +163,13 @@ void FirstKitesEndLate()
         KiteWorld const w = Heroic(start.kiter, start.spike, start.gather, start.patches);
         Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
         CHECK(plan.valid);
-        CHECK(Clean(plan.outcome));
+        CHECK(plan.outcome.tankS < 0.0f && plan.outcome.kiteS < 0.0f);
+        CHECK(!start.raidFree || plan.outcome.raidS < 0.0f);
         CHECK(plan.outcome.ending == Ending::Patch || plan.outcome.ending == Ending::PatchHand);
         CHECK(plan.outcome.endS >= 12.0f);
 
         Played const played = Play(w);
-        CHECK(!played.caught && !played.raidPass);
+        CHECK(!played.caught && (!start.raidFree || !played.raidPass));
         CHECK(played.patch >= 0 && !w.patches[static_cast<size_t>(played.patch)].tank);
         CHECK(played.endS >= 12.0f);
     }
@@ -401,7 +407,8 @@ void OwnCostsByLifeLeft()
     CHECK(std::fabs(late.cost - r.costOwn) < 0.01f);
 }
 
-// The spike's leg after the kite heads for the gather: a patch on it is the kite's hazard
+// The spike's leg after the kite heads for the gather: a patch on it is the kite's hazard, and after an
+// immunity reaching the gather is a raid pass at once
 void NextLegPassesCount()
 {
     Rules const r;
@@ -418,7 +425,8 @@ void NextLegPassesCount()
     AnubarakKitePlanner::Detail::Walk(own.track, AnubarakKitePlanner::Detail::Ticks(w, r), w.pace, w, r,
                                       AnubarakKitePlanner::Detail::ArcStep{{-1.0f, 0.0f}, 0.0f, 0.0f, &r});
     Outcome const clear = AnubarakKitePlanner::Judge(own, w, r);
-    CHECK(clear.ending == Ending::Own && Clean(clear));
+    CHECK(clear.ending == Ending::Own && clear.tankS < 0.0f && clear.kiteS < 0.0f);
+    CHECK(clear.raidS == 0.0f);
 
     w.patches.push_back(MakePatch(790.0f, 145.0f, true, 1));
     Outcome const tank = AnubarakKitePlanner::Judge(own, w, r);
@@ -447,6 +455,125 @@ void NextLegPassesCount()
     Outcome const kite = AnubarakKitePlanner::Judge(in, patch, r);
     CHECK(kite.ending == Ending::Patch);
     CHECK(kite.kiteS >= 0.0f && std::fabs(kite.kiteS - kite.endS) < 0.01f);
+}
+
+// The kiter walking straight on along dir to the end of the plan
+Candidate Straight(KiteWorld const& w, Point dir, Rules const& r)
+{
+    Candidate c;
+    c.track.push_back(w.kiter);
+    AnubarakKitePlanner::Detail::Walk(c.track, AnubarakKitePlanner::Detail::Ticks(w, r), w.pace, w, r,
+                                      AnubarakKitePlanner::Detail::ArcStep{dir, 0.0f, 0.0f, &r});
+    return c;
+}
+
+// The kiter walking straight onto patch p and standing there
+Candidate Into(KiteWorld const& w, int p, Rules const& r)
+{
+    Candidate c;
+    c.patch = p;
+    c.turnTick = 0;
+    c.ending = Ending::Patch;
+    c.track.push_back(w.kiter);
+    std::vector<Point> const legs = {w.patches[static_cast<size_t>(p)].pos};
+    AnubarakKitePlanner::Detail::Walk(c.track, AnubarakKitePlanner::Detail::Ticks(w, r), w.pace, w, r,
+                                      AnubarakKitePlanner::Detail::LegStep{&legs, 0});
+    return c;
+}
+
+// 2026-11-01 BO at 1:22: the mage at the gather blocked a base speed spike 26 yd off before it got there, though
+// the spike walks on into the gather. A kite patch late in the life wins.
+void NoImmunityOnASlowSpike()
+{
+    KiteWorld w = Heroic({777.55f, 134.34f}, {774.61f, 108.63f}, {774.96f, 134.17f},
+                         {MakePatch(795.73f, 119.19f, true, 1), MakePatch(792.11f, 148.68f, true, 2),
+                          MakePatch(769.09f, 166.66f, false, 3), MakePatch(730.44f, 111.3f, false, 4)});
+    w.lifeS = 57.3f;
+    w.spike.nextStepS = 6.9f;
+    w.own = true;
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plan.valid);
+    CHECK(plan.outcome.ownS < 0.0f);
+    CHECK(plan.outcome.ending == Ending::Patch || plan.outcome.ending == Ending::PatchHand);
+    CHECK(plan.outcome.endS >= 12.0f);
+}
+
+// Walked into, a spike the kiter outruns is a plain catch: a Hand or immunity only on one faster than the kiter
+void OnlyAFastSpikeTakesAHandOrImmunity()
+{
+    Rules const r;
+    KiteWorld w = Heroic({745.0f, 135.0f}, {745.0f, 150.0f}, {745.0f, 135.0f}, {});
+    w.gather = false;
+    w.own = true;
+    Candidate own = Straight(w, {0.0f, 1.0f}, r);
+    own.own = true;
+    own.ending = Ending::Own;
+    Candidate hand = own;
+    hand.own = false;
+    hand.hand = true;
+    hand.ending = Ending::Hand;
+
+    Outcome const slowOwn = AnubarakKitePlanner::Judge(own, w, r);
+    Outcome const slowHand = AnubarakKitePlanner::Judge(hand, w, r);
+    CHECK(slowOwn.caught && slowOwn.ownS < 0.0f && slowOwn.ending == Ending::None);
+    CHECK(slowHand.caught && slowHand.handS < 0.0f && slowHand.ending == Ending::None);
+
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    CHECK(AnubarakKitePlanner::Judge(own, w, r).ending == Ending::Own);
+    CHECK(AnubarakKitePlanner::Judge(hand, w, r).ending == Ending::Hand);
+}
+
+// 2026-11-01 BP at 2:04: a side tank walked into a base speed spike, the catch reading raid-free though the
+// spike walks on into the gather. Running off passes the raid later, so it wins.
+void NoWalkIntoASlowSpike()
+{
+    KiteWorld w = Heroic({770.0f, 130.0f}, {770.0f, 157.0f}, {768.0f, 130.0f},
+                         {MakePatch(782.32f, 114.76f, true, 1), MakePatch(795.69f, 140.62f, true, 2)});
+    w.lifeS = 19.0f;
+    w.hands.clear();
+    w.spareHands = 0;
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plan.valid);
+    CHECK(plan.outcome.endS >= 7.0f);
+    CHECK(plan.outcome.raidS > 0.0f);
+
+    Played const played = Play(w);
+    CHECK(played.endS >= 7.0f);
+}
+
+// An immunity in the spike's last seconds costs least, but its raid pass still counts: it beats a patch passing
+// the raid as early, and loses to one that never does
+void LateImmunityStillPassesTheRaid()
+{
+    Rules const r;
+    KiteWorld w = Heroic({735.0f, 135.0f}, {735.0f, 165.0f}, {765.0f, 135.0f}, {MakePatch(720.0f, 135.0f, false, 1)});
+    w.slowFactor = 1.0f;
+    w.hands.clear();
+    w.spareHands = 0;
+    w.own = true;
+    w.lifeS = 7.0f;
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Candidate own = Straight(w, {0.0f, -1.0f}, r);
+    own.own = true;
+    own.ending = Ending::Own;
+    Candidate const in = Into(w, 0, r);
+
+    Outcome const ownAway = AnubarakKitePlanner::Judge(own, w, r);
+    Outcome const patchAway = AnubarakKitePlanner::Judge(in, w, r);
+    CHECK(ownAway.ending == Ending::Own && ownAway.raidS == 0.0f);
+    CHECK(std::fabs(ownAway.cost - r.costOwn) < 0.01f);
+    CHECK(patchAway.ending == Ending::Patch && Clean(patchAway));
+    CHECK(AnubarakKitePlanner::Compare(patchAway, ownAway, r) < 0);
+
+    // The spike starts by the gather and passes it within its first second either way
+    w.gatherPos = {742.0f, 150.0f};
+    Outcome const ownNear = AnubarakKitePlanner::Judge(own, w, r);
+    Outcome const patchNear = AnubarakKitePlanner::Judge(in, w, r);
+    CHECK(ownNear.ending == Ending::Own && ownNear.raidS >= 0.0f && ownNear.raidS < r.hazardBandS);
+    CHECK(patchNear.ending == Ending::Patch && patchNear.raidS >= 0.0f && patchNear.raidS < r.hazardBandS);
+    CHECK(AnubarakKitePlanner::Compare(ownNear, patchNear, r) < 0);
 }
 
 // Four usable patches, Hands, an own immunity and a ready boost: the candidates stay bounded
@@ -484,6 +611,10 @@ int main()
     NoBoostOnASlowSpike();
     OwnCostsByLifeLeft();
     NextLegPassesCount();
+    NoImmunityOnASlowSpike();
+    OnlyAFastSpikeTakesAHandOrImmunity();
+    NoWalkIntoASlowSpike();
+    LateImmunityStillPassesTheRaid();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;
