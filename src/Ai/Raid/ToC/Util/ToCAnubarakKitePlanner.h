@@ -157,7 +157,6 @@ struct Rules
     float fastS = 6.0f;
     // A ready boost fires once a spike faster than the kiter's run comes this close
     float boostRange = 15.0f;
-    float costBoost = 0.5f;
     // An immunity hands the spike on at its speed, so it costs costOwnMid unless the spike's life is
     // nearly out by then
     float ownLateS = 6.0f;
@@ -715,10 +714,7 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
         out.cost += w.lifeS - out.endS <= r.ownLateS ? r.costOwn : r.costOwnMid;
 
     if (end.boostTick >= 0 && end.boostTick <= end.endTick)
-    {
         out.boostS = static_cast<float>(end.boostTick) * TICK_S;
-        out.cost += r.costBoost;
-    }
 
     if (w.heroic && w.gather && !spent && (end.ownUsed || out.caught) && HandedOnToGather(out, end, w, r))
         out.raidS = 0.0f;
@@ -859,6 +855,10 @@ inline int Compare(Outcome const& a, Outcome const& b, Rules const& r, int rows 
     float const endB = Detail::Band(b.endS, r.endBandS);
     if (endA != endB)
         return endA > endB ? -1 : 1;
+
+    // A boost costs nothing but its cooldown: kept unless it ends the kite later, so it's there next submerge
+    if ((a.boostS >= 0.0f) != (b.boostS >= 0.0f))
+        return a.boostS < 0.0f ? -1 : 1;
 
     if (a.endGather >= 0.0f && b.endGather >= 0.0f)
     {

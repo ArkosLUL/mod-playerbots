@@ -115,12 +115,12 @@ bool AnubarakKiteSprintKept(PlayerbotAI* botAI)
 }
 
 // Heroic: a marked druid shifts to Cat Form for Dash, and its spec's form trigger would shift it straight
-// back and end the Dash
+// back and end the Dash. Once Dash is spent that trigger takes it back to its own form.
 bool AnubarakKiteCatHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && bot->getClass() == CLASS_DRUID &&
-           bot->HasAura(SPELL_MARK) && bot->GetShapeshiftForm() == FORM_CAT;
+           bot->HasAura(SPELL_MARK) && bot->GetShapeshiftForm() == FORM_CAT && AnubarakDashRunningOrReady(bot);
 }
 
 void DefineAnubarak(EncounterBuilder& e)
@@ -156,6 +156,9 @@ void DefineAnubarak(EncounterBuilder& e)
             {"reach melee", "reach spell", "reach party member to heal"});
     // healers hold their stand while he is up; reach still walks one to a heal target out of range
     e.Block("anubarak healer stand hold", Role::Heal, AnubarakHealerStandApplies,
+            Family::CombatFormationMove | Family::Follow);
+    // heroic phase 3: the ranged hold theirs behind the tank patches; reach still walks one to its target
+    e.Block("anubarak ranged stand hold", Role::Ranged, AnubarakRangedStandApplies,
             Family::CombatFormationMove | Family::Follow);
     // the escort keeps the kiter in Hand of Protection's reach, whatever its target or heal target
     e.Block("anubarak hop escort hold", Role::Any, IsAnubarakEscort,

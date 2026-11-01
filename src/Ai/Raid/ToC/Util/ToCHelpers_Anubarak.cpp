@@ -663,8 +663,10 @@ struct AnubarakState
     // Per melee DPS bot and burrower: over ANUBARAK_MELEE_AREA_CAP of its side tank's threat
     std::map<std::pair<ObjectGuid, ObjectGuid>, bool> burrowerAreaCaps;
     std::unordered_map<ObjectGuid, ThreatCapLatch> sideBossCaps;
-    // Heroic phase 3: the healers' stands behind the tank patches, and who has set off for one
+    // Heroic phase 3: the healers' and ranged DPS bots' stands behind the tank patches, and which healers
+    // have set off for theirs
     bool behindSet = false;
+    uint32 behindTriedMs = 0;
     std::map<ObjectGuid, Position> behindStands;
     std::unordered_set<ObjectGuid> behindGone;
     // Heroic phase 3: each healer bot's duty, and the Penetrating Cold carrier at risk each one keeps up
@@ -1684,6 +1686,10 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
         state->submergedMs = now;
         state->submergePosValid = true;
         state->submergePos = boss->GetPosition();
+        // a phase 1 after this one walks the healers behind again, one at a time
+        state->behindSet = false;
+        state->behindStands.clear();
+        state->behindGone.clear();
     }
 
     // Hit rows on spheres say who downed each one, the pet or the splash. Asked again on every phase
@@ -7778,21 +7784,36 @@ bool AnubarakHealerStandApplies(PlayerbotAI* botAI) { return botAI && HealerStan
 
 // Heroic keeps spawning burrowers in phase 3 and they go for the healers. Behind the tank patches the
 // straight line from a burrow exit to a healer crosses a patch's slow, where a burrower crawls at 20% and
-// its side tank takes it first. Exits read off the traces. The floor behind the east patches is
-// navprobe-clean out to 70 yd from the room centre.
+// its side tank takes it first. Exits read off the traces. Per navprobe the floor east of the tank patches
+// is flat to 32 yd past their midpoint, then rises in the south-east.
 constexpr float ANUBARAK_BURROW_EXITS[][2] = {{740.2f, 193.4f}, {694.5f, 185.4f}, {732.0f, 83.4f}, {694.9f, 102.5f}};
-// The move starts in the last phase 1 from his 35%, one healer at a time, none setting off with a tank
-// under 50%: healers can't cast while they walk
+// Healers set off in a phase 1 from his 35%, one at a time, none with a tank under 50%: they can't cast
+// while they walk. The ranged DPS bots go all at once in phase 3.
 constexpr float ANUBARAK_BEHIND_FROM_PCT = 35.0f;
 constexpr float ANUBARAK_BEHIND_TANK_LOW_PCT = 50.0f;
-constexpr float ANUBARAK_BEHIND_DEPTHS[] = {10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f, 22.0f, 24.0f};
+// From the tank patches' midpoint, away from the exits. Deepest first: a burrower pulled off its side
+// tank has the longest walk there.
+constexpr float ANUBARAK_BEHIND_DEPTHS[] = {10.0f, 12.0f, 14.0f, 16.0f, 18.0f, 20.0f,
+                                            22.0f, 24.0f, 26.0f, 28.0f, 30.0f, 32.0f};
 constexpr float ANUBARAK_BEHIND_SIDEWAYS[] = {0.0f, 3.0f, -3.0f, 6.0f, -6.0f, 9.0f, -9.0f, 12.0f, -12.0f};
+// A healer this close to him still heals the melee Penetrating Cold carriers; a ranged bot keeps him in
+// spell range less a margin
+constexpr float ANUBARAK_BEHIND_HEALER_BOSS_REACH = 32.0f;
+constexpr float ANUBARAK_BEHIND_RANGED_BOSS_REACH = 28.0f;
+// The deepest stands sit right at those reaches, so a held one is kept this much past them, or every
+// tank step would move a healer, and it can't cast while it walks
+constexpr float ANUBARAK_BEHIND_KEEP_SLACK = 3.0f;
+constexpr uint32 ANUBARAK_BEHIND_RETRY_MS = 1000;
 
 struct BehindSlot
 {
     Position pos;
-    uint8 crossings;
-    float toMainTank;
+    uint8 crossings = 0;
+    float depth = 0.0f;
+    bool healerFits = false;
+    // OnFloor asked once per slot: -1 not yet
+    int8 floor = -1;
+    Position valid;
 };
 
 // Exit lines through a tank patch's slow
@@ -7811,29 +7832,73 @@ static uint8 BehindCrossings(Position const& at, std::vector<Position> const& ta
     return crossings;
 }
 
-// Off every patch and within reach of the main tank and both side tanks
-static bool BehindReachable(Player* bot, AnubarakState const& state, Position const& at,
-                            std::vector<Position> const& patches)
+static bool OffPatches(Position const& at, std::vector<Position> const& patches)
 {
-    if (std::any_of(patches.begin(), patches.end(), [&at](Position const& patch)
-                    { return Dist2d(at, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; }))
+    return std::none_of(patches.begin(), patches.end(), [&at](Position const& patch)
+                        { return Dist2d(at, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
+}
+
+// Within reach of him, the main tank and both side tanks, plus slack
+static bool HealerBehindFits(Player* bot, AnubarakState const& state, Creature* boss, Position const& at,
+                             float slack = 0.0f)
+{
+    if (Dist2d(at, boss->GetPosition()) > ANUBARAK_BEHIND_HEALER_BOSS_REACH + slack)
         return false;
 
     for (ObjectGuid const& guid : {state.mainTank, state.sideTanks[0], state.sideTanks[1]})
     {
         Player* tank = guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
-        if (tank && tank->IsAlive() && Dist2d(at, tank->GetPosition()) > ANUBARAK_HEALER_MAIN_TANK_REACH)
+        if (tank && tank->IsAlive() && Dist2d(at, tank->GetPosition()) > ANUBARAK_HEALER_MAIN_TANK_REACH + slack)
             return false;
     }
 
     return true;
 }
 
-// A stand per healer by guid behind the tank patches, the most exit lines crossed first, then the nearest
-// the main tank, kept 3 yd apart and on the floor. A healer with none keeps its usual stand.
-static void AssignBehindStands(Player* bot, AnubarakState& state, std::vector<ObjectGuid> const& healers)
+static bool BehindRanged(Player* player)
 {
-    state.behindStands.clear();
+    return PlayerbotAI::IsRangedDps(player) && !PlayerbotAI::IsHeal(player) && !IsAnubarakTankPlayer(player);
+}
+
+// Stands behind the tank patches for the healer bots by guid, then in phase 3 the ranged DPS bots by guid,
+// those within heal reach of every healer stand. Held stands stay. A bot without one takes the slot with
+// the most exit lines crossed, then the deepest, 3 yd off every other stand and on the floor, or keeps
+// its usual stand when none is left.
+static void AssignBehindStands(Player* bot, AnubarakState& state, Creature* boss)
+{
+    std::vector<ObjectGuid> healers;
+    std::vector<ObjectGuid> ranged;
+    bool const swarm = state.phaseValue == AnubarakPhase::Swarm;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
+            healers.push_back(member->GetGUID());
+        else if (swarm && member->IsAlive() && GET_PLAYERBOT_AI(member) && BehindRanged(member))
+            ranged.push_back(member->GetGUID());
+
+        return false;
+    });
+
+    std::sort(healers.begin(), healers.end());
+    std::sort(ranged.begin(), ranged.end());
+    std::vector<Position> taken;
+    std::vector<Position> healerStands;
+    for (auto it = state.behindStands.begin(); it != state.behindStands.end();)
+    {
+        bool const healer = std::binary_search(healers.begin(), healers.end(), it->first);
+        if (!healer && !std::binary_search(ranged.begin(), ranged.end(), it->first))
+        {
+            it = state.behindStands.erase(it);
+            continue;
+        }
+
+        taken.push_back(it->second);
+        if (healer)
+            healerStands.push_back(it->second);
+
+        ++it;
+    }
+
     std::vector<Position> tankPatches;
     for (uint8 side = 0; side < 2; ++side)
         if (Creature* patch = LatchedTankPatch(bot, state, side))
@@ -7868,44 +7933,90 @@ static void AssignBehindStands(Player* bot, AnubarakState& state, std::vector<Ob
 
     away = {away.x / length, away.y / length};
     Vec2 const sideways = {-away.y, away.x};
-    Player* mainTank = state.mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.mainTank);
     std::vector<Position> const patches = PatchPositions(bot, state);
     std::vector<BehindSlot> slots;
     for (float depth : ANUBARAK_BEHIND_DEPTHS)
         for (float off : ANUBARAK_BEHIND_SIDEWAYS)
         {
-            Position const raw = Offset(Offset(mid, away, depth), sideways, off);
-            uint8 const crossings = BehindCrossings(raw, tankPatches);
-            if (crossings && BehindReachable(bot, state, raw, patches))
-                slots.push_back({raw, crossings, mainTank ? Dist2d(raw, mainTank->GetPosition()) : 0.0f});
+            BehindSlot slot;
+            slot.pos = Offset(Offset(mid, away, depth), sideways, off);
+            slot.crossings = BehindCrossings(slot.pos, tankPatches);
+            slot.depth = depth;
+            if (!slot.crossings || !OffPatches(slot.pos, patches))
+                continue;
+
+            slot.healerFits = HealerBehindFits(bot, state, boss, slot.pos);
+            slots.push_back(slot);
         }
 
     std::stable_sort(slots.begin(), slots.end(), [](BehindSlot const& a, BehindSlot const& b)
                      {
                          if (a.crossings != b.crossings)
                              return a.crossings > b.crossings;
-                         return a.toMainTank < b.toMainTank;
+                         return a.depth > b.depth;
                      });
 
-    std::vector<Position> taken;
-    auto slot = slots.begin();
-    for (ObjectGuid const& healer : healers)
-        for (; slot != slots.end(); ++slot)
+    auto const take = [&](ObjectGuid const& guid, auto const& fits)
+    {
+        if (state.behindStands.count(guid))
+            return;
+
+        for (BehindSlot& slot : slots)
         {
-            Position valid;
-            if (std::any_of(taken.begin(), taken.end(), [&](Position const& other)
-                            { return Dist2d(other, slot->pos) < ANUBARAK_GATHER_SPREAD; }) ||
-                !OnFloor(bot, slot->pos, valid))
+            if (!fits(slot) || std::any_of(taken.begin(), taken.end(), [&](Position const& other)
+                                           { return Dist2d(other, slot.pos) < ANUBARAK_GATHER_SPREAD; }))
                 continue;
 
-            taken.push_back(valid);
-            state.behindStands[healer] = valid;
-            ++slot;
-            break;
+            if (slot.floor < 0)
+                slot.floor = OnFloor(bot, slot.pos, slot.valid) ? 1 : 0;
+
+            if (slot.floor)
+            {
+                taken.push_back(slot.valid);
+                state.behindStands[guid] = slot.valid;
+                return;
+            }
         }
+    };
+
+    for (ObjectGuid const& healer : healers)
+    {
+        if (state.behindStands.count(healer))
+            continue;
+
+        take(healer, [](BehindSlot const& slot) { return slot.healerFits; });
+        auto const stand = state.behindStands.find(healer);
+        if (stand != state.behindStands.end())
+            healerStands.push_back(stand->second);
+    }
+
+    for (ObjectGuid const& guid : ranged)
+        take(guid, [&](BehindSlot const& slot)
+             {
+                 return Dist2d(slot.pos, boss->GetPosition()) <= ANUBARAK_BEHIND_RANGED_BOSS_REACH &&
+                        std::all_of(healerStands.begin(), healerStands.end(), [&slot](Position const& stand)
+                                    { return Dist2d(slot.pos, stand) <= ANUBARAK_HEALER_MAIN_TANK_REACH; });
+             });
 }
 
-// Heroic, from his 35% in the last phase 1: this healer's stand behind the tank patches once every
+// A stand that stops fitting goes at once; a bot without one asks again once a second
+static void RefreshBehindStands(Player* bot, AnubarakState& state, Creature* boss, bool lost)
+{
+    if (lost)
+        state.behindStands.erase(bot->GetGUID());
+
+    uint32 const now = getMSTime();
+    bool const retry = !state.behindStands.count(bot->GetGUID()) &&
+                       (lost || getMSTimeDiff(state.behindTriedMs, now) >= ANUBARAK_BEHIND_RETRY_MS);
+    if (state.behindSet && !retry)
+        return;
+
+    AssignBehindStands(bot, state, boss);
+    state.behindSet = true;
+    state.behindTriedMs = now;
+}
+
+// Heroic, from his 35% in a phase 1 and in phase 3: this healer's stand behind the tank patches once every
 // healer before it by guid has reached its own. False while it waits its turn or has none.
 static bool BehindStand(Player* bot, Position& out)
 {
@@ -7916,28 +8027,14 @@ static bool BehindStand(Player* bot, Position& out)
                   (state->phaseValue != AnubarakPhase::Surface || boss->GetHealthPct() > ANUBARAK_BEHIND_FROM_PCT)))
         return false;
 
-    std::vector<ObjectGuid> healers;
-    ForEachGroupMember(bot, [&](Player* member)
-    {
-        if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
-            healers.push_back(member->GetGUID());
-
-        return false;
-    });
-
-    std::sort(healers.begin(), healers.end());
     auto mine = state->behindStands.find(bot->GetGUID());
     std::vector<Position> const patches = PatchPositions(bot, *state);
-    if (mine != state->behindStands.end() && !BehindReachable(bot, *state, mine->second, patches))
-        state->behindSet = false;
-
-    if (!state->behindSet)
-    {
-        AssignBehindStands(bot, *state, healers);
-        state->behindSet = true;
-        mine = state->behindStands.find(bot->GetGUID());
-    }
-
+    bool const lost =
+        mine != state->behindStands.end() &&
+        (!OffPatches(mine->second, patches) ||
+         !HealerBehindFits(bot, *state, boss, mine->second, ANUBARAK_BEHIND_KEEP_SLACK));
+    RefreshBehindStands(bot, *state, boss, lost);
+    mine = state->behindStands.find(bot->GetGUID());
     if (mine == state->behindStands.end())
     {
         RaidObs::NoteDerived(bot, "anub.hbehind", "none");
@@ -7946,6 +8043,16 @@ static bool BehindStand(Player* bot, Position& out)
 
     if (!state->behindGone.count(bot->GetGUID()))
     {
+        std::vector<ObjectGuid> healers;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
+                healers.push_back(member->GetGUID());
+
+            return false;
+        });
+
+        std::sort(healers.begin(), healers.end());
         for (ObjectGuid const& guid : healers)
         {
             if (guid == bot->GetGUID())
@@ -8078,6 +8185,46 @@ bool GetAnubarakHealerStand(Player* bot, Position& out)
 
     out = centre;
     return true;
+}
+
+bool GetAnubarakRangedStand(Player* bot, Position& out)
+{
+    PlayerbotAI* botAI = bot && bot->IsAlive() && BehindRanged(bot) ? GET_PLAYERBOT_AI(bot) : nullptr;
+    AnubarakState* state = botAI && AnubarakHeroic(bot) ? ReadPhase(botAI) : nullptr;
+    Creature* boss = state && state->phaseValue == AnubarakPhase::Swarm ? GetAnubarak(bot) : nullptr;
+    if (!boss || GetAnubarakDutySphere(bot) || GetAnubarakSideTankToRes(botAI))
+        return false;
+
+    auto mine = state->behindStands.find(bot->GetGUID());
+    std::vector<Position> const patches = PatchPositions(bot, *state);
+    bool const lost =
+        mine != state->behindStands.end() &&
+        (!OffPatches(mine->second, patches) ||
+         Dist2d(mine->second, boss->GetPosition()) > ANUBARAK_BEHIND_RANGED_BOSS_REACH + ANUBARAK_BEHIND_KEEP_SLACK);
+    RefreshBehindStands(bot, *state, boss, lost);
+    mine = state->behindStands.find(bot->GetGUID());
+    RaidObs::NoteDerived(bot, "anub.rbehind", mine != state->behindStands.end() ? "go" : "none");
+    if (mine == state->behindStands.end())
+        return false;
+
+    out = mine->second;
+    return true;
+}
+
+bool AnubarakRangedStandApplies(PlayerbotAI* botAI)
+{
+    Position stand;
+    return botAI && GetAnubarakRangedStand(botAI->GetBot(), stand);
+}
+
+bool AnubarakDashRunningOrReady(Player* bot)
+{
+    for (uint32 rank : DASH_RANKS)
+        if (bot->HasAura(rank))
+            return true;
+
+    uint32 const rank = KnownRank(bot, DASH_RANKS);
+    return rank && ReadyInstant(bot, rank);
 }
 
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI)

@@ -581,6 +581,20 @@ bool AnubarakHealerStandAction::Execute(Event /*event*/)
                   false, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool AnubarakRangedStandAction::Execute(Event /*event*/)
+{
+    Position stand;
+    if (!GetAnubarakRangedStand(bot, stand))
+        return false;
+
+    Position const walk = GetAnubarakPatchSafeLeg(bot, stand);
+    if (WalkInFlight(botAI, bot, walk))
+        return true;
+
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
 bool AnubarakLeavePermafrostAction::Execute(Event /*event*/)
 {
     Position spot;

@@ -178,6 +178,14 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakRangedStandAction : public MovementAction
+{
+public:
+    AnubarakRangedStandAction(PlayerbotAI* botAI, std::string const name = "anubarak ranged stand")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakLeavePermafrostAction : public MovementAction
 {
 public:
@@ -298,6 +306,8 @@ public:
             &ToCAnubarakActionContext::anubarak_gather;
         creators["anubarak healer stand"] =
             &ToCAnubarakActionContext::anubarak_healer_stand;
+        creators["anubarak ranged stand"] =
+            &ToCAnubarakActionContext::anubarak_ranged_stand;
         creators["anubarak leave permafrost"] =
             &ToCAnubarakActionContext::anubarak_leave_permafrost;
         creators["anubarak melee burrower stand"] =
@@ -398,6 +408,10 @@ private:
 
     static Action* anubarak_healer_stand(PlayerbotAI* botAI) {
         return new AnubarakHealerStandAction(botAI);
+    }
+
+    static Action* anubarak_ranged_stand(PlayerbotAI* botAI) {
+        return new AnubarakRangedStandAction(botAI);
     }
 
     static Action* anubarak_leave_permafrost(PlayerbotAI* botAI) {

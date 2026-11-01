@@ -582,10 +582,18 @@ bool AnubarakGathers(PlayerbotAI* botAI);
 // While he is up, every difficulty: a healer bot's slot on the gather's ring round the raid point, clear
 // of every patch, not floor-checked. With the tank patches 40+ yd apart the healers split in two groups
 // by guid, each ring 17.5 yd off its side's patch toward the raid point, when that keeps it clear and in
-// reach of the main tank. Heroic, from his 35% in the last phase 1, a stand behind the tank patches,
-// one healer setting off at a time (anub.hbehind). False for anyone else or while marked.
+// reach of the main tank. Heroic, from his 35% in a phase 1, a stand behind the tank patches, the
+// deepest within reach of him and the three tanks, one healer setting off at a time (anub.hbehind).
+// False for anyone else or while marked.
 bool GetAnubarakHealerStand(Player* bot, Position& out);
 bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
+// Heroic phase 3: a ranged DPS bot's stand behind the tank patches, after the healers', within 28 yd of
+// him and heal reach of every healer stand (anub.rbehind). False for anyone else, with no stand left, and
+// on sphere or battle res duty.
+bool GetAnubarakRangedStand(Player* bot, Position& out);
+bool AnubarakRangedStandApplies(PlayerbotAI* botAI);
+// A druid's Dash running, or known and off cooldown
+bool AnubarakDashRunningOrReady(Player* bot);
 // A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
 // while he is up
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);

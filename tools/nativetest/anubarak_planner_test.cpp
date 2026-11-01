@@ -369,6 +369,77 @@ void NoBoostOnASlowSpike()
     CHECK(plan.candidate.boostTick < 0 && plan.outcome.boostS < 0.0f);
 }
 
+// Top speed spike, patch only reachable under a Hand: Nitro goes first and the Hand lands later
+void BoostBeforeAHand()
+{
+    KiteWorld w = Heroic({745.0f, 160.0f}, {757.0f, 160.0f}, {765.0f, 135.0f}, {MakePatch(696.0f, 160.0f, false, 7)});
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    w.lifeS = 45.0f;
+    w.patchBudget = 3;
+    w.hands.resize(1);
+    w.hands[0].pos = {735.0f, 150.0f};
+    w.spareHands = 1;
+    Plan const plain = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plain.valid && plain.outcome.ending == Ending::PatchHand);
+
+    w.readyBoostSpeed = 17.5f;
+    w.readyBoostS = 5.0f;
+    Plan const boosted = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(boosted.valid && boosted.outcome.ending == Ending::PatchHand);
+    CHECK(boosted.outcome.boostS >= 0.0f && boosted.outcome.boostS < boosted.outcome.handS);
+    CHECK(boosted.outcome.endS >= plain.outcome.endS + 1.0f);
+}
+
+// Dash costs nothing: taken when it reaches the same patch a second or more later
+void DashWhenItEndsLater()
+{
+    KiteWorld w = Heroic({745.0f, 160.0f}, {745.0f, 180.0f}, {765.0f, 135.0f}, {MakePatch(745.0f, 135.0f, false, 7)});
+    w.spike.step = 1;
+    w.spike.speed = AnubarakPursuit::SPEEDS[1];
+    w.spike.nextStepS = 5.0f;
+    w.lifeS = 12.0f;
+    w.hands.clear();
+    w.spareHands = 0;
+    Plan const plain = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plain.valid && plain.outcome.ending == Ending::Patch);
+
+    w.readyBoostSpeed = 11.9f;
+    w.readyBoostS = 15.0f;
+    Plan const dashed = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(dashed.valid && dashed.outcome.ending == Ending::Patch && dashed.outcome.boostS >= 0.0f);
+    CHECK(dashed.outcome.endS >= plain.outcome.endS + 1.0f);
+}
+
+// Spike despawns before it can catch, boosted or not: the boost waits for the next submerge
+void BoostKeptOnATie()
+{
+    KiteWorld w = Heroic({745.0f, 160.0f}, {745.0f, 146.0f}, {700.0f, 100.0f}, {});
+    w.gather = false;
+    w.hands.clear();
+    w.spareHands = 0;
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    w.lifeS = 1.2f;
+    w.readyBoostSpeed = 17.5f;
+    w.readyBoostS = 5.0f;
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plan.valid && !plan.outcome.caught);
+    CHECK(plan.candidate.boostTick < 0 && plan.outcome.boostS < 0.0f);
+
+    // a wider margin doesn't buy the boost, only a later end does
+    Rules const r;
+    Outcome kept;
+    kept.endS = 1.2f;
+    kept.margin = 4.0f;
+    Outcome boosted = kept;
+    boosted.boostS = 0.0f;
+    boosted.margin = 12.0f;
+    CHECK(AnubarakKitePlanner::Compare(kept, boosted, r) < 0);
+    boosted.endS = 2.3f;
+    CHECK(AnubarakKitePlanner::Compare(boosted, kept, r) < 0);
+}
+
 // An immunity hands the spike on at its speed: mid-life it loses to a patch, in the last seconds it is cheap
 void OwnCostsByLifeLeft()
 {
@@ -609,6 +680,9 @@ int main()
     SlowDecidesTheWalkIn();
     BoostFiresWhenTheSpikeCloses();
     NoBoostOnASlowSpike();
+    BoostBeforeAHand();
+    DashWhenItEndsLater();
+    BoostKeptOnATie();
     OwnCostsByLifeLeft();
     NextLegPassesCount();
     NoImmunityOnASlowSpike();

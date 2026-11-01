@@ -51,6 +51,23 @@ bool AnubarakHealerStandTrigger::IsActive()
     return off;
 }
 
+bool AnubarakRangedStandTrigger::IsActive()
+{
+    if (!AnubarakEngaged(botAI) || !PlayerbotAI::IsRangedDps(bot))
+        return false;
+
+    Position stand;
+    if (!GetAnubarakRangedStand(bot, stand) || IsAnubarakDodgeHeld(botAI) || UnitOnPermafrost(bot))
+    {
+        RaidObs::NoteDerived(bot, "anub.rstand", "none");
+        return false;
+    }
+
+    bool const off = bot->GetExactDist2d(stand.GetPositionX(), stand.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
+    RaidObs::NoteDerived(bot, "anub.rstand", off ? "walk" : "hold");
+    return off;
+}
+
 bool AnubarakDemonicCircleDueTrigger::IsActive() { return AnubarakDemonicCircleDue(botAI); }
 
 // A held dodge spot inside a patch, when none was clear of one, stays: the lane is worse than the slow
@@ -312,6 +329,9 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak healer stand", {
         NextAction("anubarak healer stand", ACTION_RAID + 0.45f) }));
+
+    triggers.push_back(new TriggerNode("anubarak ranged stand", {
+        NextAction("anubarak ranged stand", ACTION_RAID + 0.45f) }));
 
     triggers.push_back(new TriggerNode("anubarak demonic circle due", {
         NextAction("anubarak demonic circle", ACTION_RAID + 0.4f) }));

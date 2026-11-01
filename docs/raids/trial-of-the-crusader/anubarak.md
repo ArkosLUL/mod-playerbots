@@ -290,7 +290,7 @@ side tank 30+ yd out is past a heal once the slots spread. A living main tank ov
 centre slides it toward him to 36, when that clears the patches and lies on the floor: in 2026-10-28 T
 the human took him 45 yd off the healers at R and died 10 s in. With no split and a living side tank in
 reach of the centre, as in heroic's submerge drag, only the odd healers by guid slide; the rest stay for
-the side tanks. Heroic, from his 35% in the last phase 1, it is behind the tank patches ([phase
+the side tanks. Heroic, from his 35% in a phase 1, it is behind the tank patches ([phase
 3](#how-the-bots-play-it)). `anubarak healer stand hold` blocks formation and follow; reach spell
 and reach heal stay. In the 2026-10-26 wipes healers stood 13-19 yd from the main tank and trailed the
 human ([healer engine](../README.md)); side tanks went 15-17 s with no healer in 40 yd.
@@ -714,9 +714,10 @@ ends 28 → 35.
 5. the lower cost: own 1 with 6 s of the spike's life left or less after it, else 3 (user call,
    2026-11-01: it hands the spike on at its speed), kite patch 2 (normal 0.5; normal's tank patch 10
    while a burrower lives, since a held one off Permafrost submerges back to full), Hand 2, 3 past the
-   spare ones, a boost fired by the end 0.5, so a boost goes only when it buys rows 1-4; a heroic
-   kite never ends on a tank patch (2026-10-29: sides bare 81-87 s, phase 3 one side unpatched);
-6. the later end;
+   spare ones, a boost free (user call, 2026-11-01: at 0.5 BQ's Nitro kite took Hand only and the
+   Nitro at the Hand's end, and both druids skipped Dash for a patch end); a heroic kite never ends on
+   a tank patch (2026-10-29: sides bare 81-87 s, phase 3 one side unpatched);
+6. the later end; then the boost kept, so one ending in the same 1 s band stays for the next submerge;
 7. an own or caught end farther from the gather, 5 yd bands, so the spike's next random target
    starts farther off;
 8. the wider spike margin past the patches' reach and the gather's clearance, capped at 20 yd.
@@ -763,6 +764,11 @@ ended at 30.4%, wipe P3 7:44 25.9%, P2c with no kite patch): fresh kites ended o
 0.0 s after the claim; 4 of 5 own immunities 1.5-3.6 s in on base-speed spikes, BP Felesta's walk-in,
 BO Fel's refused Hand.
 
+Baseline 2026-11-01, 25H on refine-21 (`297f14857`; BQ 649_2_anub-arak_1793557563, P1c ended at
+33.7%, third submerge, wipe P3 9:35 7.5%): 7 kites, 0 Impales, 4 patch ends 13.5-24.9 s, 3 runs to
+the emerge 20.2-28.9 s; the behind stands latched empty at 6:00 (as BP) so no healer walked behind in
+P3; Holylight died to a wave 9 burrower, then both side tanks.
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -783,7 +789,8 @@ patch is down.
   1.1 s), Blink and the teleport at 0.5 s (O 1:50 Stormweaver's Nitro went early): cast at any stage,
   the walk to a patch included; Sprint, Dash (heroic, a druid out of Cat Form takes it first in the
   same tick, its form dropped by aura since `RemoveShapeshift` leaves Tree of Life on, and `anubarak
-  kite cat hold` blocks the class form actions while marked), Nitro Boosts (none while one of those
+  kite cat hold` blocks the class form actions while marked and Dash runs or is ready, so a spent
+  Dash hands it back to its form trigger: bear, Tree of Life, moonkin), Nitro Boosts (none while one of those
   runs, one speed aura type), Blink 20 yd the way it faces when that lands farther from the spike and
   the spike's lane to it clears (no trail leg), then Demonic Circle: Teleport last: the circle in
   reach and 15+ yd farther from the spike, no speed boost running, and the catch due (Impale's reach
@@ -1024,15 +1031,24 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   A swap only for Aura Mastery would cost two 1.5 s aura GCDs.
 - **Healers stand behind the tank patches** (user call; `anub.hbehind`): heroic keeps spawning
   burrowers in phase 3 (`boss_anubarak_trial.cpp:263-264`), and they go for the healers. Each healer
-  bot by guid takes a stand 10-24 yd behind the tank patches' midpoint, away from the centroid of the
+  bot by guid takes a stand 10-32 yd behind the tank patches' midpoint, away from the centroid of the
   four tunnel exits ((740.2, 193.4), (694.5, 185.4), (732.0, 83.4), (694.9, 102.5), off the traces), up
   to 12 yd sideways: the most exit lines through a patch's 7.5 yd slow first, where a burrower crawls
-  at 20% and its side tank takes it, then the nearest the main tank; 3 yd apart, 8.5 off every patch,
-  within 36 yd of the main and both side tanks, on the floor (navprobe: the floor runs about 70 yd east
-  of the centre, past the east pair at x 786-794). From his 35% in the last phase 1 they walk one at a
-  time, healers being unable to cast on the move: the next once every earlier one stands within 6 yd of
-  its own, none while a tank is under 50% (`wait`). A stand out of reach re-assigns them all; none, the
-  usual stand (`none`).
+  at 20% and its side tank takes it, then the deepest (user call: the longest walk for a pulled
+  burrower); 3 yd apart, 8.5 off every patch, within 36 yd of the main and both side tanks and 32 of
+  him, on the floor (navprobe 2026-11-01: flat to 32 yd east of the midpoint (786.8, 130.6), rising in
+  the south-east past it, x 824.8 off the mesh). From his 35% in a phase 1 they walk one at a time,
+  healers being unable to cast on the move: the next once every earlier one stands within 6 yd of its
+  own, none while a tank is under 50% (`wait`). Held stands stay until 3 yd past those reaches (else
+  each tank step moves a healer); that one alone is dropped, and a bot without one asks again once a
+  second, else keeps its usual stand (`none`): in BQ and BP a submerge drag left an empty assignment
+  latched for the rest of the pull. All clear when he goes under.
+- **Ranged behind the tank patches** (user call; `anub.rbehind` `go`/`none`, `anub.rstand`
+  `walk`/`hold`/`none`): in heroic phase 3, all at once, each ranged DPS bot by guid takes a stand from
+  the same slots after the healers, within 28 yd of him and 36 of every healer stand, 3 yd off every
+  other; none on sphere or battle res duty. `anubarak ranged stand` at `ACTION_RAID + 0.45` (dodge held
+  and Permafrost aside) walks it there; `anubarak ranged stand hold` blocks formation and follow, reach
+  spell stays. In BN's P3 the ranged stood 35-48 yd west of the healers and burrowers killed two.
 - **Mana before phase 3** (user call, 2026-11-01): Holylight came in at 46-62% and was at 6-23% 45 s
   later, Elemena 55% to 3-11%, the class Divine Plea firing twice in 7 min. At `ACTION_MEDIUM_HEAL + 6`,
   heroic, unmarked: `anubarak divine plea` for a healer paladin bot under 80% mana, not in `Swarm`, no
@@ -1179,7 +1195,8 @@ personal burst is unrestricted.
 | `lane`, `bridge` | Older traces: the heroic lane step (`flags:degrees`, `ring:<way>`/`ring:<exit>`) and a `patch+hand` kite's Hand (`hand`, `turn`, `ask`) |
 | `gather` | Heroic phase 2: `walk`, `hold`, `wait` (the way to the slot crosses the spike's path) |
 | `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `none` |
-| `hbehind` | Heroic healer bot from his 35% in the last phase 1: `go` (to its stand behind the tank patches), `wait` (an earlier healer still walking, or a tank under 50%), `none` (no stand) |
+| `hbehind` | Heroic healer bot from his 35% in a phase 1: `go` (to its stand behind the tank patches), `wait` (an earlier healer still walking, or a tank under 50%), `none` (no stand) |
+| `rbehind`, `rstand` | Heroic phase 3 ranged DPS bot: `go`/`none` (a stand behind the tank patches); `walk`, `hold`, `none` |
 | `kite` | The kiter's branch: `ring` (running the plan), `patch` (its patch walk), `hold` (at its end); older traces `detour`; `none` when there's no spike or the mark moved on |
 | `dodge` | A new dodge spot's reason: `spike` (within 10 yd of it), `lane` (on its predicted path), `none` (no clear spot) |
 | `protect` | `hop` while this paladin holds the kiter's claim, `self` while the marked bot needs its own immunity, `none` |
