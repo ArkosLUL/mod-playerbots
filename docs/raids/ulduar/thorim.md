@@ -134,6 +134,44 @@ so a raid that never hits him from up there leaves him at 100% forever.
 The healer split (arena 13 bodies / 1.48 M / 2 healers against gauntlet 11 / 0.69 M / 2) is left
 uneven on purpose: the gauntlet's clock is the lever, not its survivability.
 
+## Offensive cooldowns in the gauntlet
+
+Two gates hold a burst cooldown off trash. `HoldBurstUntilTankEngagedMultiplier` (strategy `"burst"`,
+`Playerbots.BurstOnBossOnly`) blocks a grouped bot whose current target is not a dungeon or world
+boss. `UlduarBurstWindowMultiplier`, registered in `UldStrategy.cpp`, opens burst and lust only once
+Thorim is on the arena floor, `z <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD`.
+
+**The Ulduar window was blind up the corridor, and its fall-through is open, not closed.** It finds
+the gated boss by walking `possible targets no los`, which stops at `Playerbots.SightDistance`
+(100 yd), while the gauntlet runs ~190 yd from the balcony — so the corridor squad matched no gated
+boss at all and took `BurstWindow{}`, whose `allowAll` and `allowLust` are both **true**. It now
+resolves him through `GetThorim` behind `NearThorimEncounter`, the way the Razorscale and
+Mimiron-mech fallbacks in that same function already do. `GetThorim` is a per-instance guid cache
+over `ObjectAccessor` with no range, and `NearThorimEncounter` is what keeps the read inside the
+wing, so a raid on Hodir cannot hold its burst off Thorim's balcony z.
+
+While it was blind, only the generic hold stopped them: over the two 28 Oct pulls **98 and 90** burst
+pushes came from bots **101-162 yd** out, all in phase 1, and all but 1 and 3 were caught by `hold
+burst until tank engaged`. Rapid Fire 22/18, Readiness 21/17, use trinket 11/12, use tinker 11/12,
+Bestial Wrath 11/8, Elemental Mastery 9/9, single figures of Army of the Dead, Blade Flurry,
+Combustion, Mirror Image, Icy Veins, Arcane Power, Presence of Mind, Fire Elemental Totem and
+Berserk, plus **Bloodlust/Heroism 1 and 3**, a 10 minute raid cooldown. Mostly corridor ranged:
+Beastcaller 37/26, Deadeye 23/21, Lavaburst 14/14. The arena half was never affected, being inside
+100 yd of the balcony, which is the 52 and 53 `ulduar burst window` vetoes.
+
+**`BurstWindowStrategy` and `BurstOnBossOnly` are Custom-only.** The upstream-adapted Ulduar branch
+adds `"boost"` but not `"burst"`, so there the Ulduar window is the only gate and this blind spot was
+the whole defect. Check it first against any burst report from such a build.
+
+Two exemptions fire in the corridor by design: priest Shadowfiend, a mana return, and `use trinket`
+for non-dps, since survival and mana trinkets have to stay available. The two healer trinkets at
+~150 yd are those.
+
+**Nothing requires a bot to be near him when the window opens**, so one running back in phase 2 could
+in principle burst early. Self-limiting: `BalancePercentValue` returns 100 with nothing attacking, so
+a bot running an empty corridor never pushes a boost, and every phase 2 burst in both pulls went out
+inside 41 yd of the arena centre.
+
 ## Runic Colossus (32872), spawned at (2227.5, -396.179, 412.176)
 
 | Spell | Id | Detail |
@@ -632,6 +670,11 @@ evidence is the verdict stream, where it shows `FAILED` 25-31 times a pull.
 those records into that dict as it reads. A filter built on the record stream matches nothing and reads
 as "the raid never cast it", which is how a whole phase of survival cooldowns was once reported as
 zero.
+
+**Count burst cooldowns off the `act` and `veto` streams, never off aura names.** Those streams carry
+the action names `IsBurstCooldownAction` matches, while Berserk and Killing Machine are passive procs
+sharing a DBC name with a burst action, so an aura-name filter reports hundreds of casts that never
+happened.
 
 ## Aspect of the Wild has exactly one holder
 
