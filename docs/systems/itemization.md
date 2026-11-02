@@ -104,7 +104,7 @@ dated `data/sql/playerbots/updates/*_playerbots_sim_weights.sql` for the module'
   own gear.
 - **Merge** (`SimWeights::Merge`, after `GenerateBasicWeights` and `GenerateAdditionalWeights`):
   each measured stat becomes sim weight × the hand-written anchor weight, so scores keep their
-  scale. Unmeasured stats (stamina, armor, a caster's wand DPS) keep the hand value, and so does
+  scale. Unmeasured stats (stamina, armor, a caster's wand DPS, threat reduction, magic resistance) keep the hand value, and so does
   a negative hand weight the sim puts below 0.05, since those repel off-role items. Talent bumps on
   measured stats (Careful Aim, Mental Dexterity) are overwritten; the sim builds carry the talents.
 - `ApplyWeightFinetune`'s armor pen ×1.2 is skipped: the phase rows already carry that rise.
