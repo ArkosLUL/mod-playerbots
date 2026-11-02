@@ -42,6 +42,7 @@ Export base (Custom commit `ulduar-rework` mirrors): `653e2c09e` (set by `p3-uld
 | sync | p5-sync (4): Iron Assembly, Auriaya, Thorim | pushed 2026-10-28 | helpers `0f89c4f7d`; ulduar `5f5129ee8` + merge `8e71eec32` + fix `06f0f6e65` (Custom `d205fd233..61498bc20`) | Helpers gain `RaidDefensive`, `RaidResistAura`, `SpellCooldownMs`, symbols Ulduar calls only, trace-name params dropped (`NextMagicDefensive` 3 args, `RaidDefensiveScope{mapId}`, `RaidResistAuraConfig` without `noteKey`); Algalon's own cooldown helper → `SpellCooldownMs`; Iron Assembly trace state, notes, labels and hazard ids stripped; "offensive potion"/"use tinker" removed from the opener burst check (no upstream creator) | Strict pb-check (121 TUs) and codestyle pass; parity: only trace strips and the listed adaptations. #2985 body gained the `RaidDefensive`/`RaidResistAura` bullet, #2986 the Iron Assembly and Thorim gauntlet notes (both verified equal to their files). Not tested in game |
 | sync | p5-sync (5): Algalon, Thorim frost aura | pushed 2026-10-28 | ulduar `8ad6c17b3` (Custom `61498bc20..69d282d5a`) | Fire resistance totem shaman, charges kept off holes, wider dropped-star window, handler kite-first and Big Bang wait, phase 2 tank healers, stray frost aura block; Thorim's shared frost node removed. "trap launcher: explosive trap" left out of the Algalon splash list (mod-spell-tweaks spell); kite stuck notes stripped. Custom's other `-Werror` deletions (2-arg `RaidUnderExplosionLine`, `VezaxManaPct`) were already gone on the branch | Strict pb-check (42 TUs) and codestyle pass; parity: only trace strips and the Trap Launcher name. Not tested in game |
 | sync | p5-sync (6): Freya Army per lasher wave | pushed 2026-10-29 | ulduar `b151ec0eb` (Custom `69d282d5a..653e2c09e`, 3 files) | `IsFreyaArmyTurn`: one DK per lasher wave casts Army; no RaidObs in the delta, applied clean; helpers untouched; `NPC_ARMY_OF_THE_DEAD` is stock core `PetDefines.h` | Strict pb-check (15 TUs) and codestyle pass; parity: identical diff. #2986 body gained the Freya (2 DKs) and Algalon (glyphed shadow priest) notes, verified equal to its file. Not tested in game |
+| sync | upstream merge (4): `upstream/test-staging` `09da76bd0` (Custom `1f679ce9a`) | local, not pushed (2026-11-02) | framework `b151cfa86`, eoe `f4b98331c`, helpers `213af4d2b`, ulduar `bbef8ce37`, Holy Shield `2fb5ebced` | Only `EncounterHelpers.{h,cpp}` conflicted (pet/floor helpers vs upstream's class-role picker, both kept); Holy Shield keeps its constructor and `HOLY_SHIELD_REFRESH_MS` over the blessing rework (#2530). No Ulduar or EoE file changed | Strict pb-check over each PR diff passes (651/657/660/731/15 TUs); all five merge clean into test-staging. Push waits for the user's go. Lust #2987 and Ritual of Souls #3007 were already clean |
 
 ## Decisions (user, 2026-10-17)
 
@@ -218,9 +219,9 @@ parity check of the delta; record the new base.
    src/`, cppcheck 2.13 in a throwaway `ubuntu:24.04` `docker run --rm`) on all four branches; empty
    report required (drafts skip this CI job, so local is the only check).
 2. Push `raid-encounter-framework` and `eoe-malygos-rework` (fast-forward); push `raid-shared-helpers`
-   and `ulduar-rework` to `origin` and open them as **draft** PRs to `test-staging`. Drafts run the
-   build matrix (Ubuntu g++/clang++, Windows, macOS) against upstream core: the first full build of
-   the stack. A macOS link error in `PlayerSearcher<AnyPlayerInObjectRangeCheck>` is upstream's, not
+   and `ulduar-rework` to `origin` and open them as **draft** PRs to `test-staging`. Since upstream
+   #3010 (2026-10-29) drafts skip the build matrix (Ubuntu g++/clang++, Windows, macOS): it runs
+   only once a PR is marked ready, so until then local pb-check is the only build. A macOS link error in `PlayerSearcher<AnyPlayerInObjectRangeCheck>` is upstream's, not
    ours.
 3. PR texts via `handover` + `use-conversational-language`, shown before publishing: #2876 body update
    (new framework pieces), helpers PR body, Ulduar PR body filling every template section. The user
@@ -239,7 +240,7 @@ parity check of the delta; record the new base.
 - `p3-ulduar` finisher: every touched TU of `ulduar-rework` compiles via `PB_REPO`; every string-wired
   action/trigger name resolves in the creator tables; `git grep -n "RaidObs\|ObsValue\|ObsGuid"
   ulduar-rework -- src` and the same on `raid-shared-helpers` are empty; no old Ulduar basenames left.
-- `p4-parity-review`, then cppcheck (Publishing 1), then the draft build matrix.
+- `p4-parity-review`, then cppcheck (Publishing 1), then the build matrix once marked ready (#3010).
 - No in-game test or `pmon` in this effort (user's decision); contributors test the drafts.
 
 ## First steps after approval (this session)
