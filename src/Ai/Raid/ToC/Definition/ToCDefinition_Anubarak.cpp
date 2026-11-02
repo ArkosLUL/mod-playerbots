@@ -114,15 +114,6 @@ bool AnubarakKiteSprintKept(PlayerbotAI* botAI)
            GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
 }
 
-// Heroic: a marked druid shifts to Cat Form for Dash, and its spec's form trigger would shift it straight
-// back and end the Dash. Once Dash is spent that trigger takes it back to its own form.
-bool AnubarakKiteCatHeld(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    return AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && bot->getClass() == CLASS_DRUID &&
-           bot->HasAura(SPELL_MARK) && bot->GetShapeshiftForm() == FORM_CAT && AnubarakDashRunningOrReady(bot);
-}
-
 void DefineAnubarak(EncounterBuilder& e)
 {
     e.OwnTargeting("anubarak dps target guard", Role::Any, AnubarakDpsTargetOwned, Family::DpsAssist);
@@ -187,8 +178,11 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
     e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint", "dash"});
+    // heroic: a marked druid shifts to Cat Form for Dash, and its spec's form trigger would shift it straight
+    // back and end the Dash. Once Dash is spent the cat drop takes it out.
     e.Block("anubarak kite cat hold", Role::Any, AnubarakKiteCatHeld, 0,
-            {"caster form", "bear form", "dire bear form", "tree form", "moonkin form"});
+            {"caster form", "bear form", "dire bear form", "tree of life", "moonkin form"});
+    e.Block("anubarak emerge bear hold", Role::Any, AnubarakMainTankKeepsBear, 0, {"caster form"});
     // the side tanks' pickups; from the main tank they pull the burrowers walking past onto him
     e.Block("anubarak main tank shout guard", Role::Any, AnubarakMainTankEngaged, 0,
             {"challenging roar", "challenging shout"});

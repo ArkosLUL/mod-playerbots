@@ -118,6 +118,36 @@ class RowTest(unittest.TestCase):
         self.assertEqual([f.check for f in findings], ["unresolved-rule-action"])
         self.assertIn('"bloodlst"', findings[0].message)
 
+    def test_a_rule_can_name_an_action_by_its_constructor_name(self):
+        # the rule matches getName(): creators["x form"] builds an action named "x of life"
+        findings = self.run_check(pblint.check_unresolved, self.tree("""
+            e.Node<XDodgeTrigger, XDodgeAction>(ACTION_RAID, EncounterRow::Mover);
+            e.Block("x hold", Role::Any, XActive, 0, {"x of life", "x dodge action"});
+        """, Raid__X__XForm="""
+            class XFormAction : public CastBuffSpellAction
+            {
+            public:
+                XFormAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "x of life") {}
+            };
+
+            class XFormTrigger : public BuffTrigger
+            {
+            public:
+                XFormTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "x of death") {}
+            };
+        """))
+        self.assertEqual(findings, [])
+        findings = self.run_check(pblint.check_unresolved, self.tree("""
+            e.Block("x hold", Role::Any, XActive, 0, {"x of death"});
+        """, Raid__X__XForm="""
+            class XFormTrigger : public BuffTrigger
+            {
+            public:
+                XFormTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "x of death") {}
+            };
+        """))
+        self.assertEqual([f.check for f in findings], ["unresolved-rule-action"])
+
     def test_the_rule_name_itself_is_not_an_action(self):
         findings = self.run_check(pblint.check_unresolved, self.tree("""
             e.OwnMovement("x control movement multiplier", Role::Ranged, XActive, Family::Attack,

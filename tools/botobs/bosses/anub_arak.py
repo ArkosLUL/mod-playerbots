@@ -4775,6 +4775,8 @@ def show_burrowers(trace: Trace) -> None:
     show_loose_burrowers(trace, samples)
     if notes(trace, "anub.mstand"):
         show_counts(trace, "anub.mstand")
+    if notes(trace, "anub.lead"):
+        show_counts(trace, "anub.lead")
     if rows:
         show_pulls(trace, samples)
 
@@ -7438,6 +7440,16 @@ def planner_finish(world: KiteWorld, rules: dict, ticks: int, end_tick: int, end
     return out
 
 
+def fail_counts_after_catch(run: PlannerRun, catch: int, first: int, rules: dict) -> bool:
+    """Whether the run's fail still counts after the catch at `catch`, the run's spikes kept from tick `first`. On
+    the planned patch only before the spike's second Impale on the kiter, one testS on."""
+    if run.fail_tick < 0:
+        return False
+    late = run.fail_tick - catch
+    step = min(max(run.spikes[catch - first][3], 0), SPIKE_LAST_STEP)
+    return late <= to_tick(rules["postCatchS"]) and (not run.fail_planned or late < to_tick(rules["testS"][step]))
+
+
 def planner_score(world: KiteWorld, rules: dict, ticks: int, track: list, run: PlannerRun, catch: int,
                   turn_tick: int = -1, own: bool = False) -> PlanOutcome:
     """Score of a run stopped at its first patch fail, or postCatchS past its first counted catch. `own` casts the
@@ -7447,10 +7459,12 @@ def planner_score(world: KiteWorld, rules: dict, ticks: int, track: list, run: P
         return planner_finish(world, rules, ticks, end, track[end], run.margin[end], run.raid_tick, run.spikes[end],
                               catch_tick=catch, turn_tick=turn_tick, own_used=True)
     if catch >= 0:
-        spike = run.spikes[run.fail_tick if run.fail_tick >= 0 else catch]
-        return planner_finish(world, rules, ticks, catch, track[catch], run.margin[catch], run.raid_tick, spike,
-                              run.fail_tick, run.fail_patch, run.fail_planned, caught=True, catch_tick=catch,
-                              turn_tick=turn_tick)
+        if fail_counts_after_catch(run, catch, 0, rules):
+            return planner_finish(world, rules, ticks, catch, track[catch], run.margin[catch], run.raid_tick,
+                                  run.spikes[run.fail_tick], run.fail_tick, run.fail_patch, run.fail_planned,
+                                  caught=True, catch_tick=catch, turn_tick=turn_tick)
+        return planner_finish(world, rules, ticks, catch, track[catch], run.margin[catch], run.raid_tick,
+                              run.spikes[catch], caught=True, catch_tick=catch, turn_tick=turn_tick)
     if run.fail_tick >= 0:
         return planner_finish(world, rules, ticks, run.fail_tick, track[run.fail_tick], run.margin[run.fail_tick],
                               run.raid_tick, run.spikes[run.fail_tick], run.fail_tick, run.fail_patch,
@@ -7634,7 +7648,10 @@ def run_ending(world: KiteWorld, rules: dict, watch: tuple, ticks: int, base, tu
                           catch_from_tick(world))
     end_tick = catch if catch >= 0 else len(ending.track) - 1
     spike = run.spikes[(run.fail_tick if run.fail_tick >= 0 else end_tick) - turn]
-    if catch >= 0:
+    if catch >= 0 and not fail_counts_after_catch(run, catch, turn, rules):
+        out = planner_finish(world, rules, ticks, catch, ending.track[catch], run.margin[catch - turn],
+                             run.raid_tick, run.spikes[catch - turn], caught=True, catch_tick=catch, turn_tick=turn)
+    elif catch >= 0:
         out = planner_finish(world, rules, ticks, catch, ending.track[catch], run.margin[catch - turn],
                              run.raid_tick, spike, run.fail_tick, run.fail_patch, run.fail_planned, caught=True,
                              catch_tick=catch, turn_tick=turn)

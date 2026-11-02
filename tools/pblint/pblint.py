@@ -279,6 +279,18 @@ def references(sources: list[Source]) -> tuple[list, list]:
 # --- checks -------------------------------------------------------------------
 
 
+def action_self_names(sources: list[Source]) -> set[str]:
+    """The names action constructors hand their base, `: CastBuffSpellAction(botAI, "tree of life")`. A rule
+    matches getName(), which can differ from the creators[] key: "tree form" builds "tree of life"."""
+    names = set()
+    for src in sources:
+        for line in src.lines:
+            for match in RE_SELF_NAME.finditer(line):
+                if match.group(1).endswith("Action"):
+                    names.add(match.group(2))
+    return names
+
+
 def check_unresolved(sources, reg: Registry) -> list[Finding]:
     """A node naming something no context can build. The engine skips it silently and forever. A rule
     listing an action nothing registers is the same failure: it blocks or passes nothing, and says
@@ -287,6 +299,7 @@ def check_unresolved(sources, reg: Registry) -> list[Finding]:
     creators = reg.creators
     actions, triggers = references(sources)
     known = set(creators.get("Action", {})) | set(creators.get("ActionNode", {})) | reg.row_actions()
+    rule_known = known | action_self_names(sources)
     for name, rel, number in actions:
         if name and name not in known and not KNOWN_DYNAMIC.search(name):
             out.append(Finding("unresolved-action", rel, number,
@@ -301,7 +314,7 @@ def check_unresolved(sources, reg: Registry) -> list[Finding]:
             out.append(Finding("unresolved-action", row.rel, row.line,
                                f'a row runs "{row.action}", which no action context registers'))
     for name, rel, number in reg.rule_names:
-        if name not in known:
+        if name not in rule_known:
             out.append(Finding("unresolved-rule-action", rel, number,
                                f'a rule lists "{name}", which no action context or row registers'))
     return out

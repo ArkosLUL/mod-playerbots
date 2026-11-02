@@ -188,12 +188,14 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+6 | `anubarak spike nearby` → `anubarak avoid spike` | unmarked, within 10 yd of the spike or 7 yd of its predicted path (16 and 10 while it outruns the bot), or not yet at its held dodge spot | walks to its held dodge spot, `MOVEMENT_FORCED` |
 | EMERGENCY+5 | `anubarak on permafrost` → `anubarak leave permafrost` | no tank, unmarked, no dodge held, no grip duty but `kill`, within 7.5 yd of a patch | walks out ([non-tanks](#how-the-bots-play-it)) |
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
-| RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending | caster form, walks to 26 yd, Rebirth |
+| RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank, healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate |
+| RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
 | RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready | `NextTankDefensive` on self, physical only: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26) |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
 | RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to its stand, stops and `cast`s Death Grip on the duty sphere, `kill`s it once landed |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
 | RAID+4.5 | `anubarak hop escort` → `anubarak hop escort` | heroic, the escort paladin over 4 yd off its spot (`anub.escort` `walk`/`hold`) | walks there |
+| RAID+4.4 | `anubarak burrower lead` → `anubarak burrower lead` | a ranged DPS or healer bot a burrower is on, its side tank over 25 yd off ([lead](#how-the-bots-play-it)) | walks to 20 yd off the side tank |
 | RAID+4.2 | `anubarak cleave buff near burrower` → `anubarak drop cleave buff` | a melee DPS bot with Blade Flurry or Sweeping Strikes on and a burrower in melee reach at its area share ([burrower guard](#how-the-bots-play-it)) | cancels the buff |
 | RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
 | RAID+3.8 | `anubarak melee burrower stand` → `anubarak melee burrower stand` | a melee DPS bot on a burrower near a patch, out of reach, within 8 yd of a patch or 1.5 off its held stand | walks to its stand |
@@ -204,7 +206,7 @@ No ties, since a tie falls to insertion order:
 | RAID+1.2 | `anubarak redirect threat` → `anubarak redirect threat` | a hunter or rogue bot with a [redirect duty](#how-the-bots-play-it), its redirect ready or Misdirection's charges left | Misdirection or Tricks on the tank, then Steady Shot into the dump target |
 | RAID+1 | `anubarak engaged by main tank` → `anubarak main tank hold boss` | the pickup tank while he is up | steps out of Permafrost, else leads him in latched legs onto the anchor (round a patch in the way), or from 65 s onto the submerge spot |
 | RAID+0.5 | `anubarak raid gathers` → `anubarak gather` | heroic phase 2, not the kiter or a side tank with a burrower to hold or take, no dodge held | walks to its gather slot, round any patch; while the way there crosses the spike's path waits, stopping a walk (`wait`) |
-| RAID+0.45 | `anubarak healer stand` → `anubarak healer stand` | a healer bot while he is up, unmarked, no dodge held, off Permafrost, over 6 yd off its stand | walks there, round any patch |
+| RAID+0.45 | `anubarak healer stand` → `anubarak healer stand` | a healer bot while he is up, unmarked, no dodge held, off Permafrost, over 6 yd off its stand, no burrower on it (`lead`) | walks there, round any patch |
 | RAID+0.4 | `anubarak demonic circle due` → `anubarak demonic circle` | heroic, a still warlock bot, circle missing or under 100 s; on its staging stand before the pull, or while he is up | Demonic Circle: Summon |
 | MEDIUM_HEAL+5 | `anubarak penetrating cold on raid` → `anubarak heal penetrating cold` | healer, a carrier below 90% or one it can [cover](#how-the-bots-play-it) | on the lowest, the cover, else under 90% the first direct heal `CanCastSpell` allows |
 
@@ -725,7 +727,11 @@ ends 28 → 35.
 Plans count a Hand as ending 1 s early and Impale as reaching 8.5 yd, so a walk planned to the tick
 still makes it; replayed without, a BJ walk ending 0.1 s after the Hand was caught. Impale doesn't hand
 the spike on, so a patch it fails on within 3 s of an uncovered catch still counts: replayed without,
-4 of 5 tank ends followed a predicted catch by a tank patch. A spike restarted
+4 of 5 tank ends followed a predicted catch by a tank patch. The planned patch ends it only before
+the second Impale, one test interval (below) after the catch; later the run ends at the catch and
+hands the spike on (user call, 2026-11-02: BS 2:11 Tree on Dash turned back through a top-speed spike
+for the kite patch behind it, read raid-free, and died to 6 Impales 0.4 s apart beside it; the probe
+now picks Bulwark's Hand). A spike restarted
 inside a patch's reach fails only after its test interval there (1.5, 0.8, 0.4 s by speed step:
 65920/65922/65923's periods) or on coming back in, so it can be led out. A base-speed spike inside
 Impale's reach of a kiter outrunning it counts no catch before its first 1.5 s test
@@ -769,6 +775,12 @@ Baseline 2026-11-01, 25H on refine-21 (`297f14857`; BQ 649_2_anub-arak_179355756
 the emerge 20.2-28.9 s; the behind stands latched empty at 6:00 (as BP) so no healer walked behind in
 P3; Holylight died to a wave 9 burrower, then both side tanks.
 
+Baseline 2026-11-02, 25H on refine-22 (`5ed464d7f`; BR 649_2_anub-arak_1793574219 P3 from 30.0% at
+5:49, wipe 6:53 19.7%; BS …574963 P3 from 30.1% at 5:51, wipe 6:38 21.4%): 6 kites each, every
+Nitro and Dash on its pick's second, BR 0 Impales; BS Tree's flinch the only kite death. Phase 3 is
+the open race: BR held him at 27.5% 5:59-6:14 while DPS spent 48% of samples on the 4 burrowers
+carried in, BS lost both side tanks 10-12 s in.
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -789,8 +801,10 @@ patch is down.
   1.1 s), Blink and the teleport at 0.5 s (O 1:50 Stormweaver's Nitro went early): cast at any stage,
   the walk to a patch included; Sprint, Dash (heroic, a druid out of Cat Form takes it first in the
   same tick, its form dropped by aura since `RemoveShapeshift` leaves Tree of Life on, and `anubarak
-  kite cat hold` blocks the class form actions while marked and Dash runs or is ready, so a spent
-  Dash hands it back to its form trigger: bear, Tree of Life, moonkin), Nitro Boosts (none while one of those
+  kite cat hold` blocks the class form actions (by reported name: `tree of life`, not `tree form`)
+  while marked and Dash runs or is ready; then `anubarak kite cat drop` takes a non-cat druid out and
+  its form trigger takes over: BR 2:34 Tree sat 62 s in Cat Form, its heals' caster form prerequisite
+  gated on mana and Tree of Life failing from Cat Form), Nitro Boosts (none while one of those
   runs, one speed aura type), Blink 20 yd the way it faces when that lands farther from the spike and
   the spike's lane to it clears (no trail leg), then Demonic Circle: Teleport last: the circle in
   reach and 15+ yd farther from the spike, no speed boost running, and the catch due (Impale's reach
@@ -1036,7 +1050,8 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   to 12 yd sideways: the most exit lines through a patch's 7.5 yd slow first, where a burrower crawls
   at 20% and its side tank takes it, then the deepest (user call: the longest walk for a pulled
   burrower); 3 yd apart, 8.5 off every patch, within 36 yd of the main and both side tanks and 32 of
-  him, on the floor (navprobe 2026-11-01: flat to 32 yd east of the midpoint (786.8, 130.6), rising in
+  him, measured from his drag anchor (him and the main tank) and each side tank's hold, live only
+  without an anchor (BR 6:24 all 4 stands dropped as Felesta chased a burrower 35 yd), on the floor (navprobe 2026-11-01: flat to 32 yd east of the midpoint (786.8, 130.6), rising in
   the south-east past it, x 824.8 off the mesh). From his 35% in a phase 1 they walk one at a time,
   healers being unable to cast on the move: the next once every earlier one stands within 6 yd of its
   own, none while a tank is under 50% (`wait`). Held stands stay until 3 yd past those reaches (else
@@ -1045,10 +1060,20 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   latched for the rest of the pull. All clear when he goes under.
 - **Ranged behind the tank patches** (user call; `anub.rbehind` `go`/`none`, `anub.rstand`
   `walk`/`hold`/`none`): in heroic phase 3, all at once, each ranged DPS bot by guid takes a stand from
-  the same slots after the healers, within 28 yd of him and 36 of every healer stand, 3 yd off every
-  other; none on sphere or battle res duty. `anubarak ranged stand` at `ACTION_RAID + 0.45` (dodge held
+  the same slots after the healers, within 28 yd of his anchor and 36 of every healer stand, 3 yd off
+  every other; none on sphere or battle res duty. `anubarak ranged stand` at `ACTION_RAID + 0.45` (dodge held
   and Permafrost aside) walks it there; `anubarak ranged stand hold` blocks formation and follow, reach
   spell stays. In BN's P3 the ranged stood 35-48 yd west of the healers and burrowers killed two.
+- **Ranged and healers bring a burrower to its side tank** (user call, 2026-11-02; `anub.lead`
+  `walk`/`wait`/`none`): every difficulty, a ranged DPS or healer bot a selectable burrower is on,
+  its owner's side tank usable, walks once that tank is over 25 yd off (its 30 yd taunt less 5) to
+  20 yd short of it, round any patch, not while the walk crosses the spike's path; melee don't. None
+  for a tank, a marked bot, the escort, sphere or battle res duty, or while the raid gathers (a bot
+  off the gather is a kite bystander). While one is on it, its healer or ranged stand waits
+  (`hstand`/`rstand` `lead`). BR 1:01 Trueshot stood under one 12 s, Felesta 51-58 yd off.
+- **The druid main tank keeps bear form for the emerge**: `anubarak emerge bear hold` blocks its
+  `caster form` from 10 s before it, so its Rejuvenation waits: in BR and BS it came up in caster
+  form at all 4 emerges, bear back 1.8-3.5 s later, one 25.5k hit landing meanwhile.
 - **Mana before phase 3** (user call, 2026-11-01): Holylight came in at 46-62% and was at 6-23% 45 s
   later, Elemena 55% to 3-11%, the class Divine Plea firing twice in 7 min. At `ACTION_MEDIUM_HEAL + 6`,
   heroic, unmarked: `anubarak divine plea` for a healer paladin bot under 80% mana, not in `Swarm`, no
@@ -1095,6 +1120,10 @@ personal burst is unrestricted.
 - With 4 healers (Z) a side tank holding a burrower goes uncovered while two follow the main tank.
 - A bear tank kiting in Cat Form has cat armour against scarabs, and a Feral Charge can land among bugs
   that turn on it.
+- A burrower lead walks only into the side tank's taunt reach: with its taunts down the burrower stays
+  on the bot.
+- The behind stands read his anchor, not where he is held: BS 5:55 the main tank walked him 20 yd off
+  it, unexplained, and the stands stayed.
 - The east tank patches sit on the 40-45 yd kite ring, so runs arc through the west and centre and
   turn back; heroic's long drag moves him through much of each phase 1's second half.
 - The gather slots sit 18-21 yd off the kite ring's centre, where a base-speed spike settles in pure
@@ -1194,9 +1223,10 @@ personal burst is unrestricted.
 | `second` | Traces before 2026-10-29: heroic kiter `grant` (a second tank patch), `none` once the mark moves |
 | `lane`, `bridge` | Older traces: the heroic lane step (`flags:degrees`, `ring:<way>`/`ring:<exit>`) and a `patch+hand` kite's Hand (`hand`, `turn`, `ask`) |
 | `gather` | Heroic phase 2: `walk`, `hold`, `wait` (the way to the slot crosses the spike's path) |
-| `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `none` |
+| `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `lead` (a burrower on it, its side tank's), `none` |
+| `lead` | A ranged DPS or healer bot a burrower is on: `walk` (its side tank over 25 yd off), `wait`, `none` |
 | `hbehind` | Heroic healer bot from his 35% in a phase 1: `go` (to its stand behind the tank patches), `wait` (an earlier healer still walking, or a tank under 50%), `none` (no stand) |
-| `rbehind`, `rstand` | Heroic phase 3 ranged DPS bot: `go`/`none` (a stand behind the tank patches); `walk`, `hold`, `none` |
+| `rbehind`, `rstand` | Heroic phase 3 ranged DPS bot: `go`/`none` (a stand behind the tank patches); `walk`, `hold`, `lead`, `none` |
 | `kite` | The kiter's branch: `ring` (running the plan), `patch` (its patch walk), `hold` (at its end); older traces `detour`; `none` when there's no spike or the mark moved on |
 | `dodge` | A new dodge spot's reason: `spike` (within 10 yd of it), `lane` (on its predicted path), `none` (no clear spot) |
 | `protect` | `hop` while this paladin holds the kiter's claim, `self` while the marked bot needs its own immunity, `none` |

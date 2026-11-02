@@ -171,6 +171,20 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakBurrowerLeadTrigger : public Trigger
+{
+public:
+    AnubarakBurrowerLeadTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak burrower lead") {}
+    bool IsActive() override;
+};
+
+class AnubarakKiteCatDropTrigger : public Trigger
+{
+public:
+    AnubarakKiteCatDropTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak kite cat drop") {}
+    bool IsActive() override;
+};
+
 class AnubarakDemonicCircleDueTrigger : public Trigger
 {
 public:
@@ -285,6 +299,10 @@ public:
             &ToCAnubarakTriggerContext::anubarak_on_permafrost;
         creators["anubarak melee burrower stand"] =
             &ToCAnubarakTriggerContext::anubarak_melee_burrower_stand;
+        creators["anubarak burrower lead"] =
+            &ToCAnubarakTriggerContext::anubarak_burrower_lead;
+        creators["anubarak kite cat drop"] =
+            &ToCAnubarakTriggerContext::anubarak_kite_cat_drop;
         creators["anubarak demonic circle due"] =
             &ToCAnubarakTriggerContext::anubarak_demonic_circle_due;
         creators["anubarak scarab on raid"] =
@@ -396,6 +414,14 @@ private:
 
     static Trigger* anubarak_melee_burrower_stand(PlayerbotAI* botAI) {
         return new AnubarakMeleeBurrowerStandTrigger(botAI);
+    }
+
+    static Trigger* anubarak_burrower_lead(PlayerbotAI* botAI) {
+        return new AnubarakBurrowerLeadTrigger(botAI);
+    }
+
+    static Trigger* anubarak_kite_cat_drop(PlayerbotAI* botAI) {
+        return new AnubarakKiteCatDropTrigger(botAI);
     }
 
     static Trigger* anubarak_demonic_circle_due(PlayerbotAI* botAI) {

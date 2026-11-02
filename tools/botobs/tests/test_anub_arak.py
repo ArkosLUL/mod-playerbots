@@ -1380,6 +1380,8 @@ def frost_pull() -> list[dict]:
         note(22500, MAGE, "anub.leave", "none"),
         note(12500, ROGUE, "anub.mstand", "walk"),
         note(14000, ROGUE, "anub.mstand", "none"),
+        note(15000, MAGE, "anub.lead", "walk"),
+        note(17000, MAGE, "anub.lead", "none"),
 
         *grip(3000, DK, Q0),
         dmg(4000, MAGE, Q0, 42842, 9000),
@@ -1518,6 +1520,7 @@ class FrostPull(unittest.TestCase):
         self.assertNotIn("Ruirin", text)
         self.assertIn("anub.leave: Frostfire walk 1, none 1\n", text)
         self.assertIn("anub.mstand: Shadowstep walk 1, none 1\n", text)
+        self.assertIn("anub.lead: Frostfire walk 1, none 1\n", text)
         self.assertIn("anub.sidetank gather while he was down: P2 Ecoterrorist 19.0 s; P2b none\n", text)
         self.assertRegex(text, r"0:06\.500 #981 +95% +0\.5 s Ecoterrorist .* before its tank\n")
         self.assertIn("1 of 3 pick(s) before its target was a tank within 5 yd", text)
@@ -4797,6 +4800,20 @@ class PlannerPort(unittest.TestCase):
             self.assertEqual(own_near.ending, "own")
             self.assertTrue(0 <= own_near.raid < band and 0 <= patch_near.raid < band)
             self.assertLess(ab.planner_compare(own_near, patch_near, self.rules), 0)
+
+    def test_a_patch_ends_a_catch_only_before_the_second_impale(self):
+        # a top speed spike Impales every 0.4 s: caught 5 yd off the patch it fails there 0.2 s later, caught
+        # 10 yd off it's 0.6 s short and goes on from the catch into the gather
+        with unittest.mock.patch.object(ab, "KITESIM_SLOW", 1.0):
+            def judged(spike_x: float) -> ab.PlanOutcome:
+                world = top_speed(fresh_world((735.0, 135.0), (spike_x, 135.0), (790.0, 135.0),
+                                              [kite_patch(720.0, 135.0, False)], 20.0))
+                return ab.judge(into(world, 0, self.rules), world, self.rules)
+
+            near, far = judged(749.75), judged(746.6)
+            self.assertEqual((near.caught, near.tank, near.kite, near.raid), (True, -1, -1, -1))
+            self.assertEqual((far.caught, far.kite, far.raid), (True, -1, 0))
+            self.assertLess(ab.planner_compare(near, far, self.rules), 0)
 
     def test_the_spike_step_reads_off_its_speed_and_times_the_next_off_the_restart(self):
         self.assertEqual(ab.spike_step(3.4, 0.5), (0, 6.5))

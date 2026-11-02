@@ -202,6 +202,22 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakBurrowerLeadAction : public MovementAction
+{
+public:
+    AnubarakBurrowerLeadAction(PlayerbotAI* botAI, std::string const name = "anubarak burrower lead")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakKiteCatDropAction : public Action
+{
+public:
+    AnubarakKiteCatDropAction(PlayerbotAI* botAI, std::string const name = "anubarak kite cat drop")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakDemonicCircleAction : public Action
 {
 public:
@@ -312,6 +328,10 @@ public:
             &ToCAnubarakActionContext::anubarak_leave_permafrost;
         creators["anubarak melee burrower stand"] =
             &ToCAnubarakActionContext::anubarak_melee_burrower_stand;
+        creators["anubarak burrower lead"] =
+            &ToCAnubarakActionContext::anubarak_burrower_lead;
+        creators["anubarak kite cat drop"] =
+            &ToCAnubarakActionContext::anubarak_kite_cat_drop;
         creators["anubarak demonic circle"] =
             &ToCAnubarakActionContext::anubarak_demonic_circle;
         creators["anubarak tank pick up scarab"] =
@@ -420,6 +440,14 @@ private:
 
     static Action* anubarak_melee_burrower_stand(PlayerbotAI* botAI) {
         return new AnubarakMeleeBurrowerStandAction(botAI);
+    }
+
+    static Action* anubarak_burrower_lead(PlayerbotAI* botAI) {
+        return new AnubarakBurrowerLeadAction(botAI);
+    }
+
+    static Action* anubarak_kite_cat_drop(PlayerbotAI* botAI) {
+        return new AnubarakKiteCatDropAction(botAI);
     }
 
     static Action* anubarak_demonic_circle(PlayerbotAI* botAI) {

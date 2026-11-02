@@ -46,6 +46,14 @@ bool AnubarakHealerStandTrigger::IsActive()
         return false;
     }
 
+    // a burrower on it stays by its side tank until the taunt
+    AnubarakBurrowerLead lead;
+    if (GetAnubarakBurrowerLead(botAI, lead))
+    {
+        RaidObs::NoteDerived(bot, "anub.hstand", "lead");
+        return false;
+    }
+
     bool const off = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
     RaidObs::NoteDerived(bot, "anub.hstand", off ? "walk" : "hold");
     return off;
@@ -63,6 +71,13 @@ bool AnubarakRangedStandTrigger::IsActive()
         return false;
     }
 
+    AnubarakBurrowerLead lead;
+    if (GetAnubarakBurrowerLead(botAI, lead))
+    {
+        RaidObs::NoteDerived(bot, "anub.rstand", "lead");
+        return false;
+    }
+
     bool const off = bot->GetExactDist2d(stand.GetPositionX(), stand.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
     RaidObs::NoteDerived(bot, "anub.rstand", off ? "walk" : "hold");
     return off;
@@ -77,6 +92,14 @@ bool AnubarakOnPermafrostTrigger::IsActive()
 }
 
 bool AnubarakMeleeBurrowerStandTrigger::IsActive() { return AnubarakMeleeNeedsBurrowerStand(botAI); }
+
+bool AnubarakBurrowerLeadTrigger::IsActive()
+{
+    AnubarakBurrowerLead lead;
+    return GetAnubarakBurrowerLead(botAI, lead) && lead.walk && !IsAnubarakDodgeHeld(botAI);
+}
+
+bool AnubarakKiteCatDropTrigger::IsActive() { return AnubarakKiteCatDropDue(botAI); }
 
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
@@ -196,7 +219,7 @@ bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
 
 bool AnubarakSideTankDeadTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && GetAnubarakSideTankToRes(botAI);
+    return AnubarakEngaged(botAI) && GetAnubarakBattleResTarget(botAI);
 }
 
 bool AnubarakGripFrostSphereTrigger::IsActive()
@@ -281,6 +304,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));
 
+    // Off the GCD, ahead of the battle res and every heal that won't cast from Cat Form
+    triggers.push_back(new TriggerNode("anubarak kite cat drop", {
+        NextAction("anubarak kite cat drop", ACTION_RAID + 7.5f) }));
+
     triggers.push_back(new TriggerNode("anubarak side tank dead", {
         NextAction("anubarak battle res side tank", ACTION_RAID + 7) }));
 
@@ -299,6 +326,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     // Above every other walk of a DPS, side tank or healer bot that can be the escort
     triggers.push_back(new TriggerNode("anubarak hop escort", {
         NextAction("anubarak hop escort", ACTION_RAID + 4.5f) }));
+
+    // Under the escort, over the target pick: a side tank taunts only within 30 yd
+    triggers.push_back(new TriggerNode("anubarak burrower lead", {
+        NextAction("anubarak burrower lead", ACTION_RAID + 4.4f) }));
 
     // Off the GCD, ahead of the next swing the buff would carry onto the burrower
     triggers.push_back(new TriggerNode("anubarak cleave buff near burrower", {

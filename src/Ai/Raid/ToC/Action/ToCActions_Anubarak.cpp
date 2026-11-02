@@ -517,15 +517,15 @@ bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
 
 bool AnubarakBattleResSideTankAction::Execute(Event /*event*/)
 {
-    Player* tank = GetAnubarakSideTankToRes(botAI);
-    if (!tank)
+    Player* dead = GetAnubarakBattleResTarget(botAI);
+    if (!dead)
         return false;
 
-    if (bot->GetExactDist(tank) > ANUBARAK_BATTLE_RES_REACH || !bot->IsWithinLOSInMap(tank))
-        return !IsAnubarakDodgeHeld(botAI) && MoveTo(tank, ANUBARAK_BATTLE_RES_REACH - ANUBARAK_RANGED_REACH_MARGIN,
+    if (bot->GetExactDist(dead) > ANUBARAK_BATTLE_RES_REACH || !bot->IsWithinLOSInMap(dead))
+        return !IsAnubarakDodgeHeld(botAI) && MoveTo(dead, ANUBARAK_BATTLE_RES_REACH - ANUBARAK_RANGED_REACH_MARGIN,
                                                      MovementPriority::MOVEMENT_COMBAT);
 
-    return botAI->CastSpell("rebirth", tank);
+    return botAI->CastSpell("rebirth", dead);
 }
 
 bool AnubarakGatherAction::Execute(Event /*event*/)
@@ -631,6 +631,39 @@ bool AnubarakMeleeBurrowerStandAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
                   false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakBurrowerLeadAction::Execute(Event /*event*/)
+{
+    AnubarakBurrowerLead lead;
+    if (!GetAnubarakBurrowerLead(botAI, lead) || !lead.walk)
+        return false;
+
+    Position const to = ValidateFloorPoint(bot, lead.to);
+    if (!AnubarakWalkClearOfSpike(bot, to))
+        return false;
+
+    // The point moves with the side tank, so a walk headed close enough is left running
+    Position const walk = GetAnubarakPatchSafeLeg(bot, to);
+    ReleaseStalledWalk(botAI, bot);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (bot->isMoving() && last.msTime &&
+        walk.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= ANUBARAK_LEAD_REAIM)
+        return true;
+
+    BreakChannelPinningTheFeet(bot);
+    return MoveTo(bot->GetMapId(), walk.GetPositionX(), walk.GetPositionY(), walk.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+// What caster form does, past its mana gate
+bool AnubarakKiteCatDropAction::Execute(Event /*event*/)
+{
+    if (!AnubarakKiteCatDropDue(botAI))
+        return false;
+
+    botAI->RemoveShapeshift();
+    return true;
 }
 
 bool AnubarakDemonicCircleAction::Execute(Event /*event*/)

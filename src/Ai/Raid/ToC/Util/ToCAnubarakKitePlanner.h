@@ -146,7 +146,7 @@ struct Rules
     float handMarginS = 1.0f;
     float catchMargin = 1.0f;
     // Impale doesn't hand the spike on, so it keeps after a caught kiter: a patch it fails on this soon
-    // after the catch still counts against the run
+    // after the catch still counts against the run, the planned one only before the second Impale
     float postCatchS = 3.0f;
     float handRange = 30.0f;
     float paladinSpeed = 7.0f;
@@ -512,6 +512,15 @@ inline void PlanHand(CatchWindow& window, int land, Rules const& r)
 
 inline bool Caught(Point spike, Point kiter, Rules const& r) { return Dist(spike, kiter) <= r.impaleReach + r.catchMargin; }
 
+// Whether run's fail still counts after a catch at catchTick, atCatch the spike then. It Impales a caught kiter
+// again each testS, so the planned patch only saves the kite before the second hit
+inline bool FailCountsAfterCatch(Run const& run, int catchTick, Spike const& atCatch, Rules const& r)
+{
+    int const late = run.failTick - catchTick;
+    int const step = std::clamp(atCatch.step, 0, AnubarakPursuit::LAST_STEP);
+    return late <= ToTick(r.postCatchS) && (!run.failPlanned || late < ToTick(r.testS[static_cast<size_t>(step)]));
+}
+
 // First tick from from to before last the catch counts on
 inline int FirstCatch(Run const& run, std::vector<Point> const& track, int from, int last, CatchWindow const& window,
                       Rules const& r)
@@ -776,7 +785,9 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTic
             end.caught = true;
     }
 
-    if (run.failTick >= 0 && (catchTick < 0 || (end.caught && run.failTick <= catchTick + ToTick(r.postCatchS))))
+    if (run.failTick >= 0 &&
+        (catchTick < 0 ||
+         (end.caught && FailCountsAfterCatch(run, catchTick, run.spikes[static_cast<size_t>(catchTick)], r))))
     {
         end.failTick = run.failTick;
         end.failPatch = run.failPatch;
@@ -1143,7 +1154,8 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
         }
     }
 
-    if (run.failTick >= 0)
+    if (run.failTick >= 0 &&
+        (catchTick < 0 || FailCountsAfterCatch(run, catchTick, run.spikes[static_cast<size_t>(catchTick - turn)], r)))
     {
         end.failTick = run.failTick;
         end.failPatch = run.failPatch;

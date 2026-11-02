@@ -647,6 +647,53 @@ void LateImmunityStillPassesTheRaid()
     CHECK(AnubarakKitePlanner::Compare(ownNear, patchNear, r) < 0);
 }
 
+// 2026-11-02 BS at 2:11: a druid on Dash turned back through a top speed spike for the kite patch behind it,
+// caught next to it and Impaled six times. A Hand from the paladin 15 yd off wins.
+void NoCatchNextToThePatch()
+{
+    KiteWorld w = Heroic({757.1f, 143.9f}, {753.8f, 151.9f}, {779.4f, 127.9f},
+                         {MakePatch(797.2f, 139.5f, true, 1), MakePatch(794.8f, 114.0f, true, 2),
+                          MakePatch(773.7f, 172.2f, false, 3)});
+    w.pace = AnubarakPursuit::Pace(7.0f, 11.9f, 5.46f);
+    w.spike.step = AnubarakPursuit::LAST_STEP;
+    w.spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+    w.lifeS = 10.86f;
+    w.bystanders = {{758.5f, 124.0f}, {745.1f, 135.7f}, {794.2f, 107.1f}};
+    w.hands = {{1, {745.1f, 135.7f}, false}, {2, {779.6f, 125.8f}, false}, {3, {775.5f, 126.9f}, false}};
+    Plan const plan = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(plan.valid && !plan.outcome.caught);
+}
+
+// A top speed spike Impales every 0.4 s: a patch it fails on before the second Impale ends the kite there, one
+// it fails on later doesn't, and the spike goes on from the catch into the gather
+void PatchEndsACatchWithinOneImpale()
+{
+    Rules const r;
+    auto const world = [](float spikeX)
+    {
+        KiteWorld w = Heroic({735.0f, 135.0f}, {spikeX, 135.0f}, {790.0f, 135.0f}, {MakePatch(720.0f, 135.0f, false, 1)});
+        w.slowFactor = 1.0f;
+        w.hands.clear();
+        w.spareHands = 0;
+        w.lifeS = 20.0f;
+        w.spike.step = AnubarakPursuit::LAST_STEP;
+        w.spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+        return w;
+    };
+
+    // caught 5 yd off the patch, the spike on it 0.2 s later
+    KiteWorld const nearW = world(749.75f);
+    Outcome const nearOut = AnubarakKitePlanner::Judge(Into(nearW, 0, r), nearW, r);
+    CHECK(nearOut.caught && nearOut.catchS >= 0.0f && Clean(nearOut));
+
+    // caught 10 yd off, 0.6 s short of it
+    KiteWorld const farW = world(746.6f);
+    Outcome const farOut = AnubarakKitePlanner::Judge(Into(farW, 0, r), farW, r);
+    CHECK(farOut.caught && farOut.catchS >= 0.0f && farOut.kiteS < 0.0f);
+    CHECK(farOut.raidS == 0.0f);
+    CHECK(AnubarakKitePlanner::Compare(nearOut, farOut, r) < 0);
+}
+
 // Four usable patches, Hands, an own immunity and a ready boost: the candidates stay bounded
 void CandidatesStayBounded()
 {
@@ -689,6 +736,8 @@ int main()
     OnlyAFastSpikeTakesAHandOrImmunity();
     NoWalkIntoASlowSpike();
     LateImmunityStillPassesTheRaid();
+    NoCatchNextToThePatch();
+    PatchEndsACatchWithinOneImpale();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;

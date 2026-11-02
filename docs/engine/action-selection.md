@@ -171,11 +171,11 @@ Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
 At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes the spell name to
 `Action(botAI, spell)`, so the name is a reliable identifier and does not require including 25 class
 headers. Racials and trinkets follow the same convention (`"berserking"`, `"blood fury"`,
-`"use trinket"`). A rule matches `getName()` too, but pblint resolves only registered creator names,
-so a class registered under one name that reports another (the paladin's `beacon of light on main
-tank` reports `beacon of light`; `cleanse disease`, `cleanse poison` and `cleanse magic` report
-`cleanse`, `purify disease` reports `purify`) can't be listed in a rule: veto it with a narrow
-`dynamic_cast` multiplier on the concrete classes (Rotface's `icc rotface self cure`).
+`"use trinket"`). A rule matches `getName()` too, so it lists the name a class reports, which pblint
+resolves against the literal its constructor passes the base (`tree form` reports `tree of life`, the
+paladin's `beacon of light on main tank` `beacon of light`). A name several classes report
+(`cleanse disease`, `cleanse poison` and `cleanse magic` all report `cleanse`) vetoes them all: for
+one, a narrow `dynamic_cast` multiplier on the concrete class (Rotface's `icc rotface self cure`).
 
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation

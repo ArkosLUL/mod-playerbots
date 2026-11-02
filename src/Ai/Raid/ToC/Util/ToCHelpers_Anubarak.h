@@ -104,6 +104,11 @@ constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_STACKS = 5;
 constexpr float ANUBARAK_SIDE_DEFENSIVE_PCT = 50.0f;
 // Rebirth's 30 yd less a margin
 constexpr float ANUBARAK_BATTLE_RES_REACH = 28.0f;
+// A ranged or healer bot a burrower is on walks toward its side tank once over REACH off, the 30 yd taunt
+// less a margin, and stops STOP off it. Re-aimed once the point moves REAIM.
+constexpr float ANUBARAK_LEAD_REACH = 25.0f;
+constexpr float ANUBARAK_LEAD_STOP = 20.0f;
+constexpr float ANUBARAK_LEAD_REAIM = 3.0f;
 // The spike's 8 yd sphere test adds both sizes: 1.5 spike, 2.0 patch, 1.0 falling sphere. So 11.5 yd
 // round a patch and 10.5 round a falling one.
 constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
@@ -293,6 +298,15 @@ struct AnubarakBurrowerPick
     explicit operator bool() const { return held || loose; }
 };
 
+// A burrower on a ranged DPS or healer bot, and the usable side tank that owns it
+struct AnubarakBurrowerLead
+{
+    Player* tank = nullptr;
+    // The tank is over ANUBARAK_LEAD_REACH off: walk to `to`, ANUBARAK_LEAD_STOP short of it
+    bool walk = false;
+    Position to;
+};
+
 // A side tank's area or chain cast that takes in both of its burrowers and none of the other side's
 struct AnubarakSideTankAoe
 {
@@ -430,8 +444,9 @@ bool AnubarakBurrowerAreaCappedNear(Player* bot, Position const& at, float range
 int8 GetAnubarakBurrowerTankSide(Player* player);
 // Expose Weakness at ANUBARAK_SIDE_DEFENSIVE_STACKS or health under the pct, on a side tank
 bool AnubarakSideTankNeedsDefensive(Player* bot);
-// A dead side tank this druid can Rebirth now, else null
-Player* GetAnubarakSideTankToRes(PlayerbotAI* botAI);
+// Who this druid can Rebirth now: a dead side tank, else the lowest guid dead healer bot, else null. One
+// spent on a healer isn't there for a side tank that dies later.
+Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI);
 // A burrower wave is due within ANUBARAK_WAVE_READY_MS while he is up
 bool AnubarakWaveImminent(PlayerbotAI* botAI);
 // Main tank while alive, else the side tank he's on, else the first bot side tank
@@ -455,6 +470,10 @@ std::vector<Creature*> GetAnubarakBurrowers(Player* bot);
 // with it, and a dead or marked side tank's go to the other, as do all of one holding him. A human side
 // tank's still loose 5 s after it came out goes to a bot side tank, past two.
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI);
+// Every difficulty: a selectable burrower is on this ranged DPS or healer bot and its owner has a usable side
+// tank, the nearest such when several (anub.lead: walk, wait, none). Not for a tank, a marked bot, the
+// escort, sphere or battle res duty, or while the raid gathers.
+bool GetAnubarakBurrowerLead(PlayerbotAI* botAI, AnubarakBurrowerLead& out);
 // The burrower DPS focus of the bot's side (anub.dside: living DPS bots per role by guid, the sides in
 // turn, split again at each wave), else either side's; each side's latched in anub.focus0 and
 // anub.focus1 over the burrowers that side holds. Any under ANUBARAK_FOCUS_OFF_FROST_PCT counts; else
@@ -594,6 +613,14 @@ bool GetAnubarakRangedStand(Player* bot, Position& out);
 bool AnubarakRangedStandApplies(PlayerbotAI* botAI);
 // A druid's Dash running, or known and off cooldown
 bool AnubarakDashRunningOrReady(Player* bot);
+// Heroic: a marked druid in Cat Form while that holds, there for Dash
+bool AnubarakKiteCatHeld(PlayerbotAI* botAI);
+// While he is engaged: a druid bot in Cat Form that isn't a cat DPS, not held there. Tree of Life and the
+// heals won't cast from Cat Form, and caster form waits on its mana.
+bool AnubarakKiteCatDropDue(PlayerbotAI* botAI);
+// The druid main tank bot, while he is down with 10 s or less to his emerge. Its own Rejuvenation would
+// take it out of bear form for his first hits.
+bool AnubarakMainTankKeepsBear(PlayerbotAI* botAI);
 // A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
 // while he is up
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);

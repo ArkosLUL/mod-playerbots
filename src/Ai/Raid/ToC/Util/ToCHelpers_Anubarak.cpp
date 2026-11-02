@@ -95,6 +95,8 @@ constexpr float ANUBARAK_KITE_HAND_LEAD_S = 1.0f;
 constexpr float ANUBARAK_KITE_OWN_LEAD_S = 0.6f;
 // The emerge despawns the spike a minute after he goes down, 2 s before he is selectable again
 constexpr uint32 ANUBARAK_SPIKE_LIFE_MS = 60000;
+// A druid main tank stays in bear form from this long before the emerge
+constexpr int32 ANUBARAK_EMERGE_BEAR_MS = 10000;
 // The paladin due to cast the Hand keeps its GCD free from this long before the catch
 constexpr float ANUBARAK_KITE_HAND_RESERVE_S = 2.5f;
 // The Hand also waits for the spike within Impale's reach plus this much of its closing speed
@@ -5601,11 +5603,11 @@ bool AnubarakSideTankNeedsDefensive(Player* bot)
             bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT);
 }
 
-Player* GetAnubarakSideTankToRes(PlayerbotAI* botAI)
+Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     AnubarakState const* state = bot ? ReadPhase(botAI) : nullptr;
-    if (!state || state->deadSideTanks.empty() || !RebirthReady(bot) || bot->HasAura(SPELL_MARK))
+    if (!state || !RebirthReady(bot) || bot->HasAura(SPELL_MARK))
         return nullptr;
 
     // One druid per corpse: the lowest guid with Rebirth ready, a tank only when no other druid can. Never
@@ -5633,16 +5635,32 @@ Player* GetAnubarakSideTankToRes(PlayerbotAI* botAI)
     if (first != bot)
         return nullptr;
 
+    // A pending Soulstone or Reincarnation brings it back without the Rebirth
+    auto const resable = [](Player* dead)
+    {
+        return dead && !dead->IsAlive() && dead->getDeathState() == DeathState::Corpse &&
+               !dead->isResurrectRequested() &&
+               (dead->HasPlayerFlag(PLAYER_FLAGS_GHOST) || !dead->GetUInt32Value(PLAYER_SELF_RES_SPELL));
+    };
+
     for (ObjectGuid const& guid : state->deadSideTanks)
     {
         Player* tank = ObjectAccessor::GetPlayer(*bot, guid);
-        // A pending Soulstone or Reincarnation brings it back without the Rebirth
-        if (tank && !tank->IsAlive() && tank->getDeathState() == DeathState::Corpse && !tank->isResurrectRequested() &&
-            (tank->HasPlayerFlag(PLAYER_FLAGS_GHOST) || !tank->GetUInt32Value(PLAYER_SELF_RES_SPELL)))
+        if (resable(tank))
             return tank;
     }
 
-    return nullptr;
+    Player* healer = nullptr;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member) && resable(member) &&
+            (!healer || member->GetGUID() < healer->GetGUID()))
+            healer = member;
+
+        return false;
+    });
+
+    return healer;
 }
 
 bool AnubarakWaveImminent(PlayerbotAI* botAI)
@@ -5731,6 +5749,55 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
     }
 
     return pick;
+}
+
+bool GetAnubarakBurrowerLead(PlayerbotAI* botAI, AnubarakBurrowerLead& out)
+{
+    out = AnubarakBurrowerLead();
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || IsAnubarakTankPlayer(bot) ||
+        (!PlayerbotAI::IsHeal(bot) && !PlayerbotAI::IsRangedDps(bot)) || !AnubarakEngaged(botAI))
+        return false;
+
+    AnubarakState* state = ReadPhase(botAI);
+    // the gather keeps everyone off the spike's run, and a bot walking off it is a bystander the kite must miss
+    if (!state || bot->HasAura(SPELL_MARK) || IsAnubarakEscort(botAI) || AnubarakGathers(botAI) ||
+        GetAnubarakDutySphere(bot) || GetAnubarakBattleResTarget(botAI))
+    {
+        RaidObs::NoteDerived(bot, "anub.lead", "none");
+        return false;
+    }
+
+    std::unordered_map<ObjectGuid, uint8> const& owners = BurrowerOwners(bot, *state);
+    float best = 0.0f;
+    for (Creature* burrower : ResolveAlive(bot, state->burrowers))
+    {
+        if (burrower->GetVictim() != bot || burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            continue;
+
+        auto const owner = owners.find(burrower->GetGUID());
+        Player* tank = owner != owners.end() ? UsableSideTank(bot, *state, owner->second) : nullptr;
+        float const dist = tank ? bot->GetExactDist2d(tank) : 0.0f;
+        if (tank && (!out.tank || dist < best))
+        {
+            out.tank = tank;
+            best = dist;
+        }
+    }
+
+    if (!out.tank)
+    {
+        RaidObs::NoteDerived(bot, "anub.lead", "none");
+        return false;
+    }
+
+    out.walk = best > ANUBARAK_LEAD_REACH;
+    float const share = ANUBARAK_LEAD_STOP / std::max(best, 0.1f);
+    out.to = Position(out.tank->GetPositionX() + (bot->GetPositionX() - out.tank->GetPositionX()) * share,
+                      out.tank->GetPositionY() + (bot->GetPositionY() - out.tank->GetPositionY()) * share,
+                      bot->GetPositionZ());
+    RaidObs::NoteDerived(bot, "anub.lead", out.walk ? "walk" : "wait");
+    return true;
 }
 
 bool AnubarakSideTankBossCapped(Player* bot)
@@ -7838,21 +7905,48 @@ static bool OffPatches(Position const& at, std::vector<Position> const& patches)
                         { return Dist2d(at, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
 }
 
-// Within reach of him, the main tank and both side tanks, plus slack
-static bool HealerBehindFits(Player* bot, AnubarakState const& state, Creature* boss, Position const& at,
-                             float slack = 0.0f)
+// Where the stands measure him and the living tanks from: his drag anchor for him and the main tank, each
+// side tank's hold, so a side tank chasing a burrower or him stepping off the anchor moves no stand. Live
+// positions with no anchor.
+struct BehindRefs
 {
-    if (Dist2d(at, boss->GetPosition()) > ANUBARAK_BEHIND_HEALER_BOSS_REACH + slack)
-        return false;
+    Position boss;
+    std::vector<Position> tanks;
+};
 
-    for (ObjectGuid const& guid : {state.mainTank, state.sideTanks[0], state.sideTanks[1]})
+static Position BehindBossRef(Player* bot, Creature* boss)
+{
+    Position anchor;
+    return GetAnubarakDragAnchor(bot, anchor) ? anchor : boss->GetPosition();
+}
+
+static BehindRefs BehindReferences(Player* bot, AnubarakState const& state, Creature* boss)
+{
+    BehindRefs refs;
+    Position anchor;
+    bool const fixed = GetAnubarakDragAnchor(bot, anchor);
+    refs.boss = fixed ? anchor : boss->GetPosition();
+    for (uint8 i = 0; i < 3; ++i)
     {
+        ObjectGuid const guid = i == 0 ? state.mainTank : state.sideTanks[i - 1];
         Player* tank = guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
-        if (tank && tank->IsAlive() && Dist2d(at, tank->GetPosition()) > ANUBARAK_HEALER_MAIN_TANK_REACH + slack)
-            return false;
+        if (!tank || !tank->IsAlive())
+            continue;
+
+        refs.tanks.push_back(!fixed ? tank->GetPosition()
+                             : i == 0 ? anchor
+                                      : GetAnubarakSideTankHold(bot, static_cast<uint8>(i - 1)));
     }
 
-    return true;
+    return refs;
+}
+
+// Within reach of him and the three tanks, plus slack
+static bool HealerBehindFits(BehindRefs const& refs, Position const& at, float slack = 0.0f)
+{
+    return Dist2d(at, refs.boss) <= ANUBARAK_BEHIND_HEALER_BOSS_REACH + slack &&
+           std::all_of(refs.tanks.begin(), refs.tanks.end(), [&](Position const& tank)
+                       { return Dist2d(at, tank) <= ANUBARAK_HEALER_MAIN_TANK_REACH + slack; });
 }
 
 static bool BehindRanged(Player* player)
@@ -7934,6 +8028,7 @@ static void AssignBehindStands(Player* bot, AnubarakState& state, Creature* boss
     away = {away.x / length, away.y / length};
     Vec2 const sideways = {-away.y, away.x};
     std::vector<Position> const patches = PatchPositions(bot, state);
+    BehindRefs const refs = BehindReferences(bot, state, boss);
     std::vector<BehindSlot> slots;
     for (float depth : ANUBARAK_BEHIND_DEPTHS)
         for (float off : ANUBARAK_BEHIND_SIDEWAYS)
@@ -7945,7 +8040,7 @@ static void AssignBehindStands(Player* bot, AnubarakState& state, Creature* boss
             if (!slot.crossings || !OffPatches(slot.pos, patches))
                 continue;
 
-            slot.healerFits = HealerBehindFits(bot, state, boss, slot.pos);
+            slot.healerFits = HealerBehindFits(refs, slot.pos);
             slots.push_back(slot);
         }
 
@@ -7993,7 +8088,7 @@ static void AssignBehindStands(Player* bot, AnubarakState& state, Creature* boss
     for (ObjectGuid const& guid : ranged)
         take(guid, [&](BehindSlot const& slot)
              {
-                 return Dist2d(slot.pos, boss->GetPosition()) <= ANUBARAK_BEHIND_RANGED_BOSS_REACH &&
+                 return Dist2d(slot.pos, refs.boss) <= ANUBARAK_BEHIND_RANGED_BOSS_REACH &&
                         std::all_of(healerStands.begin(), healerStands.end(), [&slot](Position const& stand)
                                     { return Dist2d(slot.pos, stand) <= ANUBARAK_HEALER_MAIN_TANK_REACH; });
              });
@@ -8032,7 +8127,7 @@ static bool BehindStand(Player* bot, Position& out)
     bool const lost =
         mine != state->behindStands.end() &&
         (!OffPatches(mine->second, patches) ||
-         !HealerBehindFits(bot, *state, boss, mine->second, ANUBARAK_BEHIND_KEEP_SLACK));
+         !HealerBehindFits(BehindReferences(bot, *state, boss), mine->second, ANUBARAK_BEHIND_KEEP_SLACK));
     RefreshBehindStands(bot, *state, boss, lost);
     mine = state->behindStands.find(bot->GetGUID());
     if (mine == state->behindStands.end())
@@ -8192,7 +8287,7 @@ bool GetAnubarakRangedStand(Player* bot, Position& out)
     PlayerbotAI* botAI = bot && bot->IsAlive() && BehindRanged(bot) ? GET_PLAYERBOT_AI(bot) : nullptr;
     AnubarakState* state = botAI && AnubarakHeroic(bot) ? ReadPhase(botAI) : nullptr;
     Creature* boss = state && state->phaseValue == AnubarakPhase::Swarm ? GetAnubarak(bot) : nullptr;
-    if (!boss || GetAnubarakDutySphere(bot) || GetAnubarakSideTankToRes(botAI))
+    if (!boss || GetAnubarakDutySphere(bot) || GetAnubarakBattleResTarget(botAI))
         return false;
 
     auto mine = state->behindStands.find(bot->GetGUID());
@@ -8200,7 +8295,7 @@ bool GetAnubarakRangedStand(Player* bot, Position& out)
     bool const lost =
         mine != state->behindStands.end() &&
         (!OffPatches(mine->second, patches) ||
-         Dist2d(mine->second, boss->GetPosition()) > ANUBARAK_BEHIND_RANGED_BOSS_REACH + ANUBARAK_BEHIND_KEEP_SLACK);
+         Dist2d(mine->second, BehindBossRef(bot, boss)) > ANUBARAK_BEHIND_RANGED_BOSS_REACH + ANUBARAK_BEHIND_KEEP_SLACK);
     RefreshBehindStands(bot, *state, boss, lost);
     mine = state->behindStands.find(bot->GetGUID());
     RaidObs::NoteDerived(bot, "anub.rbehind", mine != state->behindStands.end() ? "go" : "none");
@@ -8225,6 +8320,34 @@ bool AnubarakDashRunningOrReady(Player* bot)
 
     uint32 const rank = KnownRank(bot, DASH_RANKS);
     return rank && ReadyInstant(bot, rank);
+}
+
+bool AnubarakKiteCatHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && AnubarakEngaged(botAI) && bot->GetMap()->IsHeroic() && bot->getClass() == CLASS_DRUID &&
+           bot->HasAura(SPELL_MARK) && bot->GetShapeshiftForm() == FORM_CAT && AnubarakDashRunningOrReady(bot);
+}
+
+bool AnubarakKiteCatDropDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    // the tank strategy, not the spec: a cat DPS with Thick Hide reads as a tank by spec
+    return bot && bot->IsAlive() && bot->getClass() == CLASS_DRUID && bot->GetShapeshiftForm() == FORM_CAT &&
+           (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRangedDps(bot)) &&
+           AnubarakEngaged(botAI) && !AnubarakKiteCatHeld(botAI);
+}
+
+bool AnubarakMainTankKeepsBear(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AnubarakState const* state =
+        bot && bot->getClass() == CLASS_DRUID && AnubarakEngaged(botAI) ? ReadPhase(botAI) : nullptr;
+    if (!state || state->phaseValue != AnubarakPhase::Submerged || bot->GetGUID() != state->mainTank)
+        return false;
+
+    int32 const toEmerge = static_cast<int32>(state->submergedMs + ANUBARAK_SPIKE_LIFE_MS - getMSTime());
+    return toEmerge <= ANUBARAK_EMERGE_BEAR_MS;
 }
 
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI)
