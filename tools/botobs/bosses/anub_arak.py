@@ -520,6 +520,9 @@ KITE_TOOL_COOLDOWN_MS = {11305: 180000, 8696: 180000, 2983: 180000, 33357: 18000
 SPIKE_SUMMON_MS = 2500
 SPELL_CIRCLE_SUMMON = 48018
 SPELL_CIRCLE_TELEPORT = 48020
+# on the warlock while its circle is within the teleport's 40 yd
+SPELL_CIRCLE_IN_RANGE = 62388
+CLASS_WARLOCK = 9
 # heroic downs two kite spheres a submerge, so one spent this soon into its kite left the rest uncovered
 KITE_PATCH_EARLY_MS = 15000
 # a teleported warlock has walked on once this far from where it landed, and it landed within this of its
@@ -2419,6 +2422,10 @@ def show_spike(trace: Trace) -> None:
         show_rework(trace, windows, spent)
         teleports = circle_teleports(trace, windows, samples)
         print("  Demonic Circle teleports: " + ("; ".join(teleport_text(trace, row) for row in teleports) or "none"))
+        print("  Hand of Protection on a bot warlock kiter, its circle in reach (62388) flagged: " + (", ".join(
+            f"{trace.name(row['guid'])} {clock(row['window']['start'])} {rel_s(row['window'], row['t'])}"
+            f" by {trace.name(row['caster'])}" + (", circle in reach" if row["reach"] else "")
+            for row in warlock_hands(trace, windows)) or "none"))
     show_crowds(trace, samples)
     show_dodges(trace)
 
@@ -2527,6 +2534,33 @@ def circle_teleports(trace: Trace, windows: list[dict], samples: Samples | None 
                     "spike_yd": dist2(spike[1:3], kiter[1:3]) if spike else None,
                     "circle_yd": dist2(spike[1:3], circle) if spike else None,
                     "boost": boost, "passed": passed, "stood": stood})
+    return out
+
+
+def circle_in_reach(trace: Trace, guid: int, when: int) -> bool:
+    """The warlock's 62388 at `when`: the last row's state before it, else the opposite of the first row
+    after it, a removal first meaning it stood in reach from the start; false with no row."""
+    rows = [rec for rec in trace.of("aura") if rec.get("d") == guid and rec.get("sp") == SPELL_CIRCLE_IN_RANGE]
+    before = [rec for rec in rows if rec["t"] <= when]
+    if before:
+        return not before[-1].get("r")
+    return bool(rows) and bool(rows[0].get("r"))
+
+
+def warlock_hands(trace: Trace, windows: list[dict]) -> list[dict]:
+    """Each Hand of Protection onto a bot warlock inside its own mark, with whether its circle was in reach."""
+    locks = {member["g"] for member in trace.header.get("roster", [])
+             if member.get("c") == CLASS_WARLOCK and not member.get("h")}
+    out = []
+    for rec in trace.of("cast"):
+        guid = rec.get("tgt")
+        if rec.get("tr") or rec.get("sp") not in HAND_OF_PROTECTION or guid not in locks:
+            continue
+        window = next((window for window in windows if window["guid"] == guid
+                       and window["start"] <= rec["t"] <= window["stop"]), None)
+        if window:
+            out.append({"guid": guid, "t": rec["t"], "window": window, "caster": rec.get("s"),
+                        "reach": circle_in_reach(trace, guid, rec["t"])})
     return out
 
 
@@ -6013,6 +6047,64 @@ def show_heal_duties(trace: Trace) -> None:
         print(f"    {trace.name(guid)[:14]:14} {', '.join(parts) or 'none'}")
 
 
+SWARM_EXTERNALS = {48788: "Lay on Hands", 33206: "Pain Suppression", 47788: "Guardian Spirit",
+                   6940: "Hand of Sacrifice"}
+# a tank under this in phase 3 is owed one of them (anubarak tank rescue)
+TANK_RESCUE_PCT = 35.0
+
+
+def swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) -> tuple[list[dict], list[dict]]:
+    """Phase 3's externals, each with its target's health at the cast, and each tank's dip under
+    TANK_RESCUE_PCT with the first external onto it before it rose back or died."""
+    casts = []
+    for rec in trace.of("cast"):
+        if rec.get("tr") or rec.get("sp") not in SWARM_EXTERNALS or not start <= rec["t"] <= stop:
+            continue
+        row = samples.row(rec.get("tgt"), rec["t"])
+        casts.append({"t": rec["t"], "caster": rec.get("s"), "spell": rec["sp"], "target": rec.get("tgt"),
+                      "hp": row[5] if row else None})
+    dips = []
+    for guid in sorted(roster_guids(trace)):
+        if trace.role(guid) != "tank":
+            continue
+        stamps, rows = samples.track(guid)
+        dip = None
+        for index in range(bisect.bisect_left(stamps, start), bisect.bisect_right(stamps, stop)):
+            hp = rows[index][5]
+            if dip is None and 0 < hp < TANK_RESCUE_PCT:
+                dip = {"guid": guid, "start": stamps[index], "end": stop, "died": False}
+            elif dip is not None and (hp >= TANK_RESCUE_PCT or hp <= 0):
+                dip.update({"end": stamps[index], "died": hp <= 0})
+                dips.append(dip)
+                dip = None
+        if dip is not None:
+            dips.append(dip)
+    for dip in dips:
+        dip["external"] = next((cast for cast in casts if cast["target"] == dip["guid"]
+                                and dip["start"] - NEAR_MS <= cast["t"] <= dip["end"]), None)
+    return casts, dips
+
+
+def show_swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) -> None:
+    casts, dips = swarm_externals(trace, start, stop, samples)
+    print("  phase 3 externals, the target's health at the cast: " + (", ".join(
+        f"{clock(cast['t'])} {trace.name(cast['caster'])} {SWARM_EXTERNALS[cast['spell']]} >"
+        f" {trace.name(cast['target'])} ({trace.role(cast['target'])})"
+        + ("" if cast["hp"] is None else f" {cast['hp']:.0f}%") for cast in casts) or "none"))
+    covered = [dip for dip in dips if dip["external"]]
+    bare = [dip for dip in dips if not dip["external"]]
+    counts = collections.Counter(trace.name(dip["guid"]) for dip in bare)
+    print(f"  tank dips under {TANK_RESCUE_PCT:.0f}% in phase 3: {len(dips)}; an external onto it in {len(covered)}"
+          + (": " + ", ".join(
+              f"{trace.name(dip['guid'])} {clock(dip['start'])} {SWARM_EXTERNALS[dip['external']['spell']]}"
+              f" {(dip['external']['t'] - dip['start']) / 1000:+.1f} s" + (", died" if dip["died"] else "")
+              for dip in covered) if covered else "")
+          + f"; none in {len(bare)}" + (" (" + ", ".join(f"{name} {n}" for name, n in counts.most_common()) + ")"
+                                       if bare else "")
+          + "; died with none: " + (", ".join(f"{trace.name(dip['guid'])} {clock(dip['end'])}"
+                                              for dip in bare if dip["died"]) or "none"))
+
+
 def show_swarm(trace: Trace) -> None:
     print("PHASE 3")
     samples = Samples(trace)
@@ -6060,6 +6152,7 @@ def show_swarm(trace: Trace) -> None:
         show_counts(trace, "anub.swarmheal")
         show_heal_duties(trace)
         show_cold_waves(trace, samples)
+        show_swarm_externals(trace, span[0], span[1], samples)
     show_counts(trace, "anub.defensive")
 
     if span is not None:

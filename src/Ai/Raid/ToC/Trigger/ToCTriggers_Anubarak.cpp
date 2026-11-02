@@ -55,6 +55,13 @@ bool AnubarakHealerStandTrigger::IsActive()
     }
 
     bool const off = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
+    // on while it still moves, so the action can stop the walk
+    if (off && AnubarakHealerStandWaits(bot))
+    {
+        RaidObs::NoteDerived(bot, "anub.hstand", "heal");
+        return bot->isMoving();
+    }
+
     RaidObs::NoteDerived(bot, "anub.hstand", off ? "walk" : "hold");
     return off;
 }
@@ -100,6 +107,12 @@ bool AnubarakBurrowerLeadTrigger::IsActive()
 }
 
 bool AnubarakKiteCatDropTrigger::IsActive() { return AnubarakKiteCatDropDue(botAI); }
+
+bool AnubarakTankNeedsRescueTrigger::IsActive()
+{
+    AnubarakTankRescue rescue;
+    return GetAnubarakTankRescue(botAI, rescue);
+}
 
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
@@ -300,6 +313,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak on permafrost", {
         NextAction("anubarak leave permafrost", ACTION_EMERGENCY + 5) }));
+
+    // Over the class Hand of Sacrifice, Lay on Hands and Pain Suppression, which go to whoever is lowest
+    triggers.push_back(new TriggerNode("anubarak tank needs rescue", {
+        NextAction("anubarak tank rescue", ACTION_EMERGENCY + 4) }));
 
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));

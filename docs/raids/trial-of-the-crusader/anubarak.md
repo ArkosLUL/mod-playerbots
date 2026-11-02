@@ -187,6 +187,7 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+7 | `anubarak kiter needs protection` → `anubarak protect kiter` | the paladin holding the kiter's claim | `hand of protection` on the kiter |
 | EMERGENCY+6 | `anubarak spike nearby` → `anubarak avoid spike` | unmarked, within 10 yd of the spike or 7 yd of its predicted path (16 and 10 while it outruns the bot), or not yet at its held dodge spot | walks to its held dodge spot, `MOVEMENT_FORCED` |
 | EMERGENCY+5 | `anubarak on permafrost` → `anubarak leave permafrost` | no tank, unmarked, no dodge held, no grip duty but `kill`, within 7.5 yd of a patch | walks out ([non-tanks](#how-the-bots-play-it)) |
+| EMERGENCY+4 | `anubarak tank needs rescue` → `anubarak tank rescue` | heroic phase 3, a paladin or priest bot; the lowest tank in sight under 35% with no Pain Suppression, Guardian Spirit or Hand of Sacrifice on it | the first it can cast of `lay on hands`, `pain suppression`, `guardian spirit`, `hand of sacrifice` (never from a tank, on itself or under 50%), over the class ones (`protect party member` waits for a tank at 10%: BT 5:54.5-5:55.7 Felesta under 35% with three ready, then Pain Suppression and two Hands of Sacrifice on DPS) |
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank, healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate |
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
@@ -445,7 +446,9 @@ the rest go by exit, at most two a side while both side tanks
 are usable, and a dead or marked side tank's to the other (a marked one only exists in phase 2). A
 human side tank's still loose 5 s after it came out goes to the bot side tank, past two: three on one
 patch frenzy, but none eats a healer. `anubarak no ghouls` blocks `army of the dead` all fight: its
-ghouls taunted burrowers off the side tanks and the patches, where one submerged to full. A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
+ghouls taunted burrowers off the side tanks and the patches, where one submerged to full. `anubarak tank
+sacrifice hold` blocks a tank's `hand of sacrifice on party` all fight (BT 5:58 Bulwark, under two
+burrowers, took Mighty's hits). A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
 nearest its patch, and picks a loose one up even while holding one: Righteous Defense on whoever most
 of them hit, unless he is on them, they are a side tank, or it would leave the tank past two of its own
 (it taunts all three attackers: in 2026-10-28 R and S it put three on the tank four times, three
@@ -781,6 +784,12 @@ Nitro and Dash on its pick's second, BR 0 Impales; BS Tree's flinch the only kit
 the open race: BR held him at 27.5% 5:59-6:14 while DPS spent 48% of samples on the 4 burrowers
 carried in, BS lost both side tanks 10-12 s in.
 
+Baseline 2026-11-02, 25H on refine-23 (`8772f7e75` and the upstream merge; BT
+649_2_anub-arak_1793641400 P3 from 30.0% at 5:49, wipe 7:23 17.8%): 6 kites, 0 Impales on kiters, no
+death before P3. P3 opened on wave 6's burrowers, both side tanks at Expose Weakness 6-8, their
+defensives spent in P1c: Felesta 100% to dead 5:51.5-5:55.7 (73k, only her own Death Strike healing
+her), Bulwark at 22% meanwhile.
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -815,6 +824,13 @@ patch is down.
   spike. A near teleport in combat no longer idles a bot 1-2 s (`PlayerbotAI::HandleTeleportAck`):
   both stood on the circle 1.3-2.0 s and died. Sprint's +70% outruns the spike's 11.4, so the chain
   moves on as each runs out. The kite casts them itself, so the kite veto never holds them.
+
+**The circle before a Hand** (user call, 2026-11-02): the planner offers no Hand to a bot warlock
+with its teleport ready and the circle in reach, and no Hand claim goes while the teleport would
+(`TeleportCovers`: circle 15+ yd behind the spike, no boost running); out of reach, on cooldown or
+too near, the Hand is back. The planner plans no jumps, so since it came (2026-10-31) its patches
+and Hands ended every warlock kite before a catch was due: no teleport in 10 pulls, BT Fel 1:45 a
+planned Hand with its circle in reach.
 
 `anubarak hand reserve` blocks the Spell family (off-GCD too), `anubarak heal penetrating cold` and
 `anubarak interrupt shadow strike` for the planned or claimed paladin from 2.5 s before the catch: P
@@ -1017,6 +1033,10 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   3. the lowest in the first of: non-tank under 10% (the swarm alone takes about 7 s), a carrier this
      healer can cover (`bare`), tank under 90%, carrier under 50%.
 
+  Among tanks, one another player's cast or channel is heading for ranks behind one with none
+  (`spread`): BT 5:55 a Healing Wave, Holy Light and Greater Heal landed on Bulwark within 0.75 s, the
+  last overhealing, while Felesta died at 15%.
+
   Rows 1-2 at `ACTION_CRITICAL_HEAL + 12`, over every class heal, the rest at `ACTION_MEDIUM_HEAL +
   0.75`, under the mana tools. A carrier at risk gets the **rescue** (`CastAnubarakColdRescue`), the
   first `CanCastSpell` allows: on itself divine shield, divine protection, barkskin, pain suppression
@@ -1054,7 +1074,9 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   without an anchor (BR 6:24 all 4 stands dropped as Felesta chased a burrower 35 yd), on the floor (navprobe 2026-11-01: flat to 32 yd east of the midpoint (786.8, 130.6), rising in
   the south-east past it, x 824.8 off the mesh). From his 35% in a phase 1 they walk one at a time,
   healers being unable to cast on the move: the next once every earlier one stands within 6 yd of its
-  own, none while a tank is under 50% (`wait`). Held stands stay until 3 yd past those reaches (else
+  own, none while a tank is under 50% (`wait`). Then too a walk to its stand, or to the usual one
+  meanwhile, stops and waits (`hstand` `heal`): the walk outranks the urgent heals (60.45 over 42), and
+  BT 5:52 Tree walked 7 s through the crash. Held stands stay until 3 yd past those reaches (else
   each tank step moves a healer); that one alone is dropped, and a bot without one asks again once a
   second, else keeps its usual stand (`none`): in BQ and BP a submerge drag left an empty assignment
   latched for the rest of the pull. All clear when he goes under.
@@ -1092,6 +1114,12 @@ personal burst is unrestricted.
 
 ## Known gaps
 
+- Side tanks reach phase 3 with their defensives spent: the stack rule fires at any health, every
+  last-phase-1 one in BT, BR and BS at his 43-47% (user call, 2026-11-02: no hold). No Anti-Magic Shell
+  for them in phase 3, no Rune Tap in `NextTankDefensive`.
+- Battle res (user call, 2026-11-02: left): a walk to the corpse that a cast interrupts is refused as
+  `dup` (BT 6:38 Tree never cast), and the class `rebirth` spends a druid's on anyone (BT 6:03
+  Druidica on Mighty).
 - A ready boost fires at the first tick within 15 yd of a faster spike; later can outlast more of a
   short life (nativetest: a 10 s life, a top speed spike 25 yd off, caught at 9.4 s boosted at 1.8 s,
   free boosted at 2.5).
@@ -1223,7 +1251,7 @@ personal burst is unrestricted.
 | `second` | Traces before 2026-10-29: heroic kiter `grant` (a second tank patch), `none` once the mark moves |
 | `lane`, `bridge` | Older traces: the heroic lane step (`flags:degrees`, `ring:<way>`/`ring:<exit>`) and a `patch+hand` kite's Hand (`hand`, `turn`, `ask`) |
 | `gather` | Heroic phase 2: `walk`, `hold`, `wait` (the way to the slot crosses the spike's path) |
-| `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `lead` (a burrower on it, its side tank's), `none` |
+| `hstand` | A healer bot's stand while he is up: `walk`, `hold`, `lead` (a burrower on it, its side tank's), `heal` (a tank under 50%), `none` |
 | `lead` | A ranged DPS or healer bot a burrower is on: `walk` (its side tank over 25 yd off), `wait`, `none` |
 | `hbehind` | Heroic healer bot from his 35% in a phase 1: `go` (to its stand behind the tank patches), `wait` (an earlier healer still walking, or a tank under 50%), `none` (no stand) |
 | `rbehind`, `rstand` | Heroic phase 3 ranged DPS bot: `go`/`none` (a stand behind the tank patches); `walk`, `hold`, `lead`, `none` |
@@ -1237,7 +1265,7 @@ personal burst is unrestricted.
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
 | `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
 | `burst` | Heroic burst gate: `hold` (40% or under), `behind` (released), `wait` (phase 3, its burrowers up), `open` |
-| `swarmheal` | Heroic phase 3 healer's pick: `self`, `risk` (a carrier at risk), `tank`, `low`, `bare` (a carrier it can cover), `cold`, `none` |
+| `swarmheal` | Heroic phase 3 healer's pick: `self`, `risk` (a carrier at risk), `tank`, `spread` (a tank over a lower one with a heal on the way), `low`, `bare` (a carrier it can cover), `cold`, `none` |
 | `healduty` | Heroic phase 3 healer bot's duty: 1 `cold`, 2 `tank` |
 | `coldheal` | Heroic phase 3 healer bot's carrier at risk, its own guid when itself, 0 when none |
 | `mastery` | Heroic phase 3 paladin bot: `cast`, `hold N` (a fresh round, N carriers under the tick), `none` |
@@ -1362,7 +1390,8 @@ idle, the terminals, the seconds after its first tank patch and kiter deaths; he
 (Sprint, Dash, Nitro, Divine Shield, Ice Block, Vanish, Feign Death) a bot spent off its mark before
 phase 3 and still on its base cooldown as a submerge's spike came up, per phase; each Demonic Circle
 teleport with the spike off the kiter and the circle (where it landed when the summon came before the
-trace), the boost before it and its pass by the circle, and the seconds stood on landing; per submerge
+trace), the boost before it and its pass by the circle, and the seconds stood on landing; each Hand of
+Protection on a bot warlock kiter, its circle in reach flagged; per submerge
 his distance from the gather; Cat Form and Feral Charge among the boosts; per kite `kitepred` at the
 mark against the real end, the `kitepath` picks with seconds held, a turn past 90° within 1 s of the
 last flagged `reversal`, and the first predicted hazard against the first real one (the planner's
@@ -1405,7 +1434,9 @@ share per tick and per carrier its health at the landing, its margin at the firs
 own risk model: health × (1 − drain)³ against the tick, no absorbs or timers; a survived tick's margin
 clamped to 0, the pool read at first sight), fate, heals and absorbs before it by source and its
 `coldheal` healer; a herd is 2+ healers' heals on one carrier within 1.5 s while another at risk got
-none. `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
+none; each phase 3 Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice with its
+target's health, and the tank dips under 35% with the first of them onto it, else whether it died.
+`--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
 shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
 heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
 had it back and the taunt that did it. `--spike` per kite each Sprint, Dash or Nitro with the spike's

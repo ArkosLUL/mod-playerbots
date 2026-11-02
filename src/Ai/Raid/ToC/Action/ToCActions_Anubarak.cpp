@@ -574,6 +574,19 @@ bool AnubarakHealerStandAction::Execute(Event /*event*/)
         return false;
 
     Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, slot));
+    // heals don't cast on the move: stop and let the ones below run. Booking cleared or the walk back
+    // is refused as a repeat
+    if (AnubarakHealerStandWaits(bot))
+    {
+        if (WalkInFlight(botAI, bot, walk) || WalkInFlight(botAI, bot, slot))
+        {
+            bot->StopMoving();
+            AI_VALUE(LastMovement&, "last movement").clear();
+        }
+
+        return false;
+    }
+
     if (WalkInFlight(botAI, bot, walk))
         return true;
 
@@ -664,6 +677,12 @@ bool AnubarakKiteCatDropAction::Execute(Event /*event*/)
 
     botAI->RemoveShapeshift();
     return true;
+}
+
+bool AnubarakTankRescueAction::Execute(Event /*event*/)
+{
+    AnubarakTankRescue rescue;
+    return GetAnubarakTankRescue(botAI, rescue) && botAI->CastSpell(rescue.spell, rescue.tank);
 }
 
 bool AnubarakDemonicCircleAction::Execute(Event /*event*/)

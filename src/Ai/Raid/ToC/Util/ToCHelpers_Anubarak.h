@@ -542,6 +542,7 @@ enum class AnubarakHealDuty : uint8
 // - tank duty: a tank under 50%, then a carrier at risk with no healer in reach;
 // - then a non-tank under 10%, a carrier with no HoT or shield this healer can give one, a tank under
 //   90% and a carrier under 50%, the lowest in the first that has one.
+// Among tanks, one another player's cast or channel is already heading for ranks behind one with none.
 // Urgent covers the first three rows, rescue the carriers at risk, small the non-tank, which gets no
 // big hard cast.
 struct AnubarakSwarmHealPick
@@ -576,6 +577,19 @@ bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI);
 // A priest's Power Word: Shield goes on a tank first: what it absorbs never heals him
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 
+constexpr float ANUBARAK_TANK_RESCUE_PCT = 35.0f;
+// Hand of Sacrifice moves damage onto its caster, so a paladin this low keeps it
+constexpr float ANUBARAK_TANK_RESCUE_SACRIFICE_PCT = 50.0f;
+struct AnubarakTankRescue
+{
+    Player* tank = nullptr;
+    char const* spell = nullptr;
+};
+// Heroic phase 3: the lowest tank in sight under 35% with no Pain Suppression, Guardian Spirit or Hand of
+// Sacrifice on it, and the first of Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice
+// this bot can cast on it. Never Hand of Sacrifice from a tank. False with none.
+bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out);
+
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);
 // The DK's grip of a sphere for its side's tank patch. False without one.
@@ -606,6 +620,9 @@ bool AnubarakGathers(PlayerbotAI* botAI);
 // False for anyone else or while marked.
 bool GetAnubarakHealerStand(Player* bot, Position& out);
 bool AnubarakHealerStandApplies(PlayerbotAI* botAI);
+// Heroic, from his 35% in a phase 1 and in phase 3: a tank under 50%, so the healer heals where it stands
+// instead of walking to its stand
+bool AnubarakHealerStandWaits(Player* bot);
 // Heroic phase 3: a ranged DPS bot's stand behind the tank patches, after the healers', within 28 yd of
 // him and heal reach of every healer stand (anub.rbehind). False for anyone else, with no stand left, and
 // on sphere or battle res duty.

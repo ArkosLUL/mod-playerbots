@@ -3860,12 +3860,36 @@ class CirclePull(unittest.TestCase):
         self.assertIn("into its kite, early  no kite patch down as the spike came up\n", out.getvalue())
         self.assertIn("  kite patches on the floor as he went down, under 2 flagged: P2 0 under\n", out.getvalue())
 
+    def test_a_hand_on_a_warlock_reads_whether_its_circle_was_in_reach(self):
+        # out of reach from 44 s, back in at 45.5 s; the mage's Hand is no warlock's
+        records = circle_pull() + [
+            aura(44000, CLOCK, ab.SPELL_CIRCLE_IN_RANGE, True, CLOCK),
+            aura(45500, CLOCK, ab.SPELL_CIRCLE_IN_RANGE, False, CLOCK),
+            cast(44500, CTANK, ab.HAND_OF_PROTECTION[2], CLOCK),
+            cast(46000, CTANK, ab.HAND_OF_PROTECTION[2], CLOCK),
+            cast(67000, CTANK, ab.HAND_OF_PROTECTION[2], CKITER),
+        ]
+        trace = write_trace(self.folder.name, "649_19_anub-arak_1789900002.ndjson", records)
+        rows = ab.warlock_hands(trace, ab.mark_windows(trace))
+        self.assertEqual([(row["guid"], row["t"], row["reach"]) for row in rows],
+                         [(CLOCK, 44500, False), (CLOCK, 46000, True)])
+        # before its first row: in reach when that row is a removal
+        self.assertTrue(ab.circle_in_reach(trace, CLOCK, 43000))
+        self.assertFalse(ab.circle_in_reach(trace, CKITER, 67000))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_spike(trace)
+        self.assertIn("  Hand of Protection on a bot warlock kiter, its circle in reach (62388) flagged: Hellflame"
+                      " 0:43.000 +1.5 s by Bulwark, Hellflame 0:43.000 +3.0 s by Bulwark, circle in reach\n",
+                      out.getvalue())
+
     def test_the_sections_print_them(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             ab.show_spike(self.trace)
             ab.show_spheres(self.trace)
         text = out.getvalue()
+        self.assertIn("  Hand of Protection on a bot warlock kiter, its circle in reach (62388) flagged: none\n", text)
         self.assertIn("  Demonic Circle teleports: Hellflame 0:51.000 spike 4.0 yd off, the circle 21.0 yd from it;"
                       " Nitro Boosts 3.0 s before, passing the circle at 25.0 yd; stood 1.5 s on landing\n", text)
         self.assertIn("  kite tools a bot spent off its own mark, per phase: P1 Shadow Sprint 0:05.000\n", text)
@@ -4525,6 +4549,25 @@ class ColdPull(unittest.TestCase):
                       " tick 2 no\n      anub.mastery none; resisted per tick 20%\n"
                       "      Prayer         heal     2.0k   8.0% risk  +2.0k survived       coldheal self; Prayer abs"
                       " 3.0k\n", text)
+
+    def test_the_swarm_section_reads_the_externals_and_the_tank_dips(self):
+        # Bulwark at 30% from 30 s, Lay on Hands at 31 s, full from 33 s; at 20% from 40 s and dead at 41 s
+        records = cold_pull() + [cast(31000, HHOLY, 48788, HSIDE), cast(32000, HPRAYER, 33206, HJUSTICE)]
+        for rec in records:
+            if rec.get("e") == "snap":
+                when = rec["t"]
+                for row in rec["u"]:
+                    if row[0] == HSIDE:
+                        row[5] = (30.0 if 30000 <= when < 33000 else 20.0 if 40000 <= when < 41000
+                                  else 0.0 if when >= 41000 else row[5])
+        trace = write_trace(self.folder.name, "649_22_anub-arak_1790200002.ndjson", records)
+        text = self.text(trace, ab.show_swarm)
+        self.assertIn("  phase 3 externals, the target's health at the cast: 0:31.000 Holylight Lay on Hands > Bulwark"
+                      " (tank) 30%, 0:32.000 Prayer Pain Suppression > Justice (melee) 10%\n", text)
+        self.assertIn("  tank dips under 35% in phase 3: 2; an external onto it in 1: Bulwark 0:30.000 Lay on Hands"
+                      " +1.0 s; none in 1 (Bulwark 1); died with none: Bulwark 0:41.000\n", text)
+        self.assertIn("  tank dips under 35% in phase 3: 0; an external onto it in 0; none in 0; died with none: none\n",
+                      self.text(self.trace, ab.show_swarm))
 
     def test_the_swarm_section_reads_a_trace_without_the_new_keys(self):
         text = self.text(self.bare, ab.show_swarm)

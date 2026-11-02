@@ -31,6 +31,7 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "Spell.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
@@ -2193,6 +2194,16 @@ bool FeralChargeBoost(Player* kiter, Creature* spike, AnubarakState const& state
     return true;
 }
 
+// A bot warlock's teleport goes at the catch: its circle ready in reach, no speed boost running, and the
+// circle well behind the spike
+bool TeleportCovers(Player* kiter, Creature* spike)
+{
+    GameObject* circle = GET_PLAYERBOT_AI(kiter) ? TeleportCircle(kiter) : nullptr;
+    return circle && !SpeedBoostRunning(kiter) &&
+           Dist2d(circle->GetPosition(), spike->GetPosition()) >=
+               Dist2d(kiter->GetPosition(), spike->GetPosition()) + ANUBARAK_CIRCLE_TELEPORT_GAIN;
+}
+
 // The next speed boost in the chain: Sprint, Dash, Nitro Boosts, Blink the way it runs when the spike's
 // lane to the landing stays clear, then the teleport back to a circle well behind the spike, then heroic
 // druids' Feral Charge. The teleport and the charge go last: no speed boost ready or running, and the catch
@@ -2224,10 +2235,7 @@ bool NextKiteBoost(Player* kiter, Creature* spike, AnubarakState const& state,
     if (SpeedBoostRunning(kiter))
         return false;
 
-    GameObject* circle = TeleportCircle(kiter);
-    float const dist = Dist2d(kiter->GetPosition(), spike->GetPosition());
-    if (circle && KiteCatchDue(kiter, spike) &&
-        Dist2d(circle->GetPosition(), spike->GetPosition()) >= dist + ANUBARAK_CIRCLE_TELEPORT_GAIN)
+    if (TeleportCovers(kiter, spike) && KiteCatchDue(kiter, spike))
     {
         out.spellId = SPELL_CIRCLE_TELEPORT;
         return true;
@@ -2615,7 +2623,8 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
     ObjectGuid const first = !plan.hand.IsEmpty()                     ? plan.hand
                              : state.standbyKiter == kiter->GetGUID() ? state.standby
                                                                       : ObjectGuid::Empty;
-    std::vector<Player*> hands = ReadyHands(kiter);
+    // a bot warlock with its teleport ready in reach keeps the paladins' Hands for the next kite
+    std::vector<Player*> hands = bot && TeleportCircle(kiter) ? std::vector<Player*>() : ReadyHands(kiter);
     std::stable_partition(hands.begin(), hands.end(),
                           [&first](Player* paladin) { return paladin->GetGUID() == first; });
     for (Player* paladin : hands)
@@ -4041,7 +4050,9 @@ ProtectClaim const* DeriveProtection(Player* bot)
     // A spike within the immunity range has beaten whatever walk the plan gave the kiter
     claim.standReachable =
         (plan->outcome.ending == Ending::Patch || plan->outcome.ending == Ending::PatchHand) && !claim.spikeInImmunityRange;
-    claim.need = !immune && !forbearance && !selfHand && handDue && (handKite || (!claim.standReachable && !ownPlanned));
+    // the warlock's teleport goes first, the Hand once it can't
+    claim.need = !immune && !forbearance && !selfHand && handDue &&
+                 (handKite || (!claim.standReachable && !ownPlanned)) && !TeleportCovers(kiter, spike);
     ObjectGuid const planned = handKite && !selfHand ? plan->hand : ObjectGuid::Empty;
 
     if (!claim.protector.IsEmpty() && !immune)
@@ -6772,10 +6783,33 @@ static AnubarakState* RefreshColdHeals(PlayerbotAI* botAI)
     return state;
 }
 
+// Who other players' casts and channels in progress are aimed at. Instants have landed already
+static std::vector<ObjectGuid> HealsOnTheWay(Player* healer)
+{
+    std::vector<ObjectGuid> targets;
+    ForEachGroupMember(healer, [&](Player* member)
+    {
+        if (member == healer || !member->IsAlive())
+            return false;
+
+        for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+        {
+            Spell const* spell = member->GetCurrentSpell(type);
+            if (spell && spell->GetSpellInfo()->IsPositive() && !spell->m_targets.GetUnitTargetGUID().IsEmpty())
+                targets.push_back(spell->m_targets.GetUnitTargetGUID());
+        }
+
+        return false;
+    });
+
+    return targets;
+}
+
 // For the rows under the urgent ones: SWARM_HEAL_TIERS for a heal that would only feed the swarm. A
 // carrier with no HoT or shield that this healer can cover ranks ahead of the tanks' top-off: on direct
 // heals alone, carriers died to it.
 static constexpr uint8 SWARM_HEAL_TIERS = 4;
+static constexpr uint8 SWARM_HEAL_TANK_TOPOFF = 2;
 
 static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
 {
@@ -6787,7 +6821,7 @@ static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
     if (carrier && ColdCarrierCover(botAI, member))
         return 1;
     if (tank && pct < ANUBARAK_SWARM_TANK_TOPOFF_PCT)
-        return 2;
+        return SWARM_HEAL_TANK_TOPOFF;
     if (carrier && pct < ANUBARAK_SWARM_COLD_TOPOFF_PCT)
         return 3;
 
@@ -6808,19 +6842,30 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         return member && member->IsAlive() && member->IsInMap(bot) && bot->IsWithinDistInMap(member, range) &&
                bot->IsWithinLOSInMap(member);
     };
+    std::vector<ObjectGuid> const onTheWay = HealsOnTheWay(bot);
+    auto const incoming = [&onTheWay](Player* member)
+    { return std::find(onTheWay.begin(), onTheWay.end(), member->GetGUID()) != onTheWay.end(); };
+    // Set when a tank pick passed over a lower tank that has a heal on the way
+    bool spread = false;
     auto const lowestTank = [&](float below)
     {
         Player* lowest = nullptr;
+        Player* open = nullptr;
         ForEachGroupMember(bot, [&](Player* member)
         {
-            if (IsAnubarakTankPlayer(member) && member->GetHealthPct() < below &&
-                (!lowest || member->GetHealthPct() < lowest->GetHealthPct()) && reaches(member))
+            if (!IsAnubarakTankPlayer(member) || member->GetHealthPct() >= below || !reaches(member))
+                return false;
+
+            if (!lowest || member->GetHealthPct() < lowest->GetHealthPct())
                 lowest = member;
+            if ((!open || member->GetHealthPct() < open->GetHealthPct()) && !incoming(member))
+                open = member;
 
             return false;
         });
 
-        return lowest;
+        spread = open && open != lowest;
+        return open ? open : lowest;
     };
 
     char const* label = "none";
@@ -6833,10 +6878,13 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
     };
 
     uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
-    // The lowest member of the best tier in reach and sight, null with none below SWARM_HEAL_TIERS
+    // The lowest member of the best tier in reach and sight, null with none below SWARM_HEAL_TIERS. In the
+    // tanks' top-off a tank with a heal on the way ranks behind one without
     auto const tierPick = [&](uint8& bestTier)
     {
         Player* best = nullptr;
+        Player* lowestTopOff = nullptr;
+        bool bestIncoming = false;
         bestTier = SWARM_HEAL_TIERS;
         ForEachGroupMember(bot, [&](Player* member)
         {
@@ -6844,18 +6892,30 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
                 return false;
 
             uint8 const tier = SwarmHealTier(botAI, member, cold);
-            bool const lower = !best || member->GetHealthPct() < best->GetHealthPct();
-            if (tier > bestTier || (tier == bestTier && !lower))
+            if (tier == SWARM_HEAL_TIERS || tier > bestTier)
                 return false;
 
-            if (tier == SWARM_HEAL_TIERS || !bot->IsWithinLOSInMap(member))
+            bool const topOff = tier == SWARM_HEAL_TANK_TOPOFF;
+            bool const heading = topOff && incoming(member);
+            bool const lower = !best || member->GetHealthPct() < best->GetHealthPct();
+            bool const wins = tier < bestTier || (heading != bestIncoming ? !heading : lower);
+            bool const lowestOfTopOff =
+                topOff && (!lowestTopOff || member->GetHealthPct() < lowestTopOff->GetHealthPct());
+            if ((!wins && !lowestOfTopOff) || !bot->IsWithinLOSInMap(member))
+                return false;
+
+            if (lowestOfTopOff)
+                lowestTopOff = member;
+            if (!wins)
                 return false;
 
             bestTier = tier;
             best = member;
+            bestIncoming = heading;
             return false;
         });
 
+        spread = bestTier == SWARM_HEAL_TANK_TOPOFF && best != lowestTopOff;
         return best;
     };
 
@@ -6870,19 +6930,19 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         if (reaches(carrier))
             take(carrier, "risk", true);
         else if (Player* tank = lowestTank(tankLine))
-            take(tank, "tank", false);
+            take(tank, spread ? "spread" : "tank", false);
         // Two tank healers alone fall behind the swarm on three tanks, so with no carrier of its own at risk
         // a cold healer tops the tanks up too, once nobody's dying and no carrier waits for its cover
         else if (!carrier)
         {
             uint8 tier = SWARM_HEAL_TIERS;
             Player* low = tierPick(tier);
-            if (low && tier == 2)
-                take(low, "tank", false);
+            if (low && tier == SWARM_HEAL_TANK_TOPOFF)
+                take(low, spread ? "spread" : "tank", false);
         }
     }
     else if (Player* tank = lowestTank(ANUBARAK_SWARM_TANK_URGENT_PCT))
-        take(tank, "tank", false);
+        take(tank, spread ? "spread" : "tank", false);
     else
     {
         // A carrier at risk that no healer in reach is assigned to
@@ -6914,7 +6974,7 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         char const* const labels[] = {"low", "bare", "tank", "cold"};
         pick.small = bestTier == 0;
         if (pick.target)
-            label = labels[bestTier];
+            label = spread ? "spread" : labels[bestTier];
     }
 
     if (RaidObs::Active())
@@ -7100,6 +7160,47 @@ bool AnubarakSwarmHealWasted(Player* target)
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target)
 {
     return bot->getClass() == CLASS_PRIEST && IsAnubarakTankPlayer(target) && !target->HasAura(SPELL_WEAKENED_SOUL);
+}
+
+constexpr uint32 SPELL_PAIN_SUPPRESSION = 33206;
+constexpr uint32 SPELL_GUARDIAN_SPIRIT = 47788;
+// Lay on Hands first: a full heal, the rest only cut what lands
+constexpr char const* TANK_RESCUES[] = {"lay on hands", "pain suppression", "guardian spirit", "hand of sacrifice"};
+
+bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || (bot->getClass() != CLASS_PALADIN && bot->getClass() != CLASS_PRIEST) || !bot->IsAlive() ||
+        bot->HasAura(SPELL_MARK) || !AnubarakHeroic(bot) || !AnubarakEngaged(botAI) ||
+        GetAnubarakPhase(botAI) != AnubarakPhase::Swarm)
+        return false;
+
+    bool const sacrifices = !IsAnubarakTankPlayer(bot) && bot->GetHealthPct() >= ANUBARAK_TANK_RESCUE_SACRIFICE_PCT;
+    out = AnubarakTankRescue();
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (!IsAnubarakTankPlayer(member) || !member->IsAlive() ||
+            member->GetHealthPct() >= ANUBARAK_TANK_RESCUE_PCT ||
+            (out.tank && member->GetHealthPct() >= out.tank->GetHealthPct()) ||
+            member->HasAura(SPELL_PAIN_SUPPRESSION) || member->HasAura(SPELL_GUARDIAN_SPIRIT) ||
+            member->HasAura(ai::paladin::SPELL_HAND_OF_SACRIFICE) || !bot->IsWithinLOSInMap(member))
+            return false;
+
+        for (char const* spell : TANK_RESCUES)
+        {
+            bool const sacrifice = std::strcmp(spell, "hand of sacrifice") == 0;
+            if ((sacrifice && (!sacrifices || member == bot)) || !botAI->CanCastSpell(spell, member))
+                continue;
+
+            out.tank = member;
+            out.spell = spell;
+            break;
+        }
+
+        return false;
+    });
+
+    return out.tank != nullptr;
 }
 
 static AnubarakState* ResolveDuties(Player* bot)
@@ -8111,15 +8212,45 @@ static void RefreshBehindStands(Player* bot, AnubarakState& state, Creature* bos
     state.behindTriedMs = now;
 }
 
+// Heroic, from his 35% in a phase 1 and in phase 3: when the behind stands apply. Null outside it.
+static AnubarakState* BehindWindow(Player* bot, Creature*& boss)
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    AnubarakState* state = botAI && AnubarakHeroic(bot) ? ReadPhase(botAI) : nullptr;
+    boss = state ? GetAnubarak(bot) : nullptr;
+    if (!boss || (state->phaseValue != AnubarakPhase::Swarm &&
+                  (state->phaseValue != AnubarakPhase::Surface || boss->GetHealthPct() > ANUBARAK_BEHIND_FROM_PCT)))
+        return nullptr;
+
+    return state;
+}
+
+static bool AnyTankLow(Player* bot, AnubarakState const& state)
+{
+    for (ObjectGuid const& guid : {state.mainTank, state.sideTanks[0], state.sideTanks[1]})
+    {
+        Player* tank = guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
+        if (tank && tank->IsAlive() && tank->GetHealthPct() < ANUBARAK_BEHIND_TANK_LOW_PCT)
+            return true;
+    }
+
+    return false;
+}
+
+bool AnubarakHealerStandWaits(Player* bot)
+{
+    Creature* boss = nullptr;
+    AnubarakState const* state = bot ? BehindWindow(bot, boss) : nullptr;
+    return state && AnyTankLow(bot, *state);
+}
+
 // Heroic, from his 35% in a phase 1 and in phase 3: this healer's stand behind the tank patches once every
 // healer before it by guid has reached its own. False while it waits its turn or has none.
 static bool BehindStand(Player* bot, Position& out)
 {
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    AnubarakState* state = AnubarakHeroic(bot) ? ReadPhase(botAI) : nullptr;
-    Creature* boss = state ? GetAnubarak(bot) : nullptr;
-    if (!boss || (state->phaseValue != AnubarakPhase::Swarm &&
-                  (state->phaseValue != AnubarakPhase::Surface || boss->GetHealthPct() > ANUBARAK_BEHIND_FROM_PCT)))
+    Creature* boss = nullptr;
+    AnubarakState* state = BehindWindow(bot, boss);
+    if (!state)
         return false;
 
     auto mine = state->behindStands.find(bot->GetGUID());
@@ -8163,14 +8294,10 @@ static bool BehindStand(Player* bot, Position& out)
             }
         }
 
-        for (ObjectGuid const& guid : {state->mainTank, state->sideTanks[0], state->sideTanks[1]})
+        if (AnyTankLow(bot, *state))
         {
-            Player* tank = guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
-            if (tank && tank->IsAlive() && tank->GetHealthPct() < ANUBARAK_BEHIND_TANK_LOW_PCT)
-            {
-                RaidObs::NoteDerived(bot, "anub.hbehind", "wait");
-                return false;
-            }
+            RaidObs::NoteDerived(bot, "anub.hbehind", "wait");
+            return false;
         }
 
         state->behindGone.insert(bot->GetGUID());
