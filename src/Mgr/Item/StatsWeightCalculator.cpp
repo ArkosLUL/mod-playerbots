@@ -174,6 +174,13 @@ void CollectRandomProperty(StatsCollector& collector, int32 randomPropertyId, ui
         }
     }
 }
+
+// Threat reduction per percent and magic resistance per point, by role
+constexpr float HEALER_THREAT_REDUCTION_WEIGHT = 2.0f;
+constexpr float HEALER_RESISTANCE_WEIGHT = 1.0f;
+constexpr float CASTER_THREAT_REDUCTION_WEIGHT = 4.0f;
+constexpr float CASTER_RESISTANCE_WEIGHT = 0.5f;
+constexpr float TANK_THREAT_REDUCTION_WEIGHT = -4.0f;
 }
 
 template <size_t Size>
@@ -206,6 +213,9 @@ StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
     lvl = player->GetLevel();
     tab = AiFactory::GetPlayerSpecTab(player);
     collector_ = std::make_unique<StatsCollector>(type_, cls, lvl, SpecPrimarySpellSchoolMask(cls, tab));
+    // By talent spec, like the weights in GenerateBasicWeights(); type_ follows the strategies
+    healSpec_ = PlayerbotAI::IsHeal(player, true);
+    casterSpec_ = !healSpec_ && PlayerbotAI::IsCaster(player, true);
 
     if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_UNHOLY)
         hitOverflowType_ = CollectorType::SPELL;
@@ -890,6 +900,21 @@ void StatsWeightCalculator::GenerateAdditionalWeights(Player* player)
         if (player->HasAura(SPELL_HOLY_GUIDANCE))
             stats_weights_[STATS_TYPE_INTELLECT] += 0.4f;
     }
+
+    // Healers would rather survive the hits (Greater Resistance), casters shed threat (Enchant Cloak - Subtlety),
+    // tanks want more threat (Enchant Gloves - Threat). Melee and hunters weigh neither.
+    if (healSpec_)
+    {
+        stats_weights_[STATS_TYPE_THREAT_REDUCTION] += HEALER_THREAT_REDUCTION_WEIGHT;
+        stats_weights_[STATS_TYPE_RESISTANCE] += HEALER_RESISTANCE_WEIGHT;
+    }
+    else if (casterSpec_)
+    {
+        stats_weights_[STATS_TYPE_THREAT_REDUCTION] += CASTER_THREAT_REDUCTION_WEIGHT;
+        stats_weights_[STATS_TYPE_RESISTANCE] += CASTER_RESISTANCE_WEIGHT;
+    }
+    else if (type_ == CollectorType::MELEE_TANK)
+        stats_weights_[STATS_TYPE_THREAT_REDUCTION] += TANK_THREAT_REDUCTION_WEIGHT;
 
     if (pvpSpec_ && !exclude_resilience_)
         stats_weights_[STATS_TYPE_RESILIENCE] += 7.0f;

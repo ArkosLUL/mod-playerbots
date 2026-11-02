@@ -63,7 +63,7 @@ std::vector<SimWeights::PhaseRow> Rows()
 void StatNamesMatchTheTable()
 {
     static_assert(SimWeights::StatIndex("AGILITY") == 0);
-    static_assert(SimWeights::StatIndex("BONUS") == 25);
+    static_assert(SimWeights::StatIndex("BONUS") == 27);
     static_assert(SimWeights::StatIndex("agility") == -1);
     static_assert(SimWeights::StatIndex("STATS_TYPE_HIT") == -1);
 }

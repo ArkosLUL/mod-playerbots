@@ -148,6 +148,8 @@ private:
     // -1 until ProgressionTier() resolves it.
     int16 progression_tier_ = -1;
     int tab;
+    bool healSpec_;
+    bool casterSpec_;
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;
     bool enable_cap_priority_ = false;

@@ -19,12 +19,10 @@ static constexpr uint32 SPELL_HAND_OF_PROTECTION_RANK_3 = 10278;
 static constexpr uint32 SPELL_HAND_OF_SALVATION = 1038;
 static constexpr uint32 SPELL_HAND_OF_FREEDOM = 1044;
 static constexpr uint32 SPELL_HAND_OF_SACRIFICE = 6940;
-static constexpr uint32 SPELL_BLESSING_OF_SANCTUARY = 20911;
-static constexpr uint32 SPELL_GREATER_BLESSING_OF_SANCTUARY = 25899;
 // Applied as a passive aura while the glyph is socketed; it removes the -50% healing from Divine Plea.
 static constexpr uint32 SPELL_GLYPH_DIVINE_PLEA = 63223;
 
-inline bool HasHandFromCaster(Unit* target, Player* caster, std::initializer_list<uint32> spellIds)
+inline bool HasHandFromCaster(Unit* target, Unit* caster, std::initializer_list<uint32> spellIds)
 {
     if (!target || !caster)
         return false;
@@ -38,7 +36,7 @@ inline bool HasHandFromCaster(Unit* target, Player* caster, std::initializer_lis
     return false;
 }
 
-inline bool HasAnyPaladinHandFromCaster(Unit* target, Player* caster)
+inline bool HasAnyPaladinHandFromCaster(Unit* target, Unit* caster)
 {
     return HasHandFromCaster(target, caster,
         { SPELL_HAND_OF_PROTECTION, SPELL_HAND_OF_PROTECTION_RANK_2, SPELL_HAND_OF_PROTECTION_RANK_3,

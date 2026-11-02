@@ -21,13 +21,14 @@ namespace SimWeights
 {
 
 // StatsType order, checked against StatsCollector.h in SimWeightsMgr.cpp
-constexpr std::size_t STAT_COUNT = 26;
+constexpr std::size_t STAT_COUNT = 28;
 
 constexpr std::array<std::string_view, STAT_COUNT> STAT_NAMES = {
     "AGILITY", "STRENGTH", "INTELLECT", "SPIRIT", "STAMINA", "HIT", "CRIT", "HASTE", "ARMOR",
     "DEFENSE", "DODGE", "PARRY", "BLOCK_VALUE", "BLOCK_RATING", "RESILIENCE", "HEALTH_REGENERATION",
     "SPELL_POWER", "SPELL_PENETRATION", "HEAL_POWER", "MANA_REGENERATION", "ATTACK_POWER",
-    "ARMOR_PENETRATION", "EXPERTISE", "MELEE_DPS", "RANGED_DPS", "BONUS"};
+    "ARMOR_PENETRATION", "EXPERTISE", "MELEE_DPS", "RANGED_DPS", "THREAT_REDUCTION", "RESISTANCE",
+    "BONUS"};
 
 // Smite priests have no talent tab of their own. Mustn't collide with the BIS_TAB_* sentinels.
 constexpr uint8_t TAB_PRIEST_SMITE = 13;
