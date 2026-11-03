@@ -226,6 +226,13 @@ public:
     bool Execute(Event event) override;
 };
 
+class AnubarakLustAction : public Action
+{
+public:
+    AnubarakLustAction(PlayerbotAI* botAI, std::string const name = "anubarak lust") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class AnubarakDemonicCircleAction : public Action
 {
 public:
@@ -342,6 +349,8 @@ public:
             &ToCAnubarakActionContext::anubarak_kite_cat_drop;
         creators["anubarak tank rescue"] =
             &ToCAnubarakActionContext::anubarak_tank_rescue;
+        creators["anubarak lust"] =
+            &ToCAnubarakActionContext::anubarak_lust;
         creators["anubarak demonic circle"] =
             &ToCAnubarakActionContext::anubarak_demonic_circle;
         creators["anubarak tank pick up scarab"] =
@@ -462,6 +471,10 @@ private:
 
     static Action* anubarak_tank_rescue(PlayerbotAI* botAI) {
         return new AnubarakTankRescueAction(botAI);
+    }
+
+    static Action* anubarak_lust(PlayerbotAI* botAI) {
+        return new AnubarakLustAction(botAI);
     }
 
     static Action* anubarak_demonic_circle(PlayerbotAI* botAI) {

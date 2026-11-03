@@ -114,6 +114,8 @@ bool AnubarakTankNeedsRescueTrigger::IsActive()
     return GetAnubarakTankRescue(botAI, rescue);
 }
 
+bool AnubarakLustDueTrigger::IsActive() { return GetAnubarakLust(botAI) != nullptr; }
+
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && bot->HasAura(SPELL_MARK);
@@ -314,12 +316,16 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak on permafrost", {
         NextAction("anubarak leave permafrost", ACTION_EMERGENCY + 5) }));
 
-    // Over the class Hand of Sacrifice, Lay on Hands and Pain Suppression, which go to whoever is lowest
+    // Over the class Lay on Hands and Pain Suppression, which go to whoever is lowest
     triggers.push_back(new TriggerNode("anubarak tank needs rescue", {
         NextAction("anubarak tank rescue", ACTION_EMERGENCY + 4) }));
 
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));
+
+    // Instant and castable on the move, so over the stand walks and the swarm heals
+    triggers.push_back(new TriggerNode("anubarak lust due", {
+        NextAction("anubarak lust", ACTION_EMERGENCY + 1) }));
 
     // Off the GCD, ahead of the battle res and every heal that won't cast from Cat Form
     triggers.push_back(new TriggerNode("anubarak kite cat drop", {

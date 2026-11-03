@@ -3547,6 +3547,17 @@ class SideTankCrowds(unittest.TestCase):
     def test_frenzy_counts_the_sides_within_12_yd(self):
         self.assertEqual(ab.frenzy_samples(self.trace), [("P1", 20, 8)])
 
+    def test_a_taunt_reads_kept_by_its_yards_at_the_cast(self):
+        # Righteous Defense at 3.8 s: CB2 3.6 yd off stays on Bulwark, CB3 32 yd off is Felesta's by 8.3 s
+        rows = ab.pickup_taunts(self.trace, ab.Samples(self.trace))
+        self.assertEqual([(row["guid"], round(row["yd"], 1), row["to"]) for row in rows],
+                         [(CB2, 3.6, CTANK0), (CB3, 32.0, CTANK1)])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_pickup_taunts(self.trace, ab.Samples(self.trace))
+        self.assertIn("    Bulwark        Righteous Defense within 40 yd kept 1 of 2 (lost to Felesta 1); beyond"
+                      " none\n", out.getvalue())
+
     def test_the_burrower_section_prints_both(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -4551,8 +4562,11 @@ class ColdPull(unittest.TestCase):
                       " 3.0k\n", text)
 
     def test_the_swarm_section_reads_the_externals_and_the_tank_dips(self):
-        # Bulwark at 30% from 30 s, Lay on Hands at 31 s, full from 33 s; at 20% from 40 s and dead at 41 s
-        records = cold_pull() + [cast(31000, HHOLY, 48788, HSIDE), cast(32000, HPRAYER, 33206, HJUSTICE)]
+        # Bulwark at 30% from 30 s, Lay on Hands at 31 s, full from 33 s; at 20% from 40 s and dead at 41 s.
+        # Prayer dies 4 s after its Pain Suppression.
+        records = cold_pull() + [cast(31000, HHOLY, 48788, HSIDE), cast(32000, HPRAYER, 33206, HJUSTICE),
+                                 {"t": 36000, "e": "death", "g": HPRAYER, "killer": HBOSS, "x": 0.0, "y": 0.0,
+                                  "z": 0.0}]
         for rec in records:
             if rec.get("e") == "snap":
                 when = rec["t"]
@@ -4562,8 +4576,9 @@ class ColdPull(unittest.TestCase):
                                   else 0.0 if when >= 41000 else row[5])
         trace = write_trace(self.folder.name, "649_22_anub-arak_1790200002.ndjson", records)
         text = self.text(trace, ab.show_swarm)
-        self.assertIn("  phase 3 externals, the target's health at the cast: 0:31.000 Holylight Lay on Hands > Bulwark"
-                      " (tank) 30%, 0:32.000 Prayer Pain Suppression > Justice (melee) 10%\n", text)
+        self.assertIn("  phase 3 externals, the target's health at the cast, the caster dead within 10 s flagged:"
+                      " 0:31.000 Holylight Lay on Hands > Bulwark (tank) 30%, 0:32.000 Prayer Pain Suppression >"
+                      " Justice (melee) 10% (caster dead +4.0 s)\n", text)
         self.assertIn("  tank dips under 35% in phase 3: 2; an external onto it in 1: Bulwark 0:30.000 Lay on Hands"
                       " +1.0 s; none in 1 (Bulwark 1); died with none: Bulwark 0:41.000\n", text)
         self.assertIn("  tank dips under 35% in phase 3: 0; an external onto it in 0; none in 0; died with none: none\n",

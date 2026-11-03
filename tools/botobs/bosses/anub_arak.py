@@ -4608,6 +4608,62 @@ def frenzy_samples(trace: Trace, samples: Samples | None = None) -> list[tuple[s
     return [(label, both, close) for label, (both, close) in counts.items()]
 
 
+# a tank's taunts onto one burrower, Righteous Defense's once per burrower it took. A taunt lasts TAUNT_MS,
+# and one still on the tank TAUNT_KEPT_MS after that was kept. anubarak side tank taunts wait for the
+# burrowers within TAUNT_ARRIVE_YD (ANUBARAK_TAUNT_ARRIVE).
+PICKUP_TAUNTS = {spell: name for spell, name in BURROWER_TAUNTS.items()
+                 if spell in (355, 62124, 56222, 6795, SPELL_RIGHTEOUS_DEFENSE_TAUNT)}
+TAUNT_MS = 3000
+TAUNT_KEPT_MS = 1500
+TAUNT_ARRIVE_YD = 40.0
+
+
+def pickup_taunts(trace: Trace, samples: Samples) -> list[dict]:
+    """Each tank taunt onto a burrower: the yards between them at the cast, and the burrower's target
+    TAUNT_KEPT_MS after the taunt's TAUNT_MS (`to`, None when it has no fresh sample then)."""
+    burrowers = guids_of_entry(trace, NPC_BURROWER)
+    out = []
+    for rec in trace.of("cast"):
+        tank, target = rec.get("s"), rec.get("tgt")
+        if rec.get("sp") not in PICKUP_TAUNTS or target not in burrowers or trace.role(tank) != "tank":
+            continue
+        mine, its = samples.recent(tank, rec["t"]), samples.recent(target, rec["t"])
+        if not mine or not its:
+            continue
+        later = samples.recent(target, rec["t"] + TAUNT_MS + TAUNT_KEPT_MS)
+        out.append({"t": rec["t"], "tank": tank, "guid": target, "spell": rec["sp"],
+                    "yd": dist2(mine[1:3], its[1:3]), "to": later[7] if later and later[5] > 0 else None})
+    return out
+
+
+def show_pickup_taunts(trace: Trace, samples: Samples) -> None:
+    rows = pickup_taunts(trace, samples)
+    if not rows:
+        print("  tank taunts onto a burrower: none")
+        return
+
+    def band(group: list[dict]) -> str:
+        seen = [row for row in group if row["to"] is not None]
+        if not group:
+            return "none"
+        lost = collections.Counter(trace.name(row["to"]) for row in seen if row["to"] != row["tank"])
+        text = f"kept {sum(1 for row in seen if row['to'] == row['tank'])} of {len(seen)}"
+        if lost:
+            text += " (lost to " + ", ".join(f"{name} {n}" for name, n in lost.most_common()) + ")"
+        if len(seen) < len(group):
+            text += f", {len(group) - len(seen)} gone"
+        return text
+
+    print(f"  tank taunts onto a burrower, kept when still on the tank {TAUNT_KEPT_MS / 1000:.1f} s after the"
+          f" taunt's {TAUNT_MS / 1000:.0f} s, by the yards at the cast:")
+    keys = sorted({(trace.name(row["tank"]), row["tank"], row["spell"]) for row in rows})
+    for name, tank, spell in keys:
+        mine = [row for row in rows if row["tank"] == tank and row["spell"] == spell]
+        print(f"    {name[:14]:14} {PICKUP_TAUNTS[spell]:17} within {TAUNT_ARRIVE_YD:.0f} yd"
+              f" {band([row for row in mine if row['yd'] <= TAUNT_ARRIVE_YD])}; beyond"
+              f" {band([row for row in mine if row['yd'] > TAUNT_ARRIVE_YD])}")
+
+
 def show_side_tank_crowds(trace: Trace, samples: Samples) -> None:
     crowds = side_tank_crowds(trace, samples)
     print(f"\n  {TANK_CROWD} or more burrowers on one side tank, read off their targets: the most at once, and the"
@@ -4767,6 +4823,7 @@ def show_burrowers(trace: Trace) -> None:
         show_burrower_windows(trace, samples)
         show_wave_reads(trace, samples)
         show_pickups(trace, samples)
+        show_pickup_taunts(trace, samples)
         show_burrower_submerges(trace, samples)
         show_side_tank_crowds(trace, samples)
 
@@ -6051,18 +6108,26 @@ SWARM_EXTERNALS = {48788: "Lay on Hands", 33206: "Pain Suppression", 47788: "Gua
                    6940: "Hand of Sacrifice"}
 # a tank under this in phase 3 is owed one of them (anubarak tank rescue)
 TANK_RESCUE_PCT = 35.0
+# a caster dead this soon after its external likely died of it, as Hand of Sacrifice's casters do under the swarm
+EXTERNAL_CASTER_DEATH_MS = 10000
 
 
 def swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) -> tuple[list[dict], list[dict]]:
-    """Phase 3's externals, each with its target's health at the cast, and each tank's dip under
+    """Phase 3's externals, each with its target's health at the cast and its caster's death within
+    EXTERNAL_CASTER_DEATH_MS (`dead`, ms after the cast, None for none), and each tank's dip under
     TANK_RESCUE_PCT with the first external onto it before it rose back or died."""
+    deaths: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("death"):
+        deaths[rec.get("g")].append(rec["t"])
     casts = []
     for rec in trace.of("cast"):
         if rec.get("tr") or rec.get("sp") not in SWARM_EXTERNALS or not start <= rec["t"] <= stop:
             continue
         row = samples.row(rec.get("tgt"), rec["t"])
+        dead = next((when - rec["t"] for when in deaths.get(rec.get("s"), [])
+                     if 0 <= when - rec["t"] <= EXTERNAL_CASTER_DEATH_MS), None)
         casts.append({"t": rec["t"], "caster": rec.get("s"), "spell": rec["sp"], "target": rec.get("tgt"),
-                      "hp": row[5] if row else None})
+                      "hp": row[5] if row else None, "dead": dead})
     dips = []
     for guid in sorted(roster_guids(trace)):
         if trace.role(guid) != "tank":
@@ -6087,10 +6152,13 @@ def swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) -> tu
 
 def show_swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) -> None:
     casts, dips = swarm_externals(trace, start, stop, samples)
-    print("  phase 3 externals, the target's health at the cast: " + (", ".join(
-        f"{clock(cast['t'])} {trace.name(cast['caster'])} {SWARM_EXTERNALS[cast['spell']]} >"
-        f" {trace.name(cast['target'])} ({trace.role(cast['target'])})"
-        + ("" if cast["hp"] is None else f" {cast['hp']:.0f}%") for cast in casts) or "none"))
+    print("  phase 3 externals, the target's health at the cast, the caster dead within"
+          f" {EXTERNAL_CASTER_DEATH_MS / 1000:.0f} s flagged: " + (", ".join(
+              f"{clock(cast['t'])} {trace.name(cast['caster'])} {SWARM_EXTERNALS[cast['spell']]} >"
+              f" {trace.name(cast['target'])} ({trace.role(cast['target'])})"
+              + ("" if cast["hp"] is None else f" {cast['hp']:.0f}%")
+              + ("" if cast["dead"] is None else f" (caster dead +{cast['dead'] / 1000:.1f} s)")
+              for cast in casts) or "none"))
     covered = [dip for dip in dips if dip["external"]]
     bare = [dip for dip in dips if not dip["external"]]
     counts = collections.Counter(trace.name(dip["guid"]) for dip in bare)
@@ -8164,7 +8232,8 @@ SECTIONS = (
      " the focus alive, each focus pick by side against its tank and the patches, distance from the patch"
      " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
      " exit, each pulled off its side tank by a non-tank within 15 s of coming up with the puller's casts,"
-     " triggered ones marked *, and how long until it was back on a tank and the taunts that did it, Bladestorm"
+     " triggered ones marked *, and how long until it was back on a tank and the taunts that did it, each tank"
+     " taunt onto a burrower kept or lost by its yards at the cast, Bladestorm"
      " with a burrower within 25 yd, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
      " within 5 yd held by anub.dps value",
      show_burrowers),
@@ -8184,7 +8253,8 @@ SECTIONS = (
      " per phase 3 Penetrating Cold wave the first ticks survived, the frost holder, Aura Mastery at the first two"
      " ticks, anub.mastery rows, the resisted share per tick, each carrier's health at the landing, risk, first"
      " tick margin and fate, its anub.coldheal healers and the heals and absorbs on it before the tick, and herds"
-     " of healers on one carrier while another at risk got nothing, defensives, deaths",
+     " of healers on one carrier while another at risk got nothing, the externals with a caster dead within"
+     " 10 s flagged and the tank dips under 35%%, defensives, deaths",
      show_swarm),
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand, the walk behind the tank patches from anub.hbehind go to standing"

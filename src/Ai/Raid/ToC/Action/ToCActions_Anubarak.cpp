@@ -108,17 +108,29 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     return false;
 }
 
-// A loose burrower is on a healer or ranged more often than not: Righteous Defense off whoever most of
-// them hit, a shout for two or more close by, the class taunt, then a charge or pull
-bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick)
+bool TauntLands(Unit* victim, float dist)
 {
+    return dist <= ANUBARAK_TAUNT_ARRIVE || (victim && victim->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT);
+}
+
+// A loose burrower is on a healer or ranged more often than not: Righteous Defense off whoever most of
+// them hit, a shout for two or more close by, the class taunt, then a charge or pull. tooFar: a taunt
+// waited for the burrowers to come closer.
+bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick, bool& tooFar)
+{
+    tooFar = false;
     float stop = 0.0f;
     // Righteous Defense taunts everything hitting the member, him included
     Creature* boss = GetAnubarak(bot);
     bool const bossOnRescue = boss && pick.rescue && boss->GetVictim() == pick.rescue;
     if (pick.rescue && pick.rescue != bot && !bossOnRescue && botAI->CanCastSpell("righteous defense", pick.rescue) &&
         InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
-        return botAI->CastSpell("righteous defense", pick.rescue);
+    {
+        if (TauntLands(pick.rescue, pick.rescueFar))
+            return botAI->CastSpell("righteous defense", pick.rescue);
+
+        tooFar = true;
+    }
 
     // A shout takes in whatever stands within 10 yd plus its reach, his 10 among them
     bool const bossClear =
@@ -128,8 +140,13 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
             if (botAI->CanCastSpell(shout, bot))
                 return botAI->CastSpell(shout, bot);
 
-    if (TryClassTaunt(botAI, bot, pick.loose))
+    bool const lands = TauntLands(pick.loose->GetVictim(), bot->GetExactDist2d(pick.loose));
+    if (lands && TryClassTaunt(botAI, bot, pick.loose))
         return true;
+
+    for (char const* taunt : CLASS_TAUNTS)
+        if (!lands && botAI->CanCastSpell(taunt, pick.loose))
+            tooFar = true;
 
     // A DK owed a grip keeps Death Grip for the side's tank patch
     AnubarakGripDuty grip;
@@ -404,13 +421,14 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
         return false;
 
     // Picks up even with one already held: a wave brings more burrowers than there are side tanks
-    if (pick.loose && TryBurrowerPickup(botAI, bot, pick))
+    bool tooFar = false;
+    if (pick.loose && TryBurrowerPickup(botAI, bot, pick, tooFar))
     {
         RaidObs::NoteDerived(bot, "anub.sidetank", "pickup");
         return true;
     }
 
-    RaidObs::NoteDerived(bot, "anub.sidetank", pick.held ? "hold" : "pickup");
+    RaidObs::NoteDerived(bot, "anub.sidetank", tooFar ? "far" : pick.held ? "hold" : "pickup");
     if (Attack(target))
         return true;
 
@@ -683,6 +701,12 @@ bool AnubarakTankRescueAction::Execute(Event /*event*/)
 {
     AnubarakTankRescue rescue;
     return GetAnubarakTankRescue(botAI, rescue) && botAI->CastSpell(rescue.spell, rescue.tank);
+}
+
+bool AnubarakLustAction::Execute(Event /*event*/)
+{
+    char const* lust = GetAnubarakLust(botAI);
+    return lust && botAI->CastSpell(lust, bot);
 }
 
 bool AnubarakDemonicCircleAction::Execute(Event /*event*/)

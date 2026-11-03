@@ -109,6 +109,11 @@ constexpr float ANUBARAK_BATTLE_RES_REACH = 28.0f;
 constexpr float ANUBARAK_LEAD_REACH = 25.0f;
 constexpr float ANUBARAK_LEAD_STOP = 20.0f;
 constexpr float ANUBARAK_LEAD_REAIM = 3.0f;
+// A side tank's pickup taunt lasts 3 s and a burrower closes about 13 yd/s on it, so from past ARRIVE it
+// gets there as the taunt ends and goes to whoever has the most threat, usually a healer. Under
+// RESCUE_PCT the player it hits gets the taunt anyway.
+constexpr float ANUBARAK_TAUNT_ARRIVE = 40.0f;
+constexpr float ANUBARAK_TAUNT_RESCUE_PCT = 50.0f;
 // The spike's 8 yd sphere test adds both sizes: 1.5 spike, 2.0 patch, 1.0 falling sphere. So 11.5 yd
 // round a patch and 10.5 round a falling one.
 constexpr float ANUBARAK_SPIKE_PATCH_REACH = 11.5f;
@@ -294,6 +299,8 @@ struct AnubarakBurrowerPick
     bool otherNear = false;
     // The group member most of this side's loose ones hit, for Righteous Defense
     Player* rescue = nullptr;
+    // Yards from the bot to the farthest of this side's loose ones on rescue
+    float rescueFar = 0.0f;
 
     explicit operator bool() const { return held || loose; }
 };
@@ -578,17 +585,18 @@ bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI);
 bool AnubarakSwarmShieldsTank(Player* bot, Player* target);
 
 constexpr float ANUBARAK_TANK_RESCUE_PCT = 35.0f;
-// Hand of Sacrifice moves damage onto its caster, so a paladin this low keeps it
-constexpr float ANUBARAK_TANK_RESCUE_SACRIFICE_PCT = 50.0f;
 struct AnubarakTankRescue
 {
     Player* tank = nullptr;
     char const* spell = nullptr;
 };
-// Heroic phase 3: the lowest tank in sight under 35% with no Pain Suppression, Guardian Spirit or Hand of
-// Sacrifice on it, and the first of Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice
-// this bot can cast on it. Never Hand of Sacrifice from a tank. False with none.
+// Heroic phase 3: the lowest tank in sight under 35% with no Pain Suppression or Guardian Spirit on it,
+// and the first of Lay on Hands, Pain Suppression and Guardian Spirit this bot can cast on it. False with
+// none.
 bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out);
+// Phase 3 once lust opens: the Heroism or Bloodlust this shaman bot casts on itself, whatever it has
+// selected (the class trigger wants the boss selected). Null while it's Sated or Exhausted.
+char const* GetAnubarakLust(PlayerbotAI* botAI);
 
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);

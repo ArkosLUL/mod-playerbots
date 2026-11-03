@@ -192,6 +192,13 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakLustDueTrigger : public Trigger
+{
+public:
+    AnubarakLustDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak lust due") {}
+    bool IsActive() override;
+};
+
 class AnubarakDemonicCircleDueTrigger : public Trigger
 {
 public:
@@ -312,6 +319,8 @@ public:
             &ToCAnubarakTriggerContext::anubarak_kite_cat_drop;
         creators["anubarak tank needs rescue"] =
             &ToCAnubarakTriggerContext::anubarak_tank_needs_rescue;
+        creators["anubarak lust due"] =
+            &ToCAnubarakTriggerContext::anubarak_lust_due;
         creators["anubarak demonic circle due"] =
             &ToCAnubarakTriggerContext::anubarak_demonic_circle_due;
         creators["anubarak scarab on raid"] =
@@ -435,6 +444,10 @@ private:
 
     static Trigger* anubarak_tank_needs_rescue(PlayerbotAI* botAI) {
         return new AnubarakTankNeedsRescueTrigger(botAI);
+    }
+
+    static Trigger* anubarak_lust_due(PlayerbotAI* botAI) {
+        return new AnubarakLustDueTrigger(botAI);
     }
 
     static Trigger* anubarak_demonic_circle_due(PlayerbotAI* botAI) {

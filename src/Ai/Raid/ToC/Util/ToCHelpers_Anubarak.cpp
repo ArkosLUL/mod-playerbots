@@ -5699,6 +5699,7 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
     std::unordered_map<ObjectGuid, uint8> const& owners = BurrowerOwners(bot, *state);
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     std::unordered_map<Player*, uint8> onMember;
+    std::unordered_map<Player*, float> farOnMember;
     uint8 heldCount = 0;
     bool looseOnHealer = false;
     float looseDist = 0.0f;
@@ -5728,7 +5729,11 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
 
         Player* victim = burrower->GetVictim() ? burrower->GetVictim()->ToPlayer() : nullptr;
         if (victim)
+        {
             ++onMember[victim];
+            float& farthest = farOnMember[victim];
+            farthest = std::max(farthest, bot->GetExactDist2d(burrower));
+        }
 
         if (bot->GetExactDist2d(burrower) <= ANUBARAK_SIDE_SHOUT_RADIUS)
             ++pick.looseNear;
@@ -5755,6 +5760,7 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         if (count > most || (count == most && pick.rescue && member->GetGUID() < pick.rescue->GetGUID()))
         {
             pick.rescue = member;
+            pick.rescueFar = farOnMember[member];
             most = count;
         }
     }
@@ -7164,8 +7170,9 @@ bool AnubarakSwarmShieldsTank(Player* bot, Player* target)
 
 constexpr uint32 SPELL_PAIN_SUPPRESSION = 33206;
 constexpr uint32 SPELL_GUARDIAN_SPIRIT = 47788;
-// Lay on Hands first: a full heal, the rest only cut what lands
-constexpr char const* TANK_RESCUES[] = {"lay on hands", "pain suppression", "guardian spirit", "hand of sacrifice"};
+// Lay on Hands first: a full heal, the rest only cut what lands. No Hand of Sacrifice: under the swarm
+// the paladin sits at 5-20%, and 30% of a tank's hits kills it
+constexpr char const* TANK_RESCUES[] = {"lay on hands", "pain suppression", "guardian spirit"};
 
 bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
 {
@@ -7175,7 +7182,6 @@ bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
         GetAnubarakPhase(botAI) != AnubarakPhase::Swarm)
         return false;
 
-    bool const sacrifices = !IsAnubarakTankPlayer(bot) && bot->GetHealthPct() >= ANUBARAK_TANK_RESCUE_SACRIFICE_PCT;
     out = AnubarakTankRescue();
     ForEachGroupMember(bot, [&](Player* member)
     {
@@ -7183,13 +7189,12 @@ bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
             member->GetHealthPct() >= ANUBARAK_TANK_RESCUE_PCT ||
             (out.tank && member->GetHealthPct() >= out.tank->GetHealthPct()) ||
             member->HasAura(SPELL_PAIN_SUPPRESSION) || member->HasAura(SPELL_GUARDIAN_SPIRIT) ||
-            member->HasAura(ai::paladin::SPELL_HAND_OF_SACRIFICE) || !bot->IsWithinLOSInMap(member))
+            !bot->IsWithinLOSInMap(member))
             return false;
 
         for (char const* spell : TANK_RESCUES)
         {
-            bool const sacrifice = std::strcmp(spell, "hand of sacrifice") == 0;
-            if ((sacrifice && (!sacrifices || member == bot)) || !botAI->CanCastSpell(spell, member))
+            if (!botAI->CanCastSpell(spell, member))
                 continue;
 
             out.tank = member;
@@ -7201,6 +7206,24 @@ bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
     });
 
     return out.tank != nullptr;
+}
+
+constexpr uint32 SPELL_LUST_EXHAUSTION = 57723;
+constexpr uint32 SPELL_LUST_SATED = 57724;
+
+char const* GetAnubarakLust(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_SHAMAN || !bot->IsAlive() || bot->HasAura(SPELL_MARK) ||
+        bot->HasAura(SPELL_LUST_SATED) || bot->HasAura(SPELL_LUST_EXHAUSTION) || !AnubarakEngaged(botAI) ||
+        !AnubarakLustOpen(botAI))
+        return nullptr;
+
+    for (char const* lust : {"heroism", "bloodlust"})
+        if (botAI->CanCastSpell(lust, bot))
+            return lust;
+
+    return nullptr;
 }
 
 static AnubarakState* ResolveDuties(Player* bot)

@@ -177,6 +177,9 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak no ghouls", Role::Any, AnubarakEngaged, 0, {"army of the dead"});
     // it moves the target's damage onto the caster, and a tank here is under its own burrowers or him
     e.Block("anubarak tank sacrifice hold", Role::Tank, AnubarakEngaged, 0, {"hand of sacrifice on party"});
+    // the swarm keeps the paladin at 5-20%, so the 30% it takes on kills it
+    e.Block("anubarak swarm sacrifice hold", Role::Any, AnubarakLeechingSwarmActive, 0,
+            {"hand of sacrifice on party"});
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
     e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint", "dash"});

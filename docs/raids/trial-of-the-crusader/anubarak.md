@@ -187,8 +187,9 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+7 | `anubarak kiter needs protection` → `anubarak protect kiter` | the paladin holding the kiter's claim | `hand of protection` on the kiter |
 | EMERGENCY+6 | `anubarak spike nearby` → `anubarak avoid spike` | unmarked, within 10 yd of the spike or 7 yd of its predicted path (16 and 10 while it outruns the bot), or not yet at its held dodge spot | walks to its held dodge spot, `MOVEMENT_FORCED` |
 | EMERGENCY+5 | `anubarak on permafrost` → `anubarak leave permafrost` | no tank, unmarked, no dodge held, no grip duty but `kill`, within 7.5 yd of a patch | walks out ([non-tanks](#how-the-bots-play-it)) |
-| EMERGENCY+4 | `anubarak tank needs rescue` → `anubarak tank rescue` | heroic phase 3, a paladin or priest bot; the lowest tank in sight under 35% with no Pain Suppression, Guardian Spirit or Hand of Sacrifice on it | the first it can cast of `lay on hands`, `pain suppression`, `guardian spirit`, `hand of sacrifice` (never from a tank, on itself or under 50%), over the class ones (`protect party member` waits for a tank at 10%: BT 5:54.5-5:55.7 Felesta under 35% with three ready, then Pain Suppression and two Hands of Sacrifice on DPS) |
+| EMERGENCY+4 | `anubarak tank needs rescue` → `anubarak tank rescue` | heroic phase 3, a paladin or priest bot; the lowest tank in sight under 35% with no Pain Suppression or Guardian Spirit on it | the first it can cast of `lay on hands`, `pain suppression`, `guardian spirit`, over the class ones (`protect party member` waits for a tank at 10%: BT 5:54.5-5:55.7 Felesta under 35% with three ready). No Hand of Sacrifice: the swarm holds the paladin at 5-20%, and BW and BY's four killed their casters 2.5-7.6 s later, Holylight both times |
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
+| EMERGENCY+1 | `anubarak lust due` → `anubarak lust` | phase 3, `AnubarakLustOpen`, a living unmarked shaman bot, not Sated or Exhausted | `heroism` or `bloodlust` on itself, whatever it has selected: the class trigger wants the boss selected (BY +33 s, 18 s after the burst opened, the DPS shamans on burrowers and Elemena with nothing) |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank, healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate |
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
 | RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready | `NextTankDefensive` on self, physical only: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26) |
@@ -448,14 +449,19 @@ human side tank's still loose 5 s after it came out goes to the bot side tank, p
 patch frenzy, but none eats a healer. `anubarak no ghouls` blocks `army of the dead` all fight: its
 ghouls taunted burrowers off the side tanks and the patches, where one submerged to full. `anubarak tank
 sacrifice hold` blocks a tank's `hand of sacrifice on party` all fight (BT 5:58 Bulwark, under two
-burrowers, took Mighty's hits). A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
+burrowers, took Mighty's hits), and `anubarak swarm sacrifice hold` everyone's in phase 3 (see EMERGENCY+4). A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
 nearest its patch, and picks a loose one up even while holding one: Righteous Defense on whoever most
 of them hit, unless he is on them, they are a side tank, or it would leave the tank past two of its own
 (it taunts all three attackers: in 2026-10-28 R and S it put three on the tank four times, three
 fatal); the other side's on them too go back to their tank's taunt (2026-10-30 BD 6:25, held back for
 them, it reached Elemena 0.3 s after she died and the wipe began). Then Challenging Roar or Shout with
 two within 10 yd, none of the other side's and him past 10 yd plus his reach, the class taunt, then Feral Charge,
-Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in. In
+Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in.
+Righteous Defense and the class taunt wait until the burrowers they take are within 40 yd
+(`ANUBARAK_TAUNT_ARRIVE`, `anub.sidetank` `far`), unless the player hit is under 50%: a taunt lasts 3 s and
+they close about 13 yd/s, so from farther they arrive as it ends and go to the healer with the most threat.
+BV, BW and BY: Righteous Defense within 40 yd kept 21 of 26, beyond 7 of 38 (cast as the wave came up,
+58-105 yd off); side 0 lost 55 burrowers within 15 s of coming up across BU-BY, side 1 16. In
 the 2026-10-25 wipes burrowers were on a tank 18-41% of their life and two warlocks died to them in
 every pull. It walks to its **hold** only once its pick is on it; an untaunted
 one is attacked in place, since walking off leaves it on its victim and the patch walk and reach
@@ -789,6 +795,14 @@ Baseline 2026-11-02, 25H on refine-23 (`8772f7e75` and the upstream merge; BT
 death before P3. P3 opened on wave 6's burrowers, both side tanks at Expose Weakness 6-8, their
 defensives spent in P1c: Felesta 100% to dead 5:51.5-5:55.7 (73k, only her own Death Strike healing
 her), Bulwark at 22% meanwhile.
+
+Baseline 2026-11-03, 25H on refine-24 (`9b42ae717`), `649_…`: BU `2_…1793655469` (third submerge at 31.1%,
+no kite sphere left, 3 kiters dead to Impale), BV `54_…1793659375` and BX `54_…1793660225` (reset after wave
+1-2 burrowers killed Bulwark, Trueshot, Tree, Assasin), BW `54_…1793659605` (P3 from 30.1% at 5:52.9, wipe
+7:03.7 at 18.6%), BY `54_…1793660401` (P3 from 30.0% at 7:23.4 after P2c, wipe 8:36.9 at 21.4%). Both P3s
+opened on a wave up 11-16 s, killed in 25.5 and 36.9 s while he went 30.0 → 29.5% and → 30.8%; the next
+landed +29 and +34 s; the main tank died +34.5 and +49.6 s, the raid within 25 s more. Roster damage
+155-195k/s, about 166k/s net on him once a wave is dead; healers 10-19k/s each while alive.
 
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
@@ -1181,8 +1195,6 @@ personal burst is unrestricted.
 - A heroic dodge with no spot clear of Permafrost lands in its 80% slow.
 - A side tank's rim (7 yd) is inside the 7.5 yd slow, so on heroic it carries the 80% slow most of the
   time it's up (AA 329 s): Bulwark crawled as AA's wave 7 landed.
-- Healer threat pulls a new burrower off its side tank 3-4 s in (AA: Elemena 9, Holylight 3; wave 7's
-  at +3.6 s).
 - Judgement of Light comes only from the holy paladin's rotation (AA: 8 casts).
 - The 40% burst hold kept 7 of AA's 42 last-phase-1 casts: the cluster (Icy Veins, Arcane Power, Death
   Wish, Bestial Wrath, Killing Spree, Force of Nature) went at 40.0-42.6% as wave 6 landed; 45% keeps 19.
@@ -1207,9 +1219,13 @@ personal burst is unrestricted.
 - The kite ring (40 yd round the centre) runs past the west refill pair at 36-43 yd.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
-- A healer's heal threat still pulls burrowers off a side tank as the taunt's 3 s run out (Elemena
-  11-12 times a pull in the 2026-10-27 evening wipes; BG 21 pull-offs, Elemena 15, most 3-4.6 s after
-  a wave landed).
+- Healer threat still pulls held burrowers off a side tank later in a wave (BU-BY side 1: 16, most +8-15 s).
+- Phase 3 is a race the raid loses by about half (user call, 2026-11-03: keep killing waves): his pool
+  10.6M, a 3.0M wave every 45 s, so killing every wave needs about 100 s at the raid's damage, all on him
+  about 65 s; BW and BY lasted about 55 s.
+- The class lust trigger still wants the boss selected in every other fight (user call: Anub'arak only).
+- Acid-Drenched Mandibles stacks from the last submerge keep ticking into phase 3 (BY: three dead
+  +15-21 s, no scarab alive).
 - Heroic boss health runs at 1.3× through the server's override; the real log's 37k healing on him is
   unexplained.
 - A carrier further than 40 yd from the frost holder gets no Frost Resistance Aura, and Aura Mastery
@@ -1237,7 +1253,7 @@ personal burst is unrestricted.
 | `sphere` | Sphere duty: `kite` and `stock` (normal), `0` or `1` (a side), `grip0`/`grip1` (a DK's grip for a side), `none` |
 | `gripstep` | The DK's grip: `walk`, `hold`, `cast`, `wait` (sphere in the air, or a relay link still to grip it), `kill`, `post` (a relay link to or on its post), `none` |
 | `relay` | A relay link DK: `wait` (posted), `cast` (gripped), `miss` (its grip pulled nothing), `drop` (relay dropped), `none` (no grip duty) |
-| `sidetank` | `hold`, `pickup`, `ready`, `gather` (heroic phase 2, nothing to hold) |
+| `sidetank` | `hold`, `pickup`, `ready`, `gather` (heroic phase 2, nothing to hold), `far` (a taunt waits for reach) |
 | `saoe` | A side tank's area threat: the spell, else `cap` (it would hit him over the cap), `other` (the other side's burrowers), `none` |
 | `leave` | `walk` while a non-tank steps out of Permafrost, `none` |
 | `mstand` | `walk` while a melee bot walks to its burrower stand, `none` |
@@ -1435,7 +1451,9 @@ own risk model: health × (1 − drain)³ against the tick, no absorbs or timers
 clamped to 0, the pool read at first sight), fate, heals and absorbs before it by source and its
 `coldheal` healer; a herd is 2+ healers' heals on one carrier within 1.5 s while another at risk got
 none; each phase 3 Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice with its
-target's health, and the tank dips under 35% with the first of them onto it, else whether it died.
+target's health and its caster dead within 10 s, and the tank dips under 35% with the first of them onto
+it, else whether it died. `--burrowers` each tank taunt onto a burrower kept or lost 1.5 s after its 3 s,
+by its yards at the cast, within 40 and beyond.
 `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
 shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
 heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
