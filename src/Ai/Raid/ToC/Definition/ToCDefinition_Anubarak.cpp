@@ -180,6 +180,18 @@ void DefineAnubarak(EncounterBuilder& e)
     // the swarm keeps the paladin at 5-20%, so the 30% it takes on kills it
     e.Block("anubarak swarm sacrifice hold", Role::Any, AnubarakLeechingSwarmActive, 0,
             {"hand of sacrifice on party"});
+    // heroic phase 3: the swarm holds everyone at 10-25%, so the class nodes spent the tank saves on whoever
+    // dipped first; the tank rescue casts them on a tank directly
+    e.Block("anubarak swarm save hold", Role::Any, AnubarakSwarmHealing, 0,
+            {"lay on hands", "lay on hands on party", "pain suppression", "pain suppression on party",
+             "guardian spirit on party"});
+    // phase 3: Light from a second paladin replaces the first, so the holder judges him through the encounter
+    e.Block("anubarak swarm light hold", Role::Any, AnubarakSwarmLightHeld, 0, {"judgement of light"});
+    // a paladin's judgements replace each other, so one whose Light is on him casts no other
+    e.Block("anubarak swarm judgement hold", Role::Any, AnubarakSwarmJudgementHeld, 0,
+            {"judgement", "judgement of wisdom", "judgement of justice"});
+    // phase 3: the water totem strategy would put Mana Spring back over Healing Stream
+    e.Block("anubarak swarm mana spring hold", Role::Any, AnubarakLeechingSwarmActive, 0, {"mana spring totem"});
     e.Block("anubarak kite immunity reserve", Role::Any, AnubarakKiteImmunitiesKept, 0,
             {"divine shield", "ice block", "vanish", "feign death"});
     e.Block("anubarak kite sprint reserve", Role::Any, AnubarakKiteSprintKept, 0, {"sprint", "dash"});

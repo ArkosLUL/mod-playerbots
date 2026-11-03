@@ -262,6 +262,34 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakScarabKiteTrigger : public Trigger
+{
+public:
+    AnubarakScarabKiteTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak scarab kite") {}
+    bool IsActive() override;
+};
+
+class AnubarakManaTopUpTrigger : public Trigger
+{
+public:
+    AnubarakManaTopUpTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak mana top up") {}
+    bool IsActive() override;
+};
+
+class AnubarakLightJudgeDueTrigger : public Trigger
+{
+public:
+    AnubarakLightJudgeDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak light judge due") {}
+    bool IsActive() override;
+};
+
+class AnubarakHealingStreamDueTrigger : public Trigger
+{
+public:
+    AnubarakHealingStreamDueTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak healing stream due") {}
+    bool IsActive() override;
+};
+
 class ToCAnubarakTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -339,6 +367,14 @@ public:
             &ToCAnubarakTriggerContext::anubarak_divine_plea;
         creators["anubarak innervate healer"] =
             &ToCAnubarakTriggerContext::anubarak_innervate_healer;
+        creators["anubarak scarab kite"] =
+            &ToCAnubarakTriggerContext::anubarak_scarab_kite;
+        creators["anubarak mana top up"] =
+            &ToCAnubarakTriggerContext::anubarak_mana_top_up;
+        creators["anubarak light judge due"] =
+            &ToCAnubarakTriggerContext::anubarak_light_judge_due;
+        creators["anubarak healing stream due"] =
+            &ToCAnubarakTriggerContext::anubarak_healing_stream_due;
     }
 
 private:
@@ -484,6 +520,22 @@ private:
 
     static Trigger* anubarak_innervate_healer(PlayerbotAI* botAI) {
         return new AnubarakInnervateHealerTrigger(botAI);
+    }
+
+    static Trigger* anubarak_scarab_kite(PlayerbotAI* botAI) {
+        return new AnubarakScarabKiteTrigger(botAI);
+    }
+
+    static Trigger* anubarak_mana_top_up(PlayerbotAI* botAI) {
+        return new AnubarakManaTopUpTrigger(botAI);
+    }
+
+    static Trigger* anubarak_light_judge_due(PlayerbotAI* botAI) {
+        return new AnubarakLightJudgeDueTrigger(botAI);
+    }
+
+    static Trigger* anubarak_healing_stream_due(PlayerbotAI* botAI) {
+        return new AnubarakHealingStreamDueTrigger(botAI);
     }
 };
 

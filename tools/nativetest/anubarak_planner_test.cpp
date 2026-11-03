@@ -46,7 +46,7 @@ Patch MakePatch(float x, float y, bool tank, uint64_t id)
     return patch;
 }
 
-// The first submerge of a 25H pull: three paladins at the gather, one Hand kept for the next submerge
+// The first submerge of a 25H pull: three paladins at the gather, one Hand that wouldn't be back for the third
 KiteWorld Heroic(Point kiter, Point spike, Point gather, std::vector<Patch> const& patches)
 {
     KiteWorld w;
@@ -59,7 +59,7 @@ KiteWorld Heroic(Point kiter, Point spike, Point gather, std::vector<Patch> cons
     w.gatherPos = gather;
     w.slowFactor = 0.2f;
     for (uint64_t id = 1; id <= 3; ++id)
-        w.hands.push_back({id, gather, false});
+        w.hands.push_back({id, gather, false, id <= 2});
 
     w.spareHands = 2;
     for (Patch const& patch : patches)
@@ -94,8 +94,13 @@ Played Play(KiteWorld w, Rules const& r = Rules())
         if (plan.outcome.handS >= 0.0f && plan.outcome.handS < 0.3f && handUntil < out.endS)
         {
             handUntil = out.endS + plan.outcome.handS + r.handS;
-            w.hands.pop_back();
-            w.spareHands = std::max(0, w.spareHands - 1);
+            for (auto it = w.hands.begin(); it != w.hands.end(); ++it)
+                if (it->id == plan.outcome.handId)
+                {
+                    w.spareHands -= it->spare ? 1 : 0;
+                    w.hands.erase(it);
+                    break;
+                }
         }
 
         age = plan.kept ? age + 0.3f : 0.3f;
@@ -694,6 +699,74 @@ void PatchEndsACatchWithinOneImpale()
     CHECK(AnubarakKitePlanner::Compare(nearOut, farOut, r) < 0);
 }
 
+// A kite patch kept for the third submerge loses to a Hand with an own immunity and to a Hand into the
+// emerge, and still beats a catch
+void ReservedPatchGoesLast()
+{
+    Rules const r;
+    KiteWorld w = Heroic({735.0f, 135.0f}, {735.0f, 165.0f}, {735.0f, 135.0f}, {MakePatch(720.0f, 135.0f, false, 1)});
+    w.gather = false;
+    w.slowFactor = 1.0f;
+    w.own = true;
+    w.lifeS = 20.0f;
+    w.spike.step = AnubarakPursuit::LAST_STEP;
+    w.spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+    Candidate const in = Into(w, 0, r);
+    Candidate const caught = Straight(w, {0.0f, -1.0f}, r);
+    Candidate handOwn = caught;
+    handOwn.hand = true;
+    handOwn.own = true;
+    handOwn.ending = Ending::Own;
+
+    Outcome const patch = AnubarakKitePlanner::Judge(in, w, r);
+    Outcome const saved = AnubarakKitePlanner::Judge(handOwn, w, r);
+    Outcome const lost = AnubarakKitePlanner::Judge(caught, w, r);
+    CHECK(patch.ending == Ending::Patch && Clean(patch) && !patch.caught);
+    CHECK(saved.ending == Ending::Own && saved.handS >= 0.0f && Clean(saved) && !saved.caught);
+    CHECK(lost.caught);
+    CHECK(AnubarakKitePlanner::Compare(patch, saved, r) < 0);
+
+    w.reservePatch = true;
+    Outcome const reserved = AnubarakKitePlanner::Judge(in, w, r);
+    CHECK(std::fabs(reserved.cost - r.costReservedPatch) < 0.01f);
+    CHECK(AnubarakKitePlanner::Compare(AnubarakKitePlanner::Judge(handOwn, w, r), reserved, r) < 0);
+    CHECK(AnubarakKitePlanner::Compare(reserved, AnubarakKitePlanner::Judge(caught, w, r), r) < 0);
+
+    w.lifeS = 8.0f;
+    w.own = false;
+    Candidate hand = caught;
+    hand.hand = true;
+    hand.ending = Ending::Hand;
+    Outcome const emerge = AnubarakKitePlanner::Judge(hand, w, r);
+    CHECK(emerge.ending == Ending::Hand && !emerge.caught && Clean(emerge));
+    CHECK(AnubarakKitePlanner::Compare(emerge, AnubarakKitePlanner::Judge(in, w, r), r) < 0);
+}
+
+// A Hand that wouldn't be back for the third submerge prices as the last one
+void HandShortOfTheThirdCostsMore()
+{
+    Rules const r;
+    KiteWorld w = Heroic({735.0f, 135.0f}, {735.0f, 165.0f}, {735.0f, 135.0f}, {});
+    w.gather = false;
+    w.lifeS = 8.0f;
+    w.spike.step = AnubarakPursuit::LAST_STEP;
+    w.spike.speed = AnubarakPursuit::SPEEDS[AnubarakPursuit::LAST_STEP];
+    Candidate hand = Straight(w, {0.0f, -1.0f}, r);
+    hand.hand = true;
+    hand.ending = Ending::Hand;
+    Outcome const spare = AnubarakKitePlanner::Judge(hand, w, r);
+    CHECK(spare.ending == Ending::Hand && spare.handId == 1);
+    CHECK(std::fabs(spare.cost - r.costHand) < 0.01f);
+
+    for (HandOffer& offer : w.hands)
+        offer.spare = false;
+
+    w.spareHands = 0;
+    Outcome const last = AnubarakKitePlanner::Judge(hand, w, r);
+    CHECK(last.ending == Ending::Hand);
+    CHECK(std::fabs(last.cost - r.costLastHand) < 0.01f);
+}
+
 // Four usable patches, Hands, an own immunity and a ready boost: the candidates stay bounded
 void CandidatesStayBounded()
 {
@@ -738,6 +811,8 @@ int main()
     LateImmunityStillPassesTheRaid();
     NoCatchNextToThePatch();
     PatchEndsACatchWithinOneImpale();
+    ReservedPatchGoesLast();
+    HandShortOfTheThirdCostsMore();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;

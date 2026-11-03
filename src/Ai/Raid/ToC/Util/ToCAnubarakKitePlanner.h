@@ -66,6 +66,8 @@ struct HandOffer
     Point pos;
     // The kiter's own, which lands anywhere at once
     bool self = false;
+    // Back in time for a later submerge that needs it
+    bool spare = true;
 };
 
 struct KiteWorld
@@ -88,12 +90,14 @@ struct KiteWorld
     float catchFromS = 0.0f;
     // Hand of Protection on the kiter now: no catch counts while it holds, and no other Hand lands
     float handLeftS = 0.0f;
-    // Paladins that can land a Hand, the one to keep first
+    // Paladins that can land a Hand, spare ones first, then the one to keep
     std::vector<HandOffer> hands;
-    // Hands this submerge can spend before the next one runs short
+    // The spare offers
     int spareHands = 0;
     // Patches the spike's life can still be ended on, this kite's included
     int patchBudget = 0;
+    // Heroic: a kite patch ending costs costReservedPatch, since a later submerge needs it
+    bool reservePatch = false;
     bool own = false;
     // False for a paladin: a Hand's Forbearance blocks its Divine Shield
     bool ownAfterHand = true;
@@ -163,6 +167,8 @@ struct Rules
     float costOwn = 1.0f;
     float costOwnMid = 3.0f;
     float costPatch = 2.0f;
+    // Over a Hand and an own immunity together: only a catch or a hazard loses to it
+    float costReservedPatch = 8.0f;
     float costHand = 2.0f;
     float costLastHand = 3.0f;
     float costNormalPatch = 0.5f;
@@ -555,7 +561,7 @@ inline float Uncovered(float restS, bool fast, int patches, int hands, Rules con
 inline float PatchCost(Patch const& patch, KiteWorld const& w, Rules const& r)
 {
     if (w.heroic)
-        return r.costPatch;
+        return w.reservePatch && !patch.tank ? r.costReservedPatch : r.costPatch;
 
     return patch.tank && w.burrowers ? r.costNormalTankPatch : r.costNormalPatch;
 }
@@ -588,6 +594,7 @@ struct RunEnd
     bool planned = false;
     bool caught = false;
     bool handUsed = false;
+    bool handSpare = false;
     bool ownUsed = false;
     int boostTick = -1;
     // The spike where it failed, else at the end
@@ -712,12 +719,12 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
         fast = false;
     }
 
-    out.uncoveredS = Uncovered(restS, fast, patchesLeft, w.spareHands - (end.handUsed ? 1 : 0), r);
+    out.uncoveredS = Uncovered(restS, fast, patchesLeft, w.spareHands - (end.handSpare ? 1 : 0), r);
     if (planned)
         out.cost += PatchCost(w.patches[static_cast<size_t>(end.failPatch)], w, r);
 
     if (end.handUsed)
-        out.cost += w.spareHands > 0 ? r.costHand : r.costLastHand;
+        out.cost += end.handSpare ? r.costHand : r.costLastHand;
 
     if (end.ownUsed)
         out.cost += w.lifeS - out.endS <= r.ownLateS ? r.costOwn : r.costOwnMid;
@@ -764,6 +771,7 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTic
         if (HandOffer const* offer = HandFor(w, r, track, land))
         {
             end.handUsed = true;
+            end.handSpare = offer->spare;
             out.handS = static_cast<float>(land) * TICK_S;
             out.handId = offer->id;
             PlanHand(window, land, r);
@@ -1092,6 +1100,7 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
             return false;
 
         end.handUsed = true;
+        end.handSpare = offer->spare;
         out.handS = static_cast<float>(land) * TICK_S;
         out.handId = offer->id;
         out.catchS = base.none.catchS;

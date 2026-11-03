@@ -96,6 +96,10 @@ constexpr float ANUBARAK_KITE_HAND_LEAD_S = 1.0f;
 constexpr float ANUBARAK_KITE_OWN_LEAD_S = 0.6f;
 // The emerge despawns the spike a minute after he goes down, 2 s before he is selectable again
 constexpr uint32 ANUBARAK_SPIKE_LIFE_MS = 60000;
+// The submerge whose kites the first two keep a patch and Hands for; a Hand back by this long before its
+// spike despawns is spare
+constexpr uint32 ANUBARAK_LAST_KITE_SUBMERGE = 3;
+constexpr uint32 ANUBARAK_HAND_SPARE_TAIL_MS = 10000;
 // A druid main tank stays in bear form from this long before the emerge
 constexpr int32 ANUBARAK_EMERGE_BEAR_MS = 10000;
 // The paladin due to cast the Hand keeps its GCD free from this long before the catch
@@ -125,6 +129,16 @@ constexpr uint32 SPELL_SPIKE_SPEED2 = 65922;
 constexpr uint32 SPELL_SPIKE_SPEED3 = 65923;
 
 constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
+// A scarab runs 6.3 yd/s to a player's 7 until Determination doubles that. Its victim within REACH steps
+// STEP away from it, the walk keeping it out of its 7.7 yd melee reach, or no closer than SLACK inside the
+// gap it starts at, and wide of the burrowers.
+constexpr float ANUBARAK_SCARAB_KITE_REACH = 15.0f;
+constexpr float ANUBARAK_SCARAB_KITE_STEP = 10.0f;
+constexpr float ANUBARAK_SCARAB_MELEE_REACH = 7.7f;
+constexpr float ANUBARAK_SCARAB_KITE_SLACK = 0.5f;
+constexpr float ANUBARAK_SCARAB_KITE_BURROWER_CLEARANCE = 8.0f;
+constexpr int ANUBARAK_SCARAB_KITE_HEADINGS = 16;
+constexpr uint32 SPELL_SCARAB_DETERMINATION = 66092;
 
 // Heroic phase 3: Leeching Swarm takes 30% of each player's current health a second and heals him by
 // what lands, so the raid sits low and the healing goes to the tanks and Penetrating Cold (user call,
@@ -149,6 +163,15 @@ constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
 // came up he would still be above 30% this close to the submerge
 constexpr float ANUBARAK_BURST_HOLD_PCT = 40.0f;
 constexpr float ANUBARAK_BURST_BEHIND_MARGIN_S = 5.0f;
+// Phase 3 only starts while he's up. From WINDOW before a submerge every DPS bot goes on him once his loss
+// since he came up, scaled to all of them on him and by DISCOUNT, gets him under TARGET in time. Needs
+// MIN_SPAN of samples; a share of DPS bots on him under SHARE_FLOOR counts as the floor.
+constexpr uint32 ANUBARAK_PUSH_WINDOW_MS = 30000;
+constexpr uint32 ANUBARAK_PUSH_MIN_SPAN_MS = 15000;
+constexpr uint32 ANUBARAK_PUSH_SAMPLE_MS = 1000;
+constexpr float ANUBARAK_PUSH_TARGET_PCT = 29.5f;
+constexpr float ANUBARAK_PUSH_DISCOUNT = 0.75f;
+constexpr float ANUBARAK_PUSH_SHARE_FLOOR = 0.25f;
 // Phase 3's lust and burst wait for the burrowers up at its start to die, at most this long
 constexpr uint32 ANUBARAK_SWARM_BURST_WAIT_MS = 15000;
 // Heroic phase 3: a wave is left to the side tanks only while he'd die within this at the raid's pace over
@@ -506,6 +529,14 @@ struct RefillKey
     }
 };
 
+struct PushSample
+{
+    uint32 ms = 0;
+    float healthPct = 100.0f;
+    // Living DPS bots with him selected, of all of them
+    float share = 0.0f;
+};
+
 struct AnubarakState
 {
     RaidObs::ObsValue<uint32> phase{"anub.phase"};
@@ -544,8 +575,11 @@ struct AnubarakState
     // The pull or the last emerge: the script submerges him 80 s after either
     uint32 surfacedMs = 0;
     float surfacedHpPct = 100.0f;
+    // Once a second while he's up, until the push latches. Cleared by the submerge and the swarm.
+    std::deque<PushSample> pushSamples;
+    bool push = false;
     uint32 submergedMs = 0;
-    // Submerges this pull: heroic's first keeps a Hand of Protection back for the next one
+    // Submerges this pull: heroic's first two keep a kite patch and spare Hands for the third
     uint32 submerges = 0;
     bool submergeSpotValid = false;
     Position submergeSpot;
@@ -581,6 +615,9 @@ struct AnubarakState
     bool kiteBudgetSet = false;
     uint32 kiteBudgetFlying = 0;
     uint32 kiteLeftover = 0;
+    // Heroic: the landed patches that aren't tank patches, and how many the spike took this submerge
+    std::unordered_set<ObjectGuid> kitePatchesSeen;
+    uint32 kitePatchesSpent = 0;
     // Each side's tank patch where it was last seen, for the gather to step off once it's spent
     bool tankPatchSeen[2] = {false, false};
     Position tankPatchPos[2];
@@ -685,6 +722,11 @@ struct AnubarakState
     ProtectClaim protect;
     EscortRead escort;
     FreedomRead freedom;
+    // Phase 3: the paladin bot keeping Judgement of Light on him, picked again each time it comes due
+    ObjectGuid lightJudge;
+    bool lightDue = false;
+    bool lightMemoValid = false;
+    uint32 lightMemoMs = 0;
 };
 
 RaidInstanceState<AnubarakState> anubarakStates;
@@ -871,6 +913,8 @@ void ClearPullLatches(AnubarakState& state)
     state.swarm = false;
     state.swarmBurrowers.clear();
     state.swarmHealth.clear();
+    state.pushSamples.clear();
+    state.push = false;
     state.waveLeave = false;
     state.waveReadMs = 0;
     state.waveAlive = 0;
@@ -902,6 +946,8 @@ void ClearPullLatches(AnubarakState& state)
     state.kiteBudgetSet = false;
     state.kiteBudgetFlying = 0;
     state.kiteLeftover = 0;
+    state.kitePatchesSeen.clear();
+    state.kitePatchesSpent = 0;
     state.tankPatchSeen[0] = false;
     state.tankPatchSeen[1] = false;
     state.kitePatchKiter.Clear();
@@ -949,6 +995,9 @@ void ClearPullLatches(AnubarakState& state)
     state.protect = ProtectClaim();
     state.escort = EscortRead();
     state.freedom = FreedomRead();
+    state.lightJudge.Clear();
+    state.lightDue = false;
+    state.lightMemoValid = false;
 }
 
 void TrackBossStillness(AnubarakState& state, Creature* boss, uint32 now)
@@ -1628,6 +1677,72 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
                              std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
 }
 
+// Permafrost stays until the spike takes it, so a patch gone from the sweep while he's down is spent
+// (anub.kitespent: the count this submerge)
+void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
+{
+    ObjectGuid const tanks[2] = {state.patch0.Get(), state.patch1.Get()};
+    std::unordered_set<ObjectGuid> landed;
+    for (Creature* sphere : spheres)
+        if (IsPermafrostPatch(sphere) && sphere->GetGUID() != tanks[0] && sphere->GetGUID() != tanks[1])
+            landed.insert(sphere->GetGUID());
+
+    if (state.phaseValue == AnubarakPhase::Submerged)
+        for (ObjectGuid const& guid : state.kitePatchesSeen)
+            if (!landed.count(guid) && guid != tanks[0] && guid != tanks[1])
+                RaidObs::NoteDerived(bot, "anub.kitespent", std::to_string(++state.kitePatchesSpent));
+
+    state.kitePatchesSeen = std::move(landed);
+}
+
+// While he's up: samples his health and the share of DPS bots on him once a second, and latches the push
+// once all of them on him would get him under 30% before he submerges
+void ReadPush(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
+{
+    if (state.push ||
+        (!state.pushSamples.empty() && getMSTimeDiff(state.pushSamples.back().ms, now) < ANUBARAK_PUSH_SAMPLE_MS))
+        return;
+
+    uint32 dps = 0;
+    uint32 on = 0;
+    ForEachGroupMember(bot, [&](Player* member)
+    {
+        if (member->IsAlive() && GET_PLAYERBOT_AI(member) && IsToCDpsBot(member))
+        {
+            ++dps;
+            on += member->GetTarget() == boss->GetGUID() ? 1 : 0;
+        }
+
+        return false;
+    });
+
+    float const health = boss->GetHealthPct();
+    state.pushSamples.push_back({now, health, dps ? static_cast<float>(on) / dps : 0.0f});
+
+    PushSample const& first = state.pushSamples.front();
+    uint32 const span = getMSTimeDiff(first.ms, now);
+    int32 const leftMs = static_cast<int32>(state.surfacedMs + ANUBARAK_SURFACED_MS - now);
+    float const lost = first.healthPct - health;
+    if (span < ANUBARAK_PUSH_MIN_SPAN_MS || leftMs <= 0 || leftMs > static_cast<int32>(ANUBARAK_PUSH_WINDOW_MS) ||
+        lost <= 0.0f)
+        return;
+
+    float shareSum = 0.0f;
+    for (PushSample const& sample : state.pushSamples)
+        shareSum += sample.share;
+
+    float const share = std::max(shareSum / state.pushSamples.size(), ANUBARAK_PUSH_SHARE_FLOOR);
+    float const allOnPerS = lost * IN_MILLISECONDS / span / share * ANUBARAK_PUSH_DISCOUNT;
+    float const neededS = (health - ANUBARAK_PUSH_TARGET_PCT) / allOnPerS;
+    float const leftS = static_cast<float>(leftMs) / IN_MILLISECONDS;
+    if (neededS > leftS)
+        return;
+
+    state.push = true;
+    RaidObs::NoteDerived(bot, "anub.push",
+                         "on:" + std::to_string(std::lround(neededS)) + ":" + std::to_string(std::lround(leftS)));
+}
+
 AnubarakState* ReadPhase(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1686,6 +1801,7 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     if (submerging)
     {
         ++state->submerges;
+        state->kitePatchesSpent = 0;
         state->submergedMs = now;
         state->submergePosValid = true;
         state->submergePos = boss->GetPosition();
@@ -1705,6 +1821,14 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     {
         state->drag = DragLegLatch();
         state->dragFreeValid = false;
+    }
+
+    if (state->phaseValue == AnubarakPhase::Surface)
+        ReadPush(bot, *state, boss, now);
+    else
+    {
+        state->pushSamples.clear();
+        state->push = false;
     }
 
     if (state->swarm && AnubarakHeroic(bot))
@@ -1734,6 +1858,8 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
 
     RecordSphereHomes(*state, spheres);
     RefreshTankPatches(*state, spheres);
+    if (AnubarakHeroic(bot))
+        CountSpentKitePatches(bot, *state, spheres);
     if (!state->patch0.Get().IsEmpty() && !state->patch1.Get().IsEmpty())
         state->firstPairDone = true;
 
@@ -2545,9 +2671,29 @@ bool KitePatchAvailable(Player* kiter, AnubarakState const& state, bool tankToo)
     return false;
 }
 
+// Heroic: a Hand cast now is back before the third submerge's last 10 s, or this is the third. Its cooldown
+// is 3 to 5 min by Guardian's Favor, and a submerge comes every 142 s.
+bool HandSpare(Player* paladin, AnubarakState const& state, uint32 now)
+{
+    if (state.submerges >= ANUBARAK_LAST_KITE_SUBMERGE)
+        return true;
+
+    uint32 const rank = KnownRank(paladin, HAND_OF_PROTECTION_RANKS);
+    SpellInfo const* info = rank ? sSpellMgr->GetSpellInfo(rank) : nullptr;
+    if (!info)
+        return true;
+
+    int32 cooldown = static_cast<int32>(std::max(info->RecoveryTime, info->CategoryRecoveryTime));
+    paladin->ApplySpellMod(rank, SPELLMOD_COOLDOWN, cooldown);
+    int32 const cycle = static_cast<int32>(ANUBARAK_SURFACED_MS + ANUBARAK_SUBMERGED_MS);
+    int32 const until = static_cast<int32>(ANUBARAK_LAST_KITE_SUBMERGE - state.submerges) * cycle +
+                        static_cast<int32>(ANUBARAK_SPIKE_LIFE_MS - ANUBARAK_HAND_SPARE_TAIL_MS) -
+                        static_cast<int32>(getMSTimeDiff(state.submergedMs, now));
+    return cooldown <= until;
+}
+
 // What the planner sees: the patches by kind, the gather and the players off it, the Hands that can land and
-// the kiter's own immunity. Heroic's first submerge keeps a Hand back for the second, since a Hand's 5 min
-// cooldown outlasts the 140 s between them.
+// the kiter's own immunity.
 AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, AnubarakState const& state,
                                             KitePlan const& plan)
 {
@@ -2627,12 +2773,21 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
     std::vector<Player*> hands = bot && TeleportCircle(kiter) ? std::vector<Player*>() : ReadyHands(kiter);
     std::stable_partition(hands.begin(), hands.end(),
                           [&first](Player* paladin) { return paladin->GetGUID() == first; });
+    uint32 const now = getMSTime();
     for (Player* paladin : hands)
         if (paladin == kiter || (paladin->IsAlive() && !paladin->HasAura(SPELL_MARK)))
-            w.hands.push_back({paladin->GetGUID().GetRawValue(), ToPoint(paladin->GetPosition()), paladin == kiter});
+        {
+            bool const spare = !heroic || HandSpare(paladin, state, now);
+            w.hands.push_back(
+                {paladin->GetGUID().GetRawValue(), ToPoint(paladin->GetPosition()), paladin == kiter, spare});
+            w.spareHands += spare ? 1 : 0;
+        }
 
-    int const keep = heroic && state.submerges <= 1 ? 1 : 0;
-    w.spareHands = std::max(0, static_cast<int>(w.hands.size()) - keep);
+    std::stable_partition(w.hands.begin(), w.hands.end(),
+                          [](AnubarakKitePlanner::HandOffer const& offer) { return offer.spare; });
+    // Heroic's four kite patches go two a submerge, so the first two spend one each unless nothing else ends
+    // a kite, and the third gets theirs
+    w.reservePatch = heroic && state.submerges < ANUBARAK_LAST_KITE_SUBMERGE && state.kitePatchesSpent >= 1;
     w.own = bot && OwnImmunitySpell(kiter) != 0;
     w.ownAfterHand = kiter->getClass() != CLASS_PALADIN;
     return w;
@@ -6270,10 +6425,14 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
     if (own && melee && !MeleeReachesBurrower(bot, *state, own))
         own = nullptr;
 
-    // Holding casts alone, its white swings and procs still pulled it off the side tank
-    bool const capped = own && melee && AnubarakBurrowerThreatCapped(bot, own);
+    // Holding casts alone, white swings, Auto Shot and procs still pulled it off the side tank
+    bool const capped = own && AnubarakBurrowerThreatCapped(bot, own);
     if (capped)
         own = nullptr;
+
+    bool const otherCapped = other && !melee && AnubarakBurrowerThreatCapped(bot, other);
+    if (otherCapped)
+        other = nullptr;
 
     if (Unit* skull = GetToCHumanSkull(botAI, &IsAnubarakSkullTarget))
         return NoteDpsPick(bot, skull, "skull");
@@ -6287,6 +6446,11 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
     if (melee)
         if (Creature* loose = LooseBurrowerNear(bot, *state))
             return NoteDpsPick(bot, loose, "loose");
+
+    // A bot capped on him helps more on the burrowers
+    if (state->push && state->phaseValue == AnubarakPhase::Surface && !AnubarakThreatCapped(bot))
+        if (Creature* him = GetAnubarak(bot); him && !him->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            return NoteDpsPick(bot, him, "push");
 
     if (own)
         return NoteDpsPick(bot, own, "burrower");
@@ -6305,7 +6469,7 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
 
     Creature* boss = GetAnubarak(bot);
     if (boss && !boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
-        return NoteDpsPick(bot, boss, capped ? "capped" : "boss");
+        return NoteDpsPick(bot, boss, capped || otherCapped ? "capped" : "boss");
 
     if (Creature* scarab = state->phaseValue == AnubarakPhase::Submerged ? NearestDpsScarab(bot, *state) : nullptr)
         return NoteDpsPick(bot, scarab, "scarab");
@@ -6496,6 +6660,141 @@ Creature* GetAnubarakScarabToPickUp(Player* bot)
     }
 
     return nearest;
+}
+
+// 0.1 s steps along the walk, the scarab heading for where the bot is each step: it never gets within
+// floorGap
+static bool OutrunsScarab(Position const& from, Position const& to, float botSpeed, Position const& scarabAt,
+                          float scarabSpeed, float floorGap)
+{
+    float const length = Dist2d(from, to);
+    if (botSpeed <= 0.0f || length < 0.1f)
+        return false;
+
+    constexpr float STEP_S = 0.1f;
+    float sx = scarabAt.GetPositionX();
+    float sy = scarabAt.GetPositionY();
+    int const steps = static_cast<int>(std::ceil(length / botSpeed / STEP_S));
+    for (int k = 1; k <= steps; ++k)
+    {
+        float const share = std::min(1.0f, static_cast<float>(k) * STEP_S * botSpeed / length);
+        float const bx = from.GetPositionX() + (to.GetPositionX() - from.GetPositionX()) * share;
+        float const by = from.GetPositionY() + (to.GetPositionY() - from.GetPositionY()) * share;
+        float const gap = std::hypot(bx - sx, by - sy);
+        float const move = std::min(gap, scarabSpeed * STEP_S);
+        if (gap > 0.0f)
+        {
+            sx += (bx - sx) / gap * move;
+            sy += (by - sy) / gap * move;
+        }
+
+        if (std::hypot(bx - sx, by - sy) < floorGap)
+            return false;
+    }
+
+    return true;
+}
+
+// The gather while he's down, else his tank
+static Position ScarabKiteMeleePoint(Player* bot, AnubarakState const& state)
+{
+    Position point = bot->GetPosition();
+    if (state.phaseValue == AnubarakPhase::Submerged && GatherCentre(bot, state, point))
+        return point;
+
+    Creature* boss = GetAnubarak(bot);
+    Unit* tank = boss && state.phaseValue != AnubarakPhase::Submerged ? boss->GetVictim() : nullptr;
+    if (!tank)
+        tank = ObjectAccessor::GetPlayer(*bot, state.mainTank);
+
+    return tank && tank->IsAlive() ? tank->GetPosition() : point;
+}
+
+static bool ScarabKiteStep(Player* bot, AnubarakState const& state, Creature* scarab, Position& out)
+{
+    Position const from = bot->GetPosition();
+    Position const melee = ScarabKiteMeleePoint(bot, state);
+    std::vector<Position> const patches = PatchPositions(bot, state);
+    std::vector<Creature*> const burrowers = ResolveAlive(bot, state.burrowers);
+    float const start = bot->GetExactDist2d(scarab);
+    float const floorGap = std::min(start, ANUBARAK_SCARAB_MELEE_REACH) - ANUBARAK_SCARAB_KITE_SLACK;
+    bool found = false;
+    float best = 0.0f;
+    for (int i = 0; i < ANUBARAK_SCARAB_KITE_HEADINGS; ++i)
+    {
+        float const angle = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) / ANUBARAK_SCARAB_KITE_HEADINGS;
+        Position const raw = Offset(from, {std::cos(angle), std::sin(angle)}, ANUBARAK_SCARAB_KITE_STEP);
+        Position to;
+        if (Dist2d(raw, ANUBARAK_ROOM_CENTER) > ANUBARAK_REFILL_FLOOR || !OnFloor(bot, raw, to) ||
+            scarab->GetExactDist2d(to.GetPositionX(), to.GetPositionY()) <= start)
+            continue;
+
+        bool const nearPatch = std::any_of(patches.begin(), patches.end(), [&](Position const& patch)
+                                           { return SegmentDistance2d(from, to, patch) < ANUBARAK_TANK_KEEPOUT; });
+        bool const nearBurrower = std::any_of(burrowers.begin(), burrowers.end(), [&](Creature* burrower)
+        {
+            return !burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+                   SegmentDistance2d(from, to, burrower->GetPosition()) < ANUBARAK_SCARAB_KITE_BURROWER_CLEARANCE;
+        });
+        if (nearPatch || nearBurrower || AnubarakSpikeDangerAt(bot, to) || !AnubarakWalkClearOfSpike(bot, to) ||
+            !OutrunsScarab(from, to, bot->GetSpeed(MOVE_RUN), scarab->GetPosition(), scarab->GetSpeed(MOVE_RUN),
+                           floorGap))
+            continue;
+
+        float const toMelee = Dist2d(to, melee);
+        if (!found || toMelee < best)
+        {
+            out = to;
+            best = toMelee;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+bool GetAnubarakScarabKite(PlayerbotAI* botAI, Position& out)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || IsAnubarakTankPlayer(bot) || !AnubarakEngaged(botAI))
+        return false;
+
+    AnubarakState* state = ReadPhase(botAI);
+    if (!state)
+        return false;
+
+    Creature* scarab = nullptr;
+    float gap = ANUBARAK_SCARAB_KITE_REACH;
+    for (Creature* candidate : ResolveAlive(bot, state->scarabs))
+    {
+        float const dist = bot->GetExactDist2d(candidate);
+        if (candidate->GetVictim() == bot && !candidate->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) && dist <= gap)
+        {
+            scarab = candidate;
+            gap = dist;
+        }
+    }
+
+    // noted only while one is on the bot, so the trace doesn't fill up with nones
+    if (!scarab)
+        return false;
+
+    AnubarakGripDuty grip;
+    char const* verdict = "none";
+    bool walk = false;
+    if (bot->HasAura(SPELL_MARK) || IsAnubarakEscort(botAI) || GetAnubarakDutySphere(bot) ||
+        GetAnubarakGripDuty(bot, grip) || IsAnubarakDodgeHeld(botAI))
+        verdict = "none";
+    else if (scarab->HasAura(SPELL_SCARAB_DETERMINATION))
+        verdict = "hold";
+    else
+    {
+        walk = ScarabKiteStep(bot, *state, scarab, out);
+        verdict = walk ? "walk" : "none";
+    }
+
+    RaidObs::NoteDerived(bot, "anub.scarabkite", verdict);
+    return walk;
 }
 
 // Any HoT or shield, whoever cast it
@@ -7224,6 +7523,152 @@ char const* GetAnubarakLust(PlayerbotAI* botAI)
             return lust;
 
     return nullptr;
+}
+
+// Phase 3 has no time to spare for mana: the warlocks tap from his 40%, the mages Evocate in the submerge
+// before it
+constexpr float ANUBARAK_TOPUP_PCT = 40.0f;
+constexpr float ANUBARAK_TOPUP_TAP_MANA_PCT = 95.0f;
+constexpr float ANUBARAK_TOPUP_TAP_HEALTH_PCT = 50.0f;
+constexpr float ANUBARAK_TOPUP_EVOCATION_MANA_PCT = 60.0f;
+
+char const* GetAnubarakManaTopUp(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    uint8 const cls = bot ? bot->getClass() : 0;
+    if (!bot || (cls != CLASS_WARLOCK && cls != CLASS_MAGE) || !bot->IsAlive() || !AnubarakEngaged(botAI))
+        return nullptr;
+
+    AnubarakState const* state = ReadPhase(botAI);
+    Creature* boss = state ? GetAnubarak(bot) : nullptr;
+    if (!boss || state->phaseValue == AnubarakPhase::Swarm || boss->GetHealthPct() > ANUBARAK_TOPUP_PCT)
+        return nullptr;
+
+    char const* spell = nullptr;
+    if (!bot->HasAura(SPELL_MARK) && !IsAnubarakEscort(botAI) && !GetAnubarakDutySphere(bot))
+    {
+        float const mana = bot->GetPowerPct(POWER_MANA);
+        if (cls == CLASS_WARLOCK && mana < ANUBARAK_TOPUP_TAP_MANA_PCT &&
+            bot->GetHealthPct() > ANUBARAK_TOPUP_TAP_HEALTH_PCT && botAI->CanCastSpell("life tap", bot))
+            spell = "life tap";
+        else if (cls == CLASS_MAGE && state->phaseValue == AnubarakPhase::Submerged &&
+                 mana < ANUBARAK_TOPUP_EVOCATION_MANA_PCT && botAI->CanCastSpell("evocation", bot))
+            spell = "evocation";
+    }
+
+    RaidObs::NoteDerived(bot, "anub.topup", !spell ? "none" : cls == CLASS_WARLOCK ? "tap" : "evocation");
+    return spell;
+}
+
+bool AnubarakManaTopUpDue(PlayerbotAI* botAI) { return GetAnubarakManaTopUp(botAI) != nullptr; }
+
+constexpr uint32 SPELL_JUDGEMENT_OF_LIGHT_CAST = 20271;
+constexpr uint32 SPELL_JUDGEMENT_OF_LIGHT = 20185;
+// The holder refreshes it this long before it runs out. A healer takes the turn only with this much more
+// mana than the others.
+constexpr int32 ANUBARAK_LIGHT_REFRESH_MS = 3000;
+constexpr float ANUBARAK_LIGHT_HEALER_MANA_HANDICAP = 20.0f;
+
+// Known, off cooldown, affordable, in reach and in sight of him, and not capped on him
+static bool CanJudgeLight(Player* paladin, Creature* boss)
+{
+    if (paladin->getClass() != CLASS_PALADIN || !paladin->IsAlive() || !GET_PLAYERBOT_AI(paladin) ||
+        paladin->HasAura(SPELL_MARK) || !ReadyInstant(paladin, SPELL_JUDGEMENT_OF_LIGHT_CAST) ||
+        AnubarakThreatCapped(paladin))
+        return false;
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(SPELL_JUDGEMENT_OF_LIGHT_CAST);
+    return info && paladin->IsWithinCombatRange(boss, info->GetMaxRange(false, paladin)) &&
+           paladin->IsWithinLOSInMap(boss);
+}
+
+Player* GetAnubarakLightJudge(Player* bot)
+{
+    AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
+    Creature* boss = state && state->phaseValue == AnubarakPhase::Swarm ? GetAnubarak(bot) : nullptr;
+    if (!boss)
+        return nullptr;
+
+    uint32 const now = getMSTime();
+    if (!state->lightMemoValid || state->lightMemoMs != now)
+    {
+        state->lightMemoValid = true;
+        state->lightMemoMs = now;
+        Aura const* light = boss->GetAura(SPELL_JUDGEMENT_OF_LIGHT);
+        bool const due = !light || light->GetDuration() < ANUBARAK_LIGHT_REFRESH_MS;
+        Player* holder = ObjectAccessor::GetPlayer(*bot, state->lightJudge);
+        if (!due)
+            state->lightDue = false;
+        else if (!state->lightDue || !holder || !CanJudgeLight(holder, boss))
+        {
+            state->lightDue = true;
+            Player* best = nullptr;
+            float bestMana = 0.0f;
+            ForEachGroupMember(bot, [&](Player* member)
+            {
+                float const mana = member->GetPowerPct(POWER_MANA) -
+                                   (PlayerbotAI::IsHeal(member) ? ANUBARAK_LIGHT_HEALER_MANA_HANDICAP : 0.0f);
+                if (CanJudgeLight(member, boss) && (!best || mana > bestMana))
+                {
+                    best = member;
+                    bestMana = mana;
+                }
+
+                return false;
+            });
+
+            ObjectGuid const picked = best ? best->GetGUID() : ObjectGuid::Empty;
+            if (best && picked != state->lightJudge)
+                RaidObs::NoteDerived(bot, "anub.judge",
+                                     best->GetName() + ':' +
+                                         std::to_string(std::lround(best->GetPowerPct(POWER_MANA))));
+
+            state->lightJudge = picked;
+        }
+    }
+
+    return state->lightJudge.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state->lightJudge);
+}
+
+bool AnubarakLightJudgeDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AnubarakState const* state = bot && GetAnubarakLightJudge(bot) == bot ? ReadPhase(botAI) : nullptr;
+    return state && state->lightDue;
+}
+
+bool AnubarakSwarmLightHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    return bot && bot->getClass() == CLASS_PALADIN && AnubarakLeechingSwarmActive(botAI);
+}
+
+constexpr uint32 SPELL_HEALING_STREAM_FIRST_RANK = 5394;
+constexpr uint32 SPELL_MANA_TIDE_FIRST_RANK = 16190;
+
+bool AnubarakSwarmJudgementHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Creature* boss = bot && bot->getClass() == CLASS_PALADIN && AnubarakLeechingSwarmActive(botAI) ? GetAnubarak(bot)
+                                                                                                    : nullptr;
+    return boss && boss->HasAura(SPELL_JUDGEMENT_OF_LIGHT, bot->GetGUID());
+}
+
+bool AnubarakHealingStreamDue(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->getClass() != CLASS_SHAMAN || !bot->IsAlive() || bot->HasAura(SPELL_MARK) ||
+        !AnubarakEngaged(botAI) || !AnubarakLeechingSwarmActive(botAI))
+        return false;
+
+    Creature* totem = bot->GetMap()->GetCreature(bot->m_SummonSlot[SUMMON_SLOT_TOTEM_WATER]);
+    if (!totem || !totem->IsAlive())
+        return true;
+
+    uint32 const spell = totem->GetUInt32Value(UNIT_CREATED_BY_SPELL);
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spell);
+    uint32 const first = info ? info->GetFirstRankSpell()->Id : 0;
+    return first != SPELL_HEALING_STREAM_FIRST_RANK && first != SPELL_MANA_TIDE_FIRST_RANK;
 }
 
 static AnubarakState* ResolveDuties(Player* bot)

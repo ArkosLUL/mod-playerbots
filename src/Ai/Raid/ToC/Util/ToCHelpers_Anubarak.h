@@ -490,10 +490,12 @@ bool GetAnubarakBurrowerLead(PlayerbotAI* botAI, AnubarakBurrowerLead& out);
 // lowest health. The latched one stays while it qualifies and none of those outranks it.
 Creature* GetAnubarakFocusBurrower(Player* bot);
 // This DPS bot's target: a player's skull; gathered melee in heroic phase 2, a scarab within 10 yd; a
-// melee bot, a burrower within 10 yd on a non-tank; its side's focus (a melee bot's only with a stand off
-// the patches in its reach); once he's up, a leftover scarab (melee within 10 yd); a ranged bot, the
-// other side's focus; him while selectable; while he's down, the nearest scarab in reach. Null outside
-// the pull, for non-DPS and for a bot on sphere duty.
+// melee bot, a burrower within 10 yd on a non-tank; him while the push is latched (anub.push: near the
+// submerge, all DPS bots on him would get him under 30%) and the bot isn't capped on him; its side's
+// focus (a melee bot's only with a stand off the patches in its reach); once he's up, a leftover scarab
+// (melee within 10 yd); a ranged bot, the other side's focus; him while selectable; while he's down, the
+// nearest scarab in reach. A focus the bot is capped on is skipped. Null outside the pull, for non-DPS and
+// for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // A living, selectable burrower within range of at. waiting: only one no tank has held for the settle
 // yet, above the off-Permafrost kill line.
@@ -518,6 +520,12 @@ Position GetAnubarakPatchSafeLeg(Player* bot, Position const& to);
 // Nearest scarab within 30 yd hitting someone who isn't a tank. Heroic spreads Acid-Drenched Mandibles:
 // in phase 2 the main tank takes only one already on it, and a side tank only one on a healer.
 Creature* GetAnubarakScarabToPickUp(Player* bot);
+// Every difficulty: a selectable scarab within 15 yd is on this non-tank bot. out: a floor point 10 yd on,
+// farther from it, whose walk keeps it out of reach (simulated at both speeds), clear of the patches, the
+// burrowers and the spike, nearest the gather while he's down, else his tank. False for a marked bot, the
+// escort, sphere or grip duty, a dodge hold, and against Determination, which outruns everyone (anub.scarabkite:
+// walk, hold, none).
+bool GetAnubarakScarabKite(PlayerbotAI* botAI, Position& out);
 // What a hunter or rogue bot's Misdirection or Tricks of the Trade does now
 struct AnubarakRedirect
 {
@@ -597,6 +605,24 @@ bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out);
 // Phase 3 once lust opens: the Heroism or Bloodlust this shaman bot casts on itself, whatever it has
 // selected (the class trigger wants the boss selected). Null while it's Sated or Exhausted.
 char const* GetAnubarakLust(PlayerbotAI* botAI);
+// Every difficulty, his health at or under 40% and no swarm yet, an unmarked bot off escort and sphere duty:
+// "life tap" for a warlock under 95% mana and over 50% health, "evocation" for a mage under 60% while he is
+// down (anub.topup: tap, evocation, none). Null otherwise.
+char const* GetAnubarakManaTopUp(PlayerbotAI* botAI);
+bool AnubarakManaTopUpDue(PlayerbotAI* botAI);
+// Every difficulty, phase 3: the paladin bot keeping Judgement of Light on him. Each time it's missing or
+// under 3 s left, the turn goes to the living unmarked paladin bot with the most mana that can judge him now
+// (a healer's counted 20 under), held until it's due again or the holder no longer can (anub.judge:
+// name:mana%). Judgement of Light from a second paladin replaces the first rather than stacking.
+Player* GetAnubarakLightJudge(Player* bot);
+// This bot holds the turn and it's due
+bool AnubarakLightJudgeDue(PlayerbotAI* botAI);
+// A paladin bot in phase 3: the class Judgement of Light waits, the holder judges through the encounter
+bool AnubarakSwarmLightHeld(PlayerbotAI* botAI);
+// A paladin bot whose own Judgement of Light is on him in phase 3: any judgement it casts would replace it
+bool AnubarakSwarmJudgementHeld(PlayerbotAI* botAI);
+// Every difficulty, phase 3: a shaman bot with neither its Healing Stream nor its Mana Tide Totem out
+bool AnubarakHealingStreamDue(PlayerbotAI* botAI);
 
 // The flying sphere this bot shoots now, null when it has no sphere duty
 Creature* GetAnubarakSphereToShoot(Player* bot);

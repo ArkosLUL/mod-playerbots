@@ -295,6 +295,18 @@ bool AnubarakDivinePleaTrigger::IsActive() { return AnubarakDivinePleaDue(botAI)
 
 bool AnubarakInnervateHealerTrigger::IsActive() { return AnubarakInnervateHealerDue(botAI); }
 
+bool AnubarakScarabKiteTrigger::IsActive()
+{
+    Position step;
+    return GetAnubarakScarabKite(botAI, step);
+}
+
+bool AnubarakManaTopUpTrigger::IsActive() { return AnubarakManaTopUpDue(botAI); }
+
+bool AnubarakLightJudgeDueTrigger::IsActive() { return AnubarakLightJudgeDue(botAI); }
+
+bool AnubarakHealingStreamDueTrigger::IsActive() { return AnubarakHealingStreamDue(botAI); }
+
 void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("anubarak kiter needs immunity", {
@@ -354,6 +366,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("anubarak burrower lead", {
         NextAction("anubarak burrower lead", ACTION_RAID + 4.4f) }));
 
+    // Under the lead, over the target pick: every hit adds a minute of Acid-Drenched Mandibles
+    triggers.push_back(new TriggerNode("anubarak scarab kite", {
+        NextAction("anubarak kite scarab", ACTION_RAID + 4.3f) }));
+
     // Off the GCD, ahead of the next swing the buff would carry onto the burrower
     triggers.push_back(new TriggerNode("anubarak cleave buff near burrower", {
         NextAction("anubarak drop cleave buff", ACTION_RAID + 4.2f) }));
@@ -389,6 +405,16 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak demonic circle due", {
         NextAction("anubarak demonic circle", ACTION_RAID + 0.4f) }));
+
+    // Under every walk, over the class rotation
+    triggers.push_back(new TriggerNode("anubarak healing stream due", {
+        NextAction("healing stream totem", ACTION_RAID - 0.5f) }));
+
+    triggers.push_back(new TriggerNode("anubarak mana top up", {
+        NextAction("anubarak top up mana", ACTION_RAID - 1) }));
+
+    triggers.push_back(new TriggerNode("anubarak light judge due", {
+        NextAction("anubarak judge light", ACTION_HIGH + 5) }));
 
     triggers.push_back(new TriggerNode("anubarak engaged by main tank", {
         NextAction("anubarak main tank hold boss", ACTION_RAID + 1) }));

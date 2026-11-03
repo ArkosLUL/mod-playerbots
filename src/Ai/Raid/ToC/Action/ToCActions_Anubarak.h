@@ -292,6 +292,31 @@ public:
     std::vector<NextAction> getPrerequisites() override;
 };
 
+class AnubarakKiteScarabAction : public MovementAction
+{
+public:
+    AnubarakKiteScarabAction(PlayerbotAI* botAI, std::string const name = "anubarak kite scarab")
+        : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakTopUpManaAction : public Action
+{
+public:
+    AnubarakTopUpManaAction(PlayerbotAI* botAI, std::string const name = "anubarak top up mana")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// The class Judgement of Light goes on the current target, which under the swarm is often a burrower
+class AnubarakJudgeLightAction : public Action
+{
+public:
+    AnubarakJudgeLightAction(PlayerbotAI* botAI, std::string const name = "anubarak judge light")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class ToCAnubarakActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -365,6 +390,12 @@ public:
             &ToCAnubarakActionContext::anubarak_aura_mastery;
         creators["anubarak innervate healer"] =
             &ToCAnubarakActionContext::anubarak_innervate_healer;
+        creators["anubarak kite scarab"] =
+            &ToCAnubarakActionContext::anubarak_kite_scarab;
+        creators["anubarak top up mana"] =
+            &ToCAnubarakActionContext::anubarak_top_up_mana;
+        creators["anubarak judge light"] =
+            &ToCAnubarakActionContext::anubarak_judge_light;
     }
 
 private:
@@ -503,6 +534,18 @@ private:
 
     static Action* anubarak_innervate_healer(PlayerbotAI* botAI) {
         return new AnubarakInnervateHealerAction(botAI);
+    }
+
+    static Action* anubarak_kite_scarab(PlayerbotAI* botAI) {
+        return new AnubarakKiteScarabAction(botAI);
+    }
+
+    static Action* anubarak_top_up_mana(PlayerbotAI* botAI) {
+        return new AnubarakTopUpManaAction(botAI);
+    }
+
+    static Action* anubarak_judge_light(PlayerbotAI* botAI) {
+        return new AnubarakJudgeLightAction(botAI);
     }
 };
 

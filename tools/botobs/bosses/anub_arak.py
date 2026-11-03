@@ -60,7 +60,9 @@
                                      next kiter or its spot at the mark, and the first patch it passed within
                                      11.5 yd, spent or not; per kite each stretch of 2 s or more its gap to a
                                      spike no faster than itself shrank, ending within 12 yd, with the gap and
-                                     speeds over it, summed per pull
+                                     speeds over it, summed per pull; per submerge the kite patches
+                                     anub.kitespent counted, over 1 before the third flagged, and each Hand of
+                                     Protection cast with its caster's cooldown off anub.hands
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -91,8 +93,9 @@
                                      with the taunts at it, or those it stayed on non-tanks and never came back;
                                      each Bladestorm with the nearest burrower,
                                      within 25 yd flagged, the burrower guard's Bladestorm vetoes and the burrower
-                                     threat cap's per bot; per melee bot the seconds it targeted a burrower no
-                                     tank within 5 yd held, by its anub.dps value then
+                                     threat cap's per bot; anub.dps capped rows per ranged bot; per melee bot the
+                                     seconds it targeted a burrower no tank within 5 yd held, by its anub.dps
+                                     value then
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
@@ -103,8 +106,10 @@
                                      when the drag to the submerge spot left
     anub_arak.py <file> --dps        per phase and DPS role, bots only: samples by target kind, moving, yards
                                      walked by move order and damage by target kind; his health lost per
-                                     phase 1, under 20% flagged; anub.dps rows per role; each anub.dside group
-                                     per wave, and melee walks across the midline between the side spots
+                                     phase 1, under 20% flagged; per phase 1 its first anub.push with his health
+                                     and the seconds left then, and whether phase 3 or a submerge ended it;
+                                     anub.dps rows per role; each anub.dside group per wave, and melee walks
+                                     across the midline between the side spots
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust; per 5 s his health, the median
                                      tank and non-tank health, the swarm on each and the healers' heals onto
                                      tanks, carriers and others; bot heals it cast onto a non-tank with no
@@ -121,7 +126,11 @@
                                      swarm is under the tick, the first tick's margin and fate, its anub.coldheal
                                      healers and the heals and absorbs on it before the tick by source; a herd,
                                      two healers or more landing on one carrier within 1.5 s while another at
-                                     risk had nothing from a healer; deaths
+                                     risk had nothing from a healer; per non-tank its effective heals received a
+                                     second alive by kind (healers, own, Judgement of Light, Vampiric Embrace,
+                                     Healing Stream Totem, other) and the swarm's drain; Judgement of Light's
+                                     uptime on him off the casts, each paladin's judgements, anub.judge rows,
+                                     each shaman's water totem at the start and 10 s in; deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
                                      tank, the seconds over 35 yd from a side tank a burrower was on, follow
                                      acts in the pull, its engine passes, anub.hstand; per healer its first
@@ -135,7 +144,8 @@
                                      phase and the share of the raid's, and the sources with no owner in the
                                      trace; per healer its mana at phase 3's start and 30 s in, and per player
                                      its Divine Plea, Innervate with its target and Hymn of Hope casts with
-                                     their phase
+                                     their phase; per warlock and mage bot its mana the same way and its Life
+                                     Taps and Evocations from his 40% to phase 3
     anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per run of it on the
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; per side
@@ -146,7 +156,9 @@
                                      action it ran for and when the form came back; each tank death with the
                                      damage taken and the heals landed in the 12 s before
     anub_arak.py <file> --scarabs    the scarabs alive 0, 10, 20 and 30 s after each emerge with their targets,
-                                     the main tank's Mandibles stack at the emerge, scarab lives per phase, and
+                                     the main tank's Mandibles stack at the emerge, scarab lives per phase, per
+                                     scarab victim its stacks gained moving or standing with the gap to the
+                                     scarab and the seconds one within 15 yd chased it by anub.scarabkite, and
                                      per phase each player's Mandibles peak stack and tick damage
     anub_arak.py <file> --redirects  each Misdirection and Tricks of the Trade: caster, recipient, the caster's
                                      target, and a burrower's target 1 to 8 s after; totals per recipient
@@ -209,7 +221,13 @@ What the generic views get wrong here, and what this reads instead:
   `anub.healduty` is per healer bot from the phase's start, `1` cold and `2` tank, and `anub.coldheal` is
   keyed on the healer bot with the carrier it keeps up as its value, `0` when that ends. `anub.mastery` is
   per paladin bot, `none`, `hold N` with N carriers under the tick, or `cast`, and `toc.aura` per paladin
-  and hunter bot, the resistance it holds or `none`.
+  and hunter bot, the resistance it holds or `none`. `anub.push` is written once per phase 1 by the bot
+  whose read latched it, `on:<seconds needed>:<seconds left>`, and `anub.kitespent` by the bot whose read
+  saw a kite patch go, the count this submerge. `anub.scarabkite` is per bot, `walk`, `hold` or `none`, and
+  written only while a scarab is on it, so it reads per snapshot a scarab chases the bot. `anub.topup` is
+  per warlock and mage bot, `tap`, `evocation` or `none`, and `anub.judge` is written at each Judgement of
+  Light hand-over in phase 3, `<name>:<mana%>`. A Judgement of Light on him is a creature aura, so its
+  uptime is read off the casts.
 - **Health in points is read off the pool at first sight.** Snapshots and combat rows carry a percentage,
   so a carrier under a health buff reads short. A first tick it lived through still reads a margin of 0
   or more.
@@ -622,6 +640,23 @@ MANA_COOLDOWNS = {54428: "Divine Plea", 29166: "Innervate", 64901: "Hymn of Hope
 SPELL_INNERVATE = 29166
 # phase 3's mana is read at its start and again this far in
 SWARM_MANA_MS = 30000
+CLASS_SHAMAN = 7
+CLASS_MAGE = 8
+# the warlocks' taps and the mages' Evocations are counted from his health this low
+TOPUP_FROM_PCT = radius("ANUBARAK_TOPUP_PCT")
+TOPUP_SPELLS = ("Life Tap", "Evocation")
+# the cast spells; each one's debuff lasts 20 s, and a paladin's next judgement anywhere replaces it
+JUDGEMENTS = {20271: "Light", 53408: "Wisdom", 53407: "Justice"}
+JUDGEMENT_MS = 20000
+SUSTAIN_KINDS = ("healers", "own", "JoL", "VE", "HST", "other")
+WATER_TOTEMS = ("Healing Stream Totem", "Mana Spring Totem", "Mana Tide Totem", "Cleansing Totem",
+                "Fire Resistance Totem")
+# the water totem is read at phase 3's start and this far in
+WATER_TOTEM_LATER_MS = 10000
+# a scarab this close on its victim counts as chasing it
+SCARAB_KITE_YD = radius("ANUBARAK_SCARAB_KITE_REACH")
+# ANUBARAK_LAST_KITE_SUBMERGE: the first two submerges keep a kite patch for the third
+LAST_KITE_SUBMERGE = 3
 ENGINE_NAMES = {"c": "combat", "n": "non-combat", "d": "dead"}
 # Every node of an engine lands in exactly one of these columns on every pass
 PASS_COLUMNS = ("checks", "shared", "throttled", "minimal", "dead")
@@ -2266,6 +2301,50 @@ def planner_lines(window: dict, spend: dict | None, hazard) -> list[str]:
     return lines
 
 
+def paladin_hop_cooldowns(trace: Trace) -> dict[int, int]:
+    """Per paladin, its Hand of Protection cooldown as `hop_cooldown` reads it, from its own casts and reads only."""
+    casts: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") in HAND_OF_PROTECTION and not rec.get("tr"):
+            casts[rec.get("s")].append(rec["t"])
+    spans: dict[int, list[int]] = collections.defaultdict(list)
+    for when, paladin, left, _ in hand_reads(trace):
+        last = [cast for cast in casts.get(paladin, []) if cast <= when]
+        if left > 0 and last:
+            spans[paladin].append(when - last[-1] + left)
+    return {paladin: int(round(statistics.median(found) / 1000.0)) * 1000 for paladin, found in spans.items()}
+
+
+def submerge_spends(trace: Trace) -> list[dict]:
+    """Per submerge, the most kite patches `anub.kitespent` counted in it (`patches`, None with no row) and each
+    Hand of Protection cast in it as `(t, caster, cooldown ms)`, the caster's own cooldown, else HOP_COOLDOWN_MS."""
+    cooldowns = paladin_hop_cooldowns(trace)
+    spent = [(rec["t"], int(rec["txt"])) for rec in notes(trace, "anub.kitespent") if str(rec.get("txt", "")).isdigit()]
+    hands = [rec for rec in trace.of("cast") if rec.get("sp") in HAND_OF_PROTECTION and not rec.get("tr")]
+    out = []
+    for index, (start, stop) in enumerate(submerged_spans(trace), 1):
+        counts = [count for when, count in spent if start <= when <= stop]
+        out.append({"index": index, "start": start, "patches": max(counts) if counts else None,
+                    "hands": [(rec["t"], rec.get("s"), cooldowns.get(rec.get("s"), HOP_COOLDOWN_MS))
+                              for rec in hands if start <= rec["t"] < stop]})
+    return out
+
+
+def show_submerge_spends(trace: Trace) -> None:
+    rows = submerge_spends(trace)
+    if not rows:
+        return
+    print(f"  per submerge the kite patches anub.kitespent counted, over 1 before submerge {LAST_KITE_SUBMERGE}"
+          " flagged, and the Hands of Protection\n  cast with the caster's cooldown:")
+    for row in rows:
+        patches = "no anub.kitespent rows" if row["patches"] is None else f"patches {row['patches']}"
+        if row["patches"] is not None and row["patches"] > 1 and row["index"] < LAST_KITE_SUBMERGE:
+            patches += " over the reserve"
+        hands = ", ".join(f"{trace.name(caster)} {clock(when)} ({cooldown // 1000} s)"
+                          for when, caster, cooldown in row["hands"]) or "none"
+        print(f"    {row['index']} {clock(row['start']):>9}  {patches}; Hands {hands}")
+
+
 def show_spike(trace: Trace) -> None:
     print("PURSUING SPIKE")
     samples = Samples(trace)
@@ -2426,6 +2505,7 @@ def show_spike(trace: Trace) -> None:
             f"{trace.name(row['guid'])} {clock(row['window']['start'])} {rel_s(row['window'], row['t'])}"
             f" by {trace.name(row['caster'])}" + (", circle in reach" if row["reach"] else "")
             for row in warlock_hands(trace, windows)) or "none"))
+    show_submerge_spends(trace)
     show_crowds(trace, samples)
     show_dodges(trace)
 
@@ -4805,6 +4885,13 @@ def show_loose_burrowers(trace: Trace, samples: Samples) -> None:
         for guid, held in sorted(rows.items(), key=lambda item: -sum(item[1].values()))) or "none"))
 
 
+def ranged_capped(trace: Trace) -> dict[int, int]:
+    """`anub.dps` `capped` rows per ranged DPS bot: each a pick moved onto him off a burrower it was capped on."""
+    ranged = {guid for guid, role in dps_bots(trace).items() if role == "ranged"}
+    return {guid: counts["capped"] for guid, counts in value_counts(trace, "anub.dps").items()
+            if guid in ranged and counts.get("capped")}
+
+
 def show_burrowers(trace: Trace) -> None:
     print("NERUBIAN BURROWERS")
     samples = Samples(trace)
@@ -4863,6 +4950,10 @@ def show_burrowers(trace: Trace) -> None:
     else:
         print("  anub.focusdue dropped with the focus alive: no anub.focusdue rows")
     show_counts(trace, "anub.dps")
+    capped = ranged_capped(trace)
+    print("  anub.dps capped rows per ranged DPS bot, a pick moved onto him off a burrower it was capped on: "
+          + (", ".join(f"{trace.name(guid)} {n}" for guid, n in sorted(capped.items(), key=lambda item: -item[1]))
+             or "none"))
     show_loose_burrowers(trace, samples)
     if notes(trace, "anub.mstand"):
         show_counts(trace, "anub.mstand")
@@ -5079,6 +5170,34 @@ def show_crossings(trace: Trace, samples: Samples) -> None:
         print(f"    {label:5} {clock(start):>9}  {len(mine)} walk(s)" + (f": {bots}" if bots else ""))
 
 
+def push_reads(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per phase 1, the first `anub.push` row in it (`t` and `txt` None without one) with his health then, and
+    `then`, what ended it: `phase 3`, `submerged` or `pull ended`."""
+    samples = samples or Samples(trace)
+    spans = phase_spans(trace)
+    boss = boss_guid(trace)
+    rows = notes(trace, "anub.push")
+    out = []
+    for index, (start, stop, value, label) in enumerate(spans):
+        if value != 1:
+            continue
+        after = spans[index + 1][2] if index + 1 < len(spans) else None
+        first = next((rec for rec in rows if start <= rec["t"] < stop), None)
+        out.append({"label": label, "start": start, "stop": stop,
+                    "then": {3: "phase 3", 2: "submerged"}.get(after, "pull ended"),
+                    "t": first["t"] if first else None, "txt": str(first.get("txt", "")) if first else None,
+                    "hp": health(samples, boss, first["t"]) if first else None})
+    return out
+
+
+def push_text(row: dict) -> str:
+    if row["t"] is None:
+        return f"{row['label']} no push, {row['then']}"
+    hp = "-" if row["hp"] is None else f"{row['hp']:.1f}%"
+    return (f"{row['label']} {row['txt']} at {hp}, {(row['stop'] - row['t']) / 1000:.0f} s to its end,"
+            f" {row['then']}")
+
+
 def show_dps(trace: Trace) -> None:
     print("DPS")
     if not is_toc_anubarak(trace):
@@ -5109,6 +5228,8 @@ def show_dps(trace: Trace) -> None:
     print("\n  boss health lost per phase 1: " + (", ".join(
         f"{row['label']} {boss_lost(row):.1f}%" + (" under" if boss_lost(row) < BOSS_PACE_PCT else "")
         for row in surfaced) or "none sampled"))
+    print("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, and what"
+          " ended the phase: " + ("; ".join(push_text(row) for row in push_reads(trace, samples)) or "none"))
     bots = dps_bots(trace)
     branches = {role: collections.Counter() for role in DPS_ROLES}
     for guid, counts in value_counts(trace, "anub.dps").items():
@@ -6173,6 +6294,100 @@ def show_swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) 
                                               for dip in bare if dip["died"]) or "none"))
 
 
+def sustain_kind(trace: Trace, rec: dict) -> str:
+    name = trace.spells.get(rec.get("sp"), "")
+    source = trace.owners.get(rec.get("s"), rec.get("s"))
+    if "Judgement of Light" in name:
+        return "JoL"
+    if "Vampiric Embrace" in name:
+        return "VE"
+    if "Healing Stream" in name:
+        return "HST"
+    if source == rec.get("d"):
+        return "own"
+    return "healers" if trace.role(source) == "heal" else "other"
+
+
+def swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> list[dict]:
+    """Per non-tank roster member in [start, stop): its effective heals received by SUSTAIN_KINDS, the swarm's
+    damage on it, and the snapshot milliseconds it was alive, each step capped at MAX_STEP_MS."""
+    members = [guid for guid in roster_guids(trace) if trace.role(guid) != "tank"]
+    out = {guid: {"guid": guid, "heals": collections.Counter(), "swarm": 0, "alive": 0} for guid in members}
+    for rec in trace.of("heal", "dmg"):
+        row = out.get(rec.get("d"))
+        if row is None or not start <= rec["t"] < stop:
+            continue
+        if rec["e"] == "heal":
+            row["heals"][sustain_kind(trace, rec)] += rec.get("a", 0) - rec.get("oh", 0)
+        elif rec.get("sp") == SPELL_LEECHING_SWARM_DMG or rec.get("sp") in LEECHING_SWARM:
+            row["swarm"] += rec.get("a", 0)
+    for guid, row in out.items():
+        stamps, rows = samples.track(guid)
+        for index in range(bisect.bisect_left(stamps, start), min(bisect.bisect_left(stamps, stop), len(stamps) - 1)):
+            if rows[index][5] > 0:
+                row["alive"] += min(stamps[index + 1] - stamps[index], MAX_STEP_MS)
+    return sorted(out.values(), key=lambda row: (trace.role(row["guid"]), trace.name(row["guid"])))
+
+
+def light_reads(trace: Trace, start: int, stop: int) -> dict:
+    """Judgement of Light on him over [start, stop) (`uptime` ms): each cast on him holds JUDGEMENT_MS, cut at that
+    paladin's next judgement. Per paladin its judgements in the span, `(kind, on him)` counted (`casts`)."""
+    boss = boss_guid(trace)
+    rows = sorted((rec for rec in trace.of("cast") if rec.get("sp") in JUDGEMENTS and not rec.get("tr")),
+                  key=lambda rec: rec["t"])
+    spans = []
+    casts: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for index, rec in enumerate(rows):
+        caster = rec.get("s")
+        if start <= rec["t"] < stop:
+            casts[caster][(JUDGEMENTS[rec["sp"]], rec.get("tgt") == boss)] += 1
+        if JUDGEMENTS[rec["sp"]] != "Light" or rec.get("tgt") != boss:
+            continue
+        end = rec["t"] + JUDGEMENT_MS
+        nxt = next((later["t"] for later in rows[index + 1:] if later.get("s") == caster), None)
+        spans.append((rec["t"], end if nxt is None else min(end, nxt)))
+    uptime = sum(max(0, min(high, stop) - max(low, start)) for low, high in merged(spans))
+    return {"uptime": uptime, "casts": dict(casts)}
+
+
+def water_totems(trace: Trace, start: int) -> dict[int, tuple[str | None, str | None]]:
+    """Per shaman on the roster, its last water totem cast at or before phase 3's start and WATER_TOTEM_LATER_MS in,
+    None for none."""
+    shamans = [member["g"] for member in trace.header.get("roster", []) if member.get("c") == CLASS_SHAMAN]
+    casts = [(rec["t"], rec.get("s"), trace.spells.get(rec.get("sp"), "")) for rec in trace.of("cast")
+             if not rec.get("tr") and trace.spells.get(rec.get("sp"), "") in WATER_TOTEMS]
+
+    def last(guid: int, when: int) -> str | None:
+        return next((name for at, caster, name in reversed(casts) if caster == guid and at <= when), None)
+
+    return {guid: (last(guid, start), last(guid, start + WATER_TOTEM_LATER_MS)) for guid in sorted(shamans,
+                                                                                                    key=trace.name)}
+
+
+def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> None:
+    print("\n  heals received per non-tank in phase 3, effective, k a second alive, and the swarm's drain:")
+    print(f"    {'name':14} {'role':6} {'alive':>5} " + "".join(f"{kind:>8}" for kind in SUSTAIN_KINDS)
+          + f"{'total':>8}{'swarm':>8}")
+    for row in swarm_sustain(trace, start, stop, samples):
+        seconds = max(row["alive"] / 1000, 1.0)
+        heals = row["heals"]
+        print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['alive'] / 1000:5.0f} "
+              + "".join(f"{heals[kind] / seconds / 1000:8.2f}" for kind in SUSTAIN_KINDS)
+              + f"{sum(heals.values()) / seconds / 1000:8.2f}{row['swarm'] / seconds / 1000:8.2f}")
+    light = light_reads(trace, start, stop)
+    print(f"  Judgement of Light on him in phase 3: {light['uptime'] / 1000:.1f} of {(stop - start) / 1000:.1f} s;"
+          " judgements per paladin: " + ("; ".join(
+              f"{trace.name(guid)} " + ", ".join(f"{kind} {n}" + (" on him" if on else "")
+                                                 for (kind, on), n in sorted(counts.items()))
+              for guid, counts in sorted(light["casts"].items(), key=lambda item: trace.name(item[0]))) or "none"))
+    handovers = [f"{clock(rec['t'])} {rec.get('txt')}" for rec in notes(trace, "anub.judge")]
+    print("  anub.judge hand-overs: " + (", ".join(handovers) or "no rows"))
+    totems = water_totems(trace, start)
+    print(f"  water totem per shaman at phase 3's start and {WATER_TOTEM_LATER_MS // 1000} s in: " + (", ".join(
+        f"{trace.name(guid)} {before or 'none'} > {later or 'none'}" for guid, (before, later) in totems.items())
+        or "no shaman"))
+
+
 def show_swarm(trace: Trace) -> None:
     print("PHASE 3")
     samples = Samples(trace)
@@ -6221,6 +6436,7 @@ def show_swarm(trace: Trace) -> None:
         show_heal_duties(trace)
         show_cold_waves(trace, samples)
         show_swarm_externals(trace, span[0], span[1], samples)
+        show_swarm_sustain(trace, span[0], span[1], samples)
     show_counts(trace, "anub.defensive")
 
     if span is not None:
@@ -6446,6 +6662,35 @@ def healer_mana(trace: Trace, samples: Samples | None = None) -> dict:
     return out
 
 
+def caster_mana(trace: Trace, samples: Samples | None = None) -> dict:
+    """Per warlock and mage bot, its mana at phase 3's start and SWARM_MANA_MS in (`mana[guid]`, as `healer_mana`
+    reads it), and its Life Taps and Evocations from his first sample at TOPUP_FROM_PCT or under to phase 3's
+    start, else the pull's end (`topups[guid]`, a Counter by spell name). `from` None while he never got there."""
+    samples = samples or Samples(trace)
+    swarm = swarm_span(trace)
+    casters = sorted((member["g"] for member in trace.header.get("roster", [])
+                      if member.get("c") in (CLASS_WARLOCK, CLASS_MAGE) and not member.get("h")), key=trace.name)
+    stamps, rows = samples.track(boss_guid(trace))
+    low = next((when for when, row in zip(stamps, rows) if 0 < row[5] <= TOPUP_FROM_PCT), None)
+
+    def mana(guid: int, when: int) -> float | None:
+        row = samples.recent(guid, when)
+        return row[6] if row is not None and len(row) > 6 and row[5] > 0 else None
+
+    out: dict = {"from": low, "mana": {}, "topups": {guid: collections.Counter() for guid in casters}}
+    if swarm is not None:
+        later = swarm[0] + SWARM_MANA_MS
+        out["mana"] = {guid: (mana(guid, swarm[0]), mana(guid, later) if later <= swarm[1] else None)
+                       for guid in casters}
+    stop = swarm[0] if swarm is not None else pull_end(trace)
+    for rec in trace.of("cast"):
+        name = trace.spells.get(rec.get("sp"), "")
+        if (low is not None and name in TOPUP_SPELLS and not rec.get("tr") and rec.get("s") in out["topups"]
+                and low <= rec["t"] < stop):
+            out["topups"][rec["s"]][name] += 1
+    return out
+
+
 def mana_cast_text(trace: Trace, guid: int, cast: tuple) -> str:
     when, spell, target, label = cast
     onto = f" on {trace.name(target)}" if spell == SPELL_INNERVATE and target and target != guid else ""
@@ -6468,6 +6713,18 @@ def show_healer_mana(trace: Trace, samples: Samples) -> None:
         level = "" if mana is None else f"{pct(mana[0])} > {pct(mana[1])}; "
         casts = ", ".join(mana_cast_text(trace, guid, cast) for cast in read["casts"].get(guid, [])) or "no cast"
         print(f"    {trace.name(guid)[:14]:14} {level}{casts}" + ("" if guid in healers else f"  ({trace.role(guid)})"))
+
+    casters = caster_mana(trace, samples)
+    if not casters["topups"]:
+        return
+    since = "he never got there" if casters["from"] is None else clock(casters["from"])
+    print(f"  warlock and mage bots, mana the same way, and their Life Taps and Evocations from his"
+          f" {TOPUP_FROM_PCT:.0f}% ({since}) to phase 3:")
+    for guid, counts in casters["topups"].items():
+        mana = casters["mana"].get(guid)
+        level = "" if mana is None else f"{pct(mana[0])} > {pct(mana[1])}; "
+        spent = ", ".join(f"{name} {n}" for name, n in counts.most_common()) or "none"
+        print(f"    {trace.name(guid)[:14]:14} {level}{spent}")
 
 
 def show_healer_engines(trace: Trace, healers: list[int]) -> None:
@@ -7023,6 +7280,55 @@ def mandible_windows(trace: Trace) -> list[dict]:
     return out
 
 
+def scarab_chases(trace: Trace, samples: Samples | None = None) -> dict[int, dict]:
+    """Per roster member a scarab went for: per Acid-Drenched Mandibles stack it gained `(t, moving, gap)`, the gap
+    to the nearest scarab on it, None with none sampled (`stacks`); and the snapshot milliseconds a scarab within
+    SCARAB_KITE_YD was on it, by its `anub.scarabkite` value then, `-` before its first row (`chased`)."""
+    samples = samples or Samples(trace)
+    scarabs = sorted(guids_of_entry(trace, NPC_SCARAB))
+    roster = roster_guids(trace)
+    kites = per_bot(trace, "anub.scarabkite")
+    out: dict[int, dict] = collections.defaultdict(lambda: {"stacks": [], "chased": collections.Counter()})
+
+    def gap_to(victim: int, row, when: int) -> float | None:
+        gaps = [math.dist(unit[1:3], row[1:3]) for unit in (samples.recent(guid, when) for guid in scarabs)
+                if unit is not None and unit[5] > 0 and len(unit) > 7 and unit[7] == victim]
+        return min(gaps, default=None)
+
+    for guid, track in stack_tracks(trace, MANDIBLES).items():
+        before = 0
+        for when, stack in track:
+            row = samples.recent(guid, when) if guid in roster else None
+            if row is not None and stack > before:
+                out[guid]["stacks"].append((when, bool(row[8]) if len(row) > 8 else False, gap_to(guid, row, when)))
+            before = stack
+
+    for index, when in enumerate(samples.stamps[:-1]):
+        step = min(samples.stamps[index + 1] - when, MAX_STEP_MS)
+        chased = set()
+        for guid in scarabs:
+            unit = sampled_at(samples, guid, index)
+            victim = unit[7] if unit is not None and unit[5] > 0 and len(unit) > 7 else 0
+            row = samples.recent(victim, when) if victim in roster else None
+            if row is not None and row[5] > 0 and math.dist(unit[1:3], row[1:3]) <= SCARAB_KITE_YD:
+                chased.add(victim)
+        for victim in chased:
+            value = next((value for at, value in reversed(kites.get(victim, [])) if at <= when), "-")
+            out[victim]["chased"][value] += step
+    return dict(out)
+
+
+def chase_text(row: dict) -> str:
+    moving = sum(1 for _, walking, _ in row["stacks"] if walking)
+    gaps = [gap for _, _, gap in row["stacks"] if gap is not None]
+    stacks = (f"stacks {moving} moving, {len(row['stacks']) - moving} standing"
+              + (f", median gap {statistics.median(gaps):.1f} yd" if gaps else "") if row["stacks"] else "no stack")
+    chased = row["chased"]
+    return stacks + (f"; chased {sum(chased.values()) / 1000:.1f} s ("
+                     + ", ".join(f"{value} {ms / 1000:.1f}" for value, ms in chased.most_common()) + ")"
+                     if chased else "")
+
+
 def show_scarabs(trace: Trace) -> None:
     print("SCARABS")
     if not is_toc_anubarak(trace):
@@ -7056,6 +7362,13 @@ def show_scarabs(trace: Trace) -> None:
             print(f"    {label:5} {start:>9}  {len(rows)} scarab(s), median {statistics.median(spans):.1f} s,"
                   f" longest {max(spans):.1f} s; {len(past)} lived past its end"
                   + (f", longest {max(past):.1f} s on" if past else ""))
+
+    chases = scarab_chases(trace, samples)
+    if chases:
+        print(f"\n  per scarab victim, its Mandibles stacks gained moving or standing with the median gap to the scarab"
+              f" on it, and\n  the seconds a scarab within {SCARAB_KITE_YD:.0f} yd was on it by anub.scarabkite then:")
+        for guid, row in sorted(chases.items(), key=lambda item: (-len(item[1]["stacks"]), trace.name(item[0]))):
+            print(f"    {trace.name(guid)[:14]:14} {chase_text(row)}")
 
     windows = [row for row in mandible_windows(trace) if row["players"]]
     if not windows:

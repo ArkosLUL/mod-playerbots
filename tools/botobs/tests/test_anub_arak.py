@@ -27,9 +27,11 @@ replay's starts, each kite's anub.kitepred and anub.kitepath and its first hazar
 pick per side, the side tanks' Expose Weakness and anub.p3wave, a twentieth each speed boost against the spike's
 speed and its pick's +boost@ second, the standby escort at the claim, the spike's next leg past a patch, the
 healers' phase 3 mana and mana cooldowns and the melee on a burrower no tank holds, a twenty-first the kiter
-closing on a spike no faster than itself and a tank's form or stance lost while he is up, the first one again
-phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every section reads
-empty on a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native
+closing on a spike no faster than itself and a tank's form or stance lost while he is up, a twenty-second the push
+per phase 1, a ranged bot's capped rows, the kite patches and Hands per submerge, the warlock and mage top ups, a
+scarab victim's stacks and kite seconds and phase 3's heals by kind, Light's uptime and water totems, the first
+one again phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
+section reads empty on a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native
 test's cases that need no Hand.
 """
 from __future__ import annotations
@@ -5492,6 +5494,168 @@ class ClosingPull(unittest.TestCase):
                       "     0:05.000 Felesta        P1    Frost Presence   by unholy presence; back after 3.0 s\n"
                       "     0:45.000 Ecoterrorist   P1b   Dire Bear Form   by caster form, run for anubarak innervate"
                       " healer; not back before its death 1.2 s later\n", self.text(ab.show_tanks))
+
+
+RFTANK, RFJUST, RFHOLY, RFSHAM, RFLOCK, RFMAGE, RFHUNT = range(9961, 9968)
+RFBOSS = CREATURE | 2201
+RFSCARAB = CREATURE | 2202
+RFTOTEM = CREATURE | 2203
+SPELL_LIFE_TAP, SPELL_EVOCATION, SPELL_JOL_HEAL, SPELL_HST_HEAL, SPELL_HOLY_LIGHT = 57946, 12051, 20267, 52042, 48782
+SPELL_MANA_SPRING, SPELL_HEALING_STREAM, SPELL_SIPHON_LIFE = 58774, 58757, 63106
+SPELL_JOL, SPELL_JOW = 20271, 53408
+def sustain_hp(when: int) -> float:
+    """100% to 60% by the submerge at 20 s, 40% at 43 s, 26% as phase 3 starts at 50 s, 10% by 90 s."""
+    if when < 20000:
+        return 100.0 - max(when, 0) / 500
+    if when < 40000:
+        return 60.0
+    if when < 43000:
+        return 60.0 - (when - 40000) / 150
+    if when < 50000:
+        return 40.0 - (when - 43000) / 500
+    return 26.0 - (when - 50000) / 2500
+
+
+def sustain_snap(when: int) -> dict:
+    mana = {RFLOCK: 90.0 if when < 60000 else 35.0, RFMAGE: 55.0 if when < 60000 else 80.0}
+    units = [[guid, X + 3.0 * index, Y - 20.0, Z, 0.0, 100.0, mana.get(guid, 100.0), 0, 0, 0, 0, 0]
+             for index, guid in enumerate((RFTANK, RFJUST, RFHOLY, RFSHAM, RFLOCK, RFMAGE))]
+    units.append([RFHUNT, X, Y + 10.0, Z, 0.0, 100.0, 100.0, 0, 1 if 21000 <= when < 24000 else 0, 0, 0, 0])
+    units.append([RFBOSS, X, Y, Z, 0.0, sustain_hp(when), 0.0, RFTANK, 0, 0, 0, 0])
+    if 20500 <= when <= 25500:
+        units.append([RFSCARAB, X + 3.0, Y + 10.0, Z, 0.0, 100.0, 0.0, RFHUNT, 1, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def sustain_pull() -> list[dict]:
+    """A 25H pull: P1 to 20 s, P2 to 40 s, P1b to 50 s and phase 3 to 90 s. anub.push latches at 45 s, he
+    reaching 40% at 43 s. Two kite patches go in the first submerge, with Holylight's 180 s Hand. A scarab chases
+    Trueshot from 20.5 s, who walks from 21 s to 24 s and holds after, a Mandibles stack each way. Agony taps twice
+    and Power Evocates once from his 40%, a tap at 30 s left out. In phase 3 Justice's Light holds 52-60 s, cut
+    by his Wisdom, and Holylight's 65-85 s; Elemena's Mana Spring gives way to Healing Stream at 55 s."""
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790700000000, "map": ab.MAP_TOC, "inst": 27, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": RFTANK, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": RFJUST, "n": "Justice", "r": "melee", "c": 2, "h": 0},
+                    {"g": RFHOLY, "n": "Holylight", "r": "heal", "c": 2, "h": 0},
+                    {"g": RFSHAM, "n": "Elemena", "r": "heal", "c": 7, "h": 0},
+                    {"g": RFLOCK, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+                    {"g": RFMAGE, "n": "Power", "r": "ranged", "c": 8, "h": 0},
+                    {"g": RFHUNT, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": RFBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 20000, "e": "unit", "g": RFSCARAB, "en": ab.NPC_SCARAB, "n": "Swarm Scarab"},
+        {"t": 50000, "e": "unit", "g": RFTOTEM, "n": "Healing Stream Totem", "own": RFSHAM},
+        *({"e": "spell", "sp": spell, "n": name} for spell, name in (
+            (SPELL_LIFE_TAP, "Life Tap"), (SPELL_EVOCATION, "Evocation"), (SPELL_JOL_HEAL, "Judgement of Light"),
+            (SPELL_HST_HEAL, "Healing Stream Totem"), (SPELL_HOLY_LIGHT, "Holy Light"),
+            (SPELL_MANA_SPRING, "Mana Spring Totem"), (SPELL_HEALING_STREAM, "Healing Stream Totem"),
+            (SPELL_SIPHON_LIFE, "Siphon Life"))),
+        *(note(when, RFTANK, "anub.phase", value) for when, value in ((0, 1), (20000, 2), (40000, 1), (50000, 3))),
+        *(note(when, RFHUNT, "anub.dps", value) for when, value in ((10000, "capped"), (12000, "burrower"),
+                                                                     (14000, "capped"))),
+        note(10000, RFJUST, "anub.dps", "capped"),
+        note(45000, RFHUNT, "anub.push", "on:3:5"),
+        note(25000, RFHUNT, "anub.kitespent", 1),
+        note(30000, RFHUNT, "anub.kitespent", 2),
+        cast(26000, RFHOLY, 10278, RFHUNT),
+        note(27000, RFHOLY, "anub.hands", f"{RFHOLY}:179:10"),
+        note(21000, RFHUNT, "anub.scarabkite", "walk"),
+        note(24000, RFHUNT, "anub.scarabkite", "hold"),
+        {**aura(22000, RFHUNT, 67863, False, RFSCARAB), "st": 1},
+        {**aura(24500, RFHUNT, 67863, False, RFSCARAB), "st": 2},
+        aura(60000, RFHUNT, 67863, True, RFSCARAB),
+        *(cast(when, RFLOCK, SPELL_LIFE_TAP, RFLOCK) for when in (30000, 44000, 46000)),
+        cast(47000, RFMAGE, SPELL_EVOCATION, RFMAGE),
+        cast(10000, RFSHAM, SPELL_MANA_SPRING, RFSHAM),
+        cast(55000, RFSHAM, SPELL_HEALING_STREAM, RFSHAM),
+        cast(52000, RFJUST, SPELL_JOL, RFBOSS),
+        cast(60000, RFJUST, SPELL_JOW, RFBOSS),
+        cast(65000, RFHOLY, SPELL_JOL, RFBOSS),
+        note(52000, RFJUST, "anub.judge", "Justice:90"),
+        note(65000, RFHOLY, "anub.judge", "Holylight:70"),
+        heal_row(55000, RFHOLY, RFHUNT, SPELL_HOLY_LIGHT, 5000, 1000),
+        heal_row(56000, RFJUST, RFJUST, SPELL_JOL_HEAL, 2000),
+        heal_row(57000, RFTOTEM, RFLOCK, SPELL_HST_HEAL, 2000),
+        heal_row(58000, RFLOCK, RFLOCK, SPELL_SIPHON_LIFE, 1200),
+        dmg(58000, RFBOSS, RFHUNT, ab.SPELL_LEECHING_SWARM_DMG, 8000),
+        {"t": 90000, "e": "end", "out": "wipe"},
+    ]
+    records += [sustain_snap(when) for when in range(-500, 90001, 500)]
+    return records
+
+
+class SustainPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_27_anub-arak_1790700000.ndjson", sustain_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace)
+        return out.getvalue()
+
+    def test_the_push_reads_per_phase_1_with_his_health_and_what_ended_it(self):
+        self.assertEqual([(row["label"], row["txt"], row["hp"], row["then"]) for row in ab.push_reads(self.trace)],
+                         [("P1", None, None, "submerged"), ("P1b", "on:3:5", 36.0, "phase 3")])
+        self.assertIn("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, and"
+                      " what ended the phase: P1 no push, submerged; P1b on:3:5 at 36.0%, 5 s to its end, phase 3\n",
+                      self.text(ab.show_dps))
+
+    def test_only_a_ranged_bots_capped_rows_count(self):
+        self.assertEqual(ab.ranged_capped(self.trace), {RFHUNT: 2})
+        self.assertIn("  anub.dps capped rows per ranged DPS bot, a pick moved onto him off a burrower it was capped"
+                      " on: Trueshot 2\n", self.text(ab.show_burrowers))
+
+    def test_kite_patches_and_hands_per_submerge(self):
+        self.assertEqual(ab.submerge_spends(self.trace),
+                         [{"index": 1, "start": 20000, "patches": 2, "hands": [(26000, RFHOLY, 180000)]}])
+        self.assertIn("  per submerge the kite patches anub.kitespent counted, over 1 before submerge 3 flagged, and"
+                      " the Hands of Protection\n  cast with the caster's cooldown:\n"
+                      "    1  0:20.000  patches 2 over the reserve; Hands Holylight 0:26.000 (180 s)\n",
+                      self.text(ab.show_spike))
+
+    def test_warlock_and_mage_mana_with_their_top_ups_from_his_40_percent(self):
+        read = ab.caster_mana(self.trace)
+        self.assertEqual((read["from"], read["mana"]), (43000, {RFLOCK: (90.0, 35.0), RFMAGE: (55.0, 80.0)}))
+        self.assertEqual(read["topups"], {RFLOCK: {"Life Tap": 2}, RFMAGE: {"Evocation": 1}})
+        self.assertIn("  warlock and mage bots, mana the same way, and their Life Taps and Evocations from his 40%"
+                      " (0:43.000) to phase 3:\n    Agony          90% > 35%; Life Tap 2\n"
+                      "    Power          55% > 80%; Evocation 1\n", self.text(ab.show_healers))
+
+    def test_a_scarab_victims_stacks_moving_or_standing_and_its_kite_seconds(self):
+        chase = ab.scarab_chases(self.trace)[RFHUNT]
+        self.assertEqual(chase["stacks"], [(22000, True, 3.0), (24500, False, 3.0)])
+        self.assertEqual(dict(chase["chased"]), {"-": 500, "walk": 3000, "hold": 2000})
+        self.assertIn("    Trueshot       stacks 1 moving, 1 standing, median gap 3.0 yd; chased 5.5 s (walk 3.0,"
+                      " hold 2.0, - 0.5)\n", self.text(ab.show_scarabs))
+
+    def test_phase_3_sustain_by_kind_light_uptime_and_water_totems(self):
+        rows = {row["guid"]: row for row in ab.swarm_sustain(self.trace, 50000, 90000, ab.Samples(self.trace))}
+        self.assertNotIn(RFTANK, rows)
+        self.assertEqual((dict(rows[RFHUNT]["heals"]), rows[RFHUNT]["swarm"], rows[RFHUNT]["alive"]),
+                         ({"healers": 4000}, 8000, 40000))
+        self.assertEqual(dict(rows[RFJUST]["heals"]), {"JoL": 2000})
+        self.assertEqual(dict(rows[RFLOCK]["heals"]), {"HST": 2000, "own": 1200})
+        light = ab.light_reads(self.trace, 50000, 90000)
+        self.assertEqual(light["uptime"], 28000)
+        self.assertEqual(light["casts"], {RFJUST: {("Light", True): 1, ("Wisdom", True): 1},
+                                          RFHOLY: {("Light", True): 1}})
+        self.assertEqual(ab.water_totems(self.trace, 50000), {RFSHAM: ("Mana Spring Totem", "Healing Stream Totem")})
+        text = self.text(ab.show_swarm)
+        self.assertIn("    Trueshot       ranged    40     0.10    0.00    0.00    0.00    0.00    0.00    0.10"
+                      "    0.20\n", text)
+        self.assertIn("  Judgement of Light on him in phase 3: 28.0 of 40.0 s; judgements per paladin: Holylight"
+                      " Light 1 on him; Justice Light 1 on him, Wisdom 1 on him\n"
+                      "  anub.judge hand-overs: 0:52.000 Justice:90, 1:05.000 Holylight:70\n"
+                      "  water totem per shaman at phase 3's start and 10 s in: Elemena Mana Spring Totem > Healing"
+                      " Stream Totem\n", text)
 
 
 class EveryView(unittest.TestCase):

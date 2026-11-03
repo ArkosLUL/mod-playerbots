@@ -687,6 +687,36 @@ bool AnubarakBurrowerLeadAction::Execute(Event /*event*/)
                   false, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool AnubarakKiteScarabAction::Execute(Event /*event*/)
+{
+    Position step;
+    if (!GetAnubarakScarabKite(botAI, step))
+        return false;
+
+    // Re-picked every tick 10 yd on from where the bot is, so a walk headed close enough is left running
+    ReleaseStalledWalk(botAI, bot);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (bot->isMoving() && last.msTime &&
+        step.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= ANUBARAK_LEAD_REAIM)
+        return true;
+
+    BreakChannelPinningTheFeet(bot);
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakTopUpManaAction::Execute(Event /*event*/)
+{
+    char const* spell = GetAnubarakManaTopUp(botAI);
+    return spell && botAI->CastSpell(spell, bot);
+}
+
+bool AnubarakJudgeLightAction::Execute(Event /*event*/)
+{
+    Creature* boss = AnubarakLightJudgeDue(botAI) ? GetAnubarak(bot) : nullptr;
+    return boss && botAI->CastSpell("judgement of light", boss);
+}
+
 // What caster form does, past its mana gate
 bool AnubarakKiteCatDropAction::Execute(Event /*event*/)
 {

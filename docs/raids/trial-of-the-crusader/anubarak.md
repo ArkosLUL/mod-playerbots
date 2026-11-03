@@ -198,6 +198,7 @@ No ties, since a tie falls to insertion order:
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
 | RAID+4.5 | `anubarak hop escort` → `anubarak hop escort` | heroic, the escort paladin over 4 yd off its spot (`anub.escort` `walk`/`hold`) | walks there |
 | RAID+4.4 | `anubarak burrower lead` → `anubarak burrower lead` | a ranged DPS or healer bot a burrower is on, its side tank over 25 yd off ([lead](#how-the-bots-play-it)) | walks to 20 yd off the side tank |
+| RAID+4.3 | `anubarak scarab kite` → `anubarak kite scarab` | every difficulty, a non-tank bot a selectable scarab within 15 yd is on, unmarked, not the escort, off sphere and grip duty, no dodge held, the scarab without Determination ([scarabs](#how-the-bots-play-it)) | walks a 10 yd step away from it (`anub.scarabkite` `walk`) |
 | RAID+4.2 | `anubarak cleave buff near burrower` → `anubarak drop cleave buff` | a melee DPS bot with Blade Flurry or Sweeping Strikes on and a burrower in melee reach at its area share ([burrower guard](#how-the-bots-play-it)) | cancels the buff |
 | RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
 | RAID+3.8 | `anubarak melee burrower stand` → `anubarak melee burrower stand` | a melee DPS bot on a burrower near a patch, out of reach, within 8 yd of a patch or 1.5 off its held stand | walks to its stand |
@@ -210,6 +211,9 @@ No ties, since a tie falls to insertion order:
 | RAID+0.5 | `anubarak raid gathers` → `anubarak gather` | heroic phase 2, not the kiter or a side tank with a burrower to hold or take, no dodge held | walks to its gather slot, round any patch; while the way there crosses the spike's path waits, stopping a walk (`wait`) |
 | RAID+0.45 | `anubarak healer stand` → `anubarak healer stand` | a healer bot while he is up, unmarked, no dodge held, off Permafrost, over 6 yd off its stand, no burrower on it (`lead`) | walks there, round any patch |
 | RAID+0.4 | `anubarak demonic circle due` → `anubarak demonic circle` | heroic, a still warlock bot, circle missing or under 100 s; on its staging stand before the pull, or while he is up | Demonic Circle: Summon |
+| RAID-0.5 | `anubarak healing stream due` → `healing stream totem` | every difficulty, phase 3, a living unmarked shaman bot with neither its Healing Stream nor its Mana Tide Totem out | the class totem |
+| RAID-1 | `anubarak mana top up` → `anubarak top up mana` | every difficulty, his health at or under 40% and no `Swarm` yet, an unmarked bot off escort and sphere duty: a warlock under 95% mana and over 50% health, a mage under 60% while he is down (`anub.topup` `tap`/`evocation`/`none`) | Life Tap, Evocation |
+| HIGH+5 | `anubarak light judge due` → `anubarak judge light` | every difficulty, phase 3, the [light judge](#how-the-bots-play-it) with his Judgement of Light missing or under 3 s | Judgement of Light on him, whatever it targets |
 | MEDIUM_HEAL+5 | `anubarak penetrating cold on raid` → `anubarak heal penetrating cold` | healer, a carrier below 90% or one it can [cover](#how-the-bots-play-it) | on the lowest, the cover, else under 90% the first direct heal `CanCastSpell` allows |
 
 The **pickup tank** is the main tank while alive, else the side tank he is on (a human who taunted
@@ -429,9 +433,13 @@ brake ([pitfalls.md](../../engine/pitfalls.md)), and in both 2026-10-16 kills An
 died to one hit (5.6 s, the tank still walking, 32.6k; 13.7 s, 33.1k). White swings go on:
 `Attack()` starts auto-attack itself, so the hold zeroes only actions. The same 90/80 latch runs per
 DPS bot and burrower whose victim is a tank (`anubarak burrower threat cap`, every phase): its actions
-on that burrower and its area damage within 10 yd of it or its target with one there. A melee bot
-capped on its side's focus drops it from its pick until freed (`anub.dps` `capped` once it falls to
-him), since its white swings and procs still pulled burrowers off.
+on that burrower and its area damage within 10 yd of it or its target with one there. A bot capped
+on its side's focus drops it from its pick until freed, a ranged one the other side's too
+(`anub.dps` `capped` once it falls to him): a melee bot's white swings and procs, and a ranged bot's
+Auto Shot (it keeps firing at the old target until the pick moves) and pet, still pulled burrowers
+off. BZ's reset: Trueshot's Auto Shot took side 0's #131 22 yd off its patch, it burrowed at its 30 s
+check and came back full onto Felesta with wave 2 (CA cap verdicts: Trueshot 61, Obliteration and
+Smartface 15, Justice 12).
 
 **Taunt guard.** `anubarak taunt guard` blocks `Taunt`, Righteous Defense included, while the bot's
 current target is him and his victim is another tank, a human included; the pickup tank's own taunt
@@ -537,6 +545,18 @@ wipes one raid-wide focus switched sides 24-30 yd apart 13-25 times a phase 1, a
 8. while he is down, the nearest scarab within 30 yd that is selectable, attackable and in combat.
    Each puts 20000 threat on a random player, so no tank gathers them; 30 yd is the tank pickup
    reach.
+
+**The push** (every difficulty, user call 2026-11-04; `anub.push` `on:<s needed>:<s left>`): phase 3
+starts only while he is up, so a phase 1 ending a little short of 30% costs a whole submerge cycle. While
+he is up his health and the share of living DPS bots with him selected are sampled once a second; once
+15 s of samples exist and the submerge is 30 s off or less, the push latches when his health less 29.5%
+fits in the time left at his loss rate since he came up ÷ that share (floor 0.25) × 0.75
+(`ANUBARAK_PUSH_*`), until the submerge or `Swarm`. Latched, after rows 1-3 every DPS bot not
+[capped](#how-the-bots-play-it) on him takes him (`anub.dps` `push`): 30 s, so only the wave landing
+in it stays on its side tank into phase 3. CA P1c went 53.8 → 31.0% in 80 s with 44% of the DPS bots'
+148.5k/s on him; all of it adds 0.52%/s, so it latches at +50 s (39.5%) and crosses about 18 s later,
+phase 3 starting about 6:00 against 7:16.6. At CA's phase 3 pace (0.147%/s) 30% → 0 needs about 204 s,
+so phase 3 has to start by about 6:36 for the 10 min Berserk.
 
 A bot outside the split (a human, one joined since) takes side 0's focus, else side 1's. A side's
 focus (per instance): selectable and under 10%; else **settled**: tanks within 5 yd have held it 4 s,
@@ -678,8 +698,15 @@ top speed by then). What it sees (`KiteWorldFor`):
 - the floor, a 45 yd disc round the centre (navprobe, bot filter `0x09`, 3 yd grid: on the mesh to 50,
   z 141.7-142.7, the low edge a slope at 290-310°);
 - each ready Hand (`ReadyHands`, the held plan's paladin first so the escort doesn't swap), landing
-  once its paladin can reach 30 yd of the catch point at 7 yd/s; the spare ones, heroic's first
-  submerge keeping one back for the second (a 5 min cooldown against 140 s between them);
+  once its paladin can reach 30 yd of the catch point at 7 yd/s; heroic, the **spare** ones first,
+  a Hand whose real cooldown (3-5 min by Guardian's Favor, through the core's spell mods) ends before
+  the third submerge's last 10 s, or every Hand in the third (`HandSpare`; user call 2026-11-04: CA's
+  two Hands came in the second and third submerges, Justice never cast one);
+- heroic's **patch reserve**: in the first two submerges, once a kite patch has gone this submerge
+  (`anub.kitespent`, a non-tank patch gone from the sweep while he is down: Permafrost stays until the
+  spike takes it), another costs 8 (user call 2026-11-04: CA's four went in the first two submerges,
+  P2c ran on Feign Death, Ice Block and a Hand; BU lost three to Impale there). Heroic shoots two kite
+  spheres a submerge counting those left on the floor, so the third gets the kept ones;
 - the own immunity (Divine Shield, Ice Block, Vanish, Feign Death; bots only), never after a Hand for
   a paladin (Forbearance);
 - the patch budget, normal adding its flying spheres, which its kite duty shoots.
@@ -721,11 +748,12 @@ ends 28 → 35.
    no closer than 0.5 yd past that), else the later;
 4. no uncovered catch, then the smaller uncovered remainder: the life left after this kite (after a
    patch's 4 s idle the next kite starts fresh, else fast) against 15 s for the next kite (6 if fast)
-   plus 19 s per patch and 10 s per spare Hand left;
+   plus 19 s per patch and 10 s per spare Hand left (a Hand not spare leaves the count as it is);
 5. the lower cost: own 1 with 6 s of the spike's life left or less after it, else 3 (user call,
    2026-11-01: it hands the spike on at its speed), kite patch 2 (normal 0.5; normal's tank patch 10
-   while a burrower lives, since a held one off Permafrost submerges back to full), Hand 2, 3 past the
-   spare ones, a boost free (user call, 2026-11-01: at 0.5 BQ's Nitro kite took Hand only and the
+   while a burrower lives, since a held one off Permafrost submerges back to full; heroic's reserved
+   one 8, over a Hand and an own together, so only a catch or a hazard loses to it), Hand 2, 3 for
+   one not spare, a boost free (user call, 2026-11-01: at 0.5 BQ's Nitro kite took Hand only and the
    Nitro at the Hand's end, and both druids skipped Dash for a patch end); a heroic kite never ends on
    a tank patch (2026-10-29: sides bare 81-87 s, phase 3 one side unpatched);
 6. the later end; then the boost kept, so one ending in the same 1 s band stays for the next submerge;
@@ -984,7 +1012,17 @@ checked only Hand of Protection rank 1, so it now lists all three.
 DPS target above), and leftovers ahead of him once he is up (branch 5). Heroic phase 2's pickup tank
 takes none off others, so it surfaces clean, and holds its gather edge hitting any on itself; a free
 side tank, unmarked and not the escort, peels one only off a healer, as heroic side tanks do while he
-is up. Normal phase 2 keeps the pickup tank on them.
+is up. Normal phase 2 keeps the pickup tank on them. **The victim walks away** (`anubarak scarab kite`,
+every difficulty, everyone but tanks, healers too, user call 2026-11-04): a scarab runs 6.3 yd/s
+(`speed_run` 0.9) to a player's 7, and every hit adds a minute of Acid-Drenched Mandibles (25H 67863,
+1800 every 3 s). The step is a floor point 10 yd on (within the 45 yd floor), farther from it, whose
+walk, replayed in 0.1 s steps with the scarab heading for the bot at its speed, never brings it within
+its 7.7 yd melee reach or 0.5 yd inside the gap it starts at, clear of every patch by
+`ANUBARAK_TANK_KEEPOUT`, 8 yd off the burrowers and off the spike; nearest the gather while he is down,
+else his tank, so the melee kill it on the way. With Determination (66092: +100% speed, an enrage)
+it outruns everyone, so the victim stands (`hold`). CA: Trueshot walking from 6:34 opened the gap 5.5
+→ 9.3 yd and the hits stopped, stood from 6:41.5 and took stacks 4-6 by 6:47.3; dead 14.7 s into
+phase 3 to them (phase 3 Mandibles 110k; BY lost three to them +15-21 s).
 
 **Redirects go to the tanks that need the threat** (`GetAnubarakRedirect`). In the 2026-10-26 late
 wipes every Misdirection went to the main tank (most cast with the hunter on a burrower) and 12-19 of
@@ -1118,7 +1156,41 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   itself, under 50% and under its own, from caster form (BO 5:22.4: the bot bear main tank dropped
   Dire Bear Form for it, took 57.6k and died 5 s later). `anubarak self innervate guard` blocks the
   class `innervate` for a druid tank always, else while another healer has less mana: it blocks the
-  class `innervate on healer` too, which casts under that name.
+  class `innervate on healer` too, which casts under that name. **Warlocks and mages top up**
+  (`anubarak mana top up`, every difficulty, user call 2026-11-04): from his 40% until `Swarm`, a
+  warlock bot Life Taps to 95% while over 50% health, and a mage bot under 60% Evocates while he is
+  down; the spike dodge still breaks the channel. At CA's phase 3 Agony, Fel and Hellflame stood at
+  56/51/67% and were under 10% by +41-65 s (the class taps at 40% or as a filler under 85%), Smartface
+  and Power at 0% by +45 s.
+- **Tank saves stay for the tanks** (heroic, user call 2026-11-04): `anubarak swarm save hold` blocks
+  the class `lay on hands`, `lay on hands on party`, `pain suppression`, `pain suppression on party`
+  and `guardian spirit on party` in `Swarm`, which fire on anyone the swarm holds at 10-25%; the tank
+  rescue casts them directly and the carrier rescue keeps a priest's own Pain Suppression. CA's three
+  went on non-tanks in phase 3's first 18 s, then the tanks dipped under 35% 38 times with none left.
+- **One paladin keeps Judgement of Light on him** (every difficulty, user call 2026-11-04). It doesn't
+  stack: 20185 lacks `SPELL_ATTR3_DOT_STACKING_RULE`, so the later replaces the earlier
+  (`Aura::CanStackWith`), and a paladin's judgements are single target and replace each other. Each
+  time his is missing or under 3 s, the turn goes to the living unmarked paladin bot with the most mana
+  that can judge him now (known, off cooldown, affordable, in reach with talents and in sight, not
+  capped on him), a healer counted 20 under, held until it is due again or the holder no longer can
+  (`GetAnubarakLightJudge`, `anub.judge` `<name>:<mana%>`); a rotation since the holder loses its own
+  Wisdom's mana return. `anubarak swarm light hold` blocks every paladin bot's class `judgement of
+  light`, which goes on the current target, often a burrower; `anubarak swarm judgement hold` blocks
+  `judgement`, `judgement of wisdom` and `judgement of justice` for one whose Light is on him. In CA only
+  Holylight judged Light (2 casts, about 40 of 118 s), Justice and Bulwark Wisdom.
+- **Healing Stream in phase 3** (every difficulty, user call 2026-11-04): every shaman bot puts down its
+  own Healing Stream unless its Mana Tide is out, and `anubarak swarm mana spring hold` blocks
+  `mana spring totem`, which the water totem strategy would put back. In CA only Totemist's was out.
+- **Sustain** (guides: Warcraft Tavern 25, Tentonhammer, Engadget; no real-raid log was reachable): the
+  raid stays low, healers on the tanks and Penetrating Cold; melee, hunters and affliction warlocks live
+  on passive healing, Judgement of Light above all, out-healing the 250 minimum tick; mages, moonkins and
+  healers go in a Shadow Priest's or Shaman's party for Vampiric Embrace or Healing Stream, which heal
+  only that party. CA per non-tank, k/s alive: Judgement of Light 0.1-0.5 to melee, 0.02-0.05 to
+  hunters; Vampiric Embrace 0.18-0.22 and Healing Stream 0.12-0.14, each under the minimum tick alone,
+  about 0.34 together. Its phase 3 non-tank deaths before the collapse: 5 Penetrating Cold mid-debuff
+  (carriers 11-15 s of 18 with no HoT or shield), 2 the minimum tick, 1 Mandibles. Party layout is the
+  raid's: CA's party 3 (Power, Smartface, Druidica, Tree with Malediction) had no shaman; swapping
+  Stormweaver (party 4) for Tree gives it both, and Tree heals herself (1.43k/s own).
 - The guide's Fortitude and Commanding Shout cancel is skipped (user call): about 0.2% of his health,
   once.
 
@@ -1156,8 +1228,9 @@ personal burst is unrestricted.
   kiter gets no boost stage, and the drag waits while a human holds him.
 - A human's Divine Shield, Ice Block, Feign Death or Vanish hands the spike on at its current speed,
   wherever the human stands.
-- A third submerge has no kite sphere: its kites live on boosts, Hands and immunities, and the boss
-  stood at 35-47% at the third submerge of the 2026-10-29 and -30 wipes.
+- A third submerge's kites have only the patches the first two kept back (one each at best), and the
+  boss stood at 31-47% at the third submerge of the 2026-10-29, -30 and 11-03 wipes; the push only
+  fires within reach.
 - Scarabs on a lone kiter, and a hunter opening on a kite sphere with Hunter's Mark, are unhandled.
 - With 4 healers (Z) a side tank holding a burrower goes uncovered while two follow the main tank.
 - A bear tank kiting in Cat Form has cat armour against scarabs, and a Feral Charge can land among bugs
@@ -1195,7 +1268,6 @@ personal burst is unrestricted.
 - A heroic dodge with no spot clear of Permafrost lands in its 80% slow.
 - A side tank's rim (7 yd) is inside the 7.5 yd slow, so on heroic it carries the 80% slow most of the
   time it's up (AA 329 s): Bulwark crawled as AA's wave 7 landed.
-- Judgement of Light comes only from the holy paladin's rotation (AA: 8 casts).
 - The 40% burst hold kept 7 of AA's 42 last-phase-1 casts: the cluster (Icy Veins, Arcane Power, Death
   Wish, Bestial Wrath, Killing Spree, Force of Nature) went at 40.0-42.6% as wave 6 landed; 45% keeps 19.
 - Sphere and Shadow Strike duty are memoised for one group per instance per ms, kiter protection per
@@ -1219,7 +1291,13 @@ personal burst is unrestricted.
 - The kite ring (40 yd round the centre) runs past the west refill pair at 36-43 yd.
 - A human's Army of the Dead ghouls still taunt burrowers off the patches (one submerged at 0:39 in a
   2026-10-26 wipe); only bots are blocked.
-- Healer threat still pulls held burrowers off a side tank later in a wave (BU-BY side 1: 16, most +8-15 s).
+- Healer threat still pulls held burrowers off a side tank later in a wave (BU-BY side 1: 16, most +8-15 s;
+  CA's new waves Elemena 7, Prayer 4, Tree 2), and Righteous Defense still loses them (CA within 40 yd
+  kept 2 of 7, beyond 4 of 11). Pets pull them too (CA Shadowfiend 4, Felguard 3; BY Imp 8): the
+  cap reads only the owner's threat.
+- No second side tank when the main tank dies in phase 3: CA's died at 8:31 (174k in 12 s, 128k
+  healed) with the tank saves spent, Felesta took him, and side 0's wave 9 found no side tank.
+- A balance druid comes into phase 3 dry (CA Druidica 2%): her Innervate goes to the healers.
 - Phase 3 is a race the raid loses by about half (user call, 2026-11-03: keep killing waves): his pool
   10.6M, a 3.0M wave every 45 s, so killing every wave needs about 100 s at the raid's damage, all on him
   about 65 s; BW and BY lasted about 55 s.
@@ -1286,7 +1364,12 @@ personal burst is unrestricted.
 | `coldheal` | Heroic phase 3 healer bot's carrier at risk, its own guid when itself, 0 when none |
 | `mastery` | Heroic phase 3 paladin bot: `cast`, `hold N` (a fresh round, N carriers under the tick), `none` |
 | `focus0`, `focus1` | Each side's focus burrower, 0 when none; kept current under a skull. Per instance. Traces before 2026-10-27 carry one raid-wide `focus` and `focusdue` |
-| `dps` | A DPS bot's pick: `skull`, `loose`, `burrower`, `boss`, `capped` (him, a melee bot capped on its focus), `scarab`, `none` (a sphere shooter too) |
+| `dps` | A DPS bot's pick: `skull`, `loose`, `push` (him, the push latched), `burrower`, `boss`, `capped` (him, the bot capped on its focus; a ranged one on the other side's too), `scarab`, `none` (a sphere shooter too) |
+| `push` | Written once per phase 1 by the bot whose read latched it: `on:<s needed>:<s left>` |
+| `kitespent` | Heroic: kite patches the spike took this submerge, written by the bot whose read saw one go |
+| `scarabkite` | A bot a scarab within 15 yd is on, only then: `walk`, `hold` (Determination), `none` |
+| `topup` | A warlock or mage bot from his 40% to `Swarm`: `tap`, `evocation`, `none` |
+| `judge` | Phase 3, at each Judgement of Light hand-over: `<name>:<mana%>` |
 
 The marked player is the 67574 `aura` stream, so no key repeats it.
 
@@ -1466,7 +1549,20 @@ any patch it passes within 11.5 yd (BM 1:22 Vanish spent side 1's tank patch +1.
 +4.1 s, BL 1:39 #576 +2.6 s); summed per pull. `--healers` each healer's mana at phase 3's start and
 30 s in, and its Divine Plea, Innervate (with target) and Hymn of Hope casts by phase. `--burrowers`
 per melee bot the seconds on a burrower no tank within 5 yd held, by `anub.dps` (BK-BN 14-36 s, about
-70% `loose`). Baseline, the 2026-10-27 25H wipes I,
+70% `loose`). `--dps` per phase 1 its first `push` with his health and seconds left, and whether phase 3
+or a submerge ended it. `--burrowers` `anub.dps` `capped` rows per ranged bot. `--spike` per submerge
+the most `kitespent`, over 1 before the third flagged, and each Hand of Protection with its caster's
+cooldown off `hands` (CA: Holylight 4:00.7 180 s, Bulwark 6:57.2 300 s). `--healers` per warlock and
+mage bot its mana at phase 3's start and 30 s in, and its Life Taps and Evocations from his 40%.
+`--scarabs` per victim its Mandibles stacks gained moving or standing with the median gap to the
+scarab, and the seconds one within 15 yd was on it by `scarabkite` (CA Trueshot 5 moving, 4 standing,
+median 5.8 yd). `--swarm` per non-tank its effective heals received a second alive by kind (healers,
+own, Judgement of Light, Vampiric Embrace, Healing Stream, other) and the swarm's drain, Judgement of
+Light's uptime on him read off the casts (a creature aura, never recorded: 20 s each, cut at that
+paladin's next judgement), each paladin's judgements, `judge` rows, and each shaman's water totem at
+phase 3's start and 10 s in. Baseline, the 2026-11-03 25H pulls on `9f9731e30`: BZ reset at 1:24.1
+(Elemena and Felesta dead to burrowers); CA phase 1s 25.3/20.7/22.8% (P1c to 31.0%), phase 3 from 30.1%
+at 7:16.6 for 118 s, wipe 9:14.7 at 12.7%; warlocks Life Tap 8 each from his 40% at 5:40.8. Baseline, the 2026-10-27 25H wipes I,
 J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
 bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
 Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K
