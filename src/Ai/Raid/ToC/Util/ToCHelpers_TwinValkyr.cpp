@@ -572,6 +572,14 @@ TwinColour BaseColourOf(Player* bot)
     return TankRoleOf(bot) == TwinTankRole::Eydis ? TwinColour::Light : TwinColour::Dark;
 }
 
+TwinColour TouchColourOf(Player* bot)
+{
+    if (HasLightTouch(bot))
+        return TwinColour::Light;
+
+    return HasDarkTouch(bot) ? TwinColour::Dark : TwinColour::None;
+}
+
 // No probe: the interrupt duty asks this about every other bot too
 TwinEssenceWant WantedEssence(PlayerbotAI* botAI)
 {
@@ -582,6 +590,7 @@ TwinEssenceWant WantedEssence(PlayerbotAI* botAI)
     // Over a Touch: the Touch's other colour would eat the whole Vortex, up to 80k
     Player* bot = botAI->GetBot();
     TwinColour const held = EssenceOf(bot);
+    TwinColour const touch = TouchColourOf(bot);
     if (state->vortex != TwinColour::None)
     {
         // a tank walking off would drag its twin away from the door
@@ -590,27 +599,25 @@ TwinEssenceWant WantedEssence(PlayerbotAI* botAI)
         if (keeps && held != TwinColour::None && held != state->vortex)
             return {held, TwinEssenceReason::Hold};
 
+        // re-taking the colour it holds ends the Touch and keeps what the Vortex wants
+        if (held == state->vortex && touch == held)
+            return {held, TwinEssenceReason::Touch};
+
         return {state->vortex, TwinEssenceReason::Vortex};
     }
 
-    if (HasLightTouch(bot))
-        return {TwinColour::Light, TwinEssenceReason::Touch};
-
-    if (HasDarkTouch(bot))
-        return {TwinColour::Dark, TwinEssenceReason::Touch};
+    if (touch != TwinColour::None)
+        return {touch, TwinEssenceReason::Touch};
 
     return {BaseColourOf(bot), TwinEssenceReason::Base};
 }
 
 bool MustSwap(Player* bot, TwinEssenceWant const& want, bool urgentOnly)
 {
-    if (want.colour == TwinColour::None)
-        return false;
-
     if (urgentOnly && want.reason != TwinEssenceReason::Touch && want.reason != TwinEssenceReason::Vortex)
         return false;
 
-    return want.colour != EssenceOf(bot);
+    return TwinEssenceGossipDue(bot, want);
 }
 
 bool OtherColourAllyNear(Player* bot, TwinColour colour, float radius)
@@ -1019,6 +1026,13 @@ bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly)
     return botAI && MustSwap(botAI->GetBot(), GetWantedEssence(botAI), urgentOnly);
 }
 
+// The Touch is a 20 yd/s missile, so one picked on a Light holder can land after its swap back to Dark
+bool TwinEssenceGossipDue(Player* bot, TwinEssenceWant const& want)
+{
+    return want.colour != TwinColour::None &&
+           (want.reason == TwinEssenceReason::Touch || want.colour != EssenceOf(bot));
+}
+
 Creature* GetEssencePortal(Player* bot, TwinColour colour)
 {
     if (!bot || colour == TwinColour::None)
@@ -1362,8 +1376,14 @@ bool TwinValkyrDoorHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     TwinValkyrState const* state = bot ? ReadTwins(botAI) : nullptr;
-    if (!state || !state->pull.engaged || GetTwinDoorStand(bot).role == TwinDoorRole::None)
+    if (!state || GetTwinDoorStand(bot).role == TwinDoorRole::None)
         return false;
+
+    // A tank attacks its twin once she's summoned, and reach melee would walk it 40 yd into the arena
+    // and back until someone pulls
+    if (!state->pull.engaged)
+        return TankRoleOf(bot) != TwinTankRole::None &&
+               (IsTwinAttackable(GetFjola(botAI)) || IsTwinAttackable(GetEydis(botAI)));
 
     for (Unit* twin : {GetFjola(botAI), GetEydis(botAI)})
         if (twin && IsTwinTank(bot, twin) && TwinValkyrFetchDue(botAI, twin))
@@ -1399,9 +1419,7 @@ Creature* TouchCrossPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Pos
         TankRoleOf(bot) != TwinTankRole::None || EssenceOf(bot) != state.vortex)
         return nullptr;
 
-    TwinColour const touch = HasLightTouch(bot) ? TwinColour::Light
-                             : HasDarkTouch(bot) ? TwinColour::Dark
-                                                 : TwinColour::None;
+    TwinColour const touch = TouchColourOf(bot);
     if (touch == TwinColour::None || touch == state.vortex)
         return nullptr;
 

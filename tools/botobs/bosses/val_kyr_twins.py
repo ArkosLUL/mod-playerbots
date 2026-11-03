@@ -152,6 +152,12 @@ def pull_end(trace: Trace) -> int:
     return trace.records[-1].get("t", 0) if trace.records else 0
 
 
+def engage_at(trace: Trace) -> int:
+    """When the twins engaged. A trace the summon opened carries a later `pull` row renamed to them;
+    any other starts at the engage."""
+    return next((rec["t"] for rec in trace.of("pull") if rec.get("src") == "rename"), 0)
+
+
 def named(trace: Trace, spell, names: set[str]) -> bool:
     return trace.spells.get(spell, "").lower() in names
 
@@ -343,7 +349,7 @@ def essence_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         bare = None
         if colours != [UNKNOWN]:
             bare = 0
-            for when, weight in samples.steps(0, end):
+            for when, weight in samples.steps(engage_at(trace), end):
                 row = samples.exact(guid, when)
                 if row and row[5] > 0 and colour_at(timeline, when) == NONE:
                     bare += weight
@@ -738,7 +744,7 @@ def tank_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[dict],
             continue
         alive = mine = tanked = 0
         radii = []
-        for when, weight in samples.steps(0, end):
+        for when, weight in samples.steps(engage_at(trace), end):
             row = samples.exact(twin, when)
             if not row or row[5] <= 0:
                 continue
@@ -756,7 +762,7 @@ def tank_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[dict],
 
     apart = []
     if twins["fjola"] is not None and twins["eydis"] is not None:
-        for when, _ in samples.steps(0, end):
+        for when, _ in samples.steps(engage_at(trace), end):
             first, second = samples.exact(twins["fjola"], when), samples.exact(twins["eydis"], when)
             if first and second and first[5] > 0 and second[5] > 0:
                 apart.append(dist2(first[1:3], second[1:3]))
@@ -821,7 +827,7 @@ def target_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         if trace.role(guid) not in ("melee", "ranged"):
             continue
         tally = {"right": 0, "wrong": 0, "neither": 0, "unknown": 0}
-        for when, weight in samples.steps(0, end):
+        for when, weight in samples.steps(engage_at(trace), end):
             row = samples.exact(guid, when)
             if not row or row[5] <= 0:
                 continue
@@ -900,7 +906,7 @@ def door_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         alive = on_stand = tunnel = 0
         role = spans[-1][0][0]
         away: collections.Counter = collections.Counter()
-        for when, weight in samples.steps(0, end):
+        for when, weight in samples.steps(engage_at(trace), end):
             row = samples.exact(guid, when)
             stand = next((stand for stand, low, high in spans if low <= when < high), None)
             if not row or row[5] <= 0 or stand is None:
@@ -974,6 +980,10 @@ def show_banner(trace: Trace) -> None:
     encounter = encounter_of(trace)
     difficulty = DIFFICULTY.get(trace.header.get("diff"), "difficulty ?")
     print(f"{encounter}  {difficulty}  {outcome} at {clock(end)}  {len(combat_deaths(trace))} death(s)")
+    engage = engage_at(trace)
+    if engage:
+        print(f"  opened at the summon: engaged at {clock(engage)}, fight {clock(end - engage)};"
+              " time shares count from the engage")
 
     # the probe check matches keys to the encounter, so on another boss it would pass on nothing
     if encounter != ENCOUNTER:

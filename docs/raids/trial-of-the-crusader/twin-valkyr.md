@@ -71,7 +71,8 @@ the other colour's essence who is neither twin's victim. **In this core it hits 
 `spell_valkyr_touch_aura` deals 2,925-3,075 (10H) or 5,850-6,150 (25H) every 2 s for 20 s to every
 alive player on the map without `ExcludeTargetAuraSpell`, which is 0 for the Touch spells, and deals
 the amount from before `CalcAbsorbResist`, so absorbs are spent (and grant Powering Up) without
-reducing it. Only the touched player taking the Touch's colour ends it.
+reducing it. Only gossip at a portal of its colour ends it, even for a holder of that colour: it's an
+instant 20 yd/s missile, so one picked on a Light holder can land after the swap back.
 
 ## Orbs
 
@@ -120,8 +121,9 @@ off the tank list last), so staging and the fight agree. Fjola's tank (560.5, 88
 84 and 82.5, ranged 81 and 79.8, each row at x 563.25 / 561.5 / 565; past six a role starts over,
 stacking costs nothing here. Hunters take the back row from x 565 in. The twins hover ~6 yd over
 their tank, so melee reach them from ~10 yd 2D (3D 11.8), and no shot casts inside that 11.8. A
-twin parks ~8 yd 3D short of whoever she chases, on the side she came from, and stays while her
-victim is inside that: pulled into the tunnel, she stays there. They face the raid and melee eat parries: turning them round would put the tanks in
+twin moves again only once her target moved past ~9.1 yd 3D (`CONTACT_DISTANCE` plus both reaches
+less her hover, ~6.9 yd 2D): she parks that short of a standing target on the side she came from,
+overtakes a tank walking her in and stops right over it, and pulled into the tunnel stays there. They face the raid and melee eat parries: turning them round would put the tanks in
 the orb field.
 
 **Colours**, `GetWantedEssence`, first match:
@@ -134,7 +136,7 @@ the orb field.
    (`twin valkyr walk to touch portal`), so that swap lands as the channel ends: each 2 s held ticks
    the raid (25H 2026-10-29: 6.3 s, 3 ticks, 450k). Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
    even with Aura Mastery and Divine Guardian, against 25-33k health.
-2. **Touch** on the bot: its colour.
+2. **Touch** on the bot: its colour, re-taken if already held (during a Vortex of that colour too).
 3. **Base**: Eydis's tank Light, everyone else Dark, even after a Touch or the Light Vortex left it
    Light. Eydis's Touch only picks a Light holder no twin has as victim, so it finds nobody; the
    2026-10-25 25H kill's rule "keep what it holds" bounced 3 Touch pairs (~150k each).
@@ -168,7 +170,8 @@ essence-swap multiplier: a blanket `MovementAction` veto also vetoes `AttackActi
 
 **Door hold.** `twin valkyr door hold` blocks reach (heal reach too), set behind, rear flank,
 formation, follow, flee, run away, move random, charge, blink and disengage for every bot with a
-door stand once a twin is in combat, tanks included, except a tank fetching its twin. Both it and the door
+door stand once a twin is in combat, tanks included, except a tank fetching its twin, and a twin
+tank from the summon: its attack on her would send reach melee 40 yd out and back. Both it and the door
 stand wait for the pull: the gate opens at the Faction Champions kill, so bots would stand in the
 tunnel and stop following from then. Essence walks and the orb dodge are the
 encounter's own movers. `twin valkyr door stand` walks a non-tank back past 2.5 yd off and parks it
@@ -190,8 +193,10 @@ spot, the player pulls (proximity 23 yd; the engaged twin takes the puller, her 
 player) and runs into the tunnel, and the tank taunts its twin once she's in range and taunts back
 any assigned twin on someone else. Only a twin on someone else, more than 30 yd off her door spot
 and no yard closer for 2 s sends her tank out: to 25 yd of her for the taunt, the door hold off so
-reach melee can finish. Then it walks her back exactly to its spot (`DragBossToAnchor` stops 12 yd
-short), backing up while she's on the far side. Both tanks hold their colour through every Vortex
+reach melee can finish. Then it walks her back by a lead 5 yd out of its spot toward `ARENA_CENTER`
+(0.6 yd inside the orb circle), waits up to 3 s for her to stop, and steps back to the spot
+(`DragBossToAnchor` stops 12 yd short), backing up while she's on the far side: she stays 5 yd out,
+clear of the hunters. Both tanks hold their colour through every Vortex
 (above) on the Vortex defensive, or on heals with none ready. The first 15 s cost each tank 4-5k
 damage per second, too much for the drag the kill used. `twin valkyr tank target guard` zeroes `tank assist` while its twin is attackable. Multipliers:
 `TwinValkyrTauntGuardMultiplier` zeroes a taunt on a twin another living tank owns,
@@ -276,11 +281,14 @@ walks multiply. The door deal refreshes once a second.
   against the lust window went unchecked. 8 died at 3:14, after the Light Vortex: that Touch's 3 ticks, then the ~55 yd walk
   Light 1, Dark 1, stand with healers moving at the raid's low point (32% average), and one Light
   orb going off where bots still walking out on Light crossed bots walking home on Dark, its blast
-  killing 4. The raid still waits at Light 1 through the channel, by the user's choice. Both hunters
-  shot nothing from 0:13 to 3:05 (5.0k and 3.6k DPS; 12.1k and 7.8k on 25N): Misdirection cast at
-  0:00 ran out unused, Trueshot pulled Fjola at 0:10 and she parked 8 yd from him in the tunnel, and
-  Elemena's heals pulled Eydis in at 0:13.7.
-- No tank walks a twin parked deep back out: the walk crosses the orb field.
+  killing 4. The raid still waits at Light 1 through the channel, by the user's choice.
+- 25H 2026-11-02 (traces `649_54_val-kyr-twins_1793657909` and `_1793658373`): a wipe with the twins
+  at 3%, then a 3:21 kill with 1 death. The wipe: Eydis's Touch, picked on Assasin while Light after a
+  Fjola Touch, landed after his swap back to Dark and was never re-taken (16 s, 1.09M) before the
+  Light Vortex walk. Hunters did 5-8k against 10-16k: Fjola, fetched and walked in, stopped over her
+  tank, 10-11 yd 3D from every hunter stand.
+- A twin a heal-threat pull parks deep in the tunnel stays there: re-parking her needs ~10 yd into
+  the arena.
 - Each Fjola Touch ticks once: the 25-27 yd walk to Light 1's reach takes 3.2-4.0 s, the first
   tick lands at 2 s.
 - 25H Surges dealt 33k/s after resists (6.66M over 3:21); 4 healers held the raid at 76-81% between
@@ -326,7 +334,8 @@ the twins (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.t
 that reads `skull` or `door`, Fjola while a `tv.tank` reads `both`, no Eydis Pact on normal
 (`--targets`); per bot, living time within 2.5 yd of its `tv.door` stand and 51+ yd out, time out
 of the tunnel by `tv.essence` reason, Unleashed hits taken in the tunnel and out, and `tv.nitro`
-uses by walk (`--door`).
+uses by walk (`--door`). In a trace the summon opened, time shares count from the engage (`pull` row
+`src: rename`).
 
 Still invisible, and what stands in:
 

@@ -20,7 +20,7 @@ constexpr uint32 SPELL_AUTO_SHOT = 75;
 bool WantsEssenceFor(PlayerbotAI* botAI, Player* bot, TwinEssenceReason reason)
 {
     TwinEssenceWant const want = GetWantedEssence(botAI);
-    return want.reason == reason && want.colour != EssenceOf(bot);
+    return want.reason == reason && TwinEssenceGossipDue(bot, want);
 }
 
 // the max range check Spell::CheckRange makes, Hawk Eye included

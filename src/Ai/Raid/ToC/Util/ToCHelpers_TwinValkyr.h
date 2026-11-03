@@ -120,6 +120,9 @@ bool IsTwinTank(Player* bot, Unit* twin);
 TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 // urgentOnly: only a Touch or a Vortex counts
 bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly);
+// The colour differs, or a Touch is on: only gossip at a portal of its colour removes one, even from a
+// bot already holding that colour
+bool TwinEssenceGossipDue(Player* bot, TwinEssenceWant const& want);
 // The portal of that colour with the shortest walk to it and on to the bot's door stand
 Creature* GetEssencePortal(Player* bot, TwinColour colour);
 // The twins are summoned and their portals found, so pre-pull stands can be dealt
@@ -139,8 +142,9 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI);
 TwinDoorStand GetTwinDoorStand(Player* bot);
 // Where the twin's tank holds her
 Position GetTwinDoorSpot(Player* bot, Unit* twin);
-// Every bot with a door stand once a twin is pulled, except a tank walking out to fetch its twin. The
-// gate is open from the Faction Champions kill, so without the pull test bots stand here from then.
+// Every bot with a door stand once a twin is pulled, except a tank walking out to fetch its twin, and
+// a twin tank from the summon. The gate is open from the Faction Champions kill, so without the pull
+// test bots stand here from then.
 bool TwinValkyrDoorHold(PlayerbotAI* botAI);
 // Mid-pull, a bot off its door stand, tanks aside, with no essence walk due and none waiting on the
 // end of a running Vortex. Keeps the park latch.

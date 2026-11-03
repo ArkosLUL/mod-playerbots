@@ -352,6 +352,21 @@ class UncastTwin(unittest.TestCase):
         self.assertIn("no cast rows for Fjola Lightbane: her Vortex and Pact are missing below", out.getvalue())
 
 
+class OpenedAtTheSummon(unittest.TestCase):
+    def test_shares_count_from_the_engage(self):
+        rename = {"t": 5000, "e": "pull", "boss": "val-kyr-twins", "src": "rename", "was": "trial-of-the-crusader"}
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, twins_pull() + [rename])
+            rows = {row["guid"]: row for row in vk.target_rows(trace)}
+            with contextlib.redirect_stdout(out):
+                vk.show_banner(trace)
+            self.assertEqual(vk.engage_at(trace), 5000)
+        # Shiv's first 5 s on the rule twin no longer count
+        self.assertEqual((rows[SHIV]["right"], rows[SHIV]["wrong"]), (30000, 20000))
+        self.assertIn("engaged at 0:05", out.getvalue())
+
+
 class LoneTank(unittest.TestCase):
     def test_a_lone_tank_sends_every_dps_bot_to_fjola(self):
         with tempfile.TemporaryDirectory() as folder:

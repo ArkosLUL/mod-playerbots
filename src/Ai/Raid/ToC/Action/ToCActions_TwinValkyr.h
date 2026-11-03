@@ -103,7 +103,7 @@ private:
 };
 
 // Waits on its door spot for its twin and taunts her in. Walks out only to fetch one that stopped
-// short of taunt range.
+// short of taunt range, and back by a point 5 yd out of the spot so she parks on the arena side.
 class TwinValkyrTankHoldAction : public ToCMainTankHoldAction
 {
 public:
@@ -115,8 +115,12 @@ protected:
 private:
     bool FetchTwin(Unit* twin);
     bool WalkToDoor(Unit* twin);
+    bool WalkFacingTwin(Position const& to, Unit* twin);
 
     bool doorWalk = false;
+    // back from a fetch, headed for the lead point first
+    bool leading = false;
+    uint32 leadReachedMs = 0;
 };
 
 class TwinValkyrMainTankHoldLightTwinAction : public TwinValkyrTankHoldAction

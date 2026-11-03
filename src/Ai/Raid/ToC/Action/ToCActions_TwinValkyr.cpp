@@ -6,6 +6,7 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "LastMovementValue.h"
+#include "MoveSpline.h"
 #include "Spell.h"
 #include "Timer.h"
 #include "Unit.h"
@@ -31,6 +32,12 @@ constexpr float TWIN_FETCH_STOP = 25.0f;
 constexpr float DOOR_FLOOR_TOLERANCE = 3.0f;
 // a base walk lets a channel this close to its end finish
 constexpr int32 BASE_WALK_CHANNEL_WAIT_MS = 1500;
+// A twin following her tank in overtakes it and stops right over its spot, too close for any hunter
+// stand. Stepping back from a lead this far out leaves her there: 5 yd under her 6 yd hover is 7.8 yd
+// 3D, and her chase only moves again past ~9.1.
+constexpr float TWIN_PARK_LEAD = 5.0f;
+// longest wait at the lead for her to catch up
+constexpr uint32 TWIN_PARK_SETTLE_MS = 3000;
 
 // A warlock re-channels Drain Soul on low twins, so a base walk waiting on that never starts
 bool LongChannel(Player* bot)
@@ -47,6 +54,27 @@ Position DoorFloor(Player* bot, Position const& spot)
         return spot;
 
     return Position(spot.GetPositionX(), spot.GetPositionY(), ground);
+}
+
+// How far out of the spot toward the arena centre the point is
+float ArenaOffset(Position const& point, Position const& spot)
+{
+    float const toCentreX = ARENA_CENTER.GetPositionX() - spot.GetPositionX();
+    float const toCentreY = ARENA_CENTER.GetPositionY() - spot.GetPositionY();
+    float const span = std::hypot(toCentreX, toCentreY);
+    if (span <= 0.0f)
+        return 0.0f;
+
+    return ((point.GetPositionX() - spot.GetPositionX()) * toCentreX +
+            (point.GetPositionY() - spot.GetPositionY()) * toCentreY) /
+           span;
+}
+
+Position LeadPoint(Player* bot, Position const& spot)
+{
+    float const angle = spot.GetAngle(ARENA_CENTER.GetPositionX(), ARENA_CENTER.GetPositionY());
+    return DoorFloor(bot, Position(spot.GetPositionX() + TWIN_PARK_LEAD * std::cos(angle),
+                                   spot.GetPositionY() + TWIN_PARK_LEAD * std::sin(angle), spot.GetPositionZ()));
 }
 
 // Drops a stalled booking, and with releaseElsewhere a booking for any other destination too, since
@@ -297,6 +325,34 @@ bool TwinValkyrTankHoldAction::FetchTwin(Unit* twin)
 bool TwinValkyrTankHoldAction::WalkToDoor(Unit* twin)
 {
     Position const spot = DoorFloor(bot, GetTwinDoorStand(bot).spot);
+
+    // Only a walk in from the arena leads; one that never got out that far, or is left over from an
+    // earlier pull, doesn't
+    float const out = ArenaOffset(bot->GetPosition(), spot);
+    if (twin->GetVictim() != bot || (leading && !leadReachedMs && out < TWIN_PARK_LEAD - TWIN_DOOR_UNPARK))
+        leading = false;
+    else if (!leading && out > TWIN_PARK_LEAD + TWIN_DOOR_UNPARK)
+    {
+        leading = true;
+        leadReachedMs = 0;
+    }
+
+    if (leading)
+    {
+        Position const lead = LeadPoint(bot, spot);
+        if (!leadReachedMs && bot->GetExactDist2d(lead) > TWIN_DOOR_PARK)
+            return WalkFacingTwin(lead, twin);
+
+        if (!leadReachedMs)
+            leadReachedMs = getMSTime();
+
+        // false so the rotation keeps her threat while she catches up
+        if (!twin->movespline->Finalized() && getMSTimeDiff(leadReachedMs, getMSTime()) < TWIN_PARK_SETTLE_MS)
+            return false;
+
+        leading = false;
+    }
+
     float const off = bot->GetExactDist2d(spot);
     if (off <= TWIN_DOOR_PARK || (!doorWalk && off <= TWIN_DOOR_UNPARK))
     {
@@ -305,18 +361,23 @@ bool TwinValkyrTankHoldAction::WalkToDoor(Unit* twin)
     }
 
     doorWalk = true;
-    ReleaseWalk(botAI, bot, spot, false);
+    return WalkFacingTwin(spot, twin);
+}
+
+bool TwinValkyrTankHoldAction::WalkFacingTwin(Position const& to, Unit* twin)
+{
+    ReleaseWalk(botAI, bot, to, false);
 
     // Backing up keeps her in front, and a tank takes no parry or block from behind. Only when she's on
     // the far side of the walk, or it would turn its back on her.
-    float const toSpotX = spot.GetPositionX() - bot->GetPositionX();
-    float const toSpotY = spot.GetPositionY() - bot->GetPositionY();
+    float const toSpotX = to.GetPositionX() - bot->GetPositionX();
+    float const toSpotY = to.GetPositionY() - bot->GetPositionY();
     float const toTwinX = twin->GetPositionX() - bot->GetPositionX();
     float const toTwinY = twin->GetPositionY() - bot->GetPositionY();
     bool const backwards = twin->GetVictim() == bot && toSpotX * toTwinX + toSpotY * toTwinY < 0.0f;
 
-    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
-               false, false, true, MovementPriority::MOVEMENT_COMBAT, true, backwards))
+    if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, to.GetPositionX(), to.GetPositionY(), to.GetPositionZ(), false, false,
+               false, true, MovementPriority::MOVEMENT_COMBAT, true, backwards))
         return true;
 
     return bot->isMoving();
