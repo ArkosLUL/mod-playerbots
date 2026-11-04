@@ -104,6 +104,9 @@ struct KiteWorld
     bool heroic = true;
     // Normal: a burrower alive makes a tank patch the last resort, since it submerges back to full off it
     bool burrowers = false;
+    // A warlock's Demonic Circle: Teleport ready, and where its circle stands
+    bool teleport = false;
+    Point circle;
 };
 
 struct Rules
@@ -156,6 +159,9 @@ struct Rules
     float paladinSpeed = 7.0f;
     // The spike idles this long after a patch, then marks someone fresh at its base speed
     float idleS = 4.0f;
+    // Its last chase spline keeps it walking on through the idle, idleS at its base speed: up to this far
+    // measured, so a patch that close to the walk is spent before the next mark starts
+    float driftReach = 17.0f;
     // A fresh kite runs about this long, one handed a spike already fast this long
     float freshS = 15.0f;
     float fastS = 6.0f;
@@ -185,6 +191,16 @@ struct Rules
     // between two headings at the rim
     float turnWaitDegrees = 90.0f;
     float turnWaitS = 1.0f;
+    // Demonic Circle: Teleport reaches the circle from 40 yd, read with a margin, and only pays onto a circle
+    // this much farther from the spike than the kiter. With it ready a ring this far round the centre keeps a
+    // run in range. After the jump the kiter runs on away from the spike, or turned off that by these.
+    float teleportRange = 38.0f;
+    float teleportGain = 15.0f;
+    float teleportRing = 36.0f;
+    std::array<float, 5> teleportHeadings = {0.0f, 45.0f, -45.0f, 90.0f, -90.0f};
+    std::array<float, 3> teleportArcTurns = {-24.0f, 0.0f, 24.0f};
+    // Per base, the teleport runs given endings
+    int teleportShapes = 2;
 };
 
 struct Candidate
@@ -202,6 +218,8 @@ struct Candidate
     int turnTick = -1;
     // Tick the ready boost fires, -1 for none
     int boostTick = -1;
+    // Tick the kiter teleports to the circle, there the tick after, -1 for none
+    int teleportTick = -1;
     bool hand = false;
     bool own = false;
     // Where the kiter is every TICK_S from now
@@ -212,6 +230,10 @@ struct Outcome
 {
     // What ended it: a planned Hand or immunity unused shows as the ending reached instead
     Ending ending = Ending::None;
+    // Heroic: it ends on the kite patch it planned
+    bool kitePatch = false;
+    // It spends the Hand kept for a later submerge
+    bool lastHand = false;
     float endS = 0.0f;
     // First second of each hazard, negative for none
     float tankS = -1.0f;
@@ -234,6 +256,7 @@ struct Outcome
     float turnS = -1.0f;
     // The ready boost fires by the end, negative when it doesn't
     float boostS = -1.0f;
+    float teleportS = -1.0f;
 };
 
 struct Plan
@@ -597,9 +620,22 @@ struct RunEnd
     bool handSpare = false;
     bool ownUsed = false;
     int boostTick = -1;
-    // The spike where it failed, else at the end
+    int teleportTick = -1;
+    // The spike where it failed, else at the end, and which way it was going then
     Spike spike;
+    Point heading;
 };
+
+inline Point Toward(Point from, Point to)
+{
+    float const d = Dist(from, to);
+    return d > 0.001f ? Point{(to.x - from.x) / d, (to.y - from.y) / d} : Point{0.0f, 0.0f};
+}
+
+inline Point Ahead(Point from, Point dir, float length, Rules const& r)
+{
+    return OnFloor({from.x + dir.x * length, from.y + dir.y * length}, r);
+}
 
 // How far the spike runs in leftS from t seconds into the plan, its speed stepping up on time
 inline float RunLength(Spike spike, float t, float leftS)
@@ -640,12 +676,27 @@ inline bool OutrunsKiter(Spike const& spike, Point at, int tick, int boostTick, 
     return spike.speed > CandidatePace(w, boostTick).SpeedAt(t) * SlowAt(at, w, r);
 }
 
-// The spike's leg after the kite, toward the gather: on at its speed after an immunity or a catch, from the
-// patch it failed on at its base speed after the idle. A patch it passes on the way is the kite's hazard, at
-// the kite's end.
+// The spike's leg after the kite, toward the gather: on at its speed after an immunity or a catch. After a
+// patch it first walks on the way it was going through the idle, then goes at its base speed from where
+// that leaves it. A patch it passes on either is the kite's hazard, at the kite's end.
 inline void NextLeg(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules const& r)
 {
     bool const spent = end.failTick >= 0;
+    auto const passes = [&](Point from, Point to)
+    {
+        for (size_t k = 0; k < w.patches.size(); ++k)
+        {
+            Patch const& patch = w.patches[k];
+            if ((spent && static_cast<int>(k) == end.failPatch) || (!patch.tank && !patch.usable) ||
+                AnubarakPursuit::SegmentDist(from, to, patch.pos) > r.patchReach)
+                continue;
+
+            float& hazard = patch.tank ? out.tankS : out.kiteS;
+            if (hazard < 0.0f)
+                hazard = out.endS;
+        }
+    };
+
     Spike spike = end.spike;
     float t = out.endS;
     float leftS = w.lifeS - out.endS;
@@ -654,25 +705,20 @@ inline void NextLeg(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules c
         t = 0.0f;
         leftS = w.lifeS - static_cast<float>(end.failTick) * TICK_S - r.idleS;
         spike = Spike();
-        spike.pos = end.spike.pos;
+        spike.pos = Ahead(end.spike.pos, end.heading, r.idleS * AnubarakPursuit::SPEEDS[0], r);
     }
 
-    float const full = Dist(spike.pos, w.gatherPos);
-    if (leftS <= 0.0f || full < 0.01f)
+    if (leftS <= 0.0f)
         return;
 
-    Point const to = Lerp(spike.pos, w.gatherPos, std::min(1.0f, RunLength(spike, t, leftS) / full));
-    for (size_t k = 0; k < w.patches.size(); ++k)
-    {
-        Patch const& patch = w.patches[k];
-        if ((spent && static_cast<int>(k) == end.failPatch) || (!patch.tank && !patch.usable) ||
-            AnubarakPursuit::SegmentDist(spike.pos, to, patch.pos) > r.patchReach)
-            continue;
+    if (spent)
+        passes(end.spike.pos, Ahead(end.spike.pos, end.heading, r.driftReach, r));
 
-        float& hazard = patch.tank ? out.tankS : out.kiteS;
-        if (hazard < 0.0f)
-            hazard = out.endS;
-    }
+    float const full = Dist(spike.pos, w.gatherPos);
+    if (full < 0.01f)
+        return;
+
+    passes(spike.pos, Lerp(spike.pos, w.gatherPos, std::min(1.0f, RunLength(spike, t, leftS) / full)));
 }
 
 // The hazards, ending, coverage and cost of a run that ended as end says. A run still going at the horizon
@@ -705,6 +751,7 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
                  : end.ownUsed  ? Ending::Own
                  : end.handUsed ? Ending::Hand
                                 : Ending::None;
+    out.kitePatch = planned && w.heroic && !w.patches[static_cast<size_t>(end.failPatch)].tank;
 
     int patchesLeft = w.patchBudget;
     if (spent && w.patches[static_cast<size_t>(end.failPatch)].usable)
@@ -726,11 +773,16 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
     if (end.handUsed)
         out.cost += end.handSpare ? r.costHand : r.costLastHand;
 
+    out.lastHand = end.handUsed && !end.handSpare;
+
     if (end.ownUsed)
         out.cost += w.lifeS - out.endS <= r.ownLateS ? r.costOwn : r.costOwnMid;
 
     if (end.boostTick >= 0 && end.boostTick <= end.endTick)
         out.boostS = static_cast<float>(end.boostTick) * TICK_S;
+
+    if (end.teleportTick >= 0 && end.teleportTick <= end.endTick)
+        out.teleportS = static_cast<float>(end.teleportTick) * TICK_S;
 
     if (w.heroic && w.gather && !spent && (end.ownUsed || out.caught) && HandedOnToGather(out, end, w, r))
         out.raidS = 0.0f;
@@ -746,7 +798,7 @@ inline void Finish(Outcome& out, RunEnd const& end, KiteWorld const& w, Rules co
 // the catch, own casts the immunity just before it, after the Hand when both, each only on a spike faster than
 // the kiter there.
 inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTick, bool hand, bool own,
-                     Run const& run, KiteWorld const& w, Rules const& r)
+                     Run const& run, KiteWorld const& w, Rules const& r, int teleportTick = -1)
 {
     Outcome out;
     out.turnS = turnTick >= 0 ? static_cast<float>(turnTick) * TICK_S : -1.0f;
@@ -806,7 +858,12 @@ inline Outcome Score(std::vector<Point> const& track, int turnTick, int boostTic
     end.margin = run.margin[static_cast<size_t>(end.endTick)];
     end.raidTick = run.raidTick;
     end.boostTick = boostTick;
-    end.spike = run.spikes[static_cast<size_t>(end.failTick >= 0 ? end.failTick : end.endTick)];
+    end.teleportTick = teleportTick;
+    size_t const spikeTick = static_cast<size_t>(end.failTick >= 0 ? end.failTick : end.endTick);
+    end.spike = run.spikes[spikeTick];
+    if (spikeTick > 0)
+        end.heading = Toward(run.spikes[spikeTick - 1].pos, end.spike.pos);
+
     Finish(out, end, w, r);
     return out;
 }
@@ -864,20 +921,30 @@ inline int Compare(Outcome const& a, Outcome const& b, Rules const& r, int rows 
     if (rows <= 4)
         return 0;
 
+    // Both onto a kite patch: the later first, so a spare Hand or the teleport that carries the kite on to
+    // its patch beats the plain walk onto it (user call, 2026-11-04). The Hand kept back still goes by cost.
+    float const endA = Detail::Band(a.endS, r.endBandS);
+    float const endB = Detail::Band(b.endS, r.endBandS);
+    bool const bothKite = a.kitePatch && b.kitePatch && !a.lastHand && !b.lastHand;
+    if (bothKite && endA != endB)
+        return endA > endB ? -1 : 1;
+
     if (std::fabs(a.cost - b.cost) > 0.01f)
         return a.cost < b.cost ? -1 : 1;
 
     if (rows <= 5)
         return 0;
 
-    float const endA = Detail::Band(a.endS, r.endBandS);
-    float const endB = Detail::Band(b.endS, r.endBandS);
     if (endA != endB)
         return endA > endB ? -1 : 1;
 
-    // A boost costs nothing but its cooldown: kept unless it ends the kite later, so it's there next submerge
+    // A boost or the teleport costs nothing but its cooldown: kept unless it ends the kite later, so it's
+    // there next submerge
     if ((a.boostS >= 0.0f) != (b.boostS >= 0.0f))
         return a.boostS < 0.0f ? -1 : 1;
+
+    if ((a.teleportS >= 0.0f) != (b.teleportS >= 0.0f))
+        return a.teleportS < 0.0f ? -1 : 1;
 
     if (a.endGather >= 0.0f && b.endGather >= 0.0f)
     {
@@ -903,7 +970,7 @@ inline Outcome Judge(Candidate const& c, KiteWorld const& w, Rules const& r)
     Detail::Run run = Detail::StartRun(w, r);
     Detail::Chase(run, c.track, 0, std::min(ticks, static_cast<int>(c.track.size()) - 1), c.patch, c.turnTick, w, r,
                   watch);
-    return Detail::Score(c.track, c.turnTick, c.boostTick, c.hand, c.own, run, w, r);
+    return Detail::Score(c.track, c.turnTick, c.boostTick, c.hand, c.own, run, w, r, c.teleportTick);
 }
 
 // A ring member: straight on headingDeg until radius off the centre, then round it, turn +1 counter-clockwise
@@ -996,6 +1063,8 @@ inline Candidate HeldCandidate(Candidate const& held, float elapsedS, KiteWorld 
 
     c.turnTick = held.turnTick >= 0 ? std::max(held.turnTick - at, 0) : -1;
     c.boostTick = held.boostTick >= 0 && w.readyBoostS > 0.0f ? std::max(held.boostTick - at, 0) : -1;
+    // Nearest a tick past the jump, the kiter is already at the circle
+    c.teleportTick = held.teleportTick >= at && w.teleport ? held.teleportTick - at : -1;
     if (c.patch >= 0 && c.turnTick >= 0)
     {
         Point const last = c.track.back();
@@ -1071,6 +1140,87 @@ inline Candidate Boosted(Candidate const& c, KiteWorld const& w, Rules const& r,
     return ArcCandidate(w, r, c.headingDeg, c.turn, boostTick);
 }
 
+// The base's run to ownLeadS before its catch by a spike faster than the kiter, the teleport there, then on
+// from the circle on ring, rim and arc members headed off the spike, chased from the base run's state at
+// the jump: the best teleportShapes of them. None unless the kiter is in range of the circle then and the
+// circle teleportGain farther from the spike.
+inline std::vector<Base> TeleportBases(Base const& base, KiteWorld const& w, Rules const& r, Watch const& watch)
+{
+    std::vector<Base> out;
+    std::vector<Point> const& track = base.candidate.track;
+    int const catchTick = base.none.catchS >= 0.0f ? ToTick(base.none.catchS) : -1;
+    if (!w.teleport || base.candidate.teleportTick >= 0 || catchTick < 0 ||
+        catchTick >= static_cast<int>(std::min(track.size(), base.run.spikes.size())))
+        return out;
+
+    int const jump = std::max(catchTick - ToTick(r.ownLeadS), 0);
+    Point const at = track[static_cast<size_t>(jump)];
+    Point const spike = base.run.spikes[static_cast<size_t>(jump)].pos;
+    if (!OutrunsKiter(base.run.spikes[static_cast<size_t>(catchTick)], track[static_cast<size_t>(catchTick)],
+                      catchTick, base.candidate.boostTick, w, r) ||
+        Dist(at, w.circle) > r.teleportRange || Dist(w.circle, spike) < Dist(at, spike) + r.teleportGain)
+        return out;
+
+    // The kiter as it lands on the circle, the world's clock moved on to the jump
+    float const jumpS = static_cast<float>(jump) * TICK_S;
+    KiteWorld from = w;
+    from.kiter = w.circle;
+    from.lifeS = w.lifeS - jumpS;
+    from.pace = CandidatePace(w, base.candidate.boostTick).After(jumpS);
+    Point const away = Toward(spike, w.circle);
+    float const awayDeg = std::atan2(away.y, away.x) / 0.0174532925f;
+    int const ticks = Ticks(w, r);
+
+    std::vector<Base> runs;
+    auto const add = [&](Candidate const& member)
+    {
+        Base jumped;
+        Candidate& c = jumped.candidate;
+        c.shape = base.candidate.shape;
+        c.headingDeg = base.candidate.headingDeg;
+        c.radius = base.candidate.radius;
+        c.turn = base.candidate.turn;
+        c.boostTick = base.candidate.boostTick;
+        c.teleportTick = jump;
+        c.track.assign(track.begin(), track.begin() + jump + 1);
+        c.track.insert(c.track.end(), member.track.begin(), member.track.end());
+        c.track.resize(std::min(c.track.size(), static_cast<size_t>(ticks) + 1));
+        while (static_cast<int>(c.track.size()) <= ticks)
+            c.track.push_back(c.track.back());
+
+        Run& run = jumped.run;
+        run.spikes.assign(base.run.spikes.begin(), base.run.spikes.begin() + jump + 1);
+        run.margin.assign(base.run.margin.begin(), base.run.margin.begin() + jump + 1);
+        run.raidTick = base.run.raidTick >= 0 && base.run.raidTick <= jump ? base.run.raidTick : -1;
+        run.leftTick = base.run.leftTick;
+        for (int& left : run.leftTick)
+            if (left > jump)
+                left = -1;
+
+        Chase(run, c.track, jump, ticks, -1, -1, w, r, watch);
+        jumped.none = Score(c.track, -1, c.boostTick, false, false, run, w, r, jump);
+        runs.push_back(std::move(jumped));
+    };
+
+    for (float offset : r.teleportHeadings)
+    {
+        float const deg = awayDeg + offset;
+        for (float radius : {r.ring, r.rim})
+            for (float turn : {1.0f, -1.0f})
+                add(RingCandidate(from, r, deg, radius, turn));
+
+        for (float turn : r.teleportArcTurns)
+            add(ArcCandidate(from, r, deg, turn));
+    }
+
+    std::stable_sort(runs.begin(), runs.end(),
+                     [&r](Base const& a, Base const& b) { return Compare(a.none, b.none, r) < 0; });
+    for (size_t i = 0; i < runs.size() && i < static_cast<size_t>(r.teleportShapes); ++i)
+        out.push_back(std::move(runs[i]));
+
+    return out;
+}
+
 // The base shape to tick turn, then the move onto patch p, under a Hand landed a second before the base's
 // catch when hand. The kiter walks and the spike chases from the base run's state at the turn, both stopped
 // at the first patch fail or counted catch, so c.track ends there. False when it can't be planned.
@@ -1080,7 +1230,8 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     int const ticks = Ticks(w, r);
     int const baseCatch = base.none.catchS >= 0.0f ? ToTick(base.none.catchS) : -1;
     std::vector<Point> legs;
-    if (turn < 0 || turn >= ticks || (base.run.failTick >= 0 && turn >= base.run.failTick) ||
+    if (turn < 0 || turn >= ticks || turn <= base.candidate.teleportTick ||
+        (base.run.failTick >= 0 && turn >= base.run.failTick) ||
         (!hand && baseCatch >= 0 && baseCatch <= turn) ||
         !AnubarakPursuit::PatchMoveLegs(move, base.candidate.track[static_cast<size_t>(turn)],
                                         w.patches[static_cast<size_t>(p)].pos, LegRules(r), legs))
@@ -1118,6 +1269,7 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     c.move = move;
     c.turnTick = turn;
     c.boostTick = base.candidate.boostTick;
+    c.teleportTick = base.candidate.teleportTick;
     c.hand = hand;
     c.track.assign(base.candidate.track.begin(), base.candidate.track.begin() + turn + 1);
     Pace const pace = CandidatePace(w, c.boostTick);
@@ -1174,7 +1326,14 @@ inline bool RunEnding(Base const& base, int turn, int p, PatchMove move, bool ha
     end.endPoint = c.track[static_cast<size_t>(end.endTick)];
     end.raidTick = run.raidTick;
     end.boostTick = c.boostTick;
-    end.spike = run.spikes[static_cast<size_t>((end.failTick >= 0 ? end.failTick : end.endTick) - turn)];
+    end.teleportTick = c.teleportTick;
+    size_t const spikeTick = static_cast<size_t>((end.failTick >= 0 ? end.failTick : end.endTick) - turn);
+    end.spike = run.spikes[spikeTick];
+    if (spikeTick > 0)
+        end.heading = Toward(run.spikes[spikeTick - 1].pos, end.spike.pos);
+    else if (turn > 0)
+        end.heading = Toward(base.run.spikes[static_cast<size_t>(turn - 1)].pos, end.spike.pos);
+
     out.turnS = static_cast<float>(turn) * TICK_S;
     Finish(out, end, w, r);
     return true;
@@ -1269,10 +1428,14 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
         bases.push_back(std::move(base));
     };
 
+    std::vector<float> radii = {r.ring, r.rim};
+    if (w.teleport)
+        radii.push_back(r.teleportRing);
+
     for (int h = 0; h < r.headings; ++h)
     {
         float const deg = 360.0f * static_cast<float>(h) / static_cast<float>(r.headings);
-        for (float radius : {r.ring, r.rim})
+        for (float radius : radii)
             for (float turn : {1.0f, -1.0f})
                 addBase(RingCandidate(w, r, deg, radius, turn));
 
@@ -1326,6 +1489,22 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
             ended.push_back(1);
         }
 
+    // And again with the teleport before their catch, every run on the ring that stays in range among them
+    if (w.teleport)
+        for (size_t i = 0, plain = bases.size(); i < plain; ++i)
+        {
+            Candidate const& c = bases[i].candidate;
+            if (!ended[i] && !(c.shape == Shape::Ring && c.radius == r.teleportRing))
+                continue;
+
+            std::vector<Detail::Base> jumps = Detail::TeleportBases(bases[i], w, r, watch);
+            for (Detail::Base& jump : jumps)
+            {
+                bases.push_back(std::move(jump));
+                ended.push_back(1);
+            }
+        }
+
     std::vector<Detail::Entry> entries;
     std::vector<Candidate> endings;
     entries.reserve(bases.size() * 4);
@@ -1348,14 +1527,15 @@ inline Plan PlanKite(KiteWorld const& w, Candidate const* held, float heldAgeS, 
 
         std::vector<Point> const& track = base.candidate.track;
         int const boostTick = base.candidate.boostTick;
+        int const teleportTick = base.candidate.teleportTick;
         if (w.own)
-            add(false, true, Detail::Score(track, -1, boostTick, false, true, base.run, w, r));
+            add(false, true, Detail::Score(track, -1, boostTick, false, true, base.run, w, r, teleportTick));
 
         if (!w.hands.empty() && w.handLeftS <= 0.0f)
         {
-            add(true, false, Detail::Score(track, -1, boostTick, true, false, base.run, w, r));
+            add(true, false, Detail::Score(track, -1, boostTick, true, false, base.run, w, r, teleportTick));
             if (w.own)
-                add(true, true, Detail::Score(track, -1, boostTick, true, true, base.run, w, r));
+                add(true, true, Detail::Score(track, -1, boostTick, true, true, base.run, w, r, teleportTick));
         }
     }
 

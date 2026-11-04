@@ -139,6 +139,10 @@ constexpr float ANUBARAK_IMPALE_REACH = 7.5f;
 constexpr float ANUBARAK_CIRCLE_TELEPORT_GAIN = 15.0f;
 // A circle with less left than this is cast again
 constexpr int32 ANUBARAK_CIRCLE_REFRESH_MS = 100000;
+// Heroic pre-pull: the circle goes down this close to the room centre, where the teleport reaches the whole
+// 38 yd kite ring, with this much left so it lasts to the second emerge 284 s in
+constexpr float ANUBARAK_CIRCLE_CENTRE_SLACK = 2.0f;
+constexpr int32 ANUBARAK_CIRCLE_PREPULL_MS = 290000;
 constexpr float ANUBARAK_BLINK_DISTANCE = 20.0f;
 // Heroic phase 2: slots this far round the raid point, held from up to ARRIVE off them. The healer stand
 // uses the same ring while he is up, and walks back once a healer is LEAVE off its slot.
@@ -677,9 +681,11 @@ bool AnubarakKiteCatDropDue(PlayerbotAI* botAI);
 // The druid main tank bot, while he is down with 10 s or less to his emerge. Its own Rejuvenation would
 // take it out of bear form for his first hits.
 bool AnubarakMainTankKeepsBear(PlayerbotAI* botAI);
-// A warlock bot's Demonic Circle is missing or under 100 s: on its Anub'arak stand before the pull, or
-// while he is up
+// A heroic warlock bot's Demonic Circle. Before the pull: missing, off the room centre or under 290 s left.
+// While he is up: missing or under 100 s, cast where it stands.
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);
+// Where the due circle goes down: the room centre before the pull, false where the warlock stands
+bool GetAnubarakCircleSpot(PlayerbotAI* botAI, Position& spot);
 
 // The spike within its danger radius of `at`, or its path over ANUBARAK_DODGE_TRACK_S within its lane;
 // false with no spike

@@ -444,6 +444,9 @@ portal this way.
 - **A `ReachCombatTo` leg of 6 yd or more stops half way**: it shortens the path to
   `disToGo / 2 + distance`. A walk at a far target ends wherever the midpoint is, on top of whatever
   stands there ([yogg-saron.md](../raids/ulduar/yogg-saron.md#phase-2-the-body-is-a-wall-and-the-portals-run-on-a-clock)).
+- **`UpdatePosition` on a moving creature doesn't stop its spline**: the running chase spline carries
+  it on from the old point. Anub'arak's spike, "moved" onto the patch it failed on, walked on 8.6-16.9 yd
+  through its 4 s idle ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#pursuing-spike-34660)).
 - **`Unit::SetSpeed(type, rate)` sets the rate outright**, skipped only when unchanged, so a per-tick
   "reset to 1.0" cancels Sprint, Nitro Boosts and every other speed aura until the next `UpdateSpeed`.
 - **A state read from a position band under an `Exclusive` rule can leave a bot with no mover.** The

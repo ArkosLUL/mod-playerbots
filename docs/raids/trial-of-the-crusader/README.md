@@ -385,7 +385,10 @@ The `ResistAura` stem picks:
   already that school, another unelected paladin on the same aura strategy (so the raid keeps
   Devotion), cost (resistance or `bspeed` 0, `baoe` or none 1, `bcast` 2, `barmor` 3), guid. On
   Jaraxxus and the Twins fire goes first to a paladin who knows Aura Mastery, heroic Anub'arak's phase
-  3 frost (`frostWantsMastery`), and a kept holder without it gives way. A school that stops wanting
+  3 frost (`frostWantsMastery`). A kept holder gives way, mid-fight too, to a free paladin who knows the
+  school and ranks strictly lower on that order less the guid, Aura Mastery first when wanted: only
+  toward the cheaper aura, so the two never swap back (2026-11-04 CF's wipe handed frost to side tank
+  Bulwark, kept all of CG and CH to phase 3 instead of Devotion). A school that stops wanting
   Aura Mastery drops its kept holder once, so frost goes back to the cheaper aura (a Retribution
   paladin over Concentration) instead of carrying into the next pull.
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the

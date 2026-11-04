@@ -96,9 +96,10 @@ constexpr float ANUBARAK_KITE_HAND_LEAD_S = 1.0f;
 constexpr float ANUBARAK_KITE_OWN_LEAD_S = 0.6f;
 // The emerge despawns the spike a minute after he goes down, 2 s before he is selectable again
 constexpr uint32 ANUBARAK_SPIKE_LIFE_MS = 60000;
-// The submerge whose kites the first two keep a patch and Hands for; a Hand back by this long before its
-// spike despawns is spare
+// The submerge whose kites the first two keep a patch for
 constexpr uint32 ANUBARAK_LAST_KITE_SUBMERGE = 3;
+// The submerge the first keeps a Hand for; a Hand back by this long before its spike despawns is spare
+constexpr uint32 ANUBARAK_HAND_KEEP_SUBMERGE = 2;
 constexpr uint32 ANUBARAK_HAND_SPARE_TAIL_MS = 10000;
 // A druid main tank stays in bear form from this long before the emerge
 constexpr int32 ANUBARAK_EMERGE_BEAR_MS = 10000;
@@ -247,6 +248,9 @@ constexpr uint32 ANUBARAK_KITE_SPHERES_PER_SUBMERGE = 2;
 constexpr float ANUBARAK_KITE_PRESHOT_LEFT_S = 30.0f;
 // Its patch lands inside the floor's navprobe-clean 50 yd
 constexpr float ANUBARAK_KITE_SPHERE_FLOOR = 50.0f;
+// Preferred off every tank patch: the restart reach plus the 14 yd the spike walks on after a fail, 8.6-16.9
+// over 18 fails in 2026-11-04 CC-CH. Heroic has four kite spheres, so this is only a preference.
+constexpr float ANUBARAK_KITE_SPHERE_TANK_CLEARANCE = ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN + 14.0f;
 // The stand sits this far inside the reach, so a drifting sphere doesn't walk the shooter every tick
 constexpr float ANUBARAK_SPHERE_STAND_SLACK = 1.0f;
 
@@ -1368,9 +1372,25 @@ void UpdateRefillSpots(Player* bot, AnubarakState& state, std::vector<Creature*>
     }
 }
 
+// The side's grip landed and not yet killed, or its gripped sphere falling
+Creature* GripPending(AnubarakState const& state, std::vector<Creature*> const& spheres, uint8 side)
+{
+    GripCast const& cast = state.grips[side];
+    if (cast.valid && cast.landed)
+        if (Creature* sphere = FindSphere(spheres, cast.sphere); IsFrostSphereFlying(sphere))
+            return sphere;
+
+    for (auto const& [guid, gripped] : state.grippedFor)
+        if (gripped == side)
+            if (Creature* sphere = FindSphere(spheres, guid); IsFrostSphereFalling(sphere))
+                return sphere;
+
+    return nullptr;
+}
+
 // The side's patch. Heroic after the first pair, an open side's refill spot. Else its side point moved
-// with the other side's patch, so a patch shot off its spot drags the other side's spot along and the
-// pair keeps its spacing.
+// with the other side's patch, or with its gripped sphere on the way down while this side has none, so a
+// patch shot off its spot drags the other side's spot along and the pair keeps its spacing.
 Position SideSpot(AnubarakState const& state, std::vector<Creature*> const& spheres, ObjectGuid const held[2],
                   uint8 side)
 {
@@ -1384,6 +1404,9 @@ Position SideSpot(AnubarakState const& state, std::vector<Creature*> const& sphe
     Position const point = GetAnubarakTankSidePoint(side);
     Creature* other = FindSphere(spheres, held[1 - side]);
     if (!IsPermafrostPatch(other))
+        other = GripPending(state, spheres, side) ? nullptr : GripPending(state, spheres, 1 - side);
+
+    if (!other)
         return point;
 
     Position const otherPoint = GetAnubarakTankSidePoint(1 - side);
@@ -1533,6 +1556,25 @@ bool FallingFor(AnubarakState const& state, std::vector<Creature*> const& sphere
 {
     return std::any_of(spheres.begin(), spheres.end(), [&](Creature* sphere)
                        { return IsFrostSphereFalling(sphere) && PatchFor(state, sphere, side, spot, otherSpot); });
+}
+
+// The side's patch, else the sphere about to make it: its grip's landing or one falling for it
+Creature* PatchToBe(AnubarakState const& state, std::vector<Creature*> const& spheres, ObjectGuid const held[2],
+                    uint8 side)
+{
+    if (Creature* patch = FindSphere(spheres, held[side]); IsPermafrostPatch(patch))
+        return patch;
+
+    if (Creature* gripped = GripPending(state, spheres, side))
+        return gripped;
+
+    Position const spot = SideSpot(state, spheres, held, side);
+    Position const otherSpot = SideSpot(state, spheres, held, 1 - side);
+    for (Creature* sphere : spheres)
+        if (IsFrostSphereFalling(sphere) && PatchFor(state, sphere, side, spot, otherSpot))
+            return sphere;
+
+    return nullptr;
 }
 
 // Holds each side's patch while it lasts. Never both sides on one patch, and a gripped one only where it
@@ -1958,8 +2000,9 @@ std::vector<Position> LatchedTankSpots(Player* bot, AnubarakState const& state)
     return tanks;
 }
 
-// After a fail the spike restarts from the patch it teleported onto, and its first test reaches 11.5 yd
-// plus its 5.25 yd first walk, so heroic never kites onto a stray patch that close to a tank patch
+// Heroic never kites onto a stray patch this close to a tank patch: the spike's first test after a fail
+// reaches 11.5 yd plus its 5.25 yd first walk. Its last chase spline also carries it on about 14 yd
+// through the idle, which the planner's next leg reads.
 bool NearTankPatch(Position const& patch, std::vector<Position> const& tankSpots)
 {
     return std::any_of(tankSpots.begin(), tankSpots.end(), [&patch](Position const& tank)
@@ -2702,13 +2745,10 @@ bool KitePatchAvailable(Player* kiter, AnubarakState const& state, bool tankToo)
     return false;
 }
 
-// Heroic: a Hand cast now is back before the third submerge's last 10 s, or this is the third. Its cooldown
-// is 3 to 5 min by Guardian's Favor, and a submerge comes every 142 s.
-bool HandSpare(Player* paladin, AnubarakState const& state, uint32 now)
+// A Hand cast now is back before the second submerge's last 10 s. Its cooldown is 3 to 5 min by Guardian's
+// Favor, and a submerge comes every 142 s.
+bool HandBackInTime(Player* paladin, AnubarakState const& state, uint32 now)
 {
-    if (state.submerges >= ANUBARAK_LAST_KITE_SUBMERGE)
-        return true;
-
     uint32 const rank = KnownRank(paladin, HAND_OF_PROTECTION_RANKS);
     SpellInfo const* info = rank ? sSpellMgr->GetSpellInfo(rank) : nullptr;
     if (!info)
@@ -2717,10 +2757,28 @@ bool HandSpare(Player* paladin, AnubarakState const& state, uint32 now)
     int32 cooldown = static_cast<int32>(std::max(info->RecoveryTime, info->CategoryRecoveryTime));
     paladin->ApplySpellMod(rank, SPELLMOD_COOLDOWN, cooldown);
     int32 const cycle = static_cast<int32>(ANUBARAK_SURFACED_MS + ANUBARAK_SUBMERGED_MS);
-    int32 const until = static_cast<int32>(ANUBARAK_LAST_KITE_SUBMERGE - state.submerges) * cycle +
+    int32 const until = static_cast<int32>(ANUBARAK_HAND_KEEP_SUBMERGE - state.submerges) * cycle +
                         static_cast<int32>(ANUBARAK_SPIKE_LIFE_MS - ANUBARAK_HAND_SPARE_TAIL_MS) -
                         static_cast<int32>(getMSTimeDiff(state.submergedMs, now));
     return cooldown <= until;
+}
+
+// Heroic: every Hand from the second submerge on. In the first, one back in time for the second, or one that
+// isn't while another bot paladin's that isn't is still ready, so the last of those waits for the second.
+bool HandSpare(Player* paladin, AnubarakState const& state, uint32 now)
+{
+    if (state.submerges >= ANUBARAK_HAND_KEEP_SUBMERGE || HandBackInTime(paladin, state, now))
+        return true;
+
+    bool other = false;
+    ForEachGroupMember(paladin, [&](Player* member)
+    {
+        other = member != paladin && member->IsAlive() && GET_PLAYERBOT_AI(member) && HandReady(member) &&
+                !HandBackInTime(member, state, now);
+        return other;
+    });
+
+    return other;
 }
 
 // What the planner sees: the patches by kind, the gather and the players off it, the Hands that can land and
@@ -2796,12 +2854,19 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
     w.catchFromS = BaseTestGraceS(w.spike, w.pace, kiter, spike);
     w.handLeftS = HandLeftS(kiter);
 
+    // Heroic: a bot warlock's circle wherever it is, so a run can come back into range of it
+    GameObject* circle = bot && heroic ? WarlockCircle(kiter) : nullptr;
+    if (circle && ReadyInstant(kiter, SPELL_CIRCLE_TELEPORT))
+    {
+        w.teleport = true;
+        w.circle = ToPoint(circle->GetPosition());
+    }
+
     // The held plan's paladin first, else the standby escort, so the escort doesn't swap
     ObjectGuid const first = !plan.hand.IsEmpty()                     ? plan.hand
                              : state.standbyKiter == kiter->GetGUID() ? state.standby
                                                                       : ObjectGuid::Empty;
-    // a bot warlock with its teleport ready in reach keeps the paladins' Hands for the next kite
-    std::vector<Player*> hands = bot && TeleportCircle(kiter) ? std::vector<Player*>() : ReadyHands(kiter);
+    std::vector<Player*> hands = ReadyHands(kiter);
     std::stable_partition(hands.begin(), hands.end(),
                           [&first](Player* paladin) { return paladin->GetGUID() == first; });
     uint32 const now = getMSTime();
@@ -2846,7 +2911,8 @@ AnubarakPursuit::Point HumanVelocity(Player* kiter, KitePlan& plan, uint32 now)
     return velocity;
 }
 
-// anub.kitepath: the shape, then the patch walk with its turn second, then a Hand or own immunity
+// anub.kitepath: the shape, then the patch walk with its turn second, then a Hand or own immunity, the
+// boost's second and the teleport's
 std::string KitePathText(KitePlan const& plan)
 {
     AnubarakKitePlanner::Candidate const& c = plan.candidate;
@@ -2887,6 +2953,13 @@ std::string KitePathText(KitePlan const& plan)
         char boost[16];
         std::snprintf(boost, sizeof(boost), "%.1f", static_cast<float>(c.boostTick) * AnubarakPursuit::TICK_S);
         text += std::string("+boost@") + boost;
+    }
+
+    if (c.teleportTick >= 0)
+    {
+        char teleport[16];
+        std::snprintf(teleport, sizeof(teleport), "%.1f", static_cast<float>(c.teleportTick) * AnubarakPursuit::TICK_S);
+        text += std::string("+tp@") + teleport;
     }
 
     return text;
@@ -2990,6 +3063,7 @@ KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
 // ends on a patch. Sprint, Dash and Nitro go out at the plan's boost tick, or at the catch of a plan caught
 // anyway, and never on a spike no faster than the kiter. A jump goes once the spike, faster, gains within
 // 15 yd, or is within 10 and catching up. A boost that comes ready under a Hand goes as the Hand runs out.
+// The plan's teleport goes at its tick.
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
     KiteStageRead& read = state.kiteStage;
@@ -3030,12 +3104,19 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     else if (speedBoost)
         fire = fire && faster;
 
-    if (hasBoost && fire)
+    // The plan's teleport goes at its tick, ahead of any boost due then
+    bool const teleport = bot && plan.candidate.teleportTick >= 0 && tick >= plan.candidate.teleportTick &&
+                          TeleportCircle(kiter);
+    if (teleport)
     {
-        read.boost = boost;
-        if (read.stage == AnubarakKiteStage::Run)
-            read.stage = AnubarakKiteStage::Boost;
+        read.boost = AnubarakKiteBoost();
+        read.boost.spellId = SPELL_CIRCLE_TELEPORT;
     }
+    else if (hasBoost && fire)
+        read.boost = boost;
+
+    if ((teleport || (hasBoost && fire)) && read.stage == AnubarakKiteStage::Run)
+        read.stage = AnubarakKiteStage::Boost;
 
     if (walking)
         state.kitePatchKiter = kiter->GetGUID();
@@ -3173,26 +3254,50 @@ Creature* NearestCenterSphere(std::vector<Creature*> const& spheres)
     return best;
 }
 
-template <typename Qualifies>
+// A preferred sphere first, the held one kept unless it isn't preferred and another is
+template <typename Qualifies, typename Prefers>
 Creature* HeldOrPick(std::vector<Creature*> const& flying, std::vector<SphereDuty> const& previous,
-                     Qualifies const& qualifies, Player* target, Creature* spike)
+                     Qualifies const& qualifies, Prefers const& prefers, Player* target, Creature* spike)
 {
     // Spheres drift, so the pick swaps back and forth and its shooters with it
+    Creature* held = nullptr;
     for (SphereDuty const& duty : previous)
         if (std::strcmp(duty.label, "stock") == 0)
-            if (Creature* held = FindSphere(flying, duty.sphere))
-                if (qualifies(held))
-                    return held;
+            if (Creature* sphere = FindSphere(flying, duty.sphere); !held && sphere && qualifies(sphere))
+                held = sphere;
+
+    if (held && prefers(held))
+        return held;
 
     std::vector<Creature*> open;
+    std::vector<Creature*> preferred;
     for (Creature* sphere : flying)
-        if (qualifies(sphere))
-            open.push_back(sphere);
+    {
+        if (!qualifies(sphere))
+            continue;
+
+        open.push_back(sphere);
+        if (prefers(sphere))
+            preferred.push_back(sphere);
+    }
+
+    if (!preferred.empty())
+        open = std::move(preferred);
+    else if (held)
+        return held;
 
     if (open.empty())
         return nullptr;
 
     return target && spike ? KiteSphere(open, target, spike) : NearestCenterSphere(open);
+}
+
+// After a fail the spike walks on about 14 yd before its next mark, so a kite patch this far off every tank
+// patch can't spend one on the restart
+bool ClearOfTankPatches(Position const& at, std::vector<Position> const& tanks)
+{
+    return std::none_of(tanks.begin(), tanks.end(), [&at](Position const& tank)
+                        { return Dist2d(at, tank) < ANUBARAK_KITE_SPHERE_TANK_CLEARANCE; });
 }
 
 // Heroic's kite spheres of a submerge, both shot over phase 1's last 30 s so their patches are down as
@@ -3221,7 +3326,8 @@ Creature* PreSubmergeKiteSphere(Player* bot, AnubarakState const& state, std::ve
                !NearTankPatch(at, tanks);
     };
 
-    return HeldOrPick(flying, previous, qualifies, nullptr, nullptr);
+    auto const prefers = [&tanks](Creature* sphere) { return ClearOfTankPatches(sphere->GetPosition(), tanks); };
+    return HeldOrPick(flying, previous, qualifies, prefers, nullptr, nullptr);
 }
 
 // Heroic phase 2's kite sphere while fewer than two patches are down and the submerge's two aren't shot
@@ -3248,7 +3354,8 @@ Creature* HeroicKiteSphere(Player* bot, AnubarakState const& state, std::vector<
                !NearTankPatch(at, tanks);
     };
 
-    return HeldOrPick(flying, previous, qualifies, spikeUp ? target : nullptr, spikeUp ? spike : nullptr);
+    auto const prefers = [&tanks](Creature* sphere) { return ClearOfTankPatches(sphere->GetPosition(), tanks); };
+    return HeldOrPick(flying, previous, qualifies, prefers, spikeUp ? target : nullptr, spikeUp ? spike : nullptr);
 }
 
 struct SphereShooter
@@ -3487,6 +3594,25 @@ bool GrippedDown(Creature* sphere, GripCast const& cast)
     return sphere->GetPositionZ() - cast.from.GetPositionZ() <= ANUBARAK_GRIP_LANDED_HEIGHT;
 }
 
+// The grip lands within 3 yd of the DK, and a gripped patch under 20 yd off the other side's never latches
+constexpr float ANUBARAK_GRIP_CLEAR = ANUBARAK_TANK_PATCH_GAP + ANUBARAK_GRIP_LANDED;
+
+// Out to the clearance plus the arrive slack off the other side's patch or the sphere about to make it,
+// while the sphere stays in reach of it
+Position GripStandClear(Player* bot, Position const& stand, Creature* otherPatch, Creature* sphere)
+{
+    float const want = ANUBARAK_GRIP_CLEAR + ANUBARAK_TANK_PATCH_ARRIVE;
+    float const dist = otherPatch ? Dist2d(stand, otherPatch->GetPosition()) : want;
+    if (dist >= want || dist < 1.0f)
+        return stand;
+
+    Vec2 const away = Delta(otherPatch->GetPosition(), stand);
+    Position const moved = ValidateFloorPoint(bot, Offset(stand, {away.x / dist, away.y / dist}, want - dist));
+    return sphere->GetExactDist(moved.GetPositionX(), moved.GetPositionY(), moved.GetPositionZ()) <= ANUBARAK_GRIP_RANGE
+               ? moved
+               : stand;
+}
+
 // A grip landing this far off the spot gets another link, posted Death Grip's reach less the margin
 // from the landing: the landed sphere sits low. It rises back above reach about 4 s after the landing.
 constexpr float ANUBARAK_GRIP_RELAY_FROM = ANUBARAK_SIDE_SHOOT_FAR;
@@ -3573,10 +3699,11 @@ void PlanRelay(Player* bot, AnubarakState const& state, uint8 side, Position con
 // DK keeps its duty and the side's shooters take any sphere they can. No grip takes a sphere already
 // near the other side's spot, or one another side's DK has picked. A grip landing over 20 yd off the spot
 // passes the sphere to a relay link, which grips it again within 3 s of the landing; it stays reserved
-// until the last link's grip lands, or is killed where it is once the link can't.
+// until the last link's grip lands, or is killed where it is once the link can't. A landing under 20 yd off
+// the other side's patch, or the sphere about to make it, never latches, so that grip failed.
 template <typename Taken>
 bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position const& spot, Position const& otherSpot,
-                     std::vector<Creature*> const& spheres, std::vector<Creature*> const& flying,
+                     Creature* otherPatch, std::vector<Creature*> const& spheres, std::vector<Creature*> const& flying,
                      std::vector<GripDuty> const& previousGrips, Taken const& taken,
                      std::vector<std::pair<char const*, Creature*>>& needs, std::vector<Creature*>& reserved,
                      uint32 now)
@@ -3609,7 +3736,6 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
         Player* dk = ObjectAccessor::GetPlayer(*bot, cast.dk);
         if (IsFrostSphereFlying(sphere) && dk && dk->IsAlive())
         {
-            Creature* otherPatch = LatchedTankPatch(bot, state, 1 - side);
             Position const other = otherPatch ? otherPatch->GetPosition() : otherSpot;
             Position const at = sphere->GetPosition();
             if (GrippedDown(sphere, cast) &&
@@ -3650,7 +3776,7 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
                 relay.closed = true;
             }
 
-            if (live)
+            if (live && !(cast.landed && otherPatch && Dist2d(at, other) < ANUBARAK_TANK_PATCH_GAP))
             {
                 state.gripDuties.push_back({cast.dk, sphere->GetGUID(), side, cast.from});
                 if (cast.landed)
@@ -3668,6 +3794,8 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
             }
 
             need.gripFailed = true;
+            state.grippedFor.erase(sphere->GetGUID());
+            state.farGripped.erase(sphere->GetGUID());
         }
 
         cast = GripCast();
@@ -3693,6 +3821,9 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
         if (sphere)
             stand = GripStand(bot, spot, otherSpot, sphere);
     }
+
+    if (sphere)
+        stand = GripStandClear(bot, stand, otherPatch, sphere);
 
     // Every sphere left hovers past the step-out, where a shot one lands too far off to serve the side:
     // the DK walks out to the nearest and its patch becomes the side's
@@ -3860,7 +3991,7 @@ void ComputeDuties(Player* bot, AnubarakState& state)
         // Where the other side's patch is, or is about to come down
         auto const otherOf = [&](uint8 side, Position& other)
         {
-            if (Creature* patch = LatchedTankPatch(bot, state, 1 - side))
+            if (Creature* patch = PatchToBe(state, spheres, tankPatches, 1 - side))
             {
                 other = patch->GetPosition();
                 return true;
@@ -3909,8 +4040,10 @@ void ComputeDuties(Player* bot, AnubarakState& state)
             if (!open[side] || served[side])
                 continue;
 
-            if (ServeSideByGrip(bot, state, side, spots[side], spots[1 - side], spheres, sideFlying, previousGrips, taken,
-                                needs, reserved, now))
+            // Read again for side 1: side 0's grip may have just failed
+            Creature* const otherPatch = PatchToBe(state, spheres, tankPatches, 1 - side);
+            if (ServeSideByGrip(bot, state, side, spots[side], otherPatch ? otherPatch->GetPosition() : spots[1 - side],
+                                otherPatch, spheres, sideFlying, previousGrips, taken, needs, reserved, now))
                 continue;
 
             Position other;
@@ -4236,9 +4369,10 @@ ProtectClaim const* DeriveProtection(Player* bot)
     // A spike within the immunity range has beaten whatever walk the plan gave the kiter
     claim.standReachable =
         (plan->outcome.ending == Ending::Patch || plan->outcome.ending == Ending::PatchHand) && !claim.spikeInImmunityRange;
-    // the warlock's teleport goes first, the Hand once it can't
+    // No Hand off the plan while it still teleports first
+    bool const teleportPlanned = plan->outcome.teleportS >= 0.0f;
     claim.need = !immune && !forbearance && !selfHand && handDue &&
-                 (handKite || (!claim.standReachable && !ownPlanned)) && !TeleportCovers(kiter, spike);
+                 (handKite || (!claim.standReachable && !ownPlanned && !teleportPlanned));
     ObjectGuid const planned = handKite && !selfHand ? plan->hand : ObjectGuid::Empty;
 
     if (!claim.protector.IsEmpty() && !immune)
@@ -6122,6 +6256,14 @@ constexpr float ANUBARAK_SIDE_AOE_SHIFTS[] = {0.0f, 2.0f, 4.0f, 6.0f};
 constexpr float ANUBARAK_SIDE_AOE_RANGED = 30.0f;
 // Any other area spell holds with one of the other side's burrowers this close to the bot or its target
 constexpr float ANUBARAK_SIDE_AOE_OTHER_REACH = 10.0f;
+// A ground area only with the side tank this close to its hold. Cast at the pickup, half of Death and
+// Decay's ticks hit nothing while the burrowers followed the tank 17-23 yd to its patch.
+constexpr float ANUBARAK_SIDE_AOE_HOLD_REACH = 3.0f;
+
+bool AtSideTankHold(Player* bot, uint8 side)
+{
+    return Dist2d(bot->GetPosition(), GetAnubarakSideTankHold(bot, side)) <= ANUBARAK_SIDE_AOE_HOLD_REACH;
+}
 
 enum class SideAoeKind : uint8
 {
@@ -6352,11 +6494,20 @@ bool GetAnubarakSideTankAoe(PlayerbotAI* botAI, AnubarakSideTankAoe& out)
         float const length = Length(away);
         away = length > 0.01f ? Vec2{away.x / length, away.y / length} : Vec2{0.0f, 0.0f};
 
+        bool const atHold = AtSideTankHold(bot, static_cast<uint8>(side));
         for (SideAoeSpell const& spell : SIDE_AOE_SPELLS)
         {
             uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell.name)->Get();
             if (!spellId || !bot->HasSpell(spellId))
                 continue;
+
+            if (spell.ground && !atHold)
+            {
+                if (std::strcmp(why, "none") == 0)
+                    why = "walk";
+
+                continue;
+            }
 
             std::vector<std::pair<Unit*, Position>> tries;
             if (spell.shape == SideAoeShape::Point)
@@ -6409,6 +6560,9 @@ bool AnubarakSideTankAreaAllowed(PlayerbotAI* botAI, std::string const& spellNam
     SideAoeSpell const* spell = FindSideAoeSpell(spellName);
     if (!spell && !area)
         return true;
+
+    if (spell && spell->ground && !AtSideTankHold(bot, static_cast<uint8>(side)))
+        return false;
 
     std::vector<SideAoeUnit> const units = SideAoeUnits(bot, *state, static_cast<uint8>(side));
     Unit* aimed = target && target != bot ? target : botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
@@ -7828,15 +7982,20 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
     Creature* sphere = ResolveCreature(bot, duty->sphere);
     out.sphere = IsFrostSphereFlying(sphere) ? sphere : nullptr;
 
-    // In reach from where it stands, inside the step-out and no nearer the other side: the stand follows
-    // the sphere, so walking on would only chase it. Further out, in reach while no further from the spot
-    // than the stand: walking on would only bring the landing nearer the sphere.
+    // In reach from where it stands, inside the step-out, no nearer the other side and 23 yd off its patch
+    // or the sphere about to make it: the stand follows the sphere, so walking on would only chase it.
+    // Further out, in reach while no further from the spot than the stand: walking on would only bring the
+    // landing nearer the sphere.
     bool const ready = out.sphere && !bot->GetSpellCooldownDelay(SPELL_DEATH_GRIP);
     bool const inReach = ready && bot->GetExactDist(out.sphere) <= ANUBARAK_GRIP_RANGE;
-    Position const sideSpot = GetAnubarakTankSpot(bot, duty->side);
-    Position const otherSpot = GetAnubarakTankSpot(bot, 1 - duty->side);
+    std::vector<Creature*> const spheres = ResolveSpheres(bot, *state);
+    ObjectGuid const held[2] = {state->patch0.Get(), state->patch1.Get()};
+    Position const sideSpot = SideSpot(*state, spheres, held, duty->side);
+    Creature* otherPatch = PatchToBe(*state, spheres, held, 1 - duty->side);
+    Position const otherSpot = otherPatch ? otherPatch->GetPosition() : SideSpot(*state, spheres, held, 1 - duty->side);
     bool const offOther =
-        Dist2d(bot->GetPosition(), otherSpot) + ANUBARAK_TANK_PATCH_ARRIVE >= Dist2d(sideSpot, otherSpot);
+        Dist2d(bot->GetPosition(), otherSpot) + ANUBARAK_TANK_PATCH_ARRIVE >= Dist2d(sideSpot, otherSpot) &&
+        (!otherPatch || Dist2d(bot->GetPosition(), otherSpot) >= ANUBARAK_GRIP_CLEAR);
     bool const reachesFromHere =
         inReach && offOther &&
         Dist2d(bot->GetPosition(), sideSpot) <= ANUBARAK_GRIP_STEP_OUT + ANUBARAK_TANK_PATCH_ARRIVE;
@@ -9034,21 +9193,34 @@ bool AnubarakDemonicCircleDue(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     if (!bot || bot->getClass() != CLASS_WARLOCK || !bot->IsAlive() || !bot->HasSpell(SPELL_CIRCLE_SUMMON) ||
-        bot->isMoving() || bot->HasAura(SPELL_MARK) || !AnubarakHeroic(bot))
-        return false;
-
-    if (AnubarakEngaged(botAI))
-    {
-        AnubarakPhase const phase = GetAnubarakPhase(botAI);
-        if (phase != AnubarakPhase::Surface && phase != AnubarakPhase::Swarm)
-            return false;
-    }
-    else if (GetToCStagingBoss(botAI) != ToCStagingBoss::Anubarak || !IsToCStagingHeld(botAI) ||
-             IsToCStagingRestHeld(botAI))
+        bot->HasAura(SPELL_MARK) || !AnubarakHeroic(bot))
         return false;
 
     Aura const* circle = bot->GetAura(SPELL_CIRCLE_SUMMON, bot->GetGUID());
-    return !circle || (circle->GetDuration() >= 0 && circle->GetDuration() < ANUBARAK_CIRCLE_REFRESH_MS);
+    int32 const left = circle ? circle->GetDuration() : 0;
+    if (AnubarakEngaged(botAI))
+    {
+        AnubarakPhase const phase = GetAnubarakPhase(botAI);
+        return !bot->isMoving() && (phase == AnubarakPhase::Surface || phase == AnubarakPhase::Swarm) &&
+               (!circle || (left >= 0 && left < ANUBARAK_CIRCLE_REFRESH_MS));
+    }
+
+    if (GetToCStagingBoss(botAI) != ToCStagingBoss::Anubarak || !IsToCStagingHeld(botAI) ||
+        IsToCStagingRestHeld(botAI))
+        return false;
+
+    GameObject* placed = WarlockCircle(bot);
+    return !circle || !placed || Dist2d(placed->GetPosition(), ANUBARAK_ROOM_CENTER) > ANUBARAK_CIRCLE_CENTRE_SLACK ||
+           (left >= 0 && left < ANUBARAK_CIRCLE_PREPULL_MS);
+}
+
+bool GetAnubarakCircleSpot(PlayerbotAI* botAI, Position& spot)
+{
+    if (!botAI || AnubarakEngaged(botAI))
+        return false;
+
+    spot = ANUBARAK_ROOM_CENTER;
+    return true;
 }
 
 // The dodge track's points sit a bot tick apart

@@ -31,7 +31,9 @@ closing on a spike no faster than itself and a tank's form or stance lost while 
 per phase 1, a ranged bot's capped rows, the kite patches and Hands per submerge, the warlock and mage top ups, a
 scarab victim's stacks and kite seconds and phase 3's heals by kind, Light's uptime and water totems, the first
 one again phase 3's race against the swarm and the bot tanks at the engage, a twenty-third the move swings, the
-opening walk, the submerge drag after the push and phase 3's melee ring reach, and the shared fixture shows every
+opening walk, the submerge drag after the push and phase 3's melee ring reach, a twenty-fourth a grip's landing
+against the other side's patch, the spike's walk after a patch, the turn's Hands and circle, a planned teleport, a
+ground area emptying and the paladins' resistance auras, and the shared fixture shows every
 section reads empty on a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native
 test's cases that need no Hand.
 """
@@ -3857,9 +3859,9 @@ class CirclePull(unittest.TestCase):
         [row] = ab.kite_sphere_rows(self.trace)
         self.assertEqual((row["label"], row["start"], row["ready"], row["down"]), ("P2", 40000, 1, [CPRESHOT]))
         self.assertEqual(row["spheres"], [{"guid": CPRESHOT, "killed": 25000, "spent": None, "kiter": None,
-                                           "into": None},
+                                           "into": None, "tank_gap": None},
                                           {"guid": CSPHERE, "killed": 61000, "spent": 70000, "kiter": CKITER,
-                                           "into": 4000}])
+                                           "into": 4000, "tank_gap": None}])
 
     def test_no_preshot_and_no_summon_in_the_trace(self):
         # the circle went down before the trace, so it is where the teleport landed
@@ -5807,6 +5809,144 @@ class EveryView(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 ab.show_banner(trace)
         self.assertIn("not a Trial of the Crusader Anub'arak pull", out.getvalue())
+
+
+R28_DK0, R28_DK1, R28_BULWARK, R28_JUSTICE, R28_LOCK, R28_KITER = 6101, 6102, 6103, 6104, 6105, 6106
+R28_SPIKE = CREATURE | 6200
+R28_SA, R28_SB = CREATURE | 6211, CREATURE | 6212
+R28_BW1, R28_BW2 = CREATURE | 6221, CREATURE | 6222
+# side 1's grip stand and patch; side 0's grip lands 15 yd north of it
+R28_PATCH = (X + 30.0, Y - 12.0)
+R28_LANDING = (X + 30.0, Y + 3.0)
+
+
+def r28_snap(when: int) -> dict:
+    players = {R28_DK0: R28_LANDING, R28_DK1: R28_PATCH, R28_BULWARK: (X - 40.0, Y + 40.0),
+               R28_JUSTICE: (X - 10.0, Y + 30.0), R28_LOCK: (X - 10.0, Y + 10.0), R28_KITER: (X, Y - 20.0)}
+    units = [[guid, x, y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0] for guid, (x, y) in players.items()]
+    units.append([R28_SA, *R28_PATCH, PATCH_Z if when >= 1500 else FLYING_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    units.append([R28_SB, *R28_LANDING, Z + 1.0 if when >= 4000 else FLYING_Z, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    # the spike fails by the kite patch at 9 s and the next mark starts 4 s on, 20.6 yd further
+    spike = (X, Y) if when <= 9000 else (X + 20.0, Y - 5.0)
+    units.append([R28_SPIKE, *spike, Z, 0.0, 100.0, 0.0, R28_KITER if when <= 9000 else R28_LOCK, 0, 0, 0, 0])
+    # both burrowers sit inside the Death and Decay for its first 5 s, then 20 yd off it
+    off = 2.0 if when <= 15000 else 20.0
+    for guid, side in ((R28_BW1, 1.0), (R28_BW2, -1.0)):
+        units.append([guid, R28_PATCH[0] + side * off, R28_PATCH[1], Z, 0.0, 100.0, 0.0, R28_DK1, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r28_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1790800000000, "map": ab.MAP_TOC, "inst": 4, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R28_DK0, "n": "Obliteration", "r": "melee", "c": 6, "h": 0},
+             {"g": R28_DK1, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R28_BULWARK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": R28_JUSTICE, "n": "Justice", "r": "heal", "c": 2, "h": 0},
+             {"g": R28_LOCK, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+             {"g": R28_KITER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": 0, "e": "unit", "g": R28_SPIKE, "en": ab.NPC_SPIKE, "n": "Anub'arak"},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_FROST_SPHERE, "n": "Frost Sphere"} for guid in (R28_SA, R28_SB)),
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (R28_BW1, R28_BW2)),
+        {"e": "spell", "sp": 49938, "n": "Death and Decay"},
+        note(0, R28_DK1, "anub.side1", R28_DK1),
+        note(900, R28_DK1, "anub.sphere", "grip1"),
+        *grip(1000, R28_DK1, R28_SA),
+        note(3000, R28_DK1, "anub.patch1", R28_SA),
+        note(3400, R28_DK0, "anub.sphere", "grip0"),
+        *grip(3500, R28_DK0, R28_SB),
+        aura(6000, R28_LOCK, ab.SPELL_CIRCLE_IN_RANGE, False, R28_LOCK),
+        cast(8600, R28_LOCK, ab.SPELL_CIRCLE_TELEPORT, R28_LOCK),
+        cast(10000, R28_DK1, 49938, R28_BW1),
+        note(0, R28_BULWARK, "toc.aura", "frost"),
+        note(15000, R28_BULWARK, "toc.aura", "none"),
+        note(0, R28_JUSTICE, "toc.aura", "none"),
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [r28_snap(when) for when in range(0, 20500, 500)]
+    return records
+
+
+class Refine28Lines(unittest.TestCase):
+    """The grip's landing against the other side's patch, a kite patch's yards to a tank patch, the spike's walk
+    after a patch, the Hands and the circle at a patch kite's turn, a planned teleport, a side tank's ground area
+    emptying, the paladins' resistance auras, and the port's next leg walking on past the fail."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_4_anub-arak_1790800000.ndjson", r28_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_grip_landing_reads_its_yards_to_the_other_sides_patch(self):
+        first, second = ab.grip_rows(self.trace, self.samples)
+        self.assertIsNone(first["other_gap"])
+        self.assertAlmostEqual(second["other_gap"], 15.0)
+
+    def test_a_kite_patch_reads_its_yards_to_the_nearest_tank_patch(self):
+        death = {"killed": 4000, "landed": (X - 20.0, Y)}
+        gap = ab.kite_patch_tank_gap(death, ab.patch_latches(self.trace), self.samples)
+        self.assertAlmostEqual(gap, math.hypot(50.0, 12.0))
+        self.assertIsNone(ab.kite_patch_tank_gap({"killed": 0, "landed": (X, Y)}, ab.patch_latches(self.trace),
+                                                 self.samples))
+
+    def test_the_spikes_walk_after_a_patch_and_its_restart_by_a_tank_patch(self):
+        windows = [{"guid": R28_KITER, "start": 5000, "stop": 9000, "outcome": "patch"},
+                   {"guid": R28_LOCK, "start": 13000, "stop": 19000, "outcome": "impale"}]
+        (row,) = ab.restart_rows(self.trace, windows, self.samples)
+        self.assertAlmostEqual(row["walk"], math.hypot(20.0, 5.0))
+        self.assertAlmostEqual(row["tank"], math.hypot(10.0, 7.0))
+        self.assertEqual(ab.restart_rows(self.trace, [{**windows[0], "stop": 7000}, windows[1]], self.samples), [])
+
+    def test_a_patch_kites_turn_reads_the_hands_in_reach_and_the_circle(self):
+        window = {"guid": R28_LOCK, "start": 5000, "stop": 9000, "outcome": "patch", "turn": 7000}
+        (row,) = ab.patch_turn_rows(self.trace, [window, {**window, "turn": None}], self.samples)
+        self.assertEqual((row["hands"], row["circle"]), (1, True))
+
+    def test_a_planned_teleport_reads_its_second_and_the_cast(self):
+        self.assertEqual(ab.kitepath_second("ring:0:ccw:36+boost@1.0+tp@2.5", "boost"), 1.0)
+        self.assertEqual(ab.kitepath_boost("ring:0:ccw:36+boost@1.0+tp@2.5"), 1.0)
+        self.assertEqual(ab.kitepath_second("ring:0:ccw:36+boost@1.0+tp@2.5", "tp"), 2.5)
+        window = {"guid": R28_LOCK, "start": 5000, "stop": 20000,
+                  "kitepath": [{"at": 6000, "value": "ring:0:ccw:36+tp@2.5"}]}
+        (row,) = ab.teleport_plans(self.trace, [window, {**window, "kitepath": [{"at": 6000, "value": "arc:0:0"}]}])
+        self.assertEqual((row["planned"], row["cast"]), (8500, 8600))
+
+    def test_a_ground_area_reads_the_burrowers_inside_each_second(self):
+        (row,) = ab.ground_area_rows(self.trace, self.samples)
+        self.assertEqual((row["tank"], row["name"], row["inside"], row["empty"]),
+                         (R28_DK1, "death and decay", [2, 2, 2, 2, 2, 0, 0, 0, 0, 0], 5))
+
+    def test_each_paladins_resistance_aura_and_a_tank_on_one(self):
+        rows = {row["guid"]: row for row in ab.paladin_aura_rows(self.trace)}
+        self.assertEqual(dict(rows[R28_BULWARK]["held"]), {"frost": 15000, "none": 5000})
+        self.assertTrue(rows[R28_BULWARK]["tank"])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_paladin_auras(self.trace)
+        self.assertIn("Bulwark frost 15 s, none 5 s (tank on a resistance)", out.getvalue())
+        self.assertIn("Justice none 20 s", out.getvalue())
+
+    def test_the_ports_next_leg_walks_on_past_the_fail(self):
+        rules = ab.planner_rules()
+        # the spike fails on the kite patch heading east; a tank patch 10 yd past the walk's end lies behind its
+        # leg west to the gather, so only the walk passes it
+        past = rules["driftReach"] + 10.0
+        patches = [(X - 5.0, Y, False, True, False), (X + past, Y, True, False, False)]
+        world = ab.KiteWorld((X, Y), (X, Y, 3.5, 0, 7.0), 40.0, patches, gather=(X - 30.0, Y))
+        spike = (X, Y, 11.4, 2, 7.0)
+        still = ab.planner_finish(world, rules, 400, 50, (X, Y), 5.0, -1, spike, 50, 0, True)
+        self.assertEqual(still.tank, -1)
+        self.assertTrue(still.kite_patch)
+        walked = ab.planner_finish(world, rules, 400, 50, (X, Y), 5.0, -1, spike, 50, 0, True, heading=(1.0, 0.0))
+        self.assertEqual(walked.tank, 50)
 
 
 if __name__ == "__main__":

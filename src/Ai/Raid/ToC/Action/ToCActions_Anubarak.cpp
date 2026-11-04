@@ -741,7 +741,20 @@ bool AnubarakLustAction::Execute(Event /*event*/)
 
 bool AnubarakDemonicCircleAction::Execute(Event /*event*/)
 {
-    return AnubarakDemonicCircleDue(botAI) && botAI->CastSpell(SPELL_DEMONIC_CIRCLE_SUMMON, bot);
+    if (!AnubarakDemonicCircleDue(botAI))
+        return false;
+
+    // the circle lands at the caster's feet
+    Position spot;
+    if (GetAnubarakCircleSpot(botAI, spot) &&
+        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ANUBARAK_CIRCLE_CENTRE_SLACK / 2.0f)
+        return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_NORMAL, true);
+
+    if (bot->isMoving())
+        bot->StopMoving();
+
+    return botAI->CastSpell(SPELL_DEMONIC_CIRCLE_SUMMON, bot);
 }
 
 bool AnubarakTankPickUpScarabAction::Execute(Event /*event*/)

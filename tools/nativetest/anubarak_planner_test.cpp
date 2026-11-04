@@ -79,7 +79,8 @@ struct Played
     float endS = 0.0f;
 };
 
-// Re-planned every 0.3 s, the kiter walking the plan and the spike chasing it; a planned Hand lands on time
+// Re-planned every 0.3 s, the kiter walking the plan and the spike chasing it. The plan's paladin walks to
+// the catch as the escort does, and its Hand lands on time.
 Played Play(KiteWorld w, Rules const& r = Rules())
 {
     Played out;
@@ -101,6 +102,14 @@ Played Play(KiteWorld w, Rules const& r = Rules())
                     w.hands.erase(it);
                     break;
                 }
+        }
+
+        for (HandOffer& offer : w.hands)
+        {
+            float const d = AnubarakPursuit::Dist(offer.pos, plan.outcome.catchPoint);
+            if (offer.id == plan.outcome.handId && plan.outcome.handS >= 0.0f && d > 10.0f)
+                offer.pos = AnubarakKitePlanner::Detail::Lerp(offer.pos, plan.outcome.catchPoint,
+                                                              std::min(1.0f, r.paladinSpeed * 0.3f / d));
         }
 
         age = plan.kept ? age + 0.3f : 0.3f;
@@ -767,7 +776,123 @@ void HandShortOfTheThirdCostsMore()
     CHECK(std::fabs(last.cost - r.costLastHand) < 0.01f);
 }
 
-// Four usable patches, Hands, an own immunity and a ready boost: the candidates stay bounded
+// 2026-11-04 CD-CH: kites walked onto a patch with a Hand in reach. A spare Hand that carries the kite on to a
+// later patch beats the plain walk; the Hand kept back doesn't, and a second kite with a Hand reaching the
+// emerge spends no patch
+void SpareHandCarriesTheKiteOn()
+{
+    KiteWorld w = Heroic({775.0f, 135.0f}, {745.0f, 170.0f}, {700.0f, 100.0f},
+                         {MakePatch(747.0f, 113.2f, false, 3), MakePatch(720.0f, 150.0f, false, 4)});
+    w.lifeS = 45.0f;
+    KiteWorld plain = w;
+    plain.hands.clear();
+    plain.spareHands = 0;
+    Plan const walk = PlanKite(plain, nullptr, 0.0f, 0.0f);
+    CHECK(walk.valid && walk.outcome.ending == Ending::Patch && Clean(walk.outcome));
+    CHECK(walk.outcome.uncoveredS <= 0.0f);
+
+    Plan const hand = PlanKite(w, nullptr, 0.0f, 0.0f);
+    CHECK(hand.valid && hand.outcome.ending == Ending::PatchHand && Clean(hand.outcome));
+    CHECK(hand.outcome.endS >= walk.outcome.endS + 5.0f);
+
+    KiteWorld kept = w;
+    for (HandOffer& offer : kept.hands)
+        offer.spare = false;
+
+    kept.spareHands = 0;
+    Plan const keep = PlanKite(kept, nullptr, 0.0f, 0.0f);
+    CHECK(keep.valid && keep.outcome.ending == Ending::Patch && keep.outcome.handS < 0.0f);
+
+    KiteWorld second = w;
+    second.reservePatch = true;
+    second.lifeS = 20.0f;
+    Plan const emerge = PlanKite(second, nullptr, 0.0f, 0.0f);
+    CHECK(emerge.valid && emerge.outcome.ending == Ending::Hand && !emerge.outcome.caught);
+}
+
+// A warlock with its circle at the room centre teleports before the catch and runs on to a later patch. No
+// teleport onto a circle out of reach or too little farther off the spike, and level with a Hand the free
+// teleport goes first.
+void TeleportCarriesTheKiteOn()
+{
+    Rules const r;
+    KiteWorld w = Heroic({775.0f, 135.0f}, {745.0f, 170.0f}, {700.0f, 100.0f},
+                         {MakePatch(747.0f, 113.2f, false, 3), MakePatch(720.0f, 150.0f, false, 4)});
+    w.lifeS = 45.0f;
+    w.hands.clear();
+    w.spareHands = 0;
+    Plan const walk = PlanKite(w, nullptr, 0.0f, 0.0f, r);
+    CHECK(walk.valid && walk.outcome.teleportS < 0.0f);
+
+    w.teleport = true;
+    w.circle = {745.0f, 135.0f};
+    Plan const jump = PlanKite(w, nullptr, 0.0f, 0.0f, r);
+    CHECK(jump.valid && jump.outcome.ending == Ending::Patch && Clean(jump.outcome));
+    CHECK(jump.outcome.teleportS >= 0.0f && jump.candidate.teleportTick >= 0);
+    CHECK(jump.outcome.endS >= walk.outcome.endS + 1.0f);
+    size_t const landed = static_cast<size_t>(jump.candidate.teleportTick) + 1;
+    CHECK(AnubarakPursuit::Dist(jump.candidate.track[landed], w.circle) < 0.01f);
+
+    // Held, the plan keeps its jump until the tick it goes
+    Candidate const held = AnubarakKitePlanner::HeldCandidate(jump.candidate, 0.0f, w, r);
+    CHECK(held.teleportTick == jump.candidate.teleportTick);
+
+    Rules shortReach = r;
+    shortReach.teleportRange = 5.0f;
+    CHECK(PlanKite(w, nullptr, 0.0f, 0.0f, shortReach).outcome.teleportS < 0.0f);
+
+    Rules bigGain = r;
+    bigGain.teleportGain = 60.0f;
+    CHECK(PlanKite(w, nullptr, 0.0f, 0.0f, bigGain).outcome.teleportS < 0.0f);
+
+    Outcome teleported;
+    teleported.kitePatch = true;
+    teleported.ending = Ending::Patch;
+    teleported.endS = 20.2f;
+    teleported.cost = r.costPatch;
+    teleported.teleportS = 10.0f;
+    Outcome handed = teleported;
+    handed.ending = Ending::PatchHand;
+    handed.endS = 20.7f;
+    handed.cost = r.costPatch + r.costHand;
+    handed.teleportS = -1.0f;
+    handed.handS = 12.0f;
+    CHECK(AnubarakKitePlanner::Compare(teleported, handed, r) < 0);
+}
+
+// After a fail the spike walks on along its heading through the idle: a tank patch past the end of that walk,
+// behind the spike's way back to the gather, is the kite's hazard all the same
+void DriftOverATankPatch()
+{
+    Rules const r;
+    KiteWorld w = Heroic({735.0f, 135.0f}, {735.0f, 165.0f}, {735.0f, 165.0f}, {MakePatch(720.0f, 135.0f, false, 1)});
+    w.slowFactor = 1.0f;
+    w.hands.clear();
+    w.spike.step = 2;
+    w.spike.speed = AnubarakPursuit::SPEEDS[2];
+    Candidate const in = Into(w, 0, r);
+    Outcome const alone = AnubarakKitePlanner::Judge(in, w, r);
+    CHECK(alone.ending == Ending::Patch && Clean(alone));
+
+    AnubarakPursuit::Spike spike = w.spike;
+    Point before = spike.pos;
+    for (size_t i = 0; i + 1 < in.track.size() && AnubarakPursuit::Dist(spike.pos, w.patches[0].pos) > r.patchReach;
+         ++i)
+    {
+        before = spike.pos;
+        AnubarakPursuit::ChaseTick(spike, in.track[i], static_cast<float>(i) * AnubarakPursuit::TICK_S);
+    }
+
+    // 10 yd past the walk's end: the old restart at the fail and the leg from the new one both pass it 13+ yd off
+    Point const heading = AnubarakKitePlanner::Detail::Toward(before, spike.pos);
+    float const past = r.driftReach + 10.0f;
+    w.patches.push_back(MakePatch(spike.pos.x + heading.x * past, spike.pos.y + heading.y * past, true, 2));
+    Outcome const drift = AnubarakKitePlanner::Judge(in, w, r);
+    CHECK(drift.ending == Ending::Patch);
+    CHECK(drift.tankS >= 0.0f && std::fabs(drift.tankS - drift.endS) < 0.01f);
+}
+
+// Four usable patches, Hands, an own immunity, a ready boost and the teleport: the candidates stay bounded
 void CandidatesStayBounded()
 {
     KiteWorld w = Heroic({775.0f, 135.0f}, {745.0f, 170.0f}, {776.0f, 136.0f},
@@ -776,6 +901,8 @@ void CandidatesStayBounded()
     w.own = true;
     w.readyBoostSpeed = 17.5f;
     w.readyBoostS = 5.0f;
+    w.teleport = true;
+    w.circle = {745.0f, 135.0f};
     for (int i = 0; i < 8; ++i)
         w.bystanders.push_back({745.0f + 5.0f * static_cast<float>(i), 100.0f});
 
@@ -813,6 +940,9 @@ int main()
     PatchEndsACatchWithinOneImpale();
     ReservedPatchGoesLast();
     HandShortOfTheThirdCostsMore();
+    SpareHandCarriesTheKiteOn();
+    TeleportCarriesTheKiteOn();
+    DriftOverATankPatch();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;

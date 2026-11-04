@@ -248,11 +248,23 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
 
     auto const wantsMastery = [&](RaidResistSchool school)
     { return (state.withMastery & RaidResistBit(school)) != 0; };
-    // a kept holder without Aura Mastery gives way to a free paladin with it
-    auto const masteryFree = [&](size_t keeper, RaidResistSchool school)
+    // Lower first: Aura Mastery when wanted, its own strategy that school, its aura duplicated, the cost
+    auto const rank = [&](RaidResistSchool school, size_t i)
+    {
+        Paladin const& paladin = paladins[i];
+        return std::make_tuple(wantsMastery(school) && !paladin.mastery ? 1 : 0,
+                               paladin.strategy == ResistStrategyOf(school) ? 0 : 1,
+                               AuraDuplicated(paladins, used, i) ? 0 : 1, AuraCost(paladin.strategy));
+    };
+
+    // A kept holder gives way to a free paladin ranked lower, mid-fight too: a wipe handed frost to a side
+    // tank, who then ran it instead of Devotion for whole pulls. Only ever toward the cheaper aura, so the
+    // two don't swap back.
+    auto const lowerFree = [&](size_t keeper, RaidResistSchool school)
     {
         for (size_t i = 0; i < paladins.size(); ++i)
-            if (i != keeper && !used[i] && paladins[i].mastery && paladins[i].knows[SchoolIndex(school)])
+            if (i != keeper && !used[i] && paladins[i].knows[SchoolIndex(school)] &&
+                rank(school, i) < rank(school, keeper))
                 return true;
 
         return false;
@@ -268,7 +280,7 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
         for (size_t i = 0; i < paladins.size(); ++i)
         {
             if (!used[i] && paladins[i].knows[index] && paladins[i].player->GetGUID() == state.holder[index] &&
-                (!wantsMastery(school) || paladins[i].mastery || !masteryFree(i, school)))
+                !lowerFree(i, school))
             {
                 next[index] = state.holder[index];
                 used[i] = true;
@@ -283,14 +295,8 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
         if (!open(school) || !next[index].IsEmpty())
             continue;
 
-        auto const rank = [&](size_t i)
-        {
-            Paladin const& paladin = paladins[i];
-            return std::make_tuple(wantsMastery(school) && !paladin.mastery ? 1 : 0,
-                                   paladin.strategy == ResistStrategyOf(school) ? 0 : 1,
-                                   AuraDuplicated(paladins, used, i) ? 0 : 1, AuraCost(paladin.strategy),
-                                   paladin.player->GetGUID());
-        };
+        auto const ranked = [&](size_t i)
+        { return std::tuple_cat(rank(school, i), std::make_tuple(paladins[i].player->GetGUID())); };
 
         size_t best = paladins.size();
         for (size_t i = 0; i < paladins.size(); ++i)
@@ -298,7 +304,7 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
             if (used[i] || !paladins[i].knows[index])
                 continue;
 
-            if (best == paladins.size() || rank(i) < rank(best))
+            if (best == paladins.size() || ranked(i) < ranked(best))
                 best = i;
         }
 

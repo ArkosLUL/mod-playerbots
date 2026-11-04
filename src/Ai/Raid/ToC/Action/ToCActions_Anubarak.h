@@ -233,11 +233,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class AnubarakDemonicCircleAction : public Action
+class AnubarakDemonicCircleAction : public MovementAction
 {
 public:
     AnubarakDemonicCircleAction(PlayerbotAI* botAI, std::string const name = "anubarak demonic circle")
-        : Action(botAI, name) {};
+        : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
