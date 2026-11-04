@@ -141,16 +141,21 @@ void DefineAnubarak(EncounterBuilder& e)
     // the melee stand walks it off the patch, and behind a held burrower is its patch
     e.Block("anubarak melee burrower stand hold", Role::Any, AnubarakMeleeBurrowerStandApplies,
             Family::SetBehind | Family::RearFlank, {"reach melee"});
-    // heroic phase 2: the raid holds its gather, so no walk takes anyone across the spike's run
+    // heroic phase 2: the raid holds its gather, so no walk takes anyone across the spike's run. Flee
+    // stepped casters off every scarab and the gather walked them back; the scarab kite moves a victim.
     e.Block("anubarak gather hold", Role::Any, AnubarakGathers,
-            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
-            {"reach melee", "reach spell", "reach party member to heal"});
-    // healers hold their stand while he is up; reach still walks one to a heal target out of range
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge |
+                Family::Flee,
+            {"reach melee", "reach spell", "reach party member to heal", "anubarak melee burrower stand"});
+    // healers hold their stand while he is up; reach still walks one to a heal target out of range, and the
+    // burrower lead one a burrower is on
     e.Block("anubarak healer stand hold", Role::Heal, AnubarakHealerStandApplies,
-            Family::CombatFormationMove | Family::Follow);
+            Family::CombatFormationMove | Family::Follow | Family::Flee);
     // heroic phase 3: the ranged hold theirs behind the tank patches; reach still walks one to its target
     e.Block("anubarak ranged stand hold", Role::Ranged, AnubarakRangedStandApplies,
-            Family::CombatFormationMove | Family::Follow);
+            Family::CombatFormationMove | Family::Follow | Family::Flee);
+    // the ready node places an idle side tank on its rim, and follow walked it off every second
+    e.Block("anubarak side tank follow hold", Role::Any, AnubarakSideTankHolds, Family::Follow);
     // the escort keeps the kiter in Hand of Protection's reach, whatever its target or heal target
     e.Block("anubarak hop escort hold", Role::Any, IsAnubarakEscort,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,

@@ -74,6 +74,10 @@ constexpr float ANUBARAK_SIDE_TANK_RIM = 7.0f;
 // the 7.5 yd slow
 constexpr float ANUBARAK_MELEE_BURROWER_REACH = 4.5f;
 constexpr float ANUBARAK_MELEE_PATCH_CLEARANCE = 8.0f;
+// Heroic phase 3 waves sit 2.5-3.5 yd into their patch, out of that ring's reach. There melee stand this
+// much inside the burrower's melee range, just past the slow's 7.47 yd.
+constexpr float ANUBARAK_SWARM_MELEE_REACH_MARGIN = 0.25f;
+constexpr float ANUBARAK_SWARM_MELEE_PATCH_CLEARANCE = 7.9f;
 
 // Burrowers a side tank holds before the next one goes to the other side (Spider Frenzy)
 constexpr uint8 ANUBARAK_BURROWERS_PER_SIDE = 2;
@@ -490,25 +494,26 @@ bool GetAnubarakBurrowerLead(PlayerbotAI* botAI, AnubarakBurrowerLead& out);
 // lowest health. The latched one stays while it qualifies and none of those outranks it.
 Creature* GetAnubarakFocusBurrower(Player* bot);
 // This DPS bot's target: a player's skull; gathered melee in heroic phase 2, a scarab within 10 yd; a
-// melee bot, a burrower within 10 yd on a non-tank; him while the push is latched (anub.push: near the
-// submerge, all DPS bots on him would get him under 30%) and the bot isn't capped on him; its side's
-// focus (a melee bot's only with a stand off the patches in its reach); once he's up, a leftover scarab
-// (melee within 10 yd); a ranged bot, the other side's focus; him while selectable; while he's down, the
-// nearest scarab in reach. A focus the bot is capped on is skipped. Null outside the pull, for non-DPS and
-// for a bot on sphere duty.
+// melee bot, a burrower within 10 yd on a non-tank; gathered melee, nothing else; him while the push is
+// latched (anub.push: near the submerge, all DPS bots on him would get him under 30%) and the bot isn't
+// capped on him; heroic phase 3 melee, him while his pace would leave him up 30 s before the Berserk; its
+// side's focus (a melee bot's only with a stand off the patches in its reach); once he's up, a leftover
+// scarab (melee within 10 yd); a ranged bot, the other side's focus; him while selectable; while he's
+// down, the nearest scarab in reach. A focus the bot is capped on is skipped. Null outside the pull, for
+// non-DPS and for a bot on sphere duty.
 Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // A living, selectable burrower within range of at. waiting: only one no tank has held for the settle
 // yet, above the off-Permafrost kill line.
 bool AnubarakBurrowerNear(Player* bot, Position const& at, float range, bool waiting);
-// A floor point within ANUBARAK_MELEE_BURROWER_REACH of the burrower and ANUBARAK_MELEE_PATCH_CLEARANCE
-// from every patch: in his melee reach behind him first, then in his reach, nearest the bot; else the
-// one nearest him. Held per bot while the burrower stays put. False when none is, or no patch is near
-// enough to matter.
+// A floor point on the melee ring round the burrower (ANUBARAK_MELEE_BURROWER_REACH off it and
+// ANUBARAK_MELEE_PATCH_CLEARANCE off every patch, heroic phase 3's ANUBARAK_SWARM_MELEE_*): in his melee
+// reach behind him first, then in his reach, nearest the bot; else the one nearest him. Held per bot while
+// the burrower stays put and in reach. False when none is, or no patch is near enough to matter.
 bool GetAnubarakMeleeBurrowerStand(Player* bot, Creature* burrower, Position& out);
 // A melee DPS bot's current target is a burrower near a patch with a stand off it, so its own walk
 // replaces reach melee, set behind and flank: behind a held burrower is its patch
 bool AnubarakMeleeBurrowerStandApplies(PlayerbotAI* botAI);
-// That, and the bot is out of melee reach or within ANUBARAK_MELEE_PATCH_CLEARANCE of a patch
+// That, and the bot is out of melee reach or inside the ring's clearance of a patch
 bool AnubarakMeleeNeedsBurrowerStand(PlayerbotAI* botAI);
 // A non-tank, unmarked, off grip duty (killing its gripped sphere aside), within Permafrost's slow reach
 bool AnubarakNonTankOnPermafrost(Player* bot);

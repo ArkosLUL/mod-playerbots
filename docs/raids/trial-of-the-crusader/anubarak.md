@@ -191,6 +191,11 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
 | EMERGENCY+1 | `anubarak lust due` → `anubarak lust` | phase 3, `AnubarakLustOpen`, a living unmarked shaman bot, not Sated or Exhausted | `heroism` or `bloodlust` on itself, whatever it has selected: the class trigger wants the boss selected (BY +33 s, 18 s after the burst opened, the DPS shamans on burrowers and Elemena with nothing) |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank, healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate |
+
+No shaman takes Ghost Wolf on the mark: it is outdoors only (Attributes 0x18000 in the server's Spell.dbc,
+no `spell_dbc` row), and the floor is an indoor group of `Nd_Argentcrusadecoliseum_Instance.wmo` (group
+26336, mogp 0x2805 with no 0x8, WMOAreaTable flags 2), checked unconditionally in `Spell::CheckCast`:
+`vmap.enableIndoorCheck` is only logged.
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
 | RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready | `NextTankDefensive` on self, physical only: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26) |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
@@ -201,11 +206,11 @@ No ties, since a tie falls to insertion order:
 | RAID+4.3 | `anubarak scarab kite` → `anubarak kite scarab` | every difficulty, a non-tank bot a selectable scarab within 15 yd is on, unmarked, not the escort, off sphere and grip duty, no dodge held, the scarab without Determination ([scarabs](#how-the-bots-play-it)) | walks a 10 yd step away from it (`anub.scarabkite` `walk`) |
 | RAID+4.2 | `anubarak cleave buff near burrower` → `anubarak drop cleave buff` | a melee DPS bot with Blade Flurry or Sweeping Strikes on and a burrower in melee reach at its area share ([burrower guard](#how-the-bots-play-it)) | cancels the buff |
 | RAID+4 | `anubarak dps target` → `anubarak dps target` | DPS whose `GetAnubarakDpsTarget` pick isn't its current target or its pet's | attacks the pick, pet too |
-| RAID+3.8 | `anubarak melee burrower stand` → `anubarak melee burrower stand` | a melee DPS bot on a burrower near a patch, out of reach, within 8 yd of a patch or 1.5 off its held stand | walks to its stand |
+| RAID+3.8 | `anubarak melee burrower stand` → `anubarak melee burrower stand` | a melee DPS bot on a burrower near a patch, out of reach, within 8 yd of a patch (heroic phase 3 7.9) or 1.5 off its held stand | walks to its stand |
 | RAID+3 | `anubarak burrower needs assist tank` → `anubarak assist tank hold burrower` | a side tank with a burrower to take, not the pickup tank while he is up | picks up, holds it from its rim |
 | RAID+2.5 | `anubarak side tank area threat` → `anubarak side tank area threat` | an unmarked side tank while he is up, a spell passing the [area hit test](#how-the-bots-play-it) | casts it |
 | RAID+2 | `anubarak scarab on raid` → `anubarak tank pick up scarab` | the pickup tank while he is down; an unmarked side tank, not the escort, with no burrower to take and no wave due within 8 s, while he is up (heroic also down); a scarab within 30 yd on a non-tank: heroic side tanks only one on a healer, heroic phase 2's pickup tank only one on itself | taunt (not one on itself), attack |
-| RAID+1.5 | `anubarak side tank ready` → `anubarak side tank ready` | an unmarked side tank with nothing to take, not the pickup tank while he is up, not gathered, not the escort | attacks a scarab on itself, walks to its rim (else spot) |
+| RAID+1.5 | `anubarak side tank ready` → `anubarak side tank ready` | an unmarked side tank with nothing to take, not the pickup tank while he is up, not gathered, not the escort | attacks a scarab on itself, walks to its rim (else spot); `anubarak side tank follow hold` blocks follow for a side tank the whole pull (it traded 3 yd steps with follow every 1-2 s) |
 | RAID+1.2 | `anubarak redirect threat` → `anubarak redirect threat` | a hunter or rogue bot with a [redirect duty](#how-the-bots-play-it), its redirect ready or Misdirection's charges left | Misdirection or Tricks on the tank, then Steady Shot into the dump target |
 | RAID+1 | `anubarak engaged by main tank` → `anubarak main tank hold boss` | the pickup tank while he is up | steps out of Permafrost, else leads him in latched legs onto the anchor (round a patch in the way), or from 65 s onto the submerge spot |
 | RAID+0.5 | `anubarak raid gathers` → `anubarak gather` | heroic phase 2, not the kiter or a side tank with a burrower to hold or take, no dodge held | walks to its gather slot, round any patch; while the way there crosses the spike's path waits, stopping a walk (`wait`) |
@@ -268,7 +273,12 @@ are those spots (`GetAnubarakPrepullSideStand`) and the pickup point 10 yd west 
 129.3). All three lie 8-16 yd from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
 him at 21-23 yd in Z and AA (2026-10-30), before the player. So `LayoutAnubarak` steps each toward the
 centre to 23 + `STAGING_UNPARK` yd off `Locs[17]`: (760.3, 132.4), (760.4, 137.1), (760.7, 128.4),
-navprobe-clean (bot filter, 16/16 at 3 yd). Normal's are already clear. Burrowers walk 64-105 yd from the west exits to
+navprobe-clean (bot filter, 16/16 at 3 yd). Normal's are already clear. Heroic's raid waits on the line
+from `Locs[17]` to the room centre instead of round it: melee 31 yd off it at 0/±25° ((754.9, 134.6),
+(757.3, 121.4), (758.3, 147.6)), just past the tanks and `STAGING_RELEASE_MARGIN`; healers then ranged on
+34 yd at 0/±20/±40/±60° and 40 yd at ±10/±30/±50°, all 16 navprobe-clean (bot filter, z 142.1-142.2, plain
+paths to the anchor). On the room-centre layout CB/CC melee stood 46-48 yd off him at the engage (first
+in reach a median 10.8-15.5 s), ranged 63 yd (15-16 s), healers 61. Burrowers walk 64-105 yd from the west exits to
 them (41-63 to the old centre spots). **Heroic refills follow the spheres left** (`anub.spot0`/`anub.spot1`), from once both sides have
 held a patch: each sphere's home is its nearest spawn (AnubLocs 5-10) at its first sample, and heroic
 never respawns one. After the first pair the four left hover 38-57 yd from the centre, the fixed spots
@@ -299,8 +309,8 @@ centre slides it toward him to 36, when that clears the patches and lies on the 
 the human took him 45 yd off the healers at R and died 10 s in. With no split and a living side tank in
 reach of the centre, as in heroic's submerge drag, only the odd healers by guid slide; the rest stay for
 the side tanks. Heroic, from his 35% in a phase 1, it is behind the tank patches ([phase
-3](#how-the-bots-play-it)). `anubarak healer stand hold` blocks formation and follow; reach spell
-and reach heal stay. In the 2026-10-26 wipes healers stood 13-19 yd from the main tank and trailed the
+3](#how-the-bots-play-it)). `anubarak healer stand hold` blocks formation, follow and flee (CC P3: flee
+ran Tree and Prayer 35-45 yd off it 4-7 times each); reach spell, reach heal and the burrower lead stay. In the 2026-10-26 wipes healers stood 13-19 yd from the main tank and trailed the
 human ([healer engine](../README.md)); side tanks went 15-17 s with no healer in 40 yd.
 
 **A sphere within 12 yd of a side's spot is shot first**, no grip spent. At the pull one always hovers
@@ -556,7 +566,12 @@ fits in the time left at his loss rate since he came up ÷ that share (floor 0.2
 in it stays on its side tank into phase 3. CA P1c went 53.8 → 31.0% in 80 s with 44% of the DPS bots'
 148.5k/s on him; all of it adds 0.52%/s, so it latches at +50 s (39.5%) and crosses about 18 s later,
 phase 3 starting about 6:00 against 7:16.6. At CA's phase 3 pace (0.147%/s) 30% → 0 needs about 204 s,
-so phase 3 has to start by about 6:36 for the 10 min Berserk.
+so phase 3 has to start by about 6:36 for the 10 min Berserk. Heroic's submerge drag waits while the push
+holds and his loss since the latch (the latch's estimate for its first 3 s) still gets him under 29.5% with
+2 s to spare (`PushHoldsDrag`, `ANUBARAK_PUSH_DRAG_MARGIN_S`, `ANUBARAK_PUSH_LIVE_MS`), read every tick, so a
+stalling push drags late (`anub.push` `drag:<s needed>:<s left>`, needed `-` with no loss). In CB and CC
+the drag left 7 and 10 s before phase 3 and walked him 19-32 yd off the anchor into it; the loss since the
+latch (0.54, 0.59%/s) would have held both.
 
 A bot outside the split (a human, one joined since) takes side 0's focus, else side 1's. A side's
 focus (per instance): selectable and under 10%; else **settled**: tanks within 5 yd have held it 4 s,
@@ -579,8 +594,14 @@ at 0.1% in a 2026-10-26 wipe). Shooting only patched ones, side 0's wave 1 lived
 A **melee** bot takes its focus only with a **stand**: a floor point within 4.5 yd of it and 8 from
 every patch centre, out from its nearest patch, turned up to 100°; one in his melee reach (less 1 yd)
 behind him first, then one in his reach, nearest the bot, so the switch to him needs no walk; else the
-one nearest him. Else him, or a scarab while he is down. The stand is held per bot while the burrower
-stays within 1.5 yd of where it stood at the pick: the walk happens once per burrower. With a burrower
+one nearest him. Else him, or a scarab while he is down. Heroic phase 3's ring is the burrower's melee
+range less 0.25 (4.75 yd) and 7.9 off every centre (`ANUBARAK_SWARM_MELEE_*`, `MeleeBurrowerRing`), past
+the leave rule's 7.5: CC's wave 6 sat 2.6-3.3 yd in, so all 8 melee stayed on him 6:01-6:23 while it
+killed Felesta; melee never settle nearer a centre than their goal (CB/CC closest 8.01). Phases 1 and 2
+keep 4.5/8, melee on him there decide the push. The stand is held per bot while the burrower stays within
+1.5 yd of where it stood at the pick and in melee range of it: the walk happens once per burrower. Heroic
+phase 3 melee keep him over their focus while his loss since the swarm (from 10 s in) leaves him alive 30 s
+before the Berserk (`anub.dps` `berserk`): a whole-phase pace, so 8 melee don't swap on each 10 s dip. With a burrower
 within 12.5 yd of a patch as its target, `anubarak melee burrower stand` walks it there, round any
 patch it would cut, and `anubarak melee burrower stand hold` blocks `reach melee`, set behind and flank
 (behind a rim burrower is its patch). Held burrowers sit a median 12.7-16.8 yd from him, so one stand
@@ -882,9 +903,11 @@ planned Hand with its circle in reach.
 R, each on its slot 3 yd round it (`anub.gather`), walking once 6 yd off; the main tank's slot is 6 yd
 off R away from where he went down, the spike's summon 2.5 s in, and it picks up scarabs from there.
 The melee hit him to the submerge (user: the damage is vital) and walk once he is down. `anubarak gather hold` blocks `reach melee`, `reach
-spell`, `reach party member to heal`, set behind, flank, formation, follow and charges meanwhile, so
-melee take the scarabs that come to them and the ranged the burrowers on the patches; the dodge still
-outranks it.
+spell`, `reach party member to heal`, `anubarak melee burrower stand`, set behind, flank, formation,
+follow, flee and charges meanwhile; the dodge, the scarab kite and the burrower lead still outrank it. A
+gathered melee bot's pick is only a scarab or a loose burrower within 10 yd, else none (`anub.dps`
+`none`), so the ranged take the burrowers on the patches: its side's focus walked CC's melee 20 yd out and
+back every ~6 s (P2 1,322 yd), and the class flee stepped gathered casters off every scarab (CC 268 yd).
 
 Kite and dodge break a channel that pins the feet (a pinned move is a no-op, and Impale does
 14-20k), and clear the last-move booking after 500 ms standing still: `MoveTo` refuses a repeat
@@ -1136,8 +1159,8 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   `walk`/`hold`/`none`): in heroic phase 3, all at once, each ranged DPS bot by guid takes a stand from
   the same slots after the healers, within 28 yd of his anchor and 36 of every healer stand, 3 yd off
   every other; none on sphere or battle res duty. `anubarak ranged stand` at `ACTION_RAID + 0.45` (dodge held
-  and Permafrost aside) walks it there; `anubarak ranged stand hold` blocks formation and follow, reach
-  spell stays. In BN's P3 the ranged stood 35-48 yd west of the healers and burrowers killed two.
+  and Permafrost aside) walks it there; `anubarak ranged stand hold` blocks formation, follow and flee,
+  reach spell stays. In BN's P3 the ranged stood 35-48 yd west of the healers and burrowers killed two.
 - **Ranged and healers bring a burrower to its side tank** (user call, 2026-11-02; `anub.lead`
   `walk`/`wait`/`none`): every difficulty, a ranged DPS or healer bot a selectable burrower is on,
   its owner's side tank usable, walks once that tank is over 25 yd off (its 30 yd taunt less 5) to
@@ -1200,6 +1223,10 @@ personal burst is unrestricted.
 
 ## Known gaps
 
+- A side tank under the push's wave can die at the phase 3 edge before any phase 3 rule acts (CB
+  Felesta +4.3 s, saves spent on wave 5).
+- A dead side tank's burrowers walk off the patches onto non-tanks, and under 80% there they burrow back
+  to full, so no focus takes them (CB #2 79 → 97%); a lone side tank can't take four.
 - Side tanks reach phase 3 with their defensives spent: the stack rule fires at any health, every
   last-phase-1 one in BT, BR and BS at his 43-47% (user call, 2026-11-02: no hold). No Anti-Magic Shell
   for them in phase 3, no Rune Tap in `NextTankDefensive`.
@@ -1364,8 +1391,8 @@ personal burst is unrestricted.
 | `coldheal` | Heroic phase 3 healer bot's carrier at risk, its own guid when itself, 0 when none |
 | `mastery` | Heroic phase 3 paladin bot: `cast`, `hold N` (a fresh round, N carriers under the tick), `none` |
 | `focus0`, `focus1` | Each side's focus burrower, 0 when none; kept current under a skull. Per instance. Traces before 2026-10-27 carry one raid-wide `focus` and `focusdue` |
-| `dps` | A DPS bot's pick: `skull`, `loose`, `push` (him, the push latched), `burrower`, `boss`, `capped` (him, the bot capped on its focus; a ranged one on the other side's too), `scarab`, `none` (a sphere shooter too) |
-| `push` | Written once per phase 1 by the bot whose read latched it: `on:<s needed>:<s left>` |
+| `dps` | A DPS bot's pick: `skull`, `loose`, `push` (him, the push latched), `berserk` (him, heroic phase 3 melee behind the Berserk), `burrower`, `boss`, `capped` (him, the bot capped on its focus; a ranged one on the other side's too), `scarab`, `none` (a sphere shooter and a gathered melee bot too) |
+| `push` | Written once per phase 1 by the bot whose read latched it: `on:<s needed>:<s left>`; then `drag:<s needed>:<s left>` once heroic's submerge drag leaves though it holds |
 | `kitespent` | Heroic: kite patches the spike took this submerge, written by the bot whose read saw one go |
 | `scarabkite` | A bot a scarab within 15 yd is on, only then: `walk`, `hold` (Determination), `none` |
 | `topup` | A warlock or mage bot from his 40% to `Swarm`: `tap`, `evocation`, `none` |
@@ -1549,8 +1576,12 @@ any patch it passes within 11.5 yd (BM 1:22 Vanish spent side 1's tank patch +1.
 +4.1 s, BL 1:39 #576 +2.6 s); summed per pull. `--healers` each healer's mana at phase 3's start and
 30 s in, and its Divine Plea, Innervate (with target) and Hymn of Hope casts by phase. `--burrowers`
 per melee bot the seconds on a burrower no tank within 5 yd held, by `anub.dps` (BK-BN 14-36 s, about
-70% `loose`). `--dps` per phase 1 its first `push` with his health and seconds left, and whether phase 3
-or a submerge ended it. `--burrowers` `anub.dps` `capped` rows per ranged bot. `--spike` per submerge
+70% `loose`). `--dps` per phase 1 its first `push` with his health and seconds left, the submerge drag
+after it with its `drag` row, and whether phase 3 or a submerge ended it. `--swings` per phase, role and
+move pair the walks to one goal, 8+ yd off to another and back within 5 yd inside 15 s, with yards (CC P2
+melee gather/stand 47, P1b side tank ready/follow 42). `--pull` per role the bots' median yards from him at
+the engage and seconds to a target in reach. `--burrowers` per heroic phase 3 focus pick its depth from
+the nearest centre, the phase 3 ring's reach and its side's melee on it. `--burrowers` `anub.dps` `capped` rows per ranged bot. `--spike` per submerge
 the most `kitespent`, over 1 before the third flagged, and each Hand of Protection with its caster's
 cooldown off `hands` (CA: Holylight 4:00.7 180 s, Bulwark 6:57.2 300 s). `--healers` per warlock and
 mage bot its mana at phase 3's start and 30 s in, and its Life Taps and Evocations from his 40%.
@@ -1562,7 +1593,11 @@ Light's uptime on him read off the casts (a creature aura, never recorded: 20 s 
 paladin's next judgement), each paladin's judgements, `judge` rows, and each shaman's water totem at
 phase 3's start and 10 s in. Baseline, the 2026-11-03 25H pulls on `9f9731e30`: BZ reset at 1:24.1
 (Elemena and Felesta dead to burrowers); CA phase 1s 25.3/20.7/22.8% (P1c to 31.0%), phase 3 from 30.1%
-at 7:16.6 for 118 s, wipe 9:14.7 at 12.7%; warlocks Life Tap 8 each from his 40% at 5:40.8. Baseline, the 2026-10-27 25H wipes I,
+at 7:16.6 for 118 s, wipe 9:14.7 at 12.7%; warlocks Life Tap 8 each from his 40% at 5:40.8. Baseline, the
+2026-11-04 25H pulls on `45e2f6963`, `649_54_anub-arak_…`: CB `1793794923` push `on:21:29` at 42.4%, phase 3
+from 30.1% at 5:58.5, wipe 7:40.0 at 21.1%; CC `1793795524` `on:28:29` at 43.7%, phase 3 at 5:59.9, wipe
+7:33.6 at 12.8%; both wipes burrowers after a side tank fell, phase 3 pace 0.089 and 0.184%/s against the
+0.125 the Berserk needs. Baseline, the 2026-10-27 25H wipes I,
 J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
 bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
 Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K

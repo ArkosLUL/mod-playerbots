@@ -172,6 +172,10 @@ constexpr uint32 ANUBARAK_PUSH_SAMPLE_MS = 1000;
 constexpr float ANUBARAK_PUSH_TARGET_PCT = 29.5f;
 constexpr float ANUBARAK_PUSH_DISCOUNT = 0.75f;
 constexpr float ANUBARAK_PUSH_SHARE_FLOOR = 0.25f;
+// Heroic's submerge drag waits while his loss since the push latched still gets him under TARGET with
+// DRAG_MARGIN to spare. The latch's own estimate stands in for the first LIVE_MS.
+constexpr float ANUBARAK_PUSH_DRAG_MARGIN_S = 2.0f;
+constexpr uint32 ANUBARAK_PUSH_LIVE_MS = 3000;
 // Phase 3's lust and burst wait for the burrowers up at its start to die, at most this long
 constexpr uint32 ANUBARAK_SWARM_BURST_WAIT_MS = 15000;
 // Heroic phase 3: a wave is left to the side tanks only while he'd die within this at the raid's pace over
@@ -181,6 +185,11 @@ constexpr uint32 ANUBARAK_SWARM_TTD_WINDOW_MS = 10000;
 constexpr uint32 ANUBARAK_SWARM_TTD_MIN_MS = 2000;
 constexpr uint32 ANUBARAK_SWARM_HEALTH_SAMPLE_MS = 1000;
 constexpr uint32 ANUBARAK_SWARM_WAVE_READ_MS = 2000;
+// He goes Berserk 10 min into the pull. Heroic phase 3 melee stay on him while, at his loss since the swarm,
+// he'd still be up MARGIN before it. Read from ANUBARAK_SWARM_TTD_WINDOW_MS into the swarm, a whole-phase
+// pace, so 8 melee don't swap sides every time the last 10 s dip.
+constexpr uint32 ANUBARAK_BERSERK_MS = 600000;
+constexpr float ANUBARAK_SWARM_BERSERK_MARGIN_S = 30.0f;
 
 // The floor is about 60 yd round the room centre. The Web Door is 83 yd out, and anyone who never
 // landed is still up near z 395.
@@ -564,6 +573,7 @@ struct AnubarakState
     bool swarm = false;
     // Heroic phase 3's burst waits on the burrowers alive when the swarm latched
     uint32 swarmMs = 0;
+    float swarmHpPct = 30.0f;
     std::unordered_set<ObjectGuid> swarmBurrowers;
     // Heroic phase 3: his health about once a second over the last ANUBARAK_SWARM_TTD_WINDOW_MS, and whether
     // the burrowers up since the swarm are left to the side tanks, read as each wave comes up and again
@@ -578,6 +588,10 @@ struct AnubarakState
     // Once a second while he's up, until the push latches. Cleared by the submerge and the swarm.
     std::deque<PushSample> pushSamples;
     bool push = false;
+    // Read only while push holds: the latch time, his health then and the latch's loss a second
+    uint32 pushMs = 0;
+    float pushHpPct = 100.0f;
+    float pushPerS = 0.0f;
     uint32 submergedMs = 0;
     // Submerges this pull: heroic's first two keep a kite patch and spare Hands for the third
     uint32 submerges = 0;
@@ -1646,6 +1660,19 @@ float SwarmTimeToDieS(AnubarakState const& state)
     return static_cast<float>(lastHealth) / perS;
 }
 
+bool SwarmBerserkBehind(AnubarakState const& state, Creature* boss, uint32 now)
+{
+    uint32 const since = getMSTimeDiff(state.swarmMs, now);
+    if (!state.swarm || since < ANUBARAK_SWARM_TTD_WINDOW_MS)
+        return false;
+
+    float const health = boss->GetHealthPct();
+    float const perS = (state.swarmHpPct - health) * IN_MILLISECONDS / since;
+    float const berserkLeftS =
+        static_cast<float>(static_cast<int32>(state.pullMs + ANUBARAK_BERSERK_MS - now)) / IN_MILLISECONDS;
+    return perS <= 0.0f || health / perS > berserkLeftS - ANUBARAK_SWARM_BERSERK_MARGIN_S;
+}
+
 // Heroic phase 3: samples his health once a second, and reads whether the burrowers up since the swarm are
 // left to the side tanks as a wave comes up and every ANUBARAK_SWARM_WAVE_READ_MS while one lives. Read
 // again, a wave left alone still becomes the focus once his health loss stalls.
@@ -1739,6 +1766,9 @@ void ReadPush(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
         return;
 
     state.push = true;
+    state.pushMs = now;
+    state.pushHpPct = health;
+    state.pushPerS = allOnPerS;
     RaidObs::NoteDerived(bot, "anub.push",
                          "on:" + std::to_string(std::lround(neededS)) + ":" + std::to_string(std::lround(leftS)));
 }
@@ -1779,6 +1809,7 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
         {
             state->swarm = true;
             state->swarmMs = now;
+            state->swarmHpPct = boss->GetHealthPct();
             for (auto const& seen : state->exits)
                 if (Creature* burrower = ResolveCreature(bot, seen.first); burrower && burrower->IsAlive())
                     state->swarmBurrowers.insert(seen.first);
@@ -4649,22 +4680,35 @@ Unit* NoteDpsPick(Player* bot, Unit* pick, char const* branch)
     return pick;
 }
 
-// A melee bot anywhere in reach of a burrower this far from every patch is out of the slow
-bool BurrowerNearPatch(Creature* burrower, std::vector<Position> const& patches)
+struct MeleeRing
 {
-    return std::any_of(patches.begin(), patches.end(), [burrower](Position const& patch)
-                       {
-                           return Dist2d(burrower->GetPosition(), patch) <
-                                  ANUBARAK_MELEE_PATCH_CLEARANCE + ANUBARAK_MELEE_BURROWER_REACH;
-                       });
+    float reach;
+    float clearance;
+};
+
+// Phases 1 and 2 keep the wider ring, since melee on him there decide the push
+MeleeRing MeleeBurrowerRing(Player* bot, AnubarakState const& state, Unit const* burrower)
+{
+    if (state.phaseValue == AnubarakPhase::Swarm && AnubarakHeroic(bot))
+        return {bot->GetMeleeRange(burrower) - ANUBARAK_SWARM_MELEE_REACH_MARGIN,
+                ANUBARAK_SWARM_MELEE_PATCH_CLEARANCE};
+
+    return {ANUBARAK_MELEE_BURROWER_REACH, ANUBARAK_MELEE_PATCH_CLEARANCE};
 }
 
-// Points ANUBARAK_MELEE_BURROWER_REACH round the burrower, straight out from its nearest patch and turned
-// 20 deg at a time up to 100, clear of the patches. One in his melee reach behind him first, then one in
-// his reach, the nearest the bot of those, so a switch to him needs no walk; else the one nearest him.
-// floorChecked asks the mesh too.
-bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> const& patches, bool floorChecked,
-                        Position& out)
+// A melee bot anywhere in reach of a burrower this far from every patch is out of the slow
+bool BurrowerNearPatch(Creature* burrower, std::vector<Position> const& patches, MeleeRing const& ring)
+{
+    return std::any_of(patches.begin(), patches.end(), [burrower, &ring](Position const& patch)
+                       { return Dist2d(burrower->GetPosition(), patch) < ring.clearance + ring.reach; });
+}
+
+// Points ring.reach round the burrower, straight out from its nearest patch and turned 20 deg at a time up
+// to 100, clear of the patches. One in his melee reach behind him first, then one in his reach, the
+// nearest the bot of those, so a switch to him needs no walk; else the one nearest him. floorChecked asks
+// the mesh too.
+bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> const& patches, MeleeRing const& ring,
+                        bool floorChecked, Position& out)
 {
     Creature* boss = GetAnubarak(bot);
     if (boss && boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
@@ -4683,11 +4727,13 @@ bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> c
     float const length = Length(away);
     away = length > 0.1f ? Vec2{away.x / length, away.y / length} : Vec2{1.0f, 0.0f};
 
+    // the floor check may shift a point, never out of melee range
+    float const outer = std::min(ring.reach + 0.5f, bot->GetMeleeRange(burrower));
     auto const clear = [&](Position const& point)
     {
-        return Dist2d(point, at) <= ANUBARAK_MELEE_BURROWER_REACH + 0.5f &&
-               std::none_of(patches.begin(), patches.end(), [&point](Position const& patch)
-                            { return Dist2d(point, patch) < ANUBARAK_MELEE_PATCH_CLEARANCE; });
+        return Dist2d(point, at) <= outer &&
+               std::none_of(patches.begin(), patches.end(), [&point, &ring](Position const& patch)
+                            { return Dist2d(point, patch) < ring.clearance; });
     };
 
     float const bossReach = boss ? bot->GetMeleeRange(boss) - ANUBARAK_MELEE_BOSS_REACH_SLACK : 0.0f;
@@ -4702,7 +4748,7 @@ bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> c
     static float const turns[] = {0.0f, 20.0f, -20.0f, 40.0f, -40.0f, 60.0f, -60.0f, 80.0f, -80.0f, 100.0f, -100.0f};
     for (float degrees : turns)
     {
-        Position const raw = Offset(at, Rotate(away, degrees * ANUBARAK_DEG_TO_RAD), ANUBARAK_MELEE_BURROWER_REACH);
+        Position const raw = Offset(at, Rotate(away, degrees * ANUBARAK_DEG_TO_RAD), ring.reach);
         if (!clear(raw))
             continue;
 
@@ -4736,8 +4782,10 @@ bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> c
 bool MeleeReachesBurrower(Player* bot, AnubarakState const& state, Creature* burrower)
 {
     std::vector<Position> const patches = PatchPositions(bot, state);
+    MeleeRing const ring = MeleeBurrowerRing(bot, state, burrower);
     Position stand;
-    return !BurrowerNearPatch(burrower, patches) || MeleeBurrowerStand(bot, burrower, patches, false, stand);
+    return !BurrowerNearPatch(burrower, patches, ring) ||
+           MeleeBurrowerStand(bot, burrower, patches, ring, false, stand);
 }
 
 // The two sides' spots: a latched patch, else the side's spot off the other one. False with neither
@@ -5209,6 +5257,28 @@ static bool FarSubmergeSpot(Player* bot, Creature* boss, AnubarakState const& st
     return false;
 }
 
+// Phase 3 starts on the anchor if the push gets him under 30% before he submerges, so no drag while it
+// still does. Read every tick, so a push that stalls still drags, just late.
+static bool PushHoldsDrag(Player* bot, AnubarakState const& state, Creature* boss, uint32 now)
+{
+    if (!state.push || !boss)
+        return false;
+
+    float const health = boss->GetHealthPct();
+    uint32 const since = getMSTimeDiff(state.pushMs, now);
+    float const perS =
+        since >= ANUBARAK_PUSH_LIVE_MS ? (state.pushHpPct - health) * IN_MILLISECONDS / since : state.pushPerS;
+    float const neededS = perS > 0.0f ? (health - ANUBARAK_PUSH_TARGET_PCT) / perS : -1.0f;
+    float const leftS = SurfacedLeftS(state, now);
+    if (health <= ANUBARAK_PUSH_TARGET_PCT || (neededS >= 0.0f && neededS + ANUBARAK_PUSH_DRAG_MARGIN_S <= leftS))
+        return true;
+
+    RaidObs::NoteDerived(bot, "anub.push",
+                         "drag:" + (neededS >= 0.0f ? std::to_string(std::lround(neededS)) : std::string("-")) + ":" +
+                             std::to_string(std::lround(leftS)));
+    return false;
+}
+
 bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -5327,7 +5397,8 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
         float const walkS = boss ? Dist2d(boss->GetPosition(), state->submergeSpot) / ANUBARAK_SUBMERGE_DRAG_SPEED +
                                        ANUBARAK_SUBMERGE_DRAG_MARGIN_S
                                  : 0.0f;
-        if (SurfacedLeftS(*state, now) >= std::min(ANUBARAK_SUBMERGE_DRAG_LEAD_S, walkS))
+        if (SurfacedLeftS(*state, now) >= std::min(ANUBARAK_SUBMERGE_DRAG_LEAD_S, walkS) ||
+            PushHoldsDrag(bot, *state, boss, now))
             return false;
 
         state->submergeDragStarted = true;
@@ -6437,9 +6508,11 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
     if (Unit* skull = GetToCHumanSkull(botAI, &IsAnubarakSkullTarget))
         return NoteDpsPick(bot, skull, "skull");
 
-    // Gathered melee hold their place, so they take the scarabs that come to the raid and leave the
-    // burrowers on the patches to the ranged
-    if (state->phaseValue == AnubarakPhase::Submerged && melee && AnubarakGathers(botAI))
+    // Gathered melee hold their place, so they take only the scarabs and loose burrowers that come to the
+    // raid and leave the burrowers on the patches to the ranged. Their side's focus would walk them out
+    // and the gather back, every few seconds.
+    bool const gathered = melee && AnubarakGathers(botAI);
+    if (gathered)
         if (Creature* scarab = NearestDpsScarab(bot, *state, ANUBARAK_GATHER_MELEE_SCARAB))
             return NoteDpsPick(bot, scarab, "scarab");
 
@@ -6447,10 +6520,18 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
         if (Creature* loose = LooseBurrowerNear(bot, *state))
             return NoteDpsPick(bot, loose, "loose");
 
+    if (gathered)
+        return NoteDpsPick(bot, nullptr, "none");
+
     // A bot capped on him helps more on the burrowers
     if (state->push && state->phaseValue == AnubarakPhase::Surface && !AnubarakThreatCapped(bot))
         if (Creature* him = GetAnubarak(bot); him && !him->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
             return NoteDpsPick(bot, him, "push");
+
+    // the ranged still take the waves
+    if (own && melee && state->phaseValue == AnubarakPhase::Swarm && AnubarakHeroic(bot))
+        if (Creature* him = GetAnubarak(bot); him && SwarmBerserkBehind(*state, him, getMSTime()))
+            return NoteDpsPick(bot, him, "berserk");
 
     if (own)
         return NoteDpsPick(bot, own, "burrower");
@@ -6484,21 +6565,23 @@ bool GetAnubarakMeleeBurrowerStand(Player* bot, Creature* burrower, Position& ou
         return false;
 
     std::vector<Position> const patches = PatchPositions(bot, *state);
-    if (!BurrowerNearPatch(burrower, patches))
+    MeleeRing const ring = MeleeBurrowerRing(bot, *state, burrower);
+    if (!BurrowerNearPatch(burrower, patches, ring))
         return false;
 
     // Held, so the bot walks once per burrower and not after every turn he makes
     auto const held = state->meleeStands.find(bot->GetGUID());
     if (held != state->meleeStands.end() && held->second.burrower == burrower->GetGUID() &&
         Dist2d(burrower->GetPosition(), held->second.at) <= ANUBARAK_MELEE_STAND_DRIFT &&
-        std::none_of(patches.begin(), patches.end(), [&held](Position const& patch)
-                     { return Dist2d(held->second.stand, patch) < ANUBARAK_MELEE_PATCH_CLEARANCE; }))
+        Dist2d(burrower->GetPosition(), held->second.stand) <= bot->GetMeleeRange(burrower) &&
+        std::none_of(patches.begin(), patches.end(), [&held, &ring](Position const& patch)
+                     { return Dist2d(held->second.stand, patch) < ring.clearance; }))
     {
         out = held->second.stand;
         return true;
     }
 
-    if (!MeleeBurrowerStand(bot, burrower, patches, true, out))
+    if (!MeleeBurrowerStand(bot, burrower, patches, ring, true, out))
         return false;
 
     state->meleeStands[bot->GetGUID()] = MeleeStandLatch{burrower->GetGUID(), burrower->GetPosition(), out};
@@ -6518,8 +6601,9 @@ bool AnubarakMeleeBurrowerStandApplies(PlayerbotAI* botAI)
         return false;
 
     std::vector<Position> const patches = PatchPositions(bot, *state);
+    MeleeRing const ring = MeleeBurrowerRing(bot, *state, burrower);
     Position stand;
-    return BurrowerNearPatch(burrower, patches) && MeleeBurrowerStand(bot, burrower, patches, false, stand);
+    return BurrowerNearPatch(burrower, patches, ring) && MeleeBurrowerStand(bot, burrower, patches, ring, false, stand);
 }
 
 bool AnubarakMeleeNeedsBurrowerStand(PlayerbotAI* botAI)
@@ -6531,8 +6615,9 @@ bool AnubarakMeleeNeedsBurrowerStand(PlayerbotAI* botAI)
     Unit* burrower = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     AnubarakState const* state = ReadPhase(botAI);
     std::vector<Position> const patches = PatchPositions(bot, *state);
-    bool const clear = std::none_of(patches.begin(), patches.end(), [bot](Position const& patch)
-                                    { return Dist2d(bot->GetPosition(), patch) < ANUBARAK_MELEE_PATCH_CLEARANCE; });
+    float const clearance = MeleeBurrowerRing(bot, *state, burrower).clearance;
+    bool const clear = std::none_of(patches.begin(), patches.end(), [bot, clearance](Position const& patch)
+                                    { return Dist2d(bot->GetPosition(), patch) < clearance; });
     if (!clear || !bot->IsWithinMeleeRange(burrower))
         return true;
 

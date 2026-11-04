@@ -30,7 +30,8 @@ healers' phase 3 mana and mana cooldowns and the melee on a burrower no tank hol
 closing on a spike no faster than itself and a tank's form or stance lost while he is up, a twenty-second the push
 per phase 1, a ranged bot's capped rows, the kite patches and Hands per submerge, the warlock and mage top ups, a
 scarab victim's stacks and kite seconds and phase 3's heals by kind, Light's uptime and water totems, the first
-one again phase 3's race against the swarm and the bot tanks at the engage, and the shared fixture shows every
+one again phase 3's race against the swarm and the bot tanks at the engage, a twenty-third the move swings, the
+opening walk, the submerge drag after the push and phase 3's melee ring reach, and the shared fixture shows every
 section reads empty on a trace that is not Anub'arak rather than raising. The kite planner's port is checked against the native
 test's cases that need no Hand.
 """
@@ -5604,9 +5605,10 @@ class SustainPull(unittest.TestCase):
     def test_the_push_reads_per_phase_1_with_his_health_and_what_ended_it(self):
         self.assertEqual([(row["label"], row["txt"], row["hp"], row["then"]) for row in ab.push_reads(self.trace)],
                          [("P1", None, None, "submerged"), ("P1b", "on:3:5", 36.0, "phase 3")])
-        self.assertIn("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, and"
-                      " what ended the phase: P1 no push, submerged; P1b on:3:5 at 36.0%, 5 s to its end, phase 3\n",
-                      self.text(ab.show_dps))
+        self.assertIn("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, the"
+                      " submerge drag after it\n  (drag:<seconds needed>:<seconds left> as it left anyway), and what"
+                      " ended the phase: P1 no push, submerged; P1b on:3:5 at 36.0%, 5 s to its end, no drag after"
+                      " it, phase 3\n", self.text(ab.show_dps))
 
     def test_only_a_ranged_bots_capped_rows_count(self):
         self.assertEqual(ab.ranged_capped(self.trace), {RFHUNT: 2})
@@ -5656,6 +5658,122 @@ class SustainPull(unittest.TestCase):
                       "  anub.judge hand-overs: 0:52.000 Justice:90, 1:05.000 Holylight:70\n"
                       "  water totem per shaman at phase 3's start and 10 s in: Elemena Mana Spring Totem > Healing"
                       " Stream Totem\n", text)
+
+
+LPTANK, LPMELEE, LPSWING, LPRANGED, LPHEAL = range(9971, 9976)
+LPBOSS = CREATURE | 2301
+LPSHALLOW = CREATURE | 2302
+LPDEEP = CREATURE | 2303
+LP_PATCHES = ((X + 10.0, Y + 12.0), (X + 10.0, Y - 12.0))
+LP_BOSS_SPOT = (X + 30.0, Y)
+
+
+def loop_snap(when: int) -> dict:
+    """The melee bot walks 7 yd/s at him from 30 yd, reaching 6 yd at 3.5 s; the ranged bot stands 40 yd off
+    and the healer has no target. In phase 3 the melee bot is on the shallow burrower, 3.3 yd out of its
+    patch, the other one is 2.6 yd into the other patch."""
+    melee_x = X + min(max(when, 0) / 1000 * 7.0, 24.5)
+    units = [[LPTANK, *LP_BOSS_SPOT, Z, 0.0, 100.0, 100.0, LPBOSS, 0, 0, 0, 0],
+             [LPMELEE, melee_x, Y, Z, 0.0, 100.0, 100.0, LPSHALLOW if when >= 61000 else LPBOSS, 0, 0, 0, 0],
+             [LPSWING, X - 20.0, Y, Z, 0.0, 100.0, 100.0, LPBOSS, 0, 0, 0, 0],
+             [LPRANGED, X - 10.0, Y, Z, 0.0, 100.0, 100.0, LPBOSS, 0, 0, 0, 0],
+             [LPHEAL, X, Y + 5.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [LPBOSS, *LP_BOSS_SPOT, Z, 0.0, 100.0 - max(when, 0) / 1000, 0.0, LPTANK, 0, 0, 0, 0]]
+    if when >= 60000:
+        units.append([LPSHALLOW, LP_PATCHES[0][0] + 3.3, LP_PATCHES[0][1], Z, 0.0, 90.0, 0.0, LPTANK, 0, 0, 0, 0])
+        units.append([LPDEEP, LP_PATCHES[1][0] + 2.6, LP_PATCHES[1][1], Z, 0.0, 90.0, 0.0, LPTANK, 0, 0, 0, 0])
+    hz = [[ab.PERMAFROST[3], x, y, PATCH_Z, 6.0, 1] for x, y in LP_PATCHES]
+    return {"t": when, "e": "snap", "u": units, "hz": hz}
+
+
+def loop_pull() -> list[dict]:
+    """A 25H pull: P1 to 20 s, P2 to 40 s, P1b to 60 s, phase 3 to 80 s. The P1 push holds with no drag after
+    it; the P1b one drags anyway at 50 s. In P2 a melee bot swings between its gather and a burrower stand 20 yd
+    off, a second gather row within 4 yd of the first being the same goal."""
+    gather, stand = "anubarak gather", "anubarak melee burrower stand"
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790800000000, "map": ab.MAP_TOC, "inst": 28, "diff": 3, "boss": "anub-arak",
+         "roster": [{"g": LPTANK, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+                    {"g": LPMELEE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+                    {"g": LPSWING, "n": "Angry", "r": "melee", "c": 1, "h": 0},
+                    {"g": LPRANGED, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+                    {"g": LPHEAL, "n": "Prayer", "r": "heal", "c": 5, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": -500, "e": "unit", "g": LPBOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        {"t": 60000, "e": "unit", "g": LPSHALLOW, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 60000, "e": "unit", "g": LPDEEP, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        *(note(when, LPTANK, "anub.phase", value) for when, value in ((0, 1), (20000, 2), (40000, 1), (60000, 3))),
+        note(14000, LPRANGED, "anub.push", "on:2:6"),
+        note(45000, LPRANGED, "anub.push", "on:3:5"),
+        note(50000, LPTANK, "anub.push", "drag:9:12"),
+        note(50000, LPTANK, "anub.pickup", "submerge"),
+        note(61000, LPMELEE, "anub.focus0", LPSHALLOW),
+        note(61000, LPMELEE, "anub.focus1", LPDEEP),
+        move_row(21000, LPSWING, (X - 20.0, Y), gather),
+        move_row(21500, LPSWING, (X - 19.0, Y), gather),
+        move_row(24000, LPSWING, (X, Y), stand),
+        move_row(27000, LPSWING, (X - 20.0, Y + 1.0), gather),
+        move_row(30000, LPSWING, (X, Y), stand),
+        move_row(33000, LPSWING, (X - 20.0, Y), gather),
+        {"t": 80000, "e": "end", "out": "wipe"},
+    ]
+    records += [loop_snap(when) for when in range(-500, 80001, 500)]
+    return records
+
+
+class LoopPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_28_anub-arak_1790800000.ndjson", loop_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace)
+        return out.getvalue()
+
+    def test_a_swing_is_a_goal_another_8_yd_off_and_the_first_again(self):
+        rows = {row["pair"]: row for row in ab.swing_rows(self.trace)}
+        self.assertEqual({pair: (row["phase"], row["role"], row["swings"], dict(row["bots"]))
+                          for pair, row in rows.items()},
+                         {("anubarak gather", "anubarak melee burrower stand"): ("P2", "melee", 2, {LPSWING: 2}),
+                          ("anubarak melee burrower stand", "anubarak gather"): ("P2", "melee", 1, {LPSWING: 1})})
+        # twice the 20 yd gap, then twice the 20.02 yd one from the gather a yard north
+        self.assertAlmostEqual(rows[("anubarak gather", "anubarak melee burrower stand")]["yards"],
+                               40.0 + 2.0 * math.hypot(20.0, 1.0), places=3)
+        text = self.text(ab.show_swings)
+        self.assertIn("    P2    melee     2     80 yd  anubarak gather | anubarak melee burrower stand: Angry 2\n", text)
+        self.assertNotIn("anubarak melee burrower stand | anubarak gather", text)
+
+    def test_the_opening_walk_per_role(self):
+        walk = ab.opening_walk(self.trace)
+        self.assertEqual({role: (row["bots"], round(row["yards"], 1), row["reach"], row["never"])
+                          for role, row in walk.items()},
+                         {"tank": (1, 0.0, 0, 0), "melee": (2, 40.0, 3500, 1), "ranged": (1, 40.0, None, 1),
+                          "heal": (1, 30.4, None, 1)})
+        self.assertIn("over those in reach within 40 s: tank 1 bot(s) 0.0 yd, 0.0 s; heal 1 bot(s) 30.4 yd, never;"
+                      " melee 2 bot(s) 40.0 yd, 3.5 s, 1 never; ranged 1 bot(s) 40.0 yd, never\n",
+                      self.text(ab.show_pull))
+
+    def test_the_push_line_names_the_drag_after_it(self):
+        self.assertEqual([(row["label"], row["txt"], row["drag"], row["dragtxt"]) for row in ab.push_reads(self.trace)],
+                         [("P1", "on:2:6", None, None), ("P1b", "on:3:5", 50000, "drag:9:12")])
+        self.assertIn("P1 on:2:6 at 86.0%, 6 s to its end, no drag after it, submerged; P1b on:3:5 at 55.0%, 15 s"
+                      " to its end, drag left 10 s before its end (drag:9:12), phase 3\n", self.text(ab.show_dps))
+
+    def test_phase_3_focus_depth_ring_reach_and_melee_on_it(self):
+        rows = [(row["t"], row["side"], row["guid"], round(row["depth"], 1), row["reach"], row["peak"],
+                 row["median"]) for row in ab.swarm_focus_reach(self.trace)]
+        self.assertEqual(rows, [(61000, 0, LPSHALLOW, 3.3, True, 1, 1), (61000, 1, LPDEEP, 2.6, False, 0, 0)])
+        text = self.text(ab.show_burrowers)
+        self.assertIn(f"     1:01.000 #{LPSHALLOW & 0xFFFFFFFF}      side 0  3.3 yd  reach  melee 1 peak, 1 median\n",
+                      text)
+        self.assertIn(f"     1:01.000 #{LPDEEP & 0xFFFFFFFF}      side 1  2.6 yd  deep   melee 0 peak, 0 median\n", text)
 
 
 class EveryView(unittest.TestCase):

@@ -5,7 +5,8 @@
     anub_arak.py <file> --phases     anub.phase spans, his health at each edge, deaths per phase
     anub_arak.py <file> --pull       who was locked out or never landed, stage 9 to the pull, and at the
                                      engage the player nearest his wait point and each bot tank's yards from
-                                     it, one inside his 23 yd aggro flagged
+                                     it, one inside his 23 yd aggro flagged; per role the bots' median yards
+                                     from him at the engage and seconds to a target in reach
     anub_arak.py <file> --spike      every Pursued by Anub'arak window: kiter, kite branch, outcome, protection,
                                      time in each kite stage, the kiter's boosts, its own immunities and
                                      whether anub.protect asked for them, a kiter marked inside a patch's slow,
@@ -95,7 +96,9 @@
                                      within 25 yd flagged, the burrower guard's Bladestorm vetoes and the burrower
                                      threat cap's per bot; anub.dps capped rows per ranged bot; per melee bot the
                                      seconds it targeted a burrower no tank within 5 yd held, by its anub.dps
-                                     value then
+                                     value then; heroic, per phase 3 focus pick its yards from the nearest
+                                     Permafrost centre, whether the phase 3 melee ring round it has a point off
+                                     every patch, and its side's melee bots on it, peak and median
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
@@ -107,7 +110,8 @@
     anub_arak.py <file> --dps        per phase and DPS role, bots only: samples by target kind, moving, yards
                                      walked by move order and damage by target kind; his health lost per
                                      phase 1, under 20% flagged; per phase 1 its first anub.push with his health
-                                     and the seconds left then, and whether phase 3 or a submerge ended it;
+                                     and the seconds left then, the submerge drag (anub.pickup submerge) after
+                                     it with its anub.push drag row, and whether phase 3 or a submerge ended it;
                                      anub.dps rows per role; each anub.dside group per wave, and melee walks
                                      across the midline between the side spots
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust; per 5 s his health, the median
@@ -174,6 +178,9 @@
                                      kite did, and for the fresh-spike kites, base speed and over 2 s to the
                                      replay's first event, the patch ends under 10 s, the tank patch passes and
                                      the raid passes, real against replayed
+    anub_arak.py <file> --swings     per phase, role and move pair, bots walking to one move goal, then 8+ yd off
+                                     to another and back within 5 yd of the first inside 15 s: the swings, twice
+                                     the gap in yards, and the bots with the most
 
 The banner names the probes the pull never wrote, a side left without a side tank, and a human on one.
 
@@ -222,7 +229,9 @@ What the generic views get wrong here, and what this reads instead:
   keyed on the healer bot with the carrier it keeps up as its value, `0` when that ends. `anub.mastery` is
   per paladin bot, `none`, `hold N` with N carriers under the tick, or `cast`, and `toc.aura` per paladin
   and hunter bot, the resistance it holds or `none`. `anub.push` is written once per phase 1 by the bot
-  whose read latched it, `on:<seconds needed>:<seconds left>`, and `anub.kitespent` by the bot whose read
+  whose read latched it, `on:<seconds needed>:<seconds left>`, then `drag:<seconds needed>:<seconds left>` by
+  the bot whose read let heroic's submerge drag leave though the push held, `-` needed when he lost
+  nothing since the latch; older traces never write `drag`. `anub.kitespent` is written by the bot whose read
   saw a kite patch go, the count this submerge. `anub.scarabkite` is per bot, `walk`, `hold` or `none`, and
   written only while a scarab is on it, so it reads per snapshot a scarab chases the bot. `anub.topup` is
   per warlock and mage bot, `tap`, `evocation` or `none`, and `anub.judge` is written at each Judgement of
@@ -671,6 +680,25 @@ MOVE_ROW_MS = 4000
 WALKED_SHOWN = 6
 # a melee bot this close to the midline between the side spots stands on neither side's half
 MIDLINE_BAND_YD = 5.0
+# The opening walk: a target this close is in reach, melee and tanks a step past NOMINAL_MELEE_RANGE, the
+# rest inside their spell range; read up to OPENING_MS into the pull
+OPENING_REACH_YD = {"tank": 6.0, "melee": 6.0, "ranged": 36.0, "heal": 36.0}
+OPENING_MS = 40000
+# Heroic phase 3's melee ring round a burrower: its melee range less the margin, clear of every patch centre
+# by the clearance. MeleeBurrowerStand's turns off straight out from the nearest centre, an array radius()
+# doesn't read.
+SWARM_MELEE_RING = MELEE_YD - radius("ANUBARAK_SWARM_MELEE_REACH_MARGIN")
+SWARM_MELEE_CLEARANCE = radius("ANUBARAK_SWARM_MELEE_PATCH_CLEARANCE")
+STAND_TURNS = (0.0, 20.0, -20.0, 40.0, -40.0, 60.0, -60.0, 80.0, -80.0, 100.0, -100.0)
+# A bot's move goals: rows of one action within SWING_MERGE_YD of the last are one goal. A swing is goal A,
+# goal B SWING_YD or more off it, then A's action again within SWING_BACK_YD of A, inside SWING_MS.
+SWING_YD = 8.0
+SWING_BACK_YD = 5.0
+SWING_MERGE_YD = 4.0
+SWING_MS = 15000
+# a pair swinging fewer times a phase is left out
+SWING_MIN = 2
+SWING_BOTS_SHOWN = 5
 
 
 def pull_end(trace: Trace) -> int:
@@ -1094,6 +1122,45 @@ def engage_spread(trace: Trace, samples: Samples | None = None) -> dict | None:
     return {"t": when, "nearest": nearest, "yards": yards[nearest], "tanks": tanks}
 
 
+def opening_walk(trace: Trace, samples: Samples | None = None) -> dict[str, dict]:
+    """Per role, the living bots at the engage: the median of their 2D yards from him then, and of the seconds
+    to their first snapshot with their target within OPENING_REACH_YD, over the bots that got there inside
+    OPENING_MS; `never` counts the rest."""
+    pulls = trace.of("pull")
+    boss = boss_guid(trace)
+    if not pulls or boss is None:
+        return {}
+    samples = samples or Samples(trace)
+    when = pulls[0]["t"]
+    him = samples.row(boss, when)
+    if him is None:
+        return {}
+    per: dict[str, dict] = {}
+    for guid in roster_guids(trace):
+        role = trace.role(guid)
+        row = samples.row(guid, when)
+        if guid in trace.humans or role not in OPENING_REACH_YD or row is None or row[5] <= 0:
+            continue
+        group = per.setdefault(role, {"yards": [], "reach": [], "never": 0})
+        group["yards"].append(dist2(row[1:3], him[1:3]))
+        stamps, rows = samples.track(guid)
+        first = None
+        for index in range(bisect.bisect_left(stamps, when), bisect.bisect_right(stamps, when + OPENING_MS)):
+            mine = rows[index]
+            target = mine[7] if len(mine) > 7 else 0
+            spot = samples.recent(target, stamps[index]) if target else None
+            if spot is not None and dist2(mine[1:3], spot[1:3]) <= OPENING_REACH_YD[role]:
+                first = stamps[index] - when
+                break
+        if first is None:
+            group["never"] += 1
+        else:
+            group["reach"].append(first)
+    return {role: {"bots": len(group["yards"]), "yards": statistics.median(group["yards"]),
+                   "reach": statistics.median(group["reach"]) if group["reach"] else None, "never": group["never"]}
+            for role, group in per.items()}
+
+
 def show_pull(trace: Trace) -> None:
     print("PULL")
     if not is_toc_anubarak(trace):
@@ -1118,6 +1185,16 @@ def show_pull(trace: Trace) -> None:
               f" ({'human' if nearest in trace.humans else 'bot'} {trace.role(nearest)}) {spread['yards']:.1f} yd;"
               f" bot tanks {tanks} yd"
               + (f"; inside his {AGGRO_YD:.0f} yd aggro: {', '.join(inside)}" if inside else ""))
+
+    walk = opening_walk(trace)
+    if walk:
+        print("  the opening walk, bots only: median yards from him at the engage and seconds to the first target"
+              f" in reach\n  (melee and tanks {OPENING_REACH_YD['melee']:.0f} yd, ranged and healers"
+              f" {OPENING_REACH_YD['ranged']:.0f}), over those in reach within {OPENING_MS // 1000} s: "
+              + "; ".join(f"{role} {row['bots']} bot(s) {row['yards']:.1f} yd, "
+                          + ("never" if row["reach"] is None else f"{row['reach'] / 1000:.1f} s")
+                          + (f", {row['never']} never" if row["never"] and row["reach"] is not None else "")
+                          for role, row in sorted(walk.items(), key=lambda item: CROWD_ROLES.index(item[0]))))
 
     rows = pull_rows(trace)
     if not rows:
@@ -4356,6 +4433,59 @@ def held_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def ring_reaches(at, patches) -> bool:
+    """A point of heroic phase 3's melee ring round `at`, straight out from its nearest patch centre or
+    turned by one of STAND_TURNS, keeps SWARM_MELEE_CLEARANCE off every patch centre, as MeleeBurrowerStand
+    places them."""
+    if not patches:
+        return True
+    nearest = min(patches, key=lambda centre: dist2(at, centre))
+    gap = dist2(at, nearest)
+    base = math.atan2(at[1] - nearest[1], at[0] - nearest[0]) if gap > 0.1 else 0.0
+    for turn in STAND_TURNS:
+        angle = base + math.radians(turn)
+        point = (at[0] + SWARM_MELEE_RING * math.cos(angle), at[1] + SWARM_MELEE_RING * math.sin(angle))
+        if all(dist2(point, centre) >= SWARM_MELEE_CLEARANCE for centre in patches):
+            return True
+    return False
+
+
+def swarm_focus_reach(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Heroic, per focus latch pick of a burrower held in phase 3, `t` the pick or phase 3's start for one
+    carried into it: its yards from the nearest Permafrost centre then, `reach` whether the phase 3 melee ring
+    round it then has a point clear of the patches, and over the pick's snapshots in phase 3 the peak and the
+    median count of living melee DPS bots with it as their target, only its side's `anub.dside` group when
+    the trace has one."""
+    swarm = swarm_span(trace) if is_heroic(trace) else None
+    if swarm is None:
+        return []
+    begin, end, _ = swarm
+    samples = samples or Samples(trace)
+    groups = per_bot(trace, "anub.dside")
+    melee = [guid for guid, role in dps_bots(trace).items() if role == "melee"]
+    out = []
+    for side, spans in focus_latches(trace):
+        for value, picked, stop in spans:
+            guid = as_guid(value)
+            start = max(picked, begin)
+            row = samples.recent(guid, start) if guid and start < min(stop, end) else None
+            if row is None or row[5] <= 0:
+                continue
+            patches = samples.frost_at(start)
+            counts = []
+            for index in range(bisect.bisect_left(samples.stamps, start),
+                               bisect.bisect_left(samples.stamps, min(stop, end))):
+                when = samples.stamps[index]
+                rows = [samples.recent(bot, when) for bot in melee
+                        if side is None or not groups or dside_at(groups, bot, when) == side]
+                counts.append(sum(1 for mine in rows if mine and mine[5] > 0 and len(mine) > 7 and mine[7] == guid))
+            out.append({"t": start, "side": side, "guid": guid,
+                        "depth": min((dist2(row[1:3], centre) for centre in patches), default=None),
+                        "reach": ring_reaches(row[1:3], patches),
+                        "peak": max(counts, default=0), "median": statistics.median(counts) if counts else 0})
+    return sorted(out, key=lambda row: (row["t"], focus_label(row["side"])))
+
+
 def burrower_submerges(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Each burrower submerge, read where it went under: the first sample of the still run, same spot and
     health, before it came back full. There its health, the nearest Permafrost centre and how many were
@@ -4931,6 +5061,15 @@ def show_burrowers(trace: Trace) -> None:
               " the\n  side's anub.dside group when the trace has one; side - is the single anub.focus of older"
               " traces")
     show_focus_picks(trace, samples)
+    reach = swarm_focus_reach(trace, samples)
+    if reach:
+        print(f"\n  heroic phase 3 focus picks: yards from the nearest Permafrost centre, whether the melee ring"
+              f" {SWARM_MELEE_RING:.2f} yd round it\n  has a point {SWARM_MELEE_CLEARANCE:.1f} yd off every centre,"
+              " and its side's melee bots on it, peak and median over the pick:")
+        for row in reach:
+            depth = "-" if row["depth"] is None else f"{row['depth']:.1f} yd"
+            print(f"    {clock(row['t']):>9} {short(trace, row['guid']):10} side {focus_label(row['side'])} {depth:>7}"
+                  f"  {'reach' if row['reach'] else 'deep':5}  melee {row['peak']} peak, {row['median']:g} median")
 
     stray = stray_burrower_casts(trace)
     if stray:
@@ -5171,22 +5310,29 @@ def show_crossings(trace: Trace, samples: Samples) -> None:
 
 
 def push_reads(trace: Trace, samples: Samples | None = None) -> list[dict]:
-    """Per phase 1, the first `anub.push` row in it (`t` and `txt` None without one) with his health then, and
-    `then`, what ended it: `phase 3`, `submerged` or `pull ended`."""
+    """Per phase 1, its first `anub.push` latch row (`t` and `txt` None without one) with his health then, and
+    `then`, what ended it: `phase 3`, `submerged` or `pull ended`. After the latch, `drag` is the first
+    `anub.pickup` submerge row's stamp, the drag to the submerge spot leaving, and `dragtxt` the `anub.push`
+    `drag:` row the drag start wrote, None on older traces."""
     samples = samples or Samples(trace)
     spans = phase_spans(trace)
     boss = boss_guid(trace)
     rows = notes(trace, "anub.push")
+    pickups = [rec["t"] for rec in notes(trace, "anub.pickup") if str(rec.get("txt", "")) == "submerge"]
     out = []
     for index, (start, stop, value, label) in enumerate(spans):
         if value != 1:
             continue
         after = spans[index + 1][2] if index + 1 < len(spans) else None
-        first = next((rec for rec in rows if start <= rec["t"] < stop), None)
+        mine = [rec for rec in rows if start <= rec["t"] < stop]
+        first = next((rec for rec in mine if not str(rec.get("txt", "")).startswith("drag:")), None)
+        dragged = next((rec for rec in mine if str(rec.get("txt", "")).startswith("drag:")), None)
+        drag = next((when for when in pickups if first and first["t"] <= when < stop), None)
         out.append({"label": label, "start": start, "stop": stop,
                     "then": {3: "phase 3", 2: "submerged"}.get(after, "pull ended"),
                     "t": first["t"] if first else None, "txt": str(first.get("txt", "")) if first else None,
-                    "hp": health(samples, boss, first["t"]) if first else None})
+                    "hp": health(samples, boss, first["t"]) if first else None,
+                    "drag": drag, "dragtxt": str(dragged.get("txt", "")) if dragged else None})
     return out
 
 
@@ -5194,8 +5340,12 @@ def push_text(row: dict) -> str:
     if row["t"] is None:
         return f"{row['label']} no push, {row['then']}"
     hp = "-" if row["hp"] is None else f"{row['hp']:.1f}%"
+    drag = "no drag after it"
+    if row["drag"] is not None:
+        drag = f"drag left {(row['stop'] - row['drag']) / 1000:.0f} s before its end" + (
+            f" ({row['dragtxt']})" if row["dragtxt"] else "")
     return (f"{row['label']} {row['txt']} at {hp}, {(row['stop'] - row['t']) / 1000:.0f} s to its end,"
-            f" {row['then']}")
+            f" {drag}, {row['then']}")
 
 
 def show_dps(trace: Trace) -> None:
@@ -5228,8 +5378,9 @@ def show_dps(trace: Trace) -> None:
     print("\n  boss health lost per phase 1: " + (", ".join(
         f"{row['label']} {boss_lost(row):.1f}%" + (" under" if boss_lost(row) < BOSS_PACE_PCT else "")
         for row in surfaced) or "none sampled"))
-    print("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, and what"
-          " ended the phase: " + ("; ".join(push_text(row) for row in push_reads(trace, samples)) or "none"))
+    print("  anub.push per phase 1 (on:<seconds needed>:<seconds left>), his health as it latched, the submerge"
+          " drag after it\n  (drag:<seconds needed>:<seconds left> as it left anyway), and what ended the phase: "
+          + ("; ".join(push_text(row) for row in push_reads(trace, samples)) or "none"))
     bots = dps_bots(trace)
     branches = {role: collections.Counter() for role in DPS_ROLES}
     for guid, counts in value_counts(trace, "anub.dps").items():
@@ -8509,10 +8660,71 @@ def show_kitesim(trace: Trace) -> None:
             f" {statistics.median(row['real_s'] for row in fresh):.1f} s")
 
 
+# --------------------------------------------------------------------------------------------- swings
+
+def move_goals(trace: Trace) -> dict[int, list[dict]]:
+    """Per bot, its issued move rows as goals in time order: a row of the action the last goal came from,
+    within SWING_MERGE_YD of it, extends that goal."""
+    bots = {guid for guid in roster_guids(trace) if guid not in trace.humans}
+    out: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in sorted(trace.of("move"), key=lambda rec: rec["t"]):
+        guid = rec.get("g")
+        if guid not in bots or not rec.get("ok") or "x" not in rec:
+            continue
+        goals = out[guid]
+        by = rec.get("by") or "?"
+        spot = (rec["x"], rec["y"])
+        if goals and goals[-1]["by"] == by and dist2(goals[-1]["spot"], spot) <= SWING_MERGE_YD:
+            goals[-1]["last"] = rec["t"]
+            continue
+        goals.append({"by": by, "spot": spot, "t": rec["t"], "last": rec["t"]})
+    return out
+
+
+def swing_rows(trace: Trace) -> list[dict]:
+    """Per phase, role and move pair, the swings: a goal A, the next goal B SWING_YD or more off it, then A's
+    action again within SWING_BACK_YD of A, SWING_MS or less after A. `yards` is twice the A to B gap and
+    `bots` each bot's count. Most swings first."""
+    spans = phase_spans(trace)
+    groups: dict[tuple, dict] = {}
+    for guid, goals in move_goals(trace).items():
+        for a, b, c in zip(goals, goals[1:], goals[2:]):
+            gap = dist2(a["spot"], b["spot"])
+            if (a["by"] != c["by"] or gap < SWING_YD or dist2(a["spot"], c["spot"]) > SWING_BACK_YD
+                    or c["t"] - a["t"] > SWING_MS):
+                continue
+            key = (phase_at(spans, a["t"]), trace.role(guid), a["by"], b["by"])
+            group = groups.setdefault(key, {"swings": 0, "yards": 0.0, "bots": collections.Counter()})
+            group["swings"] += 1
+            group["yards"] += 2.0 * gap
+            group["bots"][guid] += 1
+    rows = [{"phase": key[0], "role": key[1], "pair": (key[2], key[3]), **group} for key, group in groups.items()]
+    return sorted(rows, key=lambda row: (-row["swings"], row["phase"], row["role"], row["pair"]))
+
+
+def show_swings(trace: Trace) -> None:
+    print("SWINGS")
+    if not is_toc_anubarak(trace):
+        print("  not an Anub'arak pull")
+        return
+    rows = [row for row in swing_rows(trace) if row["swings"] >= SWING_MIN]
+    print(f"  a bot's move goal A, then B {SWING_YD:.0f}+ yd off it, then A's action back within {SWING_BACK_YD:.0f}"
+          f" yd of A inside {SWING_MS // 1000} s,\n  per phase, role and pair (A | B) with {SWING_MIN}+ swings; yards"
+          " are twice the A to B gap:")
+    if not rows:
+        print("    none")
+        return
+    for row in rows:
+        top = ", ".join(f"{trace.name(guid)} {n}" for guid, n in row["bots"].most_common(SWING_BOTS_SHOWN))
+        print(f"    {row['phase']:5} {row['role']:6} {row['swings']:4} {row['yards']:6.0f} yd  {row['pair'][0]} |"
+              f" {row['pair'][1]}: {top}")
+
+
 SECTIONS = (
     ("phases", "anub.phase spans, his health at each edge, deaths per phase", show_phases),
     ("pull", "locked out past the Web Door or never landed, stage 9 to the pull, the nearest player to his wait"
-     " point and each bot tank at the engage", show_pull),
+     " point and each bot tank at the engage, per role the bots' yards from him then and seconds to a target in"
+     " reach", show_pull),
     ("spike", "every Pursued by Anub'arak window, kite branches, outcome, protection, kite stages, boosts,"
      " a kiter marked in a patch, the tank patch spent and one spent in the run stage, the spike's approach to"
      " each tank patch, the spike against the gather and unlatched patches at each mark's end, the speeds at"
@@ -8548,11 +8760,13 @@ SECTIONS = (
      " triggered ones marked *, and how long until it was back on a tank and the taunts that did it, each tank"
      " taunt onto a burrower kept or lost by its yards at the cast, Bladestorm"
      " with a burrower within 25 yd, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
-     " within 5 yd held by anub.dps value",
+     " within 5 yd held by anub.dps value, heroic phase 3 focus picks' depth in their patch, melee ring reach and"
+     " the side's melee on them",
      show_burrowers),
     ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
-     " target kind; his health lost per phase 1, flagged under 20 percent; anub.dps rows per role; each anub.dside"
-     " group per wave and melee walks across the midline between the side spots", show_dps),
+     " target kind; his health lost per phase 1, flagged under 20 percent; anub.push with the submerge drag after"
+     " it; anub.dps rows per role; each anub.dside group per wave and melee walks across the midline between the"
+     " side spots", show_dps),
     ("frost", "seconds carrying Permafrost per group and bot, he up and he down, stints over 3 s with the"
      " bot's target", show_frost),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
@@ -8590,6 +8804,8 @@ SECTIONS = (
     ("kitesim", "25H: the kite planner replayed from each bot kite's start, its first pick's prediction and where the"
      " replay ended against the real kite, and for fresh-spike kites the patch ends under 10 s, tank patch passes and"
      " raid passes; no Hands, own immunity or speed boost in the replay", show_kitesim),
+    ("swings", "per phase, role and move pair: bots walking to one move goal, 8+ yd off to another and back, with"
+     " the yards and the bots", show_swings),
 )
 
 

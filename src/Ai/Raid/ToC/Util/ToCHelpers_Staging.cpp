@@ -150,13 +150,23 @@ constexpr float CHAMPION_HEAL_BEHIND = 12.0f;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
 
-// Anub'arak: the raid west of the room centre, 40+ yd from Locs[17], so his run ends on the anchor
+// Anub'arak normal: the raid west of the room centre, 40+ yd from Locs[17], so his run ends on the anchor
 constexpr float ANUBARAK_MELEE_STAND = 8.0f;
 constexpr float ANUBARAK_MELEE_DEGREES[] = {0.0f, 40.0f, -40.0f};
 constexpr RingSlot ANUBARAK_CASTER_SLOTS[] = {
     {22.0f, 180.0f}, {22.0f, 160.0f}, {22.0f, 200.0f}, {22.0f, 140.0f}, {22.0f, 220.0f}, {22.0f, 120.0f},
     {22.0f, 240.0f}, {30.0f, 170.0f}, {30.0f, 190.0f}, {30.0f, 150.0f}, {30.0f, 210.0f}, {30.0f, 130.0f},
     {30.0f, 230.0f},
+};
+// Heroic tanks him on the east anchor next to Locs[17], so the raid waits on the line from there to the room
+// centre: melee just past the tanks' wait and the release margin, casters on rings behind. navprobe: every
+// slot on the floor at z 142.1-142.2, with a plain path to the anchor.
+constexpr float ANUBARAK_HEROIC_MELEE_STAND = 31.0f;
+constexpr float ANUBARAK_HEROIC_MELEE_DEGREES[] = {0.0f, 25.0f, -25.0f};
+constexpr RingSlot ANUBARAK_HEROIC_CASTER_SLOTS[] = {
+    {34.0f, 0.0f},  {34.0f, 20.0f},  {34.0f, -20.0f}, {34.0f, 40.0f},  {34.0f, -40.0f},
+    {34.0f, 60.0f}, {34.0f, -60.0f}, {40.0f, 10.0f},  {40.0f, -10.0f}, {40.0f, 30.0f},
+    {40.0f, -30.0f}, {40.0f, 50.0f}, {40.0f, -50.0f},
 };
 
 // Lattice points sit exactly on the radius
@@ -180,6 +190,8 @@ static_assert(ICEHOWL_SPREAD_RANGED_MIN <= ICEHOWL_RANGED_STAND && ICEHOWL_RANGE
 static_assert(JARAXXUS_ADD_TANK_STAND > STAGING_DUTY_STAND, "his main tank stands nearest");
 static_assert(JARAXXUS_MELEE_STAND >= NON_DUTY_MIN && JARAXXUS_STACK_AHEAD - JARAXXUS_STACK_RADIUS >= NON_DUTY_MIN,
               "jaraxxus release margin");
+static_assert(ANUBARAK_HEROIC_MELEE_STAND >= PROXIMITY_TANK_CLEARANCE + STAGING_RELEASE_MARGIN,
+              "heroic anub'arak melee wait past the tanks and the release margin");
 
 enum class StandRole : uint8
 {
@@ -673,6 +685,18 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 
         layout.slots.push_back(At(point, ANUBARAK_STAND_Z));
     };
+
+    if (bot->GetMap()->IsHeroic())
+    {
+        Vec2 const in = Direction(LOC_ANUBARAK, centre);
+        for (float degrees : ANUBARAK_HEROIC_MELEE_DEGREES)
+            addSlot(Along(LOC_ANUBARAK, Rotate(in, degrees), ANUBARAK_HEROIC_MELEE_STAND), {StandRole::Melee});
+
+        for (RingSlot const& slot : ANUBARAK_HEROIC_CASTER_SLOTS)
+            addSlot(Along(LOC_ANUBARAK, Rotate(in, slot.degrees), slot.radius), {StandRole::Healer, StandRole::Ranged});
+
+        return;
+    }
 
     Vec2 const west{-1.0f, 0.0f};
     for (float degrees : ANUBARAK_MELEE_DEGREES)
