@@ -32,6 +32,8 @@ constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 constexpr float ANUBARAK_ESCORT_REAIM = 3.0f;
 constexpr float ANUBARAK_SIDE_SHOUT_REACH = 10.0f;
+// A bubble older than this since the cold save cast it isn't the save's to cancel
+constexpr uint32 ANUBARAK_COLD_BUBBLE_CANCEL_MS = 3000;
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
@@ -108,9 +110,11 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     return false;
 }
 
-bool TauntLands(Unit* victim, float dist)
+// The swarm keeps everyone under the rescue pct, so in phase 3 that would let every taunt go from any range
+bool TauntLands(Unit* victim, float dist, bool swarm)
 {
-    return dist <= ANUBARAK_TAUNT_ARRIVE || (victim && victim->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT);
+    return dist <= ANUBARAK_TAUNT_ARRIVE ||
+           (!swarm && victim && victim->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT);
 }
 
 // A loose burrower is on a healer or ranged more often than not: Righteous Defense off whoever most of
@@ -120,13 +124,14 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
 {
     tooFar = false;
     float stop = 0.0f;
+    bool const swarm = GetAnubarakPhase(botAI) == AnubarakPhase::Swarm;
     // Righteous Defense taunts everything hitting the member, him included
     Creature* boss = GetAnubarak(bot);
     bool const bossOnRescue = boss && pick.rescue && boss->GetVictim() == pick.rescue;
     if (pick.rescue && pick.rescue != bot && !bossOnRescue && botAI->CanCastSpell("righteous defense", pick.rescue) &&
         InSpellReach(botAI, bot, pick.rescue, "righteous defense", stop))
     {
-        if (TauntLands(pick.rescue, pick.rescueFar))
+        if (TauntLands(pick.rescue, pick.rescueFar, swarm))
             return botAI->CastSpell("righteous defense", pick.rescue);
 
         tooFar = true;
@@ -140,7 +145,7 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
             if (botAI->CanCastSpell(shout, bot))
                 return botAI->CastSpell(shout, bot);
 
-    bool const lands = TauntLands(pick.loose->GetVictim(), bot->GetExactDist2d(pick.loose));
+    bool const lands = TauntLands(pick.loose->GetVictim(), bot->GetExactDist2d(pick.loose), swarm);
     if (lands && TryClassTaunt(botAI, bot, pick.loose))
         return true;
 
@@ -382,8 +387,28 @@ bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
 
 bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 {
-    uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive", physicalOnly);
+    bool const physical = physicalOnly && GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
+    uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive", physical);
     return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool AnubarakColdSelfSaveAction::Execute(Event /*event*/)
+{
+    // The purge is done once it's up. Kept up, the mage can't cast and the paladin hits for half.
+    if (bubbleSpell && bot->HasAura(bubbleSpell) && getMSTimeDiff(bubbleMs, getMSTime()) < ANUBARAK_COLD_BUBBLE_CANCEL_MS)
+    {
+        bot->RemoveAurasDueToSpell(bubbleSpell);
+        bubbleSpell = 0;
+        return true;
+    }
+
+    uint32 const save = GetAnubarakColdSelfSave(botAI);
+    if (!save || !botAI->CastSpell(save, bot))
+        return false;
+
+    bubbleSpell = IsAnubarakColdBubble(save) ? save : 0;
+    bubbleMs = getMSTime();
+    return true;
 }
 
 bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)

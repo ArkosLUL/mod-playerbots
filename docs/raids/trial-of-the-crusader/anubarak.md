@@ -190,6 +190,7 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+5 | `anubarak on permafrost` → `anubarak leave permafrost` | no tank, unmarked, no dodge held, no grip duty but `kill`, within 7.5 yd of a patch | walks out ([non-tanks](#how-the-bots-play-it)) |
 | EMERGENCY+4 | `anubarak tank needs rescue` → `anubarak tank rescue` | heroic phase 3, a paladin or priest bot; the lowest tank in sight under 35% with no Pain Suppression or Guardian Spirit on it | the first it can cast of `lay on hands`, `pain suppression`, `guardian spirit`, over the class ones (`protect party member` waits for a tank at 10%: BT 5:54.5-5:55.7 Felesta under 35% with three ready). No Hand of Sacrifice: the swarm holds the paladin at 5-20%, and BW and BY's four killed their casters 2.5-7.6 s later, Holylight both times |
 | EMERGENCY+3 | `anubarak burrower casting shadow strike` → `anubarak interrupt shadow strike` | a caster's interrupter | interrupt or stun; out of range, walks in first |
+| EMERGENCY+2 | `anubarak penetrating cold self save` → `anubarak penetrating cold self save` | `Swarm`, a non-healer bot carrying Penetrating Cold with a tick due and none of these up; or a bubble up | the first of Cloak of Shadows, Ice Block, Divine Shield, Anti-Magic Shell, Dispersion, Divine Protection, Shamanistic Rage, Barkskin (a tank: Anti-Magic Shell, Divine Protection; Forbearance and Hypothermia checked), `anub.coldself`; a bubble it cast cancelled within 3 s |
 | EMERGENCY+1 | `anubarak lust due` → `anubarak lust` | phase 3, `AnubarakLustOpen`, a living unmarked shaman bot, not Sated or Exhausted | `heroism` or `bloodlust` on itself, whatever it has selected: the class trigger wants the boss selected (BY +33 s, 18 s after the burst opened, the DPS shamans on burrowers and Elemena with nothing) |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank, healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate |
 
@@ -198,7 +199,7 @@ no `spell_dbc` row), and the floor is an indoor group of `Nd_Argentcrusadecolise
 26336, mogp 0x2805 with no 0x8, WMOAreaTable flags 2), checked unconditionally in `Spell::CheckCast`:
 `vmap.enableIndoorCheck` is only logged.
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth ready, a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
-| RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready | `NextTankDefensive` on self, physical only: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26) |
+| RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready (any in `Swarm`), not one kept | `NextTankDefensive` on self, physical only outside `Swarm`: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26), but the swarm was 99k of Felesta's last 117k (CK). **Kept** (user call, 2026-11-04; `anub.defensive` `kept`): heroic, from his 50% until `Swarm`, a pick with a 120 s+ cooldown while the tank is at 50%+ (Icebound Fortitude, Divine Protection, Survival Instincts, Frenzied Regeneration, Last Stand, Shield Wall; not Vampiric Blood, Barkskin): CJ and CK Felesta spent Icebound Fortitude at his 42.9% and 36.0% at 86-100% and died in phase 3 with it down |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
 | RAID+5.5 | `anubarak grip frost sphere` → `anubarak grip frost sphere` | a DK with a grip duty | `walk` to its stand, stops and `cast`s Death Grip on the duty sphere, `kill`s it once landed |
 | RAID+5 | `anubarak ranged should seed permafrost` → `anubarak destroy frost sphere` | a sphere duty | attacks the sphere, out of reach walks in first |
@@ -483,9 +484,16 @@ of them hit, unless he is on them, they are a side tank, or it would leave the t
 fatal); the other side's on them too go back to their tank's taunt (2026-10-30 BD 6:25, held back for
 them, it reached Elemena 0.3 s after she died and the wipe began). Then Challenging Roar or Shout with
 two within 10 yd, none of the other side's and him past 10 yd plus his reach, the class taunt, then Feral Charge,
-Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in.
+Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in,
+except in phase 3 to one over 40 yd from its hold: `anubarak side tank swarm leash` blocks `reach melee`,
+set behind, flank, formation and charges, since the raid stands behind the patches and the burrower comes
+in anyway. At the first phase 3 wave of CI, CJ and CK that walk left a side tank 2.7-5.1 s with under 2
+healers within 40 yd (CK Felesta 27 yd west under Penetrating Cold and the swarm, no heal for her last
+4.5 s; CI Bulwark, dead 3 s after), and from the hold the taunt went at the same moment.
 Righteous Defense and the class taunt wait until the burrowers they take are within 40 yd
-(`ANUBARAK_TAUNT_ARRIVE`, `anub.sidetank` `far`), unless the player hit is under 50%: a taunt lasts 3 s and
+(`ANUBARAK_TAUNT_ARRIVE`, `anub.sidetank` `far`), unless the player hit is under 50% outside phase 3 (the
+swarm holds everyone under it: CK 6:20.9 Righteous Defense from 64 and 87 yd sent side 1's wave to
+Holylight): a taunt lasts 3 s and
 they close about 13 yd/s, so from farther they arrive as it ends and go to the healer with the most threat.
 BV, BW and BY: Righteous Defense within 40 yd kept 21 of 26, beyond 7 of 38 (cast as the wave came up,
 58-105 yd off); side 0 lost 55 burrowers within 15 s of coming up across BU-BY, side 1 16. In
@@ -900,6 +908,12 @@ Baseline 2026-11-04, 25H on refine-27 (`fa41b0760`), `649_54_anub-arak_…`: CD 
 38.5-47.3 s into phase 2, each kite 13-22 s in; Hands cast 1, 1, 0; no Demonic Circle teleport; shot kite
 patches 19.1-84.9 yd off the nearest tank patch, three under 30.
 
+Baseline 2026-11-04, 25H on refine-29 (`391288e51`), `649_3_anub-arak_…`: CJ `1793826735` (P3 from 5:50.5,
+wipe 7:49.8 at 4.8%), CK `1793827587` (P3 from 5:40.4, wipe 7:10.9 at 8.9%), no death in phases 1-2. Felesta
+first dead in both (CJ 7:16.7, CK 6:27.1); side tanks under 2 healers within 40 yd at the first phase 3
+wave CJ 3.5 s, CK 3.8 + 3.1 s (CI 5.3); Death and Decay 6/6 and 6/7 cast, 0 `FAILED`; burst from his 50%
+to phase 3 CJ 35 (13 not `behind`), CK 15 (11).
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -1135,7 +1149,8 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   killed both side tanks 8-12 s in with 8.3M (about 44 s of damage) on him; a wave of four is 3.0M,
   about 15 s. In AA 35-48% of phase 3 damage went on burrowers.
 - **Burst** (`ToCAnubarakBurstWindow`): in `Swarm` lust and the rest open once those burrowers are dead,
-  15 s at most (AA's Heroism spent 21 of its 40 s on wave 6). Before it the rest wait from his 40%,
+  15 s at most (AA's Heroism spent 21 of its 40 s on wave 6). Before it the rest wait from his 50%
+  (user call, 2026-11-04: a 2-min one spent at 45% comes back 60-90 s into phase 3; CK 11 went 48-40%),
   released while he is behind: at his health loss since he came up (`surfacedHpPct`), 30% falls later
   than 5 s before the submerge. Heroism waits for phase 3 even then (user call, 2026-11-01): reaching
   phase 3 before the third submerge needs about 70% in three phase 1s, a coin flip decided by P1b's
@@ -1144,7 +1159,16 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   tick, after the swarm ticks before it (30% of current health each, 250 minimum, absorbs first),
   leaves 250 or less after that tick (`GetAmount()` × its frost damage taken, 0 when immune). No tick
   left before the aura ends is no risk. Non-tanks sit at 1-4k, so a fresh carrier dies at its first
-  tick (3 s after landing) unless lifted; a shield survives the swarm, a heal mostly drains.
+  tick (3 s after landing) unless lifted; a shield survives the swarm, a heal mostly drains. Anti-Magic
+  Shell counts as its 75% of each hit up to what it has left, and not past its end.
+- **Own save** (user calls, 2026-11-05: phase 3 only, bubbles cancelled; `anubarak penetrating cold self
+  save`): 68510 is magic-class frost with no dispel type, 6000 every 3 s for 18 s. Cloak of Shadows' 35729
+  removes it (`SpellEffects.cpp:882`), Ice Block and Divine Shield too (`SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`,
+  `SpellAuraEffects.cpp:4057`), so the save cancels them once up; Anti-Magic Shell takes 75% of every magic
+  hit, the swarm's too, up to 50% of max health for 5 s (`spell_dk.cpp:1099`). No tank gets a bubble: it
+  halves threat and an immune victim loses its creatures unless it taunts them (`ThreatManager.cpp:123`).
+  Healers keep their rescue. In CJ 5 of 33 and CK 3 of 23 phase 3 carriers used their own; Anti-Magic
+  Shell never went out (no DK class trigger), Felesta carried it 13.4 s in CK and died.
 - **Duty** (`anub.healduty`, latched as `Swarm` starts): priests and druids `cold`, paladins and
   shamans `tank` (the guide's split); with 2+ healers all on one side, the lowest guid goes over. A
   healer back from a res takes its class duty.
@@ -1281,9 +1305,10 @@ personal burst is unrestricted.
   Felesta +4.3 s, saves spent on wave 5).
 - A dead side tank's burrowers walk off the patches onto non-tanks, and under 80% there they burrow back
   to full, so no focus takes them (CB #2 79 → 97%); a lone side tank can't take four.
-- Side tanks reach phase 3 with their defensives spent: the stack rule fires at any health, every
-  last-phase-1 one in BT, BR and BS at his 43-47% (user call, 2026-11-02: no hold). No Anti-Magic Shell
-  for them in phase 3, no Rune Tap in `NextTankDefensive`.
+- A side tank under 50% in the last phase 1 still spends its long defensive there; no Rune Tap in
+  `NextTankDefensive`.
+- The paladin class node's Divine Shield at critical health still fires on a side tank (CJ 7:28.4 Bulwark
+  at 23%; his taunts kept both burrowers on him through most of it).
 - Battle res (user call, 2026-11-02: left): a walk to the corpse that a cast interrupts is refused as
   `dup` (BT 6:38 Tree never cast), and the class `rebirth` spends a druid's on anyone (BT 6:03
   Druidica on Mighty).
@@ -1300,8 +1325,10 @@ personal burst is unrestricted.
 - A standby paladin is off the gather: a healer one heals the scarab targets less, a DPS one hits less.
 - A shaman kites on foot ([Ghost Wolf](#how-the-bots-play-it) is outdoors only); Totemist's boots carry
   Icewalker, not Nitro Boosts, so his CI 3:44.8 kite had no speed tool.
-- Phase 3: a side tank dies to Leeching Swarm plus its burrowers (CI Bulwark 37 s in, 80k of the 130k),
-  and the healers go next.
+- Phase 3: once the first side tank dies its burrowers go to a healer and the other side tank takes four
+  (CK Bulwark 16 s after Felesta), and the healers go next. CJ Felesta, in reach, went 92% to dead in 3 s
+  at Expose Weakness 5 under the swarm.
+- Phase 3: a burrower stopped on a stray 40+ yd from the hold stays on it.
 - A rescue Righteous Defense (member under 50%) from 40+ yd buys only its 3 s: Bulwark lost 9 of 9 in
   CE, 15 of 15 in CH.
 - Deathsong, the human, took 3 of Felesta's 9 lost CI taunts.
@@ -1448,7 +1475,8 @@ personal burst is unrestricted.
 | `interrupter` | `1` while the bot holds Shadow Strike duty, `0` once the cast ends |
 | `pickup` | The pickup tank's step: `taunt` (off a non-tank), `attack`, `stepout` (out of Permafrost), `hold` (no leg), `drag` (a leg to the anchor), `submerge` (a leg to the submerge spot), `prestep` (the step round him before a leg), `subhold` (submerge window, no leg to the spot or round a patch) |
 | `subspot` | The pickup tank at each submerge-spot search: `x,y,z rN` (N the patch clearance found with) or `none` |
-| `defensive` | What a side tank or the Swarm tank cast, `covered` (one running) or `none` |
+| `defensive` | What a side tank or the Swarm tank cast, `covered` (one running), `none`, or `kept` (held for phase 3) |
+| `coldself` | Phase 3 Penetrating Cold carrier's own save: the spell's name, `none` |
 | `burst` | Heroic burst gate: `hold` (40% or under), `behind` (released), `wait` (phase 3, its burrowers up), `open` |
 | `swarmheal` | Heroic phase 3 healer's pick: `self`, `risk` (a carrier at risk), `tank`, `spread` (a tank over a lower one with a heal on the way), `low`, `bare` (a carrier it can cover), `cold`, `none` |
 | `healduty` | Heroic phase 3 healer bot's duty: 1 `cold`, 2 `tank` |
@@ -1489,7 +1517,7 @@ rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 
 health, the median tank and non-tank health, the swarm and the healers' heals onto tanks, carriers and
 others; bot heals cast onto a non-tank with no Penetrating Cold at 10%+; DPS samples on him and on
 burrowers up at its start or newer; those burrowers' last death against lust and `burst` `open`; bot
-burst cast from his 40% to phase 3, flagged unless `behind`; Penetrating Cold windows and heals onto the
+burst cast from his 50% (the code's `ANUBARAK_BURST_HOLD_PCT`) to phase 3, flagged unless `behind`; Penetrating Cold windows and heals onto the
 carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
 exit, side at the spawn then each owner after (a dead side tank moves them all, so the last says
 little), seconds to the first tank and to its owning side's tank, the spawn side tank's distance from
@@ -1638,7 +1666,9 @@ it, else whether it died. `--burrowers` each tank taunt onto a burrower kept or 
 by its yards at the cast, within 40 and beyond, and the lost ones with no hit from the tank inside them (a
 cast at it, or a side tank area spell with it within 11.5 yd); each Bladestorm's burrower closest over the
 spin, inside 9.5 yd flagged. `--tanks` per side tank and area spell its `anub.saoe` picks, its casts, and
-the area threat or rotation cast `FAILED` under that pick.
+the area threat or rotation cast `FAILED` under that pick. `--healers` per side tank its phase 3 seconds
+with under 2 living healers within 40 yd, each stretch of 0.5 s+ with its move rows' `by` from 6 s before;
+`--swarm` per class the phase 3 Penetrating Cold windows with the carrier's own save inside, and `coldself`.
 `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
 shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
 heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank

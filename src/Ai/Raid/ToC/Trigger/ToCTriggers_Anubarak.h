@@ -122,6 +122,13 @@ public:
     bool IsActive() override;
 };
 
+class AnubarakColdSelfSaveTrigger : public Trigger
+{
+public:
+    AnubarakColdSelfSaveTrigger(PlayerbotAI* botAI) : Trigger(botAI, "anubarak penetrating cold self save") {}
+    bool IsActive() override;
+};
+
 class AnubarakSideTankDeadTrigger : public Trigger
 {
 public:
@@ -327,6 +334,8 @@ public:
             &ToCAnubarakTriggerContext::anubarak_cleave_buff_near_burrower;
         creators["anubarak side tank needs defensive"] =
             &ToCAnubarakTriggerContext::anubarak_side_tank_needs_defensive;
+        creators["anubarak penetrating cold self save"] =
+            &ToCAnubarakTriggerContext::anubarak_penetrating_cold_self_save;
         creators["anubarak side tank dead"] =
             &ToCAnubarakTriggerContext::anubarak_side_tank_dead;
         creators["anubarak grip frost sphere"] =
@@ -440,6 +449,10 @@ private:
 
     static Trigger* anubarak_side_tank_needs_defensive(PlayerbotAI* botAI) {
         return new AnubarakSideTankNeedsDefensiveTrigger(botAI);
+    }
+
+    static Trigger* anubarak_penetrating_cold_self_save(PlayerbotAI* botAI) {
+        return new AnubarakColdSelfSaveTrigger(botAI);
     }
 
     static Trigger* anubarak_side_tank_dead(PlayerbotAI* botAI) {

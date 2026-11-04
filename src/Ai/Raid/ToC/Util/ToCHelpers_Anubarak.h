@@ -106,6 +106,10 @@ constexpr uint32 ANUBARAK_BURROWER_FREE_MS = 25000;
 
 constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_STACKS = 5;
 constexpr float ANUBARAK_SIDE_DEFENSIVE_PCT = 50.0f;
+// Heroic, from his health at this until phase 3, a side tank's long saves wait. One spent on a stack at
+// full health in the last phase 1 is still down when phase 3's waves come.
+constexpr float ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT = 50.0f;
+constexpr uint32 ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS = 120000;
 // Rebirth's 30 yd less a margin
 constexpr float ANUBARAK_BATTLE_RES_REACH = 28.0f;
 // A ranged or healer bot a burrower is on walks toward its side tank once over REACH off, the 30 yd taunt
@@ -369,7 +373,7 @@ bool AnubarakSubmerged(PlayerbotAI* botAI);
 bool AnubarakLeechingSwarmActive(PlayerbotAI* botAI);
 // Heroic phase 3, where a heal on a healthy non-tank goes back to him through Leeching Swarm
 bool AnubarakSwarmHealing(PlayerbotAI* botAI);
-// Heroic burst other than lust waits for phase 3 from 40%, unless he's losing health too slowly to reach
+// Heroic burst other than lust waits for phase 3 from 50%, unless he's losing health too slowly to reach
 // 30% before he submerges; in phase 3 until the burrowers up at its start are dead, 15 s at most
 bool AnubarakBurstHeld(PlayerbotAI* botAI);
 // Phase 3; on heroic once those burrowers are dead too, 15 s at most
@@ -462,6 +466,21 @@ bool AnubarakBurrowerAreaCappedNear(Player* bot, Position const& at, float range
 int8 GetAnubarakBurrowerTankSide(Player* player);
 // Expose Weakness at ANUBARAK_SIDE_DEFENSIVE_STACKS or health under the pct, on a side tank
 bool AnubarakSideTankNeedsDefensive(Player* bot);
+// The side tank's defensive pick waits for phase 3: ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT, a cooldown of
+// ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS or more, the tank at or over ANUBARAK_SIDE_DEFENSIVE_PCT
+bool AnubarakSideTankDefensiveKept(PlayerbotAI* botAI, uint32 spellId);
+// Phase 3: a side tank whose target is a burrower not on it, over ANUBARAK_TAUNT_ARRIVE from its hold. The
+// raid stands behind the patches so the burrower comes in anyway, and walking out to meet it left the
+// healers 40+ yd off under the swarm.
+bool AnubarakSideTankSwarmLeash(PlayerbotAI* botAI);
+// Phase 3, a non-healer bot carrying Penetrating Cold with a tick still due: the first of its own saves it
+// can cast (Cloak of Shadows, Ice Block, Divine Shield, Anti-Magic Shell, Dispersion, Divine Protection,
+// Shamanistic Rage, Barkskin; a tank only Anti-Magic Shell and Divine Protection), else 0. 0 while one of
+// those is already up.
+uint32 GetAnubarakColdSelfSave(PlayerbotAI* botAI);
+// Ice Block and Divine Shield remove Penetrating Cold as they go up, so the save cancels them right after
+bool IsAnubarakColdBubble(uint32 spellId);
+bool AnubarakColdBubbleUp(Player* bot);
 // Who this druid can Rebirth now: a dead side tank, else the lowest guid dead healer bot, else null. One
 // spent on a healer isn't there for a side tank that dies later.
 Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI);

@@ -95,6 +95,19 @@ private:
     bool physicalOnly;
 };
 
+class AnubarakColdSelfSaveAction : public Action
+{
+public:
+    AnubarakColdSelfSaveAction(PlayerbotAI* botAI, std::string const name = "anubarak penetrating cold self save")
+        : Action(botAI, name) {};
+    bool Execute(Event event) override;
+
+private:
+    // The bubble this cast and when, so one the class node put up at low health stays
+    uint32 bubbleSpell = 0;
+    uint32 bubbleMs = 0;
+};
+
 class AnubarakDestroyFrostSphereAction : public AttackAction
 {
 public:
@@ -342,6 +355,8 @@ public:
             &ToCAnubarakActionContext::anubarak_tank_defensive;
         creators["anubarak side tank defensive"] =
             &ToCAnubarakActionContext::anubarak_side_tank_defensive;
+        creators["anubarak penetrating cold self save"] =
+            &ToCAnubarakActionContext::anubarak_penetrating_cold_self_save;
         creators["anubarak destroy frost sphere"] =
             &ToCAnubarakActionContext::anubarak_destroy_frost_sphere;
         creators["anubarak dps target"] =
@@ -435,9 +450,14 @@ private:
         return new AnubarakTankDefensiveAction(botAI);
     }
 
-    // Burrower melee is physical: Anti-Magic Shell would waste itself there
+    // Burrower melee is physical, so Anti-Magic Shell would waste itself there. Phase 3 lets it through:
+    // most of a side tank's damage is the swarm then.
     static Action* anubarak_side_tank_defensive(PlayerbotAI* botAI) {
         return new AnubarakTankDefensiveAction(botAI, "anubarak side tank defensive", true);
+    }
+
+    static Action* anubarak_penetrating_cold_self_save(PlayerbotAI* botAI) {
+        return new AnubarakColdSelfSaveAction(botAI);
     }
 
     static Action* anubarak_destroy_frost_sphere(PlayerbotAI* botAI) {

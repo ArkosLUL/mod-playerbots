@@ -161,9 +161,10 @@ constexpr int32 ANUBARAK_COLD_RESCUE_MARGIN_MS = 300;
 constexpr int32 ANUBARAK_MASTERY_ROUND_MS = 1500;
 constexpr uint32 ANUBARAK_MASTERY_MIN_CARRIERS = 2;
 constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
-// Heroic burst waits for phase 3 from this health (user call, 2026-10-30), unless at his pace since he
-// came up he would still be above 30% this close to the submerge
-constexpr float ANUBARAK_BURST_HOLD_PCT = 40.0f;
+// Heroic burst waits for phase 3 from this health (user call, 2026-11-04), unless at his pace since he
+// came up he would still be above 30% this close to the submerge. A 2 min cooldown spent in the last
+// phase 1 comes back 60-90 s into phase 3.
+constexpr float ANUBARAK_BURST_HOLD_PCT = 50.0f;
 constexpr float ANUBARAK_BURST_BEHIND_MARGIN_S = 5.0f;
 // Phase 3 only starts while he's up. From WINDOW before a submerge every DPS bot goes on him once his loss
 // since he came up, scaled to all of them on him and by DISCOUNT, gets him under TARGET in time. Needs
@@ -5975,6 +5976,24 @@ bool AnubarakSideTankNeedsDefensive(Player* bot)
             bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT);
 }
 
+bool AnubarakSideTankDefensiveKept(PlayerbotAI* botAI, uint32 spellId)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Creature* boss = bot ? GetAnubarak(bot) : nullptr;
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!boss || !info || !AnubarakHeroic(bot) || bot->GetHealthPct() < ANUBARAK_SIDE_DEFENSIVE_PCT ||
+        boss->GetHealthPct() > ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT ||
+        std::max(info->RecoveryTime, info->CategoryRecoveryTime) < ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS)
+        return false;
+
+    AnubarakPhase const phase = GetAnubarakPhase(botAI);
+    if (phase != AnubarakPhase::Surface && phase != AnubarakPhase::Submerged)
+        return false;
+
+    RaidObs::NoteDerived(bot, "anub.defensive", "kept");
+    return true;
+}
+
 Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -6835,6 +6854,22 @@ bool AnubarakMeleeBurrowerStandApplies(PlayerbotAI* botAI)
     return BurrowerNearPatch(burrower, patches, ring) && MeleeBurrowerStand(bot, burrower, patches, ring, false, stand);
 }
 
+bool AnubarakSideTankSwarmLeash(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !AnubarakEngaged(botAI) || GetAnubarakPhase(botAI) != AnubarakPhase::Swarm)
+        return false;
+
+    int8 const side = GetAnubarakBurrowerTankSide(bot);
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (side < 0 || !target || target->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER) ||
+        target->GetVictim() == bot)
+        return false;
+
+    Position const hold = GetAnubarakSideTankHold(bot, static_cast<uint8>(side));
+    return target->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) > ANUBARAK_TAUNT_ARRIVE;
+}
+
 bool AnubarakMeleeNeedsBurrowerStand(PlayerbotAI* botAI)
 {
     if (!AnubarakMeleeBurrowerStandApplies(botAI))
@@ -7179,6 +7214,8 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
     return lowest;
 }
 
+constexpr uint32 SPELL_ANTI_MAGIC_SHELL = 48707;
+
 // A carrier's next Penetrating Cold tick: what it deals before resists, and the health plus frost
 // absorbs the carrier has left when it lands
 struct ColdTick
@@ -7211,9 +7248,37 @@ static ColdTick NextColdTick(Player* member)
 
     int64 health = member->GetHealth();
     int64 absorb = 0;
+    // Anti-Magic Shell takes only its share of each hit, up to what it has left
+    int64 shell = 0;
+    int64 shellPct = 0;
     for (AuraEffect const* shield : member->GetAuraEffectsByType(SPELL_AURA_SCHOOL_ABSORB))
-        if (shield->GetMiscValue() & SPELL_SCHOOL_MASK_FROST)
+    {
+        if (!(shield->GetMiscValue() & SPELL_SCHOOL_MASK_FROST))
+            continue;
+
+        if (shield->GetId() != SPELL_ANTI_MAGIC_SHELL)
+        {
             absorb += std::max(0, shield->GetAmount());
+            continue;
+        }
+
+        // 5 s, so it can run out before the tick
+        int32 const shellLeftMs = shield->GetBase()->GetDuration();
+        if (shellLeftMs >= 0 && shellLeftMs < tick.inMs)
+            continue;
+
+        shell += std::max(0, shield->GetAmount());
+        shellPct = shield->GetSpellInfo()->Effects[EFFECT_0].CalcValue();
+    }
+
+    auto const soak = [&absorb, &shell, shellPct](int64 hit)
+    {
+        int64 const plain = std::min(absorb, hit);
+        absorb -= plain;
+        int64 const shelled = std::min(shell, (hit - plain) * shellPct / 100);
+        shell -= shelled;
+        return hit - plain - shelled;
+    };
 
     AuraEffect const* swarm =
         member->GetAuraEffect(sSpellMgr->GetSpellIdForDifficulty(SPELL_LEECHING_SWARM, member), EFFECT_0);
@@ -7222,14 +7287,66 @@ static ColdTick NextColdTick(Player* member)
         for (int32 at = swarm->GetPeriodicTimer(); at < tick.inMs && health > 0; at += swarm->GetAmplitude())
         {
             int64 const drain = std::max<int64>(ANUBARAK_SWARM_MIN_DRAIN, health * swarm->GetAmount() / 100);
-            int64 const soaked = std::min(absorb, drain);
-            absorb -= soaked;
-            health = std::max<int64>(0, health - (drain - soaked));
+            health = std::max<int64>(0, health - soak(drain));
         }
     }
 
-    tick.left = health + absorb;
+    tick.left = health + absorb + std::min(shell, std::max<int64>(0, tick.damage - absorb) * shellPct / 100);
     return tick;
+}
+
+constexpr uint32 SPELL_CLOAK_OF_SHADOWS = 31224;
+constexpr uint32 SPELL_DISPERSION = 47585;
+constexpr uint32 SPELL_DIVINE_PROTECTION = 498;
+constexpr uint32 SPELL_SHAMANISTIC_RAGE = 30823;
+constexpr uint32 SPELL_BARKSKIN = 22812;
+
+// Cloak, Ice Block and Divine Shield remove it; the rest cut it, Anti-Magic Shell the swarm too
+constexpr std::array<uint32, 8> COLD_SELF_SAVES = {
+    SPELL_CLOAK_OF_SHADOWS, SPELL_ICE_BLOCK,         SPELL_DIVINE_SHIELD,    SPELL_ANTI_MAGIC_SHELL,
+    SPELL_DISPERSION,       SPELL_DIVINE_PROTECTION, SPELL_SHAMANISTIC_RAGE, SPELL_BARKSKIN};
+
+bool IsAnubarakColdBubble(uint32 spellId) { return spellId == SPELL_ICE_BLOCK || spellId == SPELL_DIVINE_SHIELD; }
+
+bool AnubarakColdBubbleUp(Player* bot)
+{
+    return bot && (bot->HasAura(SPELL_ICE_BLOCK) || bot->HasAura(SPELL_DIVINE_SHIELD));
+}
+
+uint32 GetAnubarakColdSelfSave(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || PlayerbotAI::IsHeal(bot) || !AnubarakEngaged(botAI) ||
+        GetAnubarakPhase(botAI) != AnubarakPhase::Swarm || !NextColdTick(bot).due)
+        return 0;
+
+    for (uint32 const save : COLD_SELF_SAVES)
+        if (bot->HasAura(save))
+            return 0;
+
+    // A bubble halves a tank's threat, and the burrowers leave a tank immune to them unless it taunts them
+    bool const tank = PlayerbotAI::IsTank(bot);
+    for (uint32 const save : COLD_SELF_SAVES)
+    {
+        if (tank && save != SPELL_ANTI_MAGIC_SHELL && save != SPELL_DIVINE_PROTECTION)
+            continue;
+
+        // The exclude auras CanCastSpell's probe doesn't stop
+        if ((save == SPELL_DIVINE_SHIELD || save == SPELL_DIVINE_PROTECTION) && bot->HasAura(SPELL_FORBEARANCE))
+            continue;
+        if (save == SPELL_ICE_BLOCK && bot->HasAura(SPELL_HYPOTHERMIA))
+            continue;
+
+        if (botAI->CanCastSpell(save, bot))
+        {
+            SpellInfo const* info = sSpellMgr->GetSpellInfo(save);
+            RaidObs::NoteDerived(bot, "anub.coldself", info ? info->SpellName[0] : "?");
+            return save;
+        }
+    }
+
+    RaidObs::NoteDerived(bot, "anub.coldself", "none");
+    return 0;
 }
 
 static bool ColdTickDeadly(ColdTick const& tick)

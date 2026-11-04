@@ -121,9 +121,10 @@
                                      tanks, carriers and others; bot heals it cast onto a non-tank with no
                                      Penetrating Cold at 10%+; DPS bot samples on him, on burrowers up as it
                                      began and on newer ones; when those burrowers went against lust and
-                                     anub.burst open; bot burst cast from his 40% to phase 3, flagged unless
+                                     anub.burst open; bot burst cast from his 50% to phase 3, flagged unless
                                      anub.burst read behind; Penetrating Cold, and per carrier window in phase 3
-                                     the seconds it carried it with no HoT or shield on it; anub.swarmheal rows,
+                                     the seconds it carried it with no HoT or shield on it, and per class the phase 3
+                                     windows with the carrier's own save inside, anub.coldself rows; anub.swarmheal rows,
                                      each healer bot's anub.healduty and the carriers its anub.coldheal kept up;
                                      per phase 3 Penetrating Cold wave the first ticks survived, the living
                                      toc.aura frost holders at the landing, Aura Mastery up at the first two
@@ -143,7 +144,8 @@
                                      anub.hbehind go and the seconds until it stood still at its stand; each
                                      burrower within 5 yd of a healer in phase 3 with no step from its exit or
                                      emerge within 7.5 yd of a Permafrost centre; per side tank and the main tank
-                                     the seconds alive with no healer within 40 yd; raid healer engine in the
+                                     the seconds alive with no healer within 40 yd, in phase 3 a side tank's with under 2,
+                                     each stretch with its walks before it; raid healer engine in the
                                      coverage; per phase healing done on Warcraft Logs' rules, pets and totems
                                      folded into their owner: effective healing plus the absorbs credited to the
                                      shield's caster, overheal as a share of that plus overheal, HPS over the
@@ -295,6 +297,13 @@ SPELL_LEECHING_SWARM_DMG = 66240
 IMPALE = (65919, 67858, 67859, 67860)
 PERMAFROST = (66193, 67855, 67856, 67857)
 PENETRATING_COLD = (66013, 67700, 68509, 68510)
+# A carrier's own answer to it, the anubarak penetrating cold self save's list: Cloak, Ice Block and Divine
+# Shield remove it, the rest cut it. One cast this far before the window counts for it.
+COLD_SELF_SAVES = {31224: "Cloak of Shadows", 45438: "Ice Block", 642: "Divine Shield", 48707: "Anti-Magic Shell",
+                   47585: "Dispersion", 498: "Divine Protection", 30823: "Shamanistic Rage", 22812: "Barkskin"}
+# The classes with one of those: death knight, rogue, mage, paladin, priest, shaman, druid
+COLD_SAVE_CLASSES = {6: "dk", 4: "rogue", 8: "mage", 2: "paladin", 5: "priest", 7: "shaman", 11: "druid"}
+COLD_SAVE_LEAD_MS = 1000
 LEECHING_SWARM = (66118, 67630, 68646, 68647)
 # Bloodlust, Heroism
 LUST_SPELLS = (2825, 32182)
@@ -310,7 +319,7 @@ BURST_SPELLS = {26297: "Berserking", 20572: "Blood Fury", 33697: "Blood Fury", 3
                 16166: "Elemental Mastery", 53908: "Potion of Speed", 53909: "Potion of Wild Magic"}
 # The stem's heroic phase 3 numbers: burst waits from BURST_HOLD_PCT, and a non-tank without Penetrating
 # Cold gets a heal only under SWARM_FLOOR_PCT
-BURST_HOLD_PCT = 40.0
+BURST_HOLD_PCT = radius("ANUBARAK_BURST_HOLD_PCT")
 SWARM_FLOOR_PCT = 10.0
 SWARM_BIN_MS = 5000
 # Leeching Swarm's share of current health a second, 10N, 25N, 10H, 25H
@@ -658,6 +667,12 @@ PULL_WINDOW_MS = 15000
 PULL_CASTS_MS = 3000
 HEALER_FAR_YD = 35.0
 HEALER_REACH_YD = 40.0
+# Phase 3: a side tank wants two healers in reach, since one carrying Penetrating Cold heals itself first.
+# Stretches this close are one, shown from SHOWN_MS with the tank's walks from WALK_MS before.
+THIN_COVER_HEALERS = 2
+THIN_COVER_MERGE_MS = 700
+THIN_COVER_SHOWN_MS = 500
+THIN_COVER_WALK_MS = 6000
 # NOMINAL_MELEE_RANGE: a burrower this close to a healer can hit it
 MELEE_YD = 5.0
 TANK_DEATH_LOOKBACK_MS = 12000
@@ -6152,6 +6167,24 @@ def cold_bare(trace: Trace, start: int, stop: int) -> list[dict]:
     return sorted(out, key=lambda row: row["start"])
 
 
+def cold_self_saves(trace: Trace, start: int, stop: int) -> list[dict]:
+    """Each roster Penetrating Cold window opened in `[start, stop)` on a COLD_SAVE_CLASSES member: its class and
+    the carrier's own COLD_SELF_SAVES casts from COLD_SAVE_LEAD_MS before it to its end, `(t, spell)`."""
+    classes = {member["g"]: COLD_SAVE_CLASSES[member["c"]] for member in trace.header.get("roster", [])
+               if member.get("c") in COLD_SAVE_CLASSES}
+    saves = [rec for rec in trace.of("cast") if rec.get("sp") in COLD_SELF_SAVES and not rec.get("tr")]
+    out = []
+    for guid, windows in aura_spans(trace, PENETRATING_COLD).items():
+        if guid not in classes:
+            continue
+        for low, high, _ in windows:
+            if start <= low < stop:
+                own = [(rec["t"], rec["sp"]) for rec in saves
+                       if rec.get("s") == guid and low - COLD_SAVE_LEAD_MS <= rec["t"] <= high]
+                out.append({"guid": guid, "start": low, "class": classes[guid], "saves": own})
+    return sorted(out, key=lambda row: row["start"])
+
+
 def carrying(spans: dict[int, list[tuple[int, int, bool]]], guid, when: int) -> bool:
     return any(start <= when <= stop for start, stop, _ in spans.get(guid, ()))
 
@@ -6283,7 +6316,7 @@ def burst_before_swarm(trace: Trace, start: int, samples: Samples | None = None)
 
 def show_swarm_race(trace: Trace, start: int, stop: int, samples: Samples) -> None:
     """Phase 3's race against the swarm: the 5 s steps, heals that only fed it, the DPS on burrowers, when
-    the burst opened, and the burst spent between 40% and phase 3."""
+    the burst opened, and the burst spent between BURST_HOLD_PCT and phase 3."""
     def pct(value):
         return "    -" if value is None else f"{value:5.1f}"
 
@@ -6765,6 +6798,23 @@ def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) ->
         or "no shaman"))
 
 
+def show_cold_self_saves(trace: Trace, start: int, stop: int) -> None:
+    rows = cold_self_saves(trace, start, stop)
+    tally: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+    for row in rows:
+        tally[row["class"]][0] += bool(row["saves"])
+        tally[row["class"]][1] += 1
+    print("  phase 3 Penetrating Cold windows on a class with its own save ("
+          + ", ".join(COLD_SELF_SAVES.values()) + ") and those with one inside, per class: "
+          + (", ".join(f"{name} {used}/{total}" for name, (used, total) in sorted(tally.items())) or "none"))
+    used = [row for row in rows if row["saves"]]
+    if used:
+        print("    " + ", ".join(
+            f"{trace.name(row['guid'])} {clock(row['start'])} "
+            + " ".join(f"{COLD_SELF_SAVES[spell]} {(when - row['start']) / 1000:+.1f} s" for when, spell in row["saves"])
+            for row in used))
+
+
 def show_swarm(trace: Trace) -> None:
     print("PHASE 3")
     samples = Samples(trace)
@@ -6809,6 +6859,8 @@ def show_swarm(trace: Trace) -> None:
               + (", ".join(f"{trace.name(row['guid'])} {clock(row['start'])} {row['bare'] / 1000:.1f} of"
                            f" {row['carried'] / 1000:.1f} s" + (" died" if row["died"] else "") for row in bare)
                  or "none"))
+        show_cold_self_saves(trace, span[0], span[1])
+        show_counts(trace, "anub.coldself")
         show_counts(trace, "anub.swarmheal")
         show_heal_duties(trace)
         show_cold_waves(trace, samples)
@@ -6881,6 +6933,50 @@ def healer_rows(trace: Trace, samples: Samples | None = None) -> dict:
                                                             for row in living):
                 bare[(side, tank, label)] += step
     return {"healers": healers, "main": main, "labels": labels, "gaps": gaps, "far": far, "bare": bare}
+
+
+def thin_cover_rows(trace: Trace) -> list[dict]:
+    """Phase 3, per side tank alive while THIN_COVER_HEALERS or more healers lived, each stretch with fewer of
+    them within HEALER_REACH_YD (`{side, tank, start, stop, ms, walks}`), stretches THIN_COVER_MERGE_MS apart
+    one. `walks` counts the tank's issued move rows by `by` from THIN_COVER_WALK_MS before the stretch to its
+    end. A snapshot stands for the time since the one before, capped at MAX_STEP_MS."""
+    span = swarm_span(trace)
+    healers = healer_guids(trace)
+    if span is None or not healers:
+        return []
+    sides = side_spans(trace)
+    runs: dict[int, dict] = {}
+    out: list[dict] = []
+    last = None
+    for snap in frames(trace):
+        when = snap["t"]
+        step = 0 if last is None else min(when - last, MAX_STEP_MS)
+        last = when
+        if not span[0] <= when <= span[1]:
+            continue
+        units = {row[0]: row for row in snap.get("u", [])}
+        living = [units[guid] for guid in healers if guid in units and units[guid][5] > 0]
+        for side in (0, 1):
+            tank = as_guid(held_at(sides[side], when))
+            unit = units.get(tank) if tank else None
+            if (unit is None or unit[5] <= 0 or len(living) < THIN_COVER_HEALERS or
+                    sum(dist2(row[1:3], unit[1:3]) <= HEALER_REACH_YD for row in living) >= THIN_COVER_HEALERS):
+                continue
+            run = runs.get(side)
+            if run and run["tank"] == tank and when - run["stop"] <= THIN_COVER_MERGE_MS:
+                run["stop"] = when
+                run["ms"] += step
+                continue
+            if run:
+                out.append(run)
+            runs[side] = {"side": side, "tank": tank, "start": when, "stop": when, "ms": step}
+    out.extend(runs.values())
+    moves = [rec for rec in trace.of("move") if rec.get("ok")]
+    for row in out:
+        row["walks"] = collections.Counter(
+            rec.get("by") or rec.get("k") for rec in moves
+            if rec.get("g") == row["tank"] and row["start"] - THIN_COVER_WALK_MS <= rec["t"] <= row["stop"])
+    return sorted(out, key=lambda row: row["start"])
 
 
 def healer_follows(trace: Trace, samples: Samples | None = None) -> dict[int, list[int]]:
@@ -7251,11 +7347,28 @@ def show_healers(trace: Trace) -> None:
           + ("" if bare else " none"))
     for (side, tank), parts in sorted(bare.items()):
         print(f"    side {side} {trace.name(tank)[:14]:14} {', '.join(parts)}")
+    show_thin_cover(trace)
     print(f"  main tank {trace.name(rows['main']) if rows['main'] else '-'} alive with no living healer within"
           f" {HEALER_REACH_YD:.0f} yd: " + (", ".join(main_bare) or "none"))
     show_healer_mana(trace, samples)
     show_healing_done(trace)
     show_paladin_auras(trace)
+
+
+def show_thin_cover(trace: Trace) -> None:
+    rows = thin_cover_rows(trace)
+    totals: collections.Counter = collections.Counter()
+    for row in rows:
+        totals[(row["side"], row["tank"])] += row["ms"]
+    print(f"  phase 3, side tank alive with under {THIN_COVER_HEALERS} living healers within {HEALER_REACH_YD:.0f} yd,"
+          f" and per stretch of {THIN_COVER_SHOWN_MS / 1000:.1f} s or more\n  its walks from"
+          f" {THIN_COVER_WALK_MS / 1000:.0f} s before:" + ("" if totals else " none"))
+    for (side, tank), ms in sorted(totals.items()):
+        parts = [f"{clock(row['start'])}-{clock(row['stop'])} "
+                 + (", ".join(f"{by} {n}" for by, n in row["walks"].most_common()) or "no walk")
+                 for row in rows if row["side"] == side and row["tank"] == tank
+                 and row["stop"] - row["start"] >= THIN_COVER_SHOWN_MS]
+        print(f"    side {side} {trace.name(tank)[:14]:14} {ms / 1000:.1f} s" + (": " + "; ".join(parts) if parts else ""))
 
 
 def paladin_aura_rows(trace: Trace) -> list[dict]:
@@ -9145,8 +9258,8 @@ SECTIONS = (
      show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, per 5 s his health and the raid's, the swarm and the healers'"
      " heals by who took them, bot heals onto healthy non-carriers, DPS on burrowers up at its start and newer"
-     " ones, when the burst opened, burst spent from 40%%, Penetrating Cold heals, the seconds each phase 3"
-     " carrier went with no HoT or shield, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
+     " ones, when the burst opened, burst spent from 50%%, Penetrating Cold heals, the seconds each phase 3"
+     " carrier went with no HoT or shield, carriers' own saves and anub.coldself, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
      " per phase 3 Penetrating Cold wave the first ticks survived, the frost holder, Aura Mastery at the first two"
      " ticks, anub.mastery rows, the resisted share per tick, each carrier's health at the landing, risk, first"
      " tick margin and fate, its anub.coldheal healers and the heals and absorbs on it before the tick, and herds"
@@ -9156,7 +9269,7 @@ SECTIONS = (
     ("healers", "per healer and phase the distance to the main and side tanks, far from a side tank on a burrower,"
      " follow acts, engine passes, anub.hstand, the walk behind the tank patches from anub.hbehind go to standing"
      " still, burrowers reaching a healer in phase 3 past no patch; side tanks and the main tank with no healer in"
-     " reach; raid healer engine coverage; per phase healing done on Warcraft Logs' rules with pets and totems"
+     " reach, phase 3 side tanks with under 2 and the walks before; raid healer engine coverage; per phase healing done on Warcraft Logs' rules with pets and totems"
      " folded into their owner: effective healing plus absorbs, overheal share, HPS and share of the raid's; each"
      " healer's mana at phase 3's start and 30 s in, Divine Plea, Innervate and Hymn of Hope casts per phase",
      show_healers),

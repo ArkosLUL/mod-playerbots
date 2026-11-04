@@ -228,8 +228,18 @@ bool AnubarakCleaveBuffNearBurrowerTrigger::IsActive() { return GetAnubarakCleav
 
 bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
 {
-    return AnubarakEngaged(botAI) && AnubarakSideTankNeedsDefensive(bot) &&
-           NextTankDefensive(botAI, bot, nullptr, true);
+    if (!AnubarakEngaged(botAI) || !AnubarakSideTankNeedsDefensive(bot))
+        return false;
+
+    uint32 const defensive =
+        NextTankDefensive(botAI, bot, nullptr, GetAnubarakPhase(botAI) != AnubarakPhase::Swarm);
+    return defensive && !AnubarakSideTankDefensiveKept(botAI, defensive);
+}
+
+// Also while a bubble is up, so the action can cancel the one it cast
+bool AnubarakColdSelfSaveTrigger::IsActive()
+{
+    return GetAnubarakColdSelfSave(botAI) || (AnubarakLeechingSwarmActive(botAI) && AnubarakColdBubbleUp(bot));
 }
 
 bool AnubarakSideTankDeadTrigger::IsActive()
@@ -334,6 +344,10 @@ void AddToCAnubarakTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("anubarak burrower casting shadow strike", {
         NextAction("anubarak interrupt shadow strike", ACTION_EMERGENCY + 3) }));
+
+    // The first tick lands 3 s after Penetrating Cold, and the swarm keeps a non-tank under it
+    triggers.push_back(new TriggerNode("anubarak penetrating cold self save", {
+        NextAction("anubarak penetrating cold self save", ACTION_EMERGENCY + 2) }));
 
     // Instant and castable on the move, so over the stand walks and the swarm heals
     triggers.push_back(new TriggerNode("anubarak lust due", {

@@ -156,6 +156,9 @@ void DefineAnubarak(EncounterBuilder& e)
             Family::CombatFormationMove | Family::Follow | Family::Flee);
     // the ready node places an idle side tank on its rim, and follow walked it off every second
     e.Block("anubarak side tank follow hold", Role::Any, AnubarakSideTankHolds, Family::Follow);
+    // phase 3: it waits at its hold for a burrower still far off, and the pickup taunts it as it comes in
+    e.Block("anubarak side tank swarm leash", Role::Any, AnubarakSideTankSwarmLeash,
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Charge, {"reach melee"});
     // the escort keeps the kiter in Hand of Protection's reach, whatever its target or heal target
     e.Block("anubarak hop escort hold", Role::Any, IsAnubarakEscort,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,

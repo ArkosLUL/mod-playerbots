@@ -3984,7 +3984,7 @@ class SwarmRace(unittest.TestCase):
         self.assertEqual({kind: round(share, 2) for kind, share in shares.items()},
                          {"boss": 0.5, "old": 0.15, "new": 0.35, "other": 0.0})
 
-    def test_burst_from_40_percent_counts_bots_with_their_reading(self):
+    def test_burst_from_the_hold_counts_bots_with_their_reading(self):
         crossed, casts = ab.burst_before_swarm(self.trace, 50000, self.samples)
         self.assertEqual(crossed, 45000)
         self.assertEqual([(row["guid"], row["spell"], row["reading"]) for row in casts],
@@ -3998,7 +3998,7 @@ class SwarmRace(unittest.TestCase):
         self.assertIn("bot heals cast onto a non-tank with no Penetrating Cold at 10%+: Mercy", text)
         self.assertIn("1 burrower(s) up as it began, the last gone 0:53.000 (+3.0 s); lust +1.5 s;"
                       " anub.burst open +3.5 s", text)
-        self.assertIn("burst cast from his 40% at 0:45.000 to phase 3: 2, 1 not released as behind:"
+        self.assertIn("burst cast from his 50% at 0:45.000 to phase 3: 2, 1 not released as behind:"
                       " Trueshot Rapid Fire 0:47.000", text)
 
     def test_the_engage_names_the_nearest_and_each_bot_tank(self):
@@ -6042,6 +6042,94 @@ class Refine29Lines(unittest.TestCase):
                           round(row["passer_cast_yd"], 1)), (R29_BW1, 22.4, R29_BW2, 2.0, 30.0))
         self.assertIn(f"Mighty 0:06.000 #{R29_BW2 & 0xFFFFFFFF} 30.0 > 2.0 yd in; in 1 of 1\n",
                       self.text(ab.show_burrower_threat, self.samples))
+
+
+R30_DK, R30_HEAL1, R30_HEAL2, R30_ROGUE, R30_MAGE, R30_WARRIOR = 6401, 6402, 6403, 6404, 6405, 6406
+SPELL_PENETRATING_COLD_25H, SPELL_CLOAK = 68510, 31224
+
+
+def r30_snap(when: int) -> dict:
+    # out to 15 yd west of its spot from 12 to 13 s and back by 16 s; the healers 30 yd east of the spot
+    out = min(max(when - 12000, 0), 1000) / 1000 - min(max(when - 15000, 0), 1000) / 1000
+    units = [[R30_DK, X - 15.0 * out, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [R30_HEAL1, X + 30.0, Y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0],
+             [R30_HEAL2, X + 30.0, Y + 2.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]]
+    units += [[guid, X + 5.0, Y + 5.0, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+              for guid in (R30_ROGUE, R30_MAGE, R30_WARRIOR)]
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r30_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790910000000, "map": ab.MAP_TOC, "inst": 5, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R30_DK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R30_HEAL1, "n": "Elemena", "r": "heal", "c": 7, "h": 0},
+             {"g": R30_HEAL2, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+             {"g": R30_ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+             {"g": R30_MAGE, "n": "Power", "r": "ranged", "c": 8, "h": 0},
+             {"g": R30_WARRIOR, "n": "Angry", "r": "melee", "c": 1, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"e": "spell", "sp": SPELL_CLOAK, "n": "Cloak of Shadows"},
+        note(0, R30_DK, "anub.side1", R30_DK),
+        note(0, R30_DK, "anub.phase", 1),
+        note(10000, R30_DK, "anub.phase", 3),
+        # the walk out before the stretch, and the one back inside it
+        move_row(12000, R30_DK, (X - 15.0, Y), "reach melee"),
+        move_row(14500, R30_DK, (X, Y), "anubarak assist tank hold burrower"),
+        # before phase 3, so not counted
+        aura(5000, R30_ROGUE, SPELL_PENETRATING_COLD_25H, False),
+        cast(5200, R30_ROGUE, SPELL_CLOAK, R30_ROGUE),
+        aura(5200, R30_ROGUE, SPELL_PENETRATING_COLD_25H, True),
+        # Cloaked off half a second in; the mage carried its 6 s with nothing; a warrior has no save
+        aura(11000, R30_ROGUE, SPELL_PENETRATING_COLD_25H, False),
+        cast(11500, R30_ROGUE, SPELL_CLOAK, R30_ROGUE),
+        aura(11500, R30_ROGUE, SPELL_PENETRATING_COLD_25H, True),
+        aura(11000, R30_MAGE, SPELL_PENETRATING_COLD_25H, False),
+        aura(17000, R30_MAGE, SPELL_PENETRATING_COLD_25H, True),
+        aura(11000, R30_WARRIOR, SPELL_PENETRATING_COLD_25H, False),
+        aura(17000, R30_WARRIOR, SPELL_PENETRATING_COLD_25H, True),
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [r30_snap(when) for when in range(0, 20500, 500)]
+    return records
+
+
+class Refine30Lines(unittest.TestCase):
+    """A phase 3 side tank with under two healers in reach and the walk before it, and the carriers' own
+    Penetrating Cold saves per class."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_5_anub-arak_1790910000.ndjson", r30_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace, *args)
+        return out.getvalue()
+
+    def test_a_side_tank_out_of_two_healers_reach_reads_its_stretch_and_walks(self):
+        rows = ab.thin_cover_rows(self.trace)
+        self.assertEqual([(row["side"], row["tank"], row["start"], row["stop"], row["ms"], dict(row["walks"]))
+                          for row in rows],
+                         [(1, R30_DK, 13000, 15000, 2500,
+                           {"reach melee": 1, "anubarak assist tank hold burrower": 1})])
+        self.assertIn("    side 1 Felesta        2.5 s: 0:13.000-0:15.000 reach melee 1, anubarak assist tank hold"
+                      " burrower 1\n", self.text(ab.show_thin_cover))
+
+    def test_a_carrier_save_counts_per_class_in_phase_3_only(self):
+        rows = ab.cold_self_saves(self.trace, 10000, 20000)
+        self.assertEqual(sorted((row["guid"], row["start"], row["class"], row["saves"]) for row in rows),
+                         [(R30_ROGUE, 11000, "rogue", [(11500, SPELL_CLOAK)]), (R30_MAGE, 11000, "mage", [])])
+        text = self.text(ab.show_cold_self_saves, 10000, 20000)
+        self.assertIn("per class: mage 0/1, rogue 1/1\n", text)
+        self.assertIn("    Shadow 0:11.000 Cloak of Shadows +0.5 s\n", text)
 
 
 if __name__ == "__main__":
