@@ -294,8 +294,11 @@ struct AnubarakDragLeg
 
 struct AnubarakBurrowerPick
 {
-    // On this side tank, its current target first
+    // On this side tank: one still on its taunt first, then its current target
     Creature* held = nullptr;
+    // held is on this tank's taunt. Once that ends it goes to whoever has the most threat, so it needs
+    // hitting before then.
+    bool heldTaunted = false;
     // This side's, on someone else: one hitting a healer first, then the nearest the hold
     Creature* loose = nullptr;
     // GetAnubarakSideTankHold
@@ -509,6 +512,9 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI);
 // A living, selectable burrower within range of at. waiting: only one no tank has held for the settle
 // yet, above the off-Permafrost kill line.
 bool AnubarakBurrowerNear(Player* bot, Position const& at, float range, bool waiting);
+// A living, selectable burrower no tank has held for the settle yet that can come within radius of at in
+// seconds at its run speed
+bool AnubarakLooseBurrowerReaches(Player* bot, Position const& at, float radius, float seconds);
 // A floor point on the melee ring round the burrower (ANUBARAK_MELEE_BURROWER_REACH off it and
 // ANUBARAK_MELEE_PATCH_CLEARANCE off every patch, heroic phase 3's ANUBARAK_SWARM_MELEE_*): in his melee
 // reach behind him first, then in his reach, nearest the bot; else the one nearest him. Held per bot while

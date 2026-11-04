@@ -30,6 +30,9 @@ constexpr float ANUBARAK_AREA_THREAT_REACH = 30.0f;
 constexpr float ANUBARAK_BURROWER_AREA_REACH = 10.0f;
 // Bladestorm spins 6 s at run speed, so a burrower this far off is within its reach before it ends
 constexpr float ANUBARAK_BLADESTORM_BURROWER_REACH = 25.0f;
+// One still walking in from its exit runs at about 8 yd/s and can cross the whole spin from 55 yd
+constexpr float ANUBARAK_BLADESTORM_RADIUS = 8.0f;
+constexpr float ANUBARAK_BLADESTORM_S = 6.0f;
 
 // Matched as a leading word too, so "cyclone on cc" or "repentance on enemy healer" count
 char const* const SPHERE_CROWD_CONTROL[] = {
@@ -236,7 +239,8 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
 
     // Its pick can move to a burrower mid-spin, and the stand walks it into that side's pack
     if (action->getName() == "bladestorm" &&
-        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false))
+        (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false) ||
+         AnubarakLooseBurrowerReaches(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_RADIUS, ANUBARAK_BLADESTORM_S)))
         return 0.0f;
 
     // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose

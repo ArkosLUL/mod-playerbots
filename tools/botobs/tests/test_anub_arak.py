@@ -5949,5 +5949,100 @@ class Refine28Lines(unittest.TestCase):
         self.assertEqual(walked.tank, 50)
 
 
+R29_DK, R29_MIGHTY, R29_HEAL = 6301, 6302, 6303
+R29_BW1, R29_BW2 = CREATURE | 6311, CREATURE | 6312
+SPELL_DND, SPELL_BLOOD_BOIL, SPELL_DARK_COMMAND, SPELL_ICY_TOUCH = 49938, 49941, 56222, 49909
+
+
+def r29_snap(when: int) -> dict:
+    units = [[guid, x, y, Z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+             for guid, (x, y) in ((R29_DK, (X, Y)), (R29_MIGHTY, (X + 10.0, Y + 20.0)), (R29_HEAL, (X - 30.0, Y)))]
+    # taunted from 20 yd at 2 s and never hit, on the healer once the taunt ran out
+    first = R29_DK if 2000 <= when < 5000 else R29_HEAL if when >= 5000 else 0
+    units.append([R29_BW1, X + 20.0, Y, Z, 0.0, 100.0, 0.0, first, 0, 0, 0, 0])
+    # 30 yd off the Bladestorm at 6 s, walks in to 2 yd of it by 9 s; taunted at 10 s and hit, lost all the same
+    walked = min(max(when - 6000, 0), 3000) / 3000
+    second = R29_DK if 10000 <= when < 13000 else R29_MIGHTY
+    units.append([R29_BW2, X + 40.0 - 28.0 * walked, Y + 20.0, Z, 0.0, 100.0, 0.0, second, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r29_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790900000000, "map": ab.MAP_TOC, "inst": 5, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R29_DK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R29_MIGHTY, "n": "Mighty", "r": "melee", "c": 1, "h": 0},
+             {"g": R29_HEAL, "n": "Elemena", "r": "heal", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (R29_BW1, R29_BW2)),
+        {"e": "spell", "sp": SPELL_DND, "n": "Death and Decay"},
+        {"e": "spell", "sp": SPELL_BLOOD_BOIL, "n": "Blood Boil"},
+        {"e": "spell", "sp": SPELL_DARK_COMMAND, "n": "Dark Command"},
+        {"e": "spell", "sp": SPELL_ICY_TOUCH, "n": "Icy Touch"},
+        note(0, R29_DK, "anub.side1", R29_DK),
+        # two Death and Decay picks, one FAILED under each; the FAILED row under none isn't the pick's
+        note(1000, R29_DK, "anub.saoe", "death and decay"),
+        act(1000, R29_DK, ab.SIDE_AOE_ACTION, "FAILED"),
+        note(1500, R29_DK, "anub.saoe", "none"),
+        act(1600, R29_DK, ab.SIDE_AOE_ACTION, "FAILED"),
+        cast(2000, R29_DK, SPELL_DARK_COMMAND, R29_BW1),
+        note(3000, R29_DK, "anub.saoe", "death and decay"),
+        act(3000, R29_DK, "death and decay", "FAILED"),
+        note(3500, R29_DK, "anub.saoe", "blood boil"),
+        cast(3500, R29_DK, SPELL_BLOOD_BOIL, 0),
+        cast(4000, R29_DK, SPELL_DND, 0),
+        cast(6000, R29_MIGHTY, ab.SPELL_BLADESTORM, 0),
+        cast(10000, R29_DK, SPELL_DARK_COMMAND, R29_BW2),
+        cast(11000, R29_DK, SPELL_ICY_TOUCH, R29_BW2),
+        {"t": 16000, "e": "end", "out": "wipe"},
+    ]
+    records += [r29_snap(when) for when in range(0, 16500, 500)]
+    return records
+
+
+class Refine29Lines(unittest.TestCase):
+    """A side tank's area picks against its casts and failures, the hits inside each taunt, and the burrower
+    closest over a Bladestorm."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_5_anub-arak_1790900000.ndjson", r29_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace, *args)
+        return out.getvalue()
+
+    def test_area_picks_read_against_casts_and_failures_under_them(self):
+        self.assertEqual(ab.side_aoe_picks(self.trace),
+                         {R29_DK: {"death and decay": [2, 1, 2], "blood boil": [1, 1, 0]}})
+        self.assertIn("    Felesta        death and decay 2 picked, 1 cast, 2 failed; blood boil 1 picked, 1 cast,"
+                      " 0 failed\n", self.text(ab.show_side_tank_aoe, self.samples))
+
+    def test_a_taunt_reads_its_end_yards_and_the_hits_inside_it(self):
+        rows = ab.pickup_taunts(self.trace, self.samples)
+        self.assertEqual([(row["guid"], round(row["yd"], 1), round(row["yd_end"], 1), row["hits"], row["to"])
+                          for row in rows],
+                         [(R29_BW1, 20.0, 20.0, 0, R29_HEAL), (R29_BW2, 23.3, 23.3, 1, R29_MIGHTY)])
+        self.assertIn(f"    Felesta        1 of 2 lost: 0:02.000 #{R29_BW1 & 0xFFFFFFFF} 20.0 > 20.0 yd\n",
+                      self.text(ab.show_pickup_taunts, self.samples))
+
+    def test_a_bladestorm_reads_the_burrower_that_walked_into_it(self):
+        (row,) = ab.bladestorm_casts(self.trace, self.samples)
+        self.assertEqual((row["burrower"], round(row["yards"], 1), row["passer"], round(row["pass_yd"], 1),
+                          round(row["passer_cast_yd"], 1)), (R29_BW1, 22.4, R29_BW2, 2.0, 30.0))
+        self.assertIn(f"Mighty 0:06.000 #{R29_BW2 & 0xFFFFFFFF} 30.0 > 2.0 yd in; in 1 of 1\n",
+                      self.text(ab.show_burrower_threat, self.samples))
+
+
 if __name__ == "__main__":
     unittest.main()

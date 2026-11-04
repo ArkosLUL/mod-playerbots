@@ -92,8 +92,10 @@
                                      since it came up and on the side tank, the puller's casts on it in the 3 s
                                      before, triggered ones marked *, and the seconds until it was back on a tank
                                      with the taunts at it, or those it stayed on non-tanks and never came back;
-                                     each Bladestorm with the nearest burrower,
-                                     within 25 yd flagged, the burrower guard's Bladestorm vetoes and the burrower
+                                     each tank taunt onto a burrower kept or lost by its yards at the cast, and the
+                                     lost ones with no hit from the tank inside them; each Bladestorm with the
+                                     nearest burrower, within 25 yd flagged, and the one closest over the spin,
+                                     inside it flagged; the burrower guard's Bladestorm vetoes and the burrower
                                      threat cap's per bot; anub.dps capped rows per ranged bot; per melee bot the
                                      seconds it targeted a burrower no tank within 5 yd held, by its anub.dps
                                      value then; heroic, per phase 3 focus pick its yards from the nearest
@@ -153,7 +155,8 @@
     anub_arak.py <file> --tanks      Expose Weakness peak per burrower wave per side tank; per run of it on the
                                      main tank its peak, the burrowers on him at a stack and his area casts (Swipe,
                                      Challenging Roar, ...) from 5 s before the first stack to the peak; per side
-                                     tank and surfaced phase its area casts by spell, anub.saoe rows; each tank
+                                     tank and surfaced phase its area casts by spell, anub.saoe rows, its picks
+                                     against its casts and the area casts FAILED under a pick; each tank
                                      defensive cast with the stack then, from its cast row; each tank form or
                                      stance (bear forms, Defensive Stance, Righteous Fury, Frost Presence) lost
                                      while he was up, not to a death, with the act row that dropped it, the
@@ -364,6 +367,11 @@ BURROWER_THREAT_CAP = "anubarak burrower threat cap"
 # its veto on a Bladestorm is the hold with a burrower near, the action named bladestorm
 BURROWER_GUARD = "anubarak burrower guard"
 BLADESTORM_BURROWER_REACH = radius("ANUBARAK_BLADESTORM_BURROWER_REACH")
+# a burrower walking in can cross the whole spin: its closest pass over the spin, inside the spin's radius
+# plus about a burrower's size flagged
+BLADESTORM_RADIUS = radius("ANUBARAK_BLADESTORM_RADIUS")
+BLADESTORM_MS = 6000
+BLADESTORM_HIT_YD = BLADESTORM_RADIUS + 1.5
 # 10-man and 25-man; 25H wears 67847
 EXPOSE_WEAKNESS = (67721, 67847)
 # ANUBARAK_SIDE_DEFENSIVE_STACKS, a uint32 radius() doesn't read
@@ -4403,9 +4411,21 @@ def stray_burrower_casts(trace: Trace) -> list[dict]:
     return out
 
 
+def closest_pass(samples: Samples, guid, other, low: int, high: int) -> float | None:
+    """The nearest `guid` came to `other` over its live samples from low to high, None with none paired."""
+    stamps, rows = samples.track(guid)
+    gaps = []
+    for index in range(bisect.bisect_left(stamps, low), bisect.bisect_right(stamps, high)):
+        mine, theirs = rows[index], samples.recent(other, stamps[index])
+        if mine[5] > 0 and theirs:
+            gaps.append(dist2(mine[1:3], theirs[1:3]))
+    return min(gaps, default=None)
+
+
 def bladestorm_casts(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Each Bladestorm from the roster, triggered ones left out: the caster and the nearest living burrower
-    sampled within one snapshot gap of the cast, how far, both None with none sampled."""
+    sampled within one snapshot gap of the cast, how far, both None with none sampled; and the burrower that
+    came closest over the spin (`passer`), its yards at the cast and at that pass, None with none sampled."""
     samples = samples or Samples(trace)
     burrowers = guids_of_entry(trace, NPC_BURROWER)
     roster = roster_guids(trace)
@@ -4418,7 +4438,12 @@ def bladestorm_casts(trace: Trace, samples: Samples | None = None) -> list[dict]
             (dist2(row[1:3], caster[1:3]), guid)
             for guid, row in ((guid, samples.recent(guid, rec["t"])) for guid in burrowers) if row and row[5] > 0]
         yards, burrower = min(gaps, default=(None, None))
-        out.append({"t": rec["t"], "guid": rec["s"], "burrower": burrower, "yards": yards})
+        at_cast = dict((guid, gap) for gap, guid in gaps)
+        passes = [(gap, guid) for guid in burrowers
+                  if (gap := closest_pass(samples, guid, rec["s"], rec["t"], rec["t"] + BLADESTORM_MS)) is not None]
+        pass_yd, passer = min(passes, default=(None, None))
+        out.append({"t": rec["t"], "guid": rec["s"], "burrower": burrower, "yards": yards, "passer": passer,
+                    "pass_yd": pass_yd, "passer_cast_yd": at_cast.get(passer)})
     return out
 
 
@@ -4446,6 +4471,19 @@ def show_burrower_threat(trace: Trace, samples: Samples) -> None:
     near = sum(1 for row in casts if row["yards"] is not None and row["yards"] <= BLADESTORM_BURROWER_REACH)
     print(f"  Bladestorm, the nearest living burrower at the cast, near within {BLADESTORM_BURROWER_REACH:.0f} yd: "
           + (", ".join(map(cast_text, casts)) + f"; near in {near} of {len(casts)}" if casts else "none"))
+
+    def pass_text(row: dict) -> str:
+        if row["pass_yd"] is None:
+            return f"{trace.name(row['guid'])} {clock(row['t'])} no burrower sampled"
+        at_cast = "-" if row["passer_cast_yd"] is None else f"{row['passer_cast_yd']:.1f}"
+        return (f"{trace.name(row['guid'])} {clock(row['t'])} {short(trace, row['passer'])} {at_cast} >"
+                f" {row['pass_yd']:.1f} yd" + (" in" if row["pass_yd"] <= BLADESTORM_HIT_YD else ""))
+
+    inside = sum(1 for row in casts if row["pass_yd"] is not None and row["pass_yd"] <= BLADESTORM_HIT_YD)
+    if casts:
+        print(f"  Bladestorm, the burrower closest over its {BLADESTORM_MS / 1000:.0f} s, its yards at the cast >"
+              f" at that pass, in within {BLADESTORM_HIT_YD:.1f} yd: " + ", ".join(map(pass_text, casts))
+              + f"; in {inside} of {len(casts)}")
     capped, held = burrower_vetoes(trace)
 
     def per_bot_text(counts: collections.Counter) -> str:
@@ -4973,12 +5011,37 @@ PICKUP_TAUNTS = {spell: name for spell, name in BURROWER_TAUNTS.items()
 TAUNT_MS = 3000
 TAUNT_KEPT_MS = 1500
 TAUNT_ARRIVE_YD = 40.0
+# a hit inside the taunt: a cast aimed at the burrower, or a side tank area spell with it this close
+TAUNT_HIT_YD = 11.5
+
+
+def taunt_hits(trace: Trace, samples: Samples, tank, target, when: int, casts: list[dict]) -> int:
+    """The tank's own casts inside the taunt from `when` that reach the burrower: aimed at it, or one of
+    SIDE_AOE_SPELLS with it within TAUNT_HIT_YD of the tank then."""
+    hits = 0
+    for rec in casts:
+        if not when < rec["t"] <= when + TAUNT_MS:
+            continue
+        if rec.get("tgt") == target:
+            hits += 1
+            continue
+        if trace.spells.get(rec.get("sp"), "").lower() not in SIDE_AOE_SPELLS:
+            continue
+        mine, its = samples.recent(tank, rec["t"]), samples.recent(target, rec["t"])
+        if mine and its and dist2(mine[1:3], its[1:3]) <= TAUNT_HIT_YD:
+            hits += 1
+    return hits
 
 
 def pickup_taunts(trace: Trace, samples: Samples) -> list[dict]:
-    """Each tank taunt onto a burrower: the yards between them at the cast, and the burrower's target
-    TAUNT_KEPT_MS after the taunt's TAUNT_MS (`to`, None when it has no fresh sample then)."""
+    """Each tank taunt onto a burrower: the yards between them at the cast (`yd`) and as it ends (`yd_end`,
+    None unsampled), the tank's hits on it inside it, and the burrower's target TAUNT_KEPT_MS after the
+    taunt's TAUNT_MS (`to`, None when it has no fresh sample then)."""
     burrowers = guids_of_entry(trace, NPC_BURROWER)
+    own_casts: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if not rec.get("tr"):
+            own_casts[rec.get("s")].append(rec)
     out = []
     for rec in trace.of("cast"):
         tank, target = rec.get("s"), rec.get("tgt")
@@ -4988,8 +5051,12 @@ def pickup_taunts(trace: Trace, samples: Samples) -> list[dict]:
         if not mine or not its:
             continue
         later = samples.recent(target, rec["t"] + TAUNT_MS + TAUNT_KEPT_MS)
+        mine_end, its_end = samples.recent(tank, rec["t"] + TAUNT_MS), samples.recent(target, rec["t"] + TAUNT_MS)
         out.append({"t": rec["t"], "tank": tank, "guid": target, "spell": rec["sp"],
-                    "yd": dist2(mine[1:3], its[1:3]), "to": later[7] if later and later[5] > 0 else None})
+                    "yd": dist2(mine[1:3], its[1:3]),
+                    "yd_end": dist2(mine_end[1:3], its_end[1:3]) if mine_end and its_end else None,
+                    "hits": taunt_hits(trace, samples, tank, target, rec["t"], own_casts[tank]),
+                    "to": later[7] if later and later[5] > 0 else None})
     return out
 
 
@@ -5019,6 +5086,18 @@ def show_pickup_taunts(trace: Trace, samples: Samples) -> None:
         print(f"    {name[:14]:14} {PICKUP_TAUNTS[spell]:17} within {TAUNT_ARRIVE_YD:.0f} yd"
               f" {band([row for row in mine if row['yd'] <= TAUNT_ARRIVE_YD])}; beyond"
               f" {band([row for row in mine if row['yd'] > TAUNT_ARRIVE_YD])}")
+
+    def lost_text(row: dict) -> str:
+        end = "-" if row["yd_end"] is None else f"{row['yd_end']:.1f}"
+        return f"{clock(row['t'])} {short(trace, row['guid'])} {row['yd']:.1f} > {end} yd"
+
+    print(f"  taunts lost with no hit from the tank inside them (a cast at it, or an area spell with it within"
+          f" {TAUNT_HIT_YD:.1f} yd), yards at the cast > as it ended:")
+    for guid in sorted({row["tank"] for row in rows}, key=trace.name):
+        lost = [row for row in rows if row["tank"] == guid and row["to"] is not None and row["to"] != guid]
+        bare = [row for row in lost if not row["hits"]]
+        print(f"    {trace.name(guid)[:14]:14} {len(bare)} of {len(lost)} lost"
+              + (": " + ", ".join(map(lost_text, bare)) if bare else ""))
 
 
 def show_side_tank_crowds(trace: Trace, samples: Samples) -> None:
@@ -7430,6 +7509,36 @@ def side_tank_area_casts(trace: Trace) -> dict[tuple[int, str], collections.Coun
     return dict(out)
 
 
+SIDE_AOE_ACTION = "anubarak side tank area threat"
+
+
+def side_aoe_picks(trace: Trace) -> dict[int, dict[str, list[int]]]:
+    """Per side tank and spell: `[picked, cast, failed]`, its anub.saoe rows naming it, its own casts of it
+    (triggered left out), and SIDE_AOE_ACTION or the rotation's action of that name FAILED while anub.saoe's
+    latest row named it."""
+    tanks = set(side_tank_list(trace))
+    picks = {guid: rows for guid, rows in per_bot(trace, "anub.saoe").items() if guid in tanks}
+    stamps = {guid: [when for when, _ in rows] for guid, rows in picks.items()}
+    out: dict[int, dict[str, list[int]]] = collections.defaultdict(lambda: collections.defaultdict(lambda: [0, 0, 0]))
+    for guid, rows in picks.items():
+        for _, value in rows:
+            if value in SIDE_AOE_SPELLS:
+                out[guid][value][0] += 1
+    for rec in trace.of("cast"):
+        name = trace.spells.get(rec.get("sp"), "").lower()
+        if not rec.get("tr") and rec.get("s") in tanks and name in SIDE_AOE_SPELLS:
+            out[rec["s"]][name][1] += 1
+    for rec in trace.of("act"):
+        guid = rec.get("g")
+        if guid not in picks or rec.get("vd") != "FAILED":
+            continue
+        index = bisect.bisect_right(stamps[guid], rec["t"])
+        latest = picks[guid][index - 1][1] if index else None
+        if latest in SIDE_AOE_SPELLS and rec.get("a") in (SIDE_AOE_ACTION, latest):
+            out[guid][latest][2] += 1
+    return {guid: dict(spells) for guid, spells in out.items()}
+
+
 def ground_area_rows(trace: Trace, samples: Samples) -> list[dict]:
     """Each side tank Consecration and Death and Decay: per second of its duration, how many of the burrowers on
     the tank at the cast stood inside it alive. Consecration centres on the tank at the cast, Death and Decay on
@@ -7474,6 +7583,14 @@ def show_side_tank_aoe(trace: Trace, samples: Samples | None = None) -> None:
                 print(f"    {trace.name(guid)[:14]:14} {label:5} "
                       + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
     show_counts(trace, "anub.saoe")
+    picks = side_aoe_picks(trace)
+    if picks:
+        print(f"  anub.saoe picks per side tank against its casts, and {SIDE_AOE_ACTION} or the rotation's own cast"
+              " FAILED under that pick:")
+        for guid in sorted(picks, key=trace.name):
+            print(f"    {trace.name(guid)[:14]:14} " + "; ".join(
+                f"{name} {picked} picked, {cast} cast, {failed} failed"
+                for name, (picked, cast, failed) in sorted(picks[guid].items(), key=lambda item: -item[1][0])))
     areas = ground_area_rows(trace, samples or Samples(trace))
     if not areas:
         return
@@ -9011,8 +9128,8 @@ SECTIONS = (
      " centre while on a side tank, where each submerge went under, each opener and the players nearest its"
      " exit, each pulled off its side tank by a non-tank within 15 s of coming up with the puller's casts,"
      " triggered ones marked *, and how long until it was back on a tank and the taunts that did it, each tank"
-     " taunt onto a burrower kept or lost by its yards at the cast, Bladestorm"
-     " with a burrower within 25 yd, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
+     " taunt onto a burrower kept or lost by its yards at the cast and the lost ones with no hit inside them,"
+     " Bladestorm with a burrower within 25 yd and the one closest over the spin, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
      " within 5 yd held by anub.dps value, heroic phase 3 focus picks' depth in their patch, melee ring reach and"
      " the side's melee on them",
      show_burrowers),
@@ -9044,7 +9161,8 @@ SECTIONS = (
      " healer's mana at phase 3's start and 30 s in, Divine Plea, Innervate and Hymn of Hope casts per phase",
      show_healers),
     ("tanks", "Expose Weakness per wave per side tank, the main tank's with the burrowers and his area casts"
-     " before it, side tank area casts per surfaced phase and anub.saoe rows, each tank defensive cast with its"
+     " before it, side tank area casts per surfaced phase and anub.saoe rows, its picks against its casts and"
+     " the FAILED ones, each tank defensive cast with its"
      " stack, a tank form or stance lost while he was up with the act row that dropped it, each tank death with"
      " the damage and heals before it",
      show_tanks),

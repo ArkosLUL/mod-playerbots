@@ -19,6 +19,7 @@
 
 #include "BossAuraTriggers.h"
 #include "Creature.h"
+#include "DBCStores.h"
 #include "EncounterHelpers.h"
 #include "GameObject.h"
 #include "Group.h"
@@ -6044,6 +6045,16 @@ bool AnubarakWaveImminent(PlayerbotAI* botAI)
     return until <= static_cast<int32>(ANUBARAK_WAVE_READY_MS);
 }
 
+// Any taunt aura the tank put on it: its class taunt, Righteous Defense's, Death Grip's
+static bool TauntedBy(Unit* unit, Player* tank)
+{
+    for (AuraEffect const* effect : unit->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT))
+        if (effect->GetCasterGUID() == tank->GetGUID())
+            return true;
+
+    return false;
+}
+
 AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
 {
     AnubarakBurrowerPick pick;
@@ -6072,8 +6083,12 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         if (burrower->GetVictim() == bot)
         {
             ++heldCount;
-            if (!pick.held || burrower == current)
+            bool const taunted = TauntedBy(burrower, bot);
+            if (!pick.held || (taunted && !pick.heldTaunted) || (taunted == pick.heldTaunted && burrower == current))
+            {
                 pick.held = burrower;
+                pick.heldTaunted = taunted;
+            }
 
             continue;
         }
@@ -6459,6 +6474,41 @@ static bool SideAoeInReach(Player* bot, SideAoeSpell const& spell, Unit* target,
     }
 }
 
+// CanCastSpell's probe skips power, so a spell short a rune passes there and fails at the cast. Death runes
+// cover any type.
+static bool SideAoeRunesReady(Player* bot, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    SpellRuneCostEntry const* cost =
+        info && info->PowerType == POWER_RUNE ? sSpellRuneCostStore.LookupEntry(info->RuneCostID) : nullptr;
+    if (!cost || cost->NoRuneCost())
+        return true;
+
+    // indexed by RuneType, the way Spell::CheckRuneCost reads it
+    int32 need[RUNE_DEATH];
+    for (uint8 type = 0; type < RUNE_DEATH; ++type)
+        need[type] = static_cast<int32>(cost->RuneCost[type]);
+
+    int32 death = 0;
+    for (uint8 i = 0; i < MAX_RUNES; ++i)
+    {
+        if (bot->GetRuneCooldown(i))
+            continue;
+
+        RuneType const rune = bot->GetCurrentRune(i);
+        if (rune == RUNE_DEATH)
+            ++death;
+        else if (rune < RUNE_DEATH && need[rune] > 0)
+            --need[rune];
+    }
+
+    int32 shortBy = 0;
+    for (int32 left : need)
+        shortBy += std::max(left, 0);
+
+    return shortBy <= death;
+}
+
 bool GetAnubarakSideTankAoe(PlayerbotAI* botAI, AnubarakSideTankAoe& out)
 {
     out = AnubarakSideTankAoe();
@@ -6505,6 +6555,14 @@ bool GetAnubarakSideTankAoe(PlayerbotAI* botAI, AnubarakSideTankAoe& out)
             {
                 if (std::strcmp(why, "none") == 0)
                     why = "walk";
+
+                continue;
+            }
+
+            if (!SideAoeRunesReady(bot, spellId))
+            {
+                if (std::strcmp(why, "none") == 0)
+                    why = "runes";
 
                 continue;
             }
@@ -6561,7 +6619,9 @@ bool AnubarakSideTankAreaAllowed(PlayerbotAI* botAI, std::string const& spellNam
     if (!spell && !area)
         return true;
 
-    if (spell && spell->ground && !AtSideTankHold(bot, static_cast<uint8>(side)))
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spellName)->Get();
+    if (spell && spell->ground &&
+        (!AtSideTankHold(bot, static_cast<uint8>(side)) || !SideAoeRunesReady(bot, spellId)))
         return false;
 
     std::vector<SideAoeUnit> const units = SideAoeUnits(bot, *state, static_cast<uint8>(side));
@@ -6581,7 +6641,6 @@ bool AnubarakSideTankAreaAllowed(PlayerbotAI* botAI, std::string const& spellNam
     if (spell->shape == SideAoeShape::Disease && !Diseased(botAI, aimed))
         return true;
 
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spellName)->Get();
     Position const centre = aimed ? aimed->GetPosition() : bot->GetPosition();
     // One burrower is enough here: Heart Strike on a lone one is still the side tank's best threat
     return JudgeHits(SideAoeCastHits(botAI, *spell, spellId, aimed ? aimed : bot, centre, units),
@@ -6616,6 +6675,22 @@ bool AnubarakBurrowerNear(Player* bot, Position const& at, float range, bool wai
         if (!waiting || (burrower->GetHealthPct() >= ANUBARAK_FOCUS_OFF_FROST_PCT && !BurrowerSettled(bot, *state, burrower)))
             return true;
     }
+
+    return false;
+}
+
+bool AnubarakLooseBurrowerReaches(Player* bot, Position const& at, float radius, float seconds)
+{
+    AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
+    if (!state)
+        return false;
+
+    for (Creature* burrower : ResolveAlive(bot, state->burrowers))
+        if (!burrower->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+            Dist2d(burrower->GetPosition(), at) <=
+                radius + burrower->GetCombatReach() + burrower->GetSpeed(MOVE_RUN) * seconds &&
+            !BurrowerSettled(bot, *state, burrower))
+            return true;
 
     return false;
 }

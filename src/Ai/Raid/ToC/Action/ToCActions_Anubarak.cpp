@@ -436,6 +436,11 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
     if (target != pick.held)
         return false;
 
+    // A taunt holds it only 3 s, and walking off to the hold keeps it out of reach that long. Stands so it
+    // comes in and the rotation lands threat first.
+    if (pick.heldTaunted && !bot->IsWithinMeleeRange(pick.held))
+        return false;
+
     // The spike dodge would walk the tank straight back out
     Position const& hold = pick.hold;
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||

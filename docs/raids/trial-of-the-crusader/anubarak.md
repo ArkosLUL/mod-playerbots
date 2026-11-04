@@ -492,7 +492,10 @@ BV, BW and BY: Righteous Defense within 40 yd kept 21 of 26, beyond 7 of 38 (cas
 the 2026-10-25 wipes burrowers were on a tank 18-41% of their life and two warlocks died to them in
 every pull. It walks to its **hold** only once its pick is on it; an untaunted
 one is attacked in place, since walking off leaves it on its victim and the patch walk and reach
-melee trade the tank back and forth. It skips the walk (and the ready node's) only while the spike
+melee trade the tank back and forth. A held one still on its taunt (any `SPELL_AURA_MOD_TAUNT` it cast)
+is its target first, and the walk waits while that one is out of melee reach: a taunt holds 3 s, and in
+CI walking off left Felesta 5 of 9 lost taunts with no hit inside them (0:10.4 Dark Command from 32 yd,
+it went to Mighty and killed him and Assasin). It skips the walk (and the ready node's) only while the spike
 could reach the hold within the walk plus 2 s (distances over speeds), where the dodge would walk it
 straight back out; a veto on the spike's lane crossing the hold, however far the spike, kept side
 tanks 7-18 yd off at three phase 2 starts of the 2026-10-26 late wipes, each losing a burrower to a
@@ -538,7 +541,10 @@ the other side's. Radii come off the spell, so glyphs count; an 8-10 s ground ar
 rotation alike, every phase, only with the side tank within 3 yd of `GetAnubarakSideTankHold`
 (`anub.saoe` `walk` while that holds it): in CD, CE and CH 10 of Felesta's 22 Death and Decays, cast
 with both burrowers on her at the pickup, sat empty half their 10 s or more as she walked 17-23 yd to
-her patch. Burrowers, scarabs and he are undead. **The cap** (`AnubarakSideTankBossCapped`)
+her patch. A spell goes only with its runes ready (its `SpellRuneCost`, death runes covering any type;
+`anub.saoe` `runes`), since `CanCastSpell` skips power: in CI Felesta reached her hold 15-18 s into each
+wave, her rotation spending each rune as it came back, and picked Death and Decay 27 times there, cast 4,
+failed 21; Blood Boil failed 20-42 a pull in CD-CI. Burrowers, scarabs and he are undead. **The cap** (`AnubarakSideTankBossCapped`)
 runs from 70% of his victim's threat on him until under 60%. `anubarak side tank area guard` zeroes
 the class rotation's spell from that list failing the same test (one own burrower is enough), and any
 other area spell with one of the other side's within 10 yd plus its reach of the bot or its target.
@@ -638,7 +644,8 @@ burrower's reach); with one of those within melee reach a running Blade Flurry o
 cancelled. In 2026-10-30 BA-BE melee pulled burrowers off with Divine Storm (8 yd round him, plus Holy
 Vengeance), Blade Flurry, Sweeping Strikes, Death and Decay ticks and procs. An interrupt or stun on a
 casting one passes. Bladestorm waits
-while any burrower is within 25 yd: the guard reads only the cast, and in 2026-10-27 N Mighty's at
+while any burrower is within 25 yd, or one not yet settled could reach its 8 yd in the 6 s at its run speed
+(CI 0:08.4: #133, 30.6 yd off at the cast, passed 3.5 yd from Mighty and took him): the guard reads only the cast, and in 2026-10-27 N Mighty's at
 0:14.5 outlived his pick, which moved to a burrower, the stand walked him spinning into side 1's
 pack, and one turned on him (dead 0:21.8). Affliction multidots
 put Corruption, Unstable Affliction and Curse of Agony on all four wave-1 burrowers at 8-15 s while
@@ -1291,6 +1298,13 @@ personal burst is unrestricted.
   traces, 2 fresh kites that ended on a patch end caught instead, BM 3:44 among them (its patch's
   restart crossed side 1's tank patch, which the real pull lost at 4:02).
 - A standby paladin is off the gather: a healer one heals the scarab targets less, a DPS one hits less.
+- A shaman kites on foot ([Ghost Wolf](#how-the-bots-play-it) is outdoors only); Totemist's boots carry
+  Icewalker, not Nitro Boosts, so his CI 3:44.8 kite had no speed tool.
+- Phase 3: a side tank dies to Leeching Swarm plus its burrowers (CI Bulwark 37 s in, 80k of the 130k),
+  and the healers go next.
+- A rescue Righteous Defense (member under 50%) from 40+ yd buys only its 3 s: Bulwark lost 9 of 9 in
+  CE, 15 of 15 in CH.
+- Deathsong, the human, took 3 of Felesta's 9 lost CI taunts.
 
 - Untargeted raid AoE still pops spheres, all of it in normal (Starfall made every patch in the
   2026-10-16 kill), all but Starfall in heroic.
@@ -1621,7 +1635,10 @@ clamped to 0, the pool read at first sight), fate, heals and absorbs before it b
 none; each phase 3 Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice with its
 target's health and its caster dead within 10 s, and the tank dips under 35% with the first of them onto
 it, else whether it died. `--burrowers` each tank taunt onto a burrower kept or lost 1.5 s after its 3 s,
-by its yards at the cast, within 40 and beyond.
+by its yards at the cast, within 40 and beyond, and the lost ones with no hit from the tank inside them (a
+cast at it, or a side tank area spell with it within 11.5 yd); each Bladestorm's burrower closest over the
+spin, inside 9.5 yd flagged. `--tanks` per side tank and area spell its `anub.saoe` picks, its casts, and
+the area threat or rotation cast `FAILED` under that pick.
 `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
 shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
 heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
