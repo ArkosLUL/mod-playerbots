@@ -143,12 +143,12 @@ constexpr int ANUBARAK_SCARAB_KITE_HEADINGS = 16;
 constexpr uint32 SPELL_SCARAB_DETERMINATION = 66092;
 
 // Heroic phase 3: Leeching Swarm takes 30% of each player's current health a second and heals him by
-// what lands, so the raid sits low and the healing goes to the tanks and Penetrating Cold (user call,
-// 2026-10-30). A non-tank under the floor gets a small heal; at 10% the swarm alone takes about 7 s.
+// what lands, so the healing goes to the tanks and Penetrating Cold only (user calls, 2026-10-30 and
+// 2026-11-05). Every other non-tank, healers too, lives on its own, party and raid-wide heals: about
+// 0.3k a second keeps it over the swarm's 250 a tick.
 constexpr float ANUBARAK_SWARM_TANK_URGENT_PCT = 50.0f;
 constexpr float ANUBARAK_SWARM_TANK_TOPOFF_PCT = 90.0f;
 constexpr float ANUBARAK_SWARM_COLD_TOPOFF_PCT = 50.0f;
-constexpr float ANUBARAK_SWARM_FLOOR_PCT = 10.0f;
 // A cold duty healer leaves the tanks to the tank healers down to here, or to the tank line above with
 // none of them alive
 constexpr float ANUBARAK_SWARM_COLD_HEALER_TANK_PCT = 35.0f;
@@ -6862,12 +6862,29 @@ bool AnubarakSideTankSwarmLeash(PlayerbotAI* botAI)
 
     int8 const side = GetAnubarakBurrowerTankSide(bot);
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
-    if (side < 0 || !target || target->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER) ||
-        target->GetVictim() == bot)
+    if (side < 0 || !target || target->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER))
         return false;
+
+    // on us it walks in by itself; walking out to meet it left the healers 40+ yd off
+    if (target->GetVictim() == bot)
+        return true;
 
     Position const hold = GetAnubarakSideTankHold(bot, static_cast<uint8>(side));
     return target->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) > ANUBARAK_TAUNT_ARRIVE;
+}
+
+bool AnubarakSwarmSavesHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive() || IsAnubarakTankPlayer(bot) || !AnubarakLeechingSwarmActive(botAI) ||
+        bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot)))
+        return false;
+
+    for (Creature* burrower : GetAnubarakBurrowers(bot))
+        if (burrower->GetVictim() == bot)
+            return false;
+
+    return true;
 }
 
 bool AnubarakMeleeNeedsBurrowerStand(PlayerbotAI* botAI)
@@ -7544,22 +7561,20 @@ static std::vector<ObjectGuid> HealsOnTheWay(Player* healer)
 // For the rows under the urgent ones: SWARM_HEAL_TIERS for a heal that would only feed the swarm. A
 // carrier with no HoT or shield that this healer can cover ranks ahead of the tanks' top-off: on direct
 // heals alone, carriers died to it.
-static constexpr uint8 SWARM_HEAL_TIERS = 4;
-static constexpr uint8 SWARM_HEAL_TANK_TOPOFF = 2;
+static constexpr uint8 SWARM_HEAL_TIERS = 3;
+static constexpr uint8 SWARM_HEAL_TANK_TOPOFF = 1;
 
 static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
 {
     float const pct = member->GetHealthPct();
     bool const tank = IsAnubarakTankPlayer(member);
     bool const carrier = member->HasAura(cold);
-    if (!tank && pct < ANUBARAK_SWARM_FLOOR_PCT)
-        return 0;
     if (carrier && ColdCarrierCover(botAI, member))
-        return 1;
+        return 0;
     if (tank && pct < ANUBARAK_SWARM_TANK_TOPOFF_PCT)
         return SWARM_HEAL_TANK_TOPOFF;
     if (carrier && pct < ANUBARAK_SWARM_COLD_TOPOFF_PCT)
-        return 3;
+        return 2;
 
     return SWARM_HEAL_TIERS;
 }
@@ -7707,8 +7722,7 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
     {
         uint8 bestTier = SWARM_HEAL_TIERS;
         pick.target = tierPick(bestTier);
-        char const* const labels[] = {"low", "bare", "tank", "cold"};
-        pick.small = bestTier == 0;
+        char const* const labels[] = {"bare", "tank", "cold"};
         if (pick.target)
             label = spread ? "spread" : labels[bestTier];
     }
@@ -7889,7 +7903,7 @@ bool AnubarakSelfInnervateHeld(PlayerbotAI* botAI)
 
 bool AnubarakSwarmHealWasted(Player* target)
 {
-    return target && !IsAnubarakTankPlayer(target) && target->GetHealthPct() >= ANUBARAK_SWARM_FLOOR_PCT &&
+    return target && !IsAnubarakTankPlayer(target) &&
            !target->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, target));
 }
 

@@ -3974,9 +3974,8 @@ class SwarmRace(unittest.TestCase):
         self.assertEqual((first["heal_tank"], first["heal_cold"], first["heal_other"]), (3000, 5000, 0))
         self.assertEqual((second["boss"], second["heal_cold"], second["heal_other"]), (41.0, 3000, 8000))
 
-    def test_only_a_bot_heal_it_cast_onto_a_healthy_non_carrier_is_a_breach(self):
-        self.assertEqual(ab.swarm_heal_breaches(self.trace, 50000, 60000, self.samples),
-                         {(HEAL, 48071): [1, 6000]})
+    def test_only_a_bot_heal_it_cast_onto_a_non_carrier_is_a_breach(self):
+        self.assertEqual(ab.swarm_heal_breaches(self.trace, 50000, 60000), {(HEAL, 48071): [1, 6000]})
 
     def test_burrowers_up_as_phase_3_began_part_from_newer_ones(self):
         self.assertEqual(ab.swarm_burrowers(self.trace, 50000, self.samples), ({B4}, {B3}, 53000))
@@ -3995,7 +3994,7 @@ class SwarmRace(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             ab.show_swarm(self.trace)
         text = out.getvalue()
-        self.assertIn("bot heals cast onto a non-tank with no Penetrating Cold at 10%+: Mercy", text)
+        self.assertIn("bot heals cast onto a non-tank with no Penetrating Cold, a healer itself included: Mercy", text)
         self.assertIn("1 burrower(s) up as it began, the last gone 0:53.000 (+3.0 s); lust +1.5 s;"
                       " anub.burst open +3.5 s", text)
         self.assertIn("burst cast from his 50% at 0:45.000 to phase 3: 2, 1 not released as behind:"
@@ -5653,8 +5652,8 @@ class SustainPull(unittest.TestCase):
                                           RFHOLY: {("Light", True): 1}})
         self.assertEqual(ab.water_totems(self.trace, 50000), {RFSHAM: ("Mana Spring Totem", "Healing Stream Totem")})
         text = self.text(ab.show_swarm)
-        self.assertIn("    Trueshot       ranged    40     0.10    0.00    0.00    0.00    0.00    0.00    0.10"
-                      "    0.20\n", text)
+        self.assertIn("    Trueshot       ranged    40     0.10    0.00    0.00    0.00    0.00    0.00    0.00"
+                      "    0.10    0.20    0.00 short  no party heal\n", text)
         self.assertIn("  Judgement of Light on him in phase 3: 28.0 of 40.0 s; judgements per paladin: Holylight"
                       " Light 1 on him; Justice Light 1 on him, Wisdom 1 on him\n"
                       "  anub.judge hand-overs: 0:52.000 Justice:90, 1:05.000 Holylight:70\n"
@@ -6130,6 +6129,131 @@ class Refine30Lines(unittest.TestCase):
         text = self.text(ab.show_cold_self_saves, 10000, 20000)
         self.assertIn("per class: mage 0/1, rogue 1/1\n", text)
         self.assertIn("    Shadow 0:11.000 Cloak of Shadows +0.5 s\n", text)
+
+
+R31_TANK, R31_TREE, R31_ROGUE, R31_MAGE, R31_PRIEST, R31_SHAM = 6501, 6502, 6503, 6504, 6505, 6506
+R31_BURROWER, R31_TOTEM = 0xF130008717006507, 0xF130009AB1006508
+R31_ICE_BLOCK, R31_MANA_SHIELD, R31_HEALTHSTONE, R31_SHIELD = 45438, 43020, 47877, 48066
+R31_REJUVENATION, R31_PLAGUE, R31_EMBRACE, R31_STREAM = 48441, 48300, 15290, 52042
+
+
+def r31_snap(when: int) -> dict:
+    # the burrower is on the mage from 18 s
+    units = [[guid, X + 5.0, Y + 5.0, Z, 0.0, 30.0, 100.0, 0, 0, 0, 0, 0]
+             for guid in (R31_TANK, R31_TREE, R31_ROGUE, R31_MAGE, R31_PRIEST, R31_SHAM)]
+    units.append([R31_BURROWER, X - 5.0, Y, Z, 0.0, 100.0, 0.0, R31_MAGE if when >= 18000 else R31_TANK, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r31_heal(when: int, source: int, target: int, spell: int, amount: int) -> dict:
+    return {"t": when, "e": "heal", "s": source, "d": target, "sp": spell, "a": amount, "oh": 0}
+
+
+def r31_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790920000000, "map": ab.MAP_TOC, "inst": 6, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R31_TANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R31_TREE, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+             {"g": R31_ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+             {"g": R31_MAGE, "n": "Power", "r": "ranged", "c": 8, "h": 0},
+             {"g": R31_PRIEST, "n": "Malediction", "r": "ranged", "c": 5, "h": 0},
+             {"g": R31_SHAM, "n": "Stormweaver", "r": "ranged", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": 0, "e": "unit", "g": R31_BURROWER, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"},
+        {"t": 0, "e": "unit", "g": R31_TOTEM, "en": 3527, "n": "Healing Stream Totem IX", "own": R31_SHAM},
+        {"e": "spell", "sp": SPELL_CLOAK, "n": "Cloak of Shadows"},
+        {"e": "spell", "sp": R31_ICE_BLOCK, "n": "Ice Block"},
+        {"e": "spell", "sp": R31_MANA_SHIELD, "n": "Mana Shield"},
+        {"e": "spell", "sp": R31_HEALTHSTONE, "n": "Master Healthstone"},
+        {"e": "spell", "sp": R31_SHIELD, "n": "Power Word: Shield"},
+        {"e": "spell", "sp": R31_REJUVENATION, "n": "Rejuvenation"},
+        {"e": "spell", "sp": R31_PLAGUE, "n": "Devouring Plague"},
+        {"e": "spell", "sp": R31_EMBRACE, "n": "Vampiric Embrace"},
+        {"e": "spell", "sp": R31_STREAM, "n": "Healing Stream Totem"},
+        note(0, R31_TANK, "anub.phase", 1),
+        note(10000, R31_TANK, "anub.phase", 3),
+        # the rogue's Cloak under the swarm alone, then one on Penetrating Cold
+        cast(12000, R31_ROGUE, SPELL_CLOAK, R31_ROGUE),
+        aura(15000, R31_ROGUE, SPELL_PENETRATING_COLD_25H, False),
+        cast(15500, R31_ROGUE, SPELL_CLOAK, R31_ROGUE),
+        aura(15500, R31_ROGUE, SPELL_PENETRATING_COLD_25H, True),
+        # the mage's Mana Shield on nothing, its Ice Block with the burrower on it
+        cast(13000, R31_MAGE, R31_MANA_SHIELD, R31_MAGE),
+        cast(19000, R31_MAGE, R31_ICE_BLOCK, R31_MAGE),
+        # Power Word: Shield onto the tank is a heal, onto the priest itself a save
+        cast(14000, R31_PRIEST, R31_SHIELD, R31_TANK),
+        cast(14500, R31_PRIEST, R31_SHIELD, R31_PRIEST),
+        # Tree's Rejuvenation onto the rogue and onto itself, its Healthstone; the priest's own plague heal
+        cast(13000, R31_TREE, R31_REJUVENATION, R31_ROGUE),
+        r31_heal(13000, R31_TREE, R31_ROGUE, R31_REJUVENATION, 1500),
+        cast(16000, R31_TREE, R31_REJUVENATION, R31_TREE),
+        r31_heal(16000, R31_TREE, R31_TREE, R31_REJUVENATION, 2000),
+        cast(17000, R31_TREE, R31_HEALTHSTONE, R31_TREE),
+        r31_heal(17000, R31_TREE, R31_TREE, R31_HEALTHSTONE, 5000),
+        cast(12000, R31_PRIEST, R31_PLAGUE, BOSS),
+        r31_heal(12500, R31_PRIEST, R31_PRIEST, R31_PLAGUE, 800),
+        # the party heals: the totem onto the mage and its shaman, Vampiric Embrace onto the mage and the priest
+        r31_heal(14000, R31_TOTEM, R31_MAGE, R31_STREAM, 1000),
+        r31_heal(14000, R31_TOTEM, R31_SHAM, R31_STREAM, 1000),
+        r31_heal(15000, R31_PRIEST, R31_MAGE, R31_EMBRACE, 1000),
+        r31_heal(15000, R31_PRIEST, R31_PRIEST, R31_EMBRACE, 3000),
+        veto(20000, R31_ROGUE, ab.SWARM_SELF_SAVE_HOLD, "cloak of shadows"),
+        veto(21000, R31_ROGUE, ab.SWARM_SELF_SAVE_HOLD, "evasion"),
+        veto(22000, R31_MAGE, ab.SWARM_SELF_SAVE_HOLD, "mana shield"),
+        {"t": 30000, "e": "end", "out": "wipe"},
+    ]
+    records += [r31_snap(when) for when in range(0, 30500, 500)]
+    return records
+
+
+class Refine31Lines(unittest.TestCase):
+    """Phase 3 class saves and heal items split by what the caster was under, the self save hold's vetoes,
+    bot heals onto non-carriers with a healer's own, and what held each non-tank up with its party heals."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_6_anub-arak_1790920000.ndjson", r31_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace, *args)
+        return out.getvalue()
+
+    def test_saves_split_by_penetrating_cold_a_burrower_or_neither(self):
+        saves, vetoes = ab.swarm_self_saves(self.trace, 10000, 30000, self.samples)
+        self.assertEqual(saves, {"Cloak of Shadows": [1, 0, 1], "Ice Block": [0, 1, 0], "Mana Shield": [0, 0, 1],
+                                 "Power Word: Shield": [0, 0, 1], "Master Healthstone": [0, 0, 1]})
+        self.assertEqual(dict(vetoes), {R31_ROGUE: 2, R31_MAGE: 1})
+        text = self.text(ab.show_swarm_self_saves, 10000, 30000, self.samples)
+        self.assertIn("neither: Cloak of Shadows 1/0/1, Ice Block 0/1/0, Mana Shield 0/0/1, Master Healthstone 0/0/1,"
+                      " Power Word: Shield 0/0/1\n", text)
+        self.assertIn("  anubarak swarm self save hold vetoes per bot: Power 1, Shadow 2\n", text)
+
+    def test_a_healers_heal_on_itself_is_a_breach_and_a_dps_bots_own_or_an_item_is_not(self):
+        self.assertEqual(ab.swarm_heal_breaches(self.trace, 10000, 30000),
+                         {(R31_TREE, R31_REJUVENATION): [2, 3500]})
+
+    def test_bare_leaves_out_the_healers_the_items_and_a_healers_own_with_the_party_heals(self):
+        rows = {row["guid"]: row for row in ab.swarm_sustain(self.trace, 10000, 30000, self.samples)}
+        self.assertEqual(ab.sustain_bare(self.trace, rows[R31_TREE]), 0)
+        self.assertEqual(ab.sustain_bare(self.trace, rows[R31_MAGE]), 2000)
+        self.assertEqual(ab.sustain_bare(self.trace, rows[R31_PRIEST]), 3800)
+        self.assertEqual(rows[R31_MAGE]["party"], {("HST", R31_SHAM), ("VE", R31_PRIEST)})
+        self.assertEqual(rows[R31_PRIEST]["party"], set())
+        self.assertEqual(rows[R31_SHAM]["party"], {("HST", R31_SHAM)})
+        text = self.text(ab.show_swarm_sustain, 10000, 30000, self.samples)
+        self.assertIn("    Power          ranged    20     0.00    0.00    0.00    0.05    0.05    0.00    0.00"
+                      "    0.10    0.00    0.10 short  Malediction VE, Stormweaver HST\n", text)
+        self.assertIn("    Tree           heal      20     0.00    0.10    0.00    0.00    0.00    0.00    0.25"
+                      "    0.35    0.00    0.00 short  no party heal\n", text)
 
 
 if __name__ == "__main__":

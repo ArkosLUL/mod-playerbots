@@ -912,15 +912,9 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
     if (CastAnubarakColdCarrierCover(botAI, pick.target))
         return true;
 
-    // Wild Growth heals five around the target, and a big hard cast lifts a non-tank far past the floor:
-    // the swarm hands both back to him
-    bool const small = pick.small;
-    return CastRaidThroughputHeal(botAI, pick.target, [small](std::string const& heal)
-    {
-        return heal == "wild growth" ||
-               (small && (heal == "holy light" || heal == "greater heal" || heal == "healing wave" ||
-                          heal == "healing touch" || heal == "nourish"));
-    });
+    // Wild Growth heals five around the target, and the swarm hands the four others back to him
+    return CastRaidThroughputHeal(botAI, pick.target,
+                                  [](std::string const& heal) { return heal == "wild growth"; });
 }
 
 bool AnubarakAuraMasteryAction::Execute(Event /*event*/)

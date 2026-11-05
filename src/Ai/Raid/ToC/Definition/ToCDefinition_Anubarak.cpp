@@ -156,9 +156,11 @@ void DefineAnubarak(EncounterBuilder& e)
             Family::CombatFormationMove | Family::Follow | Family::Flee);
     // the ready node places an idle side tank on its rim, and follow walked it off every second
     e.Block("anubarak side tank follow hold", Role::Any, AnubarakSideTankHolds, Family::Follow);
-    // phase 3: it waits at its hold for a burrower still far off, and the pickup taunts it as it comes in
+    // phase 3: it waits at its hold for a burrower still far off or already on it, and the pickup taunts
+    // one as it comes in
     e.Block("anubarak side tank swarm leash", Role::Any, AnubarakSideTankSwarmLeash,
-            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Charge, {"reach melee"});
+            Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Charge,
+            {"reach melee", "reach spell"});
     // the escort keeps the kiter in Hand of Protection's reach, whatever its target or heal target
     e.Block("anubarak hop escort hold", Role::Any, IsAnubarakEscort,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Charge,
@@ -193,6 +195,14 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak swarm save hold", Role::Any, AnubarakSwarmHealing, 0,
             {"lay on hands", "lay on hands on party", "pain suppression", "pain suppression on party",
              "guardian spirit on party"});
+    // phase 3: the class nodes spent these at the start and left Penetrating Cold carriers with nothing.
+    // Mana Shield drained both mages within 50 s. Power Word: Shield on itself is a buff, so the swarm
+    // heal multiplier misses it.
+    e.Block("anubarak swarm self save hold", Role::Any, AnubarakSwarmSavesHeld, 0,
+            {"cloak of shadows", "evasion", "feint", "ice block", "divine shield", "divine protection",
+             "dispersion", "barkskin", "shamanistic rage", "icebound fortitude", "anti magic shell",
+             "deterrence", "enraged regeneration", "mana shield", "power word: shield", "healthstone",
+             "healing potion", "lifeblood", "gift of the naaru"});
     // phase 3: Light from a second paladin replaces the first, so the holder judges him through the encounter
     e.Block("anubarak swarm light hold", Role::Any, AnubarakSwarmLightHeld, 0, {"judgement of light"});
     // a paladin's judgements replace each other, so one whose Light is on him casts no other

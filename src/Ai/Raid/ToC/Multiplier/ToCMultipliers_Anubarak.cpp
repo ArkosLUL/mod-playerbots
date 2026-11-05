@@ -320,7 +320,7 @@ float AnubarakSwarmHealMultiplier::GetValue(Action* action)
         return 0.0f;
 
     Unit* target = action->GetTarget();
-    if (!target || target == bot)
+    if (!target)
         return 1.0f;
 
     return AnubarakSwarmHealWasted(target->ToPlayer()) ? 0.0f : 1.0f;

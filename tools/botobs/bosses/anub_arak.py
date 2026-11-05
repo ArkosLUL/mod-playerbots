@@ -119,12 +119,14 @@
     anub_arak.py <file> --swarm      phase 3: Leeching Swarm per bot, lust; per 5 s his health, the median
                                      tank and non-tank health, the swarm on each and the healers' heals onto
                                      tanks, carriers and others; bot heals it cast onto a non-tank with no
-                                     Penetrating Cold at 10%+; DPS bot samples on him, on burrowers up as it
+                                     Penetrating Cold, a healer itself included; DPS bot samples on him, on burrowers up as it
                                      began and on newer ones; when those burrowers went against lust and
                                      anub.burst open; bot burst cast from his 50% to phase 3, flagged unless
                                      anub.burst read behind; Penetrating Cold, and per carrier window in phase 3
                                      the seconds it carried it with no HoT or shield on it, and per class the phase 3
-                                     windows with the carrier's own save inside, anub.coldself rows; anub.swarmheal rows,
+                                     windows with the carrier's own save inside, anub.coldself rows; per class save
+                                     and heal item the phase 3 casts by non-tank bots carrying Penetrating Cold, a
+                                     burrower on it or neither, and the self save hold's vetoes; anub.swarmheal rows,
                                      each healer bot's anub.healduty and the carriers its anub.coldheal kept up;
                                      per phase 3 Penetrating Cold wave the first ticks survived, the living
                                      toc.aura frost holders at the landing, Aura Mastery up at the first two
@@ -135,7 +137,9 @@
                                      two healers or more landing on one carrier within 1.5 s while another at
                                      risk had nothing from a healer; per non-tank its effective heals received a
                                      second alive by kind (healers, own, Judgement of Light, Vampiric Embrace,
-                                     Healing Stream Totem, other) and the swarm's drain; Judgement of Light's
+                                     Healing Stream Totem, other, items), the swarm's drain, and what held it up with
+                                     no healer's cast, under 0.3k a second flagged, with the party heals that
+                                     reached it; Judgement of Light's
                                      uptime on him off the casts, each paladin's judgements, anub.judge rows,
                                      each shaman's water totem at the start and 10 s in; deaths
     anub_arak.py <file> --healers    per healer and phase its median distance to the main tank and each side
@@ -318,9 +322,8 @@ BURST_SPELLS = {26297: "Berserking", 20572: "Blood Fury", 33697: "Blood Fury", 3
                 42650: "Army of the Dead", 49206: "Summon Gargoyle", 2894: "Fire Elemental Totem",
                 16166: "Elemental Mastery", 53908: "Potion of Speed", 53909: "Potion of Wild Magic"}
 # The stem's heroic phase 3 numbers: burst waits from BURST_HOLD_PCT, and a non-tank without Penetrating
-# Cold gets a heal only under SWARM_FLOOR_PCT
+# Cold gets no heal from a bot, itself included
 BURST_HOLD_PCT = radius("ANUBARAK_BURST_HOLD_PCT")
-SWARM_FLOOR_PCT = 10.0
 SWARM_BIN_MS = 5000
 # Leeching Swarm's share of current health a second, 10N, 25N, 10H, 25H
 SWARM_DRAIN = (0.1, 0.1, 0.2, 0.3)
@@ -693,7 +696,19 @@ TOPUP_SPELLS = ("Life Tap", "Evocation")
 # the cast spells; each one's debuff lasts 20 s, and a paladin's next judgement anywhere replaces it
 JUDGEMENTS = {20271: "Light", 53408: "Wisdom", 53407: "Justice"}
 JUDGEMENT_MS = 20000
-SUSTAIN_KINDS = ("healers", "own", "JoL", "VE", "HST", "other")
+SUSTAIN_KINDS = ("healers", "own", "JoL", "VE", "HST", "other", "items")
+# one-off heals a bot keeps for Penetrating Cold in phase 3, left out of what holds it up on its own
+SUSTAIN_ITEMS = ("Master Healthstone", "Fel Healthstone", "Demonic Healthstone", "Lifeblood", "Gift of the Naaru",
+                 "Runic Healing Potion", "Endless Healing Potion")
+# what a non-tank needs from outside the healers, k a second: the swarm's 250 a tick lands at 170-260
+# after resists, and the heals come in bursts
+SUSTAIN_FLOOR_KS = 0.3
+# the class saves and heal items anubarak swarm self save hold keeps for Penetrating Cold; Power Word:
+# Shield only onto the caster itself
+SWARM_SELF_SAVES = ("Cloak of Shadows", "Evasion", "Feint", "Ice Block", "Divine Shield", "Divine Protection",
+                    "Dispersion", "Barkskin", "Shamanistic Rage", "Icebound Fortitude", "Anti-Magic Shell",
+                    "Deterrence", "Enraged Regeneration", "Mana Shield", "Power Word: Shield") + SUSTAIN_ITEMS
+SWARM_SELF_SAVE_HOLD = "anubarak swarm self save hold"
 WATER_TOTEMS = ("Healing Stream Totem", "Mana Spring Totem", "Mana Tide Totem", "Cleansing Totem",
                 "Fire Resistance Totem")
 # the water totem is read at phase 3's start and this far in
@@ -6230,24 +6245,21 @@ def swarm_bins(trace: Trace, start: int, stop: int, samples: Samples | None = No
     return out
 
 
-def swarm_heal_breaches(trace: Trace, start: int, stop: int,
-                        samples: Samples | None = None) -> dict[tuple[int, int], list[int]]:
-    """Per bot and heal spell, `[heals, effective]` landing in phase 3 on another non-tank with no
-    Penetrating Cold at SWARM_FLOOR_PCT or more by the snapshot before. Only spells the bot cast itself, so
-    procs and passive heals (Vampiric Embrace, Judgement of Light, Earthliving) stay out."""
-    samples = samples or Samples(trace)
+def swarm_heal_breaches(trace: Trace, start: int, stop: int) -> dict[tuple[int, int], list[int]]:
+    """Per bot and heal spell, `[heals, effective]` landing in phase 3 on a non-tank with no Penetrating Cold,
+    a healer bot itself included. Only spells the bot cast itself, so procs and passive heals (Vampiric
+    Embrace, Judgement of Light, Earthliving) stay out, and no SUSTAIN_ITEMS, which the self save line
+    reads; a HoT's ticks count while they land."""
     roster = roster_guids(trace)
     cold = aura_spans(trace, PENETRATING_COLD)
     cast = {(rec.get("s"), rec.get("sp")) for rec in trace.of("cast") if not rec.get("tr")}
     out: dict[tuple[int, int], list[int]] = collections.defaultdict(lambda: [0, 0])
     for rec in trace.of("heal"):
         source, target, when = rec.get("s"), rec.get("d"), rec["t"]
-        if (not start <= when < stop or source not in roster or source in trace.humans or target == source
+        if (not start <= when < stop or source not in roster or source in trace.humans
                 or target not in roster or trace.role(target) == "tank" or carrying(cold, target, when)
-                or (source, rec.get("sp")) not in cast):
-            continue
-        before = samples.row(target, when)
-        if before is None or before[5] < SWARM_FLOOR_PCT:
+                or (source, rec.get("sp")) not in cast or trace.spells.get(rec.get("sp"), "") in SUSTAIN_ITEMS
+                or (target == source and trace.role(source) != "heal")):
             continue
         out[(source, rec.get("sp"))][0] += 1
         out[(source, rec.get("sp"))][1] += rec.get("a", 0) - rec.get("oh", 0)
@@ -6327,8 +6339,8 @@ def show_swarm_race(trace: Trace, start: int, stop: int, samples: Samples) -> No
               f"  swarm {row['swarm_tank'] / 1000:6.1f} {row['swarm_other'] / 1000:6.1f}"
               f"  heals {row['heal_tank'] / 1000:6.1f} {row['heal_cold'] / 1000:6.1f} {row['heal_other'] / 1000:6.1f}")
 
-    breaches = swarm_heal_breaches(trace, start, stop, samples)
-    print(f"  bot heals cast onto a non-tank with no Penetrating Cold at {SWARM_FLOOR_PCT:.0f}%+: "
+    breaches = swarm_heal_breaches(trace, start, stop)
+    print("  bot heals cast onto a non-tank with no Penetrating Cold, a healer itself included: "
           + (", ".join(f"{trace.name(guid)} {trace.spell(spell)} {count} ({amount / 1000:.0f}k)"
                        for (guid, spell), (count, amount) in sorted(breaches.items(), key=lambda item: -item[1][1]))
              or "none"))
@@ -6707,6 +6719,8 @@ def show_swarm_externals(trace: Trace, start: int, stop: int, samples: Samples) 
 def sustain_kind(trace: Trace, rec: dict) -> str:
     name = trace.spells.get(rec.get("sp"), "")
     source = trace.owners.get(rec.get("s"), rec.get("s"))
+    if name in SUSTAIN_ITEMS:
+        return "items"
     if "Judgement of Light" in name:
         return "JoL"
     if "Vampiric Embrace" in name:
@@ -6718,17 +6732,32 @@ def sustain_kind(trace: Trace, rec: dict) -> str:
     return "healers" if trace.role(source) == "heal" else "other"
 
 
+def sustain_bare(trace: Trace, row: dict) -> int:
+    """What held a member up with no healer's cast on it: its heals less the healers', the items, and for a
+    healer its own, which are healer casts too."""
+    heals = row["heals"]
+    return (sum(heals.values()) - heals["healers"] - heals["items"]
+            - (heals["own"] if trace.role(row["guid"]) == "heal" else 0))
+
+
 def swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> list[dict]:
     """Per non-tank roster member in [start, stop): its effective heals received by SUSTAIN_KINDS, the swarm's
-    damage on it, and the snapshot milliseconds it was alive, each step capped at MAX_STEP_MS."""
+    damage on it, the snapshot milliseconds it was alive, each step capped at MAX_STEP_MS, and its party
+    heals (`party`: the Healing Stream owners, its own included, and the Vampiric Embrace casters other than
+    itself)."""
     members = [guid for guid in roster_guids(trace) if trace.role(guid) != "tank"]
-    out = {guid: {"guid": guid, "heals": collections.Counter(), "swarm": 0, "alive": 0} for guid in members}
+    out = {guid: {"guid": guid, "heals": collections.Counter(), "swarm": 0, "alive": 0, "party": set()}
+           for guid in members}
     for rec in trace.of("heal", "dmg"):
         row = out.get(rec.get("d"))
         if row is None or not start <= rec["t"] < stop:
             continue
         if rec["e"] == "heal":
-            row["heals"][sustain_kind(trace, rec)] += rec.get("a", 0) - rec.get("oh", 0)
+            kind = sustain_kind(trace, rec)
+            row["heals"][kind] += rec.get("a", 0) - rec.get("oh", 0)
+            source = trace.owners.get(rec.get("s"), rec.get("s"))
+            if kind == "HST" or (kind == "VE" and source != rec.get("d")):
+                row["party"].add((kind, source))
         elif rec.get("sp") == SPELL_LEECHING_SWARM_DMG or rec.get("sp") in LEECHING_SWARM:
             row["swarm"] += rec.get("a", 0)
     for guid, row in out.items():
@@ -6775,15 +6804,21 @@ def water_totems(trace: Trace, start: int) -> dict[int, tuple[str | None, str | 
 
 
 def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> None:
-    print("\n  heals received per non-tank in phase 3, effective, k a second alive, and the swarm's drain:")
+    print("\n  heals received per non-tank in phase 3, effective, k a second alive, and the swarm's drain; bare is"
+          " the total less the\n  healers, the items and a healer's own, under"
+          f" {SUSTAIN_FLOOR_KS:.1f} flagged, then the party heals that reached it:")
     print(f"    {'name':14} {'role':6} {'alive':>5} " + "".join(f"{kind:>8}" for kind in SUSTAIN_KINDS)
-          + f"{'total':>8}{'swarm':>8}")
+          + f"{'total':>8}{'swarm':>8}{'bare':>8}")
     for row in swarm_sustain(trace, start, stop, samples):
         seconds = max(row["alive"] / 1000, 1.0)
         heals = row["heals"]
+        bare = sustain_bare(trace, row) / seconds / 1000
+        party = ", ".join(f"{trace.name(guid)} {kind}" for kind, guid in sorted(row["party"],
+                                                                               key=lambda item: trace.name(item[1])))
         print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['alive'] / 1000:5.0f} "
               + "".join(f"{heals[kind] / seconds / 1000:8.2f}" for kind in SUSTAIN_KINDS)
-              + f"{sum(heals.values()) / seconds / 1000:8.2f}{row['swarm'] / seconds / 1000:8.2f}")
+              + f"{sum(heals.values()) / seconds / 1000:8.2f}{row['swarm'] / seconds / 1000:8.2f}{bare:8.2f}"
+              + (" short" if bare < SUSTAIN_FLOOR_KS else "      ") + f"  {party or 'no party heal'}")
     light = light_reads(trace, start, stop)
     print(f"  Judgement of Light on him in phase 3: {light['uptime'] / 1000:.1f} of {(stop - start) / 1000:.1f} s;"
           " judgements per paladin: " + ("; ".join(
@@ -6796,6 +6831,42 @@ def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) ->
     print(f"  water totem per shaman at phase 3's start and {WATER_TOTEM_LATER_MS // 1000} s in: " + (", ".join(
         f"{trace.name(guid)} {before or 'none'} > {later or 'none'}" for guid, (before, later) in totems.items())
         or "no shaman"))
+
+
+def swarm_self_saves(trace: Trace, start: int, stop: int, samples: Samples) -> tuple[dict, collections.Counter]:
+    """Per SWARM_SELF_SAVES name, a non-tank bot's casts in [start, stop) as `[carrying Penetrating Cold, a
+    burrower on it by the snapshot before, neither]`, Power Word: Shield only onto itself; and the
+    SWARM_SELF_SAVE_HOLD veto rows per bot."""
+    cold = aura_spans(trace, PENETRATING_COLD)
+    burrowers = guids_of_entry(trace, NPC_BURROWER)
+    roster = roster_guids(trace)
+    out: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0])
+    for rec in trace.of("cast"):
+        caster, when = rec.get("s"), rec["t"]
+        name = trace.spells.get(rec.get("sp"), "")
+        if (rec.get("tr") or not start <= when < stop or name not in SWARM_SELF_SAVES or caster not in roster
+                or caster in trace.humans or trace.role(caster) == "tank"
+                or (name == "Power Word: Shield" and rec.get("tgt") not in (caster, 0, None))):
+            continue
+        if carrying(cold, caster, when):
+            out[name][0] += 1
+        elif any((row := samples.row(guid, when)) is not None and row[7] == caster for guid in burrowers):
+            out[name][1] += 1
+        else:
+            out[name][2] += 1
+    vetoes = collections.Counter(rec.get("g") for rec in trace.of("veto")
+                                 if rec.get("m") == SWARM_SELF_SAVE_HOLD and start <= rec["t"] < stop)
+    return dict(out), vetoes
+
+
+def show_swarm_self_saves(trace: Trace, start: int, stop: int, samples: Samples) -> None:
+    saves, vetoes = swarm_self_saves(trace, start, stop, samples)
+    print("  phase 3 class saves and heal items cast by non-tank bots, carrying Penetrating Cold / a burrower on it"
+          " / neither: " + (", ".join(f"{name} {cold}/{burrower}/{neither}"
+                                      for name, (cold, burrower, neither) in sorted(saves.items())) or "none"))
+    print(f"  {SWARM_SELF_SAVE_HOLD} vetoes per bot: " + (", ".join(
+        f"{trace.name(guid)} {n}" for guid, n in sorted(vetoes.items(), key=lambda item: trace.name(item[0])))
+        or "no rows"))
 
 
 def show_cold_self_saves(trace: Trace, start: int, stop: int) -> None:
@@ -6861,6 +6932,7 @@ def show_swarm(trace: Trace) -> None:
                  or "none"))
         show_cold_self_saves(trace, span[0], span[1])
         show_counts(trace, "anub.coldself")
+        show_swarm_self_saves(trace, span[0], span[1], samples)
         show_counts(trace, "anub.swarmheal")
         show_heal_duties(trace)
         show_cold_waves(trace, samples)
@@ -9257,9 +9329,11 @@ SECTIONS = (
      " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows, when the submerge drag left",
      show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, per 5 s his health and the raid's, the swarm and the healers'"
-     " heals by who took them, bot heals onto healthy non-carriers, DPS on burrowers up at its start and newer"
+     " heals by who took them, bot heals onto non-carriers, DPS on burrowers up at its start and newer"
      " ones, when the burst opened, burst spent from 50%%, Penetrating Cold heals, the seconds each phase 3"
-     " carrier went with no HoT or shield, carriers' own saves and anub.coldself, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
+     " carrier went with no HoT or shield, carriers' own saves and anub.coldself, the class saves and heal"
+     " items by who cast them and the self save hold's vetoes, each non-tank's heals by kind with what held it"
+     " up with no healer's cast and its party heals, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
      " per phase 3 Penetrating Cold wave the first ticks survived, the frost holder, Aura Mastery at the first two"
      " ticks, anub.mastery rows, the resisted share per tick, each carrier's health at the landing, risk, first"
      " tick margin and fate, its anub.coldheal healers and the heals and absorbs on it before the tick, and herds"

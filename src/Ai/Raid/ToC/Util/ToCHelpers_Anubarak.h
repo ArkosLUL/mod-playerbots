@@ -469,10 +469,13 @@ bool AnubarakSideTankNeedsDefensive(Player* bot);
 // The side tank's defensive pick waits for phase 3: ANUBARAK_SIDE_DEFENSIVE_KEEP_PCT, a cooldown of
 // ANUBARAK_SIDE_DEFENSIVE_KEEP_COOLDOWN_MS or more, the tank at or over ANUBARAK_SIDE_DEFENSIVE_PCT
 bool AnubarakSideTankDefensiveKept(PlayerbotAI* botAI, uint32 spellId);
-// Phase 3: a side tank whose target is a burrower not on it, over ANUBARAK_TAUNT_ARRIVE from its hold. The
-// raid stands behind the patches so the burrower comes in anyway, and walking out to meet it left the
-// healers 40+ yd off under the swarm.
+// Phase 3: a side tank whose target is a burrower on it, or one not on it over ANUBARAK_TAUNT_ARRIVE from
+// its hold. The raid stands behind the patches so the burrower comes in anyway, and walking out to meet it
+// left the healers 40+ yd off under the swarm.
 bool AnubarakSideTankSwarmLeash(PlayerbotAI* botAI);
+// Phase 3, a living non-tank bot with no Penetrating Cold and no burrower on it: the swarm alone can't
+// kill it, yet keeps it at critical health, so its class saves and heal items would all go at once
+bool AnubarakSwarmSavesHeld(PlayerbotAI* botAI);
 // Phase 3, a non-healer bot carrying Penetrating Cold with a tick still due: the first of its own saves it
 // can cast (Cloak of Shadows, Ice Block, Divine Shield, Anti-Magic Shell, Dispersion, Divine Protection,
 // Shamanistic Rage, Barkskin; a tank only Anti-Magic Shell and Divine Protection), else 0. 0 while one of
@@ -589,20 +592,18 @@ enum class AnubarakHealDuty : uint8
 // - itself, when at risk at its next Penetrating Cold tick;
 // - cold duty: its assigned carrier (anub.coldheal), then a tank under 35%;
 // - tank duty: a tank under 50%, then a carrier at risk with no healer in reach;
-// - then a non-tank under 10%, a carrier with no HoT or shield this healer can give one, a tank under
-//   90% and a carrier under 50%, the lowest in the first that has one.
+// - then a carrier with no HoT or shield this healer can give one, a tank under 90% and a carrier under
+//   50%, the lowest in the first that has one.
 // Among tanks, one another player's cast or channel is already heading for ranks behind one with none.
-// Urgent covers the first three rows, rescue the carriers at risk, small the non-tank, which gets no
-// big hard cast.
+// Urgent covers the first three rows, rescue the carriers at risk.
 struct AnubarakSwarmHealPick
 {
     Player* target = nullptr;
     bool urgent = false;
-    bool small = false;
     bool rescue = false;
 };
 AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI);
-// A non-tank without Penetrating Cold at or above the floor: healing it only feeds the swarm
+// A non-tank without Penetrating Cold, the healer itself too: healing it only feeds the swarm
 bool AnubarakSwarmHealWasted(Player* target);
 // A HoT or shield on a Penetrating Cold carrier with none from anyone, when this healer has one ready
 bool CastAnubarakColdCarrierCover(PlayerbotAI* botAI, Player* member);

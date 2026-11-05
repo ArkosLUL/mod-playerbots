@@ -77,8 +77,8 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Heroic phase 3: no heal on another player that only feeds Leeching Swarm, a non-tank without
-// Penetrating Cold above the floor, and no area heal. Self heals pass. Wired from the definition.
+// Heroic phase 3: no heal that only feeds Leeching Swarm, on any non-tank without Penetrating Cold, the
+// caster itself too, and no area heal. Wired from the definition.
 class AnubarakSwarmHealMultiplier : public Multiplier
 {
 public:

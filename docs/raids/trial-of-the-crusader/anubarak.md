@@ -485,11 +485,14 @@ fatal); the other side's on them too go back to their tank's taunt (2026-10-30 B
 them, it reached Elemena 0.3 s after she died and the wipe began). Then Challenging Roar or Shout with
 two within 10 yd, none of the other side's and him past 10 yd plus his reach, the class taunt, then Feral Charge,
 Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in,
-except in phase 3 to one over 40 yd from its hold: `anubarak side tank swarm leash` blocks `reach melee`,
-set behind, flank, formation and charges, since the raid stands behind the patches and the burrower comes
-in anyway. At the first phase 3 wave of CI, CJ and CK that walk left a side tank 2.7-5.1 s with under 2
-healers within 40 yd (CK Felesta 27 yd west under Penetrating Cold and the swarm, no heal for her last
-4.5 s; CI Bulwark, dead 3 s after), and from the hold the taunt went at the same moment.
+except in phase 3 to one on it or one over 40 yd from its hold: `anubarak side tank swarm leash` blocks
+`reach melee`, `reach spell`, set behind, flank, formation and charges, since the raid stands behind the
+patches and the burrower comes in anyway. At the first phase 3 wave of CI, CJ and CK that walk left a side
+tank 2.7-5.1 s with under 2 healers within 40 yd (CK Felesta 27 yd west under Penetrating Cold and the
+swarm, no heal for her last 4.5 s; CI Bulwark, dead 3 s after), and from the hold the taunt went at the
+same moment. With only `reach melee` blocked and only before the taunt, CL and CM Bulwark still walked
+13-18 yd on `reach spell`, then ~16 yd more on `reach melee` once his taunt landed, to ~33 yd off his hold
+and 40-59 yd off all four healers (CL 8.4 s under 2, at 8% at 7:17.9; CM 1.3 s).
 Righteous Defense and the class taunt wait until the burrowers they take are within 40 yd
 (`ANUBARAK_TAUNT_ARRIVE`, `anub.sidetank` `far`), unless the player hit is under 50% outside phase 3 (the
 swarm holds everyone under it: CK 6:20.9 Righteous Defense from 64 and 87 yd sent side 1's wave to
@@ -914,6 +917,12 @@ first dead in both (CJ 7:16.7, CK 6:27.1); side tanks under 2 healers within 40 
 wave CJ 3.5 s, CK 3.8 + 3.1 s (CI 5.3); Death and Decay 6/6 and 6/7 cast, 0 `FAILED`; burst from his 50%
 to phase 3 CJ 35 (13 not `behind`), CK 15 (11).
 
+Baseline 2026-11-04, 25H on refine-30 (`63ade6a51`): CL `1793831836` (Ecoterrorist dead 0:29.3 to a
+first-wave burrower and his 37.7k swing, rezzed; P3 from 5:55.8, wipe 7:48.8 at 5.9%), CM `1793832446`
+(P3 from 5:45.6, wipe 7:37.8 at 9.1%). First phase 3 deaths CL Mighty 6:31.8, Elemena 6:54.8, Prayer
+7:03.8; CM Felesta 6:43.0, her burrowers then four more; burst released `behind` at his 50% in both;
+phase 3 Righteous Defense all within 40 yd; carriers' own saves CL 5, CM 2.
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -1169,6 +1178,16 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   halves threat and an immune victim loses its creatures unless it taunts them (`ThreatManager.cpp:123`).
   Healers keep their rescue. In CJ 5 of 33 and CK 3 of 23 phase 3 carriers used their own; Anti-Magic
   Shell never went out (no DK class trigger), Felesta carried it 13.4 s in CK and died.
+- **Saves wait for Penetrating Cold** (every difficulty, user call 2026-11-05): `anubarak swarm self save
+  hold` blocks, in `Swarm` for a living non-tank bot with no Penetrating Cold and no burrower on it, the
+  class `cloak of shadows`, `evasion`, `feint`, `ice block`, `divine shield`, `divine protection`,
+  `dispersion`, `barkskin`, `shamanistic rage`, `icebound fortitude`, `anti magic shell`, `deterrence`,
+  `enraged regeneration`, `mana shield`, `power word: shield` (on itself: a buff, so the heal multiplier
+  misses it), `healthstone`, `healing potion`, `lifeblood` and `gift of the naaru`. The swarm holds
+  everyone at `critical health`, so in CL and CM ~12 class saves and 16-19 each of Healthstone and
+  Lifeblood went at phase 3's start on bots carrying neither, and `coldself` then found nothing (rogue
+  carriers 0 of 9 with a Cloak); Mana Shield soaked the swarm with mana and left both mages at 0% 40-50 s
+  in. A carrier, always at `critical health`, gets them at once. Ice Barrier stays.
 - **Duty** (`anub.healduty`, latched as `Swarm` starts): priests and druids `cold`, paladins and
   shamans `tank` (the guide's split); with 2+ healers all on one side, the lowest guid goes over. A
   healer back from a res takes its class duty.
@@ -1179,12 +1198,12 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   and sight:
   1. itself at risk (`self`);
   2. `cold`: its assigned carrier (`risk`), then a tank under 35% (50% with no `tank` healer alive),
-     then with no carrier assigned a tank under 90% when row 3 has nobody under 10% and no bare
-     carrier (user call, 2026-11-01: two tank healers fell behind three tanks, 7.6-13.3k/s taken
+     then with no carrier assigned a tank under 90% when no carrier is bare (user call, 2026-11-01: two tank healers fell behind three tanks, 7.6-13.3k/s taken
      against 6.5-11.7k/s healed, Prayer and Tree giving the tanks 52-153k a phase);
      `tank`: a tank under 50%, then the most urgent carrier at risk no assigned healer reaches (`risk`);
-  3. the lowest in the first of: non-tank under 10% (the swarm alone takes about 7 s), a carrier this
-     healer can cover (`bare`), tank under 90%, carrier under 50%.
+  3. the lowest in the first of: a carrier this healer can cover (`bare`), tank under 90%, carrier
+     under 50%. No other non-tank, the healer itself included (user call, 2026-11-05: replaces the
+     2026-10-30 small heal under 10%); they live on their own, party and raid-wide heals (Sustain).
 
   Among tanks, one another player's cast or channel is heading for ranks behind one with none
   (`spread`): BT 5:55 a Healing Wave, Holy Light and Greater Heal landed on Bulwark within 0.75 s, the
@@ -1198,12 +1217,11 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   regrowth, holy light, greater heal, healing wave whose cast time + 0.3 s lands before the tick; else
   the cover. Otherwise a priest shields a tank first; a bare carrier gets the **cover**, the first of
   power word: shield (no Weakened Soul), renew, rejuvenation, lifebloom and riptide, none from a paladin
-  (Sacred Shield stays on the tank). Then `CastRaidThroughputHeal`, never Wild Growth,
-  and for the non-tank no Holy Light, Greater Heal, Healing Wave, Healing Touch or Nourish. `anubarak
+  (Sacred Shield stays on the tank). Then `CastRaidThroughputHeal`, never Wild Growth. `anubarak
   swarm group heal guard` blocks Chain Heal, Prayer of Healing, Circle of Healing, Wild Growth (both
   nodes), Divine Hymn and Tranquility (only Tranquility is a `CastAoeHealSpellAction`), and
-  `AnubarakSwarmHealMultiplier` zeroes, for every bot, an area heal and a heal on another player who is
-  no tank, no carrier and at 10%+. In 2026-10-30 BD Tree carried Penetrating Cold 12.4 of 15 s bare,
+  `AnubarakSwarmHealMultiplier` zeroes, for every bot, an area heal and a heal on any non-tank without
+  Penetrating Cold, the caster itself too. In 2026-10-30 BD Tree carried Penetrating Cold 12.4 of 15 s bare,
   cast 14 of 16 Nourishes on others and died, and Prayer died with no Renew and no shield on itself:
   `CastRaidThroughputHeal` tries HoTs last, and a carrier at 30-50% ranked under every tank under 90%.
   In BG (below) the old pick killed the healers: all four herded on one carrier, tanks under 50%
@@ -1278,7 +1296,9 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   Wisdom's mana return. `anubarak swarm light hold` blocks every paladin bot's class `judgement of
   light`, which goes on the current target, often a burrower; `anubarak swarm judgement hold` blocks
   `judgement`, `judgement of wisdom` and `judgement of justice` for one whose Light is on him. In CA only
-  Holylight judged Light (2 casts, about 40 of 118 s), Justice and Bulwark Wisdom.
+  Holylight judged Light (2 casts, about 40 of 118 s), Justice and Bulwark Wisdom. CL 86.9 of 113 s, CM
+  79.6 of 112: Justice, always in melee, judged Wisdom every 8-11 s, so his judgement was on cooldown as
+  Light came due and the others out of its 10 yd; left as is (user call, 2026-11-05).
 - **Healing Stream in phase 3** (every difficulty, user call 2026-11-04): every shaman bot puts down its
   own Healing Stream unless its Mana Tide is out, and `anubarak swarm mana spring hold` blocks
   `mana spring totem`, which the water totem strategy would put back. In CA only Totemist's was out.
@@ -1290,8 +1310,19 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   hunters; Vampiric Embrace 0.18-0.22 and Healing Stream 0.12-0.14, each under the minimum tick alone,
   about 0.34 together. Its phase 3 non-tank deaths before the collapse: 5 Penetrating Cold mid-debuff
   (carriers 11-15 s of 18 with no HoT or shield), 2 the minimum tick, 1 Mandibles. Party layout is the
-  raid's: CA's party 3 (Power, Smartface, Druidica, Tree with Malediction) had no shaman; swapping
-  Stormweaver (party 4) for Tree gives it both, and Tree heals herself (1.43k/s own).
+  raid's. Health settles where the 30% drain meets what comes in, about 3.3 × the heal a second; the
+  250 minimum lands at 170-260 after resists, so with no healer cast a non-tank needs ~0.3k/s. Healing
+  Stream reaches its party within 30 yd of the totem (52042-58759), Vampiric Embrace within 100 (15290).
+  CL/CM per non-tank, k/s from outside the healers, items left out: own + raid-wide Totemist 1.88 (Feral
+  Spirit once), Agony 1.56 (Siphon Life), Obliteration 1.54, Malediction 1.45, Assasin 1.00, Shadow 0.76,
+  Deathsong 0.71, Angry 0.58, Mighty 0.43, Hellflame 0.37, Justice 0.34, Fel 0.21, Trueshot 0.24,
+  Nightwarrior 0.24, Stormweaver 0.09, Druidica 0.07, Holylight, Prayer, Tree, Elemena ~0 (Mana Shield
+  aside, both mages ~0.1); Elemena's Healing Stream 0.22, Stormweaver's 0.15, Totemist's 0.14 (melee,
+  Fel, Druidica, Power; not the healers or hunters), Vampiric Embrace 0.20. Four sources, two at most to
+  a group, against nine near zero: the layout for this roster (user call, 2026-11-05) is (1) Elemena,
+  Stormweaver, Holylight, Prayer, Tree, both streams at the healers' stand, 0.37-0.46; (2) Malediction,
+  Totemist, Druidica, Power, Smartface, 0.30-0.46; (3) the three tanks, Agony, Obliteration; (4) Trueshot,
+  Nightwarrior (~0.24, short), Fel, Hellflame, Justice; (5) Assasin, Shadow, Deathsong, Angry, Mighty.
 - The guide's Fortitude and Commanding Shout cancel is skipped (user call): about 0.2% of his health,
   once.
 
@@ -1329,6 +1360,13 @@ personal burst is unrestricted.
   (CK Bulwark 16 s after Felesta), and the healers go next. CJ Felesta, in reach, went 92% to dead in 3 s
   at Expose Weakness 5 under the swarm.
 - Phase 3: a burrower stopped on a stray 40+ yd from the hold stays on it.
+- Phase 3, no healer cast on non-carriers: Trueshot and Nightwarrior get ~0.24k/s, about the swarm's
+  smallest tick, with no party heal left in any layout; the layout fits this roster only (`--swarm`
+  `bare` rechecks it); Fel Armor's ticks (`SPELL_AURA_OBS_MOD_HEALTH`, which skips `ProcSkillsAndAuras`)
+  are not in the trace, so a warlock reads ~0.1k/s low.
+- Phase 3: a side tank under two burrowers at Expose Weakness 9 dies in reach when both tank healers are
+  on the other side tank (CM Felesta 6:43.0: 17.9k, 12.3k, 13.6k in 2.1 s, Icebound Fortitude spent at
+  her 33% in the last phase 1).
 - A rescue Righteous Defense (member under 50%) from 40+ yd buys only its 3 s: Bulwark lost 9 of 9 in
   CE, 15 of 15 in CH.
 - Deathsong, the human, took 3 of Felesta's 9 lost CI taunts.
@@ -1515,7 +1553,8 @@ tank patches latched, before the window's first `submerge` row; taunts on him, R
 counted when its friend was his victim, split bot and human; `pickup` and `anubarak threat cap` veto
 rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start; per 5 s his
 health, the median tank and non-tank health, the swarm and the healers' heals onto tanks, carriers and
-others; bot heals cast onto a non-tank with no Penetrating Cold at 10%+; DPS samples on him and on
+others; bot heals cast onto a non-tank with no Penetrating Cold, a healer itself included, items left
+out; DPS samples on him and on
 burrowers up at its start or newer; those burrowers' last death against lust and `burst` `open`; bot
 burst cast from his 50% (the code's `ANUBARAK_BURST_HOLD_PCT`) to phase 3, flagged unless `behind`; Penetrating Cold windows and heals onto the
 carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
@@ -1668,7 +1707,9 @@ cast at it, or a side tank area spell with it within 11.5 yd); each Bladestorm's
 spin, inside 9.5 yd flagged. `--tanks` per side tank and area spell its `anub.saoe` picks, its casts, and
 the area threat or rotation cast `FAILED` under that pick. `--healers` per side tank its phase 3 seconds
 with under 2 living healers within 40 yd, each stretch of 0.5 s+ with its move rows' `by` from 6 s before;
-`--swarm` per class the phase 3 Penetrating Cold windows with the carrier's own save inside, and `coldself`.
+`--swarm` per class the phase 3 Penetrating Cold windows with the carrier's own save inside, and `coldself`;
+per class save and heal item of the self save hold its phase 3 casts by non-tank bots carrying
+Penetrating Cold, a burrower on it, or neither, and the hold's vetoes per bot.
 `--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
 shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
 heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
@@ -1693,7 +1734,9 @@ mage bot its mana at phase 3's start and 30 s in, and its Life Taps and Evocatio
 `--scarabs` per victim its Mandibles stacks gained moving or standing with the median gap to the
 scarab, and the seconds one within 15 yd was on it by `scarabkite` (CA Trueshot 5 moving, 4 standing,
 median 5.8 yd). `--swarm` per non-tank its effective heals received a second alive by kind (healers,
-own, Judgement of Light, Vampiric Embrace, Healing Stream, other) and the swarm's drain, Judgement of
+own, Judgement of Light, Vampiric Embrace, Healing Stream, other, items), the swarm's drain, `bare` (less
+the healers, the items and a healer's own; under 0.3 flagged `short`) and the party heals that reached
+it, Judgement of
 Light's uptime on him read off the casts (a creature aura, never recorded: 20 s each, cut at that
 paladin's next judgement), each paladin's judgements, `judge` rows, and each shaman's water totem at
 phase 3's start and 10 s in. Baseline, the 2026-11-03 25H pulls on `9f9731e30`: BZ reset at 1:24.1
