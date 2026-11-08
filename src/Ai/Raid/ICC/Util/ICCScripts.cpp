@@ -157,7 +157,8 @@ public:
 
     void OnMapUpdate(Map* map, uint32 /*diff*/) override
     {
-        if (!map || map->GetId() != ICC_MAP_ID)
+        // instance id 0 is the ICC parent map, which isn't an InstanceMap but ToInstanceMap() casts it anyway
+        if (!map || map->GetId() != ICC_MAP_ID || !map->GetInstanceId())
             return;
 
         InstanceMap* instance = map->ToInstanceMap();
