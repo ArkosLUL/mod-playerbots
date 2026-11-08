@@ -579,6 +579,8 @@ KITE_TOOL_COOLDOWN_MS = {11305: 180000, 8696: 180000, 2983: 180000, 33357: 18000
 # the spike is summoned on him this long after he goes down
 SPIKE_SUMMON_MS = 2500
 SPELL_CIRCLE_SUMMON = 48018
+# a circle summoned this soon after the engage was missing at the pull: the code places it before
+PULL_CIRCLE_MS = 10000
 SPELL_CIRCLE_TELEPORT = 48020
 # on the warlock while its circle is within the teleport's 40 yd
 SPELL_CIRCLE_IN_RANGE = 62388
@@ -703,6 +705,13 @@ SUSTAIN_ITEMS = ("Master Healthstone", "Fel Healthstone", "Demonic Healthstone",
 # what a non-tank needs from outside the healers, k a second: the swarm's 250 a tick lands at 170-260
 # after resists, and the heals come in bursts
 SUSTAIN_FLOOR_KS = 0.3
+# the code's ANUBARAK_SWARM_HOT_HP: a non-tank under it gets one of SWARM_HOTS from another healer
+SWARM_HOT_HP = 1200
+SWARM_HOTS = ("Riptide", "Renew", "Rejuvenation")
+# a HoT's 15 s and a tick of slack: its ticks after such a cast stay out of the breach line
+SWARM_HOT_MS = 15500
+# a non-tank's longest stretch with no Healing Stream or Vampiric Embrace tick is flagged from here
+PARTY_GAP_FLAG_MS = 5000
 # the class saves and heal items anubarak swarm self save hold keeps for Penetrating Cold; Power Word:
 # Shield only onto the caster itself
 SWARM_SELF_SAVES = ("Cloak of Shadows", "Evasion", "Feint", "Ice Block", "Divine Shield", "Divine Protection",
@@ -1152,6 +1161,26 @@ def pull_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def pull_circles(trace: Trace, samples: Samples | None = None) -> dict[int, list[tuple[int, float | None]]] | None:
+    """Per warlock bot, its Demonic Circle: Summon casts in the PULL_CIRCLE_MS after the engage with the
+    caster's 2D yards from ROOM_CENTER, None without a snapshot; None with no pull record."""
+    pulls = trace.of("pull")
+    if not pulls:
+        return None
+    samples = samples or Samples(trace)
+    engage = pulls[0]["t"]
+    out = {member["g"]: [] for member in trace.header.get("roster", [])
+           if member.get("c") == CLASS_WARLOCK and member["g"] not in trace.humans}
+    for rec in trace.of("cast"):
+        caster = rec.get("s")
+        if (rec.get("tr") or rec.get("sp") != SPELL_CIRCLE_SUMMON or caster not in out
+                or not engage <= rec["t"] < engage + PULL_CIRCLE_MS):
+            continue
+        row = samples.row(caster, rec["t"])
+        out[caster].append((rec["t"], None if row is None else dist2(row[1:3], ROOM_CENTER[:2])))
+    return out
+
+
 def engage_spread(trace: Trace, samples: Samples | None = None) -> dict | None:
     """At the engage, the living roster player nearest his wait point and each bot tank, 2D yards from it,
     off the snapshot at or before it."""
@@ -1246,6 +1275,13 @@ def show_pull(trace: Trace) -> None:
                           + ("never" if row["reach"] is None else f"{row['reach'] / 1000:.1f} s")
                           + (f", {row['never']} never" if row["never"] and row["reach"] is not None else "")
                           for role, row in sorted(walk.items(), key=lambda item: CROWD_ROLES.index(item[0]))))
+
+    circles = pull_circles(trace)
+    if circles is not None:
+        print(f"  Demonic Circle: Summon per warlock bot in the first {PULL_CIRCLE_MS // 1000} s, yards off the room"
+              " centre: " + ("; ".join(f"{trace.name(guid)} " + (", ".join(
+                  f"{clock(when)}" + ("" if yards is None else f" {yards:.1f} yd") for when, yards in casts) or "none")
+                  for guid, casts in sorted(circles.items(), key=lambda item: trace.name(item[0]))) or "no warlock bot"))
 
     rows = pull_rows(trace)
     if not rows:
@@ -6245,21 +6281,47 @@ def swarm_bins(trace: Trace, start: int, stop: int, samples: Samples | None = No
     return out
 
 
-def swarm_heal_breaches(trace: Trace, start: int, stop: int) -> dict[tuple[int, int], list[int]]:
+def swarm_hots(trace: Trace, start: int, stop: int, samples: Samples | None = None) -> list[dict]:
+    """Phase 3 SWARM_HOTS casts by healer bots onto another non-tank with no Penetrating Cold, under
+    SWARM_HOT_HP at the snapshot before: `t`, `caster`, `target`, `spell`."""
+    samples = samples or Samples(trace)
+    roster = roster_guids(trace)
+    cold = aura_spans(trace, PENETRATING_COLD)
+    out = []
+    for rec in trace.of("cast"):
+        caster, target, when = rec.get("s"), rec.get("tgt"), rec["t"]
+        if (rec.get("tr") or not start <= when < stop or trace.spells.get(rec.get("sp"), "") not in SWARM_HOTS
+                or caster not in roster or caster in trace.humans or trace.role(caster) != "heal"
+                or target not in roster or target == caster or trace.role(target) == "tank"
+                or carrying(cold, target, when)):
+            continue
+        row, top = samples.row(target, when), trace.maxhp.get(target)
+        if row is None or not top or row[5] / 100.0 * top >= SWARM_HOT_HP:
+            continue
+        out.append({"t": when, "caster": caster, "target": target, "spell": rec["sp"]})
+    return out
+
+
+def swarm_heal_breaches(trace: Trace, start: int, stop: int,
+                        samples: Samples | None = None) -> dict[tuple[int, int], list[int]]:
     """Per bot and heal spell, `[heals, effective]` landing in phase 3 on a non-tank with no Penetrating Cold,
     a healer bot itself included. Only spells the bot cast itself, so procs and passive heals (Vampiric
     Embrace, Judgement of Light, Earthliving) stay out, and no SUSTAIN_ITEMS, which the self save line
-    reads; a HoT's ticks count while they land."""
+    reads; a HoT's ticks count while they land, unless swarm_hots has its cast."""
     roster = roster_guids(trace)
     cold = aura_spans(trace, PENETRATING_COLD)
     cast = {(rec.get("s"), rec.get("sp")) for rec in trace.of("cast") if not rec.get("tr")}
+    hots: dict[tuple[int, int, int], list[int]] = collections.defaultdict(list)
+    for row in swarm_hots(trace, start, stop, samples):
+        hots[(row["caster"], row["spell"], row["target"])].append(row["t"])
     out: dict[tuple[int, int], list[int]] = collections.defaultdict(lambda: [0, 0])
     for rec in trace.of("heal"):
         source, target, when = rec.get("s"), rec.get("d"), rec["t"]
         if (not start <= when < stop or source not in roster or source in trace.humans
                 or target not in roster or trace.role(target) == "tank" or carrying(cold, target, when)
                 or (source, rec.get("sp")) not in cast or trace.spells.get(rec.get("sp"), "") in SUSTAIN_ITEMS
-                or (target == source and trace.role(source) != "heal")):
+                or (target == source and trace.role(source) != "heal")
+                or any(at <= when <= at + SWARM_HOT_MS for at in hots.get((source, rec.get("sp"), target), ()))):
             continue
         out[(source, rec.get("sp"))][0] += 1
         out[(source, rec.get("sp"))][1] += rec.get("a", 0) - rec.get("oh", 0)
@@ -6339,11 +6401,19 @@ def show_swarm_race(trace: Trace, start: int, stop: int, samples: Samples) -> No
               f"  swarm {row['swarm_tank'] / 1000:6.1f} {row['swarm_other'] / 1000:6.1f}"
               f"  heals {row['heal_tank'] / 1000:6.1f} {row['heal_cold'] / 1000:6.1f} {row['heal_other'] / 1000:6.1f}")
 
-    breaches = swarm_heal_breaches(trace, start, stop)
+    breaches = swarm_heal_breaches(trace, start, stop, samples)
     print("  bot heals cast onto a non-tank with no Penetrating Cold, a healer itself included: "
           + (", ".join(f"{trace.name(guid)} {trace.spell(spell)} {count} ({amount / 1000:.0f}k)"
                        for (guid, spell), (count, amount) in sorted(breaches.items(), key=lambda item: -item[1][1]))
              or "none"))
+    hots = collections.Counter((row["caster"], row["spell"], row["target"])
+                               for row in swarm_hots(trace, start, stop, samples))
+    print(f"  HoTs cast by healer bots onto another non-tank with no Penetrating Cold under {SWARM_HOT_HP} health,"
+          " their ticks left out above: " + (", ".join(
+              f"{trace.name(caster)} {trace.spell(spell)} > {trace.name(target)} {count}"
+              for (caster, spell, target), count in sorted(
+                  hots.items(), key=lambda item: (trace.name(item[0][0]), trace.name(item[0][2]))))
+              or "none"))
 
     shares = swarm_dps_targets(trace, start, stop, samples)
     if shares:
@@ -6740,14 +6810,33 @@ def sustain_bare(trace: Trace, row: dict) -> int:
             - (heals["own"] if trace.role(row["guid"]) == "heal" else 0))
 
 
+def party_gap(samples: Samples, guid: int, ticks: list[int], start: int, stop: int) -> int:
+    """The longest stretch over the member's snapshots in [start, stop) that it was alive with no tick in
+    `ticks`: from its last tick, or from where it came alive."""
+    stamps, rows = samples.track(guid)
+    ticks = sorted(ticks)
+    best, mark = 0, None
+    for index in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
+        when = stamps[index]
+        if rows[index][5] <= 0:
+            mark = None
+            continue
+        mark = when if mark is None else mark
+        latest = bisect.bisect_right(ticks, when)
+        if latest and ticks[latest - 1] > mark:
+            mark = ticks[latest - 1]
+        best = max(best, when - mark)
+    return best
+
+
 def swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> list[dict]:
     """Per non-tank roster member in [start, stop): its effective heals received by SUSTAIN_KINDS, the swarm's
-    damage on it, the snapshot milliseconds it was alive, each step capped at MAX_STEP_MS, and its party
-    heals (`party`: the Healing Stream owners, its own included, and the Vampiric Embrace casters other than
-    itself)."""
+    damage on it, the snapshot milliseconds it was alive, each step capped at MAX_STEP_MS, its party heals
+    (`party`: the Healing Stream owners, its own included, and the Vampiric Embrace casters other than
+    itself), and `gap`, party_gap over its Healing Stream and Vampiric Embrace ticks, None with none."""
     members = [guid for guid in roster_guids(trace) if trace.role(guid) != "tank"]
-    out = {guid: {"guid": guid, "heals": collections.Counter(), "swarm": 0, "alive": 0, "party": set()}
-           for guid in members}
+    out = {guid: {"guid": guid, "heals": collections.Counter(), "swarm": 0, "alive": 0, "party": set(),
+                  "ticks": []} for guid in members}
     for rec in trace.of("heal", "dmg"):
         row = out.get(rec.get("d"))
         if row is None or not start <= rec["t"] < stop:
@@ -6756,6 +6845,8 @@ def swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> list
             kind = sustain_kind(trace, rec)
             row["heals"][kind] += rec.get("a", 0) - rec.get("oh", 0)
             source = trace.owners.get(rec.get("s"), rec.get("s"))
+            if kind in ("HST", "VE"):
+                row["ticks"].append(rec["t"])
             if kind == "HST" or (kind == "VE" and source != rec.get("d")):
                 row["party"].add((kind, source))
         elif rec.get("sp") == SPELL_LEECHING_SWARM_DMG or rec.get("sp") in LEECHING_SWARM:
@@ -6765,6 +6856,8 @@ def swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> list
         for index in range(bisect.bisect_left(stamps, start), min(bisect.bisect_left(stamps, stop), len(stamps) - 1)):
             if rows[index][5] > 0:
                 row["alive"] += min(stamps[index + 1] - stamps[index], MAX_STEP_MS)
+        ticks = row.pop("ticks")
+        row["gap"] = party_gap(samples, guid, ticks, start, stop) if ticks else None
     return sorted(out.values(), key=lambda row: (trace.role(row["guid"]), trace.name(row["guid"])))
 
 
@@ -6806,9 +6899,11 @@ def water_totems(trace: Trace, start: int) -> dict[int, tuple[str | None, str | 
 def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) -> None:
     print("\n  heals received per non-tank in phase 3, effective, k a second alive, and the swarm's drain; bare is"
           " the total less the\n  healers, the items and a healer's own, under"
-          f" {SUSTAIN_FLOOR_KS:.1f} flagged, then the party heals that reached it:")
+          f" {SUSTAIN_FLOOR_KS:.1f} flagged; gap the longest stretch alive with no Healing Stream or Vampiric"
+          f"\n  Embrace tick, s, {PARTY_GAP_FLAG_MS // 1000} or more flagged, - with none; then the party heals that"
+          " reached it:")
     print(f"    {'name':14} {'role':6} {'alive':>5} " + "".join(f"{kind:>8}" for kind in SUSTAIN_KINDS)
-          + f"{'total':>8}{'swarm':>8}{'bare':>8}")
+          + f"{'total':>8}{'swarm':>8}{'bare':>8}{'':6}{'gap':>6}")
     for row in swarm_sustain(trace, start, stop, samples):
         seconds = max(row["alive"] / 1000, 1.0)
         heals = row["heals"]
@@ -6818,7 +6913,10 @@ def show_swarm_sustain(trace: Trace, start: int, stop: int, samples: Samples) ->
         print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['alive'] / 1000:5.0f} "
               + "".join(f"{heals[kind] / seconds / 1000:8.2f}" for kind in SUSTAIN_KINDS)
               + f"{sum(heals.values()) / seconds / 1000:8.2f}{row['swarm'] / seconds / 1000:8.2f}{bare:8.2f}"
-              + (" short" if bare < SUSTAIN_FLOOR_KS else "      ") + f"  {party or 'no party heal'}")
+              + (" short" if bare < SUSTAIN_FLOOR_KS else "      ")
+              + ("     -     " if row["gap"] is None else f"{row['gap'] / 1000:6.1f}"
+                 + (" long" if row["gap"] >= PARTY_GAP_FLAG_MS else "     "))
+              + f"  {party or 'no party heal'}")
     light = light_reads(trace, start, stop)
     print(f"  Judgement of Light on him in phase 3: {light['uptime'] / 1000:.1f} of {(stop - start) / 1000:.1f} s;"
           " judgements per paladin: " + ("; ".join(

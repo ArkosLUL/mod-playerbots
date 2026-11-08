@@ -592,16 +592,21 @@ enum class AnubarakHealDuty : uint8
 // - itself, when at risk at its next Penetrating Cold tick;
 // - cold duty: its assigned carrier (anub.coldheal), then a tank under 35%;
 // - tank duty: a tank under 50%, then a carrier at risk with no healer in reach;
-// - then a carrier with no HoT or shield this healer can give one, a tank under 90% and a carrier under
-//   50%, the lowest in the first that has one.
-// Among tanks, one another player's cast or channel is already heading for ranks behind one with none.
-// Urgent covers the first three rows, rescue the carriers at risk.
+// - then a carrier with no HoT or shield this healer can give one, another non-tank under 1.2k health
+//   with no HoT this healer can give one, a tank under 90% and a carrier under 50%, the lowest in the
+//   first that has one.
+// Among tanks and among carriers at risk, one another player's cast or channel is already heading for
+// ranks behind one with none. Urgent covers the first three rows, rescue the carriers at risk, hot the
+// HoT row, which gets that HoT and nothing bigger.
 struct AnubarakSwarmHealPick
 {
     Player* target = nullptr;
     bool urgent = false;
     bool rescue = false;
+    bool hot = false;
 };
+// A `hot` pick's HoT, false once none is due
+bool CastAnubarakSwarmHot(PlayerbotAI* botAI, Player* member);
 AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI);
 // A non-tank without Penetrating Cold, the healer itself too: healing it only feeds the swarm
 bool AnubarakSwarmHealWasted(Player* target);
@@ -707,8 +712,8 @@ bool AnubarakKiteCatDropDue(PlayerbotAI* botAI);
 // The druid main tank bot, while he is down with 10 s or less to his emerge. Its own Rejuvenation would
 // take it out of bear form for his first hits.
 bool AnubarakMainTankKeepsBear(PlayerbotAI* botAI);
-// A heroic warlock bot's Demonic Circle. Before the pull: missing, off the room centre or under 290 s left.
-// While he is up: missing or under 100 s, cast where it stands.
+// A heroic warlock bot's Demonic Circle. Before the pull, once held in the pit, parked or not: missing, off
+// the room centre or under 290 s left. While he is up: missing or under 100 s, cast where it stands.
 bool AnubarakDemonicCircleDue(PlayerbotAI* botAI);
 // Where the due circle goes down: the room centre before the pull, false where the warlock stands
 bool GetAnubarakCircleSpot(PlayerbotAI* botAI, Position& spot);

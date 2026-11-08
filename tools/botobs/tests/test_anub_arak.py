@@ -5653,7 +5653,7 @@ class SustainPull(unittest.TestCase):
         self.assertEqual(ab.water_totems(self.trace, 50000), {RFSHAM: ("Mana Spring Totem", "Healing Stream Totem")})
         text = self.text(ab.show_swarm)
         self.assertIn("    Trueshot       ranged    40     0.10    0.00    0.00    0.00    0.00    0.00    0.00"
-                      "    0.10    0.20    0.00 short  no party heal\n", text)
+                      "    0.10    0.20    0.00 short     -       no party heal\n", text)
         self.assertIn("  Judgement of Light on him in phase 3: 28.0 of 40.0 s; judgements per paladin: Holylight"
                       " Light 1 on him; Justice Light 1 on him, Wisdom 1 on him\n"
                       "  anub.judge hand-overs: 0:52.000 Justice:90, 1:05.000 Holylight:70\n"
@@ -6251,9 +6251,105 @@ class Refine31Lines(unittest.TestCase):
         self.assertEqual(rows[R31_SHAM]["party"], {("HST", R31_SHAM)})
         text = self.text(ab.show_swarm_sustain, 10000, 30000, self.samples)
         self.assertIn("    Power          ranged    20     0.00    0.00    0.00    0.05    0.05    0.00    0.00"
-                      "    0.10    0.00    0.10 short  Malediction VE, Stormweaver HST\n", text)
+                      "    0.10    0.00    0.10 short  14.5 long  Malediction VE, Stormweaver HST\n", text)
         self.assertIn("    Tree           heal      20     0.00    0.10    0.00    0.00    0.00    0.00    0.25"
-                      "    0.35    0.00    0.00 short  no party heal\n", text)
+                      "    0.35    0.00    0.00 short     -       no party heal\n", text)
+
+
+R32_TANK, R32_PRIEST, R32_HUNTER, R32_TREE, R32_SHAM, R32_LOCK, R32_FEL = 6601, 6602, 6603, 6604, 6605, 6606, 6607
+R32_TOTEM = 0xF130009AB1006608
+R32_RENEW, R32_STREAM = 48068, 52042
+
+
+def r32_snap(when: int) -> dict:
+    # the hunter at 3% of 28k under the swarm, Tree at 30% of 25k; Agony 5 yd off the room centre
+    def unit(guid, dx, dy, hp):
+        return [guid, X + dx, Y + dy, Z, 0.0, hp, 100.0, 0, 0, 0, 0, 0]
+
+    units = [unit(R32_TANK, 5.0, 0.0, 80.0), unit(R32_PRIEST, 5.0, 5.0, 30.0), unit(R32_HUNTER, 5.0, 5.0, 3.0),
+             unit(R32_TREE, 5.0, 5.0, 30.0), unit(R32_SHAM, 5.0, 5.0, 30.0), unit(R32_LOCK, 3.0, 4.0, 100.0),
+             unit(R32_FEL, 20.0, 0.0, 100.0)]
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r32_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790930000000, "map": ab.MAP_TOC, "inst": 7, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R32_TANK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R32_PRIEST, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+             {"g": R32_HUNTER, "n": "Trueshot", "r": "ranged", "c": 3, "h": 0},
+             {"g": R32_TREE, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+             {"g": R32_SHAM, "n": "Elemena", "r": "heal", "c": 7, "h": 0},
+             {"g": R32_LOCK, "n": "Agony", "r": "ranged", "c": ab.CLASS_WARLOCK, "h": 0},
+             {"g": R32_FEL, "n": "Fel", "r": "ranged", "c": ab.CLASS_WARLOCK, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": 0, "e": "unit", "g": R32_HUNTER, "n": "Trueshot", "mhp": 28000},
+        {"t": 0, "e": "unit", "g": R32_TREE, "n": "Tree", "mhp": 25000},
+        {"t": 0, "e": "unit", "g": R32_TOTEM, "en": 3527, "n": "Healing Stream Totem IX", "own": R32_SHAM},
+        {"e": "spell", "sp": ab.SPELL_CIRCLE_SUMMON, "n": "Demonic Circle: Summon"},
+        {"e": "spell", "sp": R32_RENEW, "n": "Renew"},
+        {"e": "spell", "sp": R32_STREAM, "n": "Healing Stream Totem"},
+        note(0, R32_TANK, "anub.phase", 1),
+        note(10000, R32_TANK, "anub.phase", 3),
+        # Agony's circle right after the engage, Fel's once the window closed
+        cast(200, R32_LOCK, ab.SPELL_CIRCLE_SUMMON, R32_LOCK),
+        cast(12000, R32_FEL, ab.SPELL_CIRCLE_SUMMON, R32_FEL),
+        # Renew onto the hunter at 840 health is the HoT; onto Tree at 7500 it only feeds the swarm
+        cast(12000, R32_PRIEST, R32_RENEW, R32_HUNTER),
+        r31_heal(15000, R32_PRIEST, R32_HUNTER, R32_RENEW, 600),
+        r31_heal(18000, R32_PRIEST, R32_HUNTER, R32_RENEW, 600),
+        cast(13000, R32_PRIEST, R32_RENEW, R32_TREE),
+        r31_heal(16000, R32_PRIEST, R32_TREE, R32_RENEW, 700),
+        {"t": 30000, "e": "end", "out": "wipe"},
+    ]
+    # Healing Stream onto Tree with a hole from 11 s to 19 s
+    records += [r31_heal(when, R32_TOTEM, R32_TREE, R32_STREAM, 500)
+                for when in (11000, 19000, 21000, 23000, 25000, 27000, 29000)]
+    records += [r32_snap(when) for when in range(0, 30500, 500)]
+    return records
+
+
+class Refine32Lines(unittest.TestCase):
+    """Warlock circles summoned right after the engage, HoTs onto a non-tank the swarm dragged low kept out
+    of the breach line, and each non-tank's longest stretch with no party heal tick."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_7_anub-arak_1790930000.ndjson", r32_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace, *args)
+        return out.getvalue()
+
+    def test_a_circle_summoned_in_the_first_10_s_with_its_yards_off_the_centre(self):
+        self.assertEqual(ab.pull_circles(self.trace), {R32_LOCK: [(200, 5.0)], R32_FEL: []})
+        self.assertIn("  Demonic Circle: Summon per warlock bot in the first 10 s, yards off the room centre: Agony"
+                      " 0:00.200 5.0 yd; Fel none\n", self.text(ab.show_pull))
+
+    def test_a_hot_onto_a_non_tank_under_the_line_leaves_the_breach_line(self):
+        self.assertEqual(ab.swarm_hots(self.trace, 10000, 30000, self.samples),
+                         [{"t": 12000, "caster": R32_PRIEST, "target": R32_HUNTER, "spell": R32_RENEW}])
+        self.assertEqual(ab.swarm_heal_breaches(self.trace, 10000, 30000, self.samples),
+                         {(R32_PRIEST, R32_RENEW): [1, 700]})
+        self.assertIn("  HoTs cast by healer bots onto another non-tank with no Penetrating Cold under 1200 health,"
+                      " their ticks left out above: Prayer Renew 48068 > Trueshot 1\n",
+                      self.text(ab.show_swarm_race, 10000, 30000, self.samples))
+
+    def test_the_longest_stretch_with_no_party_heal_tick(self):
+        rows = {row["guid"]: row for row in ab.swarm_sustain(self.trace, 10000, 30000, self.samples)}
+        self.assertEqual(rows[R32_TREE]["gap"], 7500)
+        self.assertIsNone(rows[R32_HUNTER]["gap"])
+        self.assertIn(" short   7.5 long  Elemena HST\n",
+                      self.text(ab.show_swarm_sustain, 10000, 30000, self.samples))
 
 
 if __name__ == "__main__":

@@ -906,6 +906,10 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
     if (pick.rescue && CastAnubarakColdRescue(botAI, pick.target))
         return true;
 
+    // the HoT or nothing: a bigger heal on a non-carrier goes straight back to him
+    if (pick.hot)
+        return CastAnubarakSwarmHot(botAI, pick.target);
+
     if (AnubarakSwarmShieldsTank(bot, pick.target) && botAI->CanCastSpell("power word: shield", pick.target))
         return botAI->CastSpell("power word: shield", pick.target);
 
