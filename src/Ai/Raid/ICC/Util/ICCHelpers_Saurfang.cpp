@@ -777,12 +777,12 @@ void UpdateMarks(DbsState& state, std::vector<Player*> const& members)
         size_t bestLoad = 0;
         for (Player* healer : healers)
         {
-            bool const near = healer->GetExactDist2d(mark) <= healDistance;
+            bool const inReach = healer->GetExactDist2d(mark) <= healDistance;
             size_t const carried = load[healer->GetGUID()];
-            if (!best || (near && !bestNear) || (near == bestNear && carried < bestLoad))
+            if (!best || (inReach && !bestNear) || (inReach == bestNear && carried < bestLoad))
             {
                 best = healer;
-                bestNear = near;
+                bestNear = inReach;
                 bestLoad = carried;
             }
         }

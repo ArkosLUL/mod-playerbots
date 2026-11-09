@@ -931,7 +931,7 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
     bool const storm = !state->spikes.empty() && ReadPhase(boss) != IccLmPhase::Normal;
     float const stormReach = PlayerbotAI::IsRanged(bot) ? LM_STORM_RANGED_REACH : LM_MELEE_SPIKE_REACH;
     std::vector<Creature*> spikes;
-    std::vector<Creature*> far;
+    std::vector<Creature*> farSpikes;
     for (size_t i = 0; i < state->spikes.size(); ++i)
     {
         Creature* spike = map->GetCreature(state->spikes[i]);
@@ -940,7 +940,7 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
 
         spikes.push_back(spike);
         if (state->spikeFar[i])
-            far.push_back(spike);
+            farSpikes.push_back(spike);
     }
 
     if (spikes.empty())
@@ -968,7 +968,7 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
     }
 
     // Ranged take the spikes no melee reaches first, split evenly by guid, then help on the rest
-    std::vector<Creature*> const& pool = far.empty() ? spikes : far;
+    std::vector<Creature*> const& pool = farSpikes.empty() ? spikes : farSpikes;
     int32 const index = IndexOf(state->rangedDps, bot->GetGUID());
     if (index < 0)
     {
@@ -978,7 +978,7 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
 
     std::vector<size_t> const sizes = IccBalancedGroupSizes(state->rangedDps.size(), pool.size());
     size_t const bucket = IccAssignedBucketIndex(static_cast<size_t>(index), sizes);
-    NoteSpike(bot, far.empty() ? "spread" : "far");
+    NoteSpike(bot, farSpikes.empty() ? "spread" : "far");
     return pool[std::min(bucket, pool.size() - 1)];
 }
 

@@ -1357,7 +1357,7 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
     auto const latched = st->kiteDir.find(bot->GetGUID());
     int8 const dir = latched != st->kiteDir.end() ? latched->second : KiteDirection(valithria, bot, zombie);
     float const step = 2.0f * static_cast<float>(M_PI) / VD_KITE_POINTS;
-    int32 const near = static_cast<int32>(std::lround(valithria->GetAngle(bot) / step));
+    int32 const ringSlot = static_cast<int32>(std::lround(valithria->GetAngle(bot) / step));
 
     uint32 const now = getMSTime();
     Position const from = bot->GetPosition();
@@ -1389,7 +1389,7 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
     // Two ring points on, else three, else one, and back the other way only when the zombie cuts across
     for (int32 hops : {2, 3, 1, -2, -3})
     {
-        Position const to = RingPoint(valithria, near + hops * dir);
+        Position const to = RingPoint(valithria, ringSlot + hops * dir);
         if (!clear(to))
             continue;
 

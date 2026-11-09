@@ -607,13 +607,13 @@ void UpdatePack(FactionChampionsState& state, uint32 now)
             if (!champion.inCombat || champion.guid == killTarget)
                 continue;
 
-            uint32 const near = static_cast<uint32>(std::count_if(
+            uint32 const packed = static_cast<uint32>(std::count_if(
                 state.champions.begin(), state.champions.end(), [&champion](Champion const& other)
                 { return other.inCombat && Dist2d(other.x, other.y, champion.x, champion.y) <= PACK_SEED_RADIUS; }));
-            if (!densest || near > most)
+            if (!densest || packed > most)
             {
                 densest = &champion;
-                most = near;
+                most = packed;
             }
         }
 

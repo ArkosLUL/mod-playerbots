@@ -2111,7 +2111,7 @@ Position SpiritTankStand(LkState const& st, Player* bot, size_t index)
     if (!st.ringStandable)
         return spot;
 
-    SpiritInfo const* far = nullptr;
+    SpiritInfo const* closest = nullptr;
     for (SpiritInfo const& spirit : st.spirits)
     {
         auto const itr = st.spiritTank.find(spirit.guid);
@@ -2119,14 +2119,14 @@ Position SpiritTankStand(LkState const& st, Player* bot, size_t index)
             spirit.pos.GetExactDist2d(spot) <= PICKUP_FROM)
             continue;
 
-        if (!far || spirit.pos.GetExactDist2d(spot) < far->pos.GetExactDist2d(spot))
-            far = &spirit;
+        if (!closest || spirit.pos.GetExactDist2d(spot) < closest->pos.GetExactDist2d(spot))
+            closest = &spirit;
     }
 
-    if (!far)
+    if (!closest)
         return spot;
 
-    Position pickup = Toward(far->pos, spot, PICKUP_REACH);
+    Position pickup = Toward(closest->pos, spot, PICKUP_REACH);
     float const r = LK_CENTER.GetExactDist2d(pickup);
     pickup = AtRadius(pickup, std::clamp(r, RING_INNER + 1.0f, RING_OUTER - 1.0f));
     return LkFloorAccepts(bot, pickup.GetPositionX(), pickup.GetPositionY()) ? pickup : spot;

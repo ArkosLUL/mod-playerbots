@@ -123,7 +123,7 @@ struct FgState
     ObjectGuid closeOn;
     ObjectGuid farOn;
     RaidObs::ObsValue<uint8> leg{"fg.leg", 1};
-    RaidObs::ObsValue<uint8> far{"fg.sporespot", 1};
+    RaidObs::ObsValue<uint8> farAnchor{"fg.sporespot", 1};
     Shift closeShift;
     Shift farShift;
     // 0 none, 1 shifted with its fixed player in the burst, 2 shifted without him
@@ -498,7 +498,7 @@ void RefreshRoster(FgState& state, Player* bot, Creature* boss, uint32 now)
         state.slot.Set(guid, id);
 }
 
-Position const& ActiveFarAnchor(FgState const& state) { return ICC_FG_FAR_ANCHORS[state.far.Get() == 2 ? 1 : 0]; }
+Position const& ActiveFarAnchor(FgState const& state) { return ICC_FG_FAR_ANCHORS[state.farAnchor.Get() == 2 ? 1 : 0]; }
 
 // The legs and the far anchors flip once goo lands on the one in use and the other is clear. Assigned every
 // pass, so each trace hears the value it opens on.
@@ -511,11 +511,11 @@ void UpdateFlips(FgState& state, std::vector<Position> const& impacts)
     state.leg = leg;
 
     float const farClear = FG_GOO_CLEARANCE + FG_SPORE_RING + FG_STAND_PARK;
-    uint8 far = state.far.Get() == 2 ? 2 : 1;
-    if (!ClearOf(ICC_FG_FAR_ANCHORS[far - 1], impacts, farClear) &&
-        ClearOf(ICC_FG_FAR_ANCHORS[2 - far], impacts, farClear))
-        far = static_cast<uint8>(3 - far);
-    state.far = far;
+    uint8 farAnchor = state.farAnchor.Get() == 2 ? 2 : 1;
+    if (!ClearOf(ICC_FG_FAR_ANCHORS[farAnchor - 1], impacts, farClear) &&
+        ClearOf(ICC_FG_FAR_ANCHORS[2 - farAnchor], impacts, farClear))
+        farAnchor = static_cast<uint8>(3 - farAnchor);
+    state.farAnchor = farAnchor;
 }
 
 void ClearDeal(FgState& state)
@@ -607,36 +607,36 @@ void UpdateDeal(FgState& state, Creature* boss, std::vector<Player*> const& memb
     state.wave = wave;
 
     std::vector<Player*> close;
-    std::vector<Player*> far;
+    std::vector<Player*> distant;
     for (Player* member : carriers)
-        (IsCloseRole(member) ? close : far).push_back(member);
+        (IsCloseRole(member) ? close : distant).push_back(member);
 
-    if (close.empty() && far.size() >= 2)
+    if (close.empty() && distant.size() >= 2)
     {
-        if (Player* spare = SpareCarrier(far, holder, ICC_FG_CLOSE_ANCHOR, false))
+        if (Player* spare = SpareCarrier(distant, holder, ICC_FG_CLOSE_ANCHOR, false))
         {
-            far.erase(std::find(far.begin(), far.end(), spare));
+            distant.erase(std::find(distant.begin(), distant.end(), spare));
             close.push_back(spare);
         }
     }
-    else if (far.empty() && close.size() >= 2)
+    else if (distant.empty() && close.size() >= 2)
     {
         if (Player* spare = SpareCarrier(close, holder, ActiveFarAnchor(state), true))
         {
             close.erase(std::find(close.begin(), close.end(), spare));
-            far.push_back(spare);
+            distant.push_back(spare);
         }
     }
 
     for (Player* member : close)
         state.carrier.Set(member->GetGUID(), GROUP_CLOSE);
-    for (Player* member : far)
+    for (Player* member : distant)
         state.carrier.Set(member->GetGUID(), GROUP_FAR);
 
     state.closeCarried = !close.empty();
-    state.farCarried = !far.empty();
+    state.farCarried = !distant.empty();
     state.closeOn = GroupAnchorOn(close, holder);
-    state.farOn = GroupAnchorOn(far, holder);
+    state.farOn = GroupAnchorOn(distant, holder);
 }
 
 Player* AnchorPlayer(Player* bot, ObjectGuid const& on)

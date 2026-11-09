@@ -2580,10 +2580,10 @@ bool BeingResurrected(std::vector<Member> const& members, ObjectGuid corpse)
 
 bool CorpseCrowded(std::vector<Unit*> const& champions, Player* corpse)
 {
-    uint32 const near = static_cast<uint32>(
+    uint32 const nearby = static_cast<uint32>(
         std::count_if(champions.begin(), champions.end(), [corpse](Unit* champion)
                       { return champion->GetExactDist2d(corpse) <= CORPSE_PACK_RADIUS; }));
-    return near > CORPSE_PACK_MAX;
+    return nearby > CORPSE_PACK_MAX;
 }
 
 void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members,

@@ -1938,8 +1938,8 @@ bool GetPpPlagueWalk(PlayerbotAI* botAI, Position& spot, char const*& branch)
         return true;
     }
 
-    std::vector<Player*> const near = OthersNear(bot, PP_CARRIER_CLEAR);
-    if (near.empty())
+    std::vector<Player*> const neighbours = OthersNear(bot, PP_CARRIER_CLEAR);
+    if (neighbours.empty())
         return false;
 
     std::vector<HazardCircle> circles;

@@ -722,12 +722,12 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
     auto const hits = [&](Position const& pos, std::vector<Position> const& extra)
     {
         bool const own = valanar->GetExactDist2d(pos) <= VORTEX_TARGETS;
-        auto const near = [&](std::vector<Position> const& list)
+        auto const sharing = [&](std::vector<Position> const& list)
         {
             return std::count_if(list.begin(), list.end(),
                                  [&](Position const& other) { return other.GetExactDist2d(pos) < VORTEX_SHARED; });
         };
-        uint8 const count = static_cast<uint8>(near(carriers) + near(extra));
+        uint8 const count = static_cast<uint8>(sharing(carriers) + sharing(extra));
         return std::pair<uint8, uint8>(static_cast<uint8>(count + (own ? 1 : 0)), own ? count : 0);
     };
 

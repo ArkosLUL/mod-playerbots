@@ -1553,11 +1553,11 @@ bool DefileWalk(LateState& st, LateBot& bs, Player* bot, Position const* prefer,
                 return true;
             }
 
-            bool const near = bot->GetExactDist2d(target) < DEFILE_CLEAR ||
+            bool const atDefile = bot->GetExactDist2d(target) < DEFILE_CLEAR ||
                               (st.defileRunValid && bot->GetExactDist2d(st.defileRunSpot) < DEFILE_CLEAR);
             bool const retry = bs.defileFor != st.defileCastMs || !bs.defileBlockedMs ||
                                getMSTimeDiff(bs.defileBlockedMs, now) >= SWEEP_RETRY_MS;
-            if (near && retry)
+            if (atDefile && retry)
             {
                 bs.defileFor = st.defileCastMs;
                 bs.defileValid = FindClearSpot(st, bot, target, prefer, bs.defileSpot);

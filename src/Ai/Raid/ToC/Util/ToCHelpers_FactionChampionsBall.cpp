@@ -596,7 +596,7 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
         (rested != state->stepEndMs.end() && getMSTimeDiff(rested->second, now) < STEP_OFF_REST_MS))
         return false;
 
-    uint32 near = 0;
+    uint32 nearby = 0;
     float sumX = 0.0f;
     float sumY = 0.0f;
     for (Unit* champion : FactionChampionsInCombat(botAI))
@@ -605,16 +605,16 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
             bot->GetExactDist2d(champion) > STEP_OFF_TRIGGER)
             continue;
 
-        ++near;
+        ++nearby;
         sumX += champion->GetPositionX();
         sumY += champion->GetPositionY();
     }
 
-    if (!near)
+    if (!nearby)
         return false;
 
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-    Vec const away = Unit2(bot->GetPositionX() - sumX / near, bot->GetPositionY() - sumY / near);
+    Vec const away = Unit2(bot->GetPositionX() - sumX / nearby, bot->GetPositionY() - sumY / nearby);
     for (float turn : {0.0f, 45.0f, -45.0f, 90.0f, -90.0f})
     {
         Position const target = Along(bot->GetPosition(), Rotate(away, turn), STEP_OFF_DIST);
@@ -686,7 +686,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
     std::array<float, 2> onSum = {0.0f, 0.0f};
     std::array<float, 2> meleeSum = {0.0f, 0.0f};
     std::array<float, 2> nearSum = {0.0f, 0.0f};
-    uint32 near = 0;
+    uint32 nearby = 0;
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
         if (champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
@@ -709,7 +709,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
 
         if (bot->GetExactDist2d(champion) <= NEXT_FOCUS_RADIUS)
         {
-            ++near;
+            ++nearby;
             nearSum[0] += champion->GetPositionX();
             nearSum[1] += champion->GetPositionY();
         }
@@ -721,7 +721,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         return false;
 
     // away from the melee on it, else everything on it, else, about to be picked, the champions round it
-    uint32 const from = meleeOn ? meleeOn : (on ? on : near);
+    uint32 const from = meleeOn ? meleeOn : (on ? on : nearby);
     std::array<float, 2> const& sum = meleeOn ? meleeSum : (on ? onSum : nearSum);
     if (!from)
         return false;
