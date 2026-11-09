@@ -67,12 +67,11 @@ spell lock; silences and stuns do nothing.
 
 **Touch**, heroic only. Each twin, first at 10-25 s, then 45-50 s after one lands or 10 s after
 finding no target; Fjola pushes hers to 15 s past each special. It targets a random player holding
-the other colour's essence who is neither twin's victim. **In this core it hits the whole raid**:
-`spell_valkyr_touch_aura` deals 2,925-3,075 (10H) or 5,850-6,150 (25H) every 2 s for 20 s to every
-alive player on the map without `ExcludeTargetAuraSpell`, which is 0 for the Touch spells, and deals
-the amount from before `CalcAbsorbResist`, so absorbs are spent (and grant Powering Up) without
-reducing it. Only gossip at a portal of its colour ends it, even for a holder of that colour: it's an
-instant 20 yd/s missile, so one picked on a Light holder can land after the swap back.
+the other colour's essence who is neither twin's victim. `spell_valkyr_touch_aura` deals 2,925-3,075
+(10H) or 5,850-6,150 (25H) every 2 s for 20 s to the touched player only, after absorbs: an essence of
+the Touch's colour absorbs it all (school absorb, fire for Light, shadow for Dark). Only gossip at a
+portal of its colour ends it, even for a holder of that colour: it's an instant 20 yd/s missile, so
+one picked on a Light holder can land after the swap back.
 
 ## Orbs
 
@@ -134,12 +133,12 @@ the orb field.
    Vortex's colour. Outranks a Touch: the Touch's other colour would eat the whole Vortex, up to
    80k. A non-tank touched meanwhile waits 10 yd from its Touch's portal toward its stand
    (`twin valkyr walk to touch portal`), so that swap lands as the channel ends: each 2 s held ticks
-   the raid (25H 2026-10-29: 6.3 s, 3 ticks, 450k). Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
+   the bot. Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
    even with Aura Mastery and Divine Guardian, against 25-33k health.
 2. **Touch** on the bot: its colour, re-taken if already held (during a Vortex of that colour too).
 3. **Base**: Eydis's tank Light, everyone else Dark, even after a Touch or the Light Vortex left it
    Light. Eydis's Touch only picks a Light holder no twin has as victim, so it finds nobody; the
-   2026-10-25 25H kill's rule "keep what it holds" bounced 3 Touch pairs (~150k each).
+   2026-10-25 25H kill's rule "keep what it holds" bounced 3 Touch pairs.
 
 No colour swap for a Pact.
 

@@ -140,7 +140,7 @@ void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("twin valkyr vortex requires essence", {
         NextAction("twin valkyr swap essence for vortex", ACTION_EMERGENCY + 7) }));
 
-    // in this core a Touch ticks on the whole raid until the touched bot swaps
+    // a Touch ticks only on the touched bot, and an essence of the Touch's colour absorbs it all
     triggers.push_back(new TriggerNode("twin valkyr touched requires essence", {
         NextAction("twin valkyr swap essence for touch", ACTION_EMERGENCY + 6) }));
 

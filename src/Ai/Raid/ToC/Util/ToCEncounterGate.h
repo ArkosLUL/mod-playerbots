@@ -10,17 +10,19 @@
 
 class PlayerbotAI;
 
-// Mirrors trial_of_the_crusader.h (DataTypes, Progress, NPCs), which lives in the core's scripts and
-// can't be included from here. The script keys the twins' guids by NPC entry, not by a data type.
+// Mirrors trial_of_the_crusader.h, which lives in the core's scripts and can't be included from here.
+// INSTANCE_PROGRESS is a GetData key (DataTypes), the rest are GetGuidData keys from
+// TrialOfTheCrusaderObjectData. Those values are implicit, so recheck them when the core adds an entry.
 enum ToCInstanceData : uint32
 {
     TOC_DATA_INSTANCE_PROGRESS = 1,
-    TOC_DATA_GORMOK = 4,
+    TOC_DATA_GORMOK = 5,
     TOC_DATA_DREADSCALE = 6,
     TOC_DATA_ACIDMAW = 7,
-    TOC_DATA_ANUBARAK = 11,
-    TOC_DATA_FJOLA = 34497,  // NPC_LIGHTBANE
-    TOC_DATA_EYDIS = 34496,  // NPC_DARKBANE
+    TOC_DATA_ICEHOWL = 8,
+    TOC_DATA_FJOLA = 11,  // DATA_LIGHTBANE
+    TOC_DATA_EYDIS = 12,  // DATA_DARKBANE
+    TOC_DATA_ANUBARAK = 14,
 };
 
 // GetData(TOC_DATA_INSTANCE_PROGRESS). Never moves back on a wipe.

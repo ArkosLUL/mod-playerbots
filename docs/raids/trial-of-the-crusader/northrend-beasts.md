@@ -23,7 +23,7 @@ and `SpellInfoCorrections.cpp`.
 `Util/ToCHelpers_NorthrendBeasts.{h,cpp}` reads the world once per instance per ms into a
 `RaidInstanceState`, so every bot gets one answer. Nothing resolves off map 649.
 
-- **Beasts.** Gormok, Dreadscale and Acidmaw by `GetGuidData` 4, 6, 7; Icehowl by entry within 200 yd
+- **Beasts.** Gormok, Dreadscale and Acidmaw by `GetGuidData` 5, 6, 7; Icehowl by entry within 200 yd
   of the reading bot, his guid cached while it resolves and re-searched at most once a second
   (he walks in for 10 s first). Engaged = alive and in combat. The mask of engaged beasts,
   1 Gormok, 2 a worm, 4 Icehowl, is `nb.stage`.

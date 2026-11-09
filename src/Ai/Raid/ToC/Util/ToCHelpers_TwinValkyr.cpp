@@ -1410,8 +1410,8 @@ bool ParkedWalkDue(bool& parked, float distance)
     return true;
 }
 
-// A Touch of the other colour waits out the Vortex, then ticks the whole raid every 2 s until the
-// swap, so the bot waits in gossip reach of its portal instead
+// A Touch of the other colour waits out the Vortex, then ticks the bot every 2 s until the swap, so
+// the bot waits in gossip reach of its portal instead
 Creature* TouchCrossPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Position& spot)
 {
     Player* bot = botAI->GetBot();

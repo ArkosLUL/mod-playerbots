@@ -43,11 +43,12 @@ things:
   until the last beast dies, at the champions' release, 3.25 s before the twins turn aggressive.
   Jaraxxus and Anub'arak set it on engage. An evade (`TYPE_FAILED`) or an all-dead cleanup sets every
   `IN_PROGRESS` boss to `FAIL` (RaidObs closes the trace `wipe`).
-- **`GetGuidData`**: Gormok (4), Dreadscale (6), Acidmaw (7), the twins by NPC entry (34497 Fjola,
-  34496 Eydis), Anub'arak (11, also while submerged). Icehowl, Jaraxxus and the champions only by
-  entry. Resolve with `map->GetCreature(GetGuidData(type))`; `InstanceScript::GetCreature(type)`
-  reads the unused object-data registry. A guid resolves map-wide, so an "encounter running" test
-  also needs the unit in combat ([pitfalls.md](../../engine/pitfalls.md)).
+- **`GetGuidData`** reads the script's object-data registry, `TrialOfTheCrusaderObjectData` (implicit
+  values, mirrored as `TOC_DATA_*`): Gormok 5, Dreadscale 6, Acidmaw 7, Icehowl 8, Jaraxxus 10, Fjola
+  11, Eydis 12, Anub'arak 14 (also while submerged). Champions only by entry. A guid empties once its
+  creature leaves the world, a despawned corpse included. Resolve with
+  `map->GetCreature(GetGuidData(type))`. A guid resolves map-wide, so an "encounter running" test also
+  needs the unit in combat ([pitfalls.md](../../engine/pitfalls.md)).
 
 ## Arena floor
 

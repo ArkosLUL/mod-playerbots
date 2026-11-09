@@ -926,26 +926,29 @@ Creature* FindBarrett(Player* bot, StagingState& state, uint32 now)
     return nullptr;
 }
 
-// A dead or despawned beast's slot keeps its guid until a wipe's cleanup clears it
+// A beast's guid empties once its corpse despawns, so check newest first. Each next beast shows up
+// before the last corpse goes (Gormok's lasts 30 s, the worms' 10 s), and a wipe despawns them all.
 ToCStagingBoss NextBeast(Map* map, InstanceScript* instance)
 {
-    auto const upNext = [&](uint32 type)
+    auto const beast = [&](uint32 type) -> Creature*
     {
         ObjectGuid const guid = instance->GetGuidData(type);
-        if (guid.IsEmpty())
-            return true;
-
-        Creature* beast = map->GetCreature(guid);
-        return beast && beast->IsAlive();
+        return guid.IsEmpty() ? nullptr : map->GetCreature(guid);
     };
+    auto const alive = [](Creature* creature) { return creature && creature->IsAlive(); };
 
-    if (upNext(TOC_DATA_GORMOK))
-        return ToCStagingBoss::Gormok;
+    if (beast(TOC_DATA_ICEHOWL))
+        return ToCStagingBoss::Icehowl;
 
-    if (upNext(TOC_DATA_DREADSCALE) || upNext(TOC_DATA_ACIDMAW))
-        return ToCStagingBoss::Worms;
+    Creature* const dreadscale = beast(TOC_DATA_DREADSCALE);
+    Creature* const acidmaw = beast(TOC_DATA_ACIDMAW);
+    if (dreadscale || acidmaw)
+        return alive(dreadscale) || alive(acidmaw) ? ToCStagingBoss::Worms : ToCStagingBoss::Icehowl;
 
-    return ToCStagingBoss::Icehowl;
+    if (Creature* const gormok = beast(TOC_DATA_GORMOK))
+        return gormok->IsAlive() ? ToCStagingBoss::Gormok : ToCStagingBoss::Worms;
+
+    return ToCStagingBoss::Gormok;
 }
 
 ToCStagingBoss ReadArrival(PlayerbotAI* botAI, Player* bot, StagingState& state, uint32 now)
