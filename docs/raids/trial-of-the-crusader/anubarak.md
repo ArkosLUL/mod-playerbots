@@ -431,10 +431,13 @@ there spends none, about (712, 156) or (712, 114) for the first pair; dropped wh
 the 2026-10-26 heroic submerges 10-13 players stood within 20 yd of where he went down, and 3 of 4
 first kites started with the spike within 12 yd. **Heroic drags him farther** (user calls, 2026-10-29
 and -30; `FarSubmergeSpot`): searched from 40 s left, the point every 15° on the 45, 40 and 35 yd rings
-within the drag's 36 yd of him ((15 - 3 s) × 3 yd/s), farthest from R in 5 yd bands, nearest the tank
+within the drag's 36 yd of him ((18 - 3 - 3 s) × 3 yd/s), farthest from R in 5 yd bands, nearest the tank
 on a tie, 50+ yd off R first, the same patch clearances and line to R, on the floor; none, the rule
-above. The drag leaves the anchor with under 15 s left, later once the walk there (distance / 3 yd/s
-+ 3 s) takes less: expected 28-35 yd off R, about (762, 165) or (762, 105). In 2026-10-30 Z it left
+above. The drag leaves the anchor with under 18 s left, later once the walk there (distance / 3 yd/s
++ 3 s + 3 s for one Freezing Slash stun, every 15-20 s, user call 2026-11-10) takes less: CR 1:05.97
+pre-stepped round him, a stun 1:07.4-1:10.4 and a 2 s `subhold` left the leg 6.2 s before, and he went
+down 15.4 yd off its r21 spot, 13.1 yd from side 0's patch (40 heroic submerges on disk: 0.4-6.3 yd but
+CR and one 11.3); expected 28-35 yd off R, about (762, 165) or (762, 105). In 2026-10-30 Z it left
 at 40 s (84 yd / 2 + 3 = 45 s), the backpedal legs made 3.0-3.6 yd/s net, he went down 68-70 yd off
 the gather 10-17 s early, and 3 of 4 side-tank deaths came in the drag, 2 of 4 healers 35+ yd off the
 side tanks. Latched for the window, redone
@@ -479,10 +482,12 @@ ghouls taunted burrowers off the side tanks and the patches, where one submerged
 sacrifice hold` blocks a tank's `hand of sacrifice on party` all fight (BT 5:58 Bulwark, under two
 burrowers, took Mighty's hits), and `anubarak swarm sacrifice hold` everyone's in phase 3 (see EMERGENCY+4). A side tank attacks the burrower on it, else its side's loose one, one hitting a healer first, then the
 nearest its patch, and picks a loose one up even while holding one: Righteous Defense on whoever most
-of them hit, unless he is on them, they are a side tank, or it would leave the tank past two of its own
-(it taunts all three attackers: in 2026-10-28 R and S it put three on the tank four times, three
-fatal); the other side's on them too go back to their tank's taunt (2026-10-30 BD 6:25, held back for
-them, it reached Elemena 0.3 s after she died and the wipe began). Then Challenging Roar or Shout with
+of them hit, unless he is on them, they are a side tank, or it would leave the tank past two, the other side's on
+them counted (it taunts all three attackers: in 2026-10-28 R and S it put three on the tank four times,
+three fatal; CR 4:55.891 it took two of side 1's off Elemena at 100%, Felesta's taunts were down, and
+Bulwark died under four 5 s later). Under 50% outside the swarm only its own count (user call,
+2026-11-10: 2026-10-30 BD 6:25, held back for the other side's, it reached Elemena 0.3 s after she
+died). Then Challenging Roar or Shout with
 two within 10 yd, none of the other side's and him past 10 yd plus his reach, the class taunt, then Feral Charge,
 Intercept, Avenger's Shield or Death Grip, each gated on `CanCastSpell` and reach; else it walks in,
 except in phase 3 to one on it or one over 40 yd from its hold: `anubarak side tank swarm leash` blocks
@@ -932,6 +937,12 @@ Nightwarrior to Penetrating Cold, Stormweaver to a scarab at Mandibles 9 in P1c)
 under 2 healers CQ Felesta 0.2 s; F-list saves on bots carrying neither 1; mages 74-76% mana 30 s in;
 first Penetrating Cold ticks survived 31 of 35; herd rows 6.
 
+Baseline, 25H on refine-32 (`44b6dcaa0`): CR `1794263639` (wipe in P1c at 48.4%: he went down by
+side 0's patch, spent 1.6 s into the first kite; Obliteration, Bulwark, Hellflame and Malediction
+impaled; 5 burrower submerges with their tank alive; Bulwark dead 5:01.2 under four, the main tank
+5:07.96 to Expose Weakness from a loose one), CS `1794264114` (kill 7:19.3, no deaths). CS: no circle
+summon in the first 10 s, 15 `hot` casts, herd rows 2, the two sides' burrowers never within 12 yd.
+
 **The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
 floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
@@ -1048,6 +1059,10 @@ standby escort; and once the plan has failed (no patch ending ahead, or
 the spike inside 9 yd anyway, and no own immunity or own hand planned) any. The claimer is an alive unmarked paladin bot within 30 yd and in sight with the hand
 ready (`ReadyInstant`; the cast waits out the GCD), in the **protector order**: neither tank nor
 healer, a side tank with no burrower to hold or take, a healer, any other tank, by guid within each.
+The planner's Hands (`ReadyHands`) skip a side tank with a burrower to hold or take, as the standby
+does; only the in-reach claim can take its Hand where it stands. CR P2b planned Bulwark's (the only one
+ready): the escort (RAID+4.5) walked him off his patch over his burrower hold (RAID+3) to 44-63 yd off
+the kiters, no Hand landed, Malediction died, and #1577 (63%) and #1576 (6%) submerged to full.
 One claim per mark, kept until the mark moves; one 1.5 s old with no immunity on the kiter passes to
 the next paladin, and one lapses, for the same paladin to retake, when the need goes. Two 2026-10-26
 hands went out 0.2 s into a kite on a 3.5 yd/s spike. **The kiter's own**: its planned hand 1 s
@@ -1434,7 +1449,12 @@ personal burst is unrestricted.
   counts every spare Hand at 10 s whatever its paladin's reach; normal's raid is all bystanders.
 - After a fail on one tank patch, a spike re-marking the other side's tank, still holding burrowers
   on its patch, spends that one too (about 1 in 24 per spent patch).
-- A spent tank patch stays bare until he emerges, then waits on a sphere in reach.
+- A spent tank patch stays bare until he emerges, then waits on a sphere in reach; a lost one that
+  re-latches a kite patch leaves one for the submerge (CR #1419).
+- The far-spot search's 36 yd reach finds no 25+ yd spot when the tank patches flank the anchor ~13 yd
+  either side (CR r21); about half the submerges on disk sat at r17-r25.
+- A spike re-marking after a death keeps its speed: the next kiter gets ~2 s (CR Bulwark, Hellflame).
+- A side tank's spike dodge leaves its patch (CR Bulwark 18.8 yd at 1:25.5).
 - In the fight the Demonic Circle goes down where the warlock stands, not at the centre.
 - Why CQ's 7:59.995 at-risk order put Shadow (21%) before Nightwarrior (13%) is not traced; a cold
   healer carrying Penetrating Cold itself reaches its assigned carrier late (CQ Angry 7:26.8).
@@ -1700,7 +1720,11 @@ Righteous Fury, Frost Presence) lost while he is up and not at a death, with the
 prerequisite that dropped it and when it came back. `--spheres`
 heroic, per submerge each kite sphere downed from 30 s before he went down, its spend and the kite it
 ended, under 15 s in flagged, a spike that came up with no kite patch down flagged, the kite patches on
-the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows. `--threat` when the submerge drag left. `--healers` also the main tank's seconds with no healer within 40 yd.
+the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows. `--threat` when the submerge drag left,
+and each Freezing Slash on its tank from 3 s before it set out (pre-step or `subhold` included; CR +1.5
+s, CS -0.4). `--burrowers` each side tank Righteous Defense that took the other side's burrowers, with
+the member's health (CR Elemena 100%). `--spike` per side tank and phase the seconds on escort duty
+with a living burrower on it (CR Bulwark P2b 35.3). `--healers` also the main tank's seconds with no healer within 40 yd.
 `--burrowers` Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it,
 `anubarak burrower threat cap` vetoes per bot. `--threat` drag pre-steps (counted as legs) and
 `subspot` rows per window with how far he went down from the last spot, `no submerge leg` (no

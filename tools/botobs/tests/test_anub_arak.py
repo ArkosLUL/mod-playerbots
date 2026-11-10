@@ -6352,5 +6352,116 @@ class Refine32Lines(unittest.TestCase):
                       self.text(ab.show_swarm_sustain, 10000, 30000, self.samples))
 
 
+R33_MT, R33_PALA, R33_DK, R33_SHAM = 6701, 6702, 6703, 6704
+R33_BOSS = CREATURE | 6790
+R33_B1, R33_B2, R33_B3, R33_B4 = (CREATURE | n for n in (6791, 6792, 6793, 6794))
+
+
+def r33_snap(when: int) -> dict:
+    # B1 on Bulwark until it dies at 30 s, B2 and B3 on Elemena, B4 on Bulwark from the emerge
+    def unit(guid, hp, target=0):
+        return [guid, X, Y, Z, 0.0, hp, 100.0, target, 0, 0, 0, 0]
+
+    units = [unit(guid, 100.0) for guid in (R33_MT, R33_PALA, R33_DK, R33_SHAM)]
+    units.append(unit(R33_BOSS, 80.0, R33_MT))
+    units.append(unit(R33_B1, 60.0 if when < 30000 else 0.0, R33_PALA))
+    units += [unit(guid, 90.0, R33_SHAM) for guid in (R33_B2, R33_B3)]
+    if when >= 40000:
+        units.append(unit(R33_B4, 95.0, R33_PALA))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def r33_pull() -> list[dict]:
+    defense = ab.SPELL_RIGHTEOUS_DEFENSE_TAUNT
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790940000000, "map": ab.MAP_TOC, "inst": 8, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R33_MT, "n": "Ecoterrorist", "r": "tank", "c": 11, "h": 0},
+             {"g": R33_PALA, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": R33_DK, "n": "Felesta", "r": "tank", "c": 6, "h": 0},
+             {"g": R33_SHAM, "n": "Elemena", "r": "heal", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        {"t": 0, "e": "unit", "g": R33_BOSS, "en": ab.NPC_ANUBARAK, "n": "Anub'arak", "b": 1},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (R33_B1, R33_B2, R33_B3, R33_B4)),
+        {"e": "spell", "sp": ab.SPELL_FREEZING_SLASH, "n": "Freezing Slash"},
+        note(0, R33_MT, "anub.phase", 1),
+        note(20000, R33_MT, "anub.phase", 2),
+        note(40000, R33_MT, "anub.phase", 1),
+        note(0, R33_PALA, "anub.side0", R33_PALA),
+        note(0, R33_DK, "anub.side1", R33_DK),
+        note(0, R33_B1, "anub.bside", 0),
+        note(0, R33_B2, "anub.bside", 1),
+        note(0, R33_B3, "anub.bside", 1),
+        note(40000, R33_B4, "anub.bside", 0),
+        # the drag opens with a pre-step and a hold before its leg; Felesta's row in between is someone else's
+        note(1000, R33_MT, "anub.pickup", "hold"),
+        note(10000, R33_MT, "anub.pickup", "prestep"),
+        note(12000, R33_DK, "anub.pickup", "hold"),
+        note(13000, R33_MT, "anub.pickup", "subhold"),
+        note(15000, R33_MT, "anub.pickup", "submerge"),
+        # one Freezing Slash long before, one still stunning him 1.5 s before the drag set out
+        cast(0, R33_BOSS, ab.SPELL_FREEZING_SLASH, R33_MT),
+        cast(8500, R33_BOSS, ab.SPELL_FREEZING_SLASH, R33_MT),
+        # Bulwark escorts with B1 on him: walk 22-26 s, post 27-33 s, B1 dead from 30 s
+        note(22000, R33_PALA, "anub.escort", "walk"),
+        note(26000, R33_PALA, "anub.escort", "none"),
+        note(27000, R33_PALA, "anub.escort", "post"),
+        note(33000, R33_PALA, "anub.escort", "none"),
+        # Righteous Defense on Elemena takes his own B4 and side 1's B2 and B3; the second one only B4
+        cast(45000, R33_PALA, ab.SPELL_RIGHTEOUS_DEFENSE, R33_SHAM),
+        cast(45000, R33_PALA, defense, R33_B4),
+        cast(45000, R33_PALA, defense, R33_B2),
+        cast(45000, R33_PALA, defense, R33_B3),
+        cast(50000, R33_PALA, ab.SPELL_RIGHTEOUS_DEFENSE, R33_SHAM),
+        cast(50000, R33_PALA, defense, R33_B4),
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [r33_snap(when) for when in range(0, 60500, 500)]
+    return records
+
+
+class Refine33Lines(unittest.TestCase):
+    """Freezing Slash on the drag tank from 3 s before the drag set out, a side tank on escort duty with a
+    burrower on it, and a side tank's Righteous Defense that took the other side's burrowers."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_8_anub-arak_1790940000.ndjson", r33_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def text(self, show, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            show(self.trace, *args)
+        return out.getvalue()
+
+    def test_freezing_slash_from_3_s_before_the_drag_set_out(self):
+        drags = [row["drag"] for row in ab.threat_rows(self.trace, self.samples) if row["drag"]]
+        self.assertEqual(drags, [{"t": 10000, "tank": R33_MT, "slashes": [8500]}])
+        self.assertIn("          Freezing Slash on Ecoterrorist from 3 s before the drag set out at 0:10.000:"
+                      " 0:08.500 -1.5 s\n", self.text(ab.show_threat))
+
+    def test_escort_duty_counts_only_while_a_living_burrower_is_on_the_side_tank(self):
+        self.assertEqual(ab.escort_under_burrowers(self.trace, self.samples),
+                         [{"tank": R33_PALA, "phase": "P2", "ms": 7000, "first": 22000}])
+        self.assertIn("  side tank on escort duty (anub.escort walk, hold, post, patch or standby) with a burrower on"
+                      " it, per phase: Bulwark P2 7.0 s from 0:22.000\n",
+                      self.text(ab.show_rework, [], [], self.samples))
+
+    def test_righteous_defense_that_took_the_other_sides_burrowers(self):
+        self.assertEqual(ab.defense_takes(self.trace, self.samples),
+                         [{"t": 45000, "tank": R33_PALA, "member": R33_SHAM, "hp": 100.0, "own": [R33_B4],
+                           "other": [R33_B2, R33_B3]}])
+        self.assertIn("  side tank Righteous Defense that took the other side's burrowers, the member and its health"
+                      " at the cast: Bulwark 0:45.000 on Elemena 100%: #6792, #6793 (own #6794)\n",
+                      self.text(ab.show_side_tank_crowds, self.samples))
+
+
 if __name__ == "__main__":
     unittest.main()

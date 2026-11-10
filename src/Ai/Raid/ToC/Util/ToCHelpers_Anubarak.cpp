@@ -211,13 +211,16 @@ constexpr float ANUBARAK_SUBMERGE_FAR_RINGS[] = {45.0f, 40.0f, 35.0f};
 constexpr uint32 ANUBARAK_SUBMERGE_FAR_HEADINGS = 24;
 constexpr float ANUBARAK_SUBMERGE_FAR_MIN = 50.0f;
 constexpr float ANUBARAK_SUBMERGE_FAR_BAND = 5.0f;
-// The tank's backpedal legs moved him 3.0-3.6 yd/s net in 2026-10-30 Z. The drag leaves with under 15 s
+// The tank's backpedal legs moved him 3.0-3.6 yd/s net in 2026-10-30 Z. The drag leaves with under 18 s
 // left, since a 40 s drag pulled healers off the side tanks, so the spot has to lie within its reach.
+// Freezing Slash stuns the tank 3 s every 15-20 s, so nearly every drag loses STUN_S standing still.
 constexpr float ANUBARAK_SUBMERGE_DRAG_SPEED = 3.0f;
 constexpr float ANUBARAK_SUBMERGE_DRAG_MARGIN_S = 3.0f;
-constexpr float ANUBARAK_SUBMERGE_DRAG_LEAD_S = 15.0f;
+constexpr float ANUBARAK_SUBMERGE_DRAG_STUN_S = 3.0f;
+constexpr float ANUBARAK_SUBMERGE_DRAG_LEAD_S = 18.0f;
 constexpr float ANUBARAK_SUBMERGE_DRAG_REACH =
-    (ANUBARAK_SUBMERGE_DRAG_LEAD_S - ANUBARAK_SUBMERGE_DRAG_MARGIN_S) * ANUBARAK_SUBMERGE_DRAG_SPEED;
+    (ANUBARAK_SUBMERGE_DRAG_LEAD_S - ANUBARAK_SUBMERGE_DRAG_MARGIN_S - ANUBARAK_SUBMERGE_DRAG_STUN_S) *
+    ANUBARAK_SUBMERGE_DRAG_SPEED;
 // Far from every patch first: the spike summoned on him runs a long way before it can reach one
 constexpr float ANUBARAK_SUBMERGE_CLEARANCES[] = {30.0f, 25.0f, ANUBARAK_SUBMERGE_PATCH_CLEARANCE,
                                                   ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN};
@@ -2609,8 +2612,16 @@ uint32 OwnImmunitySpell(Player* kiter)
 
 std::vector<Player*> ProtectorOrder(Player* bot);
 
+// A side tank bot with a burrower of its side to hold or take
+static bool HoldsSideBurrower(Player* player)
+{
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
+    return ai && GetAnubarakBurrowerTankSide(player) >= 0 && GetAnubarakBurrowerPick(ai);
+}
+
 // Paladin bots with Hand of Protection ready for the kiter, the kiter first when it's one; none while it
-// carries Forbearance
+// carries Forbearance. Never a side tank holding a burrower: the escort walk takes it off its patch and
+// the burrower submerges back to full. The claim can still take its Hand where it stands.
 std::vector<Player*> ReadyHands(Player* kiter)
 {
     std::vector<Player*> hands;
@@ -2621,7 +2632,7 @@ std::vector<Player*> ReadyHands(Player* kiter)
         hands.push_back(kiter);
 
     for (Player* paladin : ProtectorOrder(kiter))
-        if (HandReady(paladin))
+        if (HandReady(paladin) && !HoldsSideBurrower(paladin))
             hands.push_back(paladin);
 
     return hands;
@@ -5530,12 +5541,12 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
     if (!state->submergeSpotValid)
         return false;
 
-    // Heroic's drag leaves the anchor with under 15 s left, later still once the walk there takes less
+    // Heroic's drag leaves the anchor with under 18 s left, later still once the walk there takes less
     if (heroic && !state->submergeDragStarted)
     {
         Creature* boss = GetAnubarak(bot);
         float const walkS = boss ? Dist2d(boss->GetPosition(), state->submergeSpot) / ANUBARAK_SUBMERGE_DRAG_SPEED +
-                                       ANUBARAK_SUBMERGE_DRAG_MARGIN_S
+                                       ANUBARAK_SUBMERGE_DRAG_MARGIN_S + ANUBARAK_SUBMERGE_DRAG_STUN_S
                                  : 0.0f;
         if (SurfacedLeftS(*state, now) >= std::min(ANUBARAK_SUBMERGE_DRAG_LEAD_S, walkS) ||
             PushHoldsDrag(bot, *state, boss, now))
@@ -6093,6 +6104,7 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
     std::unordered_map<ObjectGuid, uint8> const& owners = BurrowerOwners(bot, *state);
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     std::unordered_map<Player*, uint8> onMember;
+    std::unordered_map<Player*, uint8> allOnMember;
     std::unordered_map<Player*, float> farOnMember;
     uint8 heldCount = 0;
     bool looseOnHealer = false;
@@ -6116,6 +6128,10 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
             continue;
         }
 
+        Player* victim = burrower->GetVictim() ? burrower->GetVictim()->ToPlayer() : nullptr;
+        if (victim)
+            ++allOnMember[victim];
+
         auto const owner = owners.find(burrower->GetGUID());
         if (owner == owners.end() || owner->second != pick.side)
         {
@@ -6125,7 +6141,6 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
             continue;
         }
 
-        Player* victim = burrower->GetVictim() ? burrower->GetVictim()->ToPlayer() : nullptr;
         if (victim)
         {
             ++onMember[victim];
@@ -6147,12 +6162,16 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
     }
 
     // Righteous Defense taunts all three attackers on the member, so never a side tank or one that would
-    // leave this tank past its two. A member the other side's hit too still counts: those are off their
-    // tank anyway, and one taunted here goes back to the other side tank's taunt.
+    // leave this tank past its two, the other side's counted too: their tank's taunts can be down, and four
+    // on one tank frenzy. Under RESCUE_PCT outside the swarm only this side's count, so a dying member
+    // still gets it.
+    bool const swarm = state->phaseValue == AnubarakPhase::Swarm;
     uint8 most = 0;
     for (auto const& [member, count] : onMember)
     {
-        if (GetAnubarakBurrowerTankSide(member) >= 0 || heldCount + count > ANUBARAK_BURROWERS_PER_SIDE)
+        bool const rescue = !swarm && member->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT;
+        uint8 const taken = rescue ? count : allOnMember[member];
+        if (GetAnubarakBurrowerTankSide(member) >= 0 || heldCount + taken > ANUBARAK_BURROWERS_PER_SIDE)
             continue;
 
         if (count > most || (count == most && pick.rescue && member->GetGUID() < pick.rescue->GetGUID()))
@@ -8674,8 +8693,7 @@ static Player* StandbyEscort(Player* kiter, AnubarakState& state)
     auto const qualifies = [kiter](Player* paladin)
     {
         PlayerbotAI* ai = paladin && paladin != kiter && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
-        return ai && !paladin->HasAura(SPELL_MARK) && HandReady(paladin) &&
-               !(GetAnubarakBurrowerTankSide(paladin) >= 0 && GetAnubarakBurrowerPick(ai));
+        return ai && !paladin->HasAura(SPELL_MARK) && HandReady(paladin) && !HoldsSideBurrower(paladin);
     };
 
     if (state.standbyKiter == kiter->GetGUID() && !state.standby.IsEmpty())

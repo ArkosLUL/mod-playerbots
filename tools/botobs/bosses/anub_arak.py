@@ -63,7 +63,8 @@
                                      spike no faster than itself shrank, ending within 12 yd, with the gap and
                                      speeds over it, summed per pull; per submerge the kite patches
                                      anub.kitespent counted, over 1 before the third flagged, and each Hand of
-                                     Protection cast with its caster's cooldown off anub.hands
+                                     Protection cast with its caster's cooldown off anub.hands; per side tank
+                                     and phase the seconds on escort duty with a burrower on it
     anub_arak.py <file> --spheres    spheres over time, patch supply at each mark, sphere duty and its shots,
                                      each dead sphere's killer and landing against its side's spot, Death Grips
                                      against the DK's spot at the cast, whether the grip duty held to kill and
@@ -100,7 +101,9 @@
                                      seconds it targeted a burrower no tank within 5 yd held, by its anub.dps
                                      value then; heroic, per phase 3 focus pick its yards from the nearest
                                      Permafrost centre, whether the phase 3 melee ring round it has a point off
-                                     every patch, and its side's melee bots on it, peak and median
+                                     every patch, and its side's melee bots on it, peak and median; each side
+                                     tank Righteous Defense that took the other side's burrowers, with the
+                                     member it went on and its health
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
@@ -108,7 +111,8 @@
                                      patches, and the longest stretch he stood 10+ yd off the midpoint of the
                                      side spots with no drag leg; the drag's pre-steps, each walk and what came
                                      after it; anub.subspot rows and how far he went down off the last spot;
-                                     when the drag to the submerge spot left
+                                     when the drag to the submerge spot left, and each Freezing Slash on the
+                                     drag tank from 3 s before it set out (its pre-step or hold included)
     anub_arak.py <file> --dps        per phase and DPS role, bots only: samples by target kind, moving, yards
                                      walked by move order and damage by target kind; his health lost per
                                      phase 1, under 20% flagged; per phase 1 its first anub.push with his health
@@ -503,6 +507,11 @@ OFF_ANCHOR_YD = 10.0
 HELD_OFF_FLAG_MS = 10000
 # a pre-step is the tank walking round him before its leg, so a drag too
 DRAG_LEGS = ("drag", "submerge", "prestep")
+# the anub.pickup rows a submerge drag can open with before its first submerge leg
+DRAG_OPENERS = ("prestep", "subhold")
+# Freezing Slash stuns his victim this long, so one cast up to this long before the drag left still held it
+SPELL_FREEZING_SLASH = 66012
+FREEZING_SLASH_STUN_MS = 3000
 
 # the spike's fail despawns the patch 1.5 s after the mark comes off
 CONSUMED_MS = 3000
@@ -549,6 +558,10 @@ SPELL_RIGHTEOUS_DEFENSE_TAUNT = 31790
 BURROWER_TAUNTS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 6795: "Growl",
                    SPELL_RIGHTEOUS_DEFENSE_TAUNT: "Righteous Defense", 49576: "Death Grip",
                    5209: "Challenging Roar", 1161: "Challenging Shout"}
+# Righteous Defense's taunts are written within this of its cast onto the friend
+DEFENSE_TAKE_MS = 200
+# anub.escort values with the paladin on escort duty
+ESCORT_DUTY = ("walk", "hold", "post", "patch", "standby")
 # Spider Frenzy (66129) hastes burrowers within this of each other
 SPIDER_FRENZY_YD = 12.0
 # a kiter's move targets jumping FLIP_YD or more and back FLIP_COUNT times inside FLIP_MS: two walks
@@ -2514,6 +2527,36 @@ def show_submerge_spends(trace: Trace) -> None:
         print(f"    {row['index']} {clock(row['start']):>9}  {patches}; Hands {hands}")
 
 
+def escort_under_burrowers(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Per side tank and phase, the time its `anub.escort` read ESCORT_DUTY while a living burrower was on it:
+    the tank, the phase label, the milliseconds and the first such snapshot. A row holds to the bot's next one,
+    and a snapshot hole counts nothing."""
+    samples = samples or Samples(trace)
+    burrowers = guids_of_entry(trace, NPC_BURROWER)
+    spans = phase_spans(trace)
+    end = pull_end(trace)
+    escorts = per_bot(trace, "anub.escort")
+    out: dict[tuple[int, str], dict] = {}
+    for tank in side_tank_list(trace):
+        rows = sorted(escorts.get(tank, []))
+        stamps, _ = samples.track(tank)
+        for index, (start, value) in enumerate(rows):
+            if value not in ESCORT_DUTY:
+                continue
+            stop = rows[index + 1][0] if index + 1 < len(rows) else end
+            for at in range(bisect.bisect_left(stamps, start), bisect.bisect_left(stamps, stop)):
+                when = stamps[at]
+                upto = min(stamps[at + 1], stop) if at + 1 < len(stamps) else stop
+                on = (samples.recent(guid, when) for guid in burrowers)
+                if upto - when > MAX_STEP_MS or not any(
+                        row is not None and len(row) > 7 and row[5] > 0 and row[7] == tank for row in on):
+                    continue
+                label = phase_at(spans, when)
+                entry = out.setdefault((tank, label), {"tank": tank, "phase": label, "ms": 0, "first": when})
+                entry["ms"] += upto - when
+    return sorted(out.values(), key=lambda entry: entry["first"])
+
+
 def show_spike(trace: Trace) -> None:
     print("PURSUING SPIKE")
     samples = Samples(trace)
@@ -2667,7 +2710,7 @@ def show_spike(trace: Trace) -> None:
         print(f"  ready is a bot paladin alive and unmarked, its last Hand of Protection {cooldown // 1000} s"
               f" or more back, the\n  cooldown {'read off anub.hands' if source == 'anub.hands' else 'with no anub.hands'},"
               " with no Forbearance on the kiter")
-        show_rework(trace, windows, spent)
+        show_rework(trace, windows, spent, samples)
         teleports = circle_teleports(trace, windows, samples)
         print("  Demonic Circle teleports: " + ("; ".join(teleport_text(trace, row) for row in teleports) or "none"))
         plans = teleport_plans(trace, windows)
@@ -3143,7 +3186,7 @@ def rework_lines(trace: Trace, window: dict) -> list[str]:
     return lines
 
 
-def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
+def show_rework(trace: Trace, windows: list[dict], spent: list[dict], samples: Samples | None = None) -> None:
     def who(window: dict) -> str:
         return f"{trace.name(window['guid'])} {clock(window['start'])}"
 
@@ -3168,6 +3211,10 @@ def show_rework(trace: Trace, windows: list[dict], spent: list[dict]) -> None:
     frozen = [window for window in windows if window["escort_read"] and window["escort_read"]["frost_s"]]
     print("  escort carrying Permafrost in the kite: "
           + (", ".join(f"{who(window)} {window['escort_read']['frost_s']:.1f} s" for window in frozen) or "none"))
+    held = escort_under_burrowers(trace, samples)
+    print("  side tank on escort duty (anub.escort walk, hold, post, patch or standby) with a burrower on it, per"
+          " phase: " + (", ".join(f"{trace.name(entry['tank'])} {entry['phase']} {entry['ms'] / 1000:.1f} s from"
+                                  f" {clock(entry['first'])}" for entry in held) or "none"))
     unused = [window for window in windows if own_unused_death(window)]
     print("  kiter dead to anything but the spike with its own immunity unused: "
           + (", ".join(f"{who(window)} by {trace.name(window['killer'])}" for window in unused) or "none"))
@@ -5069,6 +5116,49 @@ def frenzy_samples(trace: Trace, samples: Samples | None = None) -> list[tuple[s
     return [(label, both, close) for label, (both, close) in counts.items()]
 
 
+def burrower_side(samples: Samples, owned, guid: int, when: int) -> int | None:
+    """A burrower's `anub.bside` owner at `when`, its first before that, else its exit's side."""
+    changes = [(at, int(value)) for at, value in owned.get(guid, []) if value in ("0", "1")]
+    if changes:
+        return owner_at(changes, changes[0][1], when)
+    stamps, rows = samples.track(guid)
+    return min(BURROW_EXITS, key=lambda spot: dist2(spot, rows[0][1:3]))[2] if stamps else None
+
+
+def defense_takes(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each side tank's Righteous Defense that taunted one of the other side's burrowers: the cast, the tank,
+    the member it went on and its health, and the burrowers it took, `own` and `other` by their side then."""
+    samples = samples or Samples(trace)
+    tanks = set(side_tank_list(trace))
+    end = pull_end(trace)
+    sides = [latch_spans(trace, f"anub.side{side}", end) for side in (0, 1)]
+    burrowers = set(guids_of_entry(trace, NPC_BURROWER))
+    owned = per_bot(trace, "anub.bside")
+    casts = [rec for rec in trace.of("cast") if rec.get("s") in tanks]
+    taunts = [rec for rec in casts if rec.get("sp") == SPELL_RIGHTEOUS_DEFENSE_TAUNT and rec.get("tgt") in burrowers]
+    out = []
+    for rec in casts:
+        tank, when = rec["s"], rec["t"]
+        side = held_side(sides, tank, when) if rec.get("sp") == SPELL_RIGHTEOUS_DEFENSE else None
+        if side is None:
+            continue
+        own, other = [], []
+        for guid in dict.fromkeys(taunt["tgt"] for taunt in taunts
+                                  if taunt["s"] == tank and when <= taunt["t"] <= when + DEFENSE_TAKE_MS):
+            (own if burrower_side(samples, owned, guid, when) == side else other).append(guid)
+        if other:
+            out.append({"t": when, "tank": tank, "member": rec.get("tgt"), "hp": health(samples, rec.get("tgt"), when),
+                        "own": own, "other": other})
+    return out
+
+
+def defense_take_text(trace: Trace, row: dict) -> str:
+    hp = "-" if row["hp"] is None else f"{row['hp']:.0f}%"
+    own = ", ".join(short(trace, guid) for guid in row["own"])
+    return (f"{trace.name(row['tank'])} {clock(row['t'])} on {trace.name(row['member'])} {hp}: "
+            + ", ".join(short(trace, guid) for guid in row["other"]) + (f" (own {own})" if own else ""))
+
+
 # a tank's taunts onto one burrower, Righteous Defense's once per burrower it took. A taunt lasts TAUNT_MS,
 # and one still on the tank TAUNT_KEPT_MS after that was kept. anubarak side tank taunts wait for the
 # burrowers within TAUNT_ARRIVE_YD (ANUBARAK_TAUNT_ARRIVE).
@@ -5175,6 +5265,9 @@ def show_side_tank_crowds(trace: Trace, samples: Samples) -> None:
         taunts = ", ".join(f"{name} {n}" for name, n in run["taunts"].most_common()) or "no taunt"
         print(f"    {clock(run['start'])}-{clock(run['stop'])} {trace.name(run['tank'])} {run['peak']}"
               + (", the only side tank alive" if run["alone"] else "") + f"; {taunts}")
+    takes = defense_takes(trace, samples)
+    print("  side tank Righteous Defense that took the other side's burrowers, the member and its health at the"
+          " cast: " + ("; ".join(defense_take_text(trace, row) for row in takes) or "none"))
     frenzy = frenzy_samples(trace, samples)
     print(f"  the two side tanks' burrowers within Spider Frenzy's {SPIDER_FRENZY_YD:.0f} yd of each other, per phase,"
           " of the samples\n  with both holding one: "
@@ -5953,6 +6046,30 @@ def prestep_rows(samples: Samples, pickups: list[dict], start: int, stop: int) -
     return out
 
 
+def drag_start(pickups: list[dict], start: int, stop: int) -> tuple[int, int] | None:
+    """`(t, tank)` of the submerge drag leaving in `[start, stop)`: its first `anub.pickup` submerge row, or the
+    DRAG_OPENERS rows the same tank wrote straight before it. None with no submerge leg."""
+    rows = [rec for rec in pickups if start <= rec["t"] < stop]
+    first = next((index for index, rec in enumerate(rows) if str(rec.get("txt", "")) == "submerge"), None)
+    if first is None:
+        return None
+    tank = rows[first].get("g", 0)
+    began = rows[first]["t"]
+    for rec in reversed([rec for rec in rows[:first] if rec.get("g", 0) == tank]):
+        if str(rec.get("txt", "")) not in DRAG_OPENERS:
+            break
+        began = rec["t"]
+    return began, tank
+
+
+def drag_slashes(trace: Trace, boss: int, tank: int, began: int, stop: int) -> list[int]:
+    """His Freezing Slash casts onto the drag tank from FREEZING_SLASH_STUN_MS before the drag left until he went
+    down."""
+    return [rec["t"] for rec in trace.of("cast")
+            if rec.get("s") == boss and rec.get("sp") == SPELL_FREEZING_SLASH and rec.get("tgt") == tank
+            and began - FREEZING_SLASH_STUN_MS <= rec["t"] < stop]
+
+
 def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     samples = samples or Samples(trace)
     boss = boss_guid(trace)
@@ -5988,6 +6105,7 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if point is not None:
                 spread.append(dist2(row[1:3], point))
         legs = boss_legs(samples, boss, start, stop)
+        drag = drag_start(pickups, start, stop) if stop in submerges else None
         searched = next((when for when, _ in subspots if start <= when < stop), None)
         sub_legs = [str(rec.get("txt", "")) for rec in pickups if searched is not None and searched <= rec["t"] < stop]
         out.append({**window,
@@ -6008,6 +6126,8 @@ def threat_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                     "subleg": None if searched is None else any(value in ("submerge", "prestep") for value in sub_legs),
                     "subhold": sub_legs.count("subhold"),
                     "drag_left": cutoff if cutoff < stop else None,
+                    "drag": None if drag is None else {
+                        "t": drag[0], "tank": drag[1], "slashes": drag_slashes(trace, boss, drag[1], drag[0], stop)},
                     "submerge": submerge_gaps(latches, samples, boss, stop) if stop in submerges else None})
     return out
 
@@ -6063,6 +6183,11 @@ def show_threat(trace: Trace) -> None:
                          " before")
             print(f"          submerged {clock(row['stop'])} at {spot[0]:.1f}, {spot[1]:.1f}:"
                   f" {gaps or 'no tank patch latched'}{left}")
+        if row["drag"] is not None:
+            drag = row["drag"]
+            slashes = ", ".join(f"{clock(when)} {(when - drag['t']) / 1000:+.1f} s" for when in drag["slashes"])
+            print(f"          Freezing Slash on {trace.name(drag['tank'])} from {FREEZING_SLASH_STUN_MS // 1000} s"
+                  f" before the drag set out at {clock(drag['t'])}: {slashes or 'none'}")
         if row["subspot"]:
             print(f"          anub.subspot: {subspot_text(row)}")
 
@@ -9395,7 +9520,7 @@ SECTIONS = (
      " teleports, his distance from the gather, each speed boost with the spike's speed and one on a spike no faster"
      " flagged, a kite's first boost against its pick's +boost@, the standby escort at the claim, the spike's next"
      " leg past a patch after an own immunity or a patch end, the kiter closing 2+ s on a spike no faster than"
-     " itself",
+     " itself, a side tank on escort duty with a burrower on it per phase",
      show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, each far grip's links"
@@ -9414,7 +9539,8 @@ SECTIONS = (
      " taunt onto a burrower kept or lost by its yards at the cast and the lost ones with no hit inside them,"
      " Bladestorm with a burrower within 25 yd and the one closest over the spin, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
      " within 5 yd held by anub.dps value, heroic phase 3 focus picks' depth in their patch, melee ring reach and"
-     " the side's melee on them",
+     " the side's melee on them, a side tank's Righteous Defense that took the other side's burrowers with the"
+     " member's health",
      show_burrowers),
     ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
      " target kind; his health lost per phase 1, flagged under 20 percent; anub.push with the submerge drag after"
@@ -9424,7 +9550,8 @@ SECTIONS = (
      " bot's target", show_frost),
     ("threat", "per surfaced window: his target by role, time to a tank, drag legs, taunts, threat cap, main"
      " tank in a patch, submerge spot to the tank patches, the longest stretch held 10+ yd off the side spots'"
-     " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows, when the submerge drag left",
+     " midpoint with no drag leg, the drag's pre-steps, anub.subspot rows, when the submerge drag left, Freezing"
+     " Slash on the drag tank from 3 s before the drag set out",
      show_threat),
     ("swarm", "phase 3: Leeching Swarm, lust, per 5 s his health and the raid's, the swarm and the healers'"
      " heals by who took them, bot heals onto non-carriers, DPS on burrowers up at its start and newer"
