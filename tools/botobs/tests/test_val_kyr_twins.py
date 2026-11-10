@@ -450,6 +450,26 @@ class DoorStand(unittest.TestCase):
         self.assertIn("Nitro Boosts on colour walks: 1 (vortex 1)", out.getvalue())
 
 
+class Blasts(unittest.TestCase):
+    def test_hits_inside_a_tick_are_one_blast(self):
+        # Frost, on its stand in the tunnel, shares Shiv's blast at the portal, then takes one alone
+        extra = [dmg(12030, 0, FROST, 65795, 8000), dmg(12100, 0, FROST, 65795, 8000)]
+        with tempfile.TemporaryDirectory() as folder:
+            rows = [(row["t"], row["hit"], row["tunnel"]) for row in vk.blast_rows(load(folder, door_pull() + extra))]
+        self.assertEqual(rows, [(6000, 1, True), (12000, 2, False), (12100, 1, True)])
+
+    def test_absorbed_bots_count_apart_and_a_fully_absorbed_blast_drops(self):
+        extra = [dmg(44000, 0, AEGIS, 65795, 0, 8000)]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, twins_pull() + extra)
+            rows = [(row["t"], row["colour"], row["hit"], row["absorbed"]) for row in vk.blast_rows(trace)]
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                vk.show_orbs(trace)
+        self.assertEqual(rows, [(40000, "light", 1, 1), (41000, "dark", 1, 0)])
+        self.assertIn("2 blast(s), median 1 bots hit, biggest 1 at 0:40.000", out.getvalue())
+
+
 class TwoBrokenPacts(unittest.TestCase):
     def test_a_dead_bots_duty_does_not_carry_into_the_next_pact(self):
         with tempfile.TemporaryDirectory() as folder:

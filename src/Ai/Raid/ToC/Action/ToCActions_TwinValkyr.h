@@ -32,6 +32,7 @@ protected:
 
 private:
     TrialOfTheCrusaderHelpers::TwinEssenceReason const reason;
+    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
 };
 
 class TwinValkyrSwapEssenceForTouchAction : public TwinValkyrEssenceActionBase
@@ -64,6 +65,9 @@ public:
     TwinValkyrWalkToTouchPortalAction(
         PlayerbotAI* botAI, std::string const name = "twin valkyr walk to touch portal") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
+
+private:
+    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
 };
 
 class TwinValkyrCastVortexRaidCoverAction : public Action
@@ -88,6 +92,9 @@ public:
     TwinValkyrMoveToDoorStandAction(
         PlayerbotAI* botAI, std::string const name = "twin valkyr move to door stand") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
+
+private:
+    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
 };
 
 class TwinValkyrDodgeOrbAction : public MovementAction

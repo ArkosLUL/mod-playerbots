@@ -7,6 +7,7 @@
 #include "InstanceScript.h"
 #include "Map.h"
 #include "MotionMaster.h"
+#include "MoveSpline.h"
 #include "ObjectAccessor.h"
 #include "Pet.h"
 #include "Player.h"
@@ -28,6 +29,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -94,6 +96,16 @@ constexpr uint32 TWIN_NITRO_SPARE_MS = 1500;
 // gossip reach is ~14 yd 3D (5.5 plus both combat reaches), this leaves room for the floor's slope
 constexpr float TWIN_TOUCH_CROSS_PORTAL_DIST = 10.0f;
 
+// Out in the arena bots stand a yard or two apart, so a blast set off on anyone near reaches the bot
+constexpr float TWIN_ORB_SAFE_PASS = TWIN_ORB_BLAST_RADIUS + 0.5f;
+constexpr uint32 TWIN_ORB_PASS_HORIZON_MS = 1500;
+constexpr uint32 TWIN_ORB_PASS_STEP_MS = 100;
+// one stretch of waiting, shorter gaps merged in, so a heroic wave can't stall a walk
+constexpr uint32 TWIN_ORB_WAIT_MS = 3000;
+constexpr uint32 TWIN_ORB_WAIT_GAP_MS = 2000;
+constexpr float TWIN_HEAL_STOP_RANGE = 40.0f;
+constexpr float TWIN_HEAL_STOP_PCT = 35.0f;
+
 constexpr uint32 SPELL_AURA_MASTERY = 31821;
 constexpr uint32 SPELL_BLOODLUST = 2825;
 constexpr uint32 SPELL_HEROISM = 32182;
@@ -110,6 +122,8 @@ struct TwinOrb
     TwinColour colour = TwinColour::None;
     Position position;
     Position destination;
+    // yd/s, 0 once its spline ended
+    float speed = 0.0f;
 };
 
 struct TwinPortal
@@ -236,6 +250,7 @@ void ScanArena(Creature* twin, TwinValkyrState& state)
         float y = 0.0f;
         float z = 0.0f;
         orb.destination = creature->GetMotionMaster()->GetDestination(x, y, z) ? Position(x, y, z) : orb.position;
+        orb.speed = creature->movespline->Finalized() ? 0.0f : creature->movespline->Velocity();
 
         state.orbs.push_back(orb);
     }
@@ -902,6 +917,133 @@ bool LustReady(Player* bot)
     return false;
 }
 
+// The walk ends TWIN_NITRO_SPARE_MS or more before a casting Vortex does. Never once it channels:
+// then every tick counts.
+bool VortexWalkFits(PlayerbotAI* botAI, TwinValkyrState const& state, float walk)
+{
+    Creature* twin = nullptr;
+    Spell* spell = RunningVortex(botAI, state, twin);
+    if (!spell || spell->getState() != SPELL_STATE_PREPARING)
+        return false;
+
+    float const speed = std::max(botAI->GetBot()->GetSpeed(MOVE_RUN), 1.0f);
+    uint32 const walkMs = static_cast<uint32>(walk / speed * IN_MILLISECONDS);
+    return walkMs + TWIN_NITRO_SPARE_MS <= static_cast<uint32>(std::max(spell->GetCastTimeRemaining(), 0));
+}
+
+// How close an orb harmful to a holder of `held` (as OrbHazards rules it) gets to the bot over the
+// next TWIN_ORB_PASS_HORIZON_MS. The bot walks straight to `to` at its run speed, or stands when `to`
+// is its own spot; each orb flies straight on to its destination.
+float ClosestOrbPass(Player* bot, TwinValkyrState const& state, Position const& to, TwinColour held)
+{
+    float const fromX = bot->GetPositionX();
+    float const fromY = bot->GetPositionY();
+    float const walk = bot->GetExactDist2d(to);
+    float const walkX = walk > 0.0f ? (to.GetPositionX() - fromX) / walk : 0.0f;
+    float const walkY = walk > 0.0f ? (to.GetPositionY() - fromY) / walk : 0.0f;
+    float const speed = bot->GetSpeed(MOVE_RUN);
+
+    float closest = std::numeric_limits<float>::max();
+    bool splashChecked = false;
+    bool splash = false;
+    for (TwinOrb const& orb : state.orbs)
+    {
+        if (held != TwinColour::None && orb.colour == held)
+        {
+            if (!splashChecked)
+            {
+                splash = OtherColourAllyNear(bot, held, TWIN_ORB_SPLASH_ALLY_RADIUS);
+                splashChecked = true;
+            }
+
+            if (!splash)
+                continue;
+        }
+
+        float const flight = orb.position.GetExactDist2d(orb.destination);
+        float const flyX = flight > 0.0f ? (orb.destination.GetPositionX() - orb.position.GetPositionX()) / flight : 0.0f;
+        float const flyY = flight > 0.0f ? (orb.destination.GetPositionY() - orb.position.GetPositionY()) / flight : 0.0f;
+        for (uint32 ms = 0; ms <= TWIN_ORB_PASS_HORIZON_MS; ms += TWIN_ORB_PASS_STEP_MS)
+        {
+            float const seconds = ms / static_cast<float>(IN_MILLISECONDS);
+            float const walked = std::min(speed * seconds, walk);
+            float const flown = std::min(orb.speed * seconds, flight);
+            float const dx = fromX + walkX * walked - (orb.position.GetPositionX() + flyX * flown);
+            float const dy = fromY + walkY * walked - (orb.position.GetPositionY() + flyY * flown);
+            closest = std::min(closest, std::hypot(dx, dy));
+        }
+    }
+
+    return closest;
+}
+
+// The bot itself counts
+bool CriticalAllyNear(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && member->IsInMap(bot) && member->GetHealthPct() < TWIN_HEAL_STOP_PCT &&
+            bot->GetExactDist2d(member) <= TWIN_HEAL_STOP_RANGE)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+char const* WaitName(TwinWalkWait wait)
+{
+    switch (wait)
+    {
+        case TwinWalkWait::Orb:
+            return "orb";
+        case TwinWalkWait::Swap:
+            return "swap";
+        case TwinWalkWait::Heal:
+            return "heal";
+        default:
+            return "none";
+    }
+}
+
+TwinWalkWait DecideWalkWait(PlayerbotAI* botAI, TwinValkyrState const& state, Position const& to,
+                            TwinEssenceReason reason, TwinColour swap, TwinWaitBudget& budget)
+{
+    Player* bot = botAI->GetBot();
+    if (reason == TwinEssenceReason::Vortex && !VortexWalkFits(botAI, state, bot->GetExactDist2d(to)))
+        return TwinWalkWait::None;
+
+    TwinColour const held = EssenceOf(bot);
+    float const stand = ClosestOrbPass(bot, state, bot->GetPosition(), held);
+    // the gossip is instant, so a healer in reach swaps first
+    bool const homeward = swap == TwinColour::None &&
+                          (reason == TwinEssenceReason::Base || reason == TwinEssenceReason::None);
+    if (homeward && stand >= TWIN_ORB_SAFE_PASS && PlayerbotAI::IsHeal(bot) && CriticalAllyNear(bot))
+        return TwinWalkWait::Heal;
+
+    float const moved = swap != TwinColour::None ? ClosestOrbPass(bot, state, bot->GetPosition(), swap)
+                                                  : ClosestOrbPass(bot, state, to, held);
+    if (moved >= TWIN_ORB_SAFE_PASS || moved >= stand || !budget.Allow(getMSTime()))
+        return TwinWalkWait::None;
+
+    return swap != TwinColour::None ? TwinWalkWait::Swap : TwinWalkWait::Orb;
+}
+
+}
+
+bool TwinWaitBudget::Allow(uint32 now)
+{
+    if (!lastMs || getMSTimeDiff(lastMs, now) > TWIN_ORB_WAIT_GAP_MS)
+        sinceMs = now;
+
+    lastMs = now;
+    return getMSTimeDiff(sinceMs, now) <= TWIN_ORB_WAIT_MS;
 }
 
 Unit* GetFjola(PlayerbotAI* botAI)
@@ -1086,20 +1228,10 @@ bool TwinValkyrBoostEssenceWalk(PlayerbotAI* botAI, TwinEssenceReason reason, Cr
     switch (reason)
     {
         case TwinEssenceReason::Vortex:
-        {
-            // once it channels every tick counts
-            Creature* twin = nullptr;
-            Spell* spell = RunningVortex(botAI, *state, twin);
-            if (!spell || spell->getState() != SPELL_STATE_PREPARING)
-                break;
-
-            float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
-            uint32 const walkMs = static_cast<uint32>(walk / speed * IN_MILLISECONDS);
-            if (walkMs + TWIN_NITRO_SPARE_MS <= static_cast<uint32>(std::max(spell->GetCastTimeRemaining(), 0)))
+            if (VortexWalkFits(botAI, *state, walk))
                 return false;
 
             break;
-        }
         case TwinEssenceReason::Touch:
         case TwinEssenceReason::Base:
             if (!state->pull.lightVortexSeen)
@@ -1343,6 +1475,33 @@ bool FindTwinOrbDodgeSpot(PlayerbotAI* botAI, Position& spot)
     RaidObs::NoteDerived(bot, "tv.orb", nearestRule == OrbRule::Splash ? "splash" : "wrong");
     spot = candidate;
     return true;
+}
+
+TwinWalkWait TwinValkyrWalkWait(PlayerbotAI* botAI, Position const& to, TwinEssenceReason reason, TwinColour swap,
+                                TwinWaitBudget& budget)
+{
+    TwinValkyrState const* state = botAI ? ReadTwins(botAI) : nullptr;
+    if (!state)
+        return TwinWalkWait::None;
+
+    TwinWalkWait const wait = DecideWalkWait(botAI, *state, to, reason, swap, budget);
+    RaidObs::NoteDerived(botAI->GetBot(), "tv.wait", WaitName(wait));
+    return wait;
+}
+
+bool TwinValkyrDodgeYields(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    TwinValkyrState const* state = bot ? ReadTwins(botAI) : nullptr;
+    if (!state)
+        return false;
+
+    TwinEssenceWant const want = GetWantedEssence(botAI);
+    if (want.reason != TwinEssenceReason::Vortex || !TwinEssenceGossipDue(bot, want))
+        return false;
+
+    Creature* portal = GetEssencePortal(bot, want.colour);
+    return !portal || !VortexWalkFits(botAI, *state, bot->GetExactDist2d(portal));
 }
 
 TwinDoorStand GetTwinDoorStand(Player* bot)

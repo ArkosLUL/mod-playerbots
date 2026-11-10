@@ -92,6 +92,18 @@ void ReleaseWalk(PlayerbotAI* botAI, Player* bot, Position const& destination, b
     if (stalled || (releaseElsewhere && elsewhere))
         last.clear();
 }
+
+// A healer, or a bot already inside the dodge's trigger, hands the tick on to its heal nodes or the
+// dodge
+bool StandForWait(PlayerbotAI* botAI, Player* bot, TwinWalkWait wait)
+{
+    if (bot->isMoving())
+        bot->StopMoving();
+
+    botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get().clear();
+    return wait != TwinWalkWait::Heal && !PlayerbotAI::IsHeal(bot) &&
+           !TwinOrbThreatens(botAI, TWIN_ORB_DODGE_CLEARANCE);
+}
 }  // namespace
 
 bool TwinValkyrInterruptPactAction::Execute(Event /*event*/)
@@ -123,6 +135,11 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     // elevated portal in range and the gossip silently does nothing
     if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
     {
+        // ahead of the cast clip, so a healer waiting out an orb keeps its heal
+        TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), reason, TwinColour::None, orbWait);
+        if (wait != TwinWalkWait::None)
+            return StandForWait(botAI, bot, wait);
+
         // a cast pins the feet; the base colour can wait for it to end, though not for a long channel,
         // and the others can't wait at all
         if (bot->IsMovementPreventedByCasting() && (reason != TwinEssenceReason::Base || LongChannel(bot)))
@@ -143,6 +160,10 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
         // would leap the bot back onto the twin, and the forced lock doesn't stop spell movers
         return bot->isMoving();
     }
+
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), reason, colour, orbWait);
+    if (wait != TwinWalkWait::None)
+        return StandForWait(botAI, bot, wait);
 
     // The essence comes from the portal's C++ OnGossipHello, so the hello opcode fires it with or
     // without DB gossip items.
@@ -173,6 +194,10 @@ bool TwinValkyrWalkToTouchPortalAction::Execute(Event /*event*/)
     Creature* portal = nullptr;
     if (!TwinValkyrTouchCrossDue(botAI, spot, portal))
         return false;
+
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, TwinEssenceReason::Touch, TwinColour::None, orbWait);
+    if (wait != TwinWalkWait::None)
+        return StandForWait(botAI, bot, wait);
 
     // it has to be there before the channel ends
     if (bot->IsMovementPreventedByCasting())
@@ -265,6 +290,10 @@ bool TwinValkyrMoveToDoorStandAction::Execute(Event /*event*/)
     Position const spot = DoorFloor(bot, stand.spot);
     if (bot->GetExactDist2d(spot) <= TWIN_DOOR_PARK)
         return false;
+
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, TwinEssenceReason::None, TwinColour::None, orbWait);
+    if (wait != TwinWalkWait::None)
+        return StandForWait(botAI, bot, wait);
 
     ReleaseWalk(botAI, bot, spot, false);
 

@@ -181,6 +181,34 @@ bool TwinOrbThreatens(PlayerbotAI* botAI, float clearance);
 bool TwinOrbSpotClear(PlayerbotAI* botAI, Position const& spot, float clearance);
 bool FindTwinOrbDodgeSpot(PlayerbotAI* botAI, Position& spot);
 
+// Why a walk out in the arena stands still this tick
+enum class TwinWalkWait : uint8
+{
+    None,
+    // walking on passes closer to a harmful orb than standing does, inside its blast
+    Orb,
+    // in gossip reach, the new colour would bring a harmful orb closer than the held one does
+    Swap,
+    // a healer on its way home stops for a group member under 35%
+    Heal
+};
+
+// Caps one stretch of waiting at 3 s, so a heroic wave can't stall a walk
+struct TwinWaitBudget
+{
+    uint32 sinceMs = 0;
+    uint32 lastMs = 0;
+    bool Allow(uint32 now);
+};
+
+// For a walk to `to`: reason Base, Touch or Vortex for an essence walk, None for the door stand. With
+// `swap` set the bot is in gossip reach for that colour. A Vortex walk waits only while it still ends
+// 1.5 s before the cast does. Writes tv.wait.
+TwinWalkWait TwinValkyrWalkWait(PlayerbotAI* botAI, Position const& to, TwinEssenceReason reason, TwinColour swap,
+                                TwinWaitBudget& budget);
+// A Vortex swap is due with no time left to wait, so the dodge gives way to it
+bool TwinValkyrDodgeYields(PlayerbotAI* botAI);
+
 }
 
 #endif

@@ -54,7 +54,7 @@ bool TwinValkyrVortexRequiresEssenceTrigger::IsActive()
 
 bool TwinValkyrOrbIncomingTrigger::IsActive()
 {
-    return !TwinValkyrMustSwapEssence(botAI, true) && TwinOrbThreatens(botAI, TWIN_ORB_DODGE_CLEARANCE);
+    return !TwinValkyrDodgeYields(botAI) && TwinOrbThreatens(botAI, TWIN_ORB_DODGE_CLEARANCE);
 }
 
 bool TwinValkyrVortexRaidCoverTrigger::IsActive()

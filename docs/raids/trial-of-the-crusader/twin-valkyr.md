@@ -71,7 +71,8 @@ the other colour's essence who is neither twin's victim. `spell_valkyr_touch_aur
 (10H) or 5,850-6,150 (25H) every 2 s for 20 s to the touched player only, after absorbs: an essence of
 the Touch's colour absorbs it all (school absorb, fire for Light, shadow for Dark). Only gossip at a
 portal of its colour ends it, even for a holder of that colour: it's an instant 20 yd/s missile, so
-one picked on a Light holder can land after the swap back.
+one picked on a Light holder can land after the swap back. Before core `512343e24` (upstream
+2026-11-02) every tick hit the whole raid.
 
 ## Orbs
 
@@ -160,6 +161,16 @@ range clears `last movement`, which otherwise refuses the repeat as a duplicate 
 walking holds the tick, or a lower node's charge leaps the bot back onto the twin. Touch and
 Vortex walks and the orb dodge also clear a booking headed elsewhere: forced doesn't outrank forced.
 Once the gossip lands the essence the bot stops rather than finish the walk under the lock.
+
+**Orb waits** (`TwinValkyrWalkWait`, `tv.wait`). Out in the arena bots stand a yard or two apart, so
+any blast reaches the bot. Each essence walk, the Touch-portal walk and the door stand predict the
+closest pass of every harmful orb (straight to its destination at its spline speed) over 1.5 s; the
+bot stops when walking on passes inside 6.5 yd and closer than standing (`orb`), and in gossip reach
+skips a swap whose new colour would bring a harmful orb closer (`swap`). A Vortex walk waits only
+while it still ends 1.5 s before the cast (Nitro's test; never once it channels); every stretch of
+waiting caps at 3 s. A waiting healer, or a bot inside the dodge's trigger, hands the tick on to its
+heals or the dodge. A healer on a base or door-stand walk also stops (`heal`) for a group member under
+35% within 40 yd while standing is orb-safe: the walks outrank every heal node.
 `TwinValkyrBoostEssenceWalk` spends Nitro Boosts (3 min, so about one per pull) on a walk over 15 yd,
 mid-pull only: a Vortex walk when it would end under 1.5 s before the cast does (heroic's 40 yd in 6
 s; normal's 35-38 yd in 8 s doesn't), a Touch or base walk only once the pull's Light Vortex has
@@ -244,7 +255,7 @@ band or longer horizon dodges permanently: 6 yd over more path covers most of th
 heroic wave ([pitfalls.md](../../engine/pitfalls.md)). It now only fires for bots out in the arena
 (portal walkers, a fetching tank); nothing reaches the tunnel. No goalies or orb collection:
 Empowered comes from matching Vortex ticks (the Dark Vortex gives the Dark raid ~80 stacks). The
-dodge yields to a due Touch or Vortex swap.
+dodge yields only to a Vortex swap with no time left to wait.
 
 **Lookups.** One scan per instance per ms (`RaidInstanceState`) resolves the twins through
 `GetGuidData`, reads the Vortex, the Pact, the shield, the tank list and the pull's state (specials,
@@ -286,6 +297,13 @@ walks multiply. The door deal refreshes once a second.
   Fjola Touch, landed after his swap back to Dark and was never re-taken (16 s, 1.09M) before the
   Light Vortex walk. Hunters did 5-8k against 10-16k: Fjola, fetched and walked in, stopped over her
   tank, 10-11 yd 3D from every hunter stand.
+- 25H 2026-11-04/08/10 (traces `649_3_fjola-lightbane_1793819637`, `649_1_val-kyr-twins_1794146392`,
+  `649_2_val-kyr-twins_1794263217`): kills at 2:59.9, 3:16.8 and 3:11.1 with 0, 3 and 2 deaths, every
+  one on the Light Vortex walk (11-04 had none). 11-10: the column ran out through a 36-orb wave
+  spawned 1 s before the cast, the dodge off, and two Light blasts (8, 6 hit) killed two healers.
+  11-08: 14 bots swapped to Dark at one spot by Dark 1 beside a Light orb (14 hit); no direct heal on
+  the 6 s walk home; Tree and Assasin flipped between dodge and door stand into an 8-hit blast.
+- The dodge clears 5 yd against a 6 yd blast, and stacked bots all pick the same nearest clear spot.
 - A twin a heal-threat pull parks deep in the tunnel stays there: re-parking her needs ~10 yd into
   the arena.
 - Each Fjola Touch ticks once: the 25-27 yd walk to Light 1's reach takes 3.2-4.0 s, the first
@@ -320,6 +338,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Twins r
 | `shield` | The shielded twin, `0` none, `1` Fjola, `2` Eydis. Per instance |
 | `interrupt` | `duty`, `standby` or `none` (no ready interrupt), written by every living bot while a twin casts an unshielded Pact; a dead bot's goes stale, so the reader cuts it at the death |
 | `orb` | The rule of the hazard point nearest the bot when it found a dodge spot, `wrong` or `splash`, or `none` when no spot was found |
+| `wait` | Why a walk stands still: `orb`, `swap`, `heal`, or `none` |
 
 `tools/botobs/bosses/val_kyr_twins.py` reads the rest: per bot, time without an essence and swaps
 under the `tv.essence` reason held when the essence landed, and per Vortex, how many held its colour
@@ -327,8 +346,9 @@ and who took unabsorbed ticks, by role, split into bots holding on purpose and m
 (`--essence`); each Touch's hold, what ended it and the raid
 damage meanwhile (`--touch`); each Pact's shield up and down off `tv.shield`, cast length, outcome,
 kicks wasted on the shield and after the break, duty and lust (`--pact`); Unleashed hits taken or
-absorbed, peak Powering Up and Empowered per bot, and which bots dodged under each `tv.orb` rule
-(`--orbs`); each twin's time on her `tv.tank` tank, taunts, distance from `ARENA_CENTER` and between
+absorbed, peak Powering Up and Empowered per bot, each blast with unabsorbed damage (hits of one
+spell within 50 ms, its bots hit and absorbed, tunnel or arena), and which bots dodged under each
+`tv.orb` rule (`--orbs`); each twin's time on her `tv.tank` tank, taunts, distance from `ARENA_CENTER` and between
 the twins (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.target` twin while
 that reads `skull` or `door`, Fjola while a `tv.tank` reads `both`, no Eydis Pact on normal
 (`--targets`); per bot, living time within 2.5 yd of its `tv.door` stand and 51+ yd out, time out

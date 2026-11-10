@@ -5,7 +5,8 @@
     val_kyr_twins.py <file> --essence   time without an essence, swaps by reason, who ate each Vortex
     val_kyr_twins.py <file> --touch     every Touch: how long it stayed up, what it cost the raid
     val_kyr_twins.py <file> --pact      every Twin's Pact: shield, break, kicks, outcome, duty, lust
-    val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, tv.orb rules, Powering Up
+    val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, each blast's size, tv.orb rules,
+                                        Powering Up
     val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood
     val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its rule sends it to
     val_kyr_twins.py <file> --door      time on the door stand and in the tunnel, time out by reason,
@@ -135,6 +136,8 @@ START = -(1 << 62)
 DOOR_RADIUS = 51.0
 # TWIN_DOOR_UNPARK: a bot this close to its stand doesn't walk back
 DOOR_STAND_YD = 2.5
+# one Unleashed blast reaches every victim inside a server tick
+BLAST_MS = 50
 
 SILENT_WHY = {
     "tv.shield": "no twin helper ran with a bot on this map (the value restates on every trace open)",
@@ -142,6 +145,7 @@ SILENT_WHY = {
     "tv.orb": "written only when a bot looks for a dodge spot",
     "tv.tank": "no bot held a tank role",
     "tv.nitro": "written only when a bot spends Nitro Boosts on a colour walk",
+    "tv.wait": "written only by a bot walking to a portal or back to its stand",
 }
 
 
@@ -687,6 +691,31 @@ def orb_rows(trace: Trace) -> list[dict]:
     return [{"guid": guid, **row} for guid, row in sorted(rows.items(), key=lambda item: trace.name(item[0]))]
 
 
+def blast_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Each Unleashed blast that hit a bot unabsorbed: when, colour, bots hit and bots that absorbed
+    it, and whether every bot it reached stood in the tunnel. A blast lands on everyone it reaches in
+    one server tick, so rows of one spell within BLAST_MS of its first are one blast."""
+    samples = samples or Samples(trace)
+    roster = roster_guids(trace)
+    found: list[dict] = []
+    latest: dict[int, dict] = {}
+    hits = sorted((rec for rec in trace.of("dmg") if rec.get("sp") in UNLEASHED and rec.get("d") in roster),
+                  key=lambda rec: rec["t"])
+    for rec in hits:
+        blast = latest.get(rec["sp"])
+        if blast is None or rec["t"] - blast["t"] > BLAST_MS:
+            blast = {"t": rec["t"], "colour": UNLEASHED[rec["sp"]], "hit": set(), "absorbed": set(),
+                     "tunnel": True}
+            latest[rec["sp"]] = blast
+            found.append(blast)
+        (blast["hit"] if rec.get("a", 0) > 0 else blast["absorbed"]).add(rec["d"])
+        row = samples.row(rec["d"], rec["t"])
+        if not row or dist2(row[1:3], ARENA_CENTER) < DOOR_RADIUS:
+            blast["tunnel"] = False
+    return [{**blast, "hit": len(blast["hit"]), "absorbed": len(blast["absorbed"])}
+            for blast in found if blast["hit"]]
+
+
 def orb_rules(trace: Trace) -> dict[str, set[int]]:
     """Per `tv.orb` rule, the bots that ever held it. The key is change-only, so its rows count rule
     switches, not dodges; the `move` rows count those."""
@@ -717,6 +746,15 @@ def show_orbs(trace: Trace) -> None:
             by_role[trace.role(row["guid"])][1] += row["absorbed"]
         print("\n  Unleashed taken/absorbed: " + "  ".join(
             f"{role} {taken}/{absorbed}" for role, (taken, absorbed) in sorted(by_role.items())))
+    blasts = blast_rows(trace)
+    if blasts:
+        print(f"\n  {'at':>9} {'colour':6} {'where':6} {'hit':>3} {'absorbed':>8}   blasts with unabsorbed damage")
+        for blast in blasts:
+            print(f"  {clock(blast['t']):>9} {blast['colour']:6} {'tunnel' if blast['tunnel'] else 'arena':6}"
+                  f" {blast['hit']:3} {blast['absorbed']:8}")
+        biggest = max(blasts, key=lambda blast: blast["hit"])
+        print(f"  {len(blasts)} blast(s), median {statistics.median(blast['hit'] for blast in blasts):g} bots hit,"
+              f" biggest {biggest['hit']} at {clock(biggest['t'])}")
     print("  bots per tv.orb rule (none: found no spot): "
           + (", ".join(f"{rule} {len(bots)}" for rule, bots in sorted(rules.items())) or "no row"))
 
@@ -1007,7 +1045,8 @@ SECTIONS = (
     ("essence", "time without an essence, swaps by reason, Vortex damage by role", show_essence),
     ("touch", "every Touch, how long it stayed up and the raid damage meanwhile", show_touch),
     ("pact", "every Pact: shield, break, kicks, outcome, interrupt duty, lust", show_pact),
-    ("orbs", "Unleashed hits taken or absorbed, tv.orb rules, Powering Up, Empowered", show_orbs),
+    ("orbs", "Unleashed hits taken or absorbed, each blast's size, tv.orb rules, Powering Up, Empowered",
+     show_orbs),
     ("tanks", "each twin's victim against her tv.tank, taunts, distances", show_tanks),
     ("targets", "each DPS bot's time on the twin its rule names", show_targets),
     ("door", "time on the door stand and in the tunnel, time out by reason, Unleashed there, Nitro",
