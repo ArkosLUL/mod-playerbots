@@ -18,6 +18,9 @@ constexpr uint32 SPELL_BURNING_INFERNO = 66242;      // row 66242/67059/67060/67
 // The portal's own aura, whose periodic tick summons a Mistress: one at 8 s on normal, every 6 s on heroic
 constexpr uint32 SPELL_NETHER_PORTAL_SPAWN = 66263;  // row 66263/67103/67104/67105
 
+// Display 29615, scale 1
+constexpr float JARAXXUS_COMBAT_REACH = 5.0f;
+
 // Incinerate Flesh's last tick casts Burning Inferno, whose own ticks start a second later
 constexpr uint32 JARAXXUS_INFERNO_FIRST_TICK_MS = 1000;
 constexpr uint32 JARAXXUS_INFERNO_TICKS = 5;

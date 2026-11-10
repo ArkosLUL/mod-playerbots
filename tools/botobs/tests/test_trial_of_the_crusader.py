@@ -2,9 +2,10 @@
 
     python -m unittest discover -s tools/botobs/tests
 
-A synthetic 25N Beasts trace pins `--staging` on Gormok's release and both worms', two small ones pin
-the twins' shared duty and the first champion in a trace that never wrote `toc.stage`, and the shared
-fixture shows the reader reads empty off ToC.
+A synthetic 25N Beasts trace pins `--staging` on Gormok's release and both worms', small ones pin a
+first swing that kills before any snapshot shows a target, the twins' shared duty and the first
+champion in a trace that never wrote `toc.stage`, and the shared fixture shows the reader reads empty
+off ToC.
 """
 from __future__ import annotations
 
@@ -144,6 +145,27 @@ def beasts_pull() -> list[dict]:
     ]
     records += [gormok_snap(when) for when in range(-1000, 6001, 250)]
     records += [worms_snap(when) for when in range(29000, 32001, 250)]
+    return records
+
+
+def lethal_pull() -> list[dict]:
+    """Gormok's first swing kills a melee before any snapshot shows him with a target."""
+    killing = hit(97, GORMOK, SHIV, 31205)
+    killing["ok"] = 2421
+    records = [
+        header("gormok-the-impaler", 3, [(BULWARK, "Bulwark", "tank", 0), (SHIV, "Shiv", "melee", 0)]),
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": GORMOK, "en": toc.NPC_GORMOK, "n": "Gormok the Impaler", "b": 1},
+        note(-500, BULWARK, "gormok.tank 564,175,395"),
+        killing,
+        {"t": 30000, "e": "end", "out": "kill"},
+    ]
+    for when in (0, 250, 500, 750):
+        records.append({"t": when, "e": "snap", "hz": [], "u": [
+            unit_row(GORMOK, 563.9, 178.4, BULWARK if when >= 500 else 0),
+            unit_row(BULWARK, 564.0, 175.4, GORMOK),
+            unit_row(SHIV, 572.9, 178.3),
+        ]})
     return records
 
 
@@ -306,6 +328,19 @@ class BeastsStaging(unittest.TestCase):
         self.assertTrue(text.startswith("STAGING\n  Gormok the Impaler (gormok)"))
         self.assertLess(text.index("Dreadscale (worms)"), text.index("Acidmaw (worms)"))
         self.assertIn("  stand is the bot's latest toc.stage up to 2 s past the release", text)
+
+
+class LethalFirstSwing(unittest.TestCase):
+    def test_a_first_hit_before_any_targeted_snapshot_is_the_release(self):
+        trace = write(lethal_pull())
+        releases = toc.releases(trace)
+        self.assertEqual([(release["guid"], release["t"], release["victim"]) for release in releases],
+                         [(GORMOK, 97, SHIV)])
+
+        text = printed(toc.show_release, trace, toc.release_report(trace, releases[0]))
+        self.assertIn("  Gormok the Impaler (gormok) released at 0:00.097 on Shiv, melee, bot\n", text)
+        self.assertIn("    first on a tank after 403 ms\n", text)
+        self.assertIn("    non-tank hits in 5 s: 1, 31,205 damage: Shiv +0 ms 31,205 killed\n", text)
 
 
 class TwinsStaging(unittest.TestCase):

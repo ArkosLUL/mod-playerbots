@@ -91,7 +91,8 @@ reaches past 46 yd everywhere.
 
 ## Gormok the Impaler
 
-Combat reach 6.5, so melee stand within 9.3 yd of his centre.
+Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so melee stand within
+13.3 yd of his centre, at about 11.3 on 2026-11-09. A snobold rider walks to 10 yd, inside that.
 
 - **Impale** (66331 / 67477 / 67478 / 67479) on his victim every 9-10 s (2.5 s retries while
   disarmed). Stacks to 10; duration 30 / 40 / 30 / 45 s, refreshed by every application, so stacks
@@ -185,7 +186,11 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
 
 ## Acidmaw & Dreadscale
 
-Combat reach 6.5, so melee range is 9.3 yd; they run 9.45 yd/s, faster than a player. Neither
+Combat reach follows the form's display (6.5 for both before `2026_11_06_01`): mobile 12, so melee
+range 14.8 and a hunter's dead zone 19.8 (`Spell::CheckRange`: 5 + melee range); stationary 5, so
+7.8 and 12.8 (`WormMeleeRange` reads a submerged worm's coming form, since the under-ground model
+has its own reach). A chasing mobile worm stops 14 yd (contact 0.5 + 12 + 1.5) from its tank,
+`WORM_TANK_OFFSET`. They run 9.45 yd/s, faster than a player. Neither
 carries a `NO_PARRY` bit (`flags_extra` 0x80001), so melee in a worm's front half are parried and
 haste its next swing. Dreadscale (34799) walks in mobile, Acidmaw (35144) comes up stationary by the
 gate. Timers restart at every emerge (AC #28181, solo-sniffed; group and heroic unverified).
@@ -295,15 +300,15 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     guide lets any ranged class tank the stationary one.
   - **Drag**: the mobile holder, while its worm's victim, in mobile form, and no Icehowl charge is
     latched, walks the worm on once melee at it would stand in a pool 5 s on (the worm within that
-    radius + 9.3) or in Sweep (within 27.3 of the stationary worm). It takes the clear spot nearest a
-    point 10 yd ahead, searched within 30 yd, off every pool by its radius 15 s on (capped at its
-    despawn) + 19.8 and 38 off the stationary worm (else off pools only), latched until it arrives.
-    Each new pool drops at the worm's feet and fires the next drag, so the far future doesn't count.
-    Both clearances carry a 2 yd pad, so the worm, stopping 8.5 yd behind its tank, settles past the
+    radius + 9.3, the melee ring `WORM_MELEE_RING`) or in Sweep (within 27.3 of the stationary worm).
+    It takes the clear spot nearest a point 10 yd ahead, searched within 30 yd, off every pool by its
+    radius 15 s on (capped at its despawn) + 25.3 and 43.3 off the stationary worm (else off pools
+    only), latched until it arrives. Each new pool drops at the worm's feet and fires the next drag, so
+    the far future doesn't count. Both clearances carry a 2 yd pad, so the worm, stopping 14 yd behind its tank, settles past the
     trigger instead of firing it again. Walking on keeps the worm's front pointing the same way
     (guide: drag him off the pool so melee can attack). `nb.wormmove` `drag`.
   - **Edge** (heroic, whose pools outlive the 12 s between them): the drag looks 36-42 yd from
-    `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 25.5 yd
+    `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 20 yd
     out while not spewing (its cone would sweep after the tank). Order: edge clear of everything,
     floor clear of everything, edge clear of pools, floor clear of pools; off the stationary worm
     beats the edge, since its melee would stand in Sweep. `nb.wormmove` `drag edge`.
@@ -334,9 +339,9 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); with
     none and the partner past 30 yd, a 25 yd leg toward it, turned ±22.5° then ±45° when blocked
     (`partial`). Their spots clear only the real Spew cone, and a pair within 8 yd triggers on it
-    unpadded: the partner is often a mobile worm's tank, 8.5 yd ahead of it, and on 10N the 60° cone
+    unpadded: the partner is often a mobile worm's tank, up to 14 yd ahead of it, and on 10N the 60° cone
     plus the 12° pad covers the whole 6 yd disc round it. Every spot choice and the urgent test
-    while it spews also refuse the armed worm's front half within 9.3 yd (`InSpewDanger`): the
+    while it spews also refuse the armed worm's front half within its 14.8 melee range (`InSpewDanger`): the
     angle test passes a spot on the worm itself, and on 25H a cure walk to a Bile carrier at
     Dreadscale's head took 5 Spew ticks. The trigger keeps the plain cone, so melee chasing a
     walking worm aren't sent round it.
@@ -371,7 +376,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
     | Reach | a bot holding no beast whose `reach melee` or `reach spell` walk to its stop point, 30 yd at most, would cross a pool or end in one, or (neither debuff) in a Bile pulse | — | the reposition goes round it |
 
-  - **Melee stands**: 8.3 yd from the mobile worm's centre, 54° either side of its back by guid
+  - **Melee stands**: 8.3 yd from the mobile worm's centre (inside its 14.8, and the 9.3 ring the
+    casters and drag clear; median 8.3 on 2026-11-08 and -09), 54° either side of its back by guid
     parity among the roster's melee bots, two groups 13.4 yd apart; any spot such a bot takes sits
     at least 108° off the worm's facing (`set behind`'s 3π/5). ±39° is the 10.5 yd minimum, and ±72°
     leaves no margin for its turn. Stand and rear arc apply only once the worm has stood 500 ms
@@ -395,9 +401,11 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     out; a `cross` spot skips this. Checked only at its end, a 25N Bile carrier's spot ran its walk
     2 yd from a pool's centre and killed it.
   - **Role reach**, in combat-reach terms 1 yd inside the generic trigger: ranged within spell range
-    of the target (`reach spell` fires past ~37 yd, not the raw 28.5), a hunter also 15.3 from every
-    up worm (`Spell::CheckRange` adds melee range to its 5 yd minimum); melee and tanks within 8.3
-    of a worm, else melee range − 1; healers within heal range of both holders and their `party
+    of the target (`reach spell` fires past ~37 yd, not the raw 28.5), a hunter also past its dead
+    zone + 1 off every up worm (20.8 mobile, 13.8 stationary; the old flat 15.3 left Trueshot 20% of
+    mobile Acidmaw inside it on 2026-11-09); melee and tanks within the target's melee range − 1
+    (13.8 on a mobile worm, 6.8 on a stationary one: the old 8.3 left melee a median 8.5-9.9 off a
+    lone stationary Dreadscale, out of reach); healers within heal range of both holders and their `party
     member to heal`. A Bile carrier held off the stack has none.
   - **Search**, over 30 yd in 2 yd and 22.5° steps, the first tier with a spot (`nb.wormmove`):
     `stand`; `escape` first from inside a pool; `full` (every circle and reach); `pair`, spread from
@@ -423,7 +431,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     - a rule breaks at the spot. Walking: the urgent circles, floor, cones and path, plus partner
       reach and rear arc unless urgent. Parked: every trigger its tier honoured (`pair` tolerates its
       lone partner, `nospread` skips spread, `partner` and `direct` skip spread and reach), and the
-      role reach at the generic trigger itself, or a stand on the 8.3 yd edge would let go on the
+      role reach at the generic trigger itself, or a stand on the reach edge would let go on the
       worm's first step;
     - `nb.worm` changes, or, but for a cure or run hold, the target changes (not healers), the anchor
       (the up mobile worm, else the stationary one) moves 2.5 yd or turns 20° from where it stood at
@@ -509,12 +517,13 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
 
 ## Icehowl
 
-Combat reach 12, so melee range is 14.8 yd. He runs 16 yd/s (`speed_run` 2.29), so he closes a
-Whirl throw in about 2 s.
+Combat reach 14 (display 21601; 12 before `2026_11_06_01`), so melee range is 16.8 yd and a hunter's
+dead zone 21.8. He runs 16 yd/s (`speed_run` 2.29), so he closes a Whirl throw in about 2 s.
 
 - **Whirl** (67345 / 67663 / 67664 / 67665), first at 16 s then every 16 s: 15 yd centre to
-  centre, knockback ~31 yd. **Melee cannot dodge it here** — 14.8 is inside 15 — whatever the guide
-  says about max range; ranged already stand outside. He follows a thrown tank: on 25H nearly every
+  centre, 3D (a creature's area spell adds no reach for players), knockback ~31 yd. Melee at
+  15.3-16.5 hit him from outside it, as the guide says; on the old 8-13 band it hit melee 35-44 times
+  a pull, always at 13 yd or closer. Ranged already stand outside. He follows a thrown tank: on 25H nearly every
   Whirl moved him 24-44 yd within 4 s, and since he catches the tank in flight his victim stayed
   mostly inside his reach throughout.
 - **Ferocious Butt** (66770 / 67654 / 67655 / 67656) on his victim at 8.5-9 s, then every 14-17 s:
@@ -602,10 +611,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
     `spell_cone`, else 24°), the 6° covering 3° of stand error either side. They run outward from
     straight behind him, `k` = 0, 1, -1, 2, …, never within a step plus the 30° re-latch turn of his
     front (±126° at most, ±108° on 10N), so a breath on the tank misses them. Each is probed 34 yd
-    out (the ranged band's 25, his 8 yd re-latch drift, 1 spare) along the player collision path
-    (the floor is a GO, [README.md](README.md#arena-floor)) and kept with 22.5 yd of room, up to 11
+    out (the ranged band's 26.5, his 8 yd re-latch drift, 1 spare) along the player collision path
+    (the floor is a GO, [README.md](README.md#arena-floor)) and kept with 24 yd of room, up to 11
     (5 on 10N), a half circle; a walled one is replaced further round. Within the melee arc (below)
-    one with 14 yd of room, the melee band plus 1, is kept for melee alone and outside that count: at
+    one with 17.5 yd of room, the melee band plus 1, is kept for melee alone and outside that count: at
     the wall those are often the only bearings near his back. The probe works on the GO floor: on
     25N it kept 11 near the centre, 9 with him 26.5 yd out and 3-4 at 44-50, as a 48-50 yd wall
     round `ARENA_CENTER` predicts. So few survive only at the wall with his back to it: a charge
@@ -630,9 +639,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
     room − 1, less his drift along it since the probe
     ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md): clamp, don't chase).
     Judged in his frame, as the breath aims: fires 3° off the bearing (the margin's share) or 1 yd
-    outside the band, arrives at 1.5° and 0.5. Melee 8-13 (inside 14.8), healers 16.5-18.5 (heal
-    reach to the tank and the flank ranged), ranged 21.5-25; the healer and ranged floors clear
-    Whirl's 15 and a hunter's minimum (5 + 14.8) by more than that 1 yd (park tolerance, same doc).
+    outside the band, arrives at 1.5° and 0.5; melee at 0.3 and 0.15, since their band 15.5-16.2
+    sits between Whirl's 15 and his 16.8 reach. Healers 16.5-18.5 (heal reach to the tank and the
+    flank ranged), ranged 23-26.5; the healer and ranged floors clear Whirl and a hunter's 21.8 dead
+    zone by more than that 1 yd (park tolerance, same doc). All `static_assert`ed.
     `MOVEMENT_COMBAT` and no interrupt: 15-30k over 5 s is healable, and the first breath after a
     charge is 5-8 s out, from a rage or from the daze's end, when the stands return.
   - **Healer yield**: a healer holds off while its `party member to heal` is out of heal reach of
@@ -694,7 +704,10 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it. Externals on his
   victim were offered after a 25H wipe (2026-10-24: a trampled human tank, both tanks dead in 10 s)
   and declined by the user.
-- Melee eat every Whirl.
+- Melee walking in or chasing a thrown tank still eat Whirl; a 0.3 yd margin each side of the band
+  is all the reach leaves.
+- The drag's pool and Sweep circles grew 5.5 yd with the 14 yd chase stop: a 25H heroic pool's
+  reaches ~45 yd, and with no clear spot the drag doesn't happen. Unproven in a pull.
 - No spread against Fire Bomb in Gormok's stage (guide: stay spread); the impact dodge is the only
   answer.
 - A caster pinned by its own cast waits it out and can eat the impact.
@@ -716,7 +729,8 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - Staging ([README.md](README.md#pre-pull-staging)): a retry gives 11 s from the gossip to Gormok's
   release against a walk of up to about 85 yd from Barrett to his tank's stand; Gormok's closest
   caster stands are 7.1 yd apart, under Fire Bomb's 8; a worm healer stand rarely reaches both tank
-  stands within 30 yd.
+  stands within 30 yd. Every non-tank stand waits past its beast's release clearance, so melee walk
+  7-14 yd in after the release.
 
 ## What a trace answers
 

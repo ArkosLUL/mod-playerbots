@@ -36,13 +36,20 @@ constexpr uint32 SPELL_SLIME_POOL_AURA = 66882;   // no row, one tick a second g
 constexpr uint32 SPELL_PARALYTIC_SPRAY = 66901;   // row 604
 constexpr uint32 SPELL_BURNING_SPRAY = 66902;     // row 608
 
-constexpr float WORM_MELEE_RANGE = 9.3f;          // reach 6.5 + 1.5 + 4/3
+// Reach follows the display, scale 1: mobile 24564 and 29816, stationary 26935 and 29815
+constexpr float WORM_MOBILE_COMBAT_REACH = 12.0f;
+constexpr float WORM_STATIONARY_COMBAT_REACH = 5.0f;
+constexpr float WORM_MOBILE_MELEE_RANGE = PlayerMeleeRange(WORM_MOBILE_COMBAT_REACH);
+constexpr float WORM_STATIONARY_MELEE_RANGE = PlayerMeleeRange(WORM_STATIONARY_COMBAT_REACH);
+// The melee clump round the up mobile worm: its dealt stands plus a yard
+constexpr float WORM_MELEE_RING = 9.3f;
 constexpr float WORM_SPEW_RANGE = 55.0f;
 constexpr float WORM_FLOOR_RADIUS = 35.0f;        // the worms surface up to 35 yd from ARENA_CENTER
 // Bot spots only. 2 yd inside Icehowl's gate-side charge end, so the floor is known to reach it.
 constexpr float WORM_SPOT_FLOOR_RADIUS = 44.0f;
 constexpr float WORM_TAUNT_STAND = 20.0f;         // the mobile holder's reach under ground
-constexpr float WORM_TANK_OFFSET = 8.5f;          // worm centre to its victim: chase stops at contact 0.5 + 6.5 + 1.5
+// Mobile worm centre to its victim when its chase stops: contact plus both reaches
+constexpr float WORM_TANK_OFFSET = CONTACT_DISTANCE + WORM_MOBILE_COMBAT_REACH + DEFAULT_COMBAT_REACH;
 
 // Sweep: a 15 yd circle round the stationary worm, centre to centre
 constexpr float WORM_SWEEP_RADIUS = 15.0f;
@@ -59,11 +66,11 @@ constexpr float WORM_SPREAD_CLEARANCE = 13.0f;
 constexpr float WORM_SPRAY_TRIGGER = WORM_SPLASH_RADIUS + 2.0f;
 constexpr float WORM_SPRAY_CLEARANCE = WORM_SPLASH_RADIUS + 3.0f;
 // Casters keep off the melee round the up mobile worm as one circle on it
-constexpr float WORM_MELEE_STACK_TRIGGER = WORM_MELEE_RANGE + WORM_SPREAD_TRIGGER;
-constexpr float WORM_MELEE_STACK_CLEARANCE = WORM_MELEE_RANGE + WORM_SPREAD_CLEARANCE;
+constexpr float WORM_MELEE_STACK_TRIGGER = WORM_MELEE_RING + WORM_SPREAD_TRIGGER;
+constexpr float WORM_MELEE_STACK_CLEARANCE = WORM_MELEE_RING + WORM_SPREAD_CLEARANCE;
 
 // Dealt melee stands on the mobile worm
-constexpr float WORM_MELEE_STAND = WORM_MELEE_RANGE - 1.0f;  // from its centre
+constexpr float WORM_MELEE_STAND = WORM_MELEE_RING - 1.0f;  // from its centre
 constexpr float WORM_MELEE_GROUP_DEG = 54.0f;                // either side of its back: groups 13.4 yd apart
 constexpr float WORM_MELEE_REAR_ARC_DEG = 108.0f;            // least angle off its facing for a melee spot
 
@@ -125,8 +132,8 @@ constexpr uint32 WORM_POOL_SOON_TICKS = 5;
 // they line the wall: its drag looks on this band first, 2 yd inside the spot floor
 constexpr float WORM_EDGE_MIN = 36.0f;
 constexpr float WORM_EDGE_MAX = WORM_SPOT_FLOOR_RADIUS - 2.0f;
-// Further in, a heroic worm gets walked out before its next pool. It stops 8.5 yd short of its tank, so
-// one walked out from the middle settles past this.
+// Further in, a heroic worm gets walked out before its next pool. It stops WORM_TANK_OFFSET short of its
+// tank, so one walked out from the middle settles past this.
 constexpr float WORM_EDGE_WORM_MIN = WORM_EDGE_MIN - WORM_TANK_OFFSET - 2.0f;
 constexpr float WORM_POOL_TRIGGER_PAD = 1.0f;    // on the radius now
 constexpr float WORM_POOL_CLEARANCE_PAD = 2.0f;  // on the radius 5 s on
@@ -146,13 +153,15 @@ static_assert(WORM_SPEW_TRIGGER_PAD < WORM_SPEW_CLEAR_PAD, "spew band");
 static_assert(WORM_CURE_REACH < WORM_CURE_TRIGGER && WORM_CURE_TRIGGER < WORM_SPLASH_RADIUS,
               "a cure walk ends inside its trigger, and the trigger inside the pulse");
 static_assert(WORM_HOLD_ARRIVE < WORM_HOLD_TRIGGER, "a walk has to end inside its own trigger");
-static_assert(WORM_MELEE_STAND <= WORM_MELEE_RANGE - 1.0f, "the melee stand is inside the role reach");
+static_assert(WORM_MELEE_STAND <= WORM_MOBILE_MELEE_RANGE - 1.0f, "the melee stand is inside the role reach");
 static_assert(180.0f - WORM_MELEE_GROUP_DEG >= WORM_MELEE_REAR_ARC_DEG, "the dealt stands sit in the rear arc");
 
 bool IsWormSubmerged(Unit* worm);                 // UNIT_FLAG_NOT_SELECTABLE, submerge start to emerge
 // Display form. Under ground, the form it comes up in once the other worm is under too; while the
 // other is still up, the opposite of that one's. A survivor flips at every emerge too.
 bool IsWormMobile(Unit* worm);
+// A player's melee range by that form: under ground the transform model carries its own reach
+float WormMeleeRange(Unit* worm);
 float WormSpewHalfArc(PlayerbotAI* botAI);        // radians, half the cone the remapped tick uses
 
 struct WormDragPlan

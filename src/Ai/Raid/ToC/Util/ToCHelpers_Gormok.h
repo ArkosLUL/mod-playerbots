@@ -62,8 +62,12 @@ constexpr float GORMOK_STOMP_TRIGGER = 22.0f;
 constexpr float GORMOK_STOMP_CLEARANCE = 24.0f;
 static_assert(GORMOK_STOMP_TRIGGER > GORMOK_STOMP_INTERRUPT_RADIUS && GORMOK_STOMP_CLEARANCE > GORMOK_STOMP_TRIGGER);
 
+// Display 29614, scale 1
+constexpr float GORMOK_COMBAT_REACH = 10.5f;
+
 // Snobold rider inside this of Gormok's centre is in reach of the melee on him
 constexpr float GORMOK_CARRIER_MELEE_RANGE = 10.0f;
+static_assert(GORMOK_CARRIER_MELEE_RANGE < PlayerMeleeRange(GORMOK_COMBAT_REACH), "the rider stops inside his melee ring");
 
 // Total Impale stack count on a unit (0 if none)
 uint32 GetGormokImpaleStacks(Unit* unit);

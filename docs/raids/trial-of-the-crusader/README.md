@@ -255,9 +255,11 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 | Twins | Fjola `Locs[9]` (585.5, 170), Eydis `Locs[10]` (545.5, 170), 6 yd up | proximity, from 25.5 s after the gossip |
 | Anub'arak | `Locs[17]` (785.9, 133.4) | attackable once a player is inside 80 yd, then proximity |
 
-- **Forced** picks any attackable unit, totems and pets too. In the 2026-10-15/16 traces each boss
-  turned hostile within 1-3 yd of its point, the raid waited 37-70 yd off, and Gormok, Dreadscale
-  and Icehowl opened on non-tanks, Icehowl twice on a Stoneskin Totem.
+- **Forced** is `StartAttack`'s `SelectNearestTarget(200)`, which picks any attackable unit, totems
+  and pets too, and isn't the nearest ([pitfalls.md](../../engine/pitfalls.md)): grid order decides
+  among everyone within the tank's distance + the boss's reach + their own. In the 2026-10-15/16
+  traces each boss turned hostile within 1-3 yd of its point, the raid waited 37-70 yd off, and
+  Gormok, Dreadscale and Icehowl opened on non-tanks, Icehowl twice on a Stoneskin Totem.
 - **Proximity** is `Creature::GetAggroRange`: `detection_range` 20 plus the level gap, so 23 yd from
   83 against 80, 3D centre to centre.
 - **Barrett** is summoned per stage (core #28136) at (559.2, 90.6): 34816 Beasts, 35909 heroic
@@ -299,24 +301,31 @@ order, so an overflow doubles up. Arena slots past 44 yd of the centre are dropp
 is floor-checked once with `ValidateFloorPoint`, kept if it lands within 3 yd, else the raw stand;
 park within 1 yd, walk back past 2.5.
 
-- **Forced arrivals**: the duty tank 3 yd from the release point, every other stand 8+, which covers
-  a 1 yd park either side and a pet 3 yd off its owner (`static_assert`ed). Beasts duties come from
-  the Beasts roster ([northrend-beasts.md](northrend-beasts.md#stage-model-and-tank-duties)), as
-  pass 2 deals them with nothing engaged.
-  - Gormok: roster[0] `tank` toward the centre, roster[1] `swap` 9 yd out; melee 9 yd to his sides;
-    casters on 25/33/40 yd arcs 25-80° off the line to the centre: out of Stomp (clearance 24), off
-    the drag.
+- **Forced arrivals**: the duty tank 3 yd from the release point; every other non-tank stand past the
+  release clearance, `ReleaseClearance(reach)` = 3 + 5 + boss reach + 1.5 + 0.5. The 5 covers a 1 yd
+  park either side and a pet 3 yd off its owner, the 0.5 the 3D gap (`static_assert`ed). Clearances:
+  Gormok 20.5, Dreadscale 22 (released mobile), Acidmaw 15 (stationary), Icehowl 24, Jaraxxus 15.
+  A tank inside one (Gormok's swap, Jaraxxus's add tanks) may take the pull, which Beasts pass 1
+  keeps. 2026-11-09 25H, on 8 / 9 yd stands: Gormok skipped his tank and one-shot a melee, Jaraxxus
+  opened on an add tank. Beasts duties come from the Beasts roster
+  ([northrend-beasts.md](northrend-beasts.md#stage-model-and-tank-duties)), as pass 2 deals them with
+  nothing engaged. Melee walk 7-14 yd in after the release, inside the [opener hold](#opener-hold).
+  - Gormok: roster[0] `tank` toward the centre, roster[1] `swap` 9 yd out; melee 20.5 yd out 80° off
+    the line to the centre (90° sits on the floor's edge); casters on 25/33/40 yd arcs 25-80° off it:
+    out of Stomp (clearance 24), off the drag.
   - Worms: roster[0] `mobile` 3 yd east of Dreadscale, so his Spew faces away from the raid,
-    roster[1] `stationary` 3 yd west of Acidmaw; melee on Dreadscale's rear stands; casters on a
-    10.5 yd lattice 19+ yd from Acidmaw (Sweep), 22.3-36 from Dreadscale and off his Spew cone, 10
-    slots on 25-man, 8 on 10N; healers by the farther tank stand, ranged by Dreadscale.
+    roster[1] `stationary` 3 yd west of Acidmaw; melee 22 yd from Dreadscale 54° and 90° south of his
+    line to Acidmaw (22 and 34 from her; north lands past the floor); casters on a 10.5 yd lattice
+    19+ yd from Acidmaw (Sweep), 22.3-36 from Dreadscale and off his Spew cone, 10 slots on 25-man, 8
+    on 10N; healers by the farther tank stand, ranged by Dreadscale.
   - Icehowl: roster[0] `tank` 3 yd toward the gate, so the raid stands behind him (guide: the tank's
-    back to a wall); melee 11, healers 17.5, ranged 23 yd on the breath bearings, inside the spread's
-    bands.
+    back to a wall); melee 24, ranged 26.5 (in their spread band), healers 29 yd on the breath
+    bearings, 7 / 9 / 9 slots on 25-man. Melee and healers walk into their bands after the release,
+    8.5 s before Ferocious Butt.
   - Jaraxxus, on his intro spot (stage 2) or on him (the stage 3 retry): the `IsMainTank` bot `tank`
-    3 yd north, assist tanks 0 and 1 (`addtank0`/`addtank1`) 8 yd to his sides, melee 9 yd south,
-    healers and ranged on a 3 yd lattice 20 yd north, the no-spread stack. A human main tank gets
-    no stand, and no bot takes it.
+    3 yd north, assist tanks 0 and 1 (`addtank0`/`addtank1`) 8 yd to his sides, melee 15 yd south,
+    healers and ranged on a 3 yd lattice 21 yd north (edge 15), the no-spread stack. A human main
+    tank gets no stand, and no bot takes it.
 - **Proximity arrivals**: nobody inside 28 yd (23 + 5) of a boss or landing slot, so the pull stays
   with the player.
   - Champions: bot tanks (`tank`, forced) on the line from the landing centroid to `ARENA_CENTER`,
@@ -404,7 +413,10 @@ The `ResistAura` stem picks:
 **Known gaps.**
 
 - Totems and pets left near a release point aren't moved, and a forced attack takes them too.
-- Humans hold no stand. One nearer a release point than its duty stand takes the forced attack.
+- Humans hold no stand. One inside a release clearance can take the forced attack.
+- The champions' first engage (`instance_trial_of_the_crusader.cpp` 298) and the second twin
+  (`boss_twin_valkyr.cpp` 225) use the same search: `CHAMPION_TANK_LEAD` 3 is under a champion's
+  2.25 + 1.5 plus park slack (6.075 for Narrhok and Broln). 2026-11 champion pulls opened on a tank.
 - A stand is floor-checked from wherever its bot stands when dealt: one landing more than 3 yd off
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: no Barrett comes back.
@@ -435,11 +447,12 @@ Boss notes are in each boss doc. Raid-wide, under `postmortem.py <file> --notes 
 | Key | Shape | Says |
 |---|---|---|
 | `progress` | latch | The stage per the [instance script](#instance-script) table, per instance, restated at each trace's start and then noted on change, attributed to the bot whose tick read it |
-| `stage` | per bot | Its stand, `<arrival>.<role> x,y,z` rounded to the yard, ` human` on a duty stand a human stood nearer the release than; `none` in a window with no stand. Change-only, and a trace opens at the engage, so for 2 s after an arrival closes any bot's tick notes every bot's last label again |
+| `stage` | per bot | Its stand, `<arrival>.<role> x,y,z` rounded to the yard, ` human` on a duty stand with a human inside its release clearance (champions: nearer the release than the stand); `none` in a window with no stand. Change-only, and a trace opens at the engage, so for 2 s after an arrival closes any bot's tick notes every bot's last label again |
 | `aura` | per paladin and hunter bot | Its resistance duty: `fire`, `frost`, `shadow`, `nature`, `none`. No reader section |
 
 `tools/botobs/bosses/trial_of_the_crusader.py <file> --staging`, over a trace of any ToC encounter:
-per release (a unit's first snapshot with a target; of the champions only the first), the victim,
-the duty holder, ms until it targets a tank, its hits on non-tanks in the first 5 s, and each bot's
+per release (a unit's first snapshot with a target, or its first hit on the raid when sooner, since a
+first-swing kill is gone by the next snapshot; of the champions only the first), the victim, the duty
+holder, ms until it targets a tank, its hits on non-tanks in the first 5 s (`killed` on overkill), and each bot's
 stand from its latest `stage` up to 2 s past the release, with its 2D distance from it at the
 release, flagged past 3 yd. The banner says when the trace never wrote `stage`.

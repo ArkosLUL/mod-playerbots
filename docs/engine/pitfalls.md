@@ -694,6 +694,12 @@ Related traps:
 - **A creature's aggro radius is its detection range plus its level lead over the player**
   (`Creature::GetAggroRange`, 1 yd per level): a level-83 boss with detection 20 pulls a level-80
   player at 23 yd, which rules out pre-pull stands behind most raid bosses.
+- **`SelectNearestTarget` isn't the nearest.** `NearestHostileUnitCheck` under `UnitLastSearcher`
+  tests each unit's exact distance, then narrows its range to that unit's `GetDistance`, both combat
+  reaches off. A later unit wins only if it is more than (boss reach + its own) closer, so the pick is
+  grid order among everyone within "tank distance + boss reach + their reach". A forced
+  `StartAttack` opens on the tank for certain only when nobody else stands that close: on 25H
+  2026-11-09 Gormok (reach 10.5) skipped his tank at 3 yd and one-shot a melee at 9.
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.
@@ -929,6 +935,12 @@ block in `PlayerbotAI::DoNextAction` clears it.
   on a vehicle fight hull loss is the death, not the damage that follows it.
 
 ## Arc and geometry defaults
+
+**A combat reach moves with core DB updates.** It is `creature_model_info`'s `CombatReach` for the
+current display (a pet's 1.5) times scale, so a form change moves it too. `2026_11_06_01` re-sniffed
+it: Gormok 6.5→10.5, the worms 6.5→12 mobile / 5 stationary, Icehowl 12→14, Anub'arak 10→15, and every
+constant derived from the old values silently went wrong. Read `GetCombatReach()` live where the unit
+is at hand; otherwise name the display a constant comes from.
 
 `WorldObject::isInFront` / `isInBack` default to `arc = M_PI` (`Object.h`) — front half plus back half
 is the entire circle, so a check like `boss->isInFront(bot) || boss->isInBack(bot)` is **always

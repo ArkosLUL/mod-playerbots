@@ -2,6 +2,7 @@
 #define PLAYERBOTS_RAID_TOCHELPERS_STAGING_H
 
 #include "Define.h"
+#include "ObjectDefines.h"
 #include "Position.h"
 #include "ToCEncounterGate.h"
 
@@ -9,7 +10,7 @@ class Player;
 class PlayerbotAI;
 
 // Pre-pull stands: every boss turns hostile on the same script point each pull, so bots wait on a
-// dealt stand around it and the duty tank stands nearest. Nothing resolves off map 649.
+// dealt stand around it, and only tanks stand inside its release clearance. Nothing resolves off map 649.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -32,11 +33,19 @@ constexpr float STAGING_UNPARK = 2.5f;
 constexpr float STAGING_STAND_MOVED = 0.5f;
 // ValidateFloorPoint's answer is kept only this close to the raw stand
 constexpr float STAGING_FLOOR_TOLERANCE = 3.0f;
-// A forced attack takes the nearest unit: the duty tank stands this far from the release point and
-// everyone else at least the margin further, which covers a 1 yd park either side and a pet 3 yd off
+// The duty tank stands this far from the release point. The margin covers a 1 yd park either side and a
+// pet 3 yd off its owner.
 constexpr float STAGING_DUTY_STAND = 3.0f;
 constexpr float STAGING_RELEASE_MARGIN = 5.0f;
 constexpr uint32 STAGING_DEAL_MS = 1000;
+
+// A forced attack's SelectNearestTarget isn't the nearest: after each unit that passes it narrows to that
+// unit's GetDistance, both combat reaches off, so anyone inside this beats the duty tank whenever the
+// search reaches them first. The 0.5 covers the 3D gap.
+constexpr float ReleaseClearance(float bossReach)
+{
+    return STAGING_DUTY_STAND + STAGING_RELEASE_MARGIN + bossReach + DEFAULT_COMBAT_REACH + 0.5f;
+}
 
 static_assert(STAGING_PARK < STAGING_UNPARK, "a walk has to end inside its own trigger");
 

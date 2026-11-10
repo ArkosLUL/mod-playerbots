@@ -27,7 +27,7 @@ bool IcehowlBreathSpreadTrigger::IsActive()
         return false;
 
     if (IsOnIcehowlBreathStand(stand, bot->GetPositionX(), bot->GetPositionY(), ICEHOWL_SPREAD_TRIGGER_DEG,
-                               ICEHOWL_SPREAD_TRIGGER))
+                               stand.trigger))
         return false;
 
     // A healer yields to its heal target, or the two walks fight and it never casts. Same test as

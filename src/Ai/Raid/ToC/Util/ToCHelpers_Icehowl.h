@@ -41,25 +41,30 @@ constexpr float ICEHOWL_SPREAD_ARRIVE_DEG = 1.5f;
 constexpr float ICEHOWL_SPREAD_HALF_ARC_DEG = 90.0f;      // bearings kept either side of his back
 // A healer here at 17 yd is ~27 yd from his tank, ~30 straight behind
 constexpr float ICEHOWL_SPREAD_HEALER_BEARING_DEG = 60.0f;
-// Whirl, and a hunter's 5 yd minimum range past his melee range (reaches 12 and 1.5 plus 4/3), all
-// centre to centre
-constexpr float ICEHOWL_MELEE_RANGE = 12.0f + 1.5f + 4.0f / 3.0f;
+// Display 21601, scale 1
+constexpr float ICEHOWL_COMBAT_REACH = 14.0f;
+// Whirl, and a hunter's 5 yd minimum range past his melee range, all centre to centre. Whirl is a
+// creature's area spell, so it adds no reach for players.
+constexpr float ICEHOWL_MELEE_RANGE = PlayerMeleeRange(ICEHOWL_COMBAT_REACH);
 constexpr float ICEHOWL_WHIRL_RADIUS = 15.0f;
 constexpr float ICEHOWL_RANGED_MIN_RANGE = ICEHOWL_MELEE_RANGE + 5.0f;
-// Radius bands from his centre
-constexpr float ICEHOWL_SPREAD_MELEE_MIN = 8.0f;
-constexpr float ICEHOWL_SPREAD_MELEE_MAX = 13.0f;
+// Radius bands from his centre. Melee sit between Whirl and the edge of his reach, so their band and
+// trigger are tight.
+constexpr float ICEHOWL_SPREAD_MELEE_MIN = 15.5f;
+constexpr float ICEHOWL_SPREAD_MELEE_MAX = 16.2f;
 constexpr float ICEHOWL_SPREAD_HEALER_MIN = 16.5f;
 constexpr float ICEHOWL_SPREAD_HEALER_MAX = 18.5f;
-constexpr float ICEHOWL_SPREAD_RANGED_MIN = 21.5f;
-constexpr float ICEHOWL_SPREAD_RANGED_MAX = 25.0f;
+constexpr float ICEHOWL_SPREAD_RANGED_MIN = 23.0f;
+constexpr float ICEHOWL_SPREAD_RANGED_MAX = 26.5f;
 // How far outside its band a bot may stand before it walks back
 constexpr float ICEHOWL_SPREAD_TRIGGER = 1.0f;
 constexpr float ICEHOWL_SPREAD_ARRIVE = 0.5f;
+constexpr float ICEHOWL_SPREAD_MELEE_TRIGGER = 0.3f;
+constexpr float ICEHOWL_SPREAD_MELEE_ARRIVE = 0.15f;
 // A bearing walled closer than this is dropped, or kept for melee alone inside the melee arc with
 // room for their band
-constexpr float ICEHOWL_SPREAD_MIN_ROOM = 22.5f;
-constexpr float ICEHOWL_SPREAD_MELEE_ROOM = 14.0f;
+constexpr float ICEHOWL_SPREAD_MIN_ROOM = 24.0f;
+constexpr float ICEHOWL_SPREAD_MELEE_ROOM = 17.5f;
 // Whirl throws his tank ~31 yd and he follows, so the layout re-latches when he moves or turns this far
 constexpr float ICEHOWL_SPREAD_RELATCH_MOVE = 8.0f;
 constexpr float ICEHOWL_SPREAD_RELATCH_TURN_DEG = 30.0f;
@@ -76,9 +81,11 @@ constexpr float ICEHOWL_SPREAD_MELEE_ARC_DEG = 90.0f - ICEHOWL_SPREAD_RELATCH_TU
 
 static_assert(2.0f * ICEHOWL_SPREAD_TRIGGER_DEG <= ICEHOWL_SPREAD_MARGIN_DEG,
               "neighbours stay out of each other's breath");
-static_assert(ICEHOWL_SPREAD_ARRIVE_DEG < ICEHOWL_SPREAD_TRIGGER_DEG && ICEHOWL_SPREAD_ARRIVE < ICEHOWL_SPREAD_TRIGGER,
+static_assert(ICEHOWL_SPREAD_ARRIVE_DEG < ICEHOWL_SPREAD_TRIGGER_DEG && ICEHOWL_SPREAD_ARRIVE < ICEHOWL_SPREAD_TRIGGER &&
+                  ICEHOWL_SPREAD_MELEE_ARRIVE < ICEHOWL_SPREAD_MELEE_TRIGGER,
               "a walk has to end inside its own trigger");
-static_assert(ICEHOWL_SPREAD_MELEE_MAX + ICEHOWL_SPREAD_TRIGGER < ICEHOWL_MELEE_RANGE, "melee stay in reach");
+static_assert(ICEHOWL_SPREAD_MELEE_MAX + ICEHOWL_SPREAD_MELEE_TRIGGER < ICEHOWL_MELEE_RANGE, "melee stay in reach");
+static_assert(ICEHOWL_SPREAD_MELEE_MIN - ICEHOWL_SPREAD_MELEE_TRIGGER > ICEHOWL_WHIRL_RADIUS, "melee stay out of Whirl");
 static_assert(ICEHOWL_SPREAD_HEALER_MIN - ICEHOWL_SPREAD_TRIGGER > ICEHOWL_WHIRL_RADIUS, "healers stay out of Whirl");
 static_assert(ICEHOWL_SPREAD_RANGED_MIN - ICEHOWL_SPREAD_TRIGGER > ICEHOWL_RANGED_MIN_RANGE,
               "hunters stay past their minimum range");
@@ -94,6 +101,9 @@ struct IcehowlBreathStand
     float bearing = 0.0f;  // radians, from him
     float bandMin = 0.0f;
     float bandMax = 0.0f;  // capped by the room along the bearing
+    // The role's radial tolerances outside the band: walk back past trigger, stop within arrive
+    float trigger = 0.0f;
+    float arrive = 0.0f;
 };
 
 // Degrees between two neighbouring breath bearings on this map's difficulty: half the remapped

@@ -1,7 +1,10 @@
 #ifndef PLAYERBOTS_RAID_TOCDATA_H
 #define PLAYERBOTS_RAID_TOCDATA_H
 
+#include <algorithm>
+
 #include "Define.h"
+#include "ObjectDefines.h"
 #include "Position.h"
 
 struct RaidDefensiveScope;
@@ -12,6 +15,13 @@ namespace TrialOfTheCrusaderHelpers
 {
 
 constexpr uint32 TRIAL_OF_THE_CRUSADER_MAP_ID = 649;
+
+// Unit::GetMeleeRange for a player on a unit of this combat reach, centre to centre. A boss's reach is
+// creature_model_info's CombatReach for its display, and core DB updates move it.
+constexpr float PlayerMeleeRange(float unitReach)
+{
+    return std::max(unitReach + DEFAULT_COMBAT_REACH + 4.0f / 3.0f, NOMINAL_MELEE_RANGE);
+}
 
 // Map 649, covers under toc.cover, personal picks under toc.personal
 extern RaidDefensiveScope const TOC_DEFENSIVE_SCOPE;

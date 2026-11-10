@@ -10,9 +10,10 @@ reads instead:
 
 - **A release is a unit's first victim.** One boss state spans all four beasts, set at the intro's
   end, so nothing marks a later beast turning on the raid but the first snapshot row whose target
-  column is set. Gormok, each worm, Icehowl, Jaraxxus, each twin and Anub'arak get their
-  own; of the 28 champions only the first to take a target. Jaraxxus kills Fizzlebang with a
-  triggered cast, which sets no victim, so the intro never reads as one.
+  column is set, or its first hit on a raid member when that comes sooner: a victim his first swing
+  kills is gone before the next snapshot. Gormok, each worm, Icehowl, Jaraxxus, each twin and
+  Anub'arak get their own; of the 28 champions only the first to take a target. Jaraxxus kills
+  Fizzlebang with a triggered cast, which sets no victim, so the intro never reads as one.
 - **`toc.stage` is per bot and change only, and a session opens on the boss state or the first
   engage, whichever comes first.** A note written
   before the open never reaches the file, so for 2 s after the arrival closes any bot's tick notes
@@ -20,8 +21,10 @@ reads instead:
   `none` when that reads `none` (in the window with no stand), else its latest whose label leads with
   the arrival.
 - **A stand is rounded to the yard** (`DescribeDerived`), so a bot parked on it reads up to 0.7 yd off.
-- **` human` after a duty holder's stand** means a living human stood nearer the release point than
-  the stand did, so a forced attack opens on the human.
+- **` human` after a duty holder's stand** means a living human stood inside the arrival's release
+  clearance (the champions: nearer the release point than the stand), so a forced attack can open on
+  the human.
+- **`killed`** marks an early hit with overkill.
 """
 from __future__ import annotations
 
@@ -128,15 +131,31 @@ def stands(trace: Trace, arrival: str, until: int) -> dict[int, dict | None]:
     return out
 
 
+def first_hits(trace: Trace, guids: set[int]) -> dict[int, tuple[int, int]]:
+    """Per unit, `(when, victim)` of its earliest `dmg` row on a roster member."""
+    out: dict[int, tuple[int, int]] = {}
+    for rec in trace.of("dmg"):
+        guid = rec.get("s")
+        if guid in guids and rec.get("d") in trace.roles and (guid not in out or rec["t"] < out[guid][0]):
+            out[guid] = (rec["t"], rec["d"])
+    return out
+
+
 def releases(trace: Trace) -> list[dict]:
     """Each staged unit's release in time order, `{guid, arrival, duties, t, victim}`, off the first
-    snapshot row with its target set. Of the champions only the first to take one."""
+    snapshot row with its target set or its first hit on the raid, whichever is earlier. Of the
+    champions only the first to take one."""
     units = [(guid, arrival, duties) for entry, arrival, duties in STAGED_UNITS
              for guid in guids_of_entry(trace, entry)]
     champions = {guid for guid, entry in trace.entries.items() if entry in CHAMPION_ENTRIES}
-    rows = track(trace, {guid for guid, _, _ in units} | champions, ("t", "target"))
-    first = {guid: next(((when, victim) for when, victim in found if victim), None)
-             for guid, found in rows.items()}
+    guids = {guid for guid, _, _ in units} | champions
+    rows = track(trace, guids, ("t", "target"))
+    hits = first_hits(trace, guids)
+    first = {}
+    for guid in guids:
+        seen = next(((when, victim) for when, victim in rows.get(guid, []) if victim), None)
+        hit = hits.get(guid)
+        first[guid] = hit if hit and (not seen or hit[0] < seen[0]) else seen
 
     out = []
     for guid, arrival, duties in units:
@@ -246,6 +265,7 @@ def show_release(trace: Trace, report: dict) -> None:
     hits = report["hits"]
     if hits:
         listed = ", ".join(f"{trace.name(rec.get('d'))} +{rec['t'] - release['t']} ms {rec.get('a', 0):,}"
+                           + (" killed" if rec.get("ok", 0) > 0 else "")
                            for rec in hits[:SHOWN])
         print(f"    non-tank hits in {EARLY_HIT_MS // 1000} s: {len(hits)},"
               f" {sum(rec.get('a', 0) for rec in hits):,} damage: {listed}"

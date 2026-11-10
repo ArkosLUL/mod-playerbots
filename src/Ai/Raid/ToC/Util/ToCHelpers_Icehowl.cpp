@@ -760,15 +760,21 @@ bool ResolveBreathStand(PlayerbotAI* botAI, Player* bot, IcehowlBreathState cons
 
     float bandMin = ICEHOWL_SPREAD_MELEE_MIN;
     float bandMax = ICEHOWL_SPREAD_MELEE_MAX;
+    stand.trigger = ICEHOWL_SPREAD_MELEE_TRIGGER;
+    stand.arrive = ICEHOWL_SPREAD_MELEE_ARRIVE;
     if (member->role == BreathRole::Healer)
     {
         bandMin = ICEHOWL_SPREAD_HEALER_MIN;
         bandMax = ICEHOWL_SPREAD_HEALER_MAX;
+        stand.trigger = ICEHOWL_SPREAD_TRIGGER;
+        stand.arrive = ICEHOWL_SPREAD_ARRIVE;
     }
     else if (member->role == BreathRole::Ranged)
     {
         bandMin = ICEHOWL_SPREAD_RANGED_MIN;
         bandMax = ICEHOWL_SPREAD_RANGED_MAX;
+        stand.trigger = ICEHOWL_SPREAD_TRIGGER;
+        stand.arrive = ICEHOWL_SPREAD_ARRIVE;
     }
 
     float const top = std::min(bandMax, RoomLeft(state, *bearing, icehowl) - 1.0f);

@@ -28,6 +28,7 @@
 #include "ToCFactionChampionsGripChain.h"
 #include "ToCHelpers_Anubarak.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_Icehowl.h"
 #include "ToCHelpers_Jaraxxus.h"
 #include "ToCHelpers_Jormungars.h"
@@ -85,7 +86,12 @@ constexpr Point2 FACTION_CHAMPION_LANDING[] = {
     {531.399f, 125.63f},  {528.958f, 131.47f},  {526.309f, 116.667f}, {524.238f, 122.411f}, {521.901f, 128.488f},
 };
 
-constexpr float NON_DUTY_MIN = STAGING_DUTY_STAND + STAGING_RELEASE_MARGIN;
+constexpr float GORMOK_CLEARANCE = ReleaseClearance(GORMOK_COMBAT_REACH);
+// Dreadscale is released mobile and Acidmaw stationary
+constexpr float DREADSCALE_CLEARANCE = ReleaseClearance(WORM_MOBILE_COMBAT_REACH);
+constexpr float ACIDMAW_CLEARANCE = ReleaseClearance(WORM_STATIONARY_COMBAT_REACH);
+constexpr float ICEHOWL_CLEARANCE = ReleaseClearance(ICEHOWL_COMBAT_REACH);
+constexpr float JARAXXUS_CLEARANCE = ReleaseClearance(JARAXXUS_COMBAT_REACH);
 
 struct RingSlot
 {
@@ -93,9 +99,11 @@ struct RingSlot
     float degrees;
 };
 
-// Gormok: arcs to his sides 25+ yd out (Stomp reaches 20, clearance 24), off his drag line to the centre
+// Gormok: arcs to his sides 25+ yd out (Stomp reaches 20, clearance 24), off his drag line to the centre.
+// Melee past his release clearance, 80° off that line: at 90° they'd sit on the floor's edge.
 constexpr float GORMOK_SWAP_STAND = 9.0f;
-constexpr float GORMOK_MELEE_STAND = 9.0f;
+constexpr float GORMOK_MELEE_STAND = GORMOK_CLEARANCE;
+constexpr float GORMOK_MELEE_DEG = 80.0f;
 constexpr float GORMOK_CASTER_INNER = 25.0f;
 constexpr RingSlot GORMOK_CASTER_SLOTS[] = {
     {GORMOK_CASTER_INNER, 44.0f}, {GORMOK_CASTER_INNER, 62.0f}, {GORMOK_CASTER_INNER, 80.0f},
@@ -110,19 +118,26 @@ constexpr float WORM_LATTICE_STEP = 10.5f;
 constexpr float WORM_CASTER_ACIDMAW_MIN = WORM_SWEEP_CLEARANCE + 1.0f;
 constexpr float WORM_CASTER_DREADSCALE_MIN = WORM_MELEE_STACK_CLEARANCE;
 constexpr float WORM_CASTER_DREADSCALE_MAX = 36.0f;
+// Melee wait south of the worms' line, clear of both releases, then walk to their dealt stands. North of
+// it they'd land past the floor.
+constexpr float WORM_STAGING_MELEE_STAND = DREADSCALE_CLEARANCE;
+constexpr float WORM_STAGING_MELEE_DEG[] = {54.0f, 90.0f};  // off Dreadscale's line to Acidmaw
+constexpr float WORM_STAGING_MELEE_NEAR_COS = 0.5878f;      // cos 54°, the group nearer Acidmaw
 
-// Icehowl: one radius per role inside the breath spread's bands
-constexpr float ICEHOWL_MELEE_STAND = 11.0f;
-constexpr float ICEHOWL_HEALER_STAND = 17.5f;
-constexpr float ICEHOWL_RANGED_STAND = 23.0f;
+// Icehowl: one radius per role past his release clearance, ranged already in their spread band. The
+// others walk into theirs once he's out: 8.5 s before Ferocious Butt, 16 s before Whirl.
+constexpr float ICEHOWL_MELEE_STAND = ICEHOWL_CLEARANCE;
+constexpr float ICEHOWL_RANGED_STAND = ICEHOWL_SPREAD_RANGED_MAX;
+constexpr float ICEHOWL_HEALER_STAND = ICEHOWL_RANGED_STAND + 2.5f;
 constexpr float ICEHOWL_RANGED_ARC_DEG = 72.0f;
 constexpr float ICEHOWL_BEARING_EPSILON_DEG = 0.01f;
 
-// Jaraxxus: no spread, so the casters stack in front of him and melee stand a few steps back
+// Jaraxxus: no spread, so the casters stack in front of him and melee wait behind, both past his release
+// clearance
 constexpr float JARAXXUS_ADD_TANK_STAND = 8.0f;
-constexpr float JARAXXUS_MELEE_STAND = 9.0f;
+constexpr float JARAXXUS_MELEE_STAND = JARAXXUS_CLEARANCE;
 constexpr float JARAXXUS_MELEE_DEGREES[] = {0.0f, 25.0f, -25.0f, 50.0f, -50.0f};
-constexpr float JARAXXUS_STACK_AHEAD = 20.0f;
+constexpr float JARAXXUS_STACK_AHEAD = 21.0f;
 constexpr float JARAXXUS_STACK_RADIUS = 6.0f;
 constexpr float JARAXXUS_STACK_STEP = 3.0f;
 
@@ -173,23 +188,24 @@ constexpr RingSlot ANUBARAK_HEROIC_CASTER_SLOTS[] = {
 constexpr float LATTICE_EPSILON = 0.01f;
 
 static_assert(GORMOK_SWAP_STAND > STAGING_DUTY_STAND, "his tank stands nearest");
-static_assert(GORMOK_MELEE_STAND >= NON_DUTY_MIN && GORMOK_CASTER_INNER >= NON_DUTY_MIN, "gormok release margin");
-static_assert(WORM_MELEE_STAND >= NON_DUTY_MIN, "worm melee clear of Dreadscale's release");
-static_assert(LOC_DREADSCALE.x - LOC_ACIDMAW.x - WORM_MELEE_STAND >= NON_DUTY_MIN,
+static_assert(GORMOK_CASTER_INNER >= GORMOK_CLEARANCE, "gormok release margin");
+constexpr float WORM_RELEASE_GAP = LOC_DREADSCALE.x - LOC_ACIDMAW.x;
+static_assert(LOC_DREADSCALE.y - LOC_ACIDMAW.y < 0.01f && LOC_ACIDMAW.y - LOC_DREADSCALE.y < 0.01f,
+              "the worms' line runs along x");
+static_assert(WORM_RELEASE_GAP * WORM_RELEASE_GAP + WORM_STAGING_MELEE_STAND * WORM_STAGING_MELEE_STAND -
+                      2.0f * WORM_RELEASE_GAP * WORM_STAGING_MELEE_STAND * WORM_STAGING_MELEE_NEAR_COS >=
+                  ACIDMAW_CLEARANCE * ACIDMAW_CLEARANCE,
               "worm melee clear of Acidmaw's release");
-static_assert(WORM_CASTER_ACIDMAW_MIN >= NON_DUTY_MIN && WORM_CASTER_DREADSCALE_MIN >= NON_DUTY_MIN,
+static_assert(WORM_CASTER_ACIDMAW_MIN >= ACIDMAW_CLEARANCE && WORM_CASTER_DREADSCALE_MIN >= DREADSCALE_CLEARANCE,
               "worm casters clear of both releases");
-static_assert(LOC_DREADSCALE.x - LOC_ACIDMAW.x > 2.0f * STAGING_DUTY_STAND, "each worm's holder stands nearest it");
-static_assert(ICEHOWL_MELEE_STAND >= NON_DUTY_MIN, "icehowl release margin");
-static_assert(ICEHOWL_SPREAD_MELEE_MIN <= ICEHOWL_MELEE_STAND && ICEHOWL_MELEE_STAND <= ICEHOWL_SPREAD_MELEE_MAX,
-              "icehowl melee sit in the breath spread's band");
-static_assert(ICEHOWL_SPREAD_HEALER_MIN <= ICEHOWL_HEALER_STAND && ICEHOWL_HEALER_STAND <= ICEHOWL_SPREAD_HEALER_MAX,
-              "icehowl healers sit in the breath spread's band");
+static_assert(WORM_RELEASE_GAP > 2.0f * STAGING_DUTY_STAND, "each worm's holder stands nearest it");
+static_assert(ICEHOWL_MELEE_STAND >= ICEHOWL_CLEARANCE && ICEHOWL_RANGED_STAND >= ICEHOWL_CLEARANCE &&
+                  ICEHOWL_HEALER_STAND >= ICEHOWL_CLEARANCE,
+              "icehowl release margin");
 static_assert(ICEHOWL_SPREAD_RANGED_MIN <= ICEHOWL_RANGED_STAND && ICEHOWL_RANGED_STAND <= ICEHOWL_SPREAD_RANGED_MAX,
               "icehowl ranged sit in the breath spread's band");
 static_assert(JARAXXUS_ADD_TANK_STAND > STAGING_DUTY_STAND, "his main tank stands nearest");
-static_assert(JARAXXUS_MELEE_STAND >= NON_DUTY_MIN && JARAXXUS_STACK_AHEAD - JARAXXUS_STACK_RADIUS >= NON_DUTY_MIN,
-              "jaraxxus release margin");
+static_assert(JARAXXUS_STACK_AHEAD - JARAXXUS_STACK_RADIUS >= JARAXXUS_CLEARANCE, "jaraxxus release margin");
 static_assert(ANUBARAK_HEROIC_MELEE_STAND >= PROXIMITY_TANK_CLEARANCE + STAGING_RELEASE_MARGIN,
               "heroic anub'arak melee wait past the tanks and the release margin");
 
@@ -209,6 +225,8 @@ struct DealtStand
     // A forced attack's tank stand: the boss walks onto it from release
     bool duty = false;
     Position release;
+    // Around release, 0 for an arrival with none
+    float clearance = 0.0f;
 };
 
 struct StagingHold
@@ -260,6 +278,7 @@ struct DutyStand
     Position stand;
     bool forced;
     Position release;
+    float clearance;
 };
 
 // Slots shared by the roles: each role's order lists the slot indices it takes, in turn
@@ -340,10 +359,12 @@ void SortOrder(Layout& layout, StandRole role, std::function<float(Point2)> cons
                      { return key(PointOf(layout.slots[lhs])) < key(PointOf(layout.slots[rhs])); });
 }
 
-void AddForcedDuty(std::vector<DutyStand>& duties, Player* tank, char const* role, Point2 stand, Point2 release)
+void AddForcedDuty(std::vector<DutyStand>& duties, Player* tank, char const* role, Point2 stand, Point2 release,
+                   float clearance)
 {
     if (tank)
-        duties.push_back({tank->GetGUID(), role, At(stand, ARENA_STAND_Z), true, At(release, ARENA_STAND_Z)});
+        duties.push_back(
+            {tank->GetGUID(), role, At(stand, ARENA_STAND_Z), true, At(release, ARENA_STAND_Z), clearance});
 }
 
 void LayoutGormok(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
@@ -353,11 +374,11 @@ void LayoutGormok(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 
     std::vector<Player*> const roster = GetBeastsTankRoster(bot);
     AddForcedDuty(duties, roster.size() > 0 ? roster[0] : nullptr, "tank", Along(release, u, STAGING_DUTY_STAND),
-                  release);
+                  release, GORMOK_CLEARANCE);
     AddForcedDuty(duties, roster.size() > 1 ? roster[1] : nullptr, "swap", Along(release, u, GORMOK_SWAP_STAND),
-                  release);
+                  release, GORMOK_CLEARANCE);
 
-    for (float side : {90.0f, -90.0f})
+    for (float side : {GORMOK_MELEE_DEG, -GORMOK_MELEE_DEG})
         AddArenaSlot(layout, Along(release, Rotate(u, side), GORMOK_MELEE_STAND), {StandRole::Melee});
 
     for (RingSlot const& slot : GORMOK_CASTER_SLOTS)
@@ -375,11 +396,13 @@ void LayoutWorms(PlayerbotAI* botAI, std::vector<DutyStand>& duties, Layout& lay
     Point2 const stationaryStand = Along(acidmaw, Negate(w), STAGING_DUTY_STAND);
 
     std::vector<Player*> const roster = GetBeastsTankRoster(botAI->GetBot());
-    AddForcedDuty(duties, roster.size() > 0 ? roster[0] : nullptr, "mobile", mobileStand, dreadscale);
-    AddForcedDuty(duties, roster.size() > 1 ? roster[1] : nullptr, "stationary", stationaryStand, acidmaw);
+    AddForcedDuty(duties, roster.size() > 0 ? roster[0] : nullptr, "mobile", mobileStand, dreadscale,
+                  DREADSCALE_CLEARANCE);
+    AddForcedDuty(duties, roster.size() > 1 ? roster[1] : nullptr, "stationary", stationaryStand, acidmaw,
+                  ACIDMAW_CLEARANCE);
 
-    for (float side : {WORM_MELEE_GROUP_DEG, -WORM_MELEE_GROUP_DEG})
-        AddArenaSlot(layout, Along(dreadscale, Rotate(Negate(w), side), WORM_MELEE_STAND), {StandRole::Melee});
+    for (float side : WORM_STAGING_MELEE_DEG)
+        AddArenaSlot(layout, Along(dreadscale, Rotate(Negate(w), side), WORM_STAGING_MELEE_STAND), {StandRole::Melee});
 
     float const spewClear = WormSpewHalfArc(botAI) + WORM_SPEW_CLEAR_PAD;
     std::vector<Point2> const lattice =
@@ -412,7 +435,7 @@ void LayoutIcehowl(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 
     std::vector<Player*> const roster = GetBeastsTankRoster(bot);
     AddForcedDuty(duties, roster.size() > 0 ? roster[0] : nullptr, "tank", Along(release, n, STAGING_DUTY_STAND),
-                  release);
+                  release, ICEHOWL_CLEARANCE);
 
     // k = 0, 1, -1, 2, -2, ...
     std::vector<float> bearings;
@@ -465,13 +488,13 @@ void LayoutJaraxxus(PlayerbotAI* botAI, uint32 stage, std::vector<Player*> const
     for (Player* member : bots)
     {
         if (PlayerbotAI::IsMainTank(member))
-            AddForcedDuty(duties, member, "tank", Along(anchor, front, STAGING_DUTY_STAND), anchor);
+            AddForcedDuty(duties, member, "tank", Along(anchor, front, STAGING_DUTY_STAND), anchor, JARAXXUS_CLEARANCE);
         else if (PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
             AddForcedDuty(duties, member, "addtank0", Along(anchor, Rotate(front, 90.0f), JARAXXUS_ADD_TANK_STAND),
-                          anchor);
+                          anchor, JARAXXUS_CLEARANCE);
         else if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
             AddForcedDuty(duties, member, "addtank1", Along(anchor, Rotate(front, -90.0f), JARAXXUS_ADD_TANK_STAND),
-                          anchor);
+                          anchor, JARAXXUS_CLEARANCE);
     }
 
     for (float degrees : JARAXXUS_MELEE_DEGREES)
@@ -574,7 +597,7 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
         if (tank && (link == links.end() || post == 0))
         {
             Point2 const stand = ChampionTankStand(landing, centroid, inward, ChampionSideOffset(tankStands.size()));
-            AddForcedDuty(duties, member, "tank", stand, centroid);
+            AddForcedDuty(duties, member, "tank", stand, centroid, 0.0f);
             tankStands.push_back(stand);
         }
         else if (link != links.end())
@@ -583,7 +606,7 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
                                      ? ChampionChainPost(landing, centroid, inward, post, tank)
                                      : Along(Along(centroid, inward, CHAMPION_GRIP_POST), Rotate(inward, 90.0f),
                                              ChampionSideOffset(++spares));
-            duties.push_back({member->GetGUID(), "grip", At(stand, ARENA_STAND_Z), false, Position()});
+            duties.push_back({member->GetGUID(), "grip", At(stand, ARENA_STAND_Z), false, Position(), 0.0f});
         }
     }
 
@@ -642,7 +665,7 @@ void LayoutTwins(PlayerbotAI* botAI, std::vector<Player*> const& bots, std::vect
     {
         TwinDoorStand const stand = GetTwinDoorStand(member);
         if (stand.role != TwinDoorRole::None)
-            duties.push_back({member->GetGUID(), stand.label, stand.spot, false, Position()});
+            duties.push_back({member->GetGUID(), stand.label, stand.spot, false, Position(), 0.0f});
     }
 }
 
@@ -669,14 +692,14 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
     AnubarakPrepullTanks const tanks = GetAnubarakPrepullTanks(bot);
     Point2 const pickup = clearOfHim(PointOf(GetAnubarakPickupStand(bot)));
     if (!tanks.pickup.IsEmpty())
-        duties.push_back({tanks.pickup, "pickup", At(pickup, ANUBARAK_STAND_Z), false, Position()});
+        duties.push_back({tanks.pickup, "pickup", At(pickup, ANUBARAK_STAND_Z), false, Position(), 0.0f});
 
     char const* const sideNames[2] = {"side0", "side1"};
     for (uint8 side = 0; side < 2; ++side)
         if (!tanks.side[side].IsEmpty())
             duties.push_back({tanks.side[side], sideNames[side],
                               At(clearOfHim(PointOf(GetAnubarakPrepullSideStand(bot, side))), ANUBARAK_STAND_Z),
-                              false, Position()});
+                              false, Position(), 0.0f});
 
     auto const addSlot = [&](Point2 point, std::initializer_list<StandRole> roles)
     {
@@ -864,6 +887,7 @@ void Deal(PlayerbotAI* botAI, StagingState& state, ToCStagingBoss arrival, uint3
         dealt.role = duty.role;
         dealt.duty = duty.forced;
         dealt.release = duty.release;
+        dealt.clearance = duty.clearance;
     }
 
     std::vector<uint32> taken(layout.slots.size(), 0);
@@ -1038,19 +1062,20 @@ bool TwinsEssenceFirst(PlayerbotAI* botAI, ToCStagingBoss arrival)
     return GetEssencePortal(botAI->GetBot(), GetWantedEssence(botAI).colour) != nullptr;
 }
 
-// Forced attacks pick the nearest player, so a human between the stand and the release point gets it
-bool HumanNearerRelease(Player* bot, DealtStand const& dealt, Position const& spot)
+// A human inside the release clearance can take the forced attack; with no clearance (the champions),
+// one nearer the release than the stand
+bool HumanInsideRelease(Player* bot, DealtStand const& dealt, Position const& spot)
 {
     Group* group = bot->GetGroup();
     if (!dealt.duty || !group)
         return false;
 
-    float const standDistance = spot.GetExactDist2d(dealt.release);
+    float const radius = std::max(dealt.clearance, spot.GetExactDist2d(dealt.release));
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (member && IsRealPlayer(member) && member->IsAlive() && member->IsInMap(bot) &&
-            member->GetExactDist2d(dealt.release) < standDistance)
+            member->GetExactDist2d(dealt.release) < radius)
             return true;
     }
 
@@ -1064,7 +1089,7 @@ void NoteStage(Player* bot, StagingState& state, ToCStagingBoss arrival, DealtSt
     if (dealt)
     {
         label = std::string(ArrivalName(arrival)) + "." + dealt->role + " " + RaidObs::DescribeDerived(spot);
-        if (HumanNearerRelease(bot, *dealt, spot))
+        if (HumanInsideRelease(bot, *dealt, spot))
             label += " human";
     }
 

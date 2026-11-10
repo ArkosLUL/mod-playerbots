@@ -248,7 +248,7 @@ bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
     IcehowlBreathStand stand;
     if (!GetIcehowlBreathStand(botAI, stand) ||
         IsOnIcehowlBreathStand(stand, bot->GetPositionX(), bot->GetPositionY(), ICEHOWL_SPREAD_ARRIVE_DEG,
-                               ICEHOWL_SPREAD_ARRIVE))
+                               stand.arrive))
     {
         DropWalk();
         return false;
@@ -256,7 +256,7 @@ bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
 
     if (Position const* spot = WalkInFlight())
         if (IsOnIcehowlBreathStand(stand, spot->GetPositionX(), spot->GetPositionY(), ICEHOWL_SPREAD_TRIGGER_DEG,
-                                   ICEHOWL_SPREAD_TRIGGER))
+                                   stand.trigger))
             return true;
 
     // A breath is healable, so a pinning cast finishes first

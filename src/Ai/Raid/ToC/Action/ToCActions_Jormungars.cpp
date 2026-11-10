@@ -276,7 +276,7 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
 // the mobile duty through its stationary emerges.
 bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 {
-    float const stand = IsWormMobile(worm) ? WORM_TAUNT_STAND : WORM_MELEE_RANGE - 2.0f;
+    float const stand = IsWormMobile(worm) ? WORM_TAUNT_STAND : WORM_STATIONARY_MELEE_RANGE - 2.0f;
 
     Position chargeStart;
     Position chargeEnd;

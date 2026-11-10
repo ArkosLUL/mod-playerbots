@@ -89,13 +89,14 @@ constexpr uint32 SLIME_POOL_RISE_TICKS = 3;
 constexpr uint32 SPEW_NOTE_TTL_MS = 3500;
 // Melee on a worm with no dealt stand aim this far behind it, out of its front
 constexpr float MELEE_BEHIND = 6.0f;
+static_assert(MELEE_BEHIND <= WORM_STATIONARY_MELEE_RANGE - 1.0f, "the aim is inside either form's role reach");
 // The drag aims this far on from the tank, so the worm keeps facing the same way
 constexpr float DRAG_LEAD = 10.0f;
 // A pool counts at its size this far on: the next one drops 12 s on and starts the next drag anyway
 constexpr uint32 DRAG_POOL_HORIZON_TICKS = 15;
 // Off a pool or the stationary worm, the melee round the worm and the worm's offset from its tank. The
 // pad keeps the settled worm past the drag trigger, or the drag fires again as it stops.
-constexpr float DRAG_OFFSETS = WORM_MELEE_RANGE + WORM_TANK_OFFSET + WORM_POOL_CLEARANCE_PAD;
+constexpr float DRAG_OFFSETS = WORM_MELEE_RING + WORM_TANK_OFFSET + WORM_POOL_CLEARANCE_PAD;
 constexpr float DRAG_STATIONARY_CLEARANCE = WORM_SWEEP_CLEARANCE + DRAG_OFFSETS;
 // The sweep finds nothing for an empty list, and a Spew or cure plan can have no circle of its own.
 // Also turns down a spot the collision check pulled back onto the bot.
@@ -103,8 +104,9 @@ constexpr float FEET_CLEARANCE = 1.0f;
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
 // Roles come from strategies or talents, so a second is fresh enough and spares the talent walk
 constexpr uint32 ROLE_REFRESH_MS = 1000;
-// Spell::CheckRange adds melee range to a hunter's 5 yd minimum, 14.3 from a worm's centre; one spare
-constexpr float HUNTER_WORM_FLOOR = WORM_MELEE_RANGE + 6.0f;
+// Spell::CheckRange adds the melee range to a hunter's 5 yd minimum, so the floor follows the worm's form;
+// one spare
+constexpr float HUNTER_MIN_RANGE_PAD = 6.0f;
 // Every cure spot round a member this close to the up stationary worm sits inside its Sweep path circle
 constexpr float SWEEP_CURE_GAP = WORM_SWEEP_PATH_RADIUS - WORM_CURE_REACH + 1.0f;
 // Golden angle: consecutive guid counters land far apart round the circle
@@ -281,7 +283,7 @@ float AngleOffFacing(Position const& origin, float x, float y)
 // whoever stands between it and its tank, so its front half within melee reach counts too
 bool InSpewDanger(Position const& origin, float x, float y, float halfArc)
 {
-    return InCone(origin, x, y, halfArc) || (origin.GetExactDist2d(x, y) < WORM_MELEE_RANGE &&
+    return InCone(origin, x, y, halfArc) || (origin.GetExactDist2d(x, y) < WORM_MOBILE_MELEE_RANGE &&
                                              AngleOffFacing(origin, x, y) < static_cast<float>(M_PI) / 2.0f);
 }
 
@@ -1608,19 +1610,21 @@ std::function<bool(float, float)> RoleReach(PlayerbotAI* botAI, Player* bot, Jor
                 Position const at = target->GetPosition();
                 float const range =
                     botAI->GetRange("spell") + bot->GetCombatReach() + target->GetCombatReach() - 1.0f + slack;
-                std::vector<Position> worms;
+                std::vector<HazardCircle> floors;
                 if (bot->getClass() == CLASS_HUNTER)
                     for (WormRead const& worm : state.worms)
                         if (IsUp(worm))
-                            worms.push_back(worm.pos);
+                            floors.emplace_back(worm.pos, (worm.mobile ? WORM_MOBILE_MELEE_RANGE
+                                                                       : WORM_STATIONARY_MELEE_RANGE) +
+                                                              HUNTER_MIN_RANGE_PAD);
 
-                return [at, range, worms](float x, float y)
+                return [at, range, floors](float x, float y)
                 {
                     if (at.GetExactDist2d(x, y) > range)
                         return false;
 
-                    return std::none_of(worms.begin(), worms.end(), [x, y](Position const& worm)
-                                        { return worm.GetExactDist2d(x, y) < HUNTER_WORM_FLOOR; });
+                    return std::none_of(floors.begin(), floors.end(), [x, y](HazardCircle const& floor)
+                                        { return floor.first.GetExactDist2d(x, y) < floor.second; });
                 };
             }
             break;
@@ -1636,7 +1640,7 @@ std::function<bool(float, float)> RoleReach(PlayerbotAI* botAI, Player* bot, Jor
             {
                 Position const at = target->GetPosition();
                 float const reach =
-                    (IsWormEntry(target) ? WORM_MELEE_RANGE : bot->GetMeleeRange(target)) - 1.0f + slack;
+                    (IsWormEntry(target) ? WormMeleeRange(target) : bot->GetMeleeRange(target)) - 1.0f + slack;
                 return [at, reach](float x, float y) { return at.GetExactDist2d(x, y) <= reach; };
             }
             break;
@@ -1792,6 +1796,8 @@ bool IsWormMobile(Unit* worm)
     return !ShowsMobile(worm);
 }
 
+float WormMeleeRange(Unit* worm) { return IsWormMobile(worm) ? WORM_MOBILE_MELEE_RANGE : WORM_STATIONARY_MELEE_RANGE; }
+
 float WormSpewHalfArc(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1827,9 +1833,9 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
         if (IsUp(other) && !other.mobile && other.guid != worm->GetGUID())
             stationary = &other;
 
-    bool needed = stationary && worm->GetExactDist2d(stationary->pos) < WORM_SWEEP_CLEARANCE + WORM_MELEE_RANGE;
+    bool needed = stationary && worm->GetExactDist2d(stationary->pos) < WORM_SWEEP_CLEARANCE + WORM_MELEE_RING;
     for (WormPool const& pool : state->pools)
-        if (worm->GetExactDist2d(pool.pos) < pool.radiusSoon + WORM_MELEE_RANGE)
+        if (worm->GetExactDist2d(pool.pos) < pool.radiusSoon + WORM_MELEE_RING)
             needed = true;
 
     Map* map = bot->FindMap();
