@@ -6,6 +6,7 @@
 
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
+#include "RaidCombatHelpers.h"
 
 // Keep tanks anchored on Anub'arak and his burrowers instead of drifting with the combat formation
 class AnubarakControlTankMovementMultiplier : public Multiplier
@@ -24,6 +25,12 @@ public:
     AnubarakProtectSpikeKiteMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "anubarak protect spike kite multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    // Fixed by the action's type and name, so worked out once per action
+    static bool HeldWhileMarked(Action* action);
+
+    RaidActionCache<bool> held;
 };
 
 // A DPS bot's damage on him, and its area damage within 30 yd of him, while its threat cap latch holds.

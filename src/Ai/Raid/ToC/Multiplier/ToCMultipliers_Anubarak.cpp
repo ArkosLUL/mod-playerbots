@@ -137,34 +137,33 @@ float AnubarakControlTankMovementMultiplier::GetValue(Action* action)
     return tankingAnubarak ? 0.0f : 1.0f;
 }
 
-float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
+bool AnubarakProtectSpikeKiteMultiplier::HeldWhileMarked(Action* action)
 {
-    if (!action)
-        return 1.0f;
-
     // Feign Death hands the spike on at its current speed; the kiter immunity casts it only as a last resort
     if (action->getName() == "feign death")
-        return bot->HasAura(SPELL_MARK) && AnubarakEngaged(botAI) ? 0.0f : 1.0f;
+        return true;
 
     // Spell movers: Blink and Disengage off a scarab would throw the kiter 15-20 yd the kite never chose.
     // The kite casts its own Blink directly, so this never holds that one.
     bool const spellMover = dynamic_cast<CastReachTargetSpellAction*>(action) ||
                             dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action);
-    if (!spellMover)
-    {
-        if (!dynamic_cast<MovementAction*>(action) || dynamic_cast<AnubarakKiteSpikeToPermafrostAction*>(action))
-            return 1.0f;
+    if (spellMover)
+        return true;
 
-        // Attack actions, but these holds walk the tank or the DK to its spot
-        bool const walkingHold = dynamic_cast<AnubarakMainTankHoldBossAction*>(action) ||
-                                 dynamic_cast<AnubarakAssistTankHoldBurrowerAction*>(action) ||
-                                 dynamic_cast<AnubarakSideTankReadyAction*>(action) ||
-                                 dynamic_cast<AnubarakGripFrostSphereAction*>(action);
-        if (dynamic_cast<AttackAction*>(action) && !walkingHold)
-            return 1.0f;
-    }
+    if (!dynamic_cast<MovementAction*>(action) || dynamic_cast<AnubarakKiteSpikeToPermafrostAction*>(action))
+        return false;
 
-    if (!bot->HasAura(SPELL_MARK))
+    // Attack actions, but these holds walk the tank or the DK to its spot
+    bool const walkingHold = dynamic_cast<AnubarakMainTankHoldBossAction*>(action) ||
+                             dynamic_cast<AnubarakAssistTankHoldBurrowerAction*>(action) ||
+                             dynamic_cast<AnubarakSideTankReadyAction*>(action) ||
+                             dynamic_cast<AnubarakGripFrostSphereAction*>(action);
+    return !dynamic_cast<AttackAction*>(action) || walkingHold;
+}
+
+float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
+{
+    if (!action || !held.Get(action, [action] { return HeldWhileMarked(action); }) || !bot->HasAura(SPELL_MARK))
         return 1.0f;
 
     return AnubarakEngaged(botAI) ? 0.0f : 1.0f;
