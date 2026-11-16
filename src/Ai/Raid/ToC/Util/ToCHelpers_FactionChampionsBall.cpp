@@ -251,24 +251,41 @@ bool IsGripDk(Player* player)
     return memberAI && FactionChampionsGripTarget(memberAI, stand) != nullptr;
 }
 
-// Champions with their trinket up inside the spell's reach of the caster. None while one the grip guard holds
-// is anywhere near it: a fear or freeze ends a pull where it catches the champion.
-std::vector<Unit*> TrinketsInReach(PlayerbotAI* botAI, Player* caster, SpellInfo const* info,
-                                   std::vector<Unit*> const& champions)
+// Champions with their trinket up inside the spell's reach of the caster, also listed into inReach if given.
+// None while one the grip guard holds is anywhere near it: a fear or freeze ends a pull where it catches it.
+size_t CollectTrinketsInReach(PlayerbotAI* botAI, Player* caster, SpellInfo const* info,
+                              std::vector<Unit*> const& champions, std::vector<Unit*>* inReach)
 {
-    std::vector<Unit*> inReach;
+    size_t count = 0;
     float const radius = SpellRadius(info, caster);
     for (Unit* champion : champions)
     {
         float const distance = caster->GetExactDist2d(champion);
         if (distance <= radius + OPENER_MARGIN && FactionChampionsGripGuarded(botAI, champion))
-            return {};
+        {
+            if (inReach)
+                inReach->clear();
+
+            return 0;
+        }
 
         if (distance <= radius - OPENER_MARGIN && FactionChampionsTrinketReady(champion) &&
             !champion->IsImmunedToSpell(info))
-            inReach.push_back(champion);
+        {
+            ++count;
+            if (inReach)
+                inReach->push_back(champion);
+        }
     }
 
+    return count;
+}
+
+std::vector<Unit*> TrinketsInReach(PlayerbotAI* botAI, Player* caster, SpellInfo const* info,
+                                   std::vector<Unit*> const& champions)
+{
+    std::vector<Unit*> inReach;
+    CollectTrinketsInReach(botAI, caster, info, champions, &inReach);
     return inReach;
 }
 
@@ -299,7 +316,7 @@ void UpdateOpener(BallState& state, PlayerbotAI* botAI, std::vector<Player*> con
             if (!info)
                 continue;
 
-            size_t const count = TrinketsInReach(botAI, member, info, champions).size();
+            size_t const count = CollectTrinketsInReach(botAI, member, info, champions, nullptr);
             // the holder keeps a tie, so the duty doesn't hop between two bots
             bool const better = count > bestCount || (count == bestCount && member->GetGUID() == holding);
             if (count >= OPENER_MIN_CHAMPIONS && better)
