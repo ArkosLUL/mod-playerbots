@@ -229,6 +229,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 InstanceScript* IccInstance(Player* bot)
 {
     return bot && bot->IsInWorld() && bot->GetMapId() == ICC_MAP_ID ? bot->GetInstanceScript() : nullptr;

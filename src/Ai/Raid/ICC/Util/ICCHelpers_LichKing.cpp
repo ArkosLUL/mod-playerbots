@@ -459,6 +459,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 std::string Tag(char const* rule, ObjectGuid const& guid)
 {
     return guid ? std::string(rule) + " " + std::to_string(guid.GetCounter()) : std::string(rule);

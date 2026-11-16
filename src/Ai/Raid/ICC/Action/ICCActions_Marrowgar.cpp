@@ -32,6 +32,13 @@ void NoteDodge(Player* bot, std::string const& branch)
         RaidObs::NoteDerived(bot, "lm.dodge", branch);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDodge(Player* bot, char const* branch)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "lm.dodge", branch);
+}
+
 bool ClearOf(Position const& spot, std::vector<Position> const& circles, float radius)
 {
     return std::none_of(circles.begin(), circles.end(),

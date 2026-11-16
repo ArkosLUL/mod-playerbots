@@ -268,6 +268,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 std::string DescribeGuid(Unit* unit) { return unit ? RaidObs::DescribeAssignment(unit->GetGUID()) : "none"; }
 
 std::vector<Player*> MembersOnMap(Player* bot)

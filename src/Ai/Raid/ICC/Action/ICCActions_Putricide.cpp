@@ -43,6 +43,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 MovementPriority Below(MovementPriority priority)
 {
     return priority == MovementPriority::MOVEMENT_IDLE ? priority
