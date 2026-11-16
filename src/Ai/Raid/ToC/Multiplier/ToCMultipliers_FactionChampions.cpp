@@ -21,36 +21,38 @@ namespace
 // Bounces and tank splash the generic area test misses
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
                                           "avenger's shield", "blood boil", "consecration", "swipe (bear)"};
+}  // namespace
 
 // Harmful splash only: area buffs like Battle Shout land on the raid
-bool Splashes(PlayerbotAI* botAI, Action* action)
+bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
 {
+    RaidSplashCache::Facts& facts = _splash.Of(action);
+    bool const ownSplash = _ownSplash.Get(action, [action] { return OWN_SPLASH.count(action->getName()) != 0; });
+
     // the summon spell reads as positive, but what it drops burns every champion round it
-    if (OWN_SPLASH.count(action->getName()) || SummonSplashes(action))
+    if (ownSplash || facts.summon)
         return true;
 
-    if (!SpellSplashes(botAI, action))
+    if (!SpellSplashes(botAI, action, _splash))
         return false;
 
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast)
+    if (!facts.cast)
         return true;
 
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     return !info || !info->IsPositive();
 }
-}  // namespace
 
 // Also every own splash: a Death and Decay or Consecration on the pack breaks every Polymorph and Fear in
 // it, and Pestilence puts a DoT on each champion, which rules them out for both
 float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
 {
     // AoE heals land on the raid, not the champions, so they stay
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
+    if (!action || _splash.Of(action).heal)
         return 1.0f;
 
-    if (action->getThreatType() != Action::ActionThreatType::Aoe && !Splashes(botAI, action))
+    if (!_splash.Of(action).aoeThreat && !Splashes(action))
         return 1.0f;
 
     return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) ? 0.0f : 1.0f;

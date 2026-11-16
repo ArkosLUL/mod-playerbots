@@ -6,6 +6,8 @@
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
 #include "RaidBurstWindow.h"
+#include "RaidCombatHelpers.h"
+#include "RaidSplash.h"
 
 // Single-target only: Champion's Aegis 68595 is a flat -75% to AoE damage on every champion
 class FactionChampionsSuppressAoeMultiplier : public Multiplier
@@ -14,6 +16,12 @@ public:
     FactionChampionsSuppressAoeMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions suppress aoe multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    bool Splashes(Action* action);
+
+    RaidSplashCache _splash;
+    RaidActionCache<bool> _ownSplash;
 };
 
 // The script re-seeds threat every ~9 s, so a redirect onto the main tank buys nothing
