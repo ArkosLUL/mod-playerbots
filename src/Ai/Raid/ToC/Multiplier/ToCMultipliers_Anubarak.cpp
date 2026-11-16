@@ -54,16 +54,16 @@ bool IsSphereCrowdControl(std::string const& name)
 
 // Damage that lands late (any DoT, a hit of its own or not, a channel) or on everything round the sphere:
 // a sphere that dies late lands wherever it drifted, and a splash can down a second one
-bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action)
+bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action, RaidSplashCache& splash)
 {
-    if (IsRaidAreaDamage(botAI, action))
+    if (IsRaidAreaDamage(botAI, action, splash))
         return true;
 
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast)
+    RaidSplashCache::Facts& facts = splash.Of(action);
+    if (!facts.cast)
         return false;
 
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info)
         return false;
@@ -93,13 +93,13 @@ bool MovesBurrower(std::string const& name)
 }
 
 // Interrupts and stuns, for a burrower's Shadow Strike
-bool StopsCast(PlayerbotAI* botAI, Action* action)
+bool StopsCast(PlayerbotAI* botAI, Action* action, RaidSplashCache& splash)
 {
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast)
+    RaidSplashCache::Facts& facts = splash.Of(action);
+    if (!facts.cast)
         return false;
 
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info)
         return false;
@@ -182,7 +182,7 @@ float AnubarakThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
+    if (IsRaidAreaDamage(botAI, action, splash) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;
@@ -210,7 +210,7 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (sphere != GetAnubarakDutySphere(bot))
         return 0.0f;
 
-    return SlowOrSpreadOnSphere(botAI, action) ? 0.0f : 1.0f;
+    return SlowOrSpreadOnSphere(botAI, action, splash) ? 0.0f : 1.0f;
 }
 
 float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
@@ -223,7 +223,7 @@ float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
     if (aimed && AnubarakBurrowerThreatCapped(bot, aimed))
         return 0.0f;
 
-    if (IsRaidAreaDamage(botAI, action) &&
+    if (IsRaidAreaDamage(botAI, action, splash) &&
         (AnubarakBurrowerThreatCappedNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH) ||
          (aimed && AnubarakBurrowerThreatCappedNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH))))
         return 0.0f;
@@ -245,7 +245,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
     // Weakness stacks come with it
     if (IsAnubarakTankPlayer(bot))
-        return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action) &&
+        return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action, splash) &&
                        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, false)
                    ? 0.0f
                    : 1.0f;
@@ -254,7 +254,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     Unit* target = action->GetTarget();
     // Before its side tank has held it a while, a burrower takes the threat of whatever hits it. Melee
     // stand next to the held ones, so theirs also waits near one they have 60% of its tank's threat on.
-    if (IsRaidAreaDamage(botAI, action))
+    if (IsRaidAreaDamage(botAI, action, splash))
     {
         Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
         bool const melee = PlayerbotAI::IsMelee(bot);
@@ -275,7 +275,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     if (MovesBurrower(action->getName()))
         return 0.0f;
 
-    if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action))
+    if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action, splash))
         return 1.0f;
 
     return burrower == GetAnubarakDpsTarget(botAI) ? 1.0f : 0.0f;
@@ -288,7 +288,7 @@ float AnubarakSideTankAreaGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return AnubarakSideTankAreaAllowed(botAI, action->getName(), action->GetTarget(),
-                                       IsRaidAreaDamage(botAI, action))
+                                       IsRaidAreaDamage(botAI, action, splash))
                ? 1.0f
                : 0.0f;
 }
