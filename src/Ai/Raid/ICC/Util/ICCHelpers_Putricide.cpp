@@ -1396,7 +1396,7 @@ float ShareHealthLeftPct(Player* member, Creature* boss, uint8 cutPct, Player* n
     float const swings = std::ceil(static_cast<float>(SHARE_WINDOW_MS) / attackMs);
     float const left = static_cast<float>(member->GetHealth()) - swings * perSwing;
     float const pct = std::max(0.0f, left * 100.0f / std::max<uint32>(member->GetMaxHealth(), 1));
-    if (noter == member)
+    if (noter == member && RaidObs::Active())
     {
         uint32 const step = static_cast<uint32>(pct) / SHARE_HEALTH_STEP * SHARE_HEALTH_STEP;
         NoteDerived(member, "pp.sharehp", std::to_string(step));

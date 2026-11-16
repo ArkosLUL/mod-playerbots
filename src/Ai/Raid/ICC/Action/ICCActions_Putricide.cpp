@@ -130,7 +130,9 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
     std::string branch;
     if (!FindPpDodgeSpot(botAI, spot, interrupt, branch))
     {
-        NoteDerived(bot, "pp.dodge", std::string(kind) + " none");
+        if (RaidObs::Active())
+            NoteDerived(bot, "pp.dodge", std::string(kind) + " none");
+
         return false;
     }
 
@@ -141,12 +143,18 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
     float const travel = bot->GetExactDist2d(spot);
     if (!WalkTo(spot, MovementPriority::MOVEMENT_FORCED))
     {
-        NoteDerived(bot, "pp.dodge", std::string(kind) + " locked");
+        if (RaidObs::Active())
+            NoteDerived(bot, "pp.dodge", std::string(kind) + " locked");
+
         return false;
     }
 
-    std::string const yards = std::to_string(static_cast<int32>(std::lround(travel)));
-    NoteDerived(bot, "pp.dodge", std::string(kind) + " " + branch + " " + yards);
+    if (RaidObs::Active())
+    {
+        std::string const yards = std::to_string(static_cast<int32>(std::lround(travel)));
+        NoteDerived(bot, "pp.dodge", std::string(kind) + " " + branch + " " + yards);
+    }
+
     return true;
 }
 
