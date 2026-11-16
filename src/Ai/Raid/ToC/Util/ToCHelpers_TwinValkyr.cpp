@@ -1159,8 +1159,9 @@ TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI)
         return {};
 
     TwinEssenceWant const want = WantedEssence(botAI);
-    RaidObs::NoteDerived(botAI->GetBot(), "tv.essence",
-                         std::string(ReasonName(want.reason)) + ":" + ColourName(want.colour));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(botAI->GetBot(), "tv.essence",
+                             std::string(ReasonName(want.reason)) + ":" + ColourName(want.colour));
     return want;
 }
 
@@ -1327,9 +1328,13 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
         }
     }
 
-    std::string const probe =
-        target ? std::string(TwinColourOf(target) == TwinColour::Light ? "fjola" : "eydis") + ":" + rule : "none";
-    RaidObs::NoteDerived(bot, "tv.target", probe);
+    if (RaidObs::Active())
+    {
+        std::string const probe =
+            target ? std::string(TwinColourOf(target) == TwinColour::Light ? "fjola" : "eydis") + ":" + rule : "none";
+        RaidObs::NoteDerived(bot, "tv.target", probe);
+    }
+
     return target;
 }
 
