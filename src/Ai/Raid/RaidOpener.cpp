@@ -83,8 +83,7 @@ OpenerState const* ReadOpener(PlayerbotAI* botAI, RaidOpenerConfig const& config
     Group* group = bot->GetGroup();
     std::vector<uint32> const& entries = config.liveBosses(botAI);
 
-    // One sweep for all entries, read entry by entry in config order: the same bosses in the same
-    // order as one sweep per entry
+    // One sweep for every entry, read back entry by entry in config order
     std::list<Creature*> creatures;
     if (!entries.empty())
         bot->GetCreatureListWithEntryInGrid(creatures, entries, BOSS_SEARCH_RADIUS);

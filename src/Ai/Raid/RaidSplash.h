@@ -17,7 +17,7 @@ class CastSpellAction;
 class PlayerbotAI;
 
 // What IsRaidAreaDamage and SpellSplashes read off an action, worked out once per action. One per
-// multiplier, see RaidActionCache.
+// multiplier: an Action* is only unique inside one bot's AI.
 class RaidSplashCache
 {
 public:
