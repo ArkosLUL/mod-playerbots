@@ -64,6 +64,16 @@ public:
     FactionChampionsLateInterruptMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions late interrupt multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        CastSpellAction* cast = nullptr;
+        bool healerKick = false;  // named "... on enemy healer"
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

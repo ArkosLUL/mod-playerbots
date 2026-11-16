@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 // Melee hold rather than walk into a Bladestorm or Hellfire around their target, the dodge would only
 // walk them back out
@@ -52,6 +53,16 @@ public:
     FactionChampionsGripGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions grip guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool petToggle = false;
+        CastSpellAction* cast = nullptr;  // null for a pet toggle
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 void AddToCFactionChampionsDefenceMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

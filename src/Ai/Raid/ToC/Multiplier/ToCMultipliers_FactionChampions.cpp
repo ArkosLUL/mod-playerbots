@@ -116,16 +116,24 @@ bool EndsWith(std::string const& text, std::string const& tail)
 
 float FactionChampionsLateInterruptMultiplier::GetValue(Action* action)
 {
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.cast = dynamic_cast<CastSpellAction*>(action);
+        facts.healerKick = facts.cast && EndsWith(action->getName(), " on enemy healer");
+        return facts;
+    };
+
+    Facts& facts = _facts.Get(action, classify);
+    if (!facts.cast || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    uint32 const spellId = AI_VALUE2(uint32, "spell id", cast->getSpell());
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info)
         return 1.0f;
 
-    if (!Interrupts(info) && !EndsWith(action->getName(), " on enemy healer"))
+    if (!Interrupts(info) && !facts.healerKick)
         return FactionChampionsCounterspellHold(botAI) && info->CalcCastTime(bot) > 0 ? 0.0f : 1.0f;
 
     // GetTarget last, it scans every attacker

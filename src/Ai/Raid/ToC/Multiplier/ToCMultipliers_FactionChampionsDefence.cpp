@@ -68,18 +68,25 @@ float FactionChampionsPurgeGuardMultiplier::GetValue(Action* action)
 
 float FactionChampionsGripGuardMultiplier::GetValue(Action* action)
 {
-    bool const petToggle = dynamic_cast<TogglePetSpellAutoCastAction*>(action);
-    CastSpellAction* cast = petToggle ? nullptr : dynamic_cast<CastSpellAction*>(action);
-    if (!petToggle && !cast)
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.petToggle = dynamic_cast<TogglePetSpellAutoCastAction*>(action);
+        facts.cast = facts.petToggle ? nullptr : dynamic_cast<CastSpellAction*>(action);
+        return facts;
+    };
+
+    Facts& facts = _facts.Get(action, classify);
+    if (!facts.petToggle && !facts.cast)
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) || !FactionChampionsGripGuardActive(botAI))
         return 1.0f;
 
-    if (petToggle)
+    if (facts.petToggle)
         return 0.0f;
 
-    uint32 const spellId = AI_VALUE2(uint32, "spell id", cast->getSpell());
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info || !FactionChampionsSpellHoldsTarget(spellId))
         return 1.0f;
