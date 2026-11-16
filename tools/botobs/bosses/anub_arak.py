@@ -8653,15 +8653,19 @@ def planner_chase(world: KiteWorld, rules: dict, watch: tuple, run: PlannerRun, 
     where `track` ends. Stops at the first patch the spike fails on and, with `catch_from` set, postCatchS past
     the first catch counted from that tick on, or from `caught`, since Impale doesn't hand the spike on.
     Returns that catch's tick, -1 with none."""
+    # hot loop, the tests run it hundreds of thousands of times: patches unpacked once, min() as plain compares.
+    # keep the float math in this order, the tests compare exact text.
     reach, inside, grace, need = watch
-    patches = world.patches
+    hypot = math.hypot
+    spots = [(k, patch[0], patch[1], reach[k], inside[k]) for k, patch in enumerate(world.patches)]
+    slow = [(patch[0], patch[1]) for patch in world.patches if not patch[4]]
     gather = world.gather
-    slow = [(patch[0], patch[1]) for patch in patches if not patch[4]]
     slow_reach, cap, clearance = rules["slowReach"], rules["marginCap"], rules["gatherClearance"]
     catch_yd = rules["impaleReach"] + rules["catchMargin"]
     post = to_tick(rules["postCatchS"])
     step_yd = world.speed * CATCH_TICK_S
-    spike, margin = run.spikes[-1], run.margin[-1]
+    spikes, margins, left = run.spikes, run.margin, run.left
+    spike, margin = spikes[-1], margins[-1]
     for i in range(first, ticks):
         if caught >= 0 and i >= caught + post:
             break
@@ -8670,33 +8674,41 @@ def planner_chase(world: KiteWorld, rules: dict, watch: tuple, run: PlannerRun, 
         tick = i + 1
         if tick >= len(track):
             length = step_yd
-            if any(math.hypot(kx - px, ky - py) < slow_reach for px, py in slow):
-                length *= KITESIM_SLOW
+            for px, py in slow:
+                if hypot(kx - px, ky - py) < slow_reach:
+                    length *= KITESIM_SLOW
+                    break
             track.append(on_floor(*mover(kx, ky, length, i * CATCH_TICK_S), rules))
-        run.spikes.append(spike)
+        spikes.append(spike)
         sx, sy = spike[0], spike[1]
-        margin = min(margin, cap)
-        for k, patch in enumerate(patches):
-            gap = math.hypot(sx - patch[0], sy - patch[1])
-            if k != planned or tick < turn_tick:
-                margin = min(margin, gap - reach[k])
-            hit = gap <= reach[k]
-            if inside[k] and not hit and run.left[k] < 0:
-                run.left[k] = tick
-            if hit and run.fail_tick < 0 and (not inside[k] or run.left[k] >= 0 or tick >= grace):
+        if cap < margin:
+            margin = cap
+        before_turn = tick < turn_tick
+        for k, px, py, yards, starts_inside in spots:
+            gap = hypot(sx - px, sy - py)
+            if k != planned or before_turn:
+                spare = gap - yards
+                if spare < margin:
+                    margin = spare
+            hit = gap <= yards
+            if starts_inside and not hit and left[k] < 0:
+                left[k] = tick
+            if hit and run.fail_tick < 0 and (not starts_inside or left[k] >= 0 or tick >= grace):
                 run.fail_tick, run.fail_patch = tick, k
                 run.fail_planned = k == planned and tick >= turn_tick
         if gather is not None:
-            gap = math.hypot(sx - gather[0], sy - gather[1])
-            margin = min(margin, gap - clearance)
+            gap = hypot(sx - gather[0], sy - gather[1])
+            spare = gap - clearance
+            if spare < margin:
+                margin = spare
             if run.raid_tick < 0 and gap < need:
                 run.raid_tick = tick
-        run.margin.append(margin)
+        margins.append(margin)
         if run.fail_tick >= 0:
             return caught
         if caught < 0 and catch_from is not None and tick >= catch_from:
             kx, ky = track[tick]
-            if math.hypot(sx - kx, sy - ky) <= catch_yd:
+            if hypot(sx - kx, sy - ky) <= catch_yd:
                 caught = tick
     return caught
 
