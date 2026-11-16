@@ -56,7 +56,15 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    // An action's name never changes, so neither do these
+    struct Names
+    {
+        bool starfall = false;
+        bool crowdControl = false;
+    };
+
     RaidSplashCache splash;
+    RaidActionCache<Names> names;
 };
 
 // A non-tank's damage on a burrower only on its own dps pick, so a multidot doesn't pull a loose one
@@ -72,7 +80,15 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    // An action's name never changes, so neither do these
+    struct Names
+    {
+        bool bladestorm = false;
+        bool mover = false;
+    };
+
     RaidSplashCache splash;
+    RaidActionCache<Names> names;
 };
 
 // A DPS bot's damage on a burrower it has 90% of the side tank's threat on, until under 80%, and its

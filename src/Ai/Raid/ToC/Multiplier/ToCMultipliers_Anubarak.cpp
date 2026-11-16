@@ -193,9 +193,15 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (!action || !AnubarakEngaged(botAI))
         return 1.0f;
 
+    Names const& named = names.Get(action,
+                                   [action]
+                                   {
+                                       std::string const name = action->getName();
+                                       return Names{name == "starfall", IsSphereCrowdControl(name)};
+                                   });
     // Starfall's stars find the spheres overhead, and heroic has six for the pull
     Map* map = bot->GetMap();
-    if (map && map->IsHeroic() && action->getName() == "starfall")
+    if (map && map->IsHeroic() && named.starfall)
         return 0.0f;
 
     // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
@@ -204,7 +210,7 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (!sphere || sphere->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE))
         return 1.0f;
 
-    if (IsSphereCrowdControl(action->getName()))
+    if (named.crowdControl)
         return 0.0f;
 
     if (sphere != GetAnubarakDutySphere(bot))
@@ -236,8 +242,14 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !AnubarakEngaged(botAI))
         return 1.0f;
 
+    Names const& named = names.Get(action,
+                                   [action]
+                                   {
+                                       std::string const name = action->getName();
+                                       return Names{name == "bladestorm", MovesBurrower(name)};
+                                   });
     // Its pick can move to a burrower mid-spin, and the stand walks it into that side's pack
-    if (action->getName() == "bladestorm" &&
+    if (named.bladestorm &&
         (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false) ||
          AnubarakLooseBurrowerReaches(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_RADIUS, ANUBARAK_BLADESTORM_S)))
         return 0.0f;
@@ -272,7 +284,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     if (!burrower || burrower->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER))
         return 1.0f;
 
-    if (MovesBurrower(action->getName()))
+    if (named.mover)
         return 0.0f;
 
     if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action, splash))
