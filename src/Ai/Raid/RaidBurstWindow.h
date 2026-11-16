@@ -11,6 +11,7 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 class Action;
 class PlayerbotAI;
@@ -38,9 +39,16 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    struct Facts
+    {
+        bool burst = false;  // a burst cooldown, the priest's mana-return Shadowfiend aside
+        bool lust = false;
+    };
+
     Window _window;
     uint32 cachedAtMs = 0;
     RaidBurstWindow cachedValue;
+    RaidActionCache<Facts> _facts;
 };
 
 #endif

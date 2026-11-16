@@ -38,7 +38,7 @@ bool CompetesWithChargeDodge(Action* action)
 
 float IcehowlChargeGuardMultiplier::GetValue(Action* action)
 {
-    if (!CompetesWithChargeDodge(action))
+    if (!_competes.Get(action, [action] { return CompetesWithChargeDodge(action); }))
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))

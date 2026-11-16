@@ -6,6 +6,8 @@
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
 #include "RaidBurstWindow.h"
+#include "RaidCombatHelpers.h"
+#include "RaidSplash.h"
 
 // Single-target only: Champion's Aegis 68595 is a flat -75% to AoE damage on every champion
 class FactionChampionsSuppressAoeMultiplier : public Multiplier
@@ -14,6 +16,12 @@ public:
     FactionChampionsSuppressAoeMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions suppress aoe multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    bool Splashes(Action* action);
+
+    RaidSplashCache _splash;
+    RaidActionCache<bool> _ownSplash;
 };
 
 // The script re-seeds threat every ~9 s, so a redirect onto the main tank buys nothing
@@ -23,6 +31,15 @@ public:
     FactionChampionsThreatRedirectVetoMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions threat redirect veto multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool mainTankRedirect = false;
+        bool tricks = false;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 class FactionChampionsAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
@@ -45,6 +62,15 @@ public:
     FactionChampionsCcGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions cc guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool classCc = false;
+        bool spreadDot = false;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 // As in PvP: a champion's cast-time spell gets kicked in its last LATE_INTERRUPT_MS so the cast is wasted,
@@ -56,6 +82,16 @@ public:
     FactionChampionsLateInterruptMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions late interrupt multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        CastSpellAction* cast = nullptr;
+        bool healerKick = false;  // named "... on enemy healer"
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 void AddToCFactionChampionsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

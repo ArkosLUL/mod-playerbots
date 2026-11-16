@@ -40,3 +40,35 @@ bool SpellSplashes(PlayerbotAI* botAI, Action* action)
     SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     return spellInfo && (spellInfo->IsTargetingArea() || spellInfo->IsAffectingArea());
 }
+
+RaidSplashCache::Facts& RaidSplashCache::Of(Action* action)
+{
+    return _facts.Get(action,
+                      [action]
+                      {
+                          Facts facts;
+                          facts.aoeThreat = action->getThreatType() == Action::ActionThreatType::Aoe;
+                          facts.multiTarget = MULTI_TARGET_ACTIONS.count(action->getName()) != 0;
+                          facts.summon = SummonSplashes(action);
+                          facts.cast = dynamic_cast<CastSpellAction*>(action);
+                          facts.heal = dynamic_cast<CastHealingSpellAction*>(action) != nullptr;
+                          return facts;
+                      });
+}
+
+bool SpellSplashes(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache)
+{
+    if (!action)
+        return false;
+
+    RaidSplashCache::Facts& facts = cache.Of(action);
+    if (facts.summon)
+        return true;
+
+    if (!facts.cast || facts.heal)
+        return false;
+
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
+    SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return spellInfo && (spellInfo->IsTargetingArea() || spellInfo->IsAffectingArea());
+}

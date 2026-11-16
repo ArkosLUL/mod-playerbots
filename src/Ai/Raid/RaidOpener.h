@@ -14,6 +14,7 @@
 #include "Define.h"
 #include "Multiplier.h"
 #include "RaidRedirectThreat.h"
+#include "RaidSplash.h"
 #include "Trigger.h"
 
 class Player;
@@ -117,6 +118,7 @@ public:
 
 private:
     RaidOpenerConfig const& _config;
+    RaidSplashCache _splash;
 };
 
 #endif

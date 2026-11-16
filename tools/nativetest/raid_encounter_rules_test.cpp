@@ -135,6 +135,68 @@ void ExclusiveBlocksAttacksToo()
     CHECK(RuleCares(ride, DPS_ASSIST, "dps assist"));
 }
 
+void CaresBitsMatchEachSlot()
+{
+    std::vector<Rule> const rules = {
+        OwnMovement({"boss dodge", "boss position"}),
+        OwnMovement({}, Family::Attack | Family::Reach | Family::ReachHeal),
+        OwnTargeting(),
+        OwnTargeting(Family::DpsAssist | Family::DebuffOnAttacker),
+        Block(Family::Charge | Family::Blink, {"sprint", "boss scorch"}),
+        Exclusive(),
+        Exclusive(Family::Melee, {"boss board"}),
+        Block(0, {"fireball"}),
+    };
+    std::vector<FamilyMask> const handWritten = {Family::Spell | Family::Melee, Family::AnyAction, Family::ReachHeal, 0,
+                                                 Family::Spell | Family::Attack};
+
+    // interleaved, the way a definition declares rules and multipliers
+    std::vector<CaresSlot> slots;
+    for (std::size_t i = 0; i < rules.size() || i < handWritten.size(); ++i)
+    {
+        if (i < rules.size())
+            slots.push_back({&rules[i], 0});
+        if (i < handWritten.size())
+            slots.push_back({nullptr, handWritten[i]});
+    }
+
+    // every combination of the families the slots name, plus one none of them does
+    FamilyMask const named[] = {Family::AnyMovement, Family::Attack, Family::Reach, Family::ReachHeal, Family::Melee,
+                                Family::DpsAssist, Family::TankAssist, Family::Spell, Family::Charge, Family::Blink,
+                                Family::DebuffOnAttacker, Family::AnyAction, Family::PetAttack};
+    std::size_t const namedCount = sizeof(named) / sizeof(named[0]);
+    std::vector<std::string> const names = {"boss dodge", "boss position", "sprint", "boss scorch",
+                                            "boss board", "fireball", "follow", ""};
+
+    for (uint32_t combo = 0; combo < (1u << namedCount); ++combo)
+    {
+        FamilyMask action = 0;
+        for (std::size_t n = 0; n < namedCount; ++n)
+            if ((combo >> n) & 1)
+                action |= named[n];
+
+        for (std::string const& name : names)
+        {
+            uint64_t const bits = CaresBits(slots, action, name);
+            for (std::size_t i = 0; i < slots.size(); ++i)
+            {
+                bool const cares = slots[i].rule ? RuleCares(*slots[i].rule, action, name)
+                                                 : (action & slots[i].families) != 0;
+                CHECK(((bits >> i) & 1) == (cares ? 1u : 0u));
+            }
+            CHECK((bits >> slots.size()) == 0);
+        }
+    }
+}
+
+void CaresBitsStopAtMaxSlots()
+{
+    Rule const spells = Block(Family::Spell);
+    std::vector<CaresSlot> const slots(MAX_CARES_SLOTS + 6, CaresSlot{&spells, 0});
+    CHECK(CaresBits(slots, Family::Spell, "fireball") == ~uint64_t(0));
+    CHECK(CaresBits(slots, Family::AnyMovement | Family::Melee, "melee") == 0);
+}
+
 void RoleFilterStopsAtFirstMatch()
 {
     int asked = 0;
@@ -207,6 +269,8 @@ int main()
     OwnTargetingBlocksNamedPickersOnly();
     BlockTakesFamiliesAndNames();
     ExclusiveBlocksAttacksToo();
+    CaresBitsMatchEachSlot();
+    CaresBitsStopAtMaxSlots();
     RoleFilterStopsAtFirstMatch();
     EvaluateRunsChecksInOrder();
 

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 // Melee hold rather than walk into a Bladestorm or Hellfire around their target, the dodge would only
 // walk them back out
@@ -13,6 +14,9 @@ public:
     FactionChampionsAoeGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions aoe guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _meleeMove;
 };
 
 // The focus node would pull physical attackers back onto a Hand of Protection kill target
@@ -32,6 +36,9 @@ public:
     FactionChampionsDispelGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions dispel guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _magicDispel;
 };
 
 // Class purge and spellsteal fire on any magic buff, Thorns included, so one duty bot purges instead
@@ -41,6 +48,9 @@ public:
     FactionChampionsPurgeGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions purge guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _purge;
 };
 
 // A root or stun before Death Grip's pull refuses it, one mid-flight drops the champion where it is. Area
@@ -52,6 +62,16 @@ public:
     FactionChampionsGripGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions grip guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool petToggle = false;
+        CastSpellAction* cast = nullptr;  // null for a pet toggle
+        RaidSpellIdRef spellId;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 void AddToCFactionChampionsDefenceMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

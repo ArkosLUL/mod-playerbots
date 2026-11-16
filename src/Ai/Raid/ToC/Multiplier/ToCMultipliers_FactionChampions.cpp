@@ -21,36 +21,38 @@ namespace
 // Bounces and tank splash the generic area test misses
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
                                           "avenger's shield", "blood boil", "consecration", "swipe (bear)"};
+}  // namespace
 
 // Harmful splash only: area buffs like Battle Shout land on the raid
-bool Splashes(PlayerbotAI* botAI, Action* action)
+bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
 {
+    RaidSplashCache::Facts& facts = _splash.Of(action);
+    bool const ownSplash = _ownSplash.Get(action, [action] { return OWN_SPLASH.count(action->getName()) != 0; });
+
     // the summon spell reads as positive, but what it drops burns every champion round it
-    if (OWN_SPLASH.count(action->getName()) || SummonSplashes(action))
+    if (ownSplash || facts.summon)
         return true;
 
-    if (!SpellSplashes(botAI, action))
+    if (!SpellSplashes(botAI, action, _splash))
         return false;
 
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast)
+    if (!facts.cast)
         return true;
 
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", cast->getSpell())->Get();
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     return !info || !info->IsPositive();
 }
-}  // namespace
 
 // Also every own splash: a Death and Decay or Consecration on the pack breaks every Polymorph and Fear in
 // it, and Pestilence puts a DoT on each champion, which rules them out for both
 float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
 {
     // AoE heals land on the raid, not the champions, so they stay
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
+    if (!action || _splash.Of(action).heal)
         return 1.0f;
 
-    if (action->getThreatType() != Action::ActionThreatType::Aoe && !Splashes(botAI, action))
+    if (!_splash.Of(action).aoeThreat && !Splashes(action))
         return 1.0f;
 
     return ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions) ? 0.0f : 1.0f;
@@ -58,15 +60,23 @@ float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
 
 float FactionChampionsThreatRedirectVetoMultiplier::GetValue(Action* action)
 {
-    bool const mainTankRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
-                                  dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action);
-    if (!mainTankRedirect && !dynamic_cast<CastTricksOfTheTradeAction*>(action))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.mainTankRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+                                 dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action);
+        facts.tricks = dynamic_cast<CastTricksOfTheTradeAction*>(action);
+        return facts;
+    };
+
+    Facts const& facts = _facts.Get(action, classify);
+    if (!facts.mainTankRedirect && !facts.tricks)
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    if (mainTankRedirect)
+    if (facts.mainTankRedirect)
         return 0.0f;
 
     // Tricks on a melee dps still gives its 15% damage, so only veto it when it picks the tank
@@ -81,13 +91,20 @@ bool FactionChampionsAntiFearTotemGuardMultiplier::FearWindowActive()
 
 float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
 {
-    bool const classCc = dynamic_cast<CastCrowdControlSpellAction*>(action);
-    bool const spreadDot = dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
-                           dynamic_cast<CastDebuffSpellOnMeleeAttackerAction*>(action);
-    if ((!classCc && !spreadDot) || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.classCc = dynamic_cast<CastCrowdControlSpellAction*>(action);
+        facts.spreadDot = dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
+                          dynamic_cast<CastDebuffSpellOnMeleeAttackerAction*>(action);
+        return facts;
+    };
+
+    Facts const& facts = _facts.Get(action, classify);
+    if ((!facts.classCc && !facts.spreadDot) || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    if (classCc)
+    if (facts.classCc)
         return 0.0f;
 
     // a spread DoT on a champion off the kill target blocks Polymorph, Fear and Hex on it for its whole run.
@@ -114,16 +131,24 @@ bool EndsWith(std::string const& text, std::string const& tail)
 
 float FactionChampionsLateInterruptMultiplier::GetValue(Action* action)
 {
-    CastSpellAction* cast = dynamic_cast<CastSpellAction*>(action);
-    if (!cast || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.cast = dynamic_cast<CastSpellAction*>(action);
+        facts.healerKick = facts.cast && EndsWith(action->getName(), " on enemy healer");
+        return facts;
+    };
+
+    Facts& facts = _facts.Get(action, classify);
+    if (!facts.cast || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    uint32 const spellId = AI_VALUE2(uint32, "spell id", cast->getSpell());
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info)
         return 1.0f;
 
-    if (!Interrupts(info) && !EndsWith(action->getName(), " on enemy healer"))
+    if (!Interrupts(info) && !facts.healerKick)
         return FactionChampionsCounterspellHold(botAI) && info->CalcCastTime(bot) > 0 ? 0.0f : 1.0f;
 
     // GetTarget last, it scans every attacker

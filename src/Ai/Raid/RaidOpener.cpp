@@ -81,13 +81,18 @@ OpenerState const* ReadOpener(PlayerbotAI* botAI, RaidOpenerConfig const& config
     // A boss out of combat drops out, so a wipe or a reset starts its opener over
     std::vector<OpenerBoss> next;
     Group* group = bot->GetGroup();
-    for (uint32 entry : config.liveBosses(botAI))
+    std::vector<uint32> const& entries = config.liveBosses(botAI);
+
+    // One sweep for every entry, read back entry by entry in config order
+    std::list<Creature*> creatures;
+    if (!entries.empty())
+        bot->GetCreatureListWithEntryInGrid(creatures, entries, BOSS_SEARCH_RADIUS);
+
+    for (uint32 entry : entries)
     {
-        std::list<Creature*> creatures;
-        bot->GetCreatureListWithEntryInGrid(creatures, entry, BOSS_SEARCH_RADIUS);
         for (Creature* creature : creatures)
         {
-            if (!creature->IsAlive() || !creature->IsInCombat())
+            if (creature->GetEntry() != entry || !creature->IsAlive() || !creature->IsInCombat())
                 continue;
 
             OpenerBoss boss;
@@ -277,7 +282,8 @@ float RaidOpenerHoldMultiplier::GetValue(Action* action)
     if (IsRaidOpenerHeld(botAI, _config, target))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && GetRaidOpenerHeldBossNear(botAI, _config, OPENER_AREA_THREAT_REACH)
+    return IsRaidAreaDamage(botAI, action, _splash) &&
+                   GetRaidOpenerHeldBossNear(botAI, _config, OPENER_AREA_THREAT_REACH)
                ? 0.0f
                : 1.0f;
 }

@@ -16,8 +16,17 @@ float RaidBurstWindowMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    std::string const name = action->getName();
-    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
+    auto const classify = [this, action]
+    {
+        std::string const name = action->getName();
+        Facts result;
+        result.burst = IsBurstCooldownAction(name) && !IsManaReturnCooldown(bot, name);
+        result.lust = name == "bloodlust" || name == "heroism";
+        return result;
+    };
+
+    Facts const& facts = _facts.Get(action, classify);
+    if (!facts.burst)
         return 1.0f;
 
     if (!bot->IsInCombat())
@@ -30,7 +39,7 @@ float RaidBurstWindowMultiplier::GetValue(Action* action)
         cachedValue = _window(botAI);
     }
 
-    bool const allowed = (name == "bloodlust" || name == "heroism") ? cachedValue.allowLust : cachedValue.allowAll;
+    bool const allowed = facts.lust ? cachedValue.allowLust : cachedValue.allowAll;
 
     return allowed ? 1.0f : 0.0f;
 }

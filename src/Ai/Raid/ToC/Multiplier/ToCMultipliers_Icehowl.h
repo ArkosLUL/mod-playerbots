@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 // From the gaze to the end of the charge only attacks and the dodge move anyone. Anything else can walk
 // a bot into the line, like melee chasing him to where the jump back lands.
@@ -12,6 +13,9 @@ class IcehowlChargeGuardMultiplier : public Multiplier
 public:
     IcehowlChargeGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icehowl charge guard") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _competes;
 };
 
 // Keeps the combat formation off a bot holding an Arctic Breath bearing. `set behind` walks melee in
