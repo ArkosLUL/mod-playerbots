@@ -26,7 +26,7 @@ std::vector<Creature*> IccGetCreaturesByEntries(WorldObject* searcher, std::init
     else
         searcher->GetCreatureListWithEntryInGrid(raw, std::vector<uint32>(entries), range);
 
-    // Taken entry by entry, in the order one sweep per entry lists them, so the sort sees the same input
+    // Grouped by entry in list order, grid order inside each, as one search per entry would list them
     out.reserve(raw.size());
     for (uint32 entry : entries)
         for (Creature* c : raw)
