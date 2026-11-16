@@ -4,7 +4,6 @@
 #include <array>
 #include <cmath>
 #include <iterator>
-#include <list>
 #include <unordered_map>
 #include <tuple>
 #include <unordered_set>
@@ -30,6 +29,7 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -502,8 +502,9 @@ bool CarriesGroupDot(Unit* target)
 
 void ScanChampions(FactionChampionsState& state, Player* bot)
 {
-    std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, ChampionEntries(), CHAMPION_SEARCH_RADIUS);
+    static ToCEntrySet const championSet(ChampionEntries());
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(bot, creatures, championSet, CHAMPION_SEARCH_RADIUS);
 
     state.champions.clear();
     for (Creature* creature : creatures)

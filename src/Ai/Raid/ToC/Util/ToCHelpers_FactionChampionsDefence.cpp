@@ -5,7 +5,6 @@
 #include <cmath>
 #include <initializer_list>
 #include <iterator>
-#include <list>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -36,6 +35,7 @@
 #include "ToCFactionChampionsGripChain.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -931,8 +931,9 @@ KickDuty KeepOrElectKicker(FactionChampionsDefenceState& state, std::vector<Memb
 
 void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members, uint32 now)
 {
-    std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, ScanEntries(), CHAMPION_SEARCH_RADIUS);
+    static ToCEntrySet const scanSet(ScanEntries());
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(bot, creatures, scanSet, CHAMPION_SEARCH_RADIUS);
 
     state.hazards.clear();
     state.totems.clear();

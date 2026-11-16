@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <list>
 #include <unordered_map>
 
 #include "Creature.h"
@@ -24,6 +23,7 @@
 #include "TemporarySummon.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -123,8 +123,9 @@ JaraxxusScan const& ScanOf(Player* bot, JaraxxusState& state)
     scan.infernals.clear();
     scan.flames.clear();
 
-    std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, JARAXXUS_SCAN_ENTRIES, JARAXXUS_SCAN_RADIUS);
+    static ToCEntrySet const scanSet(JARAXXUS_SCAN_ENTRIES);
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(bot, creatures, scanSet, JARAXXUS_SCAN_RADIUS);
     for (Creature* creature : creatures)
     {
         if (!creature || !creature->IsAlive())
