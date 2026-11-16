@@ -221,7 +221,8 @@ void Deal(Player* bot, BeastsState& state, std::array<Creature*, DUTY_COUNT> con
             state.holder[Index(duty)] = tank->GetGUID();
     }
 
-    std::vector<Player*> const roster = GatherRoster(bot);
+    std::vector<Player*> roster;
+    bool rosterBuilt = false;
     auto const inRoster = [&roster](ObjectGuid const& guid)
     { return std::any_of(roster.begin(), roster.end(), [&guid](Player* tank) { return tank->GetGUID() == guid; }); };
 
@@ -232,6 +233,12 @@ void Deal(Player* bot, BeastsState& state, std::array<Creature*, DUTY_COUNT> con
         size_t const duty = Index(DEAL_ORDER[i]);
         if (!dutyCreature[duty] || !state.holder[duty].IsEmpty())
             continue;
+
+        if (!rosterBuilt)
+        {
+            roster = GatherRoster(bot);
+            rosterBuilt = true;
+        }
 
         auto const free = std::find_if(roster.begin(), roster.end(),
                                        [&state](Player* tank) { return !HoldsDuty(state, tank->GetGUID()); });
