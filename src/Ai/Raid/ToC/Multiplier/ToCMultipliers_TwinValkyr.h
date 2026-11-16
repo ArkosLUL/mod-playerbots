@@ -53,6 +53,10 @@ public:
     TwinValkyrRedirectGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr redirect guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    // Whether the action is one of the class redirects, fixed by its type
+    RaidActionCache<bool> redirects;
 };
 
 void AddToCTwinValkyrMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

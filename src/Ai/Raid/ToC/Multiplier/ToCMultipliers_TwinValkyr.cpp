@@ -109,10 +109,14 @@ float TwinValkyrRedirectGuardMultiplier::GetValue(Action* action)
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return 1.0f;
 
-    bool const classRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
-                               dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action) ||
-                               dynamic_cast<CastTricksOfTheTradeAction*>(action) ||
-                               dynamic_cast<RaidOpenerRedirectAction*>(action);
+    bool const classRedirect = redirects.Get(action,
+                                             [action]
+                                             {
+                                                 return dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+                                                        dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action) ||
+                                                        dynamic_cast<CastTricksOfTheTradeAction*>(action) ||
+                                                        dynamic_cast<RaidOpenerRedirectAction*>(action);
+                                             });
     if (!classRedirect)
         return 1.0f;
 
