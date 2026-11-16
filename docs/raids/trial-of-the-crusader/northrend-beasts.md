@@ -189,8 +189,9 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
 Combat reach follows the form's display (6.5 for both before `2026_11_06_01`): mobile 12, so melee
 range 14.8 and a hunter's dead zone 19.8 (`Spell::CheckRange`: 5 + melee range); stationary 5, so
 7.8 and 12.8 (`WormMeleeRange` reads a submerged worm's coming form, since the under-ground model
-has its own reach). A chasing mobile worm stops 14 yd (contact 0.5 + 12 + 1.5) from its tank,
-`WORM_TANK_OFFSET`. They run 9.45 yd/s, faster than a player. Neither
+has its own reach). A mobile worm settles 7-10 yd from a tank that walked, not the 14 of contact +
+reaches ([pitfalls.md](../../engine/pitfalls.md)): measured median 7.4/8.3, max 12 (25H 2026-11-16,
+-09), so `WORM_TANK_OFFSET` is 10; `--worms` prints it. They run 9.45 yd/s, faster than a player. Neither
 carries a `NO_PARRY` bit (`flags_extra` 0x80001), so melee in a worm's front half are parried and
 haste its next swing. Dreadscale (34799) walks in mobile, Acidmaw (35144) comes up stationary by the
 gate. Timers restart at every emerge (AC #28181, solo-sniffed; group and heroic unverified).
@@ -302,13 +303,18 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     latched, walks the worm on once melee at it would stand in a pool 5 s on (the worm within that
     radius + 9.3, the melee ring `WORM_MELEE_RING`) or in Sweep (within 27.3 of the stationary worm).
     It takes the clear spot nearest a point 10 yd ahead, searched within 30 yd, off every pool by its
-    radius 15 s on (capped at its despawn) + 25.3 and 43.3 off the stationary worm (else off pools
+    radius 15 s on (capped at its despawn) + 21.3 and 39.3 off the stationary worm (else off pools
     only), latched until it arrives. Each new pool drops at the worm's feet and fires the next drag, so
-    the far future doesn't count. Both clearances carry a 2 yd pad, so the worm, stopping 14 yd behind its tank, settles past the
-    trigger instead of firing it again. Walking on keeps the worm's front pointing the same way
-    (guide: drag him off the pool so melee can attack). `nb.wormmove` `drag`.
+    the far future doesn't count. Both clearances carry a 2 yd pad, so the worm, settling 10 yd behind
+    its tank, ends past the trigger instead of firing it again. Walking on keeps the worm's front
+    pointing the same way (guide: drag him off the pool so melee can attack). `nb.wormmove` `drag`.
+    - **Wait**: before starting a drag, the holder stays put up to 6 s from when it became needed
+      while a Toxin carrier (no Bile, not stuck) whose nearest Bile carrier is the holder stands past
+      8 yd of it (`nb.wormmove` `drag wait`). A pool at the worm's feet reaches its 8.3 yd melee after
+      ~21 s. On 25H (2026-11-16) a 26 yd drag the moment five carriers walked to the holder left one
+      paralysed on the way.
   - **Edge** (heroic, whose pools outlive the 12 s between them): the drag looks 36-42 yd from
-    `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 20 yd
+    `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 24 yd
     out while not spewing (its cone would sweep after the tank). Order: edge clear of everything,
     floor clear of everything, edge clear of pools, floor clear of pools; off the stationary worm
     beats the edge, since its melee would stand in Sweep. `nb.wormmove` `drag edge`.
@@ -330,7 +336,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   - **Run**: a runner past 8 yd of its stuck carrier. **Cure**: a Toxin carrier, neither stuck nor
     carrying Bile, past 8 yd of the nearest Bile carrier, keeping its partner while that one carries
     Bile and is within 8 yd or no carrier is, so it doesn't flip between two. Both walk to 6 yd of
-    the partner (the pulse reaches 10 exact), a walk past 15 yd spending Nitro Boosts once issued
+    the partner (the pulse reaches 10 exact); a runner to a carrier snared 70% or more, which no
+    longer moves, triggers past 9 and walks to 8.5, so it still finds a spot round one standing in a
+    pool (25H: two carriers paralysed inside 14-15 yd pools had their nearest clear spot 7.6-10 yd
+    off). A walk past 15 yd spending Nitro Boosts once issued
     (+150% multiplies with the snare; on 25H two carriers 47-49 yd out were paralysed on the way and
     kept Toxin 17.5 s, the 28 yd walks were cured in 3.5-5.4), clear of pools and, but for the `WormStationary`
     holder, Sweep. Only that holder pairs with a member within 11 yd of the up stationary worm,
@@ -339,23 +348,26 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); with
     none and the partner past 30 yd, a 25 yd leg toward it, turned ±22.5° then ±45° when blocked
     (`partial`). Their spots clear only the real Spew cone, and a pair within 8 yd triggers on it
-    unpadded: the partner is often a mobile worm's tank, up to 14 yd ahead of it, and on 10N the 60° cone
+    unpadded: the partner is often a mobile worm's tank, 7-10 yd ahead of it, and on 10N the 60° cone
     plus the 12° pad covers the whole 6 yd disc round it. Every spot choice and the urgent test
-    while it spews also refuse the armed worm's front half within its 14.8 melee range (`InSpewDanger`): the
-    angle test passes a spot on the worm itself, and on 25H a cure walk to a Bile carrier at
-    Dreadscale's head took 5 Spew ticks. The trigger keeps the plain cone, so melee chasing a
-    walking worm aren't sent round it.
+    while it spews also refuse the armed worm's front half within `WORM_TANK_OFFSET` (`InSpewDanger`):
+    the angle test passes a spot on the worm itself (the core's cone takes anyone within 2 yd from
+    any bearing), and on 25H a cure walk to a Bile carrier at Dreadscale's head took 5 Spew ticks.
+    Out to its 14.8 melee range it covered every spot round the tank for ~7.5 s of each 22, and on
+    25H (2026-11-16) no runner reached the paralysed tank. The trigger keeps the plain cone, so melee
+    chasing a walking worm aren't sent round it.
   - **Bile scatter** (`DealBileScatter`): held-out bot carriers whose Bile is under 2 s old and
     within 12 yd of another carrier are dealt spots in guid order, each 12 clear of every carrier
     but those later in the deal, of pools 5 s on, Sweep (18), armed Spew danger and the floor; clean
-    bots too where a spot exists; a ranged one in spell range where it can be; the first keeps its
+    bots too where a spot exists; in heal reach of a healer bot (below), a ranged one in spell range
+    too, where it can be; the first keeps its
     place when clear. The spot is the carrier's stand (`move <yd> bile stand`) and its held spot for
     the others' circles, for 6 s or till the Bile ends or the spot turns unsafe; a failed search
     isn't retried for that Bile. One Burning Spray on the 25H melee gave Bile to 8, who searched one
     by one, took 3 pulses each at the first tick and lost two.
   - A **stuck** carrier, a holder or snared 70% or more, takes the nearest free runner: a bot
     Bile carrier (a human never answers) holding no duty, or a holder whose worm is under ground. A
-    runner already within 8 yd serves that carrier, then last pairs hold while both qualify, so two
+    runner already within its trigger (8 yd, 9 for a carrier that no longer moves) serves that carrier, then last pairs hold while both qualify, so two
     runners don't trade carriers. Guide: free them while the worms are submerged; script: every Bite
     refreshes it, so a mobile Acidmaw's tank is never cured otherwise. One holding no beast
     with no runner walks to the nearest Bile carrier, a human too (`nb.cure` `seek`): on 25N three
@@ -372,6 +384,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too. Fresh carriers sharing a pulse are dealt spots (below) |
     | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) or is a stationary worm only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
     | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12° | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
+    | Clump | ranged and healers carrying neither debuff, not on a cure walk, of the up mobile worm; kept in every tier, `nospread` and the Spray dodge included | 9.3 / 11.3 | pools drop at its feet: on 25H a caster's `nospread` spots ended 3.7 yd from it, and paralysed there it died in the growing pool |
     | Spread | ranged and healers carrying neither debuff, of each other carrying neither (below), and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while a stationary worm is up, a lone survivor too | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation. Carriers keep their Bile and cure rules |
     | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
     | Reach | a bot holding no beast whose `reach melee` or `reach spell` walk to its stop point, 30 yd at most, would cross a pool or end in one, or (neither debuff) in a Bile pulse | — | the reposition goes round it |
@@ -406,7 +419,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     mobile Acidmaw inside it on 2026-11-09); melee and tanks within the target's melee range − 1
     (13.8 on a mobile worm, 6.8 on a stationary one: the old 8.3 left melee a median 8.5-9.9 off a
     lone stationary Dreadscale, out of reach); healers within heal range of both holders and their `party
-    member to heal`. A Bile carrier held off the stack has none.
+    member to heal`. A Bile carrier held off the stack (no healer itself) needs heal reach of some
+    living, non-stuck healer bot's held spot, less 2 for its drift, a ranged one its spell range
+    too; with no healer bot, nothing. On 25H (2026-11-16) a melee carrier's `bile full` spot sat
+    41-60 yd from all four healers and its own pulses killed it.
   - **Search**, over 30 yd in 2 yd and 22.5° steps, the first tier with a spot (`nb.wormmove`):
     `stand`; `escape` first from inside a pool; `full` (every circle and reach); `pair`, spread from
     every caster but one with no other within 10 yd, the nearest such (guide: "okay if you are in
@@ -480,8 +496,9 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     submerge drops every target, and the out-of-combat `follow` fought the spread every 0.3-1 s
     (Malygos and Yogg-Saron precedent).
   - **`northrend worms bile reach guard`** zeroes `reach melee` and the charges for a Bile carrier
-    that holds no beast and isn't a runner, so a melee walked off the stack stays off for the
-    Bile's 24 s (guide: spread even as melee). Without it the Bile rule and `reach melee` trade the
+    that holds no beast, runners too, so a melee walked off the stack stays off for the Bile's 24 s
+    (guide: spread even as melee), and a runner whose search finds nothing stands still instead of
+    trading its escape for `reach melee` every ~1.1 s (25H 2026-11-16). Without it the Bile rule and `reach melee` trade the
     bot all Bile long ([pitfalls.md](../../engine/pitfalls.md), the Hodir case); leaving melee out
     of the rule instead would put the pulse, up to 9.7k every 2 s, on the whole stack.
 - **Pools outlive the worms** (25H: 60 s, into Icehowl). The pool list stays read while the Beasts
@@ -706,8 +723,13 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   and declined by the user.
 - Melee walking in or chasing a thrown tank still eat Whirl; a 0.3 yd margin each side of the band
   is all the reach leaves.
-- The drag's pool and Sweep circles grew 5.5 yd with the 14 yd chase stop: a 25H heroic pool's
-  reaches ~45 yd, and with no clear spot the drag doesn't happen. Unproven in a pull.
+- The Spray target and its neighbours each walk off the other's start, so they can walk the same way
+  and stay within 10 yd (25H: one Paralytic Spray on five ranged).
+- With the mobile worm up and its holder carrying the only Bile, a paralysed carrier gets no runner
+  until the submerge.
+- No taunt swap off a paralysed mobile holder.
+- `reach party member to heal` can walk a healer into the melee group, where a Spray on it gave six
+  Bile (25H).
 - No spread against Fire Bomb in Gormok's stage (guide: stay spread); the impact dodge is the only
   answer.
 - A caster pinned by its own cast waits it out and can eat the impact.
@@ -799,7 +821,8 @@ included (`--bomb`); `worm` spans with their deaths, per emerge the seconds from
 Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank and the non-tanks it
 targeted first, per wedge the non-tanks inside at the nearest snapshot and the Spew tick victims by
 role over 3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
-first snapshot, 20 at most) and its hits, Sweep victims by role, per Spray (the eight ids, from a
+first snapshot, 20 at most) and its hits, Sweep victims by role, the mobile worm's gap to its target
+column per victim (count, median, max) over snapshots where neither moved, per Spray (the eight ids, from a
 worm) its
 target, who stood within 10 yd of it in the snapshot nearest its row plus `ct` (the cast's end),
 who took its debuff from that worm (the first 400 ms of applies 0.8-4 s after the row) and `spray`
@@ -808,7 +831,8 @@ ranged and healers, humans included, carrying neither debuff within 10 yd: media
 share with one beside two others), `wormhold` releases by cause and role, `wormmove` and `wormhold`
 branches (`--worms`); Paralytic Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of the removal),
 `died`, `expired` (59 s or more), `other` or `open`, with seconds carried, `stuck` past 18 s
-(13.5 heroic) and `outlived the worms` past the last `nb.stage` span with a worm, Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
+(13.5 heroic), `outlived the worms` past the last `nb.stage` span with a worm and seconds its walk
+(`none cure`) or a runner sent to it (`none run`) found no spot, Burning Bile spans with the pulse hits on bots carrying neither debuff, each given to
 the carrier nearest its victim within 10 yd in the nearest snapshot, their damage and the raid's
 total, `nitro cure` uses and `cure` branches (`--cure`).
 

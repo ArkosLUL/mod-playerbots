@@ -109,7 +109,7 @@ void DropForeignBooking(LastMovement& last, Position const& own, MovementPriorit
 bool DirectCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
 {
     Position const& partner = plan.partnerPos;
-    float const reach = WORM_CURE_REACH - CURE_DIRECT_INSET;
+    float const reach = plan.partnerReach - CURE_DIRECT_INSET;
     float const step = 2.0f * static_cast<float>(M_PI) / WORM_CURE_DIRECT_BEARINGS;
     bool found = false;
     float nearest = 0.0f;
@@ -312,9 +312,16 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
         return false;
     }
 
-    if (Position const* spot = WalkInFlight(WalkKind::Drag))
-        if (ClearOfCircles(plan.poolsOnly, *spot))
-            return true;
+    Position const* inFlight = WalkInFlight(WalkKind::Drag);
+    if (inFlight && ClearOfCircles(plan.poolsOnly, *inFlight))
+        return true;
+
+    // Toxin carriers walking over for this tank's Bile need it to stay put a bit
+    if (!inFlight && MobileWormDragWaits(botAI))
+    {
+        NoteWormMove(bot, "drag wait");
+        return false;
+    }
 
     HazardSweepCache sweep;
     Position spot;

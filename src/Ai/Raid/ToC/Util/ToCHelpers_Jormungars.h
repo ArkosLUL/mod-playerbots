@@ -48,8 +48,9 @@ constexpr float WORM_FLOOR_RADIUS = 35.0f;        // the worms surface up to 35 
 // Bot spots only. 2 yd inside Icehowl's gate-side charge end, so the floor is known to reach it.
 constexpr float WORM_SPOT_FLOOR_RADIUS = 44.0f;
 constexpr float WORM_TAUNT_STAND = 20.0f;         // the mobile holder's reach under ground
-// Mobile worm centre to its victim when its chase stops: contact plus both reaches
-constexpr float WORM_TANK_OFFSET = CONTACT_DISTANCE + WORM_MOBILE_COMBAT_REACH + DEFAULT_COMBAT_REACH;
+// Mobile worm centre to its tank once it settles. Inside melee range the chase walks at the tank and
+// stops at its next 400 ms check, so 7-10 yd on 25H, not contact plus both reaches
+constexpr float WORM_TANK_OFFSET = 10.0f;
 
 // Sweep: a 15 yd circle round the stationary worm, centre to centre
 constexpr float WORM_SWEEP_RADIUS = 15.0f;
@@ -68,6 +69,8 @@ constexpr float WORM_SPRAY_CLEARANCE = WORM_SPLASH_RADIUS + 3.0f;
 // Casters keep off the melee round the up mobile worm as one circle on it
 constexpr float WORM_MELEE_STACK_TRIGGER = WORM_MELEE_RING + WORM_SPREAD_TRIGGER;
 constexpr float WORM_MELEE_STACK_CLEARANCE = WORM_MELEE_RING + WORM_SPREAD_CLEARANCE;
+// Off the melee group itself, in every tier, spread given up or not
+constexpr float WORM_CASTER_CLUMP_CLEARANCE = WORM_MELEE_RING + 2.0f;
 
 // Dealt melee stands on the mobile worm
 constexpr float WORM_MELEE_STAND = WORM_MELEE_RING - 1.0f;  // from its centre
@@ -77,6 +80,10 @@ constexpr float WORM_MELEE_REAR_ARC_DEG = 108.0f;            // least angle off 
 // A Toxin carrier stands this close to a Bile carrier, well inside the pulse
 constexpr float WORM_CURE_REACH = 6.0f;
 constexpr float WORM_CURE_TRIGGER = 8.0f;
+// A runner's band round a carrier that can't move anymore. Further out still finds a spot when the
+// carrier stands in a pool.
+constexpr float WORM_RUN_REACH = 8.5f;
+constexpr float WORM_RUN_TRIGGER = 9.0f;
 // A cure or run walk past this spends Nitro Boosts. Toxin slows harder every second, and on 25H two
 // carriers 47-49 yd out were paralysed before they got there.
 constexpr float WORM_CURE_NITRO_FROM = 15.0f;
@@ -132,14 +139,16 @@ constexpr uint32 WORM_POOL_SOON_TICKS = 5;
 // they line the wall: its drag looks on this band first, 2 yd inside the spot floor
 constexpr float WORM_EDGE_MIN = 36.0f;
 constexpr float WORM_EDGE_MAX = WORM_SPOT_FLOOR_RADIUS - 2.0f;
-// Further in, a heroic worm gets walked out before its next pool. It stops WORM_TANK_OFFSET short of its
-// tank, so one walked out from the middle settles past this.
+// Further in, a heroic worm gets walked out before its next pool. It settles WORM_TANK_OFFSET short of
+// its tank, so one walked out from the middle ends past this.
 constexpr float WORM_EDGE_WORM_MIN = WORM_EDGE_MIN - WORM_TANK_OFFSET - 2.0f;
 constexpr float WORM_POOL_TRIGGER_PAD = 1.0f;    // on the radius now
 constexpr float WORM_POOL_CLEARANCE_PAD = 2.0f;  // on the radius 5 s on
 
 // A reposition walk holds the tick at most this long, so a bot rooted mid walk still gets a new spot
 constexpr uint32 WORM_WALK_LATCH_MS = 5000;
+// A pool at the worm's feet takes ~20 s to reach the melee stands, so the drag can wait this long
+constexpr uint32 WORM_DRAG_CURE_WAIT_MS = 6000;
 
 static_assert(WORM_SWEEP_RADIUS < WORM_SWEEP_TRIGGER && WORM_SWEEP_TRIGGER < WORM_SWEEP_CLEARANCE, "sweep band");
 static_assert(WORM_SPLASH_RADIUS < WORM_BILE_TRIGGER && WORM_BILE_TRIGGER < WORM_BILE_CLEARANCE, "bile band");
@@ -152,6 +161,11 @@ static_assert(WORM_POOL_TRIGGER_PAD < WORM_POOL_CLEARANCE_PAD, "pool band");
 static_assert(WORM_SPEW_TRIGGER_PAD < WORM_SPEW_CLEAR_PAD, "spew band");
 static_assert(WORM_CURE_REACH < WORM_CURE_TRIGGER && WORM_CURE_TRIGGER < WORM_SPLASH_RADIUS,
               "a cure walk ends inside its trigger, and the trigger inside the pulse");
+static_assert(WORM_CURE_REACH < WORM_RUN_REACH && WORM_RUN_REACH < WORM_RUN_TRIGGER &&
+                  WORM_RUN_TRIGGER < WORM_SPLASH_RADIUS,
+              "the far run band sits past the cure band and inside the pulse");
+static_assert(WORM_CASTER_CLUMP_CLEARANCE < WORM_MELEE_STACK_TRIGGER,
+              "the melee group circle sits inside the casters' spread circle on the worm");
 static_assert(WORM_HOLD_ARRIVE < WORM_HOLD_TRIGGER, "a walk has to end inside its own trigger");
 static_assert(WORM_MELEE_STAND <= WORM_MOBILE_MELEE_RANGE - 1.0f, "the melee stand is inside the role reach");
 static_assert(180.0f - WORM_MELEE_GROUP_DEG >= WORM_MELEE_REAR_ARC_DEG, "the dealt stands sit in the rear arc");
@@ -173,11 +187,15 @@ struct WormDragPlan
 };
 // The mobile worm this bot holds must be walked out: true fills the plan for the tank's own spot
 bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan);
+// A drag this holder needs waits up to WORM_DRAG_CURE_WAIT_MS while Toxin carriers walk to it for a cure.
+// Ask it only before starting a drag, never mid walk.
+bool MobileWormDragWaits(PlayerbotAI* botAI);
 
 // The worm this hunter or rogue redirects onto its duty holder right now, else nullptr
 Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder);
 
-// A Burning Bile carrier the reposition keeps off the raid: no Beasts tank duty, not sent as a runner
+// A bot Burning Bile carrier with no Beasts tank duty, runners too: reach melee would walk it back onto
+// the stack, and a runner whose search finds nothing stands still instead
 bool IsWormBileCarrierHeldOut(PlayerbotAI* botAI);
 
 // In priority order: the first rule whose trigger the bot's spot fails names the move
@@ -190,6 +208,7 @@ enum class WormMoveReason : uint8
     Spray,
     Bile,
     Sweep,
+    Clump,  // a caster inside the melee group round the mobile worm
     Spew,
     Spread,
     Melee,
@@ -238,6 +257,7 @@ struct WormMovePlan
     Position preferNear;
     ObjectGuid partner;         // Cure: the Bile carrier; Run: the Toxin carrier
     Position partnerPos;
+    float partnerReach = WORM_CURE_REACH;  // WORM_RUN_REACH on a run to a carrier that can't move
     std::vector<EncounterHelpers::HazardCircle> circles;        // hard: pools, Spray, Bile, Sweep, stomp, own feet
     std::vector<EncounterHelpers::HazardCircle> spreadCircles;  // casters' spread and the melee stack
     // spreadCircles less the pair partner's; empty when no peer can take a partner

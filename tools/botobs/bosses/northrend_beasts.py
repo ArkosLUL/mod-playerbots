@@ -10,8 +10,10 @@ Breath, snobolds, Fire Bomb, the worms and the Toxin cure.
     northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, the cone, spread, nb.breath, his walk
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
     northrend_beasts.py <file> --bomb      every Fire Bomb: target, impact hits, who stood inside, dodges
-    northrend_beasts.py <file> --worms     worm forms, emerges, Spew, pools, Sweep, Spray, caster spread, holds
-    northrend_beasts.py <file> --cure      Paralytic Toxin spans and how each ended, Bile pulses on the clean
+    northrend_beasts.py <file> --worms     worm forms, emerges, Spew, pools, Sweep, the worm-tank gap, Spray,
+                                           caster spread, holds
+    northrend_beasts.py <file> --cure      Paralytic Toxin spans, how each ended and how long its walk or runner
+                                           found no spot, Bile pulses on the clean
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -66,6 +68,9 @@ What the generic views get wrong here, and what this reads instead:
   long, `daze <yd>` that far short of Icehowl's melee range. `--cure` and `--charge` list them.
 - **A Bile pulse names Dreadscale as its source**, never the carrier, so `--cure` gives each hit to the
   carrier nearest its victim within the pulse's 10 yd, in the snapshot nearest the hit.
+- **Where the mobile worm's chase settles is no fixed figure**: inside melee range the core walks it at
+  its victim until a 400 ms recheck finds the victim still. `--worms` measures it, worm to target
+  column, over snapshots where neither moved, against `WORM_TANK_OFFSET`.
 """
 from __future__ import annotations
 
@@ -891,6 +896,11 @@ SPRAY_BURST_MS = 400
 CASTER_ROLES = ("ranged", "heal")
 # nb.worm values with both worms alive and up
 BOTH_WORMS_UP = ("1", "2")
+# nb.worm value -> the entry of the worm in its mobile form then
+MOBILE_WORM_OF = {"1": NPC_DREADSCALE, "2": NPC_ACIDMAW}
+WORM_TANK_OFFSET = radius("WORM_TANK_OFFSET")
+# a unit that moved less than this since the snapshot before stood still
+STILL_YD = 0.05
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
 
@@ -1182,6 +1192,34 @@ def caster_spread(trace: Trace) -> dict:
     return {"pairs": pairs, "crowded": crowded}
 
 
+def tank_gaps(trace: Trace) -> dict[tuple[int, int], list[float]]:
+    """`{(worm, victim): [gap]}`: the mobile worm's distance to the roster member it targets, centre to
+    centre, at each snapshot with both worms up where neither moved since the one before. The chase
+    settles there, which `WORM_TANK_OFFSET` models."""
+    spans = [(start, stop, MOBILE_WORM_OF[value])
+             for value, start, stop in latch_spans(trace, "nb.worm", pull_end(trace)) if value in MOBILE_WORM_OF]
+    worms = {entry: set(guids_of_entry(trace, entry)) for entry in MOBILE_WORM_OF.values()}
+    roster = roster_guids(trace)
+    out: dict[tuple[int, int], list[float]] = collections.defaultdict(list)
+    before: dict[int, list] = {}
+    for snap in frames(trace):
+        when = snap["t"]
+        rows = {row[0]: row for row in snap.get("u", [])}
+        entry = next((entry for start, stop, entry in spans if start <= when < stop), None)
+        for worm in worms.get(entry, ()):
+            row = rows.get(worm)
+            victim = rows.get(row[7]) if row else None
+            if victim is None or victim[0] not in roster or row[8] or victim[8]:
+                continue
+            last_worm, last_victim = before.get(worm), before.get(victim[0])
+            if (last_worm is None or last_victim is None or dist2(last_worm[1:3], row[1:3]) > STILL_YD
+                    or dist2(last_victim[1:3], victim[1:3]) > STILL_YD):
+                continue
+            out[(worm, victim[0])].append(dist2(row[1:3], victim[1:3]))
+        before = rows
+    return dict(out)
+
+
 def named(trace: Trace, guid: int) -> str:
     return f"{trace.name(guid)} ({trace.role(guid)})"
 
@@ -1237,6 +1275,13 @@ def show_worms(trace: Trace) -> None:
               + ", ".join(f"{trace.name(guid)} {n}" for guid, n in stray.most_common()))
 
     print(f"  Sweep hits: {by_role(trace, sweep_victims(trace)) or 'nobody'}")
+
+    gaps = tank_gaps(trace)
+    print(f"  mobile worm to its victim, both still (WORM_TANK_OFFSET {WORM_TANK_OFFSET:g}):"
+          + ("" if gaps else " no sample"))
+    for (worm, victim), values in sorted(gaps.items(), key=lambda item: (-len(item[1]), trace.name(item[0][1]))):
+        print(f"    {trace.name(worm).split()[0]:10} {named(trace, victim)}  n {len(values)}"
+              f"  median {statistics.median(values):.1f}  max {max(values):.1f}")
 
     show_sprays(trace)
 
@@ -1410,6 +1455,33 @@ def bile_spans(trace: Trace) -> list[dict]:
     return out
 
 
+def overlap(first: list[tuple[int, int]], second: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    return [(max(a, c), min(b, d)) for a, b in first for c, d in second if max(a, c) < min(b, d)]
+
+
+def no_spot_ms(trace: Trace, spans: list[dict]) -> dict[int, tuple[int, int]]:
+    """Per Toxin span, by its index: ms its carrier's cure walk found no spot (`nb.wormmove`
+    `none cure`) and ms a runner sent to it found none (`none run` while its `nb.cure` read
+    `run <carrier>`), both inside the span."""
+    end = pull_end(trace)
+    moves = holder_spans(trace, "nb.wormmove", end)
+    cures = holder_spans(trace, "nb.cure", end)
+
+    def held(track, value: str) -> list[tuple[int, int]]:
+        return [(start, stop) for text, start, stop in track if text == value]
+
+    out = {}
+    for index, span in enumerate(spans):
+        own = [(span["start"], span["stop"])]
+        walk = overlap(own, held(moves.get(span["carrier"], []), "none cure"))
+        run = []
+        for guid, track in cures.items():
+            sent = overlap(own, held(track, f"run {span['carrier']}"))
+            run += overlap(sent, held(moves.get(guid, []), "none run"))
+        out[index] = (sum(b - a for a, b in walk), sum(b - a for a, b in run))
+    return out
+
+
 def cure_branches(trace: Trace) -> dict[int, collections.Counter]:
     """`nb.cure` per bot by branch, the guid dropped: `seek`, `run`, `wait`, `none`."""
     return branch_counts(trace, "nb.cure", lambda text: text.split()[0] if text.split() else "")
@@ -1422,11 +1494,14 @@ def show_cure(trace: Trace) -> None:
         print("  no Paralytic Toxin carried")
     else:
         print(f"  Paralytic Toxin:\n    {'carrier':14} {'role':6} {'from':>9} {'to':>9} {'secs':>6}  end")
-        for span in toxins:
+        blind = no_spot_ms(trace, toxins)
+        for index, span in enumerate(toxins):
+            walk, run = blind[index]
             print(f"    {trace.name(span['carrier'])[:14]:14} {trace.role(span['carrier']):6}"
                   f" {clock(span['start']):>9} {clock(span['stop']):>9} {(span['stop'] - span['start']) / 1000:6.1f}"
                   f"  {span['end']}" + ("  stuck" if span["stuck"] else "")
-                  + ("  outlived the worms" if span["outlived"] else ""))
+                  + ("  outlived the worms" if span["outlived"] else "")
+                  + (f"  no spot: walk {walk / 1000:.1f} s, runner {run / 1000:.1f} s" if walk or run else ""))
         tally = collections.Counter(span["end"] for span in toxins)
         stuck = sum(1 for span in toxins if span["stuck"])
         outlived = sum(1 for span in toxins if span["outlived"])
@@ -1563,10 +1638,10 @@ SECTIONS = (
      show_breath),
     ("snobold", "snobold riders and the DPS picks", show_snobold),
     ("bomb", "every Fire Bomb: target, impact hits, who stood inside, dodges", show_bomb),
-    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, Spray casts, caster spread,"
-     " hold releases, reposition and hold branches", show_worms),
-    ("cure", "Paralytic Toxin spans and how each ended, Burning Bile pulses on the clean, cure branches",
-     show_cure),
+    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, the mobile worm's gap to its"
+     " victim, Spray casts, caster spread, hold releases, reposition and hold branches", show_worms),
+    ("cure", "Paralytic Toxin spans, how each ended and its seconds with no cure or run spot, Burning Bile"
+     " pulses on the clean, cure branches", show_cure),
 )
 
 

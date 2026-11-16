@@ -608,6 +608,11 @@ def worms_pull() -> list[dict]:
         aura(20000, SHOT, 66823),
         note(20100, SHOT, "nb.cure", f"seek {SOOTHE}"),
         note(20100, SOOTHE, "nb.cure", f"run {SHOT}"),
+        # Shot's walk finds no spot for 2 s, Soothe's run for 3
+        note(21000, SHOT, "nb.wormmove", "none cure"),
+        note(23000, SHOT, "nb.wormmove", "move 8 cure partner"),
+        note(22000, SOOTHE, "nb.wormmove", "none run"),
+        note(25000, SOOTHE, "nb.wormmove", "hold run"),
         worm_dmg(26000, DREADSCALE, SHOT, 66870),
         worm_dmg(26000, DREADSCALE, SOOTHE, 66870),
         aura(26000, SHOT, 66823, removed=True),
@@ -719,7 +724,32 @@ class WormPull(unittest.TestCase):
     def test_wormmove_branches_drop_the_yards(self):
         self.assertEqual(nb.wormmove_branches(self.trace), {
             WARD: collections.Counter({"approach": 1, "drag": 1}),
-            SHOT: collections.Counter({"move spew full": 1, "hold spew": 1, "clear": 1, "none pool": 1})})
+            SHOT: collections.Counter({"none cure": 1, "move cure partner": 1, "move spew full": 1, "hold spew": 1,
+                                       "clear": 1, "none pool": 1}),
+            SOOTHE: collections.Counter({"none run": 1, "hold run": 1})})
+
+    def test_the_gap_is_the_mobile_worm_to_its_victim_with_both_still(self):
+        gaps = nb.tank_gaps(self.trace)
+        # Dreadscale mobile 5-40 s on Ward, Acidmaw mobile from 50 s on Soothe then Ward; never the
+        # stationary one on Brace
+        self.assertEqual({key: (len(values), round(values[0], 1)) for key, values in gaps.items()},
+                         {(DREADSCALE, WARD): (35, 30.5), (ACIDMAW, SOOTHE): (2, 36.1), (ACIDMAW, WARD): (68, 8.0)})
+
+    def test_no_spot_seconds_per_toxin_span(self):
+        spans = nb.toxin_spans(self.trace)
+        blind = nb.no_spot_ms(self.trace, spans)
+        self.assertEqual({spans[index]["carrier"]: ms for index, ms in blind.items()},
+                         {SHOT: (2000, 3000), WARD: (0, 0), EDGE: (0, 0)})
+
+    def test_worms_and_cure_print_the_new_lines(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_worms(self.trace)
+            nb.show_cure(self.trace)
+        text = out.getvalue()
+        self.assertIn(f"mobile worm to its victim, both still (WORM_TANK_OFFSET {nb.WORM_TANK_OFFSET:g}):", text)
+        self.assertIn("Acidmaw    Ward (tank)  n 68  median 8.0  max 8.0", text)
+        self.assertIn("cured  no spot: walk 2.0 s, runner 3.0 s", text)
 
     def test_wormhold_counts_drop_the_tier(self):
         self.assertEqual(nb.wormhold_branches(self.trace), {

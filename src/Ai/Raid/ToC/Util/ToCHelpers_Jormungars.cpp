@@ -81,6 +81,8 @@ constexpr uint32 SLIME_POOL_PUSH_PASSES = 2;
 constexpr uint32 BILE_SCATTER_FRESH_MS = 2000;
 // Long enough to walk out, then the Bile rule keeps them apart
 constexpr uint32 BILE_SCATTER_HOLD_MS = 6000;
+// Off a healer's heal reach: the generic 1 plus 2 for the healer drifting off its spot
+constexpr float BILE_HEALER_REACH_PAD = 3.0f;
 // Every bot's tick refreshes the pools, so a read this old means nobody is left to read them
 constexpr uint32 SLIME_POOL_READ_STALE_MS = 2000;
 // A self-res stands the bot up where it lies, and it takes a moment to walk off
@@ -228,6 +230,7 @@ struct JormungarsState
     std::unordered_map<ObjectGuid, BileScatter> bileScatter;
     std::unordered_map<ObjectGuid, uint32> bileScatterTried;  // a deal that found no spot, when
     std::unordered_map<ObjectGuid, uint32> reachHolds;  // when the reach guard first held through a backoff
+    std::unordered_map<ObjectGuid, uint32> dragNeededSince;  // mobile holder -> when its drag became needed
 };
 
 RaidInstanceState<JormungarsState> jormungarsStates;
@@ -280,10 +283,11 @@ float AngleOffFacing(Position const& origin, float x, float y)
 }
 
 // A spot on the worm itself passes the cone test from almost any bearing, and a mobile worm walks over
-// whoever stands between it and its tank, so its front half within melee reach counts too
+// whoever stands between it and its tank, so its front half out to the tank counts too. Out to its full
+// melee range would cover every cure spot round the tank.
 bool InSpewDanger(Position const& origin, float x, float y, float halfArc)
 {
-    return InCone(origin, x, y, halfArc) || (origin.GetExactDist2d(x, y) < WORM_MOBILE_MELEE_RANGE &&
+    return InCone(origin, x, y, halfArc) || (origin.GetExactDist2d(x, y) < WORM_TANK_OFFSET &&
                                              AngleOffFacing(origin, x, y) < static_cast<float>(M_PI) / 2.0f);
 }
 
@@ -517,6 +521,10 @@ WormMember const* FindMember(JormungarsState const& state, ObjectGuid const& gui
     return nullptr;
 }
 
+// Snared this deep, a carrier waits where it is, so its runner can stand anywhere the pulse still reaches
+bool RunsFar(WormMember const& carrier) { return carrier.toxin && carrier.snare <= WORM_TOXIN_STUCK_SLOW; }
+float RunTrigger(WormMember const& carrier) { return RunsFar(carrier) ? WORM_RUN_TRIGGER : WORM_CURE_TRIGGER; }
+
 // A Bile carrier the reposition keeps off the raid: no Beasts tank duty, not sent as a runner
 bool HeldOut(JormungarsState const& state, WormMember const* me, BeastsTankDuty duty)
 {
@@ -616,6 +624,7 @@ void RefreshRoster(PlayerbotAI* botAI, Player* bot, Map* map, JormungarsState& s
     EraseDeparted(state, state.bileScatter);
     EraseDeparted(state, state.bileScatterTried);
     EraseDeparted(state, state.reachHolds);
+    EraseDeparted(state, state.dragNeededSince);
 }
 
 // A pinned cast or channel keeps the bot on its spot this long
@@ -749,7 +758,7 @@ void PairRunners(JormungarsState& state)
 
     // A runner already at a carrier serves that one
     for (WormMember const* carrier : stuck)
-        if (WormMember const* runner = nearestFree(carrier, WORM_CURE_TRIGGER))
+        if (WormMember const* runner = nearestFree(carrier, RunTrigger(*carrier)))
             assign(carrier, runner->guid);
 
     // Then last ms's pairs, or two runners closing on two carriers can trade them back and forth
@@ -800,6 +809,7 @@ void Disengage(Map* map, JormungarsState& state)
     state.bileScatter.clear();
     state.bileScatterTried.clear();
     state.reachHolds.clear();
+    state.dragNeededSince.clear();
 }
 
 WormForm FormOf(PlayerbotAI* botAI, JormungarsState const& state, Unit* acidmaw, Unit* dreadscale)
@@ -1019,6 +1029,27 @@ Position Jittered(Position const& at, ObjectGuid const& guid)
                     at.GetPositionY() + WORM_PREFER_JITTER * std::sin(angle), at.GetPositionZ());
 }
 
+// A Bile carrier's own pulse hits it every 2 s, so its spot keeps some healer bot in heal reach
+std::vector<HazardCircle> HealerReach(PlayerbotAI* botAI, Player* bot, JormungarsState const& state, uint32 now,
+                                      float slack)
+{
+    std::vector<HazardCircle> reach;
+    float const range =
+        botAI->GetRange("heal") + bot->GetCombatReach() + DEFAULT_COMBAT_REACH - BILE_HEALER_REACH_PAD + slack;
+    for (WormMember const& member : state.roster)
+        if (member.bot && member.role == WormRole::Heal && member.guid != bot->GetGUID() && !member.stuck)
+            reach.emplace_back(HeldSpotOf(state, member, now), range);
+
+    return reach;
+}
+
+// No healer bot left: no clause
+bool InHealerReach(std::vector<HazardCircle> const& reach, float x, float y)
+{
+    return reach.empty() || std::any_of(reach.begin(), reach.end(), [x, y](HazardCircle const& circle)
+                                        { return circle.first.GetExactDist2d(x, y) <= circle.second; });
+}
+
 // Melee bots by guid, even ranks on one side of the worm's back and odd on the other, so every bot
 // derives the same split
 Position MeleeStand(JormungarsState const& state, ObjectGuid const& self, Position const& worm)
@@ -1129,6 +1160,7 @@ struct WormRules
     bool spewFires = false;
     bool hasPartner = false;
     Position partnerPos;
+    float partnerTrigger = WORM_CURE_TRIGGER;
     bool hasStand = false;
     Position stand;
     WormMoveReason standReason = WormMoveReason::Melee;  // Bile for a dealt scatter spot
@@ -1209,7 +1241,7 @@ WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool he
     if (rules.spewFires)
     {
         // A cure pair stands just outside the real cone, where its walk put it
-        bool const atPartner = rules.hasPartner && rules.partnerPos.GetExactDist2d(x, y) <= WORM_CURE_TRIGGER;
+        bool const atPartner = rules.hasPartner && rules.partnerPos.GetExactDist2d(x, y) <= rules.partnerTrigger;
         float const arc = rules.halfArc + (atPartner ? 0.0f : WORM_SPEW_TRIGGER_PAD);
         for (Position const& cone : rules.cones)
             if (InCone(cone, x, y, arc))
@@ -1314,6 +1346,7 @@ struct WormAccept
     std::vector<Position> cones;
     float coneArc = 0.0f;
     bool partnerReach = false;
+    float partnerReachYd = WORM_CURE_REACH;
     Position partnerPos;
     bool rearArc = false;
     Position rearOf;  // the worm, with its facing
@@ -1332,7 +1365,7 @@ char const* AcceptFailure(WormAccept const& accept, float x, float y, bool escap
 
     if (!escape)
     {
-        if (accept.partnerReach && accept.partnerPos.GetExactDist2d(x, y) > WORM_CURE_REACH)
+        if (accept.partnerReach && accept.partnerPos.GetExactDist2d(x, y) > accept.partnerReachYd)
             return "target";
 
         if (accept.rearArc && AngleOffFacing(accept.rearOf, x, y) < WORM_MELEE_REAR_ARC_DEG * DEG_TO_RAD)
@@ -1479,14 +1512,19 @@ void DealBileScatter(PlayerbotAI* botAI, Map* map, JormungarsState& state, uint3
         }
 
         std::function<bool(float, float)> inReach;
+        std::vector<HazardCircle> const healers =
+            member->role == WormRole::Heal ? std::vector<HazardCircle>() : HealerReach(memberAI, player, state, now, 0.0f);
         Unit* target = memberAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
         if (member->role == WormRole::Ranged && target && target->IsAlive())
         {
             Position const at = target->GetPosition();
             float const range =
                 memberAI->GetRange("spell") + player->GetCombatReach() + target->GetCombatReach() - 1.0f;
-            inReach = [at, range](float x, float y) { return at.GetExactDist2d(x, y) <= range; };
+            inReach = [at, range, healers](float x, float y)
+            { return at.GetExactDist2d(x, y) <= range && InHealerReach(healers, x, y); };
         }
+        else if (!healers.empty())
+            inReach = [healers](float x, float y) { return InHealerReach(healers, x, y); };
 
         HazardSweepCache sweep;
         Position const prefer = Jittered(member->pos, member->guid);
@@ -1618,9 +1656,11 @@ std::function<bool(float, float)> RoleReach(PlayerbotAI* botAI, Player* bot, Jor
                                                                        : WORM_STATIONARY_MELEE_RANGE) +
                                                               HUNTER_MIN_RANGE_PAD);
 
-                return [at, range, floors](float x, float y)
+                std::vector<HazardCircle> const healers =
+                    heldOut ? HealerReach(botAI, bot, state, getMSTime(), slack) : std::vector<HazardCircle>();
+                return [at, range, floors, healers](float x, float y)
                 {
-                    if (at.GetExactDist2d(x, y) > range)
+                    if (at.GetExactDist2d(x, y) > range || !InHealerReach(healers, x, y))
                         return false;
 
                     return std::none_of(floors.begin(), floors.end(), [x, y](HazardCircle const& floor)
@@ -1632,7 +1672,10 @@ std::function<bool(float, float)> RoleReach(PlayerbotAI* botAI, Player* bot, Jor
         case WormRole::Tank:
             // Its reach melee is zeroed for the Bile's span, so a spot in reach would only keep it on the stack
             if (heldOut)
-                break;
+            {
+                std::vector<HazardCircle> const healers = HealerReach(botAI, bot, state, getMSTime(), slack);
+                return [healers](float x, float y) { return InHealerReach(healers, x, y); };
+            }
 
             // Any target, not just a worm: in a heroic overlap `reach melee` walks a melee straight back
             // to Gormok from a spot out of his reach
@@ -1847,7 +1890,10 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
         needed = true;
 
     if (!needed)
+    {
+        state->dragNeededSince.erase(bot->GetGUID());
         return false;
+    }
 
     for (WormPool const& pool : state->pools)
     {
@@ -1865,6 +1911,53 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
     plan.preferNear = Position(bot->GetPositionX() + DRAG_LEAD * std::cos(heading),
                                bot->GetPositionY() + DRAG_LEAD * std::sin(heading), bot->GetPositionZ());
     return true;
+}
+
+bool MobileWormDragWaits(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive())
+        return false;
+
+    JormungarsState* state = Refresh(botAI);
+    if (!state || !state->engaged)
+        return false;
+
+    ObjectGuid const self = bot->GetGUID();
+    uint32 const now = getMSTime();
+    auto const since = state->dragNeededSince.try_emplace(self, now).first;
+    if (getMSTimeDiff(since->second, now) >= WORM_DRAG_CURE_WAIT_MS)
+        return false;
+
+    WormMember const* me = FindMember(*state, self);
+    if (!me || !me->bile)
+        return false;
+
+    for (WormMember const& walker : state->roster)
+    {
+        if (!walker.toxin || walker.bile || walker.stuck || walker.pos.GetExactDist(me->pos) <= WORM_CURE_TRIGGER)
+            continue;
+
+        WormMember const* nearest = nullptr;
+        float nearestDist = 0.0f;
+        for (WormMember const& carrier : state->roster)
+        {
+            if (!carrier.bile || carrier.guid == walker.guid || !CureReachable(*state, walker, carrier))
+                continue;
+
+            float const dist = walker.pos.GetExactDist(carrier.pos);
+            if (!nearest || dist < nearestDist)
+            {
+                nearest = &carrier;
+                nearestDist = dist;
+            }
+        }
+
+        if (nearest == me)
+            return true;
+    }
+
+    return false;
 }
 
 Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder)
@@ -1917,7 +2010,8 @@ bool IsWormBileCarrierHeldOut(PlayerbotAI* botAI)
     if (!state || !state->engaged)
         return false;
 
-    return HeldOut(*state, FindMember(*state, bot->GetGUID()), GetBeastsTankDuty(botAI));
+    WormMember const* me = FindMember(*state, bot->GetGUID());
+    return me && me->bile && GetBeastsTankDuty(botAI) == BeastsTankDuty::None;
 }
 
 char const* WormMoveReasonName(WormMoveReason reason)
@@ -1936,6 +2030,8 @@ char const* WormMoveReasonName(WormMoveReason reason)
             return "bile";
         case WormMoveReason::Sweep:
             return "sweep";
+        case WormMoveReason::Clump:
+            return "clump";
         case WormMoveReason::Spew:
             return "spew";
         case WormMoveReason::Spread:
@@ -2050,11 +2146,14 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         return false;
 
     WormMember const* partner = carrier ? carrier : pairing.nearestBile;
-    bool const cureWalk = partner && bot->GetExactDist(partner->pos) > WORM_CURE_TRIGGER;
+    bool const runsFar = carrier && RunsFar(*carrier);
+    float const partnerTrigger = runsFar ? WORM_RUN_TRIGGER : WORM_CURE_TRIGGER;
+    bool const cureWalk = partner && bot->GetExactDist(partner->pos) > partnerTrigger;
     if (partner)
     {
         plan.partner = partner->guid;
         plan.partnerPos = partner->pos;
+        plan.partnerReach = runsFar ? WORM_RUN_REACH : WORM_CURE_REACH;
     }
 
     float const bx = bot->GetPositionX();
@@ -2075,6 +2174,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     rules.halfArc = halfArc;
     rules.spewFires = !cureWalk;
     rules.hasPartner = partner != nullptr;
+    rules.partnerTrigger = partnerTrigger;
     if (partner)
         rules.partnerPos = partner->pos;
 
@@ -2178,6 +2278,12 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
                                      WORM_MELEE_STACK_CLEARANCE, RULE_SPREAD});
     }
 
+    // Unlike the spread, every tier keeps this one: pools drop at the worm's feet, and a caster paralysed
+    // there stays in one as it grows
+    if (!cureWalk && caster && !toxin && !bile && mobileUp)
+        rules.circles.push_back({WormMoveReason::Clump, mobileUp->pos, WORM_MELEE_RING, WORM_CASTER_CLUMP_CLEARANCE,
+                                 RULE_HARD});
+
     // Heroic overlap: one mover per bot, so the worm spot also keeps casters out of the stomp
     if (!cureWalk && caster)
         if (Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok))
@@ -2229,6 +2335,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     // cure walk ends. Just outside the real cone is safe, and urgency covers a Spew being cast.
     accept->coneArc = cureWalk ? halfArc : halfArc + WORM_SPEW_CLEAR_PAD;
     accept->partnerReach = cureWalk;
+    accept->partnerReachYd = plan.partnerReach;
     accept->partnerPos = plan.partnerPos;
     accept->rearArc = meleeStand;
     if (meleeStand)
@@ -2305,7 +2412,7 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
                 return WormMoveReasonName(failed);
 
             // The cure's own trigger, not the walk's reach: a partner shifting a yard mustn't send it again
-            if (cureHold && (!partner || partner->pos.GetExactDist2d(x, y) > WORM_CURE_TRIGGER))
+            if (cureHold && (!partner || partner->pos.GetExactDist2d(x, y) > partnerTrigger))
                 return "target";
 
             return partnerTier || roleHold(x, y) ? nullptr : "reach";

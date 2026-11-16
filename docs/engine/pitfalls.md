@@ -946,6 +946,13 @@ it: Gormok 6.5→10.5, the worms 6.5→12 mobile / 5 stationary, Icehowl 12→14
 constant derived from the old values silently went wrong. Read `GetCombatReach()` live where the unit
 is at hand; otherwise name the display a constant comes from.
 
+**A chase doesn't settle at contact plus both reaches.** From outside melee range the core paths to
+that distance; inside it, any victim move sends the chaser at the victim's near point (its own reach,
+less half its run speed while it walks) until a 400 ms recheck finds the victim still
+(`TargetedMovementGenerator.cpp`). So a worm following a dragging tank settled 3-12 yd off it (median
+7-8), not the 14 its reaches give, and constants built on 14 refused every cure spot round the tank
+(25H 2026-11-16, three deaths). Measure the gap in the trace.
+
 `WorldObject::isInFront` / `isInBack` default to `arc = M_PI` (`Object.h`) — front half plus back half
 is the entire circle, so a check like `boss->isInFront(bot) || boss->isInBack(bot)` is **always
 true**. On Sapphiron this made a priority-61 repositioning action permanently active and starved the
