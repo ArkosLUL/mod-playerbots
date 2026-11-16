@@ -2013,7 +2013,7 @@ float const* FindThreat(ThreatSnapshot const& snapshot, ObjectGuid const& guid)
     return found != snapshot.end() && found->first == guid ? &found->second : nullptr;
 }
 
-// A repeated guid keeps the last threat, as a map's operator[] would
+// A repeated guid keeps its last threat
 void SetThreat(ThreatSnapshot& snapshot, ObjectGuid const& guid, float threat)
 {
     auto const found = std::lower_bound(snapshot.begin(), snapshot.end(), guid,
