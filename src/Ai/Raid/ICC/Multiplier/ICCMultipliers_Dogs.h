@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_DOGS_H
 
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // Holds a yielding tank's spells and swings on the dog, and its area damage near it. Heals pass.
 class IccDogsYieldMultiplier : public Multiplier
@@ -15,6 +16,9 @@ class IccDogsYieldMultiplier : public Multiplier
 public:
     IccDogsYieldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dogs yield") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

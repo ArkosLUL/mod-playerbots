@@ -9,6 +9,7 @@
 
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
+#include "RaidSplash.h"
 
 // A braked bot's attacks on its drake and its area damage next to it: its threat would take the drake
 // off its holder
@@ -17,6 +18,9 @@ class IccSgDrakeBrakeMultiplier : public Multiplier
 public:
     IccSgDrakeBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa drake brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 class IccSgDrakeAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier

@@ -304,6 +304,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 std::string DescribeGuid(Unit* unit) { return unit ? RaidObs::DescribeAssignment(unit->GetGUID()) : "none"; }
 
 uint8 PhaseOf(Unit* boss) { return boss->HealthAbovePct(80) ? 1 : (boss->HealthAbovePct(35) ? 2 : 3); }
@@ -1389,7 +1396,7 @@ float ShareHealthLeftPct(Player* member, Creature* boss, uint8 cutPct, Player* n
     float const swings = std::ceil(static_cast<float>(SHARE_WINDOW_MS) / attackMs);
     float const left = static_cast<float>(member->GetHealth()) - swings * perSwing;
     float const pct = std::max(0.0f, left * 100.0f / std::max<uint32>(member->GetMaxHealth(), 1));
-    if (noter == member)
+    if (noter == member && RaidObs::Active())
     {
         uint32 const step = static_cast<uint32>(pct) / SHARE_HEALTH_STEP * SHARE_HEALTH_STEP;
         NoteDerived(member, "pp.sharehp", std::to_string(step));

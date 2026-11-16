@@ -271,6 +271,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 bool IsMindControlled(Unit* member) { return member && member->HasAura(SPELL_BQL_UNCONTROLLABLE_FRENZY); }
 
 // Her, or a mind-controlled vampire a player wants dead

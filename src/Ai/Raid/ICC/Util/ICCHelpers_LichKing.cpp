@@ -459,6 +459,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 std::string Tag(char const* rule, ObjectGuid const& guid)
 {
     return guid ? std::string(rule) + " " + std::to_string(guid.GetCounter()) : std::string(rule);
@@ -2766,7 +2773,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, LkState const& st, Creature* boss)
     if (Unit* skull = GetRaidHumanSkull(botAI, &IsSkullUnit))
         if (!braked || skull != boss)
         {
-            NoteDerived(bot, "lk.target", Tag("skull", skull));
+            if (RaidObs::Active())
+                NoteDerived(bot, "lk.target", Tag("skull", skull));
+
             return skull;
         }
 
@@ -2774,7 +2783,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, LkState const& st, Creature* boss)
     if (st.phase == IccLichKingPhaseId::Outro)
     {
         bool const open = boss->IsLevitating() && bot->IsValidAttackTarget(boss);
-        NoteDerived(bot, "lk.target", open ? Tag("outro", boss) : std::string("outro"));
+        if (RaidObs::Active())
+            NoteDerived(bot, "lk.target", open ? Tag("outro", boss) : std::string("outro"));
+
         return open ? boss : nullptr;
     }
 
@@ -2782,7 +2793,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, LkState const& st, Creature* boss)
     Unit* late = GetLkLateTarget(botAI, lateRule);
     if (late || IccLichKingInFrostmourne(bot))
     {
-        NoteDerived(bot, "lk.target", late ? Tag(lateRule ? lateRule : "late", late) : std::string("frostmourne"));
+        if (RaidObs::Active())
+            NoteDerived(bot, "lk.target", late ? Tag(lateRule ? lateRule : "late", late) : std::string("frostmourne"));
+
         return late;
     }
 
@@ -2810,7 +2823,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, LkState const& st, Creature* boss)
         return nullptr;
     }
 
-    NoteDerived(bot, "lk.target", pick ? Tag(rule, pick) : std::string(rule));
+    if (RaidObs::Active())
+        NoteDerived(bot, "lk.target", pick ? Tag(rule, pick) : std::string(rule));
+
     return pick;
 }
 }  // namespace

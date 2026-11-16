@@ -168,7 +168,8 @@ bool IsTankPlayer(Player* player)
 // Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return player && GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
-void NoteDerived(Player* bot, char const* key, std::string const& value)
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, key, value);

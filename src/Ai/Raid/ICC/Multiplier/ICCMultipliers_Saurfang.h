@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_SAURFANG_H
 
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // Holds a damage dealer's area damage: the boss stands alone and Resistant Skin takes 95% off it on the
 // beasts, so it only pulls them. Tanks keep theirs for threat.
@@ -16,6 +17,9 @@ class IccDbsAreaDamageMultiplier : public Multiplier
 public:
     IccDbsAreaDamageMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc dbs area damage") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 // A paladin on Mark duty keeps its Beacon of Light on the mark, so its class beacon nodes would move it

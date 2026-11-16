@@ -378,6 +378,13 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
+// A literal builds its std::string only once a trace is open
+void NoteDerived(Player* bot, char const* key, char const* value)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, key, value);
+}
+
 std::string Tag(char const* rule, Unit const* unit)
 {
     return unit ? std::string(rule) + " " + std::to_string(unit->GetGUID().GetCounter()) : std::string(rule);
@@ -1721,6 +1728,9 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
 
     NoteDerived(bot, "sg.stand", bs.walk == WalkKind::Stand ? StandName(stand) : bs.halt ? "wait" : "none");
     NoteDerived(bot, "sg.cold", bs.coldNote);
+    if (!RaidObs::Active())
+        return;
+
     if (bs.hideTomb && bs.hideMarker)
         NoteDerived(bot, "sg.hide", Tag("bomb", bs.hideTomb));
     else if (bs.buffetTomb)
@@ -1831,7 +1841,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
     if (Unit* skull = GetRaidHumanSkull(botAI, &IsSkullUnit))
         if (!restrained || skull != boss)
         {
-            NoteDerived(bot, "sg.target", Tag("skull", skull));
+            if (RaidObs::Active())
+                NoteDerived(bot, "sg.target", Tag("skull", skull));
+
             return skull;
         }
 
@@ -1840,14 +1852,18 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
     if (st.phase == IccSindragosaPhaseId::Air)
     {
         Unit* tomb = AirTombPick(botAI, st, bs, rule);
-        NoteDerived(bot, "sg.target", tomb ? Tag(rule.c_str(), tomb) : std::string("air"));
+        if (RaidObs::Active())
+            NoteDerived(bot, "sg.target", tomb ? Tag(rule.c_str(), tomb) : std::string("air"));
+
         return tomb;
     }
 
     if (IsRaidDpsBot(bot) && PlayerbotAI::IsRanged(bot))
         if (Unit* unit = PickTomb(st, bot, &Breakable))
         {
-            NoteDerived(bot, "sg.target", Tag("break", unit));
+            if (RaidObs::Active())
+                NoteDerived(bot, "sg.target", Tag("break", unit));
+
             return unit;
         }
 

@@ -13,32 +13,26 @@
 #include <algorithm>
 #include <map>
 
-namespace
-{
-    std::vector<Creature*> IccGetCreaturesByEntry(WorldObject* searcher, uint32 entry, float range)
-    {
-        std::list<Creature*> raw;
-        searcher->GetCreatureListWithEntryInGrid(raw, entry, range);
-
-        std::vector<Creature*> out;
-        out.reserve(raw.size());
-        for (Creature* c : raw)
-            if (c && c->IsAlive())
-                out.push_back(c);
-
-        return out;
-    }
-}
-
 std::vector<Creature*> IccGetCreaturesByEntries(WorldObject* searcher, std::initializer_list<uint32> entries,
                                                 float range)
 {
     std::vector<Creature*> out;
+    if (entries.size() == 0)
+        return out;
+
+    std::list<Creature*> raw;
+    if (entries.size() == 1)
+        searcher->GetCreatureListWithEntryInGrid(raw, *entries.begin(), range);
+    else
+        searcher->GetCreatureListWithEntryInGrid(raw, std::vector<uint32>(entries), range);
+
+    // Grouped by entry in list order, grid order inside each, as one search per entry would list them
+    out.reserve(raw.size());
     for (uint32 entry : entries)
-    {
-        auto part = IccGetCreaturesByEntry(searcher, entry, range);
-        out.insert(out.end(), part.begin(), part.end());
-    }
+        for (Creature* c : raw)
+            if (c && c->GetEntry() == entry && c->IsAlive())
+                out.push_back(c);
+
     std::sort(out.begin(), out.end(), [](Creature const* a, Creature const* b) { return a->GetGUID() < b->GetGUID(); });
     out.erase(std::unique(out.begin(), out.end()), out.end());
 

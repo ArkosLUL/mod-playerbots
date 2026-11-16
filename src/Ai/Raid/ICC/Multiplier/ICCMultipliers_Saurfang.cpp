@@ -15,7 +15,7 @@
 float IccDbsAreaDamageMultiplier::GetValue(Action* action)
 {
     // Heals carry the Aoe threat type too.
-    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action))
+    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
     return PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true) ? 1.0f : 0.0f;
