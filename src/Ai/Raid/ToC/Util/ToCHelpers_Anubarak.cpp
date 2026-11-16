@@ -1061,13 +1061,16 @@ bool BossStillFor(AnubarakState const& state, uint32 now, uint32 ms)
 }
 
 // The explicit main tank, else the first living tank, as GetMainTankGuid picks but with the spec
-// asked too, so it can't blink
-ObjectGuid StableMainTankGuid(Group* group)
+// asked too, so it can't blink. walked: no flagged tank, so every living member ahead of the answer
+// (all of them when it's empty) is known not to be a tank.
+ObjectGuid StableMainTankGuid(Group* group, bool& walked)
 {
+    walked = false;
     for (Group::MemberSlot const& slot : group->GetMemberSlots())
         if (slot.flags & MEMBER_FLAG_MAINTANK)
             return slot.guid;
 
+    walked = true;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1079,16 +1082,21 @@ ObjectGuid StableMainTankGuid(Group* group)
 }
 
 // Living tanks on the map other than the main tank, bots first, so a human only takes a side no bot
-// can. Each in IsAssistTankOfIndex's order: assistants first.
-std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank)
+// can. Each in IsAssistTankOfIndex's order: assistants first. walked as StableMainTankGuid set it for
+// mainTank, so the tank test isn't asked twice of the members it already turned down.
+std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank, bool walked)
 {
     // Bot assistants, other bots, human assistants, other humans
     std::vector<ObjectGuid> ranks[4];
+    bool turnedDown = walked;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
+        if (member && member->GetGUID() == mainTank)
+            turnedDown = false;
+
         if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
-            !IsAnubarakTankPlayer(member))
+            turnedDown || !IsAnubarakTankPlayer(member))
             continue;
 
         uint8 const rank = (GET_PLAYERBOT_AI(member) ? 0 : 2) + (group->IsAssistant(member->GetGUID()) ? 0 : 1);
@@ -1115,8 +1123,9 @@ void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
         return;
     }
 
-    state.mainTank = StableMainTankGuid(group);
-    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank);
+    bool walked = false;
+    state.mainTank = StableMainTankGuid(group, walked);
+    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank, walked);
 
     for (ObjectGuid& held : state.sideTanks)
     {
@@ -5970,8 +5979,9 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
     if (!group)
         return tanks;
 
-    ObjectGuid const mainTank = StableMainTankGuid(group);
-    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank);
+    bool walked = false;
+    ObjectGuid const mainTank = StableMainTankGuid(group, walked);
+    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank, walked);
     for (size_t side = 0; side < 2 && side < sides.size(); ++side)
         tanks.side[side] = sides[side];
 
