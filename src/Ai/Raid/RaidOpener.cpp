@@ -277,7 +277,8 @@ float RaidOpenerHoldMultiplier::GetValue(Action* action)
     if (IsRaidOpenerHeld(botAI, _config, target))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && GetRaidOpenerHeldBossNear(botAI, _config, OPENER_AREA_THREAT_REACH)
+    return IsRaidAreaDamage(botAI, action, _splash) &&
+                   GetRaidOpenerHeldBossNear(botAI, _config, OPENER_AREA_THREAT_REACH)
                ? 0.0f
                : 1.0f;
 }
