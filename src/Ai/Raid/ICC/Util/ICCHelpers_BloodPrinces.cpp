@@ -1332,7 +1332,9 @@ Unit* ResolveTarget(PlayerbotAI* botAI, BpcState& st)
     if (Creature* nucleus = NucleusGrab(st, bot))
     {
         NoteDerived(bot, "bpc.target", "nucleus");
-        NoteDerived(bot, "bpc.nucleus", "hit " + std::to_string(bot->GetAuraCount(SPELL_BPC_SHADOW_RESONANCE)));
+        if (RaidObs::Active())
+            NoteDerived(bot, "bpc.nucleus", "hit " + std::to_string(bot->GetAuraCount(SPELL_BPC_SHADOW_RESONANCE)));
+
         return nucleus;
     }
 
@@ -1552,7 +1554,9 @@ Unit* GetBpcNucleusToTaunt(PlayerbotAI* botAI)
         return nullptr;
     }
 
-    NoteDerived(bot, "bpc.nucleus", "taunt " + std::to_string(stacks));
+    if (RaidObs::Active())
+        NoteDerived(bot, "bpc.nucleus", "taunt " + std::to_string(stacks));
+
     return nucleus;
 }
 
@@ -1596,14 +1600,18 @@ bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot)
                                     { return hazard.first.GetExactDist2d(bot) < hazard.second; });
     if (clear)
     {
-        NoteDerived(bot, "bpc.ball", std::string(kind) + " clear");
+        if (RaidObs::Active())
+            NoteDerived(bot, "bpc.ball", std::string(kind) + " clear");
+
         return false;
     }
 
     Position const found = FindNearestPositionClearOfHazards(bot, hazards, BALL_STEP, nullptr);
     if (found.GetPositionX() != 0.0f || found.GetPositionY() != 0.0f)
     {
-        NoteDerived(bot, "bpc.ball", std::string(kind) + " step");
+        if (RaidObs::Active())
+            NoteDerived(bot, "bpc.ball", std::string(kind) + " step");
+
         spot = found;
         return true;
     }
@@ -1634,11 +1642,15 @@ bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot)
 
     if (!best)
     {
-        NoteDerived(bot, "bpc.ball", std::string(kind) + " none");
+        if (RaidObs::Active())
+            NoteDerived(bot, "bpc.ball", std::string(kind) + " none");
+
         return false;
     }
 
-    NoteDerived(bot, "bpc.ball", std::string(kind) + " fewest");
+    if (RaidObs::Active())
+        NoteDerived(bot, "bpc.ball", std::string(kind) + " fewest");
+
     spot = NodeSpot(best);
     return true;
 }
