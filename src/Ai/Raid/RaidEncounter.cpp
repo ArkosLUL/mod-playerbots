@@ -158,8 +158,10 @@ namespace
             {
                 auto found = _bits.find(action);
                 if (found == _bits.end())
-                    found =
-                        _bits.emplace(action, Rules::CaresBits(_slots, ClassifyAction(action), action->getName())).first;
+                {
+                    uint64 const bits = Rules::CaresBits(_slots, ClassifyAction(action), action->getName());
+                    found = _bits.emplace(action, bits).first;
+                }
 
                 _lastAction = action;
                 _lastBits = &found->second;
