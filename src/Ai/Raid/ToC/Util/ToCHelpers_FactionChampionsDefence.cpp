@@ -2578,11 +2578,11 @@ bool BeingResurrected(std::vector<Member> const& members, ObjectGuid corpse)
                        });
 }
 
-bool CorpseCrowded(std::vector<Unit*> const& champions, Player* corpse)
+bool PackCrowded(std::vector<Unit*> const& champions, Unit* spot)
 {
     uint32 const nearby = static_cast<uint32>(
-        std::count_if(champions.begin(), champions.end(), [corpse](Unit* champion)
-                      { return champion->GetExactDist2d(corpse) <= CORPSE_PACK_RADIUS; }));
+        std::count_if(champions.begin(), champions.end(), [spot](Unit* champion)
+                      { return champion->GetExactDist2d(spot) <= CORPSE_PACK_RADIUS; }));
     return nearby > CORPSE_PACK_MAX;
 }
 
@@ -2598,7 +2598,7 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
         if (!PlayerbotAI::IsHeal(corpse) && !IsTankMember(corpse))
             continue;
 
-        if (!CorpseCrowded(champions, corpse) && !BeingResurrected(members, corpse->GetGUID()))
+        if (!BeingResurrected(members, corpse->GetGUID()))
             corpses.push_back(corpse);
     }
 
@@ -2618,8 +2618,9 @@ void UpdateBattleRes(FactionChampionsDefenceState& state, Player* bot, std::vect
     for (Member const& member : members)
     {
         Player* player = member.player;
+        // the raised bot comes back where the druid stands, not at its corpse
         if (player->getClass() != CLASS_DRUID || !GET_PLAYERBOT_AI(player) || IsTankMember(player) ||
-            !FreeToAct(player))
+            !FreeToAct(player) || PackCrowded(champions, player))
             continue;
 
         uint32 const rank = FirstKnownRank(player, REBIRTH_RANKS);
@@ -3499,7 +3500,7 @@ bool FactionChampionsCorpseCrowded(PlayerbotAI* botAI)
         return false;
 
     std::vector<Unit*> const champions = FactionChampionsInCombat(botAI);
-    return CorpseCrowded(champions, botAI->GetBot());
+    return PackCrowded(champions, botAI->GetBot());
 }
 
 Unit* FactionChampionsFreedomTarget(PlayerbotAI* botAI, uint32& spellId)

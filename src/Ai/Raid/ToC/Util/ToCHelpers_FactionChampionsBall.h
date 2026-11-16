@@ -55,7 +55,8 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 // off other healers. Of those within 30 yd
 // of another living healer or nearer one than the bot is now, the farthest from every melee champion; with
 // none, the one nearest a healer. Latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while
-// rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite.
+// rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite. A hard cast blocks the kite, so any
+// bot's refresh breaks it once a chaser would reach melee before it lands (fc.castbreak).
 bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
 
 // A melee champion the bot kites from is within 45 yd: reaching its target or a heal target would walk it

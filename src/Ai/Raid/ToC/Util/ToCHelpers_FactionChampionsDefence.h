@@ -196,8 +196,8 @@ Unit* FactionChampionsProtectTarget(PlayerbotAI* botAI, uint32& spellId);
 // the pack and is their next pick
 bool FactionChampionsCorpseCrowded(PlayerbotAI* botAI);
 
-// The corpse this druid bot battle-resurrects and the Rebirth rank: fewer than 2 champions within 8 yd
-// of it, healers then tanks, one druid per corpse. Never a dps.
+// The corpse this druid bot battle-resurrects and the Rebirth rank: healers then tanks, one druid per corpse,
+// none from a druid with 2 or more champions within 8 yd, since the res lands where the druid stands. Never a dps.
 Unit* FactionChampionsBattleResTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The bot is focused: 2 or more champions have it as victim and its health loss over the last 2 s, run

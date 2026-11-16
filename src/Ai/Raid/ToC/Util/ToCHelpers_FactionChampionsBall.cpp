@@ -17,6 +17,7 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "Spell.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -130,6 +131,7 @@ constexpr float KITE_CRAWL_REACH = 10.0f;
 constexpr float KITE_CRAWL_REACH_RET = 17.0f;
 // the Hands' reach, heals go to 40 so the healers can drift a bit
 constexpr float KITE_HEAL_REACH = 30.0f;
+constexpr uint32 CAST_BREAK_HOLD_MS = 1000;
 
 struct Vec
 {
@@ -163,6 +165,7 @@ struct BallState
     std::unordered_map<ObjectGuid, Run> kites;  // kiting bot -> its current hop
     std::unordered_map<ObjectGuid, uint32> stepEndMs;
     std::unordered_map<ObjectGuid, CycloneStand> cycloneStands;
+    std::unordered_map<ObjectGuid, uint32> castBreaks;  // chased caster -> when its cast break was asked
 };
 
 RaidInstanceState<BallState> ballStates;
@@ -364,6 +367,22 @@ float CrawlReach(Unit* champion)
     return ret ? KITE_CRAWL_REACH_RET : KITE_CRAWL_REACH;
 }
 
+// The ones its kite runs from, a crawling one only once it's near
+std::vector<Unit*> KiteChasers(PlayerbotAI* botAI, Player* bot)
+{
+    std::vector<Unit*> chasers = MeleeOn(botAI, bot, KITE_CLEAR);
+    chasers.erase(std::remove_if(chasers.begin(), chasers.end(), [bot](Unit* chaser)
+                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > CrawlReach(chaser); }),
+                  chasers.end());
+    return chasers;
+}
+
+bool KiteFree(BallState const& state, PlayerbotAI* botAI, Player* bot)
+{
+    return !bot->HasUnitState(UNIT_STATE_LOST_CONTROL) && !bot->HasAuraType(SPELL_AURA_MOD_ROOT) &&
+           !state.runs.count(bot->GetGUID()) && !FactionChampionsHasCcDuty(botAI, bot->GetGUID());
+}
+
 // Other living healers: a spot this close to one drags the chaser onto it
 bool NearHealer(Player* bot, std::vector<Player*> const& members, Position const& spot)
 {
@@ -508,6 +527,38 @@ void UpdateCycloneStands(BallState& state, PlayerbotAI* botAI, std::vector<Playe
     }
 }
 
+// A bot mid hard cast runs no triggers, so its kite can't break the cast. This breaks it from any bot's tick
+// once a chaser would reach melee before the cast lands.
+void BreakChasedCasts(BallState& state, PlayerbotAI* botAI, std::vector<Player*> const& members, uint32 now)
+{
+    for (Player* member : members)
+    {
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        Spell* cast = member->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!memberAI || !cast || cast->getState() != SPELL_STATE_PREPARING || !member->IsMovementPreventedByCasting())
+            continue;
+
+        // its own tick takes the request, until then every refresh would ask again
+        auto const asked = state.castBreaks.find(member->GetGUID());
+        if (asked != state.castBreaks.end() && getMSTimeDiff(asked->second, now) < CAST_BREAK_HOLD_MS)
+            continue;
+
+        float const leftSec = static_cast<float>(std::max(cast->GetCastTimeRemaining(), 0)) / 1000.0f;
+        std::vector<Unit*> const chasers = KiteChasers(botAI, member);
+        bool const caught = std::any_of(chasers.begin(), chasers.end(), [member, leftSec](Unit* chaser)
+                                        {
+                                            return member->GetExactDist2d(chaser) - chaser->GetMeleeRange(member) <=
+                                                   chaser->GetSpeed(MOVE_RUN) * leftSec;
+                                        });
+        if (!caught || !KiteFree(state, botAI, member))
+            continue;
+
+        state.castBreaks[member->GetGUID()] = now;
+        memberAI->RequestSpellInterrupt();
+        RaidObs::Note(member, "fc.castbreak", std::string(cast->GetSpellInfo()->SpellName[0]));
+    }
+}
+
 // Null unless live: a refresh after the kill would write into the next encounter's trace
 BallState* Refresh(PlayerbotAI* botAI)
 {
@@ -529,6 +580,7 @@ BallState* Refresh(PlayerbotAI* botAI)
     std::vector<Player*> const members = GroupOnMap(bot);
     UpdateOpener(state, botAI, members);
     UpdateCycloneStands(state, botAI, members);
+    BreakChasedCasts(state, botAI, members, now);
     return &state;
 }
 }  // namespace
@@ -994,13 +1046,9 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
 
     Player* bot = botAI->GetBot();
     ObjectGuid const guid = bot->GetGUID();
-    std::vector<Unit*> chasers = MeleeOn(botAI, bot, KITE_CLEAR);
-    chasers.erase(std::remove_if(chasers.begin(), chasers.end(), [bot](Unit* chaser)
-                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > CrawlReach(chaser); }),
-                  chasers.end());
+    std::vector<Unit*> const chasers = KiteChasers(botAI, bot);
     auto const kite = state->kites.find(guid);
-    if (chasers.empty() || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->HasAuraType(SPELL_AURA_MOD_ROOT) ||
-        state->runs.count(guid) || FactionChampionsHasCcDuty(botAI, guid))
+    if (chasers.empty() || !KiteFree(*state, botAI, bot))
     {
         if (kite != state->kites.end())
             state->kites.erase(kite);

@@ -445,8 +445,10 @@ REGRIP_MS = 8000
 SPELL_CHAINS_OF_ICE = 45524
 # a grip chain link's skip, `cooldown`, `gone` or `timeout`
 LINK_SKIP = "fc.linkskip"
-# a pull with no chased run, escape, kite, wall grip or skipped link writes none
-OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, WALL, LINK_SKIP))
+# a chased bot's hard cast broken so its kite can run, the spell's name
+CAST_BREAK = "fc.castbreak"
+# a pull with no chased run, escape, kite, broken cast, wall grip or skipped link writes none
+OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, CAST_BREAK, WALL, LINK_SKIP))
 KICK = "fc.kick"
 # champion channels: id -> name, every difficulty
 CHANNEL_SPELLS = {**dict.fromkeys((65816, 68145, 68146, 68147), "Hellfire"),

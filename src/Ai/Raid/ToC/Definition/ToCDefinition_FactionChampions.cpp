@@ -94,6 +94,10 @@ void DefineFactionChampions(EncounterBuilder& e)
     // bot off the kill target. The name is what the reader counts vetoes under.
     e.OwnTargeting("faction champions target guard multiplier", Role::Any, FactionChampionsTargetOwned,
                    Family::DpsAssist | Family::TankAssist);
+    // assist hands a healer a Feared champion that "invalid target" drops next tick, so it loops there instead
+    // of healing, and a healer's pick also holds our Polymorph and Fear off that champion
+    e.OwnTargeting("faction champions healer target guard multiplier", Role::Heal, FactionChampionsLive,
+                   Family::DpsAssist);
 
     // once the bot is on its totem the kill totem node returns false, and either of these would pull it off
     e.Block("faction champions totem guard multiplier", Role::Any, FactionChampionsTotemHeld, 0,
