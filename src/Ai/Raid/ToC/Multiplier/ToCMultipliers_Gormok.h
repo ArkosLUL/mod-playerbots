@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
 
 // Holds generic movers off a ranged dps or healer carrying a snobold, so it stays in Gormok's melee
 // until the snobold dies
@@ -13,6 +14,16 @@ public:
     GormokSnoboldCarrierMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "gormok snobold carrier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool spellMover = false;
+        bool mover = false;
+        bool staysFree = false;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 void AddToCGormokMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
