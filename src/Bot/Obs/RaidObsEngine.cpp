@@ -539,6 +539,9 @@ void NoteHazard(Map* map, uint32 spellId, Position const& origin, char const* sh
 
 void NoteHazardCircle(Map* map, uint32 spellId, Position const& pos, float radius, uint32 ttlMs)
 {
+    if (!Active())
+        return;
+
     NoteHazard(map, spellId, pos, "circle", "\"rad\":" + Num(radius), ttlMs);
 }
 
