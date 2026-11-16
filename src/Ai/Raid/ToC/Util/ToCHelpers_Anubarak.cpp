@@ -7,7 +7,6 @@
 #include <deque>
 #include <functional>
 #include <initializer_list>
-#include <list>
 #include <map>
 #include <optional>
 #include <string>
@@ -858,8 +857,9 @@ AnubarakState* Sweep(Player* bot)
     if (!origin)
         origin = bot;
 
-    std::list<Creature*> creatures;
-    origin->GetCreatureListWithEntryInGrid(creatures, SWEEP_ENTRIES, ANUBARAK_ROOM_RADIUS);
+    static ToCEntrySet const sweepSet(SWEEP_ENTRIES);
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(origin, creatures, sweepSet, ANUBARAK_ROOM_RADIUS);
     for (Creature* creature : creatures)
     {
         if (!creature->IsAlive())
