@@ -201,11 +201,15 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
         return false;
     }
 
-    std::string note = branch;
-    if (note == "move")
-        note += " " + std::to_string(static_cast<int32>(std::lround(travel)));
+    if (RaidObs::Active())
+    {
+        std::string note = branch;
+        if (note == "move")
+            note += " " + std::to_string(static_cast<int32>(std::lround(travel)));
 
-    NoteDodge(bot, note);
+        NoteDodge(bot, note);
+    }
+
     return true;
 }
 
