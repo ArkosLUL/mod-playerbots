@@ -10,8 +10,8 @@ In flight since 2026-11-08. The status table is the source of truth for what ran
 | 2 | go/no-go | go | | user, 2026-11-16: re-aimed at the hot triggers (lane `t-triggers`), no behavior-changing W items |
 | 3 | a-shared-fc (wave 1) | merged; review found no behavior diff, recorded 1 minor, fixed 1 harness cleanup | `f31dd9ac6` (lane `4ae762591`…`ecddf5558`) | Done: OBS, A0, A0-opener, N2, T7, R4, N1a, N1b, N1c, R3. Dropped: N1c-single-cast (one cast, a cache gains nothing), NB-TauntGuard (reads IsTank, lives in engine `src/Util`). Decisions: RaidSpellIdRef rechecks `getSpell()` each read (PullAction swaps spell); DispelGuard caches a `getSpell()` compare (safe while no cure class reassigns spell); NoteHazardCircle `Active()` race as every existing guard; R4 binds the table via static_cast in AddMultipliers; T7 uses upstream AC #22286's multi-entry grid search; wave 2 can reuse RaidActionCache/RaidSpellIdRef. Gaps: OBS/N2/A0-opener/N1c review-only; harness stubs model IsWithinDist, phase, grid visit, ClassifyAction; subjects of `e7b5c1203` (80) and `b91f8e930` (74) over 72 chars. Rebuild needed. |
 | 3 | t-triggers (wave 1) | merged; review fixed 1 bug (T2 harness skipped invalid standing cells), 2 minor + 1 cleanup comments, recorded 1 minor | `aa42c6900` (lane `7cfb6d25e`…`aead9e58d`) | Done: T1, T2, T3, T4, T5, T8; none dropped. Decisions: T2 keeps a shared per-instance hint guid (`ToCGateState::champion`), always re-checked; T2 needs IsValidMapCoord; T2 tests container membership by a one-cell `map->Visit` (`GetCurrentCell()` is protected); T4 keeps last value wins for a repeated guid; ToCEntrySet bitset ~3.5 KB for the Defence list. Gaps: RefreshIcehowl comment wrongly says no guid slot (left, a slot search changes behavior); T2's proof holds only at the 200 yd ENTRY_SEARCH_RADIUS; T2 saves the sweep only while the boss or champion is within one cell. Rebuild needed. |
-| 3 | b-anub-twins-jarax (wave 2) | pending | | |
-| 3 | c-icc (wave 2) | pending | | |
+| 3 | b-anub-twins-jarax (wave 2) | merged; review found no behavior diff, fixed 1 minor (stale red counts in the brief), recorded 1 minor | `5414916ba` (lane `a114e58a7`…`897ad3ec5`) | Done: T3a, T3b, RA, T6, KS, TG-A, TG-T, R11, R6, NM, R6-J, N1-TI, N1-TR. Dropped: N1 one-cast guards (one cast, a lookup costs the same), N1 taunt guards (reads IsTank, lives in `src/Util`), R6 heal casts (single cast, a cache lookup costs as much), SideTankAreaGuard name copy (side tanks only, too little gain). Decisions: RA returns a by-value boost `small_vector` (upstream may want std-only); T6 assumes the member list is fixed between two back-to-back walks; R11 folds Feign Death into the held branch (same calls, same verdict); N1-TI moves `TwinInterruptKind` into the header at global scope; TG-A leaves NoteHands, the `++` note and literal notes ungated; SideTankAreaGuard argument order compiler-chosen as before; `Active()` race as every guard. Gaps: T6/KS/TG-A/TG-T review-only; T3 harness models the cell visit as a list; anub harness has no value refresh clocks and synthetic action types; RA commit body claims an unmeasured heap cost; per-commit compiles checked by reading; subjects of `3a6048f71` (77), `15c8376ea` (75), `6770c17cd` (77) over 72 chars. Rebuild needed. |
+| 3 | c-icc (wave 2) | merged; review found no behavior diff, fixed 2 minor (N3 comment pointed at removed code, brief's NO null-check list), recorded 1 minor | `ef1dfd517` (lane `16ebe62fe`…`65b020a4f`) | Done: S1, N3, NO, NG-LK, NG-BPC, NG-SG, NG-SGA, NG-PP, NG-RF, NG-LM. Dropped: SG-tomb (KindOf already caches per action), NO-LKLate (every caller already inside an `Active()` guard), NG-VD/NG-LKL (rare notes, no measurable gain). Decisions: guarded notes keep the `Active()` race (wave 1 OBS); N3 keeps per-entry grouping so equivalence needs no unique guid; Svalna's wrapper now takes `char const*` only (`-Wunused-function`); guards also cover drakes and Marrowgar. Gaps: NO/NG review-only, S1 per-site proof textual; n3 harness models the grid visit as a list; no ICC baseline pmon; not attempted: splash multipliers' heal `dynamic_cast`, BPC DirectHit `"spell id"` lookup (RaidSpellIdRef); subject of `057b91e1c` (73) over 72 chars. Rebuild needed. |
 | 5 | after pull | pending | | |
 | 7 | closeout | pending | | |
 
@@ -242,3 +242,25 @@ Engine lessons from the lanes, to fold into `docs/engine` at step 7.
 - A per-instance "last hit" guid can spare a boolean sweep without changing its answer, if it is
   accepted only after every test the sweep applies plus proof the sweep visits its container, and
   falls back to the unchanged sweep on any miss.
+- `boost::container::small_vector` is available to module code (the core already pulls in
+  Boost.Container). Returned by value it keeps snapshot semantics with no heap allocation for short
+  creature lists, which matters where a nested memo refresh can clear the source list mid-loop.
+- An equivalence harness can cover every dynamic type a guard can see: make each cast target
+  inherit `Action` virtually and build `Combo<mask>` classes from conditional virtual bases, so a
+  `dynamic_cast` cross-cast works for any subset of targets.
+- A red check that maps one branch onto another passes silently when the two are equivalent (Feign
+  Death and the held path in ProtectSpikeKite). Pick reds that change the verdict, and read such a
+  pass as a hint to merge the branches.
+- `NoteDerived` and every other ProbeTarget-based probe do nothing until `Active()`, so an
+  `Active()` gate is neutral wherever the argument build is pure; the exception is an argument with
+  a side effect, such as `++` inside the call.
+- `std::string(nullptr)` throws in libstdc++, so a `char const*` note overload, or a guard that
+  skips building a string, is neutral only once every non-literal `char const*` value is proven
+  non-null.
+- To list every call that resolves to a new overload: in a scratch copy, mark it `[[deprecated]]`
+  and append `#error` to each TU; pb-syntax-check prints a failed TU's warnings, so every caller
+  shows up.
+- If a sibling overload leaves the old form of an anonymous-namespace function with no callers,
+  CI's `-Wunused-function` fails: replace the old form instead.
+- Taking a multi-entry search's hits entry by entry rebuilds per-entry searches exactly; a sort
+  afterwards makes the grouping irrelevant only if its key is unique.
