@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include <boost/container/small_vector.hpp>
+
 #include "BossAuraTriggers.h"
 #include "Creature.h"
 #include "DBCStores.h"
@@ -887,9 +889,14 @@ AnubarakState* Sweep(Player* bot)
     return &state;
 }
 
-std::vector<Creature*> ResolveAlive(Player* bot, std::vector<ObjectGuid> const& guids)
+// A few of each kind live at once, so the usual list never touches the heap
+using AliveCreatures = boost::container::small_vector<Creature*, 16>;
+
+// A copy, never a view of the guid list: a sweep nested in the caller's loop clears that list
+template <class List = AliveCreatures>
+List ResolveAlive(Player* bot, std::vector<ObjectGuid> const& guids)
 {
-    std::vector<Creature*> creatures;
+    List creatures;
     creatures.reserve(guids.size());
     for (ObjectGuid const& guid : guids)
         if (Creature* creature = ResolveCreature(bot, guid))
@@ -901,7 +908,7 @@ std::vector<Creature*> ResolveAlive(Player* bot, std::vector<ObjectGuid> const& 
 
 std::vector<Creature*> ResolveSpheres(Player* bot, AnubarakState const& state)
 {
-    return ResolveAlive(bot, state.spheres);
+    return ResolveAlive<std::vector<Creature*>>(bot, state.spheres);
 }
 
 Creature* FindSphere(std::vector<Creature*> const& spheres, ObjectGuid guid)
@@ -2021,7 +2028,7 @@ bool NearTankPatch(Position const& patch, std::vector<Position> const& tankSpots
 std::vector<Position> PatchPositions(Player* bot, AnubarakState const& state)
 {
     std::vector<Position> patches;
-    for (Creature* sphere : ResolveSpheres(bot, state))
+    for (Creature* sphere : ResolveAlive(bot, state.spheres))
         if (IsPermafrostPatch(sphere))
             patches.push_back(sphere->GetPosition());
 
@@ -2751,7 +2758,7 @@ bool KitePatchAvailable(Player* kiter, AnubarakState const& state, bool tankToo)
 {
     bool const heroic = AnubarakHeroic(kiter);
     bool const burrowers = AnyBurrower(kiter, state);
-    for (Creature* sphere : ResolveSpheres(kiter, state))
+    for (Creature* sphere : ResolveAlive(kiter, state.spheres))
     {
         int8 const rank = KitePatchRank(kiter, state, sphere, heroic, burrowers);
         bool const tank = sphere == LatchedTankPatch(kiter, state, 0) || sphere == LatchedTankPatch(kiter, state, 1);
@@ -2825,7 +2832,7 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
 
     Creature* tanks[2] = {LatchedTankPatch(kiter, state, 0), LatchedTankPatch(kiter, state, 1)};
     std::vector<Position> const tankSpots = LatchedTankSpots(kiter, state);
-    for (Creature* sphere : ResolveSpheres(kiter, state))
+    for (Creature* sphere : ResolveAlive(kiter, state.spheres))
     {
         bool const landed = IsPermafrostPatch(sphere);
         bool const falling = IsFrostSphereFalling(sphere);
@@ -4506,7 +4513,7 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
         human[side] = tank && !GET_PLAYERBOT_AI(tank);
     }
 
-    std::vector<Creature*> burrowers = ResolveAlive(bot, state.burrowers);
+    AliveCreatures burrowers = ResolveAlive(bot, state.burrowers);
     std::sort(burrowers.begin(), burrowers.end(), [](Creature* a, Creature* b) { return a->GetGUID() < b->GetGUID(); });
 
     uint8 count[2] = {0, 0};
@@ -5440,7 +5447,7 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
         return false;
 
     std::vector<Position> patches;
-    for (Creature* sphere : ResolveSpheres(bot, *state))
+    for (Creature* sphere : ResolveAlive(bot, state->spheres))
         if (IsPermafrostPatch(sphere))
             patches.push_back(sphere->GetPosition());
 
@@ -5980,7 +5987,7 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot)
 {
     AnubarakState const* state = Sweep(bot);
-    return state ? ResolveAlive(bot, state->burrowers) : std::vector<Creature*>();
+    return state ? ResolveAlive<std::vector<Creature*>>(bot, state->burrowers) : std::vector<Creature*>();
 }
 
 bool AnubarakSideTankNeedsDefensive(Player* bot)
@@ -7104,7 +7111,7 @@ static bool ScarabKiteStep(Player* bot, AnubarakState const& state, Creature* sc
     Position const from = bot->GetPosition();
     Position const melee = ScarabKiteMeleePoint(bot, state);
     std::vector<Position> const patches = PatchPositions(bot, state);
-    std::vector<Creature*> const burrowers = ResolveAlive(bot, state.burrowers);
+    AliveCreatures const burrowers = ResolveAlive(bot, state.burrowers);
     float const start = bot->GetExactDist2d(scarab);
     float const floorGap = std::min(start, ANUBARAK_SCARAB_MELEE_REACH) - ANUBARAK_SCARAB_KITE_SLACK;
     bool found = false;
