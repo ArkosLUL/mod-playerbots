@@ -8,8 +8,8 @@ In flight since 2026-11-08. The status table is the source of truth for what ran
 |---|---|---|---|---|
 | 1 | baseline pull | done | | 2026-11-16 full ToC 25H clear, one pmon dump per fight in `build-toc-wt/perf/_pmon/run2/`; ToC triggers + multipliers 22.7% of raid bot think time |
 | 2 | go/no-go | go | | user, 2026-11-16: re-aimed at the hot triggers (lane `t-triggers`), no behavior-changing W items |
-| 3 | a-shared-fc (wave 1) | pending | | |
-| 3 | t-triggers (wave 1) | pending | | |
+| 3 | a-shared-fc (wave 1) | merged; review found no behavior diff, recorded 1 minor, fixed 1 harness cleanup | `f31dd9ac6` (lane `4ae762591`…`ecddf5558`) | Done: OBS, A0, A0-opener, N2, T7, R4, N1a, N1b, N1c, R3. Dropped: N1c-single-cast (one cast, a cache gains nothing), NB-TauntGuard (reads IsTank, lives in engine `src/Util`). Decisions: RaidSpellIdRef rechecks `getSpell()` each read (PullAction swaps spell); DispelGuard caches a `getSpell()` compare (safe while no cure class reassigns spell); NoteHazardCircle `Active()` race as every existing guard; R4 binds the table via static_cast in AddMultipliers; T7 uses upstream AC #22286's multi-entry grid search; wave 2 can reuse RaidActionCache/RaidSpellIdRef. Gaps: OBS/N2/A0-opener/N1c review-only; harness stubs model IsWithinDist, phase, grid visit, ClassifyAction; subjects of `e7b5c1203` (80) and `b91f8e930` (74) over 72 chars. Rebuild needed. |
+| 3 | t-triggers (wave 1) | merged; review fixed 1 bug (T2 harness skipped invalid standing cells), 2 minor + 1 cleanup comments, recorded 1 minor | `aa42c6900` (lane `7cfb6d25e`…`aead9e58d`) | Done: T1, T2, T3, T4, T5, T8; none dropped. Decisions: T2 keeps a shared per-instance hint guid (`ToCGateState::champion`), always re-checked; T2 needs IsValidMapCoord; T2 tests container membership by a one-cell `map->Visit` (`GetCurrentCell()` is protected); T4 keeps last value wins for a repeated guid; ToCEntrySet bitset ~3.5 KB for the Defence list. Gaps: RefreshIcehowl comment wrongly says no guid slot (left, a slot search changes behavior); T2's proof holds only at the 200 yd ENTRY_SEARCH_RADIUS; T2 saves the sweep only while the boss or champion is within one cell. Rebuild needed. |
 | 3 | b-anub-twins-jarax (wave 2) | pending | | |
 | 3 | c-icc (wave 2) | pending | | |
 | 5 | after pull | pending | | |
@@ -206,3 +206,39 @@ the report's `outsideFiles`/notes, never into the file):
 - Trace gates, cast caching, const refs: compile + reviewer proof that every skipped argument is pure.
 - Merge agent: pb-check over the union of merged files on the main tree.
 - pmon shows the gain; the harnesses and reviews are the proof that behavior didn't change.
+
+## Closeout notes
+
+Engine lessons from the lanes, to fold into `docs/engine` at step 7.
+
+- `CastSpellAction::spell` is not fixed after construction: `PullAction::InitPullAction` reassigns
+  it in `isPossible` and `Execute`. A per-`Action*` cache keyed on `getSpell()` must recheck it on
+  each read, as `RaidSpellIdRef` does.
+- Per-`Action*` facts safe to cache inside one multiplier: dynamic type, `getName` (every override
+  derives from members set in the constructor), `getThreatType` (every override returns a
+  constant). Shared tools: `RaidActionCache<Facts>` and `RaidSpellIdRef` in `RaidCombatHelpers.h`.
+- The core has a multi-entry `GetCreatureListWithEntryInGrid(list, entries, range)` (upstream AC
+  #22286) with the same visit and `IsWithinDist` test as the single-entry one; taking its hits entry
+  by entry in config order reproduces one sweep per entry. `Map::Visit` never loads a grid, so sweeps
+  are pure.
+- Values and actions in an `AiObjectContext` live until the `PlayerbotAI` is destroyed, after its
+  engines, so a multiplier can hold a `Value*` or key on an `Action*` for its whole life.
+- Equivalence harness pattern: cut definitions out of the base commit and the worktree by regex
+  anchor plus brace matching into separate namespaces over global counting stubs, compare results and
+  the call log per call, write red checks as text mutations that must match exactly once
+  (`build-toc-wt/perf/_harness/a-shared-fc/extract.py`, `run.py`).
+- `MovableMapObject::GetCurrentCell()` is protected, so module code can't read a creature's
+  container cell, and a cell computed from position can lag the container until
+  `Map::MoveAllCreaturesInMoveList` runs. The exact module-side test is a one-cell
+  `map->Visit(Cell(coord), TypeContainerVisitor<searcher, GridTypeMapContainer>)` looking for the
+  creature pointer; `Map::Visit`/`VisitCell` skip unloaded grids and create no cells.
+- For a bot on `IsValidMapCoord`, `Cell::VisitObjects` at r = 200 always visits the 3x3 block around
+  the bot's standing cell (proven over every float coordinate). Past the map edge the clamped
+  standing cell breaks that, and the ±2 block is not always visited either (`VisitCircle` drops
+  corners).
+- The `GetCreature` shortcut fix in step 7: a position bound like `|dx|+|dy| < r` is not exact. The
+  provable version combines the sweep's own tests, a ±1-cell bound and a container visit of that
+  cell (not `GetCurrentCell()`, which is protected).
+- A per-instance "last hit" guid can spare a boolean sweep without changing its answer, if it is
+  accepted only after every test the sweep applies plus proof the sweep visits its container, and
+  falls back to the unchanged sweep on any miss.
