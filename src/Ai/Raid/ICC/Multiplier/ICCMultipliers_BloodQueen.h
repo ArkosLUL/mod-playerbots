@@ -9,6 +9,7 @@
 
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
+#include "RaidSplash.h"
 
 // A braked bot's attacks on her and its area damage next to her: its threat would take her off her holder
 class IccBqlBrakeMultiplier : public Multiplier
@@ -16,6 +17,9 @@ class IccBqlBrakeMultiplier : public Multiplier
 public:
     IccBqlBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc bql brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 // Area damage next to a mind-controlled vampire, which would break the CC holding it
@@ -26,6 +30,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    RaidSplashCache _splash;
     uint32 _checkedMs = 0;
     bool _vampireNear = false;
 };

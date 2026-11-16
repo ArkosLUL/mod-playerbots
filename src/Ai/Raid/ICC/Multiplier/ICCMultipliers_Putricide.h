@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_PUTRICIDE_H
 
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // A braked bot's attacks on him and its area damage next to him: its threat would take him off his holder
 class IccPutricideBrakeMultiplier : public Multiplier
@@ -15,6 +16,9 @@ class IccPutricideBrakeMultiplier : public Multiplier
 public:
     IccPutricideBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc putricide brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

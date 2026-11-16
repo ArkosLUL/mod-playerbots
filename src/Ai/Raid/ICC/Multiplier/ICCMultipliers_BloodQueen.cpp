@@ -35,13 +35,13 @@ float IccBqlBrakeMultiplier::GetValue(Action* action)
     if (target == queen || (!target && AI_VALUE(Unit*, "current target") == queen))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(queen) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
+    return IsRaidAreaDamage(botAI, action, _splash) && bot->GetExactDist2d(queen) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
 }
 
 float IccBqlSplashMultiplier::GetValue(Action* action)
 {
     // Heals carry the Aoe threat type too
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action))
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
     // Asked for every area action the bot weighs, and a bot never ticks twice in one ms

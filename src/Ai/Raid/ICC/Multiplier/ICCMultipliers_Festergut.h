@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_FESTERGUT_H
 
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // Holds a braked tank's spells and swings on him, and its area damage near him. Heals pass.
 class IccFestergutBrakeMultiplier : public Multiplier
@@ -15,6 +16,9 @@ class IccFestergutBrakeMultiplier : public Multiplier
 public:
     IccFestergutBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc festergut brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

@@ -12,6 +12,7 @@
 
 #include "ICCHelpers_Sindragosa.h"
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // A braked or chilled bot's attacks on her and its area damage next to her: threat would take her off her
 // holder, and every swing or shot at her stacks Chilled to the Bone
@@ -20,6 +21,9 @@ class IccSindragosaBrakeMultiplier : public Multiplier
 public:
     IccSindragosaBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc sindragosa brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 // A held tomb: no damage once it is at its floor, no DoT that would tick it past the floor, and no area

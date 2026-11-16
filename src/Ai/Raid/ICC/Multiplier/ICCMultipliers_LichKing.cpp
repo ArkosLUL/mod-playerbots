@@ -53,7 +53,7 @@ float IccLichKingBrakeMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
+    return IsRaidAreaDamage(botAI, action, _splash) && bot->GetExactDist2d(boss) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
 }
 
 bool IccLichKingSplashMultiplier::Splashes(Action* action)

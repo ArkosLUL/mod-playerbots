@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ICCMULTIPLIERS_DEATHWHISPER_H
 
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // Holds area damage while a Dominate Mind victim not under Cyclone stands within reach of the bot or
 // of its target: the victim takes it like any enemy.
@@ -18,6 +19,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    RaidSplashCache _splash;
     uint32 _checkedMs = 0;
     bool _victimNear = false;
 };
@@ -28,6 +30,9 @@ class IccLadyDeathwhisperBrakeMultiplier : public Multiplier
 public:
     IccLadyDeathwhisperBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icc lady deathwhisper brake") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

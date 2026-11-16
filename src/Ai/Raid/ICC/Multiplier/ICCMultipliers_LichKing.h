@@ -12,6 +12,7 @@
 
 #include "Multiplier.h"
 #include "Position.h"
+#include "RaidSplash.h"
 
 class Creature;
 
@@ -23,6 +24,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    RaidSplashCache _splash;
     uint32 _checkedMs = 0;
     Creature* _boss = nullptr;
 };

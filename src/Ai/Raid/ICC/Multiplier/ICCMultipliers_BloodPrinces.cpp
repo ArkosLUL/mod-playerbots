@@ -56,7 +56,7 @@ bool LandsDamage(SpellInfo const* info)
 float IccBpcSplashMultiplier::GetValue(Action* action)
 {
     // Heals carry the Aoe threat type too.
-    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action))
+    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
     return IsBpcAreaDamageHeld(botAI) ? 0.0f : 1.0f;
@@ -75,7 +75,7 @@ float IccBpcBrakeMultiplier::GetValue(Action* action)
     if (target == prince || (!target && AI_VALUE(Unit*, "current target") == prince))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(prince) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
+    return IsRaidAreaDamage(botAI, action, _splash) && bot->GetExactDist2d(prince) <= BRAKE_AREA_REACH ? 0.0f : 1.0f;
 }
 
 float IccBpcDirectHitMultiplier::GetValue(Action* action)

@@ -21,7 +21,7 @@ constexpr float LDW_SPLASH_HOLD_RANGE = 15.0f;
 float IccLadyDeathwhisperMultiplier::GetValue(Action* action)
 {
     // Heals carry the Aoe threat type too.
-    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action))
+    if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
     // Cached per ms: asked for every area action the bot weighs, and a bot never ticks twice in one ms.
@@ -48,5 +48,5 @@ float IccLadyDeathwhisperBrakeMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    return IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= LDW_BRAKE_AREA_REACH ? 0.0f : 1.0f;
+    return IsRaidAreaDamage(botAI, action, _splash) && bot->GetExactDist2d(boss) <= LDW_BRAKE_AREA_REACH ? 0.0f : 1.0f;
 }
