@@ -645,6 +645,8 @@ struct AnubarakState
     uint32 kiteLeftover = 0;
     // Heroic: the landed patches that aren't tank patches, and how many the spike took this submerge
     std::unordered_set<ObjectGuid> kitePatchesSeen;
+    // CountSpentKitePatches' scratch, reused for its buckets and read nowhere else
+    std::unordered_set<ObjectGuid> kitePatchesLanded;
     uint32 kitePatchesSpent = 0;
     // Each side's tank patch where it was last seen, for the gather to step off once it's spent
     bool tankPatchSeen[2] = {false, false};
@@ -1776,7 +1778,8 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
 void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
 {
     ObjectGuid const tanks[2] = {state.patch0.Get(), state.patch1.Get()};
-    std::unordered_set<ObjectGuid> landed;
+    std::unordered_set<ObjectGuid>& landed = state.kitePatchesLanded;
+    landed.clear();
     for (Creature* sphere : spheres)
         if (IsPermafrostPatch(sphere) && sphere->GetGUID() != tanks[0] && sphere->GetGUID() != tanks[1])
             landed.insert(sphere->GetGUID());
@@ -1786,7 +1789,7 @@ void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creatu
             if (!landed.count(guid) && guid != tanks[0] && guid != tanks[1])
                 RaidObs::NoteDerived(bot, "anub.kitespent", std::to_string(++state.kitePatchesSpent));
 
-    state.kitePatchesSeen = std::move(landed);
+    state.kitePatchesSeen.swap(landed);
 }
 
 // While he's up: samples his health and the share of DPS bots on him once a second, and latches the push
