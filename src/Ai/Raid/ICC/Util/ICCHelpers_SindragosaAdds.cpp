@@ -792,7 +792,8 @@ void UpdateStand(DrakeState& st, PlayerbotAI* botAI, uint32 now)
     stand.alt = alt;
     float const distance = bot->GetExactDist2d(stand.spot);
     stand.parked = stand.parked ? distance <= SG_DRAKE_STAND_UNPARK : distance <= SG_DRAKE_STAND_PARK;
-    Note(bot, "sg.drake.stand", std::string(RoleName(role)) + " " + DRAKE_NAMES[index] + (alt ? " alt" : ""));
+    if (RaidObs::Active())
+        Note(bot, "sg.drake.stand", std::string(RoleName(role)) + " " + DRAKE_NAMES[index] + (alt ? " alt" : ""));
 }
 
 Stand const* HeldStand(PlayerbotAI* botAI)
@@ -823,7 +824,9 @@ Unit* ResolveDrakeTarget(PlayerbotAI* botAI, DrakeState const& st)
     if (tank)
         if (Creature* owned = OwnedDrake(st, bot))
         {
-            Note(bot, "sg.drake.target", std::string("owned ") + DRAKE_NAMES[DrakeIndex(owned)]);
+            if (RaidObs::Active())
+                Note(bot, "sg.drake.target", std::string("owned ") + DRAKE_NAMES[DrakeIndex(owned)]);
+
             return owned;
         }
 
