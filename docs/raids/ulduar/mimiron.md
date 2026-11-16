@@ -1166,7 +1166,7 @@ is `NOT_SELECTABLE` until pulled, and evade despawns VX-001 and the ACU.
 `BOT_STATE_COMBAT` and `BOT_STATE_NON_COMBAT` (`PlayerbotAI::ApplyInstanceStrategies`), and healers went
 from 35-65% to 71-100% mana across one handover. But `DrinkAction`/`EatAction` push the next AI check
 back 12-18 s, so a sitting bot dodges nothing and, standing still, is the nearest player to a chain head:
-two burned to death drinking. `mimiron drink guard` vetoes `drink`/`food` within 15 yd of a flame node.
+two burned to death drinking. `mimiron drink guard` vetoes `drink`/`eat` within 15 yd of a flame node.
 
 ## The ring slot is what kills the Rocket Strike dodge
 

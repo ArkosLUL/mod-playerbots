@@ -65,7 +65,7 @@ use `ACTION_*` constants, so grep both forms.
 | Topic | Code | Guide |
 |---|---|---|
 | Fire close-range block | `FireMageStrategy` pushes `dragon's breath` at 41.0 on `enemy too close for spell` and `blast wave` at 40.0 on `enemy is close` | Guide treats both as AoE-rotation cooldowns. In raid PvE a self-defence disorient can break CC, move mobs out of the tank's pile, and spend a cooldown the AoE rotation wants |
-| Firestarter | Opt-in, off by default; suppresses frost nova and blink-back kiting when on | The guide's AoE ladder assumes Blast Wave and Dragon's Breath are usable, i.e. melee range |
+| Firestarter | Opt-in, off by default; suppresses frost nova and blink-back kiting when on. Off in dungeons and raids without Glyph of Blast Wave, as Blast Wave is | The guide's AoE ladder assumes Blast Wave and Dragon's Breath are usable, i.e. melee range |
 | Frostbolt in the Fire/Arcane default lists | Present at 5.2 for immune targets | Not in the guide; keeping it is a bot-specific robustness call |
 
 ## Confirmed correct — do not re-audit

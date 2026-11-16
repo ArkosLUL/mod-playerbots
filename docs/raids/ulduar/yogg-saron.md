@@ -943,7 +943,7 @@ were 9 of its 10 deaths, one killing all four healers in the back-line stack.
 
 **With none alive the raid drops combat and eats**
 ([eating blinds the bot](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)), and two melee were
-still eating when the ring threw them. `yogg-saron stack food guard multiplier` zeroes `food` and `drink`
+still eating when the ring threw them. `yogg-saron stack food guard multiplier` zeroes `eat` and `drink`
 inside 15 yd of the middle (`…_BODY_KNOCKBACK_CLEAR_RADIUS`) all encounter; the station keeps eating.
 
 ### Portals

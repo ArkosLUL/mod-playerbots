@@ -101,7 +101,8 @@ target.
   rolled when the cast finishes, so a shock dropping mid-cast leaves a plain hit.
 - **Thunderstorm's knockback node is `enemy is close and being attacked`.** Plain `enemy is close`
   fired on every cooldown beside a tanked boss, which is immune, and would knock trash off the tank.
-  The `high mana` node is separate.
+  The `high mana` node is separate. In a dungeon or raid without Glyph of Thunderstorm it casts
+  only with no enemy within 10 yd.
 - **Heroism and Bloodlust skip while the bot is Sated (57724) or Exhausted (57723)**: another lust
   already landed, so the cast only burned a GCD. Shared `ShamanBoostTrigger`, so every spec.
 - **Trap: Glyph of Totem of Wrath's 5 min self-buff (63283) is also named "Totem of Wrath".** A

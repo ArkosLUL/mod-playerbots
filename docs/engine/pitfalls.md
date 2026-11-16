@@ -531,11 +531,13 @@ portal this way.
 - **`AttackersValue::Calculate` is threat-based, not range-based.** It builds from `AddAttackersOf`,
   so an untouchable boss 138 yd away stays in every bot's attacker list and `dps assist` takes him at
   `rel=50.0`. **Distance never removes a target** — only threat does.
-- **`CommandPetAttack` reaches at most one guardian.** It drives `bot->GetGuardianPet()`, which reads
+- **`CommandPetAttack(botAI, …)` reaches at most one guardian.** It drives `bot->GetGuardianPet()`, which reads
   the single `SUMMON_SLOT_PET` slot, so a shaman's two Feral Spirits are invisible to it — the exact
   pets most likely to run off — and it dereferences `GetCharmInfo()` unchecked. Redirecting every
   guardian means walking `m_Controlled`; one with no `CharmInfo` (Army of the Dead, Feral Spirits)
-  still takes a direct `MotionMaster` order ([Thorim](../raids/ulduar/thorim.md#known-gaps)).
+  still takes a direct `MotionMaster` order ([Thorim](../raids/ulduar/thorim.md#known-gaps)). The
+  `CommandPetAttack(Creature*, …)` overload and `CallBackPets` take one controlled unit or all of
+  them.
 
 ## Detection that never fires
 
@@ -671,10 +673,12 @@ Related traps:
   explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedents
   `IccLichKingWinterAction::ClearInvalidTarget`, `FelmystMeleeClearTargetAction`). Blocking
   re-acquisition in a multiplier cannot undo a target the bot has already picked up.
-- **Eating and drinking blind the bot.** `DrinkAction`/`EatAction::Execute` set `SetNextCheckDelay`
-  to 12-18 s scaled by what is missing, so nothing runs, dodges included, until it expires. Wherever a
-  hazard outlives combat, such as a phase handover, veto `drink`/`food` near it (Mimiron's
-  `mimiron drink guard` rule).
+- **Eating and drinking blind the bot.** `DrinkAction`/`EatAction::Execute` set the action duration
+  for the time to refill (with the `food` cheat, 2 s per missing regen tick plus one, capped at
+  20 s), so nothing runs, dodges included, until it expires. Wherever a hazard outlives combat, such
+  as a phase handover, veto `drink`/`eat` near it (Mimiron's `mimiron drink guard` rule). The
+  action is `eat`, not `food`: `food` is the strategy and the cheat, and a rule listing it never
+  matches.
 - **A same-map `Player::TeleportTo` calls `CombatStop()`** unless given `TELE_TO_NOT_LEAVE_COMBAT`, so a
   floor-fall rescue built on it drops the bot out of the fight. Use `NearTeleportTo`, which passes it
   (and returns `void`, so return `true` after). It keeps the bot's transport and stale offset by

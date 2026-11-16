@@ -191,7 +191,8 @@ path.
 
 **Elemental shaman is the thinnest kit and the one to watch**: no Mana Tide (resto-only), no
 Shamanistic Rage (enhancement-only), just Water Shield and Thunderstorm's 8% per 45 s. It fires
-Thunderstorm at `high mana` (< 65%) so it is not starved today; if it ever runs dry, drop the
+Thunderstorm at `high mana` (< 65%), in a dungeon or raid without the glyph only with no enemy
+within 10 yd, so it is not starved today; if it ever runs dry, drop the
 elemental arm and leave the rest.
 
 **A spent potion stops being retried.** `UsePotionAction::isPossible` checks the item's spells

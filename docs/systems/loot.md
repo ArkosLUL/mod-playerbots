@@ -69,7 +69,7 @@ on while a trade equipped it.
 **`Player::GetItemCount` counts worn items whatever `inBankAlso` says**, so `total > bagOnly` detects
 a bank copy, not a worn one. Count worn copies by slot (`CountUnwornCopies`). The roll's
 "already owns a copy → GREED" counts only copies not worn, or a second copy for the off hand never
-gets a vote; a unique-equipped item owned anywhere never gets NEED.
+gets a vote; a Unique or Unique-Equipped item owned anywhere never gets NEED.
 
 `FinalizeRollVote` (`ItemUsageValue.cpp`) under `Playerbots.Roll.UpgradesOnly = 1` forces PASS on
 everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to GREED).
