@@ -5,7 +5,6 @@
 #include <cmath>
 #include <initializer_list>
 #include <iterator>
-#include <list>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -36,6 +35,7 @@
 #include "ToCFactionChampionsGripChain.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -325,11 +325,14 @@ struct HealthSample
     uint32 health = 0;
 };
 
+// player -> threat, sorted by guid, one entry per guid
+using ThreatSnapshot = std::vector<std::pair<ObjectGuid, float>>;
+
 struct RepickClock
 {
     uint32 repickMs = 0;
     bool seen = false;
-    std::unordered_map<ObjectGuid, float> threat;  // player -> its threat on the champion last tick
+    ThreatSnapshot threat;  // each player's threat on the champion last tick
 };
 
 struct FactionChampionsDefenceState
@@ -337,6 +340,7 @@ struct FactionChampionsDefenceState
     RaidObs::ObsValue<ObjectGuid> physical{"fc.physical"};
     RaidObs::ObsValue<ObjectGuid> nextFocus{"fc.nextfocus"};
     std::unordered_map<ObjectGuid, RepickClock> clocks;  // champion -> its re-pick clock
+    ThreatSnapshot threatScratch;                       // swapped with a clock's snapshot each refresh
     // player -> champions about to pick it, all and physical, inside their lead window only
     std::unordered_map<ObjectGuid, uint32> predicted;
     std::unordered_map<ObjectGuid, uint32> predictedPhysical;
@@ -931,8 +935,9 @@ KickDuty KeepOrElectKicker(FactionChampionsDefenceState& state, std::vector<Memb
 
 void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members, uint32 now)
 {
-    std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, ScanEntries(), CHAMPION_SEARCH_RADIUS);
+    static ToCEntrySet const scanSet(ScanEntries());
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(bot, creatures, scanSet, CHAMPION_SEARCH_RADIUS);
 
     state.hazards.clear();
     state.totems.clear();
@@ -2001,6 +2006,27 @@ float ChampionScore(Creature* champion, Player* player, bool melee)
     return factor / (factor + dist) * healthMod * armorMod;
 }
 
+float const* FindThreat(ThreatSnapshot const& snapshot, ObjectGuid const& guid)
+{
+    auto const found = std::lower_bound(snapshot.begin(), snapshot.end(), guid,
+                                        [](auto const& entry, ObjectGuid const& key) { return entry.first < key; });
+    return found != snapshot.end() && found->first == guid ? &found->second : nullptr;
+}
+
+// A repeated guid keeps its last threat
+void SetThreat(ThreatSnapshot& snapshot, ObjectGuid const& guid, float threat)
+{
+    auto const found = std::lower_bound(snapshot.begin(), snapshot.end(), guid,
+                                        [](auto const& entry, ObjectGuid const& key) { return entry.first < key; });
+    if (found != snapshot.end() && found->first == guid)
+    {
+        found->second = threat;
+        return;
+    }
+
+    snapshot.insert(found, {guid, threat});
+}
+
 bool InLeadWindow(RepickClock const& clock, uint32 now)
 {
     if (!clock.seen)
@@ -2069,7 +2095,8 @@ void UpdateFocusClock(FactionChampionsDefenceState& state, Player* bot, std::vec
             continue;
 
         RepickClock& clock = state.clocks[champion->GetGUID()];
-        std::unordered_map<ObjectGuid, float> threat;
+        ThreatSnapshot& threat = state.threatScratch;
+        threat.clear();
         uint32 moved = 0;
         for (ThreatReference const* ref : champion->GetThreatMgr().GetUnsortedThreatList())
         {
@@ -2078,14 +2105,13 @@ void UpdateFocusClock(FactionChampionsDefenceState& state, Player* bot, std::vec
                 continue;
 
             float const value = ref->GetThreat();
-            threat[victim->GetGUID()] = value;
-            auto const was = clock.threat.find(victim->GetGUID());
-            if (was != clock.threat.end() &&
-                std::fabs(value - was->second) > std::max(was->second * REPICK_SHIFT_PCT, REPICK_SHIFT_MIN))
+            SetThreat(threat, victim->GetGUID(), value);
+            float const* was = FindThreat(clock.threat, victim->GetGUID());
+            if (was && std::fabs(value - *was) > std::max(*was * REPICK_SHIFT_PCT, REPICK_SHIFT_MIN))
                 ++moved;
         }
 
-        clock.threat = std::move(threat);
+        clock.threat.swap(threat);
         if (moved >= 2)
         {
             clock.repickMs = now;
