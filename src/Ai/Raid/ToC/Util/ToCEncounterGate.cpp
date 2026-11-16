@@ -1,8 +1,9 @@
 #include "ToCEncounterGate.h"
 
-#include <list>
-
+#include "CellImpl.h"
 #include "Creature.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "InstanceScript.h"
 #include "Map.h"
 #include "Player.h"
@@ -12,9 +13,11 @@
 #include "Timer.h"
 #include "ToCData.h"
 #include "ToCHelpers_FactionChampions.h"
+#include "ToCHelpers_Shared.h"
 
 namespace
 {
+using TrialOfTheCrusaderHelpers::ToCEntrySet;
 using TrialOfTheCrusaderHelpers::ToCFactionChampions;
 using TrialOfTheCrusaderHelpers::ToCNpcs;
 
@@ -69,6 +72,7 @@ std::vector<uint32> const CHAMPION_ENTRIES = {
     static_cast<uint32>(ToCFactionChampions::NPC_HORDE_WARLOCK),
     static_cast<uint32>(ToCFactionChampions::NPC_HORDE_WARRIOR),
 };
+ToCEntrySet const CHAMPION_ENTRY_SET(CHAMPION_ENTRIES);
 
 // One read per instance per ms: every gated trigger and multiplier asks, and a read can walk a
 // 200 yd grid.
@@ -109,20 +113,24 @@ bool GuidEngaged(Map* map, InstanceScript* instance, uint32 type)
     return !guid.IsEmpty() && IsEngaged(map->GetCreature(guid));
 }
 
-bool AnyEngaged(std::list<Creature*> const& creatures)
+// GetCreatureListWithEntryInGrid's check and visit with IsEngaged on top, stopping at the first hit
+template <typename EntryTest>
+Creature* FirstEngaged(Player* bot, EntryTest const& isEntry)
 {
-    for (Creature const* creature : creatures)
-        if (IsEngaged(creature))
-            return true;
-
-    return false;
+    auto check = [bot, &isEntry](Creature* creature)
+    {
+        return isEntry(creature->GetEntry()) && bot->IsWithinDist(creature, ENTRY_SEARCH_RADIUS, false) &&
+               IsEngaged(creature);
+    };
+    Creature* found = nullptr;
+    Acore::CreatureSearcher<decltype(check)> searcher(bot, found, check);
+    Cell::VisitObjects(bot, searcher, ENTRY_SEARCH_RADIUS);
+    return found;
 }
 
 bool EntryEngaged(Player* bot, uint32 entry)
 {
-    std::list<Creature*> creatures;
-    bot->GetCreatureListWithEntryInGrid(creatures, entry, ENTRY_SEARCH_RADIUS);
-    return AnyEngaged(creatures);
+    return FirstEngaged(bot, [entry](uint32 candidate) { return candidate == entry; }) != nullptr;
 }
 
 // Icehowl, Jaraxxus and the champions have no guid slot in the script, so those go by entry.
@@ -137,11 +145,7 @@ bool EncounterEngaged(Player* bot, Map* map, InstanceScript* instance, ToCEncoun
         case ToCEncounter::Jaraxxus:
             return EntryEngaged(bot, static_cast<uint32>(ToCNpcs::NPC_JARAXXUS));
         case ToCEncounter::FactionChampions:
-        {
-            std::list<Creature*> champions;
-            bot->GetCreatureListWithEntryInGrid(champions, CHAMPION_ENTRIES, ENTRY_SEARCH_RADIUS);
-            return AnyEngaged(champions);
-        }
+            return FirstEngaged(bot, [](uint32 entry) { return CHAMPION_ENTRY_SET.Contains(entry); }) != nullptr;
         case ToCEncounter::TwinValkyr:
             return GuidEngaged(map, instance, TOC_DATA_FJOLA) || GuidEngaged(map, instance, TOC_DATA_EYDIS);
         case ToCEncounter::Anubarak:
