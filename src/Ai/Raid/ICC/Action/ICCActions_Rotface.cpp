@@ -101,7 +101,9 @@ bool IccRotfaceDodgeAction::Execute(Event /*event*/)
     std::string branch;
     if (!FindRfDodgeSpot(botAI, spot, interrupt, branch))
     {
-        NoteDodge(bot, std::string(kind) + " none");
+        if (RaidObs::Active())
+            NoteDodge(bot, std::string(kind) + " none");
+
         return false;
     }
 
@@ -121,11 +123,18 @@ bool IccRotfaceDodgeAction::Execute(Event /*event*/)
         if (lowered)
             last.priority = MovementPriority::MOVEMENT_FORCED;
 
-        NoteDodge(bot, std::string(kind) + " locked");
+        if (RaidObs::Active())
+            NoteDodge(bot, std::string(kind) + " locked");
+
         return false;
     }
 
-    NoteDodge(bot, std::string(kind) + " " + branch + " " + std::to_string(static_cast<int32>(std::lround(travel))));
+    if (RaidObs::Active())
+    {
+        std::string const yards = std::to_string(static_cast<int32>(std::lround(travel)));
+        NoteDodge(bot, std::string(kind) + " " + branch + " " + yards);
+    }
+
     return true;
 }
 
