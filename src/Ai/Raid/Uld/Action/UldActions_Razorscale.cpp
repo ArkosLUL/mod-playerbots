@@ -487,8 +487,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
         bot->GetSession()->HandleGameobjectReportUse(reportPacket);
     }
 
-    RazorscaleBossHelper::SetHarpoonOnCooldown(closestHarpoon);
-
     return true;
 }
 

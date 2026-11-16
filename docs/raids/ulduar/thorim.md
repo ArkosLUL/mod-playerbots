@@ -176,10 +176,10 @@ inside 41 yd of the arena centre.
 
 | Spell | Id | Detail |
 |---|---|---|
-| Runic Smash, left hand | 62057 | **5s cast**, lights the left-hand bunnies (33141) at x ~2235 / 2246 |
-| Runic Smash, right hand | 62058 | **5s cast**, lights the right-hand bunnies (33140) at x ~2210 / 2221 |
-| Runic Smash damage | 62465 | 10 yd per bunny; the wave starts 1s after the cast and marches y -385 → -257 at 16 yd / 500ms |
-| Runic Barrier | 62338 | -51% damage taken **and a 2000 arcane damage shield per melee swing**; cast at t+10s, 20s duration, recast every 20s |
+| Runic Smash, left hand | 62057 | **5s cast every 8s**, fires the 16 static "Right Hand" bunnies (33140) at x 2235-2257, the left lane |
+| Runic Smash, right hand | 62058 | Same, the "Left Hand" bunnies (33141) at x 2198-2222, the right lane |
+| Runic Smash damage | 62465 | 10 yd per bunny, **the whole row at once as the cast lands** (core `1702c28b7`; same millisecond in the 2026-10-11 log) |
+| Runic Barrier | 62338 | -51% damage taken **and a 2000 arcane damage shield per melee swing**; 20s, first cast 6-15s (10-man) / 10-24s (25-man) after the engage, recast every 45s |
 
 `EVENT_RC_RUNIC_SMASH` is scheduled in `Reset()` and **cancelled in `JustEngagedWith`**, so the corridor
 smash only happens on the approach and stops the moment the Colossus is tanked. The Ancient Rune Giant
@@ -189,13 +189,18 @@ The two corridor lanes (left x ~2237-2242, right x ~2212-2219) are **index-match
 a straight index map: same waypoint number, other lane. Each lane sits 2-9 yd from its own hand's bunnies
 and 15.5-22.9 yd from the other's. The bot side latches the hand it sees casting and holds the opposite
 lane until the other hand goes up — the gauntlet formation follows that preference rather than the
-master's own lane, or it would walk everyone straight back into the blast. The Colossus is 131 yd from the
+master's own lane, or it would walk everyone straight back into the blast. **Switching the moment the
+next cast shows is safe, do not delay it**: the last hit landed 3s earlier, and the 5s cast is all the
+time there is to cross the centre line, which both rows reach. The Colossus is 131 yd from the
 top pair of waypoints, past the 100 yd `Playerbots.SightDistance` cap, so the telegraph is read through a
 targeted 150 yd creature lookup rather than the usual target values.
 
-Runic Barrier is effectively permanent, so "stop attacking while it is up" would mean never attacking.
-Non-tank melee instead back out to 14 yd below 55% health and return above 80%, keeping their target the
-whole time so ranged and instant abilities keep landing.
+**Runic Barrier goes up once per pull.** The Colossus died 27-31s after the engage in all three
+2026-10-11 pulls, so the 45s recast never comes and a barrier usually lasts until he dies; "stop
+attacking while it is up" would idle melee for the rest of the fight. The shield cost 273-347k per
+pull, 58-89k on the worst-hit melee, which healers carried. Non-tank melee instead back out to 14 yd
+below 55% health and return above 80%, keeping their target the whole time so ranged and instant
+abilities keep landing.
 
 ## Phase 2
 

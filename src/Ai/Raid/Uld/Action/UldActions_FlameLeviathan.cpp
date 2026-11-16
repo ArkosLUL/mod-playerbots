@@ -672,7 +672,7 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
             RaidObs::NoteDerived(bot, "fl.corner", std::to_string(static_cast<uint32>(slot)));
         branch("corner");
 
-        // Rush the 7 yd/s commute, wave 1 comes at 34 s. Steam Rush charges along the facing, so only with the
+        // Rush the 7 yd/s commute, wave 1 comes ~32 s in. Steam Rush charges along the facing, so only with the
         // post dead ahead and over a charge away.
         Position const post = FlameLeviathanCornerPostPoint(slot);
         if (_vehicleBase->GetExactDist2d(post) > ULDUAR_FL_STEAM_RUSH_DIST + ULDUAR_FL_ARRIVE_TOLERANCE &&

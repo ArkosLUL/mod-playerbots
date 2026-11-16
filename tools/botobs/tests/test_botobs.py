@@ -697,6 +697,17 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual({key: sorted(value) for key, value in fates.items()},
                          {"died": [3], "alive": [5], "timeout": [1, 2, 6], "vanished": [4]})
 
+    def test_wave_cleared_waits_for_the_last_add(self):
+        tracks = {
+            1: [(1000, 0, 0, 100.0, 0), (9000, 0, 0, 5.0, 0)],
+            2: [(1000, 0, 0, 100.0, 0), (21000, 0, 0, 30.0, 0)],
+            3: [(1000, 0, 0, 100.0, 0), (60000, 0, 0, 50.0, 0)],     # still up when the pull ended
+            4: [(1000, 0, 0, 100.0, 0), (4000, 0, 0, 100.0, 0)],     # gone at full health
+        }
+        self.assertEqual(flame_leviathan.wave_cleared_ms(tracks, [1, 2], 1000, end=60000), 20000)
+        self.assertIsNone(flame_leviathan.wave_cleared_ms(tracks, [1, 3], 1000, end=60000))
+        self.assertIsNone(flame_leviathan.wave_cleared_ms(tracks, [1, 4], 1000, end=60000))
+
     def test_move_outcomes_count_issued_and_waiting_by_priority(self):
         moves = [{"pr": "combat", "ok": 1}, {"pr": "combat", "ok": 0, "r": "wait"},
                  {"pr": "combat", "ok": 0, "r": "wait"}, {"pr": "forced", "ok": 1},

@@ -4,21 +4,25 @@
 
 `SPELL_CHAIN_1..4` (49679, 49682, 49683, 49684) **no longer exist anywhere in the core**. Harpoons
 fire `SPELL_HARPOON_SHOT_1..4` cast by `NPC_RAZORSCALE_CONTROLLER` out of
-`go_razorscale_harpoon::OnGossipHello`; the GameObjects are summoned per ground phase by the
-controller (two in 10-man, four in 25-man) and a spent one carries `GO_FLAG_NOT_SELECTABLE` until it
-is rebuilt. Readiness is that flag (`IsHarpoonReady`); `IsHarpoonFired()` and
-`HarpoonData::chainSpellId` were removed for testing an aura that could never be present.
+`go_razorscale_harpoon::OnGossipHello`. Each Harpoon Fire State (33282) owns one turret (two in
+10-man, four in 25-man): every take-off breaks them all, the engineers wait out the 22 s fire aura
+62696, then rebuild each as a **new GameObject with a new guid**, and at permanent ground (50%) they
+are removed. `OnGossipHello` sets `GO_FLAG_NOT_SELECTABLE` only once the harpoon actually fires, so
+readiness is that flag plus `GO_STATE_READY` (`IsHarpoonReady`), and the scan re-reads the guids every
+tick. Hits count up with no time window: the 2nd (10-man) / 4th (25-man) grounds her however far apart.
+`IsHarpoonFired()` and `HarpoonData::chainSpellId` were removed for testing an aura that could never
+be present.
 
 The tank debuff also moved: **Fuse Armor is 64821**, not 64771 (64774 is still the 5-stack `Fused
 Armor`). 64771 is gone from the core, so the tank-swap check never fired. Threshold stays at 2 stacks.
 
 Airborne, the raid kills the Dark Rune adds while the harpoon crews (`IsRazorscaleHarpoonCrew`: ranged
-dps, never healers) reload; a volley grounds her, and the ground phase, knockdowns included, is the only
+dps, never healers) fire the harpoons; the last hit grounds her, and the ground phase, knockdowns included, is the only
 damage window. **The main tank is picked by max health, not spec**: `AssignRolesBasedOnHealth` flags
 the living spec tank with the most, skipping anyone at `FUSEARMOR_THRESHOLD`, and runs while nobody
 holds the flag and again once the main tank reaches the threshold. A pick is throttled to one per
-`_roleSwapCooldown` (10 s) per bot and a fired harpoon sits out `HARPOON_COOLDOWN_DURATION` (5 s), held
-in `RazorscaleInstanceState`, so a re-derivation cannot flip either mid-phase.
+`_roleSwapCooldown` (10 s) per bot, held in `RazorscaleInstanceState`, so a re-derivation cannot flip
+it mid-phase. Harpoons need no such throttle: the spent flag lands in the same call that fires.
 
 ## Devouring Flame is 5 yd, and the skull has one owner
 

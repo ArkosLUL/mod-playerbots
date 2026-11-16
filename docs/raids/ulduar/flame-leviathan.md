@@ -300,9 +300,11 @@ its goal while it stays clear, and the leg may enter no reach the hull is not al
 yard of warning: siege hulls lost 20–37%/5 s at 13–17.5 yd from a patch.
 
 **The wards fire all pull, and the adds stay until killed.** `ActivateTowers` schedules `EVENT_FREYA`
-**once** at 30 s, so four wards spawn one per arena corner (`ULDUAR_FL_ARENA_CORNERS`), each firing a
-wave on its own 29 s timer from 34 s. `npc_freya_ward_summon` makes each add
-`TEMPSUMMON_MANUAL_DESPAWN` and calls `DoZoneInCombat`: every player within 250 yd, their pets and
+**once** at 30 s, so four wards spawn one per arena corner (`ULDUAR_FL_ARENA_CORNERS`), each firing its
+first wave 1.6 s after it spawns, then every 32.4 s. A wave is **five Writhing Lashers** (62947 ×5,
+landing inside 8 yd of the reticle) plus a Ward of Life in one wave in six: 62907 always summons one and
+`npc_freya_ward` despawns it on landing unless its per-wave 1-in-6 roll passed. `npc_freya_ward_summon`
+makes each add `TEMPSUMMON_MANUAL_DESPAWN` and calls `DoZoneInCombat`: every player within 250 yd, their pets and
 **their vehicle bases**, at zero threat. `ThreatManager::AddThreat` sends a rider's threat to its
 vehicle (a gunner's through the turret to the hull), and the victim switches only at 110% melee /
 130% ranged, so **the first hull to hit a fresh add holds it**. `CanAIAttack` skips riders on
@@ -317,8 +319,8 @@ scoring add handling.
 
 | Add | Entry | Health | AI |
 |---|---|---|---|
-| Writhing Lasher | 33387 | 190,260 | `npc_freya_ward_summon`: melee + `Lash 65062` on its victim every 2 s |
-| Ward of Life | 34275 | 504,000 | same |
+| Writhing Lasher | 33387 | 190,260 (10-man 64,260) | `npc_freya_ward_summon`: melee + `Lash 65062` on its victim every 2 s |
+| Ward of Life | 34275 | 504,000 (10-man 302,400) | same |
 
 Against 230,498,304 boss health those pools are a rounding error, so **an add in a weapon's band
 outranks the boss**. The guns that matter, all verified from `Spell.dbc`: **Fire Cannon 62358**
@@ -340,7 +342,7 @@ What each one is actually worth, which is what ranks them when several are in ba
 | Sonic Horn 62974 | **6,300** | 20 energy |
 
 **`FlameLeviathanBestAdd` ranks by neighbour count inside the weapon's own splash**, nearest breaking
-ties — not by nearest alone. Adds clump at a median of 2, p75 3 and max 9 inside one 20 yd splash, so
+ties — not by nearest alone. On the old two-add waves, adds clumped at a median of 2, p75 3 and max 9 inside one 20 yd splash, so
 the extra bodies are usually there to be had. It skips an add a posted engine is holding — victim a
 siege hull inside `ULDUAR_FL_CORNER_HOLD_RADIUS` (30 yd) of a post — unless the shooter rides that
 hull: a 76k Fire Cannon hit from elsewhere passes the 130% switch and drags the add out of the corner.
@@ -350,8 +352,10 @@ hull: a 76k Fire Cannon hit from elsewhere passes the 130% switch and drags the 
 **Corner containment: one siege engine per corner, never all of them.** Each wave spawns in front of an
 engine parked `ULDUAR_FL_CORNER_STANDOFF` (12 yd) in from its corner, which takes threat, throws the
 adds back in (Ram's knockback is away from the caster) and cannons them there: an add meleeing the hull
-is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave is 694k (504k + 190k),
-about nine cannon shots against a 29 s interval. The posted turret shoots adds within 30 yd of its post
+is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave is 951k (5 × 190k), 1.46 M
+with a Ward of Life: 13 cannon shots one add at a time, 20 with the Ward, against ~16 a turret sustains
+per 32.4 s (+20 energy per 2 s, 20 a shot) plus its 100-energy bank. The lashers land clumped, so one 20
+yd splash taking all five clears them in 3, a Ward wave in 7. The posted turret shoots adds within 30 yd of its post
 before anything else. `DriveTo` parks anywhere inside `ULDUAR_FL_ARRIVE_TOLERANCE`, so the hull really
 sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reaches melee.
 
@@ -385,7 +389,7 @@ sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reac
   **Hammer marks only**, never the Inferno ([warning bands](../../engine/pitfalls.md#movement-that-silently-no-ops)),
   and the rush never charges across fire.
 - **Posting starts at engage**, gated on his Tower of Life aura 64482, which `ActivateTowers` applies in
-  `JustEngagedWith` 34 s before wave 1; gated on the first add seen, engines stood 12–27 s of driving
+  `JustEngagedWith` ~32 s before wave 1; gated on the first add seen, engines stood 12–27 s of driving
   from their posts.
 - **The commute rushes**: Steam Rush when the post is over 43 yd away and within the front 45°, 7.0
   yd/s otherwise. The corner drive stays `MOVEMENT_COMBAT`, below the `MOVEMENT_FORCED` Fury dodge,
@@ -536,6 +540,9 @@ so the next silent election failure is visible.
   Pursued vehicle driving it. An add thrown against the wall may land inside Fire Cannon's minimum.
   `DoZoneInCombat` gives a fresh add to the first roster entry's hull (a chopper, 11 of 15 adds), and
   the post takes it back in 1-3.2 s, so that costs the add's walk out and back, not the hold.
+- **One engine per corner is unproven against five-lasher waves** (core `cbf40a4ce`). The shot budget
+  fits, but five lashers run 18 yd/s into the cannon floor and Lash the hull together. `--corners`
+  counts manned waves dead before the next; if most aren't, change the containment rule.
 - **The post turn's edges are unchecked.** Held-add frames with no gun bearing fell from 71.7% to
   24.6-28.7%. Two adds on opposite sides could still leave a post facing neither — watch `fl.corner`
   for a facing that never settles. Adds leaving manned posts (2 of 17) mean the claim lapses too

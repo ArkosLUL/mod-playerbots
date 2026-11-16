@@ -97,6 +97,7 @@ CORNER_HOLD_RADIUS = geometry.radius("ULDUAR_FL_CORNER_HOLD_RADIUS")
 POSTED_YD = 15.0                # a siege hull this close to its post point is holding it
 SPAWN_YD = 10.0                 # measured spawns land 0-7.6 yd from the corner point
 WAVE_WINDOW_MS = 3000
+WARD_WAVE_MS = 32400            # npc_freya_ward's repeat, so a post that clears inside it is ready for the next
 KNOCKBACK_YD = 10.0             # an add moving this far inside a second was thrown
 
 # Weapon bands off Spell.dbc, as (vehicle entry, min, max, label). A cone is scored on range alone,
@@ -1386,7 +1387,7 @@ def timed_out(fl: Fight) -> str | None:
 def show_adds(trace: Trace) -> int:
     fl = fight(trace)
     tracks = add_tracks(fl)
-    print("Freya's Ward: four wards at the corners, a wave every 29 s\n")
+    print(f"Freya's Ward: four wards at the corners, a wave every {WARD_WAVE_MS / 1000:.1f} s\n")
     if not tracks:
         print("  no adds in this trace - the Tower of Life was down.")
         return 0
@@ -1490,6 +1491,18 @@ def ward_waves(tracks: dict[int, list[tuple]]) -> list[tuple[int, int, list[int]
     return [tuple(wave) for wave in waves]
 
 
+def wave_cleared_ms(tracks: dict[int, list[tuple]], adds: list[int], start: int, end: int) -> int | None:
+    """When the wave's last add died, from `start`; None while any add was still up at `end` or left at
+    full health."""
+    last = start
+    for guid in adds:
+        track = tracks[guid]
+        if track[-1][0] >= end - 300 or track[-1][3] >= 90:
+            return None
+        last = max(last, track[-1][0])
+    return last - start
+
+
 def show_corners(trace: Trace) -> int:
     fl = fight(trace)
     tracks = add_tracks(fl)
@@ -1522,8 +1535,8 @@ def show_corners(trace: Trace) -> int:
     quality = {row["guid"]: row for row in hold_quality(tracks, fl)}
 
     print(f"\n  {'wave':>9s} {'post':>4s} {'adds':>4s} {'engine':>7s} {'driving':>8s} {'took':>5s} {'thrown':>6s}"
-          f" {'travel':>7s} {'left':>5s} {'kill':>6s} {'hull lost':>9s}")
-    manned = first_on_post = total_adds = left_manned = 0
+          f" {'travel':>7s} {'left':>5s} {'kill':>6s} {'clear':>6s} {'hull lost':>9s}")
+    manned = first_on_post = total_adds = left_manned = cleared_manned = 0
     for corner, start, adds in ward_waves(tracks):
         px, py = posts[corner]
         frame = fl.frame_at(start)
@@ -1549,21 +1562,26 @@ def show_corners(trace: Trace) -> int:
                 kills.append((track[-1][0] - track[0][0]) / 1000.0)
         lost = "-"
         if engine is not None:
-            later = fl.frame_at(min(start + 29000, fl.end))
+            later = fl.frame_at(min(start + WARD_WAVE_MS, fl.end))
             before, after = frame.hulls[engine][2], later.hulls.get(engine, (0, 0, 0.0))[2] if later else 0.0
             lost = f"{before - after:.0f}"
+        cleared = wave_cleared_ms(tracks, adds, start, fl.end)
         total_adds += len(adds)
         if engine is not None:
             manned += 1
             first_on_post += len(took)
             left_manned += left
+            cleared_manned += cleared is not None and cleared <= WARD_WAVE_MS
         kill = f"{statistics.median(kills):.0f}s" if kills else "-"
+        clear = f"{cleared / 1000.0:.0f}s" if cleared is not None else "-"
         claim = f"{statistics.median(took):.1f}s" if took else "-"
         print(f"  {clock(start):>9s} {corner:4d} {len(adds):4d} {engine & 0xffffffff if engine else '-':>7}"
-              f" {driving:>8s} {claim:>5s} {thrown:6d} {travel:6.0f}y {left:5d} {kill:>6s} {lost:>9s}")
+              f" {driving:>8s} {claim:>5s} {thrown:6d} {travel:6.0f}y {left:5d} {kill:>6s} {clear:>6s} {lost:>9s}")
 
     waves = len(ward_waves(tracks))
     print(f"\n  waves with an engine on the post: {manned} of {waves}")
+    if manned:
+        print(f"  manned waves dead before the next ({WARD_WAVE_MS / 1000:.1f} s): {cleared_manned} of {manned}")
     manned_adds = sum(len(adds) for corner, start, adds in ward_waves(tracks)
                       if fl.frame_at(start) and any(h[3] == SIEGE and h[2] > 0 and
                                                     math.hypot(h[0] - posts[corner][0], h[1] - posts[corner][1]) <= POSTED_YD
