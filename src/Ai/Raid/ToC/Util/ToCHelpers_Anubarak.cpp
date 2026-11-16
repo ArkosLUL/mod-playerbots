@@ -7,7 +7,6 @@
 #include <deque>
 #include <functional>
 #include <initializer_list>
-#include <list>
 #include <map>
 #include <optional>
 #include <string>
@@ -16,6 +15,8 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
+#include <boost/container/small_vector.hpp>
 
 #include "BossAuraTriggers.h"
 #include "Creature.h"
@@ -644,6 +645,8 @@ struct AnubarakState
     uint32 kiteLeftover = 0;
     // Heroic: the landed patches that aren't tank patches, and how many the spike took this submerge
     std::unordered_set<ObjectGuid> kitePatchesSeen;
+    // CountSpentKitePatches' scratch, reused for its buckets and read nowhere else
+    std::unordered_set<ObjectGuid> kitePatchesLanded;
     uint32 kitePatchesSpent = 0;
     // Each side's tank patch where it was last seen, for the gather to step off once it's spent
     bool tankPatchSeen[2] = {false, false};
@@ -858,8 +861,9 @@ AnubarakState* Sweep(Player* bot)
     if (!origin)
         origin = bot;
 
-    std::list<Creature*> creatures;
-    origin->GetCreatureListWithEntryInGrid(creatures, SWEEP_ENTRIES, ANUBARAK_ROOM_RADIUS);
+    static ToCEntrySet const sweepSet(SWEEP_ENTRIES);
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(origin, creatures, sweepSet, ANUBARAK_ROOM_RADIUS);
     for (Creature* creature : creatures)
     {
         if (!creature->IsAlive())
@@ -887,9 +891,14 @@ AnubarakState* Sweep(Player* bot)
     return &state;
 }
 
-std::vector<Creature*> ResolveAlive(Player* bot, std::vector<ObjectGuid> const& guids)
+// A few of each kind live at once, so the usual list never touches the heap
+using AliveCreatures = boost::container::small_vector<Creature*, 16>;
+
+// A copy, never a view of the guid list: a sweep nested in the caller's loop clears that list
+template <class List = AliveCreatures>
+List ResolveAlive(Player* bot, std::vector<ObjectGuid> const& guids)
 {
-    std::vector<Creature*> creatures;
+    List creatures;
     creatures.reserve(guids.size());
     for (ObjectGuid const& guid : guids)
         if (Creature* creature = ResolveCreature(bot, guid))
@@ -901,7 +910,7 @@ std::vector<Creature*> ResolveAlive(Player* bot, std::vector<ObjectGuid> const& 
 
 std::vector<Creature*> ResolveSpheres(Player* bot, AnubarakState const& state)
 {
-    return ResolveAlive(bot, state.spheres);
+    return ResolveAlive<std::vector<Creature*>>(bot, state.spheres);
 }
 
 Creature* FindSphere(std::vector<Creature*> const& spheres, ObjectGuid guid)
@@ -1054,13 +1063,16 @@ bool BossStillFor(AnubarakState const& state, uint32 now, uint32 ms)
 }
 
 // The explicit main tank, else the first living tank, as GetMainTankGuid picks but with the spec
-// asked too, so it can't blink
-ObjectGuid StableMainTankGuid(Group* group)
+// asked too, so it can't blink. walked: no flagged tank, so every living member ahead of the answer
+// (all of them when it's empty) is known not to be a tank.
+ObjectGuid StableMainTankGuid(Group* group, bool& walked)
 {
+    walked = false;
     for (Group::MemberSlot const& slot : group->GetMemberSlots())
         if (slot.flags & MEMBER_FLAG_MAINTANK)
             return slot.guid;
 
+    walked = true;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1072,16 +1084,21 @@ ObjectGuid StableMainTankGuid(Group* group)
 }
 
 // Living tanks on the map other than the main tank, bots first, so a human only takes a side no bot
-// can. Each in IsAssistTankOfIndex's order: assistants first.
-std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank)
+// can. Each in IsAssistTankOfIndex's order: assistants first. walked as StableMainTankGuid set it for
+// mainTank, so the tank test isn't asked twice of the members it already turned down.
+std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank, bool walked)
 {
     // Bot assistants, other bots, human assistants, other humans
     std::vector<ObjectGuid> ranks[4];
+    bool turnedDown = walked;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
+        if (member && member->GetGUID() == mainTank)
+            turnedDown = false;
+
         if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->GetGUID() == mainTank ||
-            !IsAnubarakTankPlayer(member))
+            turnedDown || !IsAnubarakTankPlayer(member))
             continue;
 
         uint8 const rank = (GET_PLAYERBOT_AI(member) ? 0 : 2) + (group->IsAssistant(member->GetGUID()) ? 0 : 1);
@@ -1108,8 +1125,9 @@ void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
         return;
     }
 
-    state.mainTank = StableMainTankGuid(group);
-    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank);
+    bool walked = false;
+    state.mainTank = StableMainTankGuid(group, walked);
+    std::vector<ObjectGuid> const roster = RankSideTanks(bot, group, state.mainTank, walked);
 
     for (ObjectGuid& held : state.sideTanks)
     {
@@ -1750,9 +1768,10 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
     state.waveReadMs = now;
     float const ttd = SwarmTimeToDieS(state);
     state.waveLeave = ttd >= 0.0f && ttd < ANUBARAK_SWARM_IGNORE_S;
-    RaidObs::NoteDerived(bot, "anub.p3wave",
-                         std::string(state.waveLeave ? "leave:" : "kill:") +
-                             std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.p3wave",
+                             std::string(state.waveLeave ? "leave:" : "kill:") +
+                                 std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
 }
 
 // Permafrost stays until the spike takes it, so a patch gone from the sweep while he's down is spent
@@ -1760,7 +1779,8 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
 void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
 {
     ObjectGuid const tanks[2] = {state.patch0.Get(), state.patch1.Get()};
-    std::unordered_set<ObjectGuid> landed;
+    std::unordered_set<ObjectGuid>& landed = state.kitePatchesLanded;
+    landed.clear();
     for (Creature* sphere : spheres)
         if (IsPermafrostPatch(sphere) && sphere->GetGUID() != tanks[0] && sphere->GetGUID() != tanks[1])
             landed.insert(sphere->GetGUID());
@@ -1770,7 +1790,7 @@ void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creatu
             if (!landed.count(guid) && guid != tanks[0] && guid != tanks[1])
                 RaidObs::NoteDerived(bot, "anub.kitespent", std::to_string(++state.kitePatchesSpent));
 
-    state.kitePatchesSeen = std::move(landed);
+    state.kitePatchesSeen.swap(landed);
 }
 
 // While he's up: samples his health and the share of DPS bots on him once a second, and latches the push
@@ -1820,8 +1840,10 @@ void ReadPush(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
     state.pushMs = now;
     state.pushHpPct = health;
     state.pushPerS = allOnPerS;
-    RaidObs::NoteDerived(bot, "anub.push",
-                         "on:" + std::to_string(std::lround(neededS)) + ":" + std::to_string(std::lround(leftS)));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.push",
+                             "on:" + std::to_string(std::lround(neededS)) + ":" +
+                                 std::to_string(std::lround(leftS)));
 }
 
 AnubarakState* ReadPhase(PlayerbotAI* botAI)
@@ -2021,7 +2043,7 @@ bool NearTankPatch(Position const& patch, std::vector<Position> const& tankSpots
 std::vector<Position> PatchPositions(Player* bot, AnubarakState const& state)
 {
     std::vector<Position> patches;
-    for (Creature* sphere : ResolveSpheres(bot, state))
+    for (Creature* sphere : ResolveAlive(bot, state.spheres))
         if (IsPermafrostPatch(sphere))
             patches.push_back(sphere->GetPosition());
 
@@ -2751,7 +2773,7 @@ bool KitePatchAvailable(Player* kiter, AnubarakState const& state, bool tankToo)
 {
     bool const heroic = AnubarakHeroic(kiter);
     bool const burrowers = AnyBurrower(kiter, state);
-    for (Creature* sphere : ResolveSpheres(kiter, state))
+    for (Creature* sphere : ResolveAlive(kiter, state.spheres))
     {
         int8 const rank = KitePatchRank(kiter, state, sphere, heroic, burrowers);
         bool const tank = sphere == LatchedTankPatch(kiter, state, 0) || sphere == LatchedTankPatch(kiter, state, 1);
@@ -2825,7 +2847,7 @@ AnubarakKitePlanner::KiteWorld KiteWorldFor(Player* kiter, Creature* spike, Anub
 
     Creature* tanks[2] = {LatchedTankPatch(kiter, state, 0), LatchedTankPatch(kiter, state, 1)};
     std::vector<Position> const tankSpots = LatchedTankSpots(kiter, state);
-    for (Creature* sphere : ResolveSpheres(kiter, state))
+    for (Creature* sphere : ResolveAlive(kiter, state.spheres))
     {
         bool const landed = IsPermafrostPatch(sphere);
         bool const falling = IsFrostSphereFalling(sphere);
@@ -3063,7 +3085,7 @@ KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
     {
         RaidObs::NoteDerived(kiter, "anub.kiteplan", EndingName(plan.candidate.ending));
         RaidObs::NoteDerived(kiter, "anub.kitemove", patch >= 0 ? PatchMoveName(plan.candidate.move) : "none");
-        if (picked)
+        if (picked && RaidObs::Active())
         {
             RaidObs::NoteDerived(kiter, "anub.kitepath", KitePathText(plan));
             RaidObs::NoteDerived(kiter, "anub.kitepred", KitePredText(plan.outcome));
@@ -3138,7 +3160,7 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     if (walking)
         state.kitePatchKiter = kiter->GetGUID();
 
-    if (bot)
+    if (bot && RaidObs::Active())
     {
         char const* const names[] = {"none", "run", "boost", "immune", "patch"};
         uint32 const boostId = read.boost.nitro ? NITRO_BOOSTS_USE_SPELL : read.boost.spellId;
@@ -4506,7 +4528,7 @@ std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, Anubara
         human[side] = tank && !GET_PLAYERBOT_AI(tank);
     }
 
-    std::vector<Creature*> burrowers = ResolveAlive(bot, state.burrowers);
+    AliveCreatures burrowers = ResolveAlive(bot, state.burrowers);
     std::sort(burrowers.begin(), burrowers.end(), [](Creature* a, Creature* b) { return a->GetGUID() < b->GetGUID(); });
 
     uint8 count[2] = {0, 0};
@@ -5424,9 +5446,10 @@ static bool PushHoldsDrag(Player* bot, AnubarakState const& state, Creature* bos
     if (health <= ANUBARAK_PUSH_TARGET_PCT || (neededS >= 0.0f && neededS + ANUBARAK_PUSH_DRAG_MARGIN_S <= leftS))
         return true;
 
-    RaidObs::NoteDerived(bot, "anub.push",
-                         "drag:" + (neededS >= 0.0f ? std::to_string(std::lround(neededS)) : std::string("-")) + ":" +
-                             std::to_string(std::lround(leftS)));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.push",
+                             "drag:" + (neededS >= 0.0f ? std::to_string(std::lround(neededS)) : std::string("-")) +
+                                 ":" + std::to_string(std::lround(leftS)));
     return false;
 }
 
@@ -5440,7 +5463,7 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
         return false;
 
     std::vector<Position> patches;
-    for (Creature* sphere : ResolveSpheres(bot, *state))
+    for (Creature* sphere : ResolveAlive(bot, state->spheres))
         if (IsPermafrostPatch(sphere))
             patches.push_back(sphere->GetPosition());
 
@@ -5531,11 +5554,13 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
             }
         }
 
-        RaidObs::NoteDerived(bot, "anub.subspot",
-                             state->submergeSpotValid
-                                 ? RaidObs::DescribeDerived(state->submergeSpot) + " r" +
-                                       std::to_string(static_cast<int32>(std::lround(state->submergeSpotClearance)))
-                                 : "none");
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(
+                bot, "anub.subspot",
+                state->submergeSpotValid
+                    ? RaidObs::DescribeDerived(state->submergeSpot) + " r" +
+                          std::to_string(static_cast<int32>(std::lround(state->submergeSpotClearance)))
+                    : "none");
     }
 
     if (!state->submergeSpotValid)
@@ -5963,8 +5988,9 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
     if (!group)
         return tanks;
 
-    ObjectGuid const mainTank = StableMainTankGuid(group);
-    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank);
+    bool walked = false;
+    ObjectGuid const mainTank = StableMainTankGuid(group, walked);
+    std::vector<ObjectGuid> const sides = RankSideTanks(bot, group, mainTank, walked);
     for (size_t side = 0; side < 2 && side < sides.size(); ++side)
         tanks.side[side] = sides[side];
 
@@ -5980,7 +6006,7 @@ AnubarakPrepullTanks GetAnubarakPrepullTanks(Player* bot)
 std::vector<Creature*> GetAnubarakBurrowers(Player* bot)
 {
     AnubarakState const* state = Sweep(bot);
-    return state ? ResolveAlive(bot, state->burrowers) : std::vector<Creature*>();
+    return state ? ResolveAlive<std::vector<Creature*>>(bot, state->burrowers) : std::vector<Creature*>();
 }
 
 bool AnubarakSideTankNeedsDefensive(Player* bot)
@@ -7104,7 +7130,7 @@ static bool ScarabKiteStep(Player* bot, AnubarakState const& state, Creature* sc
     Position const from = bot->GetPosition();
     Position const melee = ScarabKiteMeleePoint(bot, state);
     std::vector<Position> const patches = PatchPositions(bot, state);
-    std::vector<Creature*> const burrowers = ResolveAlive(bot, state.burrowers);
+    AliveCreatures const burrowers = ResolveAlive(bot, state.burrowers);
     float const start = bot->GetExactDist2d(scarab);
     float const floorGap = std::min(start, ANUBARAK_SCARAB_MELEE_REACH) - ANUBARAK_SCARAB_KITE_SLACK;
     bool found = false;
@@ -8135,7 +8161,7 @@ Player* GetAnubarakLightJudge(Player* bot)
             });
 
             ObjectGuid const picked = best ? best->GetGUID() : ObjectGuid::Empty;
-            if (best && picked != state->lightJudge)
+            if (best && picked != state->lightJudge && RaidObs::Active())
                 RaidObs::NoteDerived(bot, "anub.judge",
                                      best->GetName() + ':' +
                                          std::to_string(std::lround(best->GetPowerPct(POWER_MANA))));

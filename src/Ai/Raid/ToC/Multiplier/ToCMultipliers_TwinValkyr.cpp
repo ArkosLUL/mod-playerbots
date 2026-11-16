@@ -18,13 +18,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-enum class TwinInterruptKind : uint8
-{
-    None,
-    Kick,
-    Refused
-};
-
 // The shield's absorb carries interrupt immunity, so these only work once it breaks
 constexpr char const* SHIELD_BLOCKED_INTERRUPTS[] = {"kick",       "pummel",      "shield bash", "counterspell",
                                                       "wind shear", "mind freeze", "spell lock"};
@@ -98,7 +91,7 @@ float TwinValkyrInterruptHoldMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    TwinInterruptKind const kind = InterruptKindOf(action->getName());
+    TwinInterruptKind const kind = kinds.Get(action, [action] { return InterruptKindOf(action->getName()); });
     if (kind == TwinInterruptKind::None)
         return 1.0f;
 
@@ -116,10 +109,14 @@ float TwinValkyrRedirectGuardMultiplier::GetValue(Action* action)
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return 1.0f;
 
-    bool const classRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
-                               dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action) ||
-                               dynamic_cast<CastTricksOfTheTradeAction*>(action) ||
-                               dynamic_cast<RaidOpenerRedirectAction*>(action);
+    bool const classRedirect = redirects.Get(action,
+                                             [action]
+                                             {
+                                                 return dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+                                                        dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action) ||
+                                                        dynamic_cast<CastTricksOfTheTradeAction*>(action) ||
+                                                        dynamic_cast<RaidOpenerRedirectAction*>(action);
+                                             });
     if (!classRedirect)
         return 1.0f;
 

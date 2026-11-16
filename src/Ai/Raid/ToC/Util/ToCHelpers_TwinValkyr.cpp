@@ -23,6 +23,7 @@
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "ToCEncounterGate.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -30,7 +31,6 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
-#include <list>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -221,8 +221,9 @@ void ScanArena(Creature* twin, TwinValkyrState& state)
     state.orbs.clear();
     state.portals.clear();
 
-    std::list<Creature*> creatures;
-    twin->GetCreatureListWithEntryInGrid(creatures, TWIN_ARENA_ENTRIES, TWIN_ARENA_SCAN_RADIUS);
+    static ToCEntrySet const arenaSet(TWIN_ARENA_ENTRIES);
+    std::vector<Creature*> creatures;
+    GetCreatureListWithEntriesInGrid(twin, creatures, arenaSet, TWIN_ARENA_SCAN_RADIUS);
     for (Creature* creature : creatures)
     {
         if (!creature->IsAlive())
@@ -1158,8 +1159,9 @@ TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI)
         return {};
 
     TwinEssenceWant const want = WantedEssence(botAI);
-    RaidObs::NoteDerived(botAI->GetBot(), "tv.essence",
-                         std::string(ReasonName(want.reason)) + ":" + ColourName(want.colour));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(botAI->GetBot(), "tv.essence",
+                             std::string(ReasonName(want.reason)) + ":" + ColourName(want.colour));
     return want;
 }
 
@@ -1326,9 +1328,13 @@ Unit* GetTwinDpsTarget(PlayerbotAI* botAI)
         }
     }
 
-    std::string const probe =
-        target ? std::string(TwinColourOf(target) == TwinColour::Light ? "fjola" : "eydis") + ":" + rule : "none";
-    RaidObs::NoteDerived(bot, "tv.target", probe);
+    if (RaidObs::Active())
+    {
+        std::string const probe =
+            target ? std::string(TwinColourOf(target) == TwinColour::Light ? "fjola" : "eydis") + ":" + rule : "none";
+        RaidObs::NoteDerived(bot, "tv.target", probe);
+    }
+
     return target;
 }
 

@@ -99,7 +99,7 @@ float JaraxxusThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsRaidAreaDamage(botAI, action) && bot->GetExactDist2d(boss) <= JARAXXUS_AREA_THREAT_REACH)
+    if (IsRaidAreaDamage(botAI, action, splash) && bot->GetExactDist2d(boss) <= JARAXXUS_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;

@@ -6,6 +6,8 @@
 
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
+#include "RaidCombatHelpers.h"
+#include "RaidSplash.h"
 
 // Keep tanks anchored on Anub'arak and his burrowers instead of drifting with the combat formation
 class AnubarakControlTankMovementMultiplier : public Multiplier
@@ -24,6 +26,12 @@ public:
     AnubarakProtectSpikeKiteMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "anubarak protect spike kite multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    // Fixed by the action's type and name, so worked out once per action
+    static bool HeldWhileMarked(Action* action);
+
+    RaidActionCache<bool> held;
 };
 
 // A DPS bot's damage on him, and its area damage within 30 yd of him, while its threat cap latch holds.
@@ -33,6 +41,9 @@ class AnubarakThreatCapMultiplier : public Multiplier
 public:
     AnubarakThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak threat cap") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache splash;
 };
 
 // Nothing aimed at a Frost Sphere but the bot's own duty sphere, and on that only direct damage: no
@@ -43,6 +54,17 @@ class AnubarakSphereGuardMultiplier : public Multiplier
 public:
     AnubarakSphereGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak sphere guard") {}
     float GetValue(Action* action) override;
+
+private:
+    // An action's name never changes, so neither do these
+    struct Names
+    {
+        bool starfall = false;
+        bool crowdControl = false;
+    };
+
+    RaidSplashCache splash;
+    RaidActionCache<Names> names;
 };
 
 // A non-tank's damage on a burrower only on its own dps pick, so a multidot doesn't pull a loose one
@@ -56,6 +78,17 @@ class AnubarakBurrowerGuardMultiplier : public Multiplier
 public:
     AnubarakBurrowerGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower guard") {}
     float GetValue(Action* action) override;
+
+private:
+    // An action's name never changes, so neither do these
+    struct Names
+    {
+        bool bladestorm = false;
+        bool mover = false;
+    };
+
+    RaidSplashCache splash;
+    RaidActionCache<Names> names;
 };
 
 // A DPS bot's damage on a burrower it has 90% of the side tank's threat on, until under 80%, and its
@@ -66,6 +99,9 @@ class AnubarakBurrowerThreatCapMultiplier : public Multiplier
 public:
     AnubarakBurrowerThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak burrower threat cap") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache splash;
 };
 
 // A side tank's area and chain spells only where AnubarakSideTankAreaAllowed passes them: none of the
@@ -75,6 +111,9 @@ class AnubarakSideTankAreaGuardMultiplier : public Multiplier
 public:
     AnubarakSideTankAreaGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak side tank area guard") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache splash;
 };
 
 // Heroic phase 3: no heal that only feeds Leeching Swarm, on any non-tank without Penetrating Cold, the
