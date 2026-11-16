@@ -149,10 +149,12 @@ bool TwinValkyrDoorHold(PlayerbotAI* botAI);
 // Mid-pull, a bot off its door stand, tanks aside, with no essence walk due and none waiting on the
 // end of a running Vortex. Keeps the park latch.
 bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI);
-// A non-tank bot holding a running Vortex's colour with a Touch of the other one, off the spot 10 yd
-// from that Touch's portal toward its stand, so the swap lands as the channel ends. Keeps a park latch.
-bool TwinValkyrTouchCrossDue(PlayerbotAI* botAI, Position& spot, Creature*& portal);
-// The twin is on someone else, past taunt range of her door spot, and hasn't closed on it for 2 s
+// A non-tank bot holding a running Vortex's colour, off the spot 10 yd from the portal it swaps at next
+// (its Touch's colour, else its base one) toward its stand, so the swap lands as the channel ends.
+// reason: Touch or Base. Keeps a park latch.
+bool TwinValkyrNextPortalDue(PlayerbotAI* botAI, Position& spot, Creature*& portal, TwinEssenceReason& reason);
+// The twin is on someone else, past taunt range of her door spot, and hasn't closed on it for 2 s.
+// Before the pull: some bot tank was told to attack either twin.
 bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin);
 
 // The running Vortex for a bot keeping its colour through it

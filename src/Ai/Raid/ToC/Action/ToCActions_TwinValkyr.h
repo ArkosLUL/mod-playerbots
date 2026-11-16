@@ -59,11 +59,11 @@ public:
         : TwinValkyrEssenceActionBase(botAI, name, TrialOfTheCrusaderHelpers::TwinEssenceReason::Base) {}
 };
 
-class TwinValkyrWalkToTouchPortalAction : public MovementAction
+class TwinValkyrWalkToNextPortalAction : public MovementAction
 {
 public:
-    TwinValkyrWalkToTouchPortalAction(
-        PlayerbotAI* botAI, std::string const name = "twin valkyr walk to touch portal") : MovementAction(botAI, name) {}
+    TwinValkyrWalkToNextPortalAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr walk to next portal") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
 
 private:
@@ -185,8 +185,8 @@ public:
             &ToCTwinValkyrActionContext::twin_valkyr_cast_vortex_defensive;
         creators["twin valkyr dodge orb"] =
             &ToCTwinValkyrActionContext::twin_valkyr_dodge_orb;
-        creators["twin valkyr walk to touch portal"] =
-            &ToCTwinValkyrActionContext::twin_valkyr_walk_to_touch_portal;
+        creators["twin valkyr walk to next portal"] =
+            &ToCTwinValkyrActionContext::twin_valkyr_walk_to_next_portal;
         creators["twin valkyr take base essence"] =
             &ToCTwinValkyrActionContext::twin_valkyr_take_base_essence;
         creators["twin valkyr main tank hold light twin"] =
@@ -226,8 +226,8 @@ private:
         return new TwinValkyrCastVortexDefensiveAction(botAI);
     }
 
-    static Action* twin_valkyr_walk_to_touch_portal(PlayerbotAI* botAI) {
-        return new TwinValkyrWalkToTouchPortalAction(botAI);
+    static Action* twin_valkyr_walk_to_next_portal(PlayerbotAI* botAI) {
+        return new TwinValkyrWalkToNextPortalAction(botAI);
     }
 
     static Action* twin_valkyr_take_base_essence(PlayerbotAI* botAI) {

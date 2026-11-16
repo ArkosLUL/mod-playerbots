@@ -2,12 +2,13 @@
 """Score a Twin Val'kyr pull from a RaidObs trace: essences, Touch, Pact, orbs, tanks, targets, door.
 
     val_kyr_twins.py <file>             every section
-    val_kyr_twins.py <file> --essence   time without an essence, swaps by reason, who ate each Vortex
+    val_kyr_twins.py <file> --essence   time without an essence, swaps by reason, who ate each Vortex,
+                                        how fast the raid swapped back and reached the tunnel
     val_kyr_twins.py <file> --touch     every Touch: how long it stayed up, what it cost the raid
     val_kyr_twins.py <file> --pact      every Twin's Pact: shield, break, kicks, outcome, duty, lust
     val_kyr_twins.py <file> --orbs      Unleashed hits taken or absorbed, each blast's size, tv.orb rules,
                                         Powering Up
-    val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood
+    val_kyr_twins.py <file> --tanks     who each twin hit, taunts, where the twins stood, who she took first
     val_kyr_twins.py <file> --targets   how long each DPS bot hit the twin its rule sends it to
     val_kyr_twins.py <file> --door      time on the door stand and in the tunnel, time out by reason,
                                         Nitro Boosts per bot by walk
@@ -367,16 +368,32 @@ def essence_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     return out
 
 
+def back_from(samples: Samples, guid: int, timeline, channel: int, end: int) -> tuple[int | None, int | None]:
+    """A bot's first essence change after the channel opened and its first sample in the tunnel after
+    that, both from the channel's end. A change before the end is negative."""
+    times = timeline[0]
+    index = bisect.bisect_right(times, channel)
+    if index >= len(times):
+        return None, None
+    off = times[index]
+    home = next((when for when, row in samples.track(guid, off, end)
+                 if dist2(row[1:3], ARENA_CENTER) >= DOOR_RADIUS), None)
+    channel_end = channel + VORTEX_CHANNEL_MS
+    return off - channel_end, None if home is None else home - channel_end
+
+
 def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Every Vortex cast: how many living bots held its colour when the channel opened, of those
     whose colour is known, the bots whose `tv.essence` kept their colour through it on purpose, and
-    each bot's unabsorbed hits and damage from it."""
+    each bot's unabsorbed hits and damage from it. `back` holds, per bot that swapped onto its colour
+    for it, `back_from`'s two delays."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     timelines = essence_timelines(trace)
     wanted = note_track(trace, "tv.essence")
     hits = [rec for rec in trace.of("dmg")
             if rec.get("sp") in VORTEX_DAMAGE and rec.get("a", 0) > 0 and rec.get("d") in roster]
+    end = pull_end(trace)
 
     out = []
     for rec in trace.of("cast"):
@@ -388,6 +405,7 @@ def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
         stop = channel + VORTEX_CHANNEL_MS + VORTEX_SLACK_MS
 
         matched = known = 0
+        back: dict[int, tuple[int, int | None]] = {}
         for guid in roster:
             row = samples.row(guid, channel)
             held = colour_at(timelines[guid], channel)
@@ -395,6 +413,10 @@ def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
                 continue
             known += 1
             matched += held == colour
+            if held == colour and colour_at(timelines[guid], start) != colour:
+                off, home = back_from(samples, guid, timelines[guid], channel, end)
+                if off is not None:
+                    back[guid] = (off, home)
 
         taken: collections.Counter = collections.Counter()
         damage: collections.Counter = collections.Counter()
@@ -405,7 +427,7 @@ def vortexes(trace: Trace, samples: Samples | None = None) -> list[dict]:
         held = {guid for guid in roster
                 if str(value_at(wanted.get(guid), channel) or "").startswith("hold:")}
         out.append({"t": start, "caster": rec.get("s"), "colour": colour, "matched": matched,
-                    "known": known, "held": held, "hits": taken, "damage": damage})
+                    "known": known, "held": held, "hits": taken, "damage": damage, "back": back})
     return out
 
 
@@ -451,8 +473,15 @@ def show_essence(trace: Trace) -> None:
                               for role, (bots, count, damage) in sorted(by_role.items())) or "nobody"
             names = ", ".join(map(trace.name, eaters))
             print(f"            unabsorbed, {label}: {eaten}" + (f"  ({names})" if names else ""))
+        if cast["back"]:
+            offs = [off for off, _ in cast["back"].values()]
+            homes = [home for _, home in cast["back"].values() if home is not None]
+            early = sum(off < 0 for off in offs)
+            print(f"            back: {len(offs)} bot(s) swapped onto it, off it a median"
+                  f" {statistics.median(offs) / 1000:.1f}s after the channel ({early} early)"
+                  + (f", in the tunnel {statistics.median(homes) / 1000:.1f}s after" if homes else ""))
     print("  held is a tv.essence of hold at the channel's open: a tank, or the raid through a normal"
-          " Light Vortex")
+          " Light Vortex; back counts from the channel's end")
 
 
 # -------------------------------------------------------------------------------------------- touch
@@ -769,9 +798,11 @@ def assigned(spans: dict[int, list[tuple[str, int, int]]], name: str, when: int)
 
 def tank_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[dict], list[float]]:
     """Per twin: time her victim was her `tv.tank` tank or any tank, of her living sampled time; her
-    taunts by caster; her distance from ARENA_CENTER. Then the twins' distance apart."""
+    taunts by caster; her distance from ARENA_CENTER; her first victim from the engage and when her
+    own tank first was. Then the twins' distance apart."""
     samples = samples or Samples(trace)
     end = pull_end(trace)
+    engage = engage_at(trace)
     twins = twin_guids(trace, samples)
     spans = holder_spans(trace, "tv.tank", end)
     casts = [rec for rec in trace.of("cast") if not rec.get("tr")]
@@ -782,21 +813,27 @@ def tank_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[dict],
             continue
         alive = mine = tanked = 0
         radii = []
-        for when, weight in samples.steps(engage_at(trace), end):
+        first = own = None
+        for when, weight in samples.steps(engage, end):
             row = samples.exact(twin, when)
             if not row or row[5] <= 0:
                 continue
             victim = row[7] if len(row) > 7 else 0
             alive += weight
-            mine += weight if victim in assigned(spans, name, when) else 0
+            is_own = victim in assigned(spans, name, when)
+            mine += weight if is_own else 0
             tanked += weight if trace.role(victim) == "tank" else 0
             radii.append(dist2(row[1:3], ARENA_CENTER))
+            if first is None and victim:
+                first = victim
+            if own is None and is_own:
+                own = when - engage
         if not alive:
             continue
         taunts = collections.Counter(cast.get("s") for cast in casts if cast.get("tgt") == twin
                                      and named(trace, cast.get("sp"), TAUNT_NAMES))
         out.append({"name": name, "guid": twin, "alive": alive, "mine": mine, "tanked": tanked,
-                    "taunts": taunts, "centre": statistics.median(radii)})
+                    "taunts": taunts, "centre": statistics.median(radii), "first": first, "own": own})
 
     apart = []
     if twins["fjola"] is not None and twins["eydis"] is not None:
@@ -822,6 +859,9 @@ def show_tanks(trace: Trace) -> None:
               f"  taunts {sum(row['taunts'].values())}" + (f" ({taunts})" if taunts else ""))
     if apart:
         print(f"  twins apart: median {statistics.median(apart):.1f} yd, max {max(apart):.1f}")
+    print("  first victim from the engage: " + "; ".join(
+        f"{trace.name(row['guid'])} {trace.name(row['first']) if row['first'] else 'nobody'}, her tank "
+        + (f"from {clock(row['own'])}" if row["own"] is not None else "never") for row in rows))
 
     held = {guid: values[-1] for guid, (_, values) in note_track(trace, "tv.tank").items()}
     print("  tv.tank at the end: " + (", ".join(f"{trace.name(guid)} {value}" for guid, value
@@ -1042,12 +1082,13 @@ def show_banner(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("essence", "time without an essence, swaps by reason, Vortex damage by role", show_essence),
+    ("essence", "time without an essence, swaps by reason, Vortex damage by role, the swap back after it",
+     show_essence),
     ("touch", "every Touch, how long it stayed up and the raid damage meanwhile", show_touch),
     ("pact", "every Pact: shield, break, kicks, outcome, interrupt duty, lust", show_pact),
     ("orbs", "Unleashed hits taken or absorbed, each blast's size, tv.orb rules, Powering Up, Empowered",
      show_orbs),
-    ("tanks", "each twin's victim against her tv.tank, taunts, distances", show_tanks),
+    ("tanks", "each twin's victim against her tv.tank, taunts, distances, her first victim", show_tanks),
     ("targets", "each DPS bot's time on the twin its rule names", show_targets),
     ("door", "time on the door stand and in the tunnel, time out by reason, Unleashed there, Nitro",
      show_door),

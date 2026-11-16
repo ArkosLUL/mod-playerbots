@@ -188,23 +188,28 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     return true;
 }
 
-bool TwinValkyrWalkToTouchPortalAction::Execute(Event /*event*/)
+bool TwinValkyrWalkToNextPortalAction::Execute(Event /*event*/)
 {
     Position spot;
     Creature* portal = nullptr;
-    if (!TwinValkyrTouchCrossDue(botAI, spot, portal))
+    TwinEssenceReason reason = TwinEssenceReason::None;
+    if (!TwinValkyrNextPortalDue(botAI, spot, portal, reason))
         return false;
 
-    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, TwinEssenceReason::Touch, TwinColour::None, orbWait);
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, reason, TwinColour::None, orbWait);
     if (wait != TwinWalkWait::None)
         return StandForWait(botAI, bot, wait);
 
-    // it has to be there before the channel ends
-    if (bot->IsMovementPreventedByCasting())
+    // A Touch ticks from the channel's end, so that walk has to be there first. The base walk has the
+    // whole channel: a cast finishes, though not a long channel.
+    bool const touch = reason == TwinEssenceReason::Touch;
+    if (bot->IsMovementPreventedByCasting() && (touch || LongChannel(bot)))
         bot->InterruptNonMeleeSpells(true);
 
-    TwinValkyrBoostEssenceWalk(botAI, TwinEssenceReason::Touch, portal);
-    ReleaseWalk(botAI, bot, spot, true);
+    if (touch)
+        TwinValkyrBoostEssenceWalk(botAI, reason, portal);
+
+    ReleaseWalk(botAI, bot, spot, touch);
 
     if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
                false, false, false, MovementPriority::MOVEMENT_FORCED, true, false))
@@ -307,6 +312,12 @@ bool TwinValkyrMoveToDoorStandAction::Execute(Event /*event*/)
 
 bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
 {
+    // Before the pull she waits 85 yd out, and attacking her already would make the attack command that
+    // calls the pull a duplicate the bot refuses
+    bool const fetch = TwinValkyrFetchDue(botAI, twin);
+    if (!twin->IsInCombat() && !fetch)
+        return WalkToDoor(twin);
+
     // the target can be out of sight round the tunnel mouth, and the walk below still has to run
     if (AI_VALUE(Unit*, "current target") != twin && Attack(twin))
         return true;
@@ -322,7 +333,7 @@ bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
         }
     }
 
-    return TwinValkyrFetchDue(botAI, twin) ? FetchTwin(twin) : WalkToDoor(twin);
+    return fetch ? FetchTwin(twin) : WalkToDoor(twin);
 }
 
 // Walks to 25 yd of her for the taunt. If it can't land, the door hold is off while fetching, so

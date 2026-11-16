@@ -94,7 +94,7 @@ constexpr float TWIN_NITRO_MIN_WALK = 15.0f;
 constexpr uint32 TWIN_NITRO_SPARE_MS = 1500;
 
 // gossip reach is ~14 yd 3D (5.5 plus both combat reaches), this leaves room for the floor's slope
-constexpr float TWIN_TOUCH_CROSS_PORTAL_DIST = 10.0f;
+constexpr float TWIN_NEXT_PORTAL_DIST = 10.0f;
 
 // Out in the arena bots stand a yard or two apart, so a blast set off on anyone near reaches the bot
 constexpr float TWIN_ORB_SAFE_PASS = TWIN_ORB_BLAST_RADIUS + 0.5f;
@@ -185,7 +185,7 @@ struct TwinValkyrState
     ObjectGuid doorGroup;
     std::unordered_map<ObjectGuid, TwinDoorStand> doorStands;
     std::unordered_map<ObjectGuid, bool> doorParked;
-    std::unordered_map<ObjectGuid, bool> touchCrossParked;
+    std::unordered_map<ObjectGuid, bool> nextPortalParked;
 };
 
 RaidInstanceState<TwinValkyrState> twinStates;
@@ -1538,11 +1538,11 @@ bool TwinValkyrDoorHold(PlayerbotAI* botAI)
     if (!state || GetTwinDoorStand(bot).role == TwinDoorRole::None)
         return false;
 
-    // A tank attacks its twin once she's summoned, and reach melee would walk it 40 yd into the arena
-    // and back until someone pulls
-    if (!state->pull.engaged)
-        return TankRoleOf(bot) != TwinTankRole::None &&
-               (IsTwinAttackable(GetFjola(botAI)) || IsTwinAttackable(GetEydis(botAI)));
+    // Before the pull only a tank holds, until it's sent for its twin: reach melee on her would walk it
+    // 40 yd into the arena and back
+    if (!state->pull.engaged && (TankRoleOf(bot) == TwinTankRole::None ||
+                                 (!IsTwinAttackable(GetFjola(botAI)) && !IsTwinAttackable(GetEydis(botAI)))))
+        return false;
 
     for (Unit* twin : {GetFjola(botAI), GetEydis(botAI)})
         if (twin && IsTwinTank(bot, twin) && TwinValkyrFetchDue(botAI, twin))
@@ -1569,48 +1569,72 @@ bool ParkedWalkDue(bool& parked, float distance)
     return true;
 }
 
-// A Touch of the other colour waits out the Vortex, then ticks the bot every 2 s until the swap, so
-// the bot waits in gossip reach of its portal instead
-Creature* TouchCrossPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Position& spot)
+// After the Vortex the bot swaps to its Touch's colour, else its base one, so it waits in gossip reach of
+// that portal. A Touch of the other colour ticks every 2 s from the channel's end until the swap, and
+// Fjola summons no orbs while she casts, so the walk is safest during her Vortex.
+Creature* NextPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Position& spot, TwinEssenceReason& reason)
 {
     Player* bot = botAI->GetBot();
     if (!state.pull.engaged || !bot->IsAlive() || state.vortex == TwinColour::None ||
         TankRoleOf(bot) != TwinTankRole::None || EssenceOf(bot) != state.vortex)
         return nullptr;
 
+    // a Touch of the Vortex's colour is re-taken at its own portal
     TwinColour const touch = TouchColourOf(bot);
-    if (touch == TwinColour::None || touch == state.vortex)
+    TwinColour const next = touch != TwinColour::None ? touch : BaseColourOf(bot);
+    if (next == state.vortex)
         return nullptr;
 
-    Creature* portal = GetEssencePortal(bot, touch);
+    Creature* portal = GetEssencePortal(bot, next);
     if (!portal)
         return nullptr;
+
+    reason = touch != TwinColour::None ? TwinEssenceReason::Touch : TwinEssenceReason::Base;
 
     // on the way to the stand, so the walk home starts from here
     TwinDoorStand const stand = GetTwinDoorStand(bot);
     Position const toward = stand.role != TwinDoorRole::None ? stand.spot : bot->GetPosition();
     float const angle = portal->GetAngle(toward.GetPositionX(), toward.GetPositionY());
-    spot.Relocate(portal->GetPositionX() + TWIN_TOUCH_CROSS_PORTAL_DIST * std::cos(angle),
-                  portal->GetPositionY() + TWIN_TOUCH_CROSS_PORTAL_DIST * std::sin(angle), portal->GetPositionZ());
+    spot.Relocate(portal->GetPositionX() + TWIN_NEXT_PORTAL_DIST * std::cos(angle),
+                  portal->GetPositionY() + TWIN_NEXT_PORTAL_DIST * std::sin(angle), portal->GetPositionZ());
     return portal;
+}
+
+// The attack and tank attack commands leave the target's guid as the bot's pull target
+bool PullCalled(PlayerbotAI* botAI, TwinValkyrState const& state)
+{
+    Player* bot = botAI->GetBot();
+    for (ObjectGuid const& guid : TwinTankGuids(bot))
+    {
+        Player* tank = ObjectAccessor::GetPlayer(*bot, guid);
+        PlayerbotAI* tankAI = tank ? GET_PLAYERBOT_AI(tank) : nullptr;
+        if (!tankAI)
+            continue;
+
+        ObjectGuid const target = tankAI->GetAiObjectContext()->GetValue<ObjectGuid>("pull target")->Get();
+        if (!target.IsEmpty() && (target == state.fjola || target == state.eydis))
+            return true;
+    }
+
+    return false;
 }
 }  // namespace
 
-bool TwinValkyrTouchCrossDue(PlayerbotAI* botAI, Position& spot, Creature*& portal)
+bool TwinValkyrNextPortalDue(PlayerbotAI* botAI, Position& spot, Creature*& portal, TwinEssenceReason& reason)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     TwinValkyrState* state = bot ? ReadTwins(botAI) : nullptr;
     if (!state)
         return false;
 
-    portal = TouchCrossPortal(botAI, *state, spot);
+    portal = NextPortal(botAI, *state, spot, reason);
     if (!portal)
     {
-        state->touchCrossParked.erase(bot->GetGUID());
+        state->nextPortalParked.erase(bot->GetGUID());
         return false;
     }
 
-    return ParkedWalkDue(state->touchCrossParked[bot->GetGUID()], bot->GetExactDist2d(spot));
+    return ParkedWalkDue(state->nextPortalParked[bot->GetGUID()], bot->GetExactDist2d(spot));
 }
 
 bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
@@ -1624,14 +1648,15 @@ bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI)
     if (stand.role == TwinDoorRole::None || MustSwap(bot, WantedEssence(botAI), false))
         return false;
 
-    // It took the Vortex's colour and walks to a portal of its own once the channel ends, or already
-    // waits by its Touch's portal for that, so the stand would be a detour
+    // It took the Vortex's colour and swaps off it at another portal once the channel ends, so the stand
+    // would be a detour
     TwinColour const held = EssenceOf(bot);
     if (state->vortex != TwinColour::None && held == state->vortex && held != BaseColourOf(bot))
         return false;
 
-    Position touchSpot;
-    if (TouchCrossPortal(botAI, *state, touchSpot))
+    Position nextSpot;
+    TwinEssenceReason nextReason = TwinEssenceReason::None;
+    if (NextPortal(botAI, *state, nextSpot, nextReason))
         return false;
 
     return ParkedWalkDue(state->doorParked[bot->GetGUID()], bot->GetExactDist2d(stand.spot));
@@ -1641,8 +1666,13 @@ bool TwinValkyrFetchDue(PlayerbotAI* botAI, Unit* twin)
 {
     TwinValkyrState const* state = botAI ? ReadTwins(botAI) : nullptr;
     TwinColour const colour = TwinColourOf(twin);
-    if (!state || colour == TwinColour::None || !state->pull.engaged || twin->GetVictim() == botAI->GetBot())
+    if (!state || colour == TwinColour::None || twin->GetVictim() == botAI->GetBot())
         return false;
+
+    // Once one twin engages her sister goes for her own nearest player, so every bot tank sets out for
+    // its own
+    if (!state->pull.engaged)
+        return IsTwinAttackable(twin) && PullCalled(botAI, *state);
 
     TwinApproach const& approach = state->pull.approach[colour == TwinColour::Light ? 0 : 1];
     return approach.valid && twin->GetExactDist2d(DoorOf(colour, state->tanks.size())) > TWIN_TAUNT_RANGE &&

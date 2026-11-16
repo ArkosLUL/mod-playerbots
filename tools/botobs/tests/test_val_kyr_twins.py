@@ -273,6 +273,8 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual((casts[0]["matched"], casts[0]["known"]), (2, 4))
         self.assertEqual(casts[0]["hits"], {TIDE: 1, BULWARK: 2})
         self.assertEqual(casts[0]["damage"], {TIDE: 6000, BULWARK: 12000})
+        # Shiv swaps back a second after the channel and never reaches the tunnel
+        self.assertEqual(casts[0]["back"], {SHIV: (1000, None)})
 
     def test_a_touch_ended_by_the_swap_and_its_raid_damage(self):
         rows = vk.touches(self.trace)
@@ -410,6 +412,41 @@ class VortexHold(unittest.TestCase):
             cast = vk.vortexes(trace)[0]
         self.assertEqual(cast["held"], {BULWARK})
         self.assertEqual(cast["hits"], {TIDE: 1, BULWARK: 2})
+
+
+class BackFromTheVortex(unittest.TestCase):
+    def test_a_swap_before_the_channels_end_reads_negative_and_home_counts_from_it(self):
+        # Shiv takes Light for a Vortex channelled 15 s to 20 s, swaps back at 18 s, in the tunnel at 20 s
+        extra = [cast(9000, FJOLA, 66046, 0, 6000),
+                 aura(10000, SHIV, 65684, 1), aura(10000, SHIV, 65686, 0),
+                 aura(18000, SHIV, 65686, 1), aura(18000, SHIV, 65684, 0)]
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, door_pull() + extra)
+            back = vk.vortexes(trace)[0]["back"]
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                vk.show_essence(trace)
+        self.assertEqual(back, {SHIV: (-2000, 0)})
+        self.assertIn("back: 1 bot(s) swapped onto it, off it a median -2.0s after the channel (1 early),"
+                      " in the tunnel 0.0s after", out.getvalue())
+
+
+class FirstVictim(unittest.TestCase):
+    def test_a_twin_on_someone_else_first_shows_when_her_tank_took_her(self):
+        records = twins_pull()
+        for rec in records:
+            if rec.get("e") == "snap" and rec["t"] < 2000:
+                rec["u"][0][7] = SHIV
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, records)
+            rows = {row["name"]: row for row in vk.tank_rows(trace)[0]}
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                vk.show_tanks(trace)
+        self.assertEqual((rows["fjola"]["first"], rows["fjola"]["own"]), (SHIV, 2000))
+        self.assertEqual((rows["eydis"]["first"], rows["eydis"]["own"]), (AEGIS, 0))
+        self.assertIn("first victim from the engage: Fjola Lightbane Shiv, her tank from 0:02.000;"
+                      " Eydis Darkbane Aegis, her tank from 0:00.000", out.getvalue())
 
 
 class DoorStand(unittest.TestCase):

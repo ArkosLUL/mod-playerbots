@@ -54,11 +54,11 @@ public:
     bool IsActive() override;
 };
 
-class TwinValkyrTouchedDuringVortexTrigger : public Trigger
+class TwinValkyrNextPortalDueTrigger : public Trigger
 {
 public:
-    TwinValkyrTouchedDuringVortexTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr touched during vortex") {}
+    TwinValkyrNextPortalDueTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr next portal due") {}
     bool IsActive() override;
 };
 
@@ -126,8 +126,8 @@ public:
             &ToCTwinValkyrTriggerContext::twin_valkyr_vortex_raid_cover;
         creators["twin valkyr vortex defensive"] =
             &ToCTwinValkyrTriggerContext::twin_valkyr_vortex_defensive;
-        creators["twin valkyr touched during vortex"] =
-            &ToCTwinValkyrTriggerContext::twin_valkyr_touched_during_vortex;
+        creators["twin valkyr next portal due"] =
+            &ToCTwinValkyrTriggerContext::twin_valkyr_next_portal_due;
         creators["twin valkyr needs base essence"] =
             &ToCTwinValkyrTriggerContext::twin_valkyr_needs_base_essence;
         creators["twin valkyr engaged by main tank"] =
@@ -167,8 +167,8 @@ private:
         return new TwinValkyrVortexDefensiveTrigger(botAI);
     }
 
-    static Trigger* twin_valkyr_touched_during_vortex(PlayerbotAI* botAI) {
-        return new TwinValkyrTouchedDuringVortexTrigger(botAI);
+    static Trigger* twin_valkyr_next_portal_due(PlayerbotAI* botAI) {
+        return new TwinValkyrNextPortalDueTrigger(botAI);
     }
 
     static Trigger* twin_valkyr_needs_base_essence(PlayerbotAI* botAI) {
