@@ -68,12 +68,128 @@ One commit per candidate, each compiling (`pb-check` over its paths), harness fi
 
 ## Task list
 
+Re-verified on Custom `905e22d9e`. One lead, no split: six small candidates, mostly in different files
+but T1/T2 share the gate and T1 uses T3's entry set. Commit order: T3, T1, T2, T4, T5, T8.
+
+- **T3** `ToCHelpers_Shared.h/.cpp` (new `ToCEntrySet`, bitset over min..max entry, and
+  `GetCreatureListWithEntriesInGrid(WorldObject const*, std::vector<Creature*>&, ToCEntrySet const&,
+  float)`: `Acore::CreatureListSearcher` + `Cell::VisitObjects(origin, …, radius)`, check =
+  `Contains(GetEntry()) && origin->IsWithinDist(unit, range, false)`). Adopt at
+  `ToCHelpers_FactionChampions.cpp` ScanChampions L504-506, `ToCHelpers_FactionChampionsDefence.cpp`
+  UpdateHazards L933-935, `ToCHelpers_Jaraxxus.cpp` ScanOf L126-127 (`std::list` → `std::vector`, loops
+  unchanged). Proof: harness (old check copied verbatim from `GridNotifiers.h`
+  `AllCreaturesMatchingOneEntryInRange` vs new, every entry list in ToC plus edge lists, every entry in
+  and around their ranges, both distance outcomes; result and `IsWithinDist` call sequence; list vs
+  vector insertion order through a copied `ContainerInserter`); red check: off-by-one in `Contains`.
+- **T1** `ToCEncounterGate.cpp` `EntryEngaged` L121-126, FC branch L139-144, `AnyEngaged` L112-119
+  removed: `Acore::CreatureSearcher` with check = entry test, `IsWithinDist(c, 200, false)`, then
+  `IsEngaged`, same `Cell::VisitObjects(bot, …, 200)`. FC entry test via a `ToCEntrySet` of
+  `CHAMPION_ENTRIES`. Proof: review (the cell walk is unchanged, only the per-container loop stops;
+  every skipped call is a pure getter; the boolean is ∃ visited creature passing the same tests).
+- **T2** same file, `ToCGateState` L75-83 (+ last engaged champion guid), `EncounterEngaged`
+  L128-152, header enum (+ `TOC_DATA_JARAXXUS = 10`: `DATA_JARAXXUS` is the 11th entry of
+  `TrialOfTheCrusaderObjectData`; fix the L128 comment, Jaraxxus and Icehowl both have slots). Before
+  the T1 sweep: candidate (Icehowl slot 8, Jaraxxus slot 10, FC stored guid) passes phase, entry,
+  range and engaged tests, its position cell lies within ±1 of the bot's standing cell (valid
+  coords), and a one-cell `map->Visit` of that cell's `GridTypeMapContainer` finds it (container
+  membership and grid-loaded test exactly as the sweep's own per-cell visit; `GetCurrentCell()` is
+  protected in the core, and a position cell can lag the container through the move list, so the
+  visit is the exact test). Miss: T1 sweep unchanged; FC stores the sweep's hit or clears. Proof:
+  harness with `Compute`/`CalculateCellArea`/`Cell::Visit`/`VisitCircle` cell selection copied in,
+  exhaustive over every float bot coordinate per axis then the cross product of distinct axis cases:
+  the ±1 block is always visited; red checks: ±2 block and "no cell test" (any candidate within
+  200 yd) must miss.
+- **T4** `ToCHelpers_FactionChampionsDefence.cpp` `RepickClock::threat` L332, `UpdateFocusClock`
+  L2071-2088: guid-sorted flat vector, built into a reused per-state scratch then swapped; insert
+  overwrites an equal guid (map `operator[]` semantics), lookup by `lower_bound`. Proof: pure-function
+  harness (old map body verbatim vs new) over enumerated old snapshots, ref sequences (duplicates and
+  non-players included) and threat values straddling both thresholds; snapshot content and `moved`
+  compared; red check: drop the overwrite.
+- **T5** `ToCHelpers_NorthrendBeasts.cpp` `Deal` L224: `GatherRoster` built at the first pass-2 duty
+  that needs it. Proof: review (nothing between pass 1 and that point feeds the roster;
+  `CountsForRoster`/`IsBeastsTank` read only pure getters, `GET_PLAYERBOT_AI` a map find, and
+  `specTabCache` is exact: invalidated, never time-windowed).
+- **T8** `ToCHelpers_FactionChampionsBall.cpp` `TrinketsInReach` L256-273: one loop writing into a
+  nullable vector and returning the count, `return {}` kept as clear + 0; the counting caller L302
+  passes null, L702 keeps the vector. Proof: review (same calls, same order, same early exit).
+
 ## Candidates done
+
+Harnesses in `build-toc-wt/perf/_harness/t-triggers/`: `extract.py <t2|t3|t4>` pulls the core, Custom
+and worktree bodies verbatim into `gen/` (and the red mutation into `gen_red/`), failing on any missed
+anchor; `run.sh` builds each harness as is and with `-DRED` inside `acore/ac-wotlk-build:master`.
+
+- **T3** `7cfb6d25e`, `ToCHelpers_Shared` `ToCEntrySet` + `GetCreatureListWithEntriesInGrid`,
+  adopted in ScanChampions, UpdateHazards, Jaraxxus ScanOf. Neutral: same `Cell::VisitObjects`, same
+  `CreatureListSearcher` phase test, same check (entry membership, then `IsWithinDist(…, false)`
+  only on a match), `push_back` in visit order into a vector the callers only iterate. Proof:
+  `t3_entryset.cpp`, 1,172,540 cases (every ToC entry list plus edge lists, every entry within 70 of
+  each list's range and 40k random, both range outcomes, random cells through a copied
+  `ContainerInserter`), 0 mismatches in result, `IsWithinDist` log and container order; red
+  (`Contains` shifted by one) 226,908.
+- **T1** `2501a4447`, gate `FirstEngaged` (`Acore::CreatureSearcher`) for `EntryEngaged` and the FC
+  branch. Neutral by review: `Cell::VisitObjects` still walks every cell (the searcher only returns
+  early inside a container, and `Map::Visit`/`VisitCell` create nothing); the skipped calls are
+  `GetEntry`, `IsWithinDist`, `IsAlive`, `IsInCombat`, all pure getters; the old answer was "some
+  visited creature passes entry, range and `IsEngaged`", which is exactly the searcher's stop
+  condition. FC membership via `CHAMPION_ENTRY_SET` is covered by the T3 harness's champion list.
+- **T2** `5414da8e1`, gate `SweepFinds` before the sweep for Icehowl (slot 8), Jaraxxus (new
+  `TOC_DATA_JARAXXUS = 10`) and FC (`ToCGateState::champion`, the last sweep hit). Neutral: it answers
+  true only for a creature that passes the sweep's own phase, entry, range and engaged tests, sits in
+  the grid container of a cell within ±1 of the bot's standing cell (found there by the same
+  `map->Visit` the sweep uses per cell, so container lag and unloaded grids fall through), with the
+  bot on `IsValidMapCoord`; such a cell is always visited, so the sweep would have answered true.
+  Every miss runs the T1 sweep unchanged. Added calls (`GetGuidData`, `Map::GetCreature`, one cell
+  visit) are pure. Proof: `t2_cells.cpp`, every float bot coordinate per axis in [-17200, 17200]
+  passing `IsValidMapCoord`, reduced to 575 (standing, low, high) cell cases, crossed into 330,625 bot
+  cells, 2,968,729 block cells checked, 0 unvisited; red: ±2 block 26,028 unvisited, "no cell test"
+  (candidates within 202 yd) 111,949 in unvisited cells.
+- **T4** `889be7091` (+ comment `f4afcf785`), Defence `RepickClock::threat` as a guid-sorted vector,
+  built in `threatScratch` and swapped. Neutral: the snapshot is only read through the lookup in the
+  same loop, so content and `moved` are all that can differ. Proof: `t4_threat.cpp`, old loop from
+  Custom vs new, 10,978,082 cases (exhaustive two refreshes of up to two refs over 3 players, a
+  non-player, a null victim and 9 values straddling both thresholds, plus 200k random interleaved
+  3-champion sequences sharing the scratch), 0 mismatches; red (no overwrite of a repeated guid)
+  2,094,970.
+- **T5** `797a9a94e`, Beasts `Deal` builds the roster at the first duty pass 2 deals. Neutral by
+  review: pass 2 reads the roster only after that point, nothing between pass 1 and it changes what
+  `GatherRoster` reads, so the built roster is identical; when skipped, the skipped calls are pure
+  getters, `GET_PLAYERBOT_AI` (a map find), `ContainsStrategy` (a mask test) and `GetPlayerSpecTab`,
+  whose `specTabCache` is exact (invalidated on all four talent hooks in `Playerbots.cpp`, keyed on
+  level and spec mask), so a skipped fill changes no later answer.
+- **T8** `d95abfc59`, Ball `CollectTrinketsInReach` with a nullable list; UpdateOpener counts, the
+  target pick keeps `TrinketsInReach`. Neutral by review: same calls in the same order
+  (`GetExactDist2d`, `FactionChampionsGripGuarded` memo call, `FactionChampionsTrinketReady`,
+  `IsImmunedToSpell`), the veto still returns at the same champion with an empty list and count 0,
+  and count equals the pushes.
+
+pb-check over the lane's union (9 files, 37 TUs): green.
 
 ## Candidates dropped
 
+None.
+
 ## Decisions for review
 
+- T2 keeps a per-instance hint (`ToCGateState::champion`) shared across bots and refreshes. It is a
+  guess validated in full on every use, never an answer: the gate result is the sweep's in every case.
+- T2 tests `IsValidMapCoord` on the bot: past the map edge the clamped standing cell leaves ±1 cells
+  unvisited (the first harness run found 3,457), so the hint stands down there.
+- T2 tests container membership with a one-cell `map->Visit` because `GetCurrentCell()` is protected
+  in `MovableMapObject`; a position bound alone would not be exact (move-list lag).
+- T4 keeps "last value wins" for a repeated guid although the core's threat list is keyed by victim
+  guid and cannot repeat one.
+- `ToCEntrySet` allocates one bit per entry between min and max: the Defence scan list spans totems
+  (5913) to champions (34475), ~3.5 KB once per process.
+
 ## Known gaps
+
+- `ToCHelpers_NorthrendBeasts.cpp` `RefreshIcehowl` says Icehowl has no guid slot; `DATA_ICEHOWL` (8)
+  is one. Switching that search to the slot changes when Icehowl is found, so it is a behaviour
+  change, left alone.
+- Behaviour-changing ideas left out by rule: one refresh per world tick, a guid-only gate (W2: the
+  slots now in the header make it a one-liner), arena-centred sweeps, lazy Defence `Update*`.
+- T2 only spares the sweep while the boss or the remembered champion is within one cell of the bot;
+  between pulls (encounter not in progress) the gate never sweeps anyway.
 
 ## Blocked
