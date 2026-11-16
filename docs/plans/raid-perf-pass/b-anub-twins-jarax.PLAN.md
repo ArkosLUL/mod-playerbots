@@ -107,9 +107,9 @@ round, 392 SpellInfo shapes plus
 no id and no info, every helper answer flipping per round, null actions, hunter/rogue/warrior bots.
 20,287,683 calls, 45,963,900 logged events (every memo, helper, `GetTarget`, `"current target"`, `"spell
 id"` create and `Get()`, `HasAura`, `GetMap`/`IsHeroic`, distance, cast state), 0 mismatches; each
-multiplier both holds and passes. Reds, all failing: cache ignores its key 3,495,763; attack hold
+multiplier both holds and passes. Reds, all failing: cache ignores its key 5,052,345; attack hold
 flipped 89,319; spell mover freed 1,290,899; Feign Death freed 750,788; kite action held 119,602; spell id
-not refetched 1,447,274; area aura ignored in `SlowOrSpreadOnSphere` 7; `StopsCast` skips the `Get()`
+not refetched 1,904,569; area aura ignored in `SlowOrSpreadOnSphere` 7; `StopsCast` skips the `Get()`
 17,400; starfall dropped 15,021; crowd control dropped 44,736; bladestorm dropped 34,500; movers dropped
 5,456; Jaraxxus area test dropped 1,016,506; interrupt kind misread 226,990; one redirect cast dropped
 1,429; Anub'arak area test dropped 656,060.
@@ -117,6 +117,13 @@ not refetched 1,447,274; area aura ignored in `SlowOrSpreadOnSphere` 7; `StopsCa
 Review (lead, three lenses over `Custom...perf/b-anub-twins-jarax`): no behaviour difference found in any
 hunk; harnesses rerun on the final tree, green with every red failing; one commit per fix, each
 pb-checked; edits only in the lane's files.
+
+Review (independent reviewer, same three lenses, old bodies from `3175a814b`): no behaviour difference in any
+hunk; T6, KS, TG-A and TG-T rechecked by hand (members ahead of the walked tank are skipped only after the
+same pure tests, the kitespent notes carry only the counter, every gated argument is pure). Harnesses `resolve`,
+`anub` and `t3` rerun on `76a4b2ba8`: green, every red failing with the counts above. A gcov pass of `anub`
+reaches every line of the lane's new code; its only one-way branches are the compiler's null tests before a
+`dynamic_cast` of an action already known non-null. pb-check over the 8 source files: green.
 
 ## Candidates dropped
 
