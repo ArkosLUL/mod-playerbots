@@ -6,10 +6,10 @@
 
 #include "ActionContext.h"
 #include "Ai/Dungeon/TOC/TOCActionContext.h"
-#include "Ai/Raid/Aq40/RaidAq40ActionContext.h"
 #include "Ai/Raid/ToC/ToCActionContext.h"
 #include "AiObjectContext.h"
 #include "Aq20ActionContext.h"
+#include "Aq40ActionContext.h"
 #include "BTActionContext.h"
 #include "BWLActionContext.h"
 #include "ChatActionContext.h"

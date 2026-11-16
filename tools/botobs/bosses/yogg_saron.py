@@ -971,7 +971,7 @@ def show_handover(trace: Trace) -> None:
 
     ate = []
     for rec in trace.of("act"):
-        if rec.get("a") in ("food", "drink") and rec.get("vd") == "OK" and 0 <= rec["t"] <= ring:
+        if rec.get("a") in ("eat", "drink") and rec.get("vd") == "OK" and 0 <= rec["t"] <= ring:
             spot = at(trace, rec.get("g"), rec["t"])
             if spot and math.dist(spot[:2], BODY) <= STACK_FOOD_RADIUS:
                 ate.append((rec["t"], trace.name(rec.get("g")), rec["a"], math.dist(spot[:2], BODY)))

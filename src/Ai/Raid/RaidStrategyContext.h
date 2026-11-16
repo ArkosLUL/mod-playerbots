@@ -8,6 +8,7 @@
 #define PLAYERBOTS_RAIDSTRATEGYCONTEXT_H
 
 #include "Aq20Strategy.h"
+#include "Aq40Strategy.h"
 #include "BTStrategy.h"
 #include "BWLStrategy.h"
 #include "EoEStrategy.h"
@@ -21,7 +22,6 @@
 #include "OSStrategy.h"
 #include "OnyStrategy.h"
 #include "RSStrategy.h"
-#include "RaidAq40Strategy.h"
 #include "SSCStrategy.h"
 #include "SWPStrategy.h"
 #include "Strategy.h"

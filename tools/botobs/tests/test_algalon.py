@@ -1272,7 +1272,7 @@ def opener_pull() -> list[dict]:
         dmg(38000, E_BOSS, WARRIOR, al.SPELL_BIG_BANG[1], 50000), dmg(38000, E_BOSS, MAGE, al.SPELL_BIG_BANG[1], 50000),
         # Trueshot runs late on Aspect of the Cheetah; Druidica sits down to eat before the cast.
         note(30000, HUNTER, "algalon.hide", "run"), note(33000, HUNTER, "algalon.speed", "aspect of the cheetah"),
-        {"t": 26000, "e": "act", "g": CASTER, "a": "food", "rel": 0, "vd": "OK"},
+        {"t": 26000, "e": "act", "g": CASTER, "a": "eat", "rel": 0, "vd": "OK"},
         {"t": 27000, "e": "act", "g": CASTER, "a": "drink", "rel": 0, "vd": "USELESS"},
 
         note(12000, CASTER, "algalon.starplan", "s1 98% 8s | s2 98% 60s | bang 18..26"),

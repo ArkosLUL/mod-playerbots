@@ -22,6 +22,8 @@ static constexpr uint32 SPELL_HAND_OF_SACRIFICE = 6940;
 // Applied as a passive aura while the glyph is socketed; it removes the -50% healing from Divine Plea.
 static constexpr uint32 SPELL_GLYPH_DIVINE_PLEA = 63223;
 
+static constexpr uint32 HOLY_SHIELD_REFRESH_MS = 2000;
+
 inline bool HasHandFromCaster(Unit* target, Unit* caster, std::initializer_list<uint32> spellIds)
 {
     if (!target || !caster)

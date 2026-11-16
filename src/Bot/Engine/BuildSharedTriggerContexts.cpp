@@ -4,10 +4,10 @@
  * or (at your option) any later version.
  */
 
-#include "Ai/Raid/Aq40/RaidAq40TriggerContext.h"
 #include "Ai/Raid/ToC/ToCTriggerContext.h"
 #include "AiObjectContext.h"
 #include "Aq20TriggerContext.h"
+#include "Aq40TriggerContext.h"
 #include "BTTriggerContext.h"
 #include "BWLTriggerContext.h"
 #include "ChatTriggerContext.h"

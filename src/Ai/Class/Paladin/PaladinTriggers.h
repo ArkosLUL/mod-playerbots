@@ -17,8 +17,7 @@ class PlayerbotAI;
 class HolyShieldTrigger : public BuffTrigger
 {
 public:
-    // 10 s buff on an 8 s cooldown - refresh inside the last 2 s so it never lapses.
-    HolyShieldTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "holy shield", 1, false, false, 2000) {}
+    HolyShieldTrigger(PlayerbotAI* botAI);
 };
 
 BUFF_TRIGGER(RighteousFuryTrigger, "righteous fury");

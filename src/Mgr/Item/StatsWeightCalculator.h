@@ -133,6 +133,7 @@ public:
     float ExpertiseRoom(Player* player) const;
     void ApplyOverflowPenalty(Player* player);
     void ApplyWeightFinetune(Player* player);
+    void ApplyRacialWeaponBonus(ItemTemplate const* proto);
 
     // Resolved on first use and then fixed for this calculator's lifetime, like progression_tier_.
     void ResolveSimWeights();

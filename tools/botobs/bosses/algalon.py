@@ -1956,10 +1956,9 @@ def meal_faults(trace: Trace) -> list[tuple[int, str]]:
     out = []
     for rec in trace.of("act"):
         guid, when = rec.get("g"), rec["t"]
-        if (rec.get("a") in ("food", "drink") and rec.get("vd") == "OK" and guid not in trace.humans
+        if (rec.get("a") in ("eat", "drink") and rec.get("vd") == "OK" and guid not in trace.humans
                 and (phase := phase_at(spans, when)) in ("P1", "P2")):
-            meal = "eat" if rec["a"] == "food" else "drink"
-            out.append((when, f"{trace.name(guid)} sat down to {meal} @ {secs(when)} in {phase}"))
+            out.append((when, f"{trace.name(guid)} sat down to {rec['a']} @ {secs(when)} in {phase}"))
     return out
 
 

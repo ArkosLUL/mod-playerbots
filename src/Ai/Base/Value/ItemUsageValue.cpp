@@ -2833,8 +2833,9 @@ static bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
     if (!proto || !bot)
         return false;
 
-    // owned anywhere, worn included
-    return proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && bot->GetItemCount(proto->ItemId, true) > 0;
+    // Unique or Unique-Equipped, owned anywhere, worn included
+    return (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) || proto->MaxCount == 1) &&
+           bot->GetItemCount(proto->ItemId, true) > 0;
 }
 } // namespace
 

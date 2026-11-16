@@ -20,7 +20,7 @@ void DefineStaging(EncounterBuilder& e)
                 Family::MoveRandom | Family::TankAssist | Family::DpsAssist,
             {"return to stay position", "return"});
     // eating blinds a bot for 12-18 s
-    e.Block("toc staging rest guard", Role::Any, IsToCStagingRestHeld, 0, {"food", "drink"});
+    e.Block("toc staging rest guard", Role::Any, IsToCStagingRestHeld, 0, {"eat", "drink"});
     // a druid tank drops bear form out of combat and nothing shifts him back
     e.Block("toc staging tank form guard", Role::Tank, IsToCStagingHeld, 0, {"caster form"});
 }
