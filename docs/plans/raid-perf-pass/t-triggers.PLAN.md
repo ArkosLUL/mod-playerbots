@@ -143,7 +143,9 @@ anchor; `run.sh` builds each harness as is and with `-DRED` inside `acore/ac-wot
   visit) are pure. Proof: `t2_cells.cpp`, every float bot coordinate per axis in [-17200, 17200]
   passing `IsValidMapCoord`, reduced to 575 (standing, low, high) cell cases, crossed into 330,625 bot
   cells, 2,968,729 block cells checked, 0 unvisited; red: ±2 block 26,028 unvisited, "no cell test"
-  (candidates within 202 yd) 111,949 in unvisited cells.
+  (candidates within 202 yd) 111,949 in unvisited cells. Review: the harness skipped bot coordinates
+  whose standing cell is invalid, where `Cell::Visit` visits nothing but `SweepFinds` (no standing
+  cell test) could still hit; it now fails on one, and none exists under `IsValidMapCoord`.
 - **T4** `889be7091` (+ comment `f4afcf785`), Defence `RepickClock::threat` as a guid-sorted vector,
   built in `threatScratch` and swapped. Neutral: the snapshot is only read through the lookup in the
   same loop, so content and `moved` are all that can differ. Proof: `t4_threat.cpp`, old loop from
@@ -164,6 +166,11 @@ anchor; `run.sh` builds each harness as is and with `-DRED` inside `acore/ac-wot
   and count equals the pushes.
 
 pb-check over the lane's union (9 files, 37 TUs): green.
+
+Review (independent): no behaviour difference found in any hunk; all three harnesses rerun from a fresh
+`extract.py` against Custom `905e22d9e`, green with every red check detected. Comment fixes:
+`85c4d677a` (two comments that only named the core code they were copied from), `6a3a79e28` (the T8
+reflow's "catches it"). pb-check over the union after them: green.
 
 ## Candidates dropped
 
@@ -191,5 +198,7 @@ None.
   slots now in the header make it a one-liner), arena-centred sweeps, lazy Defence `Update*`.
 - T2 only spares the sweep while the boss or the remembered champion is within one cell of the bot;
   between pulls (encounter not in progress) the gate never sweeps anyway.
+- T2's one-cell proof is for the 200 yd `ENTRY_SEARCH_RADIUS` only; changing that radius needs the
+  `t2_cells.cpp` rerun at the new value, or `SweepFinds` can answer true where the sweep would not.
 
 ## Blocked
