@@ -5,6 +5,7 @@
 
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
+#include "RaidSplash.h"
 
 // Keep tanks anchored on Jaraxxus and his adds instead of drifting with the combat formation
 class JaraxxusControlTankMovementMultiplier : public Multiplier
@@ -47,6 +48,9 @@ class JaraxxusThreatCapMultiplier : public Multiplier
 public:
     JaraxxusThreatCapMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "jaraxxus threat cap") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache splash;
 };
 
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
