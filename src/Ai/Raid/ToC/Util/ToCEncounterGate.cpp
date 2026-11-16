@@ -1,5 +1,7 @@
 #include "ToCEncounterGate.h"
 
+#include <cstdlib>
+
 #include "CellImpl.h"
 #include "Creature.h"
 #include "GridNotifiers.h"
@@ -84,6 +86,7 @@ struct ToCGateState
     bool memoValid = false;  // 0 is a real getMSTime value
     uint32 stage = 0;
     ToCEncounter live = ToCEncounter::None;
+    ObjectGuid champion;  // the FC sweep's last hit, tried before the next sweep
 };
 
 RaidInstanceState<ToCGateState> gateStates;
@@ -128,24 +131,68 @@ Creature* FirstEngaged(Player* bot, EntryTest const& isEntry)
     return found;
 }
 
-bool EntryEngaged(Player* bot, uint32 entry)
+// True only where FirstEngaged would find something: the guid's creature passes the sweep's tests, its
+// cell is within one of the bot's (every 200 yd visit covers those, for a bot on a valid map coord) and
+// it sits in that cell's grid container, which lags its position until the map's move list runs
+template <typename EntryTest>
+bool SweepFinds(Player* bot, Map* map, ObjectGuid const& guid, EntryTest const& isEntry)
 {
-    return FirstEngaged(bot, [entry](uint32 candidate) { return candidate == entry; }) != nullptr;
+    if (guid.IsEmpty())
+        return false;
+
+    Creature* candidate = map->GetCreature(guid);
+    if (!candidate || !candidate->InSamePhase(bot->GetPhaseMask()) || !isEntry(candidate->GetEntry()) ||
+        !bot->IsWithinDist(candidate, ENTRY_SEARCH_RADIUS, false) || !IsEngaged(candidate))
+        return false;
+
+    if (!Acore::IsValidMapCoord(bot->GetPositionX(), bot->GetPositionY()))
+        return false;
+
+    CellCoord const centre = Acore::ComputeCellCoord(bot->GetPositionX(), bot->GetPositionY());
+    CellCoord const at = Acore::ComputeCellCoord(candidate->GetPositionX(), candidate->GetPositionY());
+    if (!at.IsCoordValid() || std::abs(int32(at.x_coord) - int32(centre.x_coord)) > 1 ||
+        std::abs(int32(at.y_coord) - int32(centre.y_coord)) > 1)
+        return false;
+
+    Creature* seen = nullptr;
+    auto isCandidate = [candidate](Creature* creature) { return creature == candidate; };
+    Acore::CreatureSearcher<decltype(isCandidate)> searcher(bot, seen, isCandidate);
+    TypeContainerVisitor<decltype(searcher), GridTypeMapContainer> visitor(searcher);
+    map->Visit(Cell(at), visitor);
+    return seen != nullptr;
 }
 
-// Icehowl, Jaraxxus and the champions have no guid slot in the script, so those go by entry.
-bool EncounterEngaged(Player* bot, Map* map, InstanceScript* instance, ToCEncounter encounter)
+bool EntryEngaged(Player* bot, Map* map, ObjectGuid const& slot, uint32 entry)
+{
+    auto const isEntry = [entry](uint32 candidate) { return candidate == entry; };
+    return SweepFinds(bot, map, slot, isEntry) || FirstEngaged(bot, isEntry) != nullptr;
+}
+
+// Icehowl, Jaraxxus and the champions count only inside the 200 yd sweep, so their guids (the
+// script's slot, the last champion found) only spare the sweep, never stand in for it.
+bool EncounterEngaged(Player* bot, Map* map, InstanceScript* instance, ToCEncounter encounter,
+                      ToCGateState& state)
 {
     switch (encounter)
     {
         case ToCEncounter::NorthrendBeasts:
             return GuidEngaged(map, instance, TOC_DATA_GORMOK) || GuidEngaged(map, instance, TOC_DATA_DREADSCALE) ||
                    GuidEngaged(map, instance, TOC_DATA_ACIDMAW) ||
-                   EntryEngaged(bot, static_cast<uint32>(ToCNpcs::NPC_ICEHOWL));
+                   EntryEngaged(bot, map, instance->GetGuidData(TOC_DATA_ICEHOWL),
+                                static_cast<uint32>(ToCNpcs::NPC_ICEHOWL));
         case ToCEncounter::Jaraxxus:
-            return EntryEngaged(bot, static_cast<uint32>(ToCNpcs::NPC_JARAXXUS));
+            return EntryEngaged(bot, map, instance->GetGuidData(TOC_DATA_JARAXXUS),
+                                static_cast<uint32>(ToCNpcs::NPC_JARAXXUS));
         case ToCEncounter::FactionChampions:
-            return FirstEngaged(bot, [](uint32 entry) { return CHAMPION_ENTRY_SET.Contains(entry); }) != nullptr;
+        {
+            auto const isChampion = [](uint32 entry) { return CHAMPION_ENTRY_SET.Contains(entry); };
+            if (SweepFinds(bot, map, state.champion, isChampion))
+                return true;
+
+            Creature* found = FirstEngaged(bot, isChampion);
+            state.champion = found ? found->GetGUID() : ObjectGuid::Empty;
+            return found != nullptr;
+        }
         case ToCEncounter::TwinValkyr:
             return GuidEngaged(map, instance, TOC_DATA_FJOLA) || GuidEngaged(map, instance, TOC_DATA_EYDIS);
         case ToCEncounter::Anubarak:
@@ -179,7 +226,7 @@ ToCGateState const* ReadGate(PlayerbotAI* botAI)
 
     ToCEncounter const encounter = ToCEncounterOfStage(state.stage);
     bool const live = encounter != ToCEncounter::None && instance->IsEncounterInProgress() &&
-                      EncounterEngaged(bot, map, instance, encounter);
+                      EncounterEngaged(bot, map, instance, encounter, state);
     state.live = live ? encounter : ToCEncounter::None;
 
     return &state;
