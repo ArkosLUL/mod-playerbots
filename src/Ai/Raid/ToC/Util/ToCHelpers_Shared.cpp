@@ -14,7 +14,6 @@ namespace TrialOfTheCrusaderHelpers
 {
 namespace
 {
-// AllCreaturesMatchingOneEntryInRange with the set's entry test
 class CreaturesOfEntrySetInRange
 {
 public:

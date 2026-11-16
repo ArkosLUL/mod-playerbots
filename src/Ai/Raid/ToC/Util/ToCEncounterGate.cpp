@@ -116,7 +116,6 @@ bool GuidEngaged(Map* map, InstanceScript* instance, uint32 type)
     return !guid.IsEmpty() && IsEngaged(map->GetCreature(guid));
 }
 
-// GetCreatureListWithEntryInGrid's check and visit with IsEngaged on top, stopping at the first hit
 template <typename EntryTest>
 Creature* FirstEngaged(Player* bot, EntryTest const& isEntry)
 {
