@@ -31,6 +31,15 @@ public:
     FactionChampionsThreatRedirectVetoMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions threat redirect veto multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool mainTankRedirect = false;
+        bool tricks = false;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 class FactionChampionsAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
@@ -53,6 +62,15 @@ public:
     FactionChampionsCcGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions cc guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    struct Facts
+    {
+        bool classCc = false;
+        bool spreadDot = false;
+    };
+
+    RaidActionCache<Facts> _facts;
 };
 
 // As in PvP: a champion's cast-time spell gets kicked in its last LATE_INTERRUPT_MS so the cast is wasted,

@@ -14,6 +14,9 @@ public:
     FactionChampionsAoeGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions aoe guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _meleeMove;
 };
 
 // The focus node would pull physical attackers back onto a Hand of Protection kill target
@@ -33,6 +36,9 @@ public:
     FactionChampionsDispelGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions dispel guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _magicDispel;
 };
 
 // Class purge and spellsteal fire on any magic buff, Thorns included, so one duty bot purges instead
@@ -42,6 +48,9 @@ public:
     FactionChampionsPurgeGuardMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "faction champions purge guard multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _purge;
 };
 
 // A root or stun before Death Grip's pull refuses it, one mid-flight drops the champion where it is. Area

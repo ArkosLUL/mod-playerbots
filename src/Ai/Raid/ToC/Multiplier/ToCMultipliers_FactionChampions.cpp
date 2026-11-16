@@ -60,15 +60,23 @@ float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
 
 float FactionChampionsThreatRedirectVetoMultiplier::GetValue(Action* action)
 {
-    bool const mainTankRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
-                                  dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action);
-    if (!mainTankRedirect && !dynamic_cast<CastTricksOfTheTradeAction*>(action))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.mainTankRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+                                 dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action);
+        facts.tricks = dynamic_cast<CastTricksOfTheTradeAction*>(action);
+        return facts;
+    };
+
+    Facts const& facts = _facts.Get(action, classify);
+    if (!facts.mainTankRedirect && !facts.tricks)
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    if (mainTankRedirect)
+    if (facts.mainTankRedirect)
         return 0.0f;
 
     // Tricks on a melee dps still gives its 15% damage, so only veto it when it picks the tank
@@ -83,13 +91,20 @@ bool FactionChampionsAntiFearTotemGuardMultiplier::FearWindowActive()
 
 float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
 {
-    bool const classCc = dynamic_cast<CastCrowdControlSpellAction*>(action);
-    bool const spreadDot = dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
-                           dynamic_cast<CastDebuffSpellOnMeleeAttackerAction*>(action);
-    if ((!classCc && !spreadDot) || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+    auto const classify = [action]
+    {
+        Facts facts;
+        facts.classCc = dynamic_cast<CastCrowdControlSpellAction*>(action);
+        facts.spreadDot = dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
+                          dynamic_cast<CastDebuffSpellOnMeleeAttackerAction*>(action);
+        return facts;
+    };
+
+    Facts const& facts = _facts.Get(action, classify);
+    if ((!facts.classCc && !facts.spreadDot) || !ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
         return 1.0f;
 
-    if (classCc)
+    if (facts.classCc)
         return 0.0f;
 
     // a spread DoT on a champion off the kill target blocks Polymorph, Fear and Hex on it for its whole run.

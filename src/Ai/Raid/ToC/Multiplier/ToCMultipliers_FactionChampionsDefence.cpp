@@ -17,7 +17,10 @@ using namespace TrialOfTheCrusaderHelpers;
 
 float FactionChampionsAoeGuardMultiplier::GetValue(Action* action)
 {
-    if (!dynamic_cast<ReachMeleeAction*>(action) && !dynamic_cast<SetBehindTargetAction*>(action))
+    auto const classify = [action]
+    { return dynamic_cast<ReachMeleeAction*>(action) || dynamic_cast<SetBehindTargetAction*>(action); };
+
+    if (!_meleeMove.Get(action, classify))
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
@@ -39,12 +42,18 @@ float FactionChampionsPhysicalSwitchGuardMultiplier::GetValue(Action* action)
 
 float FactionChampionsDispelGuardMultiplier::GetValue(Action* action)
 {
-    CastSpellAction* cure = dynamic_cast<CastCureSpellAction*>(action);
-    if (!cure)
-        cure = dynamic_cast<CurePartyMemberAction*>(action);
+    // Cleanse removes magic too, whichever aura type its node aimed at. Neither cure class ever changes
+    // its spell.
+    auto const classify = [action]
+    {
+        CastSpellAction* cure = dynamic_cast<CastCureSpellAction*>(action);
+        if (!cure)
+            cure = dynamic_cast<CurePartyMemberAction*>(action);
 
-    // Cleanse removes magic too, whichever aura type its node aimed at
-    if (!cure || (cure->getSpell() != "dispel magic" && cure->getSpell() != "cleanse"))
+        return cure && (cure->getSpell() == "dispel magic" || cure->getSpell() == "cleanse");
+    };
+
+    if (!_magicDispel.Get(action, classify))
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
@@ -56,7 +65,10 @@ float FactionChampionsDispelGuardMultiplier::GetValue(Action* action)
 
 float FactionChampionsPurgeGuardMultiplier::GetValue(Action* action)
 {
-    if (!dynamic_cast<CastPurgeAction*>(action) && !dynamic_cast<CastSpellstealAction*>(action))
+    auto const classify = [action]
+    { return dynamic_cast<CastPurgeAction*>(action) || dynamic_cast<CastSpellstealAction*>(action); };
+
+    if (!_purge.Get(action, classify))
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
