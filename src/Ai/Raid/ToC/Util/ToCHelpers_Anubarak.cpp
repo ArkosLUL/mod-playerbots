@@ -1768,9 +1768,10 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
     state.waveReadMs = now;
     float const ttd = SwarmTimeToDieS(state);
     state.waveLeave = ttd >= 0.0f && ttd < ANUBARAK_SWARM_IGNORE_S;
-    RaidObs::NoteDerived(bot, "anub.p3wave",
-                         std::string(state.waveLeave ? "leave:" : "kill:") +
-                             std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.p3wave",
+                             std::string(state.waveLeave ? "leave:" : "kill:") +
+                                 std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
 }
 
 // Permafrost stays until the spike takes it, so a patch gone from the sweep while he's down is spent
@@ -1839,8 +1840,10 @@ void ReadPush(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
     state.pushMs = now;
     state.pushHpPct = health;
     state.pushPerS = allOnPerS;
-    RaidObs::NoteDerived(bot, "anub.push",
-                         "on:" + std::to_string(std::lround(neededS)) + ":" + std::to_string(std::lround(leftS)));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.push",
+                             "on:" + std::to_string(std::lround(neededS)) + ":" +
+                                 std::to_string(std::lround(leftS)));
 }
 
 AnubarakState* ReadPhase(PlayerbotAI* botAI)
@@ -3082,7 +3085,7 @@ KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
     {
         RaidObs::NoteDerived(kiter, "anub.kiteplan", EndingName(plan.candidate.ending));
         RaidObs::NoteDerived(kiter, "anub.kitemove", patch >= 0 ? PatchMoveName(plan.candidate.move) : "none");
-        if (picked)
+        if (picked && RaidObs::Active())
         {
             RaidObs::NoteDerived(kiter, "anub.kitepath", KitePathText(plan));
             RaidObs::NoteDerived(kiter, "anub.kitepred", KitePredText(plan.outcome));
@@ -3157,7 +3160,7 @@ KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState
     if (walking)
         state.kitePatchKiter = kiter->GetGUID();
 
-    if (bot)
+    if (bot && RaidObs::Active())
     {
         char const* const names[] = {"none", "run", "boost", "immune", "patch"};
         uint32 const boostId = read.boost.nitro ? NITRO_BOOSTS_USE_SPELL : read.boost.spellId;
@@ -5443,9 +5446,10 @@ static bool PushHoldsDrag(Player* bot, AnubarakState const& state, Creature* bos
     if (health <= ANUBARAK_PUSH_TARGET_PCT || (neededS >= 0.0f && neededS + ANUBARAK_PUSH_DRAG_MARGIN_S <= leftS))
         return true;
 
-    RaidObs::NoteDerived(bot, "anub.push",
-                         "drag:" + (neededS >= 0.0f ? std::to_string(std::lround(neededS)) : std::string("-")) + ":" +
-                             std::to_string(std::lround(leftS)));
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "anub.push",
+                             "drag:" + (neededS >= 0.0f ? std::to_string(std::lround(neededS)) : std::string("-")) +
+                                 ":" + std::to_string(std::lround(leftS)));
     return false;
 }
 
@@ -5550,11 +5554,13 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
             }
         }
 
-        RaidObs::NoteDerived(bot, "anub.subspot",
-                             state->submergeSpotValid
-                                 ? RaidObs::DescribeDerived(state->submergeSpot) + " r" +
-                                       std::to_string(static_cast<int32>(std::lround(state->submergeSpotClearance)))
-                                 : "none");
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(
+                bot, "anub.subspot",
+                state->submergeSpotValid
+                    ? RaidObs::DescribeDerived(state->submergeSpot) + " r" +
+                          std::to_string(static_cast<int32>(std::lround(state->submergeSpotClearance)))
+                    : "none");
     }
 
     if (!state->submergeSpotValid)
@@ -8155,7 +8161,7 @@ Player* GetAnubarakLightJudge(Player* bot)
             });
 
             ObjectGuid const picked = best ? best->GetGUID() : ObjectGuid::Empty;
-            if (best && picked != state->lightJudge)
+            if (best && picked != state->lightJudge && RaidObs::Active())
                 RaidObs::NoteDerived(bot, "anub.judge",
                                      best->GetName() + ':' +
                                          std::to_string(std::lround(best->GetPowerPct(POWER_MANA))));
