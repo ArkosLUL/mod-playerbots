@@ -252,7 +252,7 @@ bool IsGripDk(Player* player)
 }
 
 // Champions with their trinket up inside the spell's reach of the caster, also listed into inReach if given.
-// None while one the grip guard holds is anywhere near it: a fear or freeze ends a pull where it catches it.
+// None while one the grip guard holds is anywhere near it: a fear or freeze ends a pull where it catches the champion.
 size_t CollectTrinketsInReach(PlayerbotAI* botAI, Player* caster, SpellInfo const* info,
                               std::vector<Unit*> const& champions, std::vector<Unit*>* inReach)
 {
