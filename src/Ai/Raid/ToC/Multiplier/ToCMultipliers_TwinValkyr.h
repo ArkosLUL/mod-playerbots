@@ -5,6 +5,7 @@
 
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
+#include "RaidCombatHelpers.h"
 
 // Keeps a twin's tank on her instead of drifting with the combat formation
 class TwinValkyrControlTankMovementMultiplier : public Multiplier
@@ -23,6 +24,13 @@ public:
     float GetValue(Action* action) override;
 };
 
+enum class TwinInterruptKind : uint8
+{
+    None,
+    Kick,
+    Refused
+};
+
 // Holds kicks while a shield makes the twin immune to them, and silences and stuns, which never land
 // on the twins
 class TwinValkyrInterruptHoldMultiplier : public Multiplier
@@ -31,6 +39,10 @@ public:
     TwinValkyrInterruptHoldMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr interrupt hold multiplier") {}
     float GetValue(Action* action) override;
+
+private:
+    // Read off the action's name, which never changes
+    RaidActionCache<TwinInterruptKind> kinds;
 };
 
 // The class redirects pick one tank for the whole raid, and the opener's fires while the twins

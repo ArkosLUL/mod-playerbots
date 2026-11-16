@@ -18,13 +18,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-enum class TwinInterruptKind : uint8
-{
-    None,
-    Kick,
-    Refused
-};
-
 // The shield's absorb carries interrupt immunity, so these only work once it breaks
 constexpr char const* SHIELD_BLOCKED_INTERRUPTS[] = {"kick",       "pummel",      "shield bash", "counterspell",
                                                       "wind shear", "mind freeze", "spell lock"};
@@ -98,7 +91,7 @@ float TwinValkyrInterruptHoldMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    TwinInterruptKind const kind = InterruptKindOf(action->getName());
+    TwinInterruptKind const kind = kinds.Get(action, [action] { return InterruptKindOf(action->getName()); });
     if (kind == TwinInterruptKind::None)
         return 1.0f;
 
