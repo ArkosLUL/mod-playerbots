@@ -73,7 +73,9 @@ fixed per `Action*` (every `getName` override derives from members set in the co
 ## Candidates done
 
 Harnesses: `build-toc-wt/perf/_harness/a-shared-fc/` (`python -I run.py [name]`, `python -I rules_red.py`); old
-bodies cut verbatim from `905e22d9e` by `extract.py`, new from the worktree, each red variant must fail.
+bodies cut verbatim from `905e22d9e` by `extract.py`, new from the worktree, each red variant must fail. The
+independent review reran all of them green with every red failing; the splash harness now also feeds a spell id
+that has no SpellInfo.
 
 | id | site | why neutral | proof | commit |
 |---|---|---|---|---|
@@ -115,5 +117,7 @@ bodies cut verbatim from `905e22d9e` by `extract.py`, new from the worktree, eac
 - Harness stubs model `IsWithinDist` and phase as a flag and the grid visit as a list; the real
   `Cell::VisitObjects` is shared by both overloads and not exercised. The cares harness stubs `ClassifyAction`.
 - No pmon numbers yet: the after pull (step 5) measures the gain.
+- Review: the subjects of `e7b5c1203` (80 chars) and `b91f8e930` (74) run past the 72-char limit. They stay,
+  since the lane may not amend or rebase.
 
 ## Blocked
