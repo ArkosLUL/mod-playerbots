@@ -11,6 +11,8 @@
 #include <iterator>
 
 #include "Action.h"
+#include "AiObjectContext.h"
+#include "GenericSpellActions.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -26,6 +28,24 @@ bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action)
 {
     return action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()) ||
            SpellSplashes(botAI, action);
+}
+
+bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache)
+{
+    RaidSplashCache::Facts const& facts = cache.Of(action);
+    return facts.aoeThreat || facts.multiTarget || SpellSplashes(botAI, action, cache);
+}
+
+uint32 RaidSpellIdRef::Get(PlayerbotAI* botAI, CastSpellAction* cast)
+{
+    std::string const spell = cast->getSpell();
+    if (!_value || spell != _spell)
+    {
+        _value = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell);
+        _spell = spell;
+    }
+
+    return _value->Get();
 }
 
 bool CastRaidThroughputHeal(PlayerbotAI* botAI, Unit* target, std::function<bool(std::string const&)> const& skip)
