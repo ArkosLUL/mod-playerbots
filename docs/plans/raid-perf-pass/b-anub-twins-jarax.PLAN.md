@@ -156,5 +156,7 @@ pb-checked; edits only in the lane's files.
 - RA's commit body says the heap copy was most of `ResolveAlive`'s cost; not measured. It stays, since
   the lane may not amend.
 - No pmon numbers yet: the after pull (step 5) measures the gain.
+- Subjects over 72 chars: `3a6048f71` (77), `15c8376ea` (75), `6770c17cd` (77). They stay, since the lane
+  may not amend.
 
 ## Blocked
