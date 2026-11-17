@@ -1,0 +1,300 @@
+# Trial of the Crusader strategy → upstream mod-playerbots `test-staging`: orchestrated PR prep
+
+## Context
+
+The user has finished tuning the ToC raid strategy (`src/Ai/Raid/ToC/`, 123 files, ~43.6k lines,
+branch `Custom`, strategy key `trialofthecrusader`, map 649) and wants it upstream. Upstream has no
+ToC raid strategy at all (only the Trial of the *Champion* dungeon, `src/Ai/Dungeon/TOC/`), so this
+is a new raid, not a rework. It follows the Ulduar upstream effort's pattern
+(`docs/plans/ulduar-upstream-pr/ulduar-upstream-pr.PLAN.md`, drafts #2876 → #2985 → #2986 published
+2026-10-24) and reuses its stack, branches and wave script.
+
+Current stack (all drafts, mergeable, 0 reviews; last upstream merge `889e9dd6e` = today's
+`upstream/test-staging` tip): `raid-encounter-framework` #2876 `6c40cd524` → `raid-shared-helpers`
+#2985 `034ba2d88` → `ulduar-rework` #2986 `359e73c45`; `eoe-malygos-rework` #2877 on the framework.
+
+Tested by the user on this build: **25N and 25H**. The fights play the same on 10N/10H (user).
+
+## Status
+
+The merge stage alone edits this table. Export base (the Custom commit `trial-of-the-crusader`
+mirrors): none yet (set by `p3-toc`, moved by each `sync`).
+
+| Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
+|---|---|---|---|---|---|
+| 1 | c1-toc-base | pending | | | |
+| 1 | c2-toc-anubarak | pending | | | |
+| 1 | c3-toc-fc-beasts | pending | | | |
+| 1 | p1-framework-cares | pending | | | |
+| 2 | p2-helpers-toc | pending | | | |
+| 2 | c4-toc-closeout | pending | | | |
+| 3 | p3-toc | pending | | | |
+| 4 | p4-parity-review | pending | | | |
+| sync | p5-sync | pending | | | |
+| — | user's 25-man clear on cleaned Custom | pending | | | gates Publishing |
+| — | publishing | pending | | | |
+
+States: `pending`, `committed` (PR lanes), `merged` (cleanup lanes), `blocked` (branch and worktree
+kept, reason in the lane brief), `skipped` (merge refused because the main tree had a lane file
+dirty; branch kept).
+
+## Decisions (user, 2026-11-17)
+
+- **Draft** PR, like Ulduar: community testers try it; marking ready is outside this effort.
+- **Cleanup lands on Custom first**; Custom stays the source of truth and a repeatable `sync`
+  carries later Custom changes to the PR branches. RaidObs stays on Custom, never in a PR.
+- **Workflow waves** like Ulduar; the user says "go" per wave. Every push, PR open or PR text edit
+  waits for the user's explicit go.
+- **Shared raid code extends #2985** (`raid-shared-helpers`); ToC stacks on #2985 beside Ulduar
+  #2986, and `ulduar-rework` merges the grown helpers branch.
+- **The perf pass's `CaresTable` goes into #2876** (Custom `8b38899f4` + `02e6952c4`), then merges
+  down into #2877, #2985, #2986.
+- **One ToC PR**, one commit per encounter after a raid-wide base commit.
+- **Tuning is done on every encounter**, so all cleanup lanes start at once.
+
+Decisions (user, grilling round, 2026-11-17):
+- PR branches take upstream by **merge, never rebase**.
+- Custom-only generic behaviour ToC leans on stays out of the PR and is named in its text as a
+  candidate for separate class/engine PRs: `RaidHealerEngine`, `PlayerbotAI.cpp` heal-absorb
+  full-health interrupt (`9e9e1aaa5`) and near-teleport idle (`e131b1990`), paladin "aura mastery"
+  / "hand of sacrifice on party", rogue "tricks of the trade" action and value.
+- The self-res guard leaves shared `GenericTriggers.cpp` for a ToC rule on Custom; if no ToC hook
+  reaches a dead bot's engine, Custom keeps it and the PR drops it.
+- The four raid root files that collide case-insensitively with the dungeon's `TOC*` files are
+  renamed on Custom to `ToCRaidStrategy.{h,cpp}`, `ToCRaidActionContext.h`,
+  `ToCRaidTriggerContext.h`.
+- ICC work is paused: `c1` restyles the shared raid files on Custom.
+- Cleanup may carry three small behaviour changes: cache `JaraxxusPinnedCastTrigger`'s group walk,
+  move the Staging trigger's state write out of `IsActive`, `"tree of life"` → `"tree form"`.
+- Big planner functions (`GetWormMovePlan` 408 lines, Anub'arak `ComputeDuties`, `PlanKite`, …) are
+  not split; reviewers decide.
+- Bots reading enemy spline destinations and threat lists stays, named openly in the PR text.
+- Perf-pass numbers go in the PR text as context only; the pmon justification comes when the user
+  marks the PR ready.
+- Agents draft the per-boss notes from the boss docs for the user to edit; the disclaimer is the
+  user's. The PR text never calls 10N/10H untested: the fights play the same there.
+- Publishing waits for one 25-man clear by the user on Custom after wave 1 merges; wave 3 doesn't.
+- A full capped build of the ToC branch runs before the push, on the user's go.
+- Branch `trial-of-the-crusader`, title `feat(Raid/ToC): …`, GPLv2 headers on the PR branch only,
+  `ResolveAlive` keeps `boost::container::small_vector`.
+- `w5-anubarak-rest-rest` (pending in the ToC rework) is folded into `anubarak.md`'s Known gaps, and
+  the ToC rework's `w6-closeout` is absorbed by this effort (its audits by the cleanup lanes, its
+  docs pass and recipe-skill section by `c4-toc-closeout`), so `docs/plans/toc-rework/` is deleted at
+  the end of wave 2.
+
+## What ToC needs that the stack lacks (measured 2026-11-17)
+
+No fork-only **core** API or mod-spell-tweaks spell: every core call exists upstream, core PRs
+#28117 (boss states, Anub'arak guid slot), #28181, #28136 and DB update `2026_11_06_01` are on core
+`test-staging`; the local slime-pool SQL is client-visual only. No ToC code calls Ulduar or ICC
+code. No cheats (all casts via `botAI->CastSpell`; bots read enemy spline destinations and threat
+values, which the PR text names).
+
+| Need | ToC use | Goes to |
+|---|---|---|
+| `CaresTable` / `CaresSlot` (`RaidEncounter.cpp`, `RaidEncounterRules.h`) | every Definition | #2876 (`p1`) |
+| `RaidDirectTargeting.{h,cpp}` (111 lines), `RaidCombatHelpers` (165, incl. `RaidActionCache`, `RaidSpellIdRef`, `ResolveAlive`), `RaidBurstWindow` (99), `RaidOpener` (413) | 21 / 19 / 6 / 5 includes; ICC uses them too | #2985 (`p2`) |
+| `RaidDefensive` raid-cover API (`RaidCover`, `GetRaidCover`, `RaidCoverSpellId`, `IsRaidCoverChannel`, `FinishRaidCover`, `RaidHasDivineGuardian`, `RaidHitLeadIn`, `RaidCoverClassNodes`, `RaidPredictedHit::noChannel`), ~360 lines | Jaraxxus, Twins, FC Defence | #2985 |
+| `RaidSplashCache` + `SpellSplashes(botAI, action, cache)`; `SummonSplashes` without Trap Launcher | 12 refs, 5 files | #2985 |
+| `RaidResistAura`: `IsRaidResistPaladinHolding`, `frostWantsMastery` (no `noteKey`) | Anub'arak heroic frost aura | #2985 |
+| `EncounterHelpers::SegmentCrossesCircle`; `PaladinHelper.h` `SPELL_HAND_OF_PROTECTION_RANK_2/3` | 2 / 4 refs | #2985 |
+| Wiring: `RaidStrategyContext.h` creator, `BuildShared{Action,Trigger}Contexts.cpp` root contexts, `PlayerbotAI.cpp` `"trialofthecrusader"` in the instance list + `case 649` | — | ToC PR (`p3`) |
+
+Already on the stack, nothing to add: `RaidAntiFear`, `RaidRedirectThreat`, `RaidInstanceState`,
+`RaidTankDefensive` (only `noteKind` differs, dropped), `TryMoveTo`/`MoveOutcome`,
+`Strategy::OnTick`, `BurstCooldowns`. ToC adds no config option and no `AddSC_`.
+
+## Wave 1 — cleanup on Custom (lanes `c1`–`c3`) and the framework port (`p1`)
+
+**Cleanup lanes**, each in its own files (Definition files go with their encounter's lane):
+
+| Lane | Files | Size |
+|---|---|---|
+| `c1-toc-base` | ToC root files, umbrellas `ToCRaid{Actions,Triggers,Multipliers}.h`, `Definition/ToCDefinitions.h`, stems `Shared`, `Staging`, `Opener`, `ResistAura`, `Jaraxxus`, `TwinValkyr`; `Util/ToCData.*`, `Util/ToCEncounterGate.*`; the shared raid files of the table above (Custom copies); `GenericTriggers.cpp`; the rename's include sites (`RaidStrategyContext.h`, `BuildShared{Action,Trigger}Contexts.cpp`) | ~11k, lead may split |
+| `c2-toc-anubarak` | stem `Anubarak`, `Util/ToCAnubarakKitePlanner.h`, `Util/ToCAnubarakPursuit.h` | ~16.4k, split |
+| `c3-toc-fc-beasts` | stems `FactionChampions`, `FactionChampionsDefence`, `FactionChampionsBall`, `Gormok`, `Jormungars`, `Icehowl`, `NorthrendBeasts`; `Util/ToCFactionChampionsGripChain.h` | ~16k, split |
+
+A stem means its `Action/`, `Trigger/`, `Multiplier/`, `Util/ToCHelpers_` and `Definition/` files.
+Each lane also owns its encounters' boss docs in `docs/raids/trial-of-the-crusader/`; `c1` owns that
+directory's `README.md`.
+
+Every cleanup lane, behaviour unchanged (counts from the 2026-11-17 audit):
+- Comments ≤2 lines (182 longer blocks); no history in comments (13 dated lines, 11 "user call"
+  lines, ~30 trace/reader mentions; measurements move to the boss doc).
+- `ai` → `botAI` (7); private members `_lowerCamelCase` (~50 of 82); namespace `const` →
+  `inline constexpr` where possible; braces off single-statement bodies; suffix the two bare double
+  literals; name the inline magic literals (e.g. `ToCActions_Shared.cpp:32`,
+  `ToCHelpers_FactionChampionsDefence.cpp:2003`, the turn tables in `ToCHelpers_Anubarak.cpp`).
+- Make the RaidObs strip mechanical: no real logic inside a trace condition
+  (`ToCActions_Jormungars.cpp:479` runs `UseNitroBoosts(bot)` inside `... && RaidObs::Active()`);
+  rename real-logic functions that look like trace calls (`NoteAnubarakGripCast`, `NoteGrip`);
+  triggers shaped only to keep a trace value current (`ToCTriggers_Jaraxxus.cpp:14,57`) get a
+  logic-only shape.
+- Trigger cost (upstream's O(1) `IsActive` rule): cache or gate `JaraxxusPinnedCastTrigger`'s
+  per-tick group walk (`ToCHelpers_Jaraxxus.cpp:986`); move the state write out of
+  `ToCTriggers_Staging.cpp:16` `IsActive`; audit the ~52 group-walk sites in `Util/` and list
+  uncached ones under Decisions for review.
+- `w6-closeout` audits for the lane's files: every multiplier gated to its encounter and testing
+  the action family first; no `GetFirstAliveUnitByEntry` (upstream removed it in #2926); no AI value,
+  `prioritized targets` or per-instance state leaking across bosses; lust not spent twice.
+
+`c1` also:
+- Rename the four raid root files that collide case-insensitively with the dungeon's `TOC*` files
+  (`ToCActionContext.h`, `ToCStrategy.h`, `ToCStrategy.cpp`, `ToCTriggerContext.h`) to raid-unique
+  names (e.g. `ToCRaidStrategy.{h,cpp}`, `ToCRaidActionContext.h`, `ToCRaidTriggerContext.h`) and
+  fix every include; upstream CI builds on Windows and macOS.
+- Move the ToC early returns out of `SelfResurrectTrigger::IsActive`
+  (`src/Ai/Base/Trigger/GenericTriggers.cpp:27-28, 302-306`: `FactionChampionsCorpseCrowded`,
+  `CorpseInSlimePool`) into ToC, since upstream forbids shared code branching on an encounter.
+  Verify the replacement reaches the dead-state engine before relying on it; if no ToC hook can,
+  leave Custom as is and log it, and the PR drops the guard.
+- Docs: update `docs/raids/trial-of-the-crusader/README.md` "Code layout" for the renames.
+
+`c2` also fixes `"tree of life"` → `"tree form"` in the `anubarak kite cat hold` Block list
+(`ToCDefinition_Anubarak.cpp:219`; the druid action is registered as `"tree form"`, so the rule
+matches nothing today). With the two trigger-cost fixes, these are the cleanup's only intended
+behaviour changes.
+
+**`p1-framework-cares`** (PR branches only): port `8b38899f4` + `02e6952c4` onto
+`raid-encounter-framework`'s own `RaidEncounter.{h,cpp}`/`RaidEncounterRules.h` (Custom's file
+carries RaidObs and ICC-only gate pieces: port only the cares table; the native test stays out, no
+`tools/` upstream). Merge `upstream/test-staging` first if it moved. Then merge the framework into
+`eoe-malygos-rework` and `raid-shared-helpers`, and `raid-shared-helpers` into `ulduar-rework`.
+
+## Wave 2 — helpers port (`p2`) and ToC closeout docs (`c4`)
+
+**`p2-helpers-toc`** (starts once `c1` merged and `p1` committed): port the #2985 rows above from
+cleaned Custom onto `raid-shared-helpers`, RaidObs stripped, trace keys dropped
+(`RaidDefensiveScope{mapId}` only, no `toc.cover`/`toc.personal`, no `noteKey`/`noteKind`), GPLv2
+headers, only symbols ToC calls. Every string-called action/trigger name in the ported helpers must
+resolve upstream (e.g. `RaidCoverClassNodes` and any "aura mastery" call: Ulduar's audit found that
+one had no upstream creator). Keep `ResolveAlive`'s `boost::container::small_vector` (boost is a
+core dependency) and name it in the #2985 text. Merge the result into `ulduar-rework`; Ulduar code
+unchanged.
+
+**`c4-toc-closeout`** (Custom, after `c1`–`c3` merged): `w6-closeout` scope 2: final pass over
+`docs/raids/trial-of-the-crusader/`, generic lessons into `docs/engine/`, re-check RaidObs's ToC
+trace close against core #28117, fold `w5-anubarak-rest-rest` into `anubarak.md` Known gaps, delete
+`docs/plans/toc-rework/`. Its scope 3 (RaidObs section in the `raid-boss-strategy-recipe` skill, via
+`compact-skill-creator`) goes too. Docs via `compact-docs-writer` (standing approval).
+
+## Wave 3 — the ToC PR branch (`p3-toc`)
+
+Branch `trial-of-the-crusader` from `raid-shared-helpers`, worktree
+`build-tocpr-wt/trial-of-the-crusader`. Big lane: the lead splits by encounter into ≤3 implementers
+on disjoint files plus one finisher. Copy cleaned Custom `src/Ai/Raid/ToC/` at the export base
+(recorded in the status table) and apply the PR-branch-only adaptations:
+
+- **Strip RaidObs** (240 refs in 19 files): `ObsValue<T>` (30) → `T`, `ObsGuidMap` (18) →
+  `std::unordered_map`, fixing the 8 `.Raw()` / 13 `.Set()` sites; delete the ~29 trace-only
+  functions (`Note*` wrappers, label helpers like `KitePathText`, `WormMoveReasonName`), trace-only
+  fields (`peelNotes`, `kickNotes`, `wallNotes`, `kitePatchesSpent`, `ReadStand`'s `note` param),
+  `ToCEncounterSlug`, the `NamePull` call, `LogHitsOn`, `if (RaidObs::Active())` blocks (~140 lines).
+- `EncounterDefinition` without `traceName` (8 constructors); gates as the stack's plain function
+  pointers (`&ToCGateOpen`, `&ToCRaidWideGateOpen`), not Custom's `{open, live}` struct.
+- `RaidOpenerConfig` without `toc.opener`, `RaidResistAuraConfig` without `toc.aura`,
+  `NextTankDefensive` without `noteKind` (5 calls).
+- Block lists drop names with no upstream creator ("aura mastery", "hand of sacrifice on party",
+  "tricks of the trade"); the three `CastTricksOfTheTradeAction` `dynamic_cast`s (FC, Jormungars,
+  Twins multipliers) and the `"tricks of the trade target"` read go, or match upstream's own Tricks
+  action by name if it has one.
+- Wiring per the table above; GPLv2 header on every file.
+- Commits `type(Scope/Subscope): Summary` ≤72: (1) raid-wide base: gate, data, `Shared`,
+  `Staging`, `Opener`, `ResistAura` stems, root strategy and contexts, registration; (2–6) one per
+  encounter (Northrend Beasts, Lord Jaraxxus, Faction Champions, Twin Val'kyr, Anub'arak). Every
+  commit compiles where the umbrella headers allow; the tip must.
+
+## Wave 4 — parity review (`p4-parity-review`, one fresh reviewer)
+
+`git diff <export base>:src/Ai/Raid/ToC trial-of-the-crusader:src/Ai/Raid/ToC` contains only the
+RaidObs strip and the listed adaptations; the same for the helper files against Custom and the
+cares table against Custom. Also upstream's rules (`AGENTS.md`, `.agents/docs/*` on
+`upstream/test-staging`): O(1) triggers, shared state guarded, no raw `Unit*` across ticks, no
+cheats, relevance bands, comments ≤2 lines. Bugs fixed on Custom first unless upstream-only.
+
+**`p5-sync`** (repeatable, on the user's word): port `<base>..Custom` under `src/Ai/Raid/ToC/` and
+the helper files into the PR branches, parity-check the delta, record the new base.
+
+## Branches, worktrees, orchestration
+
+Worktree root `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-tocpr-wt/<name>` (gitignored by the
+core's `/build*/`, outside `modules/`).
+
+| Branch | Base | PR | Lands |
+|---|---|---|---|
+| `tocpr/<c lane>` | `Custom` | — | `--no-ff` into `Custom` |
+| `raid-encounter-framework`, `eoe-malygos-rework`, `raid-shared-helpers`, `ulduar-rework` | already checked out in `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-uldpr-wt/<branch>`; work there, never a second worktree | #2876, #2877, #2985, #2986 | push on go |
+| `trial-of-the-crusader` | `raid-shared-helpers` | new draft | push + open on go |
+
+- Plan + status table: `docs/plans/toc-upstream-pr/toc-upstream-pr.PLAN.md`; one brief per lane
+  next to it (`<lane>.PLAN.md`, written with `prepare-prompt`) with Task list, Decisions for review
+  and Blocked sections so a lost run resumes from the worktree.
+- Script `build-tocpr-wt/tocpr-wave.js`, adapted from `build-uldpr-wt/uldpr-wave.js`: one lead per
+  lane (big lanes split into ≤3 implementers + finisher), 2 lanes at a time, one fresh reviewer per
+  lane between its commit and the merge (never shown the lead's report; fixes bugs and minors on the
+  lane branch), one merge agent per wave that merges `c*` lanes into Custom, re-runs checks on the
+  merged tree, and for `p*` lanes only verifies the branch and updates the status table. Pass
+  `done: {lane: report}` to skip finished lanes. Add `build-tocpr-wt` to the module's
+  `.claude/settings.local.json` additional directories so `Workflow({scriptPath})` can read it.
+- Brief authority line: lane branches, worktrees, commits, `--no-ff` merges into Custom, merges of
+  `upstream/test-staging` or a stack parent into a PR branch. Never push, rebase, amend,
+  `reset --hard`, force, stash or clean. Never start, stop or restart a Docker container. Stage
+  only own files by explicit path (other sessions edit Custom). Never ask the user; log choices
+  under Decisions for review. Commit messages go to a fresh file per commit under
+  `build-tocpr-wt/_msg/` and are committed with `git commit -F` only after that write succeeded.
+- PR branches have no `docs/`: a PR lane keeps its working copy of the brief (Task list, Decisions
+  for review, Blocked) at `<worktree>/.agents/plans/toc-upstream-pr/<lane>.PLAN.md`, which
+  upstream's `.gitignore` ignores.
+- Checks: Custom lanes `~/.claude/scripts/pb-check <changed and new files> src/Ai/Raid/ToC` plus
+  `python tools/pblint/pblint.py --spell-difficulty src/Ai/Raid/ToC`; PR branches
+  `PB_REPO=<worktree> ~/.claude/scripts/pb-check <changed files>` (pblint and tests skip there).
+  On `INCOMPLETE`, rerun with `PB_MAX_FANOUT=all`. Commit text via `use-conversational-language`,
+  no AI attribution.
+- After each wave this session reports merged commits, decisions for review and whether a rebuild
+  is needed (cleanup lanes change no behaviour, but the user's next pull is the only in-game check),
+  then waits for "go".
+
+| Wave | Lanes (2 at a time) | Starts |
+|---|---|---|
+| 1 | `c1-toc-base`, `c2-toc-anubarak`, `c3-toc-fc-beasts`, `p1-framework-cares` | user's go |
+| 2 | `p2-helpers-toc`, `c4-toc-closeout` | user's go, wave 1 merged |
+| 3 | `p3-toc` | user's go, `c1`–`c3` merged, `p2` committed |
+| 4 | `p4-parity-review` | user's go, `p3` committed |
+| sync | `p5-sync` | user's word |
+
+## Publishing (this session, each step on the user's explicit go)
+
+0. Starts only after the user's 25-man clear on Custom with wave 1 merged; fixes from it land on
+   Custom and travel with `p5-sync`.
+1. cppcheck 2.13 (`cppcheck --force --inline-suppr --suppressions-list=./.suppress.cppcheck src/` in
+   a throwaway `ubuntu:24.04` `docker run --rm`) on all five branches; empty report required.
+   Then a full build of the ToC branch (merged into the module and core `test-staging`, CI flags)
+   in a capped throwaway container (`-j 8`, as the Ulduar sync 3 build did; an uncapped build once
+   crashed Docker and the live server): g++ and clang, 0 errors, 0 warnings. Drafts get no build CI
+   since upstream #3010.
+2. Push `raid-encounter-framework`, `eoe-malygos-rework`, `raid-shared-helpers`, `ulduar-rework`
+   (fast-forwards); push `trial-of-the-crusader` and open it as a **draft** to `test-staging`.
+3. Texts via `handover` + `use-conversational-language`, each shown before posting: #2876 body
+   gains the cares table bullet, #2985 body the ToC helpers, new ToC body filling every template
+   section. Include: draft for community testing; covers 10N/25N/10H/25H, cleared on 25N and 25H
+   (never call 10-man untested: the fights play the same); per-tick cost argued from the code, with
+   the Custom perf pass as context only (ToC share of bot CPU 22.7% → 18.0%, the cares table ~90%
+   of it); no cheats, but bots read enemy spline destinations and threat values;
+   core requirements (#28117, #28181, #28136, DB `2026_11_06_01`) and the hand-mirrored core data
+   keys in `ToCEncounterGate.h`; the Custom-only generic dependencies listed under Decisions; file
+   layout and the big planner files; "How to test" (10/25, normal/heroic, `trialofthecrusader`);
+   per-boss notes drafted from the boss docs, stressing what humans must do (Faction Champions
+   starts on the player's `pull`, Anub'arak side tanks are bots, the twins fight from the door).
+   The user edits the notes and writes the disclaimer.
+4. Title via the `pr-title` skill (`feat(Raid/ToC): …`). Nothing is marked ready.
+
+## Verification
+
+- Per lane: checks green before commit; the merge agent re-runs them on merged Custom.
+- `p3` finisher: every touched TU on `trial-of-the-crusader` compiles via `PB_REPO`; every
+  string-wired action/trigger name resolves in the stack's creator tables;
+  `git grep -n "RaidObs\|ObsValue\|ObsGuid" trial-of-the-crusader -- src` and the same on
+  `raid-shared-helpers` are empty; no header basename collides case-insensitively with another
+  (`git ls-files src | xargs -n1 basename | tr A-Z a-z | sort | uniq -d` lists none from ToC).
+- `p4` parity review, then cppcheck and the capped build (Publishing 1).
+- In game: the user's 25-man clear on Custom after wave 1 confirms the cleanup kept behaviour.
