@@ -22,10 +22,10 @@ mirrors): none yet (set by `p3-toc`, moved by each `sync`).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
-| 1 | c1-toc-base | pending | | | |
-| 1 | c2-toc-anubarak | pending | | | |
-| 1 | c3-toc-fc-beasts | pending | | | |
-| 1 | p1-framework-cares | pending | | | |
+| 1 | c1-toc-base | merged; review fixed 3 minor + 1 cleanup | `87966aa89` + review `6bacd8137`, merge `572c83f56` | self-res guard stays in `GenericTriggers.cpp` (no ToC hook reaches the dead engine), PR drops it; pinned-cast memo per group per ms; staging park latch in `OnTick` (also moves on minimal ticks); shared raid headers keep plain `constexpr`; group walks left uncached listed in the brief | no GPLv2 headers (PR branch adds them); rebuild needed |
+| 1 | c2-toc-anubarak | merged; review fixed 4 minor + 3 cleanup, 1 recorded | `a86f1e00e` + review `256bf2e2b`, merge `fe8e5314c` | `"tree of life"` kept: Block rules match `getName()`, which is `"tree of life"`, so the overview's `"tree form"` fix was wrong and p3/p4 must not apply it; `kitePatchesSpent` is logic (`KiteWorldFor` reads it), so p3 keeps it despite Wave 3's list; `NoteAnubarakGripCast` → `TrackAnubarakGripCast` | uncached group walks (brief) for p4 or a later pass; 28 pre-existing lines >120 cols; rebuild needed |
+| 1 | c3-toc-fc-beasts | merged; review fixed 4 minor + 1 cleanup, 1 decision | `f7889c35a` + review `aba1d6557`, merge `6436a8746` | no behaviour change; Jormungars Nitro fires outside the trace check; `ResolveDpsPick` reads the snobold pick under a skull only while tracing; grip `Note*` → `Track*` (logic, p3 keeps); extra trace-only fields for p3 listed in the brief | 4 uncached group walks for p4; trace-justified comments left for p3 to reword; rebuild needed |
+| 1 | p1-framework-cares | committed; review clean, 1 minor recorded | framework `2b39e938f`; merges eoe `b984c3968`, helpers `cca94c10b`, ulduar `fa6dc4af2`; heads verified, RaidObs grep empty | `CaresTable` comment rewrapped to 2 lines; plain `EncounterGate`, no live flag | commit type `perf` and 98-col body vs upstream's list and 72 cols (needs amend; squash-merge hides it); clang-format not run locally; nothing pushed |
 | 2 | p2-helpers-toc | pending | | | |
 | 2 | c4-toc-closeout | pending | | | |
 | 3 | p3-toc | pending | | | |
@@ -298,3 +298,33 @@ core's `/build*/`, outside `modules/`).
   (`git ls-files src | xargs -n1 basename | tr A-Z a-z | sort | uniq -d` lists none from ToC).
 - `p4` parity review, then cppcheck and the capped build (Publishing 1).
 - In game: the user's 25-man clear on Custom after wave 1 confirms the cleanup kept behaviour.
+
+## PR text notes
+
+- (c1) The self-res guard (`FactionChampionsCorpseCrowded` and `CorpseInSlimePool` in
+  `SelfResurrectTrigger::IsActive`) stays on Custom only. The PR drops it, because no ToC hook
+  reaches a dead bot's engine.
+- (c1) The raid root files are named `ToCRaidStrategy.{h,cpp}`, `ToCRaidActionContext.h` and
+  `ToCRaidTriggerContext.h` so they don't collide case-insensitively with the dungeon's `TOC*` files.
+- (c1) The Jaraxxus pinned-cast trigger shares one group walk per group per ms. The staging park
+  latch moves in `Strategy::OnTick`, not in `IsActive`.
+- (c2) p3 strip list for Anub'arak: keep `kitePatchesSpent` and its increment. Delete `state.grip`,
+  `GripMode`, `gripWaits`, `ReadPhase`'s phase/patches/flying/side0/side1 ObsValues and their
+  `patchCount`/`flyingCount` locals, `burrowerSide`, `TrackKiter`'s block that notes none on the last
+  kiter, and `GetAnubarakEscortSpot`'s post/patchPost/standby out-params. Each `NoteDpsPick` call
+  becomes its second argument.
+- (c2) Once the notes go, these locals become set-but-unused and must be deleted: `verdict` in
+  `AnubarakBurstHeld`, `AnubarakAuraMasteryDue` and `GetAnubarakScarabKite`; `why` in
+  `GetAnubarakSideTankAoe`; `label` in `GetAnubarakSwarmHealPick`; `name` in `GetAnubarakGripDuty`;
+  `nearSpike` in `GetAnubarakSpikeDodgeSpot`.
+- (c3) Logic helpers renamed on Custom: `FactionChampionsGripChain::TrackGrip`,
+  `FactionChampionsTrackChainGrip`, `FactionChampionsTrackWallGrip` (formerly `Note*`). p3 and p4
+  must keep them when stripping RaidObs.
+- (c3) For p3: after the strip, the Jormungars cure-walk boost becomes
+  `if (IsWormCureReason(reason) && travel > WORM_CURE_NITRO_FROM) UseNitroBoosts(bot);`. The snobold
+  read in `ResolveDpsPick`'s skull branch is trace-only and goes.
+- (p1) #2876 gains the cares table: a definition's multipliers share one per-bot table of which
+  actions each one cares about (one bit per multiplier, a new table every 64 multipliers), replacing
+  a separate `Action*` map in every rule and gated multiplier.
+- (p1) The native test from Custom (`tools/nativetest/raid_encounter_rules_test.cpp`) stays out
+  because upstream has no `tools/`.
