@@ -275,7 +275,8 @@ east and stops on the anchor.
 anchor (788.0, 129.3), R (770.2, 131.7), from the engage. Its grips and shots take only spheres homed
 there while one flies, so the four nearer the centre are left for the kites; the pre-pull side points
 are those spots (`GetAnubarakPrepullSideStand`) and the pickup point 10 yd west of that anchor, (778.0,
-129.3): picked up west of the centre, he was run across the room and dragged back. All three lie 8-16 yd from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
+129.3), not west of the centre, where he was run across the room and dragged back. All three lie 8-16 yd
+from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
 him at 21-23 yd in Z and AA (2026-10-30), before the player. So `LayoutAnubarak` steps each toward the
 centre to 23 + `STAGING_UNPARK` yd off `Locs[17]`: (760.3, 132.4), (760.4, 137.1), (760.7, 128.4),
 navprobe-clean (bot filter, 16/16 at 3 yd). Normal's are already clear. Heroic's raid waits on the line

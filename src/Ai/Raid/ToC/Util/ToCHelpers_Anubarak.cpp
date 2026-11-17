@@ -2389,8 +2389,8 @@ bool KiteCatchDue(Player* kiter, Creature* spike)
            ANUBARAK_IMPALE_REACH + closing * ANUBARAK_KITE_OWN_LEAD_S;
 }
 
-// Heroic druid's last tool once the catch is due: Feral Charge onto the bug that gains most on the spike,
-// landing on the floor off the tank patches with the spike's lane there clear
+// Heroic druid's last tool once the catch is due: Feral Charge onto the burrower or scarab that gains most on the
+// spike, landing on the floor off the tank patches with the spike's lane there clear
 bool FeralChargeBoost(Player* kiter, Creature* spike, AnubarakState const& state,
                       std::vector<LaneObstacle> const& obstacles, AnubarakKiteBoost& out)
 {
@@ -2534,8 +2534,8 @@ bool UnderHandOfProtection(Unit* unit)
                        [unit](uint32 rank) { return unit->HasAura(rank); });
 }
 
-// Which patches a kite may end on, lower first, -1 never. Heroic takes only kite patches clear of the tank
-// ones: its spheres never respawn, so a spent tank patch leaves its side bare. Normal ranks a tank one last
+// A kite's end patch rank, lower first, -1 never. Heroic takes only kite patches clear of the tank ones: its
+// spheres never respawn, so a spent tank one leaves its side bare. Normal ranks a tank one last while a burrower lives
 int8 KitePatchRank(Player* kiter, AnubarakState const& state, Creature* sphere, bool heroic, bool burrowers)
 {
     if (!IsPermafrostPatch(sphere))
@@ -6159,8 +6159,8 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         }
     }
 
-    // Righteous Defense taunts all three attackers on the member, so never one that puts this tank past its
-    // two, the other side's counted too, except under RESCUE_PCT outside the swarm so a dying member gets it
+    // Righteous Defense taunts all three attackers on the member, so never a side tank or one that puts this tank
+    // past its two, the other side's counted too, except under RESCUE_PCT outside the swarm so a dying member gets it
     bool const swarm = state->phaseValue == AnubarakPhase::Swarm;
     uint8 most = 0;
     for (auto const& [member, count] : onMember)

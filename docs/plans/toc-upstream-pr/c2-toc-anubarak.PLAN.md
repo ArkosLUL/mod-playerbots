@@ -106,6 +106,12 @@ the 9 changed `src` files plus `src/Ai/Raid/ToC` (syntax 10 TUs, pblint, codesty
 `anubarak_planner`/`anubarak_pursuit`), `pb-check tools/botobs` (botobs suite, which parses the planner's
 `Rules` and the `constexpr float` constants) and `pblint --spell-difficulty src/Ai/Raid/ToC` clean.
 
+Review (2026-11-18): no behaviour change beyond the logged ones; the new step constants are
+bit-identical to the old literals. Five rewritten comments that misstated the code were corrected
+(`GetAnubarakMeleeBurrowerStand`, `GetAnubarakEscortSpot`, `KitePatchRank`, the Righteous Defense
+pick, `AnubarakBurrowerGuardMultiplier`), plus Feral Charge's "bug" wording and the pickup-point line
+in `anubarak.md`.
+
 ## Decisions for review
 
 - **`"tree of life"` stays; the planned `"tree form"` fix is not applied.** Block lists match

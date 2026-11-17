@@ -66,8 +66,8 @@ private:
     RaidActionCache<Names> _names;
 };
 
-// Burrower damage only on the bot's own pick, so a multidot doesn't pull a loose one, and no area damage, taunt
-// or Bladestorm that would pull one. Interrupts and stuns on a cast go through. Wired from the definition.
+// A non-tank's burrower damage only on its own pick, so a multidot doesn't pull a loose one, and no area damage,
+// taunt or Bladestorm that would pull one. Interrupts and stuns on a cast go through. Wired from the definition.
 class AnubarakBurrowerGuardMultiplier : public Multiplier
 {
 public:

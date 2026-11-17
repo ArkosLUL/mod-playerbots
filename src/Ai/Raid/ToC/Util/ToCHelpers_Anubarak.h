@@ -510,8 +510,8 @@ bool AnubarakBurrowerNear(Player* bot, Position const& at, float range, bool wai
 // A living, selectable burrower no tank has held for the settle yet that can come within radius of at in
 // seconds at its run speed
 bool AnubarakLooseBurrowerReaches(Player* bot, Position const& at, float radius, float seconds);
-// A floor point on the melee ring round the burrower, clear of every patch: behind it first, else nearest the
-// bot, held while it stays put. False with no such point, or no patch near enough to matter.
+// A floor point on the melee ring round the burrower, clear of every patch, held while it stays put: in his
+// melee reach first, behind him before in front, else nearest him. False with none, or no patch near enough.
 bool GetAnubarakMeleeBurrowerStand(Player* bot, Creature* burrower, Position& out);
 // A melee DPS bot's current target is a burrower near a patch with a stand off it, so its own walk
 // replaces reach melee, set behind and flank: behind a held burrower is its patch
@@ -690,7 +690,7 @@ bool AnubarakWalkClearOfSpike(Player* bot, Position const& to);
 // The kiter this paladin bot covers with Hand of Protection now, null when it has no such duty
 Player* GetAnubarakKiterToProtect(Player* bot);
 // Heroic: the planned Hand paladin shadows the kiter, then posts by the catch from 4 s before (post), or by the
-// patch for a boosting kiter (patchPost). With no other paladin's Hand planned, a standby shadows it (standby).
+// patch for a boosting kiter (post and patchPost). No other paladin's Hand planned: a standby shadows (standby).
 bool GetAnubarakEscortSpot(Player* bot, Position& out, bool* post = nullptr, bool* patchPost = nullptr,
                            bool* standby = nullptr);
 bool IsAnubarakEscort(PlayerbotAI* botAI);
