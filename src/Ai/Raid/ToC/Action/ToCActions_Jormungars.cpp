@@ -72,6 +72,12 @@ void NotePoolMove(Player* bot, std::string const& branch)
         RaidObs::NoteDerived(bot, "nb.poolmove", branch);
 }
 
+void NoteNitro(Player* bot, std::string const& reason)
+{
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "nb.nitro", reason);
+}
+
 std::string Yards(float distance) { return std::to_string(static_cast<int32>(std::lround(distance))); }
 
 bool BookedOn(LastMovement const& last, Position const& spot)
@@ -246,20 +252,20 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
 
 bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
 {
-    Unit* worm = GetBeastOfDuty(botAI, duty);
+    Unit* worm = GetBeastOfDuty(botAI, _duty);
     if (!worm)
     {
-        walking = WalkKind::None;
+        _walking = WalkKind::None;
         return false;
     }
 
-    bool const mobile = duty == BeastsTankDuty::WormMobile;
+    bool const mobile = _duty == BeastsTankDuty::WormMobile;
 
     if (IsWormSubmerged(worm))
         return ApproachSubmerged(worm);
 
-    if (walking == WalkKind::Approach)
-        walking = WalkKind::None;
+    if (_walking == WalkKind::Approach)
+        _walking = WalkKind::None;
 
     // The submerge wipes its threat list, so it comes up on whoever threatens it first
     if (worm->GetVictim() != bot && TryClassTaunt(botAI, bot, worm))
@@ -271,9 +277,8 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
     return mobile && DragOffHazards(worm);
 }
 
-// A mobile worm only needs taunt range when it comes up. A stationary one is rooted, so its holder
-// waits in melee of where it surfaces. Goes by the form it comes up in: a lone survivor's holder keeps
-// the mobile duty through its stationary emerges.
+// By the form it surfaces in: mobile needs taunt range, a rooted stationary one melee of where it comes
+// up. A lone survivor's holder keeps the mobile duty through its stationary emerges.
 bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 {
     float const stand = IsWormMobile(worm) ? WORM_TAUNT_STAND : WORM_STATIONARY_MELEE_RANGE - 2.0f;
@@ -282,11 +287,11 @@ bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
     Position chargeEnd;
     if (bot->GetExactDist2d(worm) <= stand + APPROACH_ARRIVE || IcehowlChargeLatched(botAI, chargeStart, chargeEnd))
     {
-        walking = WalkKind::None;
+        _walking = WalkKind::None;
         return false;
     }
 
-    if (WalkInFlight(WalkKind::Approach) && worm->GetExactDist2d(approachFrom) < APPROACH_REAIM_DISTANCE)
+    if (WalkInFlight(WalkKind::Approach) && worm->GetExactDist2d(_approachFrom) < APPROACH_REAIM_DISTANCE)
         return true;
 
     float const angle = worm->GetAngle(bot);
@@ -296,7 +301,7 @@ bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
     if (!WalkTo(WalkKind::Approach, spot))
         return false;
 
-    approachFrom = worm->GetPosition();
+    _approachFrom = worm->GetPosition();
     NoteWormMove(bot, "approach " + Yards(travel));
     return true;
 }
@@ -308,7 +313,7 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
     WormDragPlan plan;
     if (IcehowlChargeLatched(botAI, chargeStart, chargeEnd) || !GetMobileWormDrag(botAI, worm, plan))
     {
-        walking = WalkKind::None;
+        _walking = WalkKind::None;
         return false;
     }
 
@@ -357,19 +362,19 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
 
 bool NorthrendWormsTankHoldAction::BookedOnWalkSpot()
 {
-    return BookedOn(AI_VALUE(LastMovement&, "last movement"), walkSpot);
+    return BookedOn(AI_VALUE(LastMovement&, "last movement"), _walkSpot);
 }
 
 Position const* NorthrendWormsTankHoldAction::WalkInFlight(WalkKind kind)
 {
     // Moving on some other node's walk doesn't count
-    if (walking != kind || !BookedOnWalkSpot())
+    if (_walking != kind || !BookedOnWalkSpot())
         return nullptr;
 
-    if (!bot->isMoving() && getMSTimeDiff(walkIssuedMs, getMSTime()) >= WALK_STALL_MS)
+    if (!bot->isMoving() && getMSTimeDiff(_walkIssuedMs, getMSTime()) >= WALK_STALL_MS)
         return nullptr;
 
-    return &walkSpot;
+    return &_walkSpot;
 }
 
 bool NorthrendWormsTankHoldAction::WalkTo(WalkKind kind, Position const& spot)
@@ -383,9 +388,9 @@ bool NorthrendWormsTankHoldAction::WalkTo(WalkKind kind, Position const& spot)
     if (BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
 
-    walkSpot = spot;
-    walking = kind;
-    walkIssuedMs = getMSTime();
+    _walkSpot = spot;
+    _walking = kind;
+    _walkIssuedMs = getMSTime();
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_COMBAT);
 }
@@ -458,7 +463,7 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
         bot->InterruptNonMeleeSpells(true);
 
     // Our own stale walk holds the booking and would refuse its replacement
-    if ((hasIssuedSpot && BookedOn(last, issuedSpot)) || (plan.held && BookedOn(last, plan.hold.spot)))
+    if ((_hasIssuedSpot && BookedOn(last, _issuedSpot)) || (plan.held && BookedOn(last, plan.hold.spot)))
         last.clear();
 
     DropForeignBooking(last, spot, MovementPriority::MOVEMENT_COMBAT);
@@ -471,13 +476,13 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
     {
         case MoveOutcome::Issued:
             SetWormHold(botAI, spot, reason, tier, false);
-            issuedSpot = spot;
-            hasIssuedSpot = true;
+            _issuedSpot = spot;
+            _hasIssuedSpot = true;
             NoteWormMove(bot, "move " + Yards(travel) + " " + WormMoveReasonName(reason) + " " +
                                   WormSpotTierName(tier));
             // after the walk is issued: the boots refuse a bot mid cast
-            if (IsWormCureReason(reason) && travel > WORM_CURE_NITRO_FROM && UseNitroBoosts(bot) && RaidObs::Active())
-                RaidObs::Note(bot, "nb.nitro", "cure " + Yards(travel));
+            if (IsWormCureReason(reason) && travel > WORM_CURE_NITRO_FROM && UseNitroBoosts(bot))
+                NoteNitro(bot, "cure " + Yards(travel));
 
             return true;
         case MoveOutcome::AlreadyThere:
@@ -496,7 +501,7 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
 {
     if (!InSlimePoolWithoutWorms(botAI))
     {
-        hasExit = false;
+        _hasExit = false;
         return false;
     }
 
@@ -508,12 +513,12 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
 
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     uint32 const now = getMSTime();
-    if (hasExit)
+    if (_hasExit)
     {
         // Every MoveTo clears the MotionMaster, so a walk still carrying the bot out is left alone
-        uint32 const age = getMSTimeDiff(exitMs, now);
-        bool const exitClear = ClearOfCircles(GetSlimePoolCircles(botAI, 0, WORM_POOL_TRIGGER_PAD), exitSpot);
-        if (exitClear && BookedOn(last, exitSpot) && age < WORM_WALK_LATCH_MS &&
+        uint32 const age = getMSTimeDiff(_exitMs, now);
+        bool const exitClear = ClearOfCircles(GetSlimePoolCircles(botAI, 0, WORM_POOL_TRIGGER_PAD), _exitSpot);
+        if (exitClear && BookedOn(last, _exitSpot) && age < WORM_WALK_LATCH_MS &&
             (bot->isMoving() || age < WALK_STALL_MS))
         {
             NotePoolMove(bot, "hold");
@@ -521,10 +526,10 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
         }
 
         // Our own stale walk holds the booking and would refuse its replacement
-        if (BookedOn(last, exitSpot))
+        if (BookedOn(last, _exitSpot))
             last.clear();
 
-        hasExit = false;
+        _hasExit = false;
     }
 
     Position spot;
@@ -543,9 +548,9 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
                       false, true, MovementPriority::MOVEMENT_FORCED, true))
     {
         case MoveOutcome::Issued:
-            exitSpot = spot;
-            exitMs = now;
-            hasExit = true;
+            _exitSpot = spot;
+            _exitMs = now;
+            _hasExit = true;
             NotePoolMove(bot, "move " + Yards(travel));
             return true;
         case MoveOutcome::AlreadyThere:

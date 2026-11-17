@@ -51,9 +51,8 @@ void AddToCNorthrendBeastsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier
     multipliers.push_back(new NorthrendBeastsTauntGuardMultiplier(botAI));
 }
 
-// Everything goes into Icehowl's daze (+100% damage taken for 15 s). Lust is one 10 minute cooldown,
-// so it's held through Gormok and the worms or it's gone by then. The rest come back mid fight, so
-// they stay free on those two.
+// Lust is one 10 min cooldown, so it waits for Icehowl's daze (+100% damage taken for 15 s). The rest come
+// back mid fight, so they stay free on Gormok and the worms.
 RaidBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI)
 {
     RaidBurstWindow window;

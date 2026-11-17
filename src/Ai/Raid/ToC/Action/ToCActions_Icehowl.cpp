@@ -104,7 +104,7 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     Position end;
     if (!IcehowlChargeLatched(botAI, start, end))
     {
-        hasDodgeSpot = false;
+        _hasDodgeSpot = false;
         return false;
     }
 
@@ -121,14 +121,14 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
 
     // Every MoveTo clears the MotionMaster, so a walk still carrying the bot out is left alone.
     bool replacing = false;
-    if (hasDodgeSpot)
+    if (_hasDodgeSpot)
     {
-        uint32 const age = getMSTimeDiff(dodgeSpotMs, now);
-        bool const spotClear = DistanceToIcehowlLane(start, end, dodgeSpot.GetPositionX(),
-                                                     dodgeSpot.GetPositionY()) >= ICEHOWL_CHARGE_TIGHT_CLEARANCE;
+        uint32 const age = getMSTimeDiff(_dodgeSpotMs, now);
+        bool const spotClear = DistanceToIcehowlLane(start, end, _dodgeSpot.GetPositionX(),
+                                                     _dodgeSpot.GetPositionY()) >= ICEHOWL_CHARGE_TIGHT_CLEARANCE;
         if (age < DODGE_LATCH_MS && spotClear)
         {
-            if (bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) <= DODGE_ARRIVE)
+            if (bot->GetExactDist2d(_dodgeSpot.GetPositionX(), _dodgeSpot.GetPositionY()) <= DODGE_ARRIVE)
             {
                 NoteDodge(bot, "clear");
                 return false;
@@ -136,9 +136,9 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
 
             // A walk some other node issued since isn't ours, and it can be heading into the lane
             LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-            bool const bookedHere = std::fabs(last.lastMoveToX - dodgeSpot.GetPositionX()) <= DODGE_SPOT_TOLERANCE &&
-                                    std::fabs(last.lastMoveToY - dodgeSpot.GetPositionY()) <= DODGE_SPOT_TOLERANCE;
-            if (!dodgeParked && bookedHere && !bot->IsMovementPreventedByCasting() &&
+            bool const bookedHere = std::fabs(last.lastMoveToX - _dodgeSpot.GetPositionX()) <= DODGE_SPOT_TOLERANCE &&
+                                    std::fabs(last.lastMoveToY - _dodgeSpot.GetPositionY()) <= DODGE_SPOT_TOLERANCE;
+            if (!_dodgeParked && bookedHere && !bot->IsMovementPreventedByCasting() &&
                 (bot->isMoving() || age < DODGE_STALL_MS))
             {
                 NoteDodge(bot, "hold");
@@ -146,8 +146,8 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
             }
         }
 
-        replacing = !dodgeParked;
-        hasDodgeSpot = false;
+        replacing = !_dodgeParked;
+        _hasDodgeSpot = false;
     }
 
     HazardSweepCache sweep;
@@ -161,10 +161,10 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
         // skips the sweep.
         if (fromLane >= ICEHOWL_CHARGE_TIGHT_CLEARANCE && !InAnyCircle(pools, bot->GetPosition()))
         {
-            dodgeSpot = bot->GetPosition();
-            dodgeSpotMs = now;
-            hasDodgeSpot = true;
-            dodgeParked = true;
+            _dodgeSpot = bot->GetPosition();
+            _dodgeSpotMs = now;
+            _hasDodgeSpot = true;
+            _dodgeParked = true;
             NoteDodge(bot, "clear");
             return false;
         }
@@ -199,10 +199,10 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
             return inLane;
     }
 
-    dodgeSpot = spot;
-    dodgeSpotMs = now;
-    hasDodgeSpot = true;
-    dodgeParked = false;
+    _dodgeSpot = spot;
+    _dodgeSpotMs = now;
+    _hasDodgeSpot = true;
+    _dodgeParked = false;
 
     if (tight)
         NoteDodge(bot, "tight");
@@ -265,13 +265,13 @@ bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
 
 bool IcehowlDazeNitroAction::isUseful()
 {
-    return !tried || getMSTimeDiff(triedMs, getMSTime()) >= DAZE_NITRO_RETRY_MS;
+    return !_tried || getMSTimeDiff(_triedMs, getMSTime()) >= DAZE_NITRO_RETRY_MS;
 }
 
 bool IcehowlDazeNitroAction::Execute(Event /*event*/)
 {
-    tried = true;
-    triedMs = getMSTime();
+    _tried = true;
+    _triedMs = getMSTime();
 
     Unit* icehowl = GetEngagedBeast(botAI, NorthrendBeast::Icehowl);
     if (!icehowl || !UseNitroBoosts(bot))

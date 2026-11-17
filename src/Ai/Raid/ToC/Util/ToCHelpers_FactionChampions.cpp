@@ -64,8 +64,8 @@ constexpr KillOrderRow KILL_ORDER[] = {
 
 constexpr uint8 NOT_A_CHAMPION = static_cast<uint8>(std::size(KILL_ORDER));
 
-// Melee by what they took off the raid in the 25H traces, the rogue steadiest at the top. The first one up
-// is kept stunned, CC'd or disarmed.
+// Melee by the damage they deal the raid, the rogue steadiest at the top. The first one up is kept stunned,
+// CC'd or disarmed.
 constexpr KillOrderRow DANGER_ORDER[] = {
     {ToCFactionChampions::NPC_ALLIANCE_ROGUE, ToCFactionChampions::NPC_HORDE_ROGUE},
     {ToCFactionChampions::NPC_ALLIANCE_DEATH_KNIGHT, ToCFactionChampions::NPC_HORDE_DEATH_KNIGHT},
@@ -116,9 +116,8 @@ constexpr uint32 TRACK_STEP_MS = 200;
 // Off the pack centre by this much, not iced and not on a tank: chasing the raid
 constexpr float ESCAPE_DIST = 20.0f;
 
-// The order melee champions get an ice duty in, the ones Chains of Ice stops best first: the Ret and the
-// Enhancement have no gap closer, the Rogue's Shadowstep and the DK's own grip get past it, and the Warrior
-// charges every 10 s
+// The order melee champions get an ice duty in, the ones Chains of Ice stops best first: Ret and Enh have no
+// gap closer, Shadowstep and the DK's grip get past it, the Warrior charges every 10 s
 constexpr KillOrderRow ICE_ORDER[] = {
     {ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION, ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION},
     {ToCFactionChampions::NPC_ALLIANCE_SHAMAN_ENHANCEMENT, ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT},
@@ -190,7 +189,7 @@ struct FactionChampionsState
     // Healers gripped off the pack and not back on it yet. Only these count as pulled, a healer that
     // wandered off on its own still heals the pack.
     std::unordered_set<ObjectGuid> gripped;
-    // CC bot -> its cast, mirrored into fc.cc
+    // CC bot -> its cast
     std::unordered_map<ObjectGuid, CcDuty> ccDuties;
     // DK -> the melee champion it keeps in Chains of Ice
     RaidObs::ObsGuidMap<ObjectGuid> ice{"fc.ice"};
@@ -589,9 +588,8 @@ void TrackHealer(FactionChampionsState& state, Champion const& champion, uint32 
         track.push_back({now, champion.x, champion.y});
 }
 
-// Follows the pack wherever its picks walk it: a step toward the mean round last tick's centre, so a
-// healer pulled 20+ yd off drops out. Off the kill target as latched last tick, since the latch reads
-// what this writes.
+// Steps toward the mean round last tick's centre, so a healer pulled 20+ yd off drops out. Leaves out last
+// tick's kill target, since the latch reads what this writes.
 void UpdatePack(FactionChampionsState& state, uint32 now)
 {
     ObjectGuid const killTarget = state.killTarget.Get();
@@ -885,11 +883,8 @@ bool ClearForBreakable(Unit* target, std::vector<Player*> const& members, std::v
     return !CarriesGroupDot(target);
 }
 
-// Healers off the tanks nearest the kill target first, then the other healers, then the danger champion,
-// then champions off the tanks casters first, then the rest in kill order. Not the kill target, nor the suspended one: the latch
-// goes back to it and CC would break or block that. Nor the skulled one, even while it's immune and so
-// not the latch. Nor a pulled healer, the latch's next pick, nor the player's pull: CC would make it immune
-// to the grip. Nor an iced one: its DK's Chains already keep it off the raid, and its DK hits it.
+// Never the kill target, suspended, skulled, pulled or iced one, nor the player's pull: CC there would break
+// the latch's return, make the next pick immune to the grip, or waste the DK's Chains.
 std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, ObjectGuid chainTarget)
 {
     ObjectGuid const killGuid = state.killTarget.Get();
@@ -1188,8 +1183,8 @@ bool KeepsIceDuty(Player* member)
     return memberAI && !FactionChampionsChainLink(memberAI);
 }
 
-// Each DK keeps one melee champion slowed for the fight, so a duty only ends for a reason fc.iceoff names.
-// A stunned DK keeps its champion, it only takes no new one.
+// A duty lasts the fight: it ends only when either side drops out, the DK turns a link or the champion turns
+// kill target. A stunned DK keeps its champion but takes no new one.
 void UpdateIce(FactionChampionsState& state, std::vector<Player*> const& members)
 {
     ObjectGuid const kill = state.killTarget.Get();

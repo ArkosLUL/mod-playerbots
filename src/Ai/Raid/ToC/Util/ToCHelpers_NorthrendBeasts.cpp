@@ -368,13 +368,16 @@ char const* DpsBranchName(BeastsDpsBranch branch)
 
 BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
 {
-    // Read even under a skull, so nb.snobold stays current
-    Unit* snobold = GetGormokSnoboldPick(botAI);
-
     if (Unit* skull = GetRaidHumanSkull(botAI, &IsBeastsSkullTarget))
-        return {skull, BeastsDpsBranch::Skull};
+    {
+        // only for its trace note, the skull wins
+        if (RaidObs::Active())
+            GetGormokSnoboldPick(botAI);
 
-    if (snobold)
+        return {skull, BeastsDpsBranch::Skull};
+    }
+
+    if (Unit* snobold = GetGormokSnoboldPick(botAI))
         return {snobold, BeastsDpsBranch::Snobold};
 
     if (Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok))

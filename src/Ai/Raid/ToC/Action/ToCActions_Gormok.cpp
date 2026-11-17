@@ -150,7 +150,7 @@ bool GormokLeaveStompRangeAction::Execute(Event /*event*/)
 
     if (Position const* spot = WalkInFlight())
         if (gormok->GetExactDist2d(spot) >= GORMOK_STOMP_TRIGGER &&
-            (!spotClearsBombs || ClearsBombs(*spot, young, FIRE_BOMB_CLEARANCE)))
+            (!_spotClearsBombs || ClearsBombs(*spot, young, FIRE_BOMB_CLEARANCE)))
             return true;
 
     // Ties go toward his tank, so healers stay in range of whoever they're keeping up
@@ -175,8 +175,8 @@ bool GormokLeaveStompRangeAction::Execute(Event /*event*/)
     };
 
     Position spot = findSpot(hazards);
-    spotClearsBombs = spot != Position();
-    if (!spotClearsBombs && hazards.size() > 1)
+    _spotClearsBombs = spot != Position();
+    if (!_spotClearsBombs && hazards.size() > 1)
         spot = findSpot({ stomp });
 
     if (spot == Position())

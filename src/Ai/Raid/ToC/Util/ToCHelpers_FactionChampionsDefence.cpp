@@ -104,10 +104,10 @@ constexpr uint32 GRIP_READY_SLACK_MS = 1000;
 constexpr float GRIP_GOAL = 45.0f;
 constexpr float CHAMPION_HEAL_REACH = 40.0f;
 
-// the player's own grip, the chain's last link, came 3-4 s after the last bot DK's
+// the player's own grip, the chain's last link, comes a few seconds after the last bot DK's
 constexpr uint32 GRIP_GUARD_TAIL_MS = 6000;
 
-// A wall grip lands the melee champion this far off ARENA_CENTER at least, past the raid's 16-24 yd spread
+// A wall grip lands the melee champion this far off ARENA_CENTER at least, past where the raid stands
 constexpr float WALL_MIN_OFF_CENTRE = 34.0f;
 // the champion lands in front of the DK, so a stand this far off it at each bearing
 constexpr std::array<float, 2> WALL_STAND_DISTS = {27.0f, 22.0f};
@@ -197,9 +197,9 @@ constexpr uint32 FOCUS_LOOKAHEAD_MS = 4000;
 constexpr uint32 FOCUS_MIN_CHAMPIONS = 2;
 constexpr uint32 FOCUS_PREEMPT_CHAMPIONS = 4;
 
-// Every champion's script resets each player's threat to 10M x its score every 8.75-9.25 s
-// (boss_faction_champions.cpp, RecalculateThreat). A tick where two entries move this much is one: damage
-// and heal threat add a few thousand, and Feint or Fade touch one entry.
+// RecalculateThreat resets each player's threat to 10M x its score every 8.75-9.25 s, so two entries moving
+// this much in a tick is one: damage and heal threat add a few thousand, Feint or Fade touch one entry.
+constexpr uint32 REPICK_SHIFT_ENTRIES = 2;
 constexpr float REPICK_SHIFT_PCT = 0.01f;
 constexpr float REPICK_SHIFT_MIN = 100000.0f;
 constexpr uint32 REPICK_MIN_MS = 8750;
@@ -214,6 +214,16 @@ constexpr float SWITCH_RANGED = 1.3f;
 constexpr float PICK_MARGIN = 1.1f;
 constexpr uint32 REPICK_NOTE_MIN = 3;
 constexpr uint32 REPICK_NOTE_SPREAD_MS = 500;
+// GetThreatMod's terms: free distance and falloff, the health mod's cap and slope, the armour sample hit
+constexpr float SCORE_MELEE_FREE = 5.0f;
+constexpr float SCORE_RANGED_FREE = 35.0f;
+constexpr float SCORE_MELEE_FACTOR = 15.0f;
+constexpr float SCORE_RANGED_FACTOR = 25.0f;
+constexpr uint32 SCORE_HEALTH_CAP = 40000;
+constexpr float SCORE_HEALTH_CAPPED = 2.0f;
+constexpr float SCORE_HEALTH_BASE = 60000.0f;
+constexpr float SCORE_HEALTH_SCALE = 10000.0f;
+constexpr uint32 SCORE_ARMOR_SAMPLE = 10000;
 
 constexpr std::array<uint32, 7> REBIRTH_RANKS = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 constexpr float REBIRTH_RANGE = 30.0f;
@@ -890,11 +900,12 @@ KickDuty ElectChannelKicker(std::vector<Member> const& members, Unit* warlock)
         for (Member const& member : members)
         {
             Player* player = member.player;
-            PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
-            if (!ai || !InControl(player))
+            PlayerbotAI* memberAI = GET_PLAYERBOT_AI(player);
+            if (!memberAI || !InControl(player))
                 continue;
 
-            char const* spell = melee ? ReadyMeleeInterrupt(player, ai, warlock) : ReadyRangedInterrupt(player, ai, warlock);
+            char const* spell = melee ? ReadyMeleeInterrupt(player, memberAI, warlock)
+                                      : ReadyRangedInterrupt(player, memberAI, warlock);
             float const distance = player->GetExactDist2d(warlock);
             if (spell && (best.bot.IsEmpty() || distance < bestDistance))
             {
@@ -919,12 +930,12 @@ KickDuty KeepOrElectKicker(FactionChampionsDefenceState& state, std::vector<Memb
         ObjectGuid const bot = held->second.bot;
         auto const holder = std::find_if(members.begin(), members.end(),
                                          [bot](Member const& member) { return member.player->GetGUID() == bot; });
-        PlayerbotAI* ai = holder != members.end() ? GET_PLAYERBOT_AI(holder->player) : nullptr;
-        if (ai && InControl(holder->player))
+        PlayerbotAI* holderAI = holder != members.end() ? GET_PLAYERBOT_AI(holder->player) : nullptr;
+        if (holderAI && InControl(holder->player))
         {
             Player* player = holder->player;
-            char const* spell = held->second.melee ? ReadyMeleeInterrupt(player, ai, warlock)
-                                                   : ReadyRangedInterrupt(player, ai, warlock);
+            char const* spell = held->second.melee ? ReadyMeleeInterrupt(player, holderAI, warlock)
+                                                   : ReadyRangedInterrupt(player, holderAI, warlock);
             if (spell)
                 return {player->GetGUID(), spell, held->second.melee};
         }
@@ -1996,13 +2007,17 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
 // up to 35 yd, melee to 5 yd and also weighing armor
 float ChampionScore(Creature* champion, Player* player, bool melee)
 {
-    float const free = melee ? 5.0f : 35.0f;
-    float const factor = melee ? 15.0f : 25.0f;
+    float const free = melee ? SCORE_MELEE_FREE : SCORE_RANGED_FREE;
+    float const factor = melee ? SCORE_MELEE_FACTOR : SCORE_RANGED_FACTOR;
     float const dist = std::max(champion->GetDistance2d(player) - free, 0.0f);
     uint32 const health = player->GetHealth();
-    float const healthMod = health > 40000 ? 2.0f : (60000.0f - static_cast<float>(health)) / 10000.0f;
+    float const healthMod = health > SCORE_HEALTH_CAP
+                                ? SCORE_HEALTH_CAPPED
+                                : (SCORE_HEALTH_BASE - static_cast<float>(health)) / SCORE_HEALTH_SCALE;
     float const armorMod =
-        melee ? static_cast<float>(Unit::CalcArmorReducedDamage(champion, player, 10000, nullptr)) / 10000.0f : 1.0f;
+        melee ? static_cast<float>(Unit::CalcArmorReducedDamage(champion, player, SCORE_ARMOR_SAMPLE, nullptr)) /
+                    static_cast<float>(SCORE_ARMOR_SAMPLE)
+              : 1.0f;
     return factor / (factor + dist) * healthMod * armorMod;
 }
 
@@ -2112,7 +2127,7 @@ void UpdateFocusClock(FactionChampionsDefenceState& state, Player* bot, std::vec
         }
 
         clock.threat.swap(threat);
-        if (moved >= 2)
+        if (moved >= REPICK_SHIFT_ENTRIES)
         {
             clock.repickMs = now;
             clock.seen = true;
@@ -3190,7 +3205,7 @@ Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand, bool&
     return target;
 }
 
-void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target)
+void FactionChampionsTrackChainGrip(PlayerbotAI* botAI, Unit* target)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     // not OpenChain: its advance would read the cooldown this grip just started and skip the link
@@ -3205,7 +3220,7 @@ void FactionChampionsNoteChainGrip(PlayerbotAI* botAI, Unit* target)
     uint32 const now = getMSTime();
     chain->lastTarget = target->GetGUID();
     chain->lastLinkMs = now;
-    FactionChampionsGripChain::NoteGrip(chain->turns, self, now);
+    FactionChampionsGripChain::TrackGrip(chain->turns, self, now);
     if (FactionChampionsGripChain::Closed(chain->turns))
         CloseChain(*chain);
 }
@@ -3302,7 +3317,7 @@ bool FactionChampionsPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
             projected = static_cast<float>(from->health - health) * FOCUS_LOOKAHEAD_MS / static_cast<float>(elapsed);
     }
 
-    // this many take a non-tank from full in 1-2 s, before the log shows the loss. Just past the floor, so
+    // this many kill a non-tank from full before the log shows the loss. Just past the floor, so
     // a class cooldown goes now and the immunities and the healthstone still wait for a projected kill.
     if (on >= FOCUS_PREEMPT_CHAMPIONS && !IsTankMember(bot))
         projected = std::max({projected, static_cast<float>(health) - floor + 1.0f, 1.0f});
@@ -3504,7 +3519,7 @@ Unit* FactionChampionsWallGrip(PlayerbotAI* botAI, Position& stand, uint32& spel
     return champion;
 }
 
-void FactionChampionsNoteWallGrip(PlayerbotAI* botAI, Unit* champion)
+void FactionChampionsTrackWallGrip(PlayerbotAI* botAI, Unit* champion)
 {
     // no Refresh: on a new ms it reruns UpdateWalls, which sees Death Grip on cooldown and drops the duty first
     Player* bot = botAI ? botAI->GetBot() : nullptr;

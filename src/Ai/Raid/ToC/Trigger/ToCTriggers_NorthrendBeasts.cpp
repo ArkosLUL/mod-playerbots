@@ -29,6 +29,6 @@ bool BelongsToStem(Unit* unit, NorthrendBeastsStem stem)
 bool NorthrendBeastsDpsTargetTrigger::IsActive()
 {
     Unit* pick = GetBeastsDpsTarget(botAI).unit;
-    return pick && BelongsToStem(pick, stem) &&
+    return pick && BelongsToStem(pick, _stem) &&
            (AI_VALUE(Unit*, "current target") != pick || RaidPetOffPick(botAI, pick));
 }

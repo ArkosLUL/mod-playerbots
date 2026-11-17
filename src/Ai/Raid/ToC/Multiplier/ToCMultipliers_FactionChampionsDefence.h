@@ -53,9 +53,8 @@ private:
     RaidActionCache<bool> _purge;
 };
 
-// A root or stun before Death Grip's pull refuses it, one mid-flight drops the champion where it is. Area
-// ones and self-cast ones like Intimidation wait while any guard is up. The class pet toggle would turn a
-// held autocast straight back on.
+// A root or stun refuses Death Grip's pull or drops the champion mid-flight; area and self-cast ones wait
+// while any guard is up. The class pet toggle would turn a held autocast straight back on.
 class FactionChampionsGripGuardMultiplier : public Multiplier
 {
 public:

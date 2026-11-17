@@ -73,9 +73,8 @@ private:
     RaidActionCache<Facts> _facts;
 };
 
-// As in PvP: a champion's cast-time spell gets kicked in its last LATE_INTERRUPT_MS so the cast is wasted,
-// a channel at once. Interrupts, silences and every stun on an enemy healer wait for it, and the mage due
-// to Counterspell starts no cast meanwhile.
+// As in PvP, kicks wait for a champion cast's last LATE_INTERRUPT_MS so the cast is wasted, channels go at
+// once. The mage due to Counterspell starts no cast meanwhile.
 class FactionChampionsLateInterruptMultiplier : public Multiplier
 {
 public:

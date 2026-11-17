@@ -8,16 +8,13 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Faction Champions positioning: healers and ranged stay put, the Cyclone stand, the healers' step off the
-// melee, the trinket opener, the Nitro Boosts run, the kite, Sprint and Dash and the casters' escapes. Every
-// reader answers null or false unless the encounter is live, but the pre-pull Demonic Circle and
-// FactionChampionsKitesFrom.
+// Faction Champions positioning: stands, step-offs, the trinket opener, runs, kites and escapes. Every reader
+// answers null or false unless the encounter is live, but the pre-pull Demonic Circle and the kite test.
 namespace TrialOfTheCrusaderHelpers
 {
 
-// Once the kill target has been out, a Cyclone druid stands 20, 26 or 30 yd from it where it still reaches
-// the pack healer nearest it after a 6 yd drift, else where it reaches it now (fc.cyclone). Kept while that
-// healer stays in Cyclone reach and the kill target within 36 yd of it. None while it holds a CC duty.
+// Once the kill target has been out, a Cyclone druid stands 20-30 yd from it where it still reaches the pack
+// healer nearest it. None while it holds a CC duty.
 bool FactionChampionsCycloneStand(PlayerbotAI* botAI, Position& spot);
 
 // Healers and ranged, tanks aside: they move only to dodge, run, kite, step off, CC or get their target in
@@ -32,43 +29,27 @@ bool FactionChampionsKitesFrom(Player* member, Unit* champion);
 // floor and clear of Bladestorm and Hellfire. Latched to arrival or 2.5 s, then none for 3 s.
 bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot);
 
-// Heroic: the bot whose ready instant AoE fear or Frost Nova reaches the most champions with their PvP
-// trinket up, three or more, casts it where it stands, so they burn it. Not a healer or the grip DK, and
-// never with a champion the grip guard holds in reach. Comes back with the trinkets. The spell, and the
-// unit to cast it at. Written to fc.opener.
+// Heroic: the bot whose ready instant AoE fear or Frost Nova reaches the most champions with their trinket
+// up, 3 or more, casts it where it stands so they burn it. The spell, and the unit to cast it at.
 Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 
-// Where a bot runs on Nitro Boosts: three or more champions, or two melee champions, have it as victim, one
-// melee champion does from within 8 yd unrooted and unslowed, or it is fc.nextfocus, at 30% health or more.
-// Away from the melee on it (else all on it, else those within 30 yd), straight or 30-120° off: on each
-// bearing the farthest clear floor spot up to the boost's reach (~87 yd), stepping back 5 yd, 15 yd at least
-// and, for a non-healer, 10 yd off other healers, within 30 yd of another living healer or nearer one than
-// the bot is now; the one farthest from every melee champion, a tie to the longer run. Latched to arrival
-// or the boost's end. Not for a tank, a CC duty holder or a bot rooted or stunned. Each run notes
-// fc.nitro.
+// Where a bot runs on Nitro Boosts when several champions start on it: as far from the melee on it as the
+// boost goes, still in heal reach. Latched to arrival or the boost's end.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
-// Where a bot kites: a melee champion it kites from (FactionChampionsKitesFrom) is within 30 yd, however
-// close; one crawling (rooted, out of control or at 60% run speed or less) only within 10 yd, a Ret within 17 yd
-// for its 15 yd Hammer of Justice, so a bot an iced champion picked keeps casting till it's near. 15 yd hops
-// away from them, on the floor, clear of AoE and
-// off other healers. Of those within 30 yd
-// of another living healer or nearer one than the bot is now, the farthest from every melee champion; with
-// none, the one nearest a healer. Latched to arrival or 2.5 s, dropped once none is within 30 yd. Not while
-// rooted, stunned, on a Nitro run or a CC duty. Each hop notes fc.kite. A hard cast blocks the kite, so any
-// bot's refresh breaks it once a chaser would reach melee before it lands (fc.castbreak).
+// Where a bot hops 15 yd away from a melee champion it kites from, in heal reach. A hard cast blocks the
+// kite, so any bot's refresh breaks it once a chaser would reach melee before it lands.
 bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot);
 
 // A melee champion the bot kites from is within 45 yd: reaching its target or a heal target would walk it
 // back in
 bool FactionChampionsKiteHold(PlayerbotAI* botAI);
 
-// The Sprint or Dash rank to cast now, else 0: a rogue, or a druid in Cat Form, with a melee champion it kites from
-// within 8 yd that isn't rooted, slowed or stunned, the spell ready and no speed buff as fast on it yet, Nitro
-// Boosts' included. Not while rooted, stunned, on a Nitro run or a CC duty.
+// The Sprint or Dash rank to cast now, else 0: a rogue or Cat Form druid with an unslowed melee champion it
+// kites from within 8 yd and no speed buff as fast on it yet, Nitro Boosts' included
 uint32 FactionChampionsSpeedBoost(PlayerbotAI* botAI);
 
-constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
+inline constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
 
 struct FactionChampionsEscapeCast
 {
@@ -78,14 +59,8 @@ struct FactionChampionsEscapeCast
     float facing = 0.0f;
 };
 
-// A healer or ranged bot with a melee champion on it within 8 yd, in control and not silenced: the first
-// ready instant, CC before movement. Mage Frost Nova, Blink 20 yd away from every melee champion within 15 yd
-// (on the floor, clear of Bladestorm and Hellfire, landing 12+ yd off all of them), Dragon's Breath; warlock
-// Shadowfury on the nearest, Demonic Circle: Teleport when the circle is 12+ yd farther from them, instant
-// Howl of Terror, Death Coil on the nearest; priest Psychic Scream; hunter Frost Trap at its feet with no iced
-// or grip-guarded champion within 12 yd, then Disengage with one within 5 yd. An
-// AoE only with no champion inside held by our breakable fear, stun or confuse or grip-guarded, a fear or
-// Dragon's Breath not on the kill target.
+// A healer or ranged bot with a melee champion on it within 8 yd: its first ready instant escape, CC before
+// movement. An AoE never catches a champion our CC or the grip guard holds, and a fear never the kill target.
 bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast);
 
 // A warlock parked on its Champions staging stand without its Demonic Circle, or with under a minute left

@@ -91,7 +91,7 @@ bool FactionChampionsHeroicLive(PlayerbotAI* botAI)
 void DefineFactionChampions(EncounterBuilder& e)
 {
     // Assist makes its own pick, so on any tick the settled focus node returns false it would take the
-    // bot off the kill target. The name is what the reader counts vetoes under.
+    // bot off the kill target
     e.OwnTargeting("faction champions target guard multiplier", Role::Any, FactionChampionsTargetOwned,
                    Family::DpsAssist | Family::TankAssist);
     // assist hands a healer a Feared champion that "invalid target" drops next tick, so it loops there instead

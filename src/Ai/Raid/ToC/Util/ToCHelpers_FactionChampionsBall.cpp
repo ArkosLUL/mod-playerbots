@@ -104,7 +104,7 @@ constexpr uint32 SPELL_DEMONIC_CIRCLE_TELEPORT = 48020;
 constexpr uint32 SPELL_DEMONIC_CIRCLE_IN_RANGE = 62388;
 // the circle lasts 6 min, a long wait between pulls gets a fresh one before it runs out
 constexpr int32 CIRCLE_REFRESH_MS = 60000;
-// two melee champions on a cloth caster kill it in 3-8 s, well before a third arrives
+// two melee champions on a cloth caster kill it in seconds, well before a third arrives
 constexpr uint32 NITRO_MELEE_FOCUS = 2;
 // Blink flees every melee champion this close, and a landing nearer one than this isn't worth the cooldown
 constexpr float BLINK_FLEE_RADIUS = 15.0f;
@@ -428,10 +428,8 @@ bool Healed(float gap, float nowGap)
     return gap <= KITE_HEAL_REACH || gap < nowGap || nowGap == std::numeric_limits<float>::max();
 }
 
-// On the rings round the kill target, so the druid still hits it. First a spot that stays in Cyclone reach
-// of the pack healer while it drifts up to SIDE_REANCHOR, then one in reach, each farthest from the pack
-// then nearest the druid; with none in reach, nearest the healer. False when no ring spot is clear. A spot
-// already held stays while both are still in reach of it, so the druid doesn't walk for every drift.
+// A ring spot round the kill target still in Cyclone reach of the pack healer after a SIDE_REANCHOR drift,
+// else in reach now, else nearest it. A held spot stays while both are in reach, so no walk per drift.
 bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Position const& centre,
                  std::vector<EncounterHelpers::HazardCircle> const& hazards, Position& spot)
 {

@@ -7,21 +7,20 @@
 #include <utility>
 #include <vector>
 
-// The grip chain carries a champion healer down the lane with Death Grips in a row, each link gripping it
-// off the last one's landing. Who grips and when, from plain inputs. No game headers here so nativetest
-// can build it.
+// Who grips a champion healer down the lane and when, each link off the last one's landing. No game
+// headers, so nativetest can build it.
 namespace FactionChampionsGripChain
 {
 // One bot DK per post: the tank line, 54 yd and 78 yd down the lane. A 4th grip would land the healer past
 // the far wall, about 83 yd off.
-constexpr std::size_t MAX_LINKS = 3;
+inline constexpr std::size_t MAX_LINKS = 3;
 // a link's turn lapses this long after it came, the first one's has the walk in on top
-constexpr uint32_t FIRST_LINK_MS = 15000;
-constexpr uint32_t NEXT_LINK_MS = 10000;
+inline constexpr uint32_t FIRST_LINK_MS = 15000;
+inline constexpr uint32_t NEXT_LINK_MS = 10000;
 // Death Grip further off its cooldown than this and the link is skipped
-constexpr uint32_t WAIT_MS = 3000;
+inline constexpr uint32_t WAIT_MS = 3000;
 // the pull starts on the hit, so the jump only shows a moment after the cast
-constexpr uint32_t LAND_MS = 300;
+inline constexpr uint32_t LAND_MS = 300;
 
 struct Dk
 {
@@ -139,7 +138,7 @@ std::vector<Skipped> Advance(Chain& chain, uint32_t now, StateOf stateOf)
 
 // The turn's link gripped the chain's champion: the next link's turn comes. A grip from any other link
 // changes nothing.
-inline void NoteGrip(Chain& chain, uint64_t guid, uint32_t now)
+inline void TrackGrip(Chain& chain, uint64_t guid, uint32_t now)
 {
     if (Closed(chain) || chain.links[chain.due] != guid)
         return;

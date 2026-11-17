@@ -10,9 +10,7 @@
 namespace TrialOfTheCrusaderHelpers
 {
 
-// Faction Champions (Trial of the Crusader, third encounter). Both faction rosters are listed
-// because players always fight the opposing faction's champions. Entries are identical across
-// 10/25 and normal/heroic (difficulty is an instance property), so no difficulty variants exist.
+// Both rosters, since the raid fights the other faction's. The same entries on every difficulty.
 enum class ToCFactionChampions : uint32
 {
     // Healers (priority kill / crowd-control / interrupt targets)
@@ -49,15 +47,15 @@ enum class ToCFactionChampions : uint32
 };
 
 // The mage's only interrupt, one rank
-constexpr uint32 SPELL_COUNTERSPELL = 2139;
+inline constexpr uint32 SPELL_COUNTERSPELL = 2139;
 // Cast-time spells get kicked this close to their end, so the champion wastes the cast. A few 100 ms bot
 // ticks of slack. Channels go at once.
-constexpr int32 LATE_INTERRUPT_MS = 600;
+inline constexpr int32 LATE_INTERRUPT_MS = 600;
 // One rank, and damage doesn't break it
-constexpr uint32 SPELL_CYCLONE = 33786;
+inline constexpr uint32 SPELL_CYCLONE = 33786;
 // Heroic champions cast it on their first fear, stun, confuse or freeze, then 2 min cooldown
 // (boss_faction_champions.cpp IsCCed). It also clears every snare and root.
-constexpr uint32 SPELL_PVP_TRINKET = 65547;
+inline constexpr uint32 SPELL_PVP_TRINKET = 65547;
 
 // True if the entry is any Faction Champion (either faction roster). Pets are not champions.
 bool IsFactionChampion(uint32 entry);
@@ -68,10 +66,8 @@ bool IsFactionChampionHealer(uint32 entry);
 // DK, Warrior, Rogue, Enhancement Shaman or Retribution Paladin
 bool IsFactionChampionMelee(uint32 entry);
 
-// The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
-// immune to all damage, to go back to the one it left over immunity, to a player's skull on a
-// champion that can be hurt, or off one never pulled out to a healer pulled out of the pack, a human
-// DK's grip included. Null unless the encounter is live.
+// The raid's one kill target, latched per instance. Moves on its death, combat drop or full immunity, to a
+// player's skull, or to a healer gripped out of the pack. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
 // The champion the kill latch left over immunity and goes back to once it can be hurt again. Null
@@ -91,11 +87,8 @@ bool FactionChampionsFocusBot(PlayerbotAI* botAI);
 // Bot tanks. Their Consecration and Death and Decay break CC and roots round them
 bool FactionChampionsIsPackTank(Player* player);
 
-// The melee champion this bot DK keeps in Chains of Ice (its ice duty), alive. One DK per champion, in
-// the order Retribution, Enhancement, Rogue, DK, Warrior, the kill target last, each to the nearest bot DK
-// knowing Chains of Ice that is in control and no grip chain link still to grip. Kept until the DK dies,
-// leaves the map or turns a link, the champion dies or leaves combat, or it turns kill target while
-// another melee champion is free. Written to fc.ice, a release's reason to fc.iceoff. Null unless live.
+// The melee champion this bot DK keeps in Chains of Ice (its ice duty): dealt Ret, Enhancement, Rogue, DK,
+// Warrior, the kill target last, each to the nearest free DK. Null unless live.
 Unit* FactionChampionsIceTarget(PlayerbotAI* botAI);
 
 bool FactionChampionsHasIceDuty(PlayerbotAI* botAI);
@@ -137,22 +130,8 @@ uint32 FactionChampionsLiveMs(PlayerbotAI* botAI);
 // Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
 
-// This bot's CC cast, the champion and spell id, when it holds a CC duty. CC bots are dps mages
-// (Polymorph), warlocks (Fear, Banish on an elemental or demon), ranged druids (Cyclone) and dps shamans
-// (Hex). None for 1.5 s after the pull, while the opening grips land. Candidates skip the kill target, the
-// suspended, the skulled, a pulled and an iced one, and a champion the grip guard holds: healers off the
-// tanks nearest the kill target, other healers, the danger champion, champions off the tanks casters
-// first, the rest in kill order. A cast at a champion that stops being a candidate is interrupted, so it
-// never makes a new kill target immune. One duty per candidate, none while it is CC'd for over 2 s more,
-// a CC cast at it is under way or it is in Bladestorm. Each of these spells holds one target per caster,
-// so a caster whose spell holds a champion for longer than its cast time plus 0.4 s casts it nowhere
-// else, unless it moves off a non-healer onto a healer. The caster has a spell that lands and, by DR, holds over 2.5 s, and is in range and sight or
-// up to 15 yd past the range, which it walks, never from a Cyclone stand: in range first, then
-// never-breaking, then the longest, then the nearest. Polymorph, Fear and Hex only on a champion with no
-// group member or pet on it and no group DoT. Latched until a fresh one lands (over its cast time plus
-// 0.4 s left) or 3 s pass with none going
-// (6 s for a walk), written to fc.cc. None for, and dropped by, a caster a melee champion it kites from
-// (FactionChampionsKitesFrom) is within 30 yd of. Null unless the encounter is live.
+// This bot's CC duty, the champion and spell id: one caster per champion, never the kill target or one the
+// grip guard holds. A cast at one that stops qualifying is interrupted. Null unless the encounter is live.
 Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint32& spellId);
 
 // The member holds a CC duty
@@ -186,8 +165,7 @@ bool FactionChampionsCycloneBot(Player* player);
 Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI);
 
 // The melee champion kept stunned, CC'd or disarmed: first alive of rogue, DK, Ret, warrior that isn't
-// iced, the kill target, pulled or suspended, and not CC'd or disarmed while another one isn't.
-// Written to fc.danger. Null unless live
+// iced, the kill target, pulled or suspended, one not already held first. Null unless live
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI);
 
 }

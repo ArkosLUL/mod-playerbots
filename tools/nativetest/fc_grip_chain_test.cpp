@@ -71,18 +71,18 @@ void EachLinkWaitsForTheLanding()
     CHECK(Due(chain, 1, 1000, false));
 
     // a grip from a link whose turn it isn't changes nothing
-    NoteGrip(chain, 2, 1500);
+    TrackGrip(chain, 2, 1500);
     CHECK(chain.due == 0);
 
-    NoteGrip(chain, 1, 2000);
+    TrackGrip(chain, 1, 2000);
     CHECK(!Pending(chain, 1));
     CHECK(!Due(chain, 2, 2100, false));
     CHECK(!Due(chain, 2, 2300, true));
     CHECK(Due(chain, 2, 2300, false));
     CHECK(!Due(chain, 3, 2300, false));
 
-    NoteGrip(chain, 2, 2400);
-    NoteGrip(chain, 3, 3000);
+    TrackGrip(chain, 2, 2400);
+    TrackGrip(chain, 3, 3000);
     CHECK(Closed(chain));
     CHECK(!Due(chain, 3, 9000, false));
 }
@@ -93,7 +93,7 @@ void GripNotedBeforeItsCooldownIsRead()
     Game game;
     Chain chain = Open({1, 2}, 1000);
     game.links[1] = {true, WAIT_MS + 30000};
-    NoteGrip(chain, 1, 1000);
+    TrackGrip(chain, 1, 1000);
     CHECK(Advance(chain, 1000, game).empty());
     CHECK(!Due(chain, 2, 1000 + LAND_MS - 1, false));
     CHECK(Due(chain, 2, 1000 + LAND_MS, false));
@@ -135,7 +135,7 @@ void TimeoutsCountFromTheTurn()
 
     // after a grip the next link's timeout starts at the grip
     chain = Open({1, 2}, 0);
-    NoteGrip(chain, 1, 12000);
+    TrackGrip(chain, 1, 12000);
     CHECK(Advance(chain, 12000 + NEXT_LINK_MS, game).empty());
     CHECK(!Closed(chain));
 }
@@ -145,7 +145,7 @@ void ClockWrapKeepsTheTurn()
     Game const game;
     uint32_t const start = 0xFFFFFF00u;
     Chain chain = Open({1, 2}, start);
-    NoteGrip(chain, 1, start);
+    TrackGrip(chain, 1, start);
     uint32_t const later = start + 1000u;
     CHECK(Due(chain, 2, later, false));
     CHECK(Advance(chain, later, game).empty());

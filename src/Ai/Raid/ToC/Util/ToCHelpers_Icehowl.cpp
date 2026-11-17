@@ -120,9 +120,8 @@ void LatchLane(Map* map, IcehowlChargeState& state, float angle, uint32 now, boo
         NoteLane(map, state);
 }
 
-// REACT_PASSIVE in combat only from the jump to the centre until the charge ends, so the cycle reads
-// straight off it. The gaze keeps the whole raid stunned, so the line only matters from the jump
-// back, and from then on he stands on it himself.
+// He is REACT_PASSIVE in combat only from the jump to the centre until the charge ends, so the cycle reads
+// off that. The gaze stuns the raid, so the line matters only from the jump back, where he stands on it.
 IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -382,11 +381,8 @@ bool CanSeat(IcehowlBreathState const& state, BreathRole role, BreathBearing con
     return role == BreathRole::Melee ? InMeleeArc(state, bearing.step) : !bearing.meleeOnly;
 }
 
-// Outward from his back, k = 0, 1, -1, 2, -2, ..., stopping short of his front by a step plus the turn
-// a re-latch allows, so a breath on his victim misses every bearing until the next re-latch. A bearing
-// the wall cuts short is skipped and the next one further round takes its place. Inside the melee arc
-// one with room for the melee band stays, for melee only and outside the count: at the wall those are
-// often the only ones near his back.
+// Outward from his back (k = 0, 1, -1, 2, ...), short of his front by a step plus the re-latch turn, so a
+// breath on his victim misses them all. Walled bearings are skipped, inside the melee arc kept for melee.
 void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
 {
     state.bearings.clear();
@@ -491,11 +487,8 @@ void RebuildRoster(Player* bot, IcehowlBreathState& state, uint32 now)
     state.dealDirty = true;
 }
 
-// Sticky: a bot keeps its bearing while it's kept and holds no more than one over the emptiest one
-// its role may take. Past that the last in deal order goes first, so bots dealt onto the only bearing
-// near his back spread out once a re-latch adds more. Healers pick first, one to a bearing where they
-// can, nearest 60° off his back; the rest fill the emptiest bearing nearest his back. A melee with no
-// bearing near enough his back gets none, and `set behind` places it.
+// Sticky while a bearing holds at most one over the emptiest its role may take. Healers pick first, one to a
+// bearing near 60° off his back; the rest fill the emptiest nearest his back.
 void DealBreath(IcehowlBreathState& state)
 {
     size_t const count = state.bearings.size();
@@ -595,9 +588,8 @@ void DealBreath(IcehowlBreathState& state)
     }
 }
 
-// Off at once under a charge and in a heroic overlap, which the charge and worm rules own. A latched
-// layout holds while he walks, and while he stands with his victim out of reach for the grace: a tank
-// at the edge of his reach flickers in and out.
+// Off under a charge and in a heroic overlap. A latched layout holds while he walks, and for the grace
+// while his victim is out of reach, since a tank at the edge of it flickers in and out.
 BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathState& state, uint32 now,
                               Unit*& victim)
 {
