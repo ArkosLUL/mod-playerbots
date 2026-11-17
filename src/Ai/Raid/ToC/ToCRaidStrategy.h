@@ -1,5 +1,5 @@
-#ifndef PLAYERBOTS_RAID_TOCSTRATEGY_H
-#define PLAYERBOTS_RAID_TOCSTRATEGY_H
+#ifndef PLAYERBOTS_RAID_TOCRAIDSTRATEGY_H
+#define PLAYERBOTS_RAID_TOCRAIDSTRATEGY_H
 
 #include "Strategy.h"
 
@@ -15,7 +15,7 @@ public:
     void InitMultipliers(std::vector<Multiplier*>& multipliers) override;
 
 private:
-    bool legacyRtiChecked = false;
+    bool _legacyRtiChecked = false;
 };
 
 #endif

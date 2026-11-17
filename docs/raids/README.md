@@ -369,10 +369,20 @@ fights" hides the fallback. The call carries any spell id, so it can ask a human
   remaining)` stays stable across reads, so they stay one hit (Decimate's 3 s self-stun).
 - **`ExpectedDamage` counts `SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN` only**, not AoE avoidance (aura
   229), so a caller whose players carry such an aura cuts the hit itself (Festergut's Inoculated).
+- **`GetRaidCover`'s deal** happens on the first read where the hit would leave `RAID_COVER_MIN_UNDER`
+  members under the floor: one bot per cooldown and one cooldown per bot, among bots that know it, have
+  it ready and can pay; latched for the hit, cast only inside its window. Aura Mastery only from a
+  paladin holding its own resistance aura of the hit's school, Divine Sacrifice only with Divine
+  Guardian, Anti-Magic Zone only with `RAID_COVER_MIN_UNDER` members inside it.
+- **`GetRaidPersonalDefensive`'s ladder**: `NextMagicDefensive`'s row for what is left of the hit (for
+  a physical one `NextPhysicalDefensive`'s, then Evasion, Deterrence or Pain Suppression); on a lethal
+  hit with no row, Dispersion, the class immunity, then a healthstone at 70% or under. A non-tank paladin
+  on a `measured` hit takes Divine Shield first, a mage on a `focus` hit Ice Block, GCD or a running cast
+  notwithstanding. Nothing while one runs or while the bot channels a raid cover. Size the hit window to
+  what a healer wouldn't cover.
 - **`GetRaidPersonalDefensive` and `GetRaidCover` write their scope notes on every call**, the cover
   even when passed no hit, so guard them with the encounter's own fight and hit checks, or every bot
-  notes `none` on other fights too. When the modelled hit is lethal the personal pick falls through to
-  Dispersion, class immunity and healthstone: size the hit window to what a healer wouldn't cover.
+  notes `none` on other fights too.
 - **A threat brake** reads the threat list (not the `threat` value, which wraps past 255%) against the
   top tank, with hysteresis (hold at 90%, free at 80%), latches in the encounter tick as an
   `ObsGuidSet`, and holds only attacks aimed at the boss and area spells near it. It is blind at a

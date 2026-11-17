@@ -21,10 +21,8 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// The first seconds of a boss belong to its tank. A DPS bot holds its damage on a boss of the live
-// encounter until a group tank has held that boss for RAID_OPENER_DWELL_MS, or RAID_OPENER_CAP_MS after
-// it came into combat. A hunter or rogue whose Misdirection or Tricks of the Trade is running is free:
-// its threat lands on the tank.
+// A DPS bot holds its damage on a live boss until a group tank has held it for RAID_OPENER_DWELL_MS, or
+// for RAID_OPENER_CAP_MS from its pull. A hunter or rogue with a redirect running is free.
 
 constexpr uint32 RAID_OPENER_DWELL_MS = 2000;
 // A boss no tank picks up in this time needs a taunt, and DPS standing idle doesn't help it

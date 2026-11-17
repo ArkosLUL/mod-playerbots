@@ -16,18 +16,16 @@
 class Action;
 class PlayerbotAI;
 
-// What one encounter lets through the burst gate right now. Default lets everything through, so only
-// the base tank-hold gate applies. Lust is its own flag: one 10-minute raid cooldown, personal
-// cooldowns come back mid-fight.
+// What one encounter lets through the burst gate now; the default leaves only the base tank-hold gate.
+// Lust is its own flag: one 10-minute raid cooldown, while personal cooldowns come back mid-fight.
 struct RaidBurstWindow
 {
     bool allowAll = true;
     bool allowLust = true;
 };
 
-// Holds burst cooldowns to the row window answers for the live encounter, default between pulls. One
-// multiplier for every encounter, so the IsBurstCooldownAction early-out runs once per action rather
-// than once per boss.
+// Holds burst cooldowns to what window answers for the live encounter. One multiplier for every encounter,
+// so the IsBurstCooldownAction early-out runs once per action rather than once per boss.
 class RaidBurstWindowMultiplier : public Multiplier
 {
 public:
@@ -46,8 +44,8 @@ private:
     };
 
     Window _window;
-    uint32 cachedAtMs = 0;
-    RaidBurstWindow cachedValue;
+    uint32 _cachedAtMs = 0;
+    RaidBurstWindow _cachedValue;
     RaidActionCache<Facts> _facts;
 };
 

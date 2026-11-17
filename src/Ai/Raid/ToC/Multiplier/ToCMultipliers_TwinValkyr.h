@@ -42,7 +42,7 @@ public:
 
 private:
     // Read off the action's name, which never changes
-    RaidActionCache<TwinInterruptKind> kinds;
+    RaidActionCache<TwinInterruptKind> _kinds;
 };
 
 // The class redirects pick one tank for the whole raid, and the opener's fires while the twins
@@ -56,7 +56,7 @@ public:
 
 private:
     // Whether the action is one of the class redirects, fixed by its type
-    RaidActionCache<bool> redirects;
+    RaidActionCache<bool> _redirects;
 };
 
 void AddToCTwinValkyrMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

@@ -10,9 +10,8 @@
 
 class PlayerbotAI;
 
-// Mirrors trial_of_the_crusader.h, which lives in the core's scripts and can't be included from here.
-// INSTANCE_PROGRESS is a GetData key (DataTypes), the rest are GetGuidData keys from
-// TrialOfTheCrusaderObjectData. Those values are implicit, so recheck them when the core adds an entry.
+// Mirrors trial_of_the_crusader.h, out of reach in the core's scripts: INSTANCE_PROGRESS a GetData key, the
+// rest GetGuidData keys from TrialOfTheCrusaderObjectData, implicit values to recheck when the core adds one
 enum ToCInstanceData : uint32
 {
     TOC_DATA_INSTANCE_PROGRESS = 1,
@@ -53,14 +52,12 @@ enum class ToCEncounter : uint8
 // The encounter a GetData(TOC_DATA_INSTANCE_PROGRESS) stage belongs to, None for 8, 10 and the rest.
 ToCEncounter ToCEncounterOfStage(uint32 stage);
 
-// Open for the whole stage, pulled or not, so pre-pull prep like taking an essence before the twins
-// still runs. Beasts and Jaraxxus also stay open the stage after their kill until the next
-// encounter is live, for their leftover adds. True off a ToC instance: ungated beats silently dead.
+// The whole stage, pulled or not, so pre-pull prep still runs; Beasts and Jaraxxus also the stage after
+// their kill, for leftover adds, until the next is live. True off a ToC instance: ungated beats dead.
 bool ToCEncounterGateOpen(PlayerbotAI* botAI, ToCEncounter encounter);
 
-// Stage matches, IsEncounterInProgress, and one of its units alive and in combat. The script flags
-// most encounters in progress before the pull (walk-ins, the Lich King scene), so the unit check is
-// what keeps those closed. False off a ToC instance.
+// Stage matches, IsEncounterInProgress, and one of its units alive and in combat: the script flags most
+// encounters in progress before the pull. False off a ToC instance.
 bool ToCEncounterIsLive(PlayerbotAI* botAI, ToCEncounter encounter);
 
 // None between pulls and off a ToC instance.
@@ -104,8 +101,8 @@ public:
     void ExternalEvent(WorldPacket& packet, Player* owner = nullptr) override;
 
 private:
-    Trigger* inner;
-    ToCEncounter encounter;
+    Trigger* _inner;
+    ToCEncounter _encounter;
 };
 
 #endif

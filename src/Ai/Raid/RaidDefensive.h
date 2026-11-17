@@ -16,9 +16,8 @@
 class Player;
 class PlayerbotAI;
 
-// Raid cooldowns and personal buttons spent ahead of a hit the encounter sees coming. The encounter
-// says when the hit lands and what it does, this says who answers it and with what. Nothing resolves
-// off the scope's map.
+// Raid cooldowns and personal buttons for a hit the encounter sees coming: it says when and how hard, this
+// says who answers with what. Nothing resolves off the scope's map.
 
 // One per raid. coverKey traces the cover dealt to each holder, personalKey each bot's personal pick.
 struct RaidDefensiveScope
@@ -44,6 +43,7 @@ struct RaidPredictedHit
     // pick, so only a lethal hit gets one
     bool keepVictim = false;
     SpellSchoolMask school = SPELL_SCHOOL_MASK_NONE;
+    // a raid boss's level, for its resistance roll
     uint8 casterLevel = 83;
     // members who mustn't channel, null for nobody
     bool (*noChannel)(Player*) = nullptr;
@@ -70,12 +70,8 @@ constexpr float RAID_DEFENSIVE_FLOOR_PCT = 25.0f;
 // A personal button goes up from this long before the first damage
 constexpr uint32 RAID_PERSONAL_LEAD_MS = 1000;
 
-// The raid cooldown this bot casts now, None otherwise. Dealt on the first read where the hit would leave
-// RAID_COVER_MIN_UNDER members under the floor, one bot per cooldown and one cooldown per bot, among bots
-// that know it, have it off cooldown and can pay for it; latched for the hit, cast only inside its
-// window. Aura Mastery only from a paladin holding its own resistance aura of the hit's school, Divine
-// Sacrifice only with Divine Guardian, Anti-Magic Zone only with RAID_COVER_MIN_UNDER members inside it.
-// Pass null with no hit coming, which drops the deal. Writes the scope's coverKey.
+// The raid cooldown this bot casts now, None otherwise, from a deal latched for the hit and cast inside its
+// window. Null with no hit coming drops the deal. Writes the scope's coverKey.
 RaidCover GetRaidCover(PlayerbotAI* botAI, RaidDefensiveScope const& scope, RaidPredictedHit const* hit);
 // The bot's own rank of it, 0 when it doesn't know it
 uint32 RaidCoverSpellId(PlayerbotAI* botAI, RaidCover cover);
@@ -100,13 +96,8 @@ struct RaidPersonalPick
     explicit operator bool() const { return spellId || consumable; }
 };
 
-// The bot's own answer to a hit that would leave it under the floor, from RAID_PERSONAL_LEAD_MS before
-// the first damage: NextMagicDefensive's row for what is left of the hit (NextPhysicalDefensive's, then
-// Evasion, Deterrence or Pain Suppression, for a physical one), and on a lethal one with no row
-// Dispersion, the class immunity, then a healthstone at 70% or under. A non-tank paladin on a measured
-// hit takes Divine Shield first, a mage on a focus hit Ice Block, the GCD or a cast in progress
-// notwithstanding. Nothing while one runs or while it channels a raid cover. Writes the scope's
-// personalKey.
+// The bot's own button for a hit that would leave it under the floor, from RAID_PERSONAL_LEAD_MS out: its
+// class defensive row, else on a lethal hit an immunity or a healthstone. Writes the scope's personalKey.
 RaidPersonalPick GetRaidPersonalDefensive(PlayerbotAI* botAI, RaidDefensiveScope const& scope,
                                           RaidPredictedHit const* hit);
 

@@ -32,7 +32,7 @@ private:
     ToCEntrySet const& _entries;
     float _range;
 };
-}
+}  // namespace
 
 ToCEntrySet::ToCEntrySet(std::vector<uint32> const& entries)
 {
@@ -40,10 +40,10 @@ ToCEntrySet::ToCEntrySet(std::vector<uint32> const& entries)
         return;
 
     auto const [low, high] = std::minmax_element(entries.begin(), entries.end());
-    base = *low;
-    bits.assign(static_cast<size_t>(*high - *low) + 1, false);
+    _base = *low;
+    _bits.assign(static_cast<size_t>(*high - *low) + 1, false);
     for (uint32 entry : entries)
-        bits[entry - base] = true;
+        _bits[entry - _base] = true;
 }
 
 void GetCreatureListWithEntriesInGrid(WorldObject const* origin, std::vector<Creature*>& creatures,

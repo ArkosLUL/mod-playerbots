@@ -1,8 +1,9 @@
-#include "ToCStrategy.h"
+#include "ToCRaidStrategy.h"
 #include "RaidDirectTargeting.h"
 #include "ToCData.h"
 #include "ToCDefinitions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Staging.h"
 #include "ToCRaidMultipliers.h"
 #include "ToCRaidTriggers.h"
 
@@ -10,12 +11,13 @@ void RaidTrialOfTheCrusaderStrategy::OnTick()
 {
     // before triggers, so the generic pull's multiplier never sees it armed
     TrialOfTheCrusaderHelpers::FactionChampionsTakePullRequest(botAI);
+    TrialOfTheCrusaderHelpers::UpdateToCStagingPark(botAI);
 
     // once per strategy object, so a player's later rti order sticks until the strategy is rebuilt
-    if (legacyRtiChecked)
+    if (_legacyRtiChecked)
         return;
 
-    legacyRtiChecked = true;
+    _legacyRtiChecked = true;
     RaidRestoreLegacyRti(botAI, TrialOfTheCrusaderHelpers::TRIAL_OF_THE_CRUSADER_MAP_ID);
 }
 

@@ -257,9 +257,8 @@ void Elect(Player* bot, uint32 mapId, ResistAuraState& state, uint32 now)
                                AuraDuplicated(paladins, used, i) ? 0 : 1, AuraCost(paladin.strategy));
     };
 
-    // A kept holder gives way to a free paladin ranked lower, mid-fight too: a wipe handed frost to a side
-    // tank, who then ran it instead of Devotion for whole pulls. Only ever toward the cheaper aura, so the
-    // two don't swap back.
+    // A kept holder gives way to a free paladin ranked lower, mid-fight too, or a wipe's pick sticks for
+    // whole pulls. Only toward the cheaper aura, so the two don't swap back.
     auto const lowerFree = [&](size_t keeper, RaidResistSchool school)
     {
         for (size_t i = 0; i < paladins.size(); ++i)

@@ -47,7 +47,7 @@ constexpr float BARRETT_SEARCH_RADIUS = 250.0f;
 // opens once a read saw him with it
 constexpr uint32 BARRETT_SEARCH_MS = 500;
 
-// The reader takes a stand noted up to 2 s past the release
+// the trace still takes a stand noted up to 2 s past the release
 constexpr uint32 STAGING_NOTE_TAIL_MS = 2000;
 
 constexpr float ARENA_ROOM_RADIUS = 80.0f;
@@ -153,11 +153,11 @@ constexpr float CHAMPION_SIDE_STEP = 3.0f;
 // the first engage sends every idle champion at its nearest player, so everyone else stands this much
 // farther from each slot than a tank
 constexpr float CHAMPION_TANK_LEAD = 3.0f;
-// The grip chain's second post, about 24 yd past the tank line where the first grip drops a healer, so its
-// DK grips without a walk. The last post is 24 yd further out, still on the floor, a third bot DK's or else
-// the player's.
+// The chain's second post sits where the first grip drops a healer, so its DK grips without a walk. The
+// last post, a third bot DK's or else the player's, is one more grip out.
 constexpr float CHAMPION_GRIP_POST = 54.0f;
-constexpr float CHAMPION_LAST_POST = CHAMPION_GRIP_POST + 24.0f;
+constexpr float CHAMPION_GRIP_CARRY = 24.0f;
+constexpr float CHAMPION_LAST_POST = CHAMPION_GRIP_POST + CHAMPION_GRIP_CARRY;
 // the gripped healer is carried down this lane to the player, so healers and ranged wait off it
 constexpr float CHAMPION_GRIP_LANE = 10.0f;
 // healers wait just behind the melee, so the tanks and melee are in heal range from the first second
@@ -173,9 +173,8 @@ constexpr RingSlot ANUBARAK_CASTER_SLOTS[] = {
     {22.0f, 240.0f}, {30.0f, 170.0f}, {30.0f, 190.0f}, {30.0f, 150.0f}, {30.0f, 210.0f}, {30.0f, 130.0f},
     {30.0f, 230.0f},
 };
-// Heroic tanks him on the east anchor next to Locs[17], so the raid waits on the line from there to the room
-// centre: melee just past the tanks' wait and the release margin, casters on rings behind. navprobe: every
-// slot on the floor at z 142.1-142.2, with a plain path to the anchor.
+// Heroic tanks him on the east anchor next to Locs[17], so the raid waits on the line from there to the
+// room centre: melee past the tanks' wait and the release margin, casters on rings behind
 constexpr float ANUBARAK_HEROIC_MELEE_STAND = 31.0f;
 constexpr float ANUBARAK_HEROIC_MELEE_DEGREES[] = {0.0f, 25.0f, -25.0f};
 constexpr RingSlot ANUBARAK_HEROIC_CASTER_SLOTS[] = {
@@ -570,9 +569,8 @@ Point2 ChampionChainPost(std::vector<Point2> const& landing, Point2 centroid, Ve
     return Along(centroid, inward, post == 1 ? CHAMPION_GRIP_POST : CHAMPION_LAST_POST);
 }
 
-// Nobody stands in aggro range, so the champions idle until a player engages one. The bot tanks wait
-// nearest them on the way to the arena centre, the grip chain's bot DKs on their posts down the lane and a
-// 4th or later one beside the second post.
+// Nobody in aggro range, so a player starts it. Bot tanks wait nearest the pack toward the centre, the
+// chain's DKs on their posts down the lane, a 4th or later DK beside the second post.
 void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
 {
     std::vector<Point2> const landing = ChampionLanding(bot);
@@ -653,9 +651,8 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
     SortOrder(layout, StandRole::Melee, [&](Point2 slot) { return Dist(slot, centroid); });
 }
 
-// The fight's own door stands, so nobody walks at the pull. They sit in the entrance tunnel, past the
-// arena floor radius AddArenaSlot keeps to. None till the twins and their portals show up, 16 s after
-// the gossip: bots follow the player meanwhile, then take the essence and walk to the stand once.
+// The fight's own door stands in the tunnel, past AddArenaSlot's floor radius, so nobody walks at the
+// pull. None till the twins and their portals show up: bots follow the player meanwhile.
 void LayoutTwins(PlayerbotAI* botAI, std::vector<Player*> const& bots, std::vector<DutyStand>& duties)
 {
     if (!TwinValkyrArrived(botAI))
@@ -673,8 +670,8 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 {
     Point2 const centre = PointOf(ANUBARAK_ROOM_CENTER);
 
-    // Heroic's tank points by the east pair are 8-16 yd from where he waits, inside his aggro: walking onto
-    // one pulled him before the player did. Each steps toward the centre until clear; normal's already are.
+    // heroic's tank points by the east pair sit 8-16 yd from where he waits, inside his aggro, so each
+    // steps toward the centre until clear. normal's already are
     auto const clearOfHim = [&](Point2 point)
     {
         Vec2 const in = Direction(point, centre);
@@ -774,9 +771,8 @@ StandRole RoleOf(Player* member)
     return PlayerbotAI::IsRangedDps(member) ? StandRole::Ranged : StandRole::Melee;
 }
 
-// IsInCombat stays true till a non-selectable add despawns: a Slime Pool keeps a combat ref with every
-// player it hit for its 60 s on 25H, and each heal or buff on one copies it to the caster. So only a
-// live unit the bot could attack counts, which a snobold or Jaraxxus's adds still are.
+// Not IsInCombat: a Slime Pool's combat ref outlives the fight and heals spread it. Only a live unit the
+// bot could attack counts, which a snobold or Jaraxxus's adds still are.
 bool FightingSomething(Player* bot)
 {
     CombatManager const& combat = bot->GetCombatManager();
@@ -1258,16 +1254,17 @@ ToCEncounter ToCStagingEncounter(PlayerbotAI* botAI)
 
 ToCStagingRead GetToCStagingRead(PlayerbotAI* botAI) { return ReadStand(botAI, true); }
 
-void SetToCStagingParked(PlayerbotAI* botAI, bool parked)
+void UpdateToCStagingPark(PlayerbotAI* botAI)
 {
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    StagingState* state = StateFor(bot);
+    ToCStagingRead const read = ReadStand(botAI, false);
+    StagingState* state = read.held ? StateFor(botAI->GetBot()) : nullptr;
     if (!state)
         return;
 
-    auto const itr = state->holds.find(bot->GetGUID());
+    // moves only where the read flips anyway, so the trigger reads the same walk this tick
+    auto const itr = state->holds.find(botAI->GetBot()->GetGUID());
     if (itr != state->holds.end())
-        itr->second.parked = parked;
+        itr->second.parked = !read.walk;
 }
 
 bool IsToCStagingHeld(PlayerbotAI* botAI) { return ReadStand(botAI, false).held; }

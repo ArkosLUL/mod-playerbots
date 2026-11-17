@@ -50,7 +50,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    RaidSplashCache splash;
+    RaidSplashCache _splash;
 };
 
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

@@ -24,15 +24,15 @@ class TwinValkyrEssenceActionBase : public MovementAction
 public:
     TwinValkyrEssenceActionBase(PlayerbotAI* botAI, std::string const name,
                                 TrialOfTheCrusaderHelpers::TwinEssenceReason reason)
-        : MovementAction(botAI, name), reason(reason) {}
+        : MovementAction(botAI, name), _reason(reason) {}
     bool Execute(Event event) override;
 
 protected:
     bool AcquireEssence(TrialOfTheCrusaderHelpers::TwinColour colour);
 
 private:
-    TrialOfTheCrusaderHelpers::TwinEssenceReason const reason;
-    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
+    TrialOfTheCrusaderHelpers::TwinEssenceReason const _reason;
+    TrialOfTheCrusaderHelpers::TwinWaitBudget _orbWait;
 };
 
 class TwinValkyrSwapEssenceForTouchAction : public TwinValkyrEssenceActionBase
@@ -67,7 +67,7 @@ public:
     bool Execute(Event event) override;
 
 private:
-    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
+    TrialOfTheCrusaderHelpers::TwinWaitBudget _orbWait;
 };
 
 class TwinValkyrCastVortexRaidCoverAction : public Action
@@ -94,7 +94,7 @@ public:
     bool Execute(Event event) override;
 
 private:
-    TrialOfTheCrusaderHelpers::TwinWaitBudget orbWait;
+    TrialOfTheCrusaderHelpers::TwinWaitBudget _orbWait;
 };
 
 class TwinValkyrDodgeOrbAction : public MovementAction
@@ -105,8 +105,8 @@ public:
     bool Execute(Event event) override;
 
 private:
-    Position dodgeSpot;
-    uint32 dodgeSpotMs = 0;
+    Position _dodgeSpot;
+    uint32 _dodgeSpotMs = 0;
 };
 
 // Waits on its door spot for its twin and taunts her in. Walks out only to fetch one that stopped
@@ -124,10 +124,10 @@ private:
     bool WalkToDoor(Unit* twin);
     bool WalkFacingTwin(Position const& to, Unit* twin);
 
-    bool doorWalk = false;
+    bool _doorWalk = false;
     // back from a fetch, headed for the lead point first
-    bool leading = false;
-    uint32 leadReachedMs = 0;
+    bool _leading = false;
+    uint32 _leadReachedMs = 0;
 };
 
 class TwinValkyrMainTankHoldLightTwinAction : public TwinValkyrTankHoldAction

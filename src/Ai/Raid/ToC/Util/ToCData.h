@@ -14,7 +14,7 @@ struct RaidDefensiveScope;
 namespace TrialOfTheCrusaderHelpers
 {
 
-constexpr uint32 TRIAL_OF_THE_CRUSADER_MAP_ID = 649;
+inline constexpr uint32 TRIAL_OF_THE_CRUSADER_MAP_ID = 649;
 
 // Unit::GetMeleeRange for a player on a unit of this combat reach, centre to centre. A boss's reach is
 // creature_model_info's CombatReach for its display, and core DB updates move it.
@@ -70,48 +70,48 @@ enum class ToCNpcs : uint32
 // From the spell enum of the boss script named on each section, as the 10N id. Every cast carries
 // the map difficulty's id, so read a remapped one through sSpellMgr->GetSpellIdForDifficulty.
 
-// Northrend Beasts - Gormok the Impaler (boss_northrend_beasts.cpp GormokSpells)
-constexpr uint32 SPELL_IMPALE            = 66331; // stacking bleed on the current tank, drives the tank swap
+// Northrend Beasts: Gormok the Impaler (boss_northrend_beasts.cpp GormokSpells)
+inline constexpr uint32 SPELL_IMPALE            = 66331; // stacking bleed on the current tank, drives the tank swap
 
 // Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells)
 // 15 yd knockback circle around the worm (DBC radius index 18)
-constexpr uint32 SPELL_SWEEP             = 66794;
+inline constexpr uint32 SPELL_SWEEP             = 66794;
 
 // Icehowl (boss_northrend_beasts.cpp IcehowlSpells)
-constexpr uint32 SPELL_MASSIVE_CRASH_10N = 66683;
-constexpr uint32 SPELL_MASSIVE_CRASH_25N = 67660;
-constexpr uint32 SPELL_MASSIVE_CRASH_10H = 67661;
-constexpr uint32 SPELL_MASSIVE_CRASH_25H = 67662;
+inline constexpr uint32 SPELL_MASSIVE_CRASH_10N = 66683;
+inline constexpr uint32 SPELL_MASSIVE_CRASH_25N = 67660;
+inline constexpr uint32 SPELL_MASSIVE_CRASH_10H = 67661;
+inline constexpr uint32 SPELL_MASSIVE_CRASH_25H = 67662;
 
 // Lord Jaraxxus (boss_lord_jaraxxus.cpp JaraxxusSpells)
-constexpr uint32 SPELL_FEL_FIREBALL      = 66532; // interruptible cast on the current tank
-constexpr uint32 SPELL_INCINERATE_FLESH  = 66237; // heal-absorb debuff on a random player
-constexpr uint32 SPELL_LEGION_FLAME      = 66197; // spawns the pursuing ground fire
+inline constexpr uint32 SPELL_FEL_FIREBALL      = 66532; // interruptible cast on the current tank
+inline constexpr uint32 SPELL_INCINERATE_FLESH  = 66237; // heal-absorb debuff on a random player
+inline constexpr uint32 SPELL_LEGION_FLAME      = 66197; // spawns the pursuing ground fire
 
 // Nether Power: stacking spell-power buff on the boss
-constexpr uint32 SPELL_NETHER_POWER_10N  = 66228;
-constexpr uint32 SPELL_NETHER_POWER_25N  = 67106;
-constexpr uint32 SPELL_NETHER_POWER_10H  = 67107;
-constexpr uint32 SPELL_NETHER_POWER_25H  = 67108;
+inline constexpr uint32 SPELL_NETHER_POWER_10N  = 66228;
+inline constexpr uint32 SPELL_NETHER_POWER_25N  = 67106;
+inline constexpr uint32 SPELL_NETHER_POWER_10H  = 67107;
+inline constexpr uint32 SPELL_NETHER_POWER_25H  = 67108;
 
 // Anub'arak (boss_anubarak_trial.cpp AnubSpells)
-constexpr uint32 SPELL_MARK              = 67574; // on the player the Pursuing Spike is chasing
-constexpr uint32 SPELL_LEECHING_SWARM    = 66118; // P3 area aura, carried by the players and never by the boss
-constexpr uint32 SPELL_SUBMERGE_ANUB     = 65981; // boss submerge aura (P2)
+inline constexpr uint32 SPELL_MARK              = 67574; // on the player the Pursuing Spike is chasing
+inline constexpr uint32 SPELL_LEECHING_SWARM    = 66118; // P3 area aura, carried by the players and never by the boss
+inline constexpr uint32 SPELL_SUBMERGE_ANUB     = 65981; // boss submerge aura (P2)
 
 // Twin Val'kyr (boss_twin_valkyr.cpp ValkyrSpells). Essences are player auras from the portal
 // NPCs' gossip.
-constexpr uint32 SPELL_LIGHT_ESSENCE     = 65686; // matches Light Vortex / Light Touch
-constexpr uint32 SPELL_DARK_ESSENCE      = 65684; // matches Dark Vortex / Dark Touch
+inline constexpr uint32 SPELL_LIGHT_ESSENCE     = 65686; // matches Light Vortex / Light Touch
+inline constexpr uint32 SPELL_DARK_ESSENCE      = 65684; // matches Dark Vortex / Dark Touch
 // Vortex casts, read from the casting twin's current spell
-constexpr uint32 SPELL_LIGHT_VORTEX      = 66046;
-constexpr uint32 SPELL_DARK_VORTEX       = 66058;
+inline constexpr uint32 SPELL_LIGHT_VORTEX      = 66046;
+inline constexpr uint32 SPELL_DARK_VORTEX       = 66058;
 // Touch DoTs, heroic only. The script casts the 10H ids 67297/67282, same difficulty rows.
-constexpr uint32 SPELL_LIGHT_TOUCH       = 65950;
-constexpr uint32 SPELL_DARK_TOUCH        = 66001;
+inline constexpr uint32 SPELL_LIGHT_TOUCH       = 65950;
+inline constexpr uint32 SPELL_DARK_TOUCH        = 66001;
 // Twin's Pact heal-to-full 15 s cast (Fjola casts Light, Eydis Dark)
-constexpr uint32 SPELL_LIGHT_TWIN_PACT   = 65876;
-constexpr uint32 SPELL_DARK_TWIN_PACT    = 65875;
+inline constexpr uint32 SPELL_LIGHT_TWIN_PACT   = 65876;
+inline constexpr uint32 SPELL_DARK_TWIN_PACT    = 65875;
 
 }
 

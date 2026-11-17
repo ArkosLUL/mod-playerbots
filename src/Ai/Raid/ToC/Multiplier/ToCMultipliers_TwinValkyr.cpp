@@ -56,7 +56,7 @@ Unit* ActionTwinTarget(Action* action, AiObjectContext* context)
     Unit* current = context->GetValue<Unit*>("current target")->Get();
     return TwinColourOf(current) != TwinColour::None ? current : nullptr;
 }
-}
+}  // namespace
 
 float TwinValkyrControlTankMovementMultiplier::GetValue(Action* action)
 {
@@ -91,7 +91,7 @@ float TwinValkyrInterruptHoldMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    TwinInterruptKind const kind = kinds.Get(action, [action] { return InterruptKindOf(action->getName()); });
+    TwinInterruptKind const kind = _kinds.Get(action, [action] { return InterruptKindOf(action->getName()); });
     if (kind == TwinInterruptKind::None)
         return 1.0f;
 
@@ -109,7 +109,7 @@ float TwinValkyrRedirectGuardMultiplier::GetValue(Action* action)
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return 1.0f;
 
-    bool const classRedirect = redirects.Get(action,
+    bool const classRedirect = _redirects.Get(action,
                                              [action]
                                              {
                                                  return dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||

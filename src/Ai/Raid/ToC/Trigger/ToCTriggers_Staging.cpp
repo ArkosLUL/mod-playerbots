@@ -9,12 +9,7 @@ using namespace TrialOfTheCrusaderHelpers;
 bool ToCStagingStandTrigger::IsActive()
 {
     ToCStagingRead const read = GetToCStagingRead(botAI);
-    if (!read.held)
-        return false;
-
-    // parks where it declines, unparks where it fires: neither write flips another read this tick
-    SetToCStagingParked(botAI, !read.walk);
-    return read.walk;
+    return read.held && read.walk;
 }
 
 void AddToCStagingTriggerNodes(std::vector<TriggerNode*>& triggers)

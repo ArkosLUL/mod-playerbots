@@ -37,10 +37,8 @@ private:
     RaidActionCache<Facts> _facts;
 };
 
-// Whether the action's spell lands on an area. The threat type doesn't say: CastHealingSpellAction
-// declares Aoe, while whirlwind, divine storm, consecration, death and decay, swipe and pestilence
-// declare something else and hit everything nearby anyway. IsTargetingArea covers the area and cone
-// selection categories, IsAffectingArea adds the persistent area auras. Heals are never counted.
+// Whether the action's spell lands on an area, by IsTargetingArea and IsAffectingArea, heals never. Not
+// the threat type: heals declare Aoe, whirlwind and consecration don't.
 bool SpellSplashes(PlayerbotAI* botAI, Action* action);
 // Same answer and the same "spell id" reads, with the per-action lookups kept in cache
 bool SpellSplashes(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache);
@@ -49,9 +47,8 @@ bool SpellSplashes(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache);
 // and its Trap Launcher. Their own spell reads as positive.
 bool SummonSplashes(Action* action);
 
-// Cleaves, chains and melee area abilities, by action name. Sweeping strikes, cleave, blade flurry,
-// bladestorm, multi-shot and chain lightning carry no area in their own spell, so the spell test misses
-// them.
+// Cleaves, chains and melee area abilities by action name: their own spell carries no area, so the
+// spell test misses them
 extern std::set<std::string> const MULTI_TARGET_ACTIONS;
 
 #endif

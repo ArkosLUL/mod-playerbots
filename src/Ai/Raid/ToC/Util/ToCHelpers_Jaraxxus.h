@@ -12,49 +12,49 @@
 namespace TrialOfTheCrusaderHelpers
 {
 
-constexpr uint32 SPELL_LEGION_FLAME_TRAIL = 66199;   // row 66199/68126/68127/68128
-constexpr uint32 SPELL_MISTRESS_KISS = 66334;        // row 66334/67905/67906/67907
-constexpr uint32 SPELL_BURNING_INFERNO = 66242;      // row 66242/67059/67060/67061
+inline constexpr uint32 SPELL_LEGION_FLAME_TRAIL = 66199;   // row 66199/68126/68127/68128
+inline constexpr uint32 SPELL_MISTRESS_KISS = 66334;        // row 66334/67905/67906/67907
+inline constexpr uint32 SPELL_BURNING_INFERNO = 66242;      // row 66242/67059/67060/67061
 // The portal's own aura, whose periodic tick summons a Mistress: one at 8 s on normal, every 6 s on heroic
-constexpr uint32 SPELL_NETHER_PORTAL_SPAWN = 66263;  // row 66263/67103/67104/67105
+inline constexpr uint32 SPELL_NETHER_PORTAL_SPAWN = 66263;  // row 66263/67103/67104/67105
 
 // Display 29615, scale 1
-constexpr float JARAXXUS_COMBAT_REACH = 5.0f;
+inline constexpr float JARAXXUS_COMBAT_REACH = 5.0f;
 
 // Incinerate Flesh's last tick casts Burning Inferno, whose own ticks start a second later
-constexpr uint32 JARAXXUS_INFERNO_FIRST_TICK_MS = 1000;
-constexpr uint32 JARAXXUS_INFERNO_TICKS = 5;
+inline constexpr uint32 JARAXXUS_INFERNO_FIRST_TICK_MS = 1000;
+inline constexpr uint32 JARAXXUS_INFERNO_TICKS = 5;
 // An Incinerate Flesh this close to running out with absorb left is a Burning Inferno coming
-constexpr uint32 JARAXXUS_INFERNO_LEAD_MS = 2000;
+inline constexpr uint32 JARAXXUS_INFERNO_LEAD_MS = 2000;
 // A carrier under this share of its health counts the rest of its trail as a hit
-constexpr float JARAXXUS_CARRIER_DEFENSIVE_PCT = 50.0f;
+inline constexpr float JARAXXUS_CARRIER_DEFENSIVE_PCT = 50.0f;
 // A carrier's next spot stays this close to a living healer
-constexpr float JARAXXUS_CARRIER_HEALER_REACH = 30.0f;
+inline constexpr float JARAXXUS_CARRIER_HEALER_REACH = 30.0f;
 
 // A Mistress' arrival hits everyone within 10 yd of her portal (66264 effect 1, a creature's area, centre
 // to centre). Melee step out from this, to this, from this long before it.
-constexpr float JARAXXUS_PORTAL_TRIGGER = 12.0f;
-constexpr float JARAXXUS_PORTAL_CLEAR = 14.0f;
-constexpr uint32 JARAXXUS_PORTAL_SPAWN_LEAD_MS = 1000;
+inline constexpr float JARAXXUS_PORTAL_TRIGGER = 12.0f;
+inline constexpr float JARAXXUS_PORTAL_CLEAR = 14.0f;
+inline constexpr uint32 JARAXXUS_PORTAL_SPAWN_LEAD_MS = 1000;
 
 // DPS bots stop on him at this share of his tank victim's threat, resume under the release share
-constexpr float JARAXXUS_THREAT_CAP = 0.9f;
-constexpr float JARAXXUS_THREAT_RELEASE = 0.8f;
+inline constexpr float JARAXXUS_THREAT_CAP = 0.9f;
+inline constexpr float JARAXXUS_THREAT_RELEASE = 0.8f;
 
-constexpr float JARAXXUS_LEGION_FLAME_RADIUS = 3.0f;       // 66877 row, centre to centre
-constexpr float JARAXXUS_LEGION_FLAME_TRIGGER = 4.0f;      // dodge starts inside this
-constexpr float JARAXXUS_LEGION_FLAME_CLEAR = 6.0f;        // a spot counts clear of a flame past this
-constexpr float JARAXXUS_LEGION_FLAME_SEARCH = 15.0f;      // sweep maxRadius
-constexpr float JARAXXUS_FLAME_CARRIER_MIN_LEG = 6.0f;     // carrier travel floor per leg
-constexpr float JARAXXUS_FLAME_CARRIER_RAID_CLEAR = 8.0f;  // carrier spot from other members
-constexpr float JARAXXUS_FLAME_CARRIER_BOSS_CLEAR = 15.0f; // carrier spot from the boss
-constexpr float JARAXXUS_FLAME_ARRIVE = 1.5f;
+inline constexpr float JARAXXUS_LEGION_FLAME_RADIUS = 3.0f;       // 66877 row, centre to centre
+inline constexpr float JARAXXUS_LEGION_FLAME_TRIGGER = 4.0f;      // dodge starts inside this
+inline constexpr float JARAXXUS_LEGION_FLAME_CLEAR = 6.0f;        // a spot counts clear of a flame past this
+inline constexpr float JARAXXUS_LEGION_FLAME_SEARCH = 15.0f;      // sweep maxRadius
+inline constexpr float JARAXXUS_FLAME_CARRIER_MIN_LEG = 6.0f;     // carrier travel floor per leg
+inline constexpr float JARAXXUS_FLAME_CARRIER_RAID_CLEAR = 8.0f;  // carrier spot from other members
+inline constexpr float JARAXXUS_FLAME_CARRIER_BOSS_CLEAR = 15.0f; // carrier spot from the boss
+inline constexpr float JARAXXUS_FLAME_ARRIVE = 1.5f;
 // Behind, flank and formation moves pick spots blind to the flames, so they stay off this close to one
-constexpr float JARAXXUS_FLAME_STAND_REACH = 10.0f;
+inline constexpr float JARAXXUS_FLAME_STAND_REACH = 10.0f;
 // A dodge spot stays this far inside the bot's reach of its target, or the generic reach walks it back in
-constexpr float JARAXXUS_DODGE_REACH_MARGIN = 0.5f;
-constexpr float JARAXXUS_SCAN_RADIUS = 200.0f;
-constexpr uint32 JARAXXUS_SCAN_MS = 200;
+inline constexpr float JARAXXUS_DODGE_REACH_MARGIN = 0.5f;
+inline constexpr float JARAXXUS_SCAN_RADIUS = 200.0f;
+inline constexpr uint32 JARAXXUS_SCAN_MS = 200;
 
 enum class JaraxxusFlameRole : uint8
 {
@@ -69,8 +69,7 @@ enum class JaraxxusFlameRole : uint8
 Unit* GetJaraxxus(PlayerbotAI* botAI);
 
 bool JaraxxusHasNetherPower(Unit* jaraxxus);
-// Stack count of whichever Nether Power id he carries, 0 without him. Writes jaraxxus.netherpower
-// on every call, so call it before any early out that would leave the probe stale.
+// Stack count of whichever Nether Power id he carries, 0 without him. Writes jaraxxus.netherpower.
 uint32 JaraxxusNetherPowerStacks(PlayerbotAI* botAI);
 // Mage always, shaman or priest when not healing. A healing one only when no other remover is alive
 // and nobody carries Incinerate Flesh.
@@ -81,9 +80,8 @@ bool HasIncinerateFlesh(Unit* unit);
 // Lowest guid alive group member carrying it. Writes jaraxxus.absorb, its absorb left, 0 with none.
 Unit* GetIncinerateFleshTarget(PlayerbotAI* botAI);
 
-// The Burning Inferno coming or running, as the raid takes it: from an Incinerate Flesh within
-// JARAXXUS_INFERNO_LEAD_MS of running out with absorb left, or a Burning Inferno on a member. Nether
-// Power's stacks count in the damage.
+// The raid's Burning Inferno, running on a member or coming from an Incinerate Flesh within
+// JARAXXUS_INFERNO_LEAD_MS of running out with absorb left. Nether Power counts in the damage.
 bool GetJaraxxusBurningInferno(PlayerbotAI* botAI, RaidPredictedHit& hit);
 // The same hit as this bot takes it once its own Burning Inferno runs, else the raid's; and the rest of
 // the trail on a Legion Flame carrier under JARAXXUS_CARRIER_DEFENSIVE_PCT.
@@ -109,10 +107,8 @@ Unit* GetJaraxxusFocusAdd(PlayerbotAI* botAI);
 // with no living index 1 tank). Writes jaraxxus.addtank for the bot, erased when null.
 Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index);
 
-// For a melee DPS bot targeting it or near it: the heroic portal it keeps JARAXXUS_PORTAL_CLEAR from,
-// from JARAXXUS_PORTAL_SPAWN_LEAD_MS before the portal's next Mistress until each of its Mistresses
-// has a victim. She takes the nearest unit only as she spawns, then goes by threat. Null otherwise.
-// The hold rule, the walk out and the flame dodge read it. Writes jaraxxus.portal: hold or none.
+// The heroic portal a melee DPS bot on or near it keeps JARAXXUS_PORTAL_CLEAR from, from just before its
+// next Mistress until each of its Mistresses has a victim. Writes jaraxxus.portal: hold or none.
 Unit* GetJaraxxusPortalToClear(PlayerbotAI* botAI);
 // A spot JARAXXUS_PORTAL_CLEAR from the portal and clear of flames, nearest him
 bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot);
@@ -135,26 +131,22 @@ bool JaraxxusIsFelFireballCasting(Unit* boss);
 // Null for a bot mid-cast or without a bot AI.
 char const* JaraxxusReadyInterrupt(Player* bot, Unit* boss);
 // Fel Fireball being cast, the bot ready, and no living group member with a lower guid ready. Writes
-// jaraxxus.interrupter on every call, so call it every tick he lives and the probe drops with the cast.
+// jaraxxus.interrupter.
 bool JaraxxusIsFelFireballInterrupter(Player* bot, Unit* boss);
 
 // Leaves the bot in UNIT_STATE_CASTING: a cast time, or a channel unless withChannels is false.
 // Unknown names answer false.
 bool JaraxxusSpellHasCastTime(PlayerbotAI* botAI, std::string const& spell, bool withChannels = true);
 
-// Group bots mid-cast while kissed or carrying Legion Flame. A casting bot runs no triggers, so
-// another bot's tick has to break the cast for it.
+// Group bots mid-cast while kissed, carrying Legion Flame or due a raid cover, read once per group per ms.
+// A casting bot runs no triggers, so another bot's tick has to break the cast for it.
 std::vector<Player*> GetJaraxxusPinnedCasters(Player* bot);
 
 JaraxxusFlameRole GetJaraxxusFlameRole(Player* bot);
 // Bearing from the boss (ARENA_CENTER without him) to the bot, so the trail leads away from him
 float GetLegionFlameCarrierHeading(Player* bot);
-// One carrier leg or one dodge. A carrier leg ends within JARAXXUS_CARRIER_HEALER_REACH of a living
-// healer where any clear spot does, and keeps JARAXXUS_PORTAL_CLEAR off a heroic portal, walk included,
-// unless nothing else is clear. A dodge keeps the bot in reach of its current target where it can, and
-// off the portal its melee hold names. Writes jaraxxus.flame: carrier, relaxed (flames only), tank (a
-// carrier holding him, flames only), far (no clear spot within a healer's reach), portal (no clear spot
-// off a heroic portal), dodge, loose (a dodge out of reach of its target) or none.
+// One carrier leg, near a healer and off heroic portals where it can, or one dodge, in reach of its target
+// and off its held portal where it can. Writes jaraxxus.flame with the branch taken.
 bool DeriveLegionFlameSpot(Player* bot, JaraxxusFlameRole role, float heading, Position& spot);
 bool IsLegionFlameSpotClear(PlayerbotAI* botAI, Position const& spot);
 // The straight walk from the bot to `to` comes nearer a flame than JARAXXUS_LEGION_FLAME_CLEAR, or

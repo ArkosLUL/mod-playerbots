@@ -15,9 +15,8 @@
 
 class PlayerbotAI;
 
-// Who raises which resistance aura: one bot paladin per wanted school (fire, frost, shadow) and the
-// generic nature hunter for Aspect of the Wild. The caller says which schools it wants, and with none
-// the paladins go back to their own aura. Nothing resolves off the config's map.
+// One bot paladin per wanted school (fire, frost, shadow), the generic nature hunter for Aspect of the
+// Wild; with none wanted the paladins go back to their own aura. Nothing resolves off the config's map.
 
 enum class RaidResistSchool : uint8
 {

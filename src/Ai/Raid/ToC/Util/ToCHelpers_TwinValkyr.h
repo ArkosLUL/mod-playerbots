@@ -13,25 +13,25 @@ namespace TrialOfTheCrusaderHelpers
 
 // Shield of Lights/Darkness, put up right before the twin's Pact. 10N ids, remap against the twin.
 // While it holds she's immune to interrupts.
-constexpr uint32 SPELL_LIGHT_SHIELD = 65858;
-constexpr uint32 SPELL_DARK_SHIELD = 65874;
+inline constexpr uint32 SPELL_LIGHT_SHIELD = 65858;
+inline constexpr uint32 SPELL_DARK_SHIELD = 65874;
 
-constexpr uint32 NPC_CONCENTRATED_LIGHT = 34630;
-constexpr uint32 NPC_CONCENTRATED_DARK = 34628;
+inline constexpr uint32 NPC_CONCENTRATED_LIGHT = 34630;
+inline constexpr uint32 NPC_CONCENTRATED_DARK = 34628;
 
 // An orb blows up on the nearest player inside this, 2D
-constexpr float TWIN_ORB_TRIGGER_RADIUS = 2.75f;
+inline constexpr float TWIN_ORB_TRIGGER_RADIUS = 2.75f;
 // Unleashed Light/Dark, absorbed by the matching essence
-constexpr float TWIN_ORB_BLAST_RADIUS = 6.0f;
+inline constexpr float TWIN_ORB_BLAST_RADIUS = 6.0f;
 // The search clears a yard past what the trigger fires on, or the bot lands back on the rim
-constexpr float TWIN_ORB_DODGE_CLEARANCE = 4.0f;
-constexpr float TWIN_ORB_DODGE_SEARCH_CLEARANCE = 5.0f;
-constexpr float TWIN_ORB_DODGE_SEARCH_RADIUS = 12.0f;
+inline constexpr float TWIN_ORB_DODGE_CLEARANCE = 4.0f;
+inline constexpr float TWIN_ORB_DODGE_SEARCH_CLEARANCE = 5.0f;
+inline constexpr float TWIN_ORB_DODGE_SEARCH_RADIUS = 12.0f;
 // About a second of orb flight. Any longer and a heroic wave covers most of the arena, so bots
 // never stop dodging.
-constexpr float TWIN_ORB_HORIZON = 7.0f;
+inline constexpr float TWIN_ORB_HORIZON = 7.0f;
 // Popping an orb of your own colour still hits other-colour allies in the blast
-constexpr float TWIN_ORB_SPLASH_ALLY_RADIUS = 7.0f;
+inline constexpr float TWIN_ORB_SPLASH_ALLY_RADIUS = 7.0f;
 
 enum class TwinColour : uint8
 {
@@ -82,10 +82,10 @@ struct TwinDoorStand
 };
 
 // A walk back starts past UNPARK and ends inside PARK
-constexpr float TWIN_DOOR_PARK = 1.0f;
-constexpr float TWIN_DOOR_UNPARK = 2.5f;
+inline constexpr float TWIN_DOOR_PARK = 1.0f;
+inline constexpr float TWIN_DOOR_UNPARK = 2.5f;
 // A twin further than this off her door spot is out of melee reach from the tunnel
-constexpr float TWIN_DOOR_MELEE_REACH = 12.0f;
+inline constexpr float TWIN_DOOR_MELEE_REACH = 12.0f;
 
 // Alive, else nullptr
 Unit* GetFjola(PlayerbotAI* botAI);
@@ -114,9 +114,8 @@ Unit* GetShieldedTwin(PlayerbotAI* botAI);
 Player* GetTwinTank(Player* bot, Unit* twin);
 bool IsTwinTank(Player* bot, Unit* twin);
 
-// A running Vortex first: a tank keeps its colour, and on normal so does the raid through a Light Vortex
-// while a Fire Resistance Aura paladin had Aura Mastery ready at the cast start. Then a Touch, then Light
-// for Eydis's tank and Dark for everyone else.
+// A running Vortex first (a tank keeps its colour, so does a normal raid through a Light Vortex with Aura
+// Mastery ready), then a Touch, then Light for Eydis's tank and Dark for everyone else
 TwinEssenceWant GetWantedEssence(PlayerbotAI* botAI);
 // urgentOnly: only a Touch or a Vortex counts
 bool TwinValkyrMustSwapEssence(PlayerbotAI* botAI, bool urgentOnly);
@@ -127,31 +126,27 @@ bool TwinEssenceGossipDue(Player* bot, TwinEssenceWant const& want);
 Creature* GetEssencePortal(Player* bot, TwinColour colour);
 // The twins are summoned and their portals found, so pre-pull stands can be dealt
 bool TwinValkyrArrived(PlayerbotAI* botAI);
-// Nitro Boosts for an essence walk to portal, mid-pull only. A Vortex walk takes them only when it
-// would end less than 1.5 s before the cast does; a Touch or base walk only once this pull's Light
-// Vortex has started, since heroic's 6 s one is the walk that kills. Writes tv.nitro on use.
+// Nitro Boosts for a mid-pull essence walk: a Vortex walk only when it would end too close to the cast's
+// end, a Touch or base walk only once this pull's Light Vortex has started. Writes tv.nitro on use.
 bool TwinValkyrBoostEssenceWalk(PlayerbotAI* botAI, TwinEssenceReason reason, Creature* portal);
 
-// A player's skull on either twin, else the Pact twin while one casts (heroic either, normal only
-// Fjola), else Fjola under a lone tank, else the twin of the other colour than the bot's essence. A
-// melee bot skips a twin more than TWIN_DOOR_MELEE_REACH off her door spot.
+// A player's skull on a twin, else a Pact twin worth it, else Fjola under a lone tank, else the bot's
+// other colour. Melee skip a twin past TWIN_DOOR_MELEE_REACH off her door spot.
 Unit* GetTwinDpsTarget(PlayerbotAI* botAI);
 
-// The bot's stand in the entrance tunnel, 51+ yd from the arena centre, so past every orb. Dealt by
-// guid over the group's bots, so staging and the fight agree. Writes tv.door, role:x,y.
+// The bot's stand in the entrance tunnel, past every orb, dealt by guid so staging and the fight agree.
+// Writes tv.door, role:x,y.
 TwinDoorStand GetTwinDoorStand(Player* bot);
 // Where the twin's tank holds her
 Position GetTwinDoorSpot(Player* bot, Unit* twin);
-// Every bot with a door stand once a twin is pulled, except a tank walking out to fetch its twin, and
-// a twin tank from the summon. The gate is open from the Faction Champions kill, so without the pull
-// test bots stand here from then.
+// Every bot with a door stand once a twin is pulled, bar a tank out fetching its twin, and twin tanks from
+// the summon on. Needs the pull test: the gate is open from the Faction Champions kill.
 bool TwinValkyrDoorHold(PlayerbotAI* botAI);
 // Mid-pull, a bot off its door stand, tanks aside, with no essence walk due and none waiting on the
 // end of a running Vortex. Keeps the park latch.
 bool TwinValkyrDoorWalkDue(PlayerbotAI* botAI);
-// A non-tank bot holding a running Vortex's colour, off the spot 10 yd from the portal it swaps at next
-// (its Touch's colour, else its base one) toward its stand, so the swap lands as the channel ends.
-// reason: Touch or Base. Keeps a park latch.
+// A non-tank holding the running Vortex's colour, off its spot by the portal it swaps at next (reason
+// Touch or Base), so the swap lands as the channel ends. Keeps a park latch.
 bool TwinValkyrNextPortalDue(PlayerbotAI* botAI, Position& spot, Creature*& portal, TwinEssenceReason& reason);
 // The twin is on someone else, past taunt range of her door spot, and hasn't closed on it for 2 s.
 // Before the pull: some bot tank was told to attack either twin.
@@ -203,9 +198,8 @@ struct TwinWaitBudget
     bool Allow(uint32 now);
 };
 
-// For a walk to `to`: reason Base, Touch or Vortex for an essence walk, None for the door stand. With
-// `swap` set the bot is in gossip reach for that colour. A Vortex walk waits only while it still ends
-// 1.5 s before the cast does. Writes tv.wait.
+// For a walk to `to`, reason None for the door stand; `swap` set means in gossip reach for that colour.
+// A Vortex walk waits only while it still ends in time. Writes tv.wait.
 TwinWalkWait TwinValkyrWalkWait(PlayerbotAI* botAI, Position const& to, TwinEssenceReason reason, TwinColour swap,
                                 TwinWaitBudget& budget);
 // A Vortex swap is due with no time left to wait, so the dodge gives way to it

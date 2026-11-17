@@ -9,8 +9,7 @@ using namespace TrialOfTheCrusaderHelpers;
 
 bool AvoidCreatureClusterAction::FleeFromCreatureCluster(uint32 entry)
 {
-    // Scan wider than the trigger radius so the escape vector runs from the centre of the whole cluster,
-    // not the nearest patch, and does not push the bot from one patch straight into the next.
+    // wider than the trigger radius, so the flee runs from the whole cluster's centre
     constexpr float clusterRadius = 15.0f;
     Position center;
     if (!GetCreatureClusterCenter(bot, entry, clusterRadius, center))
@@ -29,12 +28,12 @@ bool ToCMainTankHoldAction::DragBossToAnchor(Unit* boss, Position const& anchor)
         return false;
 
     const float distToPosition = bot->GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY());
-    if (distToPosition <= 12.0f)
+    if (distToPosition <= TOC_DRAG_DONE)
         return false;
 
     const float dX = anchor.GetPositionX() - bot->GetPositionX();
     const float dY = anchor.GetPositionY() - bot->GetPositionY();
-    const float moveDist = std::min(5.0f, distToPosition);
+    const float moveDist = std::min(TOC_DRAG_STEP, distToPosition);
     const float moveX = bot->GetPositionX() + (dX / distToPosition) * moveDist;
     const float moveY = bot->GetPositionY() + (dY / distToPosition) * moveDist;
 
