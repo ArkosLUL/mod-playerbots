@@ -72,8 +72,8 @@ constexpr DoorPoint HEAL_SLOTS[] = {{563.25f, 84.0f}, {561.5f, 84.0f}, {565.0f, 
                                     {563.25f, 82.5f}, {561.5f, 82.5f}, {565.0f, 82.5f}};
 constexpr DoorPoint RANGED_SLOTS[] = {{563.25f, 81.0f}, {561.5f, 81.0f}, {565.0f, 81.0f},
                                       {563.25f, 79.8f}, {561.5f, 79.8f}, {565.0f, 79.8f}};
-// The back row by the gate, far side from Fjola's door first: a twin's hitbox reaches the ranged rows
-// with melee range, where no shot casts
+// The back row by the gate, far side from Fjola's door first: the ranged rows sit just past a twin's
+// melee range, where no shot casts
 constexpr DoorPoint HUNTER_SLOTS[] = {{565.0f, 79.8f}, {563.25f, 79.8f}, {561.5f, 79.8f}};
 constexpr uint32 TWIN_DOOR_DEAL_MS = 1000;
 
@@ -786,7 +786,8 @@ void DealDoorStands(TwinValkyrState& state, Player* bot, uint32 now)
         {
             stand.role = TwinDoorRole::Ranged;
             stand.label = "ranged";
-            stand.spot = member->getClass() == CLASS_HUNTER ? SlotOf(HUNTER_SLOTS, hunter) : SlotOf(RANGED_SLOTS, ranged);
+            stand.spot = member->getClass() == CLASS_HUNTER ? SlotOf(HUNTER_SLOTS, hunter)
+                                                            : SlotOf(RANGED_SLOTS, ranged);
         }
         else
         {
@@ -849,8 +850,8 @@ bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHi
         return false;
 
     uint32 const ticks = static_cast<uint32>(channelMs / period);
-    uint32 const perTick =
-        static_cast<uint32>(std::max(tick->Effects[EFFECT_0].BasePoints + (tick->Effects[EFFECT_0].DieSides + 1) / 2, 0));
+    uint32 const perTick = static_cast<uint32>(
+        std::max(tick->Effects[EFFECT_0].BasePoints + (tick->Effects[EFFECT_0].DieSides + 1) / 2, 0));
 
     uint32 const now = getMSTime();
     int32 const left = std::max(spell->GetCastTimeRemaining(), 0);
@@ -959,8 +960,10 @@ float ClosestOrbPass(Player* bot, TwinValkyrState const& state, Position const& 
         }
 
         float const flight = orb.position.GetExactDist2d(orb.destination);
-        float const flyX = flight > 0.0f ? (orb.destination.GetPositionX() - orb.position.GetPositionX()) / flight : 0.0f;
-        float const flyY = flight > 0.0f ? (orb.destination.GetPositionY() - orb.position.GetPositionY()) / flight : 0.0f;
+        float const flyX =
+            flight > 0.0f ? (orb.destination.GetPositionX() - orb.position.GetPositionX()) / flight : 0.0f;
+        float const flyY =
+            flight > 0.0f ? (orb.destination.GetPositionY() - orb.position.GetPositionY()) / flight : 0.0f;
         for (uint32 ms = 0; ms <= TWIN_ORB_PASS_HORIZON_MS; ms += TWIN_ORB_PASS_STEP_MS)
         {
             float const seconds = ms / static_cast<float>(IN_MILLISECONDS);

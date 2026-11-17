@@ -37,8 +37,8 @@ bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache
 bool CastRaidThroughputHeal(PlayerbotAI* botAI, Unit* target,
                             std::function<bool(std::string const&)> const& skip = nullptr);
 
-// What a multiplier works out once about an action: its type, name, threat type. One per multiplier, as
-// an Action* is only unique inside one bot's AI.
+// What a multiplier works out once about an action: its type, name, threat type. One per multiplier: an
+// Action* is unique only inside one bot's AI, whose actions outlive its multipliers.
 template <class Facts>
 class RaidActionCache
 {

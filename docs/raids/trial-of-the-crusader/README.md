@@ -178,7 +178,7 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
   `ToCRaid{Actions,Triggers,Multipliers}.h`). A new file needs a name no dungeon file has, ignoring case.
 - `Util/ToCData.h` holds only raid-wide values: map id, `ARENA_CENTER`, `ANUBARAK_PIT_CENTER`, the
   `ToCNpcs` and `SPELL_*` mirrors. A new boss-specific id goes in the stem's
-  `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `constexpr uint32 SPELL_*`; remap one as
+  `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `inline constexpr uint32 SPELL_*`; remap one as
   `sSpellMgr->GetSpellIdForDifficulty(SPELL_X, unit)` at the call, never inside a wrapper: pblint's
   remap check reads that bare identifier.
 - Shared bases (`Action/ToCActions_Shared.h`): `ToCMainTankHoldAction::DragBossToAnchor` backs the

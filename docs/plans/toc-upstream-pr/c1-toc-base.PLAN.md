@@ -106,7 +106,6 @@ lane-only items.
 
 ## Known gaps
 
-- `ToCHelpers_TwinValkyr.cpp` has four lines over 120 columns (789, 853, 962, 963), untouched here.
 - The lane's `src/Ai/Raid/ToC/` files carry no GPLv2 header; the PR branch adds them.
 
 ## Blocked
