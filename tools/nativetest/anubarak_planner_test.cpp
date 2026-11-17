@@ -892,6 +892,33 @@ void DriftOverATankPatch()
     CHECK(drift.tankS >= 0.0f && std::fabs(drift.tankS - drift.endS) < 0.01f);
 }
 
+std::vector<Point> StraightTrack(std::vector<float> const& speeds)
+{
+    std::vector<Point> track = {{0.0f, 0.0f}};
+    for (float speed : speeds)
+        track.push_back({track.back().x + speed * AnubarakPursuit::TICK_S, 0.0f});
+
+    return track;
+}
+
+// The move point stops 8.4 yd on, 1.2 s at most: a Nitro run at 17.5 yd/s aims 5 ticks on, not 12
+void MovePointByYards()
+{
+    using AnubarakKitePlanner::AheadTick;
+    std::vector<Point> const run = StraightTrack(std::vector<float>(40, 7.0f));
+    CHECK(AheadTick(run, 0, 12, 8.4f) == 12);
+    CHECK(AheadTick(run, 3, 12, 8.4f) == 15);
+
+    std::vector<Point> const nitro = StraightTrack(std::vector<float>(40, 17.5f));
+    CHECK(AheadTick(nitro, 0, 12, 8.4f) == 5);
+
+    std::vector<Point> const slowed = StraightTrack(std::vector<float>(40, 1.4f));
+    CHECK(AheadTick(slowed, 0, 12, 8.4f) == 12);
+
+    CHECK(AheadTick(run, 35, 12, 8.4f) == 40);
+    CHECK(AheadTick(run, 40, 12, 8.4f) == 40);
+}
+
 // Four usable patches, Hands, an own immunity, a ready boost and the teleport: the candidates stay bounded
 void CandidatesStayBounded()
 {
@@ -943,6 +970,7 @@ int main()
     SpareHandCarriesTheKiteOn();
     TeleportCarriesTheKiteOn();
     DriftOverATankPatch();
+    MovePointByYards();
     CandidatesStayBounded();
     std::printf("anubarak_planner_test: ok\n");
     return 0;

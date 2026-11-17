@@ -16,7 +16,8 @@
                                      own immunity within 20 yd of the gather flagged; the spike's speed and the
                                      kiter's at each Hand of Protection and own immunity, one on a spike no
                                      faster flagged, and the seconds the kiter stood still while marked; a walk
-                                     flip-flopping between two move targets; the nearest Hand of Protection-ready
+                                     flip-flopping between two move targets; the kite move points' yards ahead
+                                     of the kiter, it boosted over 9 yd/s or not; the nearest Hand of Protection-ready
                                      paladin as the spike first came within 12 yd; a Feign Death dropped at once;
                                      per submerge the living players within 8, 12 and 20 yd of where he went
                                      down, by role, his distance from the gather and the first kiter's distance
@@ -103,7 +104,8 @@
                                      Permafrost centre, whether the phase 3 melee ring round it has a point off
                                      every patch, and its side's melee bots on it, peak and median; each side
                                      tank Righteous Defense that took the other side's burrowers, with the
-                                     member it went on and its health
+                                     member it went on and its health; side changes after a burrower's first
+                                     owner with both side tanks alive, per phase
     anub_arak.py <file> --frost      seconds carrying Permafrost per group and bot, he up and he down, and every
                                      stint over 3 s with the bot's target at its start
     anub_arak.py <file> --threat     per surfaced window: his target, his drag legs, taunts, threat cap, the
@@ -569,6 +571,9 @@ SPIDER_FRENZY_YD = 12.0
 FLIP_YD = 5.0
 FLIP_COUNT = 3
 FLIP_MS = 2000
+# a kiter's kite move rows by its speed over its last snapshot step: past this it's boosted (Dash, Sprint, Nitro)
+KITE_MOVE_ACTION = "anubarak kite spike"
+KITE_FAST_YD_S = 9.0
 # Feign Death breaks on move, so cast while running it comes off the same tick
 FEIGN_DROP_MS = 100
 # the plan is judged at the mark, so a kiter's row this close to it is that mark's first pick
@@ -1594,6 +1599,33 @@ def flip_flops(moves: list[dict], start: int, stop: int) -> list[tuple[int, int,
              for index in range(len(reversals) - FLIP_COUNT + 1)
              if reversals[index + FLIP_COUNT - 1] - reversals[index] <= FLIP_MS]
     return [(low, high, sum(1 for when in reversals if low <= when <= high)) for low, high in merged(spans)]
+
+
+def kite_move_ahead(trace: Trace, samples: Samples) -> dict[str, list[float]]:
+    """Each bot kite move row's yards from the kiter's last snapshot, under `fast` when that snapshot step ran
+    over KITE_FAST_YD_S, else `run`."""
+    out: dict[str, list[float]] = {"fast": [], "run": []}
+    for rec in trace.of("move"):
+        guid = rec.get("g")
+        if (not str(rec.get("by", "")).startswith(KITE_MOVE_ACTION) or rec.get("x") is None
+                or guid in trace.humans):
+            continue
+        stamps, rows = samples.track(guid)
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        if index < 1 or rec["t"] - stamps[index] > MAX_STEP_MS or stamps[index] == stamps[index - 1]:
+            continue
+        here, before = rows[index], rows[index - 1]
+        speed = dist2(here[1:3], before[1:3]) / ((stamps[index] - stamps[index - 1]) / 1000.0)
+        out["fast" if speed > KITE_FAST_YD_S else "run"].append(dist2((rec["x"], rec["y"]), here[1:3]))
+    return out
+
+
+def ahead_text(yards: list[float]) -> str:
+    if not yards:
+        return "none"
+    ordered = sorted(yards)
+    return (f"n {len(ordered)}, median {statistics.median(ordered):.1f}, p90"
+            f" {ordered[min(len(ordered) - 1, int(len(ordered) * 0.9))]:.1f} yd")
 
 
 def hand_reads(trace: Trace) -> list[tuple[int, int, int, int]]:
@@ -2695,7 +2727,10 @@ def show_spike(trace: Trace) -> None:
               f" {FLIP_MS / 1000:.0f} s: " + (", ".join(
                   f"{trace.name(window['guid'])} {clock(window['start'])}"
                   f" from {(window['flips'][0][0] - window['start']) / 1000:+.1f} s" for window in flipped) or "none"))
-        dropped = [(window, low) for window in windows for low in window["feign_drops"]]
+        ahead = kite_move_ahead(trace, samples)
+        print(f"  kite move targets' yards ahead of the kiter, it running over {KITE_FAST_YD_S:.0f} yd/s (a boost):"
+              f" {ahead_text(ahead['fast'])}; else {ahead_text(ahead['run'])}")
+        dropped =[(window, low) for window in windows for low in window["feign_drops"]]
         print(f"  Feign Death dropped within {FEIGN_DROP_MS} ms: " + (", ".join(
             f"{trace.name(window['guid'])} {clock(window['start'])} {(low - window['start']) / 1000:+.1f} s"
             for window, low in dropped) or "none"))
@@ -4463,7 +4498,9 @@ def pickup_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
         changes = [(when, int(value)) for when, value in owned.get(guid, []) if value in ("0", "1")]
         side = changes[0][1] if changes else exit_side
         owners = [owner for index, (_, owner) in enumerate(changes) if not index or owner != changes[index - 1][1]]
-        targets = [(when, row[7]) for when, row in zip(stamps, rows) if len(row) > 7 and row[7]]
+        swaps = [(when, owner) for index, (when, owner) in enumerate(changes)
+                 if index and owner != changes[index - 1][1]]
+        targets =[(when, row[7]) for when, row in zip(stamps, rows) if len(row) > 7 and row[7]]
         to_tank = next((when - spawn for when, target in targets if trace.role(target) == "tank"), None)
         to_side = next((when - spawn for when, target in targets
                         if as_guid(held_at(sides[owner_at(changes, side, when)], when)) == target), None)
@@ -4481,10 +4518,25 @@ def pickup_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                          key=lambda item: item[1])[:OPENER_NEAREST]
         out.append({"guid": guid, "spawn": spawn, "exit": (x, y), "exit_side": exit_side,
                     "wave": wave_of(waves, spawn),
-                    "side": side, "probed": bool(changes), "owners": owners or [side], "to_tank": to_tank,
+                    "side": side, "probed": bool(changes), "owners": owners or [side], "swaps": swaps,
+                    "to_tank": to_tank,
                     "to_side": to_side, "tank": tank or None, "gap": gap, "from": kind,
                     "opener": opener, "nearest": nearest})
     return out
+
+
+def live_side_swaps(trace: Trace, samples: Samples, rows: list[dict]) -> list[tuple[dict, int, int]]:
+    """`(row, when, owner)` per `anub.bside` change after a burrower's first owner, both side tanks alive then: a
+    dead side tank's burrowers all move, so those don't count."""
+    end = pull_end(trace)
+    sides = [latch_spans(trace, f"anub.side{side}", end) for side in (0, 1)]
+
+    def alive(side: int, when: int) -> bool:
+        tank = as_guid(held_at(sides[side], when))
+        row = samples.recent(tank, when) if tank else None
+        return bool(row) and row[5] > 0
+
+    return [(row, when, owner) for row in rows for when, owner in row["swaps"] if alive(0, when) and alive(1, when)]
 
 
 def focus_due_rows(trace: Trace, waves: list[tuple[int, int]]) -> list[dict]:
@@ -4961,6 +5013,13 @@ def show_pickups(trace: Trace, samples: Samples) -> None:
     print("  side is its owner at the spawn, then each one after; to tank and to side run from its first"
           " sample\n  to the first with any tank, then its owning side's tank, on it; a * side is read off"
           " its exit,\n  with no anub.bside row; side tank is the spawn side's")
+    swaps = live_side_swaps(trace, samples, rows)
+    spans = phase_spans(trace)
+    by_phase: dict[str, list[str]] = collections.defaultdict(list)
+    for row, when, owner in swaps:
+        by_phase[phase_at(spans, when)].append(f"{short(trace, row['guid'])} >{owner} {clock(when)}")
+    print("  side changes after the first owner, both side tanks alive: "
+          + ("; ".join(f"{label} {len(items)}: {', '.join(items)}" for label, items in by_phase.items()) or "none"))
     show_openers(trace, rows)
 
     waves = wave_starts(trace, samples)
@@ -9532,7 +9591,8 @@ SECTIONS = (
      " teleports, his distance from the gather, each speed boost with the spike's speed and one on a spike no faster"
      " flagged, a kite's first boost against its pick's +boost@, the standby escort at the claim, the spike's next"
      " leg past a patch after an own immunity or a patch end, the kiter closing 2+ s on a spike no faster than"
-     " itself, a side tank on escort duty with a burrower on it per phase",
+     " itself, a side tank on escort duty with a burrower on it per phase, the kite move points' yards ahead of a"
+     " boosted kiter and of one running",
      show_spike),
     ("spheres", "spheres over time, patches the spike used, patch supply at each mark, duty shots, killers,"
      " landings, grips from the cast spot, the grip duty to kill and a sphere back up, each far grip's links"
@@ -9552,7 +9612,7 @@ SECTIONS = (
      " Bladestorm with a burrower within 25 yd and the one closest over the spin, burrower threat cap vetoes per bot, melee bot seconds on a burrower no tank"
      " within 5 yd held by anub.dps value, heroic phase 3 focus picks' depth in their patch, melee ring reach and"
      " the side's melee on them, a side tank's Righteous Defense that took the other side's burrowers with the"
-     " member's health",
+     " member's health, side changes after the first owner with both side tanks alive",
      show_burrowers),
     ("dps", "per phase and DPS role: target kind share, moving share, yards walked by move order, damage by"
      " target kind; his health lost per phase 1, flagged under 20 percent; anub.push with the submerge drag after"

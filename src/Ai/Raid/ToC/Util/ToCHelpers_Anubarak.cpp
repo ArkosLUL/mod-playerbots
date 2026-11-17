@@ -85,8 +85,10 @@ constexpr float ANUBARAK_KITE_CATCH_HORIZON_S = 20.0f;
 // The spike tests for a patch, else Impales, every 1.5 s at its base speed
 constexpr float ANUBARAK_SPIKE_BASE_TEST_S = 1.5f;
 constexpr uint32 ANUBARAK_KITE_PLAN_JUDGE_MS = 250;
-// The kiter walks to its plan's track this far past the point nearest it, about 8 yd, the nearest point
-// looked for this many ticks either side of where the plan's age puts it
+// The kiter walks to its plan's track this far past the point nearest it, at most AHEAD_S on, the nearest
+// point looked for this many ticks either side of where the plan's age puts it. Yards, not seconds: 1.2 s
+// on a Nitro run is 21 yd, and that cut the ring and ran the spike over a tank patch the plan kept it off.
+constexpr float ANUBARAK_KITE_AHEAD_YD = 8.4f;
 constexpr float ANUBARAK_KITE_AHEAD_S = 1.2f;
 constexpr int ANUBARAK_KITE_TRACK_SLACK_TICKS = 15;
 // A human kiter's run is read off how far it moved between plans this far apart
@@ -283,6 +285,9 @@ const Position ANUBARAK_SPHERE_HOMES[] = {{786.64f, 108.25f, 142.6f}, {806.84f, 
                                           {759.14f, 163.97f, 142.6f}, {744.37f, 119.52f, 142.6f},
                                           {710.02f, 120.82f, 142.6f}, {706.64f, 161.53f, 142.6f}};
 constexpr uint8 ANUBARAK_SPHERE_HOME_COUNT = 6;
+// The boss script's churning ground, AnubLocs 1 to 4, where burrowers come up
+const Position ANUBARAK_NORTH_EXITS[] = {{694.50f, 185.36f, 142.12f}, {740.18f, 193.44f, 142.12f}};
+const Position ANUBARAK_SOUTH_EXITS[] = {{694.89f, 102.48f, 142.12f}, {731.99f, 83.38f, 142.12f}};
 // Heroic's tank pair, the east homes (user call): the four nearer the centre are the kite spheres
 constexpr uint8 ANUBARAK_TANK_HOME_NORTH = 1;
 constexpr uint8 ANUBARAK_TANK_HOME_SOUTH = 0;
@@ -1659,10 +1664,32 @@ void RefreshTankPatches(AnubarakState& state, std::vector<Creature*> const& sphe
     state.patch1 = held[1];
 }
 
-// A burrower is seen first at its exit: the two north exits feed side 0, the two south side 1. A new
-// one more than 10 s after the last opens a wave. It comes up there, and again at each emerge.
+// The side the north exits feed, the south pair the other: the pairing with fewer yards from exits to
+// spots, side 0 on the usual spots. A tank patch re-latched across the room moves its spot, and burrowers
+// fed to the far tank open on the near one, then get handed over while they hit the healers.
+uint8 NorthExitSide(AnubarakState const& state)
+{
+    Position const spots[2] = {state.spot0.Get(), state.spot1.Get()};
+    auto const yards = [&spots](uint8 north)
+    {
+        float sum = 0.0f;
+        for (Position const& exit : ANUBARAK_NORTH_EXITS)
+            sum += Dist2d(exit, spots[north]);
+
+        for (Position const& exit : ANUBARAK_SOUTH_EXITS)
+            sum += Dist2d(exit, spots[1 - north]);
+
+        return sum;
+    };
+
+    return yards(1) < yards(0) ? 1 : 0;
+}
+
+// A burrower is seen first at its exit, which fixes its side (NorthExitSide). A new one more than 10 s
+// after the last opens a wave. It comes up there, and again at each emerge.
 void TrackWaves(Player* bot, AnubarakState& state, uint32 now)
 {
+    uint8 const northSide = NorthExitSide(state);
     for (Creature* burrower : ResolveAlive(bot, state.burrowers))
     {
         ObjectGuid const guid = burrower->GetGUID();
@@ -1678,7 +1705,8 @@ void TrackWaves(Player* bot, AnubarakState& state, uint32 now)
             continue;
         }
 
-        uint8 const side = burrower->GetPositionY() >= ANUBARAK_ROOM_CENTER.GetPositionY() ? 0 : 1;
+        bool const north = burrower->GetPositionY() >= ANUBARAK_ROOM_CENTER.GetPositionY();
+        uint8 const side = north ? northSide : static_cast<uint8>(1 - northSide);
         state.exits[guid] = BurrowerExit{side, now, now, down};
         if (!state.waveSeen || getMSTimeDiff(state.lastWaveMs, now) > ANUBARAK_WAVE_GAP_MS)
         {
@@ -8469,8 +8497,8 @@ bool GetAnubarakKiteStand(Player* bot, AnubarakKiteStand& out)
         return false;
 
     int const at = PlanTick(plan, bot);
-    int const last = static_cast<int>(track.size()) - 1;
-    int const ahead = std::min(at + static_cast<int>(ANUBARAK_KITE_AHEAD_S / AnubarakPursuit::TICK_S), last);
+    int const ahead = AnubarakKitePlanner::AheadTick(
+        track, at, static_cast<int>(std::lround(ANUBARAK_KITE_AHEAD_S / AnubarakPursuit::TICK_S)), ANUBARAK_KITE_AHEAD_YD);
     AnubarakPursuit::Point const target = track[static_cast<size_t>(ahead)];
     out.stand = ValidateFloorPoint(bot, Position(target.x, target.y, bot->GetPositionZ()));
 

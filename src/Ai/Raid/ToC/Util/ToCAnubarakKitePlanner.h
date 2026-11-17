@@ -1036,6 +1036,21 @@ inline int NearestTick(std::vector<Point> const& track, Point at, int from, int 
     return best;
 }
 
+// The first tick past from that's yards along the track, at most maxTicks past it and never past its end
+inline int AheadTick(std::vector<Point> const& track, int from, int maxTicks, float yards)
+{
+    int const last = std::min(static_cast<int>(track.size()) - 1, from + maxTicks);
+    float walked = 0.0f;
+    int i = std::clamp(from, 0, std::max(last, 0));
+    while (i < last && walked < yards)
+    {
+        walked += Dist(track[static_cast<size_t>(i)], track[static_cast<size_t>(i) + 1]);
+        ++i;
+    }
+
+    return i;
+}
+
 // The held plan from the kiter's spot on: its track from the point nearest the kiter, searched slackTicks
 // either side of where elapsedS puts it. Past its end a patch walk stands on the patch and a run goes
 // straight on. A boost still ready goes now once its tick has passed.

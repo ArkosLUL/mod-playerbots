@@ -174,7 +174,10 @@ tank, at once when a side just took a new tank (and pre-pull, on the side points
 there, so walking past doesn't swap. Never between two humans.
 
 **Waves**, per pull: a burrower first seen more than 10 s after the last opens a wave
-(`anub.wave`), and its exit fixes its side, the north exits (y above the room centre) side 0. The
+(`anub.wave`), and its exit fixes its side: the north pair (y above the room centre) feeds whichever side the two pairs
+reach in fewer yards summed, side 0 on the usual spots (user call 2026-11-17: CU's
+side 1 re-latched north-west, and 10 burrowers went back and forth between the side tanks in
+P1c-P3, Elemena dead to a loose one). The
 next is due 5 s after the pull or emerge, then 45 s after each; one that would fall after the 80 s
 submerge comes 5 s after the emerge instead.
 
@@ -943,8 +946,16 @@ impaled; 5 burrower submerges with their tank alive; Bulwark dead 5:01.2 under f
 5:07.96 to Expose Weakness from a loose one), CS `1794264114` (kill 7:19.3, no deaths). CS: no circle
 summon in the first 10 s, 15 `hot` casts, herd rows 2, the two sides' burrowers never within 12 yd.
 
-**The move** (`anub.kite`): the plan's track 1.2 s past its point nearest the kiter, about 8 yd,
-floor-checked: `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
+Baseline, 25H on refine-33 (`0ff058cb1`): CT `1794829976` (kill 7:27.4, one death), CU `1794938939`
+(kill 8:10.1: side 1's patch spent at 4:41.7 (below), re-latched 71 yd off its spot; phase 3 healers
+40-47 yd from one side tank for 90-104 s, Elemena and Felesta dead to burrowers, four to the swarm
+and Penetrating Cold; phase 3 142.3 s against CT's 104.0). Both: no escort under a burrower, no
+Righteous Defense take, no burrower submerge.
+
+**The move** (`anub.kite`): the plan's track 8.4 yd past its point nearest the kiter, at most 1.2 s
+on, floor-checked (1.2 s on Nitro reached 21 yd: CU 4:41.7 Stormweaver cut the ring 0.7 s ahead of
+his plan and ran the spike onto side 1's patch 9.6 yd off, 0.47 s before its despawn, where the plan
+kept it 15 yd off): `ring` running, `patch` once the patch walk began, `hold` within 2 yd of its end, which
 returns false so a healer or caster keeps working. Normal's `kite` duty drops a sphere while no non-tank
 patch is down.
 
@@ -1450,7 +1461,9 @@ personal burst is unrestricted.
 - After a fail on one tank patch, a spike re-marking the other side's tank, still holding burrowers
   on its patch, spends that one too (about 1 in 24 per spent patch).
 - A spent tank patch stays bare until he emerges, then waits on a sphere in reach; a lost one that
-  re-latches a kite patch leaves one for the submerge (CR #1419).
+  re-latches a kite patch leaves one for the submerge (CR #1419). In heroic's last submerge one sphere
+  is left: two DK grips moved CU's 44 yd, and it landed 71 yd off the spot.
+- The submerge drag landed 2 of 4 within 6 yd of its spot (CT P1 7.4, CU P1b 9.3).
 - The far-spot search's 36 yd reach finds no 25+ yd spot when the tank patches flank the anchor ~13 yd
   either side (CR r21); about half the submerges on disk sat at r17-r25.
 - A spike re-marking after a death keeps its speed: the next kiter gets ~2 s (CR Bulwark, Hellflame).
@@ -1724,7 +1737,9 @@ the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows
 and each Freezing Slash on its tank from 3 s before it set out (pre-step or `subhold` included; CR +1.5
 s, CS -0.4). `--burrowers` each side tank Righteous Defense that took the other side's burrowers, with
 the member's health (CR Elemena 100%). `--spike` per side tank and phase the seconds on escort duty
-with a living burrower on it (CR Bulwark P2b 35.3). `--healers` also the main tank's seconds with no healer within 40 yd.
+with a living burrower on it (CR Bulwark P2b 35.3). `--spike` the kite move points' yards ahead of
+a kiter running over 9 yd/s against one running (CU median 15.6 vs 9.4). `--burrowers` side changes
+after a burrower's first owner with both side tanks alive, per phase (CU P1c 4, P3 6). `--healers` also the main tank's seconds with no healer within 40 yd.
 `--burrowers` Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it,
 `anubarak burrower threat cap` vetoes per bot. `--threat` drag pre-steps (counted as legs) and
 `subspot` rows per window with how far he went down from the last spot, `no submerge leg` (no

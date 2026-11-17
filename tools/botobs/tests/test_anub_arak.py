@@ -6463,5 +6463,82 @@ class Refine33Lines(unittest.TestCase):
                       self.text(ab.show_side_tank_crowds, self.samples))
 
 
+R34_KITER, R34_PALA, R34_DK = 6801, 6802, 6803
+R34_B1, R34_B2 = (CREATURE | n for n in (6891, 6892))
+
+
+def r34_kiter_x(when: int) -> float:
+    # 7 yd/s to 2 s, then Nitro's 17.5
+    return 7.0 * when / 1000 if when <= 2000 else 14.0 + 17.5 * (when - 2000) / 1000
+
+
+def r34_snap(when: int) -> dict:
+    def unit(guid, x, hp=100.0, target=0):
+        return [guid, x, Y, Z, 0.0, hp, 100.0, target, 0, 0, 0, 0]
+
+    return {"t": when, "e": "snap", "hz": [], "u": [
+        unit(R34_KITER, r34_kiter_x(when)), unit(R34_PALA, 0.0), unit(R34_DK, 0.0, 0.0 if when >= 3000 else 100.0),
+        unit(R34_B1, 760.0, 90.0, R34_PALA), unit(R34_B2, 760.0, 90.0, R34_DK)]}
+
+
+def r34_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790950000000, "map": ab.MAP_TOC, "inst": 9, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R34_KITER, "n": "Stormweaver", "r": "ranged", "c": 7, "h": 0},
+             {"g": R34_PALA, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+             {"g": R34_DK, "n": "Felesta", "r": "tank", "c": 6, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        *({"t": 0, "e": "unit", "g": guid, "en": ab.NPC_BURROWER, "n": "Nerubian Burrower"}
+          for guid in (R34_B1, R34_B2)),
+        note(0, R34_KITER, "anub.phase", 1),
+        note(0, R34_PALA, "anub.side0", R34_PALA),
+        note(0, R34_DK, "anub.side1", R34_DK),
+        note(0, R34_B1, "anub.bside", 0),
+        note(0, R34_B2, "anub.bside", 1),
+        # B1 handed over with both side tanks up; B2 only once Felesta is dead
+        note(2000, R34_B1, "anub.bside", 1),
+        note(3000, R34_B2, "anub.bside", 0),
+        # the kite's move points: 9 yd ahead at a run, 20 yd ahead on Nitro; a gather row isn't a kite row
+        {"t": 1000, "e": "move", "g": R34_KITER, "by": "anubarak kite spike to permafrost", "ok": 1,
+         "x": r34_kiter_x(1000) + 9.0, "y": Y},
+        {"t": 3000, "e": "move", "g": R34_KITER, "by": "anubarak kite spike to permafrost", "ok": 1,
+         "x": r34_kiter_x(3000) + 20.0, "y": Y},
+        {"t": 3500, "e": "move", "g": R34_KITER, "by": "anubarak gather", "ok": 1, "x": 0.0, "y": Y},
+        {"t": 4000, "e": "end", "out": "wipe"},
+    ]
+    records += [r34_snap(when) for when in range(0, 4200, 200)]
+    return records
+
+
+class Refine34Lines(unittest.TestCase):
+    """The kite move points' yards ahead of the kiter by its speed, and burrower side changes with both side
+    tanks alive."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_9_anub-arak_1790950000.ndjson", r34_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_kite_move_points_split_by_the_kiters_speed(self):
+        ahead = ab.kite_move_ahead(self.trace, self.samples)
+        self.assertEqual([round(yards, 1) for yards in ahead["run"]], [9.0])
+        self.assertEqual([round(yards, 1) for yards in ahead["fast"]], [20.0])
+        self.assertEqual(ab.ahead_text(ahead["fast"]), "n 1, median 20.0, p90 20.0 yd")
+        self.assertEqual(ab.ahead_text([]), "none")
+
+    def test_side_changes_count_only_with_both_side_tanks_alive(self):
+        rows = {row["guid"]: row for row in ab.pickup_rows(self.trace, self.samples)}
+        self.assertEqual(rows[R34_B1]["swaps"], [(2000, 1)])
+        self.assertEqual(rows[R34_B2]["swaps"], [(3000, 0)])
+        swaps = ab.live_side_swaps(self.trace, self.samples, list(rows.values()))
+        self.assertEqual([(row["guid"], when, owner) for row, when, owner in swaps], [(R34_B1, 2000, 1)])
+
+
 if __name__ == "__main__":
     unittest.main()
