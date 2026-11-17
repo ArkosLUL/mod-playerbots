@@ -448,7 +448,39 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   anything it derives is derived that many times: test the action first
   ([action-selection.md](action-selection.md#multiplier-semantics)). Encounter rules do it by
   construction. A multiplier needing the encounter's pick reads the resolver's memoized pick:
-  re-deriving it can hide a sight raycast per action.
+  re-deriving it can hide a sight raycast per action. Scale, ToC 25H: a bot pass runs ~127
+  interval-1 trigger nodes and ~118 multipliers, 28 of them ungated, so they run on every action
+  anywhere in ToC.
+- **Ask a definition once per action, not once per rule.** Each rule asking whether it cares cost
+  0.12–0.19 µs a row; `CaresTable` (`RaidEncounter.cpp`) fills one bitset per action per definition
+  per bot, and the other rows read their bit through a last-action shortcut for ~0.02 µs. That was
+  ~90% of the ToC pass's gain ([measured](#measuring-a-cost)). The definition's first row now pays
+  the lookup for all of them, so its own pmon row rose.
+- **Cache per action only where the check it replaces costs more than the lookup.** A
+  `RaidActionCache` is an `unordered_map` on `Action*`. A multiplier sees each action once per pass,
+  so the last-action shortcut practically never hits, and after ~120 other multipliers the nodes are
+  likely cold: the lookup measured 0.03–0.15 µs dearer than the one to four failing `dynamic_cast`s
+  or the short name copy it replaced (cheap ToC guards +8% to +74%). Replacing a `"spell id"` read
+  or name-set lookups, it pays (suppress aoe −17%, spike kite −29%).
+- **What a per-`Action*` cache may hold**, kept inside one multiplier (a global one breaks when a
+  logout frees an address for reuse): facts fixed at construction, i.e. dynamic type, `getName`
+  (every override derives from constructor-set members) and `getThreatType` (every override returns
+  a constant). Not the spell: `PullAction::InitPullAction` reassigns `CastSpellAction::spell` in
+  `isPossible` and `Execute`, so `RaidSpellIdRef` holds the `Value<uint32>*`, fetched at the old
+  first-call point, and re-compares `getSpell()` on every read, never caching the id; FC's
+  `DispelGuard` caches a `getSpell()` compare, safe only while no cure class reassigns it. Holding a
+  `Value*` or keying on `Action*` is safe for a multiplier's life: an `AiObjectContext`'s values and
+  actions outlive its engines until the `PlayerbotAI` dies. Tools: `RaidActionCache<Facts>`,
+  `RaidSpellIdRef` (`RaidCombatHelpers.h`), the `RaidSplashCache&` overloads of `IsRaidAreaDamage`
+  and `SpellSplashes`.
+- **A memo call is a side effect.** The first call in a ms fixes what every later caller that ms
+  sees, and actions run between multiplier passes; `"spell id"` caches 20 s, so a skipped `Get()`
+  shifts its next recompute. A behaviour-neutral speed-up never adds, removes or moves such a call,
+  even behind a cheap test in front of it; it only makes the call cheaper.
+- **Copy a memo's list before looping it** where the loop can trigger a nested refresh: Anub'arak's
+  ReadPhase → Sweep clears `state.burrowers` mid-loop. A by-value `boost::container::small_vector`
+  (Boost.Container is already in the core) keeps that snapshot with no heap allocation for short
+  creature lists.
 - **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
   `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
   (`Engine::HasStrategyType`). Precompute them for a 25-man loop or a sort comparator, which otherwise
@@ -485,9 +517,23 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   find for every entry in the script's `creatureData`, written and erased as the creature enters and
   leaves the world. It equals `FindNearestCreature(entry, r, true)` only for an entry with **one**
   creature per instance, after the sweep's own tests (`IsAlive`, `IsWithinDist(c, r)`, `InSamePhase`),
-  and only inside `|dx| + |dy| < r` at r = 200: `Cell::VisitCircle` drops three cells from each corner
-  of the 7×7 block, so a creature 150-200 yd off on a diagonal can be missed. Past that bound run the
-  sweep. Ids are ported in `UldEncounterGate.h`.
+  and only where the sweep provably visits the creature (next bullet); otherwise run the sweep. Ids
+  are ported in `UldEncounterGate.h`.
+- **A sweep visits container cells, not positions**, so a position bound such as `|dx| + |dy| < r`
+  is not exact: a creature's container cell lags its position until `Map::MoveAllCreaturesInMoveList`
+  runs, and at r = 200 `Cell::VisitCircle` drops three cells from each corner of the 7×7 block. For a
+  bot on `IsValidMapCoord`, r = 200 always visits the 3×3 block around its standing cell (proven over
+  every float coordinate); past the map edge the clamped cell breaks that. The exact module-side test
+  for a candidate within ±1 cell is a one-cell
+  `map->Visit(Cell(coord), TypeContainerVisitor<searcher, GridTypeMapContainer>)` looking for its
+  pointer, since `GetCurrentCell()` is protected. So a remembered guid (a "last hit") can spare a
+  boolean sweep, accepted only after every test the sweep applies plus that visit, falling back to
+  the unchanged sweep on any miss; the cell proof holds for the radius it was run at (ToC's gate hint:
+  200 yd only).
+- **Several entries take one sweep**: the core's `GetCreatureListWithEntryInGrid(list, entries,
+  range)` (upstream AC #22286) visits and tests like the single-entry form, and taking its hits entry
+  by entry in config order reproduces one sweep per entry exactly; a later sort makes that grouping
+  moot only on a unique key. `Map::Visit` never loads a grid or creates a cell, so sweeps are pure.
 - **`"nearest npcs"` casts a line-of-sight ray at every non-player unit** and has no cache. To pick a
   few entries out of it, test the entry inside the searcher's check and ray only the matches — same
   units, same order (`GetYoggSaronGuardiansInSight`, the Yogg-Saron resolver).
@@ -535,6 +581,18 @@ tree, compile both together with counting stubs, and enumerate the input space �
 combinations, 0 mismatches on XT-002. Include a red-capability check so a pass means something:
 dropping `purgingImmunity` produced 1,392 mismatches and dropping the main-tank exemption 11,520.
 
+- Cut both versions out by regex anchor plus brace matching into two namespaces over global counting
+  stubs, and compare the result **and** the call log (`Get()`s, memo calls) per call. Write each red
+  check as a text mutation that must match exactly once.
+- Pick reds that change the verdict: one mapping a branch onto an equivalent branch passes silently,
+  and such a pass hints the branches can merge (Feign Death and the held path in ProtectSpikeKite).
+- To cover every dynamic type a guard can see, make each cast target inherit `Action` virtually and
+  build `Combo<mask>` classes from conditional virtual bases, so `dynamic_cast` cross-casts for any
+  subset of targets.
+- To list every call resolving to a new overload: in a scratch copy mark it `[[deprecated]]` and
+  append `#error` to each TU; pb-syntax-check prints a failed TU's warnings. A sibling overload that
+  leaves an anonymous-namespace function uncalled fails CI's `-Wunused-function`: replace it instead.
+
 **A pure move** (a file split, no body changes) needs no harness: one generator reads every source
 from the base ref, anchors each segment on a regex searched in order and fails on any miss; an
 independent parity check then compares node order, creator maps, multiplier order and a multiset of
@@ -542,7 +600,30 @@ code lines. Splitting the move across agents repeats the reading and still leave
 ICC's 21k-line split went this way.
 
 **Timing** is `.playerbots pmon` ([../systems/observability.md](../systems/observability.md#timing-a-bot-playerbots-pmon)):
-read ratios, never absolute times.
+read ratios, never absolute times. A bot pass takes ~1 ms, so a per-instance per-ms memo refreshes
+on nearly every pass, paid by the first node in trigger order that reads it: that row times the
+refresh, not its own logic, and speeding it up means a cheaper refresh body.
+
+**Comparing two runs** (one pmon dump per fight, `pmon reset` at each pull):
+
+- Take cost per call per fight and re-weight to the before run's call counts,
+  after = Σ count_before · µs_after / Σ count_before: fight lengths, phase mixes and overworld load
+  differ between runs.
+- Deflate by a control: per fight, the time-weighted median after/before ratio over rows the change
+  cannot reach (≥ 2000 calls in both runs); net = raw ratio / deflator. The control's p10–p90 range
+  is the noise band; a row is slower only past p90 with ≥ 10 ms of baseline time.
+- Faction Champions draws a random champion set per run: compare it per check only.
+- A behaviour-neutral change keeps call frequencies: each trigger checked once per pass, each
+  multiplier's reach (its calls / the first multiplier's) within ±1.5 pp. Per-full-tick and
+  per-executed-action ratios drift on their own: `PlayerbotAIBase::FullTick` counts calls the check
+  delay skips, and executed actions include overworld bots.
+
+**Measured, the raid perf pass** (ToC 25H, 2026-11-16 vs 2026-11-17 on `ef1dfd517`): ToC's share of
+`UpdateAIInternal` 22.7% → 18.0%; trigger plus multiplier cost per call −30.5% net (9.5 of 31.3 s a
+clear), multipliers −44%, triggers −11%. `CaresTable` gave −8.5 s; the encounter gate's first-hit and
+candidate tests −0.9 s (`gormok tank duty` −66%); the FC Defence refresh −0.4 s. No measurable gain:
+Anub'arak's ReadPhase refresh work, and the entry-set sweep in FC and Jaraxxus. The ICC half of the
+pass has no baseline, so it is unmeasured.
 
 **Settled — do not re-audit:**
 
@@ -558,6 +639,9 @@ read ratios, never absolute times.
 - Replicating `Cell::CalculateCellArea` + `VisitCircle` to skip the octagon walk is provably
   identical but copies ~40 lines of core internals that go silently wrong the day AC changes cell
   visiting. Rejected.
+- The per-action caches that made cheap ToC guards slower (`407bb950e`, `0a35e1f0c`, late interrupt
+  in `e7b5c1203`, `ee8d2f669`, `2f0aef500`, `8ff51744f`; +0.40 s a 25H clear) stay as they are: the
+  user's call.
 
 **Open:**
 
@@ -565,8 +649,22 @@ read ratios, never absolute times.
   `FindBossByName` — a sight-range sweep plus a UTF-16 lowercase of every unit name — **before**
   `HasAura`, the spell-known check and the raid-group check, for 7 paladin and 3 hunter triggers in
   every raid. Reordering changes no behaviour.
-- `Engine::LogAction` formats every engine event for any bot with a real player master
-  (`LogInGroupOnly` defaults to 1), whether or not debug logging is on.
+- Engine: `Engine::LogAction` formats every engine event for any bot with a real player master
+  (`LogInGroupOnly` defaults to 1), whether or not debug logging is on; value lookups hash twice;
+  the action queue compares by name copies.
+- Costliest ToC rows per check after the perf pass: the FC Defence refresh (`personal defensive`
+  ~64 µs) and Anub'arak's ReadPhase (`kiter needs immunity` ~44 µs). The FC Ball refresh grew with
+  `BreakChasedCasts` (`6632778ad`), a `GET_PLAYERBOT_AI` walk over every member.
+- Unexplained: after `ReadOpener`'s one-sweep change the Jaraxxus opener rows rose +91% / +34%,
+  though Anub'arak, also one entry, fell 36%; a second Jaraxxus recording would tell a longer live
+  window from more adds in range.
+- BPC `DirectHit` builds its `"spell id"` lookup per action; `RaidSpellIdRef` would pay.
+- `RaidInstanceState` lock cache: crash risk, and Docker Desktop has no TSan to prove it.
+- Ulduar and older raids have had no perf pass.
+- Behaviour changes, each needing its own go: widened per-ms memos; one refresh per world tick
+  (`GameTime::GetGameTimeMS()`); the ToC gate by guid slot alone (the slots in the header make it a
+  one-liner); arena-centred ~95 yd sweeps; lazy FC Defence `Update*`; Icehowl's guid slot
+  (`DATA_ICEHOWL`, 8) in `RefreshIcehowl`, whose comment wrongly says there is none.
 - Ulduar's two directly pushed multipliers (`UldMultipliers_Shared.cpp`): `UldThreatRedirectMultiplier`
   makes seven `GetUldUnitByEntry` lookups per Misdirection/Tricks candidate where one scan would
   serve, and `UlduarBurstWindowMultiplier::EvaluateWindow` ends on an ungated

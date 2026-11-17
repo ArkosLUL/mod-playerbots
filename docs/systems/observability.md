@@ -698,6 +698,13 @@ gate *inside* the probe and pass the object, never the name: `Action::getName()`
 `std::string` **by value**, so a name passed as an argument is built before any gate can skip it, on
 every bot every tick. A thousand idle open-world bots pay that bill.
 
+An `Active()` gate the caller adds in front of a probe changes nothing where the skipped argument
+build is pure (every `ProbeTarget`-based probe, `NoteDerived` included, does nothing until
+`Active()`); an argument with a side effect, like a `++` inside the call, rules it out.
+`std::string(nullptr)` throws in libstdc++, so such a gate, or a `char const*` note overload, is safe
+only once every non-literal `char const*` it takes is proven non-null. It keeps the race every gate
+has: a trace opening between it and the probe's own test loses that one note.
+
 **Filter on the map before touching the registry.** The damage, heal and aura hooks fire for the whole
 server, not just instances. `SessionFor` tests `IsDungeon()` — a DBC flag read, no lock — and
 `FindSession` answers from a per-map-thread memo a generation counter clears on every open and close.
