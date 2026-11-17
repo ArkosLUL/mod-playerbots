@@ -18,9 +18,8 @@ private:
     RaidActionCache<bool> _competes;
 };
 
-// Keeps the combat formation off a bot holding an Arctic Breath bearing. `set behind` walks melee in
-// his front half to ±108° off his facing, and each breath turns that facing to its target for 5 s, so
-// it would pull a bot off its bearing.
+// Keeps the combat formation off a bot holding an Arctic Breath bearing: each breath turns his facing for
+// 5 s, and `set behind` would follow it off the bearing.
 class IcehowlBreathSpreadGuardMultiplier : public Multiplier
 {
 public:

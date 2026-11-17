@@ -21,11 +21,11 @@ class NorthrendBeastsDpsTargetTrigger : public Trigger
 {
 public:
     NorthrendBeastsDpsTargetTrigger(PlayerbotAI* botAI, std::string const name, NorthrendBeastsStem ownStem)
-        : Trigger(botAI, name), stem(ownStem) {}
+        : Trigger(botAI, name), _stem(ownStem) {}
     bool IsActive() override;
 
 private:
-    NorthrendBeastsStem const stem;
+    NorthrendBeastsStem const _stem;
 };
 
 // Triggers shared by Gormok, the Jormungars and Icehowl.

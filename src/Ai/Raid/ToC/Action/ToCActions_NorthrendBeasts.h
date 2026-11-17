@@ -24,17 +24,17 @@ public:
 class NorthrendBeastsWalkAction : public MovementAction
 {
 public:
-    NorthrendBeastsWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
+    NorthrendBeastsWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
     // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight()
     {
         // Moving on some other node's walk doesn't count
-        if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
+        if (!_walking || !bot->isMoving() || !BookedOnWalkSpot())
             return nullptr;
 
-        return &walkSpot;
+        return &_walkSpot;
     }
 
     // False without booking anything while a cast pins the bot's feet
@@ -47,17 +47,17 @@ protected:
 
         // A stun, a freeze or a channel stopped our last walk short, and its booking would refuse this one
         uint32 const now = getMSTime();
-        if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
+        if (_walking && !bot->isMoving() && getMSTimeDiff(_walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
             AI_VALUE(LastMovement&, "last movement").clear();
 
-        walkSpot = spot;
-        walking = true;
-        walkIssuedMs = now;
+        _walkSpot = spot;
+        _walking = true;
+        _walkIssuedMs = now;
         return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                       false, false, priority);
     }
 
-    void DropWalk() { walking = false; }
+    void DropWalk() { _walking = false; }
 
 private:
     static constexpr float WALK_SPOT_TOLERANCE = 0.5f;
@@ -67,13 +67,13 @@ private:
     bool BookedOnWalkSpot()
     {
         LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-        return std::fabs(last.lastMoveToX - walkSpot.GetPositionX()) <= WALK_SPOT_TOLERANCE &&
-               std::fabs(last.lastMoveToY - walkSpot.GetPositionY()) <= WALK_SPOT_TOLERANCE;
+        return std::fabs(last.lastMoveToX - _walkSpot.GetPositionX()) <= WALK_SPOT_TOLERANCE &&
+               std::fabs(last.lastMoveToY - _walkSpot.GetPositionY()) <= WALK_SPOT_TOLERANCE;
     }
 
-    Position walkSpot;
-    uint32 walkIssuedMs = 0;
-    bool walking = false;
+    Position _walkSpot;
+    uint32 _walkIssuedMs = 0;
+    bool _walking = false;
 };
 
 // Actions shared by Gormok, the Jormungars and Icehowl.

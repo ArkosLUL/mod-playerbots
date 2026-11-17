@@ -12,7 +12,7 @@ class IcehowlTankHoldBossAction : public AttackAction
 {
 public:
     IcehowlTankHoldBossAction(PlayerbotAI* botAI, std::string const name = "icehowl tank hold boss")
-        : AttackAction(botAI, name) {};
+        : AttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -20,16 +20,16 @@ class IcehowlClearChargePathAction : public MovementAction
 {
 public:
     IcehowlClearChargePathAction(
-        PlayerbotAI* botAI, std::string const name = "icehowl clear charge path") : MovementAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "icehowl clear charge path") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
 
 private:
     MoveOutcome IssueDodge(Position const& spot, bool replacing);
 
-    Position dodgeSpot;
-    uint32 dodgeSpotMs = 0;
-    bool hasDodgeSpot = false;
-    bool dodgeParked = false;  // stood still because it already cleared the tight line
+    Position _dodgeSpot;
+    uint32 _dodgeSpotMs = 0;
+    bool _hasDodgeSpot = false;
+    bool _dodgeParked = false;  // stood still because it already cleared the tight line
 };
 
 class IcehowlTankDefensiveAction : public Action
@@ -43,7 +43,7 @@ class IcehowlMoveToBreathStandAction : public NorthrendBeastsWalkAction
 {
 public:
     IcehowlMoveToBreathStandAction(PlayerbotAI* botAI, std::string const name = "icehowl move to breath stand")
-        : NorthrendBeastsWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -55,8 +55,8 @@ public:
     bool Execute(Event event) override;
 
 private:
-    uint32 triedMs = 0;
-    bool tried = false;
+    uint32 _triedMs = 0;
+    bool _tried = false;
 };
 
 class ToCIcehowlActionContext : public NamedObjectContext<Action>

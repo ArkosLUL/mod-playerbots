@@ -282,9 +282,8 @@ float AngleOffFacing(Position const& origin, float x, float y)
     return diff > static_cast<float>(M_PI) ? TWO_PI - diff : diff;
 }
 
-// A spot on the worm itself passes the cone test from almost any bearing, and a mobile worm walks over
-// whoever stands between it and its tank, so its front half out to the tank counts too. Out to its full
-// melee range would cover every cure spot round the tank.
+// The cone test passes on the worm from almost any bearing, and a mobile worm walks over whoever stands in
+// front of it out to its tank, so that counts too. Its full melee range would cover every cure spot.
 bool InSpewDanger(Position const& origin, float x, float y, float halfArc)
 {
     return InCone(origin, x, y, halfArc) || (origin.GetExactDist2d(x, y) < WORM_TANK_OFFSET &&
@@ -657,9 +656,8 @@ bool SprayLandsNear(JormungarsState const& state, ObjectGuid const& self, float 
                        { return member.guid != self && member.pos.GetExactDist2d(x, y) < WORM_SPRAY_TRIGGER; });
 }
 
-// Damage lands on this spot now: a pool (as big as it grows before a pinning cast ends), a Spray
-// being cast on or beside the bot, a spewing worm's real cone, a Sweep being cast, or a Bile pulse
-// with no Toxin on the bot for it to strip
+// Damage lands here now: a pool as big as it grows before a pinning cast ends, a Spray at or beside the bot,
+// a spewing cone, a Sweep being cast, or a Bile pulse with no Toxin on the bot for it to strip
 bool UrgentAt(JormungarsState const& state, ObjectGuid const& self, float x, float y, bool toxin, bool sweepHolder,
               bool sprayDodge, float halfArc, uint32 castRemainingMs)
 {
@@ -1071,9 +1069,8 @@ struct CurePairing
     WormMember const* nearestBile = nullptr;  // the Bile carrier this Toxin carrier walks to
 };
 
-// A Toxin carrier that may walk seeks a Bile carrier: any one not stuck, and a stuck one holding no
-// beast with no runner coming. It keeps its hold's partner while that one carries Bile, unless a
-// nearer carrier already cures it.
+// A Toxin carrier that may walk seeks a Bile carrier, a stuck one only if it holds no beast and has no runner
+// coming. It keeps its hold's partner while that one carries Bile, unless a nearer one already cures it.
 CurePairing PairingOf(JormungarsState const& state, Player* bot, WormMember const* me, BeastsTankDuty duty)
 {
     CurePairing pairing;
@@ -1216,9 +1213,8 @@ bool SpreadFailsAt(WormRules const& rules, Position const& spot, bool pairTolera
                         [&rules](WormSpreadPeer const* peer) { return peer->bot && rules.self < peer->guid; });
 }
 
-// The first rule whose trigger (x, y) fails, in reason order. A held spot answers to the drift deadband
-// instead of the melee stand and to roleAccept instead of the reach rule, which is about the bot's own
-// walk from where it stands.
+// The first rule whose trigger (x, y) fails, in reason order. A held spot answers to the drift deadband and
+// roleAccept instead of the melee stand and the reach rule, which judge the bot's walk from where it stands.
 WormMoveReason FirstFailedRule(WormRules const& rules, float x, float y, bool heldSpot, SpreadTest spread)
 {
     bool const skipSpread = spread == SpreadTest::Skip;
@@ -2257,9 +2253,8 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         if (IsUp(worm) && worm.mobile && worm.spewArmed)
             rules.cones.push_back(worm.pos);
 
-    // Spray's splash is 10 yd round where it lands, so casters keep that far off each other and off the
-    // melee round the mobile worm. Only an up stationary worm sprays, a lone survivor too. Carriers keep
-    // to their Bile and cure rules instead.
+    // Spray splashes 10 yd round where it lands, so casters keep that far off each other and the mobile
+    // worm's melee while a stationary worm is up. Carriers keep to their Bile and cure rules instead.
     if (!cureWalk && caster && !toxin && !bile && stationaryUp)
     {
         rules.self = self;
@@ -2293,9 +2288,8 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
 
     rules.circles.push_back({WormMoveReason::None, bot->GetPosition(), 0.0f, FEET_CLEARANCE, RULE_HARD});
 
-    // Worms parry from the front: melee bots get a dealt stand behind the mobile worm, unless a cure
-    // pairs them or their Bile keeps them off the stack. A stand dealt off a walking worm is stale by
-    // the next tick, so generic reach follows it until it stops.
+    // Worms parry from the front, so melee get a dealt stand behind the mobile worm, carriers aside. A stand
+    // dealt off a walking worm is stale by the next tick, so generic reach follows it until it stops.
     bool const meleeStand =
         role == WormRole::Melee && !toxin && !bile && mobileUp && mobileUp->settled && targetGuid == mobileUp->guid;
     if (meleeStand)

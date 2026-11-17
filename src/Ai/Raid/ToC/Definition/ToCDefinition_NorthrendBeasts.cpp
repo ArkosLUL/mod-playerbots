@@ -29,9 +29,8 @@ void DefineNorthrendBeasts(EncounterBuilder& e)
     // a tank with no beast up for its duty keeps tank assist, the only target source it has then
     e.OwnTargeting("northrend beasts tank target guard", Role::Any, BeastsTankTargetOwned, Family::TankAssist);
 
-    // a bot on its worm spot stays there, and the reposition walks it back if pushed off. a hunter's spot
-    // is already past minimum range, so flee goes too. attacks, reach to heal and avoid aoe still run.
-    // reach goes by name, so the walk to a battle res isn't blocked
+    // a bot on its worm spot stays there and the reposition walks it back if pushed off. a hunter's spot is
+    // past minimum range, so flee goes too. reach goes by name, so a battle res walk isn't blocked
     e.Block("northrend worms spot hold", Role::Any, IsWormSpotHeld,
             Family::SetBehind | Family::RearFlank | Family::CombatFormationMove | Family::Follow | Family::Flee |
                 Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink | Family::Disengage,

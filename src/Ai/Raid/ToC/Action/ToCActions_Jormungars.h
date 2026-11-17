@@ -20,7 +20,7 @@ public:
 protected:
     NorthrendWormsTankHoldAction(PlayerbotAI* botAI, std::string const name,
                                  TrialOfTheCrusaderHelpers::BeastsTankDuty holdDuty)
-        : AttackAction(botAI, name), duty(holdDuty) {};
+        : AttackAction(botAI, name), _duty(holdDuty) {}
 
 private:
     enum class WalkKind : uint8
@@ -38,11 +38,11 @@ private:
     bool WalkTo(WalkKind kind, Position const& spot);
     bool BookedOnWalkSpot();
 
-    TrialOfTheCrusaderHelpers::BeastsTankDuty const duty;
-    Position walkSpot;
-    Position approachFrom;  // where the worm stood when the approach was issued
-    uint32 walkIssuedMs = 0;
-    WalkKind walking = WalkKind::None;
+    TrialOfTheCrusaderHelpers::BeastsTankDuty const _duty;
+    Position _walkSpot;
+    Position _approachFrom;  // where the worm stood when the approach was issued
+    uint32 _walkIssuedMs = 0;
+    WalkKind _walking = WalkKind::None;
 };
 
 class NorthrendWormsTankHoldMobileWormAction : public NorthrendWormsTankHoldAction
@@ -50,7 +50,7 @@ class NorthrendWormsTankHoldMobileWormAction : public NorthrendWormsTankHoldActi
 public:
     NorthrendWormsTankHoldMobileWormAction(
         PlayerbotAI* botAI, std::string const name = "northrend worms tank hold mobile worm")
-        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormMobile) {};
+        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormMobile) {}
 };
 
 class NorthrendWormsTankHoldStationaryWormAction : public NorthrendWormsTankHoldAction
@@ -58,7 +58,7 @@ class NorthrendWormsTankHoldStationaryWormAction : public NorthrendWormsTankHold
 public:
     NorthrendWormsTankHoldStationaryWormAction(
         PlayerbotAI* botAI, std::string const name = "northrend worms tank hold stationary worm")
-        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormStationary) {};
+        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormStationary) {}
 };
 
 class NorthrendWormsRedirectThreatAction : public RaidRedirectThreatAction
@@ -66,7 +66,7 @@ class NorthrendWormsRedirectThreatAction : public RaidRedirectThreatAction
 public:
     NorthrendWormsRedirectThreatAction(
         PlayerbotAI* botAI, std::string const name = "northrend worms redirect threat")
-        : RaidRedirectThreatAction(botAI, name) {};
+        : RaidRedirectThreatAction(botAI, name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -79,13 +79,13 @@ class NorthrendWormsRepositionAction : public MovementAction
 {
 public:
     NorthrendWormsRepositionAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms reposition") : MovementAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "northrend worms reposition") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
 
 private:
     // Tells our own booking from another mover's once the hold it was for is gone
-    Position issuedSpot;
-    bool hasIssuedSpot = false;
+    Position _issuedSpot;
+    bool _hasIssuedSpot = false;
 };
 
 // Out of a pool a worm left behind. The walk is latched, so the next tick doesn't re-aim it.
@@ -93,13 +93,13 @@ class NorthrendWormsLeavePoolAction : public MovementAction
 {
 public:
     NorthrendWormsLeavePoolAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms leave pool") : MovementAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "northrend worms leave pool") : MovementAction(botAI, name) {}
     bool Execute(Event event) override;
 
 private:
-    Position exitSpot;
-    uint32 exitMs = 0;
-    bool hasExit = false;
+    Position _exitSpot;
+    uint32 _exitMs = 0;
+    bool _hasExit = false;
 };
 
 // Heals the healer's Toxin carrier, one no Bile can cure
@@ -107,7 +107,7 @@ class NorthrendWormsHealToxinCarrierAction : public Action
 {
 public:
     NorthrendWormsHealToxinCarrierAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms heal toxin carrier") : Action(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "northrend worms heal toxin carrier") : Action(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -116,7 +116,7 @@ class NorthrendWormsPurgeToxinAction : public Action
 {
 public:
     NorthrendWormsPurgeToxinAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms purge toxin") : Action(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "northrend worms purge toxin") : Action(botAI, name) {}
     bool Execute(Event event) override;
 };
 

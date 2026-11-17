@@ -207,7 +207,7 @@ bool FactionChampionsChainGripAction::Execute(Event /*event*/)
     if (walkOnly || !botAI->CastSpell("death grip", target))
         return false;
 
-    FactionChampionsNoteChainGrip(botAI, target);
+    FactionChampionsTrackChainGrip(botAI, target);
     return true;
 }
 
@@ -236,7 +236,7 @@ bool FactionChampionsWallGripAction::Execute(Event /*event*/)
             return false;
 
         if (!gripped)
-            FactionChampionsNoteWallGrip(botAI, champion);
+            FactionChampionsTrackWallGrip(botAI, champion);
 
         return true;
     }

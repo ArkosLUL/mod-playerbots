@@ -9,9 +9,8 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Which beasts are up and which tank holds each. Heroic brings the next beast in on a timer, so a
-// slow stage overlaps the next one. Read from the world once per instance per ms, so every bot gets
-// the same answer. Nothing resolves off map 649.
+// Which beasts are up and which tank holds each, read once per instance per ms on map 649 so every bot
+// agrees. Heroic brings the next beast in on a timer, so a slow stage overlaps the next one.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -54,9 +53,9 @@ struct BeastsDpsPick
 };
 
 // GetBeastsStageMask bits, also the nb.stage value
-constexpr uint32 BEASTS_STAGE_GORMOK = 1;
-constexpr uint32 BEASTS_STAGE_WORMS = 2;
-constexpr uint32 BEASTS_STAGE_ICEHOWL = 4;
+inline constexpr uint32 BEASTS_STAGE_GORMOK = 1;
+inline constexpr uint32 BEASTS_STAGE_WORMS = 2;
+inline constexpr uint32 BEASTS_STAGE_ICEHOWL = 4;
 
 // Alive and in combat, else nullptr. A beast still walking in isn't engaged.
 Unit* GetEngagedBeast(PlayerbotAI* botAI, NorthrendBeast beast);
@@ -66,9 +65,8 @@ uint32 GetBeastsStageMask(PlayerbotAI* botAI);
 // Bot or human, by strategy or by spec
 bool IsBeastsTank(Player* player);
 
-// The bot tanks the duty deal hands out from: alive on the instance, flagged main tank first, then
-// by guid. With nothing engaged it gives roster[0] every main duty and roster[1] the swap and the
-// stationary worm.
+// The bot tanks the duty deal hands out from, flagged main tank first, then by guid. With nothing engaged
+// roster[0] takes every main duty and roster[1] the swap and the stationary worm.
 std::vector<Player*> GetBeastsTankRoster(Player* bot);
 
 // None for a tank the deal left out and for every non-tank
@@ -86,9 +84,8 @@ Unit* GetBeastOfDuty(PlayerbotAI* botAI, BeastsTankDuty duty);
 // engaged beast, null included.
 BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast);
 
-// A DPS bot's target: a player's skull on a unit of the encounter, its snobold, Gormok, the mobile
-// worm while up, Icehowl. Each needs a unit in combat. The worm goes by form, never by its holder.
-// Empty without a note off map 649 or for a bot that isn't IsRaidDpsBot. Notes nb.dps.
+// A DPS bot's target, in combat: a player's skull on the encounter, its snobold, Gormok, the mobile worm
+// (by form, never by holder), Icehowl. Empty off map 649 or for a bot that isn't IsRaidDpsBot.
 BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI);
 
 }

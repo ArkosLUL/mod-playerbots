@@ -13,7 +13,7 @@ class GormokTankHoldBossAction : public ToCMainTankHoldAction
 {
 public:
     GormokTankHoldBossAction(PlayerbotAI* botAI, std::string const name = "gormok tank hold boss")
-        : ToCMainTankHoldAction(botAI, name) {};
+        : ToCMainTankHoldAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -23,7 +23,7 @@ class GormokSwapTankHoldAction : public RaidDirectAttackAction
 {
 public:
     GormokSwapTankHoldAction(PlayerbotAI* botAI, std::string const name = "gormok swap tank hold")
-        : RaidDirectAttackAction(botAI, name) {};
+        : RaidDirectAttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -31,7 +31,7 @@ class GormokTankSwapTauntAction : public AttackAction
 {
 public:
     GormokTankSwapTauntAction(
-        PlayerbotAI* botAI, std::string const name = "gormok tank swap taunt") : AttackAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "gormok tank swap taunt") : AttackAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -39,7 +39,7 @@ class GormokTankDefensiveAction : public Action
 {
 public:
     GormokTankDefensiveAction(
-        PlayerbotAI* botAI, std::string const name = "gormok tank defensive") : Action(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "gormok tank defensive") : Action(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -48,7 +48,7 @@ class GormokHandOfProtectionAction : public Action
 {
 public:
     GormokHandOfProtectionAction(
-        PlayerbotAI* botAI, std::string const name = "gormok hand of protection") : Action(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "gormok hand of protection") : Action(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -56,7 +56,7 @@ class GormokCancelHandOfProtectionAction : public Action
 {
 public:
     GormokCancelHandOfProtectionAction(
-        PlayerbotAI* botAI, std::string const name = "gormok cancel hand of protection") : Action(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "gormok cancel hand of protection") : Action(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -64,7 +64,7 @@ class GormokBringSnoboldToMeleeAction : public NorthrendBeastsWalkAction
 {
 public:
     GormokBringSnoboldToMeleeAction(PlayerbotAI* botAI, std::string const name = "gormok bring snobold to melee")
-        : NorthrendBeastsWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -72,19 +72,19 @@ class GormokLeaveStompRangeAction : public NorthrendBeastsWalkAction
 {
 public:
     GormokLeaveStompRangeAction(PlayerbotAI* botAI, std::string const name = "gormok leave stomp range")
-        : NorthrendBeastsWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {}
     bool Execute(Event event) override;
 
 private:
     // False when no spot cleared the young bombs and the walk took one clear of the stomp alone
-    bool spotClearsBombs = false;
+    bool _spotClearsBombs = false;
 };
 
 class GormokDodgeFireBombAction : public NorthrendBeastsWalkAction
 {
 public:
     GormokDodgeFireBombAction(PlayerbotAI* botAI, std::string const name = "gormok dodge fire bomb")
-        : NorthrendBeastsWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
