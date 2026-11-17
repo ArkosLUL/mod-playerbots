@@ -88,11 +88,11 @@ class AnubarakTankDefensiveAction : public Action
 public:
     AnubarakTankDefensiveAction(PlayerbotAI* botAI, std::string const name = "anubarak tank defensive",
                                 bool physicalOnly = false)
-        : Action(botAI, name), physicalOnly(physicalOnly) {};
+        : Action(botAI, name), _physicalOnly(physicalOnly) {};
     bool Execute(Event event) override;
 
 private:
-    bool physicalOnly;
+    bool _physicalOnly;
 };
 
 class AnubarakColdSelfSaveAction : public Action
@@ -104,8 +104,8 @@ public:
 
 private:
     // The bubble this cast and when, so one the class node put up at low health stays
-    uint32 bubbleSpell = 0;
-    uint32 bubbleMs = 0;
+    uint32 _bubbleSpell = 0;
+    uint32 _bubbleMs = 0;
 };
 
 class AnubarakDestroyFrostSphereAction : public AttackAction

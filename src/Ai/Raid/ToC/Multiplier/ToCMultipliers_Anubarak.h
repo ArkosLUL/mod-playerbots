@@ -31,7 +31,7 @@ private:
     // Fixed by the action's type and name, so worked out once per action
     static bool HeldWhileMarked(Action* action);
 
-    RaidActionCache<bool> held;
+    RaidActionCache<bool> _held;
 };
 
 // A DPS bot's damage on him, and its area damage within 30 yd of him, while its threat cap latch holds.
@@ -43,12 +43,11 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    RaidSplashCache splash;
+    RaidSplashCache _splash;
 };
 
-// Nothing aimed at a Frost Sphere but the bot's own duty sphere, and on that only direct damage: no
-// crowd control, DoT, channel or area spell. Heroic: no Starfall at all. Other area spells have no
-// target and stay unguarded. Wired from the definition.
+// Only direct damage on the bot's own duty sphere and nothing else at a Frost Sphere. Heroic: no Starfall at
+// all. Untargeted area spells stay unguarded. Wired from the definition.
 class AnubarakSphereGuardMultiplier : public Multiplier
 {
 public:
@@ -63,16 +62,12 @@ private:
         bool crowdControl = false;
     };
 
-    RaidSplashCache splash;
-    RaidActionCache<Names> names;
+    RaidSplashCache _splash;
+    RaidActionCache<Names> _names;
 };
 
-// A non-tank's damage on a burrower only on its own dps pick, so a multidot doesn't pull a loose one
-// onto a raider, and no area damage within 10 yd of the bot or its target while a burrower there is
-// still settling on its side tank, or, for melee, is one it has ANUBARAK_MELEE_AREA_CAP of the tank's
-// threat on. Interrupts and stuns on a casting one go through; a taunt or Death Grip never. A tank
-// holding no side holds its area damage with any burrower within 10 yd. No Bladestorm with a burrower
-// within 25 yd. Wired from the definition.
+// A non-tank's burrower damage only on its own pick, so a multidot doesn't pull a loose one, and no area damage,
+// taunt or Bladestorm that would pull one. Interrupts and stuns on a cast go through. Wired from the definition.
 class AnubarakBurrowerGuardMultiplier : public Multiplier
 {
 public:
@@ -87,13 +82,12 @@ private:
         bool mover = false;
     };
 
-    RaidSplashCache splash;
-    RaidActionCache<Names> names;
+    RaidSplashCache _splash;
+    RaidActionCache<Names> _names;
 };
 
-// A DPS bot's damage on a burrower it has 90% of the side tank's threat on, until under 80%, and its
-// area damage within 10 yd of the bot or its target with one such burrower there. Heals pass, and white
-// swings go on. Wired from the definition.
+// A DPS bot's damage on a burrower it has 90% of the side tank's threat on, until under 80%, and its area damage
+// near one. Heals pass and white swings go on. Wired from the definition.
 class AnubarakBurrowerThreatCapMultiplier : public Multiplier
 {
 public:
@@ -101,7 +95,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    RaidSplashCache splash;
+    RaidSplashCache _splash;
 };
 
 // A side tank's area and chain spells only where AnubarakSideTankAreaAllowed passes them: none of the
@@ -113,7 +107,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    RaidSplashCache splash;
+    RaidSplashCache _splash;
 };
 
 // Heroic phase 3: no heal that only feeds Leeching Swarm, on any non-tank without Penetrating Cold, the
@@ -125,7 +119,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    std::unordered_map<Action*, bool> heals;
+    std::unordered_map<Action*, bool> _heals;
 };
 
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);

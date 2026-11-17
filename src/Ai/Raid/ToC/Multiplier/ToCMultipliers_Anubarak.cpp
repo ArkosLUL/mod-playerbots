@@ -163,7 +163,7 @@ bool AnubarakProtectSpikeKiteMultiplier::HeldWhileMarked(Action* action)
 
 float AnubarakProtectSpikeKiteMultiplier::GetValue(Action* action)
 {
-    if (!action || !held.Get(action, [action] { return HeldWhileMarked(action); }) || !bot->HasAura(SPELL_MARK))
+    if (!action || !_held.Get(action, [action] { return HeldWhileMarked(action); }) || !bot->HasAura(SPELL_MARK))
         return 1.0f;
 
     return AnubarakEngaged(botAI) ? 0.0f : 1.0f;
@@ -182,7 +182,7 @@ float AnubarakThreatCapMultiplier::GetValue(Action* action)
     if (target == boss || (!target && AI_VALUE(Unit*, "current target") == boss))
         return 0.0f;
 
-    if (IsRaidAreaDamage(botAI, action, splash) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
+    if (IsRaidAreaDamage(botAI, action, _splash) && bot->GetExactDist2d(boss) <= ANUBARAK_AREA_THREAT_REACH)
         return 0.0f;
 
     return 1.0f;
@@ -193,12 +193,12 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (!action || !AnubarakEngaged(botAI))
         return 1.0f;
 
-    Names const& named = names.Get(action,
-                                   [action]
-                                   {
-                                       std::string const name = action->getName();
-                                       return Names{name == "starfall", IsSphereCrowdControl(name)};
-                                   });
+    Names const& named = _names.Get(action,
+                                    [action]
+                                    {
+                                        std::string const name = action->getName();
+                                        return Names{name == "starfall", IsSphereCrowdControl(name)};
+                                    });
     // Starfall's stars find the spheres overhead, and heroic has six for the pull
     Map* map = bot->GetMap();
     if (map && map->IsHeroic() && named.starfall)
@@ -216,7 +216,7 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
     if (sphere != GetAnubarakDutySphere(bot))
         return 0.0f;
 
-    return SlowOrSpreadOnSphere(botAI, action, splash) ? 0.0f : 1.0f;
+    return SlowOrSpreadOnSphere(botAI, action, _splash) ? 0.0f : 1.0f;
 }
 
 float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
@@ -229,7 +229,7 @@ float AnubarakBurrowerThreatCapMultiplier::GetValue(Action* action)
     if (aimed && AnubarakBurrowerThreatCapped(bot, aimed))
         return 0.0f;
 
-    if (IsRaidAreaDamage(botAI, action, splash) &&
+    if (IsRaidAreaDamage(botAI, action, _splash) &&
         (AnubarakBurrowerThreatCappedNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH) ||
          (aimed && AnubarakBurrowerThreatCappedNear(bot, aimed->GetPosition(), ANUBARAK_BURROWER_AREA_REACH))))
         return 0.0f;
@@ -242,12 +242,12 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !AnubarakEngaged(botAI))
         return 1.0f;
 
-    Names const& named = names.Get(action,
-                                   [action]
-                                   {
-                                       std::string const name = action->getName();
-                                       return Names{name == "bladestorm", MovesBurrower(name)};
-                                   });
+    Names const& named = _names.Get(action,
+                                    [action]
+                                    {
+                                        std::string const name = action->getName();
+                                        return Names{name == "bladestorm", MovesBurrower(name)};
+                                    });
     // Its pick can move to a burrower mid-spin, and the stand walks it into that side's pack
     if (named.bladestorm &&
         (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false) ||
@@ -257,7 +257,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
     // Weakness stacks come with it
     if (IsAnubarakTankPlayer(bot))
-        return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action, splash) &&
+        return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action, _splash) &&
                        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, false)
                    ? 0.0f
                    : 1.0f;
@@ -266,7 +266,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     Unit* target = action->GetTarget();
     // Before its side tank has held it a while, a burrower takes the threat of whatever hits it. Melee
     // stand next to the held ones, so theirs also waits near one they have 60% of its tank's threat on.
-    if (IsRaidAreaDamage(botAI, action, splash))
+    if (IsRaidAreaDamage(botAI, action, _splash))
     {
         Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
         bool const melee = PlayerbotAI::IsMelee(bot);
@@ -287,7 +287,7 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
     if (named.mover)
         return 0.0f;
 
-    if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action, splash))
+    if (burrower->HasUnitState(UNIT_STATE_CASTING) && StopsCast(botAI, action, _splash))
         return 1.0f;
 
     return burrower == GetAnubarakDpsTarget(botAI) ? 1.0f : 0.0f;
@@ -300,7 +300,7 @@ float AnubarakSideTankAreaGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return AnubarakSideTankAreaAllowed(botAI, action->getName(), action->GetTarget(),
-                                       IsRaidAreaDamage(botAI, action, splash))
+                                       IsRaidAreaDamage(botAI, action, _splash))
                ? 1.0f
                : 0.0f;
 }
@@ -316,12 +316,12 @@ float AnubarakSwarmHealMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    auto cached = heals.find(action);
-    if (cached == heals.end())
+    auto cached = _heals.find(action);
+    if (cached == _heals.end())
     {
         bool const heal =
             dynamic_cast<CastHealingSpellAction*>(action) || dynamic_cast<ReachPartyMemberToHealAction*>(action);
-        cached = heals.emplace(action, heal).first;
+        cached = _heals.emplace(action, heal).first;
     }
 
     if (!cached->second || !AnubarakSwarmHealing(botAI))

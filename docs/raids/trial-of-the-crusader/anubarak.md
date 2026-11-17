@@ -275,7 +275,8 @@ east and stops on the anchor.
 anchor (788.0, 129.3), R (770.2, 131.7), from the engage. Its grips and shots take only spheres homed
 there while one flies, so the four nearer the centre are left for the kites; the pre-pull side points
 are those spots (`GetAnubarakPrepullSideStand`) and the pickup point 10 yd west of that anchor, (778.0,
-129.3). All three lie 8-16 yd from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
+129.3), not west of the centre, where he was run across the room and dragged back. All three lie 8-16 yd
+from his wait point, inside his 23 yd aggro: walking onto his, Bulwark pulled
 him at 21-23 yd in Z and AA (2026-10-30), before the player. So `LayoutAnubarak` steps each toward the
 centre to 23 + `STAGING_UNPARK` yd off `Locs[17]`: (760.3, 132.4), (760.4, 137.1), (760.7, 128.4),
 navprobe-clean (bot filter, 16/16 at 3 yd). Normal's are already clear. Heroic's raid waits on the line
@@ -1035,7 +1036,8 @@ kills targeting ([action-selection.md](../../engine/action-selection.md)).
 **Non-kiters dodge the spike's path and hold the spot until it has passed.** The path is its
 predicted track over 3 s, a point every 0.2 s, per instance per ms (`DodgeTrack`): chased along the
 kite plan's track (a human's: its motion); nobody marked (the 4 s after a fail) or no plan yet,
-straight on toward its victim or spline end (`MotionTrack`).
+straight on toward its victim or spline end (`MotionTrack`): a failed spike chases its last victim at
+base speed through the idle, and in 2026-10-28 S drifted through the gather.
 Inside 10 yd of the spike or 7 yd of the track, a bot takes the nearest spot within 30 yd 13 yd off
 every track point (16 and 10 while the spike outruns the bot, to 19 and 12; 10 yd is 0.9 s at 11.4
 yd/s, and 2026-10-26 dodges started 0.3-1.3 s before the hit), its gather slot's side on a tie;
@@ -1543,7 +1545,7 @@ personal burst is unrestricted.
 | `side0`, `side1` | Each side's tank, human included, 0 when none. Per instance |
 | `wave` | Burrower waves seen this pull. Per instance |
 | `bside` | A burrower's side, keyed on the burrower |
-| `dside` | A DPS bot's burrower side, 0 or 1, keyed on the bot, re-split at each wave |
+| `dside` | A DPS bot's burrower side, 0 or 1, keyed on the bot: living DPS bots per role by guid, the sides in turn, re-split at each wave |
 | `grip` | 1 a grip went out this pull, 2 while a side waits on a failed one. Per instance |
 | `spot0`, `spot1` | Each side's tank spot, `x,y,z`: its latched patch, else the open spot. Per instance |
 | `allow` | Traces before 2026-10-29: heroic tank patches the submerge's kites could spend, 0-2. Per instance |
@@ -1568,7 +1570,7 @@ personal burst is unrestricted.
 | `lead` | A ranged DPS or healer bot a burrower is on: `walk` (its side tank over 25 yd off), `wait`, `none` |
 | `hbehind` | Heroic healer bot from his 35% in a phase 1: `go` (to its stand behind the tank patches), `wait` (an earlier healer still walking, or a tank under 50%), `none` (no stand) |
 | `rbehind`, `rstand` | Heroic phase 3 ranged DPS bot: `go`/`none` (a stand behind the tank patches); `walk`, `hold`, `lead`, `none` |
-| `kite` | The kiter's branch: `ring` (running the plan), `patch` (its patch walk), `hold` (at its end); older traces `detour`; `none` when there's no spike or the mark moved on |
+| `kite` | The kiter's branch: `ring` (running the plan), `patch` (its patch walk), `hold` (at its end); older traces `detour`; `none` when there's no spike or the mark moved on (it changes only while the kite runs, so the next window would open on the last branch) |
 | `dodge` | A new dodge spot's reason: `spike` (within 10 yd of it), `lane` (on its predicted path), `none` (no clear spot) |
 | `protect` | `hop` while this paladin holds the kiter's claim, `self` while the marked bot needs its own immunity, `none` |
 | `escort` | Heroic escort paladin: `walk`, `hold` (shadowing), `post` (at or to its post by the catch), `patch` (waiting by a boosted kiter's patch), `standby` (shadowing a kite with no other paladin's Hand), `none` |

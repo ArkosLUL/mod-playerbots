@@ -195,9 +195,8 @@ void DefineAnubarak(EncounterBuilder& e)
     e.Block("anubarak swarm save hold", Role::Any, AnubarakSwarmHealing, 0,
             {"lay on hands", "lay on hands on party", "pain suppression", "pain suppression on party",
              "guardian spirit on party"});
-    // phase 3: the class nodes spent these at the start and left Penetrating Cold carriers with nothing.
-    // Mana Shield drained both mages within 50 s. Power Word: Shield on itself is a buff, so the swarm
-    // heal multiplier misses it.
+    // phase 3: the class nodes spend these at the start, leaving Penetrating Cold carriers nothing, and Mana Shield
+    // drains a mage dry. Power Word: Shield on itself is a buff, which the swarm heal multiplier misses.
     e.Block("anubarak swarm self save hold", Role::Any, AnubarakSwarmSavesHeld, 0,
             {"cloak of shadows", "evasion", "feint", "ice block", "divine shield", "divine protection",
              "dispersion", "barkskin", "shamanistic rage", "icebound fortitude", "anti magic shell",

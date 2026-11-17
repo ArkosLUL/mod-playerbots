@@ -7,9 +7,7 @@
 #include <vector>
 
 // The Pursuing Spike runs pure pursuit: every moment it heads straight at where its target is right then.
-// Replayed from the kiter's real path over six 25H pulls, that put it within 0.9 yd of the real spike 6 s
-// on, nine times in ten. No game headers here so nativetest can build it; the drag's waypoints live here
-// for the same reason.
+// No game headers here so nativetest can build it, which is also why the drag's waypoints live here.
 namespace AnubarakPursuit
 {
 struct Point
@@ -31,10 +29,13 @@ inline float SegmentDist(Point a, Point b, Point p)
 }
 
 // Its speed auras: 3.5 yd/s, then +75% and +225%, each 7 s after the one before
-constexpr float SPEEDS[] = {3.5f, 3.5f * 1.75f, 3.5f * 3.25f};
-constexpr int LAST_STEP = 2;
-constexpr float STEP_S = 7.0f;
-constexpr float TICK_S = 0.1f;
+inline constexpr float SPEEDS[] = {3.5f, 3.5f * 1.75f, 3.5f * 3.25f};
+inline constexpr int LAST_STEP = 2;
+inline constexpr float STEP_S = 7.0f;
+inline constexpr float TICK_S = 0.1f;
+
+inline constexpr float DEG_TO_RAD = 0.0174532925f;
+inline constexpr float TWO_PI = 6.28318531f;
 
 struct Spike
 {
@@ -139,9 +140,8 @@ struct PathMember
     float straightCap = 1e9f;
 };
 
-// MakeKiterPath with the way round set, the straight leg cut short at straightCap: the kiter then rounds
-// the circle it stands on. The leg runs at least walkFirst, the straight step the kiter really walks,
-// else a heading that turns off sooner looks clear of a patch the kiter walks onto.
+// MakeKiterPath with the way round set and the straight leg cut at straightCap. It runs at least walkFirst, the
+// kiter's real first step, else a heading that turns off sooner looks clear of a patch the kiter walks onto.
 inline KiterPath MakeKiterPath(Point start, Point dir, Pace pace, Point centre, PathMember const& member,
                                float walkFirst = 0.0f)
 {
@@ -321,9 +321,8 @@ Pursuit Simulate(Spike spike, Path const& path, float horizonS, std::vector<Poin
     return Simulate(spike, path, horizonS, points, reach, std::vector<float>(points.size(), arrive));
 }
 
-// The walk now: how much sooner than the catch the spike comes within patchReach of the patch and fails
-// there, less leadS; negative when it doesn't. Under Hand of Protection the catch counts from the hand's
-// end, immuneS in. A kiter within patchReach - reach of the patch can't be caught: the spike fails first.
+// How much sooner than the catch the spike fails on the patch, less leadS; negative when it doesn't. The catch
+// counts from immuneS, the Hand's end, and never within patchReach - reach of the patch: the spike fails first.
 template <typename Path>
 float PatchMargin(Spike const& spike, Path const& walk, Point patch, float patchReach, float reach, float immuneS,
                   float horizonS, float leadS)
@@ -588,9 +587,8 @@ struct EscortRules
     float laneClearance = 9.0f;
 };
 
-// Where the escort waits for the catch: round the predicted catch point, off the spike's track to it and
-// on the paladin's side of the spike's line to the kiter, so the walk there never crosses the chase and the
-// dodge never sends it off again. The nearest the paladin first.
+// Escort posts round the predicted catch, off the spike's track and on the paladin's side of its line to the
+// kiter, so the walk there never crosses the chase and the dodge leaves it be. The nearest the paladin first.
 inline std::vector<Point> EscortPosts(Point catchPoint, Point spike, Point kiter, Point paladin,
                                       std::vector<Point> const& track, std::vector<Point> const& patches,
                                       EscortRules const& rules)
@@ -600,7 +598,7 @@ inline std::vector<Point> EscortPosts(Point catchPoint, Point spike, Point kiter
     for (float radius : rules.rings)
         for (int i = 0; i < rules.bearings; ++i)
         {
-            float const angle = 6.28318531f * static_cast<float>(i) / static_cast<float>(rules.bearings);
+            float const angle = TWO_PI * static_cast<float>(i) / static_cast<float>(rules.bearings);
             Point const post = {catchPoint.x + radius * std::cos(angle), catchPoint.y + radius * std::sin(angle)};
             if (Dist(post, rules.centre) > rules.centreReach || side * Cross(spike, kiter, post) < 0.0f ||
                 SegmentDist(spike, catchPoint, post) < rules.laneClearance)
@@ -623,9 +621,8 @@ inline std::vector<Point> EscortPosts(Point catchPoint, Point spike, Point kiter
     return out;
 }
 
-// Drag waypoints for when the boss's straight line to the anchor passes within trigger of a patch:
-// standOff either side of each such patch, square to that line, none within keepout of any patch, the
-// nearest the boss first
+// Drag waypoints standOff either side of each patch within trigger of the boss's line to the anchor, square to
+// that line, none within keepout of any patch, the nearest the boss first
 inline std::vector<Point> DragDetours(Point boss, Point anchor, std::vector<Point> const& patches, float trigger,
                                       float standOff, float keepout)
 {
@@ -660,10 +657,8 @@ struct HoldDirs
     bool turned = false;
 };
 
-// Which way each side tank's hold sits off its patch centre. Its burrowers sit about inset off the centre
-// that way, and the two sides' within Spider Frenzy's reach haste each other: the given directions while
-// they keep apart, else both turned off the line between the patches toward the boss by the smallest step
-// that does, past square to it if need be, at most straight away from each other.
+// Each side tank's hold direction off its patch, its burrowers sitting about inset that way. Within apart the two
+// sides haste each other (Spider Frenzy), so both turn toward the boss by the smallest step that parts them.
 inline HoldDirs SideHoldDirs(Point a, Point b, Point dirA, Point dirB, Point boss, float inset, float apart,
                              float stepDegrees = 15.0f)
 {
@@ -685,8 +680,8 @@ inline HoldDirs SideHoldDirs(Point a, Point b, Point dirA, Point dirB, Point bos
     out.turned = true;
     for (float degrees = stepDegrees; degrees <= 180.0f + 0.01f; degrees += stepDegrees)
     {
-        float const c = std::cos(degrees * 0.0174532925f);
-        float const s = std::sin(degrees * 0.0174532925f);
+        float const c = std::cos(degrees * DEG_TO_RAD);
+        float const s = std::sin(degrees * DEG_TO_RAD);
         out.a = {along.x * c + normal.x * s, along.y * c + normal.y * s};
         out.b = {-along.x * c + normal.x * s, -along.y * c + normal.y * s};
         if (burrowersApart(out.a, out.b))
@@ -696,9 +691,11 @@ inline HoldDirs SideHoldDirs(Point a, Point b, Point dirA, Point dirB, Point bos
     return out;
 }
 
-// A drag's first step when the tank's walk to its leg spot crosses a patch's slow: sixteen points on each
-// radius round the boss, out of keepout of every patch, the walk there and the walk on to the leg spot
-// both clear of every slow; the nearest the tank first
+inline constexpr int DRAG_PRE_STEP_BEARINGS = 16;
+inline constexpr float DRAG_PRE_STEP_RAD = TWO_PI / static_cast<float>(DRAG_PRE_STEP_BEARINGS);
+
+// A drag's first step when the tank's walk to its leg spot crosses a slow: points on each radius round the boss
+// out of keepout of every patch, both walks clear of every slow, the nearest the tank first
 inline std::vector<Point> DragPreSteps(Point boss, Point tank, Point legSpot, std::vector<Point> const& patches,
                                        std::vector<float> const& radii, float keepout, float slow)
 {
@@ -710,9 +707,9 @@ inline std::vector<Point> DragPreSteps(Point boss, Point tank, Point legSpot, st
 
     std::vector<Point> out;
     for (float radius : radii)
-        for (int i = 0; i < 16; ++i)
+        for (int i = 0; i < DRAG_PRE_STEP_BEARINGS; ++i)
         {
-            float const angle = static_cast<float>(i) * 0.392699082f;
+            float const angle = static_cast<float>(i) * DRAG_PRE_STEP_RAD;
             Point const point = {boss.x + radius * std::cos(angle), boss.y + radius * std::sin(angle)};
             if (clear(tank, point) && clear(point, legSpot))
                 out.push_back(point);
@@ -721,6 +718,8 @@ inline std::vector<Point> DragPreSteps(Point boss, Point tank, Point legSpot, st
     std::sort(out.begin(), out.end(), [tank](Point const& a, Point const& b) { return Dist(tank, a) < Dist(tank, b); });
     return out;
 }
+
+inline constexpr float RELAY_POST_TURNS_DEG[] = {0.0f, 20.0f, -20.0f, 40.0f, -40.0f};
 
 // Where a grip relay's next link grips the landed sphere again: reach short of the landing toward the
 // spot, then turned 20 and 40 degrees either way round the landing. The spot alone when it's in reach.
@@ -732,9 +731,9 @@ inline std::vector<Point> RelayPosts(Point landing, Point spot, float reach)
 
     Point const dir = {(spot.x - landing.x) / length, (spot.y - landing.y) / length};
     std::vector<Point> out;
-    for (float degrees : {0.0f, 20.0f, -20.0f, 40.0f, -40.0f})
+    for (float degrees : RELAY_POST_TURNS_DEG)
     {
-        float const angle = degrees * 0.0174532925f;
+        float const angle = degrees * DEG_TO_RAD;
         float const c = std::cos(angle);
         float const s = std::sin(angle);
         out.push_back({landing.x + (dir.x * c - dir.y * s) * reach, landing.y + (dir.x * s + dir.y * c) * reach});
@@ -743,14 +742,17 @@ inline std::vector<Point> RelayPosts(Point landing, Point spot, float reach)
     return out;
 }
 
+inline constexpr int RING_POINT_BEARINGS = 8;
+inline constexpr float RING_POINT_RAD = TWO_PI / static_cast<float>(RING_POINT_BEARINGS);
+
 // Eight points radius round centre, none within keepout of a patch, the nearest from first
 inline std::vector<Point> RingPoints(Point centre, float radius, Point from, std::vector<Point> const& patches,
                                      float keepout)
 {
     std::vector<Point> out;
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < RING_POINT_BEARINGS; ++i)
     {
-        float const angle = static_cast<float>(i) * 0.785398163f;
+        float const angle = static_cast<float>(i) * RING_POINT_RAD;
         Point const point = {centre.x + radius * std::cos(angle), centre.y + radius * std::sin(angle)};
         if (std::none_of(patches.begin(), patches.end(),
                          [&point, keepout](Point const& patch) { return Dist(point, patch) < keepout; }))
