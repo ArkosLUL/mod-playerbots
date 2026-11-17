@@ -117,9 +117,8 @@ bool TauntLands(Unit* victim, float dist, bool swarm)
            (!swarm && victim && victim->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT);
 }
 
-// A loose burrower is on a healer or ranged more often than not: Righteous Defense off whoever most of
-// them hit, a shout for two or more close by, the class taunt, then a charge or pull. tooFar: a taunt
-// waited for the burrowers to come closer.
+// Loose burrowers are mostly on healers or ranged, so first Righteous Defense off whoever most of them hit, then
+// a shout, the class taunt, a charge or pull. tooFar: a taunt waited for the burrowers to come closer.
 bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick, bool& tooFar)
 {
     tooFar = false;
@@ -387,7 +386,7 @@ bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
 
 bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 {
-    bool const physical = physicalOnly && GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
+    bool const physical = _physicalOnly && GetAnubarakPhase(botAI) != AnubarakPhase::Swarm;
     uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive", physical);
     return defensive && botAI->CastSpell(defensive, bot);
 }
@@ -395,10 +394,11 @@ bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 bool AnubarakColdSelfSaveAction::Execute(Event /*event*/)
 {
     // The purge is done once it's up. Kept up, the mage can't cast and the paladin hits for half.
-    if (bubbleSpell && bot->HasAura(bubbleSpell) && getMSTimeDiff(bubbleMs, getMSTime()) < ANUBARAK_COLD_BUBBLE_CANCEL_MS)
+    if (_bubbleSpell && bot->HasAura(_bubbleSpell) &&
+        getMSTimeDiff(_bubbleMs, getMSTime()) < ANUBARAK_COLD_BUBBLE_CANCEL_MS)
     {
-        bot->RemoveAurasDueToSpell(bubbleSpell);
-        bubbleSpell = 0;
+        bot->RemoveAurasDueToSpell(_bubbleSpell);
+        _bubbleSpell = 0;
         return true;
     }
 
@@ -406,8 +406,8 @@ bool AnubarakColdSelfSaveAction::Execute(Event /*event*/)
     if (!save || !botAI->CastSpell(save, bot))
         return false;
 
-    bubbleSpell = IsAnubarakColdBubble(save) ? save : 0;
-    bubbleMs = getMSTime();
+    _bubbleSpell = IsAnubarakColdBubble(save) ? save : 0;
+    _bubbleMs = getMSTime();
     return true;
 }
 
@@ -555,7 +555,7 @@ bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
             if (!botAI->CastSpell("death grip", sphere))
                 return false;
 
-            NoteAnubarakGripCast(bot, sphere, duty.side);
+            TrackAnubarakGripCast(bot, sphere, duty.side);
             return true;
         }
         default:

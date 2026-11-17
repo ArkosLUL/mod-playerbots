@@ -85,9 +85,8 @@ constexpr float ANUBARAK_KITE_CATCH_HORIZON_S = 20.0f;
 // The spike tests for a patch, else Impales, every 1.5 s at its base speed
 constexpr float ANUBARAK_SPIKE_BASE_TEST_S = 1.5f;
 constexpr uint32 ANUBARAK_KITE_PLAN_JUDGE_MS = 250;
-// The kiter walks to its plan's track this far past the point nearest it, at most AHEAD_S on, the nearest
-// point looked for this many ticks either side of where the plan's age puts it. Yards, not seconds: 1.2 s
-// on a Nitro run is 21 yd, and that cut the ring and ran the spike over a tank patch the plan kept it off.
+// The kiter aims this far past its nearest track point, at most AHEAD_S on, that point looked for SLACK_TICKS
+// either side of the plan's age. Yards, not seconds: a time lead on a fast run cuts the ring
 constexpr float ANUBARAK_KITE_AHEAD_YD = 8.4f;
 constexpr float ANUBARAK_KITE_AHEAD_S = 1.2f;
 constexpr int ANUBARAK_KITE_TRACK_SLACK_TICKS = 15;
@@ -124,7 +123,7 @@ constexpr float ANUBARAK_HAND_DURATION_S = 10.0f;
 // An own kite this hurt goes immune at once: scarab ticks can kill it before the catch
 constexpr float ANUBARAK_KITE_OWN_LOW_HEALTH_PCT = 50.0f;
 // After a fail the spike restarts from the spent patch, so the gather steps this far off it, inside the
-// navprobe-clean 45 yd
+// floor's walkable 45 yd
 constexpr float ANUBARAK_GATHER_STEP = 12.0f;
 constexpr float ANUBARAK_GATHER_STEP_REACH = 45.0f;
 
@@ -134,9 +133,8 @@ constexpr uint32 SPELL_SPIKE_SPEED2 = 65922;
 constexpr uint32 SPELL_SPIKE_SPEED3 = 65923;
 
 constexpr float ANUBARAK_SCARAB_PICKUP_RANGE = 30.0f;
-// A scarab runs 6.3 yd/s to a player's 7 until Determination doubles that. Its victim within REACH steps
-// STEP away from it, the walk keeping it out of its 7.7 yd melee reach, or no closer than SLACK inside the
-// gap it starts at, and wide of the burrowers.
+// A scarab runs 6.3 yd/s to a player's 7 until Determination doubles it. Its victim within REACH steps STEP
+// away, out of MELEE_REACH or no closer than SLACK inside the gap it starts at, and wide of the burrowers
 constexpr float ANUBARAK_SCARAB_KITE_REACH = 15.0f;
 constexpr float ANUBARAK_SCARAB_KITE_STEP = 10.0f;
 constexpr float ANUBARAK_SCARAB_MELEE_REACH = 7.7f;
@@ -145,12 +143,8 @@ constexpr float ANUBARAK_SCARAB_KITE_BURROWER_CLEARANCE = 8.0f;
 constexpr int ANUBARAK_SCARAB_KITE_HEADINGS = 16;
 constexpr uint32 SPELL_SCARAB_DETERMINATION = 66092;
 
-// Heroic phase 3: Leeching Swarm takes 30% of each player's current health a second and heals him by
-// what lands, so the healing goes to the tanks and Penetrating Cold only (user calls, 2026-10-30 and
-// 2026-11-05). Every other non-tank, healers too, lives on its own, party and raid-wide heals: about
-// 0.3k a second keeps it over the swarm's 250 a tick. One that sinks under ANUBARAK_SWARM_HOT_HP anyway
-// (no party heal in reach, or Mana Tide sitting in its shaman's water slot) gets a HoT from another
-// healer (user call 2026-11-08).
+// Heroic phase 3: the swarm heals him by what it drains, so heals go to the tanks and Penetrating Cold only.
+// The rest live on their own, party and raid heals, with a HoT from another healer under ANUBARAK_SWARM_HOT_HP
 constexpr float ANUBARAK_SWARM_TANK_URGENT_PCT = 50.0f;
 constexpr float ANUBARAK_SWARM_TANK_TOPOFF_PCT = 90.0f;
 constexpr float ANUBARAK_SWARM_COLD_TOPOFF_PCT = 50.0f;
@@ -168,14 +162,12 @@ constexpr int32 ANUBARAK_COLD_RESCUE_MARGIN_MS = 300;
 constexpr int32 ANUBARAK_MASTERY_ROUND_MS = 1500;
 constexpr uint32 ANUBARAK_MASTERY_MIN_CARRIERS = 2;
 constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
-// Heroic burst waits for phase 3 from this health (user call, 2026-11-04), unless at his pace since he
-// came up he would still be above 30% this close to the submerge. A 2 min cooldown spent in the last
-// phase 1 comes back 60-90 s into phase 3.
+// Heroic burst waits for phase 3 from this health, unless at his pace he'd still be over 30% BEHIND_MARGIN
+// before the submerge: a 2 min cooldown spent in the last phase 1 is only back 60-90 s into phase 3
 constexpr float ANUBARAK_BURST_HOLD_PCT = 50.0f;
 constexpr float ANUBARAK_BURST_BEHIND_MARGIN_S = 5.0f;
 // Phase 3 only starts while he's up. From WINDOW before a submerge every DPS bot goes on him once his loss
-// since he came up, scaled to all of them on him and by DISCOUNT, gets him under TARGET in time. Needs
-// MIN_SPAN of samples; a share of DPS bots on him under SHARE_FLOOR counts as the floor.
+// since he came up, scaled to all of them on him and by DISCOUNT, gets him under TARGET in time
 constexpr uint32 ANUBARAK_PUSH_WINDOW_MS = 30000;
 constexpr uint32 ANUBARAK_PUSH_MIN_SPAN_MS = 15000;
 constexpr uint32 ANUBARAK_PUSH_SAMPLE_MS = 1000;
@@ -189,15 +181,14 @@ constexpr uint32 ANUBARAK_PUSH_LIVE_MS = 3000;
 // Phase 3's lust and burst wait for the burrowers up at its start to die, at most this long
 constexpr uint32 ANUBARAK_SWARM_BURST_WAIT_MS = 15000;
 // Heroic phase 3: a wave is left to the side tanks only while he'd die within this at the raid's pace over
-// the last 10 s (user call, 2026-10-31). A wave of four takes about 15 s of the raid's damage.
+// the last 10 s
 constexpr float ANUBARAK_SWARM_IGNORE_S = 10.0f;
 constexpr uint32 ANUBARAK_SWARM_TTD_WINDOW_MS = 10000;
 constexpr uint32 ANUBARAK_SWARM_TTD_MIN_MS = 2000;
 constexpr uint32 ANUBARAK_SWARM_HEALTH_SAMPLE_MS = 1000;
 constexpr uint32 ANUBARAK_SWARM_WAVE_READ_MS = 2000;
-// He goes Berserk 10 min into the pull. Heroic phase 3 melee stay on him while, at his loss since the swarm,
-// he'd still be up MARGIN before it. Read from ANUBARAK_SWARM_TTD_WINDOW_MS into the swarm, a whole-phase
-// pace, so 8 melee don't swap sides every time the last 10 s dip.
+// Berserk comes 10 min into the pull. Heroic phase 3 melee stay on him while at his pace since the swarm he'd
+// still be up MARGIN before it, read from TTD_WINDOW in: a whole-phase pace, so a 10 s dip swaps no melee
 constexpr uint32 ANUBARAK_BERSERK_MS = 600000;
 constexpr float ANUBARAK_SWARM_BERSERK_MARGIN_S = 30.0f;
 
@@ -207,16 +198,15 @@ constexpr float ANUBARAK_PIT_RADIUS = 60.0f;
 constexpr float ANUBARAK_PIT_CEILING_Z = 200.0f;
 constexpr float ANUBARAK_SUBMERGE_SPOT_SEARCH = 40.0f;
 constexpr float ANUBARAK_SUBMERGE_SPOT_FLOOR = 40.0f;
-// Heroic drags him far off the raid point (user call): the spot is searched this long after the pull or an
-// emerge, on these rings round the centre (navprobe-clean to 45), 50+ yd off R first, farthest in bands
+// Heroic drags him far off the raid point: the spot is searched this long after the pull or an emerge, on
+// these rings round the centre (walkable out to 45 yd), 50+ yd off R first, farthest in bands
 constexpr uint32 ANUBARAK_SUBMERGE_FAR_SEARCH_MS = 40000;
 constexpr float ANUBARAK_SUBMERGE_FAR_RINGS[] = {45.0f, 40.0f, 35.0f};
 constexpr uint32 ANUBARAK_SUBMERGE_FAR_HEADINGS = 24;
 constexpr float ANUBARAK_SUBMERGE_FAR_MIN = 50.0f;
 constexpr float ANUBARAK_SUBMERGE_FAR_BAND = 5.0f;
-// The tank's backpedal legs moved him 3.0-3.6 yd/s net in 2026-10-30 Z. The drag leaves with under 18 s
-// left, since a 40 s drag pulled healers off the side tanks, so the spot has to lie within its reach.
-// Freezing Slash stuns the tank 3 s every 15-20 s, so nearly every drag loses STUN_S standing still.
+// The drag leaves with under LEAD_S to go, as a long one pulls healers off the side tanks, so the spot lies
+// within its reach. Freezing Slash stuns the tank 3 s every 15-20 s: nearly every drag loses STUN_S to it
 constexpr float ANUBARAK_SUBMERGE_DRAG_SPEED = 3.0f;
 constexpr float ANUBARAK_SUBMERGE_DRAG_MARGIN_S = 3.0f;
 constexpr float ANUBARAK_SUBMERGE_DRAG_STUN_S = 3.0f;
@@ -255,13 +245,13 @@ constexpr uint32 ANUBARAK_DRAG_STALL_MS = 5000;
 constexpr float ANUBARAK_STOCK_SPIKE_CLEARANCE = ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN;
 // Heroic: six spheres never respawn, the east pair tanks, so each of two submerges gets two of the four left
 constexpr uint32 ANUBARAK_KITE_SPHERES_PER_SUBMERGE = 2;
-// Both go from this long before he submerges: kills took 2.9-8.6 s in 2026-10-30 Z plus the 1.5 s fall,
-// and the two share the shooters
+// Both go from this long before he submerges: the two share the shooters, and each patch takes the kill plus
+// a 1.5 s fall
 constexpr float ANUBARAK_KITE_PRESHOT_LEFT_S = 30.0f;
-// Its patch lands inside the floor's navprobe-clean 50 yd
+// Its patch lands inside the floor's walkable 50 yd
 constexpr float ANUBARAK_KITE_SPHERE_FLOOR = 50.0f;
-// Preferred off every tank patch: the restart reach plus the 14 yd the spike walks on after a fail, 8.6-16.9
-// over 18 fails in 2026-11-04 CC-CH. Heroic has four kite spheres, so this is only a preference.
+// Preferred off every tank patch: the restart reach plus the ~14 yd the spike walks on after a fail. Heroic
+// has four kite spheres, so this is only a preference
 constexpr float ANUBARAK_KITE_SPHERE_TANK_CLEARANCE = ANUBARAK_SUBMERGE_PATCH_CLEARANCE_MIN + 14.0f;
 // The stand sits this far inside the reach, so a drifting sphere doesn't walk the shooter every tick
 constexpr float ANUBARAK_SPHERE_STAND_SLACK = 1.0f;
@@ -288,12 +278,12 @@ constexpr uint8 ANUBARAK_SPHERE_HOME_COUNT = 6;
 // The boss script's churning ground, AnubLocs 1 to 4, where burrowers come up
 const Position ANUBARAK_NORTH_EXITS[] = {{694.50f, 185.36f, 142.12f}, {740.18f, 193.44f, 142.12f}};
 const Position ANUBARAK_SOUTH_EXITS[] = {{694.89f, 102.48f, 142.12f}, {731.99f, 83.38f, 142.12f}};
-// Heroic's tank pair, the east homes (user call): the four nearer the centre are the kite spheres
+// Heroic's tank pair, the east homes: the four nearer the centre are the kite spheres
 constexpr uint8 ANUBARAK_TANK_HOME_NORTH = 1;
 constexpr uint8 ANUBARAK_TANK_HOME_SOUTH = 0;
 // Heroic refills: an open spot at most this far from the held patch, an open pair pulled in to this apart
 constexpr float ANUBARAK_REFILL_MAX = 30.0f;
-// Refill spots are pulled in to this far from the room centre, inside the navprobe-clean 45 yd ring
+// Refill spots are pulled in to this far from the room centre, inside the floor's walkable 45 yd
 constexpr float ANUBARAK_REFILL_FLOOR = 45.0f;
 // The raid point sits this far off the anchor, at right angles to the line through the tank spots
 constexpr float ANUBARAK_RAID_POINT_OFFSET = 18.0f;
@@ -594,9 +584,8 @@ struct AnubarakState
     uint32 swarmMs = 0;
     float swarmHpPct = 30.0f;
     std::unordered_set<ObjectGuid> swarmBurrowers;
-    // Heroic phase 3: his health about once a second over the last ANUBARAK_SWARM_TTD_WINDOW_MS, and whether
-    // the burrowers up since the swarm are left to the side tanks, read as each wave comes up and again
-    // every ANUBARAK_SWARM_WAVE_READ_MS while one lives
+    // Heroic phase 3: his health once a second over ANUBARAK_SWARM_TTD_WINDOW_MS, and whether the swarm's
+    // burrowers are left to the side tanks, read per wave and every ANUBARAK_SWARM_WAVE_READ_MS while one lives
     std::deque<std::pair<uint32, uint32>> swarmHealth;
     bool waveLeave = false;
     uint32 waveReadMs = 0;
@@ -625,7 +614,7 @@ struct AnubarakState
     uint32 humanSwapMs = 0;
     // Side tanks that died this pull, for the battle res
     std::vector<ObjectGuid> deadSideTanks;
-    // Last marked player seen, so its anub.kite closes when the mark moves on
+    // Last marked player seen, so the kite's latches reset when the mark moves on
     ObjectGuid kiter;
     // Heroic: the kiter that turned for its kite patch, until the mark moves on
     ObjectGuid kitePatchKiter;
@@ -1067,9 +1056,8 @@ bool BossStillFor(AnubarakState const& state, uint32 now, uint32 ms)
     return state.bossStillValid && getMSTimeDiff(state.bossStillMs, now) >= ms;
 }
 
-// The explicit main tank, else the first living tank, as GetMainTankGuid picks but with the spec
-// asked too, so it can't blink. walked: no flagged tank, so every living member ahead of the answer
-// (all of them when it's empty) is known not to be a tank.
+// The flagged main tank, else the first living tank with the spec asked too, so it can't blink. walked: no
+// flag, so every living member ahead of the answer (all of them when it's empty) is known not to be a tank
 ObjectGuid StableMainTankGuid(Group* group, bool& walked)
 {
     walked = false;
@@ -1088,9 +1076,8 @@ ObjectGuid StableMainTankGuid(Group* group, bool& walked)
     return ObjectGuid::Empty;
 }
 
-// Living tanks on the map other than the main tank, bots first, so a human only takes a side no bot
-// can. Each in IsAssistTankOfIndex's order: assistants first. walked as StableMainTankGuid set it for
-// mainTank, so the tank test isn't asked twice of the members it already turned down.
+// Living tanks other than the main tank, bots first so a human only takes a side no bot can, assistants
+// first within each. walked as StableMainTankGuid set it skips the tank test for members it turned down
 std::vector<ObjectGuid> RankSideTanks(Player* bot, Group* group, ObjectGuid const& mainTank, bool walked)
 {
     // Bot assistants, other bots, human assistants, other humans
@@ -1172,8 +1159,6 @@ void RefreshSideTanks(Player* bot, AnubarakState& state, bool placed[2])
     }
 }
 
-// anub.kite only changes while the kite runs, so the kiter's next window would open on the branch its
-// last one ended on
 void TrackKiter(Player* bot, AnubarakState& state, Player* target)
 {
     ObjectGuid const guid = target ? target->GetGUID() : ObjectGuid::Empty;
@@ -1199,9 +1184,10 @@ void TrackKiter(Player* bot, AnubarakState& state, Player* target)
     state.escortPatch = EscortPatchLatch();
 
     // A bot waits out a cast in progress before any action runs, its kite included
-    PlayerbotAI* ai = target ? GET_PLAYERBOT_AI(target) : nullptr;
-    if (ai && (target->GetCurrentSpell(CURRENT_GENERIC_SPELL) || target->GetCurrentSpell(CURRENT_CHANNELED_SPELL)))
-        ai->RequestSpellInterrupt();
+    PlayerbotAI* kiterAI = target ? GET_PLAYERBOT_AI(target) : nullptr;
+    if (kiterAI &&
+        (target->GetCurrentSpell(CURRENT_GENERIC_SPELL) || target->GetCurrentSpell(CURRENT_CHANNELED_SPELL)))
+        kiterAI->RequestSpellInterrupt();
 }
 
 // The boss only ever casts Leeching Swarm below 30% while surfaced, so any of these means phase 3
@@ -1268,7 +1254,7 @@ std::array<AnubarakPursuit::Point, 2> PairSpotsOf(Position const& north, Positio
                                       ANUBARAK_REFILL_FLOOR);
 }
 
-// The east pair's spots, (789.6, 141.1) and (786.4, 117.5), navprobe-clean as refill spots
+// The east pair's spots, (789.6, 141.1) and (786.4, 117.5), both walkable as refill spots
 std::array<AnubarakPursuit::Point, 2> HeroicPairSpots()
 {
     return PairSpotsOf(ANUBARAK_SPHERE_HOMES[ANUBARAK_TANK_HOME_NORTH], ANUBARAK_SPHERE_HOMES[ANUBARAK_TANK_HOME_SOUTH]);
@@ -1284,11 +1270,8 @@ bool PairOnFloor(Player* bot, Position const& north, Position const& south, Posi
            Dist2d(spots[0], spots[1]) >= ANUBARAK_TANK_PATCH_GAP;
 }
 
-// Heroic, so the patch comes down where the spheres fly (they drift round their spawns). The first pair is
-// the east one. After it, one side held: the open spot is on the line from the held patch to the nearest
-// spawn past it on the open side (north is +y), 20 to 30 yd out. Both open: the nearest north and south
-// spawns 20+ apart, pulled in until 30 apart. Run after the latches: a falling sphere keeps its spawn
-// counted, so the spot it falls for holds until its patch has latched.
+// Heroic refill spots, by the spawns the spheres still fly round. Run after the latches: a falling sphere
+// keeps its spawn counted, so the spot it falls for holds until its patch has latched
 void UpdateRefillSpots(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
 {
     RefillKey key;
@@ -1420,9 +1403,8 @@ Creature* GripPending(AnubarakState const& state, std::vector<Creature*> const& 
     return nullptr;
 }
 
-// The side's patch. Heroic after the first pair, an open side's refill spot. Else its side point moved
-// with the other side's patch, or with its gripped sphere on the way down while this side has none, so a
-// patch shot off its spot drags the other side's spot along and the pair keeps its spacing.
+// The side's patch, else heroic's refill spot, else its side point moved with the other side's patch or
+// pending grip, so a patch shot off its spot drags the other spot along and the pair keeps its spacing
 Position SideSpot(AnubarakState const& state, std::vector<Creature*> const& spheres, ObjectGuid const held[2],
                   uint8 side)
 {
@@ -1527,9 +1509,8 @@ int8 HumanOnOtherSpot(Player* bot, ObjectGuid const sides[2], Position const spo
     return -1;
 }
 
-// Bots can't tell a human his side, so it's the tank spot he stands at and the bot side tank takes the
-// other. At once when a side just took a new tank, else after he has stood there for the dwell, so
-// walking past doesn't swap.
+// Bots can't tell a human his side, so it's the tank spot he stands at. Swaps at once on a new side tank,
+// else only after the dwell, so walking past doesn't swap
 void FollowHumanSideTank(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres,
                          bool const placed[2], uint32 now)
 {
@@ -1664,9 +1645,8 @@ void RefreshTankPatches(AnubarakState& state, std::vector<Creature*> const& sphe
     state.patch1 = held[1];
 }
 
-// The side the north exits feed, the south pair the other: the pairing with fewer yards from exits to
-// spots, side 0 on the usual spots. A tank patch re-latched across the room moves its spot, and burrowers
-// fed to the far tank open on the near one, then get handed over while they hit the healers.
+// The side the north exits feed, by fewer yards from exits to spots: a patch re-latched across the room
+// moves its spot, and burrowers fed to the far tank get handed over while they hit the healers
 uint8 NorthExitSide(AnubarakState const& state)
 {
     Position const spots[2] = {state.spot0.Get(), state.spot1.Get()};
@@ -1739,7 +1719,6 @@ uint32 NextWaveMs(AnubarakState const& state)
 
 int32 MsUntilWave(AnubarakState const& state, uint32 now) { return static_cast<int32>(NextWaveMs(state) - now); }
 
-// Null while he isn't engaged. Refreshes phase, latches and probes once per instance per ms.
 // His health over its net loss a second across the samples kept, -1 while he isn't losing any or the
 // samples span under ANUBARAK_SWARM_TTD_MIN_MS
 float SwarmTimeToDieS(AnubarakState const& state)
@@ -1770,9 +1749,8 @@ bool SwarmBerserkBehind(AnubarakState const& state, Creature* boss, uint32 now)
     return perS <= 0.0f || health / perS > berserkLeftS - ANUBARAK_SWARM_BERSERK_MARGIN_S;
 }
 
-// Heroic phase 3: samples his health once a second, and reads whether the burrowers up since the swarm are
-// left to the side tanks as a wave comes up and every ANUBARAK_SWARM_WAVE_READ_MS while one lives. Read
-// again, a wave left alone still becomes the focus once his health loss stalls.
+// Heroic phase 3: samples his health once a second and re-reads the wave every ANUBARAK_SWARM_WAVE_READ_MS,
+// so a wave left to the side tanks still becomes the focus once his health loss stalls
 void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
 {
     if (state.swarmHealth.empty() ||
@@ -1802,8 +1780,7 @@ void ReadSwarmWave(Player* bot, AnubarakState& state, Creature* boss, uint32 now
                                  std::to_string(ttd < 0.0f ? -1 : static_cast<int32>(std::lround(ttd))));
 }
 
-// Permafrost stays until the spike takes it, so a patch gone from the sweep while he's down is spent
-// (anub.kitespent: the count this submerge)
+// Permafrost stays until the spike takes it, so a kite patch gone from the sweep while he's down is spent
 void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creature*> const& spheres)
 {
     ObjectGuid const tanks[2] = {state.patch0.Get(), state.patch1.Get()};
@@ -1816,7 +1793,10 @@ void CountSpentKitePatches(Player* bot, AnubarakState& state, std::vector<Creatu
     if (state.phaseValue == AnubarakPhase::Submerged)
         for (ObjectGuid const& guid : state.kitePatchesSeen)
             if (!landed.count(guid) && guid != tanks[0] && guid != tanks[1])
-                RaidObs::NoteDerived(bot, "anub.kitespent", std::to_string(++state.kitePatchesSpent));
+            {
+                ++state.kitePatchesSpent;
+                RaidObs::NoteDerived(bot, "anub.kitespent", std::to_string(state.kitePatchesSpent));
+            }
 
     state.kitePatchesSeen.swap(landed);
 }
@@ -1874,6 +1854,7 @@ void ReadPush(Player* bot, AnubarakState& state, Creature* boss, uint32 now)
                                  std::to_string(std::lround(leftS)));
 }
 
+// Null while he isn't engaged. Refreshes phase, latches and probes once per instance per ms.
 AnubarakState* ReadPhase(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1889,7 +1870,7 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
     if (state->phaseMemoValid && state->phaseMemoMs == now)
         return state;
 
-    // Gated triggers never read the phase while he's out of combat, so a wipe shows only as this gap
+    // Gated triggers never read the phase while he's out of combat, so a wipe is only seen as this gap
     if (!state->engagedSeen || getMSTimeDiff(state->lastEngagedMs, now) > ANUBARAK_PULL_GAP_MS)
     {
         state->engagedSeen = true;
@@ -1943,8 +1924,7 @@ AnubarakState* ReadPhase(PlayerbotAI* botAI)
         state->behindGone.clear();
     }
 
-    // Hit rows on spheres say who downed each one, the pet or the splash. Asked again on every phase
-    // edge, since the trace can open after the first read.
+    // Asked again on every phase edge, since the trace can open after the first read
     if (state->phaseValue != before)
         RaidObs::LogHitsOn(bot, static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE));
 
@@ -2060,8 +2040,7 @@ std::vector<Position> LatchedTankSpots(Player* bot, AnubarakState const& state)
 }
 
 // Heroic never kites onto a stray patch this close to a tank patch: the spike's first test after a fail
-// reaches 11.5 yd plus its 5.25 yd first walk. Its last chase spline also carries it on about 14 yd
-// through the idle, which the planner's next leg reads.
+// reaches 11.5 yd plus its 5.25 yd first walk
 bool NearTankPatch(Position const& patch, std::vector<Position> const& tankSpots)
 {
     return std::any_of(tankSpots.begin(), tankSpots.end(), [&patch](Position const& tank)
@@ -2159,9 +2138,8 @@ bool PathClips(Position const& a, Position const& target, Position const& patch)
     return SegmentDistance2d(a, target, patch) < limit - ANUBARAK_PATH_CLIP_SLACK;
 }
 
-// Next corner of a square round the patch, its sides just outside the slow reach. Legs along a side
-// never clip, so the kiter goes near corner, far corner, stand. A point straight out to the side
-// won't do: the leg from there to the stand still cuts to 6 yd of the patch.
+// Next corner of a square just outside the patch's slow reach: legs along a side never clip, while a point
+// straight out to the side leaves a leg to the stand that cuts to 6 yd of the patch
 Position DetourWaypoint(Player* kiter, Position const& patch, Position const& stand)
 {
     Position const from = kiter->GetPosition();
@@ -2411,9 +2389,8 @@ bool KiteCatchDue(Player* kiter, Creature* spike)
            ANUBARAK_IMPALE_REACH + closing * ANUBARAK_KITE_OWN_LEAD_S;
 }
 
-// Heroic druid's last tool, once the catch is due: Feral Charge for its form onto the burrower or scarab
-// that gains it the most on the spike, landing on the floor off the tank patches with the spike's lane
-// there clear
+// Heroic druid's last tool once the catch is due: Feral Charge onto the bug that gains most on the spike,
+// landing on the floor off the tank patches with the spike's lane there clear
 bool FeralChargeBoost(Player* kiter, Creature* spike, AnubarakState const& state,
                       std::vector<LaneObstacle> const& obstacles, AnubarakKiteBoost& out)
 {
@@ -2463,11 +2440,8 @@ bool TeleportCovers(Player* kiter, Creature* spike)
                Dist2d(kiter->GetPosition(), spike->GetPosition()) + ANUBARAK_CIRCLE_TELEPORT_GAIN;
 }
 
-// The next speed boost in the chain: Sprint, Dash, Nitro Boosts, Blink the way it runs when the spike's
-// lane to the landing stays clear, then the teleport back to a circle well behind the spike, then heroic
-// druids' Feral Charge. The teleport and the charge go last: no speed boost ready or running, and the catch
-// due, the own immunity's lead. Teleported first, or as soon as the circle lay behind, the warlock ran its
-// Nitro back across the circle and landed 15-20 yd from the spike.
+// Next boost in the chain. The teleport and Feral Charge go last, with no speed boost ready or running and the
+// catch due: teleporting earlier runs the warlock's Nitro back across the circle and lands it next to the spike
 bool NextKiteBoost(Player* kiter, Creature* spike, AnubarakState const& state,
                    std::vector<LaneObstacle> const& obstacles, AnubarakKiteBoost& out)
 {
@@ -2560,9 +2534,8 @@ bool UnderHandOfProtection(Unit* unit)
                        [unit](uint32 rank) { return unit->HasAura(rank); });
 }
 
-// Which patches a kite may end on, lower first: -1 never. Heroic takes only a kite patch clear of the tank
-// patches: its six spheres never respawn, and a tank patch spent leaves its side bare into phase 3.
-// Normal takes any, a tank patch last while a burrower lives.
+// Which patches a kite may end on, lower first, -1 never. Heroic takes only kite patches clear of the tank
+// ones: its spheres never respawn, so a spent tank patch leaves its side bare. Normal ranks a tank one last
 int8 KitePatchRank(Player* kiter, AnubarakState const& state, Creature* sphere, bool heroic, bool burrowers)
 {
     if (!IsPermafrostPatch(sphere))
@@ -2665,13 +2638,12 @@ std::vector<Player*> ProtectorOrder(Player* bot);
 // A side tank bot with a burrower of its side to hold or take
 static bool HoldsSideBurrower(Player* player)
 {
-    PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
-    return ai && GetAnubarakBurrowerTankSide(player) >= 0 && GetAnubarakBurrowerPick(ai);
+    PlayerbotAI* playerAI = GET_PLAYERBOT_AI(player);
+    return playerAI && GetAnubarakBurrowerTankSide(player) >= 0 && GetAnubarakBurrowerPick(playerAI);
 }
 
-// Paladin bots with Hand of Protection ready for the kiter, the kiter first when it's one; none while it
-// carries Forbearance. Never a side tank holding a burrower: the escort walk takes it off its patch and
-// the burrower submerges back to full. The claim can still take its Hand where it stands.
+// Paladin bots with Hand of Protection ready for the kiter, never a side tank holding a burrower: the escort walk
+// takes it off its patch and the burrower submerges back to full. The claim can still take its Hand where it stands
 std::vector<Player*> ReadyHands(Player* kiter)
 {
     std::vector<Player*> hands;
@@ -3058,9 +3030,8 @@ std::string KitePredText(AnubarakKitePlanner::Outcome const& out)
     return text;
 }
 
-// The kite plan for the marked kiter, judged at most every ANUBARAK_KITE_PLAN_JUDGE_MS. A bot's is the
-// planner's pick, the plan it holds kept unless beaten; a human's is its current motion held, judged for the
-// catch the Hand and the escort serve.
+// Judged at most every ANUBARAK_KITE_PLAN_JUDGE_MS. A bot's plan is the planner's pick, held unless beaten. A
+// human's is its current motion, judged for the catch the Hand and the escort serve
 KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
 {
     KitePlan& plan = state.kitePlan;
@@ -3126,11 +3097,8 @@ KitePlan& PlanKite(Player* kiter, Creature* spike, AnubarakState& state)
     return plan;
 }
 
-// Heroic only. The patch stage holds once the plan's walk onto its patch has begun, while the plan still
-// ends on a patch. Sprint, Dash and Nitro go out at the plan's boost tick, or at the catch of a plan caught
-// anyway, and never on a spike no faster than the kiter. A jump goes once the spike, faster, gains within
-// 15 yd, or is within 10 and catching up. A boost that comes ready under a Hand goes as the Hand runs out.
-// The plan's teleport goes at its tick.
+// Heroic only. The patch stage holds once the walk onto the plan's patch began. A speed boost waits for the
+// plan's boost tick or a due catch, and never goes on a spike no faster than the kiter
 KiteStageRead const& ReadKiteStage(Player* kiter, Creature* spike, AnubarakState& state)
 {
     KiteStageRead& read = state.kiteStage;
@@ -3367,10 +3335,8 @@ bool ClearOfTankPatches(Position const& at, std::vector<Position> const& tanks)
                         { return Dist2d(at, tank) < ANUBARAK_KITE_SPHERE_TANK_CLEARANCE; });
 }
 
-// Heroic's kite spheres of a submerge, both shot over phase 1's last 30 s so their patches are down as
-// the spike comes up: with one at a time, kiters spent tank patches while the next one was shot. Clear of
-// the submerge spot by the clearance it was found with, or the spot is searched again mid-drag, and off his
-// drag line from R.
+// Heroic's kite spheres both go before the submerge: shot one at a time, kiters spend tank patches while the
+// next is shot. Clear of the spot by the clearance it was found with, or the spot is searched again mid-drag
 template <typename Taken>
 Creature* PreSubmergeKiteSphere(Player* bot, AnubarakState const& state, std::vector<Creature*> const& flying,
                                 std::vector<SphereDuty> const& previous, Taken const& taken)
@@ -3502,10 +3468,6 @@ ObjectGuid PickupGuid(Player* bot, AnubarakState const& state)
     return FirstBotSideTank(bot, state.sideTanks);
 }
 
-// A DK side tank grips for its own side, else the lowest-guid DK bot holding no tank duty, else, before
-// any burrower is up, the other side's DK side tank. Only one whose grip is back within the wait. A far
-// grip walks the DK well off the side, so the one with no tank duty goes first and the side's own tank
-// only without one.
 bool GripperReady(Player* member, ObjectGuid const& pickup, std::vector<ObjectGuid> const& busy)
 {
     return member && member->IsAlive() && GET_PLAYERBOT_AI(member) && member->getClass() == CLASS_DEATH_KNIGHT &&
@@ -3514,6 +3476,8 @@ bool GripperReady(Player* member, ObjectGuid const& pickup, std::vector<ObjectGu
            member->GetSpellCooldownDelay(SPELL_DEATH_GRIP) <= ANUBARAK_GRIP_COOLDOWN_WAIT_MS;
 }
 
+// The side's own DK tank, else the lowest-guid DK bot with no tank duty, else the other side's DK tank before
+// any burrower is up. A far grip walks the DK well off its side, so it takes the free DK first
 Player* PickGripper(Player* bot, AnubarakState const& state, uint8 side, std::vector<ObjectGuid> const& busy,
                     bool farGrip = false)
 {
@@ -3618,6 +3582,8 @@ Position GripStand(Player* bot, Position const& spot, Position const& otherSpot,
     return ValidateFloorPoint(bot, Offset(spot, toward, step));
 }
 
+constexpr float ANUBARAK_FAR_GRIP_TURNS_DEG[] = {0.0f, 20.0f, -20.0f, 40.0f, -40.0f};
+
 // For a sphere hovering past the step-out: on the floor just inside Death Grip's reach of it, on its side
 // nearest the spot, turned round it until on the floor and off the spike and its lane
 bool FarGripStand(Player* dk, Creature* sphere, Position const& spot, Position& out)
@@ -3634,8 +3600,7 @@ bool FarGripStand(Player* dk, Creature* sphere, Position const& spot, Position& 
     Creature* spike = GetPursuingSpike(dk);
     Player* kiter = spike ? GetSpikeTarget(dk) : nullptr;
     Position const base(sphere->GetPositionX(), sphere->GetPositionY(), spot.GetPositionZ());
-    static float const turns[] = {0.0f, 20.0f, -20.0f, 40.0f, -40.0f};
-    for (float degrees : turns)
+    for (float degrees : ANUBARAK_FAR_GRIP_TURNS_DEG)
     {
         Position const raw = Offset(base, Rotate(toward, degrees * ANUBARAK_DEG_TO_RAD), flat);
         if (spike && (Dist2d(raw, spike->GetPosition()) < ANUBARAK_SPIKE_DANGER_RADIUS_FAST ||
@@ -3759,15 +3724,8 @@ void PlanRelay(Player* bot, AnubarakState const& state, uint8 side, Position con
     }
 }
 
-// True while a grip has a sphere for the side. The sphere it pulls is reserved, and the side's shooters
-// join once it is down where the DK cast from, or anywhere it still makes the side's patch. One not
-// landed 3 s on, or that pulled nothing 0.6 s on, leaves the side to its shooters until a DK's Death Grip
-// is back. With none in reach the
-// DK keeps its duty and the side's shooters take any sphere they can. No grip takes a sphere already
-// near the other side's spot, or one another side's DK has picked. A grip landing over 20 yd off the spot
-// passes the sphere to a relay link, which grips it again within 3 s of the landing; it stays reserved
-// until the last link's grip lands, or is killed where it is once the link can't. A landing under 20 yd off
-// the other side's patch, or the sphere about to make it, never latches, so that grip failed.
+// True while a grip has a sphere for the side, kept from the shooters until it's down. A landing under
+// ANUBARAK_TANK_PATCH_GAP off the other side's patch never latches, so that grip counts as failed
 template <typename Taken>
 bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position const& spot, Position const& otherSpot,
                      Creature* otherPatch, std::vector<Creature*> const& spheres, std::vector<Creature*> const& flying,
@@ -3931,9 +3889,8 @@ bool ServeSideByGrip(Player* bot, AnubarakState& state, uint8 side, Position con
     return true;
 }
 
-// Shooting a tank patch: a sphere near the spot at once, the nearest within reach of it after the wait,
-// never one close enough to the other side's patch to pull both sides into one Spider Frenzy. Near only
-// takes the first kind.
+// Shooting a tank patch: a sphere near the spot at once, one within reach after the wait unless nearOnly,
+// never one close enough to the other side's patch to pull both sides into one Spider Frenzy
 template <typename Taken>
 Creature* SideSphere(AnubarakState const& state, uint8 side, Position const& spot, Position const* other,
                      std::vector<Creature*> const& flying, std::vector<SphereDuty> const& previous, Taken const& taken,
@@ -4332,23 +4289,23 @@ void ComputeStrikeDuties(Player* bot, AnubarakState& state)
     }
 }
 
-// Paladin bots alive and unmarked in the order a kiter's Hand of Protection comes from: neither tank nor
-// healer, then a side tank with no burrower to hold or take, then a healer, then any other tank; the
-// lowest guid first within each
+// Living unmarked paladin bots in Hand of Protection order: neither tank nor healer, a side tank with no
+// burrower to hold or take, a healer, any other tank, lowest guid first within each
 std::vector<Player*> ProtectorOrder(Player* bot)
 {
     std::vector<std::pair<uint8, Player*>> ranked;
     ForEachGroupMember(bot, [&](Player* member)
     {
-        PlayerbotAI* ai = member->IsAlive() && member->getClass() == CLASS_PALADIN ? GET_PLAYERBOT_AI(member) : nullptr;
-        if (!ai || member->HasAura(SPELL_MARK))
+        PlayerbotAI* paladinAI =
+            member->IsAlive() && member->getClass() == CLASS_PALADIN ? GET_PLAYERBOT_AI(member) : nullptr;
+        if (!paladinAI || member->HasAura(SPELL_MARK))
             return false;
 
         bool const tank = IsAnubarakTankPlayer(member);
         uint8 rank = 3;
         if (!tank)
             rank = PlayerbotAI::IsHeal(member) ? 2 : 0;
-        else if (GetAnubarakBurrowerTankSide(member) >= 0 && !GetAnubarakBurrowerPick(ai))
+        else if (GetAnubarakBurrowerTankSide(member) >= 0 && !GetAnubarakBurrowerPick(paladinAI))
             rank = 1;
 
         ranked.emplace_back(rank, member);
@@ -4365,12 +4322,8 @@ std::vector<Player*> ProtectorOrder(Player* bot)
     return order;
 }
 
-// Once per instance per ms. The claim stands for the mark window: one paladin covers the kiter, and
-// passes it on only when its Hand of Protection hasn't landed 1.5 s in. It follows the kite plan: its Hand
-// 1 s before the catch, the planned paladin first, then the standby escort, and any paladin in reach at the
-// catch once the plan has failed, with no patch ending ahead (or the spike within the immunity range anyway)
-// and no Hand or immunity of the kiter's own planned. The kiter's own goes 0.6 s before the catch, its Hand
-// 1 s before.
+// Once per instance per ms. One paladin claims the kiter for the mark window, passing it on if its Hand
+// hasn't landed in ANUBARAK_PROTECT_CLAIM_MS: the planned one, the standby escort, else any in reach
 ProtectClaim const* DeriveProtection(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -4412,9 +4365,8 @@ ProtectClaim const* DeriveProtection(Player* bot)
     bool const caught = catchLeft >= 0.0f;
     float const impaleMs = (caught ? catchLeft : ANUBARAK_KITE_CATCH_HORIZON_S) * IN_MILLISECONDS;
 
-    // A kiter that leaves the run its catch was read off isn't caught then, so the Hand also waits for the
-    // spike to close. Never on a kiter outrunning the spike, a human on Dash at 19 yd/s among them, and a
-    // heroic bot's speed boost goes first when the plan fires it before the Hand lands.
+    // A kiter off the run its catch was read from isn't caught then, so the Hand also waits for the spike to
+    // close. Never on a kiter outrunning it (a human on Dash too), and a heroic bot's planned boost goes first
     AnubarakKiteBoost boost;
     int const boostTick = plan->candidate.boostTick;
     bool const boostFirst = GET_PLAYERBOT_AI(kiter) && claim.heroic && boostTick >= 0 &&
@@ -4533,10 +4485,8 @@ Player* UsableSideTank(Player* bot, AnubarakState const& state, uint8 side)
     return holdsHim ? nullptr : tank;
 }
 
-// Once per instance per ms. Up to two on a usable side tank stay with it, so a side tank never taunts those
-// off the other; a third goes to the other side while it has room. The rest go by exit, at most two a side while both side tanks are usable, and a dead or
-// marked side tank's to the other, as do all of one holding him while he's up. A human side tank's
-// still loose 5 s after it came out goes to a bot side tank, past two.
+// Once per instance per ms. Up to two on a usable side tank stay with it, so side tanks never taunt them off
+// each other. The rest go by exit, two a side, and a side tank that can't hold its own hands them over
 std::unordered_map<ObjectGuid, uint8> const& BurrowerOwners(Player* bot, AnubarakState& state)
 {
     uint32 const now = getMSTime();
@@ -4665,10 +4615,8 @@ int32 FreeMsLeft(AnubarakState const& state, Creature* burrower, uint32 now)
     return up < ANUBARAK_BURROWER_FREE_MS ? static_cast<int32>(ANUBARAK_BURROWER_FREE_MS - up) : -1;
 }
 
-// Tanks right by it have held it ANUBARAK_FOCUS_SETTLE_MS, or nobody will: before that it is still walking
-// in from its exit, and the tank's threat on it is too thin for the raid's damage. The clock runs on across
-// a swap between tanks: restarted on each, a pair passed between the side tanks went 14 s unfocused. A tank
-// it has stacked deep in Expose Weakness can't wait for the clock once it has reached that tank.
+// Tanks right by it have held it ANUBARAK_FOCUS_SETTLE_MS, or no side tank will: the threat is too thin
+// before that. The clock runs on across a tank swap, and a tank deep in Expose Weakness can't wait for it
 bool BurrowerSettled(Player* bot, AnubarakState& state, Creature* burrower)
 {
     Unit* victim = burrower->GetVictim();
@@ -4757,9 +4705,8 @@ bool LeftToSideTank(Player* bot, AnubarakState const& state, Creature* burrower)
     return state.swarm && state.waveLeave && AnubarakHeroic(bot) && !state.swarmBurrowers.count(burrower->GetGUID());
 }
 
-// The side's burrower DPS focus, latched per side over the burrowers BurrowerOwners gives it: one off
-// Permafrost in its free time first, the one whose time ends first, then the lowest health. The latched
-// one stays while it qualifies and none of those outranks it.
+// The side's burrower DPS focus: one off Permafrost in its free time first, the soonest to end first, then the
+// lowest health. The latched one stays while it qualifies, unless it's on Permafrost and another runs free
 Creature* SideFocus(Player* bot, AnubarakState& state, uint8 side)
 {
     uint32 const now = getMSTime();
@@ -4904,10 +4851,11 @@ bool BurrowerNearPatch(Creature* burrower, std::vector<Position> const& patches,
                        { return Dist2d(burrower->GetPosition(), patch) < ring.clearance + ring.reach; });
 }
 
-// Points ring.reach round the burrower, straight out from its nearest patch and turned 20 deg at a time up
-// to 100, clear of the patches. One in his melee reach behind him first, then one in his reach, the
-// nearest the bot of those, so a switch to him needs no walk; else the one nearest him. floorChecked asks
-// the mesh too.
+constexpr float ANUBARAK_MELEE_STAND_TURNS_DEG[] = {0.0f,   20.0f, -20.0f, 40.0f,  -40.0f, 60.0f,
+                                                    -60.0f, 80.0f, -80.0f, 100.0f, -100.0f};
+
+// Points ring.reach off the burrower away from its nearest patch, turned by ANUBARAK_MELEE_STAND_TURNS_DEG. In
+// his melee reach first, behind him before in front, so a switch to him needs no walk; else the one nearest him
 bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> const& patches, MeleeRing const& ring,
                         bool floorChecked, Position& out)
 {
@@ -4946,8 +4894,7 @@ bool MeleeBurrowerStand(Player* bot, Creature* burrower, std::vector<Position> c
     };
 
     std::vector<Candidate> candidates;
-    static float const turns[] = {0.0f, 20.0f, -20.0f, 40.0f, -40.0f, 60.0f, -60.0f, 80.0f, -80.0f, 100.0f, -100.0f};
-    for (float degrees : turns)
+    for (float degrees : ANUBARAK_MELEE_STAND_TURNS_DEG)
     {
         Position const raw = Offset(at, Rotate(away, degrees * ANUBARAK_DEG_TO_RAD), ring.reach);
         if (!clear(raw))
@@ -5272,8 +5219,8 @@ Position GetAnubarakBossAnchor(Player* bot)
 
 Position GetAnubarakPickupStand(Player* bot)
 {
-    // Heroic tanks him by the east pair, next to where he waits: picked up west of the centre, he was run
-    // across the room and dragged back. (778.0, 129.3) is navprobe-clean, bot filter, 16/16 at 3 yd.
+    // Heroic tanks him by the east pair, next to where he waits, so he isn't run across the room and dragged
+    // back. (778.0, 129.3) is walkable for bots
     Position anchor;
     if (!GetAnubarakDragAnchor(bot, anchor))
     {
@@ -5397,10 +5344,8 @@ std::vector<Position> GetAnubarakSubmergeDragPoints(Player* bot, Creature* boss,
     return points;
 }
 
-// Heroic: the point on the 45, 40 and 35 yd rings within the drag's reach of him farthest from the raid
-// point (in bands, the nearest the tank on a tie), 50+ yd off it first, clear of every patch by the
-// clearance with its line to R passing them by the route clearance, on the floor. The spike is summoned
-// there, so the first chase starts that far from the raid.
+// Heroic: the ring point in drag reach farthest from the raid point, by bands, nearest the tank on a tie. The
+// spike is summoned there, so the first chase starts that far from the raid
 static bool FarSubmergeSpot(Player* bot, Creature* boss, AnubarakState const& state, std::vector<Position> const& patches,
                             Position& out, float& clearanceOut)
 {
@@ -5508,7 +5453,7 @@ bool GetAnubarakSubmergeSpot(Player* bot, Position& out)
     // the clearance the spot was found with.
     if (!state->submergeSpotValid || !clear(state->submergeSpot, state->submergeSpotClearance))
     {
-        // navprobe-clean out to 45 yd, so he never ends up against a wall
+        // The floor is walkable out to 45 yd, so he never ends up against a wall
         auto const onFloor = [](float x, float y)
         { return ANUBARAK_ROOM_CENTER.GetExactDist2d(x, y) <= ANUBARAK_SUBMERGE_SPOT_FLOOR; };
 
@@ -5718,9 +5663,8 @@ AnubarakDragLeg GetAnubarakDragLeg(Player* bot, Creature* boss, Position const& 
     if (toPoint <= start || !BossStillFor(*state, now, ANUBARAK_DRAG_SETTLE_MS))
         return leg;
 
-    // He starts past both reaches plus contact and catches up at his speed over the bot's, then runs on
-    // until his next recheck once the bot stops. The bot stands far enough out that he stops on the point.
-    // The hold action walks the leg backwards, so the bot moves at its backward speed.
+    // He chases from past both reaches plus contact and runs on to his next recheck once the bot stops, so
+    // the bot stands far enough out that he stops on the point. The hold action walks it backwards
     float const bossSpeed = boss->GetSpeed(MOVE_RUN);
     float const botSpeed = bot->GetSpeed(MOVE_RUN_BACK);
     if (bossSpeed <= 0.0f || botSpeed <= 0.0f)
@@ -6215,10 +6159,8 @@ AnubarakBurrowerPick GetAnubarakBurrowerPick(PlayerbotAI* botAI)
         }
     }
 
-    // Righteous Defense taunts all three attackers on the member, so never a side tank or one that would
-    // leave this tank past its two, the other side's counted too: their tank's taunts can be down, and four
-    // on one tank frenzy. Under RESCUE_PCT outside the swarm only this side's count, so a dying member
-    // still gets it.
+    // Righteous Defense taunts all three attackers on the member, so never one that puts this tank past its
+    // two, the other side's counted too, except under RESCUE_PCT outside the swarm so a dying member gets it
     bool const swarm = state->phaseValue == AnubarakPhase::Swarm;
     uint8 most = 0;
     for (auto const& [member, count] : onMember)
@@ -6833,9 +6775,8 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
     if (Unit* skull = GetToCHumanSkull(botAI, &IsAnubarakSkullTarget))
         return NoteDpsPick(bot, skull, "skull");
 
-    // Gathered melee hold their place, so they take only the scarabs and loose burrowers that come to the
-    // raid and leave the burrowers on the patches to the ranged. Their side's focus would walk them out
-    // and the gather back, every few seconds.
+    // Gathered melee take only the scarabs and loose burrowers that come to the raid: their side's focus would
+    // walk them out and the gather back every few seconds
     bool const gathered = melee && AnubarakGathers(botAI);
     if (gathered)
         if (Creature* scarab = NearestDpsScarab(bot, *state, ANUBARAK_GATHER_MELEE_SCARAB))
@@ -7218,7 +7159,6 @@ bool GetAnubarakScarabKite(PlayerbotAI* botAI, Position& out)
         }
     }
 
-    // noted only while one is on the bot, so the trace doesn't fill up with nones
     if (!scarab)
         return false;
 
@@ -7279,8 +7219,8 @@ bool CastAnubarakColdCarrierCover(PlayerbotAI* botAI, Player* member)
 
 static char const* const SWARM_HOTS[] = {"riptide", "renew", "rejuvenation"};
 
-// For a non-tank the swarm has dragged under ANUBARAK_SWARM_HOT_HP: never the healer itself (user call
-// 2026-11-05), never on top of another HoT
+// For a non-tank the swarm has dragged under ANUBARAK_SWARM_HOT_HP: never the healer itself, never on top
+// of another HoT
 static char const* SwarmHot(PlayerbotAI* botAI, Player* member)
 {
     Player* bot = botAI->GetBot();
@@ -7666,10 +7606,8 @@ static AnubarakState* RefreshColdHeals(PlayerbotAI* botAI)
     return state;
 }
 
-// For the rows under the urgent ones: SWARM_HEAL_TIERS for a heal that would only feed the swarm. A
-// carrier with no HoT or shield that this healer can cover ranks ahead of the tanks' top-off: on direct
-// heals alone, carriers died to it. So does a HoT on a non-tank under ANUBARAK_SWARM_HOT_HP, which the
-// swarm kills within seconds while a tank under 90% can wait.
+// Rows under the urgent ones, SWARM_HEAL_TIERS for a heal that would only feed the swarm. A carrier's cover
+// and a HoT on a non-tank under ANUBARAK_SWARM_HOT_HP rank ahead of the tanks' top-off, which can wait
 static constexpr uint8 SWARM_HEAL_TIERS = 4;
 static constexpr uint8 SWARM_HEAL_HOT = 1;
 static constexpr uint8 SWARM_HEAL_TANK_TOPOFF = 2;
@@ -8314,10 +8252,8 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
     Creature* sphere = ResolveCreature(bot, duty->sphere);
     out.sphere = IsFrostSphereFlying(sphere) ? sphere : nullptr;
 
-    // In reach from where it stands, inside the step-out, no nearer the other side and 23 yd off its patch
-    // or the sphere about to make it: the stand follows the sphere, so walking on would only chase it.
-    // Further out, in reach while no further from the spot than the stand: walking on would only bring the
-    // landing nearer the sphere.
+    // Cast once in reach from here, inside the step-out or no further from the spot than the stand, and off
+    // the other side's patch: the stand follows the sphere, so walking on would only chase it
     bool const ready = out.sphere && !bot->GetSpellCooldownDelay(SPELL_DEATH_GRIP);
     bool const inReach = ready && bot->GetExactDist(out.sphere) <= ANUBARAK_GRIP_RANGE;
     std::vector<Creature*> const spheres = ResolveSpheres(bot, *state);
@@ -8383,7 +8319,7 @@ bool GetAnubarakGripDuty(Player* bot, AnubarakGripDuty& out)
 
 // No duty re-read here: a recompute after the cast sees Death Grip on cooldown and drops the DK, and the
 // landed sphere would go unrecorded
-void NoteAnubarakGripCast(Player* bot, Creature* sphere, uint8 side)
+void TrackAnubarakGripCast(Player* bot, Creature* sphere, uint8 side)
 {
     AnubarakState* state = bot && sphere && side < 2 ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
     if (!state)
@@ -8547,9 +8483,12 @@ constexpr int ANUBARAK_ESCORT_TRACK_TICKS = 5;
 // Hand of Freedom from the paladin due to cast the Hand would spend the GCD the Hand needs
 constexpr float ANUBARAK_FREEDOM_HAND_DUE_S = 3.0f;
 
-// Turned round the room centre until clear of the spike, its lane and the patches, and on the floor. None
-// there, which a spike crossing the centre can leave: ANUBARAK_ESCORT_RINGS round the kiter, the nearest
-// the paladin first.
+constexpr float ANUBARAK_SHADOW_TURNS_DEG[] = {0.0f, 15.0f, -15.0f, 30.0f, -30.0f};
+constexpr uint32 ANUBARAK_RING_BEARINGS = 12;
+constexpr float ANUBARAK_RING_BEARING_STEP_DEG = 30.0f;
+
+// Short of the kiter toward the room centre, turned round it until clear and on the floor. A spike crossing
+// the centre can leave none, so then ANUBARAK_ESCORT_RINGS round the kiter, nearest the paladin first
 static bool ShadowSpot(Player* paladin, Player* kiter, Creature* spike, std::vector<Position> const& patches,
                        float spikeClearance, float laneClearance, Position& out)
 {
@@ -8567,8 +8506,7 @@ static bool ShadowSpot(Player* paladin, Player* kiter, Creature* spike, std::vec
                             { return Dist2d(raw, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
     };
 
-    static float const turns[] = {0.0f, 15.0f, -15.0f, 30.0f, -30.0f};
-    for (float degrees : turns)
+    for (float degrees : ANUBARAK_SHADOW_TURNS_DEG)
     {
         Vec2 const arm = Rotate(Delta(ANUBARAK_ROOM_CENTER, base), degrees * ANUBARAK_DEG_TO_RAD);
         Position const raw = Offset(ANUBARAK_ROOM_CENTER, arm, 1.0f);
@@ -8582,9 +8520,9 @@ static bool ShadowSpot(Player* paladin, Player* kiter, Creature* spike, std::vec
 
     std::vector<Position> ring;
     for (float radius : ANUBARAK_ESCORT_RINGS)
-        for (uint32 i = 0; i < 12; ++i)
+        for (uint32 i = 0; i < ANUBARAK_RING_BEARINGS; ++i)
         {
-            float const angle = static_cast<float>(i) * 30.0f * ANUBARAK_DEG_TO_RAD;
+            float const angle = static_cast<float>(i) * ANUBARAK_RING_BEARING_STEP_DEG * ANUBARAK_DEG_TO_RAD;
             Position const raw = Offset(kiter->GetPosition(), {std::cos(angle), std::sin(angle)}, radius);
             if (clear(raw))
                 ring.push_back(raw);
@@ -8680,9 +8618,9 @@ static bool PatchPost(Player* paladin, Player* kiter, Creature* spike, AnubarakS
 
     std::vector<Position> ring;
     for (float radius : ANUBARAK_ESCORT_PATCH_RINGS)
-        for (uint32 i = 0; i < 12; ++i)
+        for (uint32 i = 0; i < ANUBARAK_RING_BEARINGS; ++i)
         {
-            float const angle = static_cast<float>(i) * 30.0f * ANUBARAK_DEG_TO_RAD;
+            float const angle = static_cast<float>(i) * ANUBARAK_RING_BEARING_STEP_DEG * ANUBARAK_DEG_TO_RAD;
             Position const raw = Offset(centre, {std::cos(angle), std::sin(angle)}, radius);
             if (clear(raw))
                 ring.push_back(raw);
@@ -8704,9 +8642,8 @@ static bool PatchPost(Player* paladin, Player* kiter, Creature* spike, AnubarakS
     return false;
 }
 
-// The shadow of the kiter until the plan's catch is near, then a post by the catch; the shadow again when no
-// post is on the floor. A bot kiter with a patch and a speed boost ready or running has its escort wait by
-// the patch instead, to the kite's end: boosted, it runs out of the Hand's reach.
+// Shadows the kiter until the catch is near, then posts by it. A boosted bot kiter outruns the Hand's reach,
+// so with a patch planned its escort waits by the patch to the kite's end
 static bool EscortSpot(Player* paladin, Player* kiter, Creature* spike, AnubarakState& state, KitePlan const& plan,
                        Position& out, bool& post, bool& patchPost)
 {
@@ -8746,8 +8683,9 @@ static Player* StandbyEscort(Player* kiter, AnubarakState& state)
 {
     auto const qualifies = [kiter](Player* paladin)
     {
-        PlayerbotAI* ai = paladin && paladin != kiter && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
-        return ai && !paladin->HasAura(SPELL_MARK) && HandReady(paladin) && !HoldsSideBurrower(paladin);
+        PlayerbotAI* paladinAI =
+            paladin && paladin != kiter && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
+        return paladinAI && !paladin->HasAura(SPELL_MARK) && HandReady(paladin) && !HoldsSideBurrower(paladin);
     };
 
     if (state.standbyKiter == kiter->GetGUID() && !state.standby.IsEmpty())
@@ -8767,10 +8705,8 @@ static Player* StandbyEscort(Player* kiter, AnubarakState& state)
     return best;
 }
 
-// Heroic, once per instance per ms. The paladin bot whose Hand of Protection the kite plan lands, so the
-// one walking there is the one DeriveProtection claims first. A bot kiter whose plan lands no other
-// paladin's Hand is shadowed by a standby, which the planner offers first, so a Hand is in reach whatever
-// the plan comes to. It ends with the Hand or the mark.
+// Heroic, once per instance per ms: the plan's Hand paladin, the one DeriveProtection claims first. A bot
+// kiter with no other paladin's Hand planned gets a standby, so a Hand is in reach whatever the plan comes to
 static EscortRead const* DeriveEscort(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -8819,10 +8755,8 @@ static EscortRead const* DeriveEscort(Player* bot)
     return &escort;
 }
 
-// Once per instance per ms. A kiter marked while it carries Permafrost gets Hand of Freedom from itself
-// when it's a paladin bot, else from the first paladin bot in reach in the protector order. Never from a
-// paladin with a Hand of its own on it or claimed for its Hand of Protection: one paladin's Hands on a
-// target replace each other.
+// Once per instance per ms. Never from a paladin with a Hand already on the kiter or one due for its Hand of
+// Protection: one paladin's Hands on a target replace each other
 static FreedomRead const* DeriveFreedom(Player* bot)
 {
     AnubarakState* state = bot ? ReadPhase(GET_PLAYERBOT_AI(bot)) : nullptr;
@@ -8856,12 +8790,13 @@ static FreedomRead const* DeriveFreedom(Player* bot)
 
     auto const frees = [&](Player* paladin)
     {
-        PlayerbotAI* ai = paladin->getClass() == CLASS_PALADIN && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
-        return ai && paladin->GetGUID() != protector && paladin->GetGUID() != handDue &&
+        PlayerbotAI* paladinAI =
+            paladin->getClass() == CLASS_PALADIN && paladin->IsAlive() ? GET_PLAYERBOT_AI(paladin) : nullptr;
+        return paladinAI && paladin->GetGUID() != protector && paladin->GetGUID() != handDue &&
                !ai::paladin::HasAnyPaladinHandFromCaster(kiter, paladin) &&
                (paladin == kiter ||
                 (paladin->IsWithinDistInMap(kiter, ANUBARAK_HOP_RANGE) && paladin->IsWithinLOSInMap(kiter))) &&
-               ai->CanCastSpell("hand of freedom", kiter);
+               paladinAI->CanCastSpell("hand of freedom", kiter);
     };
 
     freedom.kiter = kiter->GetGUID();
@@ -8941,9 +8876,8 @@ Player* GetAnubarakKiterToFree(Player* bot)
     return duty ? ObjectAccessor::GetPlayer(*bot, freedom->kiter) : nullptr;
 }
 
-// A side tank with no burrower of its side to hold or take gathers too: standing on its patch, a mark
-// on it would walk the spike straight into one. So does the main tank, off where the spike is summoned.
-// The escort walks after the kiter instead.
+// A side tank with no burrower to hold gathers too: marked on its patch, it would walk the spike straight
+// into it. So does the main tank. The escort walks after the kiter instead
 static AnubarakState const* GatherState(Player* bot)
 {
     PlayerbotAI* botAI = bot && AnubarakHeroic(bot) ? GET_PLAYERBOT_AI(bot) : nullptr;
@@ -8973,7 +8907,8 @@ bool GetAnubarakGatherSpot(Player* bot, Position& out)
     }
 
     // A slot per bot round the point, so twenty bots don't stand on one spot
-    float const angle = static_cast<float>(bot->GetGUID().GetCounter() % 12) * 30.0f * ANUBARAK_DEG_TO_RAD;
+    float const angle = static_cast<float>(bot->GetGUID().GetCounter() % ANUBARAK_RING_BEARINGS) *
+                        ANUBARAK_RING_BEARING_STEP_DEG * ANUBARAK_DEG_TO_RAD;
     out = Offset(gather, {std::cos(angle), std::sin(angle)}, ANUBARAK_GATHER_SPREAD);
     return true;
 }
@@ -8993,10 +8928,8 @@ static AnubarakState const* HealerStandState(Player* bot)
 
 bool AnubarakHealerStandApplies(PlayerbotAI* botAI) { return botAI && HealerStandState(botAI->GetBot()); }
 
-// Heroic keeps spawning burrowers in phase 3 and they go for the healers. Behind the tank patches the
-// straight line from a burrow exit to a healer crosses a patch's slow, where a burrower crawls at 20% and
-// its side tank takes it first. Exits read off the traces. Per navprobe the floor east of the tank patches
-// is flat to 32 yd past their midpoint, then rises in the south-east.
+// Heroic phase 3 burrowers go for the healers: behind the tank patches the line from an exit to a healer
+// crosses a patch's slow, where a burrower crawls at 20% and its side tank takes it first
 constexpr float ANUBARAK_BURROW_EXITS[][2] = {{740.2f, 193.4f}, {694.5f, 185.4f}, {732.0f, 83.4f}, {694.9f, 102.5f}};
 // Healers set off in a phase 1 from his 35%, one at a time, none with a tank under 50%: they can't cast
 // while they walk. The ranged DPS bots go all at once in phase 3.
@@ -9049,9 +8982,8 @@ static bool OffPatches(Position const& at, std::vector<Position> const& patches)
                         { return Dist2d(at, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
 }
 
-// Where the stands measure him and the living tanks from: his drag anchor for him and the main tank, each
-// side tank's hold, so a side tank chasing a burrower or him stepping off the anchor moves no stand. Live
-// positions with no anchor.
+// Where the stands measure him and the tanks from: his drag anchor and each side tank's hold, so a tank's
+// chase or his step off the anchor moves no stand. Live positions with no anchor
 struct BehindRefs
 {
     Position boss;
@@ -9098,10 +9030,8 @@ static bool BehindRanged(Player* player)
     return PlayerbotAI::IsRangedDps(player) && !PlayerbotAI::IsHeal(player) && !IsAnubarakTankPlayer(player);
 }
 
-// Stands behind the tank patches for the healer bots by guid, then in phase 3 the ranged DPS bots by guid,
-// those within heal reach of every healer stand. Held stands stay. A bot without one takes the slot with
-// the most exit lines crossed, then the deepest, 3 yd off every other stand and on the floor, or keeps
-// its usual stand when none is left.
+// Healer bots by guid, then in phase 3 the ranged DPS bots within heal reach of every healer stand. Held
+// stands stay, and a new one is the slot crossing the most exit lines, then the deepest
 static void AssignBehindStands(Player* bot, AnubarakState& state, Creature* boss)
 {
     std::vector<ObjectGuid> healers;
@@ -9380,9 +9310,8 @@ bool GetAnubarakHealerStand(Player* bot, Position& out)
                             { return Dist2d(slot, patch) < ANUBARAK_HEALER_PATCH_CLEARANCE; });
     };
 
-    // Patches this far apart put one side tank past a heal from the raid point, so the healers split in
-    // two groups by guid, one a side, each off its side tank toward the raid point: there, not toward the
-    // anchor, which keeps them off him
+    // Patches this far apart put a side tank past a heal from the raid point, so the healers split by guid,
+    // each group off its side tank toward the raid point, not the anchor, which keeps them off him
     Position centre = state->raidPoint;
     Position const spots[2] = {state->spot0.Get(), state->spot1.Get()};
     Player* mainTank = state->mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state->mainTank);
@@ -9406,9 +9335,8 @@ bool GetAnubarakHealerStand(Player* bot, Position& out)
         }
     }
 
-    // A main tank who takes him far off the anchor, as a human can or heroic's submerge drag does, is past a
-    // heal from the raid point. With a side tank still in reach of it, half the healers by guid stay for the
-    // side tanks and half follow him.
+    // A main tank who takes him far off the anchor (a human, heroic's submerge drag) is past a heal from the
+    // raid point. With a side tank still in reach, half the healers by guid stay and half follow him
     if (mainTank && mainTank->IsAlive() && Dist2d(centre, mainTank->GetPosition()) > ANUBARAK_HEALER_MAIN_TANK_REACH)
     {
         bool const sides = !split && healers.size() > 1 && index < healers.size() &&
@@ -9559,8 +9487,8 @@ constexpr int ANUBARAK_DODGE_TRACK_TICKS = 2;
 // A spike this close to where it heads stands
 constexpr float ANUBARAK_DODGE_STILL = 0.5f;
 
-// Where the spike heads with nobody marked. A fail idles it 4 s still chasing its last victim at the
-// base speed: 2026-10-28 S it drifted through the gather that way.
+// Where the spike heads with nobody marked: a fail idles it 4 s still chasing its last victim at the base
+// speed, which can drift it through the gather
 static AnubarakPursuit::Point SpikeMotion(Creature* spike)
 {
     Position to;
@@ -9583,9 +9511,8 @@ static AnubarakPursuit::Point SpikeMotion(Creature* spike)
     return {toward.x / length * speed, toward.y / length * speed};
 }
 
-// The spike's path over ANUBARAK_DODGE_TRACK_S, per instance per ms. A marked kiter is chased along its kite
-// plan's track: read straight on, a chase that turns with its kiter cut through the dodge spots. Nobody
-// marked, or no plan yet, straight on.
+// The spike's path over ANUBARAK_DODGE_TRACK_S, per instance per ms: along the kite plan's track while it has
+// one, since a chase that turns with its kiter cuts through dodge spots a straight-on read calls clear
 static std::vector<AnubarakPursuit::Point> const& DodgeTrack(Player* bot, Creature* spike, AnubarakState& state)
 {
     uint32 const now = getMSTime();
