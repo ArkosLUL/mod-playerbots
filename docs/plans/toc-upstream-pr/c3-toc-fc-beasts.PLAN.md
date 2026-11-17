@@ -54,6 +54,10 @@ the lane items. Line numbers are as of Custom `1039c9045`.
 9. [x] Checks: `pb-check` over the 32 changed files plus `src/Ai/Raid/ToC` and `tools/botobs` (syntax 38 TUs,
    pblint, codestyle, botobs, nativetest incl. `fc_grip_chain`), `pblint --spell-difficulty src/Ai/Raid/ToC`
    clean.
+10. [x] Review (fresh reviewer): no behaviour difference found; `ResolveDpsPick`'s skull branch accepted under the
+   overview's logic-only-shape item. Four rewritten comments were wrong or ambiguous and are fixed (`CcCandidates`,
+   `UpdateIce`, `FactionChampionsChainGripTarget`, `FactionChampionsChased`); the native test's
+   `GripNotedBeforeItsCooldownIsRead` follows the `TrackGrip` rename. Checks green again.
 
 ## Decisions for review
 

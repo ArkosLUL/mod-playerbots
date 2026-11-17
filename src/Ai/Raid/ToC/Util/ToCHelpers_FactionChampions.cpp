@@ -883,8 +883,8 @@ bool ClearForBreakable(Unit* target, std::vector<Player*> const& members, std::v
     return !CarriesGroupDot(target);
 }
 
-// Never the kill target, suspended, skulled, pulled or iced one, nor the player's pull: CC there would break
-// the latch's return, make the next pick immune to the grip, or waste the DK's Chains.
+// Not the latch's own (kill target, suspended, skulled), nor a pulled healer or the player's pull, which CC
+// would make immune to the grip, nor an iced one: its DK already slows and hits it
 std::vector<Champion const*> CcCandidates(FactionChampionsState const& state, ObjectGuid chainTarget)
 {
     ObjectGuid const killGuid = state.killTarget.Get();
@@ -1183,8 +1183,8 @@ bool KeepsIceDuty(Player* member)
     return memberAI && !FactionChampionsChainLink(memberAI);
 }
 
-// A duty lasts the fight: it ends only when either side drops out, the DK turns a link or the champion turns
-// kill target. A stunned DK keeps its champion but takes no new one.
+// A duty lasts the fight, ending only when either side drops out, the DK turns a link, or the champion turns
+// kill target with another melee one free. A stunned DK keeps its champion but takes no new one.
 void UpdateIce(FactionChampionsState& state, std::vector<Player*> const& members)
 {
     ObjectGuid const kill = state.killTarget.Get();

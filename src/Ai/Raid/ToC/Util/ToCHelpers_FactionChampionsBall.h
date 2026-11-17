@@ -33,8 +33,8 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot);
 // up, 3 or more, casts it where it stands so they burn it. The spell, and the unit to cast it at.
 Unit* FactionChampionsOpener(PlayerbotAI* botAI, uint32& spellId);
 
-// Where a bot runs on Nitro Boosts when several champions start on it: as far from the melee on it as the
-// boost goes, still in heal reach. Latched to arrival or the boost's end.
+// Where a bot runs on Nitro Boosts when champions focus it, are about to, or a melee one is in contact: as
+// far from the melee on it as the boost goes, still in heal reach. Latched to arrival or the boost's end.
 bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot);
 
 // Where a bot hops 15 yd away from a melee champion it kites from, in heal reach. A hard cast blocks the

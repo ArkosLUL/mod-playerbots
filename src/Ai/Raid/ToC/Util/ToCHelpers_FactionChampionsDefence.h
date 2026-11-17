@@ -116,8 +116,8 @@ bool FactionChampionsChainLink(PlayerbotAI* botAI);
 // This link's turn, and the last grip has landed
 bool FactionChampionsChainGripDue(PlayerbotAI* botAI);
 
-// The champion this link grips and its stand: its post before its turn (walkOnly), then its own spot if a
-// grip from there lands it 12+ yd farther from the pack, else 27 yd off it. None while staging holds it.
+// The champion this link grips and its stand: its post before its turn (walkOnly, none while staging holds
+// it), then its own spot if a grip from there lands it 12+ yd farther from the pack, else 27 yd off it
 Unit* FactionChampionsChainGripTarget(PlayerbotAI* botAI, Position& stand, bool& walkOnly);
 
 // A Death Grip went out on target: the turn passes on when this was the turn's link
