@@ -64,8 +64,9 @@ Decisions (user, grilling round, 2026-11-17):
   renamed on Custom to `ToCRaidStrategy.{h,cpp}`, `ToCRaidActionContext.h`,
   `ToCRaidTriggerContext.h`.
 - ICC work is paused: `c1` restyles the shared raid files on Custom.
-- Cleanup may carry three small behaviour changes: cache `JaraxxusPinnedCastTrigger`'s group walk,
-  move the Staging trigger's state write out of `IsActive`, `"tree of life"` → `"tree form"`.
+- Cleanup may carry two small behaviour changes: cache `JaraxxusPinnedCastTrigger`'s group walk,
+  move the Staging trigger's state write out of `IsActive`. (A third, `"tree of life"` →
+  `"tree form"`, was dropped: rules match `getName()`, which is `"tree of life"`.)
 - Big planner functions (`GetWormMovePlan` 408 lines, Anub'arak `ComputeDuties`, `PlanKite`, …) are
   not split; reviewers decide.
 - Bots reading enemy spline destinations and threat lists stays, named openly in the PR text.
@@ -150,10 +151,9 @@ Every cleanup lane, behaviour unchanged (counts from the 2026-11-17 audit):
   leave Custom as is and log it, and the PR drops the guard.
 - Docs: update `docs/raids/trial-of-the-crusader/README.md` "Code layout" for the renames.
 
-`c2` also fixes `"tree of life"` → `"tree form"` in the `anubarak kite cat hold` Block list
-(`ToCDefinition_Anubarak.cpp:219`; the druid action is registered as `"tree form"`, so the rule
-matches nothing today). With the two trigger-cost fixes, these are the cleanup's only intended
-behaviour changes.
+The two trigger-cost fixes are the cleanup's only intended behaviour changes. The
+`anubarak kite cat hold` Block list keeps `"tree of life"`: `CastTreeFormAction` reports that name,
+only its creator key is `"tree form"`.
 
 **`p1-framework-cares`** (PR branches only): port `8b38899f4` + `02e6952c4` onto
 `raid-encounter-framework`'s own `RaidEncounter.{h,cpp}`/`RaidEncounterRules.h` (Custom's file
@@ -188,7 +188,8 @@ on disjoint files plus one finisher. Copy cleaned Custom `src/Ai/Raid/ToC/` at t
 - **Strip RaidObs** (240 refs in 19 files): `ObsValue<T>` (30) → `T`, `ObsGuidMap` (18) →
   `std::unordered_map`, fixing the 8 `.Raw()` / 13 `.Set()` sites; delete the ~29 trace-only
   functions (`Note*` wrappers, label helpers like `KitePathText`, `WormMoveReasonName`), trace-only
-  fields (`peelNotes`, `kickNotes`, `wallNotes`, `kitePatchesSpent`, `ReadStand`'s `note` param),
+  fields (`peelNotes`, `kickNotes`, `wallNotes`, `ReadStand`'s `note` param, plus those the c2 and
+  c3 briefs list; `kitePatchesSpent` is logic and stays),
   `ToCEncounterSlug`, the `NamePull` call, `LogHitsOn`, `if (RaidObs::Active())` blocks (~140 lines).
 - `EncounterDefinition` without `traceName` (8 constructors); gates as the stack's plain function
   pointers (`&ToCGateOpen`, `&ToCRaidWideGateOpen`), not Custom's `{open, live}` struct.
