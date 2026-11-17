@@ -33,13 +33,13 @@ float RaidBurstWindowMultiplier::GetValue(Action* action)
         return 1.0f;
 
     uint32 const now = getMSTime();
-    if (now != cachedAtMs || !cachedAtMs)
+    if (now != _cachedAtMs || !_cachedAtMs)
     {
-        cachedAtMs = now;
-        cachedValue = _window(botAI);
+        _cachedAtMs = now;
+        _cachedValue = _window(botAI);
     }
 
-    bool const allowed = facts.lust ? cachedValue.allowLust : cachedValue.allowAll;
+    bool const allowed = facts.lust ? _cachedValue.allowLust : _cachedValue.allowAll;
 
     return allowed ? 1.0f : 0.0f;
 }

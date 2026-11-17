@@ -28,16 +28,17 @@ constexpr float SAME_WALK_DESTINATION = 1.0f;
 constexpr uint32 DODGE_SPOT_LATCH_MS = 1000;
 // inside the 30 yd taunt with room for her to drift
 constexpr float TWIN_FETCH_STOP = 25.0f;
-// the floor read is taken only this close to the traced height
+// the floor read is taken only this close to the stand's own height
 constexpr float DOOR_FLOOR_TOLERANCE = 3.0f;
 // a base walk lets a channel this close to its end finish
 constexpr int32 BASE_WALK_CHANNEL_WAIT_MS = 1500;
-// A twin following her tank in overtakes it and stops right over its spot, too close for any hunter
-// stand. Stepping back from a lead this far out leaves her there: 5 yd under her 6 yd hover is 7.8 yd
-// 3D, and her chase only moves again past ~9.1.
+// A twin following her tank in stops right over its spot, too close for any hunter stand. A step back
+// from a lead this far out stays under the gap her chase ignores, so she parks there.
 constexpr float TWIN_PARK_LEAD = 5.0f;
 // longest wait at the lead for her to catch up
 constexpr uint32 TWIN_PARK_SETTLE_MS = 3000;
+// an orb this little past its trigger radius is about to go off on the bot
+constexpr float ORB_CAST_CLIP_MARGIN = 0.5f;
 
 // A warlock re-channels Drain Soul on low twins, so a base walk waiting on that never starts
 bool LongChannel(Player* bot)
@@ -77,9 +78,8 @@ Position LeadPoint(Player* bot, Position const& spot)
                                    spot.GetPositionY() + TWIN_PARK_LEAD * std::sin(angle), spot.GetPositionZ()));
 }
 
-// Drops a stalled booking, and with releaseElsewhere a booking for any other destination too, since
-// forced doesn't outrank forced. A walk still headed for destination is kept so the duplicate check
-// stops a re-issue every tick.
+// Drops a stalled booking, and with releaseElsewhere one for any other destination, since forced doesn't
+// outrank forced. A walk still headed for destination stays, so the duplicate check stops a re-issue.
 void ReleaseWalk(PlayerbotAI* botAI, Player* bot, Position const& destination, bool releaseElsewhere)
 {
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
@@ -119,7 +119,7 @@ bool TwinValkyrInterruptPactAction::Execute(Event /*event*/)
 bool TwinValkyrEssenceActionBase::Execute(Event /*event*/)
 {
     TwinEssenceWant const want = GetWantedEssence(botAI);
-    if (want.reason != reason || want.colour == TwinColour::None)
+    if (want.reason != _reason || want.colour == TwinColour::None)
         return false;
 
     return AcquireEssence(want.colour);
@@ -136,32 +136,30 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
     {
         // ahead of the cast clip, so a healer waiting out an orb keeps its heal
-        TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), reason, TwinColour::None, orbWait);
+        TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), _reason, TwinColour::None, _orbWait);
         if (wait != TwinWalkWait::None)
             return StandForWait(botAI, bot, wait);
 
         // a cast pins the feet; the base colour can wait for it to end, though not for a long channel,
         // and the others can't wait at all
-        if (bot->IsMovementPreventedByCasting() && (reason != TwinEssenceReason::Base || LongChannel(bot)))
+        if (bot->IsMovementPreventedByCasting() && (_reason != TwinEssenceReason::Base || LongChannel(bot)))
             bot->InterruptNonMeleeSpells(true);
 
-        TwinValkyrBoostEssenceWalk(botAI, reason, portal);
+        TwinValkyrBoostEssenceWalk(botAI, _reason, portal);
 
-        bool const urgent = reason == TwinEssenceReason::Touch || reason == TwinEssenceReason::Vortex;
+        bool const urgent = _reason == TwinEssenceReason::Touch || _reason == TwinEssenceReason::Vortex;
         ReleaseWalk(botAI, bot, portal->GetPosition(), urgent);
 
         if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, portal->GetPositionX(), portal->GetPositionY(),
                    portal->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_FORCED, true, false))
-        {
             return true;
-        }
 
         // Hold the tick while the walk is refused as a duplicate: lower nodes like a feral charge
         // would leap the bot back onto the twin, and the forced lock doesn't stop spell movers
         return bot->isMoving();
     }
 
-    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), reason, colour, orbWait);
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, portal->GetPosition(), _reason, colour, _orbWait);
     if (wait != TwinWalkWait::None)
         return StandForWait(botAI, bot, wait);
 
@@ -196,7 +194,7 @@ bool TwinValkyrWalkToNextPortalAction::Execute(Event /*event*/)
     if (!TwinValkyrNextPortalDue(botAI, spot, portal, reason))
         return false;
 
-    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, reason, TwinColour::None, orbWait);
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, reason, TwinColour::None, _orbWait);
     if (wait != TwinWalkWait::None)
         return StandForWait(botAI, bot, wait);
 
@@ -222,26 +220,26 @@ bool TwinValkyrWalkToNextPortalAction::Execute(Event /*event*/)
 bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)
 {
     // only clip a cast when the orb is about to go off on this bot, a far one isn't worth it
-    if (bot->IsMovementPreventedByCasting() && TwinOrbThreatens(botAI, TWIN_ORB_TRIGGER_RADIUS + 0.5f))
+    if (bot->IsMovementPreventedByCasting() && TwinOrbThreatens(botAI, TWIN_ORB_TRIGGER_RADIUS + ORB_CAST_CLIP_MARGIN))
         bot->InterruptNonMeleeSpells(true);
 
     uint32 const now = getMSTime();
-    bool const kept = dodgeSpotMs && getMSTimeDiff(dodgeSpotMs, now) < DODGE_SPOT_LATCH_MS &&
-                      TwinOrbSpotClear(botAI, dodgeSpot, TWIN_ORB_DODGE_CLEARANCE);
-    if (!kept && !FindTwinOrbDodgeSpot(botAI, dodgeSpot))
+    bool const kept = _dodgeSpotMs && getMSTimeDiff(_dodgeSpotMs, now) < DODGE_SPOT_LATCH_MS &&
+                      TwinOrbSpotClear(botAI, _dodgeSpot, TWIN_ORB_DODGE_CLEARANCE);
+    if (!kept && !FindTwinOrbDodgeSpot(botAI, _dodgeSpot))
     {
-        dodgeSpotMs = 0;
+        _dodgeSpotMs = 0;
         return false;
     }
 
-    dodgeSpotMs = now;
+    _dodgeSpotMs = now;
 
-    if (bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) <= CONTACT_DISTANCE)
+    if (bot->GetExactDist2d(_dodgeSpot.GetPositionX(), _dodgeSpot.GetPositionY()) <= CONTACT_DISTANCE)
         return false;
 
-    ReleaseWalk(botAI, bot, dodgeSpot, true);
+    ReleaseWalk(botAI, bot, _dodgeSpot, true);
 
-    if (MoveTo(bot->GetMapId(), dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY(), dodgeSpot.GetPositionZ(),
+    if (MoveTo(bot->GetMapId(), _dodgeSpot.GetPositionX(), _dodgeSpot.GetPositionY(), _dodgeSpot.GetPositionZ(),
                false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false))
         return true;
 
@@ -296,7 +294,7 @@ bool TwinValkyrMoveToDoorStandAction::Execute(Event /*event*/)
     if (bot->GetExactDist2d(spot) <= TWIN_DOOR_PARK)
         return false;
 
-    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, TwinEssenceReason::None, TwinColour::None, orbWait);
+    TwinWalkWait const wait = TwinValkyrWalkWait(botAI, spot, TwinEssenceReason::None, TwinColour::None, _orbWait);
     if (wait != TwinWalkWait::None)
         return StandForWait(botAI, bot, wait);
 
@@ -325,13 +323,9 @@ bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
     // Taunt back an assigned twin that's on someone else. Taunts diminish on the twins, so the 5th
     // without a 15 s gap is immune.
     for (Unit* assigned : {GetFjola(botAI), GetEydis(botAI)})
-    {
         if (assigned && assigned->GetVictim() != bot && IsTwinTank(bot, assigned) &&
             CastClassTaunt(botAI, assigned))
-        {
             return true;
-        }
-    }
 
     return fetch ? FetchTwin(twin) : WalkToDoor(twin);
 }
@@ -340,7 +334,7 @@ bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
 // reach melee walks the rest.
 bool TwinValkyrTankHoldAction::FetchTwin(Unit* twin)
 {
-    doorWalk = false;
+    _doorWalk = false;
     if (bot->GetExactDist2d(twin) <= TWIN_FETCH_STOP)
         return false;
 
@@ -369,38 +363,38 @@ bool TwinValkyrTankHoldAction::WalkToDoor(Unit* twin)
     // Only a walk in from the arena leads; one that never got out that far, or is left over from an
     // earlier pull, doesn't
     float const out = ArenaOffset(bot->GetPosition(), spot);
-    if (twin->GetVictim() != bot || (leading && !leadReachedMs && out < TWIN_PARK_LEAD - TWIN_DOOR_UNPARK))
-        leading = false;
-    else if (!leading && out > TWIN_PARK_LEAD + TWIN_DOOR_UNPARK)
+    if (twin->GetVictim() != bot || (_leading && !_leadReachedMs && out < TWIN_PARK_LEAD - TWIN_DOOR_UNPARK))
+        _leading = false;
+    else if (!_leading && out > TWIN_PARK_LEAD + TWIN_DOOR_UNPARK)
     {
-        leading = true;
-        leadReachedMs = 0;
+        _leading = true;
+        _leadReachedMs = 0;
     }
 
-    if (leading)
+    if (_leading)
     {
         Position const lead = LeadPoint(bot, spot);
-        if (!leadReachedMs && bot->GetExactDist2d(lead) > TWIN_DOOR_PARK)
+        if (!_leadReachedMs && bot->GetExactDist2d(lead) > TWIN_DOOR_PARK)
             return WalkFacingTwin(lead, twin);
 
-        if (!leadReachedMs)
-            leadReachedMs = getMSTime();
+        if (!_leadReachedMs)
+            _leadReachedMs = getMSTime();
 
         // false so the rotation keeps her threat while she catches up
-        if (!twin->movespline->Finalized() && getMSTimeDiff(leadReachedMs, getMSTime()) < TWIN_PARK_SETTLE_MS)
+        if (!twin->movespline->Finalized() && getMSTimeDiff(_leadReachedMs, getMSTime()) < TWIN_PARK_SETTLE_MS)
             return false;
 
-        leading = false;
+        _leading = false;
     }
 
     float const off = bot->GetExactDist2d(spot);
-    if (off <= TWIN_DOOR_PARK || (!doorWalk && off <= TWIN_DOOR_UNPARK))
+    if (off <= TWIN_DOOR_PARK || (!_doorWalk && off <= TWIN_DOOR_UNPARK))
     {
-        doorWalk = false;
+        _doorWalk = false;
         return false;
     }
 
-    doorWalk = true;
+    _doorWalk = true;
     return WalkFacingTwin(spot, twin);
 }
 

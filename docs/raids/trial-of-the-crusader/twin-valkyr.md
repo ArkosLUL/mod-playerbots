@@ -122,7 +122,8 @@ off the tank list last), so staging and the fight agree. Fjola's tank (560.5, 88
 (565.5, 88.2), 5 yd apart for cleave; a lone tank (563.5, 88.2). Melee at y 87 and 85.5, healers
 84 and 82.5, ranged 81 and 79.8, each row at x 563.25 / 561.5 / 565; past six a role starts over,
 stacking costs nothing here. Hunters take the back row from x 565 in. The twins hover ~6 yd over
-their tank, so melee reach them from ~10 yd 2D (3D 11.8), and no shot casts inside that 11.8. A
+their tank, so melee reach them from ~10 yd 2D (3D 11.8), and no shot casts inside that 11.8: the
+ranged rows sit only 12-14 yd from a twin parked on the arena side of her tank. A
 twin moves again only once her target moved past ~9.1 yd 3D (`CONTACT_DISTANCE` plus both reaches
 less her hover, ~6.9 yd 2D): she parks that short of a standing target on the side she came from,
 overtakes a tank walking her in and stops right over it, and pulled into the tunnel stays there. They face the raid and melee eat parries: turning them round would put the tanks in

@@ -236,7 +236,7 @@ is never an assist tank), so their order is arbitrary.
 | `raid cover` → `cast raid cover` | `+8.6` | Above the flame walk, which holds a carrier's every tick: an instant goes out on the move. Channels go to nobody on a flame |
 | `personal defensive` → `cast personal defensive` | `+8.4` | The same, for a carrier under 50% |
 | `legion flame nearby` → `avoid legion flame` | `+8` | Beats every hold, so a carrying tank walks and he follows; breaks the bot's own cast first. The only flame mover: `AvoidAoeAction` is vetoed ([Legion Flame](#boss-abilities)) |
-| `pinned cast` → `break pinned cast` | `+7` | Breaks a kissed, carrying or cover-due bot's cast from another bot's tick ([Mistress of Pain](#adds)). Returns `false`: costs nothing, and no RAID node returning `true` can skip it |
+| `pinned cast` → `break pinned cast` | `+7` | Breaks a kissed, carrying or cover-due bot's cast from another bot's tick ([Mistress of Pain](#adds)). Returns `false`: costs nothing, and no RAID node returning `true` can skip it. The group walk behind it runs once per group per ms, shared by every bot's trigger and action |
 | `portal spawn` → `leave portal` | `+6` | Under the flame walk, which the leg's `MOVEMENT_COMBAT` yields to; drops a booking of its own priority first. `jaraxxus portal hold` blocks reach melee, set behind, rear flank, formation, follow, move random and charge meanwhile |
 | `engaged by main tank` → `main tank hold boss` | `ACTION_RAID + 5` | Only while he is in combat ([Pull and wipe](#pull-and-wipe)). The drag to `ARENA_CENTER` tests only its next 5 yd step, since a tank-carried trail lies along the whole way back; a flame there sends the tank around the trail |
 | `add needs assist tank` → `assist tank hold add` | `+4` | Assist tank 0 |

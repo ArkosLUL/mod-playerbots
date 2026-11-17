@@ -11,7 +11,7 @@ class ToCMoveToStagingStandAction : public NorthrendBeastsWalkAction
 {
 public:
     ToCMoveToStagingStandAction(PlayerbotAI* botAI, std::string const name = "toc move to staging stand")
-        : NorthrendBeastsWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 

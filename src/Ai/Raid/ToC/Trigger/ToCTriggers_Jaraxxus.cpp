@@ -11,7 +11,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 bool JaraxxusFelFireballInterruptibleTrigger::IsActive()
 {
-    // every tick, not only mid-cast, so jaraxxus.interrupter drops as the cast ends
     Unit* jaraxxus = GetJaraxxus(botAI);
     return jaraxxus && JaraxxusIsFelFireballInterrupter(bot, jaraxxus);
 }
@@ -54,7 +53,7 @@ bool JaraxxusSecondAddNeedsAssistTankTrigger::IsActive() { return JaraxxusAssist
 
 bool JaraxxusNetherPowerActiveTrigger::IsActive()
 {
-    // stack read first, every bot's tick keeps jaraxxus.netherpower current
+    // the aura test first: a healing remover walks the group
     return JaraxxusNetherPowerStacks(botAI) > 0 && JaraxxusIsNetherPowerRemover(bot);
 }
 

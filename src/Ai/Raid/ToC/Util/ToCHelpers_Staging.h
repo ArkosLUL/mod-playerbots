@@ -27,31 +27,31 @@ enum class ToCStagingBoss : uint8
 };
 
 // A parked bot walks back once pushed past UNPARK
-constexpr float STAGING_PARK = 1.0f;
-constexpr float STAGING_UNPARK = 2.5f;
+inline constexpr float STAGING_PARK = 1.0f;
+inline constexpr float STAGING_UNPARK = 2.5f;
 // The deal moving a stand further than this drops the park and validates the new spot
-constexpr float STAGING_STAND_MOVED = 0.5f;
+inline constexpr float STAGING_STAND_MOVED = 0.5f;
 // ValidateFloorPoint's answer is kept only this close to the raw stand
-constexpr float STAGING_FLOOR_TOLERANCE = 3.0f;
+inline constexpr float STAGING_FLOOR_TOLERANCE = 3.0f;
 // The duty tank stands this far from the release point. The margin covers a 1 yd park either side and a
 // pet 3 yd off its owner.
-constexpr float STAGING_DUTY_STAND = 3.0f;
-constexpr float STAGING_RELEASE_MARGIN = 5.0f;
-constexpr uint32 STAGING_DEAL_MS = 1000;
+inline constexpr float STAGING_DUTY_STAND = 3.0f;
+inline constexpr float STAGING_RELEASE_MARGIN = 5.0f;
+inline constexpr uint32 STAGING_DEAL_MS = 1000;
+// the 3D gap between a stand and the 2D distance it was dealt at
+inline constexpr float STAGING_3D_GAP = 0.5f;
 
-// A forced attack's SelectNearestTarget isn't the nearest: after each unit that passes it narrows to that
-// unit's GetDistance, both combat reaches off, so anyone inside this beats the duty tank whenever the
-// search reaches them first. The 0.5 covers the 3D gap.
+// A forced attack narrows its pick to each passing unit's GetDistance, so anyone inside this beats the
+// duty tank whenever the search reaches them first
 constexpr float ReleaseClearance(float bossReach)
 {
-    return STAGING_DUTY_STAND + STAGING_RELEASE_MARGIN + bossReach + DEFAULT_COMBAT_REACH + 0.5f;
+    return STAGING_DUTY_STAND + STAGING_RELEASE_MARGIN + bossReach + DEFAULT_COMBAT_REACH + STAGING_3D_GAP;
 }
 
 static_assert(STAGING_PARK < STAGING_UNPARK, "a walk has to end inside its own trigger");
 
-// The raid-wide half of the window, per instance per ms: Barrett's gossip gone after it was seen at
-// this stage (or Jaraxxus chained for a retry), nothing live, and the next arrival by the script's guid slots.
-// Stage 9 is Anub'arak while he isn't live.
+// The raid-wide half of the window, per instance per ms: Barrett's gossip seen and gone at this stage (or
+// Jaraxxus chained for a retry), nothing live, next arrival by guid slot. Stage 9 is Anub'arak.
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI);
 // That, while the bot is alive, out of combat and in the arrival's room together with its master,
 // else the group leader
@@ -66,12 +66,11 @@ struct ToCStagingRead
     Position spot;      // the stand, floor-validated
 };
 
-// Notes toc.stage, and for 2 s after the arrival closes every bot's last label again, since the trace
-// opens at the engage. Only a stand the deal moved changes the park latch here, dropping it; parking
-// is the trigger's write.
+// Notes toc.stage, and every bot's last label for 2 s after the arrival closes. Here only a moved stand
+// touches the park latch, dropping it.
 ToCStagingRead GetToCStagingRead(PlayerbotAI* botAI);
-// Written by the trigger on every check: parked while it declines
-void SetToCStagingParked(PlayerbotAI* botAI, bool parked);
+// The strategy's tick, before the trigger: a held bot parks while it needs no walk, unparks once it does
+void UpdateToCStagingPark(PlayerbotAI* botAI);
 
 // For the rules: no note and no park write
 bool IsToCStagingHeld(PlayerbotAI* botAI);
@@ -81,9 +80,8 @@ bool IsToCStagingRestHeld(PlayerbotAI* botAI);
 // The middle of the Faction Champions' landing slots for the bot's faction, where the pack lands
 Position GetFactionChampionsLandingCentre(Player* bot);
 
-// Where the grip chain's DK at this post waits, on the line from the landing centre to the arena centre:
-// post 0 on the tank line (a tank DK on its tank stand, any other 3 yd behind it), post 1 54 yd and post 2
-// 78 yd down the lane
+// The grip chain DK's wait on the landing centre's line to the arena centre: post 0 on the tank line (a
+// non-tank 3 yd behind), post 1 54 yd and post 2 78 yd down the lane
 Position GetFactionChampionsChainPost(Player* bot, uint32 post, bool tank);
 
 }

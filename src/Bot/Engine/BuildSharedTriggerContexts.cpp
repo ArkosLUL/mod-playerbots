@@ -4,7 +4,6 @@
  * or (at your option) any later version.
  */
 
-#include "Ai/Raid/ToC/ToCTriggerContext.h"
 #include "AiObjectContext.h"
 #include "Aq20TriggerContext.h"
 #include "Aq40TriggerContext.h"
@@ -27,6 +26,7 @@
 #include "SWPTriggerContext.h"
 #include "TKTriggerContext.h"
 #include "TbcDungeonTriggerContext.h"
+#include "ToCRaidTriggerContext.h"
 #include "TriggerContext.h"
 #include "UldTriggerContext.h"
 #include "VoATriggerContext.h"

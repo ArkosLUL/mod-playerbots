@@ -9,6 +9,7 @@
 #include "EncounterHelpers.h"
 #include "Group.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
@@ -39,6 +40,11 @@ namespace
 constexpr float JARAXXUS_ARENA_REACH = 80.0f;
 constexpr float JARAXXUS_FLAME_CARRIER_RAID_SCAN = 40.0f;
 constexpr float JARAXXUS_MELEE_INTERRUPT_RANGE = 5.0f;
+// spell damage per Nether Power stack
+constexpr float JARAXXUS_NETHER_POWER_PER_STACK = 0.2f;
+// FindNearestPositionClearOfHazards's own step defaults, spelled out where a later argument is passed
+constexpr float SWEEP_RING_STEP = 2.0f;
+constexpr float SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
 std::vector<uint32> const JARAXXUS_SCAN_ENTRIES = {
     static_cast<uint32>(ToCNpcs::NPC_JARAXXUS),        static_cast<uint32>(ToCNpcs::NPC_NETHER_PORTAL),
@@ -83,10 +89,20 @@ struct InfernoMemo
     RaidPredictedHit hit;
 };
 
+// Per group per ms, for the same reason: every bot's pinned cast trigger walks the group
+struct PinnedMemo
+{
+    bool valid = false;
+    uint32 ms = 0;
+    ObjectGuid group;
+    std::vector<ObjectGuid> casters;
+};
+
 struct JaraxxusState
 {
     JaraxxusScan scan;
     InfernoMemo inferno;
+    PinnedMemo pinned;
     std::unordered_map<ObjectGuid, ThreatCapLatch> threatCaps;
     RaidObs::ObsValue<uint32> netherPower{"jaraxxus.netherpower"};
     RaidObs::ObsValue<ObjectGuid> focus{"jaraxxus.focus"};
@@ -363,7 +379,8 @@ InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, RaidPredictedHit& hit
         return memo.phase;
 
     // his Nether Power counts: Burning Inferno is cast on his behalf
-    float const power = 1.0f + 0.2f * static_cast<float>(JaraxxusNetherPowerStacks(GET_PLAYERBOT_AI(bot)));
+    float const power =
+        1.0f + JARAXXUS_NETHER_POWER_PER_STACK * static_cast<float>(JaraxxusNetherPowerStacks(GET_PLAYERBOT_AI(bot)));
     next.startMs = now + static_cast<uint32>(std::max(incinerate->GetDuration(), 0)) + JARAXXUS_INFERNO_FIRST_TICK_MS;
     next.damage = static_cast<uint32>(PeriodicTickOf(infernoId) * JARAXXUS_INFERNO_TICKS * power);
     memo.phase = InfernoPhase::Coming;
@@ -569,8 +586,8 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
             return !offPortal ||
                    !CirclesCrossPath(portals, JARAXXUS_PORTAL_CLEAR, from, Position(x, y, from.GetPositionZ()));
         };
-        return FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, &preferNear, accept, &cache);
+        return FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_LEGION_FLAME_SEARCH, SWEEP_RING_STEP,
+                                                 SWEEP_ANGLE_STEP, &preferNear, accept, &cache);
     };
 
     Unit* boss = FindJaraxxus(bot);
@@ -675,8 +692,8 @@ bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
             Position const to(x, y, from.GetPositionZ());
             return !FlameCrossesPath(scan, from, to) && !CirclesCrossPath(heldPortal, JARAXXUS_PORTAL_CLEAR, from, to);
         };
-        return FindNearestPositionClearOfHazards(bot, circles, JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, preferNear, accept, &cache);
+        return FindNearestPositionClearOfHazards(bot, circles, JARAXXUS_LEGION_FLAME_SEARCH, SWEEP_RING_STEP,
+                                                 SWEEP_ANGLE_STEP, preferNear, accept, &cache);
     };
 
     char const* branch = "dodge";
@@ -828,16 +845,21 @@ Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index)
     JaraxxusScan const& scan = ScanOf(bot, *state);
 
     // a tank that died or left stops calling this, so its entry would outlive it in the trace
-    std::vector<Player*> const members = AliveMembersOnMap(bot);
-    std::vector<ObjectGuid> gone;
-    for (auto const& entry : state->addTank)
+    if (RaidObs::Active())
     {
-        ObjectGuid const tank = entry.first;
-        if (std::none_of(members.begin(), members.end(), [tank](Player* member) { return member->GetGUID() == tank; }))
-            gone.push_back(tank);
+        std::vector<Player*> const members = AliveMembersOnMap(bot);
+        std::vector<ObjectGuid> gone;
+        for (auto const& entry : state->addTank)
+        {
+            ObjectGuid const tank = entry.first;
+            if (std::none_of(members.begin(), members.end(),
+                             [tank](Player* member) { return member->GetGUID() == tank; }))
+                gone.push_back(tank);
+        }
+
+        for (ObjectGuid tank : gone)
+            state->addTank.erase(tank);
     }
-    for (ObjectGuid tank : gone)
-        state->addTank.erase(tank);
 
     Unit* add = nullptr;
     if (index == 0)
@@ -887,22 +909,23 @@ Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI)
     char const* branch = "none";
     if (ToCEncounterGateOpen(botAI, ToCEncounter::Jaraxxus))
     {
-        // read even under a skull, so jaraxxus.focus keeps following the adds
-        Unit* focus = GetJaraxxusFocusAdd(botAI);
-        Unit* boss = GetJaraxxus(botAI);
-
         auto const belongs = [](Unit* unit)
         { return IsJaraxxusAdd(unit) || unit->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_JARAXXUS); };
 
         target = GetRaidHumanSkull(botAI, belongs);
         if (target)
+        {
             branch = "skull";
-        else if (focus)
+            // keeps jaraxxus.focus following the adds under a skull
+            if (RaidObs::Active())
+                GetJaraxxusFocusAdd(botAI);
+        }
+        else if (Unit* focus = GetJaraxxusFocusAdd(botAI))
         {
             target = focus;
             branch = "add";
         }
-        else if (boss && boss->IsInCombat())
+        else if (Unit* boss = GetJaraxxus(botAI); boss && boss->IsInCombat())
         {
             target = boss;
             branch = "boss";
@@ -986,17 +1009,35 @@ bool JaraxxusSpellHasCastTime(PlayerbotAI* botAI, std::string const& spell, bool
 std::vector<Player*> GetJaraxxusPinnedCasters(Player* bot)
 {
     std::vector<Player*> pinned;
-    if (!StateFor(bot))
+    JaraxxusState* state = StateFor(bot);
+    if (!state)
         return pinned;
 
-    for (Player* member : AliveMembersOnMap(bot))
+    Group* group = bot->GetGroup();
+    ObjectGuid const groupGuid = group ? group->GetGUID() : ObjectGuid::Empty;
+    PinnedMemo& memo = state->pinned;
+    uint32 const now = getMSTime();
+    if (!group || !memo.valid || memo.ms != now || memo.group != groupGuid)
     {
-        if (!member->HasUnitState(UNIT_STATE_CASTING) || !GET_PLAYERBOT_AI(member))
-            continue;
+        memo.casters.clear();
+        for (Player* member : AliveMembersOnMap(bot))
+        {
+            if (!member->HasUnitState(UNIT_STATE_CASTING) || !GET_PLAYERBOT_AI(member))
+                continue;
 
-        if (HasMistressKiss(member) || IsLegionFlameCarrier(member) || JaraxxusRaidCoverPinned(member))
-            pinned.push_back(member);
+            if (HasMistressKiss(member) || IsLegionFlameCarrier(member) || JaraxxusRaidCoverPinned(member))
+                memo.casters.push_back(member->GetGUID());
+        }
+
+        // a groupless bot's list is its own, so it never serves another bot
+        memo.valid = group != nullptr;
+        memo.ms = now;
+        memo.group = groupGuid;
     }
+
+    for (ObjectGuid const& guid : memo.casters)
+        if (Player* caster = ObjectAccessor::GetPlayer(*bot, guid))
+            pinned.push_back(caster);
 
     return pinned;
 }
@@ -1078,7 +1119,7 @@ bool DeriveLegionFlameDetour(Player* bot, Position const& anchor, float maxStep,
     auto const reachable = [scan, &from](float x, float y)
     { return !FlameCrossesPath(*scan, from, Position(x, y, from.GetPositionZ())); };
 
-    spot = FindNearestPositionClearOfHazards(bot, hazards, maxStep, 2.0f, static_cast<float>(M_PI) / 8.0f, &anchor,
+    spot = FindNearestPositionClearOfHazards(bot, hazards, maxStep, SWEEP_RING_STEP, SWEEP_ANGLE_STEP, &anchor,
                                              reachable);
     return !IsEmptyPosition(spot);
 }
@@ -1211,8 +1252,8 @@ bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot)
     // back toward him, where the melee go once she has picked
     Unit* boss = FindJaraxxus(bot);
     Position const toward = boss ? boss->GetPosition() : bot->GetPosition();
-    spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_PORTAL_CLEAR + JARAXXUS_LEGION_FLAME_SEARCH, 2.0f,
-                                             static_cast<float>(M_PI) / 8.0f, &toward);
+    spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_PORTAL_CLEAR + JARAXXUS_LEGION_FLAME_SEARCH,
+                                             SWEEP_RING_STEP, SWEEP_ANGLE_STEP, &toward);
     return !IsEmptyPosition(spot);
 }
 

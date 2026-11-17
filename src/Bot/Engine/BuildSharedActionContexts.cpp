@@ -6,7 +6,6 @@
 
 #include "ActionContext.h"
 #include "Ai/Dungeon/TOC/TOCActionContext.h"
-#include "Ai/Raid/ToC/ToCActionContext.h"
 #include "AiObjectContext.h"
 #include "Aq20ActionContext.h"
 #include "Aq40ActionContext.h"
@@ -29,6 +28,7 @@
 #include "SWPActionContext.h"
 #include "TKActionContext.h"
 #include "TbcDungeonActionContext.h"
+#include "ToCRaidActionContext.h"
 #include "UldActionContext.h"
 #include "VoAActionContext.h"
 #include "WorldPacketActionContext.h"

@@ -26,9 +26,8 @@ protected:
     bool AttackDirect(Unit* target);
 };
 
-// The group skull when it sits on a unit belongs() accepts that is alive, in combat, selectable and
-// attackable by this bot. Bots on direct targeting place no skull, so it's a player's. Null without a
-// group.
+// The group skull, a player's since bots place none, on a unit belongs() accepts that is alive, in combat,
+// selectable and attackable by this bot. Null without a group.
 Unit* GetRaidHumanSkull(PlayerbotAI* botAI, bool (*belongs)(Unit*));
 
 // A living pet CommandPetAttack would send to pick, not on it yet. Resolver triggers fire on this

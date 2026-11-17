@@ -27,18 +27,19 @@ constexpr uint32 FLAME_LATCH_MS = 3000;
 constexpr uint32 FLAME_STALL_MS = 500;
 // a gap this long between ticks is a new flame, nothing latched carries over
 constexpr uint32 FLAME_WINDOW_GAP_MS = 2000;
-// DragBossToAnchor's step, and how close to its anchor it stops
-constexpr float DRAG_STEP = 5.0f;
-constexpr float DRAG_DONE = 12.0f;
 constexpr uint32 PORTAL_LATCH_MS = 3000;
 constexpr uint32 PORTAL_STALL_MS = 500;
 constexpr float PORTAL_ARRIVE = 1.5f;
+// a latched exit this little inside the portal's clearance still counts as clear
+constexpr float PORTAL_EXIT_SLACK = 0.5f;
+// a booking this close to a spot is the walk to it
+constexpr float SAME_DESTINATION = 1.0f;
 
 // A walk waits behind any booking of equal or higher priority until it runs out
 void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
 {
     if (last.msTime && last.priority <= upTo &&
-        last.lastMoveShort.GetExactDist2d(own.GetPositionX(), own.GetPositionY()) >= 1.0f)
+        last.lastMoveShort.GetExactDist2d(own.GetPositionX(), own.GetPositionY()) >= SAME_DESTINATION)
         last.clear();
 }
 
@@ -67,7 +68,7 @@ bool JaraxxusAvoidLegionFlameAction::IssueLeg(Position const& spot, uint32 now)
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const replacing =
         last.priority == MovementPriority::MOVEMENT_FORCED &&
-        last.lastMoveShort.GetExactDist2d(_lastIssued.GetPositionX(), _lastIssued.GetPositionY()) < 1.0f;
+        last.lastMoveShort.GetExactDist2d(_lastIssued.GetPositionX(), _lastIssued.GetPositionY()) < SAME_DESTINATION;
     if (replacing)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
 
@@ -187,7 +188,8 @@ bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
         bool const arrived = bot->GetExactDist2d(&_spot) <= PORTAL_ARRIVE;
         bool const stalled = !arrived && !bot->isMoving() && age > PORTAL_STALL_MS;
         if (!arrived && !stalled && age < PORTAL_LATCH_MS &&
-            _spot.GetExactDist2d(portal) >= JARAXXUS_PORTAL_CLEAR - 0.5f && IsLegionFlameSpotClear(botAI, _spot))
+            _spot.GetExactDist2d(portal) >= JARAXXUS_PORTAL_CLEAR - PORTAL_EXIT_SLACK &&
+            IsLegionFlameSpotClear(botAI, _spot))
             return true;
 
         _hasSpot = false;
@@ -265,11 +267,11 @@ bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
         return Attack(jaraxxus);
 
     float const toCenter = bot->GetExactDist2d(ARENA_CENTER);
-    if (jaraxxus->GetVictim() != bot || toCenter <= DRAG_DONE)
+    if (jaraxxus->GetVictim() != bot || toCenter <= TOC_DRAG_DONE)
         return false;
 
     // only the step about to be walked: a tank-carried trail runs along the whole way back for 60 s
-    float const scale = std::min(DRAG_STEP, toCenter) / toCenter;
+    float const scale = std::min(TOC_DRAG_STEP, toCenter) / toCenter;
     Position const step(bot->GetPositionX() + (ARENA_CENTER.GetPositionX() - bot->GetPositionX()) * scale,
                         bot->GetPositionY() + (ARENA_CENTER.GetPositionY() - bot->GetPositionY()) * scale,
                         bot->GetPositionZ());
@@ -277,7 +279,7 @@ bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
         return DragBossToAnchor(jaraxxus, ARENA_CENTER);
 
     Position detour;
-    if (!DeriveLegionFlameDetour(bot, ARENA_CENTER, DRAG_STEP, detour))
+    if (!DeriveLegionFlameDetour(bot, ARENA_CENTER, TOC_DRAG_STEP, detour))
         return false;
 
     return MoveTo(bot->GetMapId(), detour.GetPositionX(), detour.GetPositionY(), detour.GetPositionZ(), false, false,

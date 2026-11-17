@@ -37,9 +37,8 @@ bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action, RaidSplashCache& cache
 bool CastRaidThroughputHeal(PlayerbotAI* botAI, Unit* target,
                             std::function<bool(std::string const&)> const& skip = nullptr);
 
-// What a multiplier works out about an action that can't change once the action is built: its type,
-// name, threat type. Keep one per multiplier: an Action* is only unique inside one bot's AI, whose
-// actions outlive every multiplier built from it.
+// What a multiplier works out once about an action: its type, name, threat type. One per multiplier: an
+// Action* is unique only inside one bot's AI, whose actions outlive its multipliers.
 template <class Facts>
 class RaidActionCache
 {
@@ -65,9 +64,8 @@ private:
     Facts* _last = nullptr;
 };
 
-// A cast action's "spell id" value without the context lookup on every read. Get() still runs every
-// time so the value refreshes on its own clock. Fetched again when the spell changes: PullAction
-// swaps its spell at run time.
+// A cast action's "spell id" value without the context lookup on every read; Get() still runs so it
+// refreshes on its own clock. Fetched again when the spell changes, as PullAction swaps its spell.
 class RaidSpellIdRef
 {
 public:

@@ -91,9 +91,8 @@ struct ToCGateState
 
 RaidInstanceState<ToCGateState> gateStates;
 
-// The kill moves the stage on before the adds are gone: snobolds riding a player outlive Gormok, who
-// can die last on heroic, and Jaraxxus's death leaves the Mistress and Infernals his portals and
-// volcanoes summoned.
+// The kill moves the stage on before the adds are gone: snobolds can outlive Gormok, and Jaraxxus's
+// Mistresses and Infernals outlive him
 ToCEncounter EncounterBeforeStage(uint32 stage)
 {
     switch (stage)
@@ -130,9 +129,8 @@ Creature* FirstEngaged(Player* bot, EntryTest const& isEntry)
     return found;
 }
 
-// True only where FirstEngaged would find something: the guid's creature passes the sweep's tests, its
-// cell is within one of the bot's (every 200 yd visit covers those, for a bot on a valid map coord) and
-// it sits in that cell's grid container, which lags its position until the map's move list runs
+// True only where FirstEngaged would find it: passes the sweep's tests, its cell within one of the bot's,
+// and in that cell's grid container, which lags its position until the map's move list runs
 template <typename EntryTest>
 bool SweepFinds(Player* bot, Map* map, ObjectGuid const& guid, EntryTest const& isEntry)
 {
@@ -230,7 +228,7 @@ ToCGateState const* ReadGate(PlayerbotAI* botAI)
 
     return &state;
 }
-}
+}  // namespace
 
 ToCEncounter ToCEncounterOfStage(uint32 stage)
 {
@@ -324,68 +322,68 @@ char const* ToCEncounterSlug(ToCEncounter encounter)
 // of 1 would run a throttled trigger every tick.
 ToCGatedTrigger::ToCGatedTrigger(PlayerbotAI* botAI, Trigger* inner, ToCEncounter encounter)
     : Trigger(botAI, inner ? inner->getName() : "trigger", inner ? inner->getCheckInterval() : 1),
-      inner(inner),
-      encounter(encounter)
+      _inner(inner),
+      _encounter(encounter)
 {
 }
 
-ToCGatedTrigger::~ToCGatedTrigger() { delete inner; }
+ToCGatedTrigger::~ToCGatedTrigger() { delete _inner; }
 
 Event ToCGatedTrigger::Check()
 {
-    if (!inner || !ToCEncounterGateOpen(botAI, encounter))
+    if (!_inner || !ToCEncounterGateOpen(botAI, _encounter))
         return Event();
 
-    Event event = inner->Check();
+    Event event = _inner->Check();
     if (!event)
         return event;
 
     // NamePull only renames a trace still filed under the map name, which the engage hook
     // normally beats it to.
-    if (RaidObs::Active() && ToCEncounterIsLive(botAI, encounter))
+    if (RaidObs::Active() && ToCEncounterIsLive(botAI, _encounter))
         if (Map* map = bot ? bot->FindMap() : nullptr)
-            RaidObs::NamePull(map, ToCEncounterSlug(encounter));
+            RaidObs::NamePull(map, ToCEncounterSlug(_encounter));
 
     return event;
 }
 
-bool ToCGatedTrigger::IsActive() { return inner && ToCEncounterGateOpen(botAI, encounter) && inner->IsActive(); }
+bool ToCGatedTrigger::IsActive() { return _inner && ToCEncounterGateOpen(botAI, _encounter) && _inner->IsActive(); }
 
-bool ToCGatedTrigger::IsBuffTrigger() { return inner && inner->IsBuffTrigger(); }
+bool ToCGatedTrigger::IsBuffTrigger() { return _inner && _inner->IsBuffTrigger(); }
 
-bool ToCGatedTrigger::IsDebuffTrigger() { return inner && inner->IsDebuffTrigger(); }
+bool ToCGatedTrigger::IsDebuffTrigger() { return _inner && _inner->IsDebuffTrigger(); }
 
 std::vector<NextAction> ToCGatedTrigger::getHandlers()
 {
-    return inner ? inner->getHandlers() : std::vector<NextAction>();
+    return _inner ? _inner->getHandlers() : std::vector<NextAction>();
 }
 
 void ToCGatedTrigger::Reset()
 {
-    if (inner)
-        inner->Reset();
+    if (_inner)
+        _inner->Reset();
 }
 
-Unit* ToCGatedTrigger::GetTarget() { return inner ? inner->GetTarget() : Trigger::GetTarget(); }
+Unit* ToCGatedTrigger::GetTarget() { return _inner ? _inner->GetTarget() : Trigger::GetTarget(); }
 
 Value<Unit*>* ToCGatedTrigger::GetTargetValue()
 {
-    return inner ? inner->GetTargetValue() : Trigger::GetTargetValue();
+    return _inner ? _inner->GetTargetValue() : Trigger::GetTargetValue();
 }
 
 std::string const ToCGatedTrigger::GetTargetName()
 {
-    return inner ? inner->GetTargetName() : Trigger::GetTargetName();
+    return _inner ? _inner->GetTargetName() : Trigger::GetTargetName();
 }
 
 void ToCGatedTrigger::ExternalEvent(std::string const param, Player* owner)
 {
-    if (inner)
-        inner->ExternalEvent(param, owner);
+    if (_inner)
+        _inner->ExternalEvent(param, owner);
 }
 
 void ToCGatedTrigger::ExternalEvent(WorldPacket& packet, Player* owner)
 {
-    if (inner)
-        inner->ExternalEvent(packet, owner);
+    if (_inner)
+        _inner->ExternalEvent(packet, owner);
 }

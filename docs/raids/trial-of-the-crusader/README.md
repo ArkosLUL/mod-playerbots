@@ -133,7 +133,7 @@ take no encounter prefix, so their triggers run ungated, and their definitions t
   `AddToC<Stem>TriggerNodes` (both `Trigger/ToCTriggers_<Stem>.h`);
 - action: class plus entry in `ToC<Stem>ActionContext` (`Action/ToCActions_<Stem>.h`);
 - multiplier: `AddToC<Stem>Multipliers` (`Multiplier/ToCMultipliers_<Stem>.h`);
-- rule: the encounter's Definition file, wired in `ToCStrategy::InitMultipliers` right after its
+- rule: the encounter's Definition file, wired in `ToCRaidStrategy.cpp`'s `InitMultipliers` right after its
   stem multipliers, since a trace credits the first rule or multiplier that zeroes an action;
 - burst row: each encounter stem (`NorthrendBeasts`, `Jaraxxus`, `FactionChampions`, `TwinValkyr`,
   `Anubarak`) answers `ToC<Stem>BurstWindow` with a `RaidBurstWindow`, and `ToCLiveBurstWindow`
@@ -143,8 +143,8 @@ take no encounter prefix, so their triggers run ungated, and their definitions t
   Bloodlust/Heroism, `allowAll` to the rest.
   Every row ANDs with the shared tank-held-boss gate.
 
-The root only dispatches: `ToCStrategy.cpp` calls every stem's node and multiplier list and every
-Definition's rules, and `ToCActionContext.h`/`ToCTriggerContext.h` merge the stem contexts. The four
+The root only dispatches: `ToCRaidStrategy.cpp` calls every stem's node and multiplier list and every
+Definition's rules, and `ToCRaidActionContext.h`/`ToCRaidTriggerContext.h` merge the stem contexts. The four
 registration sites name only these root classes. **Dispatch order is behaviour**: equal relevances
 pop in insertion order.
 
@@ -161,7 +161,7 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
   `IsEncounterInProgress()` and one of its units alive and in combat, which keeps walk-ins, the
   Fizzlebang intro and the Lich King scene closed. Icehowl, Jaraxxus and the champions are found by
   entry within 200 yd of the bot, since the arena reaches about 80 yd from `ARENA_CENTER`.
-- `ToCTriggerContext.h` wraps every trigger whose name leads with `gormok`, `northrend worms`,
+- `ToCRaidTriggerContext.h` wraps every trigger whose name leads with `gormok`, `northrend worms`,
   `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr` or `anubarak` in `ToCGatedTrigger`,
   which returns no event while closed. A raid-wide trigger takes none of these prefixes.
 - A wrapped trigger firing while live calls `RaidObs::NamePull` with the trace slug. The engage hook
@@ -172,17 +172,18 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
 - pblint reads a `creators["..."]` key only after a one-line `class X : public NamedObjectContext<…>`
   in the same file, so a stem context keeps its constructor inline in its header. A trigger's
   `: Trigger(botAI, "name")` stays on one line for the same reason.
-- `src/Ai/Dungeon/TOC/TOC*.h` (Trial of the Champion) collide case-insensitively with raid `ToC*.h`.
-  Hence the raid-unique umbrella headers `ToCRaidActions.h`, `ToCRaidTriggers.h`,
-  `ToCRaidMultipliers.h`, and `BuildShared{Action,Trigger}Contexts.cpp` including the root contexts
-  by path. A new header needs a name no dungeon header has, ignoring case.
+- `src/Ai/Dungeon/TOC/TOC*` (Trial of the Champion) would collide case-insensitively with raid `ToC*`
+  names, which breaks the Windows and macOS builds. Hence every raid root file and umbrella header is
+  `ToCRaid*` (`ToCRaidStrategy.{h,cpp}`, `ToCRaid{Action,Trigger}Context.h`,
+  `ToCRaid{Actions,Triggers,Multipliers}.h`). A new file needs a name no dungeon file has, ignoring case.
 - `Util/ToCData.h` holds only raid-wide values: map id, `ARENA_CENTER`, `ANUBARAK_PIT_CENTER`, the
   `ToCNpcs` and `SPELL_*` mirrors. A new boss-specific id goes in the stem's
-  `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `constexpr uint32 SPELL_*`; remap one as
+  `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `inline constexpr uint32 SPELL_*`; remap one as
   `sSpellMgr->GetSpellIdForDifficulty(SPELL_X, unit)` at the call, never inside a wrapper: pblint's
   remap check reads that bare identifier.
 - Shared bases (`Action/ToCActions_Shared.h`): `ToCMainTankHoldAction::DragBossToAnchor` backs the
-  tank 5 yd at a time toward an anchor while it tanks the boss and stands more than 12 yd from it;
+  tank 5 yd at a time (`TOC_DRAG_STEP`) toward an anchor while it tanks the boss and stands more than
+  12 yd (`TOC_DRAG_DONE`) from it;
   the boss follows, so it settles up to melee reach past that, possibly on a hazard. Where the spot
   matters, measure arrival on the boss (Anub'arak's pre-submerge drag).
 - Raid-wide helpers in `src/Ai/Raid/` ([below](#targeting-is-direct-no-raid-icons)):
@@ -351,7 +352,8 @@ park within 1 yd, walk back past 2.5.
 
 **Hold.** `toc staging stand` → `toc move to staging stand` (`ACTION_RAID`) walks at
 `MOVEMENT_NORMAL`, latched, never attacks, and returns false once parked, so lower nodes buff and
-heal. Rules (`ToCDefinition_Staging.cpp`):
+heal. The park latch moves in the strategy's `OnTick` (`UpdateToCStagingPark`), before the trigger
+reads it, never inside `IsActive`. Rules (`ToCDefinition_Staging.cpp`):
 
 - `toc staging hold` zeroes follow, formation, set behind, tank face, rear flank, move random,
   `return` and `return to stay position` (a player's `stay` too), and tank and dps assist: out of

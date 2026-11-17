@@ -52,8 +52,7 @@ constexpr float TWIN_COUNTERSPELL_RANGE = 30.0f;
 constexpr float TWIN_WIND_SHEAR_RANGE = 25.0f;
 constexpr float TWIN_SPELL_LOCK_RANGE = 30.0f;
 
-// The entrance tunnel. The traces read its floor as a flat 395.2, and every stand here is 51+ yd from
-// ARENA_CENTER, where no orb gets.
+// The entrance tunnel's flat floor. Every stand here is 51+ yd from ARENA_CENTER, where no orb gets.
 constexpr float TWIN_DOOR_Z = 395.2f;
 
 struct DoorPoint
@@ -73,9 +72,8 @@ constexpr DoorPoint HEAL_SLOTS[] = {{563.25f, 84.0f}, {561.5f, 84.0f}, {565.0f, 
                                     {563.25f, 82.5f}, {561.5f, 82.5f}, {565.0f, 82.5f}};
 constexpr DoorPoint RANGED_SLOTS[] = {{563.25f, 81.0f}, {561.5f, 81.0f}, {565.0f, 81.0f},
                                       {563.25f, 79.8f}, {561.5f, 79.8f}, {565.0f, 79.8f}};
-// The back row by the gate, far side from Fjola's door first. A twin's hitbox makes anything inside
-// ~11.8 yd 3D melee range, where no shot casts, and the ranged rows sit only 12-14 yd from a twin
-// parked on the arena side of her tank.
+// The back row by the gate, far side from Fjola's door first: the ranged rows sit just past a twin's
+// melee range, where no shot casts
 constexpr DoorPoint HUNTER_SLOTS[] = {{565.0f, 79.8f}, {563.25f, 79.8f}, {561.5f, 79.8f}};
 constexpr uint32 TWIN_DOOR_DEAL_MS = 1000;
 
@@ -577,7 +575,7 @@ char const* TankRoleName(TwinTankRole role)
 
 void NoteTankRole(Player* bot, TwinTankRole role)
 {
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true))
+    if (RaidObs::Active() && (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true)))
         RaidObs::NoteDerived(bot, "tv.tank", TankRoleName(role));
 }
 
@@ -788,7 +786,8 @@ void DealDoorStands(TwinValkyrState& state, Player* bot, uint32 now)
         {
             stand.role = TwinDoorRole::Ranged;
             stand.label = "ranged";
-            stand.spot = member->getClass() == CLASS_HUNTER ? SlotOf(HUNTER_SLOTS, hunter) : SlotOf(RANGED_SLOTS, ranged);
+            stand.spot = member->getClass() == CLASS_HUNTER ? SlotOf(HUNTER_SLOTS, hunter)
+                                                            : SlotOf(RANGED_SLOTS, ranged);
         }
         else
         {
@@ -818,8 +817,6 @@ char const* DoorRoleName(TwinDoorRole role)
     }
 }
 
-// What the running Vortex still has to deal each player, before resistance. Its first tick lands a
-// period into the channel.
 // Cast or channel
 Spell* RunningVortex(PlayerbotAI* botAI, TwinValkyrState const& state, Creature*& twin)
 {
@@ -834,6 +831,8 @@ Spell* RunningVortex(PlayerbotAI* botAI, TwinValkyrState const& state, Creature*
                 : nullptr;
 }
 
+// What the running Vortex still has to deal each player, before resistance. Its first tick lands a
+// period into the channel.
 bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHit& hit)
 {
     Creature* twin = nullptr;
@@ -851,8 +850,8 @@ bool VortexHit(PlayerbotAI* botAI, TwinValkyrState const& state, RaidPredictedHi
         return false;
 
     uint32 const ticks = static_cast<uint32>(channelMs / period);
-    uint32 const perTick =
-        static_cast<uint32>(std::max(tick->Effects[EFFECT_0].BasePoints + (tick->Effects[EFFECT_0].DieSides + 1) / 2, 0));
+    uint32 const perTick = static_cast<uint32>(
+        std::max(tick->Effects[EFFECT_0].BasePoints + (tick->Effects[EFFECT_0].DieSides + 1) / 2, 0));
 
     uint32 const now = getMSTime();
     int32 const left = std::max(spell->GetCastTimeRemaining(), 0);
@@ -932,9 +931,8 @@ bool VortexWalkFits(PlayerbotAI* botAI, TwinValkyrState const& state, float walk
     return walkMs + TWIN_NITRO_SPARE_MS <= static_cast<uint32>(std::max(spell->GetCastTimeRemaining(), 0));
 }
 
-// How close an orb harmful to a holder of `held` (as OrbHazards rules it) gets to the bot over the
-// next TWIN_ORB_PASS_HORIZON_MS. The bot walks straight to `to` at its run speed, or stands when `to`
-// is its own spot; each orb flies straight on to its destination.
+// How close an orb harmful to a `held` holder gets over the next TWIN_ORB_PASS_HORIZON_MS, the bot
+// walking straight to `to` (its own spot to stand) and each orb flying straight on
 float ClosestOrbPass(Player* bot, TwinValkyrState const& state, Position const& to, TwinColour held)
 {
     float const fromX = bot->GetPositionX();
@@ -962,8 +960,10 @@ float ClosestOrbPass(Player* bot, TwinValkyrState const& state, Position const& 
         }
 
         float const flight = orb.position.GetExactDist2d(orb.destination);
-        float const flyX = flight > 0.0f ? (orb.destination.GetPositionX() - orb.position.GetPositionX()) / flight : 0.0f;
-        float const flyY = flight > 0.0f ? (orb.destination.GetPositionY() - orb.position.GetPositionY()) / flight : 0.0f;
+        float const flyX =
+            flight > 0.0f ? (orb.destination.GetPositionX() - orb.position.GetPositionX()) / flight : 0.0f;
+        float const flyY =
+            flight > 0.0f ? (orb.destination.GetPositionY() - orb.position.GetPositionY()) / flight : 0.0f;
         for (uint32 ms = 0; ms <= TWIN_ORB_PASS_HORIZON_MS; ms += TWIN_ORB_PASS_STEP_MS)
         {
             float const seconds = ms / static_cast<float>(IN_MILLISECONDS);
@@ -990,9 +990,7 @@ bool CriticalAllyNear(Player* bot)
         Player* member = ref->GetSource();
         if (member && member->IsAlive() && member->IsInMap(bot) && member->GetHealthPct() < TWIN_HEAL_STOP_PCT &&
             bot->GetExactDist2d(member) <= TWIN_HEAL_STOP_RANGE)
-        {
             return true;
-        }
     }
 
     return false;
@@ -1575,9 +1573,8 @@ bool ParkedWalkDue(bool& parked, float distance)
     return true;
 }
 
-// After the Vortex the bot swaps to its Touch's colour, else its base one, so it waits in gossip reach of
-// that portal. A Touch of the other colour ticks every 2 s from the channel's end until the swap, and
-// Fjola summons no orbs while she casts, so the walk is safest during her Vortex.
+// Waits in gossip reach of the portal it swaps at after the Vortex: a Touch ticks from the channel's end
+// until the swap, and Fjola summons no orbs while she casts, so the walk is safest during her Vortex
 Creature* NextPortal(PlayerbotAI* botAI, TwinValkyrState const& state, Position& spot, TwinEssenceReason& reason)
 {
     Player* bot = botAI->GetBot();

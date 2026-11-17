@@ -19,8 +19,8 @@ std::set<std::string> const MULTI_TARGET_ACTIONS = {
 
 bool SummonSplashes(Action* action)
 {
-    // Totem and trap summons stay invisible to the spell test - the summon is single-target and the
-    // area lives on what it summons - so they are named.
+    // named, since the spell test misses them: the summon is single-target and the area lives on what it
+    // summons
     static std::set<std::string> const summoners = {"magma totem", "fire nova", "explosive trap",
                                                     "trap launcher: explosive trap"};
     return action && summoners.count(action->getName());

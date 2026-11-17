@@ -26,7 +26,7 @@
 #include "SWPStrategy.h"
 #include "Strategy.h"
 #include "TKStrategy.h"
-#include "ToCStrategy.h"
+#include "ToCRaidStrategy.h"
 #include "UldStrategy.h"
 #include "VoAStrategy.h"
 #include "ZAStrategy.h"
