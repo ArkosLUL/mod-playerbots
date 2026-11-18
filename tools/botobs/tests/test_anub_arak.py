@@ -6540,5 +6540,67 @@ class Refine34Lines(unittest.TestCase):
         self.assertEqual([(row["guid"], when, owner) for row, when, owner in swaps], [(R34_B1, 2000, 1)])
 
 
+R35_PRAYER, R35_TREE, R35_HOLY = 6901, 6902, 6903
+
+
+def r35_hp(guid: int, when: int) -> float:
+    if guid == R35_PRAYER:
+        # under 5% from 2 s, dead to a swarm tick at 4 s
+        return 0.0 if when >= 4000 else (3.0 if when >= 2000 else 40.0)
+    if guid == R35_TREE:
+        # dead to a Penetrating Cold tick at 3 s, never under 5% while alive
+        return 0.0 if when >= 3000 else 20.0
+    return 4.0 if 1000 <= when < 1500 else 60.0
+
+
+def r35_pull() -> list[dict]:
+    def unit(guid, when):
+        return [guid, X, Y, Z, 0.0, r35_hp(guid, when), 100.0, 0, 0, 0, 0, 0]
+
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1790960000000, "map": ab.MAP_TOC, "inst": 9, "diff": 3, "boss": "anub-arak",
+         "roster": [
+             {"g": R35_PRAYER, "n": "Prayer", "r": "heal", "c": 5, "h": 0},
+             {"g": R35_TREE, "n": "Tree", "r": "heal", "c": 11, "h": 0},
+             {"g": R35_HOLY, "n": "Holylight", "r": "heal", "c": 2, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "anub-arak", "src": "engage"},
+        note(0, R35_PRAYER, "anub.phase", 3),
+        dmg(3000, BOSS, R35_TREE, 68510, 4500),
+        {"t": 3000, "e": "death", "g": R35_TREE, "killer": BOSS, "x": X, "y": Y, "z": Z},
+        dmg(3900, BOSS, R35_PRAYER, ab.SPELL_LEECHING_SWARM_DMG, 190),
+        {"t": 4000, "e": "death", "g": R35_PRAYER, "killer": BOSS, "x": X, "y": Y, "z": Z},
+        {"t": 5000, "e": "end", "out": "wipe"},
+    ]
+    records += [{"t": when, "e": "snap", "hz": [], "u": [unit(guid, when) for guid in (R35_PRAYER, R35_TREE, R35_HOLY)]}
+                for when in range(0, 5200, 250)]
+    return records
+
+
+class Refine35Lines(unittest.TestCase):
+    """Healers' phase 3 seconds under 5% health, their lowest, and a death to the swarm's minimum tick."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = write_trace(cls.folder.name, "649_9_anub-arak_1790960000.ndjson", r35_pull())
+        cls.samples = ab.Samples(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_time_under_the_floor_and_a_swarm_tick_death(self):
+        rows = {row["guid"]: row for row in ab.healer_floor(self.trace, 0, 5000, self.samples)}
+        self.assertEqual((rows[R35_PRAYER]["under"], rows[R35_PRAYER]["lowest"]), (2000, 3.0))
+        self.assertEqual(rows[R35_PRAYER]["floor_deaths"], [4000])
+        self.assertEqual((rows[R35_TREE]["under"], rows[R35_TREE]["floor_deaths"]), (0, []))
+        self.assertEqual((rows[R35_HOLY]["under"], rows[R35_HOLY]["lowest"]), (500, 4.0))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            ab.show_healer_floor(self.trace, 0, 5000, self.samples)
+        self.assertIn("Holylight 0.5 s 4.00%, Prayer 2.0 s 3.00%, died to the swarm floor 0:04.000,"
+                      " Tree 0.0 s 20.00%\n", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

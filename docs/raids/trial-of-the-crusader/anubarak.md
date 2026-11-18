@@ -956,6 +956,13 @@ Baseline, 25H on refine-33 (`0ff058cb1`): CT `1794829976` (kill 7:27.4, one deat
 and Penetrating Cold; phase 3 142.3 s against CT's 104.0). Both: no escort under a burrower, no
 Righteous Defense take, no burrower submerge.
 
+CV `1795027085` (2026-11-18, the upstream-PR cleanup's clear; refine-34 live): wipe in phase 3, `.die`
+at 4.7%. The cleanup kept behaviour: renames and `inline` constants only, c5's group memos fill what
+the old walks tested, the same 82 nodes as CT, the other four bosses killed. Phases 1-2b clean, boosted
+kite move points 10.7 yd ahead (median). Phase 3: Prayer, Tree and Holylight died to the swarm's
+minimum tick (see `floor`), then their cold carriers; healers under 5% in phase 3: CT 3-15 s each
+(down to 1.25%), CU 7-29 s (Prayer dead to a 190 tick at 7:31).
+
 **The move** (`anub.kite`): the plan's track 8.4 yd past its point nearest the kiter, at most 1.2 s
 on, floor-checked (1.2 s on Nitro reached 21 yd: CU 4:41.7 Stormweaver cut the ring 0.7 s ahead of
 his plan and ran the spike onto side 1's patch 9.6 yd off, 0.47 s before its despawn, where the plan
@@ -1238,7 +1245,12 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   healer at risk to itself. Kept until the carrier is safe, the aura ends or either dies.
 - **Healing** (`GetAnubarakSwarmHealPick`), every healer bot, the first row with someone in heal reach
   and sight:
-  1. itself at risk (`self`);
+  1. itself at risk (`self`); else, under 1.2k health plus its Nature shields (four of the swarm's
+     250 ticks) with no HoT on it, or under 750 with one (`floor`, user call 2026-11-18): its own
+     power word: shield (no Weakened Soul), at 750+ its own riptide, renew or rejuvenation, holy shock
+     or riptide, swiftmend, then the fastest rescue heal landing before 250 a second runs it out. Its
+     saves stay held. CV 6:05 Prayer died 0.15 s before Tree's Rejuvenation ticked, Tree 6:48 with
+     none;
   2. `cold`: its assigned carrier (`risk`), then a tank under 35% (50% with no `tank` healer alive),
      then with no carrier assigned a tank under 90% when no carrier is bare (user call, 2026-11-01: two tank healers fell behind three tanks, 7.6-13.3k/s taken
      against 6.5-11.7k/s healed, Prayer and Tree giving the tanks 52-153k a phase);
@@ -1247,7 +1259,7 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
      with both casts in flight, and Nightwarrior (13%, in reach of all three) died;
   3. the lowest in the first of: a carrier this healer can cover (`bare`), another non-tank under
      1.2k health with no HoT on it, given riptide, renew or rejuvenation and nothing bigger (`hot`,
-     not paladins), tank under 90%, carrier under 50%. No other non-tank, the healer itself included
+     not paladins), tank under 90%, carrier under 50%. No other non-tank, the healer itself included bar `floor`
      (user call, 2026-11-05: replaces the 2026-10-30 small heal under 10%); they live on their own,
      party and raid-wide heals (Sustain). `hot` is the exception for one whose passive healing
      falls short (user calls, 2026-11-08): health settles at ~3.3 × the healing a second, so CQ's
@@ -1298,7 +1310,7 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   without an anchor (BR 6:24 all 4 stands dropped as Felesta chased a burrower 35 yd), on the floor (navprobe 2026-11-01: flat to 32 yd east of the midpoint (786.8, 130.6), rising in
   the south-east past it, x 824.8 off the mesh). From his 35% in a phase 1 they walk one at a time,
   healers being unable to cast on the move: the next once every earlier one stands within 6 yd of its
-  own, none while a tank is under 50% (`wait`). Then too a walk to its stand, or to the usual one
+  own, none while a tank is under 50% (`wait`). Then too (and while it is on its `floor`) a walk to its stand, or to the usual one
   meanwhile, stops and waits (`hstand` `heal`): the walk outranks the urgent heals (60.45 over 42), and
   BT 5:52 Tree walked 7 s through the crash. Held stands stay until 3 yd past those reaches (else
   each tank step moves a healer); that one alone is dropped, and a bot without one asks again once a
@@ -1470,6 +1482,10 @@ personal burst is unrestricted.
   re-latches a kite patch leaves one for the submerge (CR #1419). In heroic's last submerge one sphere
   is left: two DK grips moved CU's 44 yd, and it landed 71 yd off the spot.
 - The submerge drag landed 2 of 4 within 6 yd of its spot (CT P1 7.4, CU P1b 9.3).
+- Heroic's behind stands can sit at their 32 yd limit off him: CV's healers walked ~50 yd from R, the
+  last one starting 10 s into the swarm at 11.7% (walks go one at a time).
+- A battle rez onto a healer can land into a Penetrating Cold round: CV Prayer, back 6:11.8, cold
+  6:14.4, dead 6:26.
 - The far-spot search's 36 yd reach finds no 25+ yd spot when the tank patches flank the anchor ~13 yd
   either side (CR r21); about half the submerges on disk sat at r17-r25.
 - A spike re-marking after a death keeps its speed: the next kiter gets ~2 s (CR Bulwark, Hellflame).
@@ -1757,7 +1773,8 @@ s, CS -0.4). `--burrowers` each side tank Righteous Defense that took the other 
 the member's health (CR Elemena 100%). `--spike` per side tank and phase the seconds on escort duty
 with a living burrower on it (CR Bulwark P2b 35.3). `--spike` the kite move points' yards ahead of
 a kiter running over 9 yd/s against one running (CU median 15.6 vs 9.4). `--burrowers` side changes
-after a burrower's first owner with both side tanks alive, per phase (CU P1c 4, P3 6). `--healers` also the main tank's seconds with no healer within 40 yd.
+after a burrower's first owner with both side tanks alive, per phase (CU P1c 4, P3 6). `--swarm` each healer's phase 3 seconds under 5% health and its lowest,
+a death to a swarm tick of 250 or less flagged (CV Prayer, Tree, Holylight). `--healers` also the main tank's seconds with no healer within 40 yd.
 `--burrowers` Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it,
 `anubarak burrower threat cap` vetoes per bot. `--threat` drag pre-steps (counted as legs) and
 `subspot` rows per window with how far he went down from the last spot, `no submerge leg` (no

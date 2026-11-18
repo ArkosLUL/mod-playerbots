@@ -133,7 +133,9 @@
                                      windows with the carrier's own save inside, anub.coldself rows; per class save
                                      and heal item the phase 3 casts by non-tank bots carrying Penetrating Cold, a
                                      burrower on it or neither, and the self save hold's vetoes; anub.swarmheal rows,
-                                     each healer bot's anub.healduty and the carriers its anub.coldheal kept up;
+                                     each healer's seconds under 5% health and its lowest, a death to a swarm
+                                     tick of 250 or less flagged; each healer bot's anub.healduty and the
+                                     carriers its anub.coldheal kept up;
                                      per phase 3 Penetrating Cold wave the first ticks survived, the living
                                      toc.aura frost holders at the landing, Aura Mastery up at the first two
                                      ticks, anub.mastery rows to the second tick, the resisted share per tick, and
@@ -239,7 +241,8 @@ What the generic views get wrong here, and what this reads instead:
   `standby` for one shadowing a bot kiter whose plan lands no other paladin's Hand, or `none`, older traces
   never writing `standby`. `anub.saoe` is per side tank: the spell its area threat node
   cast, else `cap`, `other` or `none`. In heroic phase 3, `anub.swarmheal` is each healer's pick: `self`,
-  `risk`, `tank`, `low`, `bare`, `cold` or `none`, older traces never writing `self` or `risk`.
+  `floor`, `risk`, `tank`, `spread`, `hot`, `bare`, `cold` or `none`; older traces write `low` and never `self` or
+  `risk`, and traces before 2026-11-18 never `floor`.
   `anub.healduty` is per healer bot from the phase's start, `1` cold and `2` tank, and `anub.coldheal` is
   keyed on the healer bot with the carrier it keeps up as its value, `0` when that ends. `anub.mastery` is
   per paladin bot, `none`, `hold N` with N carriers under the tick, or `cast`, and `toc.aura` per paladin
@@ -726,6 +729,10 @@ SUSTAIN_FLOOR_KS = 0.3
 # the code's ANUBARAK_SWARM_HOT_HP: a non-tank under it gets one of SWARM_HOTS from another healer
 SWARM_HOT_HP = 1200
 SWARM_HOTS = ("Riptide", "Renew", "Rejuvenation")
+# the swarm's minimum tick (spell_gen_leeching_swarm_aura); a death to one this size or less was its floor
+SWARM_MIN_DRAIN = 250
+# a healer under this much health sits about four minimum ticks from dying; the trace has no max health
+HEALER_FLOOR_PCT = 5.0
 # a HoT's 15 s and a tick of slack: its ticks after such a cast stay out of the breach line
 SWARM_HOT_MS = 15500
 # a non-tank's longest stretch with no Healing Stream or Vampiric Embrace tick is flagged from here
@@ -7151,6 +7158,44 @@ def show_swarm_self_saves(trace: Trace, start: int, stop: int, samples: Samples)
         or "no rows"))
 
 
+def healer_floor(trace: Trace, start: int, stop: int, samples: Samples) -> list[dict]:
+    """Per healer in [start, stop): ms alive under HEALER_FLOOR_PCT health, its lowest sampled health, and the
+    `t` of each death whose last blow was a Leeching Swarm tick of SWARM_MIN_DRAIN or less."""
+    last_hit: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if start <= rec["t"] <= stop:
+            last_hit[rec.get("d")].append(rec)
+    out = []
+    for guid in healer_guids(trace):
+        stamps, rows = samples.track(guid)
+        under, lowest = 0, None
+        for index, (when, row) in enumerate(zip(stamps, rows)):
+            if not start <= when < stop or row[5] <= 0:
+                continue
+            lowest = row[5] if lowest is None else min(lowest, row[5])
+            if row[5] < HEALER_FLOOR_PCT and index + 1 < len(stamps):
+                under += min(stamps[index + 1], stop) - when
+        floor_deaths = []
+        for rec in combat_deaths(trace):
+            if rec.get("g") != guid or not start <= rec["t"] <= stop:
+                continue
+            blow = next((hit for hit in reversed(last_hit[guid]) if hit["t"] <= rec["t"]), None)
+            if (blow is not None and rec["t"] - blow["t"] <= NEAR_MS and blow.get("sp") == SPELL_LEECHING_SWARM_DMG
+                    and blow.get("a", 0) <= SWARM_MIN_DRAIN):
+                floor_deaths.append(rec["t"])
+        out.append({"guid": guid, "under": under, "lowest": lowest, "floor_deaths": floor_deaths})
+    return out
+
+
+def show_healer_floor(trace: Trace, start: int, stop: int, samples: Samples) -> None:
+    print(f"  healers in phase 3, seconds alive under {HEALER_FLOOR_PCT:.0f}% health and the lowest, a death to a"
+          f" swarm tick of {SWARM_MIN_DRAIN} or less flagged: " + (", ".join(
+              f"{trace.name(row['guid'])} {row['under'] / 1000:.1f} s"
+              + ("" if row["lowest"] is None else f" {row['lowest']:.2f}%")
+              + "".join(f", died to the swarm floor {clock(when)}" for when in row["floor_deaths"])
+              for row in healer_floor(trace, start, stop, samples)) or "no healer"))
+
+
 def show_cold_self_saves(trace: Trace, start: int, stop: int) -> None:
     rows = cold_self_saves(trace, start, stop)
     tally: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
@@ -7216,6 +7261,7 @@ def show_swarm(trace: Trace) -> None:
         show_counts(trace, "anub.coldself")
         show_swarm_self_saves(trace, span[0], span[1], samples)
         show_counts(trace, "anub.swarmheal")
+        show_healer_floor(trace, span[0], span[1], samples)
         show_heal_duties(trace)
         show_cold_waves(trace, samples)
         show_swarm_externals(trace, span[0], span[1], samples)
@@ -9630,7 +9676,8 @@ SECTIONS = (
      " ones, when the burst opened, burst spent from 50%%, Penetrating Cold heals, the seconds each phase 3"
      " carrier went with no HoT or shield, carriers' own saves and anub.coldself, the class saves and heal"
      " items by who cast them and the self save hold's vetoes, each non-tank's heals by kind with what held it"
-     " up with no healer's cast and its party heals, anub.swarmheal rows, anub.healduty and anub.coldheal per healer bot,"
+     " up with no healer's cast and its party heals, anub.swarmheal rows, each healer's seconds under 5%% and"
+     " its lowest with a death to the swarm's minimum tick flagged, anub.healduty and anub.coldheal per healer bot,"
      " per phase 3 Penetrating Cold wave the first ticks survived, the frost holder, Aura Mastery at the first two"
      " ticks, anub.mastery rows, the resisted share per tick, each carrier's health at the landing, risk, first"
      " tick margin and fate, its anub.coldheal healers and the heals and absorbs on it before the tick, and herds"
