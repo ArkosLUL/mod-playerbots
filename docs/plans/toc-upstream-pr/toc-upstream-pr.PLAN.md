@@ -18,7 +18,7 @@ Tested by the user on this build: **25N and 25H**. The fights play the same on 1
 ## Status
 
 The merge stage alone edits this table. Export base (the Custom commit `trial-of-the-crusader`
-mirrors): `001559cbb` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 4 moved it).
+mirrors): `83683770f` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 5 moved it).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
@@ -34,6 +34,7 @@ mirrors): `001559cbb` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; syn
 | sync | p5-sync | committed (sync 1); no review result in the report, parity delta vs `d3418068c` matches line for line | `trial-of-the-crusader` `2a6d48871..b0b47cf42` (1: `refactor(Raid/ToC)`, the 8 uncalled helpers); head verified, RaidObs grep empty | one sync commit on top of the encounter commits (no rebase/amend); no helper delta, so `raid-shared-helpers` and `ulduar-rework` untouched; `upstream/test-staging` not merged (tip `889e9dd6e` already in); no new string-wired names | `upstream/test-staging` not refetched: merge it before publishing if it moved; clang-format not run, 36 pre-existing lines >120; nothing pushed, no rebuild |
 | sync | p5-sync | committed (sync 2, by the orchestrator); new functions match Custom's | `trial-of-the-crusader` `7a731ee60..fedb2340c` (1: `fix(Raid/ToC)`, Anub'arak heroic healers heal themselves on the swarm's floor, Custom `769a3b244`) | trace labels dropped from `take`; context adapted to `AnubarakAuraMasteryDue`; no helper delta | botobs and doc parts stay on Custom; nothing pushed |
 | sync | p5-sync (3, 4) | committed by the orchestrator | `trial-of-the-crusader` `fedb2340c..96219adfd` (2: `c5283f192` Jormungars hunter slot by index, Custom `44d96d34c`; `96219adfd` Death Grip skip message via `GetBotTextOrDefault`, Custom `001559cbb`) | cppcheck 2.13 `iterators3` false positive on a `ToCGroupMemo::Get` result; text id 1948 in `2026_11_18_00_ai_playerbot_toc_texts.sql` on the branch, fork-only 30005 in `2026_11_18_99_…` on Custom (both applied to a scratch copy of the tables) | nothing pushed |
+| sync | p5-sync (5) | committed by the orchestrator; parity delta vs `83683770f` = the old one plus the listed adaptations | `trial-of-the-crusader` `96219adfd..43803f774` (1: `refactor(Raid/ToC)`, every boss built from its encounter definition, Custom `83683770f`; 9 files gone, 5 definitions added) | 25 `LiveMultiplier` → `Multiplier` (stack has no live gate; each of those multipliers checks the live encounter itself, except the FC anti-fear totem guard, which checks its fear window); new definitions take `&ToCGateOpen`, no trace name; `ToCGatedTrigger` and `ToCEncounterSlug` gone; no helper delta | pushed: no; PR text counts now 119 files, ~40.7k lines |
 | — | user's 25-man run on Custom with wave 3a merged | done 2026-11-18 (CV): four bosses killed, Anub'arak wiped in phase 3 on a known healer gap, not the cleanup; fix `769a3b244` synced | | | Publishing open |
 | P2–4 | push, open, texts | done 2026-11-18 | pushed (fast-forwards) framework `2b39e938f`, eoe `b984c3968`, helpers `8fa7a9c68`, ulduar `f0d4fe5d1`, new `trial-of-the-crusader` `96219adfd`; draft **#3064** to `test-staging`, title `feat(Raid/ToC): Add Trial of the Crusader raid strategy`, body = `toc-upstream-pr.HANDOVER.md`; #2876 and #2985 bodies edited (cares table bullet; ToC helpers, HoP fix as a default change, ~3400 lines) | | not marked ready; no build CI on drafts (#3010) |
 | P1 | cppcheck + capped build | done 2026-11-18 | cppcheck 2.13 empty on all five (ToC after `c5283f192`), upstream codestyle passes on all five; `fedb2340c` merged into module and core `test-staging` (`ubuntu:24.04`, 12 GB, 8 CPUs, 6 jobs): g++ 13.3 and clang 18, CI flags, 0 errors, 0 warnings, `worldserver` links | `c5283f192` and `96219adfd` came after the build: strict per-TU check only | self-review box left unticked (user: the rule is new, a whole-branch review is too costly); bodies: ToC in `toc-upstream-pr.HANDOVER.md`, #2876/#2985 edits wait for the ToC PR number |
@@ -387,3 +388,6 @@ core's `/build*/`, outside `modules/`).
   top of the sync commit); behaviour unchanged.
 - (p5) Sync 2 brings in a heroic Anub'arak phase 3 fix as one `fix(Raid/ToC)` commit: a healer
   close to dying to the swarm heals itself first. Export base now `769a3b244`.
+- (p5) Sync 5 moves every ToC node and multiplier into its encounter definition, as Ulduar does. The
+  stack's framework has no `LiveMultiplier`, so the PR branch registers those multipliers with
+  `Multiplier`: they gate on the live encounter themselves, as they did before the sync.
