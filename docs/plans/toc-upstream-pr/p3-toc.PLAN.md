@@ -5,7 +5,7 @@ ToC needs that the stack lacks" table, the **Wave 3** section and Verification b
 
 New branch `trial-of-the-crusader` from `raid-shared-helpers`, worktree
 `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-tocpr-wt/trial-of-the-crusader`. Starts after
-`c1`–`c3` merged and `p2-helpers-toc` committed (Status table). The export base is Custom's HEAD
+`c1`–`c3` and `c5` merged and `p2-helpers-toc` committed (Status table). The export base is Custom's HEAD
 when the lane starts: copy `src/Ai/Raid/ToC/` from that commit (`git archive` or `git show`, never
 a checkout in the main tree) and report it as `exportBase`.
 

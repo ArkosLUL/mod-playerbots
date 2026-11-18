@@ -28,10 +28,11 @@ mirrors): none yet (set by `p3-toc`, moved by each `sync`).
 | 1 | p1-framework-cares | committed; review clean, 1 minor recorded | framework `2b39e938f`; merges eoe `b984c3968`, helpers `cca94c10b`, ulduar `fa6dc4af2`; heads verified, RaidObs grep empty | `CaresTable` comment rewrapped to 2 lines; plain `EncounterGate`, no live flag | commit type `perf` and 98-col body vs upstream's list and 72 cols (needs amend; squash-merge hides it); clang-format not run locally; nothing pushed |
 | 2 | p2-helpers-toc | pending | | | |
 | 2 | c4-toc-closeout | pending | | | |
-| 3 | p3-toc | pending | | | |
+| 3a | c5-toc-group-walks | pending | | | |
+| 3b | p3-toc | pending | | | |
 | 4 | p4-parity-review | pending | | | |
 | sync | p5-sync | pending | | | |
-| — | user's 25-man clear on cleaned Custom | pending | | | gates Publishing |
+| — | user's 25-man clear on Custom with wave 3a merged | pending | | | gates Publishing |
 | — | publishing | pending | | | |
 
 States: `pending`, `committed` (PR lanes), `merged` (cleanup lanes), `blocked` (branch and worktree
@@ -74,7 +75,10 @@ Decisions (user, grilling round, 2026-11-17):
   marks the PR ready.
 - Agents draft the per-boss notes from the boss docs for the user to edit; the disclaimer is the
   user's. The PR text never calls 10N/10H untested: the fights play the same there.
-- Publishing waits for one 25-man clear by the user on Custom after wave 1 merges; wave 3 doesn't.
+- Publishing waits for one 25-man clear by the user on Custom after wave 3a merges (it changes
+  behaviour); wave 3b doesn't.
+- (2026-11-18) Every group walk the wave 1 audits found uncached behind a trigger or multiplier gets
+  cached on Custom in wave 3a (`c5-toc-group-walks`), before `p3` exports.
 - A full capped build of the ToC branch runs before the push, on the user's go.
 - Branch `trial-of-the-crusader`, title `feat(Raid/ToC): …`, GPLv2 headers on the PR branch only,
   `ResolveAlive` keeps `boost::container::small_vector`.
@@ -178,9 +182,13 @@ trace close against core #28117, fold `w5-anubarak-rest-rest` into `anubarak.md`
 `docs/plans/toc-rework/`. Its scope 3 (RaidObs section in the `raid-boss-strategy-recipe` skill, via
 `compact-skill-creator`) goes too. Docs via `compact-docs-writer` (standing approval).
 
-## Wave 3 — the ToC PR branch (`p3-toc`)
+## Wave 3 — group-walk caches (`c5`), then the ToC PR branch (`p3-toc`)
 
-Branch `trial-of-the-crusader` from `raid-shared-helpers`, worktree
+**3a `c5-toc-group-walks`** (Custom, behaviour change): cache every group walk the wave 1 audits
+listed as reached uncached from a trigger's `IsActive` or a multiplier; scope in its brief. Merges
+into Custom before 3b starts, so the export base carries it.
+
+**3b `p3-toc`**: branch `trial-of-the-crusader` from `raid-shared-helpers`, worktree
 `build-tocpr-wt/trial-of-the-crusader`. Big lane: the lead splits by encounter into ≤3 implementers
 on disjoint files plus one finisher. Copy cleaned Custom `src/Ai/Raid/ToC/` at the export base
 (recorded in the status table) and apply the PR-branch-only adaptations:
@@ -259,13 +267,14 @@ core's `/build*/`, outside `modules/`).
 |---|---|---|
 | 1 | `c1-toc-base`, `c2-toc-anubarak`, `c3-toc-fc-beasts`, `p1-framework-cares` | user's go |
 | 2 | `p2-helpers-toc`, `c4-toc-closeout` | user's go, wave 1 merged |
-| 3 | `p3-toc` | user's go, `c1`–`c3` merged, `p2` committed |
+| 3a | `c5-toc-group-walks` | user's go, wave 2 merged |
+| 3b | `p3-toc` | right after 3a lands cleanly (same run), `p2` committed |
 | 4 | `p4-parity-review` | user's go, `p3` committed |
 | sync | `p5-sync` | user's word |
 
 ## Publishing (this session, each step on the user's explicit go)
 
-0. Starts only after the user's 25-man clear on Custom with wave 1 merged; fixes from it land on
+0. Starts only after the user's 25-man clear on Custom with wave 3a merged; fixes from it land on
    Custom and travel with `p5-sync`.
 1. cppcheck 2.13 (`cppcheck --force --inline-suppr --suppressions-list=./.suppress.cppcheck src/` in
    a throwaway `ubuntu:24.04` `docker run --rm`) on all five branches; empty report required.
@@ -298,7 +307,8 @@ core's `/build*/`, outside `modules/`).
   `raid-shared-helpers` are empty; no header basename collides case-insensitively with another
   (`git ls-files src | xargs -n1 basename | tr A-Z a-z | sort | uniq -d` lists none from ToC).
 - `p4` parity review, then cppcheck and the capped build (Publishing 1).
-- In game: the user's 25-man clear on Custom after wave 1 confirms the cleanup kept behaviour.
+- In game: the user's 25-man clear on Custom after wave 3a confirms the cleanup and the caches kept
+  behaviour.
 
 ## PR text notes
 
