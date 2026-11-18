@@ -211,32 +211,25 @@ hook only queues the boss id; the next map update reads the state that stuck. Th
 engage hook name the trace after the creature rather than the map — the core runs `SetBossState`
 before `OnUnitEnterCombat`.
 
-**A script without boss state closes on a credit or a fall.** ToC and Vault of Archavon keep none
-(`GetEncounterCount()` 0), so two other signals close their traces:
+**A script without boss state closes on a credit or a fall.** Vault of Archavon keeps none
+(`GetEncounterCount()` 0; ToC has kept boss state since core #28117), so two other signals close its
+traces:
 
 - **`kill`**: a DBC encounter credit (`OnAfterUpdateEncounterState`). The hook fires inside
-  `Unit::Kill` or `Spell::cast` (Tirion's 68184 for Faction Champions), often mid bot action, and a
-  close drains every roster engine's coverage, so it only queues. Boss-state scripts ignore it: their
-  `DONE` already closed. The next map update closes `kill` if `IsEncounterInProgress` has fallen,
-  which a kill's `DONE` does in the credit's own call stack. If it is still true the credit only
-  latches: heroic Beasts credits on Icehowl, summoned at 340 s whether or not the worms are dead, so a
-  worm or Gormok can outlive him. A latched trace closes `kill` at the fall unless most of the raid is
-  dead, and always at the idle close, since VoA's override stays true through Wintergrasp.
+  `Unit::Kill` or `Spell::cast`, often mid bot action, and a close drains every roster engine's
+  coverage, so it only queues. Boss-state scripts ignore it: their `DONE` already closed. The next
+  map update closes `kill` if `IsEncounterInProgress` has fallen, as a kill's `DONE` in the credit's
+  own call stack normally makes it; if it is still true the credit only latches. A latched trace
+  closes `kill` at the fall unless most of the raid is dead, and always at the idle close.
 - **`reset`**: `IsEncounterInProgress()`, polled each map update, falling after the roster was in
-  combat while it was true. ToC raises it before the pull (Beasts walk-in, champions released, twins
-  3.25 s early, Anub'arak from the Lich King scene), so a fall without that combat ends no pull. The
-  roster rule below files it `wipe` when most of the raid died.
+  combat while it was true, so a fall without that combat ends no pull. The roster rule below files
+  it `wipe` when most of the raid died.
 
-**Never call `IsEncounterInProgress` with nobody alive.** ToC's override, finding no alive non-GM
-player, resets its encounter to `NOT_STARTED`, and `InstanceCleanup` then charges the wipe no heroic
-attempt. The poll runs that same player test first and reads a failure as false.
-
-Two gaps. A Twins kill carries no credit, filing `reset` (or `wipe`), only if no player ever hit
-Eydis: her engage zeroes her damage requirement (`LowerPlayerDamageReq` in `JustEngagedWith`), so
-whichever twin takes the last blow, the kill credits through her loot recipient. VoA's override stays
-true through Wintergrasp war time, the 10 min before it, and with no WG battlefield, so a wipe that
-leaves anyone alive closes on idle (a full wipe still reads false), and a war ending mid-pull closes
-as `reset`.
+**Both reads test for an alive non-GM player first** and take none as false: an override may write
+([raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md#reading-a-boss-script)), and VoA's
+stays true through Wintergrasp war time, the 10 min before it, and with no WG battlefield. So a full
+VoA wipe still falls, but one that leaves anyone alive closes on idle, and a credit in that window
+latches; a war ending mid-pull closes as `reset`.
 
 **A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
 only the map name to use. Whatever names it first renames the file and emits a second `pull`, `src`

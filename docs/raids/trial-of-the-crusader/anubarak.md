@@ -101,8 +101,8 @@ Named "Anub'arak", rank 3 and `CREATURE_TYPE_FLAG_BOSS_MOB` (so `isWorldBoss()`)
   19.7 and 10.4. A kiter faster than it (Nitro, about 17.5 yd/s) running an arc has it cut the chord.
 - **Each tick** (1.5 / 0.8 / 0.4 s by speed stage) it tests for an alive sphere within 8 yd, 3D plus
   both sizes (spike 1.5, patch 2.0 at scale 2, falling sphere 1.0): **11.5 yd round a patch, 10.5
-  round a falling sphere**. One found: `SPIKE_FAIL` strips the sphere's auras and despawns it 1.5 s
-  later, the mark comes off, and after 4 s idle it marks a new random player at base speed. The
+  round a falling sphere**. One found: Spike Fail (66181) strips the sphere's auras and despawns it
+  1.5 s later, the mark comes off, and after 4 s idle it marks a new random player at base speed. The
   script's `UpdatePosition` onto the sphere doesn't stick: its last chase spline carries it on through
   the idle, 8.6-16.9 yd (median 13.2, 18 fails over 2026-11-04 CC-CH), so the next mark starts there. None: it casts Impale. So a patch is single-use, a falling sphere counts too, the test
   precedes Impale on the same tick, and any patch the spike merely passes is spent.
@@ -1281,7 +1281,8 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   Resistance Aura, when a Penetrating Cold round landed under 1.5 s ago and 2+ of its carriers are
   under the tick (`anub.mastery`); its 6 s cover the first two ticks. Frost goes to that paladin only
   in phase 3 (`frostWantsMastery`, [README](README.md)): before, Concentration Aura matters (user call),
-  and in phase 3 nothing pushes casts back (66240 is `SPELL_ATTR3_TREAT_AS_PERIODIC`, `Unit.cpp:1303`).
+  and in phase 3 nothing pushes casts back (66240,
+  [raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md#reading-a-boss-script)).
   A swap only for Aura Mastery would cost two 1.5 s aura GCDs.
 - **Healers stand behind the tank patches** (user call; `anub.hbehind`): heroic keeps spawning
   burrowers in phase 3 (`boss_anubarak_trial.cpp:263-264`), and they go for the healers. Each healer
@@ -1484,8 +1485,8 @@ personal burst is unrestricted.
 - Phase 3 tank healing: in V the healers came in at 8-59% mana and the main tank, cooldowns spent in
   P1d, went 82 → 27% in 3 s at 15.7%.
 - A gathered ranged bot whose burrower is out of spell range idles: the gather blocks `reach spell`.
-- The direct-heal list is a copy of `JaraxxusHealIncinerateTargetAction`'s with "lesser healing
-  wave" for "greater healing wave", not a 3.3.5 spell; one in `Shared` would keep them in step.
+- `anubarak heal penetrating cold` walks its own direct-heal list, not the shared
+  `CastRaidThroughputHeal`, so the two can drift apart.
 - A heroic dodge with no spot clear of Permafrost lands in its 80% slow.
 - A side tank's rim (7 yd) is inside the 7.5 yd slow, so on heroic it carries the 80% slow most of the
   time it's up (AA 329 s): Bulwark crawled as AA's wave 7 landed.
@@ -1530,8 +1531,20 @@ personal burst is unrestricted.
 - A carrier further than 40 yd from the frost holder gets no Frost Resistance Aura, and Aura Mastery
   counts it anyway.
 - A far grip with one DK bot, or with the side's DK tank's grip spent, has no relay.
-- Not handled: the phase 3 heal hold and stamina-buff cancel, Freezing Slash defensives, external
-  cooldowns on side tanks, scarab threat, normal's phase 2 raid positioning.
+- Not handled, with what the guide asks:
+  - The phase 3 heal hold and stamina-buff cancel: the guide keeps the raid low (no healing for melee,
+    hunters and affliction warlocks, fast heals only for Penetrating Cold carriers, stamina buffs
+    cancelled at phase 3), since the swarm takes a share of current health and heals him by what
+    lands. The hold must not starve a real emergency. 2026-10-16 25N: phase 3 55.4 s, 66240 landed
+    1.96M over 1259 ticks (about 9% of his health), no deaths, carriers at 46-67%.
+  - Freezing Slash defensives, one per slash: instant and untelegraphed, so only a timer model on the
+    engage and emerge edges (7-15 s, then every 15-20 s) can place one.
+  - External cooldowns on side tanks.
+  - Scarab threat: no DPS threat brake against a scarab's 20000. Acid-Drenched Mandibles is
+    65775/67861/67862/67863; the guide limits stacks going into phase 3. 2026-10-16 25N: 123k
+    Mandibles damage in all, 5 stacks at most.
+  - Normal's phase 2 raid positioning (guide: a corner for the first spike, then stacked where he
+    should emerge).
 
 ## What a trace answers
 

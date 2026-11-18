@@ -227,10 +227,10 @@ starts on the next attack, Kill Command included. Twin Spike
 gets no defensive node.
 
 **Vortex defensives.** `GetTwinVortexHit`, for a bot whose want is a hold: the shared
-`ToCPredictedHit` from the channel's first tick (a period in), 4 s, the remapped tick's DBC average
+`RaidPredictedHit` from the channel's first tick (a period in), 4 s, the remapped tick's DBC average
 times the ticks left, the Vortex's school. `twin valkyr vortex defensive` casts
-`GetToCPersonalDefensive`'s pick. On a normal Light Vortex hold, `twin valkyr vortex raid cover`
-casts `GetToCRaidCover`'s deal (Aura Mastery, Divine Sacrifice with Divine Guardian, Anti-Magic Zone,
+`GetRaidPersonalDefensive`'s pick. On a normal Light Vortex hold, `twin valkyr vortex raid cover`
+casts `GetRaidCover`'s deal (Aura Mastery, Divine Sacrifice with Divine Guardian, Anti-Magic Zone,
 Divine Hymn, Tranquility) and `twin valkyr raid cover hold` blocks those class nodes during the
 lead-in. Fjola's tank on 25H faces ~64k after Fire Resistance Aura.
 
@@ -384,5 +384,3 @@ Still invisible, and what stands in:
 - **Vortexes and Pacts** come from cast rows, so a twin RaidObs never watched drops out of both; the
   banner names her.
 - **A lone human tank** writes no `tv.tank`, so `--targets` scores its DPS by colour.
-- A kill where no player hit Eydis carries no credit and files `reset` or `wipe`
-  ([observability.md](../../systems/observability.md)).

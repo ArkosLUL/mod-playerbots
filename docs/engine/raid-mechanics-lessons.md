@@ -255,7 +255,7 @@ Every distance helper measures differently, and a large-model boss inflates all 
   fixed delay later still makes it; a margin on the escape's own lead won't do, since that lead is
   bounded by the stand's distance over the chaser's speed and reads thin at once. A timer of its own
   (a boost running) must never hold the commit back
-  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-planner)).
 - **An immune kiter walks the chaser straight into its trigger.** Immune, it has the chaser on its
   heels, so a stand past the trigger on the far side from the chaser circles round it: walk into the
   trigger's centre and let the chaser follow. Slowed or not, pick the ending by simulating each,
@@ -267,7 +267,7 @@ Every distance helper measures differently, and a large-model boss inflates all 
   longer would fail spends a one-shot resource as early as the geometry allows: Anub'arak's patch walk
   stays possible only 4.5-7.5 s of a 10-16 s run, so a Hand asked at the turn went 2-6 s in with the
   patch; taken at the catch it covers 10 s and the patch goes about 25 s in
-  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-planner)).
 - **Seed a closed-loop replay only with state from before its start.** Seeded with every Forbearance
   span of the real pull, Anub'arak's harness blocked Hands the replayed kite had not yet cast and
   flipped its verdict on a path change.
@@ -292,6 +292,10 @@ What lands on a raid add is not what PvP experience predicts.
   caster can still be elected and positioned during the immunity: test it on its own terms
   (`HasSpell`, cooldown, cost, form, control), keep it in range and sight, and give it an instant
   (Hammer of Justice, Repentance, Blind) so it lands the tick the aura fades.
+- **A caster holds one of each single-target CC.** Cyclone, Polymorph, Fear, Banish, Hex and
+  Entangling Roots carry `SPELL_ATTR5_LIMIT_N`: the caster's next one of that spell (same rank chain,
+  `Aura::IsSingleTargetWith`) on another unit ends the first, so a warlock holds one Fear and one
+  Banish. Deal one CC target per caster per spell.
 - **`PlayerbotAI::RemoveShapeshift` ends only druid forms and Ghost Wolf.** Tree of Life needs
   `RemoveAura("tree of life")` and Metamorphosis can't be cancelled, so a duty that drops a form
   restricts itself to druids and shamans.
@@ -812,6 +816,9 @@ encounters.
   while `UNIT_STATE_CASTING` banks every event through a long cast or channel, then fires the overdue
   ones one per tick: the seconds after it are a schedule
   ([VX-001](../raids/ulduar/mimiron.md#phase-2-is-a-healing-race-and-heat-wave-is-why)).
+- **Some damage pushes back no cast.** `Unit::DealDamage` skips pushback for a DoT and for a spell
+  flagged `SPELL_ATTR3_TREAT_AS_PERIODIC` or `SPELL_ATTR7_DONT_CAUSE_SPELL_PUSHBACK`, so a raid under
+  such an area hit casts at full speed (Leeching Swarm's 66240).
 - **A kick in a channel's first update does nothing.** `Spell::EffectInterruptCast` takes a spell
   that is `CASTING`, or `PREPARING` with a cast time; a channel has none
   ([Yogg-Saron's Drain Life](../raids/ulduar/yogg-saron.md#phase-3-cooldowns-and-casts)).

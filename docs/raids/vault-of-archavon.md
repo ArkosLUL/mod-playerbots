@@ -35,7 +35,9 @@ count.
 | Minion Shock | 64363 | Single-target ~5k on its own victim, **no AoE**; call-for-help 80yd. Parking the adds far from the raid is therefore safe |
 | Berserk | 26662 | 6 min |
 
-`spelldifficulty_dbc` maps 64213→64215 and 64216→65279 and **nothing else**.
+The world DB's `spelldifficulty_dbc` maps 64213→64215 and 64216→65279; the client DBC adds Koralon's
+Burning Breath 66665→67328 and Toravon's Freezing Ground 72090→72104
+([both sources](../engine/pitfalls.md#detection-that-never-fires)).
 
 ### The room
 
@@ -122,7 +124,7 @@ full arc ([../engine/pitfalls.md](../engine/pitfalls.md#arc-and-geometry-default
 |---|---|---|
 | Whiteout — raid-wide frost AoE, ~40s | 72034 | Unavoidable → frost resistance aura |
 | Frozen Mallet — tank frost melee debuff | 71993 | Automatic, no action |
-| Freezing Ground — void zone under a random player, ~20s | 72090 | Move out |
+| Freezing Ground — void zone under a random player, ~20s | 72090 / 72104 | Move out. The trigger and flee match 72090 alone, so the dodge never fires on 25-man |
 | Frozen Orb — pulses frost damage, switches target ~10s | NPC 38456, damage 72081 | Flee the orbs |
 
 The Freezing Ground dodge is the reusable **area-debuff flee idiom**: read
