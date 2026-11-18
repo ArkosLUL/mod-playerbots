@@ -10,13 +10,13 @@ Each boss is one encounter definition from #2876, with its triggers, actions, ru
 
 Bots don't use raid icons here. Each boss picks targets in code and puts the bots on them, and a skull you place still wins. Once you talk to Barrett, bots walk to set spots around where the next boss turns hostile, and only tanks stand close enough to take his first swing.
 
-Notes for some of the bosses:
+Per-boss notes:
 
 - **Northrend Beasts**: bot tanks split the beasts between them. A human tank keeps whatever beast it's tanking, since bots can't hand it a new one.
 - **Lord Jaraxxus**: if you main tank him, stand on him through the intro. Otherwise whoever stands nearest takes his first swings.
 - **Faction Champions**: the fight starts with you. Bot tanks wait about 30 yd out, so every champion's first pick is a tank. To get a healer out of the pack, target it and type `pull`, and the bot DKs grip it out in a chain. Healers you don't pull die where they stand. Bring 3 or more DKs, so each melee champion can be kept in Chains of Ice.
 - **Twin Val'kyr**: the raid fights from the entrance tunnel, the heroic "door strategy" from Wowhead, so nobody dodges orbs. Pull a twin and run into the tunnel, or tell a bot tank to `attack` one, and each bot tank fetches its own twin.
-- **Anub'arak**: bring three tanks. The two side tanks should be bots. A human only takes a side no bot can, and then its side is the tank spot it stands on. Put healers, mages and moonkins in groups with a shadow priest or a shaman, so they get at least one source of passive healing.
+- **Anub'arak**: bring three tanks. The two side tanks should be bots. A human only takes a side no bot can, and then its side is the tank spot it stands on. Bring at least 3 DKs, so there are enough Death Grips to move the Frost Spheres where they're needed. Put healers, mages and moonkins in groups with a shadow priest or a shaman, so they get at least one source of passive healing.
 
 ## How to Test
 
