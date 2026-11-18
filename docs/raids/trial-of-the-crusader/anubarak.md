@@ -152,7 +152,7 @@ has the main tank pull on sight.
 
 **Resolve him through guid slot 11 and the spike by a grid search.** `GetFirstAliveUnitByEntry`
 reads `possible targets`, which drop `UNIT_FLAG_NOT_SELECTABLE`, and both are unselectable in phase
-2: through it `AnubarakSubmerged` never read true and the sphere node was dead on every difficulty.
+2: through it the submerged phase never read true and the sphere node was dead on every difficulty.
 NPC entries are the base entry on every difficulty. Spheres, spike, burrowers and scarabs come from
 one grid sweep per instance per ms, taken from him, so a bot that never landed can't blank it.
 Once per group per ms ([`ToCGroupMemo`](README.md#code-layout)): the marked kiter, the battle res

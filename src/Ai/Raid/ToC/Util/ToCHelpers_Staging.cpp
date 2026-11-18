@@ -1231,27 +1231,6 @@ ToCStagingBoss GetToCStagingBoss(PlayerbotAI* botAI)
     return leader && InArrivalRoom(leader, arrival) ? arrival : ToCStagingBoss::None;
 }
 
-ToCEncounter ToCStagingEncounter(PlayerbotAI* botAI)
-{
-    switch (GetToCStagingBoss(botAI))
-    {
-        case ToCStagingBoss::Gormok:
-        case ToCStagingBoss::Worms:
-        case ToCStagingBoss::Icehowl:
-            return ToCEncounter::NorthrendBeasts;
-        case ToCStagingBoss::Jaraxxus:
-            return ToCEncounter::Jaraxxus;
-        case ToCStagingBoss::Champions:
-            return ToCEncounter::FactionChampions;
-        case ToCStagingBoss::Twins:
-            return ToCEncounter::TwinValkyr;
-        case ToCStagingBoss::Anubarak:
-            return ToCEncounter::Anubarak;
-        default:
-            return ToCEncounter::None;
-    }
-}
-
 ToCStagingRead GetToCStagingRead(PlayerbotAI* botAI) { return ReadStand(botAI, true); }
 
 void UpdateToCStagingPark(PlayerbotAI* botAI)
