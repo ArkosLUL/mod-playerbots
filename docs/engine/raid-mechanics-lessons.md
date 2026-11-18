@@ -292,6 +292,10 @@ What lands on a raid add is not what PvP experience predicts.
   caster can still be elected and positioned during the immunity: test it on its own terms
   (`HasSpell`, cooldown, cost, form, control), keep it in range and sight, and give it an instant
   (Hammer of Justice, Repentance, Blind) so it lands the tick the aura fades.
+- **A caster holds one of each single-target CC.** Cyclone, Polymorph, Fear, Banish, Hex and
+  Entangling Roots carry `SPELL_ATTR5_LIMIT_N`: the caster's next one of that spell (same rank chain,
+  `Aura::IsSingleTargetWith`) on another unit ends the first, so a warlock holds one Fear and one
+  Banish. Deal one CC target per caster per spell.
 - **`PlayerbotAI::RemoveShapeshift` ends only druid forms and Ghost Wolf.** Tree of Life needs
   `RemoveAura("tree of life")` and Metamorphosis can't be cancelled, so a duty that drops a form
   restricts itself to druids and shamans.
@@ -812,6 +816,9 @@ encounters.
   while `UNIT_STATE_CASTING` banks every event through a long cast or channel, then fires the overdue
   ones one per tick: the seconds after it are a schedule
   ([VX-001](../raids/ulduar/mimiron.md#phase-2-is-a-healing-race-and-heat-wave-is-why)).
+- **Some damage pushes back no cast.** `Unit::DealDamage` skips pushback for a DoT and for a spell
+  flagged `SPELL_ATTR3_TREAT_AS_PERIODIC` or `SPELL_ATTR7_DONT_CAUSE_SPELL_PUSHBACK`, so a raid under
+  such an area hit casts at full speed (Leeching Swarm's 66240).
 - **A kick in a channel's first update does nothing.** `Spell::EffectInterruptCast` takes a spell
   that is `CASTING`, or `PREPARING` with a cast time; a channel has none
   ([Yogg-Saron's Drain Life](../raids/ulduar/yogg-saron.md#phase-3-cooldowns-and-casts)).

@@ -14,15 +14,14 @@ are in [../README.md](../README.md). Mechanics source:
 | Twin Val'kyr | [twin-valkyr.md](twin-valkyr.md) | `TwinValkyr` | `val-kyr-twins` | `tv.` |
 | Anub'arak | [anubarak.md](anubarak.md) | `Anubarak` | `anub-arak` | `anub.` |
 
-Raid-wide notes use `toc.`. Bot-tractable (avoidance, positioning, kill order, interrupts): Beasts,
-Jaraxxus, Faction Champions, Anub'arak P1/P3. Harder, needing new state tracking: the Val'kyr
-essence system and Anub'arak spike-kiting.
+Raid-wide notes use `toc.`.
 
 ## Instance script
 
 `instance_trial_of_the_crusader.cpp` keeps boss state since core #28117 (`SetBossNumber(5)`: Beasts
-0, Jaraxxus 1, Faction Champions 2, Twins 3, Anub'arak 4) and no object data. The module reads three
-things:
+0, Jaraxxus 1, Faction Champions 2, Twins 3, Anub'arak 4), so RaidObs closes a ToC trace on boss
+state like any other raid's ([observability.md](../../systems/observability.md#lifecycle)). The module
+reads three things:
 
 - **Stage**, `GetData(TYPE_INSTANCE_PROGRESS = 1)`. A wipe never lowers it.
 
@@ -201,7 +200,8 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
     wants Aura Mastery, `Util/ToCHelpers_ResistAura.h`). The `Opener` and `ResistAura` stems hold
     only that config and the context entries that build the raid-wide classes under ToC's names.
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
-  `Playerbots.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
+  `Playerbots.FleeDistance` (5 yd), with no caller left. A new hazard uses
+  `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no
   copies.

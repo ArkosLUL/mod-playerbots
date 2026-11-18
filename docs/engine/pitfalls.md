@@ -644,7 +644,8 @@ Related traps:
     `GetSpellIdForDifficulty` call, declared and never used, named as a non-spell (`npc`, `entry`, …;
     a brace list's name counts), or marked `// pblint: spell-difficulty-ok` on its line or the one
     above. A helper remapping its parameter inside itself reads as never remapped: remap where the
-    constant is named.
+    constant is named. So does `GetSpellForDifficultyFromSpell(GetSpellInfo(SPELL_X), unit)` (VoA's
+    Burning Breath): pblint reads only `GetSpellIdForDifficulty`.
 - **A spell listener sees every cast on the server.** `AllSpellScript::OnSpellCast`/`OnSpellPrepare`
   fire for all of them, so test the caster entry or a constant id before a lookup like
   `GetSpellIdForDifficulty`. A trigger-missile child takes its caster as unit target

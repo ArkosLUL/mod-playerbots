@@ -523,7 +523,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     Toxin ends (`nb.toxinheal`): `northrend worms toxin carrier hurt` → `northrend worms heal toxin
     carrier` under 80%, in heal reach and sight, `ACTION_RAID + 3`, above the staging and breath
     stand walks, which hold the tick while in flight. Heals in throughput order, HoTs last, one
-    already ticking skipped (`CastToCThroughputHeal`, the Jaraxxus Incinerate list). On 25H the
+    already ticking skipped (`CastRaidThroughputHeal`, as Jaraxxus' Incinerate heals). On 25H the
     victims held 40 s on HoTs, then healing went to Icehowl's tank.
   - A non-tank paladin or mage carrier snared 70% or more casts Divine Shield or Ice Block
     (`northrend worms toxin stuck` → `northrend worms purge toxin`, `ACTION_EMERGENCY + 5`), before

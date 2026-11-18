@@ -182,10 +182,10 @@ The Warcraft Tavern guide, reconciled with the script:
 
 ## Raid cover
 
-The shared helper `Util/ToCHelpers_Defensive` answers a hit the encounter predicts as a
-`ToCPredictedHit` (start of its first damage, duration, damage per player, school, members who can't
-channel). Jaraxxus is its first user; another boss plugs in by predicting its own hit and wiring the
-two nodes and the holds below.
+The raid-wide `RaidDefensive` ([raids README](../README.md#defensive-windows-and-threat-brakes))
+answers a hit the encounter predicts as a `RaidPredictedHit` (start of its first damage, duration,
+damage per player, school, members who can't channel); ToC's scope is `TOC_DEFENSIVE_SCOPE`. A boss
+plugs in by predicting its own hit and wiring the two nodes and the holds below.
 
 - **The Inferno**, as predicted by `GetJaraxxusBurningInferno`: an Incinerate Flesh with 2 s or less
   left and absorb remaining, first damage 1 s after it ends, 5 ticks of the DBC average roll × (1 +
@@ -295,7 +295,7 @@ the five multipliers and the six rules. The Jaraxxus rows, under `--notes jaraxx
 | `interrupter` | per bot | `1` holding Fel Fireball duty, only inside that cast: rewritten every tick he lives, so it drops to `0` as the cast ends |
 | `flame` | per bot | `carrier`, `relaxed` (nothing clear of raid and boss, so flames only), `tank` (a carrier holding him, flames only), `far` (no clear spot within a healer's reach), `portal` (no clear spot off a heroic portal), `dodge`, `loose` (a dodge out of reach of its target), `none`. Change-only: counts are switches, not legs |
 | `portal` | per melee DPS bot | `hold` while it keeps clear of a heroic portal, `none` |
-| `toc.cover` | per holder | The cover dealt for the coming hit, `ToCRaidCover`: 1 Aura Mastery, 2 Divine Sacrifice, 3 Anti-Magic Zone, 4 Divine Hymn, 5 Tranquility; `0` when the deal drops |
+| `toc.cover` | per holder | The cover dealt for the coming hit, `RaidCover`: 1 Aura Mastery, 2 Divine Sacrifice, 3 Anti-Magic Zone, 4 Divine Hymn, 5 Tranquility; `0` when the deal drops |
 | `toc.personal` | per bot | The button picked (spell name or `healthstone`), `covered` (one running), `channel`, `none` |
 
 `tools/botobs/bosses/lord_jaraxxus.py` reads the rest, counting every difficulty id of a row; its
