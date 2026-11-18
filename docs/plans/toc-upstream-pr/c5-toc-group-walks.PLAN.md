@@ -31,6 +31,12 @@ Out of scope:
 - The shared raid files (`src/Ai/Raid/Raid*.{h,cpp}`): wave 2 has ported them to the PR stack, so
   keep every edit under `src/Ai/Raid/ToC/`.
 
+Also delete unused code (user, 2026-11-18), each referenced only by its own declaration and
+definition: `AvoidCreatureClusterAction` with `FleeFromCreatureCluster` (`Action/ToCActions_Shared.*`),
+`GetCreatureClusterCenter` and `GetNearestCreatureByEntry` (`Util/ToCHelpers_Shared.*`),
+`ANUBARAK_PIT_CENTER` (`Util/ToCData.*`), `SPELL_MASSIVE_CRASH_*` (`Util/ToCData.h`); drop includes
+left unused and doc mentions. Re-check with `git grep` before deleting. Duplicated helpers stay.
+
 The lead may split by encounter into at most 3 implementers (Jaraxxus + Twins, Anub'arak,
 FC + Jormungars); a memo helper shared across encounters stays with the finisher. The finisher also
 greps `src/Ai/Raid/ToC` for `ForEachGroupMember`, `GetFirstMember`, `AliveMembersOnMap` and

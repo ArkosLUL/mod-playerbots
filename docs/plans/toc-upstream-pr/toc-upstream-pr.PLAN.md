@@ -185,7 +185,8 @@ trace close against core #28117, fold `w5-anubarak-rest-rest` into `anubarak.md`
 ## Wave 3 — group-walk caches (`c5`), then the ToC PR branch (`p3-toc`)
 
 **3a `c5-toc-group-walks`** (Custom, behaviour change): cache every group walk the wave 1 audits
-listed as reached uncached from a trigger's `IsActive` or a multiplier; scope in its brief. Merges
+listed as reached uncached from a trigger's `IsActive` or a multiplier, and delete the unused code
+`c4` found; scope in its brief. Merges
 into Custom before 3b starts, so the export base carries it.
 
 **3b `p3-toc`**: branch `trial-of-the-crusader` from `raid-shared-helpers`, worktree
