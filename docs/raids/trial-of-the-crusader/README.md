@@ -175,8 +175,8 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
   names, which breaks the Windows and macOS builds. Hence every raid root file and umbrella header is
   `ToCRaid*` (`ToCRaidStrategy.{h,cpp}`, `ToCRaid{Action,Trigger}Context.h`,
   `ToCRaid{Actions,Triggers,Multipliers}.h`). A new file needs a name no dungeon file has, ignoring case.
-- `Util/ToCData.h` holds only raid-wide values: map id, `ARENA_CENTER`, `ANUBARAK_PIT_CENTER`, the
-  `ToCNpcs` and `SPELL_*` mirrors. A new boss-specific id goes in the stem's
+- `Util/ToCData.h` holds only raid-wide values: map id, `ARENA_CENTER`, the `ToCNpcs` and `SPELL_*`
+  mirrors. A new boss-specific id goes in the stem's
   `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `inline constexpr uint32 SPELL_*`; remap one as
   `sSpellMgr->GetSpellIdForDifficulty(SPELL_X, unit)` at the call, never inside a wrapper: pblint's
   remap check reads that bare identifier.
@@ -199,10 +199,11 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
     bosses, `Util/ToCHelpers_Opener.h`), `TOC_RESIST_AURA` (plus the wanted schools and whether fire
     wants Aura Mastery, `Util/ToCHelpers_ResistAura.h`). The `Opener` and `ResistAura` stems hold
     only that config and the context entries that build the raid-wide classes under ToC's names.
-- `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
-  `Playerbots.FleeDistance` (5 yd), with no caller left. A new hazard uses
-  `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
-  [pitfalls.md](../../engine/pitfalls.md).
+- **Group walks** a trigger or multiplier reaches run once per group per ms through `ToCGroupMemo`
+  (`Util/ToCHelpers_Shared.h`), for upstream's O(1) trigger rule: guids only, keyed by the unit the
+  answer depends on (boss, twin, kill target), a groupless bot's answer kept to itself. A member's
+  change between two bots' ticks in one ms shows a tick later. A fill never reads its own memo: the
+  refresh rebuilds the answer in place.
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no
   copies.
 

@@ -193,6 +193,8 @@ struct FactionChampionsState
     std::unordered_map<ObjectGuid, CcDuty> ccDuties;
     // DK -> the melee champion it keeps in Chains of Ice
     RaidObs::ObsGuidMap<ObjectGuid> ice{"fc.ice"};
+    // Every mage's trigger and the late interrupt multiplier ask while the kill target casts a heal
+    ToCGroupMemo<ObjectGuid> counterspellMage;
 };
 
 RaidInstanceState<FactionChampionsState> championStates;
@@ -1351,26 +1353,33 @@ bool CounterspellReady(Player* mage, Unit* target)
 }
 
 // Lowest guid among the ready mage bots, so one Counterspell answers each heal
-Player* CounterspellMage(Player* bot, Unit* target)
+ObjectGuid CounterspellMage(Player* bot, Unit* target)
 {
     Group* group = bot->GetGroup();
     if (!group)
-        return CounterspellReady(bot, target) ? bot : nullptr;
+        return CounterspellReady(bot, target) ? bot->GetGUID() : ObjectGuid::Empty;
 
-    Map* map = bot->FindMap();
-    Player* chosen = nullptr;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsInWorld() || member->FindMap() != map || !member->IsAlive() ||
-            member->getClass() != CLASS_MAGE || !GET_PLAYERBOT_AI(member) || !CounterspellReady(member, target))
-            continue;
+    FactionChampionsState* state = StateFor(bot);
+    if (!state)
+        return ObjectGuid::Empty;
 
-        if (!chosen || member->GetGUID() < chosen->GetGUID())
-            chosen = member;
-    }
+    return state->counterspellMage.Get(
+        bot,
+        [bot, group, target](ObjectGuid& chosen)
+        {
+            Map* map = bot->FindMap();
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (!member || !member->IsInWorld() || member->FindMap() != map || !member->IsAlive() ||
+                    member->getClass() != CLASS_MAGE || !GET_PLAYERBOT_AI(member) || !CounterspellReady(member, target))
+                    continue;
 
-    return chosen;
+                if (chosen.IsEmpty() || member->GetGUID() < chosen)
+                    chosen = member->GetGUID();
+            }
+        },
+        target->GetGUID());
 }
 
 }
@@ -1700,7 +1709,7 @@ bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI)
     Unit* killTarget = FactionChampionsKillTarget(botAI);
     int32 leftMs = 0;
     return killTarget && CounterspellStopsHeal(killTarget, leftMs) && leftMs <= LATE_INTERRUPT_MS &&
-           CounterspellMage(bot, killTarget) == bot;
+           CounterspellMage(bot, killTarget) == bot->GetGUID();
 }
 
 bool FactionChampionsCounterspellHold(PlayerbotAI* botAI)
@@ -1712,7 +1721,7 @@ bool FactionChampionsCounterspellHold(PlayerbotAI* botAI)
     Unit* killTarget = FactionChampionsKillTarget(botAI);
     int32 leftMs = 0;
     return killTarget && CounterspellStopsHeal(killTarget, leftMs) && leftMs > LATE_INTERRUPT_MS &&
-           CounterspellMage(bot, killTarget) == bot;
+           CounterspellMage(bot, killTarget) == bot->GetGUID();
 }
 
 bool FactionChampionsCycloneBot(Player* player) { return CycloneBot(player); }

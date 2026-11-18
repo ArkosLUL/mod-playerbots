@@ -555,6 +555,20 @@ struct PushSample
     float share = 0.0f;
 };
 
+// A positive cast or channel in progress and the unit it's aimed at
+struct HealOnTheWay
+{
+    ObjectGuid caster;
+    ObjectGuid target;
+};
+
+// Living hunter bots in group order, and the first living rogue bot
+struct RedirectRoster
+{
+    std::vector<ObjectGuid> hunters;
+    ObjectGuid firstRogue;
+};
+
 struct AnubarakState
 {
     RaidObs::ObsValue<uint32> phase{"anub.phase"};
@@ -751,6 +765,17 @@ struct AnubarakState
     bool lightDue = false;
     bool lightMemoValid = false;
     uint32 lightMemoMs = 0;
+
+    // Group walks behind triggers every bot, healer or hunter asks each tick
+    ToCGroupMemo<ObjectGuid> marked;
+    ToCGroupMemo<ObjectGuid> resDruid;
+    ToCGroupMemo<ObjectGuid> resHealer;
+    ToCGroupMemo<std::vector<ObjectGuid>> coldCarriers;
+    ToCGroupMemo<std::vector<ObjectGuid>> tankPlayers;
+    ToCGroupMemo<std::vector<HealOnTheWay>> healsOnTheWay;
+    ToCGroupMemo<std::vector<ObjectGuid>> swarmHealable;
+    ToCGroupMemo<std::vector<ObjectGuid>> healerBots;
+    ToCGroupMemo<RedirectRoster> redirect;
 };
 
 RaidInstanceState<AnubarakState> anubarakStates;
@@ -830,6 +855,22 @@ void ForEachGroupMember(Player* bot, Fn&& fn)
         if (member && member->IsInMap(bot) && fn(member))
             return;
     }
+}
+
+// A memo's players in its order, any gone from the map skipped. fn returns true to stop.
+template <typename Fn>
+void ForEachListed(Player* bot, std::vector<ObjectGuid> const& guids, Fn&& fn)
+{
+    for (ObjectGuid const& guid : guids)
+        if (Player* member = ObjectAccessor::GetPlayer(*bot, guid))
+            if (fn(member))
+                return;
+}
+
+// Null off a ToC instance
+AnubarakState* AnubarakStateOf(Player* bot)
+{
+    return InToCInstance(bot) ? &anubarakStates.For(bot->GetInstanceId()) : nullptr;
 }
 
 // One grid visit per instance per ms. From the boss when he resolves, so a bot that never landed in
@@ -5068,21 +5109,25 @@ Creature* GetPursuingSpike(Player* bot)
     return spike && spike->IsAlive() ? spike : nullptr;
 }
 
+// Null off a ToC instance, where nobody carries his mark
 Player* GetSpikeTarget(Player* bot)
 {
-    if (!bot)
+    AnubarakState const* state = AnubarakStateOf(bot);
+    if (!state)
         return nullptr;
 
-    Player* target = nullptr;
-    ForEachGroupMember(bot, [&](Player* member)
+    ObjectGuid const guid = state->marked.Get(bot, [bot](ObjectGuid& marked)
     {
-        if (member->IsAlive() && member->HasAura(SPELL_MARK))
-            target = member;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (member->IsAlive() && member->HasAura(SPELL_MARK))
+                marked = member->GetGUID();
 
-        return target != nullptr;
+            return !marked.IsEmpty();
+        });
     });
 
-    return target;
+    return guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
 }
 
 bool AnubarakSpikeLaneCrosses(Player* bot, Position const& spot)
@@ -6018,25 +6063,30 @@ Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI)
     // the one holding him: the cast takes it out of bear form.
     bool const surfaced = state->phaseValue == AnubarakPhase::Surface || state->phaseValue == AnubarakPhase::Swarm;
     ObjectGuid const pickup = surfaced ? PickupGuid(bot, *state) : ObjectGuid::Empty;
-    Player* first = nullptr;
-    bool firstTank = false;
-    ForEachGroupMember(bot, [&](Player* member)
-    {
-        if (!member->IsAlive() || !GET_PLAYERBOT_AI(member) || member->HasAura(SPELL_MARK) || !RebirthReady(member) ||
-            member->GetGUID() == pickup)
-            return false;
-
-        bool const tank = IsAnubarakTankPlayer(member);
-        if (!first || (firstTank && !tank) || (firstTank == tank && member->GetGUID() < first->GetGUID()))
+    ObjectGuid const druid = state->resDruid.Get(
+        bot,
+        [bot, &pickup](ObjectGuid& first)
         {
-            first = member;
-            firstTank = tank;
-        }
+            bool firstTank = false;
+            ForEachGroupMember(bot, [&](Player* member)
+            {
+                if (!member->IsAlive() || !GET_PLAYERBOT_AI(member) || member->HasAura(SPELL_MARK) ||
+                    !RebirthReady(member) || member->GetGUID() == pickup)
+                    return false;
 
-        return false;
-    });
+                bool const tank = IsAnubarakTankPlayer(member);
+                if (first.IsEmpty() || (firstTank && !tank) || (firstTank == tank && member->GetGUID() < first))
+                {
+                    first = member->GetGUID();
+                    firstTank = tank;
+                }
 
-    if (first != bot)
+                return false;
+            });
+        },
+        pickup);
+
+    if (druid != bot->GetGUID())
         return nullptr;
 
     // A pending Soulstone or Reincarnation brings it back without the Rebirth
@@ -6054,17 +6104,19 @@ Player* GetAnubarakBattleResTarget(PlayerbotAI* botAI)
             return tank;
     }
 
-    Player* healer = nullptr;
-    ForEachGroupMember(bot, [&](Player* member)
+    ObjectGuid const healer = state->resHealer.Get(bot, [bot, &resable](ObjectGuid& lowest)
     {
-        if (GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member) && resable(member) &&
-            (!healer || member->GetGUID() < healer->GetGUID()))
-            healer = member;
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member) && resable(member) &&
+                (lowest.IsEmpty() || member->GetGUID() < lowest))
+                lowest = member->GetGUID();
 
-        return false;
+            return false;
+        });
     });
 
-    return healer;
+    return healer.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, healer);
 }
 
 bool AnubarakWaveImminent(PlayerbotAI* botAI)
@@ -7243,6 +7295,37 @@ bool CastAnubarakSwarmHot(PlayerbotAI* botAI, Player* member)
     return hot && botAI->CastSpell(hot, member);
 }
 
+// Living Penetrating Cold carriers in group order
+static std::vector<ObjectGuid> const& ColdCarriers(Player* bot, AnubarakState const& state)
+{
+    return state.coldCarriers.Get(bot, [bot](std::vector<ObjectGuid>& carriers)
+    {
+        uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (member->IsAlive() && member->HasAura(cold))
+                carriers.push_back(member->GetGUID());
+
+            return false;
+        });
+    });
+}
+
+// Tanks by role or spec in group order, dead ones too
+static std::vector<ObjectGuid> const& TankPlayers(Player* bot, AnubarakState const& state)
+{
+    return state.tankPlayers.Get(bot, [bot](std::vector<ObjectGuid>& tanks)
+    {
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (IsAnubarakTankPlayer(member))
+                tanks.push_back(member->GetGUID());
+
+            return false;
+        });
+    });
+}
+
 Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -7250,13 +7333,17 @@ Player* GetAnubarakPenetratingColdHealTarget(PlayerbotAI* botAI)
     if (!group || AnubarakSwarmHealing(botAI))
         return nullptr;
 
+    AnubarakState const* state = AnubarakStateOf(bot);
+    if (!state)
+        return nullptr;
+
     uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
     float const range = botAI->GetRange("heal");
 
     Player* lowest = nullptr;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (ObjectGuid const& guid : ColdCarriers(bot, *state))
     {
-        Player* member = ref->GetSource();
+        Player* member = ObjectAccessor::GetPlayer(*bot, guid);
         if (!member || !member->IsInWorld() || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
             continue;
 
@@ -7473,23 +7560,31 @@ struct ColdCarrierAtRisk
 
 // Who the casts and channels in progress are aimed at, the healer's own left out unless asked. Instants
 // have landed already
-static std::vector<ObjectGuid> HealsOnTheWay(Player* healer, bool own = false)
+static std::vector<ObjectGuid> HealsOnTheWay(Player* healer, AnubarakState const& state, bool own = false)
 {
-    std::vector<ObjectGuid> targets;
-    ForEachGroupMember(healer, [&](Player* member)
-    {
-        if ((member == healer && !own) || !member->IsAlive())
-            return false;
-
-        for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+    std::vector<HealOnTheWay> const& heals =
+        state.healsOnTheWay.Get(healer, [healer](std::vector<HealOnTheWay>& casts)
         {
-            Spell const* spell = member->GetCurrentSpell(type);
-            if (spell && spell->GetSpellInfo()->IsPositive() && !spell->m_targets.GetUnitTargetGUID().IsEmpty())
-                targets.push_back(spell->m_targets.GetUnitTargetGUID());
-        }
+            ForEachGroupMember(healer, [&](Player* member)
+            {
+                if (!member->IsAlive())
+                    return false;
 
-        return false;
-    });
+                for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+                {
+                    Spell const* spell = member->GetCurrentSpell(type);
+                    if (spell && spell->GetSpellInfo()->IsPositive() && !spell->m_targets.GetUnitTargetGUID().IsEmpty())
+                        casts.push_back({member->GetGUID(), spell->m_targets.GetUnitTargetGUID()});
+                }
+
+                return false;
+            });
+        });
+
+    std::vector<ObjectGuid> targets;
+    for (HealOnTheWay const& heal : heals)
+        if (own || heal.caster != healer->GetGUID())
+            targets.push_back(heal.target);
 
     return targets;
 }
@@ -7514,7 +7609,7 @@ static AnubarakState* RefreshColdHeals(PlayerbotAI* botAI)
     Player* bot = botAI->GetBot();
     std::vector<Player*> healers;
     std::vector<ColdCarrierAtRisk> atRisk;
-    std::vector<ObjectGuid> const onTheWay = HealsOnTheWay(bot, true);
+    std::vector<ObjectGuid> const onTheWay = HealsOnTheWay(bot, *state, true);
     ForEachGroupMember(bot, [&](Player* member)
     {
         if (!member->IsAlive())
@@ -7630,6 +7725,30 @@ static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
     return SWARM_HEAL_TIERS;
 }
 
+// Everyone SwarmHealTier can rank under SWARM_HEAL_TIERS for some healer: carriers, tanks under the
+// top-off, non-tanks under ANUBARAK_SWARM_HOT_HP with no HoT. Keep in step with SwarmHealTier.
+static std::vector<ObjectGuid> const& SwarmHealable(Player* bot, AnubarakState const& state)
+{
+    return state.swarmHealable.Get(bot, [bot](std::vector<ObjectGuid>& healable)
+    {
+        uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            bool listed = member->HasAura(cold);
+            if (!listed && IsAnubarakTankPlayer(member))
+                listed = member->GetHealthPct() < ANUBARAK_SWARM_TANK_TOPOFF_PCT;
+            else if (!listed)
+                listed = member->GetHealth() < ANUBARAK_SWARM_HOT_HP &&
+                         member->GetAuraEffectsByType(SPELL_AURA_PERIODIC_HEAL).empty();
+
+            if (listed)
+                healable.push_back(member->GetGUID());
+
+            return false;
+        });
+    });
+}
+
 AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
 {
     AnubarakSwarmHealPick pick;
@@ -7644,7 +7763,7 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         return member && member->IsAlive() && member->IsInMap(bot) && bot->IsWithinDistInMap(member, range) &&
                bot->IsWithinLOSInMap(member);
     };
-    std::vector<ObjectGuid> const onTheWay = HealsOnTheWay(bot);
+    std::vector<ObjectGuid> const onTheWay = HealsOnTheWay(bot, *state);
     auto const incoming = [&onTheWay](Player* member)
     { return std::find(onTheWay.begin(), onTheWay.end(), member->GetGUID()) != onTheWay.end(); };
     // Set when a tank pick passed over a lower tank that has a heal on the way
@@ -7653,7 +7772,7 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
     {
         Player* lowest = nullptr;
         Player* open = nullptr;
-        ForEachGroupMember(bot, [&](Player* member)
+        ForEachListed(bot, TankPlayers(bot, *state), [&](Player* member)
         {
             if (!IsAnubarakTankPlayer(member) || member->GetHealthPct() >= below || !reaches(member))
                 return false;
@@ -7688,7 +7807,7 @@ AnubarakSwarmHealPick GetAnubarakSwarmHealPick(PlayerbotAI* botAI)
         Player* lowestTopOff = nullptr;
         bool bestIncoming = false;
         bestTier = SWARM_HEAL_TIERS;
-        ForEachGroupMember(bot, [&](Player* member)
+        ForEachListed(bot, SwarmHealable(bot, *state), [&](Player* member)
         {
             if (!member->IsAlive() || !bot->IsWithinDistInMap(member, range))
                 return false;
@@ -7867,13 +7986,14 @@ bool AnubarakAuraMasteryDue(PlayerbotAI* botAI)
 
     std::string verdict = "none";
     bool due = false;
+    AnubarakState const* state = AnubarakStateOf(bot);
     if (bot->GetAuraOfRankedSpell(SPELL_FROST_RESISTANCE_AURA_RANK_1, bot->GetGUID()) &&
-        botAI->CanCastSpell("aura mastery", bot))
+        botAI->CanCastSpell("aura mastery", bot) && state)
     {
         uint32 const coldId = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
         bool fresh = false;
         uint32 under = 0;
-        ForEachGroupMember(bot, [&](Player* member)
+        ForEachListed(bot, ColdCarriers(bot, *state), [&](Player* member)
         {
             Aura* cold = member->IsAlive() ? member->GetAura(coldId) : nullptr;
             AuraEffect* effect = cold ? cold->GetEffect(EFFECT_0) : nullptr;
@@ -7920,14 +8040,21 @@ bool AnubarakDivinePleaDue(PlayerbotAI* botAI)
         bot->GetPowerPct(POWER_MANA) >= ANUBARAK_PLEA_MANA_PCT || !botAI->CanCastSpell("divine plea", bot))
         return false;
 
+    AnubarakState const* state = AnubarakStateOf(bot);
+    if (!state)
+        return false;
+
     uint32 const cold = sSpellMgr->GetSpellIdForDifficulty(SPELL_PENETRATING_COLD, bot);
     bool hurt = false;
-    ForEachGroupMember(bot, [&](Player* member)
+    auto const check = [&](Player* member)
     {
         hurt = member->IsAlive() && member->GetHealthPct() < ANUBARAK_PLEA_SAFE_PCT &&
                (IsAnubarakTankPlayer(member) || member->HasAura(cold));
         return hurt;
-    });
+    };
+    ForEachListed(bot, TankPlayers(bot, *state), check);
+    if (!hurt)
+        ForEachListed(bot, ColdCarriers(bot, *state), check);
 
     return !hurt;
 }
@@ -7991,7 +8118,11 @@ bool GetAnubarakTankRescue(PlayerbotAI* botAI, AnubarakTankRescue& out)
         return false;
 
     out = AnubarakTankRescue();
-    ForEachGroupMember(bot, [&](Player* member)
+    AnubarakState const* state = AnubarakStateOf(bot);
+    if (!state)
+        return false;
+
+    ForEachListed(bot, TankPlayers(bot, *state), [&](Player* member)
     {
         if (!IsAnubarakTankPlayer(member) || !member->IsAlive() ||
             member->GetHealthPct() >= ANUBARAK_TANK_RESCUE_PCT ||
@@ -9210,6 +9341,23 @@ static bool AnyTankLow(Player* bot, AnubarakState const& state)
     return false;
 }
 
+// Living healer bots by guid
+static std::vector<ObjectGuid> const& HealerBots(Player* bot, AnubarakState const& state)
+{
+    return state.healerBots.Get(bot, [bot](std::vector<ObjectGuid>& healers)
+    {
+        ForEachGroupMember(bot, [&](Player* member)
+        {
+            if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
+                healers.push_back(member->GetGUID());
+
+            return false;
+        });
+
+        std::sort(healers.begin(), healers.end());
+    });
+}
+
 bool AnubarakHealerStandWaits(Player* bot)
 {
     Creature* boss = nullptr;
@@ -9242,17 +9390,7 @@ static bool BehindStand(Player* bot, Position& out)
 
     if (!state->behindGone.count(bot->GetGUID()))
     {
-        std::vector<ObjectGuid> healers;
-        ForEachGroupMember(bot, [&](Player* member)
-        {
-            if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
-                healers.push_back(member->GetGUID());
-
-            return false;
-        });
-
-        std::sort(healers.begin(), healers.end());
-        for (ObjectGuid const& guid : healers)
+        for (ObjectGuid const& guid : HealerBots(bot, *state))
         {
             if (guid == bot->GetGUID())
                 break;
@@ -9290,16 +9428,7 @@ bool GetAnubarakHealerStand(Player* bot, Position& out)
     if (BehindStand(bot, out))
         return true;
 
-    std::vector<ObjectGuid> healers;
-    ForEachGroupMember(bot, [&](Player* member)
-    {
-        if (member->IsAlive() && GET_PLAYERBOT_AI(member) && PlayerbotAI::IsHeal(member))
-            healers.push_back(member->GetGUID());
-
-        return false;
-    });
-
-    std::sort(healers.begin(), healers.end());
+    std::vector<ObjectGuid> const healers = HealerBots(bot, *state);
     size_t index = static_cast<size_t>(
         std::distance(healers.begin(), std::find(healers.begin(), healers.end(), bot->GetGUID())));
     size_t count = std::max<size_t>(healers.size(), 1);
@@ -9767,27 +9896,25 @@ bool GetAnubarakRedirect(Player* bot, AnubarakRedirect& out)
     if (!state || !bot->IsAlive() || bot->HasAura(SPELL_MARK))
         return false;
 
-    Player* firstHunter = nullptr;
-    Player* firstRogue = nullptr;
-    std::vector<Player*> hunters;
-    ForEachGroupMember(bot, [&](Player* member)
+    RedirectRoster const roster = state->redirect.Get(bot, [bot](RedirectRoster& found)
     {
-        if (!member->IsAlive() || !GET_PLAYERBOT_AI(member))
-            return false;
-
-        if (member->getClass() == CLASS_HUNTER)
+        ForEachGroupMember(bot, [&](Player* member)
         {
-            firstHunter = firstHunter ? firstHunter : member;
-            hunters.push_back(member);
-        }
-        else if (member->getClass() == CLASS_ROGUE)
-            firstRogue = firstRogue ? firstRogue : member;
+            if (!member->IsAlive() || !GET_PLAYERBOT_AI(member))
+                return false;
 
-        return false;
+            if (member->getClass() == CLASS_HUNTER)
+                found.hunters.push_back(member->GetGUID());
+            else if (member->getClass() == CLASS_ROGUE && found.firstRogue.IsEmpty())
+                found.firstRogue = member->GetGUID();
+
+            return false;
+        });
     });
 
+    ObjectGuid const firstHunter = roster.hunters.empty() ? ObjectGuid::Empty : roster.hunters.front();
     bool const pull = getMSTimeDiff(state->pullMs, getMSTime()) < ANUBARAK_REDIRECT_PULL_MS;
-    if (pull && (bot == firstHunter || bot == firstRogue))
+    if (pull && (bot->GetGUID() == firstHunter || bot->GetGUID() == roster.firstRogue))
     {
         Player* tank = state->mainTank.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state->mainTank);
         if (!tank || !tank->IsAlive() || tank == bot)
@@ -9834,9 +9961,9 @@ bool GetAnubarakRedirect(Player* bot, AnubarakRedirect& out)
 
     // One hunter a burrower, in group order, the pull's Misdirection aside
     size_t index = 0;
-    for (Player* hunter : hunters)
+    for (ObjectGuid const& hunter : roster.hunters)
     {
-        if (hunter == bot)
+        if (hunter == bot->GetGUID())
             break;
 
         if (!(pull && hunter == firstHunter))

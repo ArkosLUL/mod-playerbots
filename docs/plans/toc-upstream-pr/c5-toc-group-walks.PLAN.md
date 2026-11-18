@@ -46,8 +46,70 @@ pinned-cast memo). `tools/nativetest/` tests of touched code keep passing.
 
 ## Task list
 
+Not split: 19 sites, each a small memo, and one shared helper. Lead implements alone.
+
+1. [x] `Util/ToCHelpers_Shared.{h,cpp}`: `ToCGroupMemo<T>` (per group per ms, optional guid key, groupless
+   never shared, `Get` const over mutable fields) and `ToCGroupGuid`. Delete `GetNearestCreatureByEntry`,
+   `GetCreatureClusterCenter`, `<list>`.
+2. [x] Jaraxxus (`ToCHelpers_Jaraxxus.cpp`, `JaraxxusState`): `IncinerateFleshTargetFor` (target guid),
+   `JaraxxusIsNetherPowerRemover` (any non-healing remover), `JaraxxusIsFelFireballInterrupter` (lowest
+   guid with an interrupt ready, keyed by boss), `AnyLivingAssistTankOne` (bool); `PinnedMemo` onto the helper.
+3. [x] Twins (`ToCHelpers_TwinValkyr.cpp`, `TwinValkyrState`): `OtherColourAllyNear` (living members' guid,
+   position, essence), `IsTwinPactInterrupter` (lowest guid eligible, keyed by twin), `LustReady` (bool).
+4. [x] Anub'arak (`ToCHelpers_Anubarak.cpp`, `AnubarakState`): `GetSpikeTarget` (marked guid);
+   `GetAnubarakBattleResTarget` (druid pick keyed by pickup, healer corpse pick); cold carriers shared by
+   `GetAnubarakPenetratingColdHealTarget`, `AnubarakAuraMasteryDue`, `AnubarakDivinePleaDue`; tank players
+   shared by `lowestTank`, `GetAnubarakTankRescue`, `AnubarakDivinePleaDue`; `HealsOnTheWay` (caster, target
+   pairs); `tierPick` (members some healer can rank under `SWARM_HEAL_TIERS`); healer bots by guid shared by
+   `BehindStand` and `GetAnubarakHealerStand`; `GetAnubarakRedirect` (hunter bots, first rogue bot).
+5. [x] FC: `CounterspellMage` (`FactionChampionsState`, keyed by target, returns a guid);
+   `FactionChampionsChased`/`FactionChampionsKite` read living healers on the map (`BallState`) instead of
+   `GroupOnMap`.
+6. [x] Jormungars: `HunterIndex` (living hunters in group order, `JormungarsState`).
+7. [x] Unused code: `AvoidCreatureClusterAction`/`FleeFromCreatureCluster`, `ANUBARAK_PIT_CENTER`,
+   `SPELL_MASSIVE_CRASH_*`; drop the includes left unused.
+8. [x] Final grep for `ForEachGroupMember`, `GetFirstMember`, `AliveMembersOnMap`, `GroupOnMap`; docs: each
+   memo in its boss doc, `ToCGroupMemo` and the deletions in `trial-of-the-crusader/README.md`.
+
 ## Decisions for review
+
+- **One helper, `ToCGroupMemo<T>`** (`Util/ToCHelpers_Shared.h`, ToC code, not the shared raid files):
+  same rule as c1's `PinnedMemo`, which now uses it unchanged. `Get` is const over mutable fields, so states
+  passed as const keep their signatures. A refresh rebuilds the answer in place; no fill reads its own memo.
+- **Interrupter picks** (Fel Fireball, Twin Pact, Counterspell) memo the lowest eligible guid, keyed by the
+  boss, twin or kill target; a bot is on duty when it is eligible itself and nobody lower is. The fill tests
+  members in guid order up to the first eligible one, so which members' `"spell id"`, `CanCastSpell` and
+  `WantedEssence` get read moves; a bot turning ready between two ticks in one ms can make two claimants for
+  that ms. Both are the brief's allowed memo difference.
+- **Twins splash test** memos each living member's guid, position and essence; the per-bot answer is a
+  distance scan over that list, no unit lookups.
+- **FC Nitro run and kite hop** memo the living healers on the map, all `NearHealer` and `HealerGap` read;
+  their per-spot search still loops those healers. The cheap tests (Nitro ready, focused, chasers) already ran
+  before the walk.
+- **Anub'arak swarm heal** (`tierPick`) loops only the members `SwarmHealTier` can rank under
+  `SWARM_HEAL_TIERS` for any healer: carriers, tanks under the top-off, non-tanks under
+  `ANUBARAK_SWARM_HOT_HP` with no HoT. That predicate must follow `SwarmHealTier` (code comment says so).
+  `lowestTank`, `GetAnubarakTankRescue` and `AnubarakDivinePleaDue` loop the tank list (and Plea the cold
+  carriers too); loop bodies unchanged, group order kept.
+- **Off a ToC instance** `GetSpikeTarget`, the cold heal target, Aura Mastery, Divine Plea, the tank rescue
+  and `CounterspellMage` answer null or false instead of walking: unreachable, every caller runs on map 649.
+- **Unused code deleted** after a `git grep`: `AvoidCreatureClusterAction`/`FleeFromCreatureCluster`,
+  `GetNearestCreatureByEntry`, `GetCreatureClusterCenter`, `ANUBARAK_PIT_CENTER`, `SPELL_MASSIVE_CRASH_*`,
+  `<list>` and `MovementActions.h` with them. README's `AvoidCreatureClusterAction` bullet went whole:
+  `pitfalls.md` already holds the `FleePosition` cap and the clearance rule. `docs/plans/icc-rebuild/
+  r1-foundation.PLAN.md` still says to leave these in ToC; left alone, it's another effort's brief and the
+  instruction is moot.
+- Final grep: every remaining `ForEachGroupMember`/`GetFirstMember`/`AliveMembersOnMap`/`GroupOnMap` site
+  is a memo fill, behind a per-instance memo, latch or roster interval, action-only (Jaraxxus carrier spot,
+  Twins `CriticalAllyNear`), or trace-only (Jaraxxus `addTank` prune, `HumanInsideRelease`).
 
 ## Known gaps
 
+- Every memo is keyed by group, so two groups in one instance recompute on every switch (as the sphere and
+  Shadow Strike duty memos already do).
+- Duplicated helpers (`TryClassTaunt`, segment-distance helpers, threat caps, `NorthrendBeastsWalkAction`'s
+  home) stay, by the user's call.
+
 ## Blocked
+
+None.

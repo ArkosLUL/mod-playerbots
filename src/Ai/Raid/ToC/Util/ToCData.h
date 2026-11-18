@@ -29,10 +29,6 @@ extern RaidDefensiveScope const TOC_DEFENSIVE_SCOPE;
 // Center of the Crusaders' Coliseum arena (trial_of_the_crusader.h Locs[LOC_CENTER])
 extern const Position ARENA_CENTER;
 
-// Center of the underground nerubian pit where Anub'arak is fought (boss_anubarak_trial.cpp
-// AnubLocs[0], Z ~142). This is a different floor from ARENA_CENTER (the upper coliseum at Z ~393).
-extern const Position ANUBARAK_PIT_CENTER;
-
 // Boss entries from trial_of_the_crusader.h NPCs, adds and hazards from the NPC enum of the boss
 // script named on each section.
 enum class ToCNpcs : uint32
@@ -76,12 +72,6 @@ inline constexpr uint32 SPELL_IMPALE            = 66331; // stacking bleed on th
 // Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells)
 // 15 yd knockback circle around the worm (DBC radius index 18)
 inline constexpr uint32 SPELL_SWEEP             = 66794;
-
-// Icehowl (boss_northrend_beasts.cpp IcehowlSpells)
-inline constexpr uint32 SPELL_MASSIVE_CRASH_10N = 66683;
-inline constexpr uint32 SPELL_MASSIVE_CRASH_25N = 67660;
-inline constexpr uint32 SPELL_MASSIVE_CRASH_10H = 67661;
-inline constexpr uint32 SPELL_MASSIVE_CRASH_25H = 67662;
 
 // Lord Jaraxxus (boss_lord_jaraxxus.cpp JaraxxusSpells)
 inline constexpr uint32 SPELL_FEL_FIREBALL      = 66532; // interruptible cast on the current tank

@@ -158,6 +158,13 @@ struct TwinPull
     std::array<TwinApproach, 2> approach{};
 };
 
+struct TwinAlly
+{
+    ObjectGuid guid;
+    Position position;
+    TwinColour essence = TwinColour::None;
+};
+
 // One read per instance per ms: every bot asks several of these a tick, and the arena sweep walks a
 // 100 yd grid. Guids only, a pointer can die before the next read.
 struct TwinValkyrState
@@ -184,6 +191,11 @@ struct TwinValkyrState
     std::unordered_map<ObjectGuid, TwinDoorStand> doorStands;
     std::unordered_map<ObjectGuid, bool> doorParked;
     std::unordered_map<ObjectGuid, bool> nextPortalParked;
+
+    // Group walks behind triggers and multipliers every bot asks each tick
+    ToCGroupMemo<std::vector<TwinAlly>> allies;
+    ToCGroupMemo<ObjectGuid> pactInterrupter;
+    ToCGroupMemo<bool> lustReady;
 };
 
 RaidInstanceState<TwinValkyrState> twinStates;
@@ -634,21 +646,25 @@ bool MustSwap(Player* bot, TwinEssenceWant const& want, bool urgentOnly)
     return TwinEssenceGossipDue(bot, want);
 }
 
-bool OtherColourAllyNear(Player* bot, TwinColour colour, float radius)
+bool OtherColourAllyNear(Player* bot, TwinValkyrState const& state, TwinColour colour, float radius)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    std::vector<TwinAlly> const& allies = state.allies.Get(bot, [bot](std::vector<TwinAlly>& out)
     {
-        Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || !member->IsInMap(bot))
-            continue;
+        Group* group = bot->GetGroup();
+        if (!group)
+            return;
 
-        if (EssenceOf(member) != colour && bot->GetExactDist2d(member) <= radius)
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && member->IsInMap(bot))
+                out.push_back({member->GetGUID(), member->GetPosition(), EssenceOf(member)});
+        }
+    });
+
+    for (TwinAlly const& ally : allies)
+        if (ally.guid != bot->GetGUID() && ally.essence != colour && bot->GetExactDist2d(ally.position) <= radius)
             return true;
-    }
 
     return false;
 }
@@ -694,7 +710,7 @@ std::vector<OrbHazard> OrbHazards(PlayerbotAI* botAI)
 
         if (!splashChecked)
         {
-            splash = OtherColourAllyNear(bot, held, TWIN_ORB_SPLASH_ALLY_RADIUS);
+            splash = OtherColourAllyNear(bot, *state, held, TWIN_ORB_SPLASH_ALLY_RADIUS);
             splashChecked = true;
         }
 
@@ -897,24 +913,25 @@ SatedSince SatedOf(Player* bot, uint32 pullMs, uint32 now)
 }
 
 // Humans too: a player's lust lands on the bots all the same
-bool LustReady(Player* bot)
+bool LustReady(Player* bot, TwinValkyrState const& state)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    return state.lustReady.Get(bot, [bot](bool& ready)
     {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->getClass() != CLASS_SHAMAN)
-            continue;
+        Group* group = bot->GetGroup();
+        if (!group)
+            return;
 
-        for (uint32 const spellId : {SPELL_BLOODLUST, SPELL_HEROISM})
-            if (member->HasSpell(spellId) && !member->HasSpellCooldown(spellId))
-                return true;
-    }
+        for (GroupReference* ref = group->GetFirstMember(); ref && !ready; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || !member->IsInMap(bot) || member->getClass() != CLASS_SHAMAN)
+                continue;
 
-    return false;
+            for (uint32 const spellId : {SPELL_BLOODLUST, SPELL_HEROISM})
+                if (member->HasSpell(spellId) && !member->HasSpellCooldown(spellId))
+                    ready = true;
+        }
+    });
 }
 
 // The walk ends TWIN_NITRO_SPARE_MS or more before a casting Vortex does. Never once it channels:
@@ -951,7 +968,7 @@ float ClosestOrbPass(Player* bot, TwinValkyrState const& state, Position const& 
         {
             if (!splashChecked)
             {
-                splash = OtherColourAllyNear(bot, held, TWIN_ORB_SPLASH_ALLY_RADIUS);
+                splash = OtherColourAllyNear(bot, state, held, TWIN_ORB_SPLASH_ALLY_RADIUS);
                 splashChecked = true;
             }
 
@@ -1403,26 +1420,40 @@ bool IsTwinPactInterrupter(PlayerbotAI* botAI, Unit* twin)
     }
 
     bool duty = !TwinValkyrMustSwapEssence(botAI, true);
-    if (duty)
+    TwinValkyrState const* state = duty ? ReadTwins(botAI) : nullptr;
+    if (state)
     {
-        if (Group* group = bot->GetGroup())
-        {
-            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        // the lowest guid with an interrupt ready and no swap due takes the Pact
+        ObjectGuid const first = state->pactInterrupter.Get(
+            bot,
+            [bot, twin](ObjectGuid& lowest)
             {
-                Player* member = ref->GetSource();
-                if (!member || member == bot || !member->IsAlive() || !member->IsInMap(bot) ||
-                    !(member->GetGUID() < bot->GetGUID()))
-                    continue;
+                Group* group = bot->GetGroup();
+                if (!group)
+                    return;
 
-                PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-                if (!memberAI || !TwinReadyInterrupt(member, twin) ||
-                    MustSwap(member, WantedEssence(memberAI), true))
-                    continue;
+                std::vector<Player*> members;
+                for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+                {
+                    Player* member = ref->GetSource();
+                    if (member && member->IsAlive() && member->IsInMap(bot))
+                        members.push_back(member);
+                }
 
-                duty = false;
-                break;
-            }
-        }
+                std::sort(members.begin(), members.end(),
+                          [](Player* lhs, Player* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
+                for (Player* member : members)
+                {
+                    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+                    if (memberAI && TwinReadyInterrupt(member, twin) && !MustSwap(member, WantedEssence(memberAI), true))
+                    {
+                        lowest = member->GetGUID();
+                        break;
+                    }
+                }
+            },
+            twin->GetGUID());
+        duty = first.IsEmpty() || !(first < bot->GetGUID());
     }
 
     RaidObs::NoteDerived(bot, "tv.interrupt", duty ? "duty" : "standby");
@@ -1721,7 +1752,7 @@ bool TwinValkyrBurstHeld(PlayerbotAI* botAI)
     if (!state->pull.lustOpen)
         return true;
 
-    if (sated == SatedSince::Before || !LustReady(bot))
+    if (sated == SatedSince::Before || !LustReady(bot, *state))
         return false;
 
     // a lust that never comes, its shaman out of range or busy
