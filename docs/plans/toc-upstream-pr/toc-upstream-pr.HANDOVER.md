@@ -1,6 +1,6 @@
 ## Pull Request Description
 
-**Disclaimer:** YOURS TO WRITE
+**Disclaimer:** the heroic bosses are a real challenge, Anub'arak most of all. For 25 heroic I'd recommend an average raid item level of 245 or higher.
 
 Stacked on #2876 (the raid encounter framework) and #2985 (shared raid helpers), next to the Ulduar rework in #2986. Until those are merged this diff shows them too. This PR's part is `src/Ai/Raid/ToC/`, a few lines registering it in `RaidStrategyContext.h`, `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp` and `PlayerbotAI.cpp`, and one SQL update for its chat line.
 
@@ -14,7 +14,7 @@ Notes for some of the bosses:
 
 - **Northrend Beasts**: bot tanks split the beasts between them. A human tank keeps whatever beast it's tanking, since bots can't hand it a new one.
 - **Lord Jaraxxus**: if you main tank him, stand on him through the intro. Otherwise whoever stands nearest takes his first swings.
-- **Faction Champions**: the fight starts with you. Bot tanks wait about 30 yd out, so every champion's first pick is a tank. To get a healer out of the pack, target it and type `pull`, and the bot DKs grip it out in a chain. Healers you don't pull die where they stand.
+- **Faction Champions**: the fight starts with you. Bot tanks wait about 30 yd out, so every champion's first pick is a tank. To get a healer out of the pack, target it and type `pull`, and the bot DKs grip it out in a chain. Healers you don't pull die where they stand. Bring 3 or more DKs, so each melee champion can be kept in Chains of Ice.
 - **Twin Val'kyr**: the raid fights from the entrance tunnel, the heroic "door strategy" from Wowhead, so nobody dodges orbs. Pull a twin and run into the tunnel, or tell a bot tank to `attack` one, and each bot tank fetches its own twin.
 - **Anub'arak**: bring three tanks. The two side tanks should be bots. A human only takes a side no bot can, and then its side is the tank spot it stands on.
 
@@ -49,9 +49,9 @@ Only in Trial of the Crusader, which had no raid strategy before.
 - [ ] No
 - [x] Yes (say what you used it for and which parts it wrote)
 
-Yes. I used Claude Code to read the core's Trial of the Crusader scripts and spell data, write and refactor the strategy, and port it from my fork and clean it up for this repo's guidelines. It wrote most of the code. I haven't reviewed it line by line, there's too much of it. I tested it in game on my fork instead, on 25 normal and 25 heroic.
+Yes. I used Claude Code to read the core's Trial of the Crusader scripts and spell data, write and refactor the strategy, and port it from my fork and clean it up for this repo's guidelines. It wrote all of the code. I haven't reviewed it line by line, there's too much of it. I tested it in game on my fork instead, on 25 normal and 25 heroic.
 
-- [ ] I have read and understood the [AC guidelines for AI Agentic Engineering](https://www.azerothcore.org/wiki/agentic-engineering) (required if you ticked Yes)
+- [x] I have read and understood the [AC guidelines for AI Agentic Engineering](https://www.azerothcore.org/wiki/agentic-engineering) (required if you ticked Yes)
 
 **Review before submitting**
 - [ ] I ran a self-review. Tool and model: ______
