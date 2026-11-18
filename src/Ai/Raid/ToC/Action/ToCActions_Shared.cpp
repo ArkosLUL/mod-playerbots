@@ -1,26 +1,10 @@
 #include "ToCActions_Shared.h"
 #include "ToCData.h"
-#include "ToCHelpers_Shared.h"
 #include "Playerbots.h"
 
 #include <algorithm>
 
 using namespace TrialOfTheCrusaderHelpers;
-
-bool AvoidCreatureClusterAction::FleeFromCreatureCluster(uint32 entry)
-{
-    // wider than the trigger radius, so the flee runs from the whole cluster's centre
-    constexpr float clusterRadius = 15.0f;
-    Position center;
-    if (!GetCreatureClusterCenter(bot, entry, clusterRadius, center))
-        return false;
-
-    bot->CastStop();
-
-    constexpr float fleeDistance = 12.0f;
-    constexpr uint32 minInterval = 500;
-    return FleePosition(center, fleeDistance, minInterval);
-}
 
 bool ToCMainTankHoldAction::DragBossToAnchor(Unit* boss, Position const& anchor)
 {

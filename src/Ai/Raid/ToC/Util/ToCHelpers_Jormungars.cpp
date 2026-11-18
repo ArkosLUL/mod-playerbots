@@ -35,6 +35,7 @@
 #include "ToCHelpers_Gormok.h"
 #include "ToCHelpers_Icehowl.h"
 #include "ToCHelpers_NorthrendBeasts.h"
+#include "ToCHelpers_Shared.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -231,6 +232,8 @@ struct JormungarsState
     std::unordered_map<ObjectGuid, uint32> bileScatterTried;  // a deal that found no spot, when
     std::unordered_map<ObjectGuid, uint32> reachHolds;  // when the reach guard first held through a backoff
     std::unordered_map<ObjectGuid, uint32> dragNeededSince;  // mobile holder -> when its drag became needed
+    // Every hunter's redirect trigger asks while a worm is engaged
+    ToCGroupMemo<std::vector<ObjectGuid>> hunters;
 };
 
 RaidInstanceState<JormungarsState> jormungarsStates;
@@ -954,26 +957,24 @@ JormungarsState* FindState(Player* bot)
     return jormungarsStates.Find(bot->GetInstanceId());
 }
 
-int32 HunterIndex(Player* bot)
+int32 HunterIndex(Player* bot, JormungarsState const& state)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return -1;
 
-    int32 index = 0;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    std::vector<ObjectGuid> const& hunters = state.hunters.Get(bot, [group](std::vector<ObjectGuid>& out)
     {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->getClass() != CLASS_HUNTER)
-            continue;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && member->getClass() == CLASS_HUNTER)
+                out.push_back(member->GetGUID());
+        }
+    });
 
-        if (member == bot)
-            return index;
-
-        ++index;
-    }
-
-    return -1;
+    auto const found = std::find(hunters.begin(), hunters.end(), bot->GetGUID());
+    return found == hunters.end() ? -1 : static_cast<int32>(std::distance(hunters.begin(), found));
 }
 
 WormRead const* FindWorm(JormungarsState const& state, ObjectGuid const& guid)
@@ -1970,7 +1971,7 @@ Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder)
     // Tricks moves the threat off whatever the rogue hits, and DPS go for the mobile worm, so rogues
     // serve that one. Only hunters, whose dump shot aims at the assigned worm, alternate.
     bool const hunter = bot->getClass() == CLASS_HUNTER;
-    int32 const index = hunter ? HunterIndex(bot) : 0;
+    int32 const index = hunter ? HunterIndex(bot, *state) : 0;
     if (index < 0)
         return nullptr;
 

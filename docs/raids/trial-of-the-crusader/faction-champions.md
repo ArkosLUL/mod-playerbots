@@ -313,6 +313,9 @@ them.
 | Totems | Each champion totem (alive, `IsTotem`, owned by a champion, attackable) gets one killer, latched in `fc.totem`: the nearest eligible group bot holding no totem (`GetExactDist2d`, ties by guid), eligible meaning alive, on the map, in control, not a healer and within 30 yd. The hold ends once the totem stops counting or its bot turns ineligible. `faction champions kill totem` (`ACTION_RAID + 2.7f`) attacks it directly; the rule `faction champions totem guard multiplier` blocks focus and the physical switch for the holder | Guide: "a melee player dedicated to killing his totems". Grounding eats a Cyclone or Counterspell, Windfury hastes the champions' melee, Tremor undoes fears (above). The raid's own totems share the entries. The settled duty returns false, so without the rule focus drags the bot back to the kill target. No trace yet has an Enhancement Shaman |
 | Treants | No node; `--adds` measures them | No trace has a Balance Druid yet, the guide doesn't mention them, and they're three 30 s adds every 3 min |
 
+Once per group per ms ([`ToCGroupMemo`](README.md#code-layout)): the Counterspell mage, per kill
+target, and the living healers a Nitro run or kite hop measures its spots against.
+
 ## Known gaps
 
 - Two bot DKs ice two melee champions; the Warrior, last in the order, and any other one get only the kite

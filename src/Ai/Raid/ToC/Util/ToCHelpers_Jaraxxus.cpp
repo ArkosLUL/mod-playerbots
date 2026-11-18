@@ -89,20 +89,16 @@ struct InfernoMemo
     RaidPredictedHit hit;
 };
 
-// Per group per ms, for the same reason: every bot's pinned cast trigger walks the group
-struct PinnedMemo
-{
-    bool valid = false;
-    uint32 ms = 0;
-    ObjectGuid group;
-    std::vector<ObjectGuid> casters;
-};
-
 struct JaraxxusState
 {
     JaraxxusScan scan;
     InfernoMemo inferno;
-    PinnedMemo pinned;
+    // Group walks behind triggers every bot asks each tick
+    ToCGroupMemo<std::vector<ObjectGuid>> pinnedCasters;
+    ToCGroupMemo<ObjectGuid> incinerateTarget;
+    ToCGroupMemo<bool> nonHealingRemover;
+    ToCGroupMemo<ObjectGuid> fireballInterrupter;
+    ToCGroupMemo<bool> assistTankOne;
     std::unordered_map<ObjectGuid, ThreatCapLatch> threatCaps;
     RaidObs::ObsValue<uint32> netherPower{"jaraxxus.netherpower"};
     RaidObs::ObsValue<ObjectGuid> focus{"jaraxxus.focus"};
@@ -287,11 +283,14 @@ Unit* IncinerateFleshTargetFor(Player* bot)
     if (!state)
         return nullptr;
 
-    Player* target = nullptr;
-    for (Player* member : AliveMembersOnMap(bot))
-        if (HasIncinerateFlesh(member) && (!target || member->GetGUID() < target->GetGUID()))
-            target = member;
+    ObjectGuid const guid = state->incinerateTarget.Get(bot, [bot](ObjectGuid& lowest)
+    {
+        for (Player* member : AliveMembersOnMap(bot))
+            if (HasIncinerateFlesh(member) && (lowest.IsEmpty() || member->GetGUID() < lowest))
+                lowest = member->GetGUID();
+    });
 
+    Player* target = guid.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, guid);
     state->absorb = IncinerateAbsorbLeft(target);
     return target;
 }
@@ -455,13 +454,14 @@ Unit* PickInfernal(Player* bot, JaraxxusScan const& scan)
     return onBot ? onBot : lowest;
 }
 
-bool AnyLivingAssistTankOne(Player* bot)
+bool AnyLivingAssistTankOne(Player* bot, JaraxxusState const& state)
 {
-    for (Player* member : AliveMembersOnMap(bot))
-        if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
-            return true;
-
-    return false;
+    return state.assistTankOne.Get(bot, [bot](bool& any)
+    {
+        std::vector<Player*> const members = AliveMembersOnMap(bot);
+        any = std::any_of(members.begin(), members.end(),
+                          [](Player* member) { return PlayerbotAI::IsAssistTankOfIndex(member, 1, true); });
+    });
 }
 
 bool InInterruptRange(Player* bot, Unit* boss, SpellInfo const* spellInfo)
@@ -757,7 +757,8 @@ uint32 JaraxxusNetherPowerStacks(PlayerbotAI* botAI)
 
 bool JaraxxusIsNetherPowerRemover(Player* bot)
 {
-    if (!StateFor(bot))
+    JaraxxusState* state = StateFor(bot);
+    if (!state)
         return false;
 
     if (IsNonHealingRemover(bot))
@@ -767,10 +768,15 @@ bool JaraxxusIsNetherPowerRemover(Player* bot)
     if (botClass != CLASS_PRIEST && botClass != CLASS_SHAMAN)
         return false;
 
-    // a healer only fills in when nobody else can, and never while Incinerate Flesh needs its heals
-    for (Player* member : AliveMembersOnMap(bot))
-        if (member != bot && IsNonHealingRemover(member))
-            return false;
+    // a healer only fills in when nobody else can, and never while Incinerate Flesh needs its heals.
+    // a healing priest or shaman isn't one itself, so the group's answer only counts the others
+    bool const covered = state->nonHealingRemover.Get(bot, [bot](bool& any)
+    {
+        std::vector<Player*> const members = AliveMembersOnMap(bot);
+        any = std::any_of(members.begin(), members.end(), IsNonHealingRemover);
+    });
+    if (covered)
+        return false;
 
     return !IncinerateFleshTargetFor(bot);
 }
@@ -865,7 +871,7 @@ Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index)
     if (index == 0)
     {
         add = FirstAlive(bot, scan.mistresses);
-        if (!add && !AnyLivingAssistTankOne(bot))
+        if (!add && !AnyLivingAssistTankOne(bot, *state))
             add = PickInfernal(bot, scan);
     }
     else if (index == 1)
@@ -973,20 +979,32 @@ char const* JaraxxusReadyInterrupt(Player* bot, Unit* boss)
 
 bool JaraxxusIsFelFireballInterrupter(Player* bot, Unit* boss)
 {
-    if (!StateFor(bot) || !boss)
+    JaraxxusState* state = StateFor(bot);
+    if (!state || !boss)
         return false;
 
     bool interrupter = JaraxxusIsFelFireballCasting(boss) && JaraxxusReadyInterrupt(bot, boss);
     if (interrupter)
     {
-        for (Player* member : AliveMembersOnMap(bot))
-        {
-            if (member->GetGUID() < bot->GetGUID() && JaraxxusReadyInterrupt(member, boss))
+        // the lowest guid with an interrupt ready takes the cast
+        ObjectGuid const first = state->fireballInterrupter.Get(
+            bot,
+            [bot, boss](ObjectGuid& lowest)
             {
-                interrupter = false;
-                break;
-            }
-        }
+                std::vector<Player*> members = AliveMembersOnMap(bot);
+                std::sort(members.begin(), members.end(),
+                          [](Player* lhs, Player* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
+                for (Player* member : members)
+                {
+                    if (JaraxxusReadyInterrupt(member, boss))
+                    {
+                        lowest = member->GetGUID();
+                        break;
+                    }
+                }
+            },
+            boss->GetGUID());
+        interrupter = first.IsEmpty() || !(first < bot->GetGUID());
     }
 
     RaidObs::NoteDerived(bot, "jaraxxus.interrupter", interrupter ? "1" : "0");
@@ -1013,29 +1031,19 @@ std::vector<Player*> GetJaraxxusPinnedCasters(Player* bot)
     if (!state)
         return pinned;
 
-    Group* group = bot->GetGroup();
-    ObjectGuid const groupGuid = group ? group->GetGUID() : ObjectGuid::Empty;
-    PinnedMemo& memo = state->pinned;
-    uint32 const now = getMSTime();
-    if (!group || !memo.valid || memo.ms != now || memo.group != groupGuid)
+    std::vector<ObjectGuid> const& casters = state->pinnedCasters.Get(bot, [bot](std::vector<ObjectGuid>& out)
     {
-        memo.casters.clear();
         for (Player* member : AliveMembersOnMap(bot))
         {
             if (!member->HasUnitState(UNIT_STATE_CASTING) || !GET_PLAYERBOT_AI(member))
                 continue;
 
             if (HasMistressKiss(member) || IsLegionFlameCarrier(member) || JaraxxusRaidCoverPinned(member))
-                memo.casters.push_back(member->GetGUID());
+                out.push_back(member->GetGUID());
         }
+    });
 
-        // a groupless bot's list is its own, so it never serves another bot
-        memo.valid = group != nullptr;
-        memo.ms = now;
-        memo.group = groupGuid;
-    }
-
-    for (ObjectGuid const& guid : memo.casters)
+    for (ObjectGuid const& guid : casters)
         if (Player* caster = ObjectAccessor::GetPlayer(*bot, guid))
             pinned.push_back(caster);
 

@@ -26,6 +26,7 @@
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Staging.h"
 
 namespace TrialOfTheCrusaderHelpers
@@ -166,6 +167,8 @@ struct BallState
     std::unordered_map<ObjectGuid, uint32> stepEndMs;
     std::unordered_map<ObjectGuid, CycloneStand> cycloneStands;
     std::unordered_map<ObjectGuid, uint32> castBreaks;  // chased caster -> when its cast break was asked
+    // Living healers on the map, all a Nitro run or kite hop measures its spots against
+    ToCGroupMemo<std::vector<ObjectGuid>> healers;
 };
 
 RaidInstanceState<BallState> ballStates;
@@ -209,6 +212,23 @@ std::vector<Player*> GroupOnMap(Player* bot)
     std::sort(members.begin(), members.end(),
               [](Player* a, Player* b) { return a->GetGUID() < b->GetGUID(); });
     return members;
+}
+
+std::vector<Player*> HealersOnMap(Player* bot, BallState const& state)
+{
+    std::vector<ObjectGuid> const& guids = state.healers.Get(bot, [bot](std::vector<ObjectGuid>& healers)
+    {
+        for (Player* member : GroupOnMap(bot))
+            if (PlayerbotAI::IsHeal(member))
+                healers.push_back(member->GetGUID());
+    });
+
+    std::vector<Player*> healers;
+    for (ObjectGuid const& guid : guids)
+        if (Player* healer = ObjectAccessor::GetPlayer(*bot, guid))
+            healers.push_back(healer);
+
+    return healers;
 }
 
 uint32 KnownOpenerRank(Player* player, OpenerSpell const& spell)
@@ -797,9 +817,9 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
     float const reach = bot->GetSpeed(MOVE_RUN) * EncounterHelpers::NITRO_BOOSTS_SPEED_FACTOR *
                         EncounterHelpers::NITRO_BOOSTS_DURATION_MS / IN_MILLISECONDS;
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-    std::vector<Player*> const group = GroupOnMap(bot);
-    std::vector<Player*> const members = PlayerbotAI::IsHeal(bot) ? std::vector<Player*>() : group;
-    float const nowGap = HealerGap(bot, group, bot->GetPosition());
+    std::vector<Player*> const healers = HealersOnMap(bot, *state);
+    std::vector<Player*> const members = PlayerbotAI::IsHeal(bot) ? std::vector<Player*>() : healers;
+    float const nowGap = HealerGap(bot, healers, bot->GetPosition());
     bool found = false;
     float bestClear = 0.0f;
     float bestRun = 0.0f;
@@ -811,7 +831,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
         {
             Position const target = Along(bot->GetPosition(), dir, run);
             if (!Clear(target, hazards) || NearHealer(bot, members, target) ||
-                !Healed(HealerGap(bot, group, target), nowGap))
+                !Healed(HealerGap(bot, healers, target), nowGap))
                 continue;
 
             float const clear = MeleeClearance(botAI, target);
@@ -1095,11 +1115,11 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
         sumY += chaser->GetPositionY();
     }
 
-    std::vector<Player*> const members = GroupOnMap(bot);
+    std::vector<Player*> const healers = HealersOnMap(bot, *state);
     std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
     Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
     // kites to the wall left bots out of heals, so a healed hop always beats a clearer one
-    float const nowGap = HealerGap(bot, members, bot->GetPosition());
+    float const nowGap = HealerGap(bot, healers, bot->GetPosition());
     bool found = false;
     bool bestHealed = false;
     float bestClear = 0.0f;
@@ -1108,10 +1128,10 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
     for (float turn : RUN_TURNS)
     {
         Position const target = Along(bot->GetPosition(), Rotate(away, turn), KITE_STEP);
-        if (!Clear(target, hazards) || NearHealer(bot, members, target))
+        if (!Clear(target, hazards) || NearHealer(bot, healers, target))
             continue;
 
-        float const gap = HealerGap(bot, members, target);
+        float const gap = HealerGap(bot, healers, target);
         bool const healed = Healed(gap, nowGap);
         float const clear = MeleeClearance(botAI, target);
         bool const better = !found || (healed && !bestHealed) ||

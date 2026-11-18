@@ -270,7 +270,9 @@ dodge yields only to a Vortex swap with no time left to wait.
 `GetGuidData`, reads the Vortex, the Pact, the shield, the tank list and the pull's state (specials,
 lust window, each twin's approach to her door), and takes every orb and portal in one 100 yd sweep
 from a twin; `GetFirstAliveUnitByEntry` is deprecated and sight-capped, and per-bot sweeps and group
-walks multiply. The door deal refreshes once a second.
+walks multiply. The door deal refreshes once a second. Once per group per ms
+([`ToCGroupMemo`](README.md#code-layout)): the living members' positions and essences for the orb
+splash test, the Pact interrupter and whether a shaman has lust ready.
 
 | Trigger | Action | Relevance |
 |---|---|---|

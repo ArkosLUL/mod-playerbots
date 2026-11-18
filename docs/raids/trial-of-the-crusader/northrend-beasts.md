@@ -320,7 +320,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     beats the edge, since its melee would stand in Sweep. `nb.wormmove` `drag edge`.
 - **Redirect** (`northrend worms redirect threat`, `ACTION_RAID + 1`): rogues serve the `WormMobile`
   holder, since Tricks moves the threat off whatever the rogue hits and DPS hit that worm. Living
-  hunters alternate by index among hunters, even to `WormMobile`, odd to `WormStationary` (mobile
+  hunters alternate by index among hunters (read once per group per ms,
+  [`ToCGroupMemo`](README.md#code-layout)), even to `WormMobile`, odd to `WormStationary` (mobile
   without one). It fires while that holder lives and the worm is under ground or hitting someone
   else, or while a hunter holds Misdirection charges (35079), spent on its worm, not its DPS target.
   Misdirection and Tricks go out from the submerge, the shots wait for the emerge.

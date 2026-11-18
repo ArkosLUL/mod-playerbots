@@ -3,12 +3,15 @@
 
 #include <vector>
 
+#include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "RaidCombatHelpers.h"
 #include "RaidDirectTargeting.h"
+#include "Timer.h"
 #include "ToCData.h"
 
 class Creature;
+class Player;
 class WorldObject;
 
 namespace TrialOfTheCrusaderHelpers
@@ -41,12 +44,41 @@ inline constexpr auto& IsToCDpsBot = IsRaidDpsBot;
 inline constexpr auto& GetToCHumanSkull = GetRaidHumanSkull;
 inline constexpr auto& ToCPetOffPick = RaidPetOffPick;
 
-// Nearest alive creature of the given entry within radius of the bot (nullptr if none)
-Unit* GetNearestCreatureByEntry(Player* bot, uint32 entry, float radius);
+// Empty when the bot has no group
+ObjectGuid ToCGroupGuid(Player* bot);
 
-// Average position of the alive creatures of the entry within radius of the bot, to flee a whole
-// trail of hazards. False, center untouched, when there are none.
-bool GetCreatureClusterCenter(Player* bot, uint32 entry, float radius, Position& center);
+// One group walk per group per ms, shared by every bot ticking in that ms. A groupless bot's answer
+// is its own and serves nobody else.
+template <typename T>
+class ToCGroupMemo
+{
+public:
+    // fill(T&) rebuilds the answer in place: copy it before calling anything that reads this memo again
+    template <typename Fill>
+    T const& Get(Player* bot, Fill&& fill, ObjectGuid const& key = ObjectGuid::Empty) const
+    {
+        ObjectGuid const group = ToCGroupGuid(bot);
+        uint32 const now = getMSTime();
+        if (group.IsEmpty() || !_valid || _ms != now || _group != group || _key != key)
+        {
+            _value = T();
+            fill(_value);
+            _valid = !group.IsEmpty();
+            _ms = now;
+            _group = group;
+            _key = key;
+        }
+
+        return _value;
+    }
+
+private:
+    mutable bool _valid = false;  // 0 is a real getMSTime value
+    mutable uint32 _ms = 0;
+    mutable ObjectGuid _group;
+    mutable ObjectGuid _key;
+    mutable T _value{};
+};
 
 }
 

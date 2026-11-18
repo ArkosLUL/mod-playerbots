@@ -155,6 +155,9 @@ reads `possible targets`, which drop `UNIT_FLAG_NOT_SELECTABLE`, and both are un
 2: through it `AnubarakSubmerged` never read true and the sphere node was dead on every difficulty.
 NPC entries are the base entry on every difficulty. Spheres, spike, burrowers and scarabs come from
 one grid sweep per instance per ms, taken from him, so a bot that never landed can't blank it.
+Once per group per ms ([`ToCGroupMemo`](README.md#code-layout)): the marked kiter, the battle res
+druid and corpse, the Penetrating Cold carriers, the tanks, heals on the way, the members a phase 3
+heal can rank, the healer bots, and the hunters and first rogue for redirects.
 
 **Phase**, per instance, memoised per ms: `Submerged` while he is unselectable or carries 65981;
 `Swarm`, latched, once he is up and a group member carries the remapped Leeching Swarm, he casts it,
