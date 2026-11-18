@@ -28,7 +28,7 @@ mirrors): none yet (set by `p3-toc`, moved by each `sync`).
 | 1 | p1-framework-cares | committed; review clean, 1 minor recorded | framework `2b39e938f`; merges eoe `b984c3968`, helpers `cca94c10b`, ulduar `fa6dc4af2`; heads verified, RaidObs grep empty | `CaresTable` comment rewrapped to 2 lines; plain `EncounterGate`, no live flag | commit type `perf` and 98-col body vs upstream's list and 72 cols (needs amend; squash-merge hides it); clang-format not run locally; nothing pushed |
 | 2 | p2-helpers-toc | committed; review fixed 1 minor, 1 decision added, 3 cleanup recorded | helpers `4d1f74551..5fddb4be8` (8) + review `8fa7a9c68`; ulduar merges `23ac59b16`, `f0d4fe5d1`; heads verified, RaidObs grep empty | `ResolveAlive` lives in ToC, so it goes with p3 (overview table was wrong); `RaidResistAura` election ported whole (`lowerFree`), so #2986's Iron Assembly aura now matches Custom; HoP ranks 2/3 as `fix(Ai/Paladin)`, also changes #2986's Algalon hand check; `"aura mastery"` left out of `RaidCoverClassNodes`; uncached 2-arg `IsRaidAreaDamage` and `IsRaidOpenerHolding` not ported; header constants `inline constexpr` | `RaidResistAura` reads paladin strategies by name (pre-existing); lowerCamelCase public struct fields; 2 shared comments name ToC; `ReadOpener` per-ms grid sweep kept for parity; clang-format not run; nothing pushed |
 | 2 | c4-toc-closeout | merged; review fixed 1 minor, 2 minor + 1 cleanup recorded | `6deeb263f` + review `c66c37a81`, merge `85c56df82` | `docs/plans/toc-rework/` deleted (git keeps it; ICC plans still point there); recipe skill RaidObs section added outside the repo; `RaidObsLifecycle.cpp:385` stale heroic Icehowl comment left for a C++ pass; `test_toc_naming.py` samples stale trigger names | dead ToC code p3 would export (`AvoidCreatureClusterAction`, `GetCreatureClusterCenter`, `GetNearestCreatureByEntry`, `ANUBARAK_PIT_CENTER`, `SPELL_MASSIVE_CRASH_*`) and duplicates (`TryClassTaunt`, segment-distance helpers, spell-mover tests); `docs/raids/README.md:88` stale; no rebuild |
-| 3a | c5-toc-group-walks | pending | | | |
+| 3a | c5-toc-group-walks | merged; review fixed 1 minor | `8a4f3d85b` + review `e83220e92`, merge `58eeb0192` | one `ToCGroupMemo<T>` in `Util/ToCHelpers_Shared.h` (c1's `PinnedMemo` moved onto it) over 19 sites; interrupter picks memoise the lowest eligible guid per boss/twin/kill target; Anub'arak `tierPick` prefilter must stay in step with `SwarmHealTier` (comment says so); off-instance helpers return null/false; dead code c4 found deleted; `icc-rebuild/r1-foundation.PLAN.md` still names it (left) | memos keyed by group, so two groups recompute on switch; duplicates (`TryClassTaunt`, segment helpers, threat caps, `NorthrendBeastsWalkAction`'s home) stay by user call; README `ToCData.h` bullet wrap uneven; behaviour change, rebuild needed |
 | 3b | p3-toc | pending | | | |
 | 4 | p4-parity-review | pending | | | |
 | sync | p5-sync | pending | | | |
@@ -353,3 +353,12 @@ core's `/build*/`, outside `modules/`).
   over to a cheaper paladin mid-fight.
 - (c4) Docs only, nothing changes in the PR branches. The dead and duplicated ToC code in c4's
   Known gaps would go into the PR unless c5 or p3 removes it.
+- (c5) Every group walk reached from a trigger or multiplier now runs once per group per ms through
+  `ToCGroupMemo` (`Util/ToCHelpers_Shared.h`). The PR text can point to this for upstream's O(1)
+  trigger rule. `ToCGroupMemo` is ToC code and goes into the raid-wide base commit along with
+  `ToCHelpers_Shared`.
+- (c5) The never-called ToC code that c4 found has been deleted on Custom, so p3 has nothing left to
+  drop there. Duplicated helpers stay.
+- (c5) This lane changes behaviour: a member's change between two bots' ticks in the same ms now
+  shows up one tick later. This needs to land in Custom before the user's 25-man clear, which gates
+  Publishing.
