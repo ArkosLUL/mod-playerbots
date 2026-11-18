@@ -18,6 +18,7 @@
 #include "ObjectAccessor.h"
 #include "Pet.h"
 #include "Player.h"
+#include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
 #include "PositionValue.h"
 #include "PullStrategy.h"
@@ -1221,7 +1222,9 @@ void AdvanceChain(Player* bot, GripChainState& chain, uint32 now)
         if (dkAI)
         {
             uint32 const cooldown = dk->GetSpellCooldownDelay(SPELL_DEATH_GRIP);
-            dkAI->TellMaster("Death Grip ready in " + std::to_string((cooldown + 999) / 1000) + " s, skipping my grip");
+            dkAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault(
+                "toc_death_grip_skip", "Death Grip ready in %seconds s, skipping my grip",
+                {{"%seconds", std::to_string((cooldown + 999) / 1000)}}));
         }
     }
 }
