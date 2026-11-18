@@ -18,7 +18,7 @@ Tested by the user on this build: **25N and 25H**. The fights play the same on 1
 ## Status
 
 The merge stage alone edits this table. Export base (the Custom commit `trial-of-the-crusader`
-mirrors): `769a3b244` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 2 moved it).
+mirrors): `001559cbb` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 4 moved it).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
@@ -33,6 +33,7 @@ mirrors): `769a3b244` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; syn
 | 4 | p4-parity-review | committed; review clean (0 bugs, 0 minor), 1 upstream-only cleanup | `trial-of-the-crusader` `b0b47cf42..7a731ee60` (1: `refactor(Raid/ToC)`, FC redirect veto caches a `bool`); head verified, RaidObs grep empty | every diff vs `d3418068c` is the strip or a listed adaptation, helpers and cares table match Custom bar p1/p2 items; FC `EndPull`'s unguarded `Clear()` leaves the same state; braces kept on 2 branches with a braced sibling; unused data constants kept (`SPELL_FIRE_BOMB_IMPACT`, `SPELL_TRAMPLE`, `SPELL_MOLTEN_SPEW_TICK`, `JARAXXUS_LEGION_FLAME_RADIUS`); plain gate pointers safe (only ICC reads the live gate); string wiring and Block names resolve; Custom untouched | Jormungars hold release still builds a named cause; `GetWantedEssence` is `WantedEssence` + null check; `GetToCStagingRead`/`IsToCStagingHeld` comments still imply a difference; clang-format not run, 36 pre-existing lines >120; cppcheck and capped build wait for Publishing 1; nothing pushed, no rebuild |
 | sync | p5-sync | committed (sync 1); no review result in the report, parity delta vs `d3418068c` matches line for line | `trial-of-the-crusader` `2a6d48871..b0b47cf42` (1: `refactor(Raid/ToC)`, the 8 uncalled helpers); head verified, RaidObs grep empty | one sync commit on top of the encounter commits (no rebase/amend); no helper delta, so `raid-shared-helpers` and `ulduar-rework` untouched; `upstream/test-staging` not merged (tip `889e9dd6e` already in); no new string-wired names | `upstream/test-staging` not refetched: merge it before publishing if it moved; clang-format not run, 36 pre-existing lines >120; nothing pushed, no rebuild |
 | sync | p5-sync | committed (sync 2, by the orchestrator); new functions match Custom's | `trial-of-the-crusader` `7a731ee60..fedb2340c` (1: `fix(Raid/ToC)`, Anub'arak heroic healers heal themselves on the swarm's floor, Custom `769a3b244`) | trace labels dropped from `take`; context adapted to `AnubarakAuraMasteryDue`; no helper delta | botobs and doc parts stay on Custom; nothing pushed |
+| sync | p5-sync (3, 4) | committed by the orchestrator | `trial-of-the-crusader` `fedb2340c..96219adfd` (2: `c5283f192` Jormungars hunter slot by index, Custom `44d96d34c`; `96219adfd` Death Grip skip message via `GetBotTextOrDefault`, Custom `001559cbb`) | cppcheck 2.13 `iterators3` false positive on a `ToCGroupMemo::Get` result; text id 1948 in `2026_11_18_00_ai_playerbot_toc_texts.sql` on the branch, fork-only 30005 in `2026_11_18_99_…` on Custom (both applied to a scratch copy of the tables) | nothing pushed |
 | — | user's 25-man run on Custom with wave 3a merged | done 2026-11-18 (CV): four bosses killed, Anub'arak wiped in phase 3 on a known healer gap, not the cleanup; fix `769a3b244` synced | | | Publishing open |
 | — | publishing | pending | | | |
 
@@ -72,8 +73,7 @@ Decisions (user, grilling round, 2026-11-17):
 - Big planner functions (`GetWormMovePlan` 408 lines, Anub'arak `ComputeDuties`, `PlanKite`, …) are
   not split; reviewers decide.
 - Bots reading enemy spline destinations and threat lists stays, named openly in the PR text.
-- Perf-pass numbers go in the PR text as context only; the pmon justification comes when the user
-  marks the PR ready.
+- The pmon justification comes when the user marks the PR ready (perf-pass numbers: see 2026-11-18).
 - Agents draft the per-boss notes from the boss docs for the user to edit; the disclaimer is the
   user's. The PR text never calls 10N/10H untested: the fights play the same there.
 - Publishing waits for one 25-man clear by the user on Custom after wave 3a merges (it changes
@@ -81,6 +81,8 @@ Decisions (user, grilling round, 2026-11-17):
 - (2026-11-18) Every group walk the wave 1 audits found uncached behind a trigger or multiplier gets
   cached on Custom in wave 3a (`c5-toc-group-walks`), before `p3` exports.
 - A full capped build of the ToC branch runs before the push, on the user's go.
+- (2026-11-18) Title `feat(Raid/ToC): Add Trial of the Crusader raid strategy`. The PR text carries
+  no perf-pass numbers, not even as context. New chat lines get translated.
 - Branch `trial-of-the-crusader`, title `feat(Raid/ToC): …`, GPLv2 headers on the PR branch only,
   `ResolveAlive` keeps `boost::container::small_vector`.
 - `w5-anubarak-rest-rest` (pending in the ToC rework) is folded into `anubarak.md`'s Known gaps, and
@@ -289,9 +291,8 @@ core's `/build*/`, outside `modules/`).
 3. Texts via `handover` + `use-conversational-language`, each shown before posting: #2876 body
    gains the cares table bullet, #2985 body the ToC helpers, new ToC body filling every template
    section. Include: draft for community testing; covers 10N/25N/10H/25H, cleared on 25N and 25H
-   (never call 10-man untested: the fights play the same); per-tick cost argued from the code, with
-   the Custom perf pass as context only (ToC share of bot CPU 22.7% → 18.0%, the cares table ~90%
-   of it); no cheats, but bots read enemy spline destinations and threat values;
+   (never call 10-man untested: the fights play the same); per-tick cost argued from the code, no
+   perf-pass numbers; no cheats, but bots read enemy spline destinations and threat values;
    core requirements (#28117, #28181, #28136, DB `2026_11_06_01`) and the hand-mirrored core data
    keys in `ToCEncounterGate.h`; the Custom-only generic dependencies listed under Decisions; file
    layout and the big planner files; "How to test" (10/25, normal/heroic, `trialofthecrusader`);
