@@ -18,7 +18,7 @@ Tested by the user on this build: **25N and 25H**. The fights play the same on 1
 ## Status
 
 The merge stage alone edits this table. Export base (the Custom commit `trial-of-the-crusader`
-mirrors): none yet (set by `p3-toc`, moved by each `sync`).
+mirrors): `e0b85bf6c` (set by `p3-toc`, moved by each `sync`).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
@@ -29,7 +29,7 @@ mirrors): none yet (set by `p3-toc`, moved by each `sync`).
 | 2 | p2-helpers-toc | committed; review fixed 1 minor, 1 decision added, 3 cleanup recorded | helpers `4d1f74551..5fddb4be8` (8) + review `8fa7a9c68`; ulduar merges `23ac59b16`, `f0d4fe5d1`; heads verified, RaidObs grep empty | `ResolveAlive` lives in ToC, so it goes with p3 (overview table was wrong); `RaidResistAura` election ported whole (`lowerFree`), so #2986's Iron Assembly aura now matches Custom; HoP ranks 2/3 as `fix(Ai/Paladin)`, also changes #2986's Algalon hand check; `"aura mastery"` left out of `RaidCoverClassNodes`; uncached 2-arg `IsRaidAreaDamage` and `IsRaidOpenerHolding` not ported; header constants `inline constexpr` | `RaidResistAura` reads paladin strategies by name (pre-existing); lowerCamelCase public struct fields; 2 shared comments name ToC; `ReadOpener` per-ms grid sweep kept for parity; clang-format not run; nothing pushed |
 | 2 | c4-toc-closeout | merged; review fixed 1 minor, 2 minor + 1 cleanup recorded | `6deeb263f` + review `c66c37a81`, merge `85c56df82` | `docs/plans/toc-rework/` deleted (git keeps it; ICC plans still point there); recipe skill RaidObs section added outside the repo; `RaidObsLifecycle.cpp:385` stale heroic Icehowl comment left for a C++ pass; `test_toc_naming.py` samples stale trigger names | dead ToC code p3 would export (`AvoidCreatureClusterAction`, `GetCreatureClusterCenter`, `GetNearestCreatureByEntry`, `ANUBARAK_PIT_CENTER`, `SPELL_MASSIVE_CRASH_*`) and duplicates (`TryClassTaunt`, segment-distance helpers, spell-mover tests); `docs/raids/README.md:88` stale; no rebuild |
 | 3a | c5-toc-group-walks | merged; review fixed 1 minor | `8a4f3d85b` + review `e83220e92`, merge `58eeb0192` | one `ToCGroupMemo<T>` in `Util/ToCHelpers_Shared.h` (c1's `PinnedMemo` moved onto it) over 19 sites; interrupter picks memoise the lowest eligible guid per boss/twin/kill target; Anub'arak `tierPick` prefilter must stay in step with `SwarmHealTier` (comment says so); off-instance helpers return null/false; dead code c4 found deleted; `icc-rebuild/r1-foundation.PLAN.md` still names it (left) | memos keyed by group, so two groups recompute on switch; duplicates (`TryClassTaunt`, segment helpers, threat caps, `NorthrendBeastsWalkAction`'s home) stay by user call; README `ToCData.h` bullet wrap uneven; behaviour change, rebuild needed |
-| 3b | p3-toc | pending | | | |
+| 3b | p3-toc | committed; reviewed, parity diff vs `e0b85bf6c` clean | `trial-of-the-crusader` `8fa7a9c68..2a6d48871` (6: base + 5 encounters); head verified, RaidObs grep empty | plain gate pointers, trace keys dropped; Staging label strip wider than listed (park latch kept); self-res guard helpers and `TeleportBuyS` deleted; extra write-only fields gone in groups A–C (`GetBeastsDpsTarget` → `Unit*`, `OrbHazards` → `vector<Position>`); `PlayerbotAI.cpp` list rewrapped | 8 functions uncalled on Custom too (`ActiveVortexColour`, `AnubarakSubmerged`, `FactionChampionsHealerLeft`, `FactionChampionsLiveMs`, `FactionChampionsSpellPopsTrinket`, `GetAnubarakFocusBurrower`, `HasAnyEssence`, `ToCStagingEncounter`): delete on Custom, then p5; unused data constants kept; only the tip builds; clang-format not run, 36 pre-existing lines >120; nothing pushed |
 | 4 | p4-parity-review | pending | | | |
 | sync | p5-sync | pending | | | |
 | — | user's 25-man clear on Custom with wave 3a merged | pending | | | gates Publishing |
@@ -362,3 +362,14 @@ core's `/build*/`, outside `modules/`).
 - (c5) This lane changes behaviour: a member's change between two bots' ticks in the same ms now
   shows up one tick later. This needs to land in Custom before the user's 25-man clear, which gates
   Publishing.
+- (p3) The PR adds no native tests: Custom's `tools/nativetest` covers the Anub'arak kite planner and
+  the grip chain, and upstream has no `tools/`.
+- (p3) The self-res guard helpers (`FactionChampionsCorpseCrowded`, `CorpseInSlimePool`) are not in
+  the PR. This follows c1: no ToC hook reaches a dead bot's engine.
+- (p3) Only the tip of `trial-of-the-crusader` builds, because the base commit's umbrella headers
+  include every encounter. Each encounter is its own commit for review.
+- (p3) `ResolveAlive`'s `boost::container::small_vector` is in the ToC PR (`Util/ToCHelpers_Shared`),
+  as the p2 note says.
+- (p3) Commit 1 also changes shared files: `RaidStrategyContext.h`, `BuildSharedActionContexts.cpp`,
+  `BuildSharedTriggerContexts.cpp` and `PlayerbotAI.cpp`. These only register the strategy for map
+  649.
