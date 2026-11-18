@@ -26,8 +26,8 @@ mirrors): none yet (set by `p3-toc`, moved by each `sync`).
 | 1 | c2-toc-anubarak | merged; review fixed 4 minor + 3 cleanup, 1 recorded | `a86f1e00e` + review `256bf2e2b`, merge `fe8e5314c` | `"tree of life"` kept: Block rules match `getName()`, which is `"tree of life"`, so the overview's `"tree form"` fix was wrong and p3/p4 must not apply it; `kitePatchesSpent` is logic (`KiteWorldFor` reads it), so p3 keeps it despite Wave 3's list; `NoteAnubarakGripCast` → `TrackAnubarakGripCast` | uncached group walks (brief) for p4 or a later pass; 28 pre-existing lines >120 cols; rebuild needed |
 | 1 | c3-toc-fc-beasts | merged; review fixed 4 minor + 1 cleanup, 1 decision | `f7889c35a` + review `aba1d6557`, merge `6436a8746` | no behaviour change; Jormungars Nitro fires outside the trace check; `ResolveDpsPick` reads the snobold pick under a skull only while tracing; grip `Note*` → `Track*` (logic, p3 keeps); extra trace-only fields for p3 listed in the brief | 4 uncached group walks for p4; trace-justified comments left for p3 to reword; rebuild needed |
 | 1 | p1-framework-cares | committed; review clean, 1 minor recorded | framework `2b39e938f`; merges eoe `b984c3968`, helpers `cca94c10b`, ulduar `fa6dc4af2`; heads verified, RaidObs grep empty | `CaresTable` comment rewrapped to 2 lines; plain `EncounterGate`, no live flag | commit type `perf` and 98-col body vs upstream's list and 72 cols (needs amend; squash-merge hides it); clang-format not run locally; nothing pushed |
-| 2 | p2-helpers-toc | pending | | | |
-| 2 | c4-toc-closeout | pending | | | |
+| 2 | p2-helpers-toc | committed; review fixed 1 minor, 1 decision added, 3 cleanup recorded | helpers `4d1f74551..5fddb4be8` (8) + review `8fa7a9c68`; ulduar merges `23ac59b16`, `f0d4fe5d1`; heads verified, RaidObs grep empty | `ResolveAlive` lives in ToC, so it goes with p3 (overview table was wrong); `RaidResistAura` election ported whole (`lowerFree`), so #2986's Iron Assembly aura now matches Custom; HoP ranks 2/3 as `fix(Ai/Paladin)`, also changes #2986's Algalon hand check; `"aura mastery"` left out of `RaidCoverClassNodes`; uncached 2-arg `IsRaidAreaDamage` and `IsRaidOpenerHolding` not ported; header constants `inline constexpr` | `RaidResistAura` reads paladin strategies by name (pre-existing); lowerCamelCase public struct fields; 2 shared comments name ToC; `ReadOpener` per-ms grid sweep kept for parity; clang-format not run; nothing pushed |
+| 2 | c4-toc-closeout | merged; review fixed 1 minor, 2 minor + 1 cleanup recorded | `6deeb263f` + review `c66c37a81`, merge `85c56df82` | `docs/plans/toc-rework/` deleted (git keeps it; ICC plans still point there); recipe skill RaidObs section added outside the repo; `RaidObsLifecycle.cpp:385` stale heroic Icehowl comment left for a C++ pass; `test_toc_naming.py` samples stale trigger names | dead ToC code p3 would export (`AvoidCreatureClusterAction`, `GetCreatureClusterCenter`, `GetNearestCreatureByEntry`, `ANUBARAK_PIT_CENTER`, `SPELL_MASSIVE_CRASH_*`) and duplicates (`TryClassTaunt`, segment-distance helpers, spell-mover tests); `docs/raids/README.md:88` stale; no rebuild |
 | 3a | c5-toc-group-walks | pending | | | |
 | 3b | p3-toc | pending | | | |
 | 4 | p4-parity-review | pending | | | |
@@ -339,3 +339,16 @@ core's `/build*/`, outside `modules/`).
   a separate `Action*` map in every rule and gated multiplier.
 - (p1) The native test from Custom (`tools/nativetest/raid_encounter_rules_test.cpp`) stays out
   because upstream has no `tools/`.
+- (p2) For p3: `TOC_DEFENSIVE_SCOPE` becomes `{TRIAL_OF_THE_CRUSADER_MAP_ID}`, and `TOC_OPENER` and
+  `TOC_RESIST_AURA` drop their `"toc.*"` key. Upstream has no `IsRaidOpenerHolding`, but ToC never
+  calls it.
+- (p2) #2985 now carries the ToC helpers. The two-argument `IsRaidAreaDamage` and the Trap Launcher
+  name are left out, and `RaidCoverClassNodes` leaves out "aura mastery" because upstream has no
+  such action.
+- (p2) `ResolveAlive`'s `boost::container::small_vector` belongs in the ToC PR text: the function
+  lives in ToC, not in the #2985 helpers.
+- (p2) #2985 gains a generic paladin fix: `HasAnyPaladinHandFromCaster` counts Hand of Protection
+  ranks 2/3. #2986's Iron Assembly resistance aura now uses Custom's election, where a holder hands
+  over to a cheaper paladin mid-fight.
+- (c4) Docs only, nothing changes in the PR branches. The dead and duplicated ToC code in c4's
+  Known gaps would go into the PR unless c5 or p3 removes it.
