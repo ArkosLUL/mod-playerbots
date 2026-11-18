@@ -242,8 +242,8 @@ engages them, so a twin opening on a totem still has cast rows); `MarkPull` on a
 name outright. Yogg-Saron is why the last two exist — phase one is fought against Sara, the Voice and
 the Guardians, none flagged a boss, so nothing engages and the only boss the file named was General
 Vezax, swept in from the next room. `EncounterGatedTrigger` calls `NamePull` when a trigger fires
-while its own encounter is `IN_PROGRESS` (the gate's own test leaves every trigger open between pulls,
-far too loose to name by), and ToC's gate names its pull from the encounter slug (`ToCEncounterSlug`).
+while its own encounter is live (the gate's own test leaves every trigger open between pulls, far too
+loose to name by), under the definition's trace name.
 
 **A boss-state table names a trace outright.** `RaidObs::NameBossStates(mapId, {{id, slug}, …})`,
 called while scripts load (ICC's `AddSC_IcecrownBotScripts`), gives boss ids a slug. A trace opened on

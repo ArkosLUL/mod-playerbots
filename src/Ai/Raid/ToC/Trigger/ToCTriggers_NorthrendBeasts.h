@@ -2,10 +2,8 @@
 #define PLAYERBOTS_RAID_TOCTRIGGERS_NORTHRENDBEASTS_H
 
 #include <string>
-#include <vector>
 
 #include "Define.h"
-#include "NamedObjectContext.h"
 #include "Trigger.h"
 
 enum class NorthrendBeastsStem : uint8
@@ -15,8 +13,7 @@ enum class NorthrendBeastsStem : uint8
     Icehowl
 };
 
-// One per stem, named with its prefix since the gate keys on that. Fires only for the stem's own
-// beasts, so the three never act on one pick.
+// One per stem, firing only for the stem's own beasts, so the three never act on one pick.
 class NorthrendBeastsDpsTargetTrigger : public Trigger
 {
 public:
@@ -27,12 +24,5 @@ public:
 private:
     NorthrendBeastsStem const _stem;
 };
-
-// Triggers shared by Gormok, the Jormungars and Icehowl.
-class ToCNorthrendBeastsTriggerContext : public NamedObjectContext<Trigger>
-{
-};
-
-inline void AddToCNorthrendBeastsTriggerNodes(std::vector<TriggerNode*>& /*triggers*/) {}
 
 #endif

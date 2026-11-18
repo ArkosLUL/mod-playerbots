@@ -1,8 +1,6 @@
 #ifndef PLAYERBOTS_RAID_TOCMULTIPLIERS_FACTIONCHAMPIONSDEFENCE_H
 #define PLAYERBOTS_RAID_TOCMULTIPLIERS_FACTIONCHAMPIONSDEFENCE_H
 
-#include <vector>
-
 #include "Multiplier.h"
 #include "RaidCombatHelpers.h"
 
@@ -72,7 +70,5 @@ private:
 
     RaidActionCache<Facts> _facts;
 };
-
-void AddToCFactionChampionsDefenceMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 #endif

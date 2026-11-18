@@ -118,22 +118,23 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 ## Code layout
 
 `src/Ai/Raid/ToC/` splits per stem: `Action/ToCActions_<Stem>`, `Trigger/ToCTriggers_<Stem>`,
-`Multiplier/ToCMultipliers_<Stem>`, `Util/ToCHelpers_<Stem>`. `NorthrendBeasts` holds what the three
-beasts share, `Shared` what several encounters use. `Definition/ToCDefinition_<Encounter>.cpp` holds
-an encounter's rules: an `EncounterDefinition` with gate `ToCGate` and no rows or tick, its accessor
-declared in `Definition/ToCDefinitions.h`. The raid-wide stems `Staging`, `ResistAura`
-([below](#pre-pull-staging)) and `Opener` ([below](#opener-hold)) belong to no encounter: their names
-take no encounter prefix, so their triggers run ungated, and their definitions take `ToCRaidWideGate`
-(always open, never live), id `ToCEncounter::None` and no trace name.
+`Multiplier/ToCMultipliers_<Stem>`, `Util/ToCHelpers_<Stem>`, `Definition/ToCDefinition_<Stem>.cpp`.
+`NorthrendBeasts` holds what the three beasts share (its definition their rules), `Shared` what
+several encounters use. A definition takes gate `ToCGate`, its encounter's `ToCEncounter` id and
+trace slug: Gormok, Jormungars and Icehowl share the Beasts', the Faction Champions `Defence` and
+`Ball` stems the champions'. The raid-wide stems `Staging`, `ResistAura` ([below](#pre-pull-staging))
+and `Opener` ([below](#opener-hold)) belong to no encounter: their triggers carry their own window,
+and their definitions take `ToCRaidWideGate` (always open, never live), id `ToCEncounter::None` and
+no trace name.
 
-**Seams.** A boss gains a trigger, action or multiplier by editing only its own stem:
+**Seams.** A boss gains a node, multiplier or rule in its stem's definition only:
 
-- trigger: class plus `creators[...]` entry in `ToC<Stem>TriggerContext`, node in
-  `AddToC<Stem>TriggerNodes` (both `Trigger/ToCTriggers_<Stem>.h`);
-- action: class plus entry in `ToC<Stem>ActionContext` (`Action/ToCActions_<Stem>.h`);
-- multiplier: `AddToC<Stem>Multipliers` (`Multiplier/ToCMultipliers_<Stem>.h`);
-- rule: the encounter's Definition file, wired in `ToCRaidStrategy.cpp`'s `InitMultipliers` right after its
-  stem multipliers, since a trace credits the first rule or multiplier that zeroes an action;
+- rows first, then `e.Multiplier`/`e.LiveMultiplier`, then rules, since a trace credits the first
+  rule or multiplier that zeroes an action. Every row class carries its `Name`; the beast dps-target
+  classes, the side-tank defensive and the shared resist aura and opener classes take theirs from
+  the row;
+- a multiplier's families must cover every action it can zero (`Family::AnyAction` for a filter by
+  name or on a plain `Action`);
 - burst row: each encounter stem (`NorthrendBeasts`, `Jaraxxus`, `FactionChampions`, `TwinValkyr`,
   `Anubarak`) answers `ToC<Stem>BurstWindow` with a `RaidBurstWindow`, and `ToCLiveBurstWindow`
   (`Multiplier/ToCMultipliers_Shared.{h,cpp}`) picks the live encounter's.
@@ -142,10 +143,11 @@ take no encounter prefix, so their triggers run ungated, and their definitions t
   Bloodlust/Heroism, `allowAll` to the rest.
   Every row ANDs with the shared tank-held-boss gate.
 
-The root only dispatches: `ToCRaidStrategy.cpp` calls every stem's node and multiplier list and every
-Definition's rules, and `ToCRaidActionContext.h`/`ToCRaidTriggerContext.h` merge the stem contexts. The four
-registration sites name only these root classes. **Dispatch order is behaviour**: equal relevances
-pop in insertion order.
+The root only dispatches: `ToCEncounterDefinitions()` (`Definition/ToCDefinitions.h`) lists every
+definition, and `ToCRaidStrategy.cpp` and both root contexts walk it. The chain request's node rides
+the chat command's `pull` trigger, which no row can register, so the strategy adds it after the list
+and the action context registers its action. The four registration sites name only the root classes.
+**List order is behaviour**: equal relevances pop in insertion order.
 
 **Encounter gate** (`Util/ToCEncounterGate.{h,cpp}`), read from the instance script once per
 instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` adapts both to an
@@ -160,11 +162,13 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
   `IsEncounterInProgress()` and one of its units alive and in combat, which keeps walk-ins, the
   Fizzlebang intro and the Lich King scene closed. Icehowl, Jaraxxus and the champions are found by
   entry within 200 yd of the bot, since the arena reaches about 80 yd from `ARENA_CENTER`.
-- `ToCRaidTriggerContext.h` wraps every trigger whose name leads with `gormok`, `northrend worms`,
-  `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr` or `anubarak` in `ToCGatedTrigger`,
-  which returns no event while closed. A raid-wide trigger takes none of these prefixes.
-- A wrapped trigger firing while live calls `RaidObs::NamePull` with the trace slug. The engage hook
-  names every ToC trace first, so this only renames one it left under the map name.
+- Encounter trigger and action names lead with `gormok`, `northrend worms`, `icehowl`, `jaraxxus`,
+  `faction champions`, `twin valkyr` or `anubarak`: RaidObs coverage files nodes by it, and the beast
+  move guards (`ToCEncounterOfName`) let a beast's own movers through. Raid-wide names take none.
+- A gated row trigger firing while live calls `RaidObs::NamePull` with its definition's trace slug. The
+  engage hook names every ToC trace first, so this only renames one it left under the map name.
+- Not `BossStateGate`, though core #28117 gave ToC boss states: the core marks a boss `IN_PROGRESS`
+  through the walk-ins and the champions' release, and Jaraxxus's adds outlive his `DONE`.
 
 **Constraints.**
 

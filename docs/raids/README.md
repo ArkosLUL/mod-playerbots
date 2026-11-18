@@ -41,8 +41,8 @@ lacks is never removed on a zone change (`rs` once was). Its nodes run out of co
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`) replace that wiring for Ulduar, EoE, OS,
-Onyxia and Naxx. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`) replace that wiring for Ulduar, ToC, EoE,
+OS, Onyxia and Naxx. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
 - **rows**: trigger class, action class, priority, `EncounterRow::Mover`. Each name is typed once, as
   the class's `Name` constant; a class built under several names (`BossNatureAspectHoldMultiplier`)
@@ -82,11 +82,9 @@ Naxx's redirect and burst multipliers) stay raid-wide and ungated.
 strategies at runtime is not an option; that is why one raid strategy registers every boss behind
 gates.
 
-**ToC** has `Definition/` files too, rules and hand-written multipliers only: its nodes stay in the
-strategy, gated by name prefix through `ToCGatedTrigger`, and its gate (`ToCGate`) reads the
-`GetData(TOC_DATA_INSTANCE_PROGRESS)` stage. **Open gap:** moving ToC onto rows and a stage gate
-waits on the ToC rework's closeout; core #28117 since gave ToC boss states, so `BossStateGate` may
-make the stage gate moot.
+**ToC** has one definition per stem behind its own gate, `ToCGate`, which reads the
+`GetData(TOC_DATA_INSTANCE_PROGRESS)` stage
+([trial-of-the-crusader/](trial-of-the-crusader/README.md#code-layout) says why not `BossStateGate`).
 
 Nothing enforces that the registration sites agree, so run `tools/pblint/pblint.py` over what a
 commit touches: it cross-checks all four, and every trigger and action name besides, definition rows

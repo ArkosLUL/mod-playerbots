@@ -5,10 +5,14 @@
 #include "PlayerbotAI.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "Strategy.h"
+#include "ToCActions_FactionChampions.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_FactionChampions.h"
 #include "ToCHelpers_FactionChampionsBall.h"
 #include "ToCHelpers_FactionChampionsDefence.h"
+#include "ToCMultipliers_FactionChampions.h"
+#include "ToCTriggers_FactionChampions.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -90,6 +94,18 @@ bool FactionChampionsHeroicLive(PlayerbotAI* botAI)
 
 void DefineFactionChampions(EncounterBuilder& e)
 {
+    e.Node<FactionChampionsAntiFearTrigger, FactionChampionsAntiFearAction>(ACTION_RAID + 3);
+    e.Node<FactionChampionsShouldFocusTrigger, FactionChampionsFocusPriorityAction>(ACTION_RAID + 2);
+    e.Node<FactionChampionsKillTargetHealingTrigger,
+           FactionChampionsCounterspellKillTargetAction>(ACTION_INTERRUPT + 3);
+    e.Node<FactionChampionsPetAutocastTrigger, FactionChampionsPetAutocastAction>(ACTION_RAID + 6);
+
+    e.LiveMultiplier<FactionChampionsLateInterruptMultiplier>(Family::Spell);
+    e.LiveMultiplier<FactionChampionsSuppressAoeMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<FactionChampionsThreatRedirectVetoMultiplier>(Family::Spell);
+    e.LiveMultiplier<FactionChampionsAntiFearTotemGuardMultiplier>(Family::Spell);
+    e.LiveMultiplier<FactionChampionsCcGuardMultiplier>(Family::Spell);
+
     // Assist makes its own pick, so on any tick the settled focus node returns false it would take the
     // bot off the kill target
     e.OwnTargeting("faction champions target guard multiplier", Role::Any, FactionChampionsTargetOwned,

@@ -72,8 +72,8 @@ Direct, no raid icons ([README.md](README.md#targeting-is-direct-no-raid-icons))
 
   Every branch needs a unit in combat, the pre-pull guard (a direct `Attack()` reaches 100 yd), and
   there's no live test, so a snobold outliving the kill still resolves. No stationary-worm branch:
-  both worms go under within 1.5 s, and `dps assist` covers that gap. One node per stem, since gating
-  keys on the name prefix and the naming contract has no Beasts-wide one; each fires only for its
+  both worms go under within 1.5 s, and `dps assist` covers that gap. One node per stem, since the
+  naming contract has no Beasts-wide prefix; each fires only for its
   own units (Gormok and snobolds, the worms, Icehowl) while `current target` or the pet's victim
   differs. `icehowl dps target` sits ahead of the breath stand at the same relevance: a stand walk
   in flight holds the tick until it lands. `nb.dps`.

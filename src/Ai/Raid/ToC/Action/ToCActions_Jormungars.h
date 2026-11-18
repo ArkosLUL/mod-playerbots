@@ -4,7 +4,6 @@
 #include "Action.h"
 #include "AttackAction.h"
 #include "MovementActions.h"
-#include "NamedObjectContext.h"
 #include "Position.h"
 #include "RaidRedirectThreat.h"
 #include "ToCActions_NorthrendBeasts.h"
@@ -48,25 +47,27 @@ private:
 class NorthrendWormsTankHoldMobileWormAction : public NorthrendWormsTankHoldAction
 {
 public:
-    NorthrendWormsTankHoldMobileWormAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms tank hold mobile worm")
-        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormMobile) {}
+    static constexpr char const* Name = "northrend worms tank hold mobile worm";
+
+    NorthrendWormsTankHoldMobileWormAction(PlayerbotAI* botAI)
+        : NorthrendWormsTankHoldAction(botAI, Name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormMobile) {}
 };
 
 class NorthrendWormsTankHoldStationaryWormAction : public NorthrendWormsTankHoldAction
 {
 public:
-    NorthrendWormsTankHoldStationaryWormAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms tank hold stationary worm")
-        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormStationary) {}
+    static constexpr char const* Name = "northrend worms tank hold stationary worm";
+
+    NorthrendWormsTankHoldStationaryWormAction(PlayerbotAI* botAI)
+        : NorthrendWormsTankHoldAction(botAI, Name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormStationary) {}
 };
 
 class NorthrendWormsRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    NorthrendWormsRedirectThreatAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms redirect threat")
-        : RaidRedirectThreatAction(botAI, name) {}
+    static constexpr char const* Name = "northrend worms redirect threat";
+
+    NorthrendWormsRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -78,8 +79,9 @@ protected:
 class NorthrendWormsRepositionAction : public MovementAction
 {
 public:
-    NorthrendWormsRepositionAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms reposition") : MovementAction(botAI, name) {}
+    static constexpr char const* Name = "northrend worms reposition";
+
+    NorthrendWormsRepositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -92,8 +94,9 @@ private:
 class NorthrendWormsLeavePoolAction : public MovementAction
 {
 public:
-    NorthrendWormsLeavePoolAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms leave pool") : MovementAction(botAI, name) {}
+    static constexpr char const* Name = "northrend worms leave pool";
+
+    NorthrendWormsLeavePoolAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -106,8 +109,9 @@ private:
 class NorthrendWormsHealToxinCarrierAction : public Action
 {
 public:
-    NorthrendWormsHealToxinCarrierAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms heal toxin carrier") : Action(botAI, name) {}
+    static constexpr char const* Name = "northrend worms heal toxin carrier";
+
+    NorthrendWormsHealToxinCarrierAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -115,66 +119,10 @@ public:
 class NorthrendWormsPurgeToxinAction : public Action
 {
 public:
-    NorthrendWormsPurgeToxinAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms purge toxin") : Action(botAI, name) {}
+    static constexpr char const* Name = "northrend worms purge toxin";
+
+    NorthrendWormsPurgeToxinAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
-};
-
-class ToCJormungarsActionContext : public NamedObjectContext<Action>
-{
-public:
-    ToCJormungarsActionContext()
-    {
-        creators["northrend worms tank hold mobile worm"] =
-            &ToCJormungarsActionContext::northrend_worms_tank_hold_mobile_worm;
-        creators["northrend worms tank hold stationary worm"] =
-            &ToCJormungarsActionContext::northrend_worms_tank_hold_stationary_worm;
-        creators["northrend worms redirect threat"] =
-            &ToCJormungarsActionContext::northrend_worms_redirect_threat;
-        creators["northrend worms reposition"] =
-            &ToCJormungarsActionContext::northrend_worms_reposition;
-        creators["northrend worms leave pool"] =
-            &ToCJormungarsActionContext::northrend_worms_leave_pool;
-        creators["northrend worms dps target"] =
-            &ToCJormungarsActionContext::northrend_worms_dps_target;
-        creators["northrend worms heal toxin carrier"] =
-            &ToCJormungarsActionContext::northrend_worms_heal_toxin_carrier;
-        creators["northrend worms purge toxin"] =
-            &ToCJormungarsActionContext::northrend_worms_purge_toxin;
-    }
-
-private:
-    static Action* northrend_worms_tank_hold_mobile_worm(PlayerbotAI* botAI) {
-        return new NorthrendWormsTankHoldMobileWormAction(botAI);
-    }
-
-    static Action* northrend_worms_tank_hold_stationary_worm(PlayerbotAI* botAI) {
-        return new NorthrendWormsTankHoldStationaryWormAction(botAI);
-    }
-
-    static Action* northrend_worms_redirect_threat(PlayerbotAI* botAI) {
-        return new NorthrendWormsRedirectThreatAction(botAI);
-    }
-
-    static Action* northrend_worms_reposition(PlayerbotAI* botAI) {
-        return new NorthrendWormsRepositionAction(botAI);
-    }
-
-    static Action* northrend_worms_leave_pool(PlayerbotAI* botAI) {
-        return new NorthrendWormsLeavePoolAction(botAI);
-    }
-
-    static Action* northrend_worms_dps_target(PlayerbotAI* botAI) {
-        return new NorthrendBeastsDpsTargetAction(botAI, "northrend worms dps target");
-    }
-
-    static Action* northrend_worms_heal_toxin_carrier(PlayerbotAI* botAI) {
-        return new NorthrendWormsHealToxinCarrierAction(botAI);
-    }
-
-    static Action* northrend_worms_purge_toxin(PlayerbotAI* botAI) {
-        return new NorthrendWormsPurgeToxinAction(botAI);
-    }
 };
 
 #endif

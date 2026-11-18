@@ -6,7 +6,6 @@
 #include "Action.h"
 #include "LastMovementValue.h"
 #include "MovementActions.h"
-#include "NamedObjectContext.h"
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaidDirectTargeting.h"
@@ -77,8 +76,4 @@ private:
 };
 
 // Actions shared by Gormok, the Jormungars and Icehowl.
-class ToCNorthrendBeastsActionContext : public NamedObjectContext<Action>
-{
-};
-
 #endif

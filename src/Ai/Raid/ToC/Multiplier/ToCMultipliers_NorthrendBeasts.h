@@ -1,8 +1,6 @@
 #ifndef PLAYERBOTS_RAID_TOCMULTIPLIERS_NORTHRENDBEASTS_H
 #define PLAYERBOTS_RAID_TOCMULTIPLIERS_NORTHRENDBEASTS_H
 
-#include <vector>
-
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
 
@@ -23,8 +21,6 @@ public:
     NorthrendBeastsTauntGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "northrend beasts taunt guard") {}
     float GetValue(Action* action) override;
 };
-
-void AddToCNorthrendBeastsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 RaidBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI);
 

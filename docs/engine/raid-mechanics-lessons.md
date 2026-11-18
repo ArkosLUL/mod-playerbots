@@ -567,7 +567,7 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   `checkInterval == 1 ? 1 : (checkInterval < 100 ? checkInterval * 1000 : checkInterval)` — pass
   `200` for 200 ms, and **never pass 2–99**, which silently means seconds. Any trigger starting a
   multi-tick reaction the `MotionMaster` carries on with runs at 200–300 ms invisibly; triggers
-  gating positioning or vehicle steering must stay per-tick. A wrapper trigger (`ToCGatedTrigger`)
+  gating positioning or vehicle steering must stay per-tick. A wrapper trigger (`EncounterGatedTrigger`)
   must copy the inner one's interval: its own default of 1 promotes a throttled trigger to every tick.
 - `Engine::ProcessTriggers` `Check()`s an inactive trigger **once per node** referencing it, so a
   trigger wired to three nodes is evaluated three times while it is quiet.
