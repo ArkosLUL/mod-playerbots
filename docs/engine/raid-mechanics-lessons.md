@@ -255,7 +255,7 @@ Every distance helper measures differently, and a large-model boss inflates all 
   fixed delay later still makes it; a margin on the escape's own lead won't do, since that lead is
   bounded by the stand's distance over the chaser's speed and reads thin at once. A timer of its own
   (a boost running) must never hold the commit back
-  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-planner)).
 - **An immune kiter walks the chaser straight into its trigger.** Immune, it has the chaser on its
   heels, so a stand past the trigger on the far side from the chaser circles round it: walk into the
   trigger's centre and let the chaser follow. Slowed or not, pick the ending by simulating each,
@@ -267,7 +267,7 @@ Every distance helper measures differently, and a large-model boss inflates all 
   longer would fail spends a one-shot resource as early as the geometry allows: Anub'arak's patch walk
   stays possible only 4.5-7.5 s of a 10-16 s run, so a Hand asked at the turn went 2-6 s in with the
   patch; taken at the catch it covers 10 s and the patch goes about 25 s in
-  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-plan)).
+  ([anubarak.md](../raids/trial-of-the-crusader/anubarak.md#the-kite-planner)).
 - **Seed a closed-loop replay only with state from before its start.** Seeded with every Forbearance
   span of the real pull, Anub'arak's harness blocked Hands the replayed kite had not yet cast and
   flipped its verdict on a path change.

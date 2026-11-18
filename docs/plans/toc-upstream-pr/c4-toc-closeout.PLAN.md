@@ -60,6 +60,9 @@ all of its durable content.
 7. [x] RaidObs section in `C:/Users/boss2/.claude/skills/raid-boss-strategy-recipe/SKILL.md` (naming
    contract, probes, reader, no-boss-state gate and close), via `compact-skill-creator`: 502 → 642
    words. Outside the repo, not committed.
+8. [x] Review: every changed claim re-checked against the core, the DBC CSVs, pblint and RaidObs.
+   Fixed `raid-mechanics-lessons.md`'s two `anubarak.md#the-kite-plan` links (the heading is "The
+   kite planner"), broken on Custom already. Two findings left open (Known gaps).
 
 Word deltas (`wc -w`): README 5304 → 5290, anubarak 31543 → 31686, faction-champions 17389 →
 17358, twin-valkyr 5116 → 5099, observability 9097 → 8991, pitfalls 12624 → 12635,
@@ -93,6 +96,12 @@ Code debt from the rework's `w6` list, still on Custom, which `p3` would export 
   `IsSpellMover`, `CompetesWithChargeDodge`); the Jaraxxus and Anub'arak threat caps;
   `NorthrendBeastsWalkAction` serves FC and Staging from the NorthrendBeasts header.
 - Outside ToC: VoA's Freezing Ground dodge is dead on 25-man (now in `vault-of-archavon.md`).
+
+Review findings left open:
+- `docs/raids/README.md:88`'s open gap says moving ToC onto rows "waits on the ToC rework's closeout",
+  which this lane finished; the gap itself stays open. Not a lane file (other sessions edit it).
+- The recipe skill's RaidObs naming bullet has one line at ~118 columns, the rest wrap at 100.
+  Cosmetic, outside the repo.
 
 ## Blocked
 
