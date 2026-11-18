@@ -1445,7 +1445,8 @@ bool IsTwinPactInterrupter(PlayerbotAI* botAI, Unit* twin)
                 for (Player* member : members)
                 {
                     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-                    if (memberAI && TwinReadyInterrupt(member, twin) && !MustSwap(member, WantedEssence(memberAI), true))
+                    if (memberAI && TwinReadyInterrupt(member, twin) &&
+                        !MustSwap(member, WantedEssence(memberAI), true))
                     {
                         lowest = member->GetGUID();
                         break;
