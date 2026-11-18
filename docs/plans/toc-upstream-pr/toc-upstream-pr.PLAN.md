@@ -18,7 +18,7 @@ Tested by the user on this build: **25N and 25H**. The fights play the same on 1
 ## Status
 
 The merge stage alone edits this table. Export base (the Custom commit `trial-of-the-crusader`
-mirrors): `d3418068c` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 1 moved it).
+mirrors): `769a3b244` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; sync 2 moved it).
 
 | Wave | Lane | State | Commit / merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
@@ -32,7 +32,8 @@ mirrors): `d3418068c` (set by `p3-toc` at `e0b85bf6c`, moved by each `sync`; syn
 | 3b | p3-toc | committed; reviewed, parity diff vs `e0b85bf6c` clean | `trial-of-the-crusader` `8fa7a9c68..2a6d48871` (6: base + 5 encounters); head verified, RaidObs grep empty | plain gate pointers, trace keys dropped; Staging label strip wider than listed (park latch kept); self-res guard helpers and `TeleportBuyS` deleted; extra write-only fields gone in groups A–C (`GetBeastsDpsTarget` → `Unit*`, `OrbHazards` → `vector<Position>`); `PlayerbotAI.cpp` list rewrapped | 8 functions uncalled on Custom too (`ActiveVortexColour`, `AnubarakSubmerged`, `FactionChampionsHealerLeft`, `FactionChampionsLiveMs`, `FactionChampionsSpellPopsTrinket`, `GetAnubarakFocusBurrower`, `HasAnyEssence`, `ToCStagingEncounter`): delete on Custom, then p5; unused data constants kept; only the tip builds; clang-format not run, 36 pre-existing lines >120; nothing pushed |
 | 4 | p4-parity-review | committed; review clean (0 bugs, 0 minor), 1 upstream-only cleanup | `trial-of-the-crusader` `b0b47cf42..7a731ee60` (1: `refactor(Raid/ToC)`, FC redirect veto caches a `bool`); head verified, RaidObs grep empty | every diff vs `d3418068c` is the strip or a listed adaptation, helpers and cares table match Custom bar p1/p2 items; FC `EndPull`'s unguarded `Clear()` leaves the same state; braces kept on 2 branches with a braced sibling; unused data constants kept (`SPELL_FIRE_BOMB_IMPACT`, `SPELL_TRAMPLE`, `SPELL_MOLTEN_SPEW_TICK`, `JARAXXUS_LEGION_FLAME_RADIUS`); plain gate pointers safe (only ICC reads the live gate); string wiring and Block names resolve; Custom untouched | Jormungars hold release still builds a named cause; `GetWantedEssence` is `WantedEssence` + null check; `GetToCStagingRead`/`IsToCStagingHeld` comments still imply a difference; clang-format not run, 36 pre-existing lines >120; cppcheck and capped build wait for Publishing 1; nothing pushed, no rebuild |
 | sync | p5-sync | committed (sync 1); no review result in the report, parity delta vs `d3418068c` matches line for line | `trial-of-the-crusader` `2a6d48871..b0b47cf42` (1: `refactor(Raid/ToC)`, the 8 uncalled helpers); head verified, RaidObs grep empty | one sync commit on top of the encounter commits (no rebase/amend); no helper delta, so `raid-shared-helpers` and `ulduar-rework` untouched; `upstream/test-staging` not merged (tip `889e9dd6e` already in); no new string-wired names | `upstream/test-staging` not refetched: merge it before publishing if it moved; clang-format not run, 36 pre-existing lines >120; nothing pushed, no rebuild |
-| — | user's 25-man clear on Custom with wave 3a merged | pending | | | gates Publishing |
+| sync | p5-sync | committed (sync 2, by the orchestrator); new functions match Custom's | `trial-of-the-crusader` `7a731ee60..fedb2340c` (1: `fix(Raid/ToC)`, Anub'arak heroic healers heal themselves on the swarm's floor, Custom `769a3b244`) | trace labels dropped from `take`; context adapted to `AnubarakAuraMasteryDue`; no helper delta | botobs and doc parts stay on Custom; nothing pushed |
+| — | user's 25-man run on Custom with wave 3a merged | done 2026-11-18 (CV): four bosses killed, Anub'arak wiped in phase 3 on a known healer gap, not the cleanup; fix `769a3b244` synced | | | Publishing open |
 | — | publishing | pending | | | |
 
 States: `pending`, `committed` (PR lanes), `merged` (cleanup lanes), `blocked` (branch and worktree
@@ -381,3 +382,5 @@ core's `/build*/`, outside `modules/`).
   helpers and the #2876 cares table match Custom except for the p1/p2-listed items.
 - (p4) The FC redirect veto multiplier caches a plain bool on the PR branch (one-commit refactor on
   top of the sync commit); behaviour unchanged.
+- (p5) Sync 2 brings in a heroic Anub'arak phase 3 fix as one `fix(Raid/ToC)` commit: a healer
+  close to dying to the swarm heals itself first. Export base now `769a3b244`.
