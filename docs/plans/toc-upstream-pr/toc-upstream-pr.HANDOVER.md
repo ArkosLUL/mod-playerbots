@@ -6,7 +6,7 @@ Stacked on #2876 (the raid encounter framework) and #2985 (shared raid helpers),
 
 This adds a Trial of the Crusader raid strategy, `trialofthecrusader`. test-staging has none yet, only the Trial of the Champion dungeon. It covers all five encounters in 10 and 25 man, normal and heroic. I cleared it on 25 normal and 25 heroic, and the 10 man fights play the same.
 
-Each boss is one encounter definition from #2876, with its triggers, actions, rules and multipliers behind a gate that reads the instance's progress, so a boss's logic only runs at its own stage. The layout follows Ulduar and EoE: `Action/`, `Trigger/`, `Multiplier/`, `Definition/` and `Util/`, one file per boss in each, 123 files and about 42.5k lines.
+Each boss is one encounter definition from #2876, with its triggers, actions, rules and multipliers behind a gate that reads the instance's progress, so a boss's logic only runs at its own stage. The layout follows Ulduar and EoE: `Action/`, `Trigger/`, `Multiplier/`, `Definition/` and `Util/`, one file per boss in each, 119 files and about 40.7k lines.
 
 Bots don't use raid icons here. Each boss picks targets in code and puts the bots on them, and a skull you place still wins. Once you talk to Barrett, bots walk to set spots around where the next boss turns hostile, and only tanks stand close enough to take his first swing.
 
