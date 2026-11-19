@@ -203,6 +203,9 @@ def late_pull() -> list[dict]:
 
         {"t": SPIN_AT, "e": "cast", "s": LATE_VX, "sp": mm.SPELL_SPINNING_UP, "tgt": 0, "ct": 4000},
         {"t": 17000, "e": "dmg", "s": LATE_VX, "d": TREE, "sp": mm.SPELL_FLAMES, "a": 5000},
+        # a mine on the healer counts, the same mine on ranged doesn't
+        {"t": 18000, "e": "dmg", "s": LATE_VX, "d": TREE, "sp": 63009, "a": 9600},
+        {"t": 18000, "e": "dmg", "s": LATE_VX, "d": AGONY, "sp": 63009, "a": 9600},
         {"t": 21000, "e": "dmg", "s": LATE_VX, "d": BULWARK, "sp": mm.SPELL_LASER_BARRAGE, "a": 20000},
         {"t": 21000, "e": "dmg", "s": LATE_VX, "d": SHADOW, "sp": mm.SPELL_LASER_BARRAGE, "a": 20000},
 
@@ -231,6 +234,70 @@ def late_pull() -> list[dict]:
     ]
     records += [late_snap(when) for when in range(0, 75000, 250)]
     return records
+
+
+# A phase 2 for --fire: Agony dodges twice away from VX-001, once just after a tick and once clean at full
+# health, Tree once toward it, and the formation notes one of each approach kind.
+def fire_snap(when: int) -> dict:
+    rows = [[VX, 0.0, 0.0, 364.0, 0.0, 90.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
+    for guid, (x, y) in HOME.items():
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def fire_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 4, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "2"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.slot", "txt": "hmwedge 0/2 20,0,364"},
+
+        {"t": 4500, "e": "dmg", "s": VX, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3000},
+        # one dodge in two legs, then a clean one; Tree's goes toward VX-001
+        move(5000, AGONY, mm.FLAMES_DODGE, 30.0, 0.0),
+        move(5200, AGONY, mm.FLAMES_DODGE, 31.0, 0.0),
+        move(10000, AGONY, mm.FLAMES_DODGE, 26.0, 0.0),
+        move(12000, TREE, mm.FLAMES_DODGE, 0.0, 15.0),
+
+        # a detour from (22, 0) via (22, 6) to the slot at (20, 0)
+        {"t": 14000, "e": "note", "g": AGONY, "k": "mimiron.approach", "txt": "detour +35"},
+        move(14000, AGONY, mm.FORMATION, 22.0, 6.0),
+        {"t": 15000, "e": "note", "g": AGONY, "k": "mimiron.approach", "txt": "cross 3.2"},
+        {"t": 16000, "e": "note", "g": TREE, "k": "mimiron.approach", "txt": "none"},
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [fire_snap(when) for when in range(0, 20000, 250)]
+    return records
+
+
+class FirePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_4_mimiron_1789700002.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in fire_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_legs_close_together_are_one_dodge_judged_by_the_tick_before_it(self):
+        row = mm.fire_rows(self.trace)["P2"]
+        self.assertEqual((row["dodges"], row["burned"], row["full_unburned"]), (3, 1, 2))
+
+    def test_a_dodge_is_judged_against_the_bot_target(self):
+        row = mm.fire_rows(self.trace)["P2"]
+        self.assertEqual((row["farther"], row["closer"], row["judged"]), (2, 1, 3))
+
+    def test_approach_kinds_and_the_yards_a_detour_added(self):
+        row = mm.fire_rows(self.trace)["P2"]
+        self.assertEqual(dict(row["approach"]), {"detour": 1, "cross": 1, "none": 1})
+        self.assertEqual(len(row["detour_extra"]), 1)
+        self.assertAlmostEqual(row["detour_extra"][0], 6.0 + 40 ** 0.5 - 2.0)
+        self.assertEqual(dict(row["fire"]), {"ranged": 3000})
 
 
 class SyntheticPull(unittest.TestCase):
@@ -334,6 +401,7 @@ class LaterPhases(unittest.TestCase):
         self.assertEqual((row["dealt_before"], row["dealt_inside"]), (150, 140))
         self.assertEqual(row["melee_in_range"], row["melee_rows"])
         self.assertEqual(row["fire"], 5000)
+        self.assertEqual(row["heal_mines"], 9600)
         self.assertEqual((row["beam"], row["boundary"]), (2, 1))
         self.assertEqual(row["deaths"], [])
 

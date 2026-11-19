@@ -12,6 +12,8 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+#include <optional>
+
 class MimironResetEncounterStateAction : public Action
 {
 public:
@@ -39,10 +41,13 @@ protected:
                               bool sectorScreen = false, bool allowFire = false);
 
     // Same fan, fleeing a point: the fire has no single unit to flee, so the flames dodge passes its centroid.
+    // toward: a world bearing the sweep starts nearest to, kept inside the fan, so the bot leaves on the
+    // side it was heading for.
     bool MoveAwayClearOfMines(Position const& from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
-                              char const* what = "flee", float clearRadius = 0.0f);
+                              char const* what = "flee", float clearRadius = 0.0f,
+                              std::optional<float> toward = std::nullopt);
 
     // Same fan aimed at `dest`, by fleeing the point mirrored through the bot. allowFire drops the fire screen,
     // only for escapes from something deadlier than a ~3.1k/s node, like a Water Spray line.
@@ -56,7 +61,8 @@ private:
     // fallback walks straight away from `from`.
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
                  bool fallbackUnfiltered, bool interrupt, char const* what, float clearRadius = 0.0f,
-                 bool allowFire = false, bool sectorScreen = false);
+                 bool allowFire = false, bool sectorScreen = false,
+                 std::optional<float> toward = std::nullopt);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,

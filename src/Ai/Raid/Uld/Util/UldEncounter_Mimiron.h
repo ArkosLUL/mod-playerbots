@@ -104,6 +104,10 @@ inline constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS[] = {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f,
                                                                  -8.0f};
 
+// Below this a healer's barrage step also picks a radius clear of mines when one exists. A mine is
+// 9.6-10.8k, ~45% of a healer's pool, and a healer walked into two of them in one step.
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_MINE_AVOID_HP_PCT = 70.0f;
+
 // Spare time a bot inside the ignition cone needs to leave by the trailing side before the beams
 // light: two beam ticks for the leg to start and land.
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER = 0.5f;
@@ -326,6 +330,9 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 
+// Inside ULDUAR_MIMIRON_FLAMES_BURN_RADIUS of a node, so taking ticks now. FireSafe is the stand test.
+bool IsMimironSpotBurning(MimironFirefighterHazards const& hazards, Position const& pos);
+
 // Out of every spray lane, and for a 25-man caster or healer `sirenRadius` off each fire bot. The bot's
 // own spot takes the FIREBOT_SIREN_CLEARANCE and SPRAY_HALF_WIDTH pair, a destination the _STAND pair.
 bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest,
@@ -350,17 +357,23 @@ bool IsMimironSpotRocketSafe(PlayerbotAI* botAI, Position const& dest);
 // in hard mode fire, the Frost Bomb and fire bots. Else a bot that just dodged walks straight back in.
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
 
-// The straight walk to `dest` stays out of fire, or the dodge fires halfway and throws the bot out the
-// far side. Nodes the bot already stands in don't count: walking out of those is the point.
+// The straight walk to `dest` never passes inside a node's burn radius. Nodes the bot already stands in
+// don't count: walking out of those is the point.
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
 
-// One leg the formation can send a bot on toward its slot. `how` is "direct", "substitute" or
-// "detour", and `turn` is a detour's signed turn off the direct bearing, radians.
+// The straight walk to `dest` and the spot itself clear of every Proximity Mine. Pathing can't see
+// them, they're non-selectable.
+bool IsMimironWalkMineSafe(Player* bot, Position const& dest);
+
+// One leg the formation can send a bot on toward its slot. `how` is "direct", "substitute", "cross" or
+// "detour"; `turn` is a detour's signed turn off the direct bearing, radians; `burn` the yards a
+// crossing spends inside fire.
 struct MimironApproach
 {
     Position dest;
     char const* how;
     float turn;
+    float burn = 0.0f;
 };
 
 // Formation legs toward the slot, best first; empty when nothing gets there or the bot already stands
@@ -555,9 +568,22 @@ MimironBurstSector GetMimironOtherGroupSector(PlayerbotAI* botAI, Player* bot, U
 
 bool IsMimironSpotInSector(Unit* vx001, MimironBurstSector const& sector, Position const& dest);
 
-// 64566 reaches 3 yd, plus the node footprint and pathing slop. Chains grow in 7 yd steps, so a
-// destination clears every known node, not just the nearest: a short hop lands on the next one.
+// Where a bot may stand: the 3 yd burn plus slop for where a leg actually stops. Chains grow in 7 yd
+// steps, so a destination clears every known node, not just the nearest: a short hop lands on the next one.
 inline constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+
+// Where a bot is burning: 95% of traced 64566 hits landed within 3.0 yd of their node, the extra half
+// yard covers a bot moving between checks. "In fire" and "walks through fire" use this one; at 5 a bot
+// between two nodes dodged at full health without ever taking a tick.
+inline constexpr float ULDUAR_MIMIRON_FLAMES_BURN_RADIUS = 3.5f;
+
+// A formation leg may walk straight through this much burn rather than detour: ~0.6 s at run speed,
+// so one ~3.1k tick at most against a detour that costs casts.
+inline constexpr float ULDUAR_MIMIRON_FLAMES_CROSS_MAX = 4.0f;
+
+// Least health for that crossing. One tick takes ~14% of a 22-24k pool, so it lands above the 60%
+// dodge gate and the dodge doesn't throw the bot back mid-leg.
+inline constexpr float ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT = 75.0f;
 
 // Stand-in search for a spot that won't do: bearings alternate either side of the preferred one, and the
 // slot search widens in rings this far apart.

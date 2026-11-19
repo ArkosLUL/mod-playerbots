@@ -38,6 +38,7 @@ SPELL_ROCKET_STRIKE = (64402, 65034)
 SPELL_WATER_SPRAY = 64619
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
+SPELL_MINE_EXPLOSIONS = (63009, 66351)
 # Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
 # a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
@@ -47,6 +48,7 @@ COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "P
 FORMATION = "mimiron arc spread action"
 BOMB_DODGE = "mimiron frost bomb action"
 BURST_STEP = "mimiron rapid burst action"
+FLAMES_DODGE = "mimiron dodge flames action"
 
 # Read from the source so a retune shows up here without a second edit.
 BOMB_RADIUS = radius("ULDUAR_MIMIRON_FROST_BOMB_RADIUS")
@@ -91,6 +93,12 @@ FORMATION_CAUSE_MS = 10000
 SAMPLE_MS = 250
 # A snapshot gap past this is a hole in the trace, and weighs one ordinary sample.
 HOLE_MS = 1000
+# Fire dodge legs closer together than this are one dodge: the ladder re-issues within a tick or two.
+DODGE_GAP_MS = 1500
+# A dodge counts as burned when a Flames tick landed on the bot this long before it. Ticks come ~1 s apart.
+BURNED_LOOKBACK_MS = 2000
+# How near a detour note and its formation leg sit: both are written by the same action pass.
+NOTE_MOVE_MS = 300
 
 SLOT = re.compile(r"(\S+) (\d+)/(\d+) (-?\d+),(-?\d+),(-?\d+)")
 
@@ -770,6 +778,7 @@ def spin_rows(trace: Trace) -> list[dict]:
             "dealt_before": dealt_between(samples, roster, start - SPIN_WINDOW_MS, start),
             "dealt_inside": dealt_between(samples, roster, start, stop),
             "melee_rows": 0, "melee_in_range": 0, "fire": 0, "beam": 0, "boundary": 0, "deaths": [],
+            "heal_mines": 0,
             "hp_before": raid_hp(samples.before(stop), roster),
             "hp_after": raid_hp(samples.before(after), roster),
             "taken": 0, "healed": 0, "legs": 0, "yards": 0.0,
@@ -796,6 +805,9 @@ def spin_rows(trace: Trace) -> list[dict]:
             if start <= when < stop:
                 if kind == "dmg" and rec.get("d") in roster and rec.get("sp") == SPELL_FLAMES:
                     row["fire"] += rec.get("a", 0)
+                elif (kind == "dmg" and rec.get("d") in roster and rec.get("sp") in SPELL_MINE_EXPLOSIONS
+                      and trace.role(rec["d"]) == "heal"):
+                    row["heal_mines"] += rec.get("a", 0)
                 elif kind == "dmg" and rec.get("d") in roster and rec.get("sp") == SPELL_LASER_BARRAGE:
                     row["beam"] += 1
                     units = samples.before(when)
@@ -844,7 +856,8 @@ def show_spin(trace: Trace) -> None:
             for role in ROLES if role in row["inside"]))
         melee = row["melee_in_range"] / row["melee_rows"] * 100 if row["melee_rows"] else 0.0
         print(f"            melee within {MELEE_RANGE:.1f} yd of VX-001 {melee:3.0f}% of the window;"
-              f" fire {row['fire'] // 1000}k; beam ticks {row['beam']},"
+              f" fire {row['fire'] // 1000}k; mines on healers {row['heal_mines'] // 1000}k;"
+              f" beam ticks {row['beam']},"
               f" {row['boundary']} inside {BARRAGE_BOUNDARY:.1f} yd of VX-001; {len(row['deaths'])} dead"
               + (f" ({', '.join(row['deaths'])})" if row["deaths"] else ""))
         hp = ("    -" if row["hp_before"] is None or row["hp_after"] is None
@@ -854,6 +867,117 @@ def show_spin(trace: Trace) -> None:
               f" healed {row['healed']:,}, healers moving {moved},"
               f" formation {row['legs']} legs / {row['yards']:.0f} yd")
     print("\n  'inside/before' is the window against the 14.5 s before it")
+
+
+# ----------------------------------------------------------------------------------------------- fire
+
+def slot_point(slot_notes: list[dict], guid: int, when: int):
+    """The `(x, y)` the bot's last `mimiron.slot` note at or before `when` named, or None."""
+    point = None
+    for rec in slot_notes:
+        if rec["t"] > when:
+            break
+        if rec.get("g") == guid:
+            match = SLOT.match(str(rec.get("txt", "")))
+            point = (float(match.group(4)), float(match.group(5))) if match else None
+    return point
+
+
+def fire_rows(trace: Trace) -> dict[str, dict]:
+    """Per phase: fire dodges against the Flames ticks behind them, where the dodges went relative to the
+    bot's target, the formation legs `mimiron.approach` named, and Flames damage by role."""
+    roster = roster_guids(trace)
+    spans = phases(trace)
+    samples = Samples(trace)
+
+    def blank() -> dict:
+        return {"dodges": 0, "burned": 0, "full_unburned": 0, "judged": 0, "farther": 0, "closer": 0,
+                "approach": collections.Counter(), "detour_extra": [], "fire": collections.Counter()}
+
+    rows: dict[str, dict] = collections.defaultdict(blank)
+
+    ticks: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") == SPELL_FLAMES and rec.get("d") in roster:
+            ticks[rec["d"]].append(rec["t"])
+            rows[phase_at(spans, rec["t"])]["fire"][trace.role(rec["d"])] += rec.get("a", 0)
+
+    moves = accepted_moves(trace)
+    for guid, recs in moves.items():
+        last = None
+        for rec in recs:
+            if rec.get("by") != FLAMES_DODGE:
+                continue
+            if last is not None and rec["t"] - last < DODGE_GAP_MS:
+                last = rec["t"]
+                continue
+            last = rec["t"]
+
+            row = rows[phase_at(spans, rec["t"])]
+            row["dodges"] += 1
+            stamps = ticks.get(guid, [])
+            index = bisect.bisect_right(stamps, rec["t"]) - 1
+            burned = index >= 0 and rec["t"] - stamps[index] <= BURNED_LOOKBACK_MS
+            row["burned"] += int(burned)
+
+            units = samples.before(rec["t"])
+            me = units.get(guid)
+            if not me:
+                continue
+            if not burned and me[5] >= 90.0:
+                row["full_unburned"] += 1
+            target = units.get(me[7]) if len(me) > 7 and me[7] else None
+            if not target:
+                continue
+            was = dist2((me[1], me[2]), (target[1], target[2]))
+            now = dist2((rec["x"], rec["y"]), (target[1], target[2]))
+            row["judged"] += 1
+            row["farther"] += int(now - was > 1.0)
+            row["closer"] += int(was - now > 1.0)
+
+    slot_notes = notes(trace, "mimiron.slot")
+    for rec in notes(trace, "mimiron.approach"):
+        kind = str(rec.get("txt", "")).split(" ")[0]
+        row = rows[phase_at(spans, rec["t"])]
+        row["approach"][kind] += 1
+        if kind != "detour":
+            continue
+
+        guid = rec.get("g")
+        leg = next((m for m in moves.get(guid, []) if m.get("by") == FORMATION
+                    and abs(m["t"] - rec["t"]) <= NOTE_MOVE_MS), None)
+        me = samples.before(rec["t"]).get(guid)
+        slot = slot_point(slot_notes, guid, rec["t"])
+        if leg and me and slot:
+            here, waypoint = (me[1], me[2]), (leg["x"], leg["y"])
+            row["detour_extra"].append(dist2(here, waypoint) + dist2(waypoint, slot) - dist2(here, slot))
+    return rows
+
+
+def show_fire(trace: Trace) -> None:
+    print("FIRE")
+    rows = fire_rows(trace)
+    order = [label for _, _, label in phases(trace) if label in rows]
+    if not order:
+        print("  no fire dodge, formation detour or Flames tick")
+        return
+
+    for label in order:
+        row = rows[label]
+        dodges = row["dodges"]
+        burned = f"{row['burned'] / dodges * 100:.0f}%" if dodges else "-"
+        print(f"  {label:4} dodges {dodges}: burned in the {BURNED_LOOKBACK_MS / 1000:.0f} s before {burned},"
+              f" unburned at >=90% hp {row['full_unburned']};"
+              f" ended farther from target {row['farther']}, closer {row['closer']} of {row['judged']}")
+        extra = sorted(row["detour_extra"])
+        detour = (f" (extra median {statistics.median(extra):.1f} yd, max {extra[-1]:.1f})" if extra else "")
+        kinds = ", ".join(f"{kind} {count}" for kind, count in sorted(row["approach"].items()))
+        print(f"       formation legs: {kinds or 'none noted'}{detour}")
+        fire = row["fire"]
+        print(f"       Flames {sum(fire.values()) // 1000}k: "
+              + "  ".join(f"{role} {fire[role] // 1000}k" for role in ROLES if fire[role]))
+    print(f"\n  'burned' means a Flames tick on the bot inside {BURNED_LOOKBACK_MS / 1000:.0f} s before the dodge;"
+          " legs within 1 yd of where they started count neither way")
 
 
 # ------------------------------------------------------------------------------------------------- p3
@@ -1127,6 +1251,8 @@ SECTIONS = (
     ("bomb", "Frost Bomb evacuations and where escapes landed", show_bomb),
     ("slots", "formation slot churn per phase", show_slots),
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
+    ("fire", "fire dodges against the ticks behind them, where they went, and the formation's detours",
+     show_fire),
     ("p3", "phase 3 fire bots, Water Spray, the Junk Bot pile and what each core landing was worth",
      show_p3),
 )

@@ -229,6 +229,15 @@ bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position co
     return true;
 }
 
+bool IsMimironSpotBurning(MimironFirefighterHazards const& hazards, Position const& pos)
+{
+    for (Position const& node : hazards.flames)
+        if (pos.GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_BURN_RADIUS)
+            return true;
+
+    return false;
+}
+
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest)
 {
     for (Position const& bomb : hazards.bombs)
@@ -435,7 +444,74 @@ bool IsMimironLegClearOf(Position const& from, std::vector<Position> const& node
 bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const& hazards,
                           Position const& dest)
 {
-    return IsMimironLegClearOf(from, hazards.flames, ULDUAR_MIMIRON_FLAMES_RADIUS, dest);
+    return IsMimironLegClearOf(from, hazards.flames, ULDUAR_MIMIRON_FLAMES_BURN_RADIUS, dest);
+}
+
+struct MimironLegBurn
+{
+    float yards = 0.0f;   // of the walk inside any burn
+    uint32 overlap = 0;   // most burns at one point of it
+};
+
+// Counts the burn the walk starts inside too, unlike IsMimironLegClearOf: leaving it still ticks, and it
+// stacks with the next one.
+MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHazards const& hazards,
+                                     Position const& dest)
+{
+    MimironLegBurn burn;
+    float const fromX = from.GetPositionX();
+    float const fromY = from.GetPositionY();
+    float const dx = dest.GetPositionX() - fromX;
+    float const dy = dest.GetPositionY() - fromY;
+    float const length = std::sqrt(dx * dx + dy * dy);
+    if (length <= 0.0f)
+        return burn;
+
+    float const ux = dx / length;
+    float const uy = dy / length;
+    float const radius = ULDUAR_MIMIRON_FLAMES_BURN_RADIUS;
+
+    // Each node's chord along the walk as an interval of distance from `from`, then a sweep over the
+    // ends for the union and the deepest overlap.
+    std::vector<std::pair<float, int>> ends;
+    for (Position const& node : hazards.flames)
+    {
+        float const nx = node.GetPositionX() - fromX;
+        float const ny = node.GetPositionY() - fromY;
+        float const along = nx * ux + ny * uy;
+        float const side = ny * ux - nx * uy;
+        float const halfSq = radius * radius - side * side;
+        if (halfSq <= 0.0f)
+            continue;
+
+        float const half = std::sqrt(halfSq);
+        float const enter = std::max(along - half, 0.0f);
+        float const leave = std::min(along + half, length);
+        if (leave <= enter)
+            continue;
+
+        ends.emplace_back(enter, 1);
+        ends.emplace_back(leave, -1);
+    }
+
+    // Leaves sort before enters at the same distance, so two burns that only touch don't count as stacked.
+    std::sort(ends.begin(), ends.end(), [](auto const& a, auto const& b)
+              { return a.first != b.first ? a.first < b.first : a.second < b.second; });
+
+    int depth = 0;
+    float openedAt = 0.0f;
+    for (auto const& [at, step] : ends)
+    {
+        if (depth == 0 && step > 0)
+            openedAt = at;
+
+        depth += step;
+        burn.overlap = std::max(burn.overlap, static_cast<uint32>(std::max(depth, 0)));
+        if (depth == 0 && step < 0)
+            burn.yards += at - openedAt;
+    }
+
+    return burn;
 }
 
 // Pathing knows nothing about mines, and the slot screen only covers where the walk ends.
@@ -479,6 +555,20 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
 {
     return !bot || IsMimironLegFireSafe(bot->GetPosition(), hazards, dest);
+}
+
+bool IsMimironWalkMineSafe(Player* bot, Position const& dest)
+{
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    if (!botAI)
+        return true;
+
+    MimironMarkers const markers = GetMimironMarkers(botAI);
+    for (Position const& mine : markers.mines)
+        if (dest.GetExactDist2d(mine.GetPositionX(), mine.GetPositionY()) < ULDUAR_MIMIRON_MINE_CLEARANCE)
+            return false;
+
+    return IsMimironLegMineSafe(bot->GetPosition(), markers, dest);
 }
 
 bool IsMimironSpotSafe(Player* bot, Position const& dest)
@@ -687,10 +777,21 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
 
     Position const from = bot->GetPosition();
     bool const directFireSafe = IsMimironLegFireSafe(from, hazards, goal);
-    if (directFireSafe && IsMimironLegMineSafe(from, markers, goal))
+    bool const directMineSafe = IsMimironLegMineSafe(from, markers, goal);
+    if (directFireSafe && directMineSafe)
     {
         approaches.push_back({goal, how, 0.0f});
         return approaches;
+    }
+
+    // A healthy bot steps through a thin band rather than walk round it. Never through two burns at
+    // once: that's the dodge's own trigger, and it would throw the bot back out halfway.
+    if (!directFireSafe && directMineSafe &&
+        bot->GetHealthPct() >= ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT)
+    {
+        MimironLegBurn const burn = MeasureMimironLegBurn(from, hazards, goal);
+        if (burn.overlap <= 1 && burn.yards <= ULDUAR_MIMIRON_FLAMES_CROSS_MAX)
+            approaches.push_back({goal, "cross", 0.0f, burn.yards});
     }
 
     auto const legSafe = [&](Position const& start, Position const& end)

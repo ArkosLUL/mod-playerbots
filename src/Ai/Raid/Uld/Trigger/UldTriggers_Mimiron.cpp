@@ -303,9 +303,10 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return false;
 
+    // Burns, not the 5 yd stand radius: between two nodes 3-5 yd off, a bot takes nothing.
     uint32 nodes = 0;
     for (Position const& node : hazards.flames)
-        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_BURN_RADIUS)
             ++nodes;
 
     if (!nodes)

@@ -53,10 +53,11 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
 
 bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
                                              MovementPriority priority, bool fallbackUnfiltered,
-                                             bool interrupt, char const* what, float clearRadius)
+                                             bool interrupt, char const* what, float clearRadius,
+                                             std::optional<float> toward)
 {
     return FleeFan(from, nullptr, distance, priority, fallbackUnfiltered, interrupt, what,
-                   clearRadius);
+                   clearRadius, false, false, toward);
 }
 
 bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPriority priority,
@@ -78,7 +79,8 @@ bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPri
 
 bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
                                 MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
-                                char const* what, float clearRadius, bool allowFire, bool sectorScreen)
+                                char const* what, float clearRadius, bool allowFire, bool sectorScreen,
+                                std::optional<float> toward)
 {
     if (distance <= 0.0f)
         return false;
@@ -124,23 +126,40 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     MimironBurstSector const sector =
         sectorScreen && vx001 ? GetMimironOtherGroupSector(botAI, bot, vx001) : MimironBurstSector();
 
-    for (float delta = 0.0f; delta <= ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
+    // With a preferred bearing the sweep starts there instead of straight away, still never past
+    // FLEE_FAN_MAX off it, so it has to reach twice as far to cover the side it starts away from.
+    float centre = 0.0f;
+    if (toward)
+    {
+        float const pi = static_cast<float>(M_PI);
+        float off = Position::NormalizeOrientation(*toward - away);
+        if (off > pi)
+            off -= 2.0f * pi;
+        centre = std::clamp(off, -ULDUAR_MIMIRON_FLEE_FAN_MAX, ULDUAR_MIMIRON_FLEE_FAN_MAX);
+    }
+    float const sweep = toward ? 2.0f * ULDUAR_MIMIRON_FLEE_FAN_MAX : ULDUAR_MIMIRON_FLEE_FAN_MAX;
+
+    for (float delta = 0.0f; delta <= sweep + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
     {
         for (float sign : {1.0f, -1.0f})
         {
             if (delta == 0.0f && sign < 0.0f)
                 continue;
 
-            float const angle = away + sign * delta;
+            float const offAway = centre + sign * delta;
+            if (std::fabs(offAway) > ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f)
+                continue;
 
-            // Off straight away a hop r lands sqrt(d^2 + r^2 + 2dr cos delta) from the hazard, not d + r, so
+            float const angle = away + offAway;
+
+            // Off straight away a hop r lands sqrt(d^2 + r^2 + 2dr cos offAway) from the hazard, not d + r, so
             // solve r per bearing to land on the circle. No root: the bearing never reaches it.
             float hop = distance;
             if (clearRadius > 0.0f)
             {
-                float const leg = started * sin(delta);
+                float const leg = started * sin(offAway);
                 float const disc = clearRadius * clearRadius - leg * leg;
-                hop = disc > 0.0f ? sqrt(disc) - started * cos(delta) : 0.0f;
+                hop = disc > 0.0f ? sqrt(disc) - started * cos(offAway) : 0.0f;
                 if (hop <= 0.0f)
                 {
                     ++refusedBack;
@@ -241,8 +260,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
             if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
                 MoveOutcome::Issued)
             {
-                float const taken = sign * delta;
-                NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
+                NoteFleeOutcome(what, "ok", &offAway, refusedBack, refusedMine, refusedCone, refusedFire,
                                 refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
                 return true;
             }
@@ -257,7 +275,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     // line costs a burst or two, the hazard kills.
     if (sector.valid)
         return FleeFan(from, fallbackFrom, distance, priority, fallbackUnfiltered, interrupt, what,
-                       clearRadius, allowFire, false);
+                       clearRadius, allowFire, false, toward);
 
     if (!fallbackUnfiltered)
     {
@@ -487,9 +505,13 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
         // Radius is free, so spend it dodging fire, walk and endpoint both. No clean radius still keeps the
-        // step: the cone kills in a tick.
+        // step: the cone kills in a tick. A hurt healer ranks mines over fire on the walk, a mine being about
+        // three fire ticks. Ranking only, never a refusal.
+        bool const mineAware =
+            PlayerbotAI::IsHeal(bot) && bot->GetHealthPct() < ULDUAR_MIMIRON_BARRAGE_MINE_AVOID_HP_PCT;
+        int const bestScore = mineAware ? 3 : 1;
         float stepRadius = radius;
-        bool settled = false;
+        int stepScore = -1;
         for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
         {
             float const candidate = radius + shift;
@@ -503,18 +525,18 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                 !IsMimironSpotFireSafe(hazards, spot))
                 continue;
 
-            // First clean endpoint is the fallback; keep looking for one whose walk is clean too.
-            if (!settled)
+            int score = IsMimironWalkFireSafe(bot, hazards, spot) ? 1 : 0;
+            if (mineAware && IsMimironWalkMineSafe(bot, spot))
+                score += 2;
+
+            if (score > stepScore)
             {
                 stepRadius = candidate;
-                settled = true;
+                stepScore = score;
             }
 
-            if (IsMimironWalkFireSafe(bot, hazards, spot))
-            {
-                stepRadius = candidate;
+            if (score == bestScore)
                 break;
-            }
         }
 
         NoteBarrageDecision(branch, remaining < 0.0f ? "cw" : (remaining > 0.0f ? "ccw" : nullptr), cw);
@@ -554,7 +576,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
         // Clear of the beams but in fire, where the fire dodge is boxed in by band and fire: walk the ring to
         // the nearest clean ground in the sector. None leaves the tick to that dodge.
-        if (!IsMimironSpotFireSafe(hazards, bot->GetPosition()))
+        if (IsMimironSpotBurning(hazards, bot->GetPosition()))
         {
             // Clockwise raises cw toward the trailing side, counter-clockwise lowers it toward the far edge.
             float const bearing = boss->GetAngle(bot);
@@ -697,6 +719,8 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
             char line[32];
             if (std::strcmp(approach.how, "detour") == 0)
                 snprintf(line, sizeof(line), "detour %+.0f", approach.turn * 180.0f / static_cast<float>(M_PI));
+            else if (std::strcmp(approach.how, "cross") == 0)
+                snprintf(line, sizeof(line), "cross %.1f", approach.burn);
             else
                 snprintf(line, sizeof(line), "substitute r%.0f",
                          approach.dest.GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()));
@@ -913,7 +937,7 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
 
     std::vector<Position> cluster;
     for (Position const& node : hazards.flames)
-        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_BURN_RADIUS)
             cluster.push_back(node);
 
     if (cluster.empty())
@@ -933,6 +957,16 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
     for (Position const& node : cluster)
         spread = std::max(spread, centre.GetExactDist2d(node.GetPositionX(), node.GetPositionY()));
 
+    // Leave on the side the bot was heading for. Plain straight away left three dodges in four further
+    // from the target than they started.
+    std::optional<float> toward;
+    Position slot;
+    if (GetMimironSpreadSlot(botAI, bot, slot) &&
+        bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ULDUAR_MIMIRON_SPREAD_TOLERANCE)
+        toward = bot->GetAngle(slot.GetPositionX(), slot.GetPositionY());
+    else if (Unit* target = AI_VALUE(Unit*, "current target"))
+        toward = bot->GetAngle(target);
+
     // Shortest rung that lands clean, which saves the walk back; the fan screens each against the whole
     // field. Only the last may fall back unscreened, and each rung gets its own trace name.
     for (size_t rung = 0; rung < std::size(ULDUAR_MIMIRON_FLAMES_STEP_LADDER); ++rung)
@@ -948,7 +982,8 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
         float const hop = std::min(ULDUAR_MIMIRON_FLAMES_RADIUS + spread + step,
                                    ULDUAR_MIMIRON_FLAMES_MAX_HOP);
 
-        if (MoveAwayClearOfMines(centre, hop, MovementPriority::MOVEMENT_FORCED, last, true, what))
+        if (MoveAwayClearOfMines(centre, hop, MovementPriority::MOVEMENT_FORCED, last, true, what, 0.0f,
+                                 toward))
         {
             NoteMimironFireDodge(bot);
             return true;

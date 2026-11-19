@@ -244,18 +244,33 @@ seconds, too short to notice a health bar and walk 12 yd, and they are the usual
 dodges in one pull were at 100%). The count is not checkable from a trace, whose fire set caps at 40.
 Watch it: if fire per living bot per second in phase 2 climbs back above ~356 the threshold is too low.
 
+**Burning is 3.5 yd, standing is 5.** 95% of 427 Flames hits landed within 3.0 yd of their node, a tick
+every ~1.03 s. Counted at the 5 yd `ULDUAR_MIMIRON_FLAMES_RADIUS`, only 23-39% of a phase's fire dodges
+followed a tick, and 70 of 121 in one phase 3 came from full-health bots between two nodes 3-5 yd off.
+`ULDUAR_MIMIRON_FLAMES_BURN_RADIUS` (3.5) now answers "in fire": the node count above, the dodge's
+cluster, the barrage `refuge` and every leg test. Destinations keep 5, a run/stand pair like the bomb's.
+
+**The dodge leaves toward where the bot is going.** Straight away from the cluster ended 75-80% of
+dodges further from the target. The flames dodge hands `FleeFan` a bearing, the bot's slot when it is
+off it, else its `"current target"`, and the sweep starts there, still within ±112.5° of straight away.
+
 **No walk may cross fire.** Arc spread screened its slot, not the walk, so a clean slot behind a burning
 band sent bots through it and the dodge threw them out the far side, up to 23 yd. No leg may pass within
-5 yd of a node the bot is not already standing in (`IsMimironWalkFireSafe`). Once the fire fills the
-room that hold empties the formation, so `GetMimironSlotApproaches` plans for trigger and action alike:
+the burn radius of a node the bot is not already standing in (`IsMimironWalkFireSafe`), bar a crossing
+(below). Once the fire fills the room that hold empties the formation, so `GetMimironSlotApproaches`
+plans for trigger and action alike:
 
 - A slot that is not clear gives way, outside phase 1, to the nearest clear point within
   `ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE` (12) that keeps 5.5 yd off every raid member. A bot
   already on clear ground within `_RADIUS` (6) stays put, since a stand-in moves whenever the fire grows.
   The wide ring is for phase 3, where 40+ nodes stay alive and a 6 yd ring round a burning slot burns
   too; the phase 3 wedge orbits 17-27 yd out against a 35 yd cast range, so it can afford 12.
-- A walk through fire goes via one waypoint over its midpoint, 20°, 35°, 50° or 65° off the direct
-  bearing, whose two legs both miss the fire. Only a candidate with no path hands over to the next.
+- A bot at `ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT` (75) or more walks straight through up to
+  `_CROSS_MAX` (4 yd, one tick) of burn, never two burns at once, ahead of any detour (`cross`): the tick
+  leaves it above the 60% gate and one burn is under the override, so the dodge never throws it back.
+  Detours ran 3-9 yd extra (up to 89), and in one phase 4 half their direct legs touched no burn.
+- Otherwise a walk through fire goes via one waypoint over its midpoint, 20°, 35°, 50° or 65° off the
+  direct bearing, whose two legs both miss the fire. Only a candidate with no path hands over to the next.
 - Mines likewise: a leg passing within `ULDUAR_MIMIRON_MINE_LEG_CLEARANCE` (2.5 yd: the 1.9 yd poll plus
   slop) of one detours, and the straight walk follows as the last candidate whenever fire leaves it open,
   since a mine ranks last. About half the phase 4 mine hits came on arc spread legs.
@@ -448,7 +463,11 @@ dead in 6 s.
 **Radius is the free parameter, so it dodges the fire, walk and endpoint.** A step takes the nearest
 radius within ±8 whose destination **and** straight leg are clear, falling back to a clean endpoint and
 then to the plain step, because the cone kills in a tick. The search stays in `[14, 24]` for ranged and
-`[5, 9]` for melee, who give ground inward only.
+`[5, 9]` for melee, who give ground inward only. A healer under
+`ULDUAR_MIMIRON_BARRAGE_MINE_AVOID_HP_PCT` (70) ranks a radius whose endpoint and leg miss every mine
+above both, never refusing the step: one at ~47% walked through two mines (9.6k + 5.4k) in one step and
+died. Mines land within 15 yd of the MK II, so the outer
+radii are usually clean.
 
 **The fire dodge keeps running during a barrage for every bot the cone does not own.** The window is
 22-26% of phase 2 and carried 36-76% of its fire damage; one window killed 13 bots to Flames while bots
@@ -487,7 +506,7 @@ It arms 2.5 s after landing, polls every 500 ms for a player inside **1.9 yd**, 
 self-detonates at 35 s. Ten land inside 15 yd of the MK II (65347, radius idx 18) 8 s after every Shock
 Blast. Non-selectable, so never in `"possible targets"` and invisible to pathing; `IsMimironSpotMineSafe`
 gates the destination of every Mimiron move **except the barrage dodge**, where the cone kills and a mine
-does not.
+does not; only a hurt healer's step there prefers mine-free ground.
 
 **Avoid tightly, and rank it last.** Ten mines in 15 yd leave no clear ground at a wide avoid radius, so
 the node stays active and the raid paces. Trigger at 3.0 yd, clear to 3.5, step at most 5, and take the
@@ -654,6 +673,11 @@ arriving on empty ground with somewhere to dodge to.
 **Mana is a tail problem, not the wipe**, and not worth re-investigating: healers died at 40-60% mana,
 entering phase 2 at 45-65% because the drink guard vetoed handover drinks. The guard stays (handovers,
 below).
+
+**Open: healers don't reach phase 4.** One wipe entered it with two of four, both dead 28-32 s in, the
+raid 75 s later. Two fell to Heat Wave plus Rapid Burst in phase 2, one battle-rezzed beside VX-001 burned
+again in 5 s, one to a Bomb Bot its fire dodge landed beside, one to Water Spray mid-dodge, and one sat
+three ticks in a node under the 60% gate before a Hand Pulse. The gate stays by choice.
 
 **Open: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the 30 s handover, melee
 and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**, so the first cast lands at
@@ -1218,7 +1242,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
-| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
+| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing) or `cross N` (yd of burn walked through) |
 | `close` | A melee approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
@@ -1227,7 +1251,8 @@ leaves a dodge that refuses every bearing completely silent.
 
 `tools/botobs/bosses/mimiron.py --help` lists its reports. Beyond it: `--walk` charges a moving sample to
 the bot's last accepted `move` within 6 s (`ATTRIBUTE_MS`), `?` being a walk with none, a human or a
-chase; `--p3` measures each landing off the unit's own Z rather than the core latch; and a phase that
+chase; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a
+dodge burned only with a Flames tick on the bot in the 2 s before it; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated
