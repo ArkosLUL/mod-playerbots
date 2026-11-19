@@ -29,6 +29,12 @@ from raidobs.trace import Trace  # noqa: E402
 
 TOC_SRC = RAID_ROOT / "ToC"
 CHAMPIONS_HEADER = TOC_SRC / "Util" / "ToCHelpers_FactionChampions.h"
+DEFINITIONS = TOC_SRC / "Definition"
+
+CLASS_OPEN = re.compile(r"^class (\w+)\b")
+NAME_CONSTANT = re.compile(r'static constexpr char const\* Name = "([^"]+)"')
+ROW_TRIGGER_CLASS = re.compile(r"\bNode<\s*(\w+)\s*,")
+ROW_TRIGGER_NAME = re.compile(r'\.Node\(\s*"([^"]+)"')
 
 ENCOUNTERS = ("northrend-beasts", "lord-jaraxxus", "faction-champions", "val-kyr-twins", "anub-arak")
 
@@ -68,11 +74,24 @@ NODE_PER_PREFIX = {
 
 
 def registered_triggers() -> set[str]:
-    keys = set()
-    for path in (TOC_SRC / "Trigger").rglob("*"):
-        if path.suffix in (".h", ".cpp"):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            keys.update(re.findall(r'creators\[\s*"([^"]+)"\s*\]', text))
+    """Every trigger name a ToC definition row registers: a `Node<Trigger, Action>` row by its trigger
+    class's `Name`, a row built under explicit names by its first argument."""
+    names: dict[str, str] = {}
+    for path in TOC_SRC.rglob("*.h"):
+        current = None
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            opened = CLASS_OPEN.match(line)
+            if opened:
+                current = opened.group(1)
+            named = NAME_CONSTANT.search(line)
+            if named and current:
+                names[current] = named.group(1)
+
+    keys: set[str] = set()
+    for path in DEFINITIONS.glob("*.cpp"):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        keys |= {names[cls] for cls in ROW_TRIGGER_CLASS.findall(text)}
+        keys |= set(ROW_TRIGGER_NAME.findall(text))
     return keys
 
 
@@ -130,7 +149,7 @@ class NodeOwners(unittest.TestCase):
     def test_every_registered_trigger_has_an_owner(self):
         # An unowned node reads NEVER on every other encounter's pull instead of folding into the gate.
         keys = registered_triggers()
-        self.assertTrue(keys, f"no creators[...] keys under {TOC_SRC / 'Trigger'}")
+        self.assertTrue(keys, f"no definition rows under {DEFINITIONS}")
         for key in sorted(keys - RAID_WIDE_TRIGGERS):
             self.assertIn(node_encounter(key), ENCOUNTERS, key)
 
