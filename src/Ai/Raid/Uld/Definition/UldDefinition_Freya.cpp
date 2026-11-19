@@ -45,8 +45,8 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaNaturesFuryBailTrigger, FreyaNaturesFuryBailAction>(ACTION_RAID + 4);
     e.Node<FreyaStepOutOfSunbeamTrigger, FreyaStepOutOfSunbeamAction>(ACTION_RAID + 4);
 
-    // Detonating Lasher wave, which nothing can tank or outrun. Leave a blast first (a dead bot does no
-    // CC), then root, snare, ghouls, and gather last, only when nothing urgent is asking.
+    // Detonating Lasher wave, which outruns the raid and wipes its threat every 10s. Leave a blast first (a dead
+    // bot does no CC), then root, snare, ghouls, and gather last, only when nothing urgent is asking.
     e.Node<FreyaLasherAboutToBlowTrigger, FreyaLasherAboutToBlowAction>(ACTION_RAID + 3);
     e.Node<FreyaFrostNovaLashersTrigger, FreyaFrostNovaLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaTrapLashersTrigger, FreyaTrapLashersAction>(ACTION_RAID + 2);
@@ -93,6 +93,7 @@ void DefineFreya(EncounterBuilder& e)
     e.Multiplier<FreyaLasherFinishAoeMultiplier>(Family::AnyAction);
 
     e.Multiplier<FreyaLasherTrapReserveMultiplier>(Family::Spell);
+    e.Multiplier<FreyaArmyRuneReserveMultiplier>(Family::Spell);
 
     // Avoid AoE sits at ACTION_EMERGENCY above every Freya escape, and swaps their all-hazard answer for
     // a flat FleeDistance hop that clears none of them.

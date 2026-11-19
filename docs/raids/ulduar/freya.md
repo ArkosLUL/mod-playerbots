@@ -73,6 +73,9 @@ tank's threat the pick becomes the healthiest non-suppressed sibling, returning 
 alone on a fresh one, since a ratio cannot cover the opener. Damage moves, none is withheld: with no
 sibling to hit, or no tank holding threat after the head start, the pick stands.
 
+**Storm Lasher needs nothing.** Generic interrupts stop Stormbolt (62938, 1.5s cast: 12 of 13 in one
+pull); Lightning Lash (62939), its bigger hitter, is instant and cannot be interrupted.
+
 **The Ancient Water Spirit's Tidal Wave is the trio's one real cone.** `62936` is `EffectRadiusIndex 23`
 = **40 yd**, base 9,250-10,750 with a knock-back, fired **3 s after** the spirit's charge `62935` while
 it carries the 3,000 ms `62655` aura, so the charge is the telegraph. Its `spell_cone` entry is narrow
@@ -233,10 +236,10 @@ The trio rung picks the **highest-health** member on purpose: tank damage is inv
 makes it help convergence. It is percent-based like every sync threshold, and sticky by
 `ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT` (5) so the tank's own damage does not swap it every few ticks.
 
-The taunt fires for the **Snaplasher and Conservator only**, the two adds the encounter claims; the rest
-of the ladder is borrowed for damage. Taunting Freya would fight a human main tank whose raid roles are
-set differently, taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning, and a
-lasher drops the taunt on its next 10s threat wipe regardless. Mocking Blow counts as a taunt
+Of the trio and Conservator, the taunt fires for the **Snaplasher and Conservator only**; the rest is
+borrowed for damage. Taunting Freya would fight a human main tank whose raid roles are set differently,
+and taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning. Lashers have their
+own pickup ([below](#detonating-lasher-waves)). Mocking Blow counts as a taunt
 ([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)): Arms'
 `piercing howl` once fell back to it, so the `hamstring` snare trigger made a warrior taunt a
 Snaplasher at 64 stacks and die 270 ms later; it falls back to `hamstring` now.
@@ -251,11 +254,21 @@ every 10s.
 
 ## Detonating Lasher waves
 
-**They cannot be tanked, ferried, or held by any threat redirect**
-([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)). Every 10s each
-casts Flame Lash, then `DoResetThreatList()` and charges a uniformly random player within 80 yd; they
-spawn the same way after a 5s submerge, and one that finds nobody inside 80 yd despawns and still
-counts as cleared. They run at **8.0 yd/s** (`speed_run` 1.14286) against a player's 7.0.
+**No tank holds them past 10s, and no threat redirect holds them at all**
+([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)). Every 10s,
+on one timer for the whole wave, each casts Flame Lash, then `DoResetThreatList()` and charges a
+uniformly random player within 80 yd; they spawn the same way after a 5s submerge, and one that finds
+nobody inside 80 yd despawns and still counts as cleared. They run at **8.0 yd/s** (`speed_run`
+1.14286) against a player's 7.0.
+
+**The off-tank takes back loose lashers** (`TryFreyaLasherPickup`, not yet verified in a pull): assist
+tank 0, once its ladder is past the Snaplasher, Conservator and trio, picks up lashers hitting a
+non-tank player. First Righteous Defense (40 yd) on the member most of them hit, unless Freya is on
+that member; then Challenging Shout or Roar with 2+ loose inside 10 yd, only while Freya is farther than
+10 yd plus her reach, or it pulls her off the main tank; then the class taunt (30 yd) on the nearest.
+Taunts are 8s, inside the 10s reset; the class rotation's AoE threat holds them between. No new
+movement: lashers walk to the tank, and the ranged pack focus follows the pile. Before it, the off-tank
+held 11-20% of lasher time, at most 5 at once.
 
 A `GROUP_LASHERS` wave is **10** of them, 717k in 10-man and **2.35M in 25-man**, for **2** stacks each:
 150.6k HP per stack, the **worst rate in the fight** (Water Spirit 66.9k · Storm Lasher 100.4k ·
@@ -355,11 +368,24 @@ stay above it.
   **416k in 20s** and five dead. Deliberately **not** named `army of the dead`: `IsBurstCooldownAction`
   matches on the name, and the Ulduar burst gate holds that list until Attuned to Nature drops, the whole
   add phase.
-- **One Army per lasher wave** (`IsFreyaArmyTurn`). There are two lasher waves, one per random set of three,
-  1-5 min apart, and 42650's 10 min cooldown (6 with Night of the Dead) outlasts the gap, so one DK
-  never covers both. The lowest-GUID in-combat bot DK with it ready casts. Every DK holds while any DK,
-  a human included, channels Army or has a living ghoul: ghouls re-taunt every second (43264) for
-  their 40s, so they also hold a wave arriving while they're up. Untested until a pull with two bot DKs.
+  Without it a wave runs the raid: ghouls on **4%** of lasher time against 50-61% with a working Army,
+  **920k** and 7 deaths, and Eonar's Gift healed the unfinished pack from ~18% to ~66% each.
+- **One Army per lasher wave** (`IsFreyaArmyTurn`, `HasUncoveredFreyaLasher`). There are two lasher waves,
+  one per random set of three, 1-5 min apart, and 42650's 10 min cooldown (6 with Night of the Dead)
+  outlasts the gap, so one DK never covers both. The lowest-GUID in-combat bot DK with it ready casts.
+  Every DK holds while any DK, a human included, channels Army or has a living ghoul: ghouls re-taunt
+  every second (43264) for their 40s, so they also hold a wave arriving while they're up.
+- **A wave stays covered after its ghouls expire.** Lashers and ghouls share the map's creature GUID
+  counter, which only rises (wave-1 lashers 2047-2056, their ghouls 2057-2078, wave-2 lashers
+  2338-2347), so a per-instance `RaidInstanceState` mark of the highest ghoul counter seen tells a covered
+  lasher from a new wave. Without it the second DK spent Army at 0:59.9 on one lasher at 4%, leaving the
+  second wave none. An Army cut before its first ghoul moves no mark, so the next DK still casts.
+- **Nothing of ours cuts or starves the channel.** Army costs a rune of each kind and `CanCastSpell`
+  ignores runes, so the rotation spent each one as it returned and Army landed 10-11s late:
+  `FreyaArmyRuneReserveMultiplier` zeroes rune spenders for the DK whose turn it is (runic power still
+  runs). The trigger waits out a Ground Tremor cast (2s at most); `freya ground tremor hold cast` skips
+  Army, since ghouls already out outlive the Tremor's cut; `FreyaBotCannotWalk` is true while channeling,
+  so all six escapes stand down for the 4s, where the melee bail had cut one after a single ghoul.
 
 **Ranged focus** is `GetFreyaLasherPackFocus`, the lasher with the most lashers within
 `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd): `AoeTrigger` counts attackers within 8 yd of the ***current
@@ -410,11 +436,12 @@ Hunters are exempt: Steady Shot is `PreventionType` PACIFY, which never reaches 
 
 It is fully telegraphed: a **2000 ms** cast repeating `25s..35s`, a range no timer predicts. So the
 handling is Ignis's Flame Jets trio: `FreyaGroundTremorCastGateMultiplier` caches the remaining window
-per millisecond and blocks any candidate whose `CalcCastTime` would not land first (**328** vetoes in the
-reference kill), and `freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in
+per millisecond and blocks any candidate whose cast time, plus the duration for a channel, would not end
+first (**328** vetoes in the reference kill; counting cast time alone let 7 and 14 channels a pull start
+in the window only to be stopped next tick), and `freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in
 flight, reading `CURRENT_GENERIC_SPELL` **and** `CURRENT_CHANNELED_SPELL`: with the gate stopping ordinary
 casts, a channel already running is all that is left, and reading one slot meant it never fired in 164
-pushes (since: 31 times). `m_timer` carries what is left in either slot, so one compare serves both.
+pushes (since: 31 times). Army of the Dead is exempt ([crowd control](#detonating-lasher-waves)). `m_timer` carries what is left in either slot, so one compare serves both.
 Unlike Ignis, **heals are gated too**: holding a Chain Heal under 2s beats losing Nature for 10, and
 blocked bots fall through to their instants. Stopping first dodges the lockout outright:
 `Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it finds a cast to cut**. Outside hard

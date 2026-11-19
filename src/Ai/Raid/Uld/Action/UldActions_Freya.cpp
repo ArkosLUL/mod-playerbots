@@ -4,7 +4,10 @@
 #include <CombatStrategy.h>
 #include <FollowMasterStrategy.h>
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 #include "AiObjectContext.h"
 #include "DBCEnums.h"
@@ -41,9 +44,83 @@ void FreyaClearCastBlockingMove(Player* bot)
 
 // Rooted or stunned: the walk never starts but the latch would claim it did, and the interrupt would
 // waste the one cast left. Falls through to the rotation and the node that kills the root.
+// Army of the Dead stays put too: walking cuts the channel, and its ghouls are worth more than one blast or bomb.
 bool FreyaBotCannotWalk(Player* bot)
 {
-    return bot->HasUnitState(UNIT_STATE_NOT_MOVE);
+    return bot->HasUnitState(UNIT_STATE_NOT_MOVE) || IsFreyaArmyChanneling(bot);
+}
+
+// Off-tank on a lasher wave. The whole wave wipes its threat and charges random players on one 10s timer, so
+// this takes back whatever went loose since. Righteous Defense first (up to three off one member), then a
+// shout, then the class taunt. All on 8s or longer cooldowns, so at most one of each per reset.
+bool TryFreyaLasherPickup(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
+    Player* bot = botAI->GetBot();
+
+    std::vector<Unit*> loose;
+    std::vector<std::pair<Player*, uint32>> hitCounts;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        Player* victim = GetFreyaLooseLasherVictim(lasher);
+        if (!victim)
+            continue;
+
+        loose.push_back(lasher);
+        auto const counted = std::find_if(hitCounts.begin(), hitCounts.end(),
+                                          [victim](auto const& entry) { return entry.first == victim; });
+        if (counted == hitCounts.end())
+            hitCounts.emplace_back(victim, 1);
+        else
+            ++counted->second;
+    }
+
+    if (loose.empty())
+        return false;
+
+    Unit* freya = GetFreyaScanUnitByEntry(botAI, NPC_FREYA);
+
+    // Righteous Defense taunts everything hitting that member, so never on whoever Freya is on.
+    Player* rescue = nullptr;
+    uint32 mostHits = 0;
+    for (auto const& [member, count] : hitCounts)
+    {
+        if (count > mostHits && (!freya || freya->GetVictim() != member) &&
+            bot->GetExactDist2d(member) <= ULDUAR_FREYA_RIGHTEOUS_DEFENSE_RANGE && bot->IsWithinLOSInMap(member))
+        {
+            rescue = member;
+            mostHits = count;
+        }
+    }
+
+    if (rescue && botAI->CanCastSpell("righteous defense", rescue))
+        return botAI->CastSpell("righteous defense", rescue);
+
+    // The shouts take everything in 10 yd, Freya too if she's that close, and that pulls her off the main tank.
+    bool const freyaClear =
+        !freya || bot->GetExactDist2d(freya) > ULDUAR_FREYA_LASHER_SHOUT_RADIUS + freya->GetCombatReach();
+    auto const inShout = [bot](Unit* lasher) { return bot->GetExactDist2d(lasher) <= ULDUAR_FREYA_LASHER_SHOUT_RADIUS; };
+    if (freyaClear && std::count_if(loose.begin(), loose.end(), inShout) >= 2)
+    {
+        for (char const* shout : {"challenging shout", "challenging roar"})
+        {
+            if (botAI->CanCastSpell(shout, bot))
+                return botAI->CastSpell(shout, bot);
+        }
+    }
+
+    if (!ClassTauntReady(botAI))
+        return false;
+
+    Unit* nearest = nullptr;
+    for (Unit* lasher : loose)
+    {
+        float const dist = bot->GetExactDist2d(lasher);
+        if (dist <= ULDUAR_FREYA_LASHER_TAUNT_RANGE && (!nearest || dist < bot->GetExactDist2d(nearest)) &&
+            bot->IsWithinLOSInMap(lasher))
+            nearest = lasher;
+    }
+
+    return nearest && CastClassTaunt(botAI, nearest);
 }
 
 // Every other living raid member near the bot. Nature's Fury has no ground marker to route around: the
@@ -527,10 +604,15 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // Taunt only what the encounter owns: Freya may be on a human tank, taunting Storm Lasher or Water
-    // Spirit means owning Tidal Wave, and a lasher wipes the taunt on its next 10s threat reset.
+    // Of the trio and the Conservator, taunt only the two the encounter owns: Freya may be on a human tank,
+    // and taunting Storm Lasher or Water Spirit means owning Tidal Wave.
     bool const owned = target == state.snaplasher || target == state.conservator;
     if (owned && target->GetVictim() != bot && CastClassTaunt(botAI, target))
+        return true;
+
+    // Past the Snaplasher, Conservator and trio rungs, the lasher wave is the off-tank's.
+    bool const pastAddRungs = target->GetEntry() == NPC_DETONATING_LASHER || target->GetEntry() == NPC_FREYA;
+    if (pastAddRungs && PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) && TryFreyaLasherPickup(botAI, state))
         return true;
 
     if (currentTarget != target)

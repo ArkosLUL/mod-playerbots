@@ -250,7 +250,15 @@ bool FreyaSummonArmyTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    return botAI->CanCastSpell("army of the dead", bot) && IsFreyaArmyTurn(botAI);
+    // Order matters: IsFreyaArmyTurn records the newest ghoul that HasUncoveredFreyaLasher reads.
+    if (!IsFreyaArmyTurn(botAI) || !HasUncoveredFreyaLasher(botAI, state))
+        return false;
+
+    // A Tremor landing mid-channel cuts it after a ghoul or two. Waiting it out costs 2s at most, then all eight.
+    if (IsFreyaGroundTremorCasting(GetFreyaBossByEntry(botAI)))
+        return false;
+
+    return botAI->CanCastSpell("army of the dead", bot);
 }
 
 bool FreyaGroundTremorHoldCastTrigger::IsActive()
@@ -260,7 +268,8 @@ bool FreyaGroundTremorHoldCastTrigger::IsActive()
     if (!IsFreyaGroundTremorCasting(GetFreyaBossByEntry(botAI)))
         return false;
 
-    return bot->HasUnitState(UNIT_STATE_CASTING);
+    // Not Army: the ghouls already out outlive the Tremor's cut, stopping early only loses the rest.
+    return bot->HasUnitState(UNIT_STATE_CASTING) && !IsFreyaArmyChanneling(bot);
 }
 
 bool FreyaNaturesFuryBailTrigger::IsActive()

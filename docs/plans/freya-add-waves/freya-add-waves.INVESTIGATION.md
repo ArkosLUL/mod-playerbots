@@ -9,34 +9,10 @@ Post-mortem of three 25-man hard-mode Freya pulls. Traces in `env/dist/logs/boto
 (epoch-ms; pull t0 = 1791742874728 / 1791743091118 / 1791743446079).
 
 The camp geometry and the three Snaplasher fixes shipped and live in
-[docs/raids/ulduar/freya.md](../../raids/ulduar/freya.md). The two items below are **proposed, not
-built**; each needs its own go-ahead.
+[docs/raids/ulduar/freya.md](../../raids/ulduar/freya.md), as do the Army fixes. The item below is
+**proposed, not built** and needs its own go-ahead.
 
-## 1. Army of the Dead was missing or late
-
-| wave | Army | lashers on ghouls at +5.5s / +10s | lasher melee + Flame Lash on raid | deaths |
-|---|---|---|---|---|
-| A1 1:06 | **none** | 0 / 0 | **416k** in 20s | 5 (both humans) |
-| A2 1:56 | bot, cast at **+6.1s** | 0 / 8 | 102k | `Malediction` at +6.5s, 4 lashers on her |
-| K 0:10 | bot, cast at +0.2s | 9 / 10 | 15.7k | 0 |
-| K 3:35 | both humans, +2.1s | 7 / 10 | 0.3k | 0 |
-
-- **A1:** `Obliteration` (the one bot DK) spent Army on Auriaya at 18:13:35, 8m45s before the wave.
-- **A2:** `freya summon army` FAILED at +1.35s and landed at +6.05s; in between the DK cast Icy Touch,
-  Howling Blast and Frost Strike. Army costs one rune of each kind, so the rotation kept eating them
-  as they came back. Rune state is not in the trace - treat as the working hypothesis.
-
-**Fix.** `FreyaArmyRuneReserveMultiplier`, in the shape of `FreyaLasherTrapReserveMultiplier`
-([UldMultipliers_Freya.cpp](../../../src/Ai/Raid/Uld/Multiplier/UldMultipliers_Freya.cpp)): for a DK
-with lashers alive and Army off cooldown, zero every action whose spell has a rune cost. Bounded by the
-rune cooldown, on one bot.
-
-**Research before building:** a second taunt sink for the pull's second lasher wave, which the bot DK
-cannot cover (10 min cooldown) - in K the humans did. Candidates must pass the three checks in
-`CLAUDE.md` (spellbook, DBC, trigger chains) before anything keys on them. Wave order is knowable:
-each block of three holds one wave of each kind, so the third is certain.
-
-## 2. One bomb escape returned false for a whole fuse (the kill's only death)
+## One bomb escape returned false for a whole fuse (the kill's only death)
 
 87 of 88 exposed bot-volleys escaped, median **0.61s**. `Power` at 6:17.2 did not: bomb at 0.0 yd,
 three more inside 10, `freya move away nature bomb` FAILED on four ticks running, **no move order
@@ -55,8 +31,6 @@ make the last tier try other bearings instead of one.
 ## Verification
 
 1. `~/.claude/scripts/pb-check <changed files>`.
-2. One hard-mode pull: Army cast inside 1s of the pack spawning, lashers on ghouls at +5.5s;
-   `postmortem.py <trace> --coverage freya` for the new multiplier.
-3. Lasher wave clear time and raid damage a minute must not get worse.
+2. One hard-mode pull: no bot sits in a bomb for a whole fuse without a move order.
 
-When both ship, fold the results into `freya.md` through `/compact-docs-writer` and delete this file.
+When it ships, fold the results into `freya.md` through `/compact-docs-writer` and delete this file.

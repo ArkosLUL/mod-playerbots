@@ -121,6 +121,12 @@ inline constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
 // Melee never chase a lasher past this. Tight on purpose: "nearby" means the lasher came to the melee group.
 inline constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
 
+// Off-tank lasher pickup, DBC ranges: class taunts 30 yd, Righteous Defense 40, Challenging Shout and Roar a 10 yd
+// circle around the tank.
+inline constexpr float ULDUAR_FREYA_LASHER_TAUNT_RANGE = 30.0f;
+inline constexpr float ULDUAR_FREYA_RIGHTEOUS_DEFENSE_RANGE = 40.0f;
+inline constexpr float ULDUAR_FREYA_LASHER_SHOUT_RADIUS = 10.0f;
+
 // Margin before the add tank moves between two near-equal trio members. Its own damage is what closes
 // the gap, so without this it would swap every few ticks and lose swing timers to nothing.
 inline constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
@@ -361,7 +367,19 @@ uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI);
 
 // Whether this DK bot opens Army of the Dead on the lasher wave. One per wave, so the next DK still has
 // it for the second one: lowest GUID among bot DKs with it ready, held while any DK's ghouls are up.
+// Also records the newest ghoul for HasUncoveredFreyaLasher, so call it first.
 bool IsFreyaArmyTurn(PlayerbotAI* botAI);
+
+// A living lasher spawned after the last Army's ghouls, i.e. a wave no Army has landed on yet. An Army cut
+// before its first ghoul doesn't count, so the next DK still casts on that wave.
+bool HasUncoveredFreyaLasher(PlayerbotAI* botAI, FreyaWaveState const& state);
+
+// Mid Army of the Dead channel. Nothing of ours should cut it: the ghouls are the lasher wave's answer.
+bool IsFreyaArmyChanneling(Player* player);
+
+// The non-tank player this lasher is hitting, or null. Ghouls, pets and tanks holding one are fine as is, and a
+// lasher still in its 5s passive start has no victim yet.
+Player* GetFreyaLooseLasherVictim(Unit* lasher);
 
 // Where the back line balls up for the AoE: on the anchor bot. Never a computed point, a live bot is always on
 // the mesh. Empty when no ranged DPS bot is alive.

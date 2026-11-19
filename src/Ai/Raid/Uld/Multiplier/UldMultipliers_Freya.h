@@ -37,6 +37,23 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Army of the Dead costs one rune of each kind, and CanCastSpell doesn't check runes, so the DK whose turn it
+// is kept trying, failing, and spending each rune on its rotation as it came back. Holds rune spenders until
+// Army is out; runic power spells still run.
+class FreyaArmyRuneReserveMultiplier : public Multiplier
+{
+public:
+    FreyaArmyRuneReserveMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya army rune reserve") {}
+    float GetValue(Action* action) override;
+
+private:
+    // The Army turn walks the group, so it's worked out once a tick, not once per candidate action.
+    bool ReserveThisTick();
+
+    uint32 cachedAtMs = 0;
+    bool cachedReserve = false;
+};
+
 // Hard mode: Ground Tremor interrupts the raid on a 2s telegraph and school-locks whoever it cuts for
 // 10s. Heals are held too, unlike Ignis: a Chain Heal held under 2s beats no Nature for 10.
 class FreyaGroundTremorCastGateMultiplier : public Multiplier

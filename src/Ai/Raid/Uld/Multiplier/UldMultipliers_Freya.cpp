@@ -9,6 +9,7 @@
 #include "AttackAction.h"
 #include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
+#include "DBCStores.h"
 #include "EncounterHelpers.h"
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
@@ -107,6 +108,53 @@ float FreyaLasherTrapReserveMultiplier::GetValue(Action* action)
     return state.detonatingLashers.empty() ? 1.0f : 0.0f;
 }
 
+float FreyaArmyRuneReserveMultiplier::GetValue(Action* action)
+{
+    if (bot->getClass() != CLASS_DEATH_KNIGHT)
+        return 1.0f;
+
+    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+    if (!spellAction)
+        return 1.0f;
+
+    uint32 const spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo || !spellInfo->RuneCostID)
+        return 1.0f;
+
+    SpellRuneCostEntry const* runeCost = sSpellRuneCostStore.LookupEntry(spellInfo->RuneCostID);
+    if (!runeCost || runeCost->NoRuneCost())
+        return 1.0f;
+
+    return ReserveThisTick() ? 0.0f : 1.0f;
+}
+
+bool FreyaArmyRuneReserveMultiplier::ReserveThisTick()
+{
+    uint32 const now = getMSTime();
+    if (cachedAtMs && now == cachedAtMs)
+        return cachedReserve;
+
+    cachedAtMs = now;
+    cachedReserve = false;
+
+    if (!bot->HasSpell(SPELL_ARMY_OF_THE_DEAD) || bot->HasSpellCooldown(SPELL_ARMY_OF_THE_DEAD))
+        return false;
+
+    Unit* freya = GetFreyaScan(botAI).Boss();
+    if (!freya || !freya->IsAlive())
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    if (state.detonatingLashers.empty())
+        return false;
+
+    // Same order as the Army trigger: the turn records the ghoul the coverage check reads.
+    cachedReserve = IsFreyaArmyTurn(botAI) && HasUncoveredFreyaLasher(botAI, state);
+    return cachedReserve;
+}
+
 float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
@@ -134,12 +182,13 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // Anything that still lands before the tremor is worth starting, so the instants a locked-out bot
-    // would fall through to are never held, only the casts the interrupt would eat.
-    uint32 const castTime = spellInfo->CalcCastTime();
-    if (castTime == 0 && !spellInfo->IsChanneled())
-        return 1.0f;
+    // would fall through to are never held, only the casts the interrupt would eat. A channel has to end
+    // first as well, or the hold node stops it on the next tick.
+    int32 busyMs = static_cast<int32>(spellInfo->CalcCastTime());
+    if (spellInfo->IsChanneled())
+        busyMs += spellInfo->GetDuration();
 
-    return static_cast<int32>(castTime) < cachedRemainingMs ? 1.0f : 0.0f;
+    return busyMs < cachedRemainingMs ? 1.0f : 0.0f;
 }
 
 int32 FreyaGroundTremorCastGateMultiplier::EvaluateWindow()

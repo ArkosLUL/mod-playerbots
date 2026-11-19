@@ -20,6 +20,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "ThreatManager.h"
@@ -640,6 +641,25 @@ uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI)
     return rank;
 }
 
+namespace
+{
+// Highest GUID counter of any Army ghoul seen this instance. Lashers and ghouls take their counter from the same
+// map-wide sequence, which only goes up, so a lasher below the mark was already up when that Army landed. Kept past
+// the ghouls' 40s, which is what stops a second DK spending its Army on the leftovers of a covered wave.
+struct FreyaArmyState
+{
+    uint32 ghoulMark = 0;
+};
+
+RaidInstanceState<FreyaArmyState> freyaArmyStates;
+}  // namespace
+
+bool IsFreyaArmyChanneling(Player* player)
+{
+    Spell const* channel = player->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    return channel && channel->GetSpellInfo()->Id == SPELL_ARMY_OF_THE_DEAD;
+}
+
 bool IsFreyaArmyTurn(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -647,32 +667,74 @@ bool IsFreyaArmyTurn(PlayerbotAI* botAI)
     if (!group)
         return true;
 
+    // No early return: every DK's ghouls go into the mark, this bot's own included.
+    bool turn = true;
+    uint32 ghoulMark = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId() ||
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId() ||
             member->getClass() != CLASS_DEATH_KNIGHT)
             continue;
 
         // A human's Army counts too: the ghouls re-taunt every second (43264) for their 40s, whoever cast them,
         // so they also hold a wave that shows up while they're still out.
-        Spell const* channel = member->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (channel && channel->GetSpellInfo()->Id == SPELL_ARMY_OF_THE_DEAD)
-            return false;
-
         for (Unit* minion : member->m_Controlled)
         {
             if (minion && minion->IsAlive() && minion->GetEntry() == NPC_ARMY_OF_THE_DEAD)
-                return false;
+            {
+                turn = false;
+                ghoulMark = std::max(ghoulMark, minion->GetGUID().GetCounter());
+            }
         }
+
+        if (member == bot)
+            continue;
+
+        if (IsFreyaArmyChanneling(member))
+            turn = false;
 
         // Bots only here, nobody can plan around a human's cooldown.
         if (GET_PLAYERBOT_AI(member) && member->IsInCombat() && member->GetGUID() < bot->GetGUID() &&
             member->HasSpell(SPELL_ARMY_OF_THE_DEAD) && !member->HasSpellCooldown(SPELL_ARMY_OF_THE_DEAD))
-            return false;
+            turn = false;
     }
 
-    return true;
+    if (ghoulMark && bot->GetInstanceId())
+    {
+        FreyaArmyState& army = freyaArmyStates.For(bot->GetInstanceId());
+        army.ghoulMark = std::max(army.ghoulMark, ghoulMark);
+    }
+
+    return turn;
+}
+
+bool HasUncoveredFreyaLasher(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
+    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
+    FreyaArmyState const* army = instanceId ? freyaArmyStates.Find(instanceId) : nullptr;
+    uint32 const ghoulMark = army ? army->ghoulMark : 0;
+
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (lasher && lasher->IsAlive() && lasher->GetGUID().GetCounter() > ghoulMark)
+            return true;
+    }
+
+    return false;
+}
+
+Player* GetFreyaLooseLasherVictim(Unit* lasher)
+{
+    if (!lasher || !lasher->IsAlive() || lasher->GetEntry() != NPC_DETONATING_LASHER)
+        return nullptr;
+
+    Unit* victim = lasher->GetVictim();
+    Player* player = victim ? victim->ToPlayer() : nullptr;
+    if (!player || PlayerbotAI::IsTank(player))
+        return nullptr;
+
+    return player;
 }
 
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)
