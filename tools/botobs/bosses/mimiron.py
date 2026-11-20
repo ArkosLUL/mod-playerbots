@@ -100,6 +100,14 @@ BURNED_LOOKBACK_MS = 2000
 # How near a detour note and its formation leg sit: both are written by the same action pass.
 NOTE_MOVE_MS = 300
 
+NPC_PROXIMITY_MINE = 34362
+MINE_LEG_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_LEG_CLEARANCE")
+MINE_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_CLEARANCE")
+# A mine hit on a moving bot goes to its last accepted leg when that leg is this recent.
+MINE_MOVER_MS = 4000
+STANDING = "standing"
+OLDER_LEG = "an older leg"
+
 SLOT = re.compile(r"(\S+) (\d+)/(\d+) (-?\d+),(-?\d+),(-?\d+)")
 
 
@@ -980,6 +988,107 @@ def show_fire(trace: Trace) -> None:
           " legs within 1 yd of where they started count neither way")
 
 
+# ------------------------------------------------------------------------------------------------ mines
+
+def off_segment(start, end, point) -> float:
+    """Ground distance from `point` to the walk from `start` to `end`."""
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_sq = dx * dx + dy * dy
+    along = 0.0 if length_sq <= 0 else ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_sq
+    along = min(1.0, max(0.0, along))
+    return dist2(point, (start[0] + along * dx, start[1] + along * dy))
+
+
+def mine_mover(recs: list[dict], stamps: list[int], when: int, row) -> str:
+    """What was moving the bot when a mine hit it: its last accepted leg if recent, else standing."""
+    if not row or not moving(row):
+        return STANDING
+    index = bisect.bisect_right(stamps, when) - 1
+    if index >= 0 and when - recs[index]["t"] <= MINE_MOVER_MS:
+        return recs[index].get("by", "?")
+    return OLDER_LEG
+
+
+def mine_rows(trace: Trace) -> dict[str, dict]:
+    """Per phase: Proximity Mine hits, damage and kills by what was moving the bot, and per mover the
+    accepted legs whose straight line passed a live mine, passed two or more, or ended beside one. The
+    line is what the bots screen; the walk follows the navmesh and can stray off it."""
+    roster = roster_guids(trace)
+    spans = phases(trace)
+    samples = Samples(trace)
+    mine_guids = guids_of_entry(trace, NPC_PROXIMITY_MINE)
+    moves = accepted_moves(trace)
+    stamps = {guid: [rec["t"] for rec in recs] for guid, recs in moves.items()}
+
+    def blank() -> dict:
+        return {"hits": collections.Counter(), "damage": collections.Counter(), "kills": collections.Counter(),
+                "legs": collections.defaultdict(lambda: [0, 0, 0, 0])}
+
+    rows: dict[str, dict] = collections.defaultdict(blank)
+
+    def mover(guid: int, when: int) -> str:
+        return mine_mover(moves.get(guid, []), stamps.get(guid, []), when, samples.before(when).get(guid))
+
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_MINE_EXPLOSIONS and rec.get("d") in roster:
+            row = rows[phase_at(spans, rec["t"])]
+            by = mover(rec["d"], rec["t"])
+            row["hits"][by] += 1
+            row["damage"][by] += rec.get("a", 0)
+
+    for rec in combat_deaths(trace):
+        if rec.get("g") in roster and trace.entries.get(rec.get("killer")) == NPC_PROXIMITY_MINE:
+            rows[phase_at(spans, rec["t"])]["kills"][mover(rec["g"], rec["t"])] += 1
+
+    for guid, recs in moves.items():
+        for rec in recs:
+            units = samples.before(rec["t"])
+            me = units.get(guid)
+            if not me or not living(me):
+                continue
+            start, end = (me[1], me[2]), (rec["x"], rec["y"])
+            if dist2(start, end) < 1.0:
+                continue
+            mines = [(row[1], row[2]) for key, row in units.items() if key in mine_guids and living(row)]
+            # Mines the bot already stands by are left out, as the bots' own leg test does.
+            passed = [m for m in mines if dist2(start, m) >= MINE_LEG_CLEARANCE
+                      and off_segment(start, end, m) < MINE_LEG_CLEARANCE]
+            tally = rows[phase_at(spans, rec["t"])]["legs"][rec.get("by", "?")]
+            tally[0] += 1
+            tally[1] += int(len(passed) >= 1)
+            tally[2] += int(len(passed) >= 2)
+            tally[3] += int(any(dist2(end, m) < MINE_CLEARANCE for m in mines))
+    return rows
+
+
+def show_mines(trace: Trace) -> None:
+    print("MINES")
+    rows = mine_rows(trace)
+    order = [label for _, _, label in phases(trace) if label in rows]
+    shown = False
+    for label in order:
+        row = rows[label]
+        legs = {by: tally for by, tally in row["legs"].items() if tally[1] or tally[3]}
+        if not row["hits"] and not legs:
+            continue
+        shown = True
+        total = sum(row["damage"].values())
+        print(f"  {label:4} hits {sum(row['hits'].values())} for {total // 1000}k,"
+              f" killing blows {sum(row['kills'].values())}")
+        for by, count in row["hits"].most_common():
+            kills = f", {row['kills'][by]} killed" if row["kills"][by] else ""
+            print(f"       {by:44} {count:3} hits {row['damage'][by] // 1000:4}k{kills}")
+        for by, (count, over, over2, ends) in sorted(legs.items()):
+            print(f"       legs {by:39} {over:3} of {count:4} passed a mine, {over2} two or more,"
+                  f" {ends} ended beside one")
+    if not shown:
+        print("  no mine hit and no leg past a live mine")
+        return
+    print(f"\n  'passed' is the straight line within {MINE_LEG_CLEARANCE:.1f} yd of a live mine the bot did not"
+          f" start beside; 'beside' is within {MINE_CLEARANCE:.1f} yd; a hit belongs to the bot's last leg"
+          f" when it is moving and the leg is under {MINE_MOVER_MS / 1000:.0f} s old")
+
+
 # ------------------------------------------------------------------------------------------------- p3
 
 def spray_lanes(units: dict[int, list], firebot: int, flames: set[int]) -> list[tuple[float, float, float]]:
@@ -1253,6 +1362,8 @@ SECTIONS = (
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
     ("fire", "fire dodges against the ticks behind them, where they went, and the formation's detours",
      show_fire),
+    ("mines", "Proximity Mine hits and kills by what was moving the bot, and legs that passed a live mine",
+     show_mines),
     ("p3", "phase 3 fire bots, Water Spray, the Junk Bot pile and what each core landing was worth",
      show_p3),
 )

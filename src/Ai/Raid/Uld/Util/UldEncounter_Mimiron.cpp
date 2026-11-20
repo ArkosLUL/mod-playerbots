@@ -13,6 +13,7 @@
 #include "Item.h"
 #include "LootMgr.h"
 #include "Map.h"
+#include "PathGenerator.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -407,22 +408,20 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
                                     ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH);
 }
 
-// The straight walk from `from` to `dest` against a set of hazards of one radius. Hazards `from`
-// already stands in are left out, since walking out of those is the point.
-bool IsMimironLegClearOf(Position const& from, std::vector<Position> const& nodes, float radius,
-                         Position const& dest)
+// How many of a set of hazards of one radius the straight walk from `from` to `dest` passes. Hazards
+// `from` already stands in are left out, since walking out of those is the point.
+uint32 CountMimironLegHazards(Position const& from, std::vector<Position> const& nodes, float radius,
+                              Position const& dest)
 {
-    if (nodes.empty())
-        return true;
-
     float const fromX = from.GetPositionX();
     float const fromY = from.GetPositionY();
     float const dx = dest.GetPositionX() - fromX;
     float const dy = dest.GetPositionY() - fromY;
     float const lengthSq = dx * dx + dy * dy;
     if (lengthSq <= 0.0f)
-        return true;
+        return 0;
 
+    uint32 passed = 0;
     for (Position const& node : nodes)
     {
         float const nx = node.GetPositionX() - fromX;
@@ -435,10 +434,16 @@ bool IsMimironLegClearOf(Position const& from, std::vector<Position> const& node
         float const ox = nx - t * dx;
         float const oy = ny - t * dy;
         if (std::sqrt(ox * ox + oy * oy) < radius)
-            return false;
+            ++passed;
     }
 
-    return true;
+    return passed;
+}
+
+bool IsMimironLegClearOf(Position const& from, std::vector<Position> const& nodes, float radius,
+                         Position const& dest)
+{
+    return CountMimironLegHazards(from, nodes, radius, dest) == 0;
 }
 
 bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const& hazards,
@@ -513,13 +518,55 @@ MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHaz
 
     return burn;
 }
+}  // namespace
+
+std::vector<Position> GetMimironMines(PlayerbotAI* botAI)
+{
+    return botAI ? GetMimironMarkers(botAI).mines : std::vector<Position>();
+}
 
 // Pathing knows nothing about mines, and the slot screen only covers where the walk ends.
-bool IsMimironLegMineSafe(Position const& from, MimironMarkers const& markers, Position const& dest)
+bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest)
 {
-    return IsMimironLegClearOf(from, markers.mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);
+    return IsMimironLegClearOf(from, mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);
 }
-}  // namespace
+
+bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest)
+{
+    if (!bot || mines.empty())
+        return true;
+
+    Position const from = bot->GetPosition();
+    float const midX = 0.5f * (from.GetPositionX() + dest.GetPositionX());
+    float const midY = 0.5f * (from.GetPositionY() + dest.GetPositionY());
+    float const reach = 0.5f * from.GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) +
+                        ULDUAR_MIMIRON_MINE_LEG_CLEARANCE + ULDUAR_MIMIRON_PATH_BEND_PAD;
+    bool const mineNear = std::any_of(mines.begin(), mines.end(), [&](Position const& mine)
+                                      { return mine.GetExactDist2d(midX, midY) < reach; });
+    if (!mineNear)
+        return true;
+
+    // No path: the mover refuses the leg itself. Two points: the straight walk the leg test judged.
+    PathGenerator path(bot);
+    if (!path.CalculatePath(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ()) ||
+        (path.GetPathType() & PATHFIND_NOPATH))
+        return true;
+
+    Movement::PointsArray const& points = path.GetPath();
+    if (points.size() <= 2)
+        return true;
+
+    // A mine beside a waypoint is skipped by the segment leaving it, but the one arriving there catches it.
+    for (size_t i = 1; i < points.size(); ++i)
+    {
+        Position const start(points[i - 1].x, points[i - 1].y, points[i - 1].z);
+        Position const end(points[i].x, points[i].y, points[i].z);
+        if (!IsMimironLegMineSafe(start, mines, end))
+            return false;
+    }
+
+    return true;
+}
 
 MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001)
 {
@@ -557,18 +604,16 @@ bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards
     return !bot || IsMimironLegFireSafe(bot->GetPosition(), hazards, dest);
 }
 
-bool IsMimironWalkMineSafe(Player* bot, Position const& dest)
+bool IsMimironWalkMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest)
 {
-    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-    if (!botAI)
+    if (!bot)
         return true;
 
-    MimironMarkers const markers = GetMimironMarkers(botAI);
-    for (Position const& mine : markers.mines)
+    for (Position const& mine : mines)
         if (dest.GetExactDist2d(mine.GetPositionX(), mine.GetPositionY()) < ULDUAR_MIMIRON_MINE_CLEARANCE)
             return false;
 
-    return IsMimironLegMineSafe(bot->GetPosition(), markers, dest);
+    return IsMimironLegMineSafe(bot->GetPosition(), mines, dest);
 }
 
 bool IsMimironSpotSafe(Player* bot, Position const& dest)
@@ -777,7 +822,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
 
     Position const from = bot->GetPosition();
     bool const directFireSafe = IsMimironLegFireSafe(from, hazards, goal);
-    bool const directMineSafe = IsMimironLegMineSafe(from, markers, goal);
+    bool const directMineSafe = IsMimironLegMineSafe(from, markers.mines, goal);
     if (directFireSafe && directMineSafe)
     {
         approaches.push_back({goal, how, 0.0f});
@@ -795,7 +840,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     }
 
     auto const legSafe = [&](Position const& start, Position const& end)
-    { return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers, end); };
+    { return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers.mines, end); };
 
     // Round the fire and the mines instead: one waypoint over the walk's midpoint, whose legs both
     // miss them.
@@ -815,10 +860,16 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         }
     }
 
-    // Mines rank last: a blast is a healable 9000, a bot stuck off its slot costs the formation. So
-    // the straight walk is still the last resort whenever the fire leaves it open.
+    // Mines rank last, so the straight walk is still the last resort when the fire leaves it open, but past
+    // one mine at most and only with the health for it: a healer walked one past five and died to two.
     if (directFireSafe)
-        approaches.push_back({goal, how, 0.0f});
+    {
+        if (bot->GetHealthPct() >= ULDUAR_MIMIRON_MINE_CROSS_HEALTH_PCT &&
+            CountMimironLegHazards(from, markers.mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, goal) <= 1)
+            approaches.push_back({goal, how, 0.0f, 0.0f, true});
+        else if (approaches.empty() && RaidObs::Active())
+            RaidObs::NoteDerived(bot, "mimiron.approach", "none mines");
+    }
 
     return approaches;
 }

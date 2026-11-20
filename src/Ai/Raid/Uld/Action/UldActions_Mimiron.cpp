@@ -92,6 +92,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedCone = 0;
     uint32 refusedFire = 0;
     uint32 refusedBomb = 0;
+    uint32 refusedRocket = 0;
     uint32 refusedBurst = 0;
     uint32 refusedShock = 0;
     uint32 refusedSpray = 0;
@@ -107,7 +108,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     UpdateMovementState();
     if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
     {
-        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 1);
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
         return false;
     }
 
@@ -139,135 +140,161 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     }
     float const sweep = toward ? 2.0f * ULDUAR_MIMIRON_FLEE_FAN_MAX : ULDUAR_MIMIRON_FLEE_FAN_MAX;
 
-    for (float delta = 0.0f; delta <= sweep + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
+    // Walks clear of mines first, then any walk: no escape waits on a mine, but a Shock Blast escape runs
+    // out through the ten that landed after the last one.
+    std::vector<Position> const mines = GetMimironMines(botAI);
+    for (bool const mineClearWalk : {true, false})
     {
-        for (float sign : {1.0f, -1.0f})
+        if (mineClearWalk && mines.empty())
+            continue;
+
+        for (float delta = 0.0f; delta <= sweep + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
         {
-            if (delta == 0.0f && sign < 0.0f)
-                continue;
-
-            float const offAway = centre + sign * delta;
-            if (std::fabs(offAway) > ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f)
-                continue;
-
-            float const angle = away + offAway;
-
-            // Off straight away a hop r lands sqrt(d^2 + r^2 + 2dr cos offAway) from the hazard, not d + r, so
-            // solve r per bearing to land on the circle. No root: the bearing never reaches it.
-            float hop = distance;
-            if (clearRadius > 0.0f)
+            for (float sign : {1.0f, -1.0f})
             {
-                float const leg = started * sin(offAway);
-                float const disc = clearRadius * clearRadius - leg * leg;
-                hop = disc > 0.0f ? sqrt(disc) - started * cos(offAway) : 0.0f;
-                if (hop <= 0.0f)
+                if (delta == 0.0f && sign < 0.0f)
+                    continue;
+
+                float const offAway = centre + sign * delta;
+                if (std::fabs(offAway) > ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f)
+                    continue;
+
+                float const angle = away + offAway;
+
+                // Off straight away a hop r lands sqrt(d^2 + r^2 + 2dr cos offAway) from the hazard, not d + r, so
+                // solve r per bearing to land on the circle. No root: the bearing never reaches it.
+                float hop = distance;
+                if (clearRadius > 0.0f)
+                {
+                    float const leg = started * sin(offAway);
+                    float const disc = clearRadius * clearRadius - leg * leg;
+                    hop = disc > 0.0f ? sqrt(disc) - started * cos(offAway) : 0.0f;
+                    if (hop <= 0.0f)
+                    {
+                        ++refusedBack;
+                        continue;
+                    }
+                }
+
+                float dx = bot->GetPositionX() + cos(angle) * hop;
+                float dy = bot->GetPositionY() + sin(angle) * hop;
+                float dz = bot->GetPositionZ();
+                bool exact = true;
+                if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(),
+                                                                   bot->GetPositionY(),
+                                                                   bot->GetPositionZ(), dx, dy, dz))
+                {
+                    dx = bot->GetPositionX() + cos(angle) * hop;
+                    dy = bot->GetPositionY() + sin(angle) * hop;
+                    dz = bot->GetPositionZ();
+                    exact = false;
+                }
+
+                Position const dest(dx, dy, dz);
+                float const travel = speed > 0.0f ? hop / speed : 0.0f;
+
+                // CheckCollisionAndGetValidCoords reports success on an incomplete path, so an off-mesh bearing comes
+                // back as the bot's own feet. Judge the step too: the gain test below passes on a millimetre.
+                if (dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+                    hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
+                {
+                    ++refusedMove;
+                    continue;
+                }
+
+                // Collision can shorten the step enough to leave the bot no better off than it started.
+                if (dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started)
                 {
                     ++refusedBack;
                     continue;
                 }
-            }
 
-            float dx = bot->GetPositionX() + cos(angle) * hop;
-            float dy = bot->GetPositionY() + sin(angle) * hop;
-            float dz = bot->GetPositionZ();
-            bool exact = true;
-            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(),
-                                                               bot->GetPositionY(),
-                                                               bot->GetPositionZ(), dx, dy, dz))
-            {
-                dx = bot->GetPositionX() + cos(angle) * hop;
-                dy = bot->GetPositionY() + sin(angle) * hop;
-                dz = bot->GetPositionZ();
-                exact = false;
-            }
+                if (!IsMimironSpotMineSafe(bot, dest) ||
+                    (mineClearWalk && !IsMimironLegMineSafe(bot->GetPosition(), mines, dest)))
+                {
+                    ++refusedMine;
+                    continue;
+                }
 
-            Position const dest(dx, dy, dz);
-            float const travel = speed > 0.0f ? hop / speed : 0.0f;
+                // Judged at arrival, not at issue: this leg holds the lock for its whole run, so a spot that's
+                // only clear now strands the bot in the beams.
+                if (!IsMimironSpotBarrageSafe(vx001, barrage, dest, travel))
+                {
+                    ++refusedCone;
+                    continue;
+                }
 
-            // CheckCollisionAndGetValidCoords reports success on an incomplete path, so an off-mesh bearing comes
-            // back as the bot's own feet. Judge the step too: the gain test below passes on a millimetre.
-            if (dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
-                hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
-            {
+                // Firefighter only, empty otherwise. Keeps a Shock Blast or barrage dodge out of fresh fire, and a
+                // fire dodge out of the next node along.
+                if (!allowFire && !IsMimironSpotFireSafe(hazards, dest))
+                {
+                    ++refusedFire;
+                    continue;
+                }
+
+                if (!IsMimironSpotBombSafe(hazards, dest))
+                {
+                    ++refusedBomb;
+                    continue;
+                }
+
+                // Kills outright, and this forced leg locks the bot's own rocket dodge out until it lands.
+                if (!IsMimironSpotRocketSafe(botAI, dest))
+                {
+                    ++refusedRocket;
+                    continue;
+                }
+
+                // Rapid Burst is only 60 degrees wide but 100 yd deep, so any dodge can walk into it.
+                if (!IsMimironSpotRapidBurstSafe(vx001, burst, dest))
+                {
+                    ++refusedBurst;
+                    continue;
+                }
+
+                // Counted with the cone. An escape that crosses VX-001 puts melee in the wedge's line, or
+                // ranged in the melee sector, and every burst after that hits both groups.
+                if (IsMimironSpotInSector(vx001, sector, dest))
+                {
+                    ++refusedBurst;
+                    continue;
+                }
+
+                // Including the Shock Blast escape itself: the test is on where the bot ends, not where it starts.
+                if (!IsMimironSpotShockSafe(botAI, dest))
+                {
+                    ++refusedShock;
+                    continue;
+                }
+
+                if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
+                                              ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
+                {
+                    ++refusedSpray;
+                    continue;
+                }
+
+                // Last, since it builds a path: the walk bends round holes in the navmesh, off the line
+                // the leg test judged.
+                if (mineClearWalk && !IsMimironPathMineSafe(bot, mines, dest))
+                {
+                    ++refusedMine;
+                    continue;
+                }
+
+                if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
+                    MoveOutcome::Issued)
+                {
+                    NoteFleeOutcome(what, "ok", &offAway, refusedBack, refusedMine, refusedCone, refusedFire,
+                                    refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray,
+                                    refusedMove);
+                    return true;
+                }
+
+                // No path, or the same destination as the last leg. Counted, or a fan the mover emptied reads
+                // like one the hazards emptied.
                 ++refusedMove;
-                continue;
             }
-
-            // Collision can shorten the step enough to leave the bot no better off than it started.
-            if (dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started)
-            {
-                ++refusedBack;
-                continue;
-            }
-
-            if (!IsMimironSpotMineSafe(bot, dest))
-            {
-                ++refusedMine;
-                continue;
-            }
-
-            // Judged at arrival, not at issue: this leg holds the lock for its whole run, so a spot that's only
-            // clear now strands the bot in the beams.
-            if (!IsMimironSpotBarrageSafe(vx001, barrage, dest, travel))
-            {
-                ++refusedCone;
-                continue;
-            }
-
-            // Firefighter only, empty otherwise. Keeps a Shock Blast or barrage dodge out of fresh fire, and a
-            // fire dodge out of the next node along.
-            if (!allowFire && !IsMimironSpotFireSafe(hazards, dest))
-            {
-                ++refusedFire;
-                continue;
-            }
-
-            if (!IsMimironSpotBombSafe(hazards, dest))
-            {
-                ++refusedBomb;
-                continue;
-            }
-
-            // Rapid Burst is only 60 degrees wide but 100 yd deep, so any dodge can walk into it.
-            if (!IsMimironSpotRapidBurstSafe(vx001, burst, dest))
-            {
-                ++refusedBurst;
-                continue;
-            }
-
-            // Counted with the cone. An escape that crosses VX-001 puts melee in the wedge's line, or
-            // ranged in the melee sector, and every burst after that hits both groups.
-            if (IsMimironSpotInSector(vx001, sector, dest))
-            {
-                ++refusedBurst;
-                continue;
-            }
-
-            // Including the Shock Blast escape itself: the test is on where the bot ends, not where it starts.
-            if (!IsMimironSpotShockSafe(botAI, dest))
-            {
-                ++refusedShock;
-                continue;
-            }
-
-            if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
-                                          ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
-            {
-                ++refusedSpray;
-                continue;
-            }
-
-            if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
-                MoveOutcome::Issued)
-            {
-                NoteFleeOutcome(what, "ok", &offAway, refusedBack, refusedMine, refusedCone, refusedFire,
-                                refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
-                return true;
-            }
-
-            // No path, or the same destination as the last leg. Counted, or a fan the mover emptied reads like
-            // one the hazards emptied.
-            ++refusedMove;
         }
     }
 
@@ -280,27 +307,28 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
         return false;
     }
 
-    // Never into the four that kill outright: standing in fire is only ~3.1k a second, and this forced leg
+    // Never into the five that kill outright: standing in fire is only ~3.1k a second, and this forced leg
     // would also hold the lock against the Shock Blast escape.
     Position const straightAway(bot->GetPositionX() + cos(away) * distance,
                                 bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
     float const fallbackTravel = speed > 0.0f ? distance / speed : 0.0f;
     if (!IsMimironSpotShockSafe(botAI, straightAway) ||
         !IsMimironSpotBombSafe(hazards, straightAway) ||
+        !IsMimironSpotRocketSafe(botAI, straightAway) ||
         !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel) ||
         IsMimironSpotInFireBotSpray(hazards, straightAway, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                    refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                    refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -314,8 +342,9 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 // two outcomes where no bearing won at all.
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
-                                        uint32 refusedFire, uint32 refusedBomb, uint32 refusedBurst,
-                                        uint32 refusedShock, uint32 refusedSpray, uint32 refusedMove)
+                                        uint32 refusedFire, uint32 refusedBomb, uint32 refusedRocket,
+                                        uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,
+                                        uint32 refusedMove)
 {
     if (!RaidObs::Active())
         return;
@@ -326,8 +355,8 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
 
     char line[192];
     snprintf(line, sizeof(line),
-             "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u shock%u spray%u move%u)", what,
-             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
+             "%s %s%s (back%u mine%u cone%u fire%u bomb%u rocket%u burst%u shock%u spray%u move%u)", what,
+             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb, refusedRocket,
              refusedBurst, refusedShock, refusedSpray, refusedMove);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
@@ -505,13 +534,16 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
         // Radius is free, so spend it dodging fire, walk and endpoint both. No clean radius still keeps the
-        // step: the cone kills in a tick. A hurt healer ranks mines over fire on the walk, a mine being about
-        // three fire ticks. Ranking only, never a refusal.
-        bool const mineAware =
-            PlayerbotAI::IsHeal(bot) && bot->GetHealthPct() < ULDUAR_MIMIRON_BARRAGE_MINE_AVOID_HP_PCT;
-        int const bestScore = mineAware ? 3 : 1;
+        // step: the cone kills in a tick. Mines rank over fire on the walk, a blast being about three fire
+        // ticks. Ranking only, never a refusal.
+        std::vector<Position> const mines = GetMimironMines(botAI);
+        int const bestScore = 3;
         float stepRadius = radius;
         int stepScore = -1;
+
+        // The path check builds a path, so only when this step can actually go out: mid-leg it's held anyway.
+        UpdateMovementState();
+        bool const canIssue = !IsWaitingForLastMove(MovementPriority::MOVEMENT_FORCED);
         for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
         {
             float const candidate = radius + shift;
@@ -526,8 +558,13 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                 continue;
 
             int score = IsMimironWalkFireSafe(bot, hazards, spot) ? 1 : 0;
-            if (mineAware && IsMimironWalkMineSafe(bot, spot))
+            if (IsMimironWalkMineSafe(bot, mines, spot))
                 score += 2;
+
+            // Only a candidate about to take the lead pays for a path: the walk bends round holes in the
+            // navmesh, off the line the leg test judged.
+            if (score >= 2 && score > stepScore && canIssue && !IsMimironPathMineSafe(bot, mines, spot))
+                score -= 2;
 
             if (score > stepScore)
             {
@@ -699,9 +736,20 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
 
     // Pathing knows nothing of mines, rocket markers or fire, so every leg is screened here; the next tick
     // replans from wherever the leg ended.
+    std::vector<Position> const mines = GetMimironMines(botAI);
+    UpdateMovementState();
+    bool const canIssue = !IsWaitingForLastMove(MovementPriority::MOVEMENT_COMBAT);
     for (MimironApproach const& approach :
          GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)))
     {
+        // The screen judged the straight line, and the walk bends round holes in the navmesh. Only for a
+        // leg that goes out now: re-offering the one being walked, or a held one, builds no path.
+        if (!approach.overMines && canIssue &&
+            !IsDuplicateMove(approach.dest.GetPositionX(), approach.dest.GetPositionY(),
+                             approach.dest.GetPositionZ()) &&
+            !IsMimironPathMineSafe(bot, mines, approach.dest))
+            continue;
+
         // Only a candidate with no path hands over to the next. Already walking a leg, or held by
         // the movement lock, has to stay put, or the bot swaps waypoints mid leg.
         MoveOutcome const outcome =
@@ -764,9 +812,10 @@ bool MimironRocketStrikeAction::Execute(Event /*event*/)
 
     // Per-bearing hop onto the clearance circle, not a flat run. FORCED so the arc spread leg the bot is
     // usually mid-way through can't swallow the dodge.
-    float const gap = ULDUAR_MIMIRON_ROCKET_CLEARANCE - bot->GetExactDist2d(rocketStrikeN);
+    float const escape = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_FLEE_MARGIN;
+    float const gap = escape - bot->GetExactDist2d(rocketStrikeN);
     return MoveAwayClearOfMines(rocketStrikeN, gap, MovementPriority::MOVEMENT_FORCED, true, true,
-                                "rocket", ULDUAR_MIMIRON_ROCKET_CLEARANCE);
+                                "rocket", escape);
 }
 
 bool MimironPhase4FocusAction::Execute(Event /*event*/)

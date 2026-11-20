@@ -319,9 +319,12 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (IsMimironCoreFetchDue(botAI, bot))
         return lowHealth;
 
-    // One node (~3.1k a tick) leaves a healthy bot seven ticks, so it stays put. Two halve that to about four
-    // seconds, too short to notice and walk out, so they dodge at any health.
-    return nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE || lowHealth;
+    // Two nodes are about four seconds from full, too short to notice and walk out, so any health. In one, a
+    // walking bot is on its way out and only a low one dodges; a standing one leaves after a couple of ticks.
+    if (nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE || lowHealth)
+        return true;
+
+    return !bot->isMoving() && bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT;
 }
 
 bool MimironFireBotTrigger::IsActive()

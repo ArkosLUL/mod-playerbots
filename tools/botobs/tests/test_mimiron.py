@@ -300,6 +300,78 @@ class FirePull(unittest.TestCase):
         self.assertEqual(dict(row["fire"]), {"ranged": 3000})
 
 
+MINE_A, MINE_B, MINE_C, MINE_D = 4294970201, 4294970202, 4294970203, 4294970204
+MINES = {MINE_A: (30.0, 0.0), MINE_B: (35.0, 0.5), MINE_C: (10.0, 0.0), MINE_D: (-3.0, 1.0)}
+
+
+def mine_snap(when: int) -> dict:
+    rows = [[guid, x, y, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0] for guid, (x, y) in MINES.items()]
+    for guid, (x, y) in HOME.items():
+        walking = guid == AGONY and (1000 <= when < 3000 or 13500 <= when < 14500)
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 80.0, VX, int(walking), 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def mine_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 5, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+    ]
+    records += [{"t": 1, "e": "unit", "g": guid, "en": mm.NPC_PROXIMITY_MINE, "n": "Proximity Mine"}
+                for guid in MINES]
+    records += [
+        # past two mines on the way out, and hit by one a second in
+        move(1000, AGONY, "mimiron shock blast action", 40.0, 0.0),
+        {"t": 2000, "e": "dmg", "s": MINE_A, "d": AGONY, "sp": mm.SPELL_MINE_EXPLOSIONS[0], "a": 10000},
+        # standing still, and killed by it
+        {"t": 5000, "e": "dmg", "s": MINE_C, "d": TREE, "sp": mm.SPELL_MINE_EXPLOSIONS[1], "a": 9600},
+        {"t": 5001, "e": "death", "g": TREE, "killer": MINE_C, "x": 0.0, "y": 22.0, "z": 364.0},
+        # ends beside a mine; then a walk off the mine the bot stands by, which counts for neither
+        move(6000, SHADOW, mm.FORMATION, 9.0, 2.0),
+        move(7000, BULWARK, mm.FORMATION, -3.0, 10.0),
+        # under a yard, so no leg at all; then a hit 5 s after it while walking
+        move(9000, AGONY, "mimiron shock blast action", 22.5, 0.0),
+        {"t": 14000, "e": "dmg", "s": MINE_B, "d": AGONY, "sp": mm.SPELL_MINE_EXPLOSIONS[0], "a": 5000},
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [mine_snap(when) for when in range(0, 20000, 250)]
+    return records
+
+
+class MinePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_5_mimiron_1789700003.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in mine_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_hit_goes_to_the_recent_leg_of_a_moving_bot_else_standing(self):
+        row = mm.mine_rows(self.trace)["P4"]
+        self.assertEqual(dict(row["hits"]),
+                         {"mimiron shock blast action": 1, mm.STANDING: 1, mm.OLDER_LEG: 1})
+        self.assertEqual(dict(row["damage"]),
+                         {"mimiron shock blast action": 10000, mm.STANDING: 9600, mm.OLDER_LEG: 5000})
+        self.assertEqual(dict(row["kills"]), {mm.STANDING: 1})
+
+    def test_legs_count_mines_passed_and_ended_beside_but_not_the_one_left(self):
+        legs = mm.mine_rows(self.trace)["P4"]["legs"]
+        self.assertEqual(legs["mimiron shock blast action"], [1, 1, 1, 0])
+        self.assertEqual(legs[mm.FORMATION], [2, 1, 0, 1])
+
+    def test_the_view_prints_per_phase(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_mines(self.trace)
+        self.assertIn("P4   hits 3 for 24k, killing blows 1", out.getvalue())
+
+
 class SyntheticPull(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

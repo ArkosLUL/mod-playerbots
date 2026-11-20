@@ -104,10 +104,6 @@ inline constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS[] = {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f,
                                                                  -8.0f};
 
-// Below this a healer's barrage step also picks a radius clear of mines when one exists. A mine is
-// 9.6-10.8k, ~45% of a healer's pool, and a healer walked into two of them in one step.
-inline constexpr float ULDUAR_MIMIRON_BARRAGE_MINE_AVOID_HP_PCT = 70.0f;
-
 // Spare time a bot inside the ignition cone needs to leave by the trailing side before the beams
 // light: two beam ticks for the leg to start and land.
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER = 0.5f;
@@ -271,10 +267,19 @@ inline constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
 // A formation walk passing closer than this to a mine sets it off: the 1.9 yd poll plus slop. Every
 // 500 ms at 7 yd/s, so a walk straight across one is inside it for a poll or two.
 inline constexpr float ULDUAR_MIMIRON_MINE_LEG_CLEARANCE = 2.5f;
+// Least health for a formation walk that has to pass a mine. A blast is 9.6-10.8k, 42-49% of a healer's
+// pool, so one leaves it standing and two kill it.
+inline constexpr float ULDUAR_MIMIRON_MINE_CROSS_HEALTH_PCT = 70.0f;
+// How far a navmesh path strayed off its straight leg round a hole in the floor: 4.6 yd in the traces. A
+// mine further than this past the leg can't be on the walk, so no path gets built for it.
+inline constexpr float ULDUAR_MIMIRON_PATH_BEND_PAD = 5.0f;
 
 // Stand-off from a live Rocket Strike marker (5 s fuse, 3 yd blast) for any destination, or a bot that
 // dodged walks straight back onto it.
 inline constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
+// The rocket dodge aims this far past the clearance, which every flee screens: a hop landing exactly on
+// the circle fails its own marker to float noise.
+inline constexpr float ULDUAR_MIMIRON_ROCKET_FLEE_MARGIN = 0.5f;
 
 // Where the dodge fires: 63041 is a flat 3.0 yd and a creature caster adds no combat reach, so 5
 // covers it with slop. Run 5, stand 8, like the bomb and the siren.
@@ -361,19 +366,31 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // don't count: walking out of those is the point.
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
 
+// Live Proximity Mine positions, read once to screen a batch of walks.
+std::vector<Position> GetMimironMines(PlayerbotAI* botAI);
+
+// The straight walk from `from` passes no mine inside ULDUAR_MIMIRON_MINE_LEG_CLEARANCE. Mines `from`
+// already stands by don't count: walking off them is the point.
+bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest);
+
 // The straight walk to `dest` and the spot itself clear of every Proximity Mine. Pathing can't see
 // them, they're non-selectable.
-bool IsMimironWalkMineSafe(Player* bot, Position const& dest);
+bool IsMimironWalkMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest);
+
+// Same as the leg test, along the navmesh path the bot will really walk, which bends round holes in the
+// floor. Builds a path whenever a mine is near the leg, so only for the one candidate about to be issued.
+bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest);
 
 // One leg the formation can send a bot on toward its slot. `how` is "direct", "substitute", "cross" or
 // "detour"; `turn` is a detour's signed turn off the direct bearing, radians; `burn` the yards a
-// crossing spends inside fire.
+// crossing spends inside fire; `overMines` a last-resort walk that passes a mine.
 struct MimironApproach
 {
     Position dest;
     char const* how;
     float turn;
     float burn = 0.0f;
+    bool overMines = false;
 };
 
 // Formation legs toward the slot, best first; empty when nothing gets there or the bot already stands
@@ -581,8 +598,8 @@ inline constexpr float ULDUAR_MIMIRON_FLAMES_BURN_RADIUS = 3.5f;
 // so one ~3.1k tick at most against a detour that costs casts.
 inline constexpr float ULDUAR_MIMIRON_FLAMES_CROSS_MAX = 4.0f;
 
-// Least health for that crossing. One tick takes ~14% of a 22-24k pool, so it lands above the 60%
-// dodge gate and the dodge doesn't throw the bot back mid-leg.
+// Least health for that crossing. One tick takes ~14% of a 22-24k pool, so it lands above the walking
+// bot's 60% dodge gate and the dodge doesn't throw the bot back mid-leg.
 inline constexpr float ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT = 75.0f;
 
 // Stand-in search for a spot that won't do: bearings alternate either side of the preferred one, and the
@@ -649,9 +666,12 @@ inline constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE = 19.0f;
 // is about 10 yd (Death and Decay, Hurricane, Blizzard), so 12 covers the splash that reaches one.
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 12.0f;
 
-// Above this, fire is cheaper than the trip: a node ticks ~3100 against a 22000 to 24000 pool, seven
-// ticks of margin, and the round trip is 24 yd of uptime or a cast.
+// A walking bot in one node dodges only under this: it's on its way out, and a dodge would throw a
+// crossing back mid-leg. A node ticks ~3100 against a 22000 to 24000 pool.
 inline constexpr float ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT = 60.0f;
+// A bot standing in one node dodges under this, about two ticks from full. Healers held parked bots
+// above 60 for up to 38 s of ticks, so the walking gate never let them go.
+inline constexpr float ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT = 80.0f;
 
 // How many nodes overrule the health gate. One node is about 8 s of margin from full; two is 4, and
 // four seconds is not enough to notice a health bar moving and then walk 12 yd.
