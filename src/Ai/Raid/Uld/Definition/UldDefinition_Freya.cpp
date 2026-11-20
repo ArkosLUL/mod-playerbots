@@ -6,6 +6,7 @@
 
 #include "UldDefinitions.h"
 
+#include "AiObjectContext.h"
 #include "BossAuraActions.h"
 #include "BossAuraTriggers.h"
 #include "BossResistanceMultipliers.h"
@@ -29,6 +30,19 @@ bool FreyaAlive(PlayerbotAI* botAI)
 }
 
 bool FreyaOwnsTargets(PlayerbotAI* botAI) { return botAI->GetState() == BOT_STATE_COMBAT && FreyaAlive(botAI); }
+
+bool FreyaTankOnLasher(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->GetEntry() == NPC_DETONATING_LASHER;
+}
+
+bool FreyaMeleeNearBomb(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return !PlayerbotAI::IsTank(bot) &&
+           bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
+}
 
 void DefineFreya(EncounterBuilder& e)
 {
@@ -78,6 +92,8 @@ void DefineFreya(EncounterBuilder& e)
 
     // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
     // root outranks the dodge: a rooted bot can't move, so it has to free itself before it can step out.
+    // Hand of Freedom and Blink first, since either frees the bot at once.
+    e.Node<FreyaFreeRootedAllyTrigger, FreyaFreeRootedAllyAction>(ACTION_RAID + 5);
     e.Node<FreyaBreakIronRootsTrigger, FreyaBreakIronRootsAction>(ACTION_RAID + 5);
     e.Node<FreyaDodgeUnstableSunBeamTrigger, FreyaDodgeUnstableSunBeamAction>(ACTION_RAID + 4);
     e.Node<FreyaGroundTremorHoldCastTrigger, FreyaGroundTremorHoldCastAction>(ACTION_EMERGENCY + 2);
@@ -98,6 +114,16 @@ void DefineFreya(EncounterBuilder& e)
     // Avoid AoE sits at ACTION_EMERGENCY above every Freya escape, and swaps their all-hazard answer for
     // a flat FleeDistance hop that clears none of them.
     e.Block("freya avoid aoe hold", Role::Any, FreyaAlive, Family::AvoidAoe);
+
+    // Ghouls hold lashers better than any tank, and the class chain taunts one off a ghoul, or Righteous Defenses
+    // the ghoul itself, on every cooldown. The add tank's pickup casts its own, only for lashers on players.
+    e.Block("freya lasher taunt reserve", Role::Tank, FreyaTankOnLasher, 0,
+            {"hand of reckoning", "righteous defense", "taunt", "growl", "dark command", "death grip", "mocking blow",
+             "challenging shout", "challenging roar"});
+
+    // Freya faces her tank, away from the bombs, so "behind" walks a melee bot from a clear spot in her reach toward
+    // them. Reach melee stays open: a walk into a blast re-fires the escape, which aims back into reach.
+    e.Block("freya nature bomb melee guard", Role::Melee, FreyaMeleeNearBomb, 0, {"set behind"});
 
     e.Multiplier<FreyaGroundTremorCastGateMultiplier>(Family::Spell);
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "freya");

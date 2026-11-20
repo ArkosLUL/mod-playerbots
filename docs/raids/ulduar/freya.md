@@ -180,10 +180,14 @@ a median escape latency of **0.65s**.
   go quiet at 13 yd out: 51 victims walked back into a live blast a median 5.3s in, moved by the escape
   itself (40), `reach melee` (32) and `reach spell` (20). The trigger now reaches
   `_HAZARD_SEARCH_RADIUS` with `isUseful` narrowing it to the blast plus the latch window.
-- **Melee hold their spot** while a bomb still covers `bombOrigin`, and only melee: a held bot casts
-  nothing (`Engine::DoNextAction` stops at the first action returning true), which is free for melee,
-  out of range at the escape spot anyway, and pure loss for ranged and healers. A blanket hold shell is
-  out for the same reason: with a bomb up, bots sit 10-14 yd from one **34%** of the time.
+- **Melee aim for Freya's reach.** The first sweep for melee accepts only spots within
+  `GetMeleeRange(freya) − 1` of her. Arrived, while a bomb still covers `bombOrigin`, a melee bot in
+  reach returns false and swings; out of reach, once Freya stops moving, it re-sweeps for an in-reach
+  spot (every `ULDUAR_FREYA_MELEE_REACH_RETRY_MS`, 500); otherwise it holds, since `reach melee` would
+  walk it back through the blast. A held bot casts nothing (`Engine::DoNextAction` stops at the first
+  action returning true), so ranged and healers never hold, nor any blanket hold shell: with a bomb up,
+  bots sit 10-14 yd from one **34%** of the time. The old unconditional hold kept 1 of 9 melee in
+  reach for 7s with Freya 12 yd clear; phase 2 melee reach share was 37-60%. Not yet verified in a pull.
 - **Fallbacks.** Where overlapping bombs leave nothing clearing the full margin it takes AVOID + 1
   (without it: false on 164 of 394 attempts, 77% with 4+ bombs in range). Below that it clears the
   blast itself (`_BLAST_RADIUS`, 10), then walks straight out of the circles covering the bot, on the
@@ -214,6 +218,14 @@ the far side of Freya from `GetFreyaRangedCampAnchor`: it only reorders spots th
 tank never takes a longer trip or drags her toward the back line. Melee re-close on the generic `reach
 melee`; nothing zeroes it.
 
+**The drag clears Freya, not only the tank** (not yet verified in a pull). She stops in reach 6-7 yd
+in front of him, so clearing him alone left her **5.9-8.2 yd from a bomb** in 3 of 4 volleys, her
+melee ring in the blast, 1-2 of 9 melee in reach for 7-8s, and once (bombs 13.3 yd from him, 7.2 from
+her) he never moved. The trigger also fires on a bomb within `_AVOID_RADIUS` of Freya while she is on
+him, and the first sweep accepts a spot only if her predicted stand, `F' = S + (F − S)·min(1, gap/|F −
+S|)`, clears every bomb by `_CLEAR_RADIUS`. Failing that he clears himself as before, or, with only her
+ring covered, stays put rather than hop for nothing.
+
 **That preference needs a leash.** A volley every 18s with Freya walking after her holder random-walks
 her in one direction all pull: she once finished **100 yd** east, at Z 419.9 down the slope toward the
 water, the melee ring and half the raid strung out behind her. Past `ULDUAR_FREYA_TANK_LEASH` (20 yd)
@@ -225,7 +237,7 @@ and a 12 yd ring around it 8/8 on mesh.
 
 ## Tanks
 
-The main tank gets Freya; assist tank 0 works down a ladder: Snaplasher (the Hardened Bark sink) >
+The main tank gets Freya, plus the Storm Lasher (below); assist tank 0 works down a ladder: Snaplasher (the Hardened Bark sink) >
 Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it > Freya.
 Generic `TankAssistAction` is zeroed for **every** tank all encounter: gated on "the ladder has
 something", it let generic assist through on a pure lasher wave, and the off-tank walked the wave into
@@ -236,10 +248,19 @@ The trio rung picks the **highest-health** member on purpose: tank damage is inv
 makes it help convergence. It is percent-based like every sync threshold, and sticky by
 `ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT` (5) so the tank's own damage does not swap it every few ticks.
 
-Of the trio and Conservator, the taunt fires for the **Snaplasher and Conservator only**; the rest is
-borrowed for damage. Taunting Freya would fight a human main tank whose raid roles are set differently,
-and taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning. Lashers have their
-own pickup ([below](#detonating-lasher-waves)). Mocking Blow counts as a taunt
+The add tank taunts the **Snaplasher and Conservator only**; the rest of its ladder is borrowed for
+damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
+their own pickup ([below](#detonating-lasher-waves)).
+
+**A bot main tank holds the Storm Lasher** (not yet verified in a pull). Unheld, the Storm Lasher and
+Water Spirit spent **0%** of both trio waves on a tank and the Storm Lasher's swings did 73-75k a wave to
+melee DPS, while the main tank took **1.3-1.5k/s** (lowest 68-71%) against the add tank's 5.0-5.2k/s
+from the Snaplasher. He taunts it whenever it isn't on him, even under the sync floor, and attacks it
+only in melee range and above the floor, else Freya, who stays on standing threat; walking to it would
+drag her. Its swings and Stormbolt go to its holder; Lightning Lash picks a random target either way.
+Not the Water Spirit: Tidal Wave charges its holder and fires a 40 yd knock-back cone, through the
+melee stack and moving Freya. No DPS threat shed yet: add one (`FreyaShedsSnaplasherThreat`'s shape)
+only if `--threat 32919` shows DPS keep pulling it. Mocking Blow counts as a taunt
 ([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)): Arms'
 `piercing howl` once fell back to it, so the `hamstring` snare trigger made a warrior taunt a
 Snaplasher at 64 stacks and die 270 ms later; it falls back to `hamstring` now.
@@ -261,14 +282,22 @@ uniformly random player within 80 yd; they spawn the same way after a 5s submerg
 nobody inside 80 yd despawns and still counts as cleared. They run at **8.0 yd/s** (`speed_run`
 1.14286) against a player's 7.0.
 
-**The off-tank takes back loose lashers** (`TryFreyaLasherPickup`, not yet verified in a pull): assist
+**The off-tank takes back loose lashers** (`TryFreyaLasherPickup`): assist
 tank 0, once its ladder is past the Snaplasher, Conservator and trio, picks up lashers hitting a
 non-tank player. First Righteous Defense (40 yd) on the member most of them hit, unless Freya is on
 that member; then Challenging Shout or Roar with 2+ loose inside 10 yd, only while Freya is farther than
 10 yd plus her reach, or it pulls her off the main tank; then the class taunt (30 yd) on the nearest.
 Taunts are 8s, inside the 10s reset; the class rotation's AoE threat holds them between. No new
-movement: lashers walk to the tank, and the ranged pack focus follows the pile. Before it, the off-tank
-held 11-20% of lasher time, at most 5 at once.
+movement: lashers walk to the tank, and the ranged pack focus follows the pile. In its first pull it
+cast Righteous Defense on a player 5 times, 3-4 lashers each, all back on ghouls within 4s; off-tank
+lasher time stayed 11.7-18.3% (11-20% before).
+
+**No tank takes a lasher off a ghoul.** Ghouls held 58-59% of lasher time. The class chain taunts the
+tank's current target, so it fired Hand of Reckoning every 8s at ghoul-held lashers and Righteous
+Defense on the ghoul itself five times, dragging them into the melee stack and leaving both on
+cooldown when two lashers killed a ret paladin at 1:45. `freya lasher taunt reserve` blocks the class
+taunts (incl. Death Grip, Mocking Blow, the shouts) for any tank whose current target is a lasher. The
+pickup casts directly and only for lashers on a non-tank player, so the block skips it.
 
 A `GROUP_LASHERS` wave is **10** of them, 717k in 10-man and **2.35M in 25-man**, for **2** stacks each:
 150.6k HP per stack, the **worst rate in the fight** (Water Spirit 66.9k · Storm Lasher 100.4k ·
@@ -417,7 +446,9 @@ pinned bot its rotation and its root.
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)), which at `ACTION_EMERGENCY` outranks
 every Freya node and swaps a 15 yd escape for a 5 yd hop of its own; it took the tick back from a beam
 dodge 1.9s before that bot died. Freya's nodes read every hazard at once, so it has nothing to add.
-**Movement only**: nothing here zeroes `ReachTargetAction`.
+`freya nature bomb melee guard` blocks `set behind` for non-tank melee with a bomb within
+`_HAZARD_SEARCH_RADIUS`: Freya faces her tank, away from the bombs, so "behind" walks a bot from its
+in-reach spot toward them. **Movement only**: nothing here zeroes `ReachTargetAction`.
 
 ## Hard mode
 
@@ -460,6 +491,22 @@ most break inside a second on incidental AoE, but 7 of one pull's held 2s or lon
 inside a hazard. In the reference kill, **27** traps in 9 volleys of 3, most released under 1s, worst
 **25.3s**; in a later kill nobody died under a latch while rooted. Every other Freya id
 here already carries its pair.
+
+**Freeing beats breaking** (`freya free rooted ally`, `ACTION_RAID + 5` ahead of the break; not yet
+verified in a pull). A mage rooted 0.3s into a beam dodge, 3.3-4.0 yd from two Unstable Sun Beams,
+took ~10k/s for 5.2s: it finished a 2.3s Fireball on Freya first, then the break started another on the
+root, which died 1 ms after it. Roots of 9.2s and 20.6s recur, at 4.6k per 2s on their own. Iron Roots
+62438 / 62861 is `Mechanic` 7 without `SPELL_ATTR0_NO_IMMUNITIES`, and Blink 1953 and Hand of Freedom
+1044 both carry `SPELL_ATTR1_IMMUNITY_PURGES_EFFECT` with root immunity, so
+`ApplyAllSpellImmunitiesTo` → `RemoveAurasWithMechanic` strips the root and its DoT; the root creature
+(`NullCreatureAI`) never reapplies it. Blink (`SPELL_EFFECT_LEAP`) is castable while rooted.
+- **Paladins** Hand of Freedom the rooted member in 30 yd and sight (`GetFreyaRootedAllyToFree`): one in
+  a hazard first (`GetFreyaHazardsUnder`: a bomb within `_AVOID_RADIUS`, a beam within
+  `ULDUAR_FREYA_ROOTED_BEAM_RADIUS` 6), then the nearest.
+- **A mage** rooted in a hazard drops its cast, faces away from the hazards' centre (Blink leaps 20 yd
+  along the facing) and Blinks.
+- **The break** interrupts a DPS bot's cast at anything but the root while it stands in a hazard. Not
+  healers, who keep it alive in there, nor an Army channel.
 
 **Unstable Sun Beam.** The dodge rings outward to a spot clear of every beam in range.
 **`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is 2.4× too wide**: Unstable Energy **62865** is

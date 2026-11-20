@@ -12,15 +12,21 @@ The camp geometry and the three Snaplasher fixes shipped and live in
 [docs/raids/ulduar/freya.md](../../raids/ulduar/freya.md), as do the Army fixes. The item below is
 **proposed, not built** and needs its own go-ahead.
 
-## One bomb escape returned false for a whole fuse (the kill's only death)
+## Bomb escapes that returned false for a whole fuse
 
 87 of 88 exposed bot-volleys escaped, median **0.61s**. `Power` at 6:17.2 did not: bomb at 0.0 yd,
 three more inside 10, `freya move away nature bomb` FAILED on four ticks running, **no move order
 issued**, not rooted or stunned by any aura - so every sweep tier and `StepOffNatureBombs` came back
 empty. Bot at (2356.27, -37.18, 425.17); bombs at (2356.3,-37.2) (2353.2,-41.5) (2352.8,-46.0)
 (2352.7,-45.0) (2348.9,-49.3) (2348.2,-48.7) (2373.3,-53.0). The step-off bearing points at y -28,
-past the room's solid floor. **Diagnose first:** `navprobe` the ring candidates from that spot, then
-make the last tier try other bearings instead of one.
+past the room's solid floor. navprobe: that spot is on the mesh (dz +0.001).
+
+**Second case** (`603_26_elder-stonebark_1795181889`, 6:27.7-6:33.8): a rebirthed mage stood 6s on two
+bombs (0.0 and 1.1 yd) at (2406.1, −35.54, 421.47), escape FAILED, no move, dead at 100% of a
+post-rez ~17k. navprobe there: terrain 419.34, mesh 0.88 yd **above** him, a 13 yd ring all on mesh
+but settling 417.2-422.9, so he was in the stream at the room's east edge. **Diagnose first:** what
+`Map::CheckCollisionAndGetValidCoords` returns from a swimming start (every sweep candidate goes through
+it), then for the solid-floor case make the last tier try other bearings instead of one.
 
 ## Not proposed
 

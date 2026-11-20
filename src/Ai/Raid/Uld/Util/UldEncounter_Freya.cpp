@@ -476,7 +476,14 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     Unit* freya = GetFreyaScanUnitByEntry(botAI, NPC_FREYA);
 
     if (PlayerbotAI::IsMainTank(bot))
+    {
+        // Only once it's in reach: walking to it would drag Freya along. The taunt brings it over.
+        Unit* storm = state.stormLasher;
+        if (storm && storm->IsAlive() && !FreyaTrioSyncSuppress(state, storm) && bot->IsWithinMeleeRange(storm))
+            return storm;
+
         return freya;
+    }
 
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return nullptr;
@@ -735,6 +742,77 @@ Player* GetFreyaLooseLasherVictim(Unit* lasher)
         return nullptr;
 
     return player;
+}
+
+bool IsFreyaRooted(Unit* unit)
+{
+    return unit->HasAura(SPELL_IRON_ROOTS_DAMAGE_10) || unit->HasAura(SPELL_IRON_ROOTS_DAMAGE_25) ||
+           unit->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_10) || unit->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_25);
+}
+
+uint32 GetFreyaHazardsUnder(PlayerbotAI* botAI, Unit* unit, Position* centre)
+{
+    uint32 count = 0;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    auto const add = [&](WorldObject const* hazard)
+    {
+        ++count;
+        sumX += hazard->GetPositionX();
+        sumY += hazard->GetPositionY();
+    };
+
+    std::list<GameObject*> bombs;
+    unit->GetGameObjectListWithEntryInGrid(bombs, GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
+    for (GameObject* bomb : bombs)
+        if (bomb)
+            add(bomb);
+
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
+    {
+        Unit* beam = botAI->GetUnit(guid);
+        if (beam && beam->IsAlive() &&
+            (beam->GetEntry() == NPC_FREYA_SUN_BEAM || beam->GetEntry() == NPC_FREYA_UNSTABLE_SUN_BEAM) &&
+            unit->GetExactDist2d(beam) < ULDUAR_FREYA_ROOTED_BEAM_RADIUS)
+            add(beam);
+    }
+
+    if (count && centre)
+        *centre = Position(sumX / count, sumY / count, unit->GetPositionZ(), 0.0f);
+
+    return count;
+}
+
+Player* GetFreyaRootedAllyToFree(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    Player* best = nullptr;
+    bool bestInHazard = false;
+    float bestDist = 0.0f;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId() || !IsFreyaRooted(member))
+            continue;
+
+        float const dist = bot->GetExactDist2d(member);
+        if (dist > ULDUAR_FREYA_HAND_OF_FREEDOM_RANGE || !bot->IsWithinLOSInMap(member))
+            continue;
+
+        bool const inHazard = GetFreyaHazardsUnder(botAI, member) > 0;
+        if (!best || (inHazard && !bestInHazard) || (inHazard == bestInHazard && dist < bestDist))
+        {
+            best = member;
+            bestInHazard = inHazard;
+            bestDist = dist;
+        }
+    }
+
+    return best;
 }
 
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)

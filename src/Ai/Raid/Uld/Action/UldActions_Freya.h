@@ -30,6 +30,8 @@ private:
     // Where the bot fled from. A melee bot keeps its spot while this is still inside a blast, which is
     // what stops reach melee marching it back with most of the fuse left to run.
     Position bombOrigin;
+    // Last search for a clear spot in Freya's reach while holding. Each one is a full ring sweep.
+    uint32 reachRetryMs = 0;
 };
 
 // Main tank only: walks Freya off the bombs so her melee ring is somewhere the rest of the melee can
@@ -79,8 +81,8 @@ private:
     bool snaplasherShed = false;
 };
 
-// Main tank holds Freya; assist tank 0 works down the add ladder and, on the Conservator, walks it onto
-// a Healthy Spore so the melee sheltering there can still reach it.
+// Main tank holds Freya and the Storm Lasher; assist tank 0 works down the add ladder and, on the Conservator,
+// walks it onto a Healthy Spore so the melee sheltering there can still reach it.
 class FreyaTankAddsAction : public AttackAction
 {
 public:
@@ -220,6 +222,18 @@ public:
     static constexpr char const* Name = "freya break iron roots";
 
     FreyaBreakIronRootsAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Hard mode: a paladin casts Hand of Freedom on a rooted member, and a mage rooted in a beam or bomb Blinks out.
+// Both immunities purge the root, so this beats chewing through the root creature with a 2s cast.
+class FreyaFreeRootedAllyAction : public Action
+{
+public:
+    static constexpr char const* Name = "freya free rooted ally";
+
+    FreyaFreeRootedAllyAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

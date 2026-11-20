@@ -249,12 +249,43 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         bot->GetExactDist2d(bombSpot.GetPositionX(), bombSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
 
+    // Melee look first for a clear spot they can still hit Freya from. A yard inside reach, since she may
+    // still be walking after the tank. The trigger leaves tanks out.
+    Unit* freya = PlayerbotAI::IsMelee(bot) ? GetFreyaScan(botAI).Boss() : nullptr;
+    Position const freyaAt = freya ? freya->GetPosition() : Position();
+    float const reach = freya ? bot->GetMeleeRange(freya) - 1.0f : 0.0f;
+    auto const inReach = [&freyaAt, reach](float x, float y) { return freyaAt.GetExactDist2d(x, y) <= reach; };
+
     if (!covered(bot->GetPosition()))
     {
-        // Arrived, and the bomb it fled still has fuse left. Melee hold here, since they're out of range
-        // either way. Ranged and healers don't: returning true would silence them for the whole fuse.
+        // Arrived, and the bomb it fled still has fuse left. Ranged and healers move on: returning true would silence
+        // them for the whole fuse.
         if (latched && PlayerbotAI::IsMelee(bot) && stillClear(bombSpot) && covered(bombOrigin))
+        {
+            // In reach, so swing. Out of it, once the tank has stopped walking Freya, go to a clear spot in reach.
+            // Otherwise hold: reach melee would march the bot straight back through the blast.
+            if (freya && bot->IsWithinMeleeRange(freya))
+                return false;
+
+            if (freya && !freya->isMoving() &&
+                (!reachRetryMs || getMSTimeDiff(reachRetryMs, now) >= ULDUAR_FREYA_MELEE_REACH_RETRY_MS))
+            {
+                reachRetryMs = now;
+                HazardSweepCache sweep;
+                Position const spot = FindNearestPositionClearOfHazards(
+                    bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP,
+                    ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt, inReach, &sweep);
+                if (spot != Position() &&
+                    MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
+                           false, false, true, MovementPriority::MOVEMENT_FORCED, true, false))
+                {
+                    bombSpot = spot;
+                    bombSpotMs = now;
+                }
+            }
+
             return true;
+        }
 
         bombSpotMs = 0;
         return false;
@@ -266,7 +297,14 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     // check only ever has to answer for each of them once.
     HazardSweepCache sweep;
 
-    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+    Position safe;
+    if (freya)
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt,
+                                                 inReach, &sweep);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
     // A volley drops a bomb on every player at once, so nothing may clear all of them by the full
     // margin. Somebody else's hazard beats your own, and barely outside beats standing in one.
@@ -372,9 +410,46 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
 
     HazardSweepCache sweep;
 
-    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
-                                                      ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
-                                                      preferNear, {}, &sweep);
+    // First a spot that clears Freya too. She follows the tank and stops in reach on the side she comes from, so
+    // clearing the tank alone leaves her, and every melee around her, inside the blast.
+    Position safe;
+    if (boss->GetVictim() == bot)
+    {
+        Position const freyaAt = boss->GetPosition();
+        float const gap = bot->GetExactDist2d(boss);
+        // Her end spot can sit past the tank's search radius, so look that much further for bombs.
+        std::vector<Position> const nearHer = GetFreyaNatureBombPositions(
+            bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS + gap + ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS);
+        auto const freyaEndsClear = [&nearHer, &freyaAt, gap](float x, float y)
+        {
+            float const dx = freyaAt.GetPositionX() - x;
+            float const dy = freyaAt.GetPositionY() - y;
+            float const walk = std::sqrt(dx * dx + dy * dy);
+            float const keep = walk > gap ? gap / walk : 1.0f;
+            float const endX = x + dx * keep;
+            float const endY = y + dy * keep;
+            for (Position const& bomb : nearHer)
+                if (bomb.GetExactDist2d(endX, endY) < ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS)
+                    return false;
+
+            return true;
+        };
+
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear,
+                                                 freyaEndsClear, &sweep);
+    }
+
+    // The tank's own clearance after that. When only Freya's ring was covered there's nothing of his to clear, and
+    // a hop for its own sake would just drag her about.
+    if (safe == Position() &&
+        !bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS))
+        return false;
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear,
+                                                 {}, &sweep);
 
     if (safe == Position())
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS,
@@ -604,8 +679,14 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // Of the trio and the Conservator, taunt only the two the encounter owns: Freya may be on a human tank,
-    // and taunting Storm Lasher or Water Spirit means owning Tidal Wave.
+    // The main tank holds the Storm Lasher, even at the sync floor, where holding it costs no damage. Not the Water
+    // Spirit: its Tidal Wave cone would go through the melee stack at Freya and knock her tank back.
+    Unit* storm = state.stormLasher;
+    if (PlayerbotAI::IsMainTank(bot) && storm && storm->IsAlive() && storm->GetVictim() != bot &&
+        CastClassTaunt(botAI, storm))
+        return true;
+
+    // The add tank taunts only the two it owns. Freya may be on a human tank.
     bool const owned = target == state.snaplasher || target == state.conservator;
     if (owned && target->GetVictim() != bot && CastClassTaunt(botAI, target))
         return true;
@@ -787,7 +868,54 @@ bool FreyaBreakIronRootsAction::Execute(Event /*event*/)
     if (!root || !root->IsAlive())
         return false;
 
+    // In a beam or bomb, every second of a damage cast at something else is another tick of it. Healers keep
+    // casting, they're what keeps the bot alive in there. Army stays too: its ghouls are the lasher wave's answer.
+    if (PlayerbotAI::IsDps(bot) && bot->IsNonMeleeSpellCast(false) && !IsFreyaArmyChanneling(bot) &&
+        GetFreyaHazardsUnder(botAI, bot) > 0)
+    {
+        Spell const* cast = bot->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!cast)
+            cast = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+
+        if (!cast || cast->m_targets.GetUnitTarget() != root)
+            bot->InterruptNonMeleeSpells(false);
+    }
+
     return Attack(root);
+}
+
+bool FreyaFreeRootedAllyAction::isUseful()
+{
+    FreyaFreeRootedAllyTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaFreeRootedAllyAction::Execute(Event /*event*/)
+{
+    if (bot->getClass() == CLASS_PALADIN)
+    {
+        Player* rooted = GetFreyaRootedAllyToFree(botAI);
+        return rooted && botAI->CanCastSpell("hand of freedom", rooted) && botAI->CastSpell("hand of freedom", rooted);
+    }
+
+    Position centre;
+    if (!IsFreyaRooted(bot) || !GetFreyaHazardsUnder(botAI, bot, &centre))
+        return false;
+
+    uint32 const blink = AI_VALUE2(uint32, "spell id", "blink");
+    if (!blink || bot->HasSpellCooldown(blink))
+        return false;
+
+    // A cast in flight blocks Blink, and Blink leaps 20 yd along the facing, so drop the cast and face out of
+    // the hazards first. Dead on their centre, any way out will do.
+    if (bot->IsNonMeleeSpellCast(false))
+        bot->InterruptNonMeleeSpells(false);
+
+    if (bot->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) > CONTACT_DISTANCE)
+        bot->SetOrientation(std::atan2(bot->GetPositionY() - centre.GetPositionY(),
+                                       bot->GetPositionX() - centre.GetPositionX()));
+
+    return botAI->CastSpell("blink", bot);
 }
 
 bool FreyaDodgeUnstableSunBeamAction::isUseful()

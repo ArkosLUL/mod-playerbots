@@ -74,6 +74,16 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode: a paladin with a rooted member in Hand of Freedom range, or a mage rooted inside a beam or bomb.
+class FreyaFreeRootedAllyTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya free rooted ally";
+
+    FreyaFreeRootedAllyTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // A Detonating Lasher next to this bot is about to blow. Melee only: they're the ones on the pile, and
 // a lasher under the bail line still leaves them time to clear its 15 yd blast.
 class FreyaLasherAboutToBlowTrigger : public Trigger

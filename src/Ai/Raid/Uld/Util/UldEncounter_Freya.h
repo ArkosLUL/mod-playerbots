@@ -146,6 +146,9 @@ inline constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 // _explodeTimer >= 11000 but the branch under it snaps the timer from 5000 straight to 10000.
 inline constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 7000;
 
+// How often a melee bot holding outside a blast looks again for a clear spot in Freya's reach.
+inline constexpr uint32 ULDUAR_FREYA_MELEE_REACH_RETRY_MS = 500;
+
 // Ceiling on the main tank's reposition. Long enough to walk the clearance at 7 yd/s, short enough
 // that a tank stopped on the way hands the tick back instead of holding Freya still for a whole volley.
 inline constexpr uint32 ULDUAR_FREYA_TANK_BOMB_LATCH_MS = 3000;
@@ -170,6 +173,11 @@ inline constexpr float ULDUAR_FREYA_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) 
 
 // The root creature is summoned on the bot it traps, so it's always this close.
 inline constexpr float ULDUAR_FREYA_IRON_ROOTS_SEARCH_RADIUS = 10.0f;
+
+// Unstable Energy (62865) is 5 yd. The aura searcher adds the player's own size, hence the extra yard.
+inline constexpr float ULDUAR_FREYA_ROOTED_BEAM_RADIUS = 6.0f;
+
+inline constexpr float ULDUAR_FREYA_HAND_OF_FREEDOM_RANGE = 30.0f;
 
 // Lasher wave: one camp, the lashers come to it and get AoE'd. Under FINISH_PCT they're picked off one by one
 // so the blasts stagger. PACK_RADIUS / MIN_COUNT are MediumAoeTrigger's 8 yd / 3, PACK_CLEAR one past Detonate.
@@ -301,8 +309,9 @@ bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target);
 // Suppressed members drop out, so the floor moves bots to a sibling instead of idling them.
 Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state);
 
-// Main tank: Freya. Add tank: Snaplasher, Conservator, highest-health trio member, a lasher on top of it, Freya.
-// Highest health since tank damage is invisible to GetFreyaTrioAssignment, so it helps the three converge.
+// Main tank: the Storm Lasher while it's in reach and above the sync floor, else Freya, who stays on standing threat.
+// Add tank: Snaplasher, Conservator, highest-health trio member, a lasher on top of it, Freya. Highest health since
+// tank damage is invisible to GetFreyaTrioAssignment, so it helps the three converge.
 Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget);
 
 // Nearest living lasher in range, sticky on currentTarget with a switch margin. Range is also the leash, so a
@@ -380,6 +389,17 @@ bool IsFreyaArmyChanneling(Player* player);
 // The non-tank player this lasher is hitting, or null. Ghouls, pets and tanks holding one are fine as is, and a
 // lasher still in its 5s passive start has no victim yet.
 Player* GetFreyaLooseLasherVictim(Unit* lasher);
+
+// Held by either Iron Roots, either raid size.
+bool IsFreyaRooted(Unit* unit);
+
+// Nature Bombs and Unstable Sun Beams this unit stands in, with their centre when asked. What turns a root
+// from a nuisance into a death.
+uint32 GetFreyaHazardsUnder(PlayerbotAI* botAI, Unit* unit, Position* centre = nullptr);
+
+// The rooted member this paladin should Hand of Freedom: one standing in a hazard first, then the nearest.
+// Hand of Freedom's immunity purges the root aura and its DoT, and the root creature never puts it back.
+Player* GetFreyaRootedAllyToFree(PlayerbotAI* botAI);
 
 // Where the back line balls up for the AoE: on the anchor bot. Never a computed point, a live bot is always on
 // the mesh. Empty when no ranged DPS bot is alive.

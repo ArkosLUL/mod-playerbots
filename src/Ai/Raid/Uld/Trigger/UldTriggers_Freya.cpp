@@ -41,7 +41,12 @@ bool FreyaTankNatureBombTrigger::IsActive()
     if (!PlayerbotAI::IsMainTank(bot))
         return false;
 
-    return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
+    if (bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS))
+        return true;
+
+    // A bomb by Freya empties her melee ring even with the tank clear of it. Only hers to fix while she's on him.
+    return boss->GetVictim() == bot &&
+           boss->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
 }
 
 bool FreyaSetDpsPriorityTrigger::IsActive()
@@ -105,10 +110,25 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
 
 bool FreyaBreakIronRootsTrigger::IsActive()
 {
-    // Trapped by either the Ironbranch or the Freya-cast Iron Roots (each leaves its own DoT), and both
-    // ids of each: HasAura takes the exact spell, and a 25-man raid only ever applies the 25-man half.
-    return bot->HasAura(SPELL_IRON_ROOTS_DAMAGE_10) || bot->HasAura(SPELL_IRON_ROOTS_DAMAGE_25) ||
-           bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_10) || bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_25);
+    // Both ids of both roots: HasAura takes the exact spell, and a 25-man raid only ever applies the 25-man half.
+    return IsFreyaRooted(bot);
+}
+
+bool FreyaFreeRootedAllyTrigger::IsActive()
+{
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    switch (bot->getClass())
+    {
+        case CLASS_MAGE:
+            return IsFreyaRooted(bot) && GetFreyaHazardsUnder(botAI, bot) > 0;
+        case CLASS_PALADIN:
+            return GetFreyaRootedAllyToFree(botAI) != nullptr;
+        default:
+            return false;
+    }
 }
 
 bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
