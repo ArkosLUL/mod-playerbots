@@ -39,7 +39,7 @@ namespace
         // paladin
         "avenging wrath",
         // death knight
-        "killing machine", "army of the dead", "summon gargoyle",
+        "killing machine", "army of the dead", "summon gargoyle", "hysteria",
         // shaman
         "fire elemental totem", "elemental mastery",
         // consumable

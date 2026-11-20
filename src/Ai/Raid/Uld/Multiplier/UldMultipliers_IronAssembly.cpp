@@ -64,13 +64,14 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // Both predicates, each misses some: IsDpsCooldownAction has no potion, tinker or priest case, and its
-    // racial branch keys on race, not HasSpell. IsDps keeps healers and tanks out of the name branch.
+    // racial branch keys on race, not HasSpell. IsDps keeps healers and tanks out of the name branch,
+    // bar Hysteria, which a tank casts for the dps.
     std::string const name = action->getName();
     if (IsManaReturnCooldown(bot, name))
         return 1.0f;
 
     bool const burst = IsDpsCooldownAction(bot, action) ||
-                       (PlayerbotAI::IsDps(bot) && IsBurstCooldownAction(name));
+                       ((PlayerbotAI::IsDps(bot) || name == "hysteria") && IsBurstCooldownAction(name));
     if (!burst)
         return 1.0f;
 

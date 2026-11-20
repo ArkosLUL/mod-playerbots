@@ -208,10 +208,13 @@ public:
     ArmyOfTheDeadTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "army of the dead") {}
 };
 
-class HysteriaNoCooldownTrigger : public SpellNoCooldownTrigger
+class HysteriaTrigger : public SpellNoCooldownTrigger
 {
 public:
-    HysteriaNoCooldownTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "hysteria") {}
+    HysteriaTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "hysteria") {}
+
+    std::string const GetTargetName() override { return "hysteria target"; }
+    bool IsActive() override;
 };
 
 #endif

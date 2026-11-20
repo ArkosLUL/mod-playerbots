@@ -47,13 +47,14 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
     // satisfies the dwell instantly on the next pull.
     Group* group = bot->GetGroup();
     bool const isLust = name == "bloodlust" || name == "heroism";
+    bool const forOthers = isLust || name == "hysteria";
     Unit* target = AI_VALUE(Unit*, "current target");
 
-    // Lust is raid-wide, so what this bot has selected says nothing about whether the raid is on a
-    // boss - a healer often has nothing selected at all. Ask what the main tank is holding instead.
-    // Scoped to lust: doing it for the personal cooldowns would let dps burn them on trash while a
-    // tank happens to be holding a boss somewhere else.
-    if (isLust && group && !IsBossCreature(target))
+    // Lust and Hysteria buff others, so what this bot has selected says nothing about whether the
+    // raid is on a boss - a healer often has nothing selected, an off-tank has an add. Ask what the
+    // main tank is holding instead. Not for personal cooldowns: dps would burn them on trash while
+    // a tank happens to be holding a boss somewhere else.
+    if (forOthers && group && !IsBossCreature(target))
     {
         if (Player* mainTank = ObjectAccessor::GetPlayer(*bot, PlayerbotAI::GetMainTankGuid(group)))
             target = mainTank->GetVictim();
@@ -72,7 +73,8 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
         return 0.0f;
     }
 
-    if (!group || PlayerbotAI::IsMainTank(bot))
+    // A main tank casting Hysteria still waits out the dwell, or it lands before the dps cooldowns.
+    if (!group || (PlayerbotAI::IsMainTank(bot) && !forOthers))
     {
         holdState.Reset();
         return 1.0f;

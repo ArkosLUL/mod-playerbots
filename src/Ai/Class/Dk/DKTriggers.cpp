@@ -111,3 +111,5 @@ bool DeathAndDecayCooldownTrigger::IsActive()
 
     return bot->GetSpellCooldownDelay(spellId) >= 2000;
 }
+
+bool HysteriaTrigger::IsActive() { return SpellNoCooldownTrigger::IsActive() && GetTarget(); }

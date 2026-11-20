@@ -345,7 +345,8 @@ class CastHysteriaAction : public CastSpellAction
 {
 public:
     CastHysteriaAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "hysteria") {}
-    Unit* GetTarget() override;
+
+    std::string const GetTargetName() override { return "hysteria target"; }
 };
 
 #endif

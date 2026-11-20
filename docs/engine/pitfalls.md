@@ -64,7 +64,7 @@ that about half of Ulduar's and Naxx's constructors take.
 
 | Node | Registered as |
 |---|---|
-| DK `rune strike`, paladin `blessing of might`, `master loot roll`, DK `mind freeze on enemy healer` | on the other side — an action referenced as a trigger, or the reverse |
+| Paladin `blessing of might`, `master loot roll`, DK `mind freeze on enemy healer` | on the other side — an action referenced as a trigger, or the reverse |
 | `grounding totem`, `reset`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `team flagcarrier near`, `freezing trap on cc` | nothing at all: either delete the reference or write the creator |
 
 **The runtime half is `postmortem.py --coverage`**, and neither tool subsumes the other. pblint

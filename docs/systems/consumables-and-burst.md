@@ -27,7 +27,7 @@ the same predicate, so they pick it up for free. It matches by action name
 | Priest | `shadowfiend`, `power infusion` |
 | Druid | `berserk`, `force of nature` |
 | Paladin | `avenging wrath` |
-| Death Knight | `killing machine`, `army of the dead`, `summon gargoyle` |
+| Death Knight | `killing machine`, `army of the dead`, `summon gargoyle`, `hysteria` |
 | Shaman | `fire elemental totem`, `elemental mastery` |
 
 Deliberately **excluded**: `unbreakable armor` and `dancing rune weapon` (tank mitigation) and
@@ -59,7 +59,7 @@ Shadowfiend still waits out its dwell there.
 | Not a burst cooldown | `1.0f` — leaves rotation, mitigation and mana casts untouched |
 | Non-boss target, grouped, `BurstOnBossOnly` on | `0.0f` — save it for the boss |
 | Non-boss target, solo or config off | `1.0f` — solo bots still burst tough elites |
-| Boss target, bot is the main tank or ungrouped | `1.0f` — never gated on itself |
+| Boss target, bot is the main tank (not for `hysteria`) or ungrouped | `1.0f` — never gated on itself |
 | Boss target on a vehicle, `BossTakesNoVictim` or `BossHasNoStableVictim` | `1.0f` — no tank can hold it (below) |
 | Boss target otherwise | `1.0f` once a tank has held the boss for the dwell, else `0.0f` |
 
@@ -78,10 +78,14 @@ established threat exactly as well as one that gave it to the main tank. Main-ta
 burst cooldown for whole fights — Obsidian Sanctum's drake phase, where the drakes are boss-flagged
 and the off-tank holds them, is the case that forced it.
 
-**For `bloodlust` / `heroism` only, the boss is resolved from the main tank's victim** when the bot's
-own target is not boss-flagged. Lust is raid-wide and a healer often has nothing selected.
-Deliberately **not** extended to personal cooldowns, which would let DPS burn them on trash while a
-tank holds a boss somewhere else.
+**For `bloodlust` / `heroism` and `hysteria` only, the boss is resolved from the main tank's
+victim** when the bot's own target is not boss-flagged. Both buff others: a healer often has nothing
+selected, an off-tank DK has an add. Deliberately **not** extended to personal cooldowns, which
+would let DPS burn them on trash while a tank holds a boss somewhere else.
+
+**`hysteria` skips the main-tank exemption**: a main-tank Blood DK waits out the dwell
+(`TankHasHeldBoss` accepts it as the holder), or it lands before the DPS cooldowns. Iron Assembly
+hard mode's hold admits it by name despite its `IsDps` filter.
 
 **Exhaustion and Sated outlive a pull**, so a lust spent on one boss is missing on the next within
 10 min. In a trace, one applied before it began shows only as its removal; a fresh lust writes the

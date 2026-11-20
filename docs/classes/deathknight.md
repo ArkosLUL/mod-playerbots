@@ -1,4 +1,4 @@
-# Death Knight — Frost
+# Death Knight — Frost, Blood Hysteria
 
 Engine semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
@@ -43,6 +43,18 @@ reports castable with no runes, wins the tick at 5.7, fails, and burns a queue i
 `frost and unholy runes` is `ObliterateRunesTrigger`: runes ready within 2 s, a death rune covering
 either half but not both. `HowlingBlastTrigger` was deleted: unregistered, and a `DebuffTrigger` on a
 "howling blast" debuff that does not exist.
+
+## Blood: Hysteria
+
+`"hysteria target"` (`HysteriaTargetValue`, `DKValues.cpp`) picks the recipient; the `hysteria`
+trigger needs it set and the spell off cooldown. It's a burst cooldown, so the burst gate times it
+([consumables-and-burst.md](../systems/consumables-and-burst.md)).
+
+- Grouped: physical DPS only (`IsDps && !IsCaster`), in range, ≥ 50% health (the drain costs 30%),
+  without the aura. Warrior, rogue, druid, hunter before DK, paladin, shaman, whose damage is largely
+  magic; highest attack power within a tier (ranged for hunters). No candidate, no cast: never the
+  tank or the DK itself.
+- Solo: the DK itself.
 
 ## Open
 

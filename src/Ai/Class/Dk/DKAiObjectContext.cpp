@@ -8,6 +8,7 @@
 #include "BloodDKStrategy.h"
 #include "DKActions.h"
 #include "DKTriggers.h"
+#include "DKValues.h"
 #include "DeathKnightPullStrategy.h"
 #include "FrostDKStrategy.h"
 #include "GenericDKNonCombatStrategy.h"
@@ -92,7 +93,8 @@ public:
         creators["dd cd and no desolation"] = &DeathKnightTriggerFactoryInternal::dd_cd_and_no_desolation;
         creators["death and decay cooldown"] = &DeathKnightTriggerFactoryInternal::death_and_decay_cooldown;
         creators["army of the dead"] = &DeathKnightTriggerFactoryInternal::army_of_the_dead;
-        creators["hysteria no cd"] = &DeathKnightTriggerFactoryInternal::hysteria_no_cd;
+        creators["hysteria"] = &DeathKnightTriggerFactoryInternal::hysteria;
+        creators["rune strike"] = &DeathKnightTriggerFactoryInternal::rune_strike;
     }
 
 private:
@@ -152,7 +154,8 @@ private:
     }
     static Trigger* death_and_decay_cooldown(PlayerbotAI* botAI) { return new DeathAndDecayCooldownTrigger(botAI); }
     static Trigger* army_of_the_dead(PlayerbotAI* botAI) { return new ArmyOfTheDeadTrigger(botAI); }
-    static Trigger* hysteria_no_cd(PlayerbotAI* botAI) { return new HysteriaNoCooldownTrigger(botAI); }
+    static Trigger* hysteria(PlayerbotAI* botAI) { return new HysteriaTrigger(botAI); }
+    static Trigger* rune_strike(PlayerbotAI* botAI) { return new RuneStrikeTrigger(botAI); }
 };
 
 class DeathKnightAiObjectContextInternal : public NamedObjectContext<Action>
@@ -275,6 +278,18 @@ private:
     }
 };
 
+class DeathKnightValueContextInternal : public NamedObjectContext<UntypedValue>
+{
+public:
+    DeathKnightValueContextInternal()
+    {
+        creators["hysteria target"] = &DeathKnightValueContextInternal::hysteria_target;
+    }
+
+private:
+    static UntypedValue* hysteria_target(PlayerbotAI* botAI) { return new HysteriaTargetValue(botAI); }
+};
+
 SharedNamedObjectContextList<Strategy> DKAiObjectContext::sharedStrategyContexts;
 SharedNamedObjectContextList<Action> DKAiObjectContext::sharedActionContexts;
 SharedNamedObjectContextList<Trigger> DKAiObjectContext::sharedTriggerContexts;
@@ -315,4 +330,5 @@ void DKAiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<
 void DKAiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
 {
     AiObjectContext::BuildSharedValueContexts(valueContexts);
+    valueContexts.Add(new DeathKnightValueContextInternal());
 }
