@@ -41,6 +41,10 @@ boss-flagged (the Gunship freeze mage, `type_flags` 72) gets no personal burst f
 under `BurstOnBossOnly`, and releasing it needs an entry-keyed exemption in `BurstCooldowns.cpp` or
 `BurstWindowStrategy.cpp`.
 
+**The Ulduar PR branches carry neither `BurstWindowStrategy` nor `BurstOnBossOnly`**, so an encounter
+window there must hold non-boss targets itself: Yogg-Saron phase 2 spent every cooldown on tentacles
+before the portal until its branch held them off anything but the Brain.
+
 **`IsManaReturnCooldown(bot, name)` (`BurstCooldowns.cpp`) exempts a priest's `shadowfiend` from the
 per-boss phase holds** — Iron Assembly, XT-002, the shared Ulduar gate, Naxx and Sartharion. Those
 hold for a whole phase rather than a dwell, and shadow carries no mana potions, so the hold does not

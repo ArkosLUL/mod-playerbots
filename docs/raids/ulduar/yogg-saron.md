@@ -1664,6 +1664,9 @@ first.
   Heroism or Bloodlust already up (`yogg.lust`, `yogg.lustready` `position` / `timeout`). The stock path
   cast too early, Yogg being the only target until a Guardian spawns, so `UlduarBurstWindowMultiplier`'s
   Yogg branch holds lust the whole fight and the node owns it, casting by `CastSpell` under its own name.
+  The same branch lets phase 2 burst go only while the bot's `current target` is the Brain: one spent on a
+  tentacle or illusion add is down for the next portal. `--brain`'s `phase 2 burst` counts casts below and
+  on the platform.
 
 ### The tanks in phase 3
 
@@ -1727,7 +1730,9 @@ aura.
 
 **A Constrictor holding somebody outranks the Crusher** (`YoggSaronConstrictorHolding`: its vehicle seat is
 in use). 99k health dies in about 2 s under the ranged, where ranking it under the Crusher left raiders
-squeezed for 11-23 s.
+squeezed for 11-23 s. So melee take one only within 7 yd edge to edge
+(`ULDUAR_YOGG_SARON_CONSTRICTOR_MELEE_WALK`, the `dps target` fallback too): a farther one arrived as it died,
+leaving its Corruptor. `--phase2` splits each grab's busy melee into hit / walked / stayed.
 
 **A paladin can do it for somebody else with Hand of Protection**, which covers the other eight classes.
 10278 grants `SPELL_AURA_SCHOOL_IMMUNITY` over school mask 1 and carries `SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`,

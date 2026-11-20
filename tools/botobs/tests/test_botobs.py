@@ -1727,6 +1727,32 @@ class YoggPhases(unittest.TestCase):
                          [("taunt dragger", 3, 5.0, 1), ("hunter", 2, 2.0, 0), ("tank", 1, 0.0, 0),
                           ("other", 1, None, 1)])
 
+    def test_burst_by_level_splits_on_the_platform_from_below_and_skips_unsampled(self):
+        casts = [(1, 12292, 1000, 330.0), (2, 12472, 2000, 240.0), (3, 1719, 3000, None), (4, 3045, 4000, 241.0)]
+        self.assertEqual(yogg_saron.burst_by_level(casts), (2, [(1, 12292, 1000)]))
+        self.assertEqual(yogg_saron.burst_by_level([]), (0, []))
+
+    def test_melee_constrictor_split_reads_only_platform_melee_busy_before_the_grab(self):
+        def row(t, z, target, dealt):
+            return [t, 1, 0.0, 0.0, z, 0.0, 100.0, 0, target, 0, 0, 0, dealt]
+
+        rows = {
+            # switched and kept dealing
+            1: [row(7500, 330.0, 600, 100), row(9500, 330.0, 600, 200), row(10500, 330.0, 500, 200),
+                row(12500, 330.0, 500, 400)],
+            # switched and dealt nothing
+            2: [row(7500, 330.0, 600, 100), row(9500, 330.0, 600, 300), row(10500, 330.0, 500, 300),
+                row(12500, 330.0, 500, 300)],
+            # kept its own target
+            3: [row(7500, 330.0, 600, 0), row(9500, 330.0, 600, 50), row(12500, 330.0, 600, 150)],
+            # dealt nothing before the grab, so not busy
+            4: [row(7500, 330.0, 0, 100), row(9500, 330.0, 0, 100), row(10500, 330.0, 500, 100)],
+            # in the brain room
+            5: [row(7500, 240.0, 700, 0), row(9500, 240.0, 700, 90), row(10500, 240.0, 700, 120)],
+        }
+        split = yogg_saron.melee_constrictor_split(rows, 10000, 13000, {500})
+        self.assertEqual(dict(split), {"hit": 1, "walked": 1, "stayed": 1})
+
     def test_kicks_before_channel_count_only_kicks_just_ahead_of_that_guardians_drain(self):
         opens = [(10000, 7), (20000, 8)]
         # 7 kicked 100 ms early, 7 kicked during, 8 kicked 400 ms early, 9 never drained

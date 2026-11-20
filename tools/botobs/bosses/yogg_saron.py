@@ -17,6 +17,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
+from raidobs.cooldowns import BURST_SPELLS  # noqa: E402
 from raidobs.geometry import at, first_seen, guids_of_entry  # noqa: E402
 from raidobs.geometry import track as tracks  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
@@ -315,6 +316,9 @@ HEAL_RANGE = 40.0
 NPC_CONSTRICTOR_TENTACLE = 33983
 NPC_CORRUPTOR_TENTACLE = 33985
 PLATFORM_KILLABLE = (NPC_GUARDIAN, NPC_CRUSHER_TENTACLE, NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE)
+
+# A melee bot that dealt damage this long before a Constrictor grab was busy on something when it came.
+CONSTRICTOR_BUSY_MS = 3000
 
 # 64169, the Sanity Well's area aura: +20 Sanity every 2 s within 6 yd, and -50% damage done.
 SPELL_SANITY_WELL = 64169
@@ -1726,6 +1730,39 @@ def position_at(trace: Trace, guid: int, when: int):
     return (spot[0], spot[1]) if spot else None
 
 
+def burst_by_level(casts: list[tuple[int, int, int, float | None]]) -> tuple[int, list[tuple[int, int, int]]]:
+    """Burst casts as (guid, spell, t, caster z): how many went off below the platform, and (guid, spell, t) of each
+    one cast on it. A cast with no z sampled counts as neither."""
+    below = 0
+    above: list[tuple[int, int, int]] = []
+    for guid, spell, when, z in casts:
+        if z is None:
+            continue
+        if z < BRAIN_LEVEL_Z:
+            below += 1
+        else:
+            above.append((guid, spell, when))
+    return below, above
+
+
+def show_phase2_burst(trace: Trace) -> None:
+    """Phase 2 burst belongs to the Brain: one spent on a platform tentacle is down for the next portal."""
+    spans = [(start, stop) for phase, start, stop in phase_spans(trace) if phase == 2]
+    casts = []
+    for rec in trace.of("cast"):
+        guid, spell, when = rec.get("s", 0), rec.get("sp"), rec["t"]
+        if (rec.get("tr") or spell not in BURST_SPELLS or trace.role(guid) == "heal"
+                or not any(start <= when <= stop for start, stop in spans)):
+            continue
+        spot = at(trace, guid, when)
+        casts.append((guid, spell, when, spot[2] if spot else None))
+    if not casts:
+        return
+    below, above = burst_by_level(casts)
+    names = ", ".join(f"{trace.name(guid)} {BURST_SPELLS[spell]} {clock(when)}" for guid, spell, when in above)
+    print(f"  phase 2 burst    : {below} below the platform, {len(above)} on it{' - ' + names if names else ''}")
+
+
 def show_brain(trace: Trace) -> None:
     print("BRAIN ROOM")
 
@@ -1863,6 +1900,7 @@ def show_brain(trace: Trace) -> None:
         if found:
             print(f"  {label:16} : {dict(found)}")
 
+    show_phase2_burst(trace)
     show_brain_waves(trace)
     show_stalled_walks(trace)
 
@@ -2262,6 +2300,26 @@ def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
     return sorted(out, key=lambda w: w[1])
 
 
+def melee_constrictor_split(rows: dict[int, list[list]], start: int, stop: int,
+                            constrictors: set) -> collections.Counter:
+    """How the platform melee busy before one Constrictor grab spent it, off `snapshot_rows`: `hit` switched to a
+    Constrictor and dealt damage after, `walked` switched and dealt none, `stayed` never switched."""
+    out: collections.Counter = collections.Counter()
+    for samples in rows.values():
+        lead = [row for row in samples if start - CONSTRICTOR_BUSY_MS <= row[0] < start and len(row) > 12]
+        if len(lead) < 2 or lead[-1][4] < BRAIN_LEVEL_Z or lead[-1][12] <= lead[0][12]:
+            continue
+        during = [row for row in samples if start <= row[0] <= stop and len(row) > 12]
+        switch = next((row for row in during if row[8] in constrictors), None)
+        if switch is None:
+            out["stayed"] += 1
+        elif during[-1][12] > switch[12]:
+            out["hit"] += 1
+        else:
+            out["walked"] += 1
+    return out
+
+
 def show_phase2(trace: Trace) -> None:
     """Everything phase 2 is decided by that is not the brain room: who gets held by a Constrictor and
     for how long, whether Brain Linked pairs ever close, and how often two nodes trade a bot."""
@@ -2276,14 +2334,23 @@ def show_phase2(trace: Trace) -> None:
         total = sum(rec.get("a", 0) for rec in squeeze)
         longest = max((stop - start) / 1000.0 for _, start, stop in grabs)
         print(f"  Constrictor grabs  : {len(grabs)}, {total:,} damage, longest {longest:.1f} s")
+        # Melee only switch from close by: a far one walking over arrives as the ranged finish it.
+        melee_rows = snapshot_rows(trace, {guid for guid in roster if trace.role(guid) == "melee"})
+        constrictors = guids_of_entry(trace, NPC_CONSTRICTOR_TENTACLE)
+        melee_total: collections.Counter = collections.Counter()
         for guid, start, stop in grabs:
             took = sum(rec.get("a", 0) for rec in squeeze
                        if rec.get("d") == guid and start <= rec["t"] <= stop + 500)
             freed = any(rec.get("tgt") == guid and start <= rec["t"] <= stop + 500 for rec in rescues)
+            melee = melee_constrictor_split(melee_rows, start, stop, constrictors)
+            melee_total += melee
             print(f"    {trace.name(guid):14} {trace.role(guid):6} {clock(start)} -> {clock(stop)}"
                   f"  ({(stop - start) / 1000.0:5.1f} s) {took:>7,}"
-                  f"  {'Hand of Protection' if freed else 'rode it out'}")
+                  f"  {'Hand of Protection' if freed else 'rode it out'}"
+                  f"  melee hit/walked/stayed {melee['hit']}/{melee['walked']}/{melee['stayed']}")
         print(f"    rescues cast     : {len(rescues)}")
+        print(f"    busy melee       : {melee_total['hit']} switched and hit, {melee_total['walked']} switched"
+              f" for nothing, {melee_total['stayed']} stayed on their target")
     else:
         print("  no Squeeze rows - nothing was ever grabbed")
 
@@ -4995,11 +5062,11 @@ SECTIONS = (
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves, assignments, and who never walked for one", show_portals),
-    ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
+    ("phase2", "Constrictor and what the busy melee did per grab, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
     ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks,"
      " walk speed to the Brain, turns on the spot, exits decided outside the brain room, skull gaze ticks,"
-     " the hold short of phase 3", show_brain),
+     " the hold short of phase 3, phase 2 burst below and on the platform", show_brain),
     ("phase3", "Heroism, the ranged station, station arrival and Nitro, Immortal Guardians, why they left"
      " the tanks, their power and Drain Life, the tank split and swaps, swings on the raid during a gaze,"
      " beacon heals, stacked heals, who else they reached, the tanks under them, drags and what the healed"

@@ -214,8 +214,16 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     {
         uint32 const phase = YoggSaronPhase(botAI);
 
+        // P2 only on the Brain: tentacles die anyway, and a cooldown spent on one is down for the next portal
+        bool onBrain = false;
+        if (phase == 2)
+        {
+            Unit* target = AI_VALUE(Unit*, "current target");
+            onBrain = target && target->GetEntry() == NPC_BRAIN;
+        }
+
         // Lust belongs to the phase 3 node, which waits for the raid to reach its spots
-        return {phase == 2 || phase == 3, false};
+        return {onBrain || phase == 3, false};
     }
 
     return {};

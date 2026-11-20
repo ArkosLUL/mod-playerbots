@@ -422,6 +422,9 @@ inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_RANGED_CRUSHER_CLEARANCE = 18.0
 // control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up to 14 yd.
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
 
+// Farthest a melee bot walks to a Constrictor, edge to edge: any farther and the ranged kill it before the bot arrives.
+inline constexpr float ULDUAR_YOGG_SARON_CONSTRICTOR_MELEE_WALK = 7.0f;
+
 // Without Thorim a Guardian cannot die, so melee bring it only down to the floor, where it hits about a third as hard
 // as at full. The rest of the damage goes on Yogg. Under the Weakened line it hits for ~2k.
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT = 30.0f;

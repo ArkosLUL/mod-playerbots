@@ -713,12 +713,14 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
             allowed = !PlayerbotAI::IsMelee(bot) || YoggSaronCrusherStunHolds(botAI, candidate);
             break;
         // Phase 3 ranged only take one their station reaches, or a Constrictor holding somebody.
-        // The pets go for the far ones.
+        // The pets go for the far ones. Melee leave a far Constrictor to the ranged, it dies before they get there.
         case NPC_CONSTRICTOR_TENTACLE:
         case NPC_CORRUPTOR_TENTACLE:
             allowed = !phaseThreeMelee() &&
                       (!brain.phaseThreeRanged || YoggSaronConstrictorHolding(candidate) ||
-                       YoggSaronTrigger(botAI).PhaseThreeStationReaches(candidate));
+                       YoggSaronTrigger(botAI).PhaseThreeStationReaches(candidate)) &&
+                      (candidate->GetEntry() != NPC_CONSTRICTOR_TENTACLE || !PlayerbotAI::IsMelee(bot) ||
+                       bot->GetDistance(candidate) <= ULDUAR_YOGG_SARON_CONSTRICTOR_MELEE_WALK);
             break;
         // Without Thorim a marked one is healed to full whatever the raid does, and it's being dragged
         // clear of the pile, so every hit on it is wasted.
@@ -901,14 +903,14 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         return target;
 
     // The illusion rooms hold adds the module does not enumerate, so a hard stop would park a bot. The fallback knows
-    // nothing about Crush or Guardian threat though: it would put melee on a lone live Crusher.
+    // nothing about Crush or Guardian threat though: it would put melee on a lone live Crusher or a far Constrictor.
     Unit* fallback = AI_VALUE(Unit*, "dps target");
     if (fallback && brainLevel && TierOf(fallback, true) <= 1 && !YoggSaronIllusionTentacleAllowed(botAI, fallback))
         return nullptr;
 
     if (fallback &&
-        (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || fallback->GetEntry() == NPC_BRAIN ||
-         IsYoggSaronFocusedGuardian(fallback)) &&
+        (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || fallback->GetEntry() == NPC_CONSTRICTOR_TENTACLE ||
+         fallback->GetEntry() == NPC_BRAIN || IsYoggSaronFocusedGuardian(fallback)) &&
         !IsAllowedTarget(fallback, brain))
         return nullptr;
 
