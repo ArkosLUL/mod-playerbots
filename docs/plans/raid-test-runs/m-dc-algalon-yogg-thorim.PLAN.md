@@ -1,0 +1,17 @@
+# Lane M: DC rows for Algalon, Yogg-Saron and Thorim
+
+You work in a worktree of the mod-dungeon-clear (DC) clone: `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/rt-dc-w4`, branch `rt/dc-m` (from `local/wrath-raid-tests`). Read DC's `CLAUDE.md` and follow it, except that you never build: the orchestrator's capped Docker rebuild of the merged branch is the compile check, so read every declaration you call. Another DC lane adds Freya and Vezax rows at the same time, so keep your rows and roster entries in their own blocks. The fork is `G:/DevStuff/GitHub/azerothcore-wotlk-pb/modules/mod-playerbots` (branch Custom); the core is `G:/DevStuff/GitHub/azerothcore-wotlk-pb`.
+
+Your design source is `docs/plans/raid-test-runs/l-wave5-research.FINDINGS.md` in the fork: its "Facts that apply to all four", the Thorim, Algalon and Yogg-Saron sections, and "The smallest set". The user's answers to its questions (2026-11-21): build Algalon and Yogg-Saron now; Thorim gets a bot-led gauntlet and lever on the fork side (another lane), so his DC row is wanted too; Yogg-Saron is tested with **Freya's help only**, the Keeper choice **written as instance data** before the first pull, not clicked; pools stay as they are. Existing rows in `src/TestRun/DcTestDungeonRegistry.cpp` (`uld-xt002`, `uld-razorscale`, `uld-assembly`, `totc-twins`) and `src/Ai/Dungeon/DungeonClear/Data/Events/UlduarEvents.cpp` (`RegisterUlduarRoster`) are the patterns. A kill counts toward "polished" only when the boss's hard mode triggered; Algalon has none.
+
+Deliver, as commits on `rt/dc-m`:
+
+- Roster anchors for Thorim, Sara/Yogg-Saron and Algalon in `RegisterUlduarRoster`.
+- The new generic row features the findings name, each as small and generic as it can be: a once-per-run GameObject use by a member holding the items the GO's lock asks for (Algalon's console and key); a readiness check that the focus is attackable (Algalon's intro immunity); instance data writes before the first pull ("preData": Yogg-Saron's Keeper mask, Freya only); a teleport start (Yogg-Saron: the raid refreshes outside Sara's 90 yd start range, then is moved to a start point inside it); an aggro start that engages a different creature than the focus (Thorim: the arena start pack). Gtests for their pure logic.
+- Rows `uld-algalon`, `uld-yogg`, `uld-thorim` with drop points and start points backed by evidence (spawns, patrols, trash within 60 yd, preDespawn where the findings call for it), comps at 10 and 25 from `c-research.FINDINGS.md` section 1 and the findings file, and a `BossStateEquals` success predicate.
+
+The orchestrator checks every coordinate with navprobe before a live run, including the height of Yogg-Saron's start point against Sara's 3D range. Keep everything generic enough to go upstream.
+
+Boundaries: no Docker, SOAP, server or database access; no merge, push, amend, rebase or branch. Commit messages go to files named `C:/Users/boss2/AppData/Local/Temp/claude/4e3815b0e3fef148/fd2ca691-4a3e-4009-ba39-dc5273ee9f0c/scratchpad/commit-msg-m-<n>.txt`, committed with `git commit -F`, no AI trailer.
+
+Report as your final message: commits; the new row features and how a row declares each; scenario tokens and `.dc test start <token> roster=uld1 diff=25n pulls=1` commands; every coordinate with its evidence and what navprobe must confirm; start, wipe, readiness and success per boss; decisions you made alone; what is most likely to break on the first live run.
