@@ -7,7 +7,7 @@ No hard mode. Entries are shared; Sonic Screech is the only difficulty pair the 
 | Sonic Screech | 64422 / 64688 | **Soaked, never dodged** — see below |
 | Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
 | Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
-| Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one; Strength of the Pack (64369) buffs the boss while they live |
+| Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one (see below); Strength of the Pack (64369) buffs the boss and each other while they live |
 | Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
 | Seeping Feral Essence | 34098 | Non-selectable stalker, one per Defender life. Aura 64458 (25N 64676) ticks 64459 (25N 64675) every 1s: ~4,500 damage at exactly **5 yd** from its centre, both sizes. Dodged at 7 |
 | Guardian Swarm | 64396 | Tank DoT, left to the generic dispel |
@@ -84,7 +84,15 @@ mark a player sets still wins. Melee take the Defender only within 15 yd of the 
 across the room as it re-rolls aggro. It feigns at 1 HP wearing `UNIT_FLAG_NOT_SELECTABLE`, so every
 candidate is checked with `IsDownOrFeigning` after `GetUldUnitByEntry`. Savage Pounce (64666)
 fires only at 8–25 yd from the sentry's own victim, so a tank holding it in melee is the whole
-counter — the taunt needs no positioning code behind it.
+counter.
+
+**Sentries (2 at 10, 4 at 25)** each cast Strength of the Pack (64381: +30% damage to allies within
+10 yd), so a stacked pack one-shots a non-tank (38–44k, 25N). Assist tank 0 takes the nearest loose
+one: on a non-tank first, then one out of combat, then one on another tank (`GetAuriayaLooseSentry`,
+probe `auriaya.sentry`: `dps`, `free`, `tank`, `none`). Out of taunt reach (25 yd, in sight) it walks
+to 20 yd; in reach it fires only with the class taunt ready, and then targets the Sentry, since a
+taunt doesn't move the tank's own target. Picking in grid order, it re-taunted one off the main tank
+while another killed a warrior.
 
 **Every Auriaya trigger resolves her through `GetAuriaya`, by entry**: through
 [`"find target"`](../../engine/pitfalls.md#things-the-bot-cannot-see) any bot fighting a sentry or the
@@ -97,7 +105,12 @@ despawn between reads drops out instead of dangling.
 **Nothing pulls before a player does.** Every node that pulls waits for `IsAuriayaEngaged` (her
 `IsInCombat()`): targeting, the sentry taunt, the anchor and both rules. Ungated, the targeting
 action's own `Attack()` pulled the room for the first bot to see her, and the anchor walked the raid
-to its spots early. A Sentry's `JustEngagedWith` puts her in combat, so the flag covers any opener. The
+to its spots early. A Sentry's `JustEngagedWith` puts her in combat, but not the reverse: her formation
+row (groupAI 2) never makes the Sentries assist her, while theirs (519) pulls the whole pack onto
+whoever engages one. So when she alone is pulled (a ranged pull, the test harness's aggro start) the
+pack trails her in out of combat, and targeting also waits while one within 30 yd of her is
+(`AuriayaSentriesUnengaged`), leaving the off-tank's taunt to open on it. Ungated, a cat's Faerie
+Fire or a shaman's wolves put all four on one DPS. The
 pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
 `ACTION_RAID + 4`, sentry taunt +3 (a loose Sentry buffs her and pounces anything 8-25 yd off), pool
 dodge and anti-fear +2, targeting +1, position last. The fall-from-floor teleport goes to the tank's

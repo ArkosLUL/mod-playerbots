@@ -25,7 +25,7 @@ void DefineAuriaya(EncounterBuilder& e)
     e.Node<AuriayaFallFromFloorTrigger, AuriayaFallFromFloorAction>(ACTION_RAID + 4);
 
     // A loose Sentry is the worst state in the fight, so the taunt outranks the pool dodge, which can wait.
-    e.Node<AuriayaSentryTauntTrigger, AuriayaSentryTauntAction>(ACTION_RAID + 3);
+    e.Node<AuriayaSentryTauntTrigger, AuriayaSentryTauntAction>(ACTION_RAID + 3, EncounterRow::Mover);
 
     e.Node<AuriayaSeepingEssenceTrigger, AuriayaSeepingEssenceAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node<AuriayaAntiFearTrigger, AuriayaAntiFearAction>(ACTION_RAID + 2);

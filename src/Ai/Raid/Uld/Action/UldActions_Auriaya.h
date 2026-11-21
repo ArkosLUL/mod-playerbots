@@ -8,6 +8,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidAntiFear.h"
+#include "RaidDirectTargeting.h"
 #include "UldEncounter_Auriaya.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
@@ -35,12 +36,12 @@ public:
     bool isUseful() override;
 };
 
-class AuriayaSentryTauntAction : public Action
+class AuriayaSentryTauntAction : public RaidDirectAttackAction
 {
 public:
     static constexpr char const* Name = "auriaya sentry taunt action";
 
-    AuriayaSentryTauntAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    AuriayaSentryTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

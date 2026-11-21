@@ -69,7 +69,8 @@ bool AuriayaSetDpsPriorityTrigger::IsActive()
 
     // The action calls Attack() directly, so without this the first bot to see her pulls the room.
     // Whoever pulls flips it for everyone, so the raid engages together.
-    return IsAuriayaEngaged(botAI);
+    // Sentries still out of combat are the off-tank's to open on: the first bot to hit one gets the whole pack.
+    return IsAuriayaEngaged(botAI) && !AuriayaSentriesUnengaged(botAI);
 }
 
 bool AuriayaSentryTauntTrigger::IsActive()
@@ -86,5 +87,10 @@ bool AuriayaSentryTauntTrigger::IsActive()
         return false;
 
     // A sentry already on the off-tank stays in melee, where its Savage Pounce (8-25 yd) cannot fire
-    return GetAuriayaLooseSentry(botAI, bot) != nullptr;
+    Unit* sentry = GetAuriayaLooseSentry(botAI, bot);
+    if (!sentry)
+        return false;
+
+    // Out of reach it walks over. In reach it waits for the taunt and leaves the tick to the tank rotation.
+    return !InAuriayaSentryTauntReach(bot, sentry) || EncounterHelpers::ClassTauntReady(botAI);
 }

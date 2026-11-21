@@ -245,13 +245,65 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
     return IsDownOrFeigning(defender) ? nullptr : defender;
 }
 
+bool AuriayaSentriesUnengaged(PlayerbotAI* botAI)
+{
+    Unit* boss = GetAuriaya(botAI);
+    if (!boss || !boss->IsInCombat())
+        return false;
+
+    // Searched off her, not the bot: the pack walks in behind her, so it can still be out of the bot's sight.
+    std::list<Creature*> sentries;
+    boss->GetCreatureListWithEntryInGrid(sentries, NPC_AURIAYA_SANCTUM_SENTRY, ULDUAR_AURIAYA_PACK_RADIUS);
+
+    return std::any_of(sentries.begin(), sentries.end(),
+                       [](Creature* sentry) { return sentry->IsAlive() && !sentry->IsInCombat(); });
+}
+
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
 {
-    for (Unit* sentry : CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA_SANCTUM_SENTRY))
-        if (sentry->GetVictim() != tank)
-            return sentry;
+    // Lower is more urgent. rankNames are the probe's values.
+    enum LooseRank
+    {
+        ON_NON_TANK,
+        OUT_OF_COMBAT,
+        ON_OTHER_TANK,
+        NOT_LOOSE
+    };
+    static char const* const rankNames[] = {"dps", "free", "tank", "none"};
 
-    return nullptr;
+    Unit* pick = nullptr;
+    LooseRank pickRank = NOT_LOOSE;
+    float pickDistance = 0.0f;
+    for (Unit* sentry : CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA_SANCTUM_SENTRY))
+    {
+        Unit* victim = sentry->GetVictim();
+        if (victim == tank)
+            continue;
+
+        LooseRank rank = ON_NON_TANK;
+        if (!victim || !sentry->IsInCombat())
+            rank = OUT_OF_COMBAT;
+        else if (Player* player = victim->ToPlayer(); player && PlayerbotAI::IsTank(player))
+            rank = ON_OTHER_TANK;
+
+        float const distance = tank->GetExactDist2d(sentry);
+        if (rank < pickRank || (rank == pickRank && distance < pickDistance))
+        {
+            pick = sentry;
+            pickRank = rank;
+            pickDistance = distance;
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(botAI->GetBot(), "auriaya.sentry", rankNames[pickRank]);
+
+    return pick;
+}
+
+bool InAuriayaSentryTauntReach(Player* tank, Unit* sentry)
+{
+    return tank->GetExactDist2d(sentry) <= ULDUAR_AURIAYA_SENTRY_TAUNT_REACH && tank->IsWithinLOSInMap(sentry);
 }
 
 std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
