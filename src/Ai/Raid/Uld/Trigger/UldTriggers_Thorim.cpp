@@ -53,8 +53,12 @@ bool ThorimGauntletPositioningTrigger::IsActive()
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
 
-    Player* leader = GetRaidLeaderOnInstance(botAI);
+    Player* leader = ThorimGauntletLeader(botAI);
     if (!leader)
+        return false;
+
+    bool const botLed = ThorimBotLedGauntlet(botAI);
+    if (botLed && leader == bot)
         return false;
 
     if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
@@ -78,7 +82,35 @@ bool ThorimGauntletPositioningTrigger::IsActive()
 
     // Leader past the last waypoint, so nothing places the formation any more. Healers only: everyone else
     // keeps up on its own chase, and a tether on them would fight reach melee for the whole squad.
+    if (botLed)
+        return bot->GetDistance2d(leader) >
+               (PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE : ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE);
+
     return PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(leader) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
+}
+
+bool ThorimGauntletLeverTrigger::IsActive()
+{
+    if (!NearThorimEncounter(bot) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    if (!ThorimIsBotGauntletLeader(botAI, bot))
+        return false;
+
+    ObjectGuid lever;
+    return ThorimLeverUsable(bot, lever);
+}
+
+bool ThorimGauntletLeadTrigger::IsActive()
+{
+    if (!NearThorimEncounter(bot) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    if (!ThorimIsBotGauntletLeader(botAI, bot))
+        return false;
+
+    Position next;
+    return ThorimGauntletLeadStep(botAI, bot, next) || ThorimGauntletLeadColossus(botAI, bot);
 }
 
 bool ThorimBalconyAdvanceTrigger::IsActive()

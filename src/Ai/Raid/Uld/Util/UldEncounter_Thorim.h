@@ -429,6 +429,12 @@ struct ThorimEncounterState
     // The corridor fight is trash to the instance script, so nothing else opens a trace for it.
     bool gauntletTraced = false;
 
+    // Bot-led gauntlet: the lever has been pulled this pull, the next lane waypoint the leader walks to, and
+    // when that last changed. Lever state is only readable from the arena, so the latch outlives the walk.
+    bool leverPulled = false;
+    uint8 leadNext = 0;
+    uint32 leadStepMs = 0;
+
     // Raid icons are cleared once per pull rather than every tick: a human is free to re-mark something
     // mid-fight and having the bots wipe it back off would be worse than the stale mark ever was.
     RaidObs::ObsValue<bool> marksCleared{"thorim.markscleared"};
@@ -509,8 +515,42 @@ Position const& GetThorimGauntletWaypoint(bool leftLane, uint8 index);
 bool ThorimGauntletLaneIndexInLane(WorldObject const* who, bool leftLane, uint8& index);
 bool ThorimGauntletLaneIndex(WorldObject const* who, uint8& index, bool& leftLane);
 
-// The squad's waypoint index: the raid leader's, or this bot's own when the leader is on none (centre line,
-// or off on an add).
+// How close the squad's non-healers must be to the leader before a bot-led walk steps on, and how long it
+// waits for them before going anyway.
+inline constexpr float ULDUAR_THORIM_LEAD_COHESION_DISTANCE = 30.0f;
+inline constexpr uint32 ULDUAR_THORIM_LEAD_STALL_MS = 15000;
+
+// Where the Colossus walk stops: outside its melee reach, so the squad's own targeting starts the fight.
+inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE = 30.0f;
+
+// How far a squad member may trail a bot leader that stands on no waypoint before it walks to him.
+inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
+
+// True while no real player is in the raid group on this instance. Then nobody can lead the corridor or pull
+// the lever, so a squad bot does.
+bool ThorimBotLedGauntlet(PlayerbotAI* botAI);
+
+// Who the corridor squad forms on: the raid leader with a real player present, else the gauntlet tank (any
+// non-healer of the squad when he is dead). nullptr when nobody qualifies.
+Player* ThorimGauntletLeader(PlayerbotAI* botAI);
+
+// True for the one bot that leads a bot-led gauntlet.
+bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
+
+// The arena lever's guid once it is unlocked and still unused. A lever found already used is latched as
+// pulled, since the corridor is out of search range of it.
+bool ThorimLeverUsable(Player* bot, ObjectGuid& lever);
+void ThorimNoteLeverPulled(Player* bot);
+
+// The next lane waypoint the bot-led leader walks to. False when he should hold: lever not pulled, squad not
+// closed up (until the stall timer runs out), or past the last waypoint.
+bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out);
+
+// The Runic Colossus once the leader is past the last waypoint and still short of ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE.
+Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot);
+
+// The squad's waypoint index: the leader's (ThorimGauntletLeader), or this bot's own when the leader is on
+// none (centre line, or off on an add).
 bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index);
 
 // Sticky once a hand goes up, or the formation walks back into the lane it just left. False before the

@@ -93,6 +93,30 @@ public:
     bool isUseful() override;
 };
 
+// Bot-led gauntlet only: the leader pulls the arena lever once it unlocks.
+class ThorimGauntletLeverAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "thorim gauntlet lever action";
+
+    ThorimGauntletLeverAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Bot-led gauntlet only: the leader walks the lane chain, then on to the Colossus.
+class ThorimGauntletLeadAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "thorim gauntlet lead action";
+
+    ThorimGauntletLeadAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 // Walks the upper hallway to Thorim's platform, then drops into the arena behind him. Owns the jump.
 class ThorimBalconyAdvanceAction : public MovementAction
 {
