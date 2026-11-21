@@ -19,7 +19,7 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 | **Open: game port** | Windows reserved TCP 8043-8642 (Hyper-V/WinNAT; dynamic range starts at 1024), so 8085 cannot bind. Temporary: `.env` `DOCKER_WORLD_EXTERNAL_PORT=8020`, `acore_auth.realmlist` port 8020. Admin fix pending (`scratchpad/winnat-fix.ps1`: stop winnat, `netsh int ipv4 add excludedportrange protocol=tcp startport=8085 numberofports=1`, start winnat); then revert both to 8085 |
 | DC result files | done: `Playerbot.env` sets `DC_TESTRUNS_FILE`, `DC_TESTRUN_LIVE_FILE`, `DC_TESTPLANS_FILE`, `DC_LAB_TRACE_DIR` and `AC_DUNGEON_CLEAR_TEST_RUN_ROSTER_DIR` under `/azerothcore/env/dist/logs/dc` (host `env/dist/logs/dc`), plus `AC_DUNGEON_CLEAR_TEST_RUNS_ONLY=1`. The runner's default `--dc-runs-file` (`/azerothcore/dc_testruns.jsonl`) must move there in wave 3 |
 | Wave 2 (lanes A1-A3, B, C) | done 2026-11-21. DC `bcece6a`+`b4aa733` (A1), `a67164f`+`09cef94` (A2), `2e80368`+`ea39b4f` (A3); fork `rt/b` merged as `df7986351`; findings in `c-research.FINDINGS.md`. The capped build compiled all of it; DC's gtests have not run (they need a full `BUILD_TESTING` build) |
-| Wave 3 (pilots) | open |
+| Wave 3 (pilots) | go 2026-11-21: three different rosters. XT-002 drop (815.0, -10.0, 409.803, o 0.0) navprobe-clean, ~37 yd from his patrol (path 1360540) and ~55 yd from scrapyard trash; Beasts drop at Barrett (559.15, 90.56, 395.27). Lanes D (`d-dc-pilot-scenarios.PLAN.md`, DC) and E (`e-runner-pools.PLAN.md`, worktree `build-toc-wt/rt-e`, branch `rt/e`) launched; then rebuild, pools, load check, pilots |
 | Wave 4 (remaining bosses) | open |
 | Wave 5 (FL/Thorim/Algalon/Yogg research, close-out) | open |
 
