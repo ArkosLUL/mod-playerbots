@@ -7,9 +7,9 @@
 #include "UldEncounter_Thorim.h"
 
 #include "Creature.h"
-#include "GameObject.h"
 #include "DBCEnums.h"
 #include "EncounterHelpers.h"
+#include "GameObject.h"
 #include "Group.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -1536,7 +1536,8 @@ bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out)
 Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
 {
     ThorimEncounterState const* state = FindState(bot);
-    if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS || bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+    if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS ||
+        bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD || ThorimPhase2Active(botAI))
         return nullptr;
 
     Unit* colossus = GetThorimRunicColossus(botAI);
