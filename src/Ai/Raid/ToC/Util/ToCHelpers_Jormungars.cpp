@@ -2546,6 +2546,10 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
                      healReach.first.GetExactDist2d(view.spot) > healReach.second + REACH_HOLD_SLACK)
                 cause = "heal";
         }
+        // A Spray dodge still walking when its Bile makes the bot a runner carries it off the paralysed
+        // tank, and a cure walk ignores the Spray anyway
+        else if (cureWalk && !cureHold && !plan.urgent)
+            cause = "cure";
 
         if (!cause)
         {

@@ -191,6 +191,16 @@ threat lead, or while snared) trades pools under the melee for the hold; for rou
 15-68° across non-tanks: 649_20 4:19 killed a healer); a stuck Toxin melee with no runner died in a
 pool (649_17, `runner 0.0 s`); the warrior class `charge` by a fresh holder mid Spew.
 
+**Review fix.** 649_20's runner was not behind the worm by choice: its Spray dodge (`move 28 spray
+escape` 3:33.9, walk-only) ran on after `nb.cure run` at 3:36.4 and released `arrived` at 3:37.8,
+carrying it from (585.0, 123.1), 14 yd from a `direct` spot, to the blocked one. Same carry-over on
+every window-4 run or seek begun mid dodge: 649_16 (1.3 s), 649_21 (1.7 s), 649_17 (3.0 s), and
+649_8 twice (0.6, 0.2 s). A walk-only hold with no cure reason now releases `cure` once a cure walk
+is owed and the bot isn't urgent (a cure walk skips the Spray rule; a pool escape still inside the
+pool keeps walking). A replica of `direct`/`detour` on 649_20 3:36-3:57 and 649_8 3:31-3:48 agrees
+with the lane's: no direct spot, a detour every 2 s sample (24-46 yd, 649_8 62-87).
+
 **Next window should show.** `move <yd> run detour` (or `cure detour`) notes where `none run` streaks
 were, each followed by a `direct`/`partner` walk and a cure; Toxin on the mobile holder ending `cured`
-with `runner` no-spot under ~2 s; no Acidmaw kill on a non-tank while its holder carries Toxin.
+with `runner` no-spot under ~2 s; no Acidmaw kill on a non-tank while its holder carries Toxin; after
+`nb.cure run`/`seek`, a `release cure` instead of a Spray dodge's `release arrived`.

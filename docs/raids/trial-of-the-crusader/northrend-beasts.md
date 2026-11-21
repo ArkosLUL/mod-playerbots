@@ -417,10 +417,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   - **Every spot** stays within 44 yd of `ARENA_CENTER`, 2 inside Icehowl's gate-side charge end
     (the floor reaches past 46 everywhere, [Arena bounds](#arena-bounds); at one 25H moment 44 gave
     the casters 626 yd² of floor in reach to 35's 432); the drag keeps 35, where the worms surface.
-    No coordinates: navprobe can't see the floor; the stand, `direct` and `partial` points go
+    No coordinates: navprobe can't see the floor; the stand, `direct`, `detour` and `partial` points go
     unclipped, the floor test keeping them inside the wall. Spots stay outside an armed mobile
     worm's cone + 12°, its width from `GetSpellCone` on the remapped tick, else 24°. Its straight
-    walk crosses no pool at its radius when the walk ends + 1, but for the `WormStationary`
+    walk (a `detour`'s second leg from its turn) crosses no pool at its radius when the walk ends + 1, but for the `WormStationary`
     holder no up stationary worm within 16, and no armed Spew danger (the spot's cone + 12° and
     front disc; a cure or run walk only a Spew under way, since it races Toxin); a circle the bot
     starts in only has to be left, heading out, and a cone left for good, inside no longer than a
@@ -445,7 +445,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     13 yd apart and 12 as pairs, 8 and 16 with the 44 yd floor, against 14); `nospread`, except on
     heroic while Dreadscale is the stationary worm, where a shared Burning Bile kills at the first
     pulse; for a cure or run `partner` (no reach); urgent only, `escape` (urgent circles, floor,
-    cones, path), then `loose`; for a cure or run `direct`, then `partial`; last, urgent only,
+    cones, path), then `loose`; for a cure or run `direct`, `detour`, then `partial`; last, urgent only,
     `cross`: the escape's, then loose's circles without the path test, since near the floor edge,
     beside the up stationary worm or between two pools every way out can fail it, and standing in
     the damage is worse than walking through. So spread relaxes before reach, and a non-urgent move
@@ -477,7 +477,9 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     its partner, a cross one without the path) and release on arrival, never parked: they ignore
     reach, and the spot guard would strand the bot there ([pitfalls.md](../../engine/pitfalls.md)).
     A Spray dodge does too, so melee walk back to their stand after the cast instead of merging with
-    the other group.
+    the other group. Any of these begun before a cure walk is owed releases (`cure`) once one is,
+    unless the bot is urgent: on 25H (2026-11-21) Spray dodges ran on 0.2-3 s after their Bile made
+    the bot a runner, one from 14 yd of its tank to a spot with no straight walk to it.
   - **Urgent**, inside a pool or one that reaches the bot before its pinning cast or channel ends,
     within the Spray trigger (not on a cure walk), without Toxin within 10 yd of a Bile carrier,
     inside a Sweep being cast or a Spew cone during the spew: `MOVEMENT_FORCED`; any other move
