@@ -25,8 +25,7 @@ namespace
 bool InUlduar(PlayerbotAI* botAI) { return botAI->GetBot()->GetMapId() == ULDUAR_MAP_ID; }
 
 // Each tank only while it holds its unit: the main tank Ignis, a construct tank a construct. Without one it has
-// no spot, and blocking its generic movers strands it. A main tank that lost Ignis would never get back into
-// taunt range.
+// no spot, and blocking its generic movers strands it, a main tank out of taunt range for good.
 bool IgnisPlacedTank(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

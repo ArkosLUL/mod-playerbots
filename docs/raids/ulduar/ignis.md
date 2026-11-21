@@ -119,8 +119,8 @@ so left on it outranks the walk on nearly every tick spent in the fire.
 
 The `ignis tank movement` rule takes the generic movers off the main tank while Ignis is on him and
 a construct tank while it holds a construct, and nobody else. A main tank that lost Ignis gets them
-back, or nothing walks him into taunt range again. Non-tanks keep everything, which is what spreads the ranged
-half without an anchor of their own.
+back, or nothing walks him into taunt range again. Non-tanks keep everything, which is what
+spreads the ranged half without an anchor of their own.
 
 Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, Scorch's 25-man
 remap of 62546 included (**`SPELL_IGNIS_SCORCH_25` = 63474**,

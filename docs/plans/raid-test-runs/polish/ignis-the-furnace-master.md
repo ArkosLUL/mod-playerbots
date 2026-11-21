@@ -35,7 +35,9 @@ uld1 deaths; the void w2 wipe too).
   charge, follow and flee for the main tank all fight (`IgnisPlacedTank` = `IsMainTank`), so
   `reach melee` was vetoed every tick, and Hand of Reckoning failed out of range (0:12).
 - uld3's paladin MT walked off the same way, but its pull threat outlasted the bear's 3 s Growl and
-  Ignis came back at 5.8 s. uld2's warrior taunted and Thunder Clapped before the walk.
+  Ignis came back at 5.8 s. It still stranded: the MT parked at the slot 35-68 yd off Ignis until
+  0:44, `reach melee` vetoed (0:13, 0:23, 0:37), while the bear held Ignis 0:16.8-0:41.3; no deaths
+  only because the bear is a tank. uld2's warrior taunted and Thunder Clapped before the walk.
 
 **Classification: bug.** The strategy intends the main tank to hold Ignis at the anchor.
 
@@ -53,6 +55,8 @@ so any early threat loss lands on a ranged (uld1's first death, 0:09). Not the c
 stranding, which is the strategy's.
 
 **Next window should show:** in every pool Ignis on a tank above ~95% (`--threat 33118`), the main
-tank within ~20 yd of Ignis all fight apart from Slag Pot (`--track`), Ignis reaching the anchor
+tank within ~20 yd of Ignis all fight outside Scorch's 3 s root (`--track`; the leash lets the drag
+walk on through the root, and uld2's clean kill opened 35 yd there at 0:10-0:14; the MT is never
+potted, the core skips Ignis' victim), Ignis reaching the anchor
 region (y below ~290) within ~25 s, and no Ignis melee deaths on non-tanks. uld1 is the pool to
 watch.
