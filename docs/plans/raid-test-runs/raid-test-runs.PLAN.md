@@ -13,7 +13,10 @@ The polish loop runs on the user's standing go ("Polish loop" below). Per boss, 
 | XT-002 | round 2 merged (hunter arc, lust on the Heart) | test, then round 3; counts only with Heartbreak |
 | Northrend Beasts | round 3 merged (detour for the Toxin runner) | test, then round 4 (the mobile holder's drag loses threat: may be a user question) |
 | Twin Val'kyr | DC engages Fjola on the main tank after the intro (lane P) | first real pulls, then round 1 proper |
-| Razorscale, Iron Assembly, Auriaya, Hodir | round 1 lanes | merge, test |
+| Razorscale | round 1 merged (`3a3e4866c`: each ranged bot its own fire-free spot on the stack circle) | test |
+| Iron Assembly, Auriaya, Hodir | round 1 lanes | merge, test |
+| Harness: shared spread angle | `MovementAction::GetFollowAngle` (`src/Ai/Base/Actions/MovementActions.cpp` ~1001) reads the master's group; the DC driver is master but not in the group, so every bot gets angle 0 and every `MoveNear`/`MoveInside` caller stacks the raid on one point in harness pulls (Hodir, Yogg-Saron, Naxxramas, Sunwell, Black Temple, Tempest Keep use it) | a shared-code lane: fall back to the bot's own group when the master has none; then re-pull every boss using it |
+| Harness: Thorim drop | window 6: the arena pack engaged before the refresh (drop 18 yd from the nearest soldier) | DC lane: move the drop outside the pack's aggro |
 | Freya, Vezax, Algalon, Yogg-Saron, Thorim | DC rows merged, never pulled | smoke one pull each, then data on every pool |
 | Faction Champions, Mimiron | DC rows merged (`2f98dd3`): `totc-champions` engages the first kill-order healer on the main tank after the intro; `uld-mimiron` presses the Big Red Button as every pull's start (new `ObjectStart`), drop navprobe-clean. The fork's FC grip opener needs a player-selected target DC doesn't supply, so bots kill healers in place | smoke one pull each |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment) | brief a DC lane |
