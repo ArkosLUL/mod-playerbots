@@ -4,15 +4,15 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 
 ## Resume here
 
-The polish loop runs on the user's standing go ("Polish loop" below). Per boss, at the last update:
+The polish loop runs on the user's standing go ("Polish loop" below). Session paused 2026-11-22 00:45 for a PC shutdown: window 6 was stopped cleanly (`.dc test stop all`, lock released), every lane is merged, nothing is in flight. Custom and DC `local/wrath-raid-tests` hold work not yet built: Razorscale, Hodir, Iron Assembly and Auriaya round 1, Beasts round 3 is built but only partly tested, DC `962eb10` (Assembly 5 healers). The next window rebuilds first. Per boss, at the last update:
 
 | Boss | State | Next |
 |---|---|---|
 | Jaraxxus | done: 25h kills with 0/0/1 deaths, 10h kills with 0 | none |
-| Kologarn, Ignis | polished at 25n (round 1) | 10n check: one pull per pool |
-| XT-002 | round 2 merged (hunter arc, lust on the Heart) | test, then round 3; counts only with Heartbreak |
-| Northrend Beasts | round 3 merged (detour for the Toxin runner) | test, then round 4 (the mobile holder's drag loses threat: may be a user question) |
-| Twin Val'kyr | DC engages Fjola on the main tank after the intro (lane P) | first real pulls, then round 1 proper |
+| Kologarn, Ignis | polished at 25n (round 1) | 10n check: one pull per pool (window 6 was stopped before it) |
+| XT-002 | round 2 merged (hunter arc, lust on the Heart); window 6 (cut short at shutdown): kills with 2 and 0 deaths and one wipe, Heartbreak not yet read | round 3 from window 6's traces (`--head 9938bd2f0`); counts only with Heartbreak |
+| Northrend Beasts | round 3 merged (detour for the Toxin runner); window 6 pulled it on all three pools before the stop | round 4 from window 6's traces (`--head 96e2d86c2`); the mobile holder's drag loses threat, which may be a user question |
+| Twin Val'kyr | **polished at 25h** on first real data (window 6: three kills, 0 deaths each; DC engages Fjola on the main tank 26 s after the gossip) | 10h check |
 | Razorscale | round 1 merged (`3a3e4866c`: each ranged bot its own fire-free spot on the stack circle) | test |
 | Hodir | round 1 merged (`5f16288c8`: shed Biting Cold one stack sooner under Frozen Blows; no Misdirection while the shed is armed). Hard mode = no Shatter Chest 62501 cast before the kill (`hodir.py` banner) | test; round 2 implements the user's answer (2026-11-22) on off-tank deaths in Frozen Blows: each tank uses a defensive cooldown in its Frozen Blows window first, then the tanks alternate taunts on purpose if off-tanks still die |
 | Iron Assembly | round 1 merged (`ad6d38a22`: healer Shadowfiend held until 50% mana; hard mode read from `iron_assembly.py`, Steelbreaker last); DC `962eb10`: 5 healers at 25 (all three pools ran dry before Steelbreaker was alone) | test; **open user question**: spread the ranged already in Molgeim's phase so Static Disruption stops hitting the stack (lane recommends yes). Not picked: the swap tank dies to a one-charge Fusion Punch |
@@ -22,7 +22,7 @@ The polish loop runs on the user's standing go ("Polish loop" below). Per boss, 
 | Shared tools | `postmortem.py` and `raidtest/pulls.py` label a Biting Cold death "its own blow" (the victim casts the damage on itself) | fix in the shared death reader |
 | Harness: shared spread angle | `MovementAction::GetFollowAngle` (`src/Ai/Base/Actions/MovementActions.cpp` ~1001) reads the master's group; the DC driver is master but not in the group, so every bot gets angle 0 and every `MoveNear`/`MoveInside` caller stacks the raid on one point in harness pulls (Hodir, Yogg-Saron, Naxxramas, Sunwell, Black Temple, Tempest Keep use it) | a shared-code lane: fall back to the bot's own group when the master has none; then re-pull every boss using it |
 | Harness: Thorim drop | window 6: the arena pack engaged before the refresh (drop 18 yd from the nearest soldier) | DC lane: move the drop outside the pack's aggro |
-| Freya, Vezax, Algalon, Yogg-Saron, Thorim | DC rows merged, never pulled | smoke one pull each, then data on every pool |
+| Freya, Vezax, Algalon, Yogg-Saron, Thorim | window 6 smoke: every new start step worked (console use with the lent key, teleport start into Sara's range). Freya kill with 8 deaths (hard mode unread); Algalon wipe 4:35, Yogg-Saron wipe 3:08, Thorim wipe 6:05 (started unrefreshed, see the harness row); Vezax never pulled | data on every pool, then round 1 each |
 | Faction Champions, Mimiron | DC rows merged (`2f98dd3`): `totc-champions` engages the first kill-order healer on the main tank after the intro; `uld-mimiron` presses the Big Red Button as every pull's start (new `ObjectStart`), drop navprobe-clean. The fork's FC grip opener needs a player-selected target DC doesn't supply, so bots kill healers in place | smoke one pull each |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment) | brief a DC lane |
 | Flame Leviathan | parked by the user | none |
