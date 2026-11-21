@@ -1,4 +1,5 @@
-"""The cycle's report: markdown on stdout, built from the DC runs and the traces they produced."""
+"""The cycle's report: markdown on stdout, built from the DC runs and the traces they produced, one
+section per roster pool and then the pools together."""
 from __future__ import annotations
 
 import collections
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, TextIO
 
 import dc
+from pools import PullRow
 from pulls import BOTOBS, DIFF_IDS, TraceFacts, vetoes_inside
 from raidobs.encounter import canonical_boss
 
@@ -19,29 +21,20 @@ VETO_ROWS_SHOWN = 10
 
 
 @dataclass
-class PullRow:
-    phase: str
-    run_id: str
-    number: int
-    window: tuple[int, int] | None
-    dc_outcome: str
-    trace: TraceFacts | None
-
-
-@dataclass
 class State:
     boss: str
     diff: str
     head_sha: str
     head_time: datetime.datetime
     wanted: int
+    pools: list[str] = field(default_factory=list)
     cap: int = 0
     runs: list[tuple[str, dc.Run]] = field(default_factory=list)
     rows: list[PullRow] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     stopped: str | None = None
-    counted: list[TraceFacts] = field(default_factory=list)
-    baseline: list[TraceFacts] = field(default_factory=list)
+    counted: dict[str, list[TraceFacts]] = field(default_factory=dict)
+    baseline: dict[str, list[TraceFacts]] = field(default_factory=dict)
 
 
 def minutes(ms: int | None) -> str:
@@ -79,15 +72,22 @@ def window_of(row: PullRow) -> tuple[int, int] | None:
     return None
 
 
+def counted_of(state: State, pool: str) -> list[TraceFacts]:
+    return state.counted.get(pool, [])[: state.wanted]
+
+
 def headline(state: State) -> str:
-    got = len(state.counted)
-    line = f"**{min(got, state.wanted)}/{state.wanted} valid pulls** after `{state.head_sha}`"
+    counts = [(pool, len(counted_of(state, pool))) for pool in state.pools]
+    got = sum(count for _, count in counts)
+    wanted = state.wanted * len(state.pools)
+    per_pool = ", ".join(f"{pool} {count}/{state.wanted}" for pool, count in counts)
+    line = f"**{got}/{wanted} valid pulls** after `{state.head_sha}` ({per_pool})"
     test_pulls = sum(1 for row in state.rows if row.phase == "test")
     if state.cap:
-        line += f", {test_pulls} pulled this cycle (cap {state.cap})"
+        line += f", {test_pulls} pulled this cycle (cap {state.cap} per pool)"
     if state.stopped:
         line += f". **Stopped:** {state.stopped}"
-    elif got < state.wanted and state.cap:
+    elif got < wanted and state.cap:
         line += ". The cap ran out first."
     return line
 
@@ -96,25 +96,26 @@ def section_runs(state: State, out: TextIO) -> None:
     if not state.runs:
         return
     print("\n## DC runs\n", file=out)
-    print("| phase | run | verdict | pulls | reason |", file=out)
-    print("|---|---|---|---|---|", file=out)
+    print("| phase | pool | run | instance | verdict | pulls | reason |", file=out)
+    print("|---|---|---|---|---|---|---|", file=out)
     for phase, run in state.runs:
         pulls = "?" if run.pulls is None else str(len(run.pulls))
         reason = run.fail_reason.replace("|", "/") or "-"
-        print(f"| {phase} | {run.run_id} | {run.result or '?'} | {pulls} | {reason} |", file=out)
+        print(f"| {phase} | {run.pool or '?'} | {run.run_id} | {run.instance_id or '-'} | {run.result or '?'} "
+              f"| {pulls} | {reason} |", file=out)
     if any(run.pulls is None for _, run in state.runs):
-        print("\nA run record without a pull list was matched to the traces that opened inside the run.",
+        print("\nA run record without a pull list was matched to the traces of its instance inside the run.",
               file=out)
 
 
-def section_pulls(state: State, out: TextIO) -> None:
-    print("\n## Pulls\n", file=out)
-    if not state.rows:
+def section_pulls(rows: list[PullRow], state: State, out: TextIO) -> None:
+    print("\n### Pulls\n", file=out)
+    if not rows:
         print("No pulls.", file=out)
         return
     print("| # | phase | run | DC | trace | duration | hard mode | deaths | counts | file |", file=out)
     print("|---|---|---|---|---|---|---|---|---|---|", file=out)
-    for index, row in enumerate(state.rows, 1):
+    for index, row in enumerate(rows, 1):
         facts = row.trace
         duration = row.window[1] - row.window[0] if row.window else (facts.duration_ms if facts else None)
         print(f"| {index} | {row.phase} | {row.run_id or '-'} | {row.dc_outcome or '-'} "
@@ -122,7 +123,7 @@ def section_pulls(state: State, out: TextIO) -> None:
               f"| {len(facts.deaths) if facts else '-'} | {verdict(row, state.diff, state.head_time)} "
               f"| {facts.name if facts else '-'} |", file=out)
 
-    flagged = [(index, row) for index, row in enumerate(state.rows, 1) if row.trace and row.trace.warnings]
+    flagged = [(index, row) for index, row in enumerate(rows, 1) if row.trace and row.trace.warnings]
     if flagged:
         print("\nWhy a pull doesn't count:\n", file=out)
         for index, row in flagged:
@@ -130,10 +131,10 @@ def section_pulls(state: State, out: TextIO) -> None:
                 print(f"- pull {index}: {text}", file=out)
 
 
-def section_deaths(state: State, out: TextIO) -> None:
-    print("\n## Deaths\n", file=out)
+def section_deaths(rows: list[PullRow], out: TextIO) -> None:
+    print("\n### Deaths\n", file=out)
     blocks = []
-    for index, row in enumerate(state.rows, 1):
+    for index, row in enumerate(rows, 1):
         facts = row.trace
         if facts is None:
             continue
@@ -146,10 +147,10 @@ def section_deaths(state: State, out: TextIO) -> None:
     print("\n\n".join(blocks) if blocks else "No trace to read deaths from.", file=out)
 
 
-def section_contamination(state: State, out: TextIO) -> None:
-    print("\n## DC multiplier vetoes inside a pull\n", file=out)
+def section_contamination(rows: list[PullRow], out: TextIO) -> None:
+    print("\n### DC multiplier vetoes inside a pull\n", file=out)
     found = False
-    for index, row in enumerate(state.rows, 1):
+    for index, row in enumerate(rows, 1):
         window = window_of(row)
         if row.trace is None or window is None:
             continue
@@ -167,8 +168,8 @@ def section_contamination(state: State, out: TextIO) -> None:
         print("None: no `dungeon clear` or `dungeon clear combat` veto row falls inside a pull.", file=out)
 
 
-def tool_output(title: str, command: list[str], run: Run, out: TextIO) -> None:
-    print(f"\n## {title}\n", file=out)
+def tool_output(title: str, command: list[str], run: Run, out: TextIO, level: str = "###") -> None:
+    print(f"\n{level} {title}\n", file=out)
     script = pathlib.Path(command[1]).relative_to(BOTOBS).as_posix()
     rest = [pathlib.Path(part).name if part.endswith(".ndjson") else part for part in command[2:]]
     print(f"`{' '.join([script, *rest])}`\n", file=out)
@@ -194,32 +195,46 @@ def boss_reader(boss: str) -> pathlib.Path | None:
     return None
 
 
-def section_tools(state: State, run: Run, out: TextIO) -> None:
+def section_pool(pool: str, state: State, run: Run, out: TextIO) -> None:
+    rows = [row for row in state.rows if row.pool == pool]
+    counted = [str(f.path) for f in counted_of(state, pool)]
+    baseline = [str(f.path) for f in state.baseline.get(pool, [])]
+    print(f"\n## {pool}\n", file=out)
+    print(f"{len(counted)}/{state.wanted} valid after HEAD, {len(baseline)} baseline.", file=out)
+    section_pulls(rows, state, out)
+    if rows:
+        section_deaths(rows, out)
+        section_contamination(rows, out)
+
     python = sys.executable
     batch = str(BOTOBS / "batch.py")
-    tool_output("Valid pulls since HEAD",
-                [python, batch, "--strict", "--since", state.head_sha, "--boss", state.boss], run, out)
-
-    counted = [str(f.path) for f in state.counted[: state.wanted]]
-    baseline = [str(f.path) for f in state.baseline]
     if counted and baseline:
         tool_output("Baseline against this build",
                     [python, batch, "--boss", state.boss, "--split-at", state.head_sha, *baseline, *counted],
                     run, out)
     else:
-        print("\n## Baseline against this build\n", file=out)
-        print("Skipped: needs valid pulls on both sides of HEAD "
+        print("\n### Baseline against this build\n", file=out)
+        print(f"Skipped: needs valid {pool} pulls on both sides of HEAD "
               f"({len(baseline)} before, {len(counted)} after).", file=out)
 
-    if counted:
-        tool_output("Probes", [python, batch, "--boss", state.boss, "--probes", *counted], run, out)
-
     reader = boss_reader(state.boss)
-    if counted and reader:
+    if reader:
         for path in counted:
             tool_output(f"Boss reader on {pathlib.Path(path).name}", [python, str(reader), path], run, out)
-    elif counted:
-        print(f"\nNo boss reader for {state.boss} under `bosses/`.", file=out)
+
+
+def section_overall(state: State, run: Run, out: TextIO) -> None:
+    print("\n## All pools\n", file=out)
+    print(headline(state), file=out)
+    python = sys.executable
+    batch = str(BOTOBS / "batch.py")
+    tool_output("Valid pulls since HEAD",
+                [python, batch, "--strict", "--since", state.head_sha, "--boss", state.boss], run, out)
+    counted = [str(f.path) for pool in state.pools for f in counted_of(state, pool)]
+    if counted:
+        tool_output("Probes", [python, batch, "--boss", state.boss, "--probes", *counted], run, out)
+        if not boss_reader(state.boss):
+            print(f"\nNo boss reader for {state.boss} under `bosses/`.", file=out)
 
 
 def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) -> None:
@@ -233,7 +248,6 @@ def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) ->
     for note in state.notes:
         print(f"\n{note}", file=out)
     section_runs(state, out)
-    section_pulls(state, out)
-    section_deaths(state, out)
-    section_contamination(state, out)
-    section_tools(state, run, out)
+    for pool in state.pools:
+        section_pool(pool, state, run, out)
+    section_overall(state, run, out)

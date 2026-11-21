@@ -1,6 +1,6 @@
-"""The live server side of a cycle: the lock, the dirty-tree guard, the capped rebuild and restart, and
-reading DC's run log out of the container. Every external command goes through a `run` callable shaped
-like subprocess.run, so tests can stand in for git and docker.
+"""The live server side of a cycle: the lock, the dirty-tree guard, the capped rebuild and restart. Every
+external command goes through a `run` callable shaped like subprocess.run, so tests can stand in for git
+and docker.
 """
 from __future__ import annotations
 
@@ -167,19 +167,3 @@ def wait_ready(since: str, timeout_s: float, run: Run = subprocess.run,
         if clock() >= deadline:
             return False
         sleep(poll_s)
-
-
-class ContainerDown(Exception):
-    pass
-
-
-def read_file(path: str, run: Run = subprocess.run) -> str:
-    """A file inside the worldserver container; empty when it doesn't exist yet."""
-    result = run(["docker", "exec", CONTAINER, "cat", path], capture_output=True, text=True,
-                 encoding="utf-8", errors="replace")
-    if result.returncode == 0:
-        return result.stdout
-    error = (result.stderr or "").strip()
-    if "No such file" in error:
-        return ""
-    raise ContainerDown(f"cannot read {path} in {CONTAINER}: {error or 'exit ' + str(result.returncode)}")

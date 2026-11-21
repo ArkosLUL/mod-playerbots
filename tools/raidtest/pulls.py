@@ -2,7 +2,7 @@
 
 A pull counts when the trace has no warning at all (batch.py --strict), its build is newer than the
 reference commit and its header's difficulty is the one under test. Baseline pulls are the newest such
-traces built before the reference instead.
+traces built before the reference instead. Which pool a trace belongs to is pools.py's business.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ BOTOBS = pathlib.Path(__file__).resolve().parents[1] / "botobs"
 if str(BOTOBS) not in sys.path:
     sys.path.insert(0, str(BOTOBS))
 
-from raidobs.corpus import find_traces, pull_time  # noqa: E402
+from raidobs.corpus import find_traces  # noqa: E402
 from raidobs.encounter import canonical_boss  # noqa: E402
 from raidobs.paths import LOG_ROOT  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, death_records  # noqa: E402
@@ -49,6 +49,8 @@ class TraceFacts:
     deaths: list[str] = field(default_factory=list)
     wipe_commands: int = 0
     vetoes: list[Veto] = field(default_factory=list)
+    map_id: int | None = None
+    instance: int | None = None
 
     @property
     def name(self) -> str:
@@ -113,11 +115,21 @@ def read_facts(path: pathlib.Path) -> TraceFacts:
         deaths=deaths,
         wipe_commands=len(death_records(trace)) - len(combat_deaths(trace)),
         vetoes=vetoes,
+        map_id=_int_or_none(header.get("map")),
+        instance=_int_or_none(header.get("inst")),
     )
 
 
-def _newest_first(facts: list[TraceFacts]) -> list[TraceFacts]:
-    return sorted(facts, key=lambda f: f.start_ms or 0, reverse=True)
+def _int_or_none(value) -> int | None:
+    return int(value) if isinstance(value, (int, float)) else None
+
+
+def name_parts(path: pathlib.Path) -> tuple[int, int, int] | None:
+    """(map, instance id, epoch seconds) out of <map>_<instanceId>_<boss-slug>_<epoch>.ndjson."""
+    parts = path.stem.split("_")
+    if len(parts) < 4 or not (parts[0].isdigit() and parts[1].isdigit() and parts[-1].isdigit()):
+        return None
+    return int(parts[0]), int(parts[1]), int(parts[-1])
 
 
 class Corpus:
@@ -128,6 +140,7 @@ class Corpus:
         self.boss = canonical_boss(boss)
         self.roots = roots or [LOG_ROOT]
         self._cache: dict[pathlib.Path, TraceFacts] = {}
+        self._by_instance: dict[int, list[tuple[int, int, pathlib.Path]]] | None = None
 
     def facts(self, path: pathlib.Path) -> TraceFacts:
         cached = self._cache.get(path)
@@ -141,41 +154,31 @@ class Corpus:
     def paths(self) -> list[pathlib.Path]:
         return find_traces(self.roots, self.boss)
 
-    def after(self, when: datetime.datetime) -> list[TraceFacts]:
-        """Traces pulled after `when`. A pull comes after its build, so a file stamped earlier can't hold
-        a build newer than `when` and is never opened."""
-        out = []
+    def rescan(self) -> None:
+        """List the files again, so traces written since the last scan are found."""
+        index: dict[int, list[tuple[int, int, pathlib.Path]]] = {}
         for path in self.paths():
-            pulled = pull_time(path)
-            if pulled is not None and pulled < when:
+            parts = name_parts(path)
+            if parts:
+                map_id, instance, epoch = parts
+                index.setdefault(instance, []).append((map_id, epoch, path))
+        self._by_instance = index
+
+    def in_instance(self, map_id: int, instance: int, start_ms: int, end_ms: int) -> list[TraceFacts]:
+        """Traces recorded in one instance that opened inside a window, oldest first. The file name says
+        where and when, so no other file is opened."""
+        if self._by_instance is None:
+            self.rescan()
+        inside = []
+        for file_map, epoch, path in self._by_instance.get(instance, []):
+            # the name's epoch is the header's ts cut to whole seconds
+            if (map_id and file_map != map_id) or not start_ms - 1000 < epoch * 1000 <= end_ms:
                 continue
-            out.append(self.facts(path))
-        return out
-
-    def counted(self, diff: str, head_time: datetime.datetime) -> list[TraceFacts]:
-        """Valid pulls at `diff` built after head_time, newest first."""
-        diff_id = DIFF_IDS[diff]
-        return _newest_first([f for f in self.after(head_time)
-                              if f.valid(diff_id) and f.built > head_time])
-
-    def baseline(self, diff: str, head_time: datetime.datetime, wanted: int) -> list[TraceFacts]:
-        """The newest `wanted` valid pulls at `diff` built before head_time."""
-        diff_id = DIFF_IDS[diff]
-        found = []
-        epoch = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-        for path in sorted(self.paths(), key=lambda p: pull_time(p) or epoch, reverse=True):
             facts = self.facts(path)
-            if facts.valid(diff_id) and facts.built < head_time:
-                found.append(facts)
-                if len(found) >= wanted:
-                    break
-        return _newest_first(found)
-
-    def between(self, start_ms: int, end_ms: int) -> list[TraceFacts]:
-        """Traces that opened inside a window, oldest first."""
-        when = datetime.datetime.fromtimestamp(start_ms / 1000, datetime.timezone.utc)
-        inside = [f for f in self.after(when - datetime.timedelta(minutes=1))
-                  if f.start_ms is not None and start_ms <= f.start_ms <= end_ms]
+            if facts.instance not in (None, instance) or facts.start_ms is None:
+                continue
+            if start_ms <= facts.start_ms <= end_ms:
+                inside.append(facts)
         return sorted(inside, key=lambda f: f.start_ms)
 
 

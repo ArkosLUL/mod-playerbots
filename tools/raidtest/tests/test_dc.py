@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -45,16 +46,21 @@ def scripted(replies):
 
 class CommandTest(unittest.TestCase):
     def test_start(self):
-        self.assertEqual(dc.start_command("uld-xt002", "uld", "25n", 3),
-                         ".dc test start uld-xt002 roster=uld diff=25n pulls=3")
+        self.assertEqual(dc.start_command("uld-xt002", "uld2", "25n", 1),
+                         ".dc test start uld-xt002 roster=uld2 diff=25n pulls=1")
 
     def test_start_rejects_bad_values(self):
         with self.assertRaises(ValueError):
-            dc.start_command("x", "uld", "25", 3)
+            dc.start_command("x", "uld1", "25", 3)
         with self.assertRaises(ValueError):
-            dc.start_command("x", "naxx", "25n", 3)
-        with self.assertRaises(ValueError):
-            dc.start_command("x", "uld", "25n", 0)
+            dc.start_command("x", "uld1", "25n", 0)
+        for pool in ("Uld1", "1uld", "uld-1", "uldtoc1", ""):
+            with self.assertRaises(ValueError, msg=pool):
+                dc.start_command("x", pool, "25n", 1)
+
+    def test_pool_names_dc_accepts(self):
+        self.assertTrue(all(dc.valid_pool(pool) for pool in ("uld1", "toc3", "u", "abcdef")))
+        self.assertFalse(any(dc.valid_pool(pool) for pool in ("abcdefg", "uld_1", "toc 1")))
 
     def test_stop(self):
         self.assertEqual(dc.stop_command("tr-20261121-120000"), ".dc test stop tr-20261121-120000")
@@ -138,6 +144,36 @@ class RecordTest(unittest.TestCase):
         run = dc.run_of(record("tr-1", attempts=[{"start": 1, "end": 2}]))
         self.assertEqual(run.pulls[0].outcome, "?")
 
+    def test_pool_fields(self):
+        run = dc.run_of(record("tr-1", pool="uld2", mapId=603, instanceId=41, difficulty="25n", pullCap=2,
+                               poolMembers=["Ashtank", "Brightmend"], bossPulls=[]))
+        self.assertEqual((run.pool, run.map_id, run.instance_id, run.difficulty, run.pull_cap),
+                         ("uld2", 603, 41, "25n", 2))
+        self.assertEqual(run.members, ["Ashtank", "Brightmend"])
+        self.assertIsNone(run.pulls)
+
+    def test_record_without_pool_fields(self):
+        run = dc.run_of({"runId": "tr-1", "instanceId": None})
+        self.assertEqual((run.pool, run.instance_id, run.members), ("", 0, []))
+
+    def test_pool_runs_keep_the_last_record_of_the_named_pools(self):
+        records = [record("tr-1", pool="uld1", result="wipe"), record("tr-2", pool="toc1"),
+                   record("tr-3", pool=""), record("tr-4", pool="uld3"), record("tr-1", pool="uld1", result="kill")]
+        runs = dc.pool_runs(records, ["uld1", "uld2", "uld3"])
+        self.assertEqual([(run.run_id, run.result) for run in runs], [("tr-1", "kill"), ("tr-4", "success")])
+
+
+class ReadLogTest(unittest.TestCase):
+    def test_missing_file_is_empty(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(dc.read_log(pathlib.Path(folder) / "dc_testruns.jsonl"), "")
+
+    def test_reads_the_host_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "dc_testruns.jsonl"
+            path.write_text(json.dumps(record("tr-1")) + "\n", encoding="utf-8")
+            self.assertEqual(dc.parse_records(dc.read_log(str(path)))[0]["runId"], "tr-1")
+
 
 class StartRunTest(unittest.TestCase):
     def test_retries_while_the_driver_logs_in(self):
@@ -170,28 +206,31 @@ class StartRunTest(unittest.TestCase):
             dc.start_run(call, "cmd", clock, clock.sleep, unavailable=(Down,))
 
 
-class WaitRunTest(unittest.TestCase):
-    ACTIVE = "1 test run active (max 1):\n  tr-1 uld-xt002 [Monitoring] elapsed 30s"
+class WaitRunsTest(unittest.TestCase):
+    BOTH = ("2 test runs active (max unlimited):\n  tr-1 uld-xt002 25n [Monitoring] elapsed 30s"
+            "\n  tr-2 uld-xt002 25n [Monitoring] elapsed 30s")
+    SECOND = "1 test run active (max unlimited):\n  tr-2 uld-xt002 25n [Monitoring] elapsed 900s"
 
-    def test_returns_the_record_once_the_run_leaves_status(self):
+    def test_waits_until_every_run_left_status(self):
         clock = FakeClock()
-        call, sent = scripted([self.ACTIVE, Down("blip"), self.ACTIVE, "no test runs active"])
-        reads = ["", json.dumps(record("tr-1"))]
-        run = dc.wait_run(call, "tr-1", lambda: reads.pop(0), clock, clock.sleep, unavailable=(Down,))
-        self.assertEqual(run.run_id, "tr-1")
-        self.assertEqual(sent, [dc.STATUS_COMMAND] * 4)
+        call, sent = scripted([self.BOTH, Down("blip"), self.SECOND, self.SECOND, "no test runs active"])
+        reads = [json.dumps(record("tr-1")), "\n".join(json.dumps(record(i)) for i in ("tr-1", "tr-2"))]
+        runs = dc.wait_runs(call, ["tr-1", "tr-2"], lambda: reads.pop(0), clock, clock.sleep, unavailable=(Down,))
+        self.assertEqual(sorted(runs), ["tr-1", "tr-2"])
+        self.assertEqual(sent, [dc.STATUS_COMMAND] * 5)
 
     def test_server_gone_for_too_long(self):
         clock = FakeClock()
         call, _ = scripted([Down("refused")])
         with self.assertRaises(dc.RunVanished):
-            dc.wait_run(call, "tr-1", lambda: "", clock, clock.sleep, unavailable=(Down,))
+            dc.wait_runs(call, ["tr-1", "tr-2"], lambda: "", clock, clock.sleep, unavailable=(Down,))
 
-    def test_run_left_status_without_a_record(self):
+    def test_a_run_that_left_status_without_a_record_is_missing(self):
         clock = FakeClock()
         call, _ = scripted(["no test runs active"])
-        with self.assertRaises(dc.RunVanished):
-            dc.wait_run(call, "tr-1", lambda: json.dumps(record("tr-0")), clock, clock.sleep)
+        runs = dc.wait_runs(call, ["tr-1", "tr-2"], lambda: json.dumps(record("tr-2")), clock, clock.sleep)
+        self.assertEqual(list(runs), ["tr-2"])
+        self.assertGreaterEqual(clock.now, 120.0)
 
 
 if __name__ == "__main__":

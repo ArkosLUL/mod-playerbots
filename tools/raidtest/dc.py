@@ -1,8 +1,8 @@
 """Everything that knows mod-dungeon-clear's console replies and run records.
 
-    .dc test start <scenario> roster=<raid> diff=<10n|10h|25n|25h> pulls=<n>
+    .dc test start <scenario> roster=<pool> diff=<10n|10h|25n|25h> pulls=<n>
     .dc test status
-    .dc test stop
+    .dc test stop <run id>
 
 Run records are JSON lines in DC's dc_testruns.jsonl (path set by DC_TESTRUNS_FILE). Only this file
 parses DC output, so a change on DC's side is a change here.
@@ -10,12 +10,15 @@ parses DC output, so a change on DC's side is a change here.
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 from dataclasses import dataclass, field
 from typing import Callable
 
 DIFFS = ("10n", "10h", "25n", "25h")
 RAIDS = ("uld", "toc")
+# DcRosterPool::ValidatePoolName: six characters keep dcroster<pool><n> inside an account name
+POOL_NAME = re.compile(r"[a-z][a-z0-9]{0,5}")
 
 STARTED = "Test run started"
 # The driver's not-ready replies all end "retry in a few seconds"
@@ -43,17 +46,21 @@ class DriverOffline(DcError):
 
 
 class RunVanished(DcError):
-    """The run left `.dc test status` without writing its record, which is what a crash looks like."""
+    """The worldserver stopped answering while runs were going, which is what a crash looks like."""
 
 
-def start_command(scenario: str, raid: str, diff: str, pulls: int) -> str:
+def valid_pool(pool: str) -> bool:
+    return POOL_NAME.fullmatch(pool) is not None
+
+
+def start_command(scenario: str, pool: str, diff: str, pulls: int) -> str:
     if diff not in DIFFS:
         raise ValueError(f"diff must be one of {', '.join(DIFFS)}")
-    if raid not in RAIDS:
-        raise ValueError(f"raid must be one of {', '.join(RAIDS)}")
+    if not valid_pool(pool):
+        raise ValueError(f"pool {pool!r} must be a lowercase letter then up to 5 lowercase letters or digits")
     if pulls < 1:
         raise ValueError("pulls must be at least 1")
-    return f".dc test start {scenario} roster={raid} diff={diff} pulls={pulls}"
+    return f".dc test start {scenario} roster={pool} diff={diff} pulls={pulls}"
 
 
 STATUS_COMMAND = ".dc test status"
@@ -103,7 +110,21 @@ class Run:
     started_ms: int
     ended_ms: int
     pulls: list[Pull] | None
+    pool: str = ""
+    map_id: int = 0
+    instance_id: int = 0
+    difficulty: str = ""
+    pull_cap: int = 0
+    members: list[str] = field(default_factory=list)
     raw: dict = field(repr=False, default_factory=dict)
+
+
+def read_log(path: str | pathlib.Path) -> str:
+    """DC's run log from the host side of the logs volume; empty until the first run writes it."""
+    try:
+        return pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return ""
 
 
 def parse_records(text: str) -> list[dict]:
@@ -152,14 +173,26 @@ def pulls_of(record: dict) -> list[Pull] | None:
     return None
 
 
+def _int(record: dict, key: str) -> int:
+    value = record.get(key)
+    return int(value) if isinstance(value, (int, float)) else 0
+
+
 def run_of(record: dict) -> Run:
+    members = record.get("poolMembers")
     return Run(
         run_id=str(record.get("runId", "")),
         result=str(record.get("result", "")),
         fail_reason=str(record.get("failReason", "")),
-        started_ms=int(record.get("startedAtMs") or 0),
-        ended_ms=int(record.get("endedAtMs") or 0),
+        started_ms=_int(record, "startedAtMs"),
+        ended_ms=_int(record, "endedAtMs"),
         pulls=pulls_of(record),
+        pool=str(record.get("pool") or ""),
+        map_id=_int(record, "mapId"),
+        instance_id=_int(record, "instanceId"),
+        difficulty=str(record.get("difficulty") or ""),
+        pull_cap=_int(record, "pullCap"),
+        members=[str(name) for name in members] if isinstance(members, list) else [],
         raw=record,
     )
 
@@ -169,6 +202,15 @@ def find_run(records: list[dict], run_id: str) -> Run | None:
         if record.get("runId") == run_id:
             return run_of(record)
     return None
+
+
+def pool_runs(records: list[dict], pools: list[str]) -> list[Run]:
+    """The last record of every run fielded from one of `pools`, in the order the runs first appear."""
+    latest: dict[str, dict] = {}
+    for record in records:
+        if record.get("pool") in pools and record.get("runId"):
+            latest[record["runId"]] = record
+    return [run_of(record) for record in latest.values()]
 
 
 Call = Callable[[str], str]
@@ -195,10 +237,11 @@ def start_run(call: Call, command: str, clock: Callable[[], float], sleep: Calla
         sleep(every_s)
 
 
-def wait_run(call: Call, run_id: str, read_records: Callable[[], str], clock: Callable[[], float],
-             sleep: Callable[[float], None], unavailable: tuple[type[BaseException], ...] = (),
-             poll_s: float = 20.0, down_after_s: float = 180.0, record_wait_s: float = 120.0) -> Run:
-    """Poll status until the run is gone, then return its record."""
+def wait_runs(call: Call, run_ids: list[str], read_records: Callable[[], str], clock: Callable[[], float],
+              sleep: Callable[[float], None], unavailable: tuple[type[BaseException], ...] = (),
+              poll_s: float = 20.0, down_after_s: float = 180.0, record_wait_s: float = 120.0) -> dict[str, Run]:
+    """Poll status until none of the runs is in it, then return the records they wrote by run id. A run
+    missing from the result left status without writing one."""
     down_since = None
     while True:
         try:
@@ -207,18 +250,17 @@ def wait_run(call: Call, run_id: str, read_records: Callable[[], str], clock: Ca
             now = clock()
             down_since = down_since if down_since is not None else now
             if now - down_since >= down_after_s:
-                raise RunVanished(f"worldserver stopped answering during {run_id}: {exc}") from None
+                raise RunVanished(f"worldserver stopped answering during {', '.join(run_ids)}: {exc}") from None
         else:
             down_since = None
-            if not run_active(status, run_id):
+            if not any(run_active(status, run_id) for run_id in run_ids):
                 break
         sleep(poll_s)
 
     deadline = clock() + record_wait_s
     while True:
-        run = find_run(parse_records(read_records()), run_id)
-        if run:
-            return run
-        if clock() >= deadline:
-            raise RunVanished(f"{run_id} left .dc test status but never wrote its record")
+        records = parse_records(read_records())
+        found = {run_id: run for run_id in run_ids if (run := find_run(records, run_id)) is not None}
+        if len(found) == len(run_ids) or clock() >= deadline:
+            return found
         sleep(5.0)
