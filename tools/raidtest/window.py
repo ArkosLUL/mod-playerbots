@@ -3,8 +3,9 @@
 Job order is priority. Whenever a pool is free it takes the earliest job that still wants pulls on it,
 and max_raids caps the DC runs in flight across both raids. A job wants pulls on a pool until the pool
 has `pulls` valid pulls built after the job's head or has run `cap` pulls in this window. A refused
-start, a run that ends without a pull or without a record, or a build older than the job's head fails
-that job alone. SOAP going away or a crash raises Stop, and every run still going is stopped first.
+start, or a run that ends without a pull or without a record, fails that job alone; a build older than
+a job's head fails every job whose head it predates. SOAP going away or a crash raises Stop, and every
+run still going is stopped first.
 
 The jobs file is a JSON list of objects:
 
@@ -78,9 +79,6 @@ class Job:
             return 0
         return min(self.pulls - valid, self.cap - pulled)
 
-    def done(self) -> bool:
-        return all(self.valid(pool) >= self.pulls for pool in self.pools)
-
 
 def _text(entry: dict, key: str, where: str, default: str | None = None) -> str:
     value = entry.get(key, default)
@@ -139,7 +137,8 @@ def parse_jobs(data, default_head: str) -> list[Job]:
 
 def load_jobs(path: str | pathlib.Path, default_head: str) -> list[Job]:
     try:
-        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+        # PowerShell 5.1 writes UTF-8 with a BOM, json.loads chokes on it
+        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"{path} is not valid JSON: {exc}") from None
     return parse_jobs(data, default_head)
@@ -175,6 +174,10 @@ class Window:
 
     def going(self) -> list[Flight]:
         return [flight for flight in self.flights.values() if flight.ended_at is None]
+
+    @staticmethod
+    def names(flights: list[Flight]) -> str:
+        return ", ".join(f"{flight.run_id} ({flight.job.name} on {flight.pool})" for flight in flights)
 
     def run(self) -> None:
         try:
@@ -304,8 +307,13 @@ class Window:
                            f"without a pull{reason}")
             return
         built = [row.trace.built for row in rows if row.trace and row.trace.built]
-        if any(when < job.head_time for when in built):
-            self.fail(job, f"the running build predates {job.head}, so none of its pulls can count")
+        if not any(when < job.head_time for when in built):
+            return
+        # any job whose head is newer than this build would just burn a round per pool finding the same
+        oldest = min(built)
+        for other in self.jobs:
+            if other.head_time > oldest:
+                self.fail(other, f"the running build predates {other.head_sha}, so none of its pulls can count")
 
     def stop_all(self) -> None:
         """Stop every run still going and wait for them to leave status, so the lock is released on a quiet
@@ -319,10 +327,12 @@ class Window:
                 except Exception as exc:
                     self.say(f"{flight.job.name}: could not stop {flight.run_id} on {flight.pool}: {exc}")
             deadline = self.deps.clock() + STOP_WAIT_S
+            unread = ""
             while going:
                 try:
                     status = self.deps.call(dc.STATUS_COMMAND)
-                except Exception:
+                except Exception as exc:
+                    unread = f" (status unreadable: {exc})"
                     break
                 for flight in going:
                     if not dc.run_active(status, flight.run_id):
@@ -332,9 +342,8 @@ class Window:
                     break
                 self.deps.sleep(self.poll_s)
             if going:
-                self.notes.append("Still in .dc test status when the window gave up the server: "
-                                  + ", ".join(f"{flight.run_id} ({flight.job.name} on {flight.pool})"
-                                              for flight in going) + ".")
+                self.notes.append(f"Not seen to leave .dc test status when the window gave up the server{unread}: "
+                                  + self.names(going) + ".")
             records = self.read_records()
             for corpus in {id(flight.job.corpus): flight.job.corpus for flight in self.flights.values()}.values():
                 corpus.rescan()
@@ -343,5 +352,9 @@ class Window:
                 if run is not None:
                     del self.flights[flight.run_id]
                     self.take(flight, run)
+            unrecorded = [flight for flight in self.flights.values() if flight.ended_at is not None]
+            if unrecorded:
+                self.notes.append("Ended with no record in DC's run log when the window gave up the server: "
+                                  + self.names(unrecorded) + ".")
         except Exception as exc:
             self.say(f"while stopping the window: {type(exc).__name__}: {exc}")

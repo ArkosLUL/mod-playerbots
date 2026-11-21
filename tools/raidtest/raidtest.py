@@ -201,8 +201,18 @@ def finish(state: State, corpus: Corpus, ledger: Ledger, records: list[dict]) ->
     state.baseline = {pool: ledger.baseline(pool, state.head_time, state.wanted) for pool in state.pools}
 
 
+def resolve_head(repo: pathlib.Path, head: str) -> tuple[str, datetime.datetime] | None:
+    """(name, time) of a head. resolve_since names a timestamp "given", but the report hands the name to
+    batch.py --since and --split-at, which read the timestamp itself."""
+    resolved = resolve_since(repo, head)
+    if not resolved:
+        return None
+    sha, when = resolved
+    return (head if sha == "given" else sha), when
+
+
 def head_of(args) -> tuple[str, datetime.datetime] | None:
-    return resolve_since(pathlib.Path(args.repo), args.head)
+    return resolve_head(pathlib.Path(args.repo), args.head)
 
 
 def stop_reason(exc: BaseException, deps: Deps) -> str:
@@ -324,14 +334,12 @@ def run_window(args, deps: Deps) -> int:
     heads: dict[str, tuple[str, datetime.datetime] | None] = {}
     for job in jobs:
         if job.head not in heads:
-            heads[job.head] = resolve_since(repo, job.head)
+            heads[job.head] = resolve_head(repo, job.head)
         if not heads[job.head]:
             print(f"cannot resolve {job.head} ({job.name}) in {args.repo}", file=deps.log)
             return 2
-        sha, job.head_time = heads[job.head]
-        # resolve_since names a timestamp head "given"; batch.py --since takes the timestamp itself
-        job.head_sha = job.head if sha == "given" else sha
-    build = heads["HEAD"] if "HEAD" in heads else resolve_since(repo, "HEAD")
+        job.head_sha, job.head_time = heads[job.head]
+    build = heads.get("HEAD") or resolve_head(repo, "HEAD")
 
     corpora: dict[str, Corpus] = {}
     for job in jobs:

@@ -352,11 +352,32 @@ class WindowTest(unittest.TestCase):
         self.assertEqual([run.result for _, run in self.state(1).runs], ["stopped"] * 3)
         self.assertEqual(self.state(1).stopped, "interrupted")
 
+    def test_a_stopped_run_that_writes_no_record_is_named(self):
+        self.server.length = {XT: 3}
+        self.server.lose = {(XT, "uld2")}
+
+        def interrupt(seconds):
+            raise KeyboardInterrupt
+
+        self.sleep = interrupt
+        self.assertEqual(self.window([job(XT)]), 3)
+        lost = self.started_ids()[1]
+        self.assertIn(f"Ended with no record in DC's run log when the window gave up the server: {lost} "
+                      "(job 1 (xt-002 25n) on uld2).", self.out.getvalue())
+
+    def test_a_driver_that_never_gets_online_stops_every_run(self):
+        self.server.refuse = {(BEASTS, "toc1"): "The test driver is logging in, retry in a few seconds."}
+        self.assertEqual(self.window([job(XT), job(BEASTS)]), 3)
+        self.assertEqual([pool for _, pool in self.server.runs], ["uld1", "uld2", "uld3"])
+        self.assertEqual(sorted(self.stops()), sorted(self.started_ids()))
+        self.assertIn("**Stopped:** the DC test driver never got online", self.out.getvalue())
+        self.assertFalse(self.lock.exists())
+
     def test_per_job_head(self):
         self.server.built = BETWEEN
         self.server.seed(IGNIS, "uld1", OLD - datetime.timedelta(hours=1))
         self.assertEqual(self.window([job(XT), job(IGNIS, head="old1234")]), 3)
-        self.assertIn("the running build predates HEAD", self.state(1).stopped)
+        self.assertIn("the running build predates abc1234", self.state(1).stopped)
         self.assertEqual(self.counted(1), {"uld1": 0, "uld2": 0, "uld3": 0})
         self.assertIsNone(self.state(2).stopped)
         self.assertEqual(self.counted(2), {"uld1": 1, "uld2": 1, "uld3": 1})
@@ -364,6 +385,15 @@ class WindowTest(unittest.TestCase):
                          {"uld1": 1, "uld2": 0, "uld3": 0})
         self.assertEqual((self.state(2).head_sha, self.state(2).head_time), ("old1234", OLD))
         self.assertIn("| `old1234` | done |", self.header_row(2))
+
+    def test_a_build_before_a_head_fails_every_job_with_that_head_at_once(self):
+        self.server.built = BETWEEN
+        self.assertEqual(self.window([job(XT), job(IGNIS), job(BEASTS, head="old1234")]), 3)
+        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld2"), (XT, "uld3"),
+                                          (BEASTS, "toc1"), (BEASTS, "toc2"), (BEASTS, "toc3")])
+        self.assertIn("the running build predates abc1234", self.state(2).stopped)
+        self.assertIsNone(self.state(3).stopped)
+        self.assertEqual(self.counted(3), {"toc1": 1, "toc2": 1, "toc3": 1})
 
     def test_a_timestamp_head_reaches_the_report_as_given(self):
         self.server.built = BETWEEN
@@ -487,6 +517,8 @@ class JobsTest(unittest.TestCase):
             path = pathlib.Path(folder) / "jobs.json"
             path.write_text(json.dumps([job(XT)]), encoding="utf-8")
             self.assertEqual(window.load_jobs(path, "HEAD")[0].scenario, XT)
+            path.write_text(json.dumps([job(IGNIS)]), encoding="utf-8-sig")
+            self.assertEqual(window.load_jobs(path, "HEAD")[0].scenario, IGNIS)
             path.write_text("[{", encoding="utf-8")
             with self.assertRaises(ValueError):
                 window.load_jobs(path, "HEAD")

@@ -429,6 +429,11 @@ class ReportOnlyTest(unittest.TestCase):
         self.assertEqual(len(state.counted["toc2"]), 1)
         self.assertIn("No DC record for tr-missing.", state.notes)
 
+    def test_a_timestamp_head_reaches_the_report_as_given(self):
+        raidtest.resolve_since.return_value = ("given", HEAD)
+        self.assertEqual(self.report("--head", "2026-11-21T12:00"), 0)
+        self.assertEqual(self.rendered[0].head_sha, "2026-11-21T12:00")
+
     def test_a_named_run_without_a_pool_is_left_out(self):
         loose = self.dc.write_run("", 1, AFTER)
         self.assertEqual(self.report("--runs", loose["runId"]), 0)
