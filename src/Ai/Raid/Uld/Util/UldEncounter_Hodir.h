@@ -196,11 +196,16 @@ inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 5;
 static_assert(ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT <= 6,
               "62039 caps at 8 stacks and 200*2^7 is 25600 a tick, so past 6 the shed arms too late to matter");
 
+// One stack lower while he carries Frozen Blows: its raid tick (3,999 every 2s for 20s) lands on top of
+// the cold, and 3-5 stacks plus that tick is what kills casters.
+inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_FROZEN_BLOWS_DROP = 1;
+
 // Where a shed stops. The last stack ticks 400 and takes 2s of walking to drop, and standing 4s puts
 // it straight back on.
 inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_FLOOR = 1;
-static_assert(ULDUAR_HODIR_BITING_COLD_SHED_FLOOR < ULDUAR_HODIR_BITING_COLD_SHED_STACKS,
-              "a shed has to have somewhere to go");
+static_assert(ULDUAR_HODIR_BITING_COLD_SHED_FLOOR <
+                  ULDUAR_HODIR_BITING_COLD_SHED_STACKS - ULDUAR_HODIR_BITING_COLD_SHED_STACKS_FROZEN_BLOWS_DROP,
+              "a shed has to have somewhere to go, Frozen Blows up or not");
 
 // Legs for a bot shedding inside a landed shelter while Flash Freeze is being cast. Both ends stay
 // inside the park ring, so the shelter run never fires on them.
@@ -311,7 +316,7 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // True when the shed would start walking a bot standing still out of a fire. Nodes that step aside for
 // the shed ask this, not HodirBitingColdTrigger, which fires on any stack since the action owns the latch.
-bool IsHodirBitingColdShedArmed(Player* bot);
+bool IsHodirBitingColdShedArmed(PlayerbotAI* botAI, Player* bot);
 
 // False once the icicle has blown. It lingers another 3.3 s, and counting it as live sends bots back
 // and forth over a spot that's already safe.

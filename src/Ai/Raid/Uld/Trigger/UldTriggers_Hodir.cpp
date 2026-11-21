@@ -117,7 +117,7 @@ bool HodirRaidPositionTrigger::IsActive()
 
     // The arm threshold, not HodirBitingColdTrigger: that fires on any stack, and at one stack the shuttle
     // does nothing, so standing down for it keeps ranged out of Starlight.
-    if (IsHodirBitingColdShedArmed(bot))
+    if (IsHodirBitingColdShedArmed(botAI, bot))
         return false;
 
     // With a spot in hand (tank hold or buff stand) the only question is walk there or stay. Both finders
@@ -211,7 +211,12 @@ bool HodirRedirectThreatTrigger::IsActive()
     if (!IsHodirEngaged(botAI))
         return false;
 
-    return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
+        return false;
+
+    // This node outranks the shed, and a hunter's dump shots are 1.6s casts that pin it in place while
+    // the cold stacks up.
+    return !IsHodirBitingColdShedArmed(botAI, bot);
 }
 
 bool HodirSpreadStormCloudTrigger::IsActive()

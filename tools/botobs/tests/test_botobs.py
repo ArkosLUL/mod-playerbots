@@ -1018,6 +1018,32 @@ class HodirReader(unittest.TestCase):
     def test_still_at_the_arm_point_drops_a_step_longer_than_the_cap(self):
         self.assertEqual(hodir.still_armed_ms([(0, 0), (5000, 0)], [(0, 6)], [], [], 0, 9000), 0)
 
+    def test_frozen_blows_moves_the_arm_point_down_one(self):
+        samples = [(0, 0), (1000, 0), (2000, 0)]
+        self.assertEqual(hodir.still_armed_ms(samples, [(0, 3)], [], [], 0, 2000), 0)
+        self.assertEqual(hodir.still_armed_ms(samples, [(0, 3)], [], [], 0, 2000, blows=[(1000, 5000)]), 1000)
+        self.assertEqual(hodir.still_armed_ms(samples, [(0, 3)], [], [(0, 2000)], 0, 2000, blows=[(0, 5000)]), 0)
+
+    def test_the_rare_cache_counts_only_a_kill_with_no_shatter(self):
+        self.assertIn("kept", hodir.rare_cache("kill", 178151, None))
+        self.assertIn("1.8s inside", hodir.rare_cache("kill", 178151, None))
+        self.assertIn("shattered", hodir.rare_cache("kill", 201431, 180043))
+        self.assertIn("unread", hodir.rare_cache("kill", 201431, None))
+        self.assertIn("never decided", hodir.rare_cache("wipe", 150000, None))
+
+    def test_cold_stacks_at_death_counts_a_row_stripped_just_before(self):
+        death = {"t": 127133, "auras": [[62039, 5, 12000, 1, 107948, 127121, 0], [62038, 1, -1, 2, 32, 127121, 0]]}
+        self.assertEqual(hodir.cold_stacks_at_death(death), 5)
+        shed = {"t": 130000, "auras": [[62039, 4, 12000, 1, 107948, 120000, 0]]}
+        self.assertEqual(hodir.cold_stacks_at_death(shed), 0)
+
+    def test_the_killing_spell_is_the_hit_matching_the_blow(self):
+        swing = {"blow": [9, 26586], "rewind": [[100, 9, 64545, 3352], [200, 9, 0, 3998], [200, 9, 63511, 26586]]}
+        self.assertEqual(hodir.death_mechanic(swing), "Frozen Blows swing")
+        own = {"blow": [5, 1087], "rewind": [[100, 9, 64545, 2716], [200, 5, 62188, 1087]]}
+        self.assertEqual(hodir.death_mechanic(own), "Biting Cold")
+        self.assertEqual(hodir.death_mechanic({"blow": [9, 10], "rewind": [[1, 9, 0, 10]]}), "Hodir melee")
+
     def test_a_shed_leg_onto_a_standing_bot_goes_nowhere(self):
         standing = [(0, 10.0, 10.0, 0)]
         walking = [(0, 10.0, 10.0, 1)]

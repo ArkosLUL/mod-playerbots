@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks."""
+"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks, deaths."""
 from __future__ import annotations
 
 import bisect
@@ -32,6 +32,20 @@ SPELL_BITING_COLD_DAMAGE = 62188
 SPELL_ICE_SHARDS = 62457
 SPELL_BLOODLUST = 2825
 SPELL_HEROISM = 32182
+# The aura he casts on himself, 10 and 25: each lasts 20 s and opens 15 s after a Flash Freeze starts.
+SPELL_FROZEN_BLOWS = (62478, 63512)
+FROZEN_BLOWS_MS = 20000
+# His miss of the hard mode: the 65272 timer ticks at 3:00 after the engage and he casts this on the cache.
+SPELL_SHATTER_CHEST = 62501
+# What killed a raider, by the spell of the killing blow. Biting Cold's tick is cast by the victim on itself.
+DEATH_SPELLS = {
+    62867: "Frozen Blows swing", 63511: "Frozen Blows swing",
+    64544: "Frozen Blows raid tick", 64545: "Frozen Blows raid tick",
+    62188: "Biting Cold",
+    62469: "Freeze",
+    62457: "Ice Shards", 65370: "Ice Shards",
+    62226: "Flash Freeze",
+}
 
 DODGE = "hodir icicle dodge action"
 SHELTER = "hodir move snowpacked icicle"
@@ -81,6 +95,8 @@ STALL_SETTLE_MS = 300
 # Where the shed arms outside Starlight, and inside it.
 BITING_COLD_ARM = 4
 BITING_COLD_ARM_IN_STARLIGHT = 5
+# Both arm points drop this much while he carries Frozen Blows.
+BITING_COLD_ARM_FROZEN_BLOWS_DROP = 1
 SHED = "hodir biting cold shed"
 # A shed leg this close to where the bot already stands goes nowhere: MoveTo calls it there or a dup.
 OWN_SPOT_YD = 0.5
@@ -388,9 +404,11 @@ def band_ms(changes: list[tuple[int, int]], low: int, high: int, floor: int) -> 
 
 
 def still_armed_ms(samples: list[tuple[int, int]], changes: list[tuple[int, int]], fires: list[tuple[int, int]],
-                   stars: list[tuple[int, int]], low: int, high: int, step_cap: int = 2000) -> int:
+                   stars: list[tuple[int, int]], low: int, high: int, step_cap: int = 2000,
+                   blows: list[tuple[int, int]] = ()) -> int:
     """Time in `[low, high)` one bot stood still out of a fire at the shed's arm point or more, one higher
-    in Starlight. `samples` are `(t, moving)`, each lasting to the next; a step over `step_cap` is a hole."""
+    in Starlight and one lower inside `blows`, the Frozen Blows windows. `samples` are `(t, moving)`, each
+    lasting to the next; a step over `step_cap` is a hole."""
     total = 0
     for (when, moving), (nxt, _) in zip(samples, samples[1:]):
         if moving or when < low or when >= high or nxt - when > step_cap:
@@ -398,6 +416,8 @@ def still_armed_ms(samples: list[tuple[int, int]], changes: list[tuple[int, int]
         if any(start <= when < stop for start, stop in fires):
             continue
         arm = BITING_COLD_ARM_IN_STARLIGHT if any(start <= when < stop for start, stop in stars) else BITING_COLD_ARM
+        if any(start <= when < stop for start, stop in blows):
+            arm -= BITING_COLD_ARM_FROZEN_BLOWS_DROP
         if stacks_before(changes, when) >= arm:
             total += min(nxt, high) - when
     return total
@@ -417,6 +437,50 @@ def own_spot_legs(moves: list[tuple[int, float, float]], rows: list[tuple[int, f
         if not moving and math.hypot(x - px, y - py) < within:
             count += 1
     return count
+
+
+def rare_cache(outcome: str, end: int, shatter: int | None) -> str:
+    """Whether the pull was a hard-mode kill. The cache needs no toggle: he shatters it with 62501 when
+    the timer he cast at the engage ticks, so only a kill with no such cast before it counts."""
+    if shatter is not None:
+        return f"Rare Cache shattered at {clock(shatter)} (Shatter Chest {SPELL_SHATTER_CHEST}): not a hard-mode kill"
+    if outcome == "kill" and end > DEADLINE_MS:
+        return f"Rare Cache unread: kill at {clock(end)}, past the timer, but no Shatter Chest cast in the trace"
+    if outcome == "kill":
+        return (f"Rare Cache kept: kill at {clock(end)}, {(DEADLINE_MS - end) / 1000:.1f}s inside the"
+                f" {clock(DEADLINE_MS)[:4]} timer, a hard-mode kill")
+    return f"Rare Cache never decided: {outcome} at {clock(end)}, before the timer"
+
+
+def cold_stacks_at_death(death: dict, settle_ms: int = 1500) -> int:
+    """Biting Cold stacks on a raider as it died. The core strips auras a few ms before the death hook,
+    so a row removed just before still counts; one that fell off earlier is a shed, not the death."""
+    held = 0
+    for row in death.get("auras") or []:
+        if len(row) < 6 or row[0] != SPELL_BITING_COLD:
+            continue
+        if row[5] == -1 or row[5] >= death["t"] - settle_ms:
+            held = max(held, row[1])
+    return held
+
+
+def killing_spell(death: dict) -> int:
+    """The spell of the blow that killed, 0 for a white swing. Two hits can share the killing ms, a
+    swing and its Frozen Blows proc, so the one matching the blow's amount wins."""
+    rewind = sorted(death.get("rewind") or [], key=lambda row: row[0])
+    if not rewind:
+        return 0
+    last = [row for row in rewind if row[0] == rewind[-1][0]]
+    amount = (death.get("blow") or [None, None])[1]
+    match = [row for row in last if len(row) > 3 and row[3] == amount]
+    return (match or last)[-1][2]
+
+
+def death_mechanic(death: dict) -> str:
+    spell = killing_spell(death)
+    if spell in DEATH_SPELLS:
+        return DEATH_SPELLS[spell]
+    return "Hodir melee" if spell == 0 else f"spell {spell}"
 
 
 # Trace readers.
@@ -503,6 +567,18 @@ def fire_starts(trace: Trace) -> list[int]:
 
 def freeze_casts(trace: Trace, boss: int) -> list[int]:
     return [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_FLASH_FREEZE and rec.get("s") == boss]
+
+
+def frozen_blows_windows(trace: Trace, boss: int | None) -> list[tuple[int, int]]:
+    """`(start, stop)` of each Frozen Blows aura. The stop runs half a second past the 20 s, since the
+    last raid tick lands on the aura's final millisecond."""
+    return [(rec["t"], rec["t"] + FROZEN_BLOWS_MS + 500) for rec in trace.of("cast")
+            if rec.get("sp") in SPELL_FROZEN_BLOWS and rec.get("s") == boss]
+
+
+def shatter_cast(trace: Trace, boss: int | None) -> int | None:
+    casts = [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_SHATTER_CHEST and rec.get("s") == boss]
+    return min(casts) if casts else None
 
 
 def tank_holder(trace: Trace) -> int | None:
@@ -621,6 +697,7 @@ def show_banner(trace: Trace) -> None:
         return
     gone = missing_probes(trace)
     print(f"probes absent from this trace: {', '.join(gone)}" if gone else "all hodir.* probes present")
+    print(rare_cache(outcome, fight_end(trace), shatter_cast(trace, boss_guid(trace))))
 
 
 def show_pace(trace: Trace) -> None:
@@ -900,7 +977,9 @@ def show_buffs(trace: Trace) -> None:
     # getting it anywhere, which the stack totals above can't tell apart from a shed doing its job.
     fires = aura_spans(trace, [SPELL_TOASTY_FIRE])
     stars = aura_spans(trace, [SPELL_STARLIGHT])
-    still = {guid: still_armed_ms(rows, changes.get(guid, []), fires.get(guid, []), stars.get(guid, []), 0, stop)
+    blows = frozen_blows_windows(trace, boss_guid(trace))
+    still = {guid: still_armed_ms(rows, changes.get(guid, []), fires.get(guid, []), stars.get(guid, []), 0, stop,
+                                  blows=blows)
              for guid, rows in track(trace, team, ("t", "moving")).items()}
     worst = sorted(((ms, guid) for guid, ms in still.items() if ms), reverse=True)[:3]
     print(f"  standing still at the arm point out of a fire: {sum(still.values()) / 1000:.0f} bot-seconds"
@@ -1113,6 +1192,23 @@ def show_blocks(trace: Trace) -> None:
             print(f"    {kinds.get(guid, '?'):6} {life:5.1f}s  died {clock(rows[-1][0])}")
 
 
+def show_deaths(trace: Trace) -> None:
+    print("DEATHS")
+    deaths = combat_deaths(trace)
+    if not deaths:
+        print("  none")
+        return
+    blows = frozen_blows_windows(trace, boss_guid(trace))
+    inside = [d for d in deaths if any(start <= d["t"] < stop for start, stop in blows)]
+    counts = collections.Counter(death_mechanic(d) for d in deaths)
+    print("  " + ", ".join(f"{name} {n}" for name, n in counts.most_common())
+          + f"; {len(inside)} of {len(deaths)} inside a Frozen Blows window")
+    for death in deaths:
+        where = "in Frozen Blows" if death in inside else "outside"
+        print(f"  {clock(death['t'])}  {trace.name(death['g']):10} {trace.role(death['g']):6}"
+              f" {death_mechanic(death):22} Biting Cold x{cold_stacks_at_death(death)}  {where}")
+
+
 SECTIONS = (
     ("pace", "health, boss dps per 15 s, 0-3:00 against the cache pace", show_pace),
     ("hold", "hodir.tankhold windows and the fire gaps after each freeze", show_hold),
@@ -1120,6 +1216,7 @@ SECTIONS = (
     ("buffs", "Starlight, fire, Storm Power, Biting Cold by role", show_buffs),
     ("churn", "walking undone, A-B-A flips, moves by action, dodge walk-backs", show_churn),
     ("blocks", "helper ice blocks per freeze and the next fire", show_blocks),
+    ("deaths", "each death's killing spell, Biting Cold stacks and Frozen Blows window", show_deaths),
 )
 
 

@@ -894,7 +894,7 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
     return found;
 }
 
-bool IsHodirBitingColdShedArmed(Player* bot)
+bool IsHodirBitingColdShedArmed(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot)
         return false;
@@ -909,8 +909,10 @@ bool IsHodirBitingColdShedArmed(Player* bot)
 
     // The extra stack in Starlight buys uninterrupted haste rather than an uninterrupted stand, and it
     // has to be the same number the action arms at or the two disagree about whether a shed is coming.
-    uint32 const arm = bot->HasAura(SPELL_HODIR_STARLIGHT) ? ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT
-                                                           : ULDUAR_HODIR_BITING_COLD_SHED_STACKS;
+    uint32 arm = bot->HasAura(SPELL_HODIR_STARLIGHT) ? ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT
+                                                     : ULDUAR_HODIR_BITING_COLD_SHED_STACKS;
+    if (HodirFrozenBlowsActive(botAI, bot))
+        arm -= ULDUAR_HODIR_BITING_COLD_SHED_STACKS_FROZEN_BLOWS_DROP;
 
     return cold->GetStackAmount() >= arm;
 }

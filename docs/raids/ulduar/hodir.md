@@ -176,7 +176,9 @@ and `IsHodirHardModeActive` were deleted rather than left gating nothing.
 **The deadline is 3:00, not the 2:00 the guides give.** `SPELL_SHATTER_CHEST_TIMER` is **65272**, an
 `EffectAuraPeriod_1` of 180000 ms on a 180000 ms duration, cast in `boss_hodir::JustEngagedWith`;
 its single tick fires `EVENT_HARD_MODE_MISSED` and shatters the Rare Cache. So the target is halving
-this fight, not thirding it.
+this fight, not thirding it. **A trace shows a miss as Hodir's `cast` of Shatter Chest `62501`** ~180 s
+after the engage; a kill with none before it is the hard-mode kill. The reader's banner prints the
+verdict; the runner's "hard mode" column can't, since no toggle exists.
 
 ## The Flash Freeze window is the nine-second cast and the shelter exists for five
 
@@ -299,8 +301,11 @@ walking to drop, and 4 s standing puts it back. It arms at **4 stacks, 5 in Star
 made the shuttle 32.4% of accepted moves (18.7% of won engine passes) while six raiders dipped under
 15% health. Arming at 5 stood bots through 3-5 stacks once ranged stopped standing in fires: Biting
 Cold ran **1.70M over 0-3:00** against 0.84-1.41M, 44% of it at 4+ stacks, a hunter bled out at 4
-stacks under Frozen Blows, and healers spent 42-77% of that window moving, mostly shedding. **3 is the
-next step** if deaths or Biting Cold damage stay high. `IsHodirBitingColdShedArmed` short-circuits on
+stacks under Frozen Blows, and healers spent 42-77% of that window moving, mostly shedding. **While he
+carries Frozen Blows it arms one lower, 3 / 4** (`_SHED_STACKS_FROZEN_BLOWS_DROP`): in three 25-man
+pulls every death but two fell inside a Frozen Blows window, the ranged and healers among them at 3-5
+stacks, the `64545` tick on top. 3 everywhere is the next step if deaths stay high there.
+`IsHodirBitingColdShedArmed` short-circuits on
 the fire aura, so this governs only bots that have none. Out of a fire, sitting at 1-3 stacks is the
 real cost — once at 4 stacks bots are back under it in a **2.0 s** median — and Biting Cold plus the
 Frozen Blows raid tick killed every ranged and healer who died in one wipe, 39-44 yd from him. Still,
@@ -411,7 +416,12 @@ for **22%**.
   Sheltering is the only failure that is death outright; targeting sits over the shed, which moves for
   seconds and would starve it, and costs nothing since it returns false once the target is right;
   position is last. The redirect never contends with the swap (hunters and rogues against tanks) and
-  outranks targeting so the charges go out before a bot switches to a block.
+  outranks targeting so the charges go out before a bot switches to a block. It stands down while the
+  shed is armed: its dump Steady Shots (1.6 s casts) pinned a hunter 3.5 s at 4-5 stacks, which killed it.
+- **Damage on a helper block before the pull pulls Hodir** onto the attacker
+  (`npc_ulduar_flash_freeze::DamageTaken` while `NOT_STARTED`). The blocks sit 20-35 yd from the
+  `uld-hodir` drop, inside Starfall's 30: a balance druid's Starfall there engaged him before the harness
+  started the pull.
 
 ## Every mover here thrashes unless it latches
 
@@ -507,6 +517,9 @@ nothing. Fires and Starlight zones reach a trace only as `snap.hz` rows, cluster
 boss dps comes off his health column, since `dealt` counts the ice blocks too; and a helper's kind
 comes only from `hodir.dpstarget`, so it reads `?` before the centre-hold build. Shed legs sent onto
 the bot's own spot are refused, so the stall count cannot see them; the reader counts them apart.
+**A Biting Cold death reads as "its own blow: a fall, lava or .die"** in `postmortem.py` and the
+runner's report: the victim casts `62188` on itself. `--deaths` names each death's killing spell,
+stacks and Frozen Blows window.
 
 ## Pace
 
@@ -538,6 +551,11 @@ landed; from the first fire it covers that fire's window to the landing. The pul
   healer p50 18.1 yd — so read the swap's gating before anyone's positioning. With the human in the
   second tank slot, `HodirFrozenBlowsSwapTrigger` has no partner to hand him to: a tank died to four
   swings with Divine Shield and Ardent Defender already spent.
+- **The main tank's generic taunt contests the swap.** Its class `hand of reckoning` / `righteous
+  defense` (relevance 27) fire within ~150 ms of each off-tank swap taunt, since only
+  `HodirTauntSuicide` blocks them, and flip him back for part of the window. The flips also cost him
+  swings (3-5 a window across both tanks, against ~8 on a steady holder), and every tank death so
+  far was the off-tank in a window, so fixing it alone may kill more off-tanks.
 - **The tank drags Hodir every 48s.** He moves **1.72 yd/s** during shelter runs against **1.27** the
   rest of the fight, because the tank walked 39-56 yd per window and Hodir follows whoever holds him;
   the hold and Starlight latches re-derive against that drift every tick. Taking the nearest shelter
