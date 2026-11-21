@@ -15,7 +15,7 @@ The polish loop runs on the user's standing go ("Polish loop" below). Per boss, 
 | Twin Val'kyr | DC engages Fjola on the main tank after the intro (lane P) | first real pulls, then round 1 proper |
 | Razorscale, Iron Assembly, Auriaya, Hodir | round 1 lanes | merge, test |
 | Freya, Vezax, Algalon, Yogg-Saron, Thorim | DC rows merged, never pulled | smoke one pull each, then data on every pool |
-| Faction Champions, Mimiron | lane Q (`q-dc-champions-mimiron.PLAN.md`) | merge, navprobe, smoke |
+| Faction Champions, Mimiron | DC rows merged (`2f98dd3`): `totc-champions` engages the first kill-order healer on the main tank after the intro; `uld-mimiron` presses the Big Red Button as every pull's start (new `ObjectStart`), drop navprobe-clean. The fork's FC grip opener needs a player-selected target DC doesn't supply, so bots kill healers in place | smoke one pull each |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment) | brief a DC lane |
 | Flame Leviathan | parked by the user | none |
 
