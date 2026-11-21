@@ -1363,26 +1363,33 @@ bool SpewBlocksWalk(Position const& from, Position const& to, Position const& co
     return inside;
 }
 
-bool PathBlocked(WormPath const& path, float x, float y, bool poolsOnly)
+// The leg from `from` to (x, y), after a straight walk from path.from to `from`
+bool PathBlocked(WormPath const& path, Position const& from, float x, float y, bool poolsOnly)
 {
-    Position const to(x, y, path.from.GetPositionZ());
-    uint32 const ticks = static_cast<uint32>(std::ceil(path.from.GetExactDist2d(x, y) / path.speed));
+    Position const to(x, y, from.GetPositionZ());
+    float const walked = path.from.GetExactDist2d(from) + from.GetExactDist2d(x, y);
+    uint32 const ticks = static_cast<uint32>(std::ceil(walked / path.speed));
     for (WormPool const& pool : path.pools)
-        if (CircleBlocksWalk(path.from, to, pool.pos, PoolRadiusIn(pool, ticks) + WORM_POOL_PATH_PAD))
+        if (CircleBlocksWalk(from, to, pool.pos, PoolRadiusIn(pool, ticks) + WORM_POOL_PATH_PAD))
             return true;
 
     if (poolsOnly)
         return false;
 
     for (Position const& worm : path.sweeps)
-        if (CircleBlocksWalk(path.from, to, worm, WORM_SWEEP_PATH_RADIUS))
+        if (CircleBlocksWalk(from, to, worm, WORM_SWEEP_PATH_RADIUS))
             return true;
 
     for (Position const& cone : path.cones)
-        if (SpewBlocksWalk(path.from, to, cone, path.coneArc))
+        if (SpewBlocksWalk(from, to, cone, path.coneArc))
             return true;
 
     return false;
+}
+
+bool PathBlocked(WormPath const& path, float x, float y, bool poolsOnly)
+{
+    return PathBlocked(path, path.from, x, y, poolsOnly);
 }
 
 WormPath PathFrom(Player* bot, JormungarsState const& state)
@@ -1406,9 +1413,10 @@ struct WormAccept
     Position rearOf;  // the worm, with its facing
 };
 
-// What turns (x, y) down, else nullptr. The escape keeps only the floor, the cones and the path, and
-// the cross tier drops the path too.
-char const* AcceptFailure(WormAccept const& accept, float x, float y, bool escape, bool skipPath)
+// What turns (x, y) down for a walk whose last leg starts at `from`, else nullptr. The escape keeps only
+// the floor, the cones and the path, and the cross tier drops the path too.
+char const* AcceptFailure(WormAccept const& accept, Position const& from, float x, float y, bool escape,
+                          bool skipPath)
 {
     if (ARENA_CENTER.GetExactDist2d(x, y) > WORM_SPOT_FLOOR_RADIUS)
         return "path";
@@ -1426,7 +1434,12 @@ char const* AcceptFailure(WormAccept const& accept, float x, float y, bool escap
             return "melee";
     }
 
-    return !skipPath && PathBlocked(accept.path, x, y, false) ? "path" : nullptr;
+    return !skipPath && PathBlocked(accept.path, from, x, y, false) ? "path" : nullptr;
+}
+
+char const* AcceptFailure(WormAccept const& accept, float x, float y, bool escape, bool skipPath)
+{
+    return AcceptFailure(accept, accept.path.from, x, y, escape, skipPath);
 }
 
 // WormSpotStillSafe with the failure named
@@ -2143,6 +2156,8 @@ char const* WormSpotTierName(WormSpotTier tier)
             return "partner";
         case WormSpotTier::Direct:
             return "direct";
+        case WormSpotTier::Detour:
+            return "detour";
         case WormSpotTier::Partial:
             return "partial";
         case WormSpotTier::Escape:
@@ -2156,11 +2171,12 @@ char const* WormSpotTierName(WormSpotTier tier)
     return "full";
 }
 
-// Escape, loose, partial and cross spots ignore reach, and the spot guard would strand a bot parked on one
+// Escape, loose, detour, partial and cross spots ignore reach, and the spot guard would strand a bot parked
+// on one
 bool WormTierParks(WormSpotTier tier)
 {
-    return tier != WormSpotTier::Partial && tier != WormSpotTier::Escape && tier != WormSpotTier::Loose &&
-           tier != WormSpotTier::Cross;
+    return tier != WormSpotTier::Detour && tier != WormSpotTier::Partial && tier != WormSpotTier::Escape &&
+           tier != WormSpotTier::Loose && tier != WormSpotTier::Cross;
 }
 
 bool WormHoldParks(WormMoveReason reason, WormSpotTier tier)
@@ -2428,6 +2444,8 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
 
     std::shared_ptr<WormAccept const> const model = accept;
     plan.accept = [model](float x, float y) { return AcceptFailure(*model, x, y, false, false) == nullptr; };
+    plan.acceptVia = [model](Position const& via, float x, float y)
+    { return AcceptFailure(*model, via, x, y, false, false) == nullptr; };
     plan.escapeAccept = [model](float x, float y) { return AcceptFailure(*model, x, y, true, false) == nullptr; };
     plan.crossAccept = [model](float x, float y) { return AcceptFailure(*model, x, y, true, true) == nullptr; };
 
@@ -2474,8 +2492,8 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         bool const partnerTier = view.tier == WormSpotTier::Partner || view.tier == WormSpotTier::Direct;
         float const dist = bot->GetExactDist2d(view.spot);
 
-        // An escape, loose, partial or cross spot ignores partner, rear arc and reach by design, and a
-        // cross walk was picked knowing its path is blocked
+        // An escape, loose, detour, partial or cross spot ignores partner, rear arc and reach by design, and
+        // a cross walk was picked knowing its path is blocked
         auto const walkingFailure = [&]()
         {
             return SpotUnsafeCause(rules, *accept, plan.urgent || walkOnly, view.tier == WormSpotTier::Cross,
@@ -2504,8 +2522,9 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
         };
 
         char const* cause = nullptr;
-        // A partial walk is only ever toward its partner
-        if (view.tier == WormSpotTier::Partial && (!partner || partner->guid != hold.partner))
+        // A detour or partial walk is only ever toward its partner
+        if ((view.tier == WormSpotTier::Detour || view.tier == WormSpotTier::Partial) &&
+            (!partner || partner->guid != hold.partner))
             cause = "target";
         else if (!walkOnly)
         {
@@ -2527,6 +2546,10 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
                      healReach.first.GetExactDist2d(view.spot) > healReach.second + REACH_HOLD_SLACK)
                 cause = "heal";
         }
+        // A Spray dodge still walking when its Bile makes the bot a runner carries it off the paralysed
+        // tank, and a cure walk ignores the Spray anyway
+        else if (cureWalk && !cureHold && !plan.urgent)
+            cause = "cure";
 
         if (!cause)
         {

@@ -125,6 +125,7 @@ inline constexpr float WORM_SEARCH_RADIUS = 30.0f;
 inline constexpr float WORM_PREFER_JITTER = 0.5f;
 inline constexpr uint32 WORM_CURE_DIRECT_BEARINGS = 16;
 inline constexpr float WORM_CURE_PARTIAL_STEP = 25.0f;
+inline constexpr float WORM_CURE_DETOUR_STEP = 6.0f;  // rings of first-leg points out to WORM_SEARCH_RADIUS
 
 // Spew pads past the half-arc: stepping out triggers at the first, and the spot clears the second
 inline constexpr float WORM_SPEW_TRIGGER_PAD = 5.0f * static_cast<float>(M_PI) / 180.0f;
@@ -223,7 +224,8 @@ enum class WormMoveReason : uint8
 };
 char const* WormMoveReasonName(WormMoveReason reason);  // "cure", "run", "pool", ...
 
-// The search that found a spot. Escape, loose, partial and cross spots are walked to, never parked on.
+// The search that found a spot. Escape, loose, detour, partial and cross spots are walked to, never parked
+// on.
 enum class WormSpotTier : uint8
 {
     Stand,
@@ -232,6 +234,7 @@ enum class WormSpotTier : uint8
     NoSpread,
     Partner,
     Direct,
+    Detour,  // first leg of a two-leg walk round a pool or Sweep to a direct spot
     Partial,
     Escape,
     Loose,
@@ -276,6 +279,8 @@ struct WormMovePlan
     std::vector<EncounterHelpers::HazardCircle> escapeCircles;
     std::vector<EncounterHelpers::HazardCircle> looseCircles;   // escapeCircles less those clean bots
     std::function<bool(float, float)> accept;        // floor, Spew cones, path, partner reach, melee rear arc
+    // accept for a second leg walked straight on from via, pools grown over both legs
+    std::function<bool(Position const& via, float, float)> acceptVia;
     std::function<bool(float, float)> escapeAccept;  // floor, Spew cones, path
     std::function<bool(float, float)> crossAccept;   // floor, Spew cones
     std::function<bool(float, float)> roleAccept;    // the role's reach, in combat-reach terms
