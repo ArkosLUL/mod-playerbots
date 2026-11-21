@@ -20,7 +20,8 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 | DC result files | done: `Playerbot.env` sets `DC_TESTRUNS_FILE`, `DC_TESTRUN_LIVE_FILE`, `DC_TESTPLANS_FILE`, `DC_LAB_TRACE_DIR` and `AC_DUNGEON_CLEAR_TEST_RUN_ROSTER_DIR` under `/azerothcore/env/dist/logs/dc` (host `env/dist/logs/dc`), plus `AC_DUNGEON_CLEAR_TEST_RUNS_ONLY=1`. The runner's default `--dc-runs-file` (`/azerothcore/dc_testruns.jsonl`) must move there in wave 3 |
 | Wave 2 (lanes A1-A3, B, C) | done 2026-11-21. DC `bcece6a`+`b4aa733` (A1), `a67164f`+`09cef94` (A2), `2e80368`+`ea39b4f` (A3); fork `rt/b` merged as `df7986351`; findings in `c-research.FINDINGS.md`. The capped build compiled all of it; DC's gtests have not run (they need a full `BUILD_TESTING` build) |
 | Wave 3 (pilots) | go 2026-11-21: three different rosters. XT-002 drop (815.0, -10.0, 409.803, o 0.0) navprobe-clean, ~37 yd from his patrol (path 1360540) and ~55 yd from scrapyard trash; Beasts drop at Barrett (559.15, 90.56, 395.27). Lanes D and E done (workflow `wf_85538f2e-272`). DC `88b1e68` (scenarios `uld-xt002`, `totc-beasts`: boss-state success predicate, re-pull gated on "success is the kill", multi-NPC gossip with `clickerAchievements` 3916, `summonsFocus` keeps DC held through Beasts pulls so the fork's ToC staging positions the raid and DC's muster does not run there, a map-649 roster anchor on Icehowl), `d25d9ec` + `a0a97bc` (parties of five in slot order for every raid run; Icehowl's early kill credit is not a kill). Templates `dc_roster_{uld,toc}{1,2,3}.conf` in `env/dist/logs/dc` (prefixes Uldx/y/z, Tocx/y/z). Fork `580a1e13a` merges `rt/e`: `raidtest.py cycle --raid uld|toc` runs pools `<raid>1-3` in parallel, 1 valid pull per pool, cap 2, pairs baseline per pool, matches traces by instance id, reads the run log from the host. Pools created 2026-11-21 (6 x 27, tanks read as tanks incl. bear and blood DK); one member in four pools came out naked: DC `RestoreGear` gated the best roll's re-equip on the core `CanEquipNewItem`, which refuses while the bot casts or is stunned; fixed in DC `4c6866f` (equip the snapshot directly, fail the member if the restore comes back short), pools re-geared. Pilot single pulls: `tr-20261121-154253-1` XT-002 25n hard mode on `uld2`, harness clean end to end, wipe at 5.5 min (first death Heart at 3:17, then XT 4:16-5:00); `tr-20261121-154933-2` Beasts 25h on `toc2`, gossip start with achievement 3916 granted, **kill, 0 deaths**, 8 min. Load baseline (solo XT pull, RaidObs snapshot gaps, target 250 ms): mean 250, p95 318, p99 330, max 445. First runner cycle (XT-002 25n, `uld1` + `uld3` in parallel; `uld2` reused the pilot pull): harness and report end to end, but both pulls carried DC veto rows inside the fight (`dungeon clear zeroed xt002 set dps priority action` x19, `dps assist` x19) and scrapyard trash joined: an aggro start released DC, whose pull logic and multipliers then ran alongside the strategy (the Beasts pilot, DC held throughout, had zero vetoes). Fixed: DC now stays held through every pull of every re-pulled row, an aggro start sets the focus boss on the tank (`EngageWithTarget`), and DC's pre-boss muster no longer runs (supersedes the "DC pre-boss muster" decision); the runner never counts a pull with a DC veto inside the fight. Load check passed: two parallel 25-man fights read the same as one (snapshot gaps p95 322 / 323 ms, max 342, none over 400), and three read the same again (p95 322-323, max 348). DC `d47634c` (hold through every pull, aggro start = `EngageWithTarget` on the tank), `e9f488e` (only a boss-state DONE predicate re-pulls: with DC held its all-cleared never fires, so a kill on `uld3` ran into `no_progress`; XT-002 row now `BossStateEquals(3, DONE)`); fork `937240174` (runner drops a pull with a DC veto inside the fight). **XT-002 25n hard mode pilot done:** 6 clean pulls, no DC vetoes, kill ends the run: uld1 wipe 4:31 / kill 3:28 (0 deaths); uld2 wipe 3:13 / wipe 6:04; uld3 kill 2:44 (0 deaths) / wipe 7:53. **Northrend Beasts 25h pilot done:** 3/3 kills, no DC vetoes: toc2 0 deaths 8:01; toc1 2 deaths (ranged, Slime Pool at 5:42) 8:09; toc3 6 deaths (4 melee to Dreadscale's Molten Spew at 4:20, 1 Slime Pool, a tank to Icehowl at 5:27) 8:40. Wave 3 complete; the cycle works for both pilots (`raidtest.py cycle --boss xt-002 --scenario uld-xt002 --raid uld`, `--boss northrend-beasts --scenario totc-beasts --raid toc`) |
-| Wave 4 (remaining bosses) | open |
+| Polish loop | go 2026-11-21 (standing, see "Polish loop"). DC rule 2 "never use worktrees" removed on our branch (`4aa501b`). Round 1: lane F (runner `window`), polish XT-002 r1, polish Northrend Beasts r1, lane H (Wave 4 batch 1) |
+| Wave 4 (remaining bosses) | in batches inside the polish loop; batch 1 = lane H |
 | Wave 5 (FL/Thorim/Algalon/Yogg research, close-out) | open |
 
 ## Roster drafts (user-reviewed 2026-11-21; identical copies vs these three still open)
@@ -62,8 +63,8 @@ with no human client logged in, and reports from the RaidObs traces.
 | No-player logout | `DisabledWithoutRealPlayer` stays on. Its logout runs once per absence and spares bots whose master is a self-mastered bot (the DC driver); before, the driver kept it repeating and every later masterless roster login was dropped |
 | DC during a pull | DC stays held through every pull (logistics only: spawn, gear, group, teleport, reset); the fork's raid strategies run the whole fight, an aggro start sets the boss on the tank. Replaces the earlier "keep DC's pre-boss muster" answer, which let DC's multipliers veto strategy actions inside the fight |
 | Scope | A cycle tests the boss the change touches; a **sweep** (3 pulls of every automated boss of a raid) only when the user says "sweep" |
-| When | A cycle runs **automatically** after every committed change under `src/Ai/Raid/Uld` or `src/Ai/Raid/ToC`, unless the user says skip |
-| Baseline | Fewer than 3 valid pulls of that boss and difficulty from the build before the change → run 3 on the live build before rebuilding |
+| When | A cycle runs **automatically** after every committed change under `src/Ai/Raid/Uld` or `src/Ai/Raid/ToC`, unless the user says skip. While the polish loop runs, such a change goes into the next window instead |
+| Baseline | Fewer than 3 valid pulls of that boss and difficulty from the build before the change → run 3 on the live build before rebuilding. In the polish loop a pool's pulls from earlier builds are the baseline; no separate phase |
 | Limits | No wall-clock cap. A pull ends at kill, wipe, enrage, or DC's stall checks (`stalled` 120 s, `no_progress` 600 s, which counts the boss's health moving). A cycle stops after **6 pulls** without 3 valid ones. DC's run timeout 2 h → 6 h. A failed build, a crash or a driver that never logs in stops the cycle with a report, no retry around it |
 | Traces | `Playerbots.Obs.RetentionDays` 7 → 60, `MaxDirMB` 5120 → 51200 in `Playerbot.env` (no override exists today; G: has 391 GB free, biggest trace 28 MB). `MaxFileMB` 256 stays |
 | Instance limit | `AccountInstancesPerHour` raised to 100 server-wide |
@@ -72,8 +73,8 @@ with no human client logged in, and reports from the RaidObs traces.
 | Reports | In chat only; traces and DC's run log are the record; durable conclusions go to `docs/raids/` |
 | Pilot | XT-002 (aggro start) and Northrend Beasts (Barrett gossip start) |
 | Master fix | Committed on Custom only, not ported into the upstream PR stacks unless asked |
-| Orchestration | The agent orchestrates; the work runs as Workflow waves, each launched only on the user's "go" |
-| Git authority | mod-playerbots: lane branches and worktrees, `--no-ff` merges into Custom without waiting. DC clone: commits on its one local branch, no worktrees. Never push, amend, rebase or force |
+| Orchestration | The agent orchestrates; the work runs as Workflow waves, each launched only on the user's "go"; the polish loop runs on one standing go |
+| Git authority | mod-playerbots: lane branches and worktrees, `--no-ff` merges into Custom without waiting. DC clone: lane branches and worktrees from `local/wrath-raid-tests`, `--no-ff` merges into it. Never push, amend, rebase or force |
 
 ## Facts the work rests on
 
@@ -148,8 +149,8 @@ with no human client logged in, and reports from the RaidObs traces.
 - Unique commit-message file names per lane in the shared scratchpad.
 - mod-playerbots lanes: worktrees under `G:\DevStuff\GitHub\azerothcore-wotlk-pb\build-toc-wt\rt-<lane>`
   (two levels under the core root, and `build-toc-wt` is an added directory), branch `rt/<lane>`; closing cycle per `CLAUDE.local.md`
-  (`pb-check`, docs, commit). DC lanes: the DC clone itself, one agent at a time; the capped rebuild is
-  their compile check, run by the orchestrator after the lane.
+  (`pb-check`, docs, commit). DC lanes: worktree `build-toc-wt/rt-dc-<lane>`, branch `rt/dc-<lane>` from
+  `local/wrath-raid-tests`, one lane at a time; the capped rebuild after the merge is their compile check.
 
 ## Waves
 
@@ -192,11 +193,41 @@ with no human client logged in, and reports from the RaidObs traces.
 Merge, rebuild, deploy; navprobe the drop points; create both pools after the comp table is approved;
 pilot cycles for XT-002 25N and Northrend Beasts 25N; fix what the pilots expose.
 
-### Wave 4 (one lane per raid)
-Scenario rows for the remaining bosses: ToC Jaraxxus, Faction Champions (its opener reads the sender's
-selected healer: check what DC can supply), Twin Val'kyr, Anub'arak; Ulduar Ignis, Razorscale
-(commander gossip), Kologarn, Auriaya, Hodir, Freya, Iron Assembly, Mimiron, Vezax. The orchestrator
-confirms each with a live 1-pull run.
+### Wave 4 (DC batches inside the polish loop)
+Scenario rows for the remaining bosses, one DC lane per batch (brief per batch beside this plan):
+1. ToC Jaraxxus, Twin Val'kyr; Ulduar Ignis, Kologarn (lane H).
+2. ToC Faction Champions (its opener reads the sender's selected healer: check what DC can supply),
+   Anub'arak; Ulduar Razorscale (commander gossip), Auriaya.
+3. Ulduar Hodir, Freya, Iron Assembly, Mimiron, Vezax.
+
+The orchestrator navprobes each drop, merges, and the next window gives each new boss one pull per
+pool; a boss with a pull on every pool joins the polish loop.
+
+## Polish loop (go 2026-11-21)
+
+A rebuild restarts the only worldserver and kills every pull in flight, so polish and new-boss work
+share one build schedule.
+
+- **Server (orchestrator only):** build, then a test window, repeat. A window runs a job list on one
+  build across all six pools (`raidtest.py window`, lane F `f-runner-window.PLAN.md`), up to 6 raids at
+  once unless its load line degrades (one to three parallel 25-man fights read snapshot gaps p95
+  ~320 ms, max < 450). Rebuild only between windows, only when something new is merged. Idle pool time
+  goes to Wave 4 checks and extra pulls of bosses in polish.
+- **Polish lanes:** one Workflow run per boss per round (lead + fresh reviewer), brief
+  `g-polish.PLAN.md`, worktree `build-toc-wt/rt-polish-<slug>`, branch `rt/polish-<slug>-r<n>` from
+  Custom per round. The lane's memory between rounds is `polish/<slug>.md` in this folder. In polish:
+  XT-002 (25n hard mode), Northrend Beasts (25h); at most 4 bosses at once.
+- **Fix authority:** a lane fixes bugs (bots not doing what the strategy intends) directly; a plan change
+  (new tactic, different tank, kill or target order, new positions or assignments) goes to the user as
+  a question in the window report.
+- **Judging a fix:** by the mechanic it targets (did those deaths stop), not by kill rate.
+- **Done:** a boss is polished when one window gives a kill on all three pools with at most 3 deaths in
+  each pull. Then one 10-man pull per pool (10h, or 10n with hard mode) as a check; failures go back
+  into polish. A lane that picks the same failure three rounds running and still sees it stops and
+  reports.
+- **Shared code:** a lane changes only its boss's files; a shared change is named in its report and
+  every boss using it is pulled again next window.
+- **Reports:** in chat after every window: pulls, kills, deaths by mechanic, what changed, questions.
 
 ### Wave 5
 Research only: Flame Leviathan (vehicle driving), Thorim (gauntlet walk), Algalon (console + key),
