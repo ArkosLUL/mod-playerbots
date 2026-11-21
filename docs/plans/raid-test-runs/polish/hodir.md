@@ -36,7 +36,8 @@ from the healers' mana.
 **Picked: ranged and healers dying to Biting Cold plus the Frozen Blows raid tick** (14 deaths, 11 in
 uld2; uld3 Uldzak 2:07, Uldzad 2:58 and 3:00). Bug: the shed arms at 4 stacks (5 in Starlight)
 whatever Frozen Blows does, so bots sit at 3-5 stacks through the 20 s window while `64545` adds 3,999
-every 2 s. The dying bots carried 3-5 stacks (`--deaths`); Biting Cold was 15-61% of each one's last
+every 2 s. 8 of the 14 carried 3-5 stacks (`--deaths`); the other 6 had 0-2, two just after a
+resurrection and three (uld2 3:49.85) dying to one raid tick at 1 stack, which is healing, not cold; Biting Cold was 15-61% of each one's last
 22 hits. Ranged spent 109-188 bot-seconds a pull at 3+ stacks inside the windows, healers 28-60. Out of
 a fire, bots stood still at the new arm point 108 / 163 / 147 bot-seconds over 0-3:00 (reader,
 `--buffs`, re-scored on these traces).
@@ -65,7 +66,7 @@ of a fire. Watch the cost: pace 0-3:00 should not drop below this window's 216-2
    drop south to about (1998, -288) so no helper block is within 40 yd of it; navprobe it first.
 2. *Plan:* the off-tank died in all three tank deaths, each time inside a Frozen Blows window, after 2-3
    swings in ~5 s (25-31k each plus 4k melee). The main tank's generic taunt (`hand of reckoning`,
-   `righteous defense`, relevance 27) fires within ~150 ms of each swap taunt and flips Hodir back for
+   `righteous defense`, relevance 27) fires 0.1-0.6 s after each swap taunt and flips Hodir back for
    part of the window, against the swap's intent, but the flips also cut his swings to 3-5 a window
    against ~8 on a steady holder. Options: (a) keep the swap and stop the main tank's taunt in a
    window, so the off-tank eats all of it; (b) alternate deliberately, the tank not holding taunting

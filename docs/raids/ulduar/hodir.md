@@ -303,10 +303,9 @@ made the shuttle 32.4% of accepted moves (18.7% of won engine passes) while six 
 Cold ran **1.70M over 0-3:00** against 0.84-1.41M, 44% of it at 4+ stacks, a hunter bled out at 4
 stacks under Frozen Blows, and healers spent 42-77% of that window moving, mostly shedding. **While he
 carries Frozen Blows it arms one lower, 3 / 4** (`_SHED_STACKS_FROZEN_BLOWS_DROP`): in three 25-man
-pulls every death but two fell inside a Frozen Blows window, the ranged and healers among them at 3-5
-stacks, the `64545` tick on top. 3 everywhere is the next step if deaths stay high there.
-`IsHodirBitingColdShedArmed` short-circuits on
-the fire aura, so this governs only bots that have none. Out of a fire, sitting at 1-3 stacks is the
+pulls 17 of 19 deaths fell inside a Frozen Blows window; on the two clean ones both casters who died
+there carried 4-5 stacks, the `64545` tick on top. 3 everywhere is the next step if deaths stay high
+there. `IsHodirBitingColdShedArmed` short-circuits on the fire aura, so this governs only bots that have none. Out of a fire, sitting at 1-3 stacks is the
 real cost — once at 4 stacks bots are back under it in a **2.0 s** median — and Biting Cold plus the
 Frozen Blows raid tick killed every ranged and healer who died in one wipe, 39-44 yd from him. Still,
 it is not the bulk of the problem: **57.1%** of the 17,554/s the raid takes is the raid-wide `64545`
@@ -552,7 +551,7 @@ landed; from the first fire it covers that fire's window to the landing. The pul
   second tank slot, `HodirFrozenBlowsSwapTrigger` has no partner to hand him to: a tank died to four
   swings with Divine Shield and Ardent Defender already spent.
 - **The main tank's generic taunt contests the swap.** Its class `hand of reckoning` / `righteous
-  defense` (relevance 27) fire within ~150 ms of each off-tank swap taunt, since only
+  defense` (relevance 27) fire 0.1-0.6 s after each off-tank swap taunt, since only
   `HodirTauntSuicide` blocks them, and flip him back for part of the window. The flips also cost him
   swings (3-5 a window across both tanks, against ~8 on a steady holder), and every tank death so
   far was the off-tank in a window, so fixing it alone may kill more off-tanks.

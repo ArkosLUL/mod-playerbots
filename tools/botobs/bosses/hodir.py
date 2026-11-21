@@ -444,8 +444,8 @@ def rare_cache(outcome: str, end: int, shatter: int | None) -> str:
     the timer he cast at the engage ticks, so only a kill with no such cast before it counts."""
     if shatter is not None:
         return f"Rare Cache shattered at {clock(shatter)} (Shatter Chest {SPELL_SHATTER_CHEST}): not a hard-mode kill"
-    if outcome == "kill" and end > DEADLINE_MS:
-        return f"Rare Cache unread: kill at {clock(end)}, past the timer, but no Shatter Chest cast in the trace"
+    if end > DEADLINE_MS:
+        return f"Rare Cache unread: {outcome} at {clock(end)}, past the timer, but no Shatter Chest cast in the trace"
     if outcome == "kill":
         return (f"Rare Cache kept: kill at {clock(end)}, {(DEADLINE_MS - end) / 1000:.1f}s inside the"
                 f" {clock(DEADLINE_MS)[:4]} timer, a hard-mode kill")

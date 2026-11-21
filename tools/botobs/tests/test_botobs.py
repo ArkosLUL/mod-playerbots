@@ -1030,6 +1030,7 @@ class HodirReader(unittest.TestCase):
         self.assertIn("shattered", hodir.rare_cache("kill", 201431, 180043))
         self.assertIn("unread", hodir.rare_cache("kill", 201431, None))
         self.assertIn("never decided", hodir.rare_cache("wipe", 150000, None))
+        self.assertIn("unread: wipe", hodir.rare_cache("wipe", 201431, None))
 
     def test_cold_stacks_at_death_counts_a_row_stripped_just_before(self):
         death = {"t": 127133, "auras": [[62039, 5, 12000, 1, 107948, 127121, 0], [62038, 1, -1, 2, 32, 127121, 0]]}
