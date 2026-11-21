@@ -199,9 +199,9 @@ pilot cycles for XT-002 25N and Northrend Beasts 25N; fix what the pilots expose
 ### Wave 4 (DC batches inside the polish loop)
 Scenario rows for the remaining bosses, one DC lane per batch (brief per batch beside this plan):
 1. ToC Jaraxxus, Twin Val'kyr; Ulduar Ignis, Kologarn (lane H).
-2. ToC Faction Champions (its opener reads the sender's selected healer: check what DC can supply),
-   Anub'arak; Ulduar Razorscale (commander gossip), Auriaya.
-3. Ulduar Hodir, Freya, Iron Assembly, Mimiron, Vezax.
+2. Ulduar Razorscale (commander gossip), Iron Assembly, Auriaya, Hodir (lane K).
+3. ToC Faction Champions (its opener reads the sender's selected healer: check what DC can supply) and
+   Anub'arak, once lane J makes the later Barrett stages start; Ulduar Freya, Mimiron, Vezax.
 
 The orchestrator navprobes each drop, merges, and the next window gives each new boss one pull per
 pool; a boss with a pull on every pool joins the polish loop.
