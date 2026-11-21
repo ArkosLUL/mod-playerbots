@@ -707,6 +707,20 @@ class WormPull(unittest.TestCase):
         self.assertEqual(rows[0]["worm"], "Acidmaw")
         self.assertEqual(rows[0]["inside"], {SHOT})
         self.assertEqual(rows[0]["hit"], {"ranged": collections.Counter({SHOT: 1})})
+        self.assertEqual((rows[0]["swing"], rows[0]["victims"]), (0.0, [(WARD, 0.0)]))
+
+    def test_spew_swing_follows_the_victim_walking_and_the_taunt(self):
+        def frame(when, facing, victim, ward_y):
+            return {"t": when, "u": [[ACIDMAW, 10.0, 0.0, 0.0, facing, 100.0, 0.0, victim],
+                                     [WARD, 18.0, ward_y, 0.0, 0.0, 100.0, 100.0, 0],
+                                     [BRACE, -5.0, 28.0, 0.0, 0.0, 100.0, 100.0, 0]]}
+
+        snaps = [frame(0, 0.0, WARD, 0.0), frame(1000, 0.3, WARD, 3.0), frame(2000, 0.6, WARD, 7.0),
+                 frame(3000, 2.0, BRACE, 7.0), frame(5000, 3.0, BRACE, 7.0)]
+        swing, victims = nb.spew_swing(snaps, [snap["t"] for snap in snaps], {ACIDMAW}, (10.0, 0.0), 0.0, 0)
+        # The 5 s frame is past the Spew
+        self.assertAlmostEqual(swing, 114.6, places=1)
+        self.assertEqual([(guid, round(yards, 1)) for guid, yards in victims], [(WARD, 7.0), (BRACE, 0.0)])
 
     def test_a_growing_pool_counts_who_stood_inside_and_its_hits(self):
         pools = nb.slime_pools(self.trace)

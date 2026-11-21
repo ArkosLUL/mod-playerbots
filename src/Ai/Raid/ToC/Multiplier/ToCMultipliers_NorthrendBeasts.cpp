@@ -1,6 +1,7 @@
 #include "ToCMultipliers_NorthrendBeasts.h"
 #include "ToCEncounterGate.h"
 #include "ToCHelpers_Icehowl.h"
+#include "ToCHelpers_Jormungars.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 #include "EncounterHelpers.h"
 #include "MovementActions.h"
@@ -38,11 +39,16 @@ float NorthrendBeastsTauntGuardMultiplier::GetValue(Action* action)
     if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))
         return 1.0f;
 
-    BeastsTankDuty const duty = GetDutyOfBeast(botAI, AI_VALUE(Unit*, "current target"));
+    Unit* target = AI_VALUE(Unit*, "current target");
+    BeastsTankDuty const duty = GetDutyOfBeast(botAI, target);
     if (duty == BeastsTankDuty::None)
         return 1.0f;
 
-    return GetBeastsDutyHolder(botAI, duty) == bot ? 1.0f : 0.0f;
+    if (GetBeastsDutyHolder(botAI, duty) != bot)
+        return 0.0f;
+
+    // a flagged main tank's "lose aggro" taunt fires whenever another tank has its worm
+    return IsWormSpewingAtOtherTank(botAI, target) ? 0.0f : 1.0f;
 }
 
 // Lust is one 10 min cooldown, so it waits for Icehowl's daze (+100% damage taken for 15 s). The rest come

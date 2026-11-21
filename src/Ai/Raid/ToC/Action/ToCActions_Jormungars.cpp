@@ -268,7 +268,8 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
         _walking = WalkKind::None;
 
     // The submerge wipes its threat list, so it comes up on whoever threatens it first
-    if (worm->GetVictim() != bot && TryClassTaunt(botAI, bot, worm))
+    if (worm->GetVictim() != bot && !(mobile && IsWormSpewingAtOtherTank(botAI, worm)) &&
+        TryClassTaunt(botAI, bot, worm))
         return true;
 
     if (AI_VALUE(Unit*, "current target") != worm)
@@ -308,6 +309,19 @@ bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 
 bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
 {
+    // Walking its victim turns the Spew cone with it
+    if (IsWormSpewing(botAI, worm))
+    {
+        if (WalkInFlight(WalkKind::Drag))
+        {
+            bot->StopMoving();
+            AI_VALUE(LastMovement&, "last movement").clear();
+        }
+
+        _walking = WalkKind::None;
+        return false;
+    }
+
     Position chargeStart;
     Position chargeEnd;
     WormDragPlan plan;

@@ -50,8 +50,9 @@ key on their duty.
 
 - **`northrend beasts taunt guard`** zeroes a class taunt (`IsTauntAction`) while the encounter is
   live and the bot's current target is a beast whose duty holder is someone else: a generic taunt
-  fights the deal and burns diminishing returns ([thorim.md](../ulduar/thorim.md)). The encounter's
-  own taunts cast inside `Execute` and pass.
+  fights the deal and burns diminishing returns ([thorim.md](../ulduar/thorim.md)). It also zeroes the
+  holder's own on a worm spewing at another tank: a flagged main tank's `lose aggro` fires whenever
+  another tank has its target. The encounter's own taunts cast inside `Execute` and pass.
 - **`northrend beasts control tank movement multiplier`** zeroes `CombatFormationMoveAction` for a
   tank whose victim is an engaged beast.
 
@@ -201,8 +202,11 @@ gate. Timers restart at every emerge (AC #28181, solo-sniffed; group and heroic 
   - Spew at 11 s after the engage, at once on a mobile emerge, then 22 s after each cast's start: a 1 s
     cast (66818 / 66821, no row), then a 2.5 s aura ticking every 250 ms in a 55 yd cone along his
     facing, which follows his victim: **60° on 10N** (`spell_cone`), 24° on the other three
-    (`TARGET_UNIT_CONE_ENEMY_24`). Ten ticks. During the 3 s Emerge cast the threat wipe swings his
-    facing between whoever threatens him.
+    (`TARGET_UNIT_CONE_ENEMY_24`). Ten ticks. A player counts in out to 56.5, the range plus its
+    combat reach (`IsWithinDist3d`): on 25H (2026-11-21) 99 of 385 non-tank ticks landed 55-56.7 yd
+    out, on bots parked just past 55. He stands rooted through it, so his victim walking or a taunt
+    sweeps the cone: on 25H a drag and a taunt swung it 52° and 41° across the casters and killed 7. During the 3 s
+    Emerge cast the threat wipe swings his facing between whoever threatens him.
   - Slime Pool at 14.5 s, then every 12 s: summon 66883 (row 613) puts NPC 35176 at his feet for
     the summon's duration, 30 s on normal, 45 s on 10H, 60 s on 25H, so up to 4 live at once. Its
     aura 66882 (60 s) ticks every second and `SpellAuraEffects.cpp` casts each tick with a radius
@@ -291,8 +295,9 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     the last issue (it moves once, 2.5 s in): the worm walks to its taunter
     ([xt002.md](../ulduar/xt002.md)). Not while an Icehowl charge is latched: the charge guard spares
     attack actions. `nb.wormmove` `approach`.
-  - Up, a holder the worm isn't hitting taunts, then attacks. There's no swap duty, and pass 1 gives
-    each tank the worm it already holds, so no holder taunts another's worm. The taunt waits for
+  - Up, a holder the worm isn't hitting taunts, then attacks; the mobile holder not while it spews
+    at another tank (the taunt guard holds its class taunts then too). There's no swap duty, and
+    pass 1 gives each tank the worm it already holds, so no holder taunts another's worm. The taunt waits for
     cooldown and range: `CastSpell` turns the bot to its target even when the cast fails.
   - Duties across a submerge stay with the deal, no per-worm latch: the threat wipe keeps the old
     victim until someone gains threat, and a stunned worm takes no heal assist threat, so pass 1
@@ -307,7 +312,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     only), latched until it arrives. Each new pool drops at the worm's feet and fires the next drag, so
     the far future doesn't count. Both clearances carry a 2 yd pad, so the worm, settling 10 yd behind
     its tank, ends past the trigger instead of firing it again. Walking on keeps the worm's front
-    pointing the same way (guide: drag him off the pool so melee can attack). `nb.wormmove` `drag`.
+    pointing the same way (guide: drag him off the pool so melee can attack). No drag while he
+    spews, and one in flight stops. `nb.wormmove` `drag`.
     - **Wait**: before starting a drag, the holder stays put up to 6 s from when it became needed
       while a Toxin carrier (no Bile, not stuck) whose nearest Bile carrier is the holder stands past
       8 yd of it (`nb.wormmove` `drag wait`). A pool at the worm's feet reaches its 8.3 yd melee after
@@ -315,8 +321,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
       paralysed on the way.
   - **Edge** (heroic, whose pools outlive the 12 s between them): the drag looks 36-42 yd from
     `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 24 yd
-    out while not spewing (its cone would sweep after the tank). Order: edge clear of everything,
-    floor clear of everything, edge clear of pools, floor clear of pools; off the stationary worm
+    out. Order: edge clear of everything, floor clear of everything, edge clear of pools, floor
+    clear of pools; off the stationary worm
     beats the edge, since its melee would stand in Sweep. `nb.wormmove` `drag edge`.
 - **Redirect** (`northrend worms redirect threat`, `ACTION_RAID + 1`): rogues serve the `WormMobile`
   holder, since Tricks moves the threat off whatever the rogue hits and DPS hit that worm. Living
@@ -384,7 +390,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     | Spray | all but a cure walk, of the target of a Spray being cast where it stands; the target, of every other member within 24 yd where they stand; both Sprays, urgent | 12 / 13 | the splash takes everyone within 10 yd of the target as the cast ends; on 25H most casters hit stood 4-7.4 yd from it at the cast's start, melee 0-3, so only both walking opens 10 yd within the 1.1 s cast |
     | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too. Fresh carriers sharing a pulse are dealt spots (below) |
     | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) or is a stationary worm only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
-    | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12° | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
+    | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12°, out to 57.5 yd | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
     | Clump | ranged and healers carrying neither debuff, not on a cure walk, of the up mobile worm; kept in every tier, `nospread` and the Spray dodge included | 9.3 / 11.3 | pools drop at its feet: on 25H a caster's `nospread` spots ended 3.7 yd from it, and paralysed there it died in the growing pool |
     | Spread | ranged and healers carrying neither debuff, of each other carrying neither (below), and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while a stationary worm is up, a lone survivor too | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation. Carriers keep their Bile and cure rules |
     | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
@@ -799,7 +805,7 @@ The lane is a `haz` row, 66734, shape `lane`: origin 35 yd behind the centre, `e
 `half` 12. Written at the gaze and again when the line freezes at the jump back; the last in a
 cycle is his path. It never reaches `snap.hz`, so no death block says STOOD IN for Trample. Nor do
 the worms' hazards: Spew is a `haz` row on the remapped tick, shape `wedge`, origin the worm,
-`facing` in radians, `arc` degrees either side, `range` 55, once per cast; a Slime Pool is a
+`facing` in radians at the cast's start, `arc` degrees either side, `range` 56.5, once per cast; a Slime Pool is a
 creature (35176) whose radius only the reader rebuilds.
 
 Each Fire Bomb is one `haz` row, 66317, shape `circle`, `rad` 8, at the bomb, written by the first bot
@@ -831,8 +837,8 @@ modelled impact, each given to the nearest bomb whose
 window holds it, who stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear`
 included (`--bomb`); `worm` spans with their deaths, per emerge the seconds from each worm's own
 Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank and the non-tanks it
-targeted first, per wedge the non-tanks inside at the nearest snapshot and the Spew tick victims by
-role over 3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
+targeted first, per wedge the non-tanks inside at the nearest snapshot, the Spew tick victims by
+role over 3.5 s, how far the worm's facing swung and each victim in turn with the yards it walked, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
 first snapshot, 20 at most) and its hits, Sweep victims by role, the mobile worm's gap to its target
 column per victim (count, median, max) over snapshots where neither moved, per Spray (the eight ids, from a
 worm) its
