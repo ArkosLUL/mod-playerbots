@@ -5,13 +5,14 @@ Read-only research for [raid-test-runs.PLAN.md](raid-test-runs.PLAN.md), brief
 `9d5e1b2` (`local/wrath-raid-tests`, lane J merged). Path prefixes: core `src/server/...` and `data/sql/...`;
 Ulduar scripts shortened to `ulduar/<file>` (`src/server/scripts/Northrend/Ulduar/Ulduar/`); fork
 `src/Ai/...`, `docs/...`; DC `DC:src/...`. Nothing here was run live: every coordinate needs navprobe, and
-every "live only" item needs the first run.
+every "live only" item needs the first run. Compass words follow the fork's docs: +x east, +y north (the
+game's own axes are x north, y west).
 
 ## Summary
 
 | | Flame Leviathan | Thorim | Algalon | Yogg-Saron |
 |---|---|---|---|---|
-| Start | First pull: base-camp vehicles unlocked by an intro gossip, a ~830 yd gauntlet, both Colossi dead, a 63.5 s RP. Every later pull: fresh vehicles at the arena edge, he is attackable, no RP | Damage to the arena start pack zone-combats him; 6 pack deaths unlock the lever into the gauntlet and start phase 1 | Console + key item (once per instance) summons Brann, then Algalon after a ~36 s intro; each pull is an attack on him | Sara starts by herself 5 s after a living player comes within 90 yd (3D) |
+| Start | First pull: base-camp vehicles unlocked by an intro gossip, a ~870 yd gauntlet, both Colossi dead, a 63.5 s RP. Every later pull: fresh vehicles at the arena edge, he is attackable, no RP | Damage to the arena start pack zone-combats him; 6 pack deaths unlock the lever into the gauntlet and start phase 1 | Console + key item (once per instance) summons Brann, then Algalon after a ~36 s intro; each pull is an attack on him | Sara starts by herself 5 s after a living player comes within 90 yd (3D) |
 | DC needs | preState SPECIAL + one focus evade, preData (towers), preDespawn, "seated and inside the arena" readiness | Roster anchor, aggro start on a separate engage entry | Roster anchor, once-per-run GameObject use with lock items, "focus attackable" readiness, preDespawn | Roster anchor, preData (keeper mask), teleport start |
 | Strategy blockers | Boarding needs `master->GetVehicle()`; nothing drives the fleet into the arena before the pull | Gauntlet squad follows the raid leader, who is the arena main tank under DC; no bot pulls the lever | None | None |
 | Size | Large | Large | Medium | Medium |
@@ -30,11 +31,13 @@ every "live only" item needs the first run.
   `ValidateScenario` refuses rows focused on them (`DC:src/TestRun/DcTestDungeonRegistry.cpp:497`, `:502`).
   Fix: an Ulduar roster patch like the ToC one (`DC:src/Ai/Dungeon/DungeonClear/Data/Events/TrialOfTheCrusaderEvents.cpp:16-34`)
   anchoring Thorim 32865 on boss 8, Sara 33134 on boss 12 (she is always present, Yogg-Saron is not) and
-  Algalon 32871 on boss 13.
+  Algalon 32871 on boss 13. Lane K (`rt/dc-w4b` at `4f045f8`, not merged yet) already adds
+  `DC:src/Ai/Dungeon/DungeonClear/Data/Events/UlduarEvents.cpp` with `RegisterUlduarRoster` for the Assembly
+  of Iron and Hodir (spell credit too); the three anchors go into that function, not a second Ulduar patch.
 - **Who "leads" under the DC driver.** `botAI->GetMaster()` is the driver: non-null, off the map, never on a
   vehicle, not in the group. `GetRaidLeaderOnInstance` (`src/Ai/Raid/RaidCombatHelpers.cpp:38-51`) skips it
-  and returns the group leader, slot 0, which DC fills with the first tank, which is also
-  `GetMainTankGuid`'s fallback main tank.
+  and returns the group leader, slot 0, which DC fills with the first tank and flags `MEMBER_FLAG_MAINTANK`
+  (`DC:src/TestRun/DcTestRunJob.cpp:1162-1196`), so it is also `GetMainTankGuid`'s main tank.
 - **Four hard-mode env lines do nothing.** `Playerbot.env` sets `AC_PLAYERBOTS_ULDUAR_{THORIM,FREYA,FLAME_LEVIATHAN,YOGG_SARON}_HARD_MODE`,
   but `src/PlayerbotAIConfig.cpp:782-785` reads only Vezax, Iron Assembly, Mimiron and XT-002. For these four
   bosses hard mode is instance state, set as described per boss.
@@ -56,8 +59,8 @@ every "live only" item needs the first run.
   sets data 107 (`:1003-1009`, `:331-339`). The intro starts from Lore Keeper of Norgannon's gossip (menu
   10366 option 0, then 10477 option 0: towers kept) or Brann's (menu 10355 option 0, which also sets data 802
   and destroys all four towers, `:1089-1094`) (`data/sql/base/db_world/smart_scripts.sql:36716-36788`,
-  `:51588-51636`; `data/sql/updates/db_world/2026_08_27_09.sql`). The camp is ~830 yd from the arena,
-  through the gauntlet.
+  `:51588-51636`; `data/sql/updates/db_world/2026_08_27_09.sql`). The camp is ~870 yd in a straight line
+  from the Shield Wall and ~1,080 yd from `homePos`, through the gauntlet.
 - **Every later pull.** `JustEngagedWith` sets `SPECIAL` (`:275-292`), which nothing resets; he never uses
   `IN_PROGRESS`, and `IsEncounterInProgress` reads his combat instead (`instance_ulduar.cpp:548-563`). A wipe:
   `EVENT_CHECK_PLAYERS` evades him once no living player is in his combat list (`:469-475`); `Reset()` on
@@ -102,16 +105,24 @@ every "live only" item needs the first run.
 
 ### Drop, comps, risks
 
-- **Drop (108.0, -37.0, 409.8, o 0.0):** 11.8 yd west of the vehicle line, 210 yd from `homePos`, 313 yd
+- **Drop (108.0, -37.0, 409.8, o 0.0):** 11.8 yd west of the vehicle line, 216 yd from `homePos`, 313 yd
   from his spawn. Within 60 yd, all removed by the preDespawn above: Runeforged Sentry 136808 (patrol x 103.3,
-  y 43.5 to -24.7, path 1368080), Steelforged Defenders 137146, 137411, 137299 standing on the vehicle line
-  plus ten more, Colossus 137476 (patrol (81.4, -52.4) to (5.9, -54.3), 27 yd), generators 136077 (52 yd) and
-  136091 (56 yd). navprobe: the drop and the staging line (x ~175).
-- **Comps:** `Sized(25, 2, 4)`, `Sized(10, 2, 2)`; tanks and healers have no vehicle duty. The raid must be
-  exactly 25 / 10 with at least 5 / 2 melee and 5 / 2 ranged for the driver seats; every roster draft has that.
-- **Risks:** which side of the Shield Wall the x 119.8 line is on cannot be read from SQL (top); DC's refresh
-  runs `maintenance` and its revive teleports members who may be seated (live only); one lost boarding race
-  leaves a bot on foot and the "seated" readiness waiting until `no_progress`.
+  y 43.5 to -24.7, path 1368080, 13 yd at closest), Steelforged Defenders 137146, 137411, 137299 standing on
+  the vehicle line plus fourteen more, Colossus 137476 (patrol (81.4, -52.4) to (5.9, -54.3), 30.7 yd at
+  closest), generators 136077 (52 yd) and 136091 (56 yd). navprobe: the drop and the staging line (x ~175).
+- **Comps:** `Sized(25, 2, 4)`, `Sized(10, 2, 2)`; tanks and healers have no role duty, but they board like
+  everyone else: the action seats melee (tanks included) on siege engines and ranged (healers included) on
+  demolishers (`UldActions_FlameLeviathan.cpp:1290-1307`). The raid must be exactly 25 / 10 with at least
+  5 / 2 melee and 5 / 2 ranged for the driver seats; every roster draft has that.
+- **Risks:** which side of the Shield Wall the x 119.8 line is on cannot be read from SQL (top), and whether a
+  closed wall stops server-driven vehicles at all is unverified (`PathGenerator` paths over the static mmaps,
+  which hold no game objects, and checks line of sight only to shorten a path; live only): if it does not, the aggro start alone lets the fleet drive in and the pre-pull drive
+  is not needed. The preState evade leaves him at his spawn (420.7, -15.4), behind the Leviathan doors
+  (GO 194630 at x 395.1, opened by `TurnGates` under `SPECIAL`): only `InitializeAI` (`:294-304`, at spawn)
+  and `JustEngagedWith` (`:281`) move his home to `homePos`, so the first pull starts ~100 yd further east
+  than later ones unless DC also teleports him to `homePos`. DC's refresh runs `maintenance` and its revive
+  teleports members who may be seated (live only); one lost boarding race leaves a bot on foot and the
+  "seated" readiness waiting until `no_progress`.
 - **Size: large** (two fork changes, three DC features).
 
 ## Thorim (boss 8, entry 32865)
@@ -165,8 +176,9 @@ every "live only" item needs the first run.
 ### Drop, comps, risks
 
 - **Drop (2135.0, -235.0, 419.85, o 4.71):** inside the arena check box, so the fence closes behind the raid;
-  16-20 yd north of the pack (soldiers at (2120-2127, -251..-259), captain (2131.3, -259.2), Behemoth
-  (2146.6, -266.7)), 62 yd from Thorim, 42 yd from the lever. Thorim's own tank anchor (2135.0, -263.1) sits
+  18-43 yd north of the pack (soldiers at (2120-2127, -251..-259) 18.1-28.2 yd, captain (2131.3, -259.2)
+  24.5 yd, Behemoth (2146.6, -266.7) 33.7 yd, acolyte (2129.1, -277.1) 42.6 yd), 63 yd from Thorim, 42 yd from
+  the lever. Thorim's own tank anchor (2135.0, -263.1) sits
   inside the mock battle, where a stray hit starts the pull before DC's refresh. The stands' Dark Runes carry
   `unit_flags` 768 (immune). Dark Rune Thunderer 137482 and Ravager 137484 patrol x 2128.6 / 2138.0, y -150.6
   to -199.5, z 412.3 outside the fence: 35.6 yd at closest, 7.5 yd lower; preDespawn 33754 / 33755 if they react.
@@ -183,8 +195,8 @@ every "live only" item needs the first run.
 
 - **Summon, once per instance.** The console (GO 194628 at 10, lock 579; GO 194752 at 25, lock 1831; both at
   (1646.2, -174.7, 427.3)) runs `go_celestial_planetarium_access` (`ulduar/boss_algalon_the_observer.cpp:1157-1243`):
-  the user must hold an item the GO's lock names (Lock.dbc; `item_template` has 45796 "Celestial Planetarium
-  Key" and 45798 "Heroic Celestial Planetarium Key"). It summons Brann, opens sigil doors 01 / 02,
+  the user must hold an item the GO's lock names (client Lock.dbc: lock 579 takes 45796 "Celestial
+  Planetarium Key" or 45798 "Heroic Celestial Planetarium Key", lock 1831 takes 45798 only). It summons Brann, opens sigil doors 01 / 02,
   perm-binds every player and deletes itself 5 s later. Brann walks in and summons Algalon 7.5 s after his
   talk point (`:988-999`); the first intro keeps him `ImmuneToPC` for 36 s (`:429-459`, `:696-701`).
 - **Start:** he then stands passive until attacked. `JustEngagedWith` zone-combats, keeps him unselectable for
@@ -192,13 +204,16 @@ every "live only" item needs the first run.
   despawn countdown (`:513-556`; `instance_ulduar.cpp:1010-1017`).
 - **Wipe:** with no unphased player alive within 120 yd he Ascends (`:369-382`), the encounter goes `FAIL`,
   he despawns (hard reset) and the map resummons him about 20 s later with a 5 s intro (`:384-396`,
-  `:794-803`; `instance_ulduar.cpp:686-710`, `:747-752`). Leaving the 47 yd disc also Ascends (`:651-660`).
+  `:794-803`; `instance_ulduar.cpp:686-710`, `:747-752`). He also Ascends when he himself is pulled more than
+  47 yd from his landing point or below z 410 (`IsInRoom`, `:651-660`).
 - **Kill:** `DONE` at the outro start, at 2% health (`:633-648`, `:804-810`). No prerequisite boss.
+- **No hard mode** exists for him, so the plan's "an Ulduar kill counts only when its hard mode triggered"
+  has nothing to test here: a kill should count as it is.
 
 ### The strategy under the DC driver
 
 No master reads in the Algalon files. It needs two bot tanks plus a handler at 25
-(`docs/raids/ulduar/algalon.md:403-412`, `:760-763`).
+(`docs/raids/ulduar/algalon.md:302-309`, `:403-412`, `:760-763`).
 
 ### What DC needs
 
@@ -208,15 +223,17 @@ No master reads in the Algalon files. It needs two bot tanks plus a handler at 2
   drop. Rows list both console entries; only the difficulty's one exists.
 - **Readiness: the focus is attackable** (generic: no `IMMUNE_TO_PC`, no `NOT_SELECTABLE`). Engaging him mid
   intro runs `JustEngagedWith` early; its `events.Reset()` cancels `EVENT_INTRO_FINISH`, the only thing that
-  clears `ImmuneToPC`, and the pull is dead. It also covers the first pull's Brann walk and intro without a
+  clears `ImmuneToPC` inside a pull (`Reset()` and `ACTION_INIT_ALGALON` clear it too, but only between
+  pulls), and the pull is dead until the wipe. It also covers the first pull's Brann walk and intro without a
   timer. Aggro start as XT-002.
 
 ### Drop, comps, risks
 
-- **Drop (1632.0, -282.0, 417.3, o 4.71):** inside the disc around (1632.7, -302.8), 20.8 yd north of where he
-  lands, 15.9 yd inside the room door GO 194910 (`DOOR_TYPE_ROOM`, shut while `IN_PROGRESS`). The only spawns
-  within 60 yd are Dark Matter 33089 with phase mask 16, which exist only inside a black hole. The room's floor
-  GOs have collision off (`instance_ulduar.cpp:886-892`), so navprobe must find the static floor.
+- **Drop (1632.0, -282.0, 417.3, o 4.71):** 20.8 yd north of where he lands (1632.7, -302.8), well inside
+  the 120 yd wipe check, 15.9 yd inside the room door GO 194910 (`DOOR_TYPE_ROOM`, shut while
+  `IN_PROGRESS`). The only spawns within 60 yd are Dark Matter 33089 with phase mask 16, which exist only
+  inside a black hole. The room's floor GOs and that door have collision off (`instance_ulduar.cpp:886-892`),
+  so navprobe must find the static floor.
 - **Comps:** `Sized(25, 3, 4, {NeedSpec(CLASS_PRIEST, "shadow pve", 1)})`, `Sized(10, 2, 2, {same})`. The
   strategy's backup Big Bang soaker is a second shadow priest; every roster draft has one, so the backup falls
   to a swap tank (`algalon.md:61-66`).
@@ -261,7 +278,7 @@ the driver is not, so every portal goes to a bot. Bots walk in from 72-96 yd the
 - **Roster anchor** for boss 12 on Sara.
 - **preData** (generic): `StorePersistentData(0, mask)`, then `SetData(62941, 0)` so Sara summons the room
   keepers. The faithful alternative, the keepers' own gossip, costs more: DC refuses menu-0 picks, which is
-  what a scripted menu reads as (`DcTestDungeonRegistry.cpp:552`); its gossip start runs every pull while a
+  what a scripted menu reads as (`DC:src/TestRun/DcTestDungeonRegistry.cpp:551-552`); its gossip start runs every pull while a
   chosen keeper despawns; and it needs preDone 7-10 plus clearing Auriaya's ring.
 - **Teleport start** (generic): after the refresh and settle at a drop outside 90 yd, move the raid to a start
   point inside it and let Sara start. A drop inside 90 yd fails: she pulls 5 s after her recovery, and DC's
@@ -273,8 +290,9 @@ the driver is not, so every portal goes to a bot. Bots walk in from 72-96 yd the
 - **Drop (1866.0, -24.0, 335.0, o 0.0):** 11.9 yd west of the chamber doors, 114 yd from Sara in 3D. Nearest
   hostile at that level over 100 yd off: Faceless Horror 137566 at (1880.2, 78.2) and Vezax at (1852.8, 81.4),
   behind the Runed Stone Door GO 194750 at (1854.9, 31.5). **Start point (1896.0, -25.0, z from navprobe,
-  ~330):** inside the doors, so their close 15 s in locks nobody out, 84 yd from Sara in 2D, outside the cloud
-  orbits (43 yd); navprobe must give a z that keeps it under 90 yd in 3D.
+  ~330):** inside the doors, so their close 15 s in locks nobody out, 84 yd from Sara in 2D, outside the outer
+  cloud orbit (60.8 yd, 69.3 yd with a cloud's 8.5 yd summon reach, `docs/raids/ulduar/yogg-saron.md:308-316`);
+  navprobe must give a z that keeps it under 90 yd in 3D.
 - **Comps:** `Sized(25, 2, 4)`, `Sized(10, 2, 2)`. The anti-fear need (priest or shaman) is met by every roster
   draft and DC cannot express "either" in one need.
 - **Risks:** a start point at the wrong z never starts the fight and sits until `no_progress` (top); a member
@@ -301,17 +319,20 @@ gossip and console clicks themselves (replaced by data and a harness step).
 
 ## Questions for the user
 
-1. **Should Yogg-Saron and Algalon come first?** These two need only harness work in DC: no change to how the
-   bots fight. Thorim and Flame Leviathan also need strategy changes (questions 2 and 3). Starting with the two
-   cheap ones gets more bosses into the polish loop sooner. **Recommendation: yes, build Yogg-Saron and Algalon
-   as the next DC lane.**
+1. **Build Yogg-Saron and Algalon now, or wait and build all four together?** Yogg-Saron and Algalon need
+   only harness work in DC (a new way to start the fight and a few instance settings), with no change to how
+   the bots fight. Thorim and Flame Leviathan also need changes to the bots' strategy, which wait for your
+   answers to questions 2 and 3. Building the two harness-only bosses now, as one DC lane, gets them into the
+   polish loop while the other two wait. Waiting means one lane for all four, but no new boss gets tested
+   until the strategy changes are done. **Recommendation: build Yogg-Saron and Algalon now, as the next DC
+   lane.**
 
 2. **May a bot lead Thorim's gauntlet and pull the lever?** Today the gauntlet group walks only behind the raid
    leader, and in your raid that is you. Under DC the leader is the main tank, who stays in the arena, so the
    gauntlet never starts and every pull wipes at 5 minutes. The change: while no real player is in the gauntlet
    group, the gauntlet tank walks the corridor route himself, the group follows him, and a gauntlet bot pulls the
-   lever. When you lead, nothing changes. It is new strategy behaviour, so it needs your yes. **Recommendation:
-   yes.**
+   lever. When you lead, nothing changes. It is new strategy behaviour, so it needs your yes. If you say no,
+   Thorim stays a boss only you can test, by leading the raid. **Recommendation: yes.**
 
 3. **Should Flame Leviathan be automated at all?** It is the biggest job: two strategy changes (bots board
    without you, and drive the vehicles into the arena before the pull) and three new harness features. It would
@@ -319,8 +340,9 @@ gossip and console clicks themselves (replaced by data and a harness step).
    drive). **Recommendation: not now. Decide again once the other three run.**
 
 4. **If Flame Leviathan is automated, how many towers?** Each standing tower gives him +40% health and adds a
-   hazard, so 4 towers is the full hard mode the strategy was tuned against, and 0 towers is normal mode. The
-   harness can knock down any towers before the first pull. **Recommendation: all 4 standing.**
+   hazard, so 4 towers is the full hard mode the strategy was tuned against, and 0 towers is normal mode,
+   whose kill does not count toward "polished". The harness can knock down any towers before the first pull.
+   **Recommendation: all 4 standing.**
 
 5. **Which Keepers should help against Yogg-Saron?** Options: all four (normal mode, so a kill does not count
    toward "polished"), Freya only, or Thorim only. The strategy handles all three; the latest phase 3 work
