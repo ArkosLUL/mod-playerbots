@@ -16,6 +16,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidCombatHelpers.h"
 #include "UldEncounter_Thorim.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -216,14 +217,14 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
 {
     FollowMasterStrategy followMasterStrategy(botAI);
 
-    Unit* master = botAI->GetMaster();
-    if (!master)
+    Player* leader = GetRaidLeaderOnInstance(botAI);
+    if (!leader)
         return false;
 
-    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
-        bot->GetDistance2d(master) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
+    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
+        bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
     {
-        if (MoveTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(), false,
+        if (MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
         {
             if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
@@ -236,9 +237,9 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
 
     uint8 index = 0;
     bool leftLane = false;
-    if (ThorimGauntletLaneIndex(master, index, leftLane))
+    if (ThorimGauntletLaneIndex(leader, index, leftLane))
     {
-        // The master's progress, but in the lane the last Runic Smash telegraph left safe, or the formation
+        // The leader's progress, but in the lane the last Runic Smash telegraph left safe, or the formation
         // walks everyone back into the blast.
         bool preferredLane = false;
         if (ThorimPreferredGauntletLane(botAI, preferredLane))
@@ -247,9 +248,9 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
-    // Past the waypoints the master is the only anchor left, and a trailing healer heals nobody.
-    if (PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(master) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE)
-        return MoveTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
+    // Past the waypoints the leader is the only anchor left, and a trailing healer heals nobody.
+    if (PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(leader) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE)
+        return MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
                       false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
 
     return false;
@@ -371,12 +372,12 @@ bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
 
 bool ThorimFallFromFloorAction::Execute(Event /*event*/)
 {
-    Player* master = botAI->GetMaster();
-    if (!master || master->GetMap() != bot->GetMap())
+    Player* leader = GetRaidLeaderOnInstance(botAI);
+    if (!leader || leader == bot)
         return false;
 
-    bot->NearTeleportTo(master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
-                        master->GetOrientation());
+    bot->NearTeleportTo(leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
+                        leader->GetOrientation());
     return true;
 }
 
