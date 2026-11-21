@@ -414,16 +414,24 @@ bool RazorscaleGroundedAction::Execute(Event /*event*/)
 
     if (PlayerbotAI::IsRanged(bot))
     {
-        if (IsRazorscaleAtFirstLanding(boss))
-            return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                              RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y -
-                                  RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_OFFSET_Y,
-                              bot->GetPositionZ(), RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_RADIUS,
-                              MovementPriority::MOVEMENT_COMBAT);
+        bool const firstLanding = IsRazorscaleAtFirstLanding(boss);
+        float const centreX = RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X;
+        float const centreY =
+            firstLanding ? RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y -
+                               RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_OFFSET_Y
+                         : RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y;
+        float const radius = firstLanding ? RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_STACK_RADIUS
+                                          : RazorscaleBossHelper::RAZORSCALE_RANGED_STACK_RADIUS;
 
-        return MoveInside(ULDUAR_MAP_ID, RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_X,
-                          RazorscaleBossHelper::RAZORSCALE_ARENA_CENTER_Y, bot->GetPositionZ(),
-                          RazorscaleBossHelper::RAZORSCALE_RANGED_STACK_RADIUS, MovementPriority::MOVEMENT_COMBAT);
+        if (bot->GetDistance2d(centreX, centreY) <= radius)
+            return false;
+
+        Position spot;
+        if (!GetRazorscaleRangedStackSpot(bot, centreX, centreY, radius, spot))
+            return false;
+
+        return MoveTo(ULDUAR_MAP_ID, spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                      false, false, MovementPriority::MOVEMENT_COMBAT);
     }
 
     return false;
