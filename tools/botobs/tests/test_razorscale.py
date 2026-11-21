@@ -43,9 +43,9 @@ def snap(t: int, boss_z: float, hp: float, flame: bool = False) -> dict:
     return {"t": t, "e": "snap", "u": units}
 
 
-def move(t: int, guid: int, x: float, y: float) -> dict:
-    return {"t": t, "e": "move", "g": guid, "k": "point", "x": x, "y": y, "z": 391.5, "tgt": 0, "ok": 1,
-            "r": "", "by": rs.STACK_MOVER, "pr": "combat"}
+def move(t: int, guid: int, x: float, y: float, ok: bool = True) -> dict:
+    return {"t": t, "e": "move", "g": guid, "k": "point", "x": x, "y": y, "z": 391.5, "tgt": 0,
+            "ok": 1 if ok else 0, "r": "" if ok else "wait", "by": rs.STACK_MOVER, "pr": "combat"}
 
 
 def pull() -> list[dict]:
@@ -107,6 +107,12 @@ class Stack(unittest.TestCase):
             "RANGED STACK\n"
             "  0:20.000 knockdown  2 walks by 2 bots to 2 spot(s), busiest (600, -175) x1; onto a live patch 1\n"
             "  whole pull: 1 of 2 walks ended within 10 yd of a live patch\n"))
+
+    def test_refused_rows_are_not_walks(self):
+        records = pull()
+        at = next(i for i, rec in enumerate(records) if rec.get("e") == "move")
+        records.insert(at + 1, move(21100, CASTER, 599.54, -175.04, ok=False))
+        self.assertIn("whole pull: 1 of 2 walks ended", printed(rs.show_stack, load(records)))
 
     def test_tank_walks_are_not_the_stack(self):
         records = [rec for rec in pull() if not (rec.get("e") == "move" and rec.get("g") != TANK)]

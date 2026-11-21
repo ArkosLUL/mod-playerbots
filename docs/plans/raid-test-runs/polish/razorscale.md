@@ -21,19 +21,21 @@ DC veto rows inside a pull.
 **Failure picked: the ranged stack walks back onto Devouring Flame** (14 of 15 deaths).
 
 - Every `razorscale grounded` walk by a ranged or healer in all three pulls went to one spot,
-  (599.54, -175.04) (2907, 1569, 2886 walks). `RazorscaleGroundedAction::Execute`
+  (599.54, -175.04) (141, 139, 186 issued walks; 2907, 1569, 2886 move rows counting the `wait`
+  refusals). `RazorscaleGroundedAction::Execute`
   (`UldActions_Razorscale.cpp:415-427`) used `MoveInside(centre, 12)` → `MoveNear` → the ring point
   at `GetFollowAngle()`, and `GetFollowAngle` (`MovementActions.cpp:1001-1006`) reads the master's
   group: the DC driver masters every bot from outside the group, so every bot gets angle 0. With a
   human master in the raid the slots spread round the ring.
-- Nothing checked that spot for fire. A patch landed on it in the final phase of uld1 (548 s: stalker
-  at exactly 599.54, -175.04). `razorscale avoid devouring flames` (`ACTION_RAID + 4`) stepped each
+- Nothing checked that spot for fire. A patch landed on it in the final phase of uld1 (538-560 s,
+  deaths 552-560 s: stalker at exactly 599.54, -175.04). `razorscale avoid devouring flames` (`ACTION_RAID + 4`) stepped each
   bot ~10.5 yd off the patch's centre; most steps left the 12 yd ring, so the next tick
   `razorscale grounded` walked them straight back; `RazorscaleMoversBlocked` exempts ranged
-  (`UldDefinition_Razorscale.cpp:35-36`) and does not cover the boss node anyway. uld1's last minute:
-  1277 dodge vs 1268 stack moves for ranged/heal; 1057 stack walks ended within 10 yd of a live patch.
-- uld3 had the same loop (1270 walks onto a patch in its final phase, ranged 488k and healers 207k
-  flame damage on the ground) and survived on heals; uld2 had no patch on the spot (0 walks).
+  (`UldDefinition_Razorscale.cpp:35-36`) and does not cover the boss node anyway. uld1's final phase,
+  ranged/heal: 183 dodges vs 94 stack walks issued; 72 of those walks ended within 10 yd of a live
+  patch.
+- uld3 had the same loop (104 issued walks onto a patch in its final phase, ranged 488k and healers
+  207k flame damage on the ground) and survived on heals; uld2 had no patch on the spot (0 walks).
 - The dodge measures `GetDistance2d`, so it fires up to ~10 yd from a patch's centre (90% of dodges
   started inside 10.3 yd), not 7: a spot must clear that, not `DevouringFlameBlocks`' 7.
 
@@ -53,6 +55,13 @@ human play too.
 
 **Not picked:** uld2's Guardian death (one bot, a harpoon crew member caught by three Guardians, air
 phase).
+
+**Review notes (no deaths, for later rounds):** `--stack` counts issued walks only (`ok`), not the
+`wait` refusals. In every knockdown she sat at (585.4, -173.5) facing 0, so the angle-0 spot was in
+Flame Breath's cone and `razorscale flame breath action` fought the stack walk (477 ranged/heal move
+rows in uld2's first knockdown); with the spread slots 2-5 of the 14 fall in the cone, and the slot
+pick does not test it. `IsRazorscaleAtFirstLanding` (588, -166) never held in window 5, so the
+first-landing stack branch never ran.
 
 **Next window should show** (`razorscale.py --stack`, `--fire`, `--deaths`): stack walks spread over
 many spots per ground phase (roughly one per ranged or healer, not 1); "onto a live patch" at or near

@@ -11,9 +11,12 @@ What the generic views miss here:
   knockdown; once under 50% on the ground she stays down, so the last one can begin above 50%.
 - **A Devouring Flame patch is a creature** (34188), sampled in the snapshots like any other unit.
   The dodge fires on `GetDistance2d`, which takes both combat reaches off, so a bot is dodged within
-  ~10 yd of a patch's centre (window 5: 90% of dodges started inside 10.3), not the 7 yd constant.
+  ~10 yd of a patch's centre (90% of dodges in the 25-man traces started inside 10.3), not the 7 yd
+  constant.
 - **The stack walk and the dodge fight.** A grounded walk that ends inside that reach is undone by the
-  dodge the next tick and re-issued the tick after; in window 5 that loop killed 9 bots 14 times.
+  dodge the next tick and re-issued the tick after.
+- **Most move rows are refusals.** A mover asks every tick and gets `wait` while the last walk runs,
+  so only the issued rows count as walks.
 """
 from __future__ import annotations
 
@@ -119,10 +122,10 @@ def snapshot_before(trace: Trace, t: int) -> dict | None:
 
 
 def stack_walks(trace: Trace) -> list[dict]:
-    """Every ranged or healer row the stack mover issued, with whether a live patch covered its end."""
+    """Every ranged or healer walk the stack mover issued, with whether a live patch covered its end."""
     walks: list[dict] = []
     for rec in trace.of("move"):
-        if rec.get("by") != STACK_MOVER or trace.role(rec.get("g")) not in STACK_ROLES:
+        if rec.get("by") != STACK_MOVER or trace.role(rec.get("g")) not in STACK_ROLES or not rec.get("ok"):
             continue
         snap = snapshot_before(trace, rec["t"])
         spot = (rec["x"], rec["y"])
