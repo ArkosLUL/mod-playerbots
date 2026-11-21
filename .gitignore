@@ -58,4 +58,5 @@ __pycache__/
 # Agent tooling
 #
 .agents/plans/**
+tools/raidtest/.env
 .claude/settings.local.json
