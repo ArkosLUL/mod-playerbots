@@ -210,9 +210,8 @@ bot refuses. The player pulls (proximity 23 yd; the engaged twin takes the pulle
 nearest player) and runs into the tunnel, or tells a bot tank to `attack` (or `tank attack`) either
 twin: that leaves her as its `pull target`, and every bot tank then fetches its own twin, so each
 sister takes her own tank. No bot pulls otherwise: without a player (the DC harness, its master off
-the map) the raid waits on its stands, so the harness engages Fjola on the main tank once she turns
-attackable. The tank taunts its twin once she's in range and taunts back any assigned
-twin on someone else. Mid-pull only a twin on someone else, more than 30 yd off her door spot and no
+the map) the raid waits on its stands. The tank taunts its twin once she's in range and taunts back
+any assigned twin on someone else. Mid-pull only a twin on someone else, more than 30 yd off her door spot and no
 yard closer for 2 s sends her tank out. A fetch walks to 25 yd of her for the taunt, the door hold
 off so reach melee can finish. Then it walks her back by a lead 5 yd out of its spot toward `ARENA_CENTER`
 (0.6 yd inside the orb circle), waits up to 3 s for her to stop, and steps back to the spot
