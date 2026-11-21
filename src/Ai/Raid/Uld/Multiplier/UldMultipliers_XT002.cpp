@@ -73,9 +73,9 @@ XT002BurstWindowMultiplier::Window XT002BurstWindowMultiplier::EvaluateWindow()
 
     if (GetXT002ExposedHeart(botAI))
     {
-        // Hard mode burns the Heart with everything but lust: Heartbreak runs the rest of the fight, and
-        // Exhaustion means there's no second lust.
-        return {hardMode, false};
+        // Hard mode burns the Heart with everything, lust too: without it the raid kills the Heart in its
+        // first window only about half the time, and Heartbreak then runs without lust
+        return {hardMode, hardMode};
     }
 
     // Below this the last Heart phase is over. In hard mode the Heart outlived every window, so the lust held
