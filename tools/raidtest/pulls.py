@@ -62,8 +62,13 @@ class TraceFacts:
             return None
         return self.end_ms - self.start_ms
 
+    @property
+    def dc_interfered(self) -> bool:
+        """A DC multiplier vetoed an action once the encounter was on, so DC ran part of the fight."""
+        return self.start_ms is not None and any(veto.at_ms >= self.start_ms for veto in self.vetoes)
+
     def valid(self, diff_id: int) -> bool:
-        return self.built is not None and not self.warnings and self.diff == diff_id
+        return self.built is not None and not self.warnings and self.diff == diff_id and not self.dc_interfered
 
 
 def death_cause(trace: Trace, death: dict) -> str:

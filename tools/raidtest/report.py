@@ -54,6 +54,8 @@ def verdict(row: PullRow, diff: str, head_time: datetime.datetime) -> str:
         return "no: " + ", ".join(kind for kind, _ in facts.warnings)
     if facts.built is None:
         return "no: build unknown"
+    if facts.dc_interfered:
+        return "no: DC vetoed actions in the fight"
     return "counts" if facts.built > head_time else "baseline"
 
 

@@ -170,6 +170,23 @@ class MatchTest(unittest.TestCase):
         self.assertEqual(match_traces([(5_000, 72_000), (6_000, 71_000)], [only]), [only, None])
 
 
+class DcInterferenceTest(unittest.TestCase):
+    def facts(self, veto_at: int | None) -> pulls.TraceFacts:
+        vetoes = [] if veto_at is None else [pulls.Veto(veto_at, "Uldxay", "dungeon clear", "dps assist")]
+        return pulls.TraceFacts(path=pathlib.Path("a"), encounter="xt-002",
+                                built=datetime.datetime(2026, 11, 21, 18), diff=1, warnings=[], hardmode=True,
+                                start_ms=100_000, end_ms=300_000, outcome="wipe", closed=True, vetoes=vetoes)
+
+    def test_a_veto_in_the_fight_voids_the_pull(self):
+        self.assertTrue(self.facts(110_000).dc_interfered)
+        self.assertFalse(self.facts(110_000).valid(1))
+
+    def test_a_veto_before_the_pull_does_not(self):
+        self.assertFalse(self.facts(90_000).dc_interfered)
+        self.assertTrue(self.facts(90_000).valid(1))
+        self.assertTrue(self.facts(None).valid(1))
+
+
 class CauseTest(unittest.TestCase):
     def test_causes(self):
         class FakeTrace:

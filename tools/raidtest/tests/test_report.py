@@ -82,7 +82,7 @@ class ReportTest(unittest.TestCase):
         text, _ = self.render(self.state())
         toc1, toc2, toc3 = (self.section(text, pool) for pool in ("toc1", "toc2", "toc3"))
         self.assertIn("1/1 valid after HEAD, 1 baseline.", toc1)
-        self.assertIn("| 1 | test | tr-1 | kill | wipe | 2:00 | - | 1 | counts |", toc1)
+        self.assertIn("| 1 | test | tr-1 | kill | wipe | 2:00 | - | 1 | no: DC vetoed actions in the fight |", toc1)
         self.assertIn("Icehowl, last hit Trample", toc1)
         self.assertIn("pull 1: 1 row(s): dungeon clear zeroed follow x1", toc1)
         self.assertIn("| 2 | test | tr-2 | kill |", toc2)
