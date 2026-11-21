@@ -410,10 +410,14 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     No coordinates: navprobe can't see the floor; the stand, `direct` and `partial` points go
     unclipped, the floor test keeping them inside the wall. Spots stay outside an armed mobile
     worm's cone + 12°, its width from `GetSpellCone` on the remapped tick, else 24°. Its straight
-    walk crosses no pool at its radius when the walk ends + 1 and, but for the `WormStationary`
-    holder, no up stationary worm within 16; a circle the bot starts in only has to be left, heading
-    out; a `cross` spot skips this. Checked only at its end, a 25N Bile carrier's spot ran its walk
-    2 yd from a pool's centre and killed it.
+    walk crosses no pool at its radius when the walk ends + 1, but for the `WormStationary`
+    holder no up stationary worm within 16, and no armed Spew danger (the spot's cone + 12° and
+    front disc; a cure or run walk only a Spew under way, since it races Toxin); a circle the bot
+    starts in only has to be left, heading out, and a cone left for good, inside no longer than a
+    straight step off its axis + 4. A `cross` spot skips this. Checked only at its end, a 25N Bile
+    carrier's spot ran its walk 2 yd from a pool's centre and killed it; with no cone in it, four
+    25H melee dodged Dreadscale's emerge Spew, then walked 59-65 yd through it to their stands
+    behind him and died (2026-11-21).
   - **Role reach**, in combat-reach terms 1 yd inside the generic trigger: ranged within spell range
     of the target (`reach spell` fires past ~37 yd, not the raw 28.5), a hunter also past its dead
     zone + 1 off every up worm (20.8 mobile, 13.8 stationary; the old flat 15.3 left Trueshot 20% of
@@ -493,6 +497,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     for 4 s (`WORM_REACH_HOLD_MS`) per streak, after which generic reach walks it in. Otherwise an
     escape released on arrival walked back into its pool or pulse every ~1.4 s (25H 2026-10-28, two
     ranged for 24 s). A held-out melee Bile carrier is the Bile guard's.
+  - **`northrend worms spew reach guard`** zeroes `reach melee`, `reach spell` and the charges for a
+    bot holding no beast while that walk to its stop point fails the Spew path test (armed cone
+    + 12°), at any distance and with no way round: the cone disarms within seconds. Once the
+    reposition backed off, 25H melee out front walked 18-20 yd into a spewing cone (2026-11-21).
   - **`northrend worms follow guard`** zeroes follow for every bot while a worm is engaged: a
     submerge drops every target, and the out-of-combat `follow` fought the spread every 0.3-1 s
     (Malygos and Yogg-Saron precedent).
@@ -509,8 +517,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     no worm engaged, a bot inside a pool's radius + 1 (as big as it grows before its pinned cast
     ends) walks to the nearest spot clear of every pool 5 s on + 2, on the floor, path-tested,
     in reach of its target first, off a latched charge lane, `MOVEMENT_FORCED`, latched till
-    arrival. `icehowl charge guard` spares it: the crash throws the raid to the wall, where the
-    heroic pools are. The per-instance read breaks a pinning cast in a pool for it. `nb.poolmove`.
+    arrival. `icehowl charge guard` spares it: the crash stuns a bot in a pool there. The
+    per-instance read breaks a pinning cast in a pool for it. `nb.poolmove`.
   - Breath bearings lose room at their ray's first pool (5 s on + 2), re-read every tick so a
     growing pool re-latches; a stand inside one takes the nearest clear distance in its band, else
     none. The charge dodge searches clear of pools first, then lane-only (Trample 50k beats a pool
@@ -563,7 +571,8 @@ cycle, which makes that an exact read.
 
 1. He jumps to `ARENA_CENTER`, drops his victim and clears his target.
 2. 0.9 s after landing, Massive Crash (66683 / 67660 / 67661 / 67662), 1 s cast: 150 yd, knockback
-   40 yd/s out and 15 up (~62 yd, so the raid lands at the wall), damage and a 6.5 s stun.
+   40 yd/s out and 15 up, damage and a 6.5 s stun. The knockback moved no bot in six 25H crashes
+   (2026-11-21): they're stunned where they stand.
 3. 3.9 s after the crash he gazes at a random player off his threat list: `UNIT_FIELD_TARGET` holds
    it. The charge ends 50 yd out along his line to that player (46 when its angle falls in (1, 2)
    rad, the gate).
@@ -602,9 +611,11 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   ([pitfalls.md](../../engine/pitfalls.md): movement lock, cast pin). The whole lane, not the two
   contact points: a server stall moves the first test along it (guide: strafe out of the way).
   `nb.dodge`.
-- **`icehowl charge guard`**, gaze to the charge's end, every bot: zeroes every mover but attacks and
-  the dodge, and gap closers, `blink` and `disengage` too. Melee chasing his start point meet the first
-  contact test.
+- **`icehowl charge guard`**, from his jump to the centre (at most 12 s before the gaze) to the
+  charge's end, every bot: zeroes every mover but attacks, the dodge and the two pool walks, and gap
+  closers, `blink` and `disengage` too. Melee chasing his start point meet the first contact test;
+  on 25H (2026-11-21) two hunters he landed beside disengaged into a pool and the crash stunned them
+  there.
 - **Arctic Breath spread** (`icehowl breath spread` → `icehowl move to breath stand`,
   `ACTION_RAID + 2`), by bearing round him, since the cone ignores distance (guide: a half circle
   behind him, healers apart). Per instance, read once per ms:
@@ -706,7 +717,7 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - A healer needs heal reach of both holders and its heal target: with the worms far apart no spot
   may have it, and the healer stays put, or escapes out of reach when urgent.
 - Melee split by guid parity, so the groups are uneven when some melee hit another target.
-- The path test covers pools and Sweep, not Spew cones or Bile carriers on the way, a `cross`
+- The path test covers pools, Sweep and Spew, not Bile carriers on the way, a `cross`
   walk takes no path test, and `reach party member to heal` still walks healers through pools, as
   generic reach does past the search radius or while the search backs off.
 - A Toxin'd `WormStationary` holder gets no runner until its worm submerges.

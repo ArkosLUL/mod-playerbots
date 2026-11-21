@@ -115,6 +115,10 @@ float IcehowlBreathStepDeg(Unit* anyUnitOnMap);
 // to the end of the charge, read once per instance per ms. False off map 649 and outside the charge.
 bool IcehowlChargeLatched(PlayerbotAI* botAI, Position& start, Position& end);
 
+// From his jump to the centre to the end of the charge: the latched line, or before the gaze at most as
+// long as a latch lasts. False off map 649 and outside the charge.
+bool IcehowlChargeCycleActive(PlayerbotAI* botAI);
+
 // 2D distance from (x, y) to the latched line, FLT_MAX when nothing is latched.
 float DistanceToIcehowlCharge(PlayerbotAI* botAI, float x, float y);
 

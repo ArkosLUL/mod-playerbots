@@ -119,6 +119,11 @@ constexpr float REACH_SEARCH_SLACK = 0.05f;
 // A held spot answers to the generic reach trigger itself, or a stand on the reach edge would let go
 // on the worm's first step
 constexpr float REACH_HOLD_SLACK = 1.0f;
+// Path samples against a Spew cone. Its narrowest crossing is the front disc, WORM_TANK_OFFSET round the worm.
+constexpr float SPEW_PATH_STEP = 1.0f;
+// A walk out of a cone may stay inside this much longer than a step straight off its axis. Deep in a
+// 25-man cone the search's 22.5 degree bearings miss that step by up to 2 yd.
+constexpr float SPEW_EXIT_SLACK = 4.0f;
 
 struct WormRead
 {
@@ -1300,6 +1305,8 @@ struct WormPath
     float speed = 1.0f;  // yd/s
     std::vector<WormPool> pools;
     std::vector<Position> sweeps;  // up stationary worms, none for its holder
+    std::vector<Position> cones;   // armed mobile worms, with their facing
+    float coneArc = 0.0f;
 };
 
 // A circle the walk starts in only has to be left: heading out of it and ending outside
@@ -1311,6 +1318,49 @@ bool CircleBlocksWalk(Position const& from, Position const& to, Position const& 
     float const outward = (to.GetPositionX() - from.GetPositionX()) * (from.GetPositionX() - centre.GetPositionX()) +
                           (to.GetPositionY() - from.GetPositionY()) * (from.GetPositionY() - centre.GetPositionY());
     return outward <= 0.0f || centre.GetExactDist2d(to) < radius;
+}
+
+// How far (x, y) has to step straight off the cone's axis to leave InSpewDanger
+float SpewSideExit(Position const& origin, float x, float y, float halfArc)
+{
+    float const ax = std::cos(origin.GetOrientation());
+    float const ay = std::sin(origin.GetOrientation());
+    float const px = x - origin.GetPositionX();
+    float const py = y - origin.GetPositionY();
+    float const along = px * ax + py * ay;
+    if (along <= 0.0f)
+        return 0.0f;
+
+    float const side = std::fabs(px * ay - py * ax);
+    float const coneEdge = std::min(along * std::tan(halfArc),
+                                    std::sqrt(std::max(WORM_SPEW_RANGE * WORM_SPEW_RANGE - along * along, 0.0f)));
+    float const discEdge =
+        along < WORM_TANK_OFFSET ? std::sqrt(WORM_TANK_OFFSET * WORM_TANK_OFFSET - along * along) : 0.0f;
+    return std::max(std::max(coneEdge, discEdge) - side, 0.0f);
+}
+
+// Only a way out may run through the cone: never back in once out, and no longer inside than a step off
+// its axis. Without that cap a melee in front still walks the whole cone to its stand behind the worm.
+bool SpewBlocksWalk(Position const& from, Position const& to, Position const& cone, float halfArc)
+{
+    float const fx = from.GetPositionX();
+    float const fy = from.GetPositionY();
+    float const length = from.GetExactDist2d(to);
+    bool inside = InSpewDanger(cone, fx, fy, halfArc);
+    float const budget = inside ? SpewSideExit(cone, fx, fy, halfArc) + SPEW_EXIT_SLACK : 0.0f;
+    uint32 const steps = std::max<uint32>(1, static_cast<uint32>(std::ceil(length / SPEW_PATH_STEP)));
+    for (uint32 step = 1; step <= steps; ++step)
+    {
+        float const share = static_cast<float>(step) / static_cast<float>(steps);
+        bool const in = InSpewDanger(cone, fx + (to.GetPositionX() - fx) * share,
+                                     fy + (to.GetPositionY() - fy) * share, halfArc);
+        if (in && (!inside || length * share > budget))
+            return true;
+
+        inside = in;
+    }
+
+    return inside;
 }
 
 bool PathBlocked(WormPath const& path, float x, float y, bool poolsOnly)
@@ -1326,6 +1376,10 @@ bool PathBlocked(WormPath const& path, float x, float y, bool poolsOnly)
 
     for (Position const& worm : path.sweeps)
         if (CircleBlocksWalk(path.from, to, worm, WORM_SWEEP_PATH_RADIUS))
+            return true;
+
+    for (Position const& cone : path.cones)
+        if (SpewBlocksWalk(path.from, to, cone, path.coneArc))
             return true;
 
     return false;
@@ -1500,6 +1554,8 @@ void DealBileScatter(PlayerbotAI* botAI, Map* map, JormungarsState& state, uint3
             if (IsUp(worm) && worm.mobile && worm.spewArmed)
                 accept.cones.push_back(worm.pos);
         accept.coneArc = halfArc + WORM_SPEW_CLEAR_PAD;
+        accept.path.cones = accept.cones;
+        accept.path.coneArc = accept.coneArc;
         auto const safe = [&accept](float x, float y) { return AcceptFailure(accept, x, y, true, false) == nullptr; };
 
         bool const clearHere =
@@ -1561,44 +1617,58 @@ enum class ReachHazard : uint8
     EndsIn    // its stop point lies in a pool, or for a bot with neither debuff in a Bile pulse
 };
 
-// Generic reach from where the bot stands, `reach melee` for melee and tanks and `reach spell` for the
-// rest, against the pools and pulses on the way to its stop point
+// Where generic reach stops on the line to the target, `reach melee` for melee and tanks and `reach spell`
+// for the rest. False when the bot is in reach already.
+bool GenericReachStop(PlayerbotAI* botAI, Player* bot, WormRole role, Unit* target, Position& stop, float& walk)
+{
+    float reach = 0.0f;
+    if (role == WormRole::Melee || role == WormRole::Tank)
+    {
+        if (bot->IsWithinMeleeRange(target))
+            return false;
+
+        reach = bot->GetMeleeRange(target) - 1.0f;
+    }
+    else
+    {
+        float const range = botAI->GetRange("spell") + CONTACT_DISTANCE;
+        if (bot->IsWithinCombatRange(target, range))
+            return false;
+
+        reach = range + bot->GetCombatReach() + target->GetCombatReach() - 1.0f;
+    }
+
+    float const dist = target->GetExactDist2d(bot);
+    if (dist <= reach)
+        return false;
+
+    float const share = reach / dist;
+    stop = Position(target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * share,
+                    target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * share,
+                    bot->GetPositionZ());
+    walk = dist - reach;
+    return true;
+}
+
+// Generic reach from where the bot stands against the pools and pulses on the way to its stop point
 ReachHazard ReachThroughHazard(PlayerbotAI* botAI, Player* bot, JormungarsState const& state, WormRole role,
                                Unit* target, BeastsTankDuty duty, bool heldOut, uint32 now)
 {
     if (duty != BeastsTankDuty::None || !target || !target->IsAlive())
         return ReachHazard::None;
 
-    bool const melee = role == WormRole::Melee || role == WormRole::Tank;
     // The Bile reach guard already keeps a held-out melee carrier off the stack
-    if (melee && heldOut)
+    if ((role == WormRole::Melee || role == WormRole::Tank) && heldOut)
         return ReachHazard::None;
 
-    float stop = 0.0f;
-    if (melee)
-    {
-        if (bot->IsWithinMeleeRange(target))
-            return ReachHazard::None;
-
-        stop = bot->GetMeleeRange(target) - 1.0f;
-    }
-    else
-    {
-        float const range = botAI->GetRange("spell") + CONTACT_DISTANCE;
-        if (bot->IsWithinCombatRange(target, range))
-            return ReachHazard::None;
-
-        stop = range + bot->GetCombatReach() + target->GetCombatReach() - 1.0f;
-    }
-
-    float const dist = target->GetExactDist2d(bot);
+    Position stop;
+    float walk = 0.0f;
     // Past the search radius the reposition can't find a spot in reach either, so generic reach walks it
-    if (dist <= stop || dist - stop > WORM_SEARCH_RADIUS)
+    if (!GenericReachStop(botAI, bot, role, target, stop, walk) || walk > WORM_SEARCH_RADIUS)
         return ReachHazard::None;
 
-    float const share = stop / dist;
-    float const x = target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * share;
-    float const y = target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * share;
+    float const x = stop.GetPositionX();
+    float const y = stop.GetPositionY();
     for (WormPool const& pool : state.pools)
         if (pool.pos.GetExactDist2d(x, y) < pool.radiusSoon + WORM_POOL_TRIGGER_PAD)
             return ReachHazard::EndsIn;
@@ -2332,6 +2402,11 @@ bool GetWormMovePlan(PlayerbotAI* botAI, WormMovePlan& plan)
     // On 10N the 60 degree cone plus the pad covers the whole disc round a mobile worm's tank, where a
     // cure walk ends. Just outside the real cone is safe, and urgency covers a Spew being cast.
     accept->coneArc = cureWalk ? halfArc : halfArc + WORM_SPEW_CLEAR_PAD;
+    // A cure walk races Toxin's paralysis, so only a Spew already under way sends it round
+    for (WormRead const& worm : state->worms)
+        if (IsUp(worm) && worm.mobile && (cureWalk ? worm.spewing : worm.spewArmed))
+            accept->path.cones.push_back(worm.pos);
+    accept->path.coneArc = accept->coneArc;
     accept->partnerReach = cureWalk;
     accept->partnerReachYd = plan.partnerReach;
     accept->partnerPos = plan.partnerPos;
@@ -2644,6 +2719,35 @@ bool WormReachCrossesPool(PlayerbotAI* botAI)
 
     auto const held = state->reachHolds.try_emplace(self, now).first;
     return getMSTimeDiff(held->second, now) < WORM_REACH_HOLD_MS;
+}
+
+bool WormReachIntoSpew(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive())
+        return false;
+
+    JormungarsState* state = Refresh(botAI);
+    if (!state || !state->engaged || GetBeastsTankDuty(botAI) != BeastsTankDuty::None)
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive())
+        return false;
+
+    WormMember const* me = FindMember(*state, bot->GetGUID());
+    Position stop;
+    float walk = 0.0f;
+    if (!GenericReachStop(botAI, bot, me ? me->role : RoleOf(bot), target, stop, walk))
+        return false;
+
+    float const coneArc = WormSpewHalfArc(botAI) + WORM_SPEW_CLEAR_PAD;
+    for (WormRead const& worm : state->worms)
+        if (IsUp(worm) && worm.mobile && worm.spewArmed &&
+            SpewBlocksWalk(bot->GetPosition(), stop, worm.pos, coneArc))
+            return true;
+
+    return false;
 }
 
 Player* GetWormToxinHealTarget(PlayerbotAI* botAI)

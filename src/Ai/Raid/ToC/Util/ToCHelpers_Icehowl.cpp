@@ -63,6 +63,7 @@ struct IcehowlChargeState
     bool memoValid = false;  // 0 is a real getMSTime value
 
     bool inCycle = false;
+    uint32 cycleMs = 0;
     uint32 lastPassiveMs = 0;
     ObjectGuid gazeTarget;
     bool frozen = false;
@@ -159,6 +160,7 @@ IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
     {
         ResetCycle(state);
         state.inCycle = true;
+        state.cycleMs = now;
     }
 
     state.lastPassiveMs = now;
@@ -819,6 +821,16 @@ bool IcehowlChargeLatched(PlayerbotAI* botAI, Position& start, Position& end)
     start = state->start;
     end = state->end;
     return true;
+}
+
+bool IcehowlChargeCycleActive(PlayerbotAI* botAI)
+{
+    IcehowlChargeState const* state = RefreshCharge(botAI);
+    if (!state || !state->inCycle)
+        return false;
+
+    // Nothing latches before the gaze, so that stretch gets a latch's cap from the jump
+    return state->latched || getMSTimeDiff(state->cycleMs, getMSTime()) <= CHARGE_LATCH_MAX_MS;
 }
 
 float DistanceToIcehowlCharge(PlayerbotAI* botAI, float x, float y)

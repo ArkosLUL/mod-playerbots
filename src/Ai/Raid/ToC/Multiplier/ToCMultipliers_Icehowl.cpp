@@ -16,13 +16,13 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// The pool exit keeps off the lane itself: the Massive Crash knockback lands the raid at the wall,
-// where the heroic pools are
+// The pool walks mind a latched lane themselves, and the crash stuns a bot wherever it stands, pool or not
 bool CompetesWithChargeDodge(Action* action)
 {
     if (dynamic_cast<MovementAction*>(action))
         return !dynamic_cast<AttackAction*>(action) && !dynamic_cast<IcehowlClearChargePathAction*>(action) &&
-               !dynamic_cast<NorthrendWormsLeavePoolAction*>(action);
+               !dynamic_cast<NorthrendWormsLeavePoolAction*>(action) &&
+               !dynamic_cast<NorthrendWormsRepositionAction*>(action);
 
     if (!dynamic_cast<CastSpellAction*>(action))
         return false;
@@ -44,9 +44,7 @@ float IcehowlChargeGuardMultiplier::GetValue(Action* action)
     if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))
         return 1.0f;
 
-    Position start;
-    Position end;
-    return IcehowlChargeLatched(botAI, start, end) ? 0.0f : 1.0f;
+    return IcehowlChargeCycleActive(botAI) ? 0.0f : 1.0f;
 }
 
 // SetBehindTargetAction is a CombatFormationMoveAction too

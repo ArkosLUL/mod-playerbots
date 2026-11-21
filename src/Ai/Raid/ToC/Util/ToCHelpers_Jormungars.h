@@ -286,6 +286,9 @@ void BackOffWormSearch(PlayerbotAI* botAI);     // the plan stays quiet on non-u
 // reach melee or reach spell would walk this bot through a pool or stop it in one (or a Bile pulse, with
 // neither debuff). With no way round, only a stop inside counts, for WORM_REACH_HOLD_MS at most.
 bool WormReachCrossesPool(PlayerbotAI* botAI);
+// reach melee, reach spell or a charge would walk this bot (no Beasts duty) into an armed mobile worm's
+// Spew, by the reposition's path test
+bool WormReachIntoSpew(PlayerbotAI* botAI);
 
 // Toxin no Bile can cure (no worm engaged, or nobody carries Bile) ticks on to 60 s, so each such carrier
 // gets one healer bot, nearest first, latched till its Toxin ends.

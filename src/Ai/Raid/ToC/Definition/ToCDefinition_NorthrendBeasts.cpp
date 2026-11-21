@@ -41,6 +41,10 @@ void DefineNorthrendBeasts(EncounterBuilder& e)
             {"reach melee", "reach spell"});
     // reach walks a straight line through the pool, the reposition takes the bot round it instead
     e.Block("northrend worms pool reach guard", Role::Any, WormReachCrossesPool, 0, {"reach melee", "reach spell"});
+    // holds even with no way round, unlike the pool guard: the cone disarms within seconds, and reach
+    // would walk melee out front straight down it
+    e.Block("northrend worms spew reach guard", Role::Any, WormReachIntoSpew, Family::Charge,
+            {"reach melee", "reach spell"});
     e.Block("northrend worms follow guard", Role::Any, WormEngaged, Family::Follow);
 }
 }  // namespace
