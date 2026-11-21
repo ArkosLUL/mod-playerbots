@@ -126,6 +126,10 @@ public:
     PlayerbotAI* GetPlayerbotAI(Player* player);
     PlayerbotMgr* GetPlayerbotMgr(Player* player);
 
+    // World thread. A headless bot acting as a master never gets OnSessionUpdate, so its alts' packets
+    // and teleport acks are drained here instead.
+    void UpdateHeadlessMasterSessions();
+
 private:
     PlayerbotsMgr() = default;
     ~PlayerbotsMgr() = default;

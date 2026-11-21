@@ -4,7 +4,7 @@
     .dc test status
     .dc test stop
 
-Run records are JSON lines in dc_testruns.jsonl in the worldserver's working directory. Only this file
+Run records are JSON lines in DC's dc_testruns.jsonl (path set by DC_TESTRUNS_FILE). Only this file
 parses DC output, so a change on DC's side is a change here.
 """
 from __future__ import annotations

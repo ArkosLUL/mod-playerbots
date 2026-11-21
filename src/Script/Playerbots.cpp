@@ -580,6 +580,7 @@ public:
     {
         PlayerbotHolder::UpdatePendingLogins();  // Headless sessions whose login holder is in flight
         sRandomPlayerbotMgr.UpdateSessions();  // Per-bot packet queues, world thread only
+        PlayerbotsMgr::instance().UpdateHeadlessMasterSessions();
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
         sBisDatasetMgr.Update(diff);

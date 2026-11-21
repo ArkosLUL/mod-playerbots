@@ -36,8 +36,9 @@ from report import PullRow, State, render
 
 CORE = REPO.parents[1]
 MODULE_REPO = CORE / "modules" / "mod-playerbots"
-# The worldserver's working directory in the container is the image's WORKDIR
-DC_RUNS_FILE = "/azerothcore/dc_testruns.jsonl"
+# Expects the server env to set DC_TESTRUNS_FILE onto the bind-mounted logs volume: DC's default, its
+# working directory, sits in the container layer and is wiped on every recreate.
+DC_RUNS_FILE = "/azerothcore/env/dist/logs/dc/dc_testruns.jsonl"
 # A trace closes up to Obs.IdleCloseSeconds (30 s) after its pull, so wait that out before reading
 SETTLE_S = 45.0
 

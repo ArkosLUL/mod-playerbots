@@ -1922,6 +1922,25 @@ PlayerbotAI* PlayerbotsMgr::GetPlayerbotAI(Player* player)
     return nullptr;
 }
 
+void PlayerbotsMgr::UpdateHeadlessMasterSessions()
+{
+    // A logout inside UpdateSessions can destroy a PlayerbotMgr, so look each one up again
+    std::vector<ObjectGuid> masters;
+    for (auto const& [guid, mgr] : _playerbotsMgrMap)
+        if (sRandomPlayerbotMgr.GetPlayerBot(guid))
+            masters.push_back(guid);
+
+    for (ObjectGuid const& guid : masters)
+    {
+        auto itr = _playerbotsMgrMap.find(guid);
+        if (itr == _playerbotsMgrMap.end())
+            continue;
+
+        if (PlayerbotMgr* mgr = dynamic_cast<PlayerbotMgr*>(itr->second))
+            mgr->UpdateSessions();
+    }
+}
+
 PlayerbotMgr* PlayerbotsMgr::GetPlayerbotMgr(Player* player)
 {
     if (!(sPlayerbotAIConfig.Enabled) || !player)
