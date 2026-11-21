@@ -9,6 +9,8 @@ What the generic views miss here:
 - **A kill is not a hard mode kill.** Hard mode needs the Heart dead inside a window. If it survives
   all three, XT still dies to the damage it passes on, so the kill counts with `hardmode` on in the
   header and Heartbreak never landed.
+- **Hunters can't shoot the Heart from a ring slot.** Its 22.5 yd combat reach puts their shot minimum at
+  30.3 yd, so each window prints the hunters' damage on it against the ranged median.
 - **Adds come from the pile, not from XT.** A pile only summons while XT stands outside 90 yd plus
   both combat reaches, so where the tank holds him decides which piles spawn. In the 25-man traces
   piles up to 105 yd off stayed quiet and 108 yd or more summoned, hence the distances per window.
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import collections
 import pathlib
+import statistics
 import sys
 
 # Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
@@ -43,7 +46,9 @@ ADDS = {NPC_SCRAPBOT: "Scrapbot", NPC_PUMMELLER: "Pummeller", NPC_BOOMBOT: "Boom
 TRASH = {34267, 34269, 34271, 34273, 34288}
 
 SPELL_HEART_PHASE = 37751
+SPELL_STAND = 37752
 HEARTBREAK = (64193, 65737)
+CLASS_HUNTER = 3
 
 # core data/sql/updates/db_world/2026_07_04_03.sql
 PILES = {
@@ -85,21 +90,54 @@ def heartbreak_at(trace: Trace) -> int | None:
     return None
 
 
-def heart_windows(trace: Trace) -> list[tuple[int, float]]:
-    """(start, lowest Heart hp %) per window, from XT's own heart phase casts."""
-    starts = [rec["t"] for rec in trace.of("cast")
-              if rec.get("sp") == SPELL_HEART_PHASE and entry(trace, rec.get("s")) == NPC_XT002]
+def heart_windows(trace: Trace) -> list[tuple[int, float, float]]:
+    """(start, stop, lowest Heart hp %) per window, from XT's own submerge and stand casts.
+
+    The window shuts on the stand, not on the next submerge: the hidden Heart still takes splash in between,
+    and that hp is gone by the next window's full heal.
+    """
+    casts = [rec for rec in trace.of("cast") if entry(trace, rec.get("s")) == NPC_XT002]
+    starts = [rec["t"] for rec in casts if rec.get("sp") == SPELL_HEART_PHASE]
+    stands = [rec["t"] for rec in casts if rec.get("sp") == SPELL_STAND]
     out = []
     for index, start in enumerate(starts):
         stop = starts[index + 1] if index + 1 < len(starts) else float("inf")
+        stop = min([t for t in stands if t > start] + [stop])
         low = 100.0
         for snap in frames(trace):
             if start <= snap["t"] < stop:
                 for row in snap.get("u", []):
                     if entry(trace, row[0]) == NPC_HEART:
                         low = min(low, row[5])
-        out.append((start, low))
+        out.append((start, stop, low))
     return out
+
+
+def heart_damage(trace: Trace, start: float, stop: float) -> collections.Counter:
+    """Damage per roster member while it had the Heart targeted, pets folded in, from the `dealt` column."""
+    roster = {member["g"] for member in trace.header.get("roster", [])}
+    before, out = {}, collections.Counter()
+    for snap in frames(trace):
+        for row in snap.get("u", []):
+            if row[0] not in roster or len(row) < 12:
+                continue
+            if row[0] in before and start <= snap["t"] <= stop and entry(trace, row[7]) == NPC_HEART:
+                out[row[0]] += row[11] - before[row[0]]
+            before[row[0]] = row[11]
+    return out
+
+
+def hunters_line(trace: Trace, start: float, stop: float) -> str | None:
+    """Hunters' Heart damage against the other ranged, the check on whether they could shoot it."""
+    damage = heart_damage(trace, start, stop)
+    classes = {member["g"]: member.get("c") for member in trace.header.get("roster", [])}
+    ranged = [guid for guid in classes if trace.role(guid) == "ranged"]
+    hunters = sorted((damage[guid] for guid in ranged if classes[guid] == CLASS_HUNTER), reverse=True)
+    others = [damage[guid] for guid in ranged if classes[guid] != CLASS_HUNTER]
+    if not hunters or not others:
+        return None
+    shown = ", ".join(f"{value / 1000:.0f}k" for value in hunters)
+    return f"    hunters on it {shown} against a ranged median {statistics.median(others) / 1000:.0f}k"
 
 
 def show_banner(trace: Trace) -> None:
@@ -129,12 +167,15 @@ def show_heart(trace: Trace) -> None:
     if not windows:
         print("  no heart phase")
     spots = xt_frames(trace)
-    for start, low in windows:
+    for start, stop, low in windows:
         line = f"  window at {clock(start)}  lowest {low:.0f}%"
         spot = next(((x, y) for t, x, y in spots if t >= start), None)
         if spot:
             line += f"  XT at ({spot[0]:.0f}, {spot[1]:.0f}), piles {pile_distances(spot)} yd"
         print(line)
+        hunters = hunters_line(trace, start, stop)
+        if hunters:
+            print(hunters)
     broke = heartbreak_at(trace)
     print(f"  Heartbreak at {clock(broke)}" if broke is not None else "  Heart survived every window")
 

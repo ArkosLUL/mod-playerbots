@@ -62,6 +62,18 @@ inline constexpr float ULDUAR_XT002_RANGED_RING_OUTER_X = 9.0f;
 inline constexpr float ULDUAR_XT002_RANGED_RING_OUTER_Y = 12.0f;
 inline constexpr size_t ULDUAR_XT002_RANGED_RING_INNER_SLOTS = 6;
 
+// XT-002: hunters get an arc round XT, not a ring slot. Shots fail inside 5 yd plus melee range, and the Heart's
+// 22.5 yd combat reach puts that at 30.3 yd, past every ring slot. Plus the slot tolerance.
+inline constexpr float ULDUAR_XT002_HUNTER_ARC_RADIUS = 37.0f;
+
+// XT-002: arc bearings off XT's spawn, west turning north. Further south the Searing Light spot is inside its
+// 12 yd clearance, further north the northern bomb lot is inside Gravity Bomb's 20 yd pull. A fourth hunter
+// starts the next row out.
+inline constexpr float ULDUAR_XT002_HUNTER_ARC_FIRST_BEARING_DEG = 175.0f;
+inline constexpr float ULDUAR_XT002_HUNTER_ARC_BEARING_STEP_DEG = 10.0f;
+inline constexpr size_t ULDUAR_XT002_HUNTER_ARC_SLOTS = 3;
+inline constexpr float ULDUAR_XT002_HUNTER_ARC_ROW_STEP = 6.0f;
+
 // XT-002 hard mode: default Void Zone parking grid, walked +x from its origin and then away from the raid in
 // y. Step is just over the Void Zone diameter so consecutive drops can't overlap.
 inline constexpr float ULDUAR_XT002_BOMB_GRID_STEP = 6.0f;
@@ -125,6 +137,7 @@ inline constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
 // the Heart outlived every window and no Heartbreak is coming.
 inline constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
 
+extern const Position ULDUAR_XT002_SPAWN;
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
 extern const Position ULDUAR_XT002_SEARING_LIGHT_SPOT;
@@ -171,7 +184,7 @@ bool IsXT002AddEngageable(Unit* xt002, Unit* unit);
 Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float botReach);
 
 // This bot's formation slot. Every bot sorts the same roster, so none needs telling; healers take the centre
-// and inner ring to keep the tank in range. False for melee and tanks, or without a group.
+// and inner ring to keep the tank in range, hunters the arc. False for melee and tanks, or without a group.
 bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out);
 
 // Every formation slot except this bot's own, as laid out before any Void Zone re-deal. Empty when the

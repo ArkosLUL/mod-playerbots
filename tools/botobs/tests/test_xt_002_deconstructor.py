@@ -99,6 +99,24 @@ class Heart(unittest.TestCase):
             "  window at 1:16.000  lowest 20%  XT at (887, -12), piles NE 80 SE 78 SW 125 NW 122 yd\n"
             "  Heart survived every window\n"))
 
+    def test_window_shuts_on_the_stand(self):
+        records = pull()
+        records.insert(-1, {"t": 106000, "e": "cast", "s": XT, "sp": 37752})
+        records.insert(-1, snap(110000, heart_hp=5.0))
+        self.assertIn("lowest 20%", printed(xt.show_heart, load(records)))
+
+    def test_hunters_are_set_against_the_ranged_median(self):
+        hunter, mage = 7703, 7704
+        records = pull()
+        records[0]["roster"] += [{"g": hunter, "n": "Fletcher", "r": "ranged", "c": 3, "h": 0},
+                                 {"g": mage, "n": "Sparks", "r": "ranged", "c": 8, "h": 0}]
+        for rec in records:
+            if rec.get("e") == "snap":
+                dealt = max(rec["t"] - 76000, 0)
+                rec["u"] += [[hunter, 850.0, -9.0, 409.8, 0, 100, 100, HEART, 0, 0, 0, dealt // 10],
+                             [mage, 866.0, -6.0, 409.8, 0, 100, 100, HEART, 0, 0, 0, dealt * 10]]
+        self.assertIn("hunters on it 1k against a ranged median 72k", printed(xt.show_heart, load(records)))
+
 
 class Trash(unittest.TestCase):
     def test_pack_pull_is_tied_to_the_pummeller(self):

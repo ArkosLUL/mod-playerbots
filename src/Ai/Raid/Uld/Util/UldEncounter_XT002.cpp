@@ -27,6 +27,7 @@
 using namespace EncounterHelpers;
 
 // XT-002 anchors. The tank spot sits just behind XT's spawn; the ranged spot keeps a 30 yd caster in range.
+const Position ULDUAR_XT002_SPAWN = Position(886.28f, -12.05f, 409.6f);
 const Position ULDUAR_XT002_MAINTANK_SPOT = Position(895.82f, -12.53954f, 409.68756f);
 const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
 // South-west so the 8 yd splash reaches neither the formation nor a bomb cell, and 38 yd from the melee stack,
@@ -154,15 +155,16 @@ Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float
     return nearest;
 }
 
-// Formation roster, in the order every bot derives. The dead keep their slots: indexing by the living
-// re-seats everyone behind a corpse mid-fight.
-static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
+// Formation roster, in the order every bot derives, with hunters split off for the arc. The dead keep their
+// slots: indexing by the living re-seats everyone behind a corpse mid-fight.
+static bool BuildXT002FormationMembers(Player* bot, std::vector<Player*>& ring, std::vector<Player*>& hunters)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return false;
 
-    out.clear();
+    ring.clear();
+    hunters.clear();
 
     // Heal flag read once per member, not on both sides of every compare in the sort.
     std::vector<std::pair<bool, Player*>> ranked;
@@ -180,11 +182,17 @@ static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
         if (!heal && !PlayerbotAI::IsRangedDps(member))
             continue;
 
-        ranked.emplace_back(heal, member);
+        if (!heal && member->getClass() == CLASS_HUNTER)
+            hunters.push_back(member);
+        else
+            ranked.emplace_back(heal, member);
     }
 
-    if (ranked.empty())
+    if (ranked.empty() && hunters.empty())
         return false;
+
+    std::sort(hunters.begin(), hunters.end(),
+              [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
 
     // Healers ahead of ranged dps, then guid: every bot derives the same order, and healers land on the centre
     // and inner ring, nearest the tank spot.
@@ -197,9 +205,23 @@ static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
               });
 
     for (std::pair<bool, Player*> const& entry : ranked)
-        out.push_back(entry.second);
+        ring.push_back(entry.second);
 
     return true;
+}
+
+static Position XT002HunterSlotPoint(size_t index)
+{
+    float const radius = ULDUAR_XT002_HUNTER_ARC_RADIUS +
+                         ULDUAR_XT002_HUNTER_ARC_ROW_STEP * static_cast<float>(index / ULDUAR_XT002_HUNTER_ARC_SLOTS);
+    float const bearingDeg = ULDUAR_XT002_HUNTER_ARC_FIRST_BEARING_DEG -
+                             ULDUAR_XT002_HUNTER_ARC_BEARING_STEP_DEG *
+                                 static_cast<float>(index % ULDUAR_XT002_HUNTER_ARC_SLOTS);
+    float const bearing = bearingDeg * static_cast<float>(M_PI) / 180.0f;
+
+    return Position(ULDUAR_XT002_SPAWN.GetPositionX() + std::cos(bearing) * radius,
+                    ULDUAR_XT002_SPAWN.GetPositionY() + std::sin(bearing) * radius,
+                    ULDUAR_XT002_RANGED_SPOT.GetPositionZ());
 }
 
 // Raw formation geometry for one slot, no ground or collision pass.
@@ -245,8 +267,44 @@ static Position XT002RingSlotPoint(size_t slot, size_t total)
 bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
 {
     std::vector<Player*> members;
-    if (!BuildXT002RingMembers(bot, members))
+    std::vector<Player*> hunters;
+    if (!BuildXT002FormationMembers(bot, members, hunters))
         return false;
+
+    // Every ranged bot and healer asks for this every tick, so skip the grid scan until Heartbreak: nothing
+    // drops a puddle before it.
+    std::list<Creature*> voidZones;
+    if (IsXT002HeartbreakActive(bot, xt002))
+        bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+
+    auto const inVoidZone = [&voidZones](Position const& point)
+    {
+        for (Creature* voidZone : voidZones)
+            if (voidZone->GetExactDist2d(point.GetPositionX(), point.GetPositionY()) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+                return true;
+
+        return false;
+    };
+
+    auto const hunter = std::find(hunters.begin(), hunters.end(), bot);
+    if (hunter != hunters.end())
+    {
+        size_t const index = static_cast<size_t>(hunter - hunters.begin());
+
+        // Puddle on the spot: one row further out on the same bearing, still in range of XT.
+        Position spot = XT002HunterSlotPoint(index);
+        if (inVoidZone(spot))
+            spot = XT002HunterSlotPoint(index + ULDUAR_XT002_HUNTER_ARC_SLOTS);
+
+        out = ValidateFloorPoint(bot, spot);
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "xt002.slot",
+                                 "hunter " + std::to_string(index) + "/" + std::to_string(hunters.size()) + " " +
+                                     RaidObs::DescribeDerived(out));
+
+        return true;
+    }
 
     size_t slot = members.size();
     for (size_t i = 0; i < members.size(); ++i)
@@ -258,30 +316,13 @@ bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
 
     size_t const total = members.size();
 
-    // Every ranged bot and healer asks for this every tick, so skip the grid scan until Heartbreak: nothing
-    // drops a puddle before it.
-    std::list<Creature*> voidZones;
-    if (IsXT002HeartbreakActive(bot, xt002))
-        bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
-
     // Index into the slots clear of Consumption: every bot sees the same puddles, so they agree on the new
     // layout. A bot left without one keeps its own, and the hazard dodge, which outranks the anchor, moves it.
     std::vector<Position> clear;
     for (size_t i = 0; i < total; ++i)
     {
         Position const candidate = XT002RingSlotPoint(i, total);
-        bool blocked = false;
-        for (Creature* voidZone : voidZones)
-        {
-            if (voidZone->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY()) <
-                ULDUAR_XT002_VOID_ZONE_RADIUS)
-            {
-                blocked = true;
-                break;
-            }
-        }
-
-        if (!blocked)
+        if (!inVoidZone(candidate))
             clear.push_back(candidate);
     }
 
@@ -303,12 +344,17 @@ std::vector<Position> GetXT002OtherFormationSlots(Player* bot)
 {
     std::vector<Position> slots;
     std::vector<Player*> members;
-    if (!BuildXT002RingMembers(bot, members))
+    std::vector<Player*> hunters;
+    if (!BuildXT002FormationMembers(bot, members, hunters))
         return slots;
 
     for (size_t i = 0; i < members.size(); ++i)
         if (members[i] != bot)
             slots.push_back(XT002RingSlotPoint(i, members.size()));
+
+    for (size_t i = 0; i < hunters.size(); ++i)
+        if (hunters[i] != bot)
+            slots.push_back(XT002HunterSlotPoint(i));
 
     return slots;
 }
