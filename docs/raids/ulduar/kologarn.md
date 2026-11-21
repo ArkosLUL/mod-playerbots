@@ -45,7 +45,8 @@ the eyebeam" ever conflicting.
 Boss at `(1797.15, -24.40, 448.74)`, `o≈π`: **entrance is -X**, arms split along **Y**. The walkway
 runs from the Shattered Walkway Door (x 1740.84) to the broken span at x 1782, past which
 `boss_kologarn_pit_kill_bunny` instakills inside x 1782–1832 / y -56…8 / z 400–439. West of x 1750
-the floor narrows to the door corridor (bots walk y -33…-15); past the door, stairs drop ~20 yd into
+the floor narrows to the door corridor (bots walk y -33…-15), and its south edge runs diagonally from
+(1750, -34) to (1760, -48); past the door, stairs drop ~20 yd into
 the antechamber, whose trash joins only when a bot walks down. A `MoveTo` to an off-floor point
 still paths: out the door, down to the floor below it.
 

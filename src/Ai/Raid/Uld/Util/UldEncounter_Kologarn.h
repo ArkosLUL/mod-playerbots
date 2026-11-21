@@ -44,7 +44,7 @@ inline constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 inline constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
 
 // Every destination is clamped to this walkway box: past x 1782 the pit bunny instakills. Entrance is -X.
-// The box is wider than the floor: west of x 1750 only the door corridor, y -33 to -15, is walkway.
+// Box isn't the floor: its west end outside the door corridor and its southwest corner are off the walkway.
 inline constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
 inline constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
 inline constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MIN = -48.0f;

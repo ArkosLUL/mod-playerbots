@@ -32,7 +32,8 @@ second pack at 2:22 the same way.
 
 Cause: `GetKologarnEyebeamEscapeStep` (`UldEncounter_Kologarn.cpp`) clamps steps to the box
 x 1745-1780 / y -48..-2, but the floor is narrower: west of x 1750 only the door corridor, y -33..-15,
-is walkway (walked extent over 4 traces). Each of the 7 departures followed an accepted
+is walkway, and the south edge runs diagonally from (1750, -34) to (1760, -48) (walked extent over 4
+traces). Each of the 7 departures followed an accepted
 `kologarn eyebeam action` move (forced) to (1746.8-1750.8, -2..-6) or (.., -41..-48); e.g. uld2 Uldyao
 0:15.473 -> (1748.0, -2.0, 448.0), held 4.7 s, walked (1758, -2) -> (1749, -15) -> door -> stairs ->
 (1675, -6, 427). `PathGenerator` resolves an off-floor end point to the nearest poly within 50 yd
@@ -58,4 +59,4 @@ all after the trash joined.
 
 **Next window should show.** `--eyebeam`: "runs that left the walkway: 0 of N", the westmost x of a
 run 1745 or more; `--trash`: "never engaged" if the trash stays; no `kologarn eyebeam action` move to
-a point at x < 1750 outside y -33..-15. Deaths then show Kologarn's own mechanics.
+a point at x < 1750 outside y -33..-15, or south of that diagonal edge. Deaths then show Kologarn's own mechanics.
