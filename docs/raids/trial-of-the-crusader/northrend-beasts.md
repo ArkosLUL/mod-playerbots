@@ -497,6 +497,10 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     for 4 s (`WORM_REACH_HOLD_MS`) per streak, after which generic reach walks it in. Otherwise an
     escape released on arrival walked back into its pool or pulse every ~1.4 s (25H 2026-10-28, two
     ranged for 24 s). A held-out melee Bile carrier is the Bile guard's.
+  - **`northrend worms spew reach guard`** zeroes `reach melee`, `reach spell` and the charges for a
+    bot holding no beast while that walk to its stop point fails the Spew path test (armed cone
+    + 12°), at any distance and with no way round: the cone disarms within seconds. Once the
+    reposition backed off, 25H melee out front walked 18-20 yd into a spewing cone (2026-11-21).
   - **`northrend worms follow guard`** zeroes follow for every bot while a worm is engaged: a
     submerge drops every target, and the out-of-combat `follow` fought the spread every 0.3-1 s
     (Malygos and Yogg-Saron precedent).

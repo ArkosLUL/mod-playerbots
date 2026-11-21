@@ -1617,44 +1617,58 @@ enum class ReachHazard : uint8
     EndsIn    // its stop point lies in a pool, or for a bot with neither debuff in a Bile pulse
 };
 
-// Generic reach from where the bot stands, `reach melee` for melee and tanks and `reach spell` for the
-// rest, against the pools and pulses on the way to its stop point
+// Where generic reach stops on the line to the target, `reach melee` for melee and tanks and `reach spell`
+// for the rest. False when the bot is in reach already.
+bool GenericReachStop(PlayerbotAI* botAI, Player* bot, WormRole role, Unit* target, Position& stop, float& walk)
+{
+    float reach = 0.0f;
+    if (role == WormRole::Melee || role == WormRole::Tank)
+    {
+        if (bot->IsWithinMeleeRange(target))
+            return false;
+
+        reach = bot->GetMeleeRange(target) - 1.0f;
+    }
+    else
+    {
+        float const range = botAI->GetRange("spell") + CONTACT_DISTANCE;
+        if (bot->IsWithinCombatRange(target, range))
+            return false;
+
+        reach = range + bot->GetCombatReach() + target->GetCombatReach() - 1.0f;
+    }
+
+    float const dist = target->GetExactDist2d(bot);
+    if (dist <= reach)
+        return false;
+
+    float const share = reach / dist;
+    stop = Position(target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * share,
+                    target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * share,
+                    bot->GetPositionZ());
+    walk = dist - reach;
+    return true;
+}
+
+// Generic reach from where the bot stands against the pools and pulses on the way to its stop point
 ReachHazard ReachThroughHazard(PlayerbotAI* botAI, Player* bot, JormungarsState const& state, WormRole role,
                                Unit* target, BeastsTankDuty duty, bool heldOut, uint32 now)
 {
     if (duty != BeastsTankDuty::None || !target || !target->IsAlive())
         return ReachHazard::None;
 
-    bool const melee = role == WormRole::Melee || role == WormRole::Tank;
     // The Bile reach guard already keeps a held-out melee carrier off the stack
-    if (melee && heldOut)
+    if ((role == WormRole::Melee || role == WormRole::Tank) && heldOut)
         return ReachHazard::None;
 
-    float stop = 0.0f;
-    if (melee)
-    {
-        if (bot->IsWithinMeleeRange(target))
-            return ReachHazard::None;
-
-        stop = bot->GetMeleeRange(target) - 1.0f;
-    }
-    else
-    {
-        float const range = botAI->GetRange("spell") + CONTACT_DISTANCE;
-        if (bot->IsWithinCombatRange(target, range))
-            return ReachHazard::None;
-
-        stop = range + bot->GetCombatReach() + target->GetCombatReach() - 1.0f;
-    }
-
-    float const dist = target->GetExactDist2d(bot);
+    Position stop;
+    float walk = 0.0f;
     // Past the search radius the reposition can't find a spot in reach either, so generic reach walks it
-    if (dist <= stop || dist - stop > WORM_SEARCH_RADIUS)
+    if (!GenericReachStop(botAI, bot, role, target, stop, walk) || walk > WORM_SEARCH_RADIUS)
         return ReachHazard::None;
 
-    float const share = stop / dist;
-    float const x = target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * share;
-    float const y = target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * share;
+    float const x = stop.GetPositionX();
+    float const y = stop.GetPositionY();
     for (WormPool const& pool : state.pools)
         if (pool.pos.GetExactDist2d(x, y) < pool.radiusSoon + WORM_POOL_TRIGGER_PAD)
             return ReachHazard::EndsIn;
@@ -2705,6 +2719,35 @@ bool WormReachCrossesPool(PlayerbotAI* botAI)
 
     auto const held = state->reachHolds.try_emplace(self, now).first;
     return getMSTimeDiff(held->second, now) < WORM_REACH_HOLD_MS;
+}
+
+bool WormReachIntoSpew(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || !bot->IsAlive())
+        return false;
+
+    JormungarsState* state = Refresh(botAI);
+    if (!state || !state->engaged || GetBeastsTankDuty(botAI) != BeastsTankDuty::None)
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive())
+        return false;
+
+    WormMember const* me = FindMember(*state, bot->GetGUID());
+    Position stop;
+    float walk = 0.0f;
+    if (!GenericReachStop(botAI, bot, me ? me->role : RoleOf(bot), target, stop, walk))
+        return false;
+
+    float const coneArc = WormSpewHalfArc(botAI) + WORM_SPEW_CLEAR_PAD;
+    for (WormRead const& worm : state->worms)
+        if (IsUp(worm) && worm.mobile && worm.spewArmed &&
+            SpewBlocksWalk(bot->GetPosition(), stop, worm.pos, coneArc))
+            return true;
+
+    return false;
 }
 
 Player* GetWormToxinHealTarget(PlayerbotAI* botAI)

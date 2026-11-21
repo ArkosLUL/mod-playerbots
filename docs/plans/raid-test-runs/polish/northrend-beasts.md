@@ -49,6 +49,12 @@ too. Measured: the crash knockback moved no bot in 6 crashes over the 3 traces (
 - toc3 Toczaz (third tank, blood DK): Icehowl's duty bounced Toczaa → Toczaz → Toczab → Toczaz in
   5:18-5:24; died to 2 melee + Ferocious Butt (79k in 1.7 s).
 
+**Review fix.** With the stand walk blocked the reposition backs off 1 s, and generic `reach melee`
+(rel 21) took over: the same melee walked 18-20 yd into spewing cones by it (toc3 4:17.40 Toczat,
+4:18.60 Toczao; toc1 4:21.28-4:21.37 six melee). New `northrend worms spew reach guard` zeroes
+`reach melee`, `reach spell` and the charges while that walk fails the Spew path test.
+
 **Next window should show.** No Spew deaths; no `nb.wormmove` stand walk crossing an armed cone (watch
-`nb.wormhold release path` counts, and `none melee` backoffs while armed). No `disengage`/`blink`/
+`nb.wormhold release path` counts, and `none melee` backoffs while armed), and `spew reach guard`
+vetoes instead of `reach melee` walks into a spewing cone. No `disengage`/`blink`/
 `flee` OK rows between `nb.charge` 1 and 2, no Slime Pool death in Icehowl's stage.
