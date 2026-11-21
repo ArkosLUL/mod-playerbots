@@ -44,7 +44,10 @@ the eyebeam" ever conflicting.
 
 Boss at `(1797.15, -24.40, 448.74)`, `o≈π`: **entrance is -X**, arms split along **Y**. The walkway
 runs from the Shattered Walkway Door (x 1740.84) to the broken span at x 1782, past which
-`boss_kologarn_pit_kill_bunny` instakills inside x 1782–1832 / y -56…8 / z 400–439.
+`boss_kologarn_pit_kill_bunny` instakills inside x 1782–1832 / y -56…8 / z 400–439. West of x 1750
+the floor narrows to the door corridor (bots walk y -33…-15); past the door, stairs drop ~20 yd into
+the antechamber, whose trash joins only when a bot walks down. A `MoveTo` to an off-floor point
+still paths: out the door, down to the floor below it.
 
 ## Mechanics
 
@@ -58,7 +61,10 @@ thresholds, so no AoE action exists.
 
 **Focused Eyebeam** is a real run, not a teleport, re-stepped each tick: -X toward the entrance, then
 along the walkway, then back toward the boss. Turning that corner matters — the eye outlives the ~5s
-of -X runway. Bystanders `FleePosition` off it. None of it needs the raid cheat.
+of -X runway. Bystanders `FleePosition` off it. None of it needs the raid cheat. Each step is cut
+where a navmesh ray from the bot leaves the floor (`Map::CheckCollisionAndGetValidCoords`); a failed
+or < 3 yd step is skipped. Clamped to the box alone, the box's off-floor corners sent 7 of 21 runs
+into the antechamber, every first wave among them, and its trash wiped the raid.
 
 **Petrifying Breath** gets its own `ACTION_EMERGENCY` guard sending the nearest tank, then nearest
 melee, into melee range whenever the body is uncovered. The swap handover is already covered by the
@@ -84,4 +90,10 @@ alive hunter raises it, and Aspect of the Wild 49071 is `APPLY_AREA_AURA_RAID` +
   pit is where bots fall in.
 - **Fall-from-floor teleport kept** — a pathing workaround, not a mechanic: a bot under the walkway
   is in the kill box and dies within a second, so there is no walk-back to attempt.
+
+## What a trace answers
+
+`tools/botobs/bosses/kologarn.py <trace>`, no probes: `--eyebeam` whom each wave chased and whether
+the run left the walkway; `--trash` each antechamber pack and the bot it first targeted; `--deaths`
+deaths by mechanic, split at the trash joining.
 
