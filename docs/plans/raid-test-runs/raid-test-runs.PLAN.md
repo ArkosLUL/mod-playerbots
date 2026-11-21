@@ -2,6 +2,25 @@
 
 Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is prepared.
 
+## Resume here
+
+The polish loop runs on the user's standing go ("Polish loop" below). Per boss, at the last update:
+
+| Boss | State | Next |
+|---|---|---|
+| Jaraxxus | done: 25h kills with 0/0/1 deaths, 10h kills with 0 | none |
+| Kologarn, Ignis | polished at 25n (round 1) | 10n check: one pull per pool |
+| XT-002 | round 2 merged (hunter arc, lust on the Heart) | test, then round 3; counts only with Heartbreak |
+| Northrend Beasts | round 3 merged (detour for the Toxin runner) | test, then round 4 (the mobile holder's drag loses threat: may be a user question) |
+| Twin Val'kyr | DC engages Fjola on the main tank after the intro (lane P) | first real pulls, then round 1 proper |
+| Razorscale, Iron Assembly, Auriaya, Hodir | round 1 lanes | merge, test |
+| Freya, Vezax, Algalon, Yogg-Saron, Thorim | DC rows merged, never pulled | smoke one pull each, then data on every pool |
+| Faction Champions, Mimiron | lane Q (`q-dc-champions-mimiron.PLAN.md`) | merge, navprobe, smoke |
+| Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment) | brief a DC lane |
+| Flame Leviathan | parked by the user | none |
+
+Mechanics: lanes run through one reusable Workflow script (lead, then a fresh reviewer when the lead committed; kinds `polish`, `dc`, `strategy`, `research`, `runner`): `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.js`, invoked with `args` naming the kind, tag, brief, worktree and branch (polish lanes also boss, slug, raid, round, report files and a note). Windows run `python tools/raidtest/raidtest.py window --jobs <file.json>` (no `-I`; `cap` is per window while `pulls` counts every build since the job's `head`, so `cap` must be at least `pulls`). Reports and job files of past windows lived in the session scratchpad and are gone; `raidtest.py report --boss <slug> --raid <raid> --head <sha> --pulls 10` rebuilds any view from the traces.
+
 ## Status
 
 | Step | State |
