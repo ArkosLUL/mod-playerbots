@@ -68,6 +68,10 @@ inline constexpr float ULDUAR_IGNIS_SCORCH_SPAWN_RANGE = 20.0f;
 inline constexpr float ULDUAR_IGNIS_TANK_RADIUS = 9.5f;
 inline constexpr float ULDUAR_IGNIS_TANK_SPOT_TOLERANCE = 2.0f;
 
+// Longest single move on the drag. An issued walk keeps going after he stops following, so this caps how far
+// the tank ends up from him when the drag breaks, well inside taunt range.
+inline constexpr float ULDUAR_IGNIS_TANK_DRAG_LEG = 5.0f;
+
 // Three slots 60 degrees apart, one step per Scorch, so the patches fan out instead of stacking.
 inline constexpr uint8 ULDUAR_IGNIS_TANK_ARC_SLOTS = 3;
 inline constexpr float ULDUAR_IGNIS_TANK_ARC_STEP = static_cast<float>(M_PI) / 3.0f;
@@ -144,6 +148,10 @@ Position GetIgnisWaterApproach(Player* tank, Position const& pool);
 // Arc slot around the anchor, advanced on each Scorch while Ignis is rooted. `boss` is the caller's GetIgnis
 // result, so it isn't looked up twice.
 Position GetIgnisMainTankPosition(Player* bot, Unit* boss);
+
+// Where the main tank's next move ends: the spot itself when it's inside Ignis' melee reach from where he
+// stands (arc steps on the anchor), else ULDUAR_IGNIS_TANK_DRAG_LEG along the line to it.
+Position GetIgnisMainTankLeg(Player* bot, Unit* boss, Position const& spot);
 
 // The 3 s window in which Ignis is rooted and rotation-locked. The patch lands when it ends.
 bool IsIgnisScorchWindow(Unit const* boss);
