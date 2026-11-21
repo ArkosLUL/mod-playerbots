@@ -14,7 +14,10 @@ The polish loop runs on the user's standing go ("Polish loop" below). Per boss, 
 | Northrend Beasts | round 3 merged (detour for the Toxin runner) | test, then round 4 (the mobile holder's drag loses threat: may be a user question) |
 | Twin Val'kyr | DC engages Fjola on the main tank after the intro (lane P) | first real pulls, then round 1 proper |
 | Razorscale | round 1 merged (`3a3e4866c`: each ranged bot its own fire-free spot on the stack circle) | test |
-| Iron Assembly, Auriaya, Hodir | round 1 lanes | merge, test |
+| Hodir | round 1 merged (`5f16288c8`: shed Biting Cold one stack sooner under Frozen Blows; no Misdirection while the shed is armed). Hard mode = no Shatter Chest 62501 cast before the kill (`hodir.py` banner) | test; **open user question** on off-tank deaths in Frozen Blows: (a) block the main tank's taunt, (b) alternate taunts on purpose, (c) a defensive cooldown per window; lane recommends (c) first |
+| Iron Assembly, Auriaya | round 1 lanes | merge, test |
+| Harness: unrefreshed pulls | "the boss engaged before the start step" means no refresh (low mana, Exhaustion from the previous run): Hodir uld2 (a Starfall hit the frozen helpers' ice blocks, which pulls him), Thorim (pack aggro) | runner: void such pulls; DC: move `uld-hodir`'s drop south to about (1998, -288), no ice block within 40 yd (navprobe first), and Thorim's drop off the pack |
+| Shared tools | `postmortem.py` and `raidtest/pulls.py` label a Biting Cold death "its own blow" (the victim casts the damage on itself) | fix in the shared death reader |
 | Harness: shared spread angle | `MovementAction::GetFollowAngle` (`src/Ai/Base/Actions/MovementActions.cpp` ~1001) reads the master's group; the DC driver is master but not in the group, so every bot gets angle 0 and every `MoveNear`/`MoveInside` caller stacks the raid on one point in harness pulls (Hodir, Yogg-Saron, Naxxramas, Sunwell, Black Temple, Tempest Keep use it) | a shared-code lane: fall back to the bot's own group when the master has none; then re-pull every boss using it |
 | Harness: Thorim drop | window 6: the arena pack engaged before the refresh (drop 18 yd from the nearest soldier) | DC lane: move the drop outside the pack's aggro |
 | Freya, Vezax, Algalon, Yogg-Saron, Thorim | DC rows merged, never pulled | smoke one pull each, then data on every pool |
