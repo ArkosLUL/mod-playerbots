@@ -53,9 +53,9 @@ What the generic views get wrong here, and what this reads instead:
   change-only notes too.
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
   side of `facing` at the cast's start. The cone then follows the worm's victim, so `--worms` also
-  prints how far the worm's facing swung over the Spew and how far each victim walked; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 till it
-  despawns (11 yd at 30 s on normal, 20 at 60 s on 25H), so `--worms` rebuilds its radius from its
-  first snapshot.
+  prints how far the worm's facing swung over the Spew and how far each victim walked; a Slime
+  Pool is a creature (35176) that grows 0.3 yd a second from 2 till it despawns (11 yd at 30 s on
+  normal, 20 at 60 s on 25H), so `--worms` rebuilds its radius from its first snapshot.
 - **A Spray's `cast` row is its start.** The splash lands on its target when the cast ends, `ct`
   later, so `--worms` reads who stood in it from the snapshot nearest that end. Its debuff arrives as
   one burst of applies 1-3 s after the row, so the first burst 0.8-4 s after it is who took it.

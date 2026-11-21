@@ -1924,6 +1924,14 @@ bool IsWormSpewing(PlayerbotAI* botAI, Unit* worm)
     return read && read->spewing;
 }
 
+bool IsWormSpewingAtOtherTank(PlayerbotAI* botAI, Unit* worm)
+{
+    Unit* victim = worm ? worm->GetVictim() : nullptr;
+    Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+    return victimPlayer && victimPlayer != botAI->GetBot() && IsBeastsTank(victimPlayer) &&
+           IsWormSpewing(botAI, worm);
+}
+
 bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
 {
     plan = WormDragPlan();

@@ -182,6 +182,8 @@ float WormMeleeRange(Unit* worm);
 float WormSpewHalfArc(PlayerbotAI* botAI);        // radians, half the cone the remapped tick uses
 // Its Spew is being cast or channelled, its cone following its victim all along
 bool IsWormSpewing(PlayerbotAI* botAI, Unit* worm);
+// Spewing at a tank other than this bot: a taunt then only swings the cone across the raid
+bool IsWormSpewingAtOtherTank(PlayerbotAI* botAI, Unit* worm);
 
 struct WormDragPlan
 {

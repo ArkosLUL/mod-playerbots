@@ -118,9 +118,17 @@ each victim with the yards it walked.
 - Slime Pool deaths in the worm stage (649_9 Tocyas: `reach spell` into the pool and `pool escape` every
   ~1.5 s for 8 s, then a 30 yd `cross` walk) — the pool reach guard's 4 s streak cap lets reach win.
 - toc3 Icehowl reached Berserk (8:39.9 at 24.9%) after the Spew wipe of the casters.
-- A non-holder victim (a healer on the emerge's threat wipe) still runs the Spew rule and drags the
-  cone with it; no death traced to it yet.
+- A non-holder victim still runs the Spew rule and drags the cone with it: a healer on the emerge's
+  threat wipe, or a tank with no worm duty, which now keeps the worm through the Spew (649_3_…875
+  Toczaz, duty `none` 4:36.41, `move 8 spew escape` 4:36.42, ~4° of swing). No death traced to it yet.
 
-**Next window should show.** Spew wedges with a tank victim: `swing` under ~10° and that victim walking
-~0 yd (no `drag` note within 3.5 s of a wedge); no taunt by the mobile holder mid Spew; no non-tank
-Spew tick 55-57 yd out; Spew deaths only on a non-tank victim.
+**Review fix.** The class `lose aggro` taunt (`hand of reckoning` ACTION_HIGH + 7, warrior `taunt`
+ACTION_INTERRUPT + 1, …) fires for a flagged main tank whenever another tank holds its target
+(`HasAggroValue`), and the hold failing mid Spew lets it run; `northrend beasts taunt guard` passed it
+for the holder. The guard now zeroes the holder's taunt on a worm spewing at another tank
+(`IsWormSpewingAtOtherTank`, shared with the hold). DC flags slot 0 main tank, and the deal puts the
+flagged main tank first.
+
+**Next window should show.** Spew wedges with a holder victim: `swing` under ~10° and that victim
+walking ~0 yd (no `drag` note within 3.5 s of a wedge); no taunt by the mobile holder mid Spew, the
+class one included; no non-tank Spew tick 55-57 yd out; Spew deaths only on a non-tank victim.

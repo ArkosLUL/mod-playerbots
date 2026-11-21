@@ -50,8 +50,9 @@ key on their duty.
 
 - **`northrend beasts taunt guard`** zeroes a class taunt (`IsTauntAction`) while the encounter is
   live and the bot's current target is a beast whose duty holder is someone else: a generic taunt
-  fights the deal and burns diminishing returns ([thorim.md](../ulduar/thorim.md)). The encounter's
-  own taunts cast inside `Execute` and pass.
+  fights the deal and burns diminishing returns ([thorim.md](../ulduar/thorim.md)). It also zeroes the
+  holder's own on a worm spewing at another tank: a flagged main tank's `lose aggro` fires whenever
+  another tank has its target. The encounter's own taunts cast inside `Execute` and pass.
 - **`northrend beasts control tank movement multiplier`** zeroes `CombatFormationMoveAction` for a
   tank whose victim is an engaged beast.
 
@@ -204,7 +205,7 @@ gate. Timers restart at every emerge (AC #28181, solo-sniffed; group and heroic 
     (`TARGET_UNIT_CONE_ENEMY_24`). Ten ticks. A player counts in out to 56.5, the range plus its
     combat reach (`IsWithinDist3d`): on 25H (2026-11-21) 99 of 385 non-tank ticks landed 55-56.7 yd
     out, on bots parked just past 55. He stands rooted through it, so his victim walking or a taunt
-    sweeps the cone: two 25H drags swung it 41-52° across the casters and killed 7. During the 3 s
+    sweeps the cone: on 25H a drag and a taunt swung it 52° and 41° across the casters and killed 7. During the 3 s
     Emerge cast the threat wipe swings his facing between whoever threatens him.
   - Slime Pool at 14.5 s, then every 12 s: summon 66883 (row 613) puts NPC 35176 at his feet for
     the summon's duration, 30 s on normal, 45 s on 10H, 60 s on 25H, so up to 4 live at once. Its
@@ -295,8 +296,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     ([xt002.md](../ulduar/xt002.md)). Not while an Icehowl charge is latched: the charge guard spares
     attack actions. `nb.wormmove` `approach`.
   - Up, a holder the worm isn't hitting taunts, then attacks; the mobile holder not while it spews
-    at another tank. There's no swap duty, and pass 1 gives
-    each tank the worm it already holds, so no holder taunts another's worm. The taunt waits for
+    at another tank (the taunt guard holds its class taunts then too). There's no swap duty, and
+    pass 1 gives each tank the worm it already holds, so no holder taunts another's worm. The taunt waits for
     cooldown and range: `CastSpell` turns the bot to its target even when the cast fails.
   - Duties across a submerge stay with the deal, no per-worm latch: the threat wipe keeps the old
     victim until someone gains threat, and a stunned worm takes no heal assist threat, so pass 1
@@ -320,8 +321,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
       paralysed on the way.
   - **Edge** (heroic, whose pools outlive the 12 s between them): the drag looks 36-42 yd from
     `ARENA_CENTER` first, so the pools line the wall (guide), and also fires on a worm under 24 yd
-    out. Order: edge clear of everything,
-    floor clear of everything, edge clear of pools, floor clear of pools; off the stationary worm
+    out. Order: edge clear of everything, floor clear of everything, edge clear of pools, floor
+    clear of pools; off the stationary worm
     beats the edge, since its melee would stand in Sweep. `nb.wormmove` `drag edge`.
 - **Redirect** (`northrend worms redirect threat`, `ACTION_RAID + 1`): rogues serve the `WormMobile`
   holder, since Tricks moves the threat off whatever the rogue hits and DPS hit that worm. Living
