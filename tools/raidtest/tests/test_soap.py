@@ -118,6 +118,17 @@ class ExecuteTest(unittest.TestCase):
             with self.assertRaises(soap.SoapUnavailable):
                 self.call(error)
 
+    def test_bad_url_is_not_retried_and_not_quoted(self):
+        for url in (f"gm:{SECRET}@127.0.0.1:7878", f"http://gm:{SECRET}@127.0.0.1/", "http://127.0.0.1:port/",
+                    "http:///"):
+            with mock.patch("soap.urllib.request.urlopen") as urlopen, \
+                    self.assertRaises(soap.SoapError) as caught:
+                soap.execute(".dc test status", url, "gm", "x")
+            urlopen.assert_not_called()
+            self.assertNotIsInstance(caught.exception, soap.SoapUnavailable)
+            self.assertNotIn(SECRET, str(caught.exception))
+        self.assertTrue(soap.usable_url("http://127.0.0.1:7878/"))
+
 
 class EnvTest(unittest.TestCase):
     def write(self, text: str) -> pathlib.Path:
@@ -138,6 +149,12 @@ class EnvTest(unittest.TestCase):
         with self.assertRaises(soap.SoapError) as caught:
             soap.credentials(path)
         self.assertIn("SOAP_USER", str(caught.exception))
+        self.assertNotIn(SECRET, str(caught.exception))
+
+    def test_credentials_in_the_url_are_refused_unquoted(self):
+        path = self.write(f"SOAP_URL=http://gm:{SECRET}@127.0.0.1:7878/\nSOAP_USER=gm\nSOAP_PASS=x\n")
+        with self.assertRaises(soap.SoapError) as caught:
+            soap.credentials(path)
         self.assertNotIn(SECRET, str(caught.exception))
 
     def test_missing_file(self):

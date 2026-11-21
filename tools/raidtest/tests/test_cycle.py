@@ -174,6 +174,14 @@ class CycleTest(unittest.TestCase):
         self.assertEqual(len(self.starts(dc)), 1)
         self.assertIn("baseline", " ".join(self.rendered[0].notes))
 
+    def test_a_test_pull_on_a_build_before_head_stops(self):
+        corpus = FakeCorpus(baseline=3)
+        corpus.build = BEFORE
+        dc = FakeDc(corpus)
+        self.assertEqual(self.cycle(corpus, dc, "--skip-rebuild"), 3)
+        self.assertEqual(len(self.starts(dc)), 1)
+        self.assertIn("predates abc1234", self.rendered[0].stopped)
+
     def test_skip_flags(self):
         corpus = FakeCorpus(baseline=0)
         dc = FakeDc(corpus)
@@ -234,6 +242,33 @@ class CycleTest(unittest.TestCase):
         dc.call = fault
         self.assertEqual(self.cycle(corpus, dc), 3)
         self.assertIn("no such command", self.rendered[0].stopped)
+        self.assertFalse(self.lock.exists())
+
+    def test_soap_error_while_waiting_stops_the_dc_run(self):
+        corpus = FakeCorpus()
+        dc = FakeDc(corpus)
+        original = dc.call
+
+        def status_refused(command):
+            if command == ".dc test status":
+                dc.commands.append(command)
+                raise soap.SoapAuthError("SOAP refused the account in .env (HTTP 403)")
+            return original(command)
+
+        dc.call = status_refused
+        self.assertEqual(self.cycle(corpus, dc), 3)
+        run_id = dc.records[0]["runId"]
+        self.assertEqual(dc.commands[-1], f".dc test stop {run_id}")
+        self.assertIn("HTTP 403", self.rendered[0].stopped)
+        self.assertFalse(self.lock.exists())
+
+    def test_unexpected_error_still_reports_and_releases(self):
+        corpus = FakeCorpus()
+        dc = FakeDc(corpus)
+        dc.read = mock.Mock(side_effect=RuntimeError("boom"))
+        self.assertEqual(self.cycle(corpus, dc), 3)
+        self.assertTrue(dc.commands[-1].startswith(".dc test stop tr-"))
+        self.assertEqual(self.rendered[0].stopped, "RuntimeError: boom")
         self.assertFalse(self.lock.exists())
 
     def test_run_without_pulls_stops(self):

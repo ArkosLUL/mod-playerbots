@@ -15,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import dc  # noqa: E402
 from pulls import TraceFacts, Veto  # noqa: E402
-from report import PullRow, State, render, verdict  # noqa: E402
+from report import PullRow, State, boss_reader, render, verdict  # noqa: E402
 
 UTC = datetime.timezone.utc
 HEAD = datetime.datetime(2026, 11, 21, 12, 0, tzinfo=UTC)
@@ -101,6 +101,11 @@ class ReportTest(unittest.TestCase):
         state.rows[0].trace.vetoes = []
         text, _ = self.render(state)
         self.assertIn("None: no `dungeon clear` or `dungeon clear combat` veto row falls inside a pull.", text)
+
+    def test_boss_reader_filed_under_an_alias(self):
+        self.assertEqual(boss_reader("vezax").name, "general_vezax.py")
+        self.assertEqual(boss_reader("northrend-beasts").name, "northrend_beasts.py")
+        self.assertIsNone(boss_reader("iron-assembly"))
 
     def test_verdicts(self):
         before = facts("x", HEAD - datetime.timedelta(hours=1))

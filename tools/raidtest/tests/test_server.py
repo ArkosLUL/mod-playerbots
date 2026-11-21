@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
@@ -84,6 +85,15 @@ class LockTest(TempDir):
         (path / "owner").write_text("theirs\n", encoding="utf-8")
         lock.release()
         self.assertTrue(path.exists())
+
+    def test_failed_owner_write_leaves_no_lock(self):
+        path = self.dir / "server"
+        lock = server.ServerLock(path, "x")
+        with mock.patch.object(pathlib.Path, "write_text", side_effect=OSError("disk full")), \
+                self.assertRaises(OSError):
+            lock.acquire()
+        self.assertFalse(path.exists())
+        self.assertFalse(lock.held)
 
     def test_owner_text(self):
         self.assertIn("raidtest cycle", server.owner_text("raidtest cycle"))
@@ -167,8 +177,15 @@ class DockerTest(TempDir):
         self.assertEqual(up[-4:], ["up", "-d", "--no-deps", "ac-worldserver"])
 
     def test_restart_same_container(self):
-        run = FakeRun([(("inspect",), done(stdout="same\n"))])
+        run = FakeRun([(("inspect",), done(stdout="same 2026-11-21T10:00:00Z\n"))])
         self.assertFalse(server.restart(self.dir, run)[2])
+
+    def test_restart_of_a_stopped_container_is_a_start(self):
+        ids = iter(["same 2026-11-21T10:00:00Z\n", "same 2026-11-21T13:00:00Z\n"])
+        run = FakeRun([(("inspect",), lambda c, k: done(stdout=next(ids)))])
+        self.assertTrue(server.restart(self.dir, run)[2])
+        inspect = [command for command, _ in run.calls if "inspect" in command][0]
+        self.assertIn("{{.State.StartedAt}}", inspect[-2])
 
     def test_wait_ready_polls_until_the_line(self):
         logs = iter(["starting\n", "loading maps\n", "AzerothCore rev. (worldserver-daemon) ready...\n"])

@@ -14,6 +14,7 @@ import pathlib
 import socket
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
@@ -74,6 +75,8 @@ def credentials(path: pathlib.Path = ENV_FILE) -> tuple[str, str, str]:
     missing = [key for key in CREDENTIAL_KEYS if not values.get(key)]
     if missing:
         raise SoapError(f"{path} has no {', '.join(missing)}")
+    if not usable_url(values["SOAP_URL"]):
+        raise SoapError(f"SOAP_URL in {path} must be http(s)://host:port/ with no credentials in it")
     return values["SOAP_URL"], values["SOAP_USER"], values["SOAP_PASS"]
 
 
@@ -107,7 +110,20 @@ def parse_response(body: bytes) -> str:
     return result
 
 
+def usable_url(url: str) -> bool:
+    """http(s) with a host and no user:pass@, which urllib would pass on as part of the host and then
+    quote back in its error."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        parts.port  # a non-numeric port raises here
+    except ValueError:
+        return False
+    return parts.scheme in ("http", "https") and bool(parts.hostname) and "@" not in parts.netloc
+
+
 def execute(command: str, url: str, user: str, password: str, timeout: float = 60.0) -> str:
+    if not usable_url(url):
+        raise SoapError("SOAP_URL in .env must be http(s)://host:port/ with no credentials in it")
     token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
     request = urllib.request.Request(
         url,
@@ -121,6 +137,9 @@ def execute(command: str, url: str, user: str, password: str, timeout: float = 6
             body = response.read()
     except urllib.error.HTTPError as exc:
         status, body = exc.code, exc.read()
+    except http.client.InvalidURL:
+        # its message quotes the URL
+        raise SoapError("SOAP_URL in .env is not a usable http URL") from None
     except (urllib.error.URLError, http.client.HTTPException, ConnectionError, socket.timeout, TimeoutError) as exc:
         reason = getattr(exc, "reason", exc)
         raise SoapUnavailable(f"no SOAP answer from the worldserver: {reason}") from None

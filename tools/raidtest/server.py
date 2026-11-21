@@ -45,8 +45,13 @@ class ServerLock:
             self.path.mkdir()
         except FileExistsError:
             raise LockHeld(self.path, self.read_owner()) from None
+        try:
+            (self.path / OWNER_FILE).write_text(self.owner + "\n", encoding="utf-8")
+        except BaseException:
+            (self.path / OWNER_FILE).unlink(missing_ok=True)
+            self.path.rmdir()
+            raise
         self.held = True
-        (self.path / OWNER_FILE).write_text(self.owner + "\n", encoding="utf-8")
 
     def read_owner(self) -> str:
         try:
@@ -133,13 +138,15 @@ def build(core: pathlib.Path, log_path: pathlib.Path, run: Run = subprocess.run)
 
 
 def container_id(run: Run = subprocess.run) -> str:
-    result = run(["docker", "inspect", "-f", "{{.Id}}", CONTAINER], capture_output=True, text=True)
+    """The container's id and start time, so a recreate and a start of a stopped one both change it."""
+    result = run(["docker", "inspect", "-f", "{{.Id}} {{.State.StartedAt}}", CONTAINER],
+                 capture_output=True, text=True)
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def restart(core: pathlib.Path, run: Run = subprocess.run, now: Callable[[], float] = time.time) \
         -> tuple[int, str, bool]:
-    """`up -d --no-deps` on the new image: (exit code, log --since stamp, whether it recreated)."""
+    """`up -d --no-deps` on the new image: (exit code, log --since stamp, whether a worldserver started)."""
     before = container_id(run)
     # a few seconds early, in case the Docker VM's clock trails the host's
     since = datetime.datetime.fromtimestamp(now() - 5, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

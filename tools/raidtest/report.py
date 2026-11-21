@@ -11,6 +11,7 @@ from typing import Callable, TextIO
 
 import dc
 from pulls import BOTOBS, DIFF_IDS, TraceFacts, vetoes_inside
+from raidobs.encounter import canonical_boss
 
 Run = Callable[..., subprocess.CompletedProcess]
 
@@ -185,6 +186,14 @@ def tool_output(title: str, command: list[str], run: Run, out: TextIO) -> None:
         print(f"\nexit {result.returncode}", file=out)
 
 
+def boss_reader(boss: str) -> pathlib.Path | None:
+    """The reader for a canonical boss slug, which can be filed under an alias (general_vezax.py reads vezax)."""
+    for path in sorted((BOTOBS / "bosses").glob("*.py")):
+        if canonical_boss(path.stem.replace("_", "-")) == boss:
+            return path
+    return None
+
+
 def section_tools(state: State, run: Run, out: TextIO) -> None:
     python = sys.executable
     batch = str(BOTOBS / "batch.py")
@@ -205,12 +214,12 @@ def section_tools(state: State, run: Run, out: TextIO) -> None:
     if counted:
         tool_output("Probes", [python, batch, "--boss", state.boss, "--probes", *counted], run, out)
 
-    reader = BOTOBS / "bosses" / f"{state.boss.replace('-', '_')}.py"
-    if counted and reader.is_file():
+    reader = boss_reader(state.boss)
+    if counted and reader:
         for path in counted:
             tool_output(f"Boss reader on {pathlib.Path(path).name}", [python, str(reader), path], run, out)
     elif counted:
-        print(f"\nNo boss reader for {state.boss} (`bosses/{reader.name}`).", file=out)
+        print(f"\nNo boss reader for {state.boss} under `bosses/`.", file=out)
 
 
 def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) -> None:

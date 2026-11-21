@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from dataclasses import dataclass
 from typing import Callable, TextIO
 
@@ -93,10 +94,11 @@ def dc_run(phase: str, args, deps: Deps, corpus: Corpus, state: State, pulls: in
         raise Stop(f"{exc}; the worldserver may have crashed") from None
     except server.ContainerDown as exc:
         raise Stop(str(exc)) from None
-    except KeyboardInterrupt:
+    except BaseException:
+        # don't leave a run going on a server the cycle is about to unlock
         try:
             deps.call(dc.stop_command(run_id))
-        except soap.SoapError:
+        except Exception:
             pass
         raise
 
@@ -133,6 +135,9 @@ def run_phase(phase: str, args, deps: Deps, corpus: Corpus, state: State) -> Non
                                        for row in rows):
             state.notes.append("The live build already holds HEAD, so it can't give a baseline.")
             return
+        if phase == "test" and any(row.trace and row.trace.built and row.trace.built < state.head_time
+                                   for row in rows):
+            raise Stop(f"the running build predates {state.head_sha}, so none of its pulls can count")
 
 
 def rebuild(args, deps: Deps, state: State) -> None:
@@ -212,6 +217,9 @@ def cycle(args, deps: Deps) -> int:
             state.stopped = f"SOAP: {exc}"
         except KeyboardInterrupt:
             state.stopped = "interrupted"
+        except Exception as exc:
+            traceback.print_exc(file=deps.log)
+            state.stopped = f"{type(exc).__name__}: {exc}"
         finish(state, corpus)
         render(state, deps.run, deps.out)
     finally:

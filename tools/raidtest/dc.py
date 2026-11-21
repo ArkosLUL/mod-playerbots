@@ -80,7 +80,8 @@ def parse_start_reply(text: str) -> tuple[str, str]:
 
 
 def run_active(status_text: str, run_id: str) -> bool:
-    return run_id in status_text
+    # tr-...-1 is a prefix of tr-...-12, a run started in the same second
+    return re.search(re.escape(run_id) + r"(?![\w-])", status_text) is not None
 
 
 @dataclass

@@ -92,6 +92,12 @@ class StatusTest(unittest.TestCase):
         self.assertTrue(dc.run_active(status, "tr-20261121-120102"))
         self.assertFalse(dc.run_active("no test runs active", "tr-20261121-120102"))
 
+    def test_a_longer_id_is_another_run(self):
+        status = "1 test run active (max 2):\n  tr-20261121-120102-12 uld-xt002 [Monitoring] elapsed 30s"
+        self.assertFalse(dc.run_active(status, "tr-20261121-120102-1"))
+        self.assertFalse(dc.run_active(status, "tr-20261121-120102"))
+        self.assertTrue(dc.run_active(status, "tr-20261121-120102-12"))
+
 
 def record(run_id: str, **extra) -> dict:
     base = {"schema": 15, "runId": run_id, "result": "success", "failReason": "", "startedAtMs": 1000,
