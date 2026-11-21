@@ -136,6 +136,54 @@ bool DirectCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
     return found;
 }
 
+// Every straight walk into the partner's reach crosses a pool or Sweep. On heroic a paralysed mobile
+// holder stands at the wall in front of its worm, with the worm's newest pool between it and the raid.
+// Takes the first leg of the shortest two-leg walk that ends on a direct spot.
+bool DetourCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
+{
+    if (!plan.acceptVia || !plan.escapeAccept)
+        return false;
+
+    Position const& partner = plan.partnerPos;
+    float const reach = plan.partnerReach - CURE_DIRECT_INSET;
+    float const step = 2.0f * static_cast<float>(M_PI) / WORM_CURE_DIRECT_BEARINGS;
+    std::vector<Position> ends;
+    for (uint32 bearing = 0; bearing < WORM_CURE_DIRECT_BEARINGS; ++bearing)
+    {
+        Position const end(partner.GetPositionX() + reach * std::cos(step * bearing),
+                           partner.GetPositionY() + reach * std::sin(step * bearing), partner.GetPositionZ());
+        if (ClearOfCircles(plan.urgentCircles, end))
+            ends.push_back(end);
+    }
+
+    bool found = false;
+    float shortest = 0.0f;
+    for (uint32 bearing = 0; bearing < WORM_CURE_DIRECT_BEARINGS && !ends.empty(); ++bearing)
+    {
+        for (float leg = WORM_CURE_DETOUR_STEP; leg <= WORM_SEARCH_RADIUS; leg += WORM_CURE_DETOUR_STEP)
+        {
+            Position const via(bot->GetPositionX() + leg * std::cos(step * bearing),
+                               bot->GetPositionY() + leg * std::sin(step * bearing), bot->GetPositionZ());
+            if ((found && leg >= shortest) || !ClearOfCircles(plan.circles, via) ||
+                !plan.escapeAccept(via.GetPositionX(), via.GetPositionY()))
+                continue;
+
+            for (Position const& end : ends)
+            {
+                float const walk = leg + via.GetExactDist2d(end);
+                if ((found && walk >= shortest) || !plan.acceptVia(via, end.GetPositionX(), end.GetPositionY()))
+                    continue;
+
+                spot = via;
+                shortest = walk;
+                found = true;
+            }
+        }
+    }
+
+    return found;
+}
+
 // Partner out of search range and nothing clear round it: walk part of the way, bending off the
 // straight line when that's blocked
 bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
@@ -161,7 +209,7 @@ bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
 }
 
 // First tier with a spot: stand, escape when starting in a pool, full, pair, nospread, partner, escape,
-// loose, direct, partial, cross
+// loose, direct, detour, partial, cross
 bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpotTier& tier)
 {
     auto const fits = [&plan](float x, float y)
@@ -232,6 +280,12 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
         if (DirectCureSpot(bot, plan, spot))
         {
             tier = WormSpotTier::Direct;
+            return true;
+        }
+
+        if (DetourCureSpot(bot, plan, spot))
+        {
+            tier = WormSpotTier::Detour;
             return true;
         }
 

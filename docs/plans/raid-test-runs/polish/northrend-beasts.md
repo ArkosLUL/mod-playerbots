@@ -132,3 +132,65 @@ flagged main tank first.
 **Next window should show.** Spew wedges with a holder victim: `swing` under ~10° and that victim
 walking ~0 yd (no `drag` note within 3.5 s of a wedge); no taunt by the mobile holder mid Spew, the
 class one included; no non-tank Spew tick 55-57 yd out; Spew deaths only on a non-tank victim.
+
+## Round 3 (2026-11-21, build a038bba60, window 4)
+
+**Data.** 6 valid 25H pulls, no freeze: toc1 `649_20_…_1795292856` (wipe 10:02, 34 deaths),
+`649_15_…_1795292227` (kill, 1); toc2 `649_22_…_1795292925` (kill, 1), `649_16_…_1795292272` (kill, 3);
+toc3 `649_21_…_1795292936` (kill, 1), `649_17_…_1795292293` (kill, 3). Report `window-4.md`,
+regenerated `raidtest.py report --boss northrend-beasts --raid toc --head a038bba60 --pulls 10`.
+
+**Stop rules.** Not polished: the toc1 wipe. Spew was picked in rounds 1-2; this round picks another
+failure.
+
+**Deaths by mechanic.**
+
+| Pull | Deaths |
+|---|---|
+| toc1 649_20 | 3 Acidmaw melee on ranged (3:53-3:58), its holder paralysed; 5 Burning Bile (melee and a healer, 3:58-4:00, one Spray on the melee group with Acidmaw loose in the raid); 1 Sweep; 3 Molten Spew (healer at the 4:19 emerge, then the holder and the ranged that inherited the cone, 4:44-4:45, two healers down); Berserk 8:29 with Icehowl at 12.2%: 17 Massive Crash, 5 more |
+| toc1 649_15 | 1 Icehowl melee on a melee (6:08) |
+| toc2 649_22 | 1 Acidmaw melee on a melee (3:25), the holder's edge drag 2.5 s after its emerge taunt |
+| toc2 649_16 | 1 Acidmaw melee on a melee (3:38), the Toxin-snared holder dragging 26 yd; 1 holder to enraged lone Dreadscale melee + Spew (4:39); 1 Icehowl melee on a tank |
+| toc3 649_21 | 1 Dreadscale melee on a melee (3:08) |
+| toc3 649_17 | 1 Slime Pool (stuck Toxin melee, no runner, 3:50); 1 lone Dreadscale melee on a ranged (4:59); 1 Icehowl melee on a tank |
+
+**Verdict on round 2.** Held. Steady-state Spew wedges on a holder: 12 of 14 swing 0-2° with the
+victim walking 0-1 yd. The two others aren't the drag or the hold's taunt: 649_16 3:40.6 (27°, the
+tank that had just taunted Acidmaw off the casters fired the class `charge` at the cast start, 5
+non-tank ticks, nobody died) and 649_20 4:41.6 (73°, the holder died mid Spew and the cone moved to a
+ranged). Non-tank Spew ticks 54 yd and out: 2 of 55 (one melee at a 649_15 emerge), against 99 of 385.
+No Spew death from a swept cone; the rest are emerge threat races and the wipe's cascade.
+
+**Picked: Acidmaw takes a non-tank while its holder carries Toxin, 5 deaths and the wipe (bug).**
+649_20: Bite at 3:23.6 put Toxin on holder Tocxaa (581.4, 106.2), 37.8 yd out, 7.4 yd in front of
+Acidmaw (578.3, 113.0) facing it; pools dropped at the worm's feet at 3:32 and 3:44. Runner Tocxav took
+Bile from the 3:33 Burning Spray (`nb.cure run` 3:36.4) and stood at (573.6, 127.8), 15.6 yd behind the
+worm: `none run` from 3:37.8 to 3:57.3. Tocxaa paralysed ~3:37, sat 41 s in the pools; at 3:50.9
+Acidmaw left it for the casters (Tocxaj, Tocxas, Tocxak dead by 3:58), Toxin `expired` at 4:39 with
+`runner 40.6 s` no spot. Cause: a run or cure walk is a single straight leg (`PathBlocked`,
+`ToCHelpers_Jormungars.cpp`). From behind the worm every straight walk to a spot within 8.5 yd of the
+tank passes within 2-5.6 yd of the worm's centre, through the pool's path circle (radius at the walk's
+end + 1, ~6 yd at 3:38); the far side is past the 44 yd floor; `partial` (`ToCActions_Jormungars.cpp`)
+only runs past 30 yd. Same in window 1 (649_8, 3 deaths): runner Tocxak 6.4 yd from the stationary
+Dreadscale, the tank south of it, every leg into the Sweep path circle; and 649_21 (`runner 9.2 s`).
+A replica of the search on these moments finds no `direct` spot and a two-leg route in each
+(649_20 3:38: 12 yd leg then 12 yd, 24 against 23 straight; 649_8: 24 + 50).
+
+Fix: `detour` tier after `direct`: the first leg of the shortest two-leg walk to a direct spot, turn
+point on 16 bearings × 6 yd rings out to 30, clear of the hard circles with the escape accept; the
+second leg passes the full accept from the turn point (`acceptVia`; `PathBlocked` grows pools over
+both legs). Walk-only like `partial`, released on arrival, so the next tick walks the rest.
+
+**Second, not fixed: the mobile holder's drag loses Acidmaw to melee.** 649_22: edge drag at 3:23.5,
+2.5 s after the emerge growl, the worm took a melee at 3:24.0. 649_16: the Toxin-snared bear dragged
+26 yd at a crawl from 3:33, and as it left the worm's 14.8 yd melee range the worm took a melee
+(3:37.4). The walking holder stops hitting while melee keep their 110% race. A fix (no drag on a thin
+threat lead, or while snared) trades pools under the melee for the hold; for round 4 if it recurs.
+
+**Not fixed, for later rounds.** The emerge threat race (Spew at once on a mobile emerge swings
+15-68° across non-tanks: 649_20 4:19 killed a healer); a stuck Toxin melee with no runner died in a
+pool (649_17, `runner 0.0 s`); the warrior class `charge` by a fresh holder mid Spew.
+
+**Next window should show.** `move <yd> run detour` (or `cure detour`) notes where `none run` streaks
+were, each followed by a `direct`/`partner` walk and a cure; Toxin on the mobile holder ending `cured`
+with `runner` no-spot under ~2 s; no Acidmaw kill on a non-tank while its holder carries Toxin.

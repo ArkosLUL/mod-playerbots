@@ -352,7 +352,11 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     holder, Sweep. Only that holder pairs with a member within 11 yd of the up stationary worm,
     whose cure spots all lie inside the Sweep path's 16: others take the next carrier, a Toxin'd
     stationary holder waits for the submerge. When the ring search misses that disc (its rays fan
-    22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); with
+    22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); when every
+    straight walk to those crosses a pool or Sweep, the first leg of the shortest two-leg walk to one,
+    turning on 6 yd rings out to 30 (`detour`): on heroic the mobile holder stands at the wall in front
+    of its worm, the newest pool between them and the raid, and on 25H (2026-11-21) a runner found no
+    straight walk for 20 s while the paralysed tank lost Acidmaw to the casters; with
     none and the partner past 30 yd, a 25 yd leg toward it, turned ±22.5° then ±45° when blocked
     (`partial`). Their spots clear only the real Spew cone, and a pair within 8 yd triggers on it
     unpadded: the partner is often a mobile worm's tank, 7-10 yd ahead of it, and on 10N the 60° cone
@@ -469,7 +473,7 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     - a cure or run hold's partner changes, or a parked one's leaves 8 yd of the spot (the cure
       trigger, so a partner shifting a yard sends nothing).
 
-    Escape, loose, partial and cross walks answer to the walking test alone (a partial one also to
+    Escape, loose, detour, partial and cross walks answer to the walking test alone (a detour or partial one also to
     its partner, a cross one without the path) and release on arrival, never parked: they ignore
     reach, and the spot guard would strand the bot there ([pitfalls.md](../../engine/pitfalls.md)).
     A Spray dodge does too, so melee walk back to their stand after the cast instead of merging with
@@ -794,8 +798,8 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `worm` | 0 no worm engaged, 1 Dreadscale mobile, 2 Acidmaw mobile, 3 a worm under ground, 4 lone Dreadscale, 5 lone Acidmaw. Per instance |
 | `cure` | A bot's pairing: `seek <Bile carrier>`, `run <Toxin carrier>` as its runner, `wait <runner>` or `wait` stuck with no runner, `none` |
 | `toxinheal` | A healer bot's carrier of Toxin no Bile can cure, `0` when the duty ends |
-| `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `spray`, `bile`, `sweep`, `spew`, `spread`, `melee`, `reach`) and the search tier that found the spot (`stand`, `full`, `pair`, `nospread`, `partner`, `direct`, `partial`, `escape`, `loose`, `cross`): `move <yd> <reason> <tier>`, `hold <reason>` its walk to the held spot in flight, `clear` already there, `none <reason>` (not urgent: a 1 s backoff), `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
-| `wormhold` | A bot's held spot: `set <reason> <tier>` latched by a walk or an arrival (a walk back to it writes none), `park` within 1 yd, `unpark` pushed off it, walking back, `release <cause>`. Cause: a rule (`pool`, `spray`, `bile`, `sweep`, `spew`, `spread`), `melee` the rear arc, `reach` the role reach at a parked spot, `path` off the floor or across a pool or Sweep, `target` the target or a cure or run partner changed, left or drifted out of 8 yd, `cure` a cure walk owed, `phase` `worm` changed, 0 included, `drift` the anchor worm moved or turned, `heal` the heal target out of reach, `arrived` an escape, loose, partial, cross or Spray walk ended, `gone` the bot died or left |
+| `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `spray`, `bile`, `sweep`, `spew`, `spread`, `melee`, `reach`) and the search tier that found the spot (`stand`, `full`, `pair`, `nospread`, `partner`, `direct`, `detour`, `partial`, `escape`, `loose`, `cross`): `move <yd> <reason> <tier>`, `hold <reason>` its walk to the held spot in flight, `clear` already there, `none <reason>` (not urgent: a 1 s backoff), `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
+| `wormhold` | A bot's held spot: `set <reason> <tier>` latched by a walk or an arrival (a walk back to it writes none), `park` within 1 yd, `unpark` pushed off it, walking back, `release <cause>`. Cause: a rule (`pool`, `spray`, `bile`, `sweep`, `spew`, `spread`), `melee` the rear arc, `reach` the role reach at a parked spot, `path` off the floor or across a pool or Sweep, `target` the target or a cure or run partner changed, left or drifted out of 8 yd, `cure` a cure walk owed, `phase` `worm` changed, 0 included, `drift` the anchor worm moved or turned, `heal` the heal target out of reach, `arrived` an escape, loose, detour, partial, cross or Spray walk ended, `gone` the bot died or left |
 | `spread` | A non-tank bot's bearing `k` from straight behind Icehowl (`0`, `1`, `-1`, …), kept while the layout holds through his walk, or `none` while it is off (the daze included) or the bot holds none. Written when a trigger asks |
 | `arc` | Bearings the layout kept, melee-only ones included, 0 while it is off. Per instance |
 | `breath` | The breath spread: 0 off, 1 up, 2 grace, 3 moving, 4 daze. Per instance; `arc` can't tell a held layout from a live one, nor the daze from off |
