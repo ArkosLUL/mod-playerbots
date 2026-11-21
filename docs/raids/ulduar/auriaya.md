@@ -108,10 +108,9 @@ action's own `Attack()` pulled the room for the first bot to see her, and the an
 to its spots early. A Sentry's `JustEngagedWith` puts her in combat, but not the reverse: her formation
 row (groupAI 2) never makes the Sentries assist her, while theirs (519) pulls the whole pack onto
 whoever engages one. So when she alone is pulled (a ranged pull, the test harness's aggro start) the
-pack trails her in out of combat, and targeting also waits while one within 30 yd of her is
-(`AuriayaSentriesUnengaged`), leaving the off-tank's taunt to open on it. Ungated, a cat's Faerie
-Fire or a shaman's wolves put all four on one DPS. The
-pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
+pack trails her in out of combat, and while an off-tank lives, targeting also waits while one within
+30 yd of her is (`AuriayaSentriesUnengaged`), leaving the off-tank's taunt to open on it. Ungated, a
+cat's Faerie Fire or a shaman's wolves put all four on one DPS. The pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
 `ACTION_RAID + 4`, sentry taunt +3 (a loose Sentry buffs her and pounces anything 8-25 yd off), pool
 dodge and anti-fear +2, targeting +1, position last. The fall-from-floor teleport goes to the tank's
 station or a soak spot raycast from her (the bot is under the floor), and to the master only without

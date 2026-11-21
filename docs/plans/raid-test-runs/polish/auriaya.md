@@ -37,8 +37,10 @@ on a melee DPS (uld1 #202 25 s, uld2 #200 17 s, uld3 #200 12 s and #201 10 s).
 2. *Taunt pick ignores who the Sentry hits.* `GetAuriayaLooseSentry` returned the first Sentry in
    grid order not on the off-tank: uld2 Growl 0:31.4 went to #201 (just taken by the main tank's
    Thunder Clap) while #200 had sat on a warrior since 0:24.5; that warrior died 0:36.96.
-3. *Taunt left the tank on its old target.* uld3 Growl #201 0:22.3, then the bear charged #200 and
-   kept hitting it; #201 went back to melee at 0:25.9 and killed two (0:30.6, 0:34.3).
+3. *The tank leaves the taunted Sentry.* uld2 Growl #201 0:25.3 left the bear on #200, its old
+   target. uld3 the bear was already on #201 when it growled it at 0:22.3, and generic tank assist
+   (fires once the tank holds aggro, picks the nearest target it lacks aggro on) moved it to #200 by
+   0:22.8; #201 went back to melee at 0:25.9 and killed two (0:30.6, 0:34.3).
 
 The trigger fired 81-122 times a pull and the action ran 1-3 times: in reach it only cast the class
 taunt, failing on cooldown.
@@ -54,7 +56,10 @@ strategy must handle it.
   `auriaya.sentry`.
 - Out of reach (25 yd, LOS) it walks to 20 yd; in reach the trigger fires only with the taunt ready,
   and after the taunt the tank targets that Sentry (`AttackDirect`). A taunt on an out-of-combat
-  Sentry engages the whole pack on the off-tank.
+  Sentry engages the whole pack on the off-tank. `AttackDirect` covers the uld2 case only: tank
+  assist can still move the tank off on its next tick (uld3); the opener should make that rare.
+- Review: the DPS hold applies only while an off-tank lives (`GetGroupAssistTank(bot, 0)`), so a
+  raid without one isn't stuck idle until the enrage.
 
 Same entries and room at 10 and 25 (2 Sentries at 10); no hard mode or heroic split.
 

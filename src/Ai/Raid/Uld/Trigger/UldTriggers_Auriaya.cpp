@@ -69,8 +69,12 @@ bool AuriayaSetDpsPriorityTrigger::IsActive()
 
     // The action calls Attack() directly, so without this the first bot to see her pulls the room.
     // Whoever pulls flips it for everyone, so the raid engages together.
+    if (!IsAuriayaEngaged(botAI))
+        return false;
+
     // Sentries still out of combat are the off-tank's to open on: the first bot to hit one gets the whole pack.
-    return IsAuriayaEngaged(botAI) && !AuriayaSentriesUnengaged(botAI);
+    // No living off-tank means nobody opens on them, so don't hold the raid forever.
+    return !AuriayaSentriesUnengaged(botAI) || !EncounterHelpers::GetGroupAssistTank(bot, 0);
 }
 
 bool AuriayaSentryTauntTrigger::IsActive()
