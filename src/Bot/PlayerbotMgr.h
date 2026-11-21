@@ -38,6 +38,8 @@ public:
     void HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder const& holder, WorldSession* botSession);
 
     static void DropPendingLogins(bool randomOnly);
+    // Bot sessions never register with WorldSessionMgr, so a self-mastered bot master is searched for too
+    static Player* FindMasterByAccount(uint32 accountId);
 
     void LogoutPlayerBot(ObjectGuid guid);
     void DisablePlayerBot(ObjectGuid guid);

@@ -100,8 +100,10 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
     if (!accountId)
         return;
 
-    WorldSession* masterSession = masterAccountId ? sWorldSessionMgr->FindSession(masterAccountId) : nullptr;
-    Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
+    Player* masterPlayer = FindMasterByAccount(masterAccountId);
+    WorldSession* masterSession = masterPlayer ? masterPlayer->GetSession()
+                                  : masterAccountId ? sWorldSessionMgr->FindSession(masterAccountId)
+                                                    : nullptr;
 
     bool isRndbot = !masterAccountId;
     bool sameAccount = sPlayerbotAIConfig.AllowAccountBots && accountId == masterAccountId;
@@ -182,8 +184,7 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
 
                 if (masterAccountId)
                 {
-                    WorldSession* masterSession = sWorldSessionMgr->FindSession(masterAccountId);
-                    Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
+                    Player* masterPlayer = FindMasterByAccount(masterAccountId);
                     PlayerbotHolder* mgr =
                         masterPlayer ? PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer) : nullptr;
 
@@ -198,6 +199,25 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
 
                 RandomPlayerbotMgr::instance().HandlePlayerBotLoginCallback(holder, botSession);
             });
+}
+
+Player* PlayerbotHolder::FindMasterByAccount(uint32 accountId)
+{
+    if (!accountId)
+        return nullptr;
+
+    if (WorldSession* session = sWorldSessionMgr->FindSession(accountId))
+        return session->GetPlayer();
+
+    for (auto itr = sRandomPlayerbotMgr.GetPlayerBotsBegin(); itr != sRandomPlayerbotMgr.GetPlayerBotsEnd(); ++itr)
+    {
+        Player* bot = itr->second;
+        if (bot && bot->GetSession() && bot->GetSession()->GetAccountId() == accountId && IsSelfBot(bot) &&
+            PlayerbotsMgr::instance().GetPlayerbotMgr(bot))
+            return bot;
+    }
+
+    return nullptr;
 }
 
 void PlayerbotHolder::DropPendingLogins(bool randomOnly)

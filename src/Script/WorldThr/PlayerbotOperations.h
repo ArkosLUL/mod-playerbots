@@ -501,8 +501,7 @@ public:
         PlayerbotHolder* holder = &RandomPlayerbotMgr::instance();
         if (m_masterAccountId)
         {
-            WorldSession* masterSession = sWorldSessionMgr->FindSession(m_masterAccountId);
-            Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
+            Player* masterPlayer = PlayerbotHolder::FindMasterByAccount(m_masterAccountId);
             if (masterPlayer)
                 holder = PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer);
         }

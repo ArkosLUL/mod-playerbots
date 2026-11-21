@@ -9,11 +9,14 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 | Wave 1: env changes (`Playerbot.env`: `+dungeon clear` dropped, Obs retention 60 d / 51200 MB, `AccountInstancesPerHour` 100) | done 2026-11-21, live at next restart |
 | Wave 1: `tools/raidtest/.env` gitignored | done 2026-11-21 |
 | Wave 1: DC clone + local branch | done: `modules/mod-dungeon-clear`, `local/wrath-raid-tests` at `142732c` |
-| Wave 1: user's SOAP GM account in `tools/raidtest/.env` | waiting for the user |
+| Wave 1: SOAP account | done: `RAIDTEST` (GM 3, all realms), login in gitignored `tools/raidtest/.env` |
 | Wave 1: DC conf | none needed: the container entrypoint installs `mod_dungeon_clear.conf.dist` into the bind-mounted `env/dist/etc/modules`; settings go through `AC_DUNGEON_CLEAR_*` env vars |
-| Wave 1: first build | failed: DC does not compile against the fork (`RollUniqueCheck` is file-static in `ItemUsageValue.cpp`); keep-going build collecting every error |
-| Wave 1: DC compat fixes, restart, 5-man headless smoke | open |
-| Wave 2 (lanes A1-A3, B, C) | open, needs the user's "go" |
+| Wave 1: DC compat | done: `ea7f427` (local `RollUniqueCheck`; the only one of 207 DC TUs that failed), `d7605fe` (driver account read-back race latched a refusal) |
+| Wave 1: restart | done; env confirmed (Obs 60 d / 51200 MB, instances 100, `+worldbuff` only) |
+| Wave 1: 5-man headless smoke | `tr-20261121-101742-1` (uk) failed at spawning_bots and crashed the worldserver. (1) Fork: bot sessions never register with `WorldSessionMgr`, so the login callback (`PlayerbotMgr.cpp`, `PlayerbotOperations.h`) found no master for the DC driver's account and dropped every bot; fixed with `PlayerbotHolder::FindMasterByAccount` (also finds a self-mastered bot master), full-fanout pb-check running. (2) DC teardown `UnbindFromMap` calls `PlayerUnbindInstance` for guids whose binds were never loaded: `playerBindStorage[guid]` is null and line 874 segfaults; fix after lane A (guard with `PlayerGetBoundInstances`). Rerun the smoke after both |
+| **Open: game port** | Windows reserved TCP 8043-8642 (Hyper-V/WinNAT; dynamic range starts at 1024), so 8085 cannot bind. Temporary: `.env` `DOCKER_WORLD_EXTERNAL_PORT=8020`, `acore_auth.realmlist` port 8020. Admin fix pending (`scratchpad/winnat-fix.ps1`: stop winnat, `netsh int ipv4 add excludedportrange protocol=tcp startport=8085 numberofports=1`, start winnat); then revert both to 8085 |
+| **Open: DC result files** | the worldserver cwd is `/azerothcore` in the container's writable layer, so `dc_testruns.jsonl` and friends vanish on every recreate; move them to a mounted path or copy them out after each run (wave 3) |
+| Wave 2 (lanes A1-A3, B, C) | launched 2026-11-21 (workflow `wf_fbb3bb5a-c26`) |
 | Wave 3 (pilots) | open |
 | Wave 4 (remaining bosses) | open |
 | Wave 5 (FL/Thorim/Algalon/Yogg research, close-out) | open |
