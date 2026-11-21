@@ -1,4 +1,4 @@
-"""Pull counting over synthetic RaidObs traces: validity, build against HEAD, difficulty, the baseline,
+"""Trace facts over synthetic RaidObs traces: validity, difficulty, the instance a trace was recorded in,
 matching DC pull windows to traces, and the DC veto window.
 
     python -m unittest discover -s tools/raidtest/tests
@@ -11,6 +11,7 @@ import pathlib
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
@@ -28,8 +29,8 @@ def ms(when: datetime.datetime) -> int:
 
 def write_trace(folder: pathlib.Path, pulled: datetime.datetime, built: datetime.datetime | None, diff: int = 1,
                 human: bool = False, dead: bool = False, records: list[dict] | None = None,
-                closed: bool = True, length_ms: int = 60000) -> pathlib.Path:
-    header = {"e": "hdr", "v": 14, "ts": ms(pulled), "map": 603, "inst": 7, "diff": diff,
+                closed: bool = True, length_ms: int = 60000, inst: int = 7, map_id: int = 603) -> pathlib.Path:
+    header = {"e": "hdr", "v": 14, "ts": ms(pulled), "map": map_id, "inst": inst, "diff": diff,
               "boss": "xt-002-deconstructor", "cfg": {},
               "roster": [{"g": TANK, "n": "Tanky", "c": 1, "r": "tank"},
                          {"g": HEALER, "n": "Mendy", "c": 2, "r": "heal"}]}
@@ -44,7 +45,7 @@ def write_trace(folder: pathlib.Path, pulled: datetime.datetime, built: datetime
     lines += records or []
     if closed:
         lines.append({"e": "end", "t": length_ms, "out": "kill"})
-    path = folder / f"603_7_xt-002-deconstructor_{int(pulled.timestamp())}.ndjson"
+    path = folder / f"{map_id}_{inst}_xt-002-deconstructor_{int(pulled.timestamp())}.ndjson"
     path.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
     return path
 
@@ -61,15 +62,15 @@ class CorpusTest(unittest.TestCase):
     def at(self, minutes: int) -> datetime.datetime:
         return HEAD + datetime.timedelta(minutes=minutes)
 
-    def test_counts_only_valid_pulls_built_after_head_at_the_difficulty(self):
-        good = write_trace(self.dir, self.at(30), self.at(20))
-        write_trace(self.dir, self.at(40), self.at(-20))                # binary predates HEAD
-        write_trace(self.dir, self.at(50), self.at(20), diff=0)         # 10-man
-        write_trace(self.dir, self.at(60), self.at(20), human=True)     # a human in the raid
-        write_trace(self.dir, self.at(70), self.at(20), dead=True)      # raid dead at the open
-        write_trace(self.dir, self.at(80), None)                        # no build stamp
-        newer = write_trace(self.dir, self.at(90), self.at(20))
-        self.assertEqual([f.path for f in self.corpus().counted("25n", HEAD)], [newer, good])
+    def test_valid_only_without_warnings_and_with_a_build(self):
+        def valid(path):
+            return pulls.read_facts(path).valid(1)
+
+        self.assertTrue(valid(write_trace(self.dir, self.at(30), self.at(20))))
+        self.assertFalse(valid(write_trace(self.dir, self.at(50), self.at(20), diff=0)))
+        self.assertFalse(valid(write_trace(self.dir, self.at(60), self.at(20), human=True)))
+        self.assertFalse(valid(write_trace(self.dir, self.at(70), self.at(20), dead=True)))
+        self.assertFalse(valid(write_trace(self.dir, self.at(80), None)))
 
     def test_strict_drops_a_human_who_only_did_damage(self):
         path = write_trace(self.dir, self.at(30), self.at(20), human=True)
@@ -77,18 +78,10 @@ class CorpusTest(unittest.TestCase):
         self.assertEqual([kind for kind, _ in facts.warnings], ["human-in-raid"])
         self.assertFalse(facts.valid(1))
 
-    def test_baseline_is_the_newest_valid_before_head(self):
-        write_trace(self.dir, self.at(-300), self.at(-400))
-        middle = write_trace(self.dir, self.at(-200), self.at(-400))
-        newest = write_trace(self.dir, self.at(-100), self.at(-400))
-        write_trace(self.dir, self.at(-50), self.at(-400), human=True)
-        write_trace(self.dir, self.at(30), self.at(20))
-        self.assertEqual([f.path for f in self.corpus().baseline("25n", HEAD, 2)], [newest, middle])
-
     def test_difficulty_ids(self):
-        path = write_trace(self.dir, self.at(30), self.at(20), diff=3)
-        self.assertEqual([f.path for f in self.corpus().counted("25h", HEAD)], [path])
-        self.assertEqual(self.corpus().counted("25n", HEAD), [])
+        facts = pulls.read_facts(write_trace(self.dir, self.at(30), self.at(20), diff=3))
+        self.assertTrue(facts.valid(pulls.DIFF_IDS["25h"]))
+        self.assertFalse(facts.valid(pulls.DIFF_IDS["25n"]))
 
     def test_open_trace_is_read_again(self):
         path = write_trace(self.dir, self.at(30), self.at(20), closed=False)
@@ -97,11 +90,48 @@ class CorpusTest(unittest.TestCase):
         write_trace(self.dir, self.at(30), self.at(20))
         self.assertTrue(corpus.facts(path).closed)
 
-    def test_between(self):
-        inside = write_trace(self.dir, self.at(30), self.at(20))
-        write_trace(self.dir, self.at(90), self.at(20))
-        found = self.corpus().between(ms(self.at(29)), ms(self.at(31)))
-        self.assertEqual([f.path for f in found], [inside])
+    def test_instance_from_the_header(self):
+        facts = pulls.read_facts(write_trace(self.dir, self.at(30), self.at(20), inst=41, map_id=649))
+        self.assertEqual((facts.map_id, facts.instance), (649, 41))
+
+    def test_name_parts(self):
+        self.assertEqual(pulls.name_parts(pathlib.Path("649_2_gormok-the-impaler_1794917863.ndjson")),
+                         (649, 2, 1794917863))
+        self.assertEqual(pulls.name_parts(pathlib.Path("603_7_flame_leviathan_1794917863.ndjson"))[:2], (603, 7))
+        self.assertIsNone(pulls.name_parts(pathlib.Path("notes_1794917863.ndjson")))
+
+    def test_in_instance_keeps_overlapping_instances_apart(self):
+        mine = write_trace(self.dir, self.at(30), self.at(20), inst=8)
+        write_trace(self.dir, self.at(30) + datetime.timedelta(seconds=5), self.at(20), inst=7)
+        write_trace(self.dir, self.at(31), self.at(20), inst=9)
+        second = write_trace(self.dir, self.at(33), self.at(20), inst=8)
+        found = self.corpus().in_instance(603, 8, ms(self.at(29)), ms(self.at(40)))
+        self.assertEqual([f.path for f in found], [mine, second])
+
+    def test_in_instance_window_and_map(self):
+        write_trace(self.dir, self.at(-600), self.at(-700), inst=8)    # instance id reused a day before
+        inside = write_trace(self.dir, self.at(30), self.at(20), inst=8)
+        write_trace(self.dir, self.at(90), self.at(20), inst=8)        # a later run in the same instance
+        corpus = self.corpus()
+        self.assertEqual([f.path for f in corpus.in_instance(603, 8, ms(self.at(29)), ms(self.at(31)))], [inside])
+        self.assertEqual(corpus.in_instance(649, 8, ms(self.at(29)), ms(self.at(31))), [])
+
+    def test_in_instance_opens_only_files_named_for_it(self):
+        write_trace(self.dir, self.at(30), self.at(20), inst=8)
+        write_trace(self.dir, self.at(30), self.at(20), inst=9)
+        write_trace(self.dir, self.at(90), self.at(20), inst=8)
+        corpus = self.corpus()
+        with mock.patch.object(pulls, "read_facts", wraps=pulls.read_facts) as read:
+            corpus.in_instance(603, 8, ms(self.at(29)), ms(self.at(31)))
+        self.assertEqual([call.args[0].name.split("_")[1] for call in read.call_args_list], ["8"])
+
+    def test_rescan_finds_new_files(self):
+        corpus = self.corpus()
+        self.assertEqual(corpus.in_instance(603, 8, ms(self.at(29)), ms(self.at(31))), [])
+        path = write_trace(self.dir, self.at(30), self.at(20), inst=8)
+        self.assertEqual(corpus.in_instance(603, 8, ms(self.at(29)), ms(self.at(31))), [])
+        corpus.rescan()
+        self.assertEqual([f.path for f in corpus.in_instance(603, 8, ms(self.at(29)), ms(self.at(31)))], [path])
 
     def test_deaths_and_vetoes(self):
         records = [

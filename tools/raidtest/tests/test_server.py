@@ -203,21 +203,6 @@ class DockerTest(TempDir):
         self.assertFalse(server.wait_ready("x", 60, run, lambda: clock[0],
                                            lambda s: clock.__setitem__(0, clock[0] + s)))
 
-    def test_read_file(self):
-        run = FakeRun([(("exec",), done(stdout='{"runId":"tr-1"}\n'))])
-        self.assertEqual(server.read_file("/azerothcore/dc_testruns.jsonl", run), '{"runId":"tr-1"}\n')
-        self.assertEqual(run.calls[0][0],
-                         ["docker", "exec", "ac-worldserver", "cat", "/azerothcore/dc_testruns.jsonl"])
-
-    def test_read_missing_file_is_empty(self):
-        run = FakeRun([(("exec",), done(1, stderr="cat: /x: No such file or directory"))])
-        self.assertEqual(server.read_file("/x", run), "")
-
-    def test_read_from_a_stopped_container(self):
-        run = FakeRun([(("exec",), done(1, stderr="Error response from daemon: container is not running"))])
-        with self.assertRaises(server.ContainerDown):
-            server.read_file("/x", run)
-
 
 if __name__ == "__main__":
     unittest.main()

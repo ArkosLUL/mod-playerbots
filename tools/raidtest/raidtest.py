@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Unattended raid test cycle on mod-dungeon-clear, with no human logged in.
+"""Unattended raid test cycle on mod-dungeon-clear across a raid's roster pools, with no human logged in.
 
-    raidtest.py cycle --boss xt-002 --scenario <dc scenario> --raid uld [--diff 25n] [--pulls 3] [--cap 6]
-                      [--skip-baseline] [--skip-rebuild]
-    raidtest.py report --boss xt-002 [--diff 25n] [--pulls 3] [--runs tr-...,tr-...]
+    raidtest.py cycle --boss xt-002 --scenario <dc scenario> --raid uld [--pools uld1,uld2,uld3]
+                      [--diff 25n] [--pulls 1] [--cap 2] [--skip-baseline] [--skip-rebuild]
+    raidtest.py report --boss xt-002 --raid uld [--pools ...] [--diff 25n] [--pulls 1] [--runs tr-...,tr-...]
 
-A cycle takes the server lock, runs baseline pulls on the live build when fewer than --pulls valid ones
-exist from before HEAD, rebuilds and restarts the worldserver, then has DC pull the boss until --pulls
-valid pulls built after HEAD exist or --cap pulls were run. The markdown report goes to stdout,
-progress to stderr.
+A cycle takes the server lock, gets baseline pulls on the live build for every pool with fewer than
+--pulls valid ones from before HEAD, rebuilds and restarts the worldserver, then pulls the boss until
+every pool has --pulls valid pulls built after HEAD or ran --cap pulls. Each round starts one DC run per
+pool still short, all at once, and waits for all of them. A pool's pulls are only counted for, and
+compared with, that pool. --pools defaults to <raid>1,<raid>2,<raid>3 and --diff to 25h for toc and 25n
+for uld, whose hard modes come from the server's toggles. The markdown report goes to stdout, progress
+to stderr.
 
-Exit codes: 0 enough valid pulls, 1 the cap ran out first, 2 refused before touching the server,
-3 stopped on a failure (build, restart, driver, crash, a refused start).
+Exit codes: 0 every pool got enough valid pulls, 1 a cap ran out first, 2 refused before touching the
+server, 3 stopped on a failure (build, restart, driver, crash, a refused start).
 """
 from __future__ import annotations
 
@@ -29,16 +32,18 @@ from typing import Callable, TextIO
 import dc
 import server
 import soap
-from pulls import DIFF_IDS, Corpus, match_traces
+from pools import Ledger, PullRow, pool_names, rows_for_run
+from pulls import DIFF_IDS, Corpus
 from raidobs.paths import REPO
 from raidobs.validity import resolve_since
-from report import PullRow, State, render
+from report import State, render
 
 CORE = REPO.parents[1]
 MODULE_REPO = CORE / "modules" / "mod-playerbots"
-# Expects the server env to set DC_TESTRUNS_FILE onto the bind-mounted logs volume: DC's default, its
-# working directory, sits in the container layer and is wiped on every recreate.
-DC_RUNS_FILE = "/azerothcore/env/dist/logs/dc/dc_testruns.jsonl"
+# The host side of DC_TESTRUNS_FILE, which the server env points at the bind-mounted logs volume: DC's
+# default, its working directory, sits in the container layer and is wiped on every recreate.
+DC_RUNS_FILE = CORE / "env" / "dist" / "logs" / "dc" / "dc_testruns.jsonl"
+DEFAULT_DIFF = {"uld": "25n", "toc": "25h"}
 # A trace closes up to Obs.IdleCloseSeconds (30 s) after its pull, so wait that out before reading
 SETTLE_S = 45.0
 
@@ -64,80 +69,98 @@ def say(deps: Deps, text: str) -> None:
     print(text, file=deps.log, flush=True)
 
 
-def rows_for_run(phase: str, run: dc.Run, corpus: Corpus) -> list[PullRow]:
-    if not run.started_ms or not run.ended_ms:
-        return []
-    if run.pulls is not None:
-        windows = [(pull.start_ms, pull.end_ms) for pull in run.pulls]
-        candidates = corpus.between(run.started_ms - 60000, run.ended_ms + 60000)
-        traces = match_traces(windows, candidates)
-        return [PullRow(phase, run.run_id, index, window, pull.outcome, trace)
-                for index, (pull, window, trace) in enumerate(zip(run.pulls, windows, traces), 1)]
-    return [PullRow(phase, run.run_id, index, None, "", trace)
-            for index, trace in enumerate(corpus.between(run.started_ms, run.ended_ms), 1)]
+def read_records(args) -> list[dict]:
+    return dc.parse_records(dc.read_log(args.dc_runs_file))
 
 
-def dc_run(phase: str, args, deps: Deps, corpus: Corpus, state: State, pulls: int) -> list[PullRow]:
-    command = dc.start_command(args.scenario, args.raid, args.diff, pulls)
+def dc_round(phase: str, wants: dict[str, int], args, deps: Deps, corpus: Corpus, state: State) \
+        -> dict[str, list[PullRow]]:
+    """One DC run per pool in `wants` (pool: pulls), all started before any is waited on. Returns the
+    rows of each pool's run."""
     unavailable = (soap.SoapUnavailable,)
+    started: dict[str, str] = {}
     try:
-        run_id = dc.start_run(deps.call, command, deps.clock, deps.sleep, unavailable)
-    except dc.DriverOffline as exc:
-        raise Stop(f"the DC test driver never got online: {exc}") from None
-    except dc.StartRefused as exc:
-        raise Stop(f"DC refused `{command}`: {exc}") from None
-    say(deps, f"{phase}: {run_id} started for up to {pulls} pull(s)")
-
-    try:
-        run = dc.wait_run(deps.call, run_id, lambda: server.read_file(args.dc_runs_file, deps.run),
-                          deps.clock, deps.sleep, unavailable)
+        for pool, pulls in wants.items():
+            command = dc.start_command(args.scenario, pool, args.diff, pulls)
+            try:
+                run_id = dc.start_run(deps.call, command, deps.clock, deps.sleep, unavailable)
+            except dc.DriverOffline as exc:
+                raise Stop(f"the DC test driver never got online: {exc}") from None
+            except dc.StartRefused as exc:
+                raise Stop(f"DC refused `{command}`: {exc}") from None
+            started[run_id] = pool
+            say(deps, f"{phase}: {run_id} started on {pool} for up to {pulls} pull(s)")
+        runs = dc.wait_runs(deps.call, list(started), lambda: dc.read_log(args.dc_runs_file), deps.clock,
+                            deps.sleep, unavailable)
     except dc.RunVanished as exc:
         raise Stop(f"{exc}; the worldserver may have crashed") from None
-    except server.ContainerDown as exc:
-        raise Stop(str(exc)) from None
     except BaseException:
-        # don't leave a run going on a server the cycle is about to unlock
-        try:
-            deps.call(dc.stop_command(run_id))
-        except Exception:
-            pass
+        # don't leave runs going on a server the cycle is about to unlock
+        for run_id in started:
+            try:
+                deps.call(dc.stop_command(run_id))
+            except Exception:
+                pass
         raise
 
-    say(deps, f"{phase}: {run_id} ended {run.result or '?'}")
     deps.sleep(SETTLE_S)
-    state.runs.append((phase, run))
-    rows = rows_for_run(phase, run, corpus)
-    state.rows += rows
-    if not rows:
-        reason = f": {run.fail_reason}" if run.fail_reason else ""
-        raise Stop(f"{run_id} ended {run.result or 'without a verdict'} without a pull{reason}")
+    corpus.rescan()
+    rows: dict[str, list[PullRow]] = {}
+    for run_id, pool in started.items():
+        run = runs.get(run_id)
+        if run is None:
+            continue
+        run.pool = run.pool or pool
+        say(deps, f"{phase}: {run_id} on {pool} ended {run.result or '?'}")
+        state.runs.append((phase, run))
+        rows[pool] = rows_for_run(phase, run, corpus)
+        state.rows += rows[pool]
+
+    missing = [run_id for run_id in started if run_id not in runs]
+    if missing:
+        raise Stop(f"{', '.join(missing)} left .dc test status without a record in {args.dc_runs_file}; "
+                   "the worldserver may have crashed")
+    for run_id, pool in started.items():
+        if not rows[pool]:
+            run = runs[run_id]
+            reason = f": {run.fail_reason}" if run.fail_reason else ""
+            raise Stop(f"{run_id} on {pool} ended {run.result or 'without a verdict'} without a pull{reason}")
     return rows
 
 
-def run_phase(phase: str, args, deps: Deps, corpus: Corpus, state: State) -> None:
-    """DC runs until --pulls valid pulls exist for this phase, or --cap pulls were run."""
-    def have() -> int:
-        if phase == "test":
-            return len(corpus.counted(args.diff, state.head_time))
-        return len(corpus.baseline(args.diff, state.head_time, args.pulls))
-
-    pulled = 0
+def run_phase(phase: str, args, deps: Deps, corpus: Corpus, ledger: Ledger, state: State) -> None:
+    """Rounds of DC runs until every pool has --pulls valid pulls for this phase or ran --cap pulls."""
+    pulled = dict.fromkeys(args.pools, 0)
+    capped: set[str] = set()
     while True:
-        valid = have()
-        say(deps, f"{phase}: {valid}/{args.pulls} valid, {pulled}/{args.cap} pulled")
-        if valid >= args.pulls:
+        ledger.load(read_records(args))
+        wants: dict[str, int] = {}
+        for pool in args.pools:
+            if phase == "test":
+                valid = len(ledger.counted(pool, state.head_time))
+            else:
+                valid = len(ledger.baseline(pool, state.head_time, args.pulls))
+            say(deps, f"{phase} {pool}: {valid}/{args.pulls} valid, {pulled[pool]}/{args.cap} pulled")
+            if valid >= args.pulls:
+                continue
+            if pulled[pool] >= args.cap:
+                if pool not in capped:
+                    capped.add(pool)
+                    state.notes.append(f"{pool}: the {phase} cap of {args.cap} pulls ran out with {valid} valid.")
+                continue
+            wants[pool] = min(args.pulls - valid, args.cap - pulled[pool])
+        if not wants:
             return
-        if pulled >= args.cap:
-            state.notes.append(f"The {phase} cap of {args.cap} pulls ran out with {valid} valid.")
-            return
-        rows = dc_run(phase, args, deps, corpus, state, min(args.pulls - valid, args.cap - pulled))
-        pulled += len(rows)
-        if phase == "baseline" and any(row.trace and row.trace.built and row.trace.built > state.head_time
-                                       for row in rows):
+
+        rows = dc_round(phase, wants, args, deps, corpus, state)
+        for pool, pool_rows in rows.items():
+            pulled[pool] += len(pool_rows)
+        built = [row.trace.built for pool_rows in rows.values() for row in pool_rows
+                 if row.trace and row.trace.built]
+        if phase == "baseline" and any(when > state.head_time for when in built):
             state.notes.append("The live build already holds HEAD, so it can't give a baseline.")
             return
-        if phase == "test" and any(row.trace and row.trace.built and row.trace.built < state.head_time
-                                   for row in rows):
+        if phase == "test" and any(when < state.head_time for when in built):
             raise Stop(f"the running build predates {state.head_sha}, so none of its pulls can count")
 
 
@@ -165,15 +188,16 @@ def rebuild(args, deps: Deps, state: State) -> None:
         raise Stop(f"no `{server.READY_LINE}` in the worldserver log after {args.ready_timeout:.0f} s")
 
 
-def finish(state: State, corpus: Corpus) -> None:
+def finish(state: State, corpus: Corpus, ledger: Ledger, records: list[dict]) -> None:
     for row in state.rows:
         if row.trace:
             try:
                 row.trace = corpus.facts(row.trace.path)
             except OSError:
                 pass
-    state.counted = corpus.counted(state.diff, state.head_time)
-    state.baseline = corpus.baseline(state.diff, state.head_time, state.wanted)
+    ledger.load(records)
+    state.counted = {pool: ledger.counted(pool, state.head_time) for pool in state.pools}
+    state.baseline = {pool: ledger.baseline(pool, state.head_time, state.wanted) for pool in state.pools}
 
 
 def head_of(args) -> tuple[str, datetime.datetime] | None:
@@ -186,10 +210,12 @@ def cycle(args, deps: Deps) -> int:
         print(f"cannot resolve {args.head} in {args.repo}", file=deps.log)
         return 2
     corpus = Corpus(args.boss)
+    ledger = Ledger(corpus, args.pools, args.diff)
     state = State(boss=corpus.boss, diff=args.diff, head_sha=head[0], head_time=head[1], wanted=args.pulls,
-                  cap=args.cap)
+                  pools=list(args.pools), cap=args.cap)
 
-    owner = f"raidtest cycle {corpus.boss} {args.diff}" + (f": {args.owner}" if args.owner else "")
+    owner = f"raidtest cycle {corpus.boss} {args.diff} on {','.join(args.pools)}" + \
+        (f": {args.owner}" if args.owner else "")
     lock = server.ServerLock(pathlib.Path(args.lock), server.owner_text(owner))
     try:
         lock.acquire()
@@ -208,10 +234,10 @@ def cycle(args, deps: Deps) -> int:
                 return 2
         try:
             if not args.skip_baseline:
-                run_phase("baseline", args, deps, corpus, state)
+                run_phase("baseline", args, deps, corpus, ledger, state)
             if not args.skip_rebuild:
                 rebuild(args, deps, state)
-            run_phase("test", args, deps, corpus, state)
+            run_phase("test", args, deps, corpus, ledger, state)
         except Stop as stop:
             state.stopped = stop.reason
         except soap.SoapError as exc:
@@ -221,14 +247,19 @@ def cycle(args, deps: Deps) -> int:
         except Exception as exc:
             traceback.print_exc(file=deps.log)
             state.stopped = f"{type(exc).__name__}: {exc}"
-        finish(state, corpus)
+        try:
+            records = read_records(args)
+        except Exception as exc:
+            records = []
+            state.notes.append(f"Could not read DC's run log `{args.dc_runs_file}`: {exc}")
+        finish(state, corpus, ledger, records)
         render(state, deps.run, deps.out)
     finally:
         lock.release()
 
     if state.stopped:
         return 3
-    return 0 if len(state.counted) >= args.pulls else 1
+    return 0 if all(len(state.counted[pool]) >= args.pulls for pool in state.pools) else 1
 
 
 def report_only(args, deps: Deps) -> int:
@@ -236,25 +267,35 @@ def report_only(args, deps: Deps) -> int:
     if not head:
         print(f"cannot resolve {args.head} in {args.repo}", file=deps.log)
         return 2
+    try:
+        records = read_records(args)
+    except OSError as exc:
+        print(f"cannot read {args.dc_runs_file}: {exc}", file=deps.log)
+        return 2
     corpus = Corpus(args.boss)
-    state = State(boss=corpus.boss, diff=args.diff, head_sha=head[0], head_time=head[1], wanted=args.pulls)
+    state = State(boss=corpus.boss, diff=args.diff, head_sha=head[0], head_time=head[1], wanted=args.pulls,
+                  pools=list(args.pools))
     if args.runs:
-        try:
-            records = dc.parse_records(server.read_file(args.dc_runs_file, deps.run))
-        except server.ContainerDown as exc:
-            print(str(exc), file=deps.log)
-            return 2
         for run_id in args.runs:
             run = dc.find_run(records, run_id)
             if run is None:
                 state.notes.append(f"No DC record for {run_id}.")
                 continue
+            if not run.pool:
+                state.notes.append(f"{run_id} has no pool: DC fielded it without roster=.")
+                continue
+            if run.pool not in state.pools:
+                state.pools.append(run.pool)
             state.runs.append(("run", run))
             state.rows += rows_for_run("run", run, corpus)
-    else:
-        state.rows = [PullRow("test", "", index, None, "", facts)
-                      for index, facts in enumerate(corpus.counted(args.diff, state.head_time)[:args.pulls], 1)]
-    finish(state, corpus)
+    ledger = Ledger(corpus, state.pools, args.diff)
+    if not args.runs:
+        ledger.load(records)
+        for pool in state.pools:
+            for row in ledger.rows_of(ledger.counted(pool, state.head_time)[:args.pulls]):
+                row.phase = "test"
+                state.rows.append(row)
+    finish(state, corpus, ledger, records)
     render(state, deps.run, deps.out)
     return 0
 
@@ -266,24 +307,36 @@ def env_setting(key: str, default: str) -> str:
         return default
 
 
+def pool_list(text: str) -> list[str]:
+    pools = [part.strip() for part in text.split(",") if part.strip()]
+    bad = [pool for pool in pools if not dc.valid_pool(pool)]
+    if not pools or bad:
+        raise argparse.ArgumentTypeError(
+            f"pool names are a lowercase letter then up to 5 lowercase letters or digits: {', '.join(bad) or text!r}")
+    if len(set(pools)) != len(pools):
+        raise argparse.ArgumentTypeError(f"a pool is named twice: {text}")
+    return pools
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Unattended raid test cycle on mod-dungeon-clear.")
     commands = parser.add_subparsers(dest="command", required=True)
 
     def common(sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--boss", required=True, help="RaidObs trace slug, e.g. xt-002 or northrend-beasts")
-        sub.add_argument("--diff", choices=sorted(DIFF_IDS), default="25n")
-        sub.add_argument("--pulls", type=int, default=3, help="valid pulls wanted (default 3)")
+        sub.add_argument("--raid", required=True, choices=dc.RAIDS, help="the raid whose roster pools to use")
+        sub.add_argument("--pools", type=pool_list, help="roster pools (default <raid>1,<raid>2,<raid>3)")
+        sub.add_argument("--diff", choices=sorted(DIFF_IDS), help="default 25h for toc, 25n for uld")
+        sub.add_argument("--pulls", type=int, default=1, help="valid pulls wanted per pool (default 1)")
         sub.add_argument("--head", default="HEAD", help="commit-ish the build must be newer than")
         sub.add_argument("--repo", default=str(MODULE_REPO), help="repo --head resolves in")
-        sub.add_argument("--dc-runs-file", default=env_setting("DC_RUNS_FILE", DC_RUNS_FILE),
-                         help="DC's run log inside the container (.env DC_RUNS_FILE)")
+        sub.add_argument("--dc-runs-file", default=env_setting("DC_RUNS_FILE", str(DC_RUNS_FILE)),
+                         help="DC's run log on the host (.env DC_RUNS_FILE)")
 
     run = commands.add_parser("cycle", help="baseline, rebuild, pulls, report")
     common(run)
-    run.add_argument("--scenario", required=True, help="DC scenario token")
-    run.add_argument("--raid", required=True, choices=dc.RAIDS, help="roster pool")
-    run.add_argument("--cap", type=int, default=6, help="most pulls per phase (default 6)")
+    run.add_argument("--scenario", required=True, help="DC scenario token, passed to DC as given")
+    run.add_argument("--cap", type=int, default=2, help="most pulls per pool in each phase (default 2)")
     run.add_argument("--skip-baseline", action="store_true")
     run.add_argument("--skip-rebuild", action="store_true", help="test the build that is running")
     run.add_argument("--core", default=str(CORE), help="core checkout the build compiles")
@@ -292,7 +345,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     run.add_argument("--log-dir", default=str(pathlib.Path(tempfile.gettempdir()) / "raidtest"))
     run.add_argument("--ready-timeout", type=float, default=1800.0, help="seconds to wait for the restart")
 
-    rep = commands.add_parser("report", help="only the report, from the traces on disk")
+    rep = commands.add_parser("report", help="only the report, from the traces and DC's run log on disk")
     common(rep)
     rep.add_argument("--runs", type=lambda text: [part for part in text.split(",") if part],
                      help="DC run ids to report pull by pull")
@@ -302,6 +355,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         parser.error("--pulls must be at least 1")
     if args.command == "cycle" and args.cap < args.pulls:
         parser.error("--cap can't be below --pulls")
+    args.pools = args.pools or pool_names(args.raid)
+    args.diff = args.diff or DEFAULT_DIFF[args.raid]
     if args.command == "cycle":
         args.core = pathlib.Path(args.core)
     return args
