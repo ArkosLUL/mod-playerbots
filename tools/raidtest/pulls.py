@@ -24,6 +24,9 @@ from raidobs.validity import inspect  # noqa: E402
 # RaidObs `hdr.diff`, the core's raid difficulty ids
 DIFF_IDS = {"10n": 0, "25n": 1, "10h": 2, "25h": 3}
 DC_MULTIPLIERS = ("dungeon clear", "dungeon clear combat")
+# Far above any load gap seen (under 1 s with six raids at once). A longer one is the whole world
+# thread stopped, usually another raid's run being set up, and the frozen fight then catches up in bursts.
+FREEZE_MS = 2000
 
 
 @dataclass
@@ -68,8 +71,15 @@ class TraceFacts:
         """A DC multiplier vetoed an action once the encounter was on, so DC ran part of the fight."""
         return self.start_ms is not None and any(veto.at_ms >= self.start_ms for veto in self.vetoes)
 
+    @property
+    def froze(self) -> int:
+        """The longest server freeze inside the pull in ms, 0 when none passed FREEZE_MS."""
+        longest = max(self.snap_gaps, default=0)
+        return longest if longest > FREEZE_MS else 0
+
     def valid(self, diff_id: int) -> bool:
-        return self.built is not None and not self.warnings and self.diff == diff_id and not self.dc_interfered
+        return (self.built is not None and not self.warnings and self.diff == diff_id and not self.dc_interfered
+                and not self.froze)
 
 
 def death_cause(trace: Trace, death: dict) -> str:

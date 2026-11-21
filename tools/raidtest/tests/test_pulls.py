@@ -187,6 +187,24 @@ class DcInterferenceTest(unittest.TestCase):
         self.assertTrue(self.facts(None).valid(1))
 
 
+class FreezeTest(unittest.TestCase):
+    def facts(self, gaps: list[int]) -> pulls.TraceFacts:
+        return pulls.TraceFacts(path=pathlib.Path("a"), encounter="northrend-beasts",
+                                built=datetime.datetime(2026, 11, 21, 18), diff=3, warnings=[], hardmode=None,
+                                start_ms=100_000, end_ms=300_000, outcome="kill", closed=True, snap_gaps=gaps)
+
+    def test_a_freeze_in_the_fight_voids_the_pull(self):
+        facts = self.facts([250, 6857, 240])
+        self.assertEqual(facts.froze, 6857)
+        self.assertFalse(facts.valid(3))
+
+    def test_load_gaps_do_not(self):
+        facts = self.facts([250, 909, 450, pulls.FREEZE_MS])
+        self.assertEqual(facts.froze, 0)
+        self.assertTrue(facts.valid(3))
+        self.assertTrue(self.facts([]).valid(3))
+
+
 class CauseTest(unittest.TestCase):
     def test_causes(self):
         class FakeTrace:

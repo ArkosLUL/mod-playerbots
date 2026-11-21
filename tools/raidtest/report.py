@@ -86,6 +86,8 @@ def verdict(row: PullRow, diff: str, head_time: datetime.datetime) -> str:
         return "no: build unknown"
     if facts.dc_interfered:
         return "no: DC vetoed actions in the fight"
+    if facts.froze:
+        return f"no: the server froze {facts.froze / 1000:.1f} s in the fight"
     return "counts" if facts.built > head_time else "baseline"
 
 
