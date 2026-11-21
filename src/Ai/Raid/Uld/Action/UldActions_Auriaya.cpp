@@ -227,7 +227,20 @@ bool AuriayaSentryTauntAction::isUseful()
 
 bool AuriayaSentryTauntAction::Execute(Event /*event*/)
 {
-    return CastClassTaunt(botAI, GetAuriayaLooseSentry(botAI, bot));
+    Unit* sentry = GetAuriayaLooseSentry(botAI, bot);
+    if (!sentry)
+        return false;
+
+    // Walk over first, the pack can still be trailing her across the room.
+    if (!InAuriayaSentryTauntReach(bot, sentry))
+        return MoveTo(sentry, ULDUAR_AURIAYA_SENTRY_TAUNT_WALK, MovementPriority::MOVEMENT_COMBAT);
+
+    if (!CastClassTaunt(botAI, sentry))
+        return false;
+
+    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one.
+    AttackDirect(sentry);
+    return true;
 }
 
 bool AuriayaRaidPositionAction::isUseful()

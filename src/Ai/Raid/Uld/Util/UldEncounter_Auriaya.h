@@ -55,6 +55,13 @@ inline constexpr float ULDUAR_AURIAYA_ESSENCE_LEASH = 12.0f;
 // Melee only take the Defender this close to her. It re-rolls aggro, so they'd chase it all fight.
 inline constexpr float ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE = 15.0f;
 
+// Class taunts reach 30 yd. Cast inside 25 and walk to 20, so a Sentry still closing in can't leave the
+// off-tank a yard short.
+inline constexpr float ULDUAR_AURIAYA_SENTRY_TAUNT_REACH = 25.0f;
+inline constexpr float ULDUAR_AURIAYA_SENTRY_TAUNT_WALK = 20.0f;
+// Her formation keeps the Sentries 7-12 yd behind her.
+inline constexpr float ULDUAR_AURIAYA_PACK_RADIUS = 30.0f;
+
 extern const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[];
 
 // Terrifying Screech fears every 35s from the pull, so the whole fight is the fear window.
@@ -65,14 +72,21 @@ Unit* GetAuriaya(PlayerbotAI* botAI);
 bool AuriayaEncounterActive(PlayerbotAI* botAI);
 
 // Gate for anything that pulls. A Sentry's JustEngagedWith calls SetInCombatWithZone on her, so
-// her combat flag covers however the raid opens.
+// her combat flag covers any opener on them. Not the other way round, see AuriayaSentriesUnengaged.
 bool IsAuriayaEngaged(PlayerbotAI* botAI);
+
+// She's in combat but a Sentry around her isn't. Her formation row never makes them assist her, theirs
+// makes the whole pack join whichever one engages, so the first bot to hit one gets all of them.
+bool AuriayaSentriesUnengaged(PlayerbotAI* botAI);
 
 // Sentries first: they stay dead and stop buffing her, the Defender only feigns and comes back.
 Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI);
 
-// A Sentry not already on the off-tank. Two spawn, so "first alive sentry" leaves the second loose.
+// The Sentry the off-tank takes next, nearest first: one on a non-tank, then one still out of combat
+// (a taunt on it brings the whole pack), then one on another tank. Null once all are on the off-tank.
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
+
+bool InAuriayaSentryTauntReach(Player* tank, Unit* sentry);
 
 // Grid search, not "possible targets": the stalkers aren't selectable. Runs per bot per tick on the
 // dodge path, so pass the smallest radius that answers the question. The radius counts both units'
