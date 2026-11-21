@@ -16,6 +16,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidDifficulty.h"
 #include "RaidHumanTankCall.h"
 #include "RaidInstanceState.h"
@@ -1385,8 +1386,8 @@ bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index)
         return false;
 
     bool lane = false;
-    if (Unit* master = botAI->GetMaster())
-        if (ThorimGauntletLaneIndex(master, index, lane))
+    if (Player* leader = GetRaidLeaderOnInstance(botAI))
+        if (ThorimGauntletLaneIndex(leader, index, lane))
             return true;
 
     return ThorimGauntletLaneIndex(bot, index, lane);

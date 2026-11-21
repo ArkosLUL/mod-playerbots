@@ -53,8 +53,8 @@ static_assert(STAGING_PARK < STAGING_UNPARK, "a walk has to end inside its own t
 // The raid-wide half of the window, per instance per ms: Barrett's gossip seen and gone at this stage (or
 // Jaraxxus chained for a retry), nothing live, next arrival by guid slot. Stage 9 is Anub'arak.
 ToCStagingBoss GetToCStagedArrival(PlayerbotAI* botAI);
-// That, while the bot is alive, out of combat and in the arrival's room together with its master,
-// else the group leader
+// That, while the bot is alive, out of combat and in the arrival's room together with whoever leads the
+// raid on this instance
 ToCStagingBoss GetToCStagingBoss(PlayerbotAI* botAI);
 
 struct ToCStagingRead

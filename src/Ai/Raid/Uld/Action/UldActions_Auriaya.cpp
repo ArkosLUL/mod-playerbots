@@ -22,6 +22,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidCombatHelpers.h"
 #include "UldEncounter_Auriaya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -135,7 +136,7 @@ bool FindAuriayaPoolEscape(Player* bot, Position const& center, std::vector<Unit
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {
-    // A spot in the room first, the master may be out in the corridor. The bot is under the floor, so
+    // A spot in the room first, the leader may be out in the corridor. The bot is under the floor, so
     // a soak spot is checked from her instead.
     if (Unit* boss = GetAuriaya(botAI))
     {
@@ -158,12 +159,12 @@ bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
         }
     }
 
-    Player* master = botAI->GetMaster();
-    if (!master || master->GetMap() != bot->GetMap())
+    Player* leader = GetRaidLeaderOnInstance(botAI);
+    if (!leader || leader == bot)
         return false;
 
-    bot->NearTeleportTo(master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
-                        master->GetOrientation());
+    bot->NearTeleportTo(leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
+                        leader->GetOrientation());
     return true;
 }
 

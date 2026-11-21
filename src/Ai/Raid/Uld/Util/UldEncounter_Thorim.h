@@ -509,8 +509,8 @@ Position const& GetThorimGauntletWaypoint(bool leftLane, uint8 index);
 bool ThorimGauntletLaneIndexInLane(WorldObject const* who, bool leftLane, uint8& index);
 bool ThorimGauntletLaneIndex(WorldObject const* who, uint8& index, bool& leftLane);
 
-// The squad's waypoint index: the master's, or this bot's own when the master is on none (centre line, or
-// off on an add).
+// The squad's waypoint index: the raid leader's, or this bot's own when the leader is on none (centre line,
+// or off on an add).
 bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index);
 
 // Sticky once a hand goes up, or the formation walks back into the lane it just left. False before the

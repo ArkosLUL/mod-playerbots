@@ -1033,9 +1033,9 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     uint32 size = IsRaid25Man(bot) ? ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN
                                   : ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN;
 
-    // A non-tank master takes a portal of its own, and it is not ours to move.
+    // A non-tank master in the raid takes a portal of its own, and it is not ours to move.
     Player* master = botAI->GetMaster();
-    bool const masterTakesOne = master && !PlayerbotAI::IsTank(master);
+    bool const masterTakesOne = master && master->GetGroup() == group && !PlayerbotAI::IsTank(master);
     if (masterTakesOne && size)
         --size;
 

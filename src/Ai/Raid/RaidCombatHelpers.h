@@ -26,6 +26,10 @@ class Value;
 // so the two can't drift apart.
 bool IsRaidDpsBot(Player* bot);
 
+// Whoever leads the raid on this bot's map and instance: its master when that's here, else the group
+// leader when that's here, else nullptr. A test harness can master the bots from outside the raid.
+Player* GetRaidLeaderOnInstance(PlayerbotAI* botAI);
+
 // An action whose damage lands on everything around its target or the bot, so it threatens a boss
 // it isn't aimed at
 bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action);

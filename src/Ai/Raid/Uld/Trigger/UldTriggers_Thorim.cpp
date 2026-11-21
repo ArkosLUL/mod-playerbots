@@ -4,6 +4,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "UldEncounter_Thorim.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -52,17 +53,17 @@ bool ThorimGauntletPositioningTrigger::IsActive()
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
 
-    Unit* master = botAI->GetMaster();
-    if (!master)
+    Player* leader = GetRaidLeaderOnInstance(botAI);
+    if (!leader)
         return false;
 
-    if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
-        bot->GetDistance2d(master) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
+    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
+        bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
         return true;
 
-    uint8 masterIndex = 0;
+    uint8 leaderIndex = 0;
     bool leftLane = false;
-    if (ThorimGauntletLaneIndex(master, masterIndex, leftLane))
+    if (ThorimGauntletLaneIndex(leader, leaderIndex, leftLane))
     {
         bool preferredLane = false;
         if (ThorimPreferredGauntletLane(botAI, preferredLane))
@@ -75,9 +76,9 @@ bool ThorimGauntletPositioningTrigger::IsActive()
         return false;
     }
 
-    // Master past the last waypoint, so nothing places the formation any more. Healers only: everyone else
+    // Leader past the last waypoint, so nothing places the formation any more. Healers only: everyone else
     // keeps up on its own chase, and a tether on them would fight reach melee for the whole squad.
-    return PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(master) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
+    return PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(leader) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
 }
 
 bool ThorimBalconyAdvanceTrigger::IsActive()
@@ -171,7 +172,7 @@ bool ThorimRunicSmashTrigger::IsActive()
     if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
-    // Corridor squad only: ThorimResolveGauntletIndex falls back to the master's waypoint, so an arena bot would
+    // Corridor squad only: ThorimResolveGauntletIndex falls back to the leader's waypoint, so an arena bot would
     // answer the telegraph by walking 110 yd down the corridor and never come back.
     if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;

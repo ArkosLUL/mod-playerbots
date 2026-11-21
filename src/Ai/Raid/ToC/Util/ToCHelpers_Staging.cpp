@@ -20,6 +20,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SharedDefines.h"
@@ -1024,21 +1025,6 @@ bool InArrivalRoom(Player* player, ToCStagingBoss arrival)
     return player->GetExactDist2d(ARENA_CENTER) <= ARENA_ROOM_RADIUS && player->GetPositionZ() > ARENA_ROOM_MIN_Z;
 }
 
-// The master, else the group leader, on this instance
-Player* StagingLeader(PlayerbotAI* botAI, Player* bot)
-{
-    Player* leader = botAI->GetMaster();
-    if (!leader)
-        if (Group* group = bot->GetGroup())
-            leader = ObjectAccessor::FindPlayer(group->GetLeaderGUID());
-
-    if (!leader || !leader->IsInWorld() || leader->GetMapId() != bot->GetMapId() ||
-        leader->GetInstanceId() != bot->GetInstanceId())
-        return nullptr;
-
-    return leader;
-}
-
 DealtStand const* DealtFor(PlayerbotAI* botAI, StagingState& state, ToCStagingBoss arrival)
 {
     uint32 const now = getMSTime();
@@ -1227,7 +1213,7 @@ ToCStagingBoss GetToCStagingBoss(PlayerbotAI* botAI)
         return ToCStagingBoss::None;
 
     // A leader who walks out releases the hold
-    Player* leader = StagingLeader(botAI, bot);
+    Player* leader = GetRaidLeaderOnInstance(botAI);
     return leader && InArrivalRoom(leader, arrival) ? arrival : ToCStagingBoss::None;
 }
 

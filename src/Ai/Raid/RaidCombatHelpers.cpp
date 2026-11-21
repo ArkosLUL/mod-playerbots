@@ -13,15 +13,41 @@
 #include "Action.h"
 #include "AiObjectContext.h"
 #include "GenericSpellActions.h"
+#include "Group.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidSplash.h"
 #include "Unit.h"
 
+namespace
+{
+bool OnInstanceOf(Player const* player, Player const* bot)
+{
+    return player && player->IsInWorld() && player->GetMapId() == bot->GetMapId() &&
+           player->GetInstanceId() == bot->GetInstanceId();
+}
+}  // namespace
+
 bool IsRaidDpsBot(Player* bot)
 {
     return bot && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsTank(bot, true) && !PlayerbotAI::IsHeal(bot);
+}
+
+Player* GetRaidLeaderOnInstance(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot)
+        return nullptr;
+
+    Player* master = botAI->GetMaster();
+    if (OnInstanceOf(master, bot))
+        return master;
+
+    Group* group = bot->GetGroup();
+    Player* leader = group ? ObjectAccessor::FindPlayer(group->GetLeaderGUID()) : nullptr;
+    return OnInstanceOf(leader, bot) ? leader : nullptr;
 }
 
 bool IsRaidAreaDamage(PlayerbotAI* botAI, Action* action)
