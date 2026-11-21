@@ -9,6 +9,7 @@
 #include "Creature.h"
 #include "DBCEnums.h"
 #include "EncounterHelpers.h"
+#include "GameObject.h"
 #include "Group.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -1386,11 +1387,164 @@ bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index)
         return false;
 
     bool lane = false;
-    if (Player* leader = GetRaidLeaderOnInstance(botAI))
+    if (Player* leader = ThorimGauntletLeader(botAI))
         if (ThorimGauntletLaneIndex(leader, index, lane))
             return true;
 
     return ThorimGauntletLaneIndex(bot, index, lane);
+}
+
+namespace
+{
+constexpr uint32 THORIM_ARENA_LEVER_ENTRY = 194264;
+constexpr float THORIM_LEVER_SEARCH_RANGE = 150.0f;
+
+bool OnThisInstance(Player const* member, Player const* bot)
+{
+    return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
+           member->GetInstanceId() == bot->GetInstanceId();
+}
+}  // namespace
+
+bool ThorimBotLedGauntlet(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (OnThisInstance(member, bot) && !IsBotPlayer(member))
+            return false;
+    }
+
+    return true;
+}
+
+Player* ThorimGauntletLeader(PlayerbotAI* botAI)
+{
+    if (!ThorimBotLedGauntlet(botAI))
+        return GetRaidLeaderOnInstance(botAI);
+
+    Player* bot = botAI->GetBot();
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || !state->squadsAssigned)
+        return nullptr;
+
+    Player* fallback = nullptr;
+    for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!OnThisInstance(member, bot) || !member->IsAlive() || SquadOf(*state, member) != ThorimSquad::Gauntlet)
+            continue;
+
+        if (PlayerbotAI::IsTank(member))
+            return member;
+
+        if (!fallback && !PlayerbotAI::IsHeal(member))
+            fallback = member;
+    }
+
+    return fallback;
+}
+
+bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot)
+{
+    return botAI && bot && ThorimBotLedGauntlet(botAI) && ThorimGauntletLeader(botAI) == bot;
+}
+
+bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
+{
+    ThorimEncounterState* state = FindState(bot);
+    if (!state || state->leverPulled)
+        return false;
+
+    GameObject* lever = bot->FindNearestGameObject(THORIM_ARENA_LEVER_ENTRY, THORIM_LEVER_SEARCH_RANGE);
+    if (!lever)
+        return false;
+
+    // Locked until six of the start pack are dead (not selectable); a pulled one leaves the ready state.
+    if (lever->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
+        return false;
+
+    if (lever->GetGoState() != GO_STATE_READY)
+    {
+        state->leverPulled = true;
+        state->leadStepMs = getMSTime();
+        return false;
+    }
+
+    leverGuid = lever->GetGUID();
+    return true;
+}
+
+void ThorimNoteLeverPulled(Player* bot)
+{
+    if (ThorimEncounterState* state = FindState(bot))
+    {
+        state->leverPulled = true;
+        state->leadStepMs = getMSTime();
+    }
+}
+
+bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    ThorimEncounterState* state = FindState(bot);
+    if (!state || !state->leverPulled || state->leadNext >= ULDUAR_THORIM_GAUNTLET_WAYPOINTS)
+        return false;
+
+    // The balcony and the phase 2 floor are no corridor.
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD || ThorimPhase2Active(botAI))
+        return false;
+
+    // Right lane until the Colossus raises a hand, then the one its last telegraph left safe.
+    bool leftLane = false;
+    ThorimPreferredGauntletLane(botAI, leftLane);
+
+    uint32 const now = getMSTime();
+    uint8 index = 0;
+    if (ThorimGauntletLaneIndexInLane(bot, leftLane, index) && index >= state->leadNext)
+    {
+        state->leadNext = index + 1;
+        state->leadStepMs = now;
+        if (state->leadNext >= ULDUAR_THORIM_GAUNTLET_WAYPOINTS)
+            return false;
+    }
+
+    // Wait for the squad's non-healers (healers tether themselves), but not for ever: a stuck bot must
+    // not hold the 150 s clock.
+    if (getMSTimeDiff(state->leadStepMs, now) < ULDUAR_THORIM_LEAD_STALL_MS)
+    {
+        for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member == bot || !OnThisInstance(member, bot) || !member->IsAlive() || !IsBotPlayer(member) ||
+                PlayerbotAI::IsHeal(member) || SquadOf(*state, member) != ThorimSquad::Gauntlet)
+                continue;
+
+            if (bot->GetDistance2d(member) > ULDUAR_THORIM_LEAD_COHESION_DISTANCE)
+                return false;
+        }
+    }
+
+    out = GetThorimGauntletWaypoint(leftLane, state->leadNext);
+    return true;
+}
+
+Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS ||
+        bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD || ThorimPhase2Active(botAI))
+        return nullptr;
+
+    Unit* colossus = GetThorimRunicColossus(botAI);
+    if (!colossus || !colossus->IsAlive() || bot->GetDistance(colossus) <= ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
+        return nullptr;
+
+    return colossus;
 }
 
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane)
@@ -2902,6 +3056,9 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->runicSmashSeenMs = 0;
     state->smashScanMs = 0;
     state->gauntletTraced = false;
+    state->leverPulled = false;
+    state->leadNext = 0;
+    state->leadStepMs = 0;
     state->chargedOrbGuid = ObjectGuid::Empty;
     state->orbScanMs = 0;
     state->lightningOrbGuid = ObjectGuid::Empty;

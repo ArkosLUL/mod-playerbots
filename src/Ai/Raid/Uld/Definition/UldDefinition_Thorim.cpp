@@ -119,6 +119,8 @@ void DefineThorim(EncounterBuilder& e)
     e.Node<ThorimPetLeashTrigger, ThorimPetLeashAction>(ACTION_RAID);
 
     e.Node<ThorimGauntletPositioningTrigger, ThorimGauntletPositioningAction>(ACTION_RAID);
+    e.Node<ThorimGauntletLeverTrigger, ThorimGauntletLeverAction>(ACTION_RAID + 1);
+    e.Node<ThorimGauntletLeadTrigger, ThorimGauntletLeadAction>(ACTION_RAID + 1);
 
     // Above the corridor walk, because on the balcony that one has no waypoint to offer and the
     // hallway is where the two Paralytic Field bunnies are.

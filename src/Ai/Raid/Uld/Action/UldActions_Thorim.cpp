@@ -217,8 +217,12 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
 {
     FollowMasterStrategy followMasterStrategy(botAI);
 
-    Player* leader = GetRaidLeaderOnInstance(botAI);
+    Player* leader = ThorimGauntletLeader(botAI);
     if (!leader)
+        return false;
+
+    bool const botLed = ThorimBotLedGauntlet(botAI);
+    if (botLed && leader == bot)
         return false;
 
     if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
@@ -227,7 +231,7 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         if (MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
         {
-            if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
+            if (!botLed && !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
                 botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
                                       BotState::BOT_STATE_NON_COMBAT);
 
@@ -248,10 +252,58 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
-    // Past the waypoints the leader is the only anchor left, and a trailing healer heals nobody.
-    if (PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(leader) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE)
+    // Past the waypoints the leader is the only anchor left, and a trailing healer heals nobody. A bot leader
+    // walks between waypoints too, so everyone closes up on him when too far behind.
+    float const trail = botLed && !PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE
+                                                              : ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
+    if ((botLed || PlayerbotAI::IsHeal(bot)) && bot->GetDistance2d(leader) > trail)
         return MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
                       false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
+
+    return false;
+}
+
+bool ThorimGauntletLeverAction::isUseful()
+{
+    ThorimGauntletLeverTrigger thorimGauntletLeverTrigger(botAI);
+    return thorimGauntletLeverTrigger.IsActive();
+}
+
+bool ThorimGauntletLeverAction::Execute(Event /*event*/)
+{
+    ObjectGuid leverGuid;
+    if (!ThorimLeverUsable(bot, leverGuid))
+        return false;
+
+    GameObject* lever = botAI->GetGameObject(leverGuid);
+    if (!lever)
+        return false;
+
+    if (!lever->IsAtInteractDistance(bot))
+        return MoveTo(lever, fmaxf(lever->GetInteractionDistance() - 1.0f, 0.0f));
+
+    WorldPacket data(CMSG_GAMEOBJ_USE);
+    data << lever->GetGUID();
+    bot->GetSession()->HandleGameObjectUseOpcode(data);
+    ThorimNoteLeverPulled(bot);
+    return true;
+}
+
+bool ThorimGauntletLeadAction::isUseful()
+{
+    ThorimGauntletLeadTrigger thorimGauntletLeadTrigger(botAI);
+    return thorimGauntletLeadTrigger.IsActive();
+}
+
+bool ThorimGauntletLeadAction::Execute(Event /*event*/)
+{
+    Position next;
+    if (ThorimGauntletLeadStep(botAI, bot, next))
+        return MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_COMBAT, true);
+
+    if (Unit* colossus = ThorimGauntletLeadColossus(botAI, bot))
+        return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
 
     return false;
 }

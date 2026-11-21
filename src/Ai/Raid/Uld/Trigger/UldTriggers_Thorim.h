@@ -43,6 +43,24 @@ public:
     bool IsActive() override;
 };
 
+class ThorimGauntletLeverTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "thorim gauntlet lever trigger";
+
+    ThorimGauntletLeverTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class ThorimGauntletLeadTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "thorim gauntlet lead trigger";
+
+    ThorimGauntletLeadTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // Corridor squad member up in the hallway, Rune Giant dead. The lane waypoints all sit down at z 412, so without
 // this plain follow walks the squad over both Paralytic Field bunnies on the centre line.
 class ThorimBalconyAdvanceTrigger : public Trigger

@@ -774,8 +774,29 @@ even spread, so a chain held in one cluster spends its late hops on pets rather 
 slot's players. **Human-owned pets are 13-30% of the bodies and are not steerable at all**, no
 `PlayerbotAI`. Logging pet damage in `Bot/Obs` is still what it would take to count the real hops.
 
-**A bot-only raid never walks the corridor at all.** `ThorimGauntletPositioningTrigger` opens with
-`if (!master) return false;` and derives progress from the master's waypoint.
+**A bot-led gauntlet** (`ThorimBotLedGauntlet`: no non-headless group member on the instance, which is how
+the unattended harness runs, its master being a headless GM bot off the map and slot 0, the arena main
+tank, the group leader). With a real player present nothing below applies and the corridor formation keys
+on the raid leader as before.
+- **Leader:** `ThorimGauntletLeader` is the gauntlet-squad tank, else the first living non-healer of the
+  squad. Everything that keyed on the raid leader (`ThorimGauntletPositioningTrigger`/`Action`,
+  `ThorimResolveGauntletIndex`, so the Runic Smash lane swap too) keys on him instead. The
+  `ThorimFallFromFloor` teleport still targets the group leader.
+- **Lever:** `ThorimGauntletLeverTrigger` is true for the leader once the lever (GO 194264) has lost
+  `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`; the action walks into
+  interact range and sends `CMSG_GAMEOBJ_USE`. A used lever toggles back, so `leverPulled` latches (also
+  when the lever is seen already used; the corridor is out of the 150 yd search range).
+- **Walk:** `ThorimGauntletLeadTrigger` steps the leader through the lane waypoints (`leadNext`, monotonic;
+  right lane, or the one the last Runic Smash telegraph left safe), at combat priority. He holds while a
+  squad non-healer is more than 30 yd behind, but at most 15 s per step, so a stuck bot cannot eat the 150 s
+  clock. Past the last waypoint he walks on to 30 yd from the Colossus, which the squad's own targeting then
+  engages. Followers take his waypoint as before; between waypoints they walk to him once more than 25 yd
+  (healers 20 yd) behind, and the follow-master strategy is not added.
+- **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
+  roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
+  led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
+  across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
+  one, about 100-125 s from the lever. Unmeasured: needs a live pull.
 
 **The last 67 yd of the lower corridor are unwaypointed** — waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
