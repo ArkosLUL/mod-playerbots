@@ -41,6 +41,18 @@ collected once round the bot (`CollectDevouringFlames`), not a sweep per candida
 Both release the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
 is the freeze bug.
 
+**The ranged stack walks to a slot, never onto a patch.** A ranged bot outside the stack circle
+(12 yd round the arena centre, 18 yd round the first-landing offset) walks to its own slot on it,
+bearing from its place in the group (`GetRazorscaleRangedStackSpot`). Not `MoveInside`: its
+`GetFollowAngle` reads the master's group, so a master outside the raid (the DC console driver)
+gives every bot angle 0. Window 5 put all 14 ranged and healers on one spot, and a patch there killed
+9 of them 14 times. The slot turns along the circle, up to a quarter turn each way, off any patch the
+dodge would move the bot out of, at the spot or on the walk; if none is clear the bot stays put. The
+dodge fires on `GetDistance2d`, which subtracts both combat reaches: ~10 yd from a patch's centre,
+not 7. So the spot clears `DEVOURING_FLAME_CLEAR_RADIUS` + both reaches +
+`DEVOURING_FLAME_STAND_MARGIN`; short of that the dodge steps the bot off and the stack walk takes it
+straight back, every tick.
+
 **The per-tick lookups go through one scan.** `RazorscaleScan` is the
 [per-bot `getMSTime()`-stamped scan](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid),
 held as a `ManualSetValue<RazorscaleScan*>` in `RaidUlduarValueContext` (`UldValueContext.h`) and
@@ -63,3 +75,9 @@ No generic strategy commands pets ([action-selection](../../engine/action-select
 so they keep whatever they last hit: `razorscale pet control action` puts them on the adds
 while she flies and on her when she lands, and always reports failure so the tick falls through.
 
+## What a trace answers
+
+`tools/botobs/bosses/razorscale.py <trace>`, no probes: `--phases` air and ground stretches with her
+health; `--stack` per ground phase, where the stack walk sent ranged and healers (spots, and walks
+ending within 10 yd of a live patch); `--fire` Devouring Flame damage by role, air and ground;
+`--deaths` deaths by mechanic and phase.

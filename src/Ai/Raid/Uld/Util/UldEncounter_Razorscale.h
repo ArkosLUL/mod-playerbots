@@ -55,6 +55,9 @@ public:
     // the margin a step needs to actually leave the patch rather than stopping on its edge.
     static constexpr float DEVOURING_FLAME_RADIUS = 5.0f;
     static constexpr float DEVOURING_FLAME_CLEAR_RADIUS = DEVOURING_FLAME_RADIUS + 2.0f;
+    // Kept by a ranged stack spot past the dodge's own reach, so a bot parked a little off it isn't
+    // dodged straight back out.
+    static constexpr float DEVOURING_FLAME_STAND_MARGIN = 2.0f;
 
     // The main tank's clear while she is airborne, so he can hold the Dark Rune adds away from the patches.
     static constexpr float DEVOURING_FLAME_AIRBORNE_TANK_SCALE = 2.3f;
@@ -188,6 +191,11 @@ Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
 
 // She sits on her first landing spot, where the ranged stack shifts off centre.
 bool IsRazorscaleAtFirstLanding(Unit* boss);
+
+// Where a ranged bot outside the stack walks: its own slot on the circle of `radius` round (x, y), by
+// its place in the group, turned along the circle off any Devouring Flame patch the dodge would take it
+// out of again, standing there or on the walk. False when nothing within a quarter turn is clear.
+bool GetRazorscaleRangedStackSpot(Player* bot, float x, float y, float radius, Position& spot);
 
 // Skull target: the boss whenever she's on the floor, harpoon knockdowns included since she takes
 // damage then. Otherwise the add above.

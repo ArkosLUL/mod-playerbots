@@ -478,6 +478,84 @@ bool IsRazorscaleAtFirstLanding(Unit* boss)
                RazorscaleBossHelper::RAZORSCALE_FIRST_LANDING_Z_TOLERANCE;
 }
 
+namespace
+{
+
+// Not MovementAction::GetFollowAngle: that reads the master's group, so a master outside the raid (a
+// console-driven run) puts every bot on angle 0 and the whole ranged stack on one spot.
+float RazorscaleStackSlotAngle(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    uint32 const members = group ? group->GetMembersCount() : 0;
+    if (!members)
+        return 0.0f;
+
+    uint32 index = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next(), ++index)
+        if (ref->GetSource() == bot)
+            return 2.0f * static_cast<float>(M_PI) * static_cast<float>(index) / static_cast<float>(members);
+
+    return 0.0f;
+}
+
+}
+
+bool GetRazorscaleRangedStackSpot(Player* bot, float x, float y, float radius, Position& spot)
+{
+    using Helper = RazorscaleBossHelper;
+
+    // The grid search adds both combat reaches on its own, so this covers every slot and every walk.
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, Helper::UNIT_DEVOURING_FLAME,
+                                        bot->GetExactDist2d(x, y) + radius + Helper::DEVOURING_FLAME_CLEAR_RADIUS +
+                                            Helper::DEVOURING_FLAME_STAND_MARGIN);
+
+    // The dodge fires on GetDistance2d, which takes both combat reaches off the centre distance: ~10 yd
+    // from the patch's centre, not 7.
+    std::vector<HazardCircle> flames;
+    for (Creature* flame : found)
+    {
+        if (!flame || !flame->IsAlive())
+            continue;
+
+        flames.emplace_back(flame->GetPosition(), Helper::DEVOURING_FLAME_CLEAR_RADIUS + bot->GetObjectSize() +
+                                                      flame->GetObjectSize());
+    }
+
+    Position const from = bot->GetPosition();
+    float const slot = RazorscaleStackSlotAngle(bot);
+
+    constexpr int TURN_STEPS = 6;
+    constexpr float TURN_STEP = static_cast<float>(M_PI) / 12.0f;
+    for (int i = 0; i <= TURN_STEPS; ++i)
+    {
+        for (float sign : {1.0f, -1.0f})
+        {
+            if (i == 0 && sign < 0.0f)
+                continue;
+
+            float const angle = slot + sign * static_cast<float>(i) * TURN_STEP;
+            Position const candidate(x + std::cos(angle) * radius, y + std::sin(angle) * radius, bot->GetPositionZ());
+
+            bool const fouled = std::any_of(flames.begin(), flames.end(),
+                [&](HazardCircle const& flame)
+                {
+                    return candidate.GetExactDist2d(flame.first.GetPositionX(), flame.first.GetPositionY()) <
+                               flame.second + Helper::DEVOURING_FLAME_STAND_MARGIN ||
+                           SegmentCrossesCircle(from, candidate, flame);
+                });
+
+            if (!fouled)
+            {
+                spot = candidate;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)
 {
     Unit* boss = GetRazorscaleScan(botAI).Boss();
