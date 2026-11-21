@@ -162,7 +162,7 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
 
     // Same check everything that steps aside for the shed uses, so they can't disagree. It reads the buff
     // auras, not a zone lookup: that's what the walk would lose, and it needs no grid sweep.
-    if (!_shedding && !IsHodirBitingColdShedArmed(bot))
+    if (!_shedding && !IsHodirBitingColdShedArmed(botAI, bot))
         return false;
 
     // Once started, go down to the floor: a stack only drops on the second moving tick in a row, so
