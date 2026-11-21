@@ -52,7 +52,8 @@ What the generic views get wrong here, and what this reads instead:
   `nb.wormhold` and `nb.poolmove` (the walk out of a pool with no worm engaged) are per-bot
   change-only notes too.
 - **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
-  side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 till it
+  side of `facing` at the cast's start. The cone then follows the worm's victim, so `--worms` also
+  prints how far the worm's facing swung over the Spew and how far each victim walked; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 till it
   despawns (11 yd at 30 s on normal, 20 at 60 s on 25H), so `--worms` rebuilds its radius from its
   first snapshot.
 - **A Spray's `cast` row is its start.** The splash lands on its target when the cast ends, `ct`
@@ -889,6 +890,8 @@ TOXIN_STUCK_HEROIC_MS = 13500
 CURE_WINDOW_MS = 250
 # The row goes out at the 1 s cast and the last of the 2.5 s of ticks lands 3.5 s after it.
 SPEW_WINDOW_MS = 3500
+# The channel roots the worm where the row was written
+SPEW_WORM_YD = 3.0
 # A Spray's debuff lands as one burst 1-3 s after its cast row; a later apply has another source.
 SPRAY_APPLY_FROM_MS = 800
 SPRAY_APPLY_TO_MS = 4000
@@ -989,12 +992,50 @@ def wedge_angle_off(origin, facing: float, point) -> float:
     return abs(math.degrees((bearing - facing + math.pi) % (2 * math.pi) - math.pi))
 
 
+def spew_swing(snaps: list[dict], stamps: list[int], worms: set[int], origin, facing: float,
+               start: int) -> tuple[float, list[tuple[int, float]]]:
+    """Degrees the worm at `origin` turned off `facing` over the Spew, and each of its victims in turn with
+    the yards it walked while the target. The cone follows the victim, so a walk or a taunt sweeps it."""
+    swing = 0.0
+    walks: list[list] = []
+    worm = None
+    last = None
+    for snap in snaps[bisect.bisect_left(stamps, start):]:
+        if snap["t"] > start + SPEW_WINDOW_MS:
+            break
+        rows = {row[0]: row for row in snap.get("u", [])}
+        if worm is None:
+            near = [row for guid, row in rows.items() if guid in worms and dist2(row[1:3], origin) <= SPEW_WORM_YD]
+            if not near:
+                continue
+            worm = min(near, key=lambda row: dist2(row[1:3], origin))[0]
+        row = rows.get(worm)
+        if row is None or row[5] <= 0:
+            break
+        swing = max(swing, abs(math.degrees((row[4] - facing + math.pi) % (2 * math.pi) - math.pi)))
+        victim = rows.get(row[7]) if len(row) > 7 else None
+        if victim is None:
+            last = None
+            continue
+        if not walks or walks[-1][0] != victim[0]:
+            walks.append([victim[0], 0.0])
+        elif last is not None:
+            walks[-1][1] += dist2(last, victim[1:3])
+        last = victim[1:3]
+    return swing, [(guid, yards) for guid, yards in walks]
+
+
 def spew_wedges(trace: Trace) -> list[dict]:
-    """Per `wedge` row on a Spew tick: the living non-tanks inside it at the nearest snapshot, and that
-    worm's Spew tick victims by role over the next 3.5 s. `arc` is degrees either side of `facing`."""
+    """Per `wedge` row on a Spew tick: the living non-tanks inside it at the nearest snapshot, that worm's
+    Spew tick victims by role over the next 3.5 s, and its swing and victims (`spew_swing`). `arc` is
+    degrees either side of `facing`."""
     roster = roster_guids(trace)
     ticks = [rec for rec in trace.of("dmg")
              if rec.get("sp") in SPELL_ACIDIC_SPEW_TICK + SPELL_MOLTEN_SPEW_TICK]
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    worms = {"Acidmaw": set(guids_of_entry(trace, NPC_ACIDMAW)),
+             "Dreadscale": set(guids_of_entry(trace, NPC_DREADSCALE))}
     out = []
     for rec in trace.of("haz"):
         if rec.get("shape") != "wedge" or rec.get("sp") not in SPELL_ACIDIC_SPEW_TICK + SPELL_MOLTEN_SPEW_TICK:
@@ -1016,13 +1057,17 @@ def spew_wedges(trace: Trace) -> list[dict]:
             if tick["sp"] in family and rec["t"] <= tick["t"] <= rec["t"] + SPEW_WINDOW_MS:
                 hit[trace.role(tick.get("d", 0))][tick.get("d", 0)] += 1
 
+        worm = "Acidmaw" if family is SPELL_ACIDIC_SPEW_TICK else "Dreadscale"
+        swing, victims = spew_swing(snaps, stamps, worms[worm], origin, facing, rec["t"])
         out.append({
             "t": rec["t"],
-            "worm": "Acidmaw" if family is SPELL_ACIDIC_SPEW_TICK else "Dreadscale",
+            "worm": worm,
             "facing": facing,
             "arc": arc,
             "inside": inside,
             "hit": dict(hit),
+            "swing": swing,
+            "victims": victims,
         })
     return out
 
@@ -1257,7 +1302,9 @@ def show_worms(trace: Trace) -> None:
     print("  Spew wedges:" + ("" if wedges else " none"))
     for row in wedges:
         inside = ", ".join(named(trace, guid) for guid in sorted(row["inside"], key=trace.name)) or "nobody"
+        victims = " > ".join(f"{named(trace, guid)} {yards:.0f} yd" for guid, yards in row["victims"]) or "none"
         print(f"    {clock(row['t']):>9}  {row['worm']:10} facing {row['facing']:.2f} arc {row['arc']:.0f}"
+              f" swing {row['swing']:.0f}  victims walked: {victims}"
               f"  non-tanks inside: {inside}  ticks: {by_role(trace, row['hit']) or 'none'}")
 
     pools = slime_pools(trace)

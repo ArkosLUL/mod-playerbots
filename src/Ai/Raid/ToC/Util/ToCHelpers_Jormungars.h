@@ -43,6 +43,10 @@ inline constexpr float WORM_STATIONARY_MELEE_RANGE = PlayerMeleeRange(WORM_STATI
 // The melee clump round the up mobile worm: its dealt stands plus a yard
 inline constexpr float WORM_MELEE_RING = 9.3f;
 inline constexpr float WORM_SPEW_RANGE = 55.0f;
+// The tick takes a player in out to its range plus the player's combat reach (WorldObject::IsWithinDist3d)
+inline constexpr float WORM_SPEW_HIT_RANGE = WORM_SPEW_RANGE + DEFAULT_COMBAT_REACH;
+// Bot spots and triggers, a yard spare
+inline constexpr float WORM_SPEW_REACH = WORM_SPEW_HIT_RANGE + 1.0f;
 inline constexpr float WORM_FLOOR_RADIUS = 35.0f;        // the worms surface up to 35 yd from ARENA_CENTER
 // Bot spots only. 2 yd inside Icehowl's gate-side charge end, so the floor is known to reach it.
 inline constexpr float WORM_SPOT_FLOOR_RADIUS = 44.0f;
@@ -176,6 +180,8 @@ bool IsWormMobile(Unit* worm);
 // A player's melee range by that form: under ground the transform model carries its own reach
 float WormMeleeRange(Unit* worm);
 float WormSpewHalfArc(PlayerbotAI* botAI);        // radians, half the cone the remapped tick uses
+// Its Spew is being cast or channelled, its cone following its victim all along
+bool IsWormSpewing(PlayerbotAI* botAI, Unit* worm);
 
 struct WormDragPlan
 {

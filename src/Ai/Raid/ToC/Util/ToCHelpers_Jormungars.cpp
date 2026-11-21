@@ -272,7 +272,7 @@ bool InCone(Position const& origin, float x, float y, float halfArc)
 {
     float const dx = x - origin.GetPositionX();
     float const dy = y - origin.GetPositionY();
-    if (dx * dx + dy * dy > WORM_SPEW_RANGE * WORM_SPEW_RANGE)
+    if (dx * dx + dy * dy > WORM_SPEW_REACH * WORM_SPEW_REACH)
         return false;
 
     float diff = Position::NormalizeOrientation(std::atan2(dy, dx) - origin.GetOrientation());
@@ -400,8 +400,8 @@ void ReadWorm(Map* map, Unit* worm, uint32 spewCast, uint32 spewTick, WormRead& 
         return;
 
     char params[80];
-    snprintf(params, sizeof(params), "\"facing\":%.2f,\"arc\":%.1f,\"range\":%.0f", worm->GetOrientation(),
-             HalfArcOf(spewTick) * 180.0f / static_cast<float>(M_PI), WORM_SPEW_RANGE);
+    snprintf(params, sizeof(params), "\"facing\":%.2f,\"arc\":%.1f,\"range\":%.1f", worm->GetOrientation(),
+             HalfArcOf(spewTick) * 180.0f / static_cast<float>(M_PI), WORM_SPEW_HIT_RANGE);
     RaidObs::NoteHazard(map, spewTick, read.pos, "wedge", params, SPEW_NOTE_TTL_MS);
 }
 
@@ -1333,7 +1333,7 @@ float SpewSideExit(Position const& origin, float x, float y, float halfArc)
 
     float const side = std::fabs(px * ay - py * ax);
     float const coneEdge = std::min(along * std::tan(halfArc),
-                                    std::sqrt(std::max(WORM_SPEW_RANGE * WORM_SPEW_RANGE - along * along, 0.0f)));
+                                    std::sqrt(std::max(WORM_SPEW_REACH * WORM_SPEW_REACH - along * along, 0.0f)));
     float const discEdge =
         along < WORM_TANK_OFFSET ? std::sqrt(WORM_TANK_OFFSET * WORM_TANK_OFFSET - along * along) : 0.0f;
     return std::max(std::max(coneEdge, discEdge) - side, 0.0f);
@@ -1917,6 +1917,13 @@ float WormSpewHalfArc(PlayerbotAI* botAI)
     return HalfArcOf(bot ? sSpellMgr->GetSpellIdForDifficulty(SPELL_ACIDIC_SPEW_TICK, bot) : SPELL_ACIDIC_SPEW_TICK);
 }
 
+bool IsWormSpewing(PlayerbotAI* botAI, Unit* worm)
+{
+    JormungarsState* state = worm ? Refresh(botAI) : nullptr;
+    WormRead const* read = state ? FindWorm(*state, worm->GetGUID()) : nullptr;
+    return read && read->spewing;
+}
+
 bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
 {
     plan = WormDragPlan();
@@ -1953,10 +1960,7 @@ bool GetMobileWormDrag(PlayerbotAI* botAI, Unit* worm, WormDragPlan& plan)
 
     Map* map = bot->FindMap();
     plan.edge = map && map->IsHeroic();
-    // Not while it spews: its cone would sweep after the tank
-    WormRead const* read = FindWorm(*state, worm->GetGUID());
-    if (plan.edge && read && !read->spewing &&
-        ARENA_CENTER.GetExactDist2d(worm->GetPositionX(), worm->GetPositionY()) < WORM_EDGE_WORM_MIN)
+    if (plan.edge && ARENA_CENTER.GetExactDist2d(worm->GetPositionX(), worm->GetPositionY()) < WORM_EDGE_WORM_MIN)
         needed = true;
 
     if (!needed)
