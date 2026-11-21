@@ -322,6 +322,23 @@ class CycleTest(unittest.TestCase):
         self.assertIn("HTTP 403", self.state.stopped)
         self.assertFalse(self.lock.exists())
 
+    def test_a_server_that_stops_answering_still_gets_every_run_stopped(self):
+        self.baseline_for(*POOLS)
+        original = self.dc.call
+
+        def gone(command):
+            if command == dcmod.STATUS_COMMAND:
+                self.dc.commands.append(command)
+                raise soap.SoapUnavailable("no SOAP answer from the worldserver: refused")
+            return original(command)
+
+        self.dc.call = gone
+        self.assertEqual(self.cycle(), 3)
+        run_ids = [r["runId"] for r in self.dc.records[-3:]]
+        self.assertEqual(self.dc.commands[-3:], [f".dc test stop {run_id}" for run_id in run_ids])
+        self.assertIn("may have crashed", self.state.stopped)
+        self.assertFalse(self.lock.exists())
+
     def test_unexpected_error_still_reports_and_releases(self):
         self.baseline_for(*POOLS)
         original = self.dc.read
@@ -411,6 +428,13 @@ class ReportOnlyTest(unittest.TestCase):
         self.assertEqual([(row.pool, row.phase) for row in state.rows], [("toc2", "run")])
         self.assertEqual(len(state.counted["toc2"]), 1)
         self.assertIn("No DC record for tr-missing.", state.notes)
+
+    def test_a_named_run_without_a_pool_is_left_out(self):
+        loose = self.dc.write_run("", 1, AFTER)
+        self.assertEqual(self.report("--runs", loose["runId"]), 0)
+        state = self.rendered[0]
+        self.assertEqual((state.pools, state.runs, state.rows), (POOLS, [], []))
+        self.assertIn(f"{loose['runId']} has no pool: DC fielded it without roster=.", state.notes)
 
 
 class ArgsTest(unittest.TestCase):

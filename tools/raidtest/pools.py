@@ -42,7 +42,7 @@ def rows_for_run(phase: str, run: dc.Run, corpus: Corpus) -> list[PullRow]:
     if run.pulls is not None:
         # DC writes endMs 0 for a pull it never closed
         windows = [(pull.start_ms, pull.end_ms or run.ended_ms or pull.start_ms) for pull in run.pulls]
-        matched = match_traces(windows, traces)
+        matched = match_traces(windows, traces, SLACK_MS)
         return [PullRow(phase, run.pool, run.run_id, index, window, pull.outcome, trace)
                 for index, (pull, window, trace) in enumerate(zip(run.pulls, windows, matched), 1)]
     return [PullRow(phase, run.pool, run.run_id, index, None, "", trace) for index, trace in enumerate(traces, 1)]

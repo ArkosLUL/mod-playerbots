@@ -92,15 +92,15 @@ def dc_round(phase: str, wants: dict[str, int], args, deps: Deps, corpus: Corpus
             say(deps, f"{phase}: {run_id} started on {pool} for up to {pulls} pull(s)")
         runs = dc.wait_runs(deps.call, list(started), lambda: dc.read_log(args.dc_runs_file), deps.clock,
                             deps.sleep, unavailable)
-    except dc.RunVanished as exc:
-        raise Stop(f"{exc}; the worldserver may have crashed") from None
-    except BaseException:
-        # don't leave runs going on a server the cycle is about to unlock
+    except BaseException as exc:
+        # don't leave runs going on a server the cycle is about to unlock, also when only SOAP went quiet
         for run_id in started:
             try:
                 deps.call(dc.stop_command(run_id))
             except Exception:
                 pass
+        if isinstance(exc, dc.RunVanished):
+            raise Stop(f"{exc}; the worldserver may have crashed") from None
         raise
 
     deps.sleep(SETTLE_S)
