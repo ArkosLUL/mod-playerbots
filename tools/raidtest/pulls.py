@@ -51,6 +51,7 @@ class TraceFacts:
     vetoes: list[Veto] = field(default_factory=list)
     map_id: int | None = None
     instance: int | None = None
+    snap_gaps: list[int] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -90,6 +91,14 @@ def death_cause(trace: Trace, death: dict) -> str:
     return line
 
 
+def snapshot_gaps(trace: Trace) -> list[int]:
+    """Milliseconds between consecutive snapshots from the pull on (t >= 0), in file order. The recorder
+    aims at 250 ms, so the gaps read how far the world thread falls behind under load."""
+    stamps = [int(snap["t"]) for snap in trace.of("snap")
+              if isinstance(snap.get("t"), (int, float)) and snap["t"] >= 0]
+    return [later - earlier for earlier, later in zip(stamps, stamps[1:])]
+
+
 def read_facts(path: pathlib.Path) -> TraceFacts:
     trace = Trace(path)
     facts, warnings = inspect(trace, None)
@@ -122,6 +131,7 @@ def read_facts(path: pathlib.Path) -> TraceFacts:
         vetoes=vetoes,
         map_id=_int_or_none(header.get("map")),
         instance=_int_or_none(header.get("inst")),
+        snap_gaps=snapshot_gaps(trace),
     )
 
 
