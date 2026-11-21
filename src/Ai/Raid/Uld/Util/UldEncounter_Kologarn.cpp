@@ -9,6 +9,7 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "Group.h"
+#include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -231,6 +232,7 @@ Position GetKologarnEyebeamEscapeStep(Player* bot, Unit* eye)
     float const step = ULDUAR_KOLOGARN_EYEBEAM_RUN_STEP;
     float const botX = bot->GetPositionX();
     float const botY = bot->GetPositionY();
+    float const botZ = bot->GetPositionZ();
 
     // Toward the entrance first, then along the walkway, and only then back toward the boss. X never
     // reaches the broken span, so even the last resort stays out of the pit.
@@ -245,10 +247,16 @@ Position GetKologarnEyebeamEscapeStep(Player* bot, Unit* eye)
 
     for (auto const& [dx, dy] : candidates)
     {
-        float const x = std::clamp(botX + dx, ULDUAR_KOLOGARN_WALKWAY_X_MIN, ULDUAR_KOLOGARN_WALKWAY_X_MAX);
-        float const y = std::clamp(botY + dy, ULDUAR_KOLOGARN_WALKWAY_Y_MIN, ULDUAR_KOLOGARN_WALKWAY_Y_MAX);
+        float x = std::clamp(botX + dx, ULDUAR_KOLOGARN_WALKWAY_X_MIN, ULDUAR_KOLOGARN_WALKWAY_X_MAX);
+        float y = std::clamp(botY + dy, ULDUAR_KOLOGARN_WALKWAY_Y_MIN, ULDUAR_KOLOGARN_WALKWAY_Y_MAX);
+        float z = ULDUAR_KOLOGARN_WALKWAY_Z;
 
-        Position candidate(x, y, ULDUAR_KOLOGARN_WALKWAY_Z, bot->GetOrientation());
+        // Box corners are off the floor, and a walk to one still paths: out the door, down into the
+        // antechamber trash. Cut the step where a navmesh ray from the bot runs off the walkway.
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, botX, botY, botZ, x, y, z, false))
+            continue;
+
+        Position candidate(x, y, z, bot->GetOrientation());
 
         // Clamped flat against a wall: no ground gained, so no distance from the beam.
         float const moved = candidate.GetExactDist2d(botX, botY);
