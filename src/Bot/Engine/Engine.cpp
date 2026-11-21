@@ -178,9 +178,11 @@ void Engine::Init()
 
     if (testMode)
     {
-        FILE* file = fopen("test.log", "w");
-        fprintf(file, "\n");
-        fclose(file);
+        if (FILE* file = fopen("test.log", "w"))
+        {
+            fprintf(file, "\n");
+            fclose(file);
+        }
     }
 }
 
@@ -850,10 +852,12 @@ void Engine::LogAction(char const* format, ...)
 
     if (testMode)
     {
-        FILE* file = fopen("test.log", "a");
-        fprintf(file, "'%s'", buf);
-        fprintf(file, "\n");
-        fclose(file);
+        if (FILE* file = fopen("test.log", "a"))
+        {
+            fprintf(file, "'%s'", buf);
+            fprintf(file, "\n");
+            fclose(file);
+        }
     }
     else
     {
