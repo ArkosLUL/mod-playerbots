@@ -271,6 +271,12 @@ bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
     if (!BuildXT002FormationMembers(bot, members, hunters))
         return false;
 
+    // Melee and tanks ask too, so they leave before the grid scan.
+    auto const hunter = std::find(hunters.begin(), hunters.end(), bot);
+    auto const member = std::find(members.begin(), members.end(), bot);
+    if (hunter == hunters.end() && member == members.end())
+        return false;
+
     // Every ranged bot and healer asks for this every tick, so skip the grid scan until Heartbreak: nothing
     // drops a puddle before it.
     std::list<Creature*> voidZones;
@@ -286,7 +292,6 @@ bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
         return false;
     };
 
-    auto const hunter = std::find(hunters.begin(), hunters.end(), bot);
     if (hunter != hunters.end())
     {
         size_t const index = static_cast<size_t>(hunter - hunters.begin());
@@ -306,14 +311,7 @@ bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
         return true;
     }
 
-    size_t slot = members.size();
-    for (size_t i = 0; i < members.size(); ++i)
-        if (members[i] == bot)
-            slot = i;
-
-    if (slot >= members.size())
-        return false;
-
+    size_t const slot = static_cast<size_t>(member - members.begin());
     size_t const total = members.size();
 
     // Index into the slots clear of Consumption: every bot sees the same puddles, so they agree on the new

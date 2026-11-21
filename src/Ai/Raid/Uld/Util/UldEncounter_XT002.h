@@ -63,7 +63,7 @@ inline constexpr float ULDUAR_XT002_RANGED_RING_OUTER_Y = 12.0f;
 inline constexpr size_t ULDUAR_XT002_RANGED_RING_INNER_SLOTS = 6;
 
 // XT-002: hunters get an arc round XT, not a ring slot. Shots fail inside 5 yd plus melee range, and the Heart's
-// 22.5 yd combat reach puts that at 30.3 yd, past every ring slot. Plus the slot tolerance.
+// 22.5 yd combat reach puts that at 30.3 yd, past every ring slot. Radius adds the 5 yd slot tolerance.
 inline constexpr float ULDUAR_XT002_HUNTER_ARC_RADIUS = 37.0f;
 
 // XT-002: arc bearings off XT's spawn, west turning north. Further south the Searing Light spot is inside its
