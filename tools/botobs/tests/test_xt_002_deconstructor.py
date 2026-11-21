@@ -83,10 +83,10 @@ def printed(show, *args) -> str:
 
 
 class Banner(unittest.TestCase):
-    def test_tank_spot_leaves_only_the_west_piles_spawning(self):
+    def test_outcome_and_spot(self):
         text = printed(xt.show_banner, load(pull()))
         self.assertIn("outcome wipe, no Heartbreak, normal mode", text)
-        self.assertIn("XT at (887, -12) from 0:30, piles over 90 yd: SW NW", text)
+        self.assertIn("XT at (887, -12) from 0:30", text)
 
     def test_heartbreak_is_named(self):
         self.assertIn("Heartbreak at 1:40.000", printed(xt.show_banner, load(pull(heartbreak=True))))
@@ -96,7 +96,7 @@ class Heart(unittest.TestCase):
     def test_window_reports_the_lowest_hp(self):
         self.assertEqual(printed(xt.show_heart, load(pull())), (
             "HEART\n"
-            "  window at 1:16.000  lowest 20%\n"
+            "  window at 1:16.000  lowest 20%  XT at (887, -12), piles NE 80 SE 78 SW 125 NW 122 yd\n"
             "  Heart survived every window\n"))
 
 
@@ -112,6 +112,12 @@ class Trash(unittest.TestCase):
 
     def test_deaths_by_mechanic(self):
         self.assertIn("1  Scrapyard trash", printed(xt.show_deaths, load(pull())))
+
+    def test_unnamed_xt_spell_is_not_melee(self):
+        records = pull()
+        records[-2] = {"t": 90000, "e": "death", "g": HEALER, "killer": XT, "x": 866.0, "y": -6.0,
+                       "z": 409.8, "rewind": [[89900, XT, 62776, 9000]]}
+        self.assertIn("1  spell 62776", printed(xt.show_deaths, load(records)))
 
 
 class EveryView(unittest.TestCase):

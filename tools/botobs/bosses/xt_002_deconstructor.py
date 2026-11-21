@@ -9,8 +9,9 @@ What the generic views miss here:
 - **A kill is not a hard mode kill.** Hard mode needs the Heart dead inside a window. If it survives
   all three, XT still dies to the damage it passes on, so the kill counts with `hardmode` on in the
   header and Heartbreak never landed.
-- **Adds come from the pile, not from XT.** A pile only summons while XT stands more than 90 yd off it,
-  so where the tank holds him decides which piles spawn.
+- **Adds come from the pile, not from XT.** A pile only summons while XT stands outside 90 yd plus
+  both combat reaches, so where the tank holds him decides which piles spawn. In the 25-man traces
+  piles up to 105 yd off stayed quiet and 108 yd or more summoned, hence the distances per window.
 - **The west piles sit inside the Scrapyard trash.** A Pummeller engaging there calls assistance
   (10 yd, centre to centre, 2 s delay) and its pack follows it onto the Pummeller's target.
 """
@@ -49,7 +50,6 @@ PILES = {
     "NE": (897.908, 67.0764), "SE": (898.099, -88.9115),
     "SW": (793.096, -95.158), "NW": (792.646, 65.3854),
 }
-PILE_SUMMON_DISTANCE = 90.0
 ASSIST_RADIUS = 10.0
 ASSIST_LOOKBACK_MS = 4000
 # trash in one pack engages on the same tick, so anything inside this reads as one pull
@@ -114,9 +114,11 @@ def show_banner(trace: Trace) -> None:
     print(f"  outcome {out}, {mode}")
     held = [f for f in xt_frames(trace) if f[0] >= 30000]
     if held:
-        spot = (held[0][1], held[0][2])
-        spawning = [name for name, pile in PILES.items() if dist2(spot, pile) > PILE_SUMMON_DISTANCE]
-        print(f"  XT at ({spot[0]:.0f}, {spot[1]:.0f}) from 0:30, piles over 90 yd: {' '.join(spawning) or 'none'}")
+        print(f"  XT at ({held[0][1]:.0f}, {held[0][2]:.0f}) from 0:30")
+
+
+def pile_distances(spot) -> str:
+    return " ".join(f"{name} {dist2(spot, pile):.0f}" for name, pile in PILES.items())
 
 
 def show_heart(trace: Trace) -> None:
@@ -126,8 +128,13 @@ def show_heart(trace: Trace) -> None:
     windows = heart_windows(trace)
     if not windows:
         print("  no heart phase")
+    spots = xt_frames(trace)
     for start, low in windows:
-        print(f"  window at {clock(start)}  lowest {low:.0f}%")
+        line = f"  window at {clock(start)}  lowest {low:.0f}%"
+        spot = next(((x, y) for t, x, y in spots if t >= start), None)
+        if spot:
+            line += f"  XT at ({spot[0]:.0f}, {spot[1]:.0f}), piles {pile_distances(spot)} yd"
+        print(line)
     broke = heartbreak_at(trace)
     print(f"  Heartbreak at {clock(broke)}" if broke is not None else "  Heart survived every window")
 
@@ -204,7 +211,8 @@ def show_trash(trace: Trace) -> None:
 def mechanic(trace: Trace, death: dict) -> str:
     killer = entry(trace, death.get("killer"))
     rewind = death.get("rewind") or []
-    spell = trace.spells.get(rewind[-1][2], "") if rewind and rewind[-1][2] else ""
+    spell_id = rewind[-1][2] if rewind else 0
+    spell = (trace.spells.get(spell_id) or f"spell {spell_id}") if spell_id else ""
     if killer in TRASH:
         return "Scrapyard trash"
     if killer in ADDS:
