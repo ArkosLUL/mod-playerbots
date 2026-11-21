@@ -23,6 +23,21 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 | Wave 4 (remaining bosses) | open |
 | Wave 5 (FL/Thorim/Algalon/Yogg research, close-out) | open |
 
+## Roster drafts (user-reviewed 2026-11-21; identical copies vs these three still open)
+
+27 per roster: a normal 25-man pull takes 2 tanks, 4 healers, all 19 DPS; *italic* members (third tank,
+fifth healer) replace a DPS only when a comp asks. Every normal pull carries 3 paladins, a feral druid
+(Improved Leader of the Pack), a disc priest and a resto shaman (user: disc buffs and Mana Tide matter;
+a missing Blessing of Sanctuary is fine). Same three designs for `uld` (ilvl 226) and `toc` (ilvl 245).
+Order DPS DKs before a DK tank; give each party a Draenei; order the first 6 DPS for 10-man interrupts.
+At pool creation confirm the premade `bear pve` / `cat pve` specs take Improved Leader of the Pack.
+
+| | A | B | C |
+|---|---|---|---|
+| Tanks | prot paladin, blood DK, *prot warrior* | prot warrior, bear druid, *prot paladin* | prot paladin, bear druid, *blood DK* |
+| Healers | holy paladin, disc priest, resto shaman, resto druid, *holy priest* | holy paladin, disc priest, resto shaman, holy priest, *resto druid* | disc priest, resto shaman, holy priest, resto druid, *holy paladin* |
+| DPS (19) | ret; affli, demo, destro; shadow; arcane, fire; balance, cat; ele, enh; surv, bm; as, combat; arms, fury; frost DK, unholy DK | ret, ret; affli, demo, destro; shadow; arcane, frost mage; balance; ele, enh; mm, surv; as, combat; arms, fury; frost DK, unholy DK | ret, ret; affli, demo, destro; shadow; arcane, fire; cat; ele, enh; bm, mm; as, combat; arms, fury; frost DK, unholy DK |
+
 ## Context
 
 Testing an Ulduar or ToC strategy change today needs the user in game leading the bot raid: walk it to
