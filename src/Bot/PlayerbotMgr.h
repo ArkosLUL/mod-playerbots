@@ -55,7 +55,8 @@ public:
     static void UpdatePendingLogins();  // world thread, once per tick
     static void ClearPendingLogins();   // shutdown, outside any callback
 
-    void LogoutAllBots();
+    // keepHeadlessMastered: skip bots whose master is a self-mastered bot, e.g. a test harness driver
+    void LogoutAllBots(bool keepHeadlessMastered = false);
     void OnBotLogin(Player* const bot);
 
     std::vector<std::string> HandlePlayerbotCommand(char const* args, Player* master = nullptr);

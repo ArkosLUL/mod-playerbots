@@ -366,7 +366,7 @@ void PlayerbotHolder::HandleBotPackets(WorldSession* session)
     }
 }
 
-void PlayerbotHolder::LogoutAllBots()
+void PlayerbotHolder::LogoutAllBots(bool keepHeadlessMastered)
 {
     /*
     while (true)
@@ -391,6 +391,13 @@ void PlayerbotHolder::LogoutAllBots()
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
         if (!botAI || IsSelfBot(bot))
             continue;
+
+        if (keepHeadlessMastered)
+        {
+            Player* master = botAI->GetMaster();
+            if (master && master != bot && IsSelfBot(master))
+                continue;
+        }
 
         LogoutPlayerBot(bot->GetGUID());
     }

@@ -404,8 +404,11 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
             if (RealPlayerLastTimeSeen != 0 && onlineBotCount > 0 &&
                 time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.DisabledWithoutRealPlayerLogoutDelay)
             {
-                LogoutAllBots();
+                // once per absence: a headless self-mastered bot keeps onlineBotCount above 0, so
+                // repeating this would drop every masterless login it starts later
+                LogoutAllBots(true);
                 DropPendingLogins(true);
+                RealPlayerLastTimeSeen = 0;
                 LOG_INFO("playerbots", "Logout all bots due no real player session.");
             }
         }
