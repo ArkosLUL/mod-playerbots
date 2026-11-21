@@ -37,6 +37,9 @@ only to the guaranteed instakill — then loses 22 people in 20s as the corpses 
 **Fusion Punch is a 3 s cast on his victim every 15–20 s** (35,000 nature + a DoT in 25-man, +25% per
 charge): at two charges it hit a full-health DK tank for 67k raw and the wipe followed. So in phase 3 a
 tank it is aimed at casts `NextMagicDefensive` for the remaining cast time (`ironassembly.punchdef`).
+One charge is enough to kill: 54–56k raw, 44–50k landed, on 41–48k tanks. The swap partner
+often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
+Regeneration at 33–57% health before phase 3.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
@@ -53,7 +56,8 @@ callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the writte
 **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power (64637/61888) is
 `DispelType 0`**, not dispellable.
 
-**Overwhelming Power goes to `GetVictim()`**, never a random player: 8s into phase 3 and every 36s
+**Overwhelming Power goes to `GetVictim()`**, never a random player, and only raises the carrier's
+own damage done (+200%), not damage taken: 8s into phase 3 and every 36s
 after, lasting **35s** (25-man 61888; 10-man 64637 recasts at 61s, lasts 60s). Its
 `EffectTriggerSpell_2` is Meltdown 61889, **cast by the carrier**: 29,250 nature to its allies within
 15 yd centre to centre, plus an **INSTAKILL** on the carrier. So the raid loses whoever is tanking
@@ -282,6 +286,15 @@ the last one standing**. Held burst costs nothing when three bars are one pool, 
 lost 21 of 31 and 20 of 27 deaths inside it. Traced release: Heroism goes out 3.6–4.3s into the
 phase. Hard mode only — the normal order kills him first, so it would never release.
 
+**Healer mana decides the 25-man hard mode.** At 4 healers and ilvl 226 the raid does ~130–140k, so
+each member takes ~100 s and Steelbreaker is alone at 3:20–4:00. In all three pulls of 21 Nov at
+least two healers were under 10% mana within 25 s of it, priests first (2:49–3:37); the raid sagged under High
+Voltage and the first non-tank death set off the cascade. Uld1 still took him to 7%.
+**`iron assembly shadowfiend hold`** keeps a healer's Shadowfiend until its mana is ≤ 50%: it
+returns about half the bar (traced 1.8% → 54.7%) on a 5 min cooldown, so one counts per pull: the
+class node fired it 8–23 s in at 80–95% mana, where the full bar capped the return at 5–19%, and the
+second came back at 5:08, after the cascade.
+
 **One round goes at the pull**, by the user's call, to speed the fight up: while all three are up and
 within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health), trinkets,
 tinkers and any burst spell whose talented cooldown (`SpellCooldownMs`) is **≤ 3 min**. Every allowed
@@ -311,7 +324,11 @@ cooldowns, on the first two bosses.
 `IsBurstCooldownAction`'s registry names all of those and misses nine the chain catches, so the hold
 takes either, with `IsDps` on the name branch since a healer's Shadowfiend is mana, not burst.
 
-**Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
+**Reading a pull:** `bosses/iron_assembly.py <file>` (`--phases`: each member's death with healer
+mana and mana returns; `--empowered`: Overwhelming Power carriers and Fusion Punches; `--deaths`: by
+mechanic per phase). Its banner gives the **hard mode verdict**: a kill counts only when the last
+`alive` value is `1`, Steelbreaker died last; the `hdr.cfg.hardmode` toggle alone proves nothing.
+`postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
 Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**; the snapshot
 stream shows a death only as a boss row that stops appearing), `focus` (what
 the raid is killing, and whether a human's skull beat the order), `tank` (the boss a bot tank owns,

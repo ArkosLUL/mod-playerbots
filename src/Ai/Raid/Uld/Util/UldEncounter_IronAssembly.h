@@ -136,6 +136,10 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SLOT_TOLERANCE = 2.0f;
 inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_OPENER_BURST_WINDOW_MS = 20000;
 inline constexpr int32 ULDUAR_IRON_ASSEMBLY_OPENER_BURST_MAX_COOLDOWN_MS = 180000;
 
+// Shadowfiend gives back about half the priest's bar (traced 1.8% to 54.7%) and its 5 min cooldown
+// makes it one per pull, so a healer only casts it once that half fits.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_SHADOWFIEND_MANA_PCT = 50.0f;
+
 // Brundir parks at 28, not the 25 his Overload needs, so the stack 38 yd off never reacts to it and
 // stays parked, free to kick Lightning Whirl.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING = 0.0f;
@@ -375,6 +379,8 @@ bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why);
 
 // One round of burst at the pull is allowed in hard mode: all three up and the pull under 20s old.
 bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI);
+
+bool IronAssemblyShadowfiendHeld(PlayerbotAI* botAI);
 
 // Reset once the council is back at full health, never on "nobody in combat": Brundir spends 16s of
 // every Lightning Tendrils out of combat by design.
