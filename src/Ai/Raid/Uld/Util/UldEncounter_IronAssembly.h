@@ -380,7 +380,6 @@ bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why);
 // One round of burst at the pull is allowed in hard mode: all three up and the pull under 20s old.
 bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI);
 
-// The bot's mana is still above ULDUAR_IRON_ASSEMBLY_SHADOWFIEND_MANA_PCT during the fight.
 bool IronAssemblyShadowfiendHeld(PlayerbotAI* botAI);
 
 // Reset once the council is back at full health, never on "nobody in combat": Brundir spends 16s of

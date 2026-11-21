@@ -26,17 +26,17 @@ inside 10 s.
 | uld3 | Brundir 1:37, Molgeim 3:43, alone 19 s | Molgeim phase: 2 Static Disruption, 1 Rune of Death, 1 High Voltage; then 25 High Voltage, 2 Steelbreaker melee on tanks |
 
 **Picked: the High Voltage cascade, started by healers out of mana.** HV is 73–76% of all damage
-taken and 76 of 93 deaths. Every pull reached Steelbreaker's phase with healers dry
-(`--phases`): uld1 priest and paladin under 10% at 3:37/3:44, uld2 three of four under 10% at
-Molgeim's death, uld3 two healers dead and the third priest at 1%. The first deaths in his phase
+taken and 76 of 93 deaths. Every pull had healers dry within 25 s of Steelbreaker's
+phase (`--phases`): uld1 priest and paladin under 10% at 3:37/3:44 (18–25 s in), uld2 two of four
+under 10% and two at 12–14% at Molgeim's death, uld3 two healers dead and the third priest at 1%. The first deaths in his phase
 follow from it: uld2's partner tank took Fusion Punch at 61% health with all four healers at 1–3%
 mana, raid mean health 33–35% when the first ranged died.
 
 Contributing bug: **every healer priest cast its one Shadowfiend 8–23 s in at 80–95% mana** (uld1
-Uldxac, uld2 Uldyaf/Uldyad, uld3 Uldzae/Uldzac), returning 3–15%. Cast low it returns about half the
+Uldxac, uld2 Uldyaf/Uldyad, uld3 Uldzae/Uldzac), the full bar capping the return at 5–19%. Cast low it returns about half the
 bar: uld2 Uldyaf's second at 5:08, 1.8% → 54.7% 16 s later. Priests are the first healers dry in every
 pool (2:49–3:37). Cause: disc and holy run the class `shadowfiend` trigger, `SpellNoCooldownTrigger`
-(`DiscPriestStrategy.cpp:153`, `HolyPriestStrategy.cpp:55,203`); the encounter exempts it from the
+(`DiscPriestStrategy.cpp:153`, `HolyPriestStrategy.cpp:203`); the encounter exempts it from the
 burst hold as a mana return (`UldMultipliers_IronAssembly.cpp:70`) but never gates it on mana.
 
 Fix: `iron assembly shadowfiend hold` blocks `shadowfiend` for healers while their mana is above 50%

@@ -39,7 +39,7 @@ charge): at two charges it hit a full-health DK tank for 67k raw and the wipe fo
 tank it is aimed at casts `NextMagicDefensive` for the remaining cast time (`ironassembly.punchdef`).
 One charge is enough to kill: 54–56k raw, 44–50k landed, on 41–48k tanks. The swap partner
 often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
-Regeneration at 33–43% health before phase 3.
+Regeneration at 33–57% health before phase 3.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
@@ -288,11 +288,12 @@ phase. Hard mode only — the normal order kills him first, so it would never re
 
 **Healer mana decides the 25-man hard mode.** At 4 healers and ilvl 226 the raid does ~130–140k, so
 each member takes ~100 s and Steelbreaker is alone at 3:20–4:00. In all three pulls of 21 Nov at
-least two healers were under 10% mana by then, priests first (2:49–3:37); the raid sagged under High
+least two healers were under 10% mana within 25 s of it, priests first (2:49–3:37); the raid sagged under High
 Voltage and the first non-tank death set off the cascade. Uld1 still took him to 7%.
 **`iron assembly shadowfiend hold`** keeps a healer's Shadowfiend until its mana is ≤ 50%: it
-returns about half the bar (traced 1.8% → 54.7%) on a 5 min cooldown, so one per pull, and the
-class node fired it 8–23 s in at 80–95% mana, where it returned 3–15%.
+returns about half the bar (traced 1.8% → 54.7%) on a 5 min cooldown, so one counts per pull: the
+class node fired it 8–23 s in at 80–95% mana, where the full bar capped the return at 5–19%, and the
+second came back at 5:08, after the cascade.
 
 **One round goes at the pull**, by the user's call, to speed the fight up: while all three are up and
 within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health), trinkets,
