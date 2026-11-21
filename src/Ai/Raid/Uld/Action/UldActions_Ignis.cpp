@@ -69,13 +69,15 @@ bool IgnisMainTankPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    // No throttle needed, at 10 yd/s to a player's 7 he keeps up. Out of melee means his path broke and walking
-    // on loses him for good, unless he's rooted for Scorch.
+    // Checked before every leg, since the walk already issued doesn't care whether he follows. Out of melee means
+    // his path broke, unless he's rooted for Scorch.
     if (!bot->IsWithinMeleeRange(boss) && !IsIgnisScorchWindow(boss))
         return false;
 
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
-                  false, true, MovementPriority::MOVEMENT_COMBAT);
+    Position const leg = GetIgnisMainTankLeg(bot, boss, spot);
+
+    return MoveTo(bot->GetMapId(), leg.GetPositionX(), leg.GetPositionY(), leg.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool IgnisConstructTankAction::isUseful()

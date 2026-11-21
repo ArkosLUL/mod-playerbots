@@ -45,8 +45,11 @@ latched per instance id. A reactive "step out once it lands" was rejected: it is
 [dodge-and-hold oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates).
 
 **Nothing pre-positions**: the tank walks the boss to the anchor in combat, from wherever the pull
-happened. Ignis runs at 10 yd/s against a player's 7, so he stays glued to a tank at full speed: a
-melee-range leash check is the whole guard, no throttled drag.
+happened. Ignis runs at 10 yd/s against a player's 7, so he keeps up with a tank at full speed, but
+an issued walk goes on whether he follows or not: one `MoveTo` to the spot carried a tank 99 yd off
+a boss who had switched to a DPS, and left him there. So the tank walks
+`ULDUAR_IGNIS_TANK_DRAG_LEG` (5 yd) at a time, checking before each leg that Ignis is on him and in
+melee range or rooted for Scorch. A spot inside his melee reach (an arc step) goes in one move.
 
 ## Two construct tanks, pools fixed by index
 
@@ -114,9 +117,10 @@ the construct tank is parked in a patch on purpose and the main tank's arc alrea
 The generic one is what matters — at `ACTION_EMERGENCY` it sits above the kite's `ACTION_RAID + 4`,
 so left on it outranks the walk on nearly every tick spent in the fire.
 
-The `ignis tank movement` rule takes the generic movers off the main tank and a construct tank
-holding a construct, and nobody else. Non-tanks keep everything, which is what spreads the ranged
-half without an anchor of their own.
+The `ignis tank movement` rule takes the generic movers off the main tank while Ignis is on him and
+a construct tank while it holds a construct, and nobody else. A main tank that lost Ignis gets them
+back, or nothing walks him into taunt range again. Non-tanks keep everything, which is what
+spreads the ranged half without an anchor of their own.
 
 Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, Scorch's 25-man
 remap of 62546 included (**`SPELL_IGNIS_SCORCH_25` = 63474**,

@@ -389,6 +389,24 @@ Position GetIgnisMainTankPosition(Player* bot, Unit* boss)
     return Position(x, y, z);
 }
 
+Position GetIgnisMainTankLeg(Player* bot, Unit* boss, Position const& spot)
+{
+    // Both ends inside his reach keep the whole straight walk inside it, so that walk can't lose him.
+    float const distance = bot->GetExactDist2d(&spot);
+    if (distance <= ULDUAR_IGNIS_TANK_DRAG_LEG || boss->GetExactDist(&spot) < bot->GetMeleeRange(boss))
+        return spot;
+
+    float const ratio = ULDUAR_IGNIS_TANK_DRAG_LEG / distance;
+    float const x = bot->GetPositionX() + (spot.GetPositionX() - bot->GetPositionX()) * ratio;
+    float const y = bot->GetPositionY() + (spot.GetPositionY() - bot->GetPositionY()) * ratio;
+
+    float z = bot->GetMapWaterOrGroundLevel(x, y, bot->GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = spot.GetPositionZ();
+
+    return Position(x, y, z);
+}
+
 // Both ids: spelldifficulty_dbc remaps these on 25-man, so the 10-man id alone never matches.
 bool IsIgnisScorchWindow(Unit const* boss)
 {

@@ -24,12 +24,18 @@ namespace
 {
 bool InUlduar(PlayerbotAI* botAI) { return botAI->GetBot()->GetMapId() == ULDUAR_MAP_ID; }
 
-// Main tank, plus a construct tank only while it holds one: between constructs it has no spot, and blocking
-// its generic movers would leave it standing still.
+// Each tank only while it holds its unit: the main tank Ignis, a construct tank a construct. Without one it has
+// no spot, and blocking its generic movers strands it, a main tank out of taunt range for good.
 bool IgnisPlacedTank(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return PlayerbotAI::IsMainTank(bot) || GetIgnisHeldConstruct(botAI, bot);
+    if (PlayerbotAI::IsMainTank(bot))
+    {
+        Unit* boss = GetIgnis(botAI);
+        return boss && boss->GetVictim() == bot;
+    }
+
+    return GetIgnisHeldConstruct(botAI, bot) != nullptr;
 }
 
 // GetIgnis walks the grid, so it goes last.
