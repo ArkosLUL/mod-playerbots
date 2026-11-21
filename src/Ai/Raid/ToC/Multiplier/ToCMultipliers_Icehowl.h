@@ -4,8 +4,9 @@
 #include "Multiplier.h"
 #include "RaidCombatHelpers.h"
 
-// From the gaze to the end of the charge only attacks and the dodge move anyone. Anything else can walk
-// a bot into the line, like melee chasing him to where the jump back lands.
+// From his jump to the centre to the end of the charge only attacks, the dodge and the pool walks move
+// anyone. Anything else can walk a bot into the line, like melee chasing him to where the jump back
+// lands, or leap it off him into a pool just before the crash stuns it there.
 class IcehowlChargeGuardMultiplier : public Multiplier
 {
 public:
