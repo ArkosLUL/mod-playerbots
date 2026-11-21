@@ -25,6 +25,14 @@ OWNER_FILE = "owner"
 Run = Callable[..., subprocess.CompletedProcess]
 
 
+class Stop(Exception):
+    """A failure that ends a cycle or a whole window; `reason` goes into the report."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class LockHeld(Exception):
     def __init__(self, path: pathlib.Path, owner: str):
         super().__init__(f"server lock {path} is held by: {owner or '(no owner file)'}")

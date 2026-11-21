@@ -1,9 +1,11 @@
 """The cycle's report: markdown on stdout, built from the DC runs and the traces they produced, one
-section per roster pool and then the pools together."""
+section per roster pool and then the pools together. A window prints its own header and load line
+around one such report per job."""
 from __future__ import annotations
 
 import collections
 import datetime
+import math
 import pathlib
 import subprocess
 import sys
@@ -18,6 +20,8 @@ from raidobs.encounter import canonical_boss
 Run = Callable[..., subprocess.CompletedProcess]
 
 VETO_ROWS_SHOWN = 10
+LOAD_LIMIT_MS = 400
+LOAD_REFERENCE = "one to three parallel 25-man fights read p95 about 320 ms, max under 450"
 
 
 @dataclass
@@ -35,6 +39,32 @@ class State:
     stopped: str | None = None
     counted: dict[str, list[TraceFacts]] = field(default_factory=dict)
     baseline: dict[str, list[TraceFacts]] = field(default_factory=dict)
+    label: str = ""
+
+
+@dataclass
+class JobLine:
+    number: int
+    label: str
+    boss: str
+    diff: str
+    head: str
+    verdict: str
+    # (pool, valid pulls after the job's head, pulls this window)
+    pools: list[tuple[str, int, int]]
+
+
+@dataclass
+class WindowState:
+    build_sha: str
+    build_time: datetime.datetime | None
+    build_note: str
+    max_raids: int
+    jobs: list[JobLine] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    stopped: str | None = None
+    most_in_flight: int = 0
+    traces: list[TraceFacts] = field(default_factory=list)
 
 
 def minutes(ms: int | None) -> str:
@@ -240,7 +270,8 @@ def section_overall(state: State, run: Run, out: TextIO) -> None:
 
 
 def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) -> None:
-    print(f"# Raid test: {state.boss} {state.diff}\n", file=out)
+    label = f" ({state.label})" if state.label else ""
+    print(f"# Raid test: {state.boss} {state.diff}{label}\n", file=out)
     print(headline(state), file=out)
     stamp = state.head_time.astimezone().strftime("%Y-%m-%d %H:%M")
     print(f"\nHEAD `{state.head_sha}` committed {stamp}.", file=out)
@@ -253,3 +284,54 @@ def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) ->
     for pool in state.pools:
         section_pool(pool, state, run, out)
     section_overall(state, run, out)
+
+
+def cell(text: str) -> str:
+    return text.replace("|", "/").replace("\n", " ")
+
+
+def render_window_header(window: WindowState, out: TextIO = sys.stdout) -> None:
+    print("# Raid test window\n", file=out)
+    stamp = f" committed {window.build_time.astimezone().strftime('%Y-%m-%d %H:%M')}" if window.build_time else ""
+    print(f"Build HEAD `{window.build_sha}`{stamp}: {window.build_note}.", file=out)
+    binaries = sorted({facts.built for facts in window.traces if facts.built})
+    if binaries:
+        stamps = ", ".join(when.astimezone().strftime("%Y-%m-%d %H:%M") for when in binaries)
+        print(f"The window's traces name the binary built {stamps}.", file=out)
+    if window.stopped:
+        print(f"\n**Stopped:** {window.stopped}", file=out)
+    for note in window.notes:
+        print(f"\n{note}", file=out)
+    print("\n| job | label | boss | diff | head | verdict | valid/pulled per pool |", file=out)
+    print("|---|---|---|---|---|---|---|", file=out)
+    for job in window.jobs:
+        pools = ", ".join(f"{pool} {valid}/{pulled}" for pool, valid, pulled in job.pools)
+        print(f"| {job.number} | {cell(job.label) or '-'} | {job.boss} | {job.diff} | `{job.head}` "
+              f"| {cell(job.verdict)} | {pools} |", file=out)
+    print("\nValid: the pool's valid pulls built after the job's head. Pulled: the pool's pulls in this window.",
+          file=out)
+
+
+def percentile(ordered: list[int], share: float) -> int:
+    """Nearest rank: the smallest value with at least `share` of the values at or below it."""
+    return ordered[max(0, math.ceil(share * len(ordered)) - 1)]
+
+
+def load_line(traces: list[TraceFacts], most_in_flight: int, max_raids: int) -> str:
+    gaps = [gap for facts in traces for gap in facts.snap_gaps]
+    flight = (f"at most {most_in_flight} DC run{'' if most_in_flight == 1 else 's'} in flight at once "
+              f"(cap {max_raids})")
+    if not gaps:
+        return f"No snapshot gaps to read in this window's traces; {flight}."
+    ordered = sorted(gaps)
+    over = sum(1 for gap in gaps if gap > LOAD_LIMIT_MS)
+    count = f"{len(traces)} trace{'' if len(traces) == 1 else 's'}"
+    return (f"RaidObs snapshot gaps over {count} ({len(gaps)} gaps, cadence 250 ms): "
+            f"mean {sum(gaps) / len(gaps):.0f} ms, p95 {percentile(ordered, 0.95)}, "
+            f"p99 {percentile(ordered, 0.99)}, max {ordered[-1]}, {over} over {LOAD_LIMIT_MS} ms; {flight}. "
+            f"For reference, {LOAD_REFERENCE}.")
+
+
+def render_window_load(window: WindowState, out: TextIO = sys.stdout) -> None:
+    print("\n# Window load\n", file=out)
+    print(load_line(window.traces, window.most_in_flight, window.max_raids), file=out)
