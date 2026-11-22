@@ -931,7 +931,7 @@ AnubarakState* Sweep(Player* bot)
 // A few of each kind live at once, so the usual list never touches the heap
 using AliveCreatures = boost::container::small_vector<Creature*, 16>;
 
-// A copy, never a view of the guid list: a sweep nested in the caller's loop clears that list
+// returns a copy on purpose: a sweep nested in the caller's loop clears the guid list
 template <class List = AliveCreatures>
 List ResolveAlive(Player* bot, std::vector<ObjectGuid> const& guids)
 {
@@ -4107,7 +4107,7 @@ void ComputeDuties(Player* bot, AnubarakState& state)
             if (!open[side] || served[side])
                 continue;
 
-            // Read again for side 1: side 0's grip may have just failed
+            // keep this read in the loop, side 0's grip may have just failed
             Creature* const otherPatch = PatchToBe(state, spheres, tankPatches, 1 - side);
             if (ServeSideByGrip(bot, state, side, spots[side], otherPatch ? otherPatch->GetPosition() : spots[1 - side],
                                 otherPatch, spheres, sideFlying, previousGrips, taken, needs, reserved, now))
@@ -6574,7 +6574,7 @@ static bool SideAoeRunesReady(Player* bot, uint32 spellId)
     if (!cost || cost->NoRuneCost())
         return true;
 
-    // indexed by RuneType, the way Spell::CheckRuneCost reads it
+    // RuneCost is in RuneType order, same as Spell::CheckRuneCost reads it
     int32 need[RUNE_DEATH];
     for (uint8 type = 0; type < RUNE_DEATH; ++type)
         need[type] = static_cast<int32>(cost->RuneCost[type]);
@@ -6791,8 +6791,7 @@ Unit* GetAnubarakDpsTarget(PlayerbotAI* botAI)
     if (GetAnubarakGripDuty(bot, grip) && grip.step != AnubarakGripStep::Hold)
         return NoteDpsPick(bot, nullptr, "none");
 
-    // Read even under a skull, so both focus latches stay current. A melee bot that can't hit its side's
-    // focus from outside the patches stays on him.
+    // read both focuses before the skull check, their latches have to stay current under a skull
     Creature* const focus[2] = {SideFocus(bot, *state, 0), SideFocus(bot, *state, 1)};
     int8 const side = DpsSide(bot, *state);
     bool const melee = PlayerbotAI::IsMelee(bot);
@@ -7735,8 +7734,7 @@ static uint8 SwarmHealTier(PlayerbotAI* botAI, Player* member, uint32 cold)
     return SWARM_HEAL_TIERS;
 }
 
-// Everyone SwarmHealTier can rank under SWARM_HEAL_TIERS for some healer: carriers, tanks under the
-// top-off, non-tanks under ANUBARAK_SWARM_HOT_HP with no HoT. Keep in step with SwarmHealTier.
+// has to list everyone SwarmHealTier ranks under SWARM_HEAL_TIERS, so change both together
 static std::vector<ObjectGuid> const& SwarmHealable(Player* bot, AnubarakState const& state)
 {
     return state.swarmHealable.Get(bot, [bot](std::vector<ObjectGuid>& healable)
@@ -9715,7 +9713,7 @@ static std::vector<AnubarakPursuit::Point> const& DodgeTrack(Player* bot, Creatu
                                              ANUBARAK_DODGE_TRACK_TICKS * AnubarakPursuit::TICK_S);
     else
     {
-        // Read, not judged: the kiter's own ticks judge it, and judging here could reach back into the dodge
+        // only read the plan here, judging it can call back into the dodge (the kiter's own ticks judge it)
         KitePlan const& plan = state.kitePlan;
         if (plan.valid && plan.kiter == kiter->GetGUID() && plan.candidate.track.size() >= 2)
             track = AnubarakPursuit::SpikeTrack(PursuitSpike(spike), PathFrom(plan, kiter), ANUBARAK_DODGE_TRACK_S,
