@@ -300,6 +300,8 @@ inline constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of 
 // any melee hit, even a caster's weapon swing, makes the bot the victim of the next Crush.
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
+// Past the Crusher's live melee reach, for a bot drifting in while it swings or walks.
+inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_AREA_HOLD_SLACK = 2.0f;
 
 // Shattered Illusion lifts at Induce Madness end or when the Brain drops under 30%; a freed Crusher swings at whoever
 // hit it last. 13 yd is under 2 s at run speed, doubled for the tick and the path.
@@ -1218,6 +1220,9 @@ bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius);
 // A Crusher under Shattered Illusion cannot hurt a bot in its reach. True while that holds for STUN_EXIT_LEAD_MS more:
 // Induce Madness still casting with more than the lead left, Brain above STUN_BRAIN_FLOOR_PCT (hold guard if held).
 bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher);
+
+// The bot stands within slack of a live Crusher's melee reach and that Crusher's stun does not hold.
+bool YoggSaronInSwingingCrusherReach(PlayerbotAI* botAI, float slack);
 
 // Whether a forced walk is still closing. MoveTo's `ok` only says a command was issued; the core falls back to a
 // straight-line spline, so closing distance is the only evidence of a path. Records are per node and destination.

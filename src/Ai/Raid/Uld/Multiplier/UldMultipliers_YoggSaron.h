@@ -10,6 +10,7 @@
 #include "Define.h"
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
+#include "RaidSplash.h"
 
 class CastSpellAction;
 class Unit;
@@ -96,6 +97,21 @@ public:
     YoggSaronPhase3AreaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "yogg-saron phase 3 area multiplier") {}
 
     float GetValue(Action* action) override;
+};
+
+// Area damage from inside a swinging Crusher's reach makes the bot its victim, and Crush cones whoever stands there.
+class YoggSaronCrusherAreaHoldMultiplier : public Multiplier
+{
+public:
+    YoggSaronCrusherAreaHoldMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron crusher area hold multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 // Phase 1 walks back to the stack or station, held for a Sara's Fervor holder near a live nova (dodge: inside 17 yd)

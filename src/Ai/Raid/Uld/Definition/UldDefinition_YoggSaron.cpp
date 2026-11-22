@@ -232,6 +232,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Multiplier<YoggSaronExitHoldCastMultiplier>(Family::Spell);
     e.Multiplier<YoggSaronHeldTargetCastMultiplier>(Family::Spell);
     e.Multiplier<YoggSaronPhase3AreaMultiplier>(Family::AnyAction);
+    e.Multiplier<YoggSaronCrusherAreaHoldMultiplier>(Family::Spell);
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"eat", "drink"});
 

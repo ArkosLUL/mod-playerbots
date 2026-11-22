@@ -353,6 +353,25 @@ float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
     return allowed ? 1.0f : 0.0f;
 }
 
+float YoggSaronCrusherAreaHoldMultiplier::GetValue(Action* action)
+{
+    // Glyph of Maul and Hammer of the Righteous hit a second target, which the area test misses.
+    static std::set<std::string> const secondTarget = {"maul", "hammer of the righteous"};
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) ||
+        (!secondTarget.count(action->getName()) && !IsRaidAreaDamage(botAI, action, _splash)))
+        return 1.0f;
+
+    if (bot->GetMapId() != ULDUAR_MAP_ID ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+    if (phase != 2 && phase != 3)
+        return 1.0f;
+
+    return YoggSaronInSwingingCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_AREA_HOLD_SLACK) ? 0.0f : 1.0f;
+}
+
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
 {
     if (!action)
