@@ -154,6 +154,18 @@ bool IronAssemblyMeltdownRunOutTrigger::IsActive()
     return IronAssemblyMeltdownRoleFor(botAI, bot) == IronAssemblyMeltdownRole::Run;
 }
 
+bool IronAssemblyMeltdownStepOutTrigger::IsActive()
+{
+    Position spot;
+    return TryGetIronAssemblyMeltdownStepOut(botAI, bot, spot);
+}
+
+bool IronAssemblyTankBattleRezTrigger::IsActive()
+{
+    IronAssemblyBattleRez duty;
+    return IronAssemblyBattleRezDuty(botAI, bot, duty);
+}
+
 bool IronAssemblyFusionPunchDefensiveTrigger::IsActive()
 {
     uint32 const needMs = IronAssemblyFusionPunchIncomingMs(botAI, bot);

@@ -21,6 +21,8 @@
 #include "RtiTargetValue.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include "TotemsShamanStrategy.h"
 #include "UldEncounterGate.h"
@@ -69,6 +71,16 @@ struct IronAssemblyEncounterState
     // Carriers that started the walk to the Meltdown point. Latched so one slowed or detoured mid-walk
     // doesn't turn "late" and stop halfway, which is the worst place to blow up.
     RaidObs::ObsGuidSet meltdownRunners{"ironassembly.meltdownrun"};
+
+    // The carrier due to blow inside STEP_OUT_MS, nearest Steelbreaker, kept for the tick: every melee bot's
+    // movement rule asks for it once per action it weighs.
+    uint32 blowingCarrierAtMs = 0;
+    ObjectGuid blowingCarrier;
+
+    // The druid sent to Rebirth a dead bot tank, and that tank. Latched so two druids about as far off never
+    // trade the walk.
+    RaidObs::ObsValue<ObjectGuid> rezDruid{"ironassembly.rezdruid"};
+    RaidObs::ObsValue<ObjectGuid> rezTank{"ironassembly.reztank"};
 
     // The shaman dropping Nature Resistance Totem. Latched until it dies or leaves, so the duty never
     // trades back and forth between two spares.
@@ -203,8 +215,8 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
                                    ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE);
     }
 
-    // One circle per carrier, usually none. Clearance equals radius since nobody dodges it, the circle only
-    // tells a death inside the blast from one beside it.
+    // One circle per carrier, usually none. Clearance is where melee step out to in a blast's last 3 s
+    // next to Steelbreaker.
     Group* group = bot->GetGroup();
     if (!group)
         return;
@@ -216,7 +228,7 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
         if (IronAssemblyMemberCounts(member, instanceId) && IronAssemblyHasOverwhelmingPower(member))
             NoteIronAssemblyCircle(map, SPELL_MELTDOWN, member->GetPosition(),
                                    ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS,
-                                   ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS);
+                                   ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE);
     }
 }
 
@@ -390,6 +402,8 @@ void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
         {
             state.engagedAtMs = 0;
             state.meltdownRunners.clear();
+            state.rezDruid = ObjectGuid::Empty;
+            state.rezTank = ObjectGuid::Empty;
         }
 
         return;
@@ -397,6 +411,137 @@ void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
 
     if (!state.engagedAtMs && targets.AliveCount() == 3)
         state.engagedAtMs = std::max<uint32>(getMSTime(), 1);
+}
+
+// The group member whose Overwhelming Power ends inside STEP_OUT_MS, nearest Steelbreaker, or nullptr. Its
+// Meltdown goes off wherever it stands by then.
+Player* IronAssemblyBlowingCarrier(Player* bot, Unit* steelbreaker)
+{
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+    if (!FreshThisTick(state.blowingCarrierAtMs))
+    {
+        state.blowingCarrier = ObjectGuid::Empty;
+        float nearest = 0.0f;
+        uint32 const instanceId = bot->GetInstanceId();
+        Group* group = bot->GetGroup();
+        for (GroupReference* ref = group ? group->GetFirstMember() : nullptr; ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!IronAssemblyMemberCounts(member, instanceId))
+                continue;
+
+            uint32 const left = IronAssemblyOverwhelmingPowerLeftMs(member);
+            if (!left || left > ULDUAR_IRON_ASSEMBLY_MELTDOWN_STEP_OUT_MS)
+                continue;
+
+            float const distance = member->GetExactDist2d(steelbreaker);
+            if (state.blowingCarrier.IsEmpty() || distance < nearest)
+            {
+                state.blowingCarrier = member->GetGUID();
+                nearest = distance;
+            }
+        }
+    }
+
+    return state.blowingCarrier.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.blowingCarrier);
+}
+
+// Someone else's Meltdown is due within withinMs, and spot is inside radius of it.
+bool IronAssemblyMeltdownDueNear(Player* bot, Position const& spot, uint32 withinMs, float radius)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 const instanceId = bot->GetInstanceId();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !IronAssemblyMemberCounts(member, instanceId))
+            continue;
+
+        uint32 const left = IronAssemblyOverwhelmingPowerLeftMs(member);
+        if (left && left <= withinMs && member->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < radius)
+            return true;
+    }
+
+    return false;
+}
+
+constexpr uint32 IRON_ASSEMBLY_REBIRTH_RANKS[] = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
+
+// The druid's highest Rebirth while it is off cooldown and affordable, else 0. Not CanCastSpell: that says
+// no in cat or bear form, and the action shifts out first.
+uint32 IronAssemblyRebirthReady(Player* druid)
+{
+    if (druid->getClass() != CLASS_DRUID)
+        return 0;
+
+    for (uint32 rank : IRON_ASSEMBLY_REBIRTH_RANKS)
+    {
+        if (!druid->HasSpell(rank))
+            continue;
+
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(rank);
+        if (!info || druid->HasSpellCooldown(rank) ||
+            static_cast<int32>(druid->GetPower(POWER_MANA)) < info->CalcPowerCost(druid, info->GetSchoolMask()))
+            return 0;
+
+        return rank;
+    }
+
+    return 0;
+}
+
+bool IronAssemblyBeingRaised(Group* group, Player* body)
+{
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == body || !member->IsAlive())
+            continue;
+
+        Spell const* spell = member->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell || spell->m_targets.GetUnitTargetGUID() != body->GetGUID())
+            continue;
+
+        SpellInfo const* info = spell->GetSpellInfo();
+        if (info->HasEffect(SPELL_EFFECT_RESURRECT) || info->HasEffect(SPELL_EFFECT_RESURRECT_NEW))
+            return true;
+    }
+
+    return false;
+}
+
+enum class IronAssemblyTankLife : uint8
+{
+    Ready,   // up and not swapped out, so it can hold him or take the next swap
+    Rising,  // a res accepted, being cast, or its own Soulstone or Reincarnation still to use
+    Body,    // dead in the hall with nothing pending: Rebirth's job
+    Out,
+};
+
+IronAssemblyTankLife IronAssemblyTankLifeOf(Group* group, Player* tank, Unit* steelbreaker)
+{
+    if (tank->IsAlive())
+        return IronAssemblySwappedOut(tank, steelbreaker) ? IronAssemblyTankLife::Out : IronAssemblyTankLife::Ready;
+
+    // A released ghost stands at the graveyard, not by its body.
+    if (tank->getDeathState() != DeathState::Corpse || tank->HasPlayerFlag(PLAYER_FLAGS_GHOST))
+        return IronAssemblyTankLife::Out;
+
+    if (tank->isResurrectRequested() || tank->GetUInt32Value(PLAYER_SELF_RES_SPELL) ||
+        IronAssemblyBeingRaised(group, tank))
+        return IronAssemblyTankLife::Rising;
+
+    return IronAssemblyBotInHall(tank) ? IronAssemblyTankLife::Body : IronAssemblyTankLife::Out;
+}
+
+bool IronAssemblyRezDruid(Player* member, uint32 instanceId)
+{
+    return IronAssemblyMemberCounts(member, instanceId) && GET_PLAYERBOT_AI(member) &&
+           !PlayerbotAI::IsTank(member) && IronAssemblyBotInHall(member) &&
+           !IronAssemblyOverwhelmingPowerLeftMs(member) && IronAssemblyRebirthReady(member);
 }
 
 }  // namespace
@@ -1572,6 +1717,246 @@ IronAssemblyMeltdownRole IronAssemblyMeltdownRoleFor(PlayerbotAI* botAI, Player*
         RaidObs::NoteDerived(bot, "ironassembly.meltdown", IronAssemblyMeltdownLabel(role));
 
     return role;
+}
+
+bool IronAssemblyMeltdownMeleeWindow(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || PlayerbotAI::IsTank(bot) || PlayerbotAI::IsRanged(bot) || !IronAssemblyFormationActive(botAI))
+        return false;
+
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    if (!targets.steelbreaker ||
+        !IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
+        return false;
+
+    // A carrier at the Meltdown point is 46 yd off and reaches nobody in his melee.
+    Player* carrier = IronAssemblyBlowingCarrier(bot, targets.steelbreaker);
+    return carrier && carrier != bot &&
+           carrier->GetExactDist2d(targets.steelbreaker) <
+               ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE + bot->GetMeleeRange(targets.steelbreaker);
+}
+
+static bool DeriveIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, Position& spot, char const*& how)
+{
+    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
+    Player* carrier = steelbreaker ? IronAssemblyBlowingCarrier(bot, steelbreaker) : nullptr;
+    if (!carrier || !IronAssemblyMeltdownMeleeWindow(botAI))
+    {
+        how = "none";
+        return false;
+    }
+
+    if (bot->GetExactDist(carrier) >= ULDUAR_IRON_ASSEMBLY_MELTDOWN_DANGER_RADIUS)
+    {
+        how = "clear";
+        return false;
+    }
+
+    // Straight behind him from the carrier: the one side out of the blast his melee range still covers,
+    // and he can't parry it.
+    float const dx = steelbreaker->GetPositionX() - carrier->GetPositionX();
+    float const dy = steelbreaker->GetPositionY() - carrier->GetPositionY();
+    float const apart = std::sqrt(dx * dx + dy * dy);
+    float const bearing =
+        apart < 0.5f ? steelbreaker->GetOrientation() + static_cast<float>(M_PI) : std::atan2(dy, dx);
+    float const inReach = bot->GetMeleeRange(steelbreaker) - 1.0f;
+    float const radius = std::max(inReach, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE - apart);
+
+    spot = Position(steelbreaker->GetPositionX() + std::cos(bearing) * radius,
+                    steelbreaker->GetPositionY() + std::sin(bearing) * radius, steelbreaker->GetPositionZ());
+
+    // Inside the ring navprobe walked round his designed spot, which settles on the floor at every heading.
+    Position designed;
+    float designedBearing = 0.0f;
+    if (IronAssemblyDesignedTankSpot(steelbreaker, designed, designedBearing))
+    {
+        float const ox = spot.GetPositionX() - designed.GetPositionX();
+        float const oy = spot.GetPositionY() - designed.GetPositionY();
+        float const off = std::sqrt(ox * ox + oy * oy);
+        if (off > ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS)
+        {
+            float const scale = ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS / off;
+            spot = Position(designed.GetPositionX() + ox * scale, designed.GetPositionY() + oy * scale,
+                            spot.GetPositionZ());
+        }
+    }
+
+    how = radius > inReach ? "out" : "behind";
+    return true;
+}
+
+bool TryGetIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, Position& spot)
+{
+    if (!botAI || !bot || PlayerbotAI::IsTank(bot) || PlayerbotAI::IsRanged(bot))
+        return false;
+
+    char const* how = "none";
+    bool const move = DeriveIronAssemblyMeltdownStepOut(botAI, bot, spot, how);
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ironassembly.meltstep", how);
+
+    return move;
+}
+
+static bool DeriveIronAssemblyBattleRez(PlayerbotAI* botAI, Player* bot, IronAssemblyBattleRez& duty,
+                                        char const*& how)
+{
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    Group* group = bot->GetGroup();
+    if (!group || !targets.steelbreaker ||
+        !IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
+    {
+        how = "none:phase";
+        return false;
+    }
+
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+    uint32 const instanceId = bot->GetInstanceId();
+
+    // Two tanks make a swap, so only a missing one is worth a Rebirth.
+    uint32 ready = 0;
+    std::vector<Player*> bodies;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->GetMapId() != ULDUAR_MAP_ID || member->GetInstanceId() != instanceId ||
+            !GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsTank(member))
+            continue;
+
+        switch (IronAssemblyTankLifeOf(group, member, targets.steelbreaker))
+        {
+            case IronAssemblyTankLife::Ready:
+            case IronAssemblyTankLife::Rising:
+                ++ready;
+                break;
+            case IronAssemblyTankLife::Body:
+                bodies.push_back(member);
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (ready >= 2 || bodies.empty())
+    {
+        if (!state.rezDruid.Get().IsEmpty())
+        {
+            state.rezDruid = ObjectGuid::Empty;
+            state.rezTank = ObjectGuid::Empty;
+        }
+
+        how = ready >= 2 ? "none:tanks" : "none:nobody";
+        return false;
+    }
+
+    Player* druid = ObjectAccessor::GetPlayer(*bot, state.rezDruid.Get());
+    Player* tank = ObjectAccessor::GetPlayer(*bot, state.rezTank.Get());
+    bool const latched = druid && IronAssemblyRezDruid(druid, instanceId) &&
+                         std::find(bodies.begin(), bodies.end(), tank) != bodies.end();
+    if (!latched)
+    {
+        druid = nullptr;
+        tank = nullptr;
+        float best = 0.0f;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!IronAssemblyRezDruid(member, instanceId))
+                continue;
+
+            for (Player* body : bodies)
+            {
+                float const distance = member->GetExactDist2d(body);
+                if (!druid || distance < best)
+                {
+                    druid = member;
+                    tank = body;
+                    best = distance;
+                }
+            }
+        }
+
+        state.rezDruid = druid ? druid->GetGUID() : ObjectGuid::Empty;
+        state.rezTank = tank ? tank->GetGUID() : ObjectGuid::Empty;
+    }
+
+    if (!druid)
+    {
+        how = "none:nodruid";
+        return false;
+    }
+
+    if (druid != bot)
+    {
+        how = "none:other";
+        return false;
+    }
+
+    duty.tank = tank;
+    duty.spellId = IronAssemblyRebirthReady(bot);
+
+    float const distance = bot->GetExactDist2d(tank);
+    if (distance <= ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH && bot->IsWithinLOSInMap(tank))
+    {
+        // A casting bot can't step out, so the cast has to end before a blast it stands in.
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(duty.spellId);
+        uint32 const castMs = info ? info->CalcCastTime(bot) : 0;
+        if (IronAssemblyMeltdownDueNear(bot, bot->GetPosition(), ULDUAR_IRON_ASSEMBLY_MELTDOWN_STEP_OUT_MS + castMs,
+                                        ULDUAR_IRON_ASSEMBLY_MELTDOWN_DANGER_RADIUS))
+        {
+            how = "hold:meltdown";
+            return false;
+        }
+
+        duty.step = IronAssemblyBattleRezStep::Cast;
+        how = "cast";
+        return true;
+    }
+
+    // Straight at the body until it's in reach. The raised tank stands up where the druid is, not at the body.
+    Position goal = tank->GetPosition();
+    if (distance > ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH)
+    {
+        float const scale = ULDUAR_IRON_ASSEMBLY_REBIRTH_WALK_REACH / distance;
+        goal = Position(tank->GetPositionX() + (bot->GetPositionX() - tank->GetPositionX()) * scale,
+                        tank->GetPositionY() + (bot->GetPositionY() - tank->GetPositionY()) * scale,
+                        tank->GetPositionZ());
+    }
+
+    // A carrier inside its swap lead blows before a walk and a cast are done.
+    if (IronAssemblyMeltdownDueNear(bot, goal, ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS,
+                                    ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE))
+    {
+        how = "hold:meltdown";
+        return false;
+    }
+
+    duty.walkTo = goal;
+    duty.step = IronAssemblyBattleRezStep::Walk;
+    how = "walk";
+    return true;
+}
+
+bool IronAssemblyBattleRezDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyBattleRez& duty)
+{
+    duty = IronAssemblyBattleRez();
+    if (!botAI || !bot || bot->getClass() != CLASS_DRUID || PlayerbotAI::IsTank(bot) ||
+        !IronAssemblyFormationActive(botAI))
+        return false;
+
+    char const* how = "none:phase";
+    bool const due = DeriveIronAssemblyBattleRez(botAI, bot, duty, how);
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ironassembly.rez",
+                             duty.tank ? std::string(how) + " " + RaidObs::DescribeAssignment(duty.tank->GetGUID())
+                                       : std::string(how));
+
+    return due;
 }
 
 bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI)

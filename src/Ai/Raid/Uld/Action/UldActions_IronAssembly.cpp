@@ -5,6 +5,7 @@
 
 #include "AiObjectContext.h"
 #include "Group.h"
+#include "LastMovementValue.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -14,6 +15,7 @@
 #include "RaidObs.h"
 #include "RaidTankDefensive.h"
 #include "ServerFacade.h"
+#include "Timer.h"
 #include "UldData.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldHardMode.h"
@@ -328,6 +330,64 @@ bool IronAssemblyMeltdownRunOutAction::Execute(Event /*event*/)
     // its threat matching the taunter's after the taunt.
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool IronAssemblyMeltdownStepOutAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!TryGetIronAssemblyMeltdownStepOut(botAI, bot, spot))
+        return false;
+
+    Position step;
+    if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
+        return false;
+
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
+{
+    IronAssemblyBattleRez duty;
+    if (!IronAssemblyBattleRezDuty(botAI, bot, duty))
+        return false;
+
+    if (duty.step == IronAssemblyBattleRezStep::Walk)
+    {
+        Position step;
+        if (!TryGetIronAssemblyRouteStep(botAI, bot, duty.walkTo, step))
+            return false;
+
+        auto const walk = [&]()
+        {
+            return TryMoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false,
+                             false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+        };
+
+        // Stopped short by something else, the same goal re-sent within MaxWaitForMove reads as a duplicate
+        // and the body waits out the rest of it.
+        MoveOutcome outcome = walk();
+        if (outcome == MoveOutcome::Duplicate && !bot->isMoving())
+        {
+            AI_VALUE(LastMovement&, "last movement").clear();
+            outcome = walk();
+        }
+
+        return outcome == MoveOutcome::Issued;
+    }
+
+    // CastSpell refuses a cast-time spell while the bot walks. A FORCED leg is a dodge, so it finishes first.
+    if (bot->isMoving())
+    {
+        LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+        if (last.priority == MovementPriority::MOVEMENT_FORCED && last.lastdelayTime + last.msTime > getMSTime())
+            return false;
+
+        bot->StopMoving();
+        last.clear();
+    }
+
+    return duty.spellId && botAI->CastSpell(duty.spellId, duty.tank);
 }
 
 bool IronAssemblyFusionPunchDefensiveAction::Execute(Event /*event*/)

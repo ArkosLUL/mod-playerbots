@@ -122,6 +122,26 @@ public:
     bool IsActive() override;
 };
 
+// A carrier is about to blow next to Steelbreaker, and this melee bot is in its blast.
+class IronAssemblyMeltdownStepOutTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly meltdown step out trigger";
+
+    IronAssemblyMeltdownStepOutTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+// This druid is the one sent to Rebirth a dead bot tank, so the next swap has a partner.
+class IronAssemblyTankBattleRezTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly tank battle rez trigger";
+
+    IronAssemblyTankBattleRezTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // Empowered Steelbreaker is casting Fusion Punch at this tank and it has a magic defensive for it.
 class IronAssemblyFusionPunchDefensiveTrigger : public Trigger
 {
