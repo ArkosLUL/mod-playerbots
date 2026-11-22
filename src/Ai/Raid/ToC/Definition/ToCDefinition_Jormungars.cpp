@@ -36,6 +36,7 @@ void DefineJormungars(EncounterBuilder& e)
     e.LiveMultiplier<NorthrendWormsMoveGuardMultiplier>(Family::AnyMovement | Family::Spell);
     e.LiveMultiplier<NorthrendWormsBileReachGuardMultiplier>(Family::AnyMovement | Family::Spell);
     e.LiveMultiplier<NorthrendWormsRedirectGuardMultiplier>(Family::Spell);
+    e.LiveMultiplier<NorthrendWormsThreatBrakeMultiplier>(Family::Spell | Family::Melee);
 }
 }  // namespace
 

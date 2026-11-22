@@ -237,6 +237,9 @@ struct JormungarsState
     std::unordered_map<ObjectGuid, uint32> bileScatterTried;  // a deal that found no spot, when
     std::unordered_map<ObjectGuid, uint32> reachHolds;  // when the reach guard first held through a backoff
     std::unordered_map<ObjectGuid, uint32> dragNeededSince;  // mobile holder -> when its drag became needed
+    // DPS bot -> the worms its threat brake holds, a bit per slot: 1 Acidmaw, 2 Dreadscale
+    RaidObs::ObsGuidMap<uint8> brake{"nb.brake"};
+    std::unordered_map<ObjectGuid, uint32> brakeReadMs;
     // Every hunter's redirect trigger asks while a worm is engaged
     ToCGroupMemo<std::vector<ObjectGuid>> hunters;
 };
@@ -816,6 +819,15 @@ void Disengage(Map* map, JormungarsState& state)
     state.bileScatterTried.clear();
     state.reachHolds.clear();
     state.dragNeededSince.clear();
+
+    // nb.brake is change-only too
+    std::vector<ObjectGuid> braked;
+    for (auto const& entry : state.brake)
+        if (entry.second)
+            braked.push_back(entry.first);
+    for (ObjectGuid const& guid : braked)
+        state.brake.Set(guid, 0);
+    state.brakeReadMs.clear();
 }
 
 WormForm FormOf(PlayerbotAI* botAI, JormungarsState const& state, Unit* acidmaw, Unit* dreadscale)
@@ -2093,6 +2105,81 @@ Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder)
 
     holder = dutyHolder;
     return worm;
+}
+
+namespace
+{
+// Read off the threat list, not the "threat" value, which is a uint8 share and wraps past 255%. At most
+// once per bot per ms: the multiplier asks for every action.
+uint8 WormBrakeBits(PlayerbotAI* botAI, JormungarsState*& state)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    state = bot ? Refresh(botAI) : nullptr;
+    if (!state || !state->engaged || !IsRaidDpsBot(bot))
+        return 0;
+
+    ObjectGuid const guid = bot->GetGUID();
+    auto const held = state->brake.find(guid);
+    uint8 const bits = held != state->brake.end() ? held->second : 0;
+    uint32 const now = getMSTime();
+    auto const stamp = state->brakeReadMs.find(guid);
+    if (stamp != state->brakeReadMs.end() && stamp->second == now)
+        return bits;
+
+    state->brakeReadMs[guid] = now;
+    Map* map = bot->GetMap();
+    uint8 next = 0;
+    for (size_t slot = 0; bot->IsAlive() && slot < SLOT_COUNT; ++slot)
+    {
+        Creature* worm = IsUp(state->worms[slot]) ? map->GetCreature(state->worms[slot].guid) : nullptr;
+        Player* holder = worm ? GetBeastsDutyHolder(botAI, GetDutyOfBeast(botAI, worm)) : nullptr;
+        if (!holder || holder == bot)
+            continue;
+
+        uint8 const bit = static_cast<uint8>(1u << slot);
+        float const top = worm->GetThreatMgr().GetThreat(holder);
+        float const own = worm->GetThreatMgr().GetThreat(bot);
+        float const share = (bits & bit) ? WORM_THREAT_RELEASE : WORM_THREAT_CAP;
+        if (top > 0.0f && own > 0.0f && own >= share * top)
+            next |= bit;
+    }
+
+    if (next != bits)
+        state->brake.Set(guid, next);
+
+    return next;
+}
+}  // namespace
+
+bool IsWormThreatBraked(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!IsWormEntry(unit))
+        return false;
+
+    JormungarsState* state = nullptr;
+    uint8 const bits = WormBrakeBits(botAI, state);
+    for (size_t slot = 0; bits && slot < SLOT_COUNT; ++slot)
+        if ((bits & (1u << slot)) && state->worms[slot].guid == unit->GetGUID())
+            return true;
+
+    return false;
+}
+
+bool IsWormThreatBraking(PlayerbotAI* botAI)
+{
+    JormungarsState* state = nullptr;
+    return WormBrakeBits(botAI, state) != 0;
+}
+
+bool IsWormThreatBrakedNear(PlayerbotAI* botAI, Position const& at, float range)
+{
+    JormungarsState* state = nullptr;
+    uint8 const bits = WormBrakeBits(botAI, state);
+    for (size_t slot = 0; bits && slot < SLOT_COUNT; ++slot)
+        if ((bits & (1u << slot)) && state->worms[slot].pos.GetExactDist2d(at) <= range)
+            return true;
+
+    return false;
 }
 
 bool IsWormBileCarrierHeldOut(PlayerbotAI* botAI)

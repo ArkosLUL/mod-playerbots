@@ -661,6 +661,16 @@ def worms_pull() -> list[dict]:
         worm_dmg(61000, ACIDMAW, SHOT, 66819),
         worm_dmg(64000, ACIDMAW, EDGE, 66819),
 
+        # Acidmaw swings at Shot while Shot's brake holds it off Acidmaw, then at Ward, a tank. Dreadscale's
+        # swing kills Edge, whose brake on both worms ended at 92 s.
+        note(61500, SHOT, "nb.brake", "1"),
+        worm_dmg(62000, ACIDMAW, SHOT, 0),
+        note(63000, SHOT, "nb.brake", "0"),
+        worm_dmg(80000, ACIDMAW, WARD, 0),
+        note(90000, EDGE, "nb.brake", "3"),
+        note(92000, EDGE, "nb.brake", "0"),
+        worm_dmg(105000, DREADSCALE, EDGE, 0),
+
         note(71000, WARD, "nb.wormmove", "drag 14"),
         worm_dmg(81000, POOL, SOOTHE, 66881),
         worm_dmg(82000, POOL, SOOTHE, 66881),
@@ -749,6 +759,16 @@ class WormPull(unittest.TestCase):
         self.assertEqual({key: (len(values), round(values[0], 1)) for key, values in gaps.items()},
                          {(DREADSCALE, WARD): (35, 30.5), (ACIDMAW, SOOTHE): (2, 36.1), (ACIDMAW, WARD): (68, 8.0)})
 
+    def test_worm_swings_on_non_tanks_carry_the_victims_brake(self):
+        rows = nb.worm_strays(self.trace)
+        self.assertEqual([(row["t"], row["worm"], row["victim"], row["died"], row["braked"]) for row in rows],
+                         [(62000, "Acidmaw", SHOT, False, True), (105000, "Dreadscale", EDGE, True, False)])
+
+    def test_brake_time_per_worm_reads_each_bit(self):
+        self.assertEqual(nb.brake_time(self.trace), {
+            "Acidmaw": collections.Counter({SHOT: 1500, EDGE: 2000}),
+            "Dreadscale": collections.Counter({EDGE: 2000})})
+
     def test_no_spot_seconds_per_toxin_span(self):
         spans = nb.toxin_spans(self.trace)
         blind = nb.no_spot_ms(self.trace, spans)
@@ -763,6 +783,8 @@ class WormPull(unittest.TestCase):
         text = out.getvalue()
         self.assertIn(f"mobile worm to its victim, both still (WORM_TANK_OFFSET {nb.WORM_TANK_OFFSET:g}):", text)
         self.assertIn("Acidmaw    Ward (tank)  n 68  median 8.0  max 8.0", text)
+        self.assertIn("1:45.000  Dreadscale Edge (melee) 3.0k  died  not braked", text)
+        self.assertIn("Acidmaw       3.5  Edge (melee) 2.0, Shot (ranged) 1.5", text)
         self.assertIn("cured  no spot: walk 2.0 s, runner 3.0 s", text)
 
     def test_wormhold_counts_drop_the_tier(self):
@@ -828,6 +850,7 @@ class WormPull(unittest.TestCase):
         text = out.getvalue()
         for empty in ("no nb.worm rows", "emerges, seconds until each worm targeted a tank: none",
                       "Spew wedges: none", "slime pools: none sampled", "Sweep hits: nobody",
+                      "worm melee on non-tanks: none", "nb.brake, seconds braked per worm: none",
                       "nb.wormmove: none", "nb.wormhold: none", "no Paralytic Toxin carried",
                       "no Burning Bile carried",
                       "nb.cure: none"):

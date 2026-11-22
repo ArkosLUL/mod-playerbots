@@ -10,8 +10,8 @@ Breath, snobolds, Fire Bomb, the worms and the Toxin cure.
     northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, the cone, spread, nb.breath, his walk
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
     northrend_beasts.py <file> --bomb      every Fire Bomb: target, impact hits, who stood inside, dodges
-    northrend_beasts.py <file> --worms     worm forms, emerges, Spew, pools, Sweep, the worm-tank gap, Spray,
-                                           caster spread, holds
+    northrend_beasts.py <file> --worms     worm forms, emerges, Spew, pools, Sweep, the worm-tank gap, worm
+                                           swings on non-tanks, threat brakes, Spray, caster spread, holds
     northrend_beasts.py <file> --cure      Paralytic Toxin spans, how each ended and how long its walk or runner
                                            found no spot, Bile pulses on the clean
 
@@ -72,6 +72,9 @@ What the generic views get wrong here, and what this reads instead:
 - **Where the mobile worm's chase settles is no fixed figure**: inside melee range the core walks it at
   its victim until a 400 ms recheck finds the victim still. `--worms` measures it, worm to target
   column, over snapshots where neither moved, against `WORM_TANK_OFFSET`.
+- **A worm's swing at a non-tank can fall between snapshots**: its target can leave the tank for one
+  swing and come back inside 250 ms. `--worms` lists the worms' melee `dmg` rows on non-tanks instead,
+  each with the victim's `nb.brake` (a bit per worm, 1 Acidmaw, 2 Dreadscale) at the time.
 """
 from __future__ import annotations
 
@@ -901,6 +904,10 @@ CASTER_ROLES = ("ranged", "heal")
 BOTH_WORMS_UP = ("1", "2")
 # nb.worm value -> the entry of the worm in its mobile form then
 MOBILE_WORM_OF = {"1": NPC_DREADSCALE, "2": NPC_ACIDMAW}
+# `nb.brake` holds a bit per worm
+WORM_BRAKE_BIT = {NPC_ACIDMAW: 1, NPC_DREADSCALE: 2}
+# A death this soon after a swing came from it
+STRAY_DEATH_MS = 50
 WORM_TANK_OFFSET = radius("WORM_TANK_OFFSET")
 # a unit that moved less than this since the snapshot before stood still
 STILL_YD = 0.05
@@ -1265,6 +1272,45 @@ def tank_gaps(trace: Trace) -> dict[tuple[int, int], list[float]]:
     return dict(out)
 
 
+def brake_bits(held: str | None) -> int:
+    return int(held) if held and held.isdigit() else 0
+
+
+def brake_time(trace: Trace) -> dict[str, collections.Counter]:
+    """`{worm name: {bot: ms}}` each DPS bot's threat brake held it off that worm (`nb.brake`)."""
+    out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for guid, track in holder_spans(trace, "nb.brake", pull_end(trace)).items():
+        for held, start, stop in track:
+            for name, entry in WORMS:
+                if brake_bits(held) & WORM_BRAKE_BIT[entry]:
+                    out[name][guid] += stop - start
+    return dict(out)
+
+
+def worm_strays(trace: Trace) -> list[dict]:
+    """Every worm melee swing on a roster member who isn't a tank, with the hit, whether the victim died of
+    it and whether its threat brake held it off that worm then. A worm off its tank one-shots a melee."""
+    worms = {guid: entry for _, entry in WORMS for guid in guids_of_entry(trace, entry)}
+    roster = roster_guids(trace)
+    brakes = holder_spans(trace, "nb.brake", pull_end(trace))
+    deaths = [(death.get("g"), death["t"]) for death in combat_deaths(trace)]
+    out = []
+    for rec in trace.of("dmg"):
+        victim = rec.get("d", 0)
+        if rec.get("sp") != 0 or rec.get("s") not in worms or victim not in roster or trace.role(victim) == "tank":
+            continue
+        entry = worms[rec["s"]]
+        out.append({
+            "t": rec["t"],
+            "worm": next(name for name, worm_entry in WORMS if worm_entry == entry),
+            "victim": victim,
+            "amount": rec.get("a", 0),
+            "died": any(guid == victim and 0 <= when - rec["t"] <= STRAY_DEATH_MS for guid, when in deaths),
+            "braked": bool(brake_bits(value_at(brakes.get(victim), rec["t"])) & WORM_BRAKE_BIT[entry]),
+        })
+    return out
+
+
 def named(trace: Trace, guid: int) -> str:
     return f"{trace.name(guid)} ({trace.role(guid)})"
 
@@ -1329,6 +1375,18 @@ def show_worms(trace: Trace) -> None:
     for (worm, victim), values in sorted(gaps.items(), key=lambda item: (-len(item[1]), trace.name(item[0][1]))):
         print(f"    {trace.name(worm).split()[0]:10} {named(trace, victim)}  n {len(values)}"
               f"  median {statistics.median(values):.1f}  max {max(values):.1f}")
+
+    strays = worm_strays(trace)
+    print("  worm melee on non-tanks:" + ("" if strays else " none"))
+    for row in strays:
+        print(f"    {clock(row['t']):>9}  {row['worm']:10} {named(trace, row['victim'])} {row['amount'] / 1000:.1f}k"
+              f"{'  died' if row['died'] else ''}  {'braked' if row['braked'] else 'not braked'}")
+
+    braked = brake_time(trace)
+    print("  nb.brake, seconds braked per worm:" + ("" if braked else " none"))
+    for name, bots in sorted(braked.items()):
+        print(f"    {name:10} {sum(bots.values()) / 1000:6.1f}  "
+              + ", ".join(f"{named(trace, guid)} {ms / 1000:.1f}" for guid, ms in bots.most_common()))
 
     show_sprays(trace)
 
@@ -1686,7 +1744,8 @@ SECTIONS = (
     ("snobold", "snobold riders and the DPS picks", show_snobold),
     ("bomb", "every Fire Bomb: target, impact hits, who stood inside, dodges", show_bomb),
     ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, the mobile worm's gap to its"
-     " victim, Spray casts, caster spread, hold releases, reposition and hold branches", show_worms),
+     " victim, worm swings on non-tanks, threat brakes, Spray casts, caster spread, hold releases, reposition"
+     " and hold branches", show_worms),
     ("cure", "Paralytic Toxin spans, how each ended and its seconds with no cure or run spot, Burning Bile"
      " pulses on the clean, cure branches", show_cure),
 )

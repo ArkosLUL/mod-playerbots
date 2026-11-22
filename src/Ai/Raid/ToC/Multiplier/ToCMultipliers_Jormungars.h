@@ -3,6 +3,7 @@
 
 #include "Multiplier.h"
 #include "RaidCombatHelpers.h"
+#include "RaidSplash.h"
 
 // Holds other movers while a reposition walk is in flight, since every MoveTo clears the MotionMaster
 // and any of them would cancel it. Attacks, `avoid aoe` and the beasts' own movers stay.
@@ -46,6 +47,18 @@ public:
 
 private:
     RaidActionCache<bool> _classRedirect;
+};
+
+// A DPS bot braked on a worm deals it nothing, area damage near it included. Its white swings and
+// DoTs run on.
+class NorthrendWormsThreatBrakeMultiplier : public Multiplier
+{
+public:
+    NorthrendWormsThreatBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "northrend worms threat brake") {}
+    float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

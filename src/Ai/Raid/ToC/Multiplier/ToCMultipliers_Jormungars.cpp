@@ -101,3 +101,22 @@ float NorthrendWormsRedirectGuardMultiplier::GetValue(Action* action)
 
     return (GetBeastsStageMask(botAI) & BEASTS_STAGE_WORMS) ? 0.0f : 1.0f;
 }
+
+float NorthrendWormsThreatBrakeMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action) || !IsWormThreatBraking(botAI))
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
+    if (IsWormThreatBraked(botAI, aimed))
+        return 0.0f;
+
+    if (!IsRaidAreaDamage(botAI, action, _splash))
+        return 1.0f;
+
+    return IsWormThreatBrakedNear(botAI, bot->GetPosition(), WORM_AREA_THREAT_REACH) ||
+                   (aimed && IsWormThreatBrakedNear(botAI, aimed->GetPosition(), WORM_AREA_THREAT_REACH))
+               ? 0.0f
+               : 1.0f;
+}
