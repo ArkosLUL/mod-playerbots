@@ -76,7 +76,11 @@ it, never a reason to stop damaging it while a tank has it (the [hold](#tanks) i
 strategy that withheld raid damage from the Snaplasher is why the trio could never die together. It
 sits at the cap for most of every trio wave, split or not: **7/25/43/61/78/99** stacks at +2/+4/+6/+8/+10/+15s (combat log). It swings
 every 2.45s for **57-120k** on a non-tank and 22-50k raw on a DK tank who avoided 76% of them, so
-whoever takes it off the tank dies (six deaths in two resets).
+whoever takes it off the tank dies (six deaths in two resets). Capped, it lands **18-52k** raw on the add
+tank, against ~40k health on a DK and ~55k on a bear in form: one swing kills the DK from full, two in one
+gap kill the bear, with four healers in range. Each add tank that held a trio wave to its end had Survival
+Instincts, Frenzied Regeneration or Vampiric Blood up; each death came with them spent earlier (Icebound
+Fortitude in a Conservator wave, both 3 min bear ones in the first trio) or unpressed (Vampiric Blood).
 
 **A damage dealer near the tank's threat on the Snaplasher moves to a sibling** (`ShedSnaplasherThreat`,
 not yet verified in a pull). The generic `threat` strategy is never added (`AiFactory`), so nothing
@@ -415,6 +419,16 @@ Tanks never flee the blast; they eat it. The gate is per lasher on purpose: the 
 step out` asked for 3+ under 20% inside one 8 yd pack and fired once in six pulls
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)).
 
+**Nothing walks a bailed melee bot back in** (not yet verified in a pull). The bail stops at the blast's
+edge, and `reach melee` re-aimed the bot at its target inside it: 559 of 862 melee Detonate hits over 16
+pulls came after a bail and a reach back, and 33-57% of melee reach and set-behind orders in a lasher wave
+ended inside a low lasher's blast, three in four of them for Freya. `freya lasher blast reach guard` zeroes
+`reach melee` (by name: `Family::Reach` also holds a battle res's walk to its corpse) and charges, `freya
+lasher blast behind guard` set behind, for a non-tank melee bot whose walk would end within
+`ULDUAR_FREYA_DETONATE_RADIUS` + 1 of a lasher under the bail line: reach melee's stop on the bot's side of
+its target, or either of set behind's flank points (3/5 π off its facing). The bot waits outside until that
+lasher blows.
+
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
 DPS or healer to its own nearest spot `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (18 yd) from every low one,
@@ -609,13 +623,15 @@ that clear it takes radius + 1. It is latched (`dodgeSpot`, ceiling `ULDUAR_FREY
 true without calling `MoveTo` while the walk is in flight
 ([oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates)).
 
-**A beam escape must not cost the tanks their healers** (not yet verified in a pull). At 12 / 15 yd,
-32-67% of each role's dodges fired from past 8 yd, where no pool reaches, re-dodges from 11.5-12.7 yd
-undoing healers' `reach spell` back to their tank: two of a bear add tank's three living healers sat
-52-56 yd off for his last 10s, and the loose Snaplasher led a 27-death collapse. **Both beam escapes
-take the side toward Freya** (`GetFreyaBeamEscapeBias` as `preferNear`), since the sweep tries +x
-first: 177 of 338 escapes from on top of a beam went that way, 74% ending farther from her.
-`preferNear` only breaks ties inside one ring, so no walk gets longer.
+**A beam escape must not cost the tanks their healers.** At 12 / 15 yd, 32-67% of each role's dodges
+fired from past 8 yd, where no pool reaches, re-dodges from 11.5-12.7 yd undoing healers' `reach spell`
+back to their tank: two of a bear add tank's three living healers sat 52-56 yd off for his last 10s, and
+the loose Snaplasher led a 27-death collapse. **Both beam escapes take the side toward Freya**
+(`GetFreyaBeamEscapeBias` as `preferNear`), since the sweep tries +x first: 177 of 338 escapes from on top
+of a beam went that way, 74% ending farther from her. `preferNear` only breaks ties inside one ring, so no
+walk gets longer. At 8 / 11 yd with the bias, dodges from past 8 yd fell to 6-12% by role, healers and
+ranged ending farther from Freya to 33-39% (77-81%), and fewer than 2 healers had the Snaplasher's holder
+in range for 0-7% of each trio wave (26%). The cost: a hit bot takes 1.8 Unstable Energy ticks, not 1.4.
 
 ## Per-tick scan
 
@@ -632,13 +648,18 @@ about what is up.
 
 ## What a trace answers
 
-`tools/botobs/bosses/freya.py <trace>`; one probe, the `freya.snaphold` note. The banner reads hard mode
-off the Elders' empowers (Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since
-`cfg.hardmode` has no Freya key; `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
+`tools/botobs/bosses/freya.py <trace>`; one probe, the `freya.snaphold` note. A pull files under the first
+Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
+living Elder into combat before Freya's own hook runs, and the recorder never renames a named trace.
+`cfg.hardmode` has no Freya key, so the report's column reads `-`; the banner reads hard mode off the
+Elders' essence channels into Freya at her engage (62483-62485), else their empowers (Ground Tremor casts,
+Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
+62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, and each hold change (on, bark gone, off); `--beams` Unstable Sun Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
-28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--deaths` by killer
-and spell.
+28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--blasts` per lasher
+wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
+blast, and their samples inside one; `--deaths` by killer and spell.

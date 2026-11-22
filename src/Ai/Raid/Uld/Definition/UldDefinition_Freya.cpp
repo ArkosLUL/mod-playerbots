@@ -11,12 +11,15 @@
 #include "BossAuraTriggers.h"
 #include "BossResistanceMultipliers.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Strategy.h"
 #include "UldActions_Freya.h"
 #include "UldEncounterGate.h"
 #include "UldEncounter_Freya.h"
 #include "UldMultipliers_Freya.h"
 #include "UldTriggers_Freya.h"
+
+#include <cmath>
 
 namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
@@ -51,6 +54,47 @@ bool FreyaMeleeNearBomb(PlayerbotAI* botAI)
     return !PlayerbotAI::IsTank(bot) &&
            bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
 }
+
+// True when the walk to the current target ends in a low lasher's blast. Reach melee stops on the bot's side, set
+// behind at whichever flank point 3/5 pi off the target's facing is nearer, so both flanks count.
+bool FreyaMeleeApproachEndsInBlast(PlayerbotAI* botAI, bool behind)
+{
+    Player* bot = botAI->GetBot();
+    if (PlayerbotAI::IsTank(bot))
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target)
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    if (state.detonatingLashers.empty())
+        return false;
+
+    float const reach = sPlayerbotAIConfig.MeleeDistance + bot->GetCombatReach() + target->GetCombatReach();
+    auto const endsInBlast = [&state, target, reach](float angle)
+    {
+        float const x = target->GetPositionX() + reach * std::cos(angle);
+        float const y = target->GetPositionY() + reach * std::sin(angle);
+        for (Unit* lasher : state.detonatingLashers)
+            if (lasher->IsAlive() && lasher->GetHealthPct() < ULDUAR_FREYA_LASHER_BAIL_PCT &&
+                lasher->GetExactDist2d(x, y) < ULDUAR_FREYA_DETONATE_RADIUS + 1.0f)
+                return true;
+
+        return false;
+    };
+
+    if (!behind)
+        return endsInBlast(target->GetAngle(bot));
+
+    float const flank = float(M_PI) * 3.0f / 5.0f;
+    return endsInBlast(target->GetOrientation() + flank) || endsInBlast(target->GetOrientation() - flank);
+}
+
+bool FreyaMeleeReachIntoBlast(PlayerbotAI* botAI) { return FreyaMeleeApproachEndsInBlast(botAI, false); }
+
+bool FreyaMeleeBehindIntoBlast(PlayerbotAI* botAI) { return FreyaMeleeApproachEndsInBlast(botAI, true); }
 
 void DefineFreya(EncounterBuilder& e)
 {
@@ -142,6 +186,11 @@ void DefineFreya(EncounterBuilder& e)
     // Freya faces her tank, away from the bombs, so "behind" walks a melee bot from a clear spot in her reach toward
     // them. Reach melee stays open: a walk into a blast re-fires the escape, which aims back into reach.
     e.Block("freya nature bomb melee guard", Role::Melee, FreyaMeleeNearBomb, 0, {"set behind"});
+
+    // The lasher bail stops at the blast's edge, so reach melee would walk the bot right back to a target still in it.
+    // Named rather than Family::Reach, which also covers a battle res walking to its corpse.
+    e.Block("freya lasher blast reach guard", Role::Melee, FreyaMeleeReachIntoBlast, Family::Charge, {"reach melee"});
+    e.Block("freya lasher blast behind guard", Role::Melee, FreyaMeleeBehindIntoBlast, Family::SetBehind);
 
     e.Multiplier<FreyaGroundTremorCastGateMultiplier>(Family::Spell);
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "freya");
