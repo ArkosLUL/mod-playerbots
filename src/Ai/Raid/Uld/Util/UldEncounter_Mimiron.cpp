@@ -30,9 +30,11 @@
 #include "UldTargets.h"
 #include "Unit.h"
 #include "Vehicle.h"
+#include "WorldSession.h"
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -1098,6 +1100,161 @@ std::unordered_map<ObjectGuid, uint32>& MimironFireDodgesFor(Player* bot)
 
 MimironFightState& MimironFightStateFor(Player* bot) { return mimironFightStates.For(bot->GetInstanceId()); }
 
+// Raid-wide, kept by the encounter tick: every bot has to walk to the same band and leave it together.
+// Out of MimironFightState, which the handover resets on every scan.
+struct MimironHandoverState
+{
+    RaidObs::ObsValue<MimironHandoverStep> step{"mimiron.handover"};
+    uint32 scanMs = 0;
+
+    bool picked = false;
+    float bearing = 0.0f;  // hold band centreline from the room centre
+};
+
+RaidInstanceState<MimironHandoverState> mimironHandoverStates;
+
+MimironHandoverState& MimironHandoverStateFor(Player* bot) { return mimironHandoverStates.For(bot->GetInstanceId()); }
+
+MimironHandoverStep CachedMimironHandoverStep(Player* bot)
+{
+    MimironHandoverState& state = MimironHandoverStateFor(bot);
+    if (!state.scanMs || GetMSTimeDiffToNow(state.scanMs) > ULDUAR_MIMIRON_HANDOVER_STALE_MS)
+        return MimironHandoverStep::None;
+
+    return state.step;
+}
+
+// No real player in the raid group on this instance, so nobody leads it between phases.
+bool MimironBotLedRaid(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsInWorld() || member->GetMapId() != bot->GetMapId() ||
+            member->GetInstanceId() != bot->GetInstanceId())
+            continue;
+
+        WorldSession const* session = member->GetSession();
+        if (!session || !session->IsHeadless())
+            return false;
+    }
+
+    return true;
+}
+
+// Read off the boss script's own clock: the MK II beaten, VX-001 summoned 17 s in, Mimiron aboard it
+// at 35 s, phase 2 at 47.75 s. Grid scans, since every mech is NOT_SELECTABLE until its phase.
+MimironHandoverStep ReadMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bot)
+{
+    if (!IsMimironHardModeActive(botAI) || !BossStateGateLive(botAI, ULD_BOSS_MIMIRON) || !MimironBotLedRaid(bot))
+        return MimironHandoverStep::None;
+
+    if (bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE))
+        return MimironHandoverStep::None;
+
+    Creature* leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
+    if (!leviathanMkII || !leviathanMkII->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ||
+        leviathanMkII->GetHealthPct() >= ULDUAR_MIMIRON_SPENT_HEALTH_PCT)
+        return MimironHandoverStep::None;
+
+    Creature* vx001 = bot->FindNearestCreature(NPC_VX001, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
+    if (!vx001)
+        return MimironHandoverStep::Hold;
+
+    // Riding is phase 4. Spent is the 2.5 s before the 2 to 3 handover summons the Aerial Command Unit.
+    if (!vx001->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || vx001->GetVehicleBase() ||
+        vx001->GetHealthPct() < ULDUAR_MIMIRON_SPENT_HEALTH_PCT)
+        return MimironHandoverStep::None;
+
+    // Seat 0 at 35 s, seat 1 at 44 s.
+    if (Vehicle* kit = vx001->GetVehicleKit())
+    {
+        for (int8 seat : {0, 1})
+        {
+            Unit* passenger = kit->GetPassenger(seat);
+            if (passenger && passenger->GetEntry() == NPC_MIMIRON)
+                return MimironHandoverStep::WalkIn;
+        }
+    }
+
+    return MimironHandoverStep::Late;
+}
+
+// Fewest burning nodes round the band's middle, ties to the one nearest the phase 1 tank spot: the
+// handover's own seeds then land beside the phase 1 field, one fire for the first Frost Bomb to clear.
+float PickMimironHoldBearing(PlayerbotAI* botAI, Player* bot)
+{
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    float const middle = ULDUAR_MIMIRON_HOLD_OUTER_RADIUS -
+                         0.5f * ULDUAR_MIMIRON_HOLD_ROW_STEP * static_cast<float>(ULDUAR_MIMIRON_HOLD_ROWS - 1);
+
+    float bestBearing = 0.0f;
+    uint32 bestFire = std::numeric_limits<uint32>::max();
+    float bestReach = 0.0f;
+    for (uint32 i = 0; i < ULDUAR_MIMIRON_HOLD_BEARINGS; ++i)
+    {
+        float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
+                              static_cast<float>(ULDUAR_MIMIRON_HOLD_BEARINGS);
+        Position const centre(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + middle * std::cos(bearing),
+                              ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + middle * std::sin(bearing),
+                              ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+
+        uint32 fire = 0;
+        for (Position const& flame : hazards.flames)
+            if (centre.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY()) <= ULDUAR_MIMIRON_HOLD_CLEAR_RADIUS)
+                ++fire;
+
+        float const reach = centre.GetExactDist2d(ULDUAR_MIMIRON_PHASE1_TANK_SPOT);
+        if (fire < bestFire || (fire == bestFire && reach < bestReach))
+        {
+            bestBearing = bearing;
+            bestFire = fire;
+            bestReach = reach;
+        }
+    }
+
+    if (RaidObs::Active())
+    {
+        char line[32];
+        snprintf(line, sizeof(line), "%.0f deg %u fire", bestBearing * 180.0f / static_cast<float>(M_PI), bestFire);
+        RaidObs::NoteDerived(bot, "mimiron.hold", line);
+    }
+
+    return bestBearing;
+}
+
+// Called from the tick with nothing attackable. The band is picked once, on the fire phase 1 left.
+void UpdateMimironHandover(PlayerbotAI* botAI, Player* bot)
+{
+    MimironHandoverState& state = MimironHandoverStateFor(bot);
+    state.scanMs = getMSTime();
+
+    MimironHandoverStep const step = ReadMimironBotLedHandoverStep(botAI, bot);
+    state.step = step;
+    if (step == MimironHandoverStep::None)
+    {
+        state.picked = false;
+        return;
+    }
+
+    if (!state.picked)
+    {
+        state.bearing = PickMimironHoldBearing(botAI, bot);
+        state.picked = true;
+    }
+}
+
+void ResetMimironHandover(Player* bot)
+{
+    MimironHandoverState& state = MimironHandoverStateFor(bot);
+    state.step = MimironHandoverStep::None;
+    state.picked = false;
+}
+
 // Everything the trace needs once per instance per tick rather than once per bot: the phase, the
 // Magnetic Core window, who holds the core, and the Laser Barrage cone.
 void TickMimironObs(PlayerbotAI* botAI, Player* bot)
@@ -1125,8 +1282,11 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
         state.acuGrounded = false;
         state.coreCarrier = ObjectGuid::Empty;
         ResetMimironFightState(bot);
+        UpdateMimironHandover(botAI, bot);
         return;
     }
+
+    ResetMimironHandover(bot);
 
     if (leviathanMkII && vx001 && aerialCommandUnit)
         state.phase = MIMIRON_TRACE_ALL;
@@ -1169,6 +1329,14 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 }  // namespace
 
 void MimironTick(PlayerbotAI* botAI) { TickMimironObs(botAI, botAI->GetBot()); }
+
+MimironHandoverStep GetMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !IsNearMimironRoom(bot) || GetMimironRingFocus(botAI))
+        return MimironHandoverStep::None;
+
+    return CachedMimironHandoverStep(bot);
+}
 
 bool IsMimironEngaged(PlayerbotAI* botAI)
 {
@@ -2334,6 +2502,43 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
     return best;
 }
 
+// Every living member in the room gets one, tanks and melee too: outer row first, each row centred
+// on the band's bearing.
+bool GetMimironHoldSlot(Player* bot, Group* group, Position& out, uint32& index, uint32& count)
+{
+    MimironHandoverState const& state = MimironHandoverStateFor(bot);
+    if (!state.picked)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInMap(bot))
+            continue;
+
+        if (member == bot)
+            index = count;
+
+        ++count;
+    }
+
+    if (count == 0)
+        return false;
+
+    uint32 const perRow = (count + ULDUAR_MIMIRON_HOLD_ROWS - 1) / ULDUAR_MIMIRON_HOLD_ROWS;
+    uint32 const row = index / perRow;
+    uint32 const inRow = std::min(perRow, count - row * perRow);
+    float const radius = ULDUAR_MIMIRON_HOLD_OUTER_RADIUS - static_cast<float>(row) * ULDUAR_MIMIRON_HOLD_ROW_STEP;
+    float const offset = (static_cast<float>(index % perRow) - 0.5f * static_cast<float>(inRow - 1)) *
+                         ULDUAR_MIMIRON_HOLD_SPACING / radius;
+    float const bearing = Position::NormalizeOrientation(state.bearing + offset);
+
+    out = Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + radius * std::cos(bearing),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + radius * std::sin(bearing),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+    return true;
+}
+
 // `branch` names the shape that answered, for the trace: a coordinate alone can't tell a wedge slot
 // from a ring slot that lands near it.
 bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, char const*& branch,
@@ -2354,8 +2559,21 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     // anyway, for the one spot handed out then.
     Unit* focus = GetMimironRingFocus(botAI);
     bool const staging = focus == nullptr;
+    bool walkIn = false;
     if (staging)
+    {
+        // A bot-led raid has nobody to follow off the phase 1 field. It holds clean ground, then walks
+        // to its phase 2 slot, worked out on VX-001 as if it were up.
+        MimironHandoverStep const step = CachedMimironHandoverStep(bot);
+        if (step == MimironHandoverStep::Hold || step == MimironHandoverStep::Late)
+        {
+            branch = "hmhold";
+            return GetMimironHoldSlot(bot, group, out, index, count);
+        }
+
+        walkIn = step == MimironHandoverStep::WalkIn;
         focus = GetMimironStagingFocus(bot);
+    }
 
     if (!focus)
         return false;
@@ -2384,9 +2602,9 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Nobody else gets a spot in a handover: refusing hands the tick to follow, and a raid walking with its
-    // master stays ahead of the fire. After p4tank on purpose, since that spot holds the boss.
-    if (staging)
+    // Nobody else gets a spot in a handover bar a bot-led walk in: refusing hands the tick to follow, and a
+    // raid walking with its master stays ahead of the fire. After p4tank on purpose, since that spot holds the boss.
+    if (staging && !walkIn)
         return false;
 
     // Phase 3 tank spot, for the Magnetic Core: the unit holds 30 yd from its tank and the core grounds it

@@ -300,6 +300,97 @@ class FirePull(unittest.TestCase):
         self.assertEqual(dict(row["fire"]), {"ranged": 3000})
 
 
+# A bot-led 1 to 2 handover from 11 s to 59 s: both bots hold 40 yd west, walk in from 46 s, and at
+# phase 2 Agony stands on her wedge slot while Tree is 9 yd short of hers.
+CX, CY = mm.ROOM_CENTRE
+
+
+def handover_spot(guid: int, when: int) -> tuple[float, float]:
+    if when <= 11000:
+        return CX - 30.0, CY
+    if when < 50000:
+        return (CX - 40.0, CY) if guid == AGONY else (CX - 40.0, CY + 4.0)
+    return (2767.0, 2569.0) if guid == AGONY else (2744.0, 2600.0)
+
+
+def handover_snap(when: int) -> dict:
+    rows = []
+    for guid in (AGONY, TREE):
+        x, y = handover_spot(guid, when)
+        mana = 40.0 if when <= 11000 else 90.0
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, mana, 0, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def handover_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 6, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "0"},
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "1"},
+        {"t": 11000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "0"},
+        {"t": 28000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 59000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "2"},
+
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.handover", "txt": "0"},
+        {"t": 11000, "e": "note", "g": AGONY, "k": "mimiron.handover", "txt": "1"},
+        {"t": 11000, "e": "note", "g": AGONY, "k": "mimiron.hold", "txt": "180 deg 0 fire"},
+        {"t": 28000, "e": "note", "g": AGONY, "k": "mimiron.handover", "txt": "2"},
+        {"t": 46000, "e": "note", "g": AGONY, "k": "mimiron.handover", "txt": "3"},
+        {"t": 59000, "e": "note", "g": AGONY, "k": "mimiron.handover", "txt": "0"},
+
+        # a phase 1 slot, then the band, then the walk in
+        {"t": 2000, "e": "note", "g": AGONY, "k": "mimiron.slot", "txt": "p1stack 0/2 2716,2580,364"},
+        {"t": 11000, "e": "note", "g": AGONY, "k": "mimiron.slot", "txt": "hmhold 0/2 2705,2569,364"},
+        {"t": 11000, "e": "note", "g": TREE, "k": "mimiron.slot", "txt": "hmhold 1/2 2705,2573,364"},
+        {"t": 46000, "e": "note", "g": AGONY, "k": "mimiron.slot", "txt": "hmwedge 0/2 2767,2569,364"},
+        {"t": 46000, "e": "note", "g": TREE, "k": "mimiron.slot", "txt": "hmwedge 1/2 2744,2591,364"},
+
+        {"t": 15000, "e": "act", "g": TREE, "a": "drink", "rel": 4.2, "vd": "OK"},
+        {"t": 16000, "e": "act", "g": AGONY, "a": "drink", "rel": 4.2, "vd": "IMPOSSIBLE"},
+        {"t": 20000, "e": "dmg", "s": 4294970300, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3000},
+        {"t": 60000, "e": "dmg", "s": 4294970300, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3000},
+        {"t": 62000, "e": "end", "out": "wipe"},
+    ]
+    records += [handover_snap(when) for when in range(0, 62000, 250)]
+    return records
+
+
+class HandoverPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_6_mimiron_1789700004.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in handover_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_handover_runs_from_phase_1_to_phase_2_with_each_step_once(self):
+        row = mm.handover_rows(self.trace)[0]
+        self.assertEqual(row["span"], (11000, 59000))
+        self.assertEqual(row["steps"], {"1": 11000, "2": 28000, "3": 46000})
+        self.assertEqual(row["hold"], "180 deg 0 fire")
+
+    def test_the_raid_is_measured_from_the_room_centre(self):
+        spread = mm.handover_rows(self.trace)[0]["spread"]
+        self.assertAlmostEqual(spread["walk in"][0], (40.0 + (40.0 ** 2 + 4.0 ** 2) ** 0.5) / 2)
+        self.assertAlmostEqual(spread["P1 end"][1], 30.0)
+
+    def test_only_a_handover_slot_counts_and_only_within_the_tolerance(self):
+        row = mm.handover_rows(self.trace)[0]
+        self.assertEqual((row["on_slot"], row["slotted"], row["living"]), (1, 2, 2))
+
+    def test_mana_drinks_and_fire_inside_the_handover_only(self):
+        row = mm.handover_rows(self.trace)[0]
+        self.assertEqual(row["mana"], [(40.0, 90.0)])
+        self.assertEqual(row["drinks"], [("Tree", 4.0)])
+        self.assertEqual((row["fire"], row["dead"]), (3000, []))
+
+
 MINE_A, MINE_B, MINE_C, MINE_D = 4294970201, 4294970202, 4294970203, 4294970204
 MINES = {MINE_A: (30.0, 0.0), MINE_B: (35.0, 0.5), MINE_C: (10.0, 0.0), MINE_D: (-3.0, 1.0)}
 

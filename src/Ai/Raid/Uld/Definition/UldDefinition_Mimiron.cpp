@@ -88,6 +88,14 @@ bool MimironNearFire(PlayerbotAI* botAI)
     return false;
 }
 
+// A drink stops the bot thinking for up to 20 s, and Mimiron boards VX-001 18 s after it is summoned, so
+// a drink started from the summon on keeps the bot on the hold band through the walk in.
+bool MimironWalkInDrinkHold(PlayerbotAI* botAI)
+{
+    MimironHandoverStep const step = GetMimironBotLedHandoverStep(botAI, botAI->GetBot());
+    return step == MimironHandoverStep::Late || step == MimironHandoverStep::WalkIn;
+}
+
 // Room test before the grid scan: the hard mode switch holds all over Ulduar.
 bool MimironNearFrostBomb(PlayerbotAI* botAI)
 {
@@ -221,6 +229,7 @@ void DefineMimiron(EncounterBuilder& e)
     // Eating or drinking stops the bot thinking for up to 18 s, so one that sits down near the fire
     // doesn't dodge it. Near fire only: a handover drink on clean ground is worth the mana.
     e.Block("mimiron drink guard", Role::Any, MimironNearFire, 0, {"drink", "eat"});
+    e.Block("mimiron walk-in drink hold", Role::Any, MimironWalkInDrinkHold, 0, {"drink", "eat"});
 
     // Every mover that aims at a unit rather than the floor. The bomb flee lets go just inside its clearance, so
     // any of these walks the bot back into the blast for the rest of the fuse.
