@@ -153,7 +153,9 @@ widening the files widens the strafe. Flight time is not tight: the front rank's
 a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against the impact;
 `FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe still in
 the blast. Position and soak both decline while an impact covers their destination, as on Algalon; without that the
-bot clears, walks straight back with the missile still inbound, and never casts.
+bot clears, walks straight back with the missile still inbound, and never casts. The dodge itself yields once
+the bot is clear, so the soak can walk it back into the field the missile leaves and class interrupts get the
+ticks between.
 
 **Key the dodge off the cast, never the field.** The boss is **never** in `UNIT_STATE_CASTING` for this
 one, so a trigger must not gate on that; crashes come every 10s, so one stored impact is enough. The

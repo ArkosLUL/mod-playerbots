@@ -105,7 +105,8 @@ Everyone else keeps fighting until the walk to its hole plus 2.5 s is all that i
 Its hole is the nearest one not claimed by the kite, latched per cast so a closer new hole can't turn it round
 mid run; the run ends 4.5 yd from its centre. The wait, the run and the far-hole approach all read that hole:
 timed off a nearer kite hole, 13 bots left 2.4-4.7 s before the hit for one 35-52 yd away and died on the way.
-The phase only has to cover the hit, so hiding early buys nothing, bar a star dying under it (Stars).
+The phase only has to cover the hit, so hiding early buys nothing, bar a star dying under it (Stars). The time to the next hit is signed, so a cast running late reads as
+imminent, not a cycle away; before the intro ends nothing is predicted and nothing is held for it.
 
 The run breaks a cast pinning the feet, re-issues a walk stalled 500 ms ([a walk stopped short is never
 re-issued](../../engine/pitfalls.md#movement-that-silently-no-ops)) and holds its tick while walking, or a heal
@@ -213,7 +214,7 @@ kills them; the target exclusions keep every other bot on Algalon, and an `OwnTa
 `dps assist` from pulling the team back, since a star is no attacker until something hits it. The team
 is cleared (`algalon.focusstar`) onto a star only when its death is **planned**. Splash near him takes
 1-2.4 %/s on top of the drain, so a star's forecast death is its health over its measured loss (the slope of a
-4 s log, never under the drain), not its health. A kill lands at its health over 9-5.5 %/s (whole kills ran
+4 s log, never under the drain; under 2 s of log reads as the drain alone), not its health. A kill lands at its health over 9-5.5 %/s (whole kills ran
 6.2-7.8 %/s on 25-man) plus the team's walk (mean distance past 28 yd at 7 yd/s) and a 2 s start (every kill's first
 2 s only matched the drain; none for a star already losing 3.5 %/s), or over its own slope once the team is on
 it. Any other star is planned up to the speed the team last showed on its focus (capped
@@ -310,7 +311,7 @@ The generic movers know nothing of holes, and holes land beside him where melee 
 four pulls came off `reach melee`, `set behind` and `reach spell`, and 4 in one pull off Charge and Intercept (3
 dead). `AlgalonWalkGuardMultiplier` holds reach, reach-to-heal, set behind, rear flank and the charges (Charge,
 Intercept, Feral Charge) when the stop point (melee range of the target, 28 yd for spells, both
-set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one; for a phased bot within
+set-behind spots, 108° either side of his facing at the bot's own distance from him) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one; for a phased bot within
 8 yd, the hole it left included, since reach walked melee back in before the strip. A held bot waits; holes
 live until a constellation eats one or phase 2.
 
@@ -420,7 +421,9 @@ there):
   20 s pass. An `OwnMovement` rule and a Charge block keep reach and charges from taking them in early.
 
 The formation runs on presence, not combat: the intro is the only free window to put the raid on its spots.
-A far hole before Big Bang beats a far star for a bot's spot.
+A far hole before Big Bang beats a far star for a bot's spot. A slot walk reaches the slot (2 yd), then holds
+until drift passes 4 yd: re-issuing on every yard restarts the spline, and a moving bot can't start a cast. A
+waypoint round a hole is never a place to hold, so the next leg is handed out at once.
 
 Every ring slot and waiting spot is 13.5 yd from the whole line from his landing spot to the tank slot (his
 landing, his drag and any stop point), at least 8 yd from the four worm hole spots and within 44 yd of the
@@ -456,11 +459,11 @@ whenever someone else holds him, 4 stacks or not, and an Arms warrior's snare ch
 which `ClassifyAction` counts as a taunt, and one killed its caster. The swap, pickup,
 handler and Dark Matter nodes taunt through `CastClassTaunt`; when the pickup's taunt missed or is cooling down
 while he is off a swap tank, the class's second one follows (Righteous Defense on his victim, Challenging Shout
-or Roar), since a missed Hand of Reckoning left him loose for 1.5 s. **A taunt moves him, not the taker's own
+or Roar, which only reach 10 yd round the tank), since a missed Hand of Reckoning left him loose for 1.5 s. **A taunt moves him, not the taker's own
 target**, so every take ends in `Attack(him)`, and a holder that got him by threat with another target fires the
 pickup node, which then only retargets: a former handler kept its constellation, so `reach melee` and the slot
 walk took turns, the target guard zeroed every attack and he hit its back (20 k/s against 12 k), killing a
-holder in four of six pulls.
+holder in four of six pulls. With the taunt cooling down or out of reach the tank walks in and hits him instead.
 
 The class "on main tank" redirects stay off for the whole fight (`UldThreatRedirectMultiplier`). For 20 s
 after the intro, hunters cast Misdirection (100 yd) and rogues Tricks of the Trade (20 yd, else they wait)
@@ -490,7 +493,7 @@ A tank healer heals the holder (else the lower pair tank), itself under 50 %, th
   paladin spent its global at 65 % on Judgement. The paladin's order is Holy Shock, Flash of Light only
   if Infusion of Light made it instant, Holy Light, Flash: hard cast, Flash heals a third of Holy Light;
 - else under 95 % holder / 85 % partner (the partner first only when 15 % lower), shields and HoTs first
-  (Sacred Shield follows the holder), then efficient heals, at `ACTION_MEDIUM_HEAL + 0.75`, under the mana
+  (Sacred Shield follows the holder, one per paladin; Earth Shield is one per target whoever cast it), then efficient heals, at `ACTION_MEDIUM_HEAL + 0.75`, under the mana
   tools and, on purpose, Judgement of Light (its procs are a quarter of the paladin's healing).
 
 Over the first 3 pulls tank deaths with under 5 dead fell from 26 in 23 pulls to 2, and those with every
@@ -589,7 +592,7 @@ None without a duplicate: Mana Spring or Healing Stream is worth more. Frost Res
 engaged: a paladin still carrying `rfrost` from an earlier boss traded the tank's Devotion for it.
 
 **Personal buttons** (`ACTION_EMERGENCY`, after the cover, so a bot the cover saves keeps its button): 23 of 41
-explosion deaths had one ready, and bots press them only once already low. With a star dying within 1.5 s, an unphased bot outside the swap pair under the
+explosion deaths had one ready, and bots press them only once already low. With a star dying within 1.5 s (or at ≤ 3%, whatever its slope), an unphased bot outside the swap pair under the
 top roll (× 0.8 with Divine Guardian on it or within 40 yd of the Aura Mastery paladin; the largest of 87 hits
 under Aura Mastery was 79% of it), times the stars dying within 3 s of it up to 3 (three inside a second killed
 18 who were each above one hit; in the cast only those still catching it outside a field, or 8 pressed at full
@@ -649,7 +652,7 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
   its drain death, `s` the shelter star).
 
 Events: `algalon.holelost` (`kite`/`stray`/`phase2`/`bigbang`, the last a non-kite hole lost during the cast:
-the handler's constellations followed it into the raid's), one per hole, skipped when every summon goes at once on a kill or Ascend; `algalon.stardeath`
+the handler's constellations followed it into the raid's; `stray` any other loss), one per hole, skipped when every summon goes at once on a kill or Ascend; `algalon.stardeath`
 (`under`/`early`/`late` for an under-star inside, before or after its window, else `killed` as the focus
 star, `drained` within 3% of its drain-only health, else `chewed`, and the nearest raid member's distance;
 older traces say `collapsed`); the roster's hits on stars (pets under their owner) as `dmg` rows, from

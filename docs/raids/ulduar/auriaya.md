@@ -5,7 +5,7 @@ No hard mode. Entries are shared; Sonic Screech is the only difficulty pair the 
 | Mechanic | Ids | Handling |
 |---|---|---|
 | Sonic Screech | 64422 / 64688 | **Soaked, never dodged** — see below |
-| Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
+| Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window; the shaman's own earth totem nodes are held for it (the slot holds one totem, or Tremor is replaced on the next GCD) |
 | Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
 | Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one, the DPS kill its target (see below); Strength of the Pack (64369) buffs the boss and each other while they live |
 | Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
