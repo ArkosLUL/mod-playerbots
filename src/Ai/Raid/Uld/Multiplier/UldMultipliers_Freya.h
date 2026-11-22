@@ -19,6 +19,8 @@ public:
     float GetValue(Action* action) override;
 
 private:
+    bool Lingers(Action* action);
+
     uint32 cachedAtMs = 0;
     ObjectGuid cachedHeld;
     bool cachedFree = false;

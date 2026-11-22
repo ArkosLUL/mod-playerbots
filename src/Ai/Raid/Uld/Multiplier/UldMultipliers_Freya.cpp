@@ -97,14 +97,32 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
     if (target == snaplasher || (!target && current == snaplasher))
         return cachedFree && PlayerbotAI::IsTank(bot) ? 1.0f : 0.0f;
 
+    Unit* aim = target ? target : current;
+    auto const reaches = [this, aim, snaplasher](float reach)
+    {
+        return bot->GetExactDist2d(snaplasher) <= reach || (aim && aim->GetExactDist2d(snaplasher) <= reach);
+    };
+
+    if (Lingers(action))
+        return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH) ? 0.0f : 1.0f;
+
     if (!IsRaidAreaDamage(botAI, action, splash))
         return 1.0f;
 
-    Unit* aim = target ? target : current;
-    bool const reaches = bot->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH ||
-                         (aim && aim->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH);
+    return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH) ? 0.0f : 1.0f;
+}
 
-    return reaches ? 0.0f : 1.0f;
+bool FreyaSnaplasherHoldMultiplier::Lingers(Action* action)
+{
+    RaidSplashCache::Facts& facts = splash.Of(action);
+    if (facts.summon)
+        return true;
+
+    if (!facts.cast || facts.heal)
+        return false;
+
+    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
+    return spellId && IsFreyaLingeringAreaDamage(sSpellMgr->GetSpellInfo(spellId));
 }
 
 float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)

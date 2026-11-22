@@ -27,7 +27,8 @@ What the generic views miss here:
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
 - **The Snaplasher hold is a note.** `freya.snaphold` goes to 1 when the Snaplasher is loose with no add tank
   alive, 2 once its bark has run out (a tank may take it), and back to 0 once a tank holds it; `--tanks` lists
-  each change.
+  each change. Its bark runs out 4 s after the last hit, so each "on" line counts the hits that kept it up
+  (Hardened Bark stack casts) and the deaths to a Snaplasher until the next change.
 - **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
   while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
 - **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
@@ -85,6 +86,8 @@ HEAL_RANGE_YD = 38.5
 HEALERS_WANTED = 2
 HOLD_NOTE = "freya.snaphold"
 HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
+# Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
+BARK_STACKS = (62663, 64190)
 NPC_ARMY_GHOUL = 24207
 REACH_ACTION = "freya reach held pack"
 # Playerbots.SpellDistance: past this from every lasher a ranged bot has none to shoot.
@@ -222,11 +225,33 @@ def show_tanks(trace: Trace) -> None:
         if rec.get("sp") in AREA_TAUNTS and trace.role(rec.get("s")) == "tank" and not rec.get("tr"):
             target = f" on {holder_label(trace, rec['tgt'])}" if rec.get("tgt") else ""
             print(f"  {clock(rec['t'])} {trace.name(rec['s'])} {AREA_TAUNTS[rec['sp']]}{target}")
+    for change in hold_changes(trace):
+        state = change["state"]
+        line = f"  {clock(change['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}"
+        if state == "1":
+            line += (f" for {(change['until'] - change['t']) / 1000:.1f}s: {change['bark']} hit(s) on its bark, "
+                     f"{change['deaths']} death(s) to it")
+        print(line)
+
+
+def hold_changes(trace: Trace) -> list[dict]:
+    """Each change of the Snaplasher hold note, with when the next one came (the last snapshot for the last),
+    and the bark procs and deaths to a Snaplasher in between."""
+    changes: list[dict] = []
     state = "0"
     for rec in trace.of("note"):
         if rec.get("k") == HOLD_NOTE and rec.get("txt") != state:
             state = rec.get("txt")
-            print(f"  {clock(rec['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}")
+            changes.append({"t": rec["t"], "state": state})
+    snaplashers = {guid for guid, entry in trace.entries.items() if entry == NPC_SNAPLASHER}
+    bark = [rec["t"] for rec in trace.of("cast") if rec.get("sp") in BARK_STACKS and rec.get("s") in snaplashers]
+    deaths = [death["t"] for death in combat_deaths(trace) if death.get("killer") in snaplashers]
+    end = last_snapshot(trace)
+    for index, change in enumerate(changes):
+        change["until"] = changes[index + 1]["t"] if index + 1 < len(changes) else max(end, change["t"])
+        change["bark"] = sum(1 for t in bark if change["t"] <= t < change["until"])
+        change["deaths"] = sum(1 for t in deaths if change["t"] <= t < change["until"])
+    return changes
 
 
 def dodge_trigger_yd() -> float | None:

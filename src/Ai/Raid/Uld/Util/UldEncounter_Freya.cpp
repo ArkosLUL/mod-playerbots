@@ -6,6 +6,7 @@
 
 #include "UldEncounter_Freya.h"
 
+#include "AiObjectContext.h"
 #include "AttackersValue.h"
 #include "CellImpl.h"
 #include "Creature.h"
@@ -15,6 +16,7 @@
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Map.h"
+#include "Pet.h"
 #include "PetDefines.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -23,7 +25,9 @@
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Spell.h"
+#include "SpellAuras.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "ThreatManager.h"
 #include "Timer.h"
 #include "UldScripts.h"
@@ -789,6 +793,122 @@ bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI)
     uint32 const instanceId = botAI->GetBot()->GetInstanceId();
     FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
     return hold && hold->held.Get() == FREYA_SNAPLASHER_HOLD_FREE;
+}
+
+bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo)
+{
+    if (!spellInfo)
+        return false;
+
+    for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+    {
+        if (effect.ApplyAuraName != SPELL_AURA_PERIODIC_TRIGGER_SPELL &&
+            effect.ApplyAuraName != SPELL_AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE &&
+            effect.ApplyAuraName != SPELL_AURA_PERIODIC_DUMMY)
+            continue;
+
+        SpellInfo const* tick = effect.TriggerSpell ? sSpellMgr->GetSpellInfo(effect.TriggerSpell) : nullptr;
+        if (tick ? tick->IsAffectingArea() && !tick->IsPositive()
+                 : effect.Effect == SPELL_EFFECT_PERSISTENT_AREA_AURA && !spellInfo->IsPositive())
+            return true;
+    }
+
+    return false;
+}
+
+bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop)
+{
+    Player* bot = botAI->GetBot();
+    if (!held)
+        return false;
+
+    bool hits = false;
+
+    if (bot->GetVictim() == held)
+    {
+        hits = true;
+        if (stop)
+            bot->AttackStop();
+    }
+
+    Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
+    if (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == held)
+    {
+        hits = true;
+        if (stop)
+            bot->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
+    }
+
+    Value<Unit*>* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target");
+    if (current->Get() == held)
+    {
+        hits = true;
+        if (stop)
+            current->Set(nullptr);
+    }
+
+    Guardian* pet = bot->GetGuardianPet();
+    for (Unit* minion : bot->m_Controlled)
+    {
+        if (!minion || minion->IsTotem() || !minion->IsAlive() || minion->GetVictim() != held)
+            continue;
+
+        hits = true;
+        if (!stop)
+            continue;
+
+        if (minion != pet)
+        {
+            minion->AttackStop();
+            continue;
+        }
+
+        Unit* aim = current->Get();
+        if (aim && aim != held && aim->IsAlive())
+            CommandPetAttack(botAI, aim);
+
+        if (pet->GetVictim() == held)
+            StopPet(botAI);
+    }
+
+    Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    if (channel && !IsFreyaArmyChanneling(bot) && IsFreyaLingeringAreaDamage(channel->GetSpellInfo()))
+    {
+        Position centre = bot->GetPosition();
+        if (channel->m_targets.HasDst())
+            centre = channel->m_targets.GetDstPos()->GetPosition();
+        else if (Unit* aim = channel->m_targets.GetUnitTarget())
+            centre = aim->GetPosition();
+
+        if (held->GetExactDist2d(&centre) <= ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH)
+        {
+            hits = true;
+            if (stop)
+                bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
+        }
+    }
+
+    if (bot->GetExactDist2d(held) > ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH)
+        return hits;
+
+    std::vector<uint32> lingering;
+    for (auto const& [spellId, aura] : bot->GetOwnedAuras())
+    {
+        SpellInfo const* spellInfo = aura->GetSpellInfo();
+        if (aura->GetCasterGUID() == bot->GetGUID() && !spellInfo->IsChanneled() &&
+            IsFreyaLingeringAreaDamage(spellInfo))
+            lingering.push_back(spellId);
+    }
+
+    if (!lingering.empty())
+    {
+        hits = true;
+        if (stop)
+            for (uint32 spellId : lingering)
+                bot->RemoveAurasDueToSpell(spellId, bot->GetGUID());
+    }
+
+    return hits;
 }
 
 Player* GetFreyaLooseLasherVictim(Unit* lasher)

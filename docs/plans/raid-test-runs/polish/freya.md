@@ -415,3 +415,119 @@ that did not. Script: `scratchpad/freya-r4-review/guard_model.py`. Fixed:
 - The behind guard tested the point straight behind the target, but `SetBehindTargetAction` walks to the
   nearer of two flank points 3/5 π off the target's facing. It checks both now: 20 of window 10's 20
   set-behind orders into a blast caught (19 before), none of its 126 clear ones.
+
+## Round 5 (build d2874f536: round 3 built, round 4 merged but not built)
+
+**Data:** `report --boss freya --raid uld --head d2874f536 --pulls 10`, one valid pull per pool, no DC veto
+inside a pull: `tr-20261122-191816-22` (uld1, DK add tank), `-192040-24` (uld2, bear), `-191959-23` (uld3,
+bear); traces `env/dist/logs/botobs/603_{22,24,23}_elder-stonebark_{1795375139,1795375288,
+1795375250}.ndjson`. Windows 9 and 10 are the baseline. Ad hoc scripts: `scratchpad/freya-r5/`.
+
+**Hard mode.** All three pulls 3 of 3 Elders from their essence channels. uld1's kill cast chest 62952, the
+25-man three-Elder chest: a hard-mode kill, 3 deaths.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795375139 | **kill 6:28, 3** | Unstable Energy 1 (melee, 1:06), Ground Tremor 1 (melee, 1:07), own Iron Roots 1 (ranged, 6:23) |
+| uld2 | 1795375288 | wipe 6:25, 31 | Snaplasher 17 (a melee 3.3s into trio 2, the bear add tank 25s in, then 12 non-tanks in three holds and the main tank twice), Freya melee 6 (after the main tank), Detonate 4 (melee), Water Spirit 2 (the bear 0.8s after his soulstone), Nature Bomb 1, own Iron Roots 1 |
+| uld3 | 1795375250 | wipe 4:13, 32 | Snaplasher 6 (the bear add tank 15s into trio 2, then 5 in one hold, both DPS DKs among them), Detonating Lasher 23 (the second lasher wave with no DK left for the Army: melee 20, Flame Lash 2, Detonate 1), Freya melee 2, Sunbeam 1 |
+
+**Stop rules:** one hard-mode kill in three pools, not polished. No failure picked three rounds running
+(round 2 the add tank's heal range, round 3 the user's answers, round 4 the blast walk-back).
+
+**Round 3 verdict.** (1) The hold: **not held.** The notes fire as built (`on` at each add-tank death, `bark
+gone`, `off` once a tank has it), but the bark took 14.6s, 25.7s and 8.9s to run out in uld2 and never did in
+uld3 (18.8s, ended when the Snaplasher turned on the main tank), against ~4s expected. Deaths to it during
+the holds: 5, 5 and 2 in uld2, 5 in uld3 (window 9 with no hold: 8 and 13). `freya snaplasher hold` never
+vetoed `freya set dps priority`. Risen add tanks: uld3's bear soulstoned 0.3s after dying, waited out the
+whole hold, growled it still capped at 3:03.6 and held it 22s until it died, so no death within seconds of
+rising; uld2's bear died 0.5s after his soulstone to a Tidal Wave, not the Snaplasher. The main tank took it
+at each reset and held it with Freya for 6s, then 20s under Shield Wall. (3) The walk to a held pack:
+**held where tested.** `--ghouls`, all five held waves: no lasher in reach 1-9%, on Freya 1-6%, 2-13
+`freya reach held pack` orders a wave; inside 18 yd 17-51% (windows 9-10's comparable waves 20-95%); no
+ranged Detonate death; 1-4 lashers summing 0-26% left when the last ghoul went (windows 9-10's worst
+201-388%). No wave this window drifted out of reach like window 9's uld3 second, so the 55/54% case is untested.
+uld3's second wave had no Army: both DPS DKs died to the loose Snaplasher.
+
+Rounds 1 and 2 still hold: no tank Roar, Shout or Righteous Defense; Freya off the main tank only in uld1's
+opener (DK Dark Command, 1.7s) and after he died. Beam dodges from past 8 yd 3-9% by role; ended farther from
+Freya heal 45%, ranged 45%, melee 64%, tank 78% (window 10: 33/39/63/65%); one Unstable Energy death. uld1's
+first trio had healers on the DK's side for a median 2, under 2 for 30% of it (window 10: 0-7%), no death.
+Round 4 is not in this binary; its baseline here: melee approach orders into a low blast 27-92 a wave
+(38-49%), 45-65 melee Detonate hits in each wave with melee alive, 5 melee Detonate deaths.
+
+**Ranking.** (1) The trio-2 chain, 58 of 66 deaths (all from trio 2 on): the add tank dies (question 2), then the loose
+Snaplasher kills a non-tank every 2.45s while the hold waits for a reset that does not come, then the main
+tank dies holding both (uld2) or the DKs are gone for the next lasher wave (uld3). (2) Melee Detonate, 5,
+round 4's target. (3) Scattered singles. The add tank's own death is question 2; the hold not resetting is
+picked.
+
+**Failure picked: bots keep hitting the held Snaplasher, so its bark never runs out.**
+
+- Each 64190 cast by the Snaplasher is one direct hit it took. 102 fell inside the four holds; matched by
+  millisecond to the hit that caused them, about two thirds came with a bot's own hit.
+- Running attacks the multiplier cannot reach: uld3's Uldzau kept Auto Shot on it at 2:43.9, 2:45.7, 2:47.4,
+  2:49.4 after his target moved; Uldzak's spider bit it at 2:44.2 and 2:45.7; uld2's healers wanded it at
+  5:07.1-5:07.2 and four of them kept it as `current target` through the 25.7s hold. Hurricane (4:45.3) and Mind Sear (4:45.2)
+  channels ran on into uld2's first hold.
+- Lingering area cast past the 15 yd reach: uld3 Uldzai's Death and Decay at 2:49.243 (17.8 yd from it,
+  aimed 16.6 yd) ticked it 11 times to 2:59.2; uld2 Volley at 4:53.4 (19.5 / 20.7 yd) and 4:59.3, procs
+  4:55.3 and 4:56.2; Starfall at 5:23.3 (10 yd), procs each second 5:24.3-5:28.3. In a hold the Snaplasher
+  walks 25-42 yd, spread 17-22 yd, after its victims.
+- Code: the multiplier zeroes only actions aimed at it and `IsRaidAreaDamage` within 15 yd of the caster or
+  its aim (`UldMultipliers_Freya.cpp:71-108`), which cannot stop a swing, Auto Shot, a pet or a channel
+  already running (`AttackStop` leaves the autorepeat slot, pitfalls.md); Starfall is a self aura, so
+  `SpellSplashes` (`RaidSplash.cpp:29-41`) does not call it area.
+- What no bot stops: Uldyam's Wandering Plague (unholy talent: a disease tick can hit everything within 8 yd
+  of its target), 7 procs in uld2's second hold, his Pestilence having put diseases on it at 5:04.8 and 5:06.1;
+  Seed of Corruption and Living Bomb bursts. Dropping the matched bot hits from the traces, the holds still
+  reset 5.1-11.8s in (`scratchpad/freya-r5/leaks.py`).
+
+**Classification: bug** (the hold's intent is that nothing hits it); the passive remainder is question 4.
+
+**Fix** (Freya files only, any size or difficulty, no player branch):
+
+- `freya release held snaplasher` (`ACTION_RAID + 2`, at most once a second): while the hold is on (tanks
+  exempt once it is free), a bot stops its swing and Auto Shot or wand on it, clears it as `current target`,
+  sends its pet to its own target (else stops it), stops other minions on it, interrupts a lingering-area
+  channel landing within 30 yd of it, and drops its own lingering auras (Starfall, Bladestorm) within 30 yd.
+- `freya snaplasher hold` zeroes lingering area (`IsFreyaLingeringAreaDamage`: a periodic trigger or dummy
+  aura with a negative area tick, or a persistent area aura ticking a dummy; plus totems and traps) within
+  `ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH` (30 yd) of the bot or its aim; instant area stays at 15.
+- Reader: `--tanks` gives each hold its bark procs and deaths to the Snaplasher, tested.
+
+**Next window should show** (`freya.py --tanks`, `postmortem.py --coverage`):
+
+- Each hold's bark procs well under this window's 23 / 21 / 5 / 53, `bark gone` sooner than 8.9-25.7s, under
+  5 deaths a hold; `freya release held snaplasher` fires in each hold.
+- No Auto Shot, wand or pet cast at a held Snaplasher after a hold's first second; no Volley, Blizzard,
+  Hurricane, Death and Decay or Starfall cast during a hold within 30 yd of it.
+- The trio wave still dies around a hold (no wave left hanging on a sibling).
+- Round 4's checks as written there; rounds 1-3 still holding.
+
+**Not picked:** the trio-2 opener (uld2's Arms warrior out-threatened the bear's Growl and Maul through
+Sweeping Strikes and cleaves on the Storm Lasher beside it and died 3.3s in, as round 4's uld3 melee did;
+the threat shed covers picks, not cleaves; one death a window); uld1's first-trio healer range (no death);
+Guardian Spirit cast on a mage's Water Elemental (generic healer code).
+
+**Questions:**
+
+2. (pending, this window's numbers) Two bear add-tank deaths, both with four healers in range. uld3's bear
+   died 15.5s into trio 2 to 31.6k then 46.0k (~55k health) with nothing left: Barkskin and Frenzied
+   Regeneration spent in the first lasher wave (1:05-1:07), Survival Instincts 5s before trio 1, Barkskin
+   again at its end. uld2's bear pressed Survival Instincts and Frenzied Regeneration 8s into trio 2; Frenzied
+   Regeneration ran out 7s before he died with Survival Instincts still up, to 33.8k and 37.7k 2.4s apart
+   (~80k health with it); Barkskin was spent in the Conservator wave. uld1's DK held both waves on Vampiric
+   Blood, then Icebound Fortitude. No Pain Suppression, Guardian Spirit, Lay on Hands or Hand of Sacrifice
+   went to an add tank all window. Options: (a) the add tank keeps its class defensives for the trio waves
+   and spends one at a time once the Snaplasher on it is stacked, so they chain across the wave (Survival
+   Instincts 20s, Barkskin 12s, Frenzied Regeneration 10s for a 35-45s wave); (b) the highest-health tank as
+   add tank; (c) as (a), plus healers' tank externals on the add tank under a stacked Snaplasher.
+   Recommendation: (c).
+4. The hold needs 4s with no hit, and an unholy DK's Wandering Plague keeps hitting it while diseases tick on
+   it or within 8 yd, which this round cannot stop. Options: (a) keep the hold with this round's release and
+   read the holds next window; (b) with no add tank alive, burn it: from 45-75% of 1.36M at ~105-140k raid
+   DPS that is 4-10s, 2-4 swings, and it revives without stacks 11s later unless both siblings die in that
+   window, for the risen add tank or main tank to take; (c) as (a), plus no Icy Touch, Plague Strike or
+   Pestilence on the Snaplasher in trio waves. Recommendation: (a) for one window; if holds still run past
+   ~8s, (b).

@@ -79,8 +79,11 @@ every 2.45s for **57-120k** on a non-tank and 22-50k raw on a DK tank who avoide
 whoever takes it off the tank dies (six deaths in two resets). Capped, it lands **18-52k** raw on the add
 tank, against ~40k health on a DK and ~55k on a bear in form: one swing kills the DK from full, two in one
 gap kill the bear, with four healers in range. Each add tank that held a trio wave to its end had Survival
-Instincts, Frenzied Regeneration or Vampiric Blood up; each death came with them spent earlier (Icebound
-Fortitude in a Conservator wave, both 3 min bear ones in the first trio) or unpressed (Vampiric Blood).
+Instincts, Frenzied Regeneration, Vampiric Blood or Icebound Fortitude up; deaths came with them spent
+earlier (Icebound Fortitude in a Conservator wave; a bear's Barkskin and Frenzied Regeneration in a lasher
+wave, Survival Instincts before or in the first trio) or unpressed (Vampiric Blood), and once with Survival
+Instincts up, to two swings 2.4s apart. Pain Suppression, Guardian Spirit, Lay on Hands and Hand of
+Sacrifice went to DPS, healers and a pet, never the add tank.
 
 **A damage dealer near the tank's threat on the Snaplasher moves to a sibling** (`ShedSnaplasherThreat`,
 not yet verified in a pull). The generic `threat` strategy is never added (`AiFactory`), so nothing
@@ -306,26 +309,48 @@ only if `--threat 32919` shows DPS keep pulling it. Mocking Blow counts as a tau
 `piercing howl` once fell back to it, so the `hamstring` snare trigger made a warrior taunt a
 Snaplasher at 64 stacks and die 270 ms later; it falls back to `hamstring` now.
 
-**No add tank alive: the Snaplasher hold** (user's choice 2026-11-22; not yet verified in a pull). Loose
-after its tank died, a capped Snaplasher killed 8 in 32s, and the main tank plus 12 in another pull; a
-DK add tank that rose and taunted it capped died 4s later. `TickFreya` latches a per-instance hold
-(note `freya.snaphold`) once the Snaplasher is off every tank with no living add tank
-(`GetGroupAssistTank(bot, 0)` null), and clears it only once a tank holds it again, so it survives the
-add tank's rise. While it is on, nothing hits the Snaplasher (`GetFreyaHeldSnaplasher`):
+**No add tank alive: the Snaplasher hold** (user's choice 2026-11-22). Loose after its tank died, a
+capped Snaplasher killed 8 in 32s, and the main tank plus 12 in another pull; a DK add tank that rose and
+taunted it capped died 4s later. `TickFreya` latches a per-instance hold (note `freya.snaphold`) once the
+Snaplasher is off every tank with no living add tank (`GetGroupAssistTank(bot, 0)` null), and clears it
+only once a tank holds it again, so it survives the add tank's rise. While it is on, nothing hits the
+Snaplasher (`GetFreyaHeldSnaplasher`):
 
 - `GetFreyaTrioAssignment` drops it, with no fallback onto the siblings waiting at the floor, so their
   bots take the rest of the ladder;
-- `freya snaplasher hold` zeroes every non-heal action aimed at it and area damage
-  (`IsRaidAreaDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd, Seed of
-  Corruption's burst, the widest a damage dealer carries; most are 8-10) of the caster or its target.
-  The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they aim at the current
-  target, so zeroed they could never move a bot off it, and its auto attack would keep the bark up;
+- `freya snaplasher hold` zeroes every non-heal action aimed at it, area damage (`IsRaidAreaDamage`)
+  with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd, Seed of Corruption's burst, the
+  widest a damage dealer carries; most are 8-10) of the caster or its target, and lingering area inside
+  `_HOLD_LINGER_REACH` (30 yd): that ticks for 6-10s, and in a hold the Snaplasher crosses 17-22 yd of
+  raid after its victims. The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they
+  aim at the current target, so zeroed they could never move a bot off it, and its auto attack would keep
+  the bark up;
+- `freya release held snaplasher` (`ACTION_RAID + 2`, at most once a second) stops what a multiplier
+  can't: the bot's swing and Auto Shot or wand on it (both keep firing at a target the bot has left), its
+  `current target` (healers wand theirs), its pet (sent to the bot's target) and other minions, its
+  lingering channel landing within 30 yd, and its own lingering auras while within 30 yd;
 - the redirect dumps no shot into it, and the add tank's ladder skips it while stacked.
+
+*Lingering area* (`IsFreyaLingeringAreaDamage`) is a periodic trigger or dummy aura whose tick is negative
+and hits an area, or a persistent area aura ticking a dummy: Blizzard, Volley, Hurricane, Rain of Fire,
+Death and Decay, Mind Sear, Hellfire, Starfall, Bladestorm; totems and traps count too. `IsRaidAreaDamage`
+misses Starfall, a self aura. Consecration and Flamestrike's ground tick as periodic damage, which never
+procs the bark.
+
+**The bark outlives the hold.** Before the release node, four holds ran 9-26s, or until the Snaplasher
+turned on a tank, against 4s planned, and it killed a non-tank every 2.45s meanwhile (12 and 5 in two
+pulls, against 8 and 13 with no hold). About two thirds of the 102 bark procs in them came with a bot's
+own hit (auto-repeat, pets, lingering area cast past 15 yd or still running); the rest no bot stops: an
+unholy DK's Wandering Plague, which hits everything within 8 yd of an enemy its diseases tick on (the
+Snaplasher, or Freya and the siblings beside it), and Seed of Corruption and Living Bomb bursts placed
+earlier. Without the bots' share those traces still reset 5-12s in.
 
 The first time no stack is left the hold latches free (note `2`, `IsFreyaHeldSnaplasherFree`), so the
 stacks a tank's own pickup hits add don't turn him away. From then tanks may act on it: a living add
 tank's ladder taunts it; with none, the main tank taunts it and, while it is on him in melee range,
-attacks it ahead of the Storm Lasher, keeping Freya on standing threat. **Known-open:** a third tank
+attacks it ahead of the Storm Lasher, keeping Freya on standing threat. Holding both, he lasted 6s, then
+20s under Shield Wall. A bear add tank that rose by soulstone 0.3s after dying waited out an 18.5s hold,
+took it still capped once it turned on the main tank, and held it 22s to its death. **Known-open:** a third tank
 shifting into the add tank slot counts as an add tank, so no hold starts and it taunts the capped
 Snaplasher at once; a Snaplasher past the main tank's 30 yd taunt waits there, unhit.
 
@@ -656,7 +681,8 @@ Elders' essence channels into Freya at her engage (62483-62485), else their empo
 Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
-Righteous Defense, and each hold change (on, bark gone, off); `--beams` Unstable Sun Beam dodges per role
+Righteous Defense, and each hold change (on, bark gone, off), each "on" with its bark procs and deaths to
+the Snaplasher; `--beams` Unstable Sun Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
