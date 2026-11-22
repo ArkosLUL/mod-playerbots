@@ -1643,7 +1643,7 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     // Ahead of the gap, or any other death drops a kill half done. Dropped, a star keeps its slope for the carry,
     // then drains (one dropped at 9% lost 1.4 %/s and went off under three meteors), so a drop only goes when that
     // span is clear or ends before the kill lands. A kill landing on another explosion or on Big Bang still drops
-    // when the span only meets a meteor: kept, two went off 1.8 s apart and killed 11.
+    // when the span only meets a meteor, which costs fewer lives.
     AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get());
     if (focus && !focus->under)
     {

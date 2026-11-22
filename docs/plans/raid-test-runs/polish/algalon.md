@@ -40,8 +40,8 @@ explosion deaths, uld1's wipe trigger). Bug.
   was released early at 25% (`underdrop early`) and from 3:04.7 drained 1 %/s to its death at 3:26.7,
   0.1 s before the cast. The team kept 1653 for 22 s at 3.5 %/s (planned 5.5-9) and killed it at 3:24.9.
 - uld2: at 2:57.0 the team opened 1642 at 86% as a deadline kill while 1606 drained unattended to its
-  planned death at 3:23.7 ("1606 26% 25s"). The kill ran 2.9 %/s and landed at 3:26.85, 0.3 s into the
-  cast and 3.1 s after 1606.
+  planned death at 3:23.7 ("1606 26% 25s"). The kill ran 2.9 %/s and landed at 3:26.7, 0.2 s into the
+  cast and 3.0 s after 1606.
 - Cause, `StarWindow` keep-or-drop (`UldEncounter_Algalon.cpp`, the `focus && !focus->under` block): a
   kill continues if its finish is clear or if dropping wouldn't help, and the dropped star was modelled
   dying anywhere from `StarDeathAt(min(slope, 5 %/s))` to the drain. For a kill slower than 5 %/s that
@@ -92,4 +92,7 @@ each cast on `algalon.spot=nearhole`, 22 yd off a hole, not on him.
 (window 7: uld1 3:24.9/3:26.7, uld2 3:23.7/3:26.7); star explosion deaths around Big Bang 2 near zero
 (window 7: 11 and 10). Watch that a dropped star is not reopened and dropped again (`--stars` "over
 one switch per star"), and that one left at 40-70% is later killed by a deadline rather than drained
-into a meteor.
+into a meteor. A drop runs on into the due pass, whose no-clear fallback can take the same star back as
+`deadline` when the due star it collided with has no clear finish yet (uld1 at 3:06: 1655 still inside
+the 3:05.5 meteor's blackout): a `deadline` on the kill's own star right after its `open`, with the other
+star going off within 8 s, means the drop changed nothing.
