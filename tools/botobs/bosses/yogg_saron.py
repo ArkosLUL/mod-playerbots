@@ -301,7 +301,7 @@ BRAIN_MELEE_SPOT = (1977.0, -25.43)
 # 2026_11_06_01) plus the player's 1.5 plus 4/3. The floor under it is a bowl 29.0-29.2 yd from the model.
 BRAIN_POSITION = (1981.3, -25.43, 265.0)
 BRAIN_MELEE_RANGE = 27.0 + 1.5 + 4.0 / 3.0
-# A melee bot this close to the Brain's ground point, 2D, has stopped walking at it; the old spot was 12.3 out.
+# Melee this close to the Brain's ground point (2D) count as standing at it.
 BRAIN_MELEE_STAND_RADIUS = 15.0
 # A reach melee move this soon after a brain spot move by the same bot is the two trading it.
 BRAIN_MELEE_TRADE_MS = 1500

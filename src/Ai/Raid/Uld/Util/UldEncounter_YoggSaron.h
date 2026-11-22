@@ -150,7 +150,7 @@ inline constexpr uint32 ULDUAR_YOGG_SARON_SANITY_LOW = 40;
 // Chamber only: 3 min cooldown against a Chamber every 240 s, so it is ready for the longest walk.
 inline constexpr float ULDUAR_YOGG_SARON_NITRO_MIN_WALK = 40.0f;
 
-// A warrior's charge at the Brain lands on the floor ring at both combat reaches from it (31.5 yd), so
+// A warrior's charge at the Brain lands on the floor ring at both combat reaches from it (28.5 yd), so
 // only worth breaking the walk for when that ring is at least this much nearer the bot's brain spot.
 inline constexpr float ULDUAR_YOGG_SARON_BRAIN_CHARGE_MIN_GAIN = 8.0f;
 

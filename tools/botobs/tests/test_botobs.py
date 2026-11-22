@@ -1206,7 +1206,7 @@ class YoggPhases(unittest.TestCase):
         self.assertIsNone(yogg_saron.station_arrival(dead, [spot], 1000))
 
     def test_melee_reach_share_counts_positions_within_a_swing_of_the_brain(self):
-        # The new spot (29.0 yd 3D), reach melee's stop (29.3), and the old spot (30.15) that sat outside a swing.
+        # The melee spot (29.0 yd 3D), where reach melee stops (29.3), and 12.3 yd west at 30.15, out of a swing.
         points = [(1977.0, -25.43, 236.30), (1972.92, -25.41, 236.9), (1969.0, -25.4, 237.474)]
         self.assertEqual(yogg_saron.melee_reach_share(points), (2, 3))
         self.assertEqual(yogg_saron.melee_reach_share([]), (0, 0))
