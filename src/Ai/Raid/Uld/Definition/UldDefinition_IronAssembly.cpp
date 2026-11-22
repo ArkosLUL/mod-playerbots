@@ -43,6 +43,14 @@ bool IronAssemblyBrundirHazard(PlayerbotAI* botAI)
     return brundir && (IronAssemblyOverloadActive(brundir) || IronAssemblyTendrilsActive(brundir));
 }
 
+// Swapped out and walking to the Meltdown point or waiting on it. Late and no-partner carriers stay
+// on the boss, so they keep their reach.
+bool IronAssemblyMeltdownCarrierAway(PlayerbotAI* botAI)
+{
+    IronAssemblyMeltdownRole const role = IronAssemblyMeltdownRoleFor(botAI, botAI->GetBot());
+    return role == IronAssemblyMeltdownRole::Run || role == IronAssemblyMeltdownRole::Parked;
+}
+
 // Only a tank holding an assignment, which is the one that has a spot to be pulled off.
 bool IronAssemblyTankPinned(PlayerbotAI* botAI)
 {
@@ -86,6 +94,11 @@ void DefineIronAssembly(EncounterBuilder& e)
     // A gap-closer runs straight, reads nothing about the ground and isn't a MovementAction, so the
     // movement guard can't see it.
     e.Block("iron assembly charge guard", Role::Any, IronAssemblyBrundirHazard, Family::Charge);
+
+    // The movement guard keeps reach, and the run only outranks it while walking. Parked, reach melee
+    // tugs the carrier back toward Steelbreaker, and a charge at any point lands it on the melee.
+    e.Block("iron assembly meltdown carrier hold", Role::Tank, IronAssemblyMeltdownCarrierAway,
+            Family::Reach | Family::ReachHeal | Family::Charge);
 
     // Tank face is a second mover at the tank spot's priority, and the two alternate. Set facing is a
     // separate node.
