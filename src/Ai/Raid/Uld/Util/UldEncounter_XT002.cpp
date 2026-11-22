@@ -11,6 +11,7 @@
 #include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
 #include "RaidInstanceState.h"
@@ -324,6 +325,128 @@ bool IsXT002ThreatBraked(Player* bot, Unit* xt002)
         state.braked.erase(guid);
 
     return brake;
+}
+
+namespace
+{
+struct XT002BombHealState
+{
+    // bomb carrier -> the healer sent to it
+    RaidObs::ObsGuidMap<ObjectGuid> healers{"xt002.bombheal"};
+};
+
+RaidInstanceState<XT002BombHealState> xt002BombHealStates;
+
+Player* FindByGuid(std::vector<Player*> const& players, ObjectGuid const& guid)
+{
+    auto const it = std::find_if(players.begin(), players.end(),
+                                 [&guid](Player* player) { return player->GetGUID() == guid; });
+    return it != players.end() ? *it : nullptr;
+}
+
+// Bots only, and never one carrying either debuff: its own carrier walk wins.
+bool CanGoToXT002BombCarrier(Player* healer)
+{
+    return GET_PLAYERBOT_AI(healer) && !healer->HasAura(GetXT002GravityBombSpellId(healer)) &&
+           !healer->HasAura(GetXT002SearingLightSpellId(healer));
+}
+}  // namespace
+
+std::vector<Player*> GetXT002BombCarriers(Player* bot)
+{
+    std::vector<Player*> carriers;
+    Group* group = bot->GetGroup();
+    if (!group)
+        return carriers;
+
+    uint32 const bomb = GetXT002GravityBombSpellId(bot);
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && member->GetMapId() == bot->GetMapId() && member->HasAura(bomb))
+            carriers.push_back(member);
+    }
+
+    return carriers;
+}
+
+Player* GetXT002BombHealCarrier(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group || !bot->GetInstanceId() || !PlayerbotAI::IsHeal(bot))
+        return nullptr;
+
+    // Carriers first: there's one every 16-20 s, so most ticks end here.
+    std::vector<Player*> const carriers = GetXT002BombCarriers(bot);
+    XT002BombHealState* state = xt002BombHealStates.Find(bot->GetInstanceId());
+    if (carriers.empty() && (!state || state->healers.empty()))
+        return nullptr;
+
+    if (!state)
+        state = &xt002BombHealStates.For(bot->GetInstanceId());
+
+    // Real players count as cover for a carrier in their range, they just never get sent.
+    std::vector<Player*> healers;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && member->GetMapId() == bot->GetMapId() && PlayerbotAI::IsHeal(member))
+            healers.push_back(member);
+    }
+
+    std::vector<ObjectGuid> released;
+    for (auto const& [carrier, healer] : state->healers)
+    {
+        Player* sent = FindByGuid(healers, healer);
+        if (!FindByGuid(carriers, carrier) || !sent || !CanGoToXT002BombCarrier(sent))
+            released.push_back(carrier);
+    }
+
+    for (ObjectGuid const& carrier : released)
+        state->healers.erase(carrier);
+
+    float const healRange = sPlayerbotAIConfig.HealDistance;
+    for (Player* carrier : carriers)
+    {
+        if (state->healers.count(carrier->GetGUID()))
+            continue;
+
+        // A healer carrying the bomb covers itself.
+        bool const covered = std::any_of(healers.begin(), healers.end(), [carrier, healRange](Player* healer)
+                                         { return healer->GetExactDist2d(carrier) <= healRange; });
+        if (covered)
+            continue;
+
+        Player* nearest = nullptr;
+        float nearestDistance = 0.0f;
+        for (Player* healer : healers)
+        {
+            if (!CanGoToXT002BombCarrier(healer))
+                continue;
+
+            bool const sentElsewhere =
+                std::any_of(state->healers.begin(), state->healers.end(),
+                            [healer](auto const& latch) { return latch.second == healer->GetGUID(); });
+            if (sentElsewhere)
+                continue;
+
+            float const distance = healer->GetExactDist2d(carrier);
+            if (!nearest || distance < nearestDistance)
+            {
+                nearest = healer;
+                nearestDistance = distance;
+            }
+        }
+
+        if (nearest)
+            state->healers[carrier->GetGUID()] = nearest->GetGUID();
+    }
+
+    for (auto const& [carrier, healer] : state->healers)
+        if (healer == bot->GetGUID())
+            return FindByGuid(carriers, carrier);
+
+    return nullptr;
 }
 
 bool IsXT002AddEngageable(Unit* xt002, Unit* unit)

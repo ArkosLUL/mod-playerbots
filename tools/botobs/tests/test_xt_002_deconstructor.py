@@ -267,6 +267,60 @@ class Tanks(unittest.TestCase):
                       " Beacon of Light 81/19%, Earth Shield 86/0%\n", text)
 
 
+class Bombs(unittest.TestCase):
+    CARRIER = 7708
+
+    def bomb_pull(self, sent: bool) -> list[dict]:
+        records = [rec for rec in pull(heartbreak=True) if rec.get("e") not in ("snap", "death", "end")]
+        records[0]["roster"].append({"g": self.CARRIER, "n": "Cleaver", "r": "melee", "c": 1, "h": 0})
+        records += [
+            {"t": 150000, "e": "note", "g": HEALER, "k": "xt002.slot", "txt": "0/14 866,-6,410"},
+            {"t": 200000, "e": "aura", "d": self.CARRIER, "s": XT, "sp": 64234, "r": 0},
+            {"t": 209000, "e": "aura", "d": self.CARRIER, "s": XT, "sp": 64234, "r": 1},
+        ]
+        healer_spots = {200000: (866.0, -6.0), 203000: (866.0, -6.0), 205000: (874.0, -20.0),
+                        208000: (874.0, -20.0), 211000: (870.0, -12.0), 213000: (866.0, -6.5)}
+        carrier_spots = {200000: (880.0, -20.0), 203000: (893.0, -48.0), 205000: (893.0, -48.0),
+                         208000: (893.0, -48.0), 211000: (893.0, -48.0), 213000: (880.0, -20.0)}
+        for t, carrier in carrier_spots.items():
+            healer = healer_spots[t] if sent else (866.0, -6.0)
+            records.append({"t": t, "e": "snap", "u": [
+                [HEALER, healer[0], healer[1], 409.8, 0, 100, 100, 0],
+                [self.CARRIER, carrier[0], carrier[1], 409.8, 0, 50, 0, XT]]})
+        if sent:
+            records += [
+                {"t": 203100, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": str(HEALER)},
+                {"t": 206000, "e": "heal", "s": HEALER, "d": self.CARRIER, "sp": 48071, "a": 9000, "oh": 0},
+                {"t": 207500, "e": "heal", "s": HEALER, "d": self.CARRIER, "sp": 48071, "a": 9000, "oh": 0},
+                {"t": 209050, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": "0"},
+            ]
+        else:
+            records.append({"t": 209500, "e": "death", "g": self.CARRIER, "killer": XT, "x": 893.0, "y": -48.0,
+                            "z": 409.8, "rewind": [[209000, XT, 64234, 14550]]})
+        records.append({"t": 220000, "e": "end", "out": "kill"})
+        return records
+
+    def test_sent_healer_is_measured_on_its_carrier(self):
+        self.assertEqual(printed(xt.show_bombs, load(self.bomb_pull(sent=True))), (
+            "GRAVITY BOMBS\n"
+            "  1 bombs, 1 carriers out of every healer's 38.5 yd, 0 killed by their own\n"
+            "  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:23.100, closest 34 yd,"
+            " 34 yd at expiry, 2 heals from it, back on its slot 4 s after, nearest healer 34 yd at expiry,"
+            " carrier 50% at expiry\n"))
+
+    def test_carrier_nobody_reached_is_killed_by_its_bomb(self):
+        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, nobody sent, nearest healer 50 yd"
+                      " at expiry, carrier 50% at expiry, killed\n",
+                      printed(xt.show_bombs, load(self.bomb_pull(sent=False))))
+
+    def test_healer_sent_after_the_last_snapshot_gets_no_distance(self):
+        records = self.bomb_pull(sent=True)
+        next(rec for rec in records if rec.get("k") == "xt002.bombheal")["t"] = 208500
+        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:28.500, 2 heals from it,"
+                      " back on its slot 4 s after, nearest healer 34 yd at expiry, carrier 50% at expiry\n",
+                      printed(xt.show_bombs, load(records)))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL_V14)

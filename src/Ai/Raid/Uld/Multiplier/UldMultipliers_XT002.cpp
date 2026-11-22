@@ -144,8 +144,9 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     if (movement && !dynamic_cast<AttackAction*>(action) &&
         (PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot) || carryingDebuff()))
     {
-        static std::set<std::string> const encounterMovers = {
-            "xt002 raid position action", "xt002 debuff carrier action", "xt002 avoid hazard action"};
+        static std::set<std::string> const encounterMovers = {"xt002 raid position action",
+                                                              "xt002 debuff carrier action",
+                                                              "xt002 avoid hazard action", "xt002 bomb heal action"};
 
         pinnedMover = !encounterMovers.count(action->getName());
     }

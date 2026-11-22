@@ -7,6 +7,7 @@
 
 #include "Group.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
 #include "RaidObs.h"
@@ -594,6 +595,69 @@ bool XT002AvoidHazardAction::Execute(Event /*event*/)
     }
 
     return MoveClearOf(hazards);
+}
+
+bool XT002BombHealAction::Execute(Event /*event*/)
+{
+    Player* carrier = GetXT002BombHealCarrier(bot);
+    float const healRange = sPlayerbotAIConfig.HealDistance;
+    if (!carrier || bot->GetExactDist2d(carrier) <= healRange)
+        return false;
+
+    std::vector<Player*> const carriers = GetXT002BombCarriers(bot);
+    std::list<Creature*> voidZones;
+    bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+
+    // The hazard dodge's own clearance, or it walks the healer straight back off the point.
+    float const puddleClearance = ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED;
+    float const stand = healRange - ULDUAR_XT002_BOMB_HEAL_MARGIN;
+    float const bearing = carrier->GetAngle(bot);
+
+    struct Candidate
+    {
+        float x;
+        float y;
+        float distance;
+    };
+
+    // On the line back to the healer first, the shortest walk off its slot, then sideways round anything in the way.
+    std::vector<Candidate> candidates;
+    for (int step = -ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS; step <= ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS; ++step)
+    {
+        float const angle = bearing + static_cast<float>(step) * ULDUAR_XT002_BOMB_HEAL_BEARING_STEP_DEG *
+                                          static_cast<float>(M_PI) / 180.0f;
+        float const x = carrier->GetPositionX() + std::cos(angle) * stand;
+        float const y = carrier->GetPositionY() + std::sin(angle) * stand;
+
+        bool const clearOfBombs =
+            std::none_of(carriers.begin(), carriers.end(), [x, y](Player* other)
+                         { return other->GetExactDist2d(x, y) < ULDUAR_XT002_GRAVITY_BOMB_PULL_RADIUS; });
+        bool const clearOfPuddles =
+            std::none_of(voidZones.begin(), voidZones.end(), [x, y, puddleClearance](Creature* voidZone)
+                         { return voidZone->GetExactDist2d(x, y) < puddleClearance; });
+
+        if (clearOfBombs && clearOfPuddles)
+            candidates.push_back({x, y, bot->GetExactDist2d(x, y)});
+    }
+
+    std::sort(candidates.begin(), candidates.end(),
+              [](Candidate const& left, Candidate const& right) { return left.distance < right.distance; });
+
+    size_t const attempts = std::min<size_t>(ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS, candidates.size());
+    for (size_t i = 0; i < attempts; ++i)
+    {
+        switch (IssueMove(candidates[i].x, candidates[i].y, bot->GetPositionZ()))
+        {
+            case MoveIssue::Taken:
+                return true;
+            case MoveIssue::Refused:
+                return false;
+            case MoveIssue::NoPath:
+                break;
+        }
+    }
+
+    return false;
 }
 
 bool XT002PummellerTauntAction::Execute(Event /*event*/)

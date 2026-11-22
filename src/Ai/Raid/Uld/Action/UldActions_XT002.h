@@ -111,6 +111,18 @@ public:
     bool Execute(Event event) override;
 };
 
+// Walks the healer sent to a bomb carrier just inside heal range of it, at least the 20 yd bomb pull off every
+// carrier and clear of Void Zones. The anchor takes it back to its slot once the bomb is off.
+class XT002BombHealAction : public XT002MoveClearAction
+{
+public:
+    static constexpr char const* Name = "xt002 bomb heal action";
+
+    XT002BombHealAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class XT002PummellerTauntAction : public Action
 {
 public:
