@@ -131,7 +131,7 @@ class ReportTest(unittest.TestCase):
     def test_boss_reader_filed_under_an_alias(self):
         self.assertEqual(boss_reader("vezax").name, "general_vezax.py")
         self.assertEqual(boss_reader("northrend-beasts").name, "northrend_beasts.py")
-        self.assertIsNone(boss_reader("iron-assembly"))
+        self.assertIsNone(boss_reader("no-such-boss"))
 
     def test_verdicts(self):
         before = facts("x", HEAD - datetime.timedelta(hours=1))
@@ -139,6 +139,10 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(verdict(PullRow("t", "toc1", "", 1, None, "", None), "25h", HEAD), "no trace")
         ten = facts("x", HEAD + datetime.timedelta(hours=1), diff=0)
         self.assertEqual(verdict(PullRow("t", "toc1", "", 1, None, "", ten), "25h", HEAD), "no: difficulty 0")
+        after = facts("x", HEAD + datetime.timedelta(hours=1))
+        self.assertEqual(verdict(PullRow("t", "toc1", "", 1, None, "", after), "25h", HEAD), "counts")
+        self.assertEqual(verdict(PullRow("t", "toc1", "", 1, None, "", after, engaged_first=True), "25h", HEAD),
+                         "no: the boss engaged before the start step, no refresh")
 
 
 if __name__ == "__main__":

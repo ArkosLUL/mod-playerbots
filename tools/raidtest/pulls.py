@@ -2,7 +2,8 @@
 
 A pull counts when the trace has no warning at all (batch.py --strict), its build is newer than the
 reference commit and its header's difficulty is the one under test. Baseline pulls are the newest such
-traces built before the reference instead. Which pool a trace belongs to is pools.py's business.
+traces built before the reference instead. Which pool a trace belongs to is pools.py's business, and
+so is a pull DC started without its pre-pull refresh, since only DC's record says so.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ if str(BOTOBS) not in sys.path:
 from raidobs.corpus import find_traces  # noqa: E402
 from raidobs.encounter import canonical_boss  # noqa: E402
 from raidobs.paths import LOG_ROOT  # noqa: E402
-from raidobs.trace import Trace, clock, combat_deaths, death_records  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, death_records, own_blow, own_blow_spell  # noqa: E402
 from raidobs.validity import inspect  # noqa: E402
 
 # RaidObs `hdr.diff`, the core's raid difficulty ids
@@ -84,15 +85,14 @@ class TraceFacts:
 
 def death_cause(trace: Trace, death: dict) -> str:
     """The same reading deathreport gives a death, cut down to one line."""
-    guid = death.get("g")
     cause = death.get("cause")
     if cause == "reset":
         return "the wipe command"
     if cause == "self":
         return "a script kill, no blow recorded"
-    blow = death.get("blow") or []
-    if blow and blow[0] == guid:
-        return "its own blow: a fall, lava or .die"
+    if own_blow(death):
+        spell = own_blow_spell(death)
+        return f"its own {trace.spell(spell)}" if spell else "its own blow: a fall, lava or .die"
     line = f"{trace.name(death.get('killer'))}"
     rewind = sorted(death.get("rewind") or [], key=lambda row: row[0])
     if rewind:

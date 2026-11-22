@@ -96,10 +96,19 @@ class Pull:
     start_ms: int
     end_ms: int
     outcome: str
+    # bossPulls[].start from schema 18: "step", or "engaged" when the boss engaged before DC's start step.
+    # Empty in older records.
+    start: str = ""
 
     @property
     def duration_ms(self) -> int:
         return max(0, self.end_ms - self.start_ms)
+
+    @property
+    def engaged_first(self) -> bool:
+        """DC dropped its pre-pull refresh (health, mana, cooldowns, Sated), so the raid went in on
+        whatever the last pull left."""
+        return self.start == "engaged"
 
 
 @dataclass
@@ -158,7 +167,10 @@ def _pull_of(entry) -> Pull | None:
     if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
         return None
     outcome = _first(entry, PULL_OUTCOME_KEYS)
-    return Pull(int(start), int(end), str(outcome) if outcome is not None else "?")
+    # older shapes used `start` for the time, which PULL_START_KEYS reads
+    kind = entry.get("start")
+    return Pull(int(start), int(end), str(outcome) if outcome is not None else "?",
+                kind if isinstance(kind, str) else "")
 
 
 def pulls_of(record: dict) -> list[Pull] | None:

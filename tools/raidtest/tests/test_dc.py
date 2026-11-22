@@ -143,6 +143,19 @@ class RecordTest(unittest.TestCase):
     def test_pull_without_outcome(self):
         run = dc.run_of(record("tr-1", attempts=[{"start": 1, "end": 2}]))
         self.assertEqual(run.pulls[0].outcome, "?")
+        self.assertEqual((run.pulls[0].start_ms, run.pulls[0].start), (1, ""))
+
+    def test_how_a_pull_started(self):
+        pulls = [{"n": 1, "startMs": 1000, "endMs": 4000, "outcome": "wipe", "start": "engaged"},
+                 {"n": 2, "startMs": 5000, "endMs": 9000, "outcome": "kill", "start": "step"}]
+        run = dc.find_run([record("tr-1", bossPulls=pulls)], "tr-1")
+        self.assertEqual([(p.start_ms, p.start, p.engaged_first) for p in run.pulls],
+                         [(1000, "engaged", True), (5000, "step", False)])
+
+    def test_a_record_before_schema_18_does_not_say_how_a_pull_started(self):
+        run = dc.find_run([record("tr-1", bossPulls=[{"startMs": 1000, "endMs": 4000, "outcome": "kill"}])], "tr-1")
+        self.assertEqual(run.pulls[0].start, "")
+        self.assertFalse(run.pulls[0].engaged_first)
 
     def test_pool_fields(self):
         run = dc.run_of(record("tr-1", pool="uld2", mapId=603, instanceId=41, difficulty="25n", pullCap=2,

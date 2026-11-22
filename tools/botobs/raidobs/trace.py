@@ -213,6 +213,27 @@ def combat_deaths(trace: Trace) -> list[dict]:
     return [d for d in death_records(trace) if d.get("cause") != "reset"]
 
 
+def own_blow(death: dict) -> bool:
+    """The victim landed its own killing blow: a fall, lava, .die or a spell it cast on itself."""
+    blow = death.get("blow") or []
+    return bool(blow) and blow[0] == death.get("g")
+
+
+def own_blow_spell(death: dict) -> int:
+    """The spell behind an own killing blow, 0 when there's none to name.
+
+    A self-cast tick like Hodir's Biting Cold or Kologarn's Stone Grip ends the rewind with the
+    victim's own row for the blow's amount. A fall, lava or .die never reaches the combat log, so it
+    leaves no such row."""
+    if not own_blow(death):
+        return 0
+    blow = death["blow"]
+    amount = blow[1] if len(blow) > 1 else None
+    rewind = sorted((row for row in death.get("rewind") or [] if len(row) >= 4), key=lambda row: row[0])
+    landed = [row[2] for row in rewind if row[0] == rewind[-1][0] and row[1] == death["g"] and row[3] == amount]
+    return landed[-1] if landed else 0
+
+
 def first_deaths(trace: Trace) -> dict[int, int]:
     """guid -> `t` of its first death record."""
     dead_at: dict[int, int] = {}

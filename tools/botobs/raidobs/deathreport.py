@@ -10,7 +10,7 @@ import sys
 from collections import defaultdict
 
 from .records import act_row, aura_line, held_to_death, is_debuff
-from .trace import Trace, clock, combat_deaths, death_records
+from .trace import Trace, clock, combat_deaths, death_records, own_blow, own_blow_spell
 
 
 # How close an impact marker or a hazard creature has to be to count as "on top of the bot". A
@@ -148,8 +148,12 @@ def death_block(trace: Trace, death: dict, index: int, brief: bool) -> None:
         # Yogg's Insane running out, the Brain killing whoever hits it early. Falling or lava does pass
         # DealDamage, and reads as a blow from the victim itself.
         print("     killed by a script, no blow recorded")
-    elif (death.get("blow") or [None])[0] == guid:
-        print("     killed by its own blow: .die, a fall or lava, none of which reach the combat log")
+    elif own_blow(death):
+        spell = own_blow_spell(death)
+        if spell:
+            print(f"     killed by its own {trace.spell(spell)}")
+        else:
+            print("     killed by its own blow: .die, a fall or lava, none of which reach the combat log")
     else:
         print(f"     killed by {trace.name(death.get('killer'))}")
     print(f"     at ({death.get('x')}, {death.get('y')}, {death.get('z')})")
