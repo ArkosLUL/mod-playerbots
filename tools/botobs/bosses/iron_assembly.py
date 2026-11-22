@@ -6,6 +6,7 @@ Steelbreaker's empowered phase, deaths by mechanic.
     iron_assembly.py <file> --phases   each member's death, with every healer's mana at that moment
     iron_assembly.py <file> --punches  every Fusion Punch, every phase, with the verdict and the button
     iron_assembly.py <file> --revived  every tank that rose mid pull and the raid buffs put back on it
+    iron_assembly.py <file> --defensives  every tank defensive, who was on the tank and which node cast it
 
 What the generic views miss here:
 
@@ -69,6 +70,15 @@ RAID_BUFFS = {"Mark of the Wild": "Mark of the Wild", "Gift of the Wild": "Mark 
               "Arcane Intellect": "Arcane Intellect", "Arcane Brilliance": "Arcane Intellect"}
 HELD_AT_DEATH_MS = 250
 CLASS_PALADIN = 2
+
+# The buttons the punch node and the tanks' class nodes share, plus the two whose Forbearance locks out
+# Divine Protection. Lay on Hands counts only on the caster itself, the one cast that puts it up.
+TANK_DEFENSIVES = {12975: "Last Stand", 871: "Shield Wall", 498: "Divine Protection", 22812: "Barkskin",
+                   22842: "Frenzied Regeneration", 61336: "Survival Instincts", 48707: "Anti-Magic Shell",
+                   55233: "Vampiric Blood", 48792: "Icebound Fortitude", 642: "Divine Shield"}
+SPELL_LAY_ON_HANDS = (48788, 27154, 10310, 2800, 633)
+# Snapshots come every ~250 ms and a dead member drops out of them, so an older row says nothing about now.
+SNAPSHOT_FRESH_MS = 1000
 
 
 def mine(trace: Trace) -> bool:
@@ -157,12 +167,17 @@ class Samples:
                     self.boss.setdefault(trace.entries[row[0]], []).append((snap["t"], row))
         self.times = {guid: [t for t, _ in rows] for guid, rows in self.rows.items()}
 
-    def at(self, guid: int, t: int):
+    def sample(self, guid: int, t: int):
+        """(t, row) of the last sample at or before `t`, or None."""
         times = self.times.get(guid)
         if not times:
             return None
         index = bisect.bisect_right(times, t) - 1
-        return self.rows[guid][index][1] if index >= 0 else None
+        return self.rows[guid][index] if index >= 0 else None
+
+    def at(self, guid: int, t: int):
+        found = self.sample(guid, t)
+        return found[1] if found else None
 
     def boss_hp(self, entry: int, t: int) -> float | None:
         rows = [row for row_t, row in self.boss.get(entry, []) if row_t <= t]
@@ -405,21 +420,24 @@ def show_revived(trace: Trace) -> None:
                 continue
             up, row = rose
             end = up + REBUFF_WINDOW_MS
+            # The first live sample can trail the rise by a snapshot. Nothing lands on a corpse, so count
+            # from the death.
+            since = death["t"] + 1
             lines.append((up, f"  {clock(up)}  {trace.name(guid)} up at {row[5]:.0f}%, dead since {clock(death['t'])}"))
             for rec in trace.of("aura"):
-                if rec.get("d") == guid and not rec.get("r") and up <= rec["t"] <= end \
+                if rec.get("d") == guid and not rec.get("r") and since <= rec["t"] <= end \
                         and raid_buff(trace.spells.get(rec.get("sp"))):
                     lines.append((rec["t"], f"  {clock(rec['t'])}    {trace.spells[rec['sp']]} from "
                                             f"{trace.name(rec.get('s'))}"))
             for rec in notes(trace, "ironassembly.rebuff"):
                 how, _, about = str(rec.get("txt", "")).partition(" ")
-                if up <= rec["t"] <= end and about == str(guid) and how in ("none:nobody", "hold:cast"):
+                if since <= rec["t"] <= end and about == str(guid) and how in ("none:nobody", "hold:cast"):
                     lines.append((rec["t"], f"  {clock(rec['t'])}    {trace.name(rec.get('g'))}: {how}"))
             if later is not None:
                 t, label, held = later["t"], "died again", held_raid_buffs(trace, later)
             elif ends:
                 t, label = ends[-1]["t"], "at the end"
-                held = raid_buffs_since(trace, guid, up, t)
+                held = raid_buffs_since(trace, guid, since, t)
             else:
                 continue
             lost = sorted(before - held)
@@ -429,6 +447,76 @@ def show_revived(trace: Trace) -> None:
         print("  none")
     for _, line in sorted(lines, key=lambda item: item[0]):
         print(line)
+
+
+def hitting(trace: Trace, samples: Samples, guid: int, t: int) -> list[str]:
+    """The council members whose snapshot target at `t` was `guid`."""
+    out = []
+    for entry, name in MEMBERS.items():
+        rows = samples.boss.get(entry, [])
+        index = bisect.bisect_right([row_t for row_t, _ in rows], t) - 1
+        if index < 0 or t - rows[index][0] > SNAPSHOT_FRESH_MS:
+            continue
+        row = rows[index][1]
+        if row[5] > 0 and row[7] == guid:
+            out.append(name)
+    return out
+
+
+def punch_windows(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Per tank, (verdict, landing) for every punch read `under`: what the punch node casts in between is its."""
+    landings = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_FUSION_PUNCH:
+            landings[rec["d"]].append(rec["t"])
+    out = collections.defaultdict(list)
+    for rec in notes(trace, "ironassembly.punch"):
+        if str(rec.get("txt", "")).startswith("under"):
+            hit = next((t for t in landings[rec["g"]] if 0 <= t - rec["t"] <= PUNCH_CAST_WINDOW_MS),
+                       rec["t"] + PUNCH_CAST_WINDOW_MS)
+            out[rec["g"]].append((rec["t"], hit))
+    return out
+
+
+def show_defensives(trace: Trace) -> None:
+    """Every tank defensive and the bubble or self Lay on Hands that locks Divine Protection: the tank's
+    health, which council member was on it, and whether the punch node or a class node cast it. A class
+    cast with nothing on the tank is one the hold should have kept."""
+    print("TANK DEFENSIVES")
+    if not mine(trace):
+        return
+    samples = Samples(trace)
+    windows = punch_windows(trace)
+    loose = 0
+    shown = 0
+    for rec in trace.of("cast"):
+        caster, spell, t = rec.get("s"), rec.get("sp"), rec["t"]
+        if trace.role(caster) != "tank":
+            continue
+        if spell in SPELL_LAY_ON_HANDS and rec.get("tgt") in (0, caster):
+            name = "Lay on Hands"
+        else:
+            name = TANK_DEFENSIVES.get(spell)
+        if not name:
+            continue
+        found = samples.sample(caster, t - 1)
+        health = f" at {found[1][5]:.0f}%" if found else ""
+        # A council hit between that sample and the cast is what the class node saw.
+        hit = found and next((d for d in reversed(trace.of("dmg")) if d.get("d") == caster
+                              and found[0] < d["t"] <= t and trace.entries.get(d.get("s")) in MEMBERS), None)
+        if hit:
+            health += f" before a {hit.get('a', 0) / 1000:.1f}k {trace.spells.get(hit.get('sp')) or 'melee'}"
+        on = hitting(trace, samples, caster, t)
+        node = "punch node" if any(start <= t <= end for start, end in windows[caster]) else "class node"
+        if node == "class node" and not on:
+            loose += 1
+        print(f"  {clock(t)}  {trace.name(caster)} {name}{health}, "
+              f"{' and '.join(on) + ' on it' if on else 'nothing on it'} ({node})")
+        shown += 1
+    if not shown:
+        print("  none")
+    else:
+        print(f"  class casts with nothing on the tank: {loose}")
 
 
 def mechanic(trace: Trace, death: dict) -> str:
@@ -478,6 +566,7 @@ SECTIONS = (
      show_empowered),
     ("punches", "every Fusion Punch in every phase, with the strategy's verdict and the button spent", show_punches),
     ("revived", "every tank that rose mid pull and the raid buffs put back on it", show_revived),
+    ("defensives", "every tank defensive with its health, who was on it and which node cast it", show_defensives),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
 

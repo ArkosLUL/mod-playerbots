@@ -365,3 +365,105 @@ vetoes: `iron assembly tank defensive hold` on class defensives at 25%+ health, 
 `--punches`: phase-3 punches on tanks find a button (`defensive <name>`), fewer `no defensive` than
 window 8, and fewer tank deaths to Fusion Punch. Check tank deaths in Molgeim's phase against window 8
 (2 in 3 pulls, both punches) for the risk above.
+
+## Round 6 (2026-11-22, window on build 697052475: rounds 4 and 5, re-specced DKs, tank soulstones)
+
+**Data.** `raidtest.py report --boss iron-assembly --raid uld --head 697052475 --pulls 10`: one pull per
+pool, all valid (`batch.py --strict --since 697052475`), no DC veto, hard mode on: uld1
+`tr-20261122-163545-7` (`603_10_stormcaller-brundir_1795365408`, **kill 5:27, 3 deaths**, Steelbreaker
+last), uld2 `tr-20261122-163606-9` (`603_11_…_1795365440`, **kill 6:06, 4 deaths**, Steelbreaker last),
+uld3 `tr-20261122-163545-8` (`603_9_…_1795365427`, wipe 5:43, 32 deaths, Steelbreaker last, lowest 13.0%).
+
+**Stop rules.** Not polished: uld2 has 4 deaths and uld3 wiped. Picks so far: healer mana (r1), Meltdown
+on the melee (r2), the user's answers (r3), Fusion Punch on the tanks (r4), the user's answers on it
+(r5); this round picks Fusion Punch on the tanks a second time, so a round 7 pick of it that still shows
+hits the three-round rule.
+
+**Deaths by mechanic.**
+
+| Pull | Phase timeline | Deaths |
+|---|---|---|
+| uld1 | Brundir 1:39, Molgeim 3:26, alone 121 s, **kill** | 1 Meltdown (carrier at the point), 2 Fusion Punch on carriers (Uldxam 4:33.5, 24 s into its Overwhelming Power, 1 charge; Uldxaa 5:08.8, 23 s in, 2 charges, High Voltage the last hit) |
+| uld2 | Brundir 1:43, Molgeim 3:59, alone 127 s, **kill**, lowest 0.1% | 2 Meltdown (carriers at the point), 1 Fusion Punch on a carrier (Uldyaa 5:32.7, 13 s in, 2 charges), 1 High Voltage (healer Uldyaf 5:57.0, 3 charges) |
+| uld3 | Brundir 1:41, Molgeim 3:26, alone 133 s, 17.5% at 5:11 | 2 Meltdown, 2 Fusion Punch on carriers (Uldzaa 5:14.0 running out, 3 charges; Uldzab 5:29.4, 7 s in, 6 charges), 23 High Voltage, 3 Steelbreaker melee on tanks, 1 on a non-tank, 1 Static Disruption |
+
+Every phase-3 punch death was a carrier 7-28 s before its Meltdown: the same one charge it would have
+cost there, only earlier (longer High Voltage at the higher count, a soulstone or Rebirth spent sooner).
+The deaths past one per Overwhelming Power are healers: uld2's Uldyaf at 5:57, and uld3's cascade from
+healer Uldzad at 5:06.0 (Static Disruption 6.8k + High Voltage, priests Uldzac and Uldzae under 10% mana
+since 3:49 and 4:06), +1 charge each, then the 6-charge punch and Steelbreaker melee on the third tank.
+
+**Verdict on round 4 (punch defensive in every phase, judged in the cast's last 1.5 s): works.** No tank
+died before phase 3 (window 8: 2) and no Rebirth went on a tank there. Before phase 3, uld2 and uld3 read
+every punch `safe` and spent nothing; uld1 read three `under`: 1:40.7 cast Anti-Magic Shell, 3:06.9 and
+3:22.2 found none ready (Uldxaa's own Avenging Wrath at 3:01.07 put up the 30 s marker that locks Divine
+Protection) and were absorbed.
+
+**Verdict on round 5 (tank defensive hold above 25%, rebuff a risen tank): works, one gap.** The hold's
+veto rows (3 / 44 / 38: Barkskin, Frenzied Regeneration, Shield Wall, Survival Instincts, Icebound
+Fortitude) kept every class cast above 25% off, and the punch node spent the buttons in phase 3 (uld1 Anti-Magic Shell
+4:14, Divine Protection 4:48.6, Anti-Magic Shell 5:24; uld2 Barkskin 4:55, Shield Wall 5:13, Divine
+Protection 5:50.7; uld3 Barkskin 4:21.8). Rebuff: every rise got its raid buffs back, all "every raid
+buff back" at the next death or the end bar uld1 Uldxaa's Kings (the expected three-paladin gap). The
+reader had shown uld2 Uldyaa ending without Kings and Might: both landed at 5:34.517, before its first
+live sample at 5:34.608, which `--revived` used as the window start; fixed (from the death).
+
+**Verdict on round 3 (tank battle rez, melee step out): not exercised.** `ironassembly.rez` read
+`none:tanks` in every pull: soulstones (DC `4d3978b`, `Use Soulstone` 47882) raised 7 of 10 dead tanks
+0.3-0.5 s after death with three tanks in the comp, and the three tank Rebirths (uld1 5:09.3, uld2 5:33.0, uld3 5:14.5) were the class
+`rebirth` on a punch-killed carrier next to the boss. Every carrier blew 0 yd from the point (5 of 5), so
+`meltstep` read only `none`.
+
+**Picked: phase-3 Fusion Punch deaths on tanks with no button left**, the gap in round 5's hold. New
+`--defensives` lists six class casts with nothing on the tank (1 / 2 / 3), each under 25%, which the
+hold lets through as a last resort:
+
+- uld2 Uldyaa Last Stand 4:43.2 at 13%, 0.4 s after its soulstone rise at the point (Steelbreaker on
+  Uldyab). The punch node then spent Shield Wall at 5:13.2, so its 5:31.4 punch (`under 50k` at 100%)
+  found nothing and killed it at 5:32.7. With Last Stand kept, 5:13 takes Last Stand and 5:31 Shield Wall.
+- uld3 Uldzaa Divine Shield 4:10.3 at 13%, 0.7 s after its rise (Steelbreaker on Uldzab). Its Forbearance
+  (25771, 2 min) locked Divine Protection through the punches at 4:38.3, 4:54.1 and 5:12.7, all `under`
+  with no act row from the punch node (its trigger needs a castable button); Ardent Defender (31852)
+  absorbed the first, the third killed it at 5:14.0.
+- uld3 Uldzab Survival Instincts 4:47.0 at 15%, Uldzaa Divine Protection 5:17.6 at 17%, uld2 Uldyab
+  Frenzied Regeneration 5:21.2 at 14%, all just risen; uld1 Uldxaa Divine Shield 3:59.6 at 20% as a parked
+  carrier.
+
+Cause: `IronAssemblyTankDefensiveHeld` (`UldDefinition_IronAssembly.cpp:62` before) holds only at 25%+,
+and every rise starts at 13-19%. Divine Shield and a self Lay on Hands (`GenericPaladinStrategy.cpp:25-26`,
+"critical health") are not in `HeldTankDefensiveNames()` at all, and both put up Forbearance
+(`spell_pal_immunities`, `spell_pal_lay_on_hands`). The three true last resorts in the window had
+Steelbreaker on the tank: uld2 Uldyab Survival Instincts after a 32.3k punch, uld3 Uldzab Frenzied
+Regeneration after a 17.4k swing, uld1 Uldxam Icebound Fortitude at 8%.
+
+**Fix (bug: only the punch node was meant to spend them).** Under 25% the hold now lets a class
+defensive through only while a living council member has the tank as victim
+(`UldDefinition_IronAssembly.cpp:67`), and its name list adds `divine shield` and `lay on hands` (the
+self cast; `lay on hands on party` stays free). Holds for 10/25 and both modes (no size or mode input;
+normal mode only meets it before Steelbreaker dies). Reader: `--defensives` (every tank defensive with
+health, the member on it, punch or class node, and a count of class casts with nothing on the tank);
+`--revived` starts its window at the death. pb-check green.
+
+**Also seen, not picked.**
+- *Shared, uld1 Uldxam 4:32.2:* the punch node picked Vampiric Blood with no Blood rune free (Death Strike,
+  Heart Strike, Icy Touch all failing that tick); `CanCastSpell` checks no power
+  (`PlayerbotAI.cpp:3587`, `TRIGGERED_IGNORE_POWER_AND_REAGENT_COST`), so `PickDefensive`
+  (`RaidTankDefensive.cpp:101`) offered it, the cast failed every tick and the ready Icebound Fortitude
+  (vetoed 3 times by the hold) never went; a 41.7k punch at 92% killed it 1.3 s later. The fix (skip a
+  row the bot can't pay runes or runic power for, as `SideAoeRunesReady` in `ToCHelpers_Anubarak.cpp`
+  does) is shared: every boss on `NextTankDefensive` / `NextMagicDefensive` / `NextPhysicalDefensive`.
+- A paladin tank casts Avenging Wrath on cooldown (0:01, 3:01; the burst hold skips tanks), and its 30 s
+  marker locks Divine Protection through Molgeim's last punches (uld1 3:06.9, 3:22.2; window 8 uld1's
+  3:01.4 death). Boss-local candidate for a later round.
+- Healers: priests still the first dry (uld3 3:49 and 4:06, 23-40 s into phase 3); uld3's resto shaman
+  read Mana Tide Totem `IMPOSSIBLE` at 3:16, 4:39 and 4:49.8 and dropped it at 5:17 at 2% mana. The
+  extra deaths now come from here; the likely round 7 pick.
+
+**Next window should show.** `--defensives`: "class casts with nothing on the tank: 0" in every pull
+(1 / 2 / 3 here), and `postmortem.py --vetoes` rows `iron assembly tank defensive hold` on `last stand`,
+`survival instincts`, `frenzied regeneration`, `divine protection`, `divine shield` or `lay on hands` in
+the seconds after a rise. Class casts under 25% with Steelbreaker on the tank still go. `--punches`: a
+risen warrior's or paladin's next `under` punches find a button (Last Stand, then Shield Wall; Divine
+Protection with no Divine Shield before it), and fewer carriers die to a punch before their Meltdown (5
+here). Risk to watch: no risen tank dying to High Voltage before a heal lands, now that the rise's class
+casts no longer pad it (none of 10 rises here died inside 5 s).

@@ -111,7 +111,8 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 17.0f;
 // shouldn't spend a button, and a tank still ticks at least once in it.
 inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS = 1500;
 
-// Tanks' class defensive nodes are held above this, so only the punch node spends the buttons.
+// Tanks' class defensive nodes are held above this, and below it while no council member hits the tank, so
+// only the punch node spends the buttons.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
 
 // Rebirth reaches 30 yd. A druid casts inside CAST_REACH and walks to WALK_REACH of the body.

@@ -17,6 +17,9 @@
 #include "UldScripts.h"
 #include "UldTriggers_IronAssembly.h"
 
+#include <string>
+#include <vector>
+
 namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
 
@@ -59,10 +62,35 @@ bool IronAssemblyTankPinned(PlayerbotAI* botAI)
     return IronAssemblyFormationActive(botAI) && IronAssemblyAssignedBoss(botAI, botAI->GetBot());
 }
 
+// Under the floor the class nodes are a last resort, but only while a council member is hitting the tank.
+// A tank rises at 13-19% and a parked Meltdown carrier gets there too, with nothing on either.
 bool IronAssemblyTankDefensiveHeld(PlayerbotAI* botAI)
 {
-    return IronAssemblyFormationActive(botAI) &&
-           botAI->GetBot()->GetHealthPct() >= ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT;
+    if (!IronAssemblyFormationActive(botAI))
+        return false;
+
+    Player* bot = botAI->GetBot();
+    if (bot->GetHealthPct() >= ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT)
+        return true;
+
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
+    {
+        if (member && member->GetVictim() == bot)
+            return false;
+    }
+
+    return true;
+}
+
+// Divine Shield and a self Lay on Hands put up Forbearance, which locks out Divine Protection, a paladin
+// tank's one button for the punch, for 2 min.
+std::vector<std::string> IronAssemblyHeldTankDefensiveNames()
+{
+    std::vector<std::string> names = HeldTankDefensiveNames();
+    names.insert(names.end(), {"divine shield", "lay on hands"});
+    return names;
 }
 
 void DefineIronAssembly(EncounterBuilder& e)
@@ -121,10 +149,9 @@ void DefineIronAssembly(EncounterBuilder& e)
     e.Block("iron assembly meltdown melee charge guard", Role::Melee, IronAssemblyMeltdownMeleeWindow,
             Family::Charge);
 
-    // The class nodes spend these on health alone and would leave the Fusion Punch node nothing. Under the
-    // floor they go through as a last resort.
+    // The class nodes spend these on health alone and would leave the Fusion Punch node nothing.
     e.Block("iron assembly tank defensive hold", Role::Tank, IronAssemblyTankDefensiveHeld, 0,
-            HeldTankDefensiveNames());
+            IronAssemblyHeldTankDefensiveNames());
 
     // Tank face is a second mover at the tank spot's priority, and the two alternate. Set facing is a
     // separate node.

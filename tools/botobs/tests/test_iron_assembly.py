@@ -4,7 +4,7 @@
 
 A synthetic hard mode pull pins the kill order verdict, healer mana at each member's death, an
 Overwhelming Power carrier's Meltdown, a Fusion Punch kill with the strategy's verdict on it, a punch
-before Steelbreaker is alone and the deaths per phase. The shared v14
+before Steelbreaker is alone, the tank defensives by node and the deaths per phase. The shared v14
 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
@@ -196,6 +196,40 @@ class Revived(unittest.TestCase):
         self.assertNotIn("Prayer of Fortitude from", text)
         self.assertIn("4:20.010  Rampart died again, without Fortitude", text)
 
+    def test_a_buff_landing_before_the_first_live_sample_counts(self):
+        records = pull()
+        records[1:1] = [{"t": 0, "e": "spell", "sp": 48162, "n": "Prayer of Fortitude"}]
+        records[-1:-1] = [
+            {"t": 150000, "e": "death", "g": PARTNER, "killer": STEEL, "x": 1575.9, "y": 132.3, "z": 427.3,
+             "auras": [[48162, 1, 0, PRIEST, -1, -1, 1]], "rewind": [[150000, STEEL, 63493, 50000]]},
+            {"t": 159900, "e": "aura", "d": PARTNER, "s": PRIEST, "sp": 48162, "st": 1, "dur": 3600000, "p": 1},
+            {"t": 160000, "e": "snap", "u": [[PARTNER, 1575.9, 132.3, 427.3, 0, 18, 100, 0]]},
+        ]
+        punched = next(rec for rec in records if rec.get("e") == "death" and rec["t"] == 260010)
+        punched["auras"] = [[48162, 1, 0, PRIEST, 159900, -1, 1]]
+        text = printed(ia.show_revived, load(records))
+        self.assertIn("2:40.000  Rampart up at 18%, dead since 2:30.000", text)
+        self.assertIn("2:39.900    Prayer of Fortitude from Mender", text)
+        self.assertIn("4:20.010  Rampart died again, every raid buff back", text)
+
+
+class Defensives(unittest.TestCase):
+    def test_who_was_on_the_tank_and_which_node_cast_it(self):
+        records = pull()
+        records[-1:-1] = [
+            {"t": 249500, "e": "note", "g": PARTNER, "k": "ironassembly.punch", "txt": "under 41k"},
+            {"t": 250200, "e": "cast", "s": TANK, "sp": 642, "tgt": 0},
+            {"t": 250300, "e": "cast", "s": PARTNER, "sp": 48792, "tgt": 0},
+            {"t": 250400, "e": "cast", "s": TANK, "sp": 48788, "tgt": TANK},
+            {"t": 250500, "e": "cast", "s": TANK, "sp": 48788, "tgt": PRIEST},
+        ]
+        text = printed(ia.show_defensives, load(records))
+        self.assertIn("4:10.200  Bulwark Divine Shield at 100%, nothing on it (class node)", text)
+        self.assertIn("4:10.300  Rampart Icebound Fortitude at 100%, Steelbreaker on it (punch node)", text)
+        self.assertIn("4:10.400  Bulwark Lay on Hands at 100%, nothing on it (class node)", text)
+        self.assertEqual(text.count("Lay on Hands"), 1)
+        self.assertIn("class casts with nothing on the tank: 2", text)
+
 
 class Deaths(unittest.TestCase):
     def test_by_mechanic_and_the_first_one_that_was_not_a_meltdown(self):
@@ -219,7 +253,8 @@ class OtherFights(unittest.TestCase):
     def test_every_section_reads_empty(self):
         trace = Trace(FULL_V14)
         self.assertIn("not an Assembly of Iron pull", printed(ia.show_banner, trace))
-        for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_revived, ia.show_deaths):
+        for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_revived, ia.show_defensives,
+                     ia.show_deaths):
             self.assertEqual(len(printed(show, trace).splitlines()), 1)
 
 
