@@ -12,8 +12,10 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SpellMgr.h"
+#include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -187,6 +189,90 @@ XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002)
 bool IsXT002PummellerTank(Player* bot, Unit* xt002)
 {
     return PlayerbotAI::IsTank(bot) && GetXT002TankRoles(bot, xt002).pummeller == bot;
+}
+
+namespace
+{
+struct XT002BuffTankState
+{
+    RaidObs::ObsValue<ObjectGuid> tank{"xt002.buffs"};
+    ObjectGuid candidate;  // a new holder waiting out the settle time
+    uint32 candidateSinceMs = 0;
+    uint32 lastAskedMs = 0;
+};
+
+RaidInstanceState<XT002BuffTankState> xt002BuffTankStates;
+
+Player* FindLivingMember(Group* group, ObjectGuid const& guid)
+{
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->GetGUID() == guid)
+            return member->IsAlive() ? member : nullptr;
+    }
+
+    return nullptr;
+}
+}  // namespace
+
+Player* GetXT002BuffTank(Player* bot, Unit* xt002)
+{
+    Group* group = bot->GetGroup();
+    if (!group || !xt002 || !xt002->IsInCombat() || !bot->GetInstanceId())
+        return nullptr;
+
+    Player* holder = GetXT002TankRoles(bot, xt002).holder;
+    if (!holder)
+        return nullptr;
+
+    uint32 const now = getMSTime();
+    XT002BuffTankState& state = xt002BuffTankStates.For(bot->GetInstanceId());
+
+    // first ask of a pull
+    if (!state.lastAskedMs || getMSTimeDiff(state.lastAskedMs, now) > ULDUAR_XT002_BUFF_TANK_STALE_MS)
+    {
+        state.tank = holder->GetGUID();
+        state.candidate.Clear();
+    }
+    state.lastAskedMs = now;
+
+    if (holder->GetGUID() == state.tank.Get())
+        state.candidate.Clear();
+    else
+    {
+        if (holder->GetGUID() != state.candidate)
+        {
+            state.candidate = holder->GetGUID();
+            state.candidateSinceMs = now;
+        }
+
+        if (!FindLivingMember(group, state.tank.Get()) ||
+            getMSTimeDiff(state.candidateSinceMs, now) >= ULDUAR_XT002_BUFF_TANK_SETTLE_MS)
+        {
+            state.tank = holder->GetGUID();
+            state.candidate.Clear();
+        }
+    }
+
+    return FindLivingMember(group, state.tank.Get());
+}
+
+Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell)
+{
+    Player* tank = GetXT002BuffTank(botAI->GetBot(), GetXT002(botAI));
+    if (!tank)
+        return nullptr;
+
+    // Same owner rule as the class nodes: Beacon and Renew count only this healer's copy, the shields anyone's.
+    bool const ownOnly = spell == "beacon of light" || spell == "renew";
+    if (botAI->HasAura(spell, tank, false, ownOnly))
+        return nullptr;
+
+    if (spell == "power word: shield" && botAI->HasAura("weakened soul", tank))
+        return nullptr;
+
+    return botAI->CanCastSpell(spell, tank) ? tank : nullptr;
 }
 
 bool IsXT002AddEngageable(Unit* xt002, Unit* unit)

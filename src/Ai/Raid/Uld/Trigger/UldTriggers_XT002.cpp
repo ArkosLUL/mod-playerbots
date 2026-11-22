@@ -161,3 +161,15 @@ bool XT002RedirectThreatTrigger::IsActive()
     // burn its charges on nothing.
     return !IsXT002Submerged(xt002);
 }
+
+bool XT002HolderBuffTrigger::IsActive()
+{
+    // Class and role first: every bot runs all five rows, and the buff check scans for XT.
+    if (bot->getClass() != classId || !PlayerbotAI::IsHeal(bot))
+        return false;
+
+    if (strategy && !botAI->HasStrategy(strategy, BOT_STATE_COMBAT))
+        return false;
+
+    return GetXT002BuffTarget(botAI, spell) != nullptr;
+}

@@ -24,6 +24,10 @@ What the generic views miss here:
 - **Tank duties follow whoever XT is on**, since nothing can taunt him back. The tanks view lists who XT
   was on and how far that tank stood off the tank spot, each tank's `xt002.tank` duty notes, and the
   taunts still cast at him.
+- **So do the healers' tank buffs.** The class nodes put Beacon, Sacred Shield, Earth Shield and the priest's
+  shield and Renew on the group's main tank or, for a paladin, whichever tank dropped lowest. The tanks view
+  prints the `xt002.buffs` tank they followed and, over the long holds, how much of the time each buff sat
+  on the holder against the other tank.
 """
 from __future__ import annotations
 
@@ -38,6 +42,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import anchor, dist2, frames, nearest  # noqa: E402
+from raidobs.probes import latch_spans, resolve_guids  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "xt-002"
@@ -67,6 +72,15 @@ TAUNTS = {355, 6795, 56222, 62124, 49576, 1161, 5209, 694}
 RIGHTEOUS_DEFENSE = 31789
 # walking XT from where he turned to the tank spot takes a holder up to this long
 SETTLE_MS = 15000
+# The ranks a level-80 healer casts. Beacon, Sacred Shield and Earth Shield each have a heal or absorb proc
+# under the same name, so a name match would count those.
+TANK_BUFFS = {
+    "Beacon of Light": {53563},
+    "Sacred Shield": {53601},
+    "Earth Shield": {49284},
+    "Power Word: Shield": {48065, 48066},
+    "Renew": {48067, 48068},
+}
 
 # 25-man hard mode traces: sparks the raid could hit died in 5-17 s, ones it couldn't lived 39-90 s
 SPARK_LONG_MS = 20000
@@ -403,6 +417,68 @@ def taunts_at_xt(trace: Trace, runs: list[dict]) -> collections.Counter:
     return out
 
 
+def buff_spans(trace: Trace) -> dict[tuple[str, int], list[tuple[int, float]]]:
+    """(buff name, tank guid) -> merged [(start, stop)] a healer's copy of that tank buff sat on that tank. Tracked
+    per caster, since two priests' Renews come and go apart."""
+    by_id = {sp: name for name, ids in TANK_BUFFS.items() for sp in ids}
+    ends = trace.of("end")
+    end = ends[-1]["t"] if ends else float("inf")
+    raw, since = collections.defaultdict(list), {}
+    for rec in trace.of("aura"):
+        name = by_id.get(rec.get("sp"))
+        if not name or trace.role(rec.get("d")) != "tank" or trace.role(rec.get("s")) != "heal":
+            continue
+        key = (name, rec["d"], rec["s"])
+        if not rec.get("r"):
+            since.setdefault(key, rec["t"])
+        elif key in since:
+            raw[key[:2]].append((since.pop(key), rec["t"]))
+    for key, start in since.items():
+        raw[key[:2]].append((start, end))
+    spans = {}
+    for key, pieces in raw.items():
+        merged = []
+        for start, stop in sorted(pieces):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], stop))
+            else:
+                merged.append((start, stop))
+        spans[key] = merged
+    return spans
+
+
+def overlap(spans: list[tuple[int, float]], start: int, stop: int) -> float:
+    return sum(max(0.0, min(b, stop) - max(a, start)) for a, b in spans)
+
+
+def buffs_line(trace: Trace, runs: list[dict]) -> str | None:
+    """For each healer tank buff cast in the pull, its share of the tank holds of SETTLE_MS or more spent on the
+    holder, then on the other tank."""
+    holds = [run for run in runs
+             if run["g"] and trace.role(run["g"]) == "tank" and run["until"] - run["t"] >= SETTLE_MS]
+    spans = buff_spans(trace)
+    total = sum(run["until"] - run["t"] for run in holds)
+    if not total or not spans:
+        return None
+    shares = []
+    for name in TANK_BUFFS:
+        if not any(buff == name for buff, _ in spans):
+            continue
+        on = off = 0.0
+        for (buff, tank), tank_spans in spans.items():
+            if buff != name:
+                continue
+            for run in holds:
+                held = overlap(tank_spans, run["t"], run["until"])
+                if tank == run["g"]:
+                    on += held
+                else:
+                    off += held
+        shares.append(f"{name} {100 * on / total:.0f}/{100 * off / total:.0f}%")
+    return (f"  tank buffs over {total / 1000:.0f} s of holds of {SETTLE_MS // 1000} s or more, % on the holder/"
+            f"the other tank: {', '.join(shares)}")
+
+
 def show_tanks(trace: Trace) -> None:
     print("TANKS")
     if not mine(trace):
@@ -426,6 +502,12 @@ def show_tanks(trace: Trace) -> None:
     taunts = taunts_at_xt(trace, runs)
     shown = ", ".join(f"{trace.name(g)} {name} {n}" for (g, name), n in taunts.most_common())
     print(f"  taunts at XT: {sum(taunts.values())}" + (f" ({shown})" if shown else ""))
+    moved = [f"{resolve_guids(trace, value)} {clock(start)}" for value, start, _ in latch_spans(trace, "xt002.buffs")]
+    if moved:
+        print(f"  healer buff tank: {', '.join(moved)}")
+    line = buffs_line(trace, runs)
+    if line:
+        print(line)
 
 
 def mechanic(trace: Trace, death: dict) -> str:
