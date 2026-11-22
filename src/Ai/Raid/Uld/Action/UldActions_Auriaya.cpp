@@ -244,8 +244,8 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     if (!CastClassTaunt(botAI, sentry))
         return false;
 
-    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one. Off the
-    // main tank the Sentry is safe either way, and switching would pull every DPS off the one they're on.
+    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one. Off another
+    // tank the Sentry is safe either way, and switching would pull every DPS off the one they're on.
     if (!fromTank)
         AttackDirect(sentry);
 
@@ -387,7 +387,7 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
     }
 
     // The off-tank's Sentry, no 10 yd rule: that's where its threat is. Nearest only while the off-tank
-    // is dead or hits no Sentry.
+    // is dead or has no Sentry to take.
     bool const sentryWanted = desiredPriority == 0;
     Unit* offTankSentry = sentryWanted ? GetAuriayaOffTankSentry(bot) : nullptr;
     if (offTankSentry && (!IsAllowedPriorityTarget(boss, offTankSentry) || !bot->IsWithinLOSInMap(offTankSentry)))

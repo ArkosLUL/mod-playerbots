@@ -142,6 +142,9 @@ lives).
   taunts a Sentry on a non-tank within 30 yd while it holds fewer than two, never walking;
   `TankAssist` zeroed for it then (rule `auriaya main tank target guard`). Probe `auriaya.sentry` on
   the main tank: `dps`, `full`, `none`. A third tank in the raid becomes the off-tank instead.
+- Review: between Sentries the DPS take a bot off-tank's next pick (`GetAuriayaOffTankHoldSentry` on
+  it), not their nearest: in window 7 the off-tank went 0.2-0.8 s without a live Sentry after a kill,
+  time enough for every DPS ticking then to open on a different one.
 
 Same entries at 10 (2 Sentries) and 25; no hard mode. No shared code touched.
 

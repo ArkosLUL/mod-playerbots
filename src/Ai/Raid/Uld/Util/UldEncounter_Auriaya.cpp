@@ -314,7 +314,12 @@ Unit* GetAuriayaOffTankSentry(Player* bot)
 
     // Its victim, not a bot value, so a human off-tank works the same.
     Unit* victim = offTank->GetVictim();
-    return victim && victim->IsAlive() && victim->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY ? victim : nullptr;
+    if (victim && victim->IsAlive() && victim->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY)
+        return victim;
+
+    // A bot off-tank takes this one a few ticks after its Sentry dies. Going nearest in that gap spreads
+    // DPS casts over the whole pack.
+    return GET_PLAYERBOT_AI(offTank) ? GetAuriayaOffTankHoldSentry(offTank) : nullptr;
 }
 
 Unit* GetAuriayaOffTankHoldSentry(Player* tank)

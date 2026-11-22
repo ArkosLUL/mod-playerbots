@@ -91,19 +91,19 @@ counter.
 one: on a non-tank first, then one out of combat, then one on another tank (`GetAuriayaLooseSentry`,
 probe `auriaya.sentry`: `dps`, `free`, `tank`, `none`). Out of taunt reach (25 yd, in sight) it walks
 to 20 yd; in reach it fires only with the class taunt ready, and then targets the Sentry, since a
-taunt doesn't move the tank's own target — except off the main tank, where it is safe and a retarget
+taunt doesn't move the tank's own target — except off another tank, where it is safe and a retarget
 drags every DPS along. Picking in grid order, it re-taunted one off the main tank while another
 killed a warrior.
 
 **The DPS kill the off-tank's target** (its `GetVictim()`, so a human counts), where its threat is
-highest; the nearest Sentry only while it is dead or on none (probe `auriaya.focus`: `offtank`,
-`nearest`, `none`). On nearest they spread over the pack and pulled Sentries off it. Generic tank
+highest, or between Sentries a bot off-tank's next pick, which it takes a few ticks later; the nearest
+Sentry only while it is dead or has none (probe `auriaya.focus`: `offtank`, `nearest`, `none`). On nearest they spread over the pack and pulled Sentries off it. Generic tank
 assist tabs to the lowest-threat mob about once a second, so the off-tank's `TankAssist` is zeroed
 while a Sentry is in sight and it keeps one until it dies; next, the nearest on itself, else the
 nearest in combat.
 
 **No off-tank alive** (no third tank, by choice): the main tank keeps her and taunts at most two
-Sentries, only ones on a non-tank within 30 yd of its station, never walking or retargeting (probe
+Sentries, only ones on a non-tank within 30 yd, never walking or retargeting (probe
 `auriaya.sentry`: `dps`, `full`, `none`). Its `TankAssist` is zeroed then: with one tank left it
 takes the nearest Sentry it lacks aggro on, and reach drags her cone along (22 s off her after a
 25N off-tank death).

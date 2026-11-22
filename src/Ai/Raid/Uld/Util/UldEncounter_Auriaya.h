@@ -91,8 +91,9 @@ Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 
 bool InAuriayaSentryTauntReach(Player* tank, Unit* sentry);
 
-// What the living off-tank is hitting, if it's a Sentry. DPS all take it: the tank's own threat is
-// highest there, and one target at a time keeps them off the rest of the pack.
+// What the living off-tank is hitting, if it's a Sentry, else the one a bot off-tank takes next. DPS all
+// take it: the tank's own threat is highest there, and one target at a time keeps them off the rest of
+// the pack.
 Unit* GetAuriayaOffTankSentry(Player* bot);
 
 // The off-tank's next Sentry once its own target isn't one: nearest on itself, else nearest in combat.
