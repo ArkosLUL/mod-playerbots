@@ -331,9 +331,9 @@ not holding Algalon, and always a bot, taunts every loose one onto itself. One c
 has it active: one spawned 53 yd out and 26 yd up never came below 16 yd, evaded home ~8.5 s after each wave
 woke it, still selectable, and held the handler on `taunt` 80 s with the rest held and holes spare. More than
 7.5 yd above the floor, where no hole takes one (2-23 s of descent after waking), it isn't kited, nor taunted
-outside the gather. The field picks constellations in 2D and `SpellHit` ignores one over 5 yd up only after
-both combat reaches (1.5 default, the hole's 1.0): at the old 5 yd, ones diving 6-7.7 yd up closed holes
-unwatched. At Big Bang it **hides last**,
+outside the gather: the field picks constellations in 2D, and `SpellHit`'s 5 yd height limit counts past both
+combat reaches (1.5 default, the hole's 1.0), so ones diving 6.4-7.2 yd up have closed holes. At Big Bang it
+**hides last**,
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
 hole, nobody else's, else its shelter, and waits there (`hold`; with a star under only a tank above the explosion's

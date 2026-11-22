@@ -327,8 +327,8 @@ In the 13 older traces, constellations on someone other than the handler closed 
   up to 7.5 yd up: `npc_living_constellation::SpellHit` ignores 65509 when `GetDistanceZ > 5`, which
   subtracts both combat reaches (model 28741 has none, so 1.5; the Black Hole's 28460 is 1.0 since
   `2026_11_06_01`), and 65509 (target 7, entries) picks non-players in 2D (`Spell.cpp`
-  `WorldObjectSpellAreaTargetCheck`). Holes closed at +6.4 (uld3 2:30.9), +7.2 (uld1 3:16.5), +7.7 (uld3
-  3:21.5).
+  `WorldObjectSpellAreaTargetCheck`). Holes closed at +6.4 (uld3 2:30.9), +7.2 (uld1 3:16.5), +7.2 (uld3
+  3:21.5; +7.7 a second earlier), each the eater's last snapshot before the close.
 - Bug (the kite flag): uld1's handler stood still in `cross` 4 × 12.6 s (2:11.5, 2:26.2, 2:41.6, 2:57.0) on
   hole 1617. The cross spot (1660.3, -273.9), 40 yd out at bearing 46°, came back from the floor check
   within 2 yd of the handler (no `move` row, no `stuck` note: the only path through the action that fits);
