@@ -291,11 +291,12 @@ The tracker marks the focus star with the **star** icon for humans; skull would 
 ## Holes are a resource
 
 Holes exist only where a star died (it wanders 25 yd from its spawn first, so anywhere in the room), and
-every constellation eats one. With a Big Bang ≤ 30 s away one hole is kept out of the kite, never the one
-nearest the hold spot (the raid's; a latched kite hole there is dropped), and
-`urgent` (no hole, cast due or running) puts every ranged DPS on the star team. A slot buried under a
-hole is stepped aside from the slot itself, nearest ring first, up to 12 yd; a bot standing in one outside a
-cast leaves it.
+every constellation eats one. From 60 s before a Big Bang through its cast the kite keeps off the two holes
+nearest the hold spot (the raid's; a latched kite hole there is dropped): wave 3's constellations dive on
+healers from 20 s before Big Bang 2 and close holes, and with the kite's one left the raid had none (19
+dead). `urgent` (no hole, a cast ≤ 30 s away or running) puts every ranged DPS on the star team. A slot
+buried under a hole is stepped aside from the slot itself, nearest ring first, up to 12 yd; a bot standing
+in one outside a cast leaves it.
 
 A bot phased outside a cast is alone in the void with the phase-16 Dark Matter, which kills a healer in
 about 3 s. So no walk may clip a field: dodges and exits reject ground whose straight path passes within
@@ -340,7 +341,7 @@ hole, nobody else's, else its shelter, and waits there (`hold`; with a star unde
 top roll, since a handler going straight in closed the only hole on the other tank) until every hider bound for
 that hole is in (bots by shelter, humans by the nearest hole, kite hole included), or until its walk plus 2 s is left: a tank
 is caught out under its walk plus 1.5 s, and with the same threshold a 250 ms tick read that first. From 10 s
-before the cast it only taunts (`gather`), keeping its kite hole unless that became the raid's: a constellation
+before the cast it only taunts (`gather`), keeping its kite hole unless that became one of the raid's: a constellation
 keeps its victim 9.5 s from the cast start, and one chasing a healer closed a hole a ranged was walking to.
 Any bot a constellation chases waits the same way at its shelter, and the count leaves chased bots out: one
 chasing a healer took the nearest hole of 12 bots in the cast, and 8 died running to the last.
@@ -369,7 +370,7 @@ else's shelter pick would skip the hole. A held one goes to a spare hole that fi
 is taunted: taunting each time the class taunt came back walked the handler off its stage every 8 s, and with
 healers and diseases peeling them it crossed 5 times in 305 s. Once held, the taunt's spot past the hole is
 dropped: a stage walk kept on it found no way round and stood still until the next taunt (`stuck`, a walk refused
-standing still). Never kited: the raid's hole with Big Bang due, and the only
+standing still). Never kited: the raid's two holes with Big Bang due, and the only
 hole within 35 yd of the hold spot, the swap tanks' reach. The walks run at combat priority, so the exit and
 the meteor dodge always win over them: a straight forced walk crossed the field, and its booking refused both
 the tank slot walk and the exit when the handler took him as Big Bang began. Its movement rule still passes
