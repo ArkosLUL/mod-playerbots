@@ -361,7 +361,8 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The shed's next hop: whichever end of a 1 yd line through the bot's spot it isn't standing on, and how
 // long the hop has to stay up to cover the next two Biting Cold ticks. False when no end is usable (a live
-// icicle, or the floor check pulled it in), and then the shed walks its legs.
+// icicle, or the floor check pulled it in) or a melee spot is out of its target's reach, and then the shed
+// walks.
 bool GetHodirShedHop(PlayerbotAI* botAI, Player* bot, Position& out, uint32& flightMs);
 
 void LatchHodirShedHop(Player* bot, Position const& to);

@@ -355,9 +355,10 @@ spot, with melee in reach of him 61-76% of it and Starlight held 67-82%.
   booking). `IsHodirShedHopInFlight` matches the spline's destination, since a knockback takes the same
   slot. Up, the shed returns false so instants go out. A normal cast is left to finish, since a hop
   launches mid-cast and cancels it where a walk waits; a channel is broken.
-- **Walking legs remain only where no hop end works**: inside a live icicle's dodge trigger (4.5 / 7.5,
-  tanks exempt) or pulled within `_SHED_HOP_MIN_TRAVEL` 0.3 by the floor check. `hodir.shuttle` reads
-  `hop`, `cut`, or the fallback leg's rule.
+- **Walking legs remain only where no hop works**: an end inside a live icicle's dodge trigger (4.5 /
+  7.5, tanks exempt), both pulled within `_SHED_HOP_MIN_TRAVEL` 0.3 by the floor check, or a melee spot
+  out of `GetMeleeRange` of its victim: every Frozen Blows taunt moves him, and the legs close on him
+  where a hop stays put. `hodir.shuttle` reads `hop` once one launches, `cut`, or the fallback leg's rule.
 
 **A crowd or solo leg must travel at least `_SHUTTLE_HALF_LEG`** (`goesSomewhere` in
 `DeriveHodirShuttleLeg`), the travel floor of

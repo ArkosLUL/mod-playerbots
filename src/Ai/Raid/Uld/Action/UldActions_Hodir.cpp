@@ -222,9 +222,9 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
         return true;
     }
 
-    // No hop end usable (a live icicle, or the floor check pulled both in), so walk. Hold one leg till it's
-    // walked instead of re-deriving under the walk. On arrival derive the next leg, don't stop: only the
-    // chain covers consecutive aura ticks.
+    // No hop (a live icicle, the floor check pulled both ends in, a melee spot out of reach), so walk. Hold one leg
+    // till it's walked instead of re-deriving under the walk. On arrival derive the next leg, don't stop:
+    // only the chain covers consecutive aura ticks.
     if (!IsEmptyPosition(_leg))
     {
         float const remaining = bot->GetExactDist2d(&_leg);

@@ -336,3 +336,28 @@ with `movegen` 16 (effect) in flight.
 of each shed beyond 2 yd of his centre: `MoveJump` can't keep the facing (`OrientationFixed` isn't
 reachable from it). If melee dps during sheds matters, the options are a module-side spline that sets
 `OrientationFixed` (shared movement code) or a core `MoveJump` option.
+
+**Review (round 4).** Core claims hold: `spell_hodir_biting_cold_player_aura` ticks on `EFFECT_0`
+(`SPELL_AURA_PERIODIC_DUMMY`), so `GetEffect(EFFECT_0)` reads the right timer; `AuraEffect::Update`
+keeps `m_periodicTimer` as time to the next tick; `MoveJump` launches at `Mutate` with
+`generatePath` false, so the spline ends exactly on the latched end. `--shed` on window 8 reproduces
+the walking table.
+- Fixed, bug: a melee hop home is a world point, but the melee spot is wherever he is. In window 8's
+  melee sheds he moved 4+ yd during 8 of 16 (uld1), 1 of 7 (uld2) and 2 of 10 (uld3), 10 of the 11 with
+  a taunt inside the shed; a home left where the shed started would have had him in reach 55 / 91 /
+  47% of the samples of sheds that started in reach, and 11 / 1 / 5 melee sheds started out of his
+  reach already. Hops kept such a bot hopping out of reach for the whole shed, since the shed outranks `reach
+  melee`. `GetHodirShedHop` now returns false for a melee non-tank whose home is beyond
+  `GetMeleeRange` of its victim (him, or a block it is breaking, which then keeps its hops), so the
+  walking legs (which prefer points near him) close the gap; once a leg moves it 1.5 yd the home
+  re-latches and hops resume.
+- Fixed, minor: the `hodir.shuttle` `hop` probe fired before `JumpTo`, so a refused hop (a walk still
+  booked) read as one; it now fires in `LatchHodirShedHop`, after the jump went out.
+- Fixed, minor: a tank standing in Starlight hopped square to the zone, not to him, against the
+  findings doc ("square to him", like the fallback legs); `HodirShedHopAxis` now skips Starlight for
+  tanks.
+- Left: tanks hop square to him, so he sits at ~90° and is behind them through the second half of
+  each hop and the pause after it (no parry or block, no swings). The walking legs did the same, so
+  no regression; radial hops would trade it for a full outbound half facing away.
+- Next window adds: `--shed` melee walked legs above zero (the out-of-reach sheds), with melee in
+  reach still the figure to judge.

@@ -994,8 +994,8 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
 
 // Melee hop toward him and back. A spline turns the bot the way it travels, and a swing only lands with
 // him within 60 degrees of its facing (or the bot within 2 yd of his centre), so every other hop keeps
-// swinging. The rest hop square to whatever they mustn't drift off: the Starlight zone they stand in,
-// else him, so the caster band and a tank's hold don't move.
+// swinging. Tanks hop square to him so the hold doesn't move, the rest square to the Starlight zone they
+// stand in, else to him, so the caster band holds.
 static float HodirShedHopAxis(PlayerbotAI* botAI, Player* bot)
 {
     auto const bearingFrom = [bot](Position const& from)
@@ -1006,11 +1006,13 @@ static float HodirShedHopAxis(PlayerbotAI* botAI, Player* bot)
 
     Unit* hodir = GetHodir(botAI);
     bool const offHodir = hodir && bot->GetExactDist2d(hodir) >= ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL;
-    if (offHodir && PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot))
+    bool const tank = PlayerbotAI::IsTank(bot);
+    if (offHodir && PlayerbotAI::IsMelee(bot) && !tank)
         return bearingFrom(hodir->GetPosition());
 
     Position zone;
-    if (GetHodirStarlightZoneAt(botAI, bot, zone) && bot->GetExactDist2d(&zone) >= ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL)
+    if (!tank && GetHodirStarlightZoneAt(botAI, bot, zone) &&
+        bot->GetExactDist2d(&zone) >= ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL)
         return bearingFrom(zone) + square;
 
     if (offHodir)
@@ -1038,6 +1040,14 @@ bool GetHodirShedHop(PlayerbotAI* botAI, Player* bot, Position& out, uint32& fli
     }
 
     Position const& home = latched->second.home;
+
+    // A melee spot is only worth keeping while what it hits is in reach. Every Frozen Blows taunt moves
+    // him, and the walking legs close on him where a hop would stay put.
+    if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot))
+        if (Unit* victim = bot->GetVictim())
+            if (victim->GetExactDist2d(&home) > bot->GetMeleeRange(victim))
+                return false;
+
     float const dx = std::cos(latched->second.axis) * ULDUAR_HODIR_SHED_HOP_HALF;
     float const dy = std::sin(latched->second.axis) * ULDUAR_HODIR_SHED_HOP_HALF;
     std::array<Position, 2> ends = {
@@ -1075,10 +1085,6 @@ bool GetHodirShedHop(PlayerbotAI* botAI, Player* bot, Position& out, uint32& fli
                                                           : static_cast<int32>(ULDUAR_HODIR_BITING_COLD_TICK_MS);
     int32 const next = tick ? std::clamp(tick->GetPeriodicTimer(), 0, period) : period;
     flightMs = static_cast<uint32>(next + period) + ULDUAR_HODIR_SHED_HOP_TICK_MARGIN_MS;
-
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.shuttle", "hop");
-
     return true;
 }
 
@@ -1088,6 +1094,9 @@ void LatchHodirShedHop(Player* bot, Position const& to)
     auto const latched = latches.find(bot->GetGUID());
     if (latched != latches.end())
         latched->second.to = to;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.shuttle", "hop");
 }
 
 bool IsHodirShedHopInFlight(Player* bot)

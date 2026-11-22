@@ -53,7 +53,7 @@ private:
 
 // Shed Biting Cold by moving: a stack drops only on the second moving tick in a row, so this hops back
 // and forth on the bot's spot down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, each hop up across two ticks.
-// Walks 6 yd legs instead, each held until walked, where no hop end is clear.
+// Walks 6 yd legs instead, each held until walked, where no hop works.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
