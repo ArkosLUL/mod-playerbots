@@ -169,6 +169,16 @@ bool XT002DebuffCarrierAction::InsideParkingLot() const
     return false;
 }
 
+bool XT002DebuffCarrierAction::CarriedBombUnderSearingLight() const
+{
+    Aura* light = bot->GetAura(GetXT002SearingLightSpellId(bot));
+    if (!light || !bombSeenMs)
+        return false;
+
+    uint32 const lightAge = static_cast<uint32>(std::max(0, light->GetMaxDuration() - light->GetDuration()));
+    return getMSTimeDiff(bombSeenMs, getMSTime()) <= lightAge;
+}
+
 float XT002DebuffCarrierAction::TravelReach(uint32 remainingMs) const
 {
     if (remainingMs <= ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS)
@@ -328,8 +338,8 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
 }
 
 XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std::list<Creature*> const& voidZones,
-                                                                           float reach, float& cellX,
-                                                                           float& cellY)
+                                                                           float reach, bool bombLive,
+                                                                           float& cellX, float& cellY)
 {
     struct Cell
     {
@@ -338,12 +348,12 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
         float z;
         bool reachable;
         float lane;
+        bool clearOfRaid;
         bool roomy;
         float distance;
     };
 
     std::vector<Cell> cells;
-    float nearestDistance = std::numeric_limits<float>::max();
 
     for (XT002BombLot const& lot : GetXT002BombLots(bot))
     {
@@ -366,11 +376,12 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
             bool const reachable = distance + ULDUAR_XT002_BOMB_CELL_ARRIVED <= reach;
             float const lane = std::min(ApproachClearance(candidateX, candidateY, voidZones),
                                         ULDUAR_XT002_BOMB_APPROACH_CLEARANCE);
+            bool const clearOfRaid =
+                !bombLive || RaidClearance(candidateX, candidateY) >= ULDUAR_XT002_GRAVITY_BOMB_PULL_RADIUS;
             bool const roomy = nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE;
 
-            cells.push_back({candidateX, candidateY, lot.origin.GetPositionZ(), reachable, lane, roomy,
-                             distance});
-            nearestDistance = std::min(nearestDistance, distance);
+            cells.push_back({candidateX, candidateY, lot.origin.GetPositionZ(), reachable, lane, clearOfRaid,
+                             roomy, distance});
         }
     }
 
@@ -386,6 +397,8 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
             return left.reachable;
         if (left.lane != right.lane)
             return left.lane > right.lane;
+        if (left.clearOfRaid != right.clearOfRaid)
+            return left.clearOfRaid;
         if (left.roomy != right.roomy)
             return left.roomy;
         return left.distance < right.distance;
@@ -393,6 +406,12 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
 
     cellX = cells.front().x;
     cellY = cells.front().y;
+
+    bool const wantClear = cells.front().clearOfRaid;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (Cell const& cell : cells)
+        if (cell.clearOfRaid || !wantClear)
+            nearestDistance = std::min(nearestDistance, cell.distance);
 
     bool const inVoidZone = StandingInVoidZone(voidZones);
 
@@ -449,11 +468,14 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (hasBomb)
+        bombSeenMs = getMSTime();
+
     Unit* xt002 = GetXT002(botAI);
 
     bool const heartbreak = IsXT002HeartbreakActive(bot, xt002);
 
-    bool const steppingOffOwnBomb = !hasBomb && heartbreak && InsideParkingLot();
+    bool const steppingOffOwnBomb = !hasBomb && heartbreak && CarriedBombUnderSearingLight() && InsideParkingLot();
 
     std::list<Creature*> voidZones;
     if (heartbreak && xt002)
@@ -471,7 +493,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         {
             float cellX = 0.0f;
             float cellY = 0.0f;
-            switch (ParkVoidZone(voidZones, reach, cellX, cellY))
+            switch (ParkVoidZone(voidZones, reach, hasBomb, cellX, cellY))
             {
                 case ParkResult::Moving:
                     return true;

@@ -35,6 +35,8 @@ What the generic views miss here:
   first until it's above 90%; the bombs view lists each carrier that went out of range, who was sent, how close
   it got, when it was in range, its heals and shields on the carrier, the carrier's hp when the bomb hit (off
   the hit itself) and when the healer was back on its slot.
+- **A melee carrier's bomb lands among the melee** when it parks in the lot's near rows, 10-12 yd from bots on
+  XT's south side: the bombs view counts the other raiders each bomb hit after Heartbreak.
 """
 from __future__ import annotations
 
@@ -78,6 +80,8 @@ HEAL_RANGE = 38.5
 BOMB_DEATH_MS = 5000
 # the bomb's own hit on its carrier shares a tick with the aura's removal (0-1 ms apart in the 25-man traces)
 BOMB_HIT_MS = 1000
+# the splash on everyone else near the carrier, 0-500 ms after the aura's removal
+BOMB_SPLASH = (63025, 64233)
 # the point at the end of an `xt002.slot` note, "<slot>/<of> x,y,z"
 SLOT_POINT = re.compile(r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),-?\d+(?:\.\d+)?$")
 SEARING_LIGHT_SPOT = "ULDUAR_XT002_SEARING_LIGHT_SPOT"
@@ -710,6 +714,33 @@ def show_bombs(trace: Trace) -> None:
     sent_rows = [row for row in rows if row["healer"]]
     if sent_rows:
         print(f"  {sent_summary(sent_rows)}")
+    line = bystanders_line(trace, bombs, deaths)
+    if line:
+        print(f"  {line}")
+
+
+def bystanders_line(trace: Trace, bombs: list[dict], deaths: list[dict]) -> str | None:
+    """Raiders other than the carrier that a bomb's splash hit after Heartbreak, when carriers park in the lots,
+    and those of melee carriers, whose lot sits closest to the raid."""
+    heartbreak = heartbreak_at(trace)
+    if heartbreak is None:
+        return None
+    splashes = [rec for rec in trace.of("dmg") if rec.get("sp") in BOMB_SPLASH]
+    total = melee_bombs = hit = melee_hit = dead = 0
+    for bomb in bombs:
+        if bomb["until"] < heartbreak:
+            continue
+        victims = {rec["d"] for rec in splashes
+                   if rec.get("d") != bomb["g"] and 0 <= rec["t"] - bomb["until"] <= BOMB_HIT_MS}
+        melee = trace.role(bomb["g"]) == "melee"
+        total += 1
+        melee_bombs += melee
+        hit += len(victims)
+        melee_hit += len(victims) if melee else 0
+        dead += sum(1 for death in deaths
+                    if death["g"] in victims and 0 <= death["t"] - bomb["until"] <= BOMB_DEATH_MS)
+    return (f"after Heartbreak {total} bombs hit {hit} other raiders, {dead} dead within {BOMB_DEATH_MS // 1000} s;"
+            f" melee carriers' {melee_bombs} hit {melee_hit}")
 
 
 def carrier_hp(row: dict) -> str:

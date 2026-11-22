@@ -315,7 +315,8 @@ class Bombs(unittest.TestCase):
             " carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n"
             "    Mender in range 3:25.000 with the carrier at 50%, 2 heals on it for 15.5k (2.5k over),"
             " first 3:26.000, its shields absorbed 4.2k\n"
-            "  sent healers: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%\n"))
+            "  sent healers: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%\n"
+            "  after Heartbreak 1 bombs hit 0 other raiders, 0 dead within 5 s; melee carriers' 1 hit 0\n"))
 
     def test_carrier_nobody_reached_is_killed_by_its_bomb(self):
         self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, nobody sent, nearest healer 50 yd"
@@ -331,6 +332,27 @@ class Bombs(unittest.TestCase):
                       " carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n", text)
         self.assertIn("    Mender never in range, 2 heals on it for 15.5k (2.5k over), first 3:26.000,"
                       " its shields absorbed 4.2k\n", text)
+
+    def test_raiders_the_splash_hit_are_counted(self):
+        bystander = 7709
+        records = self.bomb_pull(sent=False)
+        end = records.pop()
+        records[0]["roster"].append({"g": bystander, "n": "Brawler", "r": "melee", "c": 1, "h": 0})
+        records += [
+            {"t": 209400, "e": "dmg", "s": XT, "d": bystander, "sp": 64233, "a": 14500, "hp": 60.0},
+            {"t": 209400, "e": "dmg", "s": XT, "d": TANK, "sp": 64233, "a": 9000, "hp": 100.0},
+            # the carrier's own splash row is its bomb, not a bystander hit
+            {"t": 209400, "e": "dmg", "s": XT, "d": self.CARRIER, "sp": 64233, "a": 14500, "hp": 10.0},
+            {"t": 211000, "e": "death", "g": bystander, "killer": XT, "x": 893.0, "y": -40.0, "z": 409.8,
+             "rewind": [[209400, XT, 64233, 14500]]},
+            end,
+        ]
+        self.assertIn("  after Heartbreak 1 bombs hit 2 other raiders, 1 dead within 5 s; melee carriers' 1 hit 2\n",
+                      printed(xt.show_bombs, load(records)))
+
+    def test_no_bystander_line_without_heartbreak(self):
+        records = [rec for rec in self.bomb_pull(sent=False) if not (rec.get("e") == "cast" and rec.get("sp") == 64193)]
+        self.assertNotIn("after Heartbreak", printed(xt.show_bombs, load(records)))
 
     def test_a_bomb_hit_far_from_the_expiry_is_not_read(self):
         records = self.bomb_pull(sent=True)
