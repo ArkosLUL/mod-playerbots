@@ -5,16 +5,17 @@ Strategy key `ulduar`, one strategy for all 14 encounters. Cross-raid convention
 
 Files are split per boss: `Action/UldActions_<Boss>.{h,cpp}`, `Trigger/UldTriggers_<Boss>.{h,cpp}`,
 with `Action/UldActions.h` and `Trigger/UldTriggers.h` as **thin umbrella headers** including the
-parts, so `UldActionContext.h`, `UldTriggerContext.h` and the registration maps include one header each.
+parts, so `UldActionContext.h`, `UldTriggerContext.h` and the registration maps include one header
+each.
 
 Every boss is an [encounter definition](../README.md#file-layout-and-wiring) in
 `Definition/UldDefinition_<Boss>.cpp`, listed in `Definition/UldDefinitions.h`; the two contexts
 register only definitions, and `UldStrategy.cpp` adds each boss's nodes and multipliers in a fixed
-per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids.
-`UldEncounterGate.h` and `Util/UldScripts.h` copy what they need from the core's `ulduar.h`, which sits
-under `scripts/` and can't be included: boss ids, `GetCreature` data types, NPC entries, and the
-Keeper bits of `PERSISTENT_DATA_WATCHERS_MASK`. `Util/UldData.h` holds only values no single
-encounter owns; a boss's ids, tuning and positions go in its `Util/UldEncounter_<Boss>.h`.
+per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids; it and
+`Util/UldScripts.h` copy the boss ids, `GetCreature` data types, NPC entries and the Keeper bits of
+`PERSISTENT_DATA_WATCHERS_MASK` from the core's `ulduar.h`, which sits under `scripts/` and can't be
+included. `Util/UldData.h` holds only values no single encounter owns; a boss's ids, tuning and
+positions go in its `Util/UldEncounter_<Boss>.h`.
 
 Each boss doc records the upstream script and DBC facts its strategy keys off. Every one of them once
 silently disabled something, so re-check them after any parent-repo sync.
@@ -40,18 +41,18 @@ silently disabled something, so re-check them after any parent-repo sync.
 
 **Ulduar hard modes are a raid choice, not the 10/25 heroic flag**, so the "heroic comes free via a
 spell-id predicate" trick from other raids does not apply. Bots follow the **follower model**: they
-never *trigger* a hard mode, they react once the raid has. In an all-bot raid nobody triggers one —
-accepted.
+never *trigger* a hard mode, they react once the raid has; in an all-bot raid nobody triggers one
+(accepted).
 
 The four `Playerbots.Ulduar*HardMode` options (Vezax, Iron Assembly, XT-002, Mimiron; all default 0)
 are the **single source of truth**: each `Is*HardModeActive` is a plain config read. A live server
-signal on top of the config was removed: it depended on this core's scripting details, **silently
-disabled a whole boss's hard-mode handling** when a signal was missing, and was invisible to the
-operator who had turned the option on. **A boss gets an option only when its hard mode changes the
-plan before the mechanic shows** (vapors left alive, kill order, Heart burn, Firefighter camp). Flame
-Leviathan, Freya, Thorim and Yogg-Saron have none, so bots react whenever the raid triggers those. The
-per-boss triggers keep their own mechanic checks (hazard nearby, debuff on the bot, add alive), and
-**those are the real gate**.
+signal on top was removed: it depended on this core's scripting details, **silently disabled a whole
+boss's hard-mode handling** when a signal was missing, and was invisible to the operator who had set
+the option. **A boss gets an option only when its hard mode changes the plan before the mechanic
+shows** (vapors left alive, kill order, Heart burn, Firefighter camp). Flame Leviathan, Freya, Thorim
+and Yogg-Saron have none, so bots react whenever the raid triggers those. The per-boss triggers keep
+their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those are the real
+gate**.
 
 **The config check lives in the detector, not scattered across triggers**: detectors are the only
 coupling to server internals, and triggers stay thin.
@@ -59,9 +60,9 @@ coupling to server internals, and triggers stay thin.
 Still dynamic, because they are *phase* or target selection rather than hard-mode detection:
 `IsSteelbreakerEmpowered` (must not arm before phase 3), `GetIronAssemblyNextKillTarget`,
 `GetFlameLeviathanNearestTowerHazard`. `YoggActiveKeeperMask` and the file-static
-`GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
-`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone: the
-Keepers are freed in-instance, so config can't say which are up.
+`GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives**, still reading
+`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript` because Keepers are freed in-instance and
+config can't say which are up, so that dependency is not fully gone.
 
 Flame Leviathan's hazard callers pass `FL_TOWER_ALL`, and hazards are found by NPC entry, so destroyed
 towers contribute nothing. Thorim's Frost Resistance paladin waits for `sifJoined`, latched on Sif's
@@ -71,8 +72,8 @@ first Blizzard.
 
 Three hard modes tried it and found it wrong:
 
-- **Vezax** `GetData(1)` returns `lootMode == 3`, set only in `DoAction(2)` — i.e. **after** the
-  Saronite Animus dies. It is a completion flag, not a live signal; the truth is "Animus (33524) alive".
+- **Vezax** `GetData(1)` returns `lootMode == 3`, set only in `DoAction(2)`, **after** the Saronite
+  Animus dies: a completion flag, not a live signal. The truth is "Animus (33524) alive".
 - **Hodir** `GetData(3)` is the 3-minute timer flag; deliberately unused, because the buff
   optimisation is harmless past the window.
 - **Mimiron** `GetData(1)` is authoritative but lives on Mimiron himself, who sits in his pod and
@@ -132,8 +133,8 @@ gate opens instead of closing. That fallback is ungated, so it runs in every oth
 
 Two more fall back to a grid search, so no gated boss reaches that open default. **Mimiron's mechs**:
 the sweep lags the pull and skips unselectable units, which every mech is through a handover, and
-missing all three would fall through and lust. **Thorim**, near his encounter (`NearThorimEncounter`): his gauntlet runs
-about 190 yd up the corridor, past `SightDistance`.
+missing all three would fall through and lust. **Thorim**, near his encounter
+(`NearThorimEncounter`): his gauntlet runs about 190 yd up the corridor, past `SightDistance`.
 
 Open question that cannot be answered from source: whether the Mimiron mechs and the Assembly council
 members are `IsDungeonBoss()`-flagged. If they are not, lust never fires on them and those two gates
@@ -165,15 +166,15 @@ XT-002 is covered by `XT002TargetGuardMultiplier`, which vetoes for the whole en
 main tank is the wrong sink while a Pummeller is out.
 
 Iron Assembly leaves the veto off on purpose: its own redirect node at `ACTION_RAID + 2` outranks the
-class-generic nodes (`ACTION_HIGH + 7`) and spends the cooldown on whoever tanks the kill target, so they
-only fire with no kill target up.
+class-generic nodes (`ACTION_HIGH + 7`) and spends the cooldown on whoever tanks the kill target, so
+they only fire with no kill target up.
 
 **Razorscale's phase comes from the static `IsFlyingPhaseFor(Unit*)`**, which takes the unit the
 multiplier already holds, so `UpdateBossAI()` (which reassigns the main tank) never runs. It holds
 outside `IsGroundPhaseFor` (Z ≤ 440, under 50%, no stun aura), harpoon knockdowns included.
 
-A pull-window redirect uses BT's stateless `boss->GetHealthPct() > 95.0f`, not a combat clock: it needs
-no new state and doubles as the fresh-spawn / fresh-phase test. Use `GetUldUnitByEntry`, not
+A pull-window redirect uses BT's stateless `boss->GetHealthPct() > 95.0f`, not a combat clock: it
+needs no new state and doubles as the fresh-spawn / fresh-phase test. Use `GetUldUnitByEntry`, not
 `"find target"`, for multi-tank detection: a bot parked on boss A never resolves boss B.
 
 Hodir subclasses `RaidRedirectThreatAction` as `HodirRedirectThreatAction`, feeding whichever tank
@@ -193,8 +194,8 @@ Sev-1 fails **even with the raid cheat on**:
 Yogg Crusher/Constrictor tentacles, illusion-room adds and P2 movement (cheat instakill / teleport).
 Ominous Clouds are off this list: `yogg-saron phase 1 spacing` dodges them without the cheat.
 
-**No boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank swap**: each rolls its own
-detector instead (Thorim on the Unbalancing Strike debuff, Kologarn on Crunch Armor stacks, Hodir on
+**No boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank swap**: each rolls its
+own detector (Thorim on the Unbalancing Strike debuff, Kologarn on Crunch Armor stacks, Hodir on
 Frozen Blows). There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
 requirement.
 

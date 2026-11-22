@@ -28,9 +28,8 @@ Verified against `boss_malygos.cpp`:
 - **P1 suppresses no heal or buff cast.** The P1 rules block no `CastSpellAction` but the Blink,
   Disengage and Taunt families and, for everyone but his victim, Charge. "Disc priests never shield on
   Malygos" was a generic priest bug ([../classes/priest.md](../classes/priest.md)). P1 leaves healers
-  targetless; only `raid healer engine`
-  ([README.md](README.md#targeting-the-whole-fight)) keeps them on the combat engine, where the
-  shield lives.
+  targetless; only `raid healer engine` ([README.md](README.md#targeting-the-whole-fight)) keeps them
+  on the combat engine, where the shield lives.
 
 ## Phase model
 
@@ -41,7 +40,7 @@ combat, Malygos non-attackable, not mounted.
 P4 exists because during P2→P3 the boss is untargetable and the bot not yet on its drake: with no
 phase every override lifted and **the default raid strategy resumed on a collapsing platform**. An
 `Exclusive` rule holds the raid at centre on `malygos position`. P4 also catches the **pull intro**,
-which wants the P1 hold spots instead (below); full health separates the intro from the two real
+which wants the P1 hold spots instead (below); full health tells the intro from the two real
 transitions, both at 50%.
 
 `GetMalygos` falls back to `FindNearestCreature` so detection survives the non-attackable flag.
@@ -189,11 +188,11 @@ spread (`combat formation move`) and were dragged back next tick. The spots need
 named. They only *target* — `AttackAction::Attack` stops nothing but a sub-combat-priority walk — so
 a melee bot peeling onto a spark stays put.
 
-His victim's own Reach and ReachHeal are blocked too: he parks just outside what `ReachMeleeAction`
-calls melee, so reach would walk the tank in every tick while the position action walks him back out.
-The position action returns false once a bot is on its spot, the tank included, or it would outrank
-the rotation and stop him attacking. A P1 rule blocks `drop target` for DPS, since any of them may be
-holding a Power Spark rather than the boss.
+His victim's Reach and ReachHeal are blocked too: he parks just outside what `ReachMeleeAction` calls
+melee, so reach would walk the tank in every tick against the position action. That action returns
+false once a bot is on its spot, the tank included, or it would outrank the rotation and stop him
+attacking. DPS have `drop target` blocked in P1, since any of them may hold a Power Spark rather than
+the boss.
 
 **Only the assigned tank pulls him back.** `MalygosTargetAction` puts an off-tank on the boss (the
 spark peel is gated on `IsDps`, which a tank spec fails) and parks him on the stack, so a taunt from
@@ -243,9 +242,8 @@ matching on entry welded bots to an add they could never reach, and re-picking e
 equidistant Scions forever. Nexus Lords come first for everyone, ranged included — on the ground,
 tankable, quicker to die — and Scions are the ranged fallback once no Lord is in reach.
 `MalygosScionTankAssistMultiplier` zeroes `tank assist` onto a Scion: a tank that picks one ends up
-standing under it. A P2 `Block` on `Flee` keeps
-the generic flee from walking bots off the edge; the anti-fall recenter in `malygos position` bails
-for anyone in a vehicle.
+standing under it. A P2 `Block` on `Flee` keeps the generic flee from walking bots off the edge; the
+anti-fall recenter in `malygos position` bails for anyone in a vehicle.
 
 **Mages steal the Nexus Lords' Haste.** `npc_nexus_lord` self-casts `SPELL_HASTE` (57060) every
 20–30 s. `malygos spellsteal` takes it off the nearest Lord inside `spellDistance` by

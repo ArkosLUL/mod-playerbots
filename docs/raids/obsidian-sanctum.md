@@ -1,12 +1,11 @@
 # Obsidian Sanctum — Sartharion (map 615)
 
 Strategy key `wotlk-os`, files in `src/Ai/Raid/OS/`. Cross-raid conventions are in
-[README.md](README.md). Verified against
-`src/server/scripts/Northrend/ChamberOfAspects/ObsidianSanctum/`, `acore_world` and the DBC reference
-CSVs in `modules/mod-spell-tweaks/data/dbc-reference/`.
+[README.md](README.md). Verified against `src/server/scripts/Northrend/ChamberOfAspects/ObsidianSanctum/`,
+`acore_world` and the DBC reference CSVs in `modules/mod-spell-tweaks/data/dbc-reference/`.
 
 The strategy targets the 3-drake kill and degrades to 0/1/2-drake without special-casing. Like every
-instance strategy it runs on both engines, so the holds run out of combat too — which is why the
+instance strategy it runs on both engines, so the holds run out of combat too, which is why the
 off-tank is parked before the pull.
 
 Everything sits in `Definition/OSDefinition_Sartharion.cpp`, behind his encounter gate, except the
@@ -47,9 +46,10 @@ gives away the east end; each band was swept at 0.5 yd and is 100% ground:
 | 520–566 | 3227–**3268**: corridors, drake spots, off-tank |
 
 The west edge runs out to 3219.75 from Y 490 north, so the southern bands start at 3220: the tank's
-right hold needs that yard. It doubles as the freeze guard: with movement suppression live, an
-off-navmesh `MoveTo` strands a bot for the fight. **Targets** use the looser `InsideRoom` box `X 3208–3286, Y 474–591, Z ≤ 65`, so a
-Lava Blaze on the rim still counts while the drake perches do not.
+right hold needs that yard. The floor clamp doubles as the freeze guard: with movement suppression
+live, an off-navmesh `MoveTo` strands a bot for the fight. **Targets** use the looser `InsideRoom` box
+`X 3208–3286, Y 474–591, Z ≤ 65`, so a Lava Blaze on the rim still counts while the drake perches do
+not.
 
 **The two boxes leave an 18 yd band of lava that reads as "inside the room"** (`ROOM_MAX_X` 3286
 against a platform ending at 3268), so clamping every destination never caught a bot standing out
@@ -145,13 +145,13 @@ spread instead of stacking dispels.
 **Each drake is held where it lands**, on its own measured spot — no shared pile. Assignment walks
 the drakes **newest first**, because reverse call order is landing recency and the drake that just
 touched down is the one with nobody on it. Vesperon is held **north of his landing**, so his breath
-stops pointing down the raid line: the only spot level with his touchdown is west of it, straight
-down the line, whose east end is 9.5 yd away. From the north he settles around (3267, 549) facing up
-the empty rim, 17 yd from the raid's home hold (outside the 15 yd breath), with its left-wave hold
-71° off his facing. No spot is safe under **both** wave patterns, so a live wave takes
-the raid corridor Y and keeps X; the east anchor is only for blazes and whelps. Shadron's spot clears
-every right line and Vesperon's every left one. Under a right wave Tenebron's is the long walk, 27.9 yd
-to the raid corridor, and the wave needs 6.2 s from its summon to reach that X.
+stops pointing down the raid line: level with his touchdown is only west of it, straight down the
+line, whose east end is 9.5 yd away. From the north he settles around (3267, 549) facing up the empty
+rim, 17 yd from the raid's home hold (outside the 15 yd breath), its left-wave hold 71° off his
+facing. No spot is safe under **both** wave patterns, so a live wave takes the raid corridor Y and
+keeps X; the east anchor is only for blazes and whelps. Shadron's spot clears every right line and
+Vesperon's every left one. Under a right wave Tenebron's is the long walk, 27.9 yd to the raid
+corridor, and the wave needs 6.2 s from its summon to reach that X.
 
 The drakes are **boss-flagged**: `instance_encounters` credit rows for 30452/30451/30449 make
 `ObjectMgr` OR in `CREATURE_FLAG_EXTRA_DUNGEON_BOSS`, and the heroic entries carry `type_flags 108`
@@ -237,8 +237,9 @@ A corridor is 15 yd wide with 4 yd margins, so each group is effectively colline
 ordering is the only tool. **West to east, offsets from `RAID_ENTRY_ANCHOR_X` 3228.58: Sartharion +
 main tank (+0, the boss +7) → ranged/healers (+20) → off-tank (+33).** The boss faces the main tank,
 so his cones point west into the empty strip. Ranged and healers hold an 8 yd band along X
-(`RAID_LINE_TOLERANCE_X`) rather than a point, so a dozen bots don't pile onto one coordinate and
-fight the collision mover; Y keeps the tight corridor tolerance. Two rules enforce "only the off-tank eats it":
+(`RAID_LINE_TOLERANCE_X`), not a point, so a dozen bots don't pile onto one coordinate and fight the
+collision mover; Y keeps the tight corridor tolerance. Two rules enforce "only the off-tank eats
+it":
 
 1. **Nobody crosses west of a drake.** Everyone meets a landing 4 yd **east** of its coord, so the
    drake faces east into empty platform on touchdown, and the ranged line clears Shadron's
@@ -303,12 +304,11 @@ damage there or never arrives, `Y 487.0` is the fallback; it costs under 1.5 yd 
 The drag ends when the tank arrives with the boss in melee range, or the boss is south of Y 522 by any
 route, or `MAIN_TANK_DRAG_TIMEOUT_MS` 45000 elapses — **measured from the drag, not from the pull**.
 The tank reaches the corner in ~3 s and the boss needs 7-9 s to cross the room, so arrival alone
-proves nothing; the dwell lets him settle facing the tank rather than mid-turn. Arrival is cleared if
-the tank is pushed off, so a tsunami mid-wait restarts the dwell. The drag takes ~10 s and a wave can
-add ~11, so past the timeout the boss isn't following (a player holds threat), and the corner is
-lethal under a left wave.
-The give-up path logs one `LOG_WARN` per pull with the tank's position, the only way to tell "the boss
-never followed" from "`MoveTo` silently refused the off-mesh corner".
+proves nothing; the dwell lets him settle facing the tank, not mid-turn. Arrival is cleared if the
+tank is pushed off, so a tsunami mid-wait restarts the dwell. The drag takes ~10 s and a wave can add
+~11, so past the timeout the boss isn't following (a player holds threat), and the corner is lethal
+under a left wave. The give-up path logs one `LOG_WARN` per pull with the tank's position, the only
+way to tell "the boss never followed" from "`MoveTo` silently refused the off-mesh corner".
 
 **`os main tank cooldown` owns the main tank's defensives.** Each drake's aura covers the raid from
 the pull until that drake dies: Power of Shadron 58105 +100% fire taken, Vesperon's 61251 −25% health,
@@ -405,10 +405,10 @@ the entire raid**. Consequences:
 **The squad skips Tenebron's realm** — it holds nothing worth the trip.
 
 Squad is fixed at the pull by stable GUID sort and never reshuffled: **every DPS, melee included, plus
-the first two healers and the second off-tank**: the acolyte dies to whatever the raid brings, and
-damage left on the platform only lengthens the immunity. The main tank and the first off-tank always
-stay out.
-`OnThePlatform` is false for a shifted bot, so realm melee are not dragged back at a landing drake.
+the first two healers and the second off-tank**, since the acolyte dies to whatever the raid brings
+and damage left on the platform only lengthens the immunity. The main tank and the first off-tank
+always stay out. `OnThePlatform` is false for a shifted bot, so realm melee are not dragged back at a
+landing drake.
 
 ### In-realm kill order is flat
 
@@ -450,8 +450,8 @@ Acolyte of *Shadron* never went in.
   straight down the raid line at 57° — and his safe band (15 yd left, 5 yd right) has no room for it.
   One Void Blast on the tank beats a frontal breath on the whole ranged line. South comes first: it
   keeps both cones off the line and puts him back on his hold X. North is no better than east, since
-  the floor's west edge steps from 3220 to 3227 at Y 520 and turns a north step into a 5.6 yd move
-  east. X steps stay as the tail, for a fissure pinning him against the southern rim.
+  `PlatformMinX` steps from 3220 to 3227 at Y 520 and turns a north step into a 5.6 yd move east. X
+  steps stay as the tail, for a fissure pinning him against the southern rim.
 - **The off-tank steps along Y first too**: he sets the drake's facing. Held from the west on
   Shadron's spot, a 10 yd step east turns its breath onto the raid line, whose west end is 10.2 yd off
   on the same Y. X steps are his tail.
@@ -504,9 +504,8 @@ once", which never opened first on a good run (Tenebron lands at 30 s, the secon
 `os off platform` outranks both dodges: off the arena nothing can hit the bot and the bot can do
 nothing, so no mechanic is left worth reacting to. It moves to this bot's own hold at zero tolerance;
 the off-tank takes both of his anchor's axes, since his hold is a drake spot and the corridor Y only
-bought a second walk.
-Bounded by the 200 yd Sartharion search: enough, because it catches the first step off, not a bot
-already halfway across the zone.
+bought a second walk. Bounded by the 200 yd Sartharion search: enough, because it catches the first
+step off, not a bot already halfway across the zone.
 
 `os tank shapeshift` puts a druid tank back in bear form: the class strategy does that only from the
 combat engine, and the off-tank is out of combat between drakes. Only a druid who knows a bear form
@@ -607,10 +606,10 @@ two of one group on different holds at the same `t` is the half-and-half split t
 
 **Waves reach the trace only as `haz` rows**, written once each by `NoteTsunamiHazards` from the
 definition's tick, on one mechanic-tracker bot per instance, since `ClassifyTsunamiWave` already
-costs ten grid searches per bot per tick. Nothing else records them: a wave never enters combat so the watch list skips it,
-its damage is an aura on the creature rather than a dynamic object so there is no swept-hazard row,
-and the 40-slot snapshot sweep is spent on Onyx Sanctum trash and 52 cosmetic Twilight Eggs before it
-reaches one.
+costs ten grid searches per bot per tick. Nothing else records them: a wave never enters combat so
+the watch list skips it, its damage is an aura on the creature rather than a dynamic object so there
+is no swept-hazard row, and the 40-slot snapshot sweep is spent on Onyx Sanctum trash and 52 cosmetic
+Twilight Eggs before it reaches one.
 
 ## Known-open gaps
 
