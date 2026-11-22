@@ -420,14 +420,15 @@ hold lets through as a last resort:
 
 - uld2 Uldyaa Last Stand 4:43.2 at 13%, 0.4 s after its soulstone rise at the point (Steelbreaker on
   Uldyab). The punch node then spent Shield Wall at 5:13.2, so its 5:31.4 punch (`under 50k` at 100%)
-  found nothing and killed it at 5:32.7. With Last Stand kept, 5:13 takes Last Stand and 5:31 Shield Wall.
+  found nothing and killed it at 5:32.7. With Last Stand kept, 5:13 takes Last Stand, which still runs at
+  5:31 (20 s), so the node reads `covered` and the punch lands in its last 0.5 s (see the review below).
 - uld3 Uldzaa Divine Shield 4:10.3 at 13%, 0.7 s after its rise (Steelbreaker on Uldzab). Its Forbearance
   (25771, 2 min) locked Divine Protection through the punches at 4:38.3, 4:54.1 and 5:12.7, all `under`
   with no act row from the punch node (its trigger needs a castable button); Ardent Defender (31852)
   absorbed the first, the third killed it at 5:14.0.
 - uld3 Uldzab Survival Instincts 4:47.0 at 15%, Uldzaa Divine Protection 5:17.6 at 17%, uld2 Uldyab
-  Frenzied Regeneration 5:21.2 at 14%, all just risen; uld1 Uldxaa Divine Shield 3:59.6 at 20% as a parked
-  carrier.
+  Frenzied Regeneration 5:21.2 at 14%, all just risen; uld1 Uldxaa Divine Shield 3:59.6 at 20% as a
+  carrier walking to its point (swapped at 3:58.8, the punch cast before the swap landed at 3:59.58).
 
 Cause: `IronAssemblyTankDefensiveHeld` (`UldDefinition_IronAssembly.cpp:62` before) holds only at 25%+,
 and every rise starts at 13-19%. Divine Shield and a self Lay on Hands (`GenericPaladinStrategy.cpp:25-26`,
@@ -463,7 +464,18 @@ health, the member on it, punch or class node, and a count of class casts with n
 (1 / 2 / 3 here), and `postmortem.py --vetoes` rows `iron assembly tank defensive hold` on `last stand`,
 `survival instincts`, `frenzied regeneration`, `divine protection`, `divine shield` or `lay on hands` in
 the seconds after a rise. Class casts under 25% with Steelbreaker on the tank still go. `--punches`: a
-risen warrior's or paladin's next `under` punches find a button (Last Stand, then Shield Wall; Divine
-Protection with no Divine Shield before it), and fewer carriers die to a punch before their Meltdown (5
-here). Risk to watch: no risen tank dying to High Voltage before a heal lands, now that the rise's class
-casts no longer pad it (none of 10 rises here died inside 5 s).
+risen warrior's or paladin's next `under` punches find a button (Last Stand, or `covered` while it runs;
+Divine Protection with no Divine Shield before it), and fewer carriers die to a punch before their
+Meltdown (5 here). Risk to watch: no risen tank dying to High Voltage before a heal lands, now that the
+rise's class casts no longer pad it (none of 10 rises here died inside 5 s).
+
+**Review.** The six class casts, the rises, Forbearance on uld3 Uldzaa (4:10.3 until its 5:14.0 death)
+and the true last resorts re-read from the traces; root cause and fix hold. One fix: the hold also
+applied with Steelbreaker dead, where no punch is left to save a button for (normal mode's kill order,
+Molgeim or Brundir on the tank above 25%); it now needs him alive. Left, shared: `PickDefensive`
+(`RaidTankDefensive.cpp:92`) returns any running row as `covered` whatever its remaining time, and Last
+Stand (12976, `SPELL_AURA_MOD_INCREASE_HEALTH`) takes its 30% back on fade down to 1 hp
+(`HandleAuraModIncreaseHealth`). Punches come 15-20 s apart, so a Last Stand spent on one still covers
+the next and fades right after it lands (uld2 Uldyaa's 5:13 / 5:31 pair above). If round 7 shows a
+warrior dying just after a `covered` punch, the fix is shared: count a running row only if it outlasts
+the landing, and not Last Stand into its fade.

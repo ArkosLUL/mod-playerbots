@@ -62,19 +62,23 @@ bool IronAssemblyTankPinned(PlayerbotAI* botAI)
     return IronAssemblyFormationActive(botAI) && IronAssemblyAssignedBoss(botAI, botAI->GetBot());
 }
 
+// Only held for Fusion Punch, so a normal mode kill order frees them once Steelbreaker is dead.
 // Under the floor the class nodes are a last resort, but only while a council member is hitting the tank.
-// A tank rises at 13-19% and a parked Meltdown carrier gets there too, with nothing on either.
+// A tank rises at 13-19% and a swapped-out Meltdown carrier gets there too, with nothing on either.
 bool IronAssemblyTankDefensiveHeld(PlayerbotAI* botAI)
 {
     if (!IronAssemblyFormationActive(botAI))
+        return false;
+
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+    if (!targets.steelbreaker)
         return false;
 
     Player* bot = botAI->GetBot();
     if (bot->GetHealthPct() >= ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT)
         return true;
 
-    IronAssemblyTargets targets;
-    GatherIronAssemblyTargets(botAI, targets);
     for (Unit* member : {targets.steelbreaker, targets.molgeim, targets.brundir})
     {
         if (member && member->GetVictim() == bot)
