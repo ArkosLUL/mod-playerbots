@@ -149,3 +149,88 @@ Tauren two killed 14 of 21 in window 9 and Broln was hit within 2 s after 71% of
 46-59%, against ~35% as the bar. The question: may a disarm peel (Disarm, Dismantle) go on an iced champion whose
 victim is no tank? Recommended: yes, applied in the round after window 10 only if Broln or Narrhok still catch
 over ~35% of kites or top the deaths there.
+
+## Round 3 (2026-11-22, build 697052475)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head 697052475 --pulls 10`, binary 18:21
+(`hdr.bin` 1795364516), rounds 1 and 2 in it, roster DKs at full talents: toc1 `tr-20261122-162559-1` kill 7:07
+(`649_4_thrakgar_1795364950`), toc2 `tr-20261122-162559-2` wipe 3:47 (`649_3_erin-misthoof_1795364958`), toc3
+`tr-20261122-162559-3` kill 6:57 (`649_5_thrakgar_1795364962`). Scripts in the round's scratchpad `fc3/` (gone
+with it); the reader's new `--personal` cells cover the key ones.
+
+**Stop rules.** A wipe and 6 and 7 deaths: not polished. Round 3 picks a different failure.
+
+**Deaths by killing blow.**
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 6 | Narrhok (iced 87%) 2, ranged; Gorgrim (iced), Harkzog, Vivienne, Thrakgar 1 each |
+| toc2 wipe | 28 | Ruj'kah 6 + Cat 1, Maz'dinah 5, Ginselle 4, Narrhok (never iced: two ice DKs) 3, Gorgrim (never iced) 3, Harkzog 3, Broln 2 (after his ice DK died at 3:19), Erin 1. From 1:43, 5-6 champions on one ranged after another with no external left (three Hands of Sacrifice and a Hand of Protection went on Tocyak, an Enhancement bot, through 4-5 champion focuses at 0:11-1:30); 25 deaths in 2 min, raid DPS 82k (earlier toc2 kills 117-121k) |
+| toc3 kill | 7 | Narrhok (uniced till 5:05) 2: Bladestorm, melee; Ruj'kah 2; Harkzog 2; Ginselle 1 |
+
+The Tauren two: 9 of 41 (window 9: 14 of 21, window 8: 31 of 57).
+
+**Verdict on round 1 (kite): held in part.** `--personal` kite catches: Broln 9 of 22 (41%, window 9 71%), 6 of
+them Earth Shock, which no kite answers: melee 3 of 22. Narrhok 18/47, 13/24, 16/46, 40% (window 9 51%); iced
+19 of 57 (33%), free 28 of 60. 26 of his 47 catches came from kites started within 8 yd (already in reach:
+a CC broken or a switch next to the bot), 15 from 12-16 yd (Charge range). Maz'dinah 18 of 118 (15%).
+
+**Verdict on round 2 (snare): half held.** The autorepeat fix works: hunters take the snare duty (`faction
+champions snare` 12 OK rows on toc1, Wing Clip 10 and 16 on toc2 and toc3) and full-speed chases got a snare in
+18%, 27%, 36% (window 9 8-16%). The concussive guard never fired: no veto row, and the class still cast it (55
+`concussive shot on snare target` OK rows on toc1), iced 50 of 58, 6 of 28, 36 of 56 (window 9: 44/56, 43/52,
+33/53). Narrhok out of his Chains still killed 3 on toc2 and 2 on toc3.
+
+**Q1 measured.** Narrhok catches 40% of kites (iced 33%), Broln 41% (all iced, melee 14%); over ~35% both, so
+the question goes back to the user (below). Deaths: Narrhok 7 of 41, top on toc1 and tied on toc3; Ruj'kah tops
+the window with 9.
+
+**Picked: the melee gates miss the Tauren two (bug, the reach audit's row).**
+
+- White swings on non-tank raiders: Narrhok from a median 8.6, 8.1, 8.9 yd, 52-67% past 8, 23-34% past 10; Broln
+  11.3, 94% past 8, 76% past 10; Gorgrim and Maz'dinah 4.7-6.5, 0-9% past 8, 0-3% past 10.
+- Escape (`ToCHelpers_FactionChampionsBall.cpp:96` `ESCAPE_MELEE_REACH` 8): of the Tauren's swings on a mage,
+  warlock, priest or hunter, 48 of 74 came with no melee champion within 8 yd of the victim, so the escape saw
+  none; the rest 7 of 105. A Tauren chase parks at 8.075 yd (both reaches + 0.5). Every `fc.escape` with a Tauren
+  nearest had him within 8.2 yd, past 8 only by snapshot lag (twice).
+- Step-off (`:50` `STEP_OFF_TRIGGER` 8): the Tauren hit healers from past 8 yd on 14 of 18 swings, the rest 1 of
+  14. Sprint and Dash contact (`:60` `BOOST_CONTACT` 8): 9 of 13 on rogues and druids, the rest 6 of 24.
+  Disengage (`:118` `DISENGAGE_REACH` 5): Narrhok's 4 swings on hunters all from past 5.
+- Peel (`ToCHelpers_FactionChampionsDefence.cpp:143` `PEEL_VICTIM_REACH` 10): 16 of Narrhok's 58 free swings came
+  from past 10. Protect (`:169` `PROTECT_MELEE_REACH` 8): the >8 yd swings above go uncounted as attackers.
+  AoE dodge (`:84` `DODGE_MELEE_GAP` 8) the same distance, not measurable in a trace.
+
+**Picked too: the concussive guard's name (bug, small, independent).** `e.Block(..., {"concussive shot"})`
+(`ToCDefinition_FactionChampions.cpp:175`) lists the creators[] key, but a rule matches `getName()` and
+`CastSnareSpellAction::getName` returns `spell + " on snare target"` (`GenericSpellActions.h:399`). pblint passed
+it since a creators[] key counts as known.
+
+**Fix.** `FactionChampionsSwingReach` (`ToCHelpers_FactionChampions.cpp`): `GetMeleeRange` + `LEEWAY_BONUS_RANGE`,
+7.7 for most, 11.6 for the Tauren two. Escape, step-off, Sprint/Dash/Nitro contact, protect and the AoE dodge
+gate on it (8 → 7.7 for the rest); peel on it + 2.25 (10, 13.8); Disengage on `GetMeleeRange` (5.1, 8.9); the
+escape's nearest is the one deepest inside its reach. The kite's `KiteReach` became that helper. The guard lists
+`concussive shot on snare target`. pblint (shared tooling, no bot behaviour) adds a base's `getName()` suffix to
+the names a rule may list and reads an init list on the line after the colon. Reader `--personal`: the nearest
+melee champion and its distance at each escape, the escapes with it past 8 yd, kite catches iced apart.
+
+**Next window should show.** `--vetoes`: `faction champions concussive guard` rows on `concussive shot on snare
+target`; `--peel` hunter Concussive Shot iced near 0. `--personal`: escapes with Narrhok or Broln nearest past 8
+yd (this window 0, 2, 0, snapshot lag), the Tauren's catches and deaths at or below this window's (40%, 41%;
+9 of 41), healer `faction champions step off` moves with a Tauren on them.
+
+**Seen, not picked.**
+
+- The class paladin node `hammer of justice on snare target` stuns iced champions: 23 of 50 Hammers on champions
+  landed on one in its Chains (17, 9, 16 OK rows), where a stun pops its trinket and the Chains with it. Same
+  shape as the concussive guard; next round's candidate.
+- toc2's collapse (above): the externals spent on one melee bot before the focus turned to the ranged, and Erin
+  took 69 s as kill target.
+- Kite catches still count any hit: Gorgrim's 63 of 103 are mostly Death Coil and Icy Touch, Broln's mostly Earth
+  Shock.
+
+**Question for the user.** Q1 again, with this window's numbers: may a disarm peel (Disarm, Dismantle) go on an
+iced champion whose victim is no tank? Narrhok catches 40% of kites and Broln 41%, over the ~35% bar, but iced
+the disarm's reach is smaller: iced Narrhok 33% (19 of 57), iced Broln 41% of which melee 14% (Earth Shock
+ignores a disarm), and an iced Tauren killed 2 of 41 (Narrhok on toc1; Broln's two came after his DK died). Recommended: not yet; this round's reach fix changes escapes,
+step-offs and externals against both, so judge the iced split again next window and build it only if iced
+Narrhok still catches over ~35% or the iced Tauren top the deaths.
