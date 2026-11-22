@@ -342,3 +342,114 @@ out to (1827.3,120.5) and (1868.3,120.5), row 4 to (1827.3,129.5) and (1868.3,12
 healers in front at 30.5 yd, ranged behind out to 39.5 yd. The candidate points above navprobe on the floor
 (orchestrator: both settles' outer strafed slots, row 4 and the mark arcs read z 341.6-342.4, dz under 0.9).
 Q2 (dodge and camp points off the walkable floor) is a bug: fix it in the same round.
+
+## Round 4 (2026-11-22, branch from `b21cda8ee`)
+
+**Data.** Window 11 at 25n (`raidtest.py report --boss vezax --raid uld --head d2874f536 --pulls 10`) and
+window 12's 10n check (`--head ebe746ad1 --pulls 10 --diff 10n`), one valid pull per pool, all kills with
+hard mode held (`--vapors`: `animus` at 3:08.2-3:08.5, never `lost`). Analysis scripts: session scratchpad
+`vezax-r4/`.
+
+| Window | Pool | Run | Trace | Result |
+|---|---|---|---|---|
+| 11 (25n) | uld1 | `tr-20261122-190009-16` | `603_16_general-vezax_1795374055` | kill 5:52, 2 deaths |
+| 11 (25n) | uld2 | `tr-20261122-190132-17` | `603_17_general-vezax_1795374146` | kill 6:02, 1 death |
+| 11 (25n) | uld3 | `tr-20261122-190132-18` | `603_18_general-vezax_1795374151` | kill 4:59, 2 deaths |
+| 12 (10n) | uld1 | `tr-20261122-195816-11` | `603_11_general-vezax_1795377531` | kill 6:40, 1 death |
+| 12 (10n) | uld2 | `tr-20261122-195654-10` | `603_10_general-vezax_1795377450` | kill 5:34, 2 deaths |
+| 12 (10n) | uld3 | `tr-20261122-195856-12` | `603_12_general-vezax_1795377572` | kill 7:36, 1 death |
+
+**Stop rules.** Polished at 25n (window 11, kills on all three pools, 2/1/2 deaths) and the 10n check
+passed (window 12, 1/2/1). No failure is picked this round: it builds the user's answers to round 3's Q1
+and Q2.
+
+**Deaths by mechanic.**
+
+| Pull | Deaths |
+|---|---|
+| w11 uld1 | 2 melee to Profound Darkness (4:22, 4:28) |
+| w11 uld2 | 1 ranged to Shadow Crash (4:07) |
+| w11 uld3 | 1 healer (3:57), 1 melee (4:39) to Shadow Crash |
+| w12 uld1 | 1 healer to Shadow Crash (5:20) |
+| w12 uld2 | 2 ranged to Shadow Crash (4:17, 5:20) |
+| w12 uld3 | 1 ranged to Shadow Crash (3:56) |
+
+**Verdict on round 3 (a marked main tank holds where it stands): it worked.** Window 12 marked the main
+tank four times (10n uld1 3:12, uld2 1:00 and 3:12, uld3 2:20; none in window 11): `--mark` branch
+`unchanged` in all four, no Berserk (26662/64112) in any of the six pulls, Vezax 9.5-13 yd from the anchor
+(`--band`). The two 3:12 marks, in the Animus phase with 1 of 4 far, leeched 21 and 23 ticks (+1.3 and
++2.0 %/s on him), worse than a marked melee's 6-16: at 10-man the old rows left the whole raid inside the
+floor, which this round's rows end.
+
+**Change 1, user answer Q1 (a): the Mark only reaches ranged and healers.**
+`ULDUAR_VEZAX_CAMP_RADIUS` 31.5 → 35 (`UldEncounter_Vezax.h`): rows 30.5 / 32.75 / 35 / 37.25 / 39.5, mark
+arcs at 35 yd ±65.5°, exactly the navprobed candidate points above. `EnsureVezaxSlotAssignments`
+(`UldEncounter_Vezax.cpp:283` before) hands out slots in two passes, healers first, so 4 healers take row
+0 at 25-man (2 at 10-man) and ranged dps fill behind. 13-14 camp bots fill rows 0-3 at 25-man; only row
+4's strafed slots (44.5) pass reach spell's 42.6 ceiling, row 3's widest strafe is 42.5.
+
+`--mark` far replay on the window 11-12 traces (`vezax-r4/mark_far_replay.py`): *now* as recorded; *stood*
+moves each living camp bot by its new slot minus its old one, keeping how far it stood off its slot;
+*slot* puts it exactly on its new slot. Vezax and everyone else stay where they stood.
+
+| Pull | Marks | Far now (under the minimum) | Far, new rows as stood | Far, new rows on slot |
+|---|---|---|---|---|
+| w11 uld1 | 8 | 10-14/9 (0) | 12-14 (0) | 14 |
+| w11 uld2 | 9 | 10-14/9 (0) | 10-14 (0) | 13-14 |
+| w11 uld3 | 7 | 4-13/9 (1, 0:20 on a melee) | 11-13 (0) | 13 |
+| w12 uld1 | 10 | 0-5/4 (8) | 4-5 (0) | 4-5 |
+| w12 uld2 | 8 | 1-5/4 (7) | 4-5 (0) | 4-5 |
+| w12 uld3 | 11 | 0-5/4 (9) | 3-5 (1, 4:32) | 4-5 |
+
+Today 2 of 24 window 11 marks and 15 of 29 window 12 marks went to melee or a tank. Healer reach replay
+(`vezax-r4/heal_reach_replay.py`, 0:15-3:00, within 41.5 yd 2D of the main tank): w11 uld1 and uld2 100%
+→ 100%, w11 uld3 19-54% per healer (any healer 66%) → 74-100% (any 100%), 10n 80-100% → 77-100% (any
+84-100%), Vezax settling 9.5-9.9 yd north, except 9.9 yd south in w11 uld1 and uld2 (the tank between him
+and the camp).
+
+**Change 2, user answer Q2 (bug): dodge and camp points off the walkable floor.** In window 10 uld2
+(`603_19_general-vezax_1795366925`) Uldyaf, Uldyaj and Uldyaq stood at (1881-1885, 181-184, 342.2) when
+dodge moves sent them to (1895.95-1901.6, 190.4-210.6) at 6:22.5-6:24.8; over the next 3 s their xy moved
+under 2 yd while z fell 342.2 → 321.9, then they landed at (1861.1, 170.7, -27.7). The strafe
+(`TryGetVezaxDodgeSpot`, `UldEncounter_Vezax.cpp:728-768` before), the slot (`TryGetVezaxSlotPosition`
+`:259`) and the mark spots (`TryGetVezaxMarkSpot` `:370`) are raw boss-relative geometry at his Z, handed
+to `MoveTo` with no floor test. The collision check alone would not have caught it either: for a Player
+source `PathGenerator::BuildPolyPath` takes the "can fly" shortcut whenever the start or end has no poly
+nearby (`PathGenerator.cpp:277-288`), and `Map::CheckCollisionAndGetValidCoords` then skips the raycast,
+settles Z on the ground below (`Map.cpp:3503-3550`) and returns true.
+
+Fix (`UldEncounter_Vezax.{h,cpp}`, `UldActions_Vezax.cpp`): `VezaxPlaceOnFloor` runs the hazard sweep's
+`CheckCollisionAndGetValidCoords` from the bot and takes its answer (a point past the navmesh edge comes
+back pulled onto it), refusing a failed call or an answer more than `ULDUAR_VEZAX_FLOOR_STEP` (5 yd) above
+or below the bot. The position node checks its slot before every walk (not while parked) and holds when
+refused or already within tolerance of the pulled-back point; the strafe is checked, and a refused strafe
+or one pulled into the blast falls back to the sweep; the side mark spot is checked and a refused one
+holds; a marked melee takes the nearest southern spot that passes. The dodge sweep and the melee mark
+break pass the sweep an accept callback taking only ground within 5 yd of the bot. New probe
+`vezax.floor` (`on`/`edge`/`off`). Docs: `docs/raids/ulduar/vezax.md` (camp section, mark arc, crash
+fallback, trace, known gap removed) and a pitfalls entry on the player shortcut in
+`docs/engine/pitfalls.md` (doc only).
+
+10/25 and normal/hard: the rows, fill order and floor check key on nothing that differs. Real players take
+slots by spec as before, so the same with or without one in the raid.
+
+**Next window should show.**
+
+- `--band`: no camp bot's `<29.1` share near the 44-68% rows 0-1 read in windows 11-12; medians 30.5-37.5.
+- `--mark`: far 13-14/9 at 25n and 4-5/4 at 10n, every mark on `heal` or `ranged` (`L`/`R`, branch
+  `side`) until camp deaths take the pool under 9 / 4; no main tank mark, so no 21-23 tick leech on him.
+- `vezax.slot`: healers on 0, 1, 10, 11 (25n) or 0, 10 (10n).
+- No main tank death before the Animus and `--animus` near window 11 (healers still reach him); the
+  heal replay predicts a drop only where Vezax settles past ~10.5 yd north.
+- Ranged casts/min on the Animus near window 11's (review replay, scratchpad `vezax-r4-review/`): the
+  camp still follows Vezax while the Animus lives, and the new rows put ranged dps past 38.5 yd of the
+  Animus (a 30 yd spell's reach, combat reach 7) in 4-40% of samples against 0-9% today, past 44.5 (36
+  yd talented) in 0-6%. The formation vetoes reach spell, so a caster short of its range talent stands
+  out of range there.
+- `postmortem.py --probes vezax.floor`: only `on` while he stands near his spawn. An `edge` there is a
+  navmesh hole a straight check clips at, stranding the bot short of its slot: report it. No bot ever
+  below z 330.
+- Shadow Crash: the front rank's flight time grows 2.7 → 3.1 s; crash deaths no higher than windows
+  11-12's 1-2 a pull.
+
+**Questions.** None new.

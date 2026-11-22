@@ -67,7 +67,7 @@ inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 
 inline constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
-inline constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
+inline constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 35.0f;
 inline constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
 inline constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
 inline constexpr float ULDUAR_VEZAX_CAMP_GROUP_OFFSET = 4.0f;
@@ -83,6 +83,9 @@ inline constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
 inline constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
 inline constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
+
+inline constexpr float ULDUAR_VEZAX_FLOOR_STEP = 5.0f;
+inline constexpr float ULDUAR_VEZAX_FLOOR_CLIP = 1.0f;
 
 inline constexpr float ULDUAR_VEZAX_MARK_LEECH_RADIUS = 15.0f;
 inline constexpr float ULDUAR_VEZAX_MARK_BREAK_DISTANCE = 18.0f;
@@ -136,6 +139,8 @@ float VezaxSlotTolerance(Player* bot);
 void EnsureVezaxSlotAssignments(Player* bot);
 
 bool TryGetVezaxSlot(Player* bot, Position& position);
+
+bool VezaxPlaceOnFloor(Player* bot, Position& point);
 
 bool TryGetVezaxMarkSpot(Player* bot, Position& position);
 

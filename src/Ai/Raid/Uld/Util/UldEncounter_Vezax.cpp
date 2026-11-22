@@ -10,6 +10,7 @@
 #include "EncounterHelpers.h"
 #include "Group.h"
 #include "InstanceScript.h"
+#include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -23,6 +24,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <array>
 #include <list>
@@ -120,6 +122,47 @@ bool TryGetVezaxDodgeSlot(Player* bot, uint8& slotIndex)
 
     slotIndex = assignmentItr->second;
     return true;
+}
+
+enum class VezaxFloor
+{
+    On,
+    Edge,
+    Off
+};
+
+VezaxFloor CheckVezaxFloor(Player* bot, Position& point)
+{
+    float x = point.GetPositionX();
+    float y = point.GetPositionY();
+    float z = bot->GetPositionZ();
+
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                         bot->GetPositionZ(), x, y, z) ||
+        std::fabs(z - bot->GetPositionZ()) > ULDUAR_VEZAX_FLOOR_STEP)
+        return VezaxFloor::Off;
+
+    bool const clipped = point.GetExactDist2d(x, y) > ULDUAR_VEZAX_FLOOR_CLIP;
+    point.Relocate(x, y, z);
+    return clipped ? VezaxFloor::Edge : VezaxFloor::On;
+}
+
+void NoteVezaxFloor(Player* bot, VezaxFloor floor)
+{
+    RaidObs::NoteDerived(bot, "vezax.floor",
+                         floor == VezaxFloor::On     ? "on"
+                         : floor == VezaxFloor::Edge ? "edge"
+                                                     : "off");
+}
+
+std::function<bool(float, float)> VezaxFloorFilter(Player* bot)
+{
+    float const height = bot->GetPositionZ();
+    return [bot, height](float x, float y)
+    {
+        float const ground = bot->GetMapWaterOrGroundLevel(x, y, height);
+        return ground > INVALID_HEIGHT && std::fabs(ground - height) <= ULDUAR_VEZAX_FLOOR_STEP;
+    };
 }
 
 }
@@ -314,23 +357,27 @@ void EnsureVezaxSlotAssignments(Player* bot)
         if (assignment.second < ULDUAR_VEZAX_TOTAL_SLOTS)
             used[assignment.second] = true;
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    for (bool const healers : {true, false})
     {
-        Player* member = ref->GetSource();
-        if (!member || member->GetMapId() != ULDUAR_MAP_ID || !VezaxTakesSlot(member))
-            continue;
-
-        if (state.slotAssignments.find(member->GetGUID()) != state.slotAssignments.end())
-            continue;
-
-        for (uint8 slotIndex : VEZAX_SLOT_FILL_ORDER)
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
-            if (used[slotIndex])
+            Player* member = ref->GetSource();
+            if (!member || member->GetMapId() != ULDUAR_MAP_ID || !VezaxTakesSlot(member) ||
+                PlayerbotAI::IsHeal(member) != healers)
                 continue;
 
-            state.slotAssignments[member->GetGUID()] = slotIndex;
-            used[slotIndex] = true;
-            break;
+            if (state.slotAssignments.find(member->GetGUID()) != state.slotAssignments.end())
+                continue;
+
+            for (uint8 slotIndex : VEZAX_SLOT_FILL_ORDER)
+            {
+                if (used[slotIndex])
+                    continue;
+
+                state.slotAssignments[member->GetGUID()] = slotIndex;
+                used[slotIndex] = true;
+                break;
+            }
         }
     }
 }
@@ -367,6 +414,16 @@ bool TryGetVezaxSlot(Player* bot, Position& position)
     return TryGetVezaxSlotPosition(bot, assignmentItr->second, position);
 }
 
+bool VezaxPlaceOnFloor(Player* bot, Position& point)
+{
+    if (!bot)
+        return false;
+
+    VezaxFloor const floor = CheckVezaxFloor(bot, point);
+    NoteVezaxFloor(bot, floor);
+    return floor != VezaxFloor::Off;
+}
+
 bool TryGetVezaxMarkSpot(Player* bot, Position& position)
 {
     if (!bot)
@@ -384,35 +441,46 @@ bool TryGetVezaxMarkSpot(Player* bot, Position& position)
                                                             : -ULDUAR_VEZAX_MARK_SIDE_OFFSET;
         float const bearing = ULDUAR_VEZAX_ARC_ORIENTATION + side / ULDUAR_VEZAX_CAMP_RADIUS;
 
-        RaidObs::NoteDerived(bot, "vezax.mark", "side");
-        position = VezaxPositionAt(vezax->GetPosition(), Position::NormalizeOrientation(bearing),
-                                   ULDUAR_VEZAX_CAMP_RADIUS);
-        return true;
+        Position spot = VezaxPositionAt(vezax->GetPosition(), Position::NormalizeOrientation(bearing),
+                                        ULDUAR_VEZAX_CAMP_RADIUS);
+        bool const onFloor = VezaxPlaceOnFloor(bot, spot);
+
+        RaidObs::NoteDerived(bot, "vezax.mark", onFloor ? "side" : "none");
+        if (onFloor)
+            position = spot;
+        return onFloor;
     }
 
+    std::array<Position, ULDUAR_VEZAX_MARK_SPOT_COUNT> candidates;
     std::array<float, ULDUAR_VEZAX_MARK_SPOT_COUNT> const bearings = {
         ULDUAR_VEZAX_ARC_ORIENTATION + ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET,
         ULDUAR_VEZAX_ARC_ORIENTATION - ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET,
         ULDUAR_VEZAX_ARC_ORIENTATION + static_cast<float>(M_PI)};
 
-    bool found = false;
-    float bestDistance = std::numeric_limits<float>::max();
+    for (uint8 i = 0; i < ULDUAR_VEZAX_MARK_SPOT_COUNT; ++i)
+        candidates[i] = VezaxPositionAt(vezax->GetPosition(), Position::NormalizeOrientation(bearings[i]),
+                                        ULDUAR_VEZAX_MARK_SPOT_RADIUS);
 
-    for (float bearing : bearings)
+    std::stable_sort(candidates.begin(), candidates.end(),
+                     [bot](Position const& a, Position const& b)
+                     {
+                         return bot->GetExactDist2d(a.GetPositionX(), a.GetPositionY()) <
+                                bot->GetExactDist2d(b.GetPositionX(), b.GetPositionY());
+                     });
+
+    VezaxFloor floor = VezaxFloor::Off;
+    for (Position candidate : candidates)
     {
-        Position const candidate = VezaxPositionAt(
-            vezax->GetPosition(), Position::NormalizeOrientation(bearing),
-            ULDUAR_VEZAX_MARK_SPOT_RADIUS);
-
-        float const distance = bot->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY());
-        if (found && distance >= bestDistance)
+        floor = CheckVezaxFloor(bot, candidate);
+        if (floor == VezaxFloor::Off)
             continue;
 
         position = candidate;
-        bestDistance = distance;
-        found = true;
+        break;
     }
 
+    NoteVezaxFloor(bot, floor);
+    bool const found = floor != VezaxFloor::Off;
     RaidObs::NoteDerived(bot, "vezax.mark", found ? "south" : "none");
     return found;
 }
@@ -451,9 +519,10 @@ bool TryGetVezaxMarkBreakSpot(Player* bot, Unit* marked, Position& spot)
     if (!bot || !marked)
         return false;
 
-    std::vector<Position> const avoid = {marked->GetPosition()};
+    std::vector<HazardCircle> const avoid = {{marked->GetPosition(), ULDUAR_VEZAX_MARK_BREAK_DISTANCE}};
     Position const candidate = FindNearestPositionClearOfHazards(
-        bot, avoid, ULDUAR_VEZAX_MARK_BREAK_DISTANCE, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
+        bot, avoid, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f, nullptr,
+        VezaxFloorFilter(bot));
 
     if (candidate == Position())
     {
@@ -738,12 +807,13 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     {
         float const strafe = VezaxSlotIsRightGroup(slotIndex) ? ULDUAR_VEZAX_CAMP_STRAFE
                                                               : -ULDUAR_VEZAX_CAMP_STRAFE;
-        Position const strafed =
+        Position strafed =
             VezaxCampPosition(vezax->GetPosition(), VezaxSlotRadius(slotIndex),
                               VezaxSlotTangentialOffset(slotIndex) + strafe);
 
-        if (strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=
-            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+        if (VezaxPlaceOnFloor(bot, strafed) &&
+            strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=
+                ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
         {
             RaidObs::NoteDerived(bot, "vezax.dodge", "strafe");
             spot = strafed;
@@ -751,10 +821,10 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
         }
     }
 
-    std::vector<Position> const avoid = {impact};
+    std::vector<HazardCircle> const avoid = {{impact, ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE}};
     Position const candidate = FindNearestPositionClearOfHazards(
-        bot, avoid, ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE,
-        ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS);
+        bot, avoid, ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
+        nullptr, VezaxFloorFilter(bot));
 
     if (candidate == Position())
     {
