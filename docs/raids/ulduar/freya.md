@@ -22,7 +22,8 @@ rules stand the generic pickers down. The trio target changes several times per 
 converges, which a group icon cannot carry without one bot spamming `SetTargetIcon` for the rest to
 read back a tick later. A human's own marks are not honoured here.
 
-Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya; once any trio
+Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya (a lasher tail
+goes ahead of the trio for ranged, [below](#detonating-lasher-waves)); once any trio
 member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once
 every member is in the release band nothing pulls a bot away. A bot keeps its current target unless
 something strictly higher on that list is up, so add churn cannot reset swing timers; the trio slot is
@@ -41,7 +42,10 @@ gets it from the pack's spawn, whatever the Gift's own age. **Known-open:** a Gi
 the back line lives: the nine that healed in three pulls spawned a median 38-79 yd from the ranged, and
 at most 7 of them reached it; in five, during lasher and Conservator waves, at most one did, each `reach
 spell` step undone by the spore node or the back-line bail from a low lasher chasing them
-([below](#detonating-lasher-waves)).
+([below](#detonating-lasher-waves)). `freya ranged camp`'s gather also pulled them back, so it stands down
+for a ranged DPS bot whose target is a Gift; the bail still runs. **A Gift that lives is why a lasher wave
+outlives its 60s:** waves clear in 31-50s otherwise, and each that ran past the next spawn had a Gift heal
+it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%).
 
 ## The trio wave
 
@@ -290,6 +294,15 @@ makes it help convergence. It is percent-based like every sync threshold, and st
 The add tank taunts the **Snaplasher and Conservator only**; the rest of its ladder is borrowed for
 damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
 their own pickup ([below](#detonating-lasher-waves)).
+
+**The add tank's cooldowns wait for a stacked Snaplasher** (user's choice; not yet verified in a pull),
+since every add-tank death came with them spent in an earlier wave ([Hardened Bark](#the-trio-wave)).
+`freya add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for
+assist tank 0 while Freya lives and is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT`
+(25%). Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, `freya add
+tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one, so they chain
+through the wave; `freya add tank external` has a healer cast Pain Suppression, Guardian Spirit or Hand of
+Sacrifice on him whenever none of the three is up. Notes `freya.adddef`, `freya.addext`.
 
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
@@ -575,6 +588,12 @@ under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed 
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
 Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in.
 
+**A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
+trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a
+ranged DPS bot's lasher pick above goes ahead of the trio slot; out of reach it falls through to the trio.
+The 60s timer brings a trio onto an unfinished lasher wave, and the next Gift heals what is left: four
+lashers at 76% summed went to 228%, three at 15% to 130%.
+
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment
 it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. They switch
 only to a lasher 10 yd closer than the one held, so two at similar range don't trade the bot every tick.
@@ -698,7 +717,8 @@ about what is up.
 
 ## What a trace answers
 
-`tools/botobs/bosses/freya.py <trace>`; one probe, the `freya.snaphold` note. A pull files under the first
+`tools/botobs/bosses/freya.py <trace>`; probes are the notes `freya.snaphold`, `freya.adddef` and
+`freya.addext`. A pull files under the first
 Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
 living Elder into combat before Freya's own hook runs, and the recorder never renames a named trace.
 `cfg.hardmode` has no Freya key, so the report's column reads `-`; the banner reads hard mode off the
@@ -707,7 +727,8 @@ Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core 
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, and each hold change (on, bark gone, off), each "on" with its bark procs and deaths to
-the Snaplasher; `--beams` Unstable Sun Beam dodges per role
+the Snaplasher, and each cooldown a tank or healer spent under a stacked Snaplasher; `--beams` Unstable Sun
+Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within

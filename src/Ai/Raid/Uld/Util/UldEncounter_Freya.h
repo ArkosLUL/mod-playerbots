@@ -56,7 +56,15 @@ enum UlduarFreyaIds
 
     SPELL_HARDENED_BARK_STACK_10 = 62663,
     SPELL_HARDENED_BARK_STACK_25 = 64190,
+
+    SPELL_FREYA_PAIN_SUPPRESSION = 33206,
+    SPELL_FREYA_GUARDIAN_SPIRIT = 47788,
+    SPELL_FREYA_HAND_OF_SACRIFICE = 6940,
 };
+
+inline constexpr uint32 ULDUAR_FREYA_ADD_TANK_DEFENSIVE_STACKS = 25;
+
+inline constexpr float ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
 
 inline constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 8.0f;
 
@@ -241,6 +249,14 @@ Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state,
 Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 
 Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range);
+
+bool IsFreyaLasherTail(FreyaWaveState const& state);
+
+Player* GetFreyaStackedSnaplasherTank(FreyaWaveState const& state);
+
+bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI);
+
+char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank);
 
 Unit* GetFreyaConservatorSpore(Unit* conservator);
 

@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidTankDefensive.h"
 #include "UldEncounter_Freya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -70,6 +71,25 @@ bool FreyaReleaseHeldSnaplasherTrigger::IsActive()
         return false;
 
     return FreyaStopHittingHeldSnaplasher(botAI, held, false);
+}
+
+bool FreyaAddTankDefensiveTrigger::IsActive()
+{
+    if (!PlayerbotAI::IsTank(bot))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    return GetFreyaStackedSnaplasherTank(state) == bot && NextTankDefensive(botAI, bot, nullptr, true) != 0;
+}
+
+bool FreyaAddTankExternalTrigger::IsActive()
+{
+    if (!PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Player* tank = nullptr;
+    return GetFreyaTankExternal(botAI, tank) != nullptr;
 }
 
 bool FreyaRedirectThreatTrigger::IsActive()
@@ -186,6 +206,10 @@ bool FreyaRangedCampTrigger::IsActive()
     }
 
     if (PlayerbotAI::IsRangedDps(bot) && IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state)))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (PlayerbotAI::IsRangedDps(bot) && target && target->IsAlive() && target->GetEntry() == NPC_EONARS_GIFT)
         return false;
 
     Position const camp = GetFreyaLasherCampSpot(botAI);
