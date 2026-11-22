@@ -129,7 +129,8 @@ which no trigger interrupts; the handover rule should move it before the cast st
 
 **User answer (2026-11-22):** yes. A bot-only raid gets its own phase 1 to 2 handover position:
 out to clean ground about 45 yd from the centre, back in over the last ~10 s, triggered by no real
-player in the raid (like Yogg-Saron's walk-in).
+player in the raid (like Yogg-Saron's walk-in). Round 3 drops that trigger under the user's one code
+path decision: every Firefighter raid holds the band.
 
 ## Round 2 (Custom eda15422d, round 1 merged as e939553d1)
 
@@ -156,7 +157,7 @@ window 7). Trace scripts in the lane scratchpad.
 
 - `MimironHandoverStep`, per instance, refreshed by `TickMimironObs` while nothing is attackable (trace
   latch `mimiron.handover`). Needs Firefighter, the boss in progress, no real player of the group on the
-  instance (`MimironBotLedRaid`, the Yogg-Saron and Thorim test), no Aerial Command Unit, and a
+  instance (`MimironBotLedRaid`, removed in round 3), no Aerial Command Unit, and a
   NOT_SELECTABLE MK II under `ULDUAR_MIMIRON_SPENT_HEALTH_PCT` (10). Then **Hold** with no VX-001,
   **Late** with a fresh unselectable VX-001 not riding, **WalkIn** once Mimiron sits in its seat 0 or 1.
   Anything else, None.
@@ -175,8 +176,7 @@ window 7). Trace scripts in the lane scratchpad.
   phase 1 end, +10 s, walk in and phase 2, bots on a phase 2 slot at phase 2, healer mana, drinks,
   Flames and deaths. A phase latch blip splitting phase 1 (P1, Z, P1b) still finds the handover (review).
 
-Player-led raids keep `follow` (every step None; their traces gain one `mimiron.handover 0` row).
-Normal mode is unchanged.
+Player-led raids kept `follow` until round 3. Normal mode is unchanged.
 
 **navprobe for the orchestrator:** the band spans 36-44 yd from the room centre at any bearing. The
 findings doc has the floor flat and on mesh to 45 yd on all 16 headings (the retired lap plan, commit
@@ -186,7 +186,7 @@ failing arc means a lower `ULDUAR_MIMIRON_HOLD_OUTER_RADIUS` or skipping those b
 
 **Next window should show** (`mimiron.py --handover`, `--fire`, `--bomb`, `--heal`, `--flips`):
 
-- In every bot-only pull reaching phase 2: `mimiron.handover` 1, 2, 3 once each, the walk in about 12.7 s
+- In every pull reaching phase 2: `mimiron.handover` 1, 2, 3 once each, the walk in about 12.7 s
   before phase 2, one `mimiron.hold` row.
 - Raid median ~40 yd from the centre at +10 s and at the walk in, melee out of the alcove; at phase 2
   most living bots on a phase 2 slot (aim: 80%+).
@@ -205,3 +205,43 @@ burn within ~10 s. If `--fire` shows hold-slot dodges dominating Z and H, drop t
 phase 1 tank spot for the band farthest from the fire.
 
 **Questions for the user:** none new. Q2 (DK talents) is DC lane S, merged.
+
+## Round 3 (Custom 60f6769dc, round 2 merged there)
+
+**Data:** nothing new. Rounds 1 and 2 are merged but no window has pulled them; the newest Mimiron
+traces on disk are still window 8's (`603_28/29/30_…`) and window 7's `603_31_…`. Stop rules, verdict
+and failure ranking skipped. This round carries out the user's one code path decision (2026-11-22, the
+effort's decisions row): a strategy runs the same code with or without a real player in the raid, and a
+real player only changes who does a job he is doing himself.
+
+**Changed** (Mimiron files and reader only):
+
+- `MimironBotLedRaid` removed: the handover step (`ReadMimironHandoverStep`, was
+  `ReadMimironBotLedHandoverStep`) runs in every Firefighter raid, so a player-led raid holds the band,
+  walks in and keeps the drink hold too. `GetMimironBotLedHandoverStep` renamed `GetMimironHandoverStep`.
+  RaidObs keys unchanged (`mimiron.handover`, `mimiron.hold`, `mimiron.slot` `hmhold`).
+- `mimiron handover follow hold` (new block): zeroes `follow` while a step is on and the bot has a slot.
+  With a player leading, `follow` takes every tick the formation lets go (on the slot it stands down,
+  mid-leg it fails), so the bot would walk to the player and back: the A-B-A that phase 1's camp needed
+  sight fixes for. Only `follow`, only until phase 2 (the step goes None once VX-001 is selectable or on a
+  wipe).
+- Real players: nothing in the handover moves another unit, and a player keeps his `hmhold` index, which
+  just stays empty wherever he stands, so the band's layout is the same code with or without him.
+- Reader `mimiron.py --handover`: positions, slot counts and healer mana count bots only (a human is never
+  moved by the handover); steps print as `steps:`, and a pull without them as "not Firefighter, or a build
+  without the handover hold" (review: window 7 and 8's bot-only traces predate round 2 too). Test with a
+  human healer standing on the room centre.
+- navprobe (orchestrator, 2026-11-22): `navprobe --map 603 --nav 0x09 ring 2744.65 2569.46 364.32 <r> 72`
+  gave 72/72 on mesh at r = 36, 40 and 44, so the band's floor is checked every 5°; header and findings
+  doc say so.
+
+Bot-only pulls are unchanged by this round: their step was already on, and `follow` never runs there
+(window 8: 276-326 `follow` rows a pull, all `USELESS`; the human-led `603_26_…_1795128319` had 585 `OK`).
+
+**Next window should show:** round 2's list (the window still judges rounds 1 and 2); this round's
+block can't show in a bot-only pull. A player-led pull, when one comes, should show `mimiron.handover`
+1, 2, 3, the bots on the band and then on their phase 2 slots, the player wherever he chose, no `follow`
+row with verdict `OK` from a bot between step 1 and phase 2, and no `follow`/`mimiron arc spread action`
+A-B-A in the Z and H spans (`--flips`).
+
+**Questions for the user:** none.

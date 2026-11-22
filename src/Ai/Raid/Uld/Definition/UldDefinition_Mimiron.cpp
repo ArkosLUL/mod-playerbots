@@ -93,7 +93,7 @@ bool MimironNearFire(PlayerbotAI* botAI)
 bool MimironHandoverDrinkHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    MimironHandoverStep const step = GetMimironBotLedHandoverStep(botAI, bot);
+    MimironHandoverStep const step = GetMimironHandoverStep(botAI, bot);
     if (step == MimironHandoverStep::Late || step == MimironHandoverStep::WalkIn)
         return true;
 
@@ -101,6 +101,16 @@ bool MimironHandoverDrinkHold(PlayerbotAI* botAI)
     Position slot;
     return step == MimironHandoverStep::Hold && GetMimironSpreadSlot(botAI, bot, slot) &&
            bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ULDUAR_MIMIRON_SPREAD_TOLERANCE;
+}
+
+// On its slot the formation stands down, and with a player leading, follow walks the bot back to him.
+// Walking, the same: the leg fails its action every tick and hands the tick to follow.
+bool MimironHandoverFollowHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Position slot;
+    return GetMimironHandoverStep(botAI, bot) != MimironHandoverStep::None &&
+           GetMimironSpreadSlot(botAI, bot, slot);
 }
 
 // Room test before the grid scan: the hard mode switch holds all over Ulduar.
@@ -237,6 +247,8 @@ void DefineMimiron(EncounterBuilder& e)
     // doesn't dodge it. Near fire only: a handover drink on clean ground is worth the mana.
     e.Block("mimiron drink guard", Role::Any, MimironNearFire, 0, {"drink", "eat"});
     e.Block("mimiron handover drink hold", Role::Any, MimironHandoverDrinkHold, 0, {"drink", "eat"});
+    // Only follow, only until phase 2: a leading player's other orders still go through.
+    e.Block("mimiron handover follow hold", Role::Any, MimironHandoverFollowHold, 0, {"follow"});
 
     // Every mover that aims at a unit rather than the floor. The bomb flee lets go just inside its clearance, so
     // any of these walks the bot back into the blast for the rest of the fuse.

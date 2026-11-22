@@ -300,9 +300,10 @@ class FirePull(unittest.TestCase):
         self.assertEqual(dict(row["fire"]), {"ranged": 3000})
 
 
-# A bot-led 1 to 2 handover from 11 s to 59 s: both bots hold 40 yd west, walk in from 46 s, and at
-# phase 2 Agony stands on her wedge slot while Tree is 9 yd short of hers.
+# A 1 to 2 handover from 11 s to 59 s: both bots hold 40 yd west, walk in from 46 s, and at phase 2
+# Agony stands on her wedge slot while Tree is 9 yd short of hers.
 CX, CY = mm.ROOM_CENTRE
+LEAD = 5009  # a human healer who stays on the room centre throughout
 
 
 def handover_spot(guid: int, when: int) -> tuple[float, float]:
@@ -399,6 +400,20 @@ class HandoverPull(unittest.TestCase):
         path = pathlib.Path(self.folder.name) / "603_6_mimiron_1789700005.ndjson"
         path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
         self.assertEqual([row["span"] for row in mm.handover_rows(Trace(path))], [(11000, 59000)])
+
+    def test_a_human_elsewhere_counts_in_no_position_or_mana(self):
+        records = handover_pull()
+        records[0] = dict(records[0], roster=ROSTER + [{"g": LEAD, "n": "Lead", "r": "heal", "c": "priest",
+                                                         "h": 1}])
+        for rec in records:
+            if rec.get("e") == "snap":
+                rec["u"].append([LEAD, CX, CY, 364.0, 0.0, 100.0, 5.0, 0, 0, 0, 0, 0, 0, 0.0])
+        path = pathlib.Path(self.folder.name) / "603_6_mimiron_1789700006.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+        row = mm.handover_rows(Trace(path))[0]
+        self.assertEqual(row["spread"], mm.handover_rows(self.trace)[0]["spread"])
+        self.assertEqual((row["on_slot"], row["slotted"], row["living"]), (1, 2, 2))
+        self.assertEqual(row["mana"], [(40.0, 90.0)])
 
 
 MINE_A, MINE_B, MINE_C, MINE_D = 4294970201, 4294970202, 4294970203, 4294970204
