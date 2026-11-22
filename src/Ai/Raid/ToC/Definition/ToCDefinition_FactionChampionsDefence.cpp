@@ -18,6 +18,7 @@ void DefineFactionChampionsDefence(EncounterBuilder& e)
     e.Node<FactionChampionsProtectTrigger, FactionChampionsProtectAction>(ACTION_EMERGENCY + 4);
     e.Node<FactionChampionsFreedomTrigger, FactionChampionsFreedomAction>(ACTION_EMERGENCY + 3);
 
+    // over the ice duty nodes, so a link leaves its champion for it
     e.Node<FactionChampionsChainGripTrigger, FactionChampionsChainGripAction>(ACTION_RAID + 4.6f);
     e.Node<FactionChampionsDeathGripTrigger, FactionChampionsDeathGripAction>(ACTION_RAID + 4.5f);
     e.Node<FactionChampionsBattleResTrigger, FactionChampionsBattleResAction>(ACTION_RAID + 4.2f);
@@ -29,6 +30,7 @@ void DefineFactionChampionsDefence(EncounterBuilder& e)
     e.Node<FactionChampionsKillTotemTrigger, FactionChampionsKillTotemAction>(ACTION_RAID + 2.7f);
     e.Node<FactionChampionsPhysicalSwitchTrigger, FactionChampionsPhysicalSwitchAction>(ACTION_RAID + 2.5f);
 
+    // under the kite and the Nitro run, over the holds and the focus
     e.Node<FactionChampionsWallGripTrigger, FactionChampionsWallGripAction>(ACTION_RAID + 2.3f);
     e.Node<FactionChampionsPurgeKillTargetTrigger, FactionChampionsPurgeKillTargetAction>(ACTION_RAID);
 
@@ -39,7 +41,7 @@ void DefineFactionChampionsDefence(EncounterBuilder& e)
     e.LiveMultiplier<FactionChampionsPurgeGuardMultiplier>(Family::Spell);
     e.LiveMultiplier<FactionChampionsIceGuardMultiplier>(Family::Spell);
 }
-}
+}  // namespace
 
 EncounterDefinition const& ToCFactionChampionsDefenceDefinition()
 {
