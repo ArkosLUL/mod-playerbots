@@ -642,7 +642,7 @@ def bomb_row(trace: Trace, bomb: dict, healers: set, latches: dict, deaths: list
     killed it."""
     carrier, start, stop = bomb["g"], bomb["t"], bomb["until"]
     picks, sent = latch_picks(latches.get(carrier, []), start, stop)
-    if carrier in healers:
+    if carrier in healers and not picks:
         kind, picks = "self", [(start, carrier)]
     else:
         kind = "sent" if sent is not None else "assigned" if picks else None

@@ -373,6 +373,16 @@ class Bombs(unittest.TestCase):
                       "    lowest 50% before the hit, 1 heals on it for 8.0k (1.0k over), first 3:27.000\n", text)
         self.assertIn("  healer carriers: 1, no bomb hit read\n", text)
 
+    def test_a_real_healer_carrier_reads_its_bot_healer(self):
+        records = self.in_reach_pull(upgrade=False)
+        records[0]["roster"][-1].update(r="heal", h=1)
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("  3:20.000 Cleaver (heal), Mender in reach 3:21.000, closest 6 yd, 6 yd at expiry,"
+                      " nearest healer 0 yd at expiry, carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n", text)
+        self.assertIn("    Mender in range 3:23.000 with the carrier at 70%, 2 heals on it for 15.5k", text)
+        self.assertIn("  healers in reach: 1 carriers", text)
+        self.assertNotIn("healer carriers:", text)
+
     def test_a_healer_carrier_never_under_the_ceiling_is_left_out(self):
         records = self.bomb_pull(sent=False)
         records[0]["roster"][-1]["r"] = "heal"
