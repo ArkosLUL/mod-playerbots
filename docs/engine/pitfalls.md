@@ -944,8 +944,9 @@ block in `PlayerbotAI::DoNextAction` clears it.
 
 **A combat reach moves with core DB updates.** It is `creature_model_info`'s `CombatReach` for the
 current display (a pet's 1.5) times scale, so a form change moves it too. `2026_11_06_01` re-sniffed
-it: Gormok 6.5→10.5, the worms 6.5→12 mobile / 5 stationary, Icehowl 12→14, Anub'arak 10→15, and every
-constant derived from the old values silently went wrong. Read `GetCombatReach()` live where the unit
+it: Gormok 6.5→10.5, the worms 6.5→12 mobile / 5 stationary, Icehowl 12→14, Anub'arak 10→15, the Faction
+Champions left on the 1.5 default →2.25 (the Tauren Warrior and Enhancement →6.075), and every constant derived from the old
+values silently went wrong. Read `GetCombatReach()` live where the unit
 is at hand; otherwise name the display a constant comes from.
 
 **A chase doesn't settle at contact plus both reaches.** From outside melee range the core paths to

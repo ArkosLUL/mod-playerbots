@@ -1619,6 +1619,18 @@ class ControlAndDefence(unittest.TestCase):
         self.assertIn("danger 10.0s", text)
         self.assertRegex(text, r"Irieth +Rogue +3000 +75% +2")
 
+    def test_damage_renders_a_champion_whose_only_hit_dealt_nothing(self):
+        # a fully absorbed Mana Burn leaves the healer a row worth 0
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            nothing = {**dmg(3000, DISC, TANK, 0), "a": 0}
+            path.write_text("\n".join(json.dumps(rec) for rec in control_pull() + [nothing]) + "\n",
+                            encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_damage(Trace(path))
+        self.assertRegex(out.getvalue(), r"Caiphus +Disc Priest +0 +0% +0 .*\| tank 0%")
+
     def test_divine_sacrifice_reads_who_divine_guardian_reached_and_raid_wide_casts_list(self):
         rows = [row for row in fc.external_casts(self.trace) if row["spell"] == "Divine Sacrifice"]
         self.assertEqual([(row["t"], row["target"], row["reach"]) for row in rows], [(4000, PALADIN_BOT, 3)])
@@ -1789,6 +1801,23 @@ class FocusAndRepick(unittest.TestCase):
         self.assertRegex(text, r"0:01\.100 Frost +ranged +2 +1\.4 +5 +2\+2")
         self.assertIn("fc.kite: 2 kite(s), the chasers dropped the bot in 1; ending past 30 yd of every healer: 0",
                       text)
+
+    def test_a_kite_counts_a_hit_from_its_nearest_chaser_soon_after_its_first_hop(self):
+        # the rogue and the warrior tie on the mage at its 1.1 s hop, so the lower guid is the chaser
+        self.assertEqual(fc.kite_catches(self.trace), {ROGUE_C: [1, 0]})
+        self.assertIn("hit by the nearest melee chaser within 2 s of the first hop: Irieth 0 of 1",
+                      self.render(fc.show_personal))
+
+        def catches(extra: list[dict]) -> dict:
+            with tempfile.TemporaryDirectory() as folder:
+                path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+                path.write_text("\n".join(json.dumps(rec) for rec in focus_pull() + extra) + "\n", encoding="utf-8")
+                return fc.kite_catches(Trace(path))
+
+        # the warrior isn't the chaser and the rogue's 3.2 s hit is too late, its 3.0 s one counts
+        late = [dmg(2000, WARRIOR_C, MAGE, 0), dmg(3200, ROGUE_C, MAGE, 0)]
+        self.assertEqual(catches(late), {ROGUE_C: [1, 0]})
+        self.assertEqual(catches(late + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1]})
 
     def test_a_kite_reads_the_nearest_living_healer_after_its_last_hop(self):
         # the mage ends 5 yd off the priest; the moonkin's kite ends with no healer alive
@@ -2050,6 +2079,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.escape_rows(trace), [])
         self.assertEqual(fc.speed_rows(trace), [])
         self.assertEqual(fc.kite_rows(trace), [])
+        self.assertEqual(fc.kite_catches(trace), {})
         self.assertEqual(fc.chase_spacing(trace), [])
         self.assertEqual(fc.outside_grips(trace), [])
         self.assertEqual(fc.freedom_rows(trace), ([], collections.Counter()))
