@@ -67,9 +67,12 @@ inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
 // Tricks, so saving them from here has both ready when it lands.
 inline constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
 inline constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
-// The Animus swaps victim at 110% threat in melee range, 130% outside. 90% of the main tank leaves room
-// for a cast in flight and lets him take it back at 110%.
-inline constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
+// Vezax and the Animus swap victim at 110% threat in melee range, 130% outside. 90% of the main tank
+// leaves room for a cast in flight and lets him take the boss back at 110%.
+inline constexpr float ULDUAR_VEZAX_THREAT_SHARE = 0.9f;
+// Area damage holds while a live vapor is this close to the bot or its target. Most of it reaches 10 yd
+// around one of them, Seed of Corruption's burst 15.
+inline constexpr float ULDUAR_VEZAX_VAPOR_AREA_CLEARANCE = 15.0f;
 // Hard mode only: a strong raid kills him before the sixth vapor merges into the Animus. Tanks get the
 // lower line so they keep threat while everyone else waits.
 inline constexpr float ULDUAR_VEZAX_HOLD_HEALTH_PCT = 15.0f;
@@ -223,6 +226,9 @@ bool VezaxHardModePending(PlayerbotAI* botAI);
 // Hard mode still pending and he's at or under this bot's stop line. The Barrier check backs up the
 // summon hook, in case it ever misses.
 bool VezaxDamageHeld(PlayerbotAI* botAI);
+// Hard mode still pending and a live vapor within area reach of the bot or its target. A vapor is cast
+// 45 yd out, but it lands on the first navmesh edge in the way, or on him when that raycast fails.
+bool VezaxVaporInAreaReach(PlayerbotAI* botAI);
 // The hold parks pets passive. Stances are kept per instance so any engine can give them back, wipes
 // included.
 void VezaxHushPet(Creature* pet);

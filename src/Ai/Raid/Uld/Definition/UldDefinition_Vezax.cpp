@@ -74,6 +74,18 @@ void DefineVezax(EncounterBuilder& e)
     // target guard never sees, and a vapor can spawn under one already falling.
     e.Block("vezax hard mode hold", Role::Any, VezaxHardModePending, 0, {"heroism", "bloodlust", "starfall"});
 
+    // A vapor that lands in the melee dies to whatever hits around it, and one dead vapor ends hard mode.
+    e.Block("vezax vapor area hold", Role::Any, VezaxVaporInAreaReach, 0,
+            {"avenger's shield", "blade flurry", "bladestorm", "blast wave", "blizzard", "blood boil",
+             "chain lightning", "cleave", "cone of cold", "consecration", "corpse explosion", "death and decay",
+             "divine storm", "dragon's breath", "explosive trap", "fan of knives", "fire elemental totem",
+             "fire elemental totem melee", "fire nova", "flamestrike", "frost nova", "hammer of the righteous",
+             "holy nova", "holy wrath", "howling blast", "hurricane", "immolation aura", "killing spree",
+             "living bomb", "magma totem", "mind sear", "multi-shot", "pestilence", "rain of fire",
+             "seed of corruption", "shadowflame", "shadowfury", "shockwave", "sweeping strikes", "swipe (bear)",
+             "swipe (cat)", "thunder clap", "thunderstorm", "trap launcher: explosive trap", "typhoon", "volley",
+             "whirlwind"});
+
     // Past the stop line nothing hits him until the Animus is up. Spells are the multiplier below, which
     // sees the summons as buffs, so they go by name here.
     e.Block("vezax damage hold", Role::Any, VezaxDamageHeld,
@@ -87,12 +99,13 @@ void DefineVezax(EncounterBuilder& e)
     // triggers spend them on Vezax, where the tank has had minutes to build threat, or on a dps.
     e.Block("vezax save redirects for the animus", Role::Any, VezaxAnimusDue, 0,
             {"misdirection on main tank", "tricks of the trade", "tricks of the trade on main tank"});
+    e.Multiplier<VezaxTricksOnTankMultiplier>(Family::Spell);
 
     e.Multiplier<VezaxHoldCastOutsideFieldMultiplier>(Family::Melee | Family::Spell);
 
     // Nothing generic holds a dps bot under the tank's threat, since no bot ever gets the "threat"
-    // strategy, and the Animus can't be taunted back once one passes him.
-    e.Multiplier<VezaxAnimusThreatMultiplier>(Family::Melee | Family::Spell);
+    // strategy. The Animus can't be taunted back once one passes him, and Vezax walks into the camp.
+    e.Multiplier<VezaxThreatMultiplier>(Family::Melee | Family::Spell);
 
     e.Tick(TickVezax);
 }

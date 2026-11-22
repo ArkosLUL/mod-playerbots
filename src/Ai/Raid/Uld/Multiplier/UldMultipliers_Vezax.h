@@ -38,12 +38,23 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The Animus is taunt-immune, so only the main tank's threat keeps it. A dps bot on it holds its
-// damage once it gets close to his, which also lets him win it back from whoever pulled it.
-class VezaxAnimusThreatMultiplier : public Multiplier
+// A dps bot on Vezax or the Animus holds its damage once its threat gets close to the main tank's, which
+// also lets him win the boss back from whoever pulled it. The Animus can't be taunted at all, and in a
+// field a caster's shadow damage outruns a tank's threat.
+class VezaxThreatMultiplier : public Multiplier
 {
 public:
-    VezaxAnimusThreatMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax animus threat multiplier") {}
+    VezaxThreatMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax threat multiplier") {}
+
+    float GetValue(Action* action) override;
+};
+
+// Tricks of the Trade only on a tank. At the pull the generic pick decides the tank needs no redirect and
+// takes the hardest-hitting melee instead, which hands the rogue's threat to a dps.
+class VezaxTricksOnTankMultiplier : public Multiplier
+{
+public:
+    VezaxTricksOnTankMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax tricks on tank multiplier") {}
 
     float GetValue(Action* action) override;
 };
