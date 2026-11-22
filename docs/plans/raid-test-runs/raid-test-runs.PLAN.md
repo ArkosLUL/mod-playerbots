@@ -10,7 +10,7 @@ The polish loop runs on the user's standing go ("Polish loop" below). Resumed 20
 |---|---|---|
 | Jaraxxus | done: 25h kills with 0/0/1 deaths, 10h kills with 0 | none |
 | Kologarn, Ignis | polished at 25n (round 1) | 10n check: one pull per pool (window 6 was stopped before it) |
-| XT-002 | round 2 merged (hunter arc, lust on the Heart); window 6 (cut short at shutdown): kills with 2 and 0 deaths and one wipe, Heartbreak not yet read | round 3 from window 6's traces (`--head 9938bd2f0`); counts only with Heartbreak |
+| XT-002 | round 2 verified (Heart dead in its first window in 5 of 5 pulls, Heartbreak in all); round 3 merged (`041399767`): the raid drops a Life Spark the core made immune (it can't path to its victim) for a hittable one, reader `--sparks`. Window 6: hard-mode kills on uld1 (2 deaths) and uld3 (0); uld2 wiped to 3 sparks up at once (24 deaths) | window 8 on round 3. **Open user question (Q5)**: after Heartbreak, an off-tank holding neither XT nor a Pummeller takes Searing Light to the Searing Light spot like other carriers (lane recommends yes) |
 | Northrend Beasts | round 3 merged (detour for the Toxin runner); window 6 pulled it on all three pools before the stop | round 4 from window 6's traces (`--head 96e2d86c2`); the mobile holder's drag loses threat, which may be a user question |
 | Twin Val'kyr | **polished at 25h** on first real data (window 6: three kills, 0 deaths each; DC engages Fjola on the main tank 26 s after the gossip) | 10h check |
 | Razorscale | round 1 merged (`3a3e4866c`: each ranged bot its own fire-free spot on the stack circle) | test |
