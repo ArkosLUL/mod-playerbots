@@ -1,0 +1,12 @@
+[
+  {"boss": "faction-champions", "scenario": "totc-champions", "raid": "toc", "label": "polish r6 + shared defensive"},
+  {"boss": "thorim", "scenario": "uld-thorim", "raid": "uld", "label": "polish r7 + shared defensive"},
+  {"boss": "iron-assembly", "scenario": "uld-assembly", "raid": "uld", "label": "confirm shared defensive"},
+  {"boss": "xt-002", "scenario": "uld-xt002", "raid": "uld", "label": "polish r11"},
+  {"boss": "hodir", "scenario": "uld-hodir", "raid": "uld", "label": "polish r7 + shared defensive"},
+  {"boss": "vezax", "scenario": "uld-vezax", "raid": "uld", "label": "confirm r4 camp"},
+  {"boss": "mimiron", "scenario": "uld-mimiron", "raid": "uld", "label": "polish r6 + shared defensive"},
+  {"boss": "freya", "scenario": "uld-freya", "raid": "uld", "label": "polish r7"},
+  {"boss": "yogg-saron", "scenario": "uld-yogg", "raid": "uld", "label": "polish r5 + shared defensive"},
+  {"boss": "algalon", "scenario": "uld-algalon", "raid": "uld", "label": "polish r5 + shared defensive"}
+]
