@@ -39,7 +39,7 @@ bool IccLkWalkAction::WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementP
         if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
             return true;
 
-    // Nitro Boosts refuse a bot mid-cast, so they go after the walk drops it
+    // boots after the walk, they refuse a bot mid-cast and the walk is what drops the cast
     bool const walked = WalkTo(spot, priority, interrupt);
     if (walked && nitro && bot->GetExactDist2d(spot) > NITRO_FROM && EncounterHelpers::NitroBoostsReady(bot))
         EncounterHelpers::UseNitroBoosts(bot);

@@ -26,7 +26,7 @@ target size. Guides: Warcraft Tavern (WT), Wowhead (WH), the gauntlet blog.
 | Icy Grip 70117, Blistering Cold 70123/71047/71048/71049 | grip at 33.5 s, 35-40 s after landing; last phase 35-40 s after it starts, then 65-70 s after each Cold. Pulls everyone within 100 yd and in sight onto her, except holders of Tank Marker 71038 (her melee hit in the last 30 s); 1 s later a 5 s cast, 30k/35k/45k/60k Frost within 25 yd | everyone runs past 25 yd | forced run past 29.5 yd, the holder along her front, the rest to the nearest flank escape clear of beacons and tombs |
 | Frost Beacon 70126 (air) | 50 s, then 110 s after each takeoff while above 35%: passive, up 20 yd, to (4476, 2484, 248); 69712 then 69675 beacon 2/5/2/6 random players not Frost-Imbued or immune | WH: beacons 2 by 2 at the stair foot, each pair over 10 yd from the next, raid up the stairs; WT: 3 rows of 2 (10-man a triangle) | pairs at the stair foot, everyone else staged on the stairs |
 | Ice Tomb 70157 | 7 s after the beacon: 15.6-16.4k Frost and a stun on the target and everyone within 10 yd, other beacons included, then tomb 36980 (38320/38321/38322, 113k/453k/113k/453k) with ice block GO 201722 blocking sight; inside, -99% Frost damage taken; Asphyxiation 71665, 8% max health per s, after 22.5 s, about as the 4th bomb lands | stay 10 yd off a beacon; a pair takes 2x16k; HoTs on beacons; damage tombs to 20%, break them after the last bomb | 12 yd beacon dodge; HoTs and shields; tombs held at 20% (10-man 40%) with DoTs and area damage off them, broken after the 4th bomb or on Asphyxiation once no bot hides behind it from a live bomb |
-| Frost Bomb 69846, 69845/71053/71054/71055 | from (4525.6, 2485.15, 245.1), 7 s after the beacons then every 6 s, four per air phase: a 1 s cast drops marker 37186 (aura 70022) at a random point x 4350-4425, y 2450-2525, 3 yd off ice blocks; 5.5 s later 23.6-26.4k/23.6-26.4k/188.5-211.5k/188.5-211.5k Frost to everyone in its sight. She flies back 5.5 s after the 4th cast, 1 s before it lands | hide behind a tomb | 3.5 yd behind the nearest tomb on the marker's far side |
+| Frost Bomb 69846, 69845/71053/71054/71055 | from (4525.6, 2485.15, 245.1), the far station (the near one, where she casts the beacons, is 49.6 yd off), 7 s after the beacons then every 6 s, four per air phase: a 1 s cast drops marker 37186 (aura 70022) at a random point x 4350-4425, y 2450-2525, 3 yd off ice blocks; 5.5 s later 23.6-26.4k/23.6-26.4k/188.5-211.5k/188.5-211.5k Frost to everyone in its sight. She flies back 5.5 s after the 4th cast, 1 s before it lands | hide behind a tomb | 3.5 yd behind the nearest tomb on the marker's far side |
 | Mystic Buffet 70128, 70127/72528/72529/72530 | last phase, from 35% (latched; reached in the air, from touchdown), no more air phases; every 6 s +10/15/20/20% magic damage taken per stack, 8 s, to everyone in sight by GO models only; a player melee-attacking her within melee range is always hit | hide behind a tomb at 3 stacks, auto attack off | hide at 3 stacks, the free tank at 1, until it drops |
 | Frost Beacon 70126 (last phase) | 7-10 s in, then 18-22 s: one random player within 80 yd who is not her victim and has no Tank Marker | WH: the tomb on the outer circle 25 yd off her, alternating sides, away from the melee; break the previous tomb once the next exists, within 20 s | two alternating spots 31 yd off her; ranged break older tombs |
 
@@ -40,7 +40,8 @@ of L: the gate stays open between pulls and through the drakes. A wipe or a kill
 ## Layout
 
 Ground stands are polar from her live spot, re-latched once she drifts 3 yd (θ from +x, north, toward
-+y, west; r in yd), round L through her fly-in and nowhere while she idles there after a wipe.
++y, west; r in yd), round L through her fly-in and nowhere while she idles there after a wipe. A stand
+parks within 1 yd and walks back past 2.5.
 Navprobed `--nav 0x09` at L and 10, 20 and 30 yd west (her drift toward the holder), settled Z within
 0.03 of 203.38; static sight clear from S to T and her, and from the hides to T.
 
@@ -80,7 +81,8 @@ the bombs' x 4350; beacons take the stair-foot spots in guid order, 25-man (4362
 
 One `RaidInstanceState`: a 200 ms scan within 150 yd of L for tombs 36980 and Frost Bomb markers
 37186 with 70022, duties every 250 ms, then per bot the holds, the brake and one walk, highest first:
-Blistering Cold, splash, bomb hide, beacon, buffet hide, unchained, stand.
+Blistering Cold, splash, bomb hide, beacon, buffet hide, unchained, stand. A walk with Nitro Boosts
+uses them past 12 yd.
 
 - **Tanks** (`sg.tank`): the holder is her victim when a group tank, else the last holder while alive
   and untombed, else the group's main tank, else the first untombed bot tank; other bot tanks are free.
@@ -93,7 +95,8 @@ Blistering Cold, splash, bomb hide, beacon, buffet hide, unchained, stand.
 - **Holder cover** (`sg.cover`): in the last phase, from 18 s after a breath or through one, a holder
   no swap relieves (none elected, or it missed) at 5 Buffet stacks or more and without one gets the
   nearest healer bot's Pain Suppression, Guardian Spirit or Hand of Sacrifice in that spell's range
-  (Hand of Sacrifice's 30 yd misses T from S) and sight, unchained-held healers skipped.
+  (Hand of Sacrifice's 30 yd misses T from S) and sight, unchained-held healers skipped; every such
+  external lasts 8 s or more.
 - **Brake** (`sg.brake`): on the ground, non-holders but healers and a swapper past its taunt, at 90%
   of the holder's threat until 80%. Nothing of theirs lands on her, nor area damage within 30 yd of her.
 - **Blistering Cold** (`sg.cold`): while she casts it, bots within 29.5 yd run, forced, the cast
@@ -102,48 +105,51 @@ Blistering Cold, splash, bomb hide, beacon, buffet hide, unchained, stand.
   already out hold still.
 - **Unchained Magic** (`sg.unchained`): a carrier at 3 Instability holds every spell, heals included,
   until Instability drops. Heroic: carriers walk to their grid node while they carry Unchained Magic or
-  Instability, and hold while any living non-carrier is within 23 yd.
+  Instability, cutting a cast (one finished on the way stacks Instability), and hold while any living
+  non-carrier is within 23 yd.
 - **Chilled to the Bone** (`sg.chilled`): a non-holder at 6 stacks drops her, auto attack and auto
   shot until the aura is gone.
 - **Air phase**: at takeoff all but beacons walk to the stage; beacons (70126, `sg.beacon` 1-6) walk
-  to their spot, forced, Nitro Boosts. A non-beacon within 12 yd of a beaconed player or its spot moves
-  to 13.5 yd (`sg.splash`): to its next destination when that and the straight walk there are clear,
-  else a hazard sweep retried after 1 s. A stand whose straight walk passes within 12 yd of one (the
-  stair foot spots sit on every line to the stage) waits, its walk stopped (`sg.stand` `wait`).
-  Healers put Renew, Power Word: Shield, Rejuvenation or Riptide on beaconed members. Once
-  tombs exist, each live marker sends every bot 3.5 yd behind a tomb on its far side, the hide nearest
-  the bot among tombs 3 yd or more off the marker with a floor point (`sg.hide` `bomb`); between bombs
-  bots hold at their last hide. Tombs stay held (`sg.tombhold`) until `sg.bombs` counted four and none
-  is live, or she left both stations with none live.
+  to their spot, forced, the cast interrupted, Nitro Boosts. A non-beacon within 12 yd of a beaconed
+  player or its spot moves to 13.5 yd (`sg.splash`): to its next destination when that and the
+  straight walk there are clear, else a hazard sweep retried after 1 s. A stand whose straight walk
+  passes within 12 yd of one (the stair foot spots sit on every line to the stage) waits, its walk
+  stopped (`sg.stand` `wait`). Healers put Renew, Power Word: Shield, Rejuvenation or Riptide on
+  beaconed members. Once tombs exist, the live marker that goes off first sends every bot 3.5 yd
+  behind a tomb on its far side, the hide nearest the bot among tombs 3 yd or more off the marker with
+  a floor point, latched per marker (`sg.hide` `bomb`); between bombs bots hold at their last hide.
+  Tombs stay held (`sg.tombhold`) until `sg.bombs` counted four and none is live, or she left both
+  stations with none live.
 - **Last phase**: a beacon walks to A, or to B while a tomb sits within 6 yd of A (`sg.beacon` 7, 8).
   At 3 Mystic Buffet stacks (the free tank at 1, so it meets the swap at 1 or less) a non-holder hides
-  4 yd behind the newest tomb from her, auto attack off
-  and no target, until the aura drops or the tomb dies, one try per tomb (`sg.hide` `buffet`). Healers
-  hide only where the holder stays within 38 yd (behind A, not B), the holder and swapper never, a
-  heroic carrier only without Instability.
+  4 yd behind the newest tomb from her, auto attack off and no target, until the aura drops or the
+  tomb dies, one try per tomb (`sg.hide` `buffet`). Healers hide only where the holder stays within 38
+  yd (behind A, not B), the holder and swapper never, a heroic carrier only without Instability.
 - **Hand of Freedom**: the nearest paladin within 30 yd with it ready, one per tank, on each tank
   carrying Frost Breath in the first 6 s of an air phase and on the holder at 3 breath stacks.
 - **Tank buttons** (`sg.defensive`, `sg.humancall`): the holder on each breath cast at 3 Buffet stacks
-  in the last phase or under 50%, any tank under 40%; class buttons held to 25%; a human tank is called
-  on the same windows.
+  in the last phase or under 50%, any tank under 40%, magic buttons such as Anti-Magic Shell counting
+  since the breath is frost; class buttons held to 25%; a human tank is called on the same windows.
 - **Hooks**: lust in the last phase, opener boss 36853, frost resistance all fight.
 
 `GetSgTarget` (`sg.target`), tanks and DPS: a player's skull on her or a tomb, except her for a braked
-or chilled bot; nothing for a tombed, unchained-held or buffet-hiding bot. In the air, ranged break an
-asphyxiating tomb no bot hides behind from a live bomb, then each bot takes its last hide's tomb above
-the floor and ranged also the highest held one above it; once released, everyone breaks them. On the
-ground, ranged break any tomb but the last phase's newest (air leftovers, older tombs, a prisoner
-asphyxiating or under 40%); else her, but nothing for a braked or chilled bot. Tombs go danger first,
-then prisoner tank, healer, other, lowest first; one the bot can't attack yields the next.
+or chilled bot, to whom tombs stay open since Permeating Chill procs and threat build only on her;
+nothing for a tombed, unchained-held or buffet-hiding bot. In the air, ranged break an asphyxiating
+tomb no bot hides behind from a live bomb, then each bot takes its last hide's tomb above the floor
+and ranged also the highest held one above it; once released, everyone breaks them. On the ground,
+ranged break any tomb but the last phase's newest (air leftovers, older tombs, a prisoner asphyxiating
+or under 40%); else her, but nothing for a braked or chilled bot. Tombs go danger first, then
+prisoner tank, healer, other, lowest first; one the bot can't attack yields the next.
 
 Held tombs (air tombs before release, the last phase's newest) stop at a floor of 20%, 40% on 10-man:
-a live multiplier zeroes all damage on one at the floor, mostly periodic casts at any health, and
-`SpellSplashes`/`SummonSplashes` area damage within 12 yd; the hold node stops auto attack on one at
-the floor.
+a live multiplier zeroes all damage on one at the floor, mostly periodic casts (more damage from ticks
+than the hit, at base values) at any health, and `SpellSplashes`/`SummonSplashes` area damage within
+12 yd; the hold node stops auto attack on one at the floor.
 
 Rules: `OwnTargeting`; while the resolver holds a tank or DPS bot, a `Block` of the pickers, follow,
 random moves and the pet picker; spells blocked while unchained-held; `OwnMovement` over every Mover
-row, Attack kept; spell movers blocked; `AvoidAoe` and tanks' taunts blocked while live, tanks' caster
+row, Attack kept; spell movers blocked; `AvoidAoe` (it flees a few yards at most, against the forced
+runs) and tanks' taunts blocked while live, tanks' caster
 form through her fly-in too; the tank defensive hold.
 
 ## Decisions
@@ -162,13 +168,11 @@ Source, then the choice:
   external from 5, lust in the last phase.
 - A taunt's 8 s cooldown outlasts the 4-9 s left before the breath: a missed swap goes back to M rather
   than share the breath, and the holder's cover takes over.
-- WT 2-3, WH 3-5: Unchained Magic held at 3 Instability.
 - Backlash's 20 yd plus both parks, and WH (carriers leave the stack): heroic carriers on the probed
   grid, 25 yd apart and 24 yd off the raid's spots, picked live since she drifts. Others first, within
   spell reach of her; healers toward the holder, else the raid, rather than WH's fixed head and tail
   sides, which run out of floor once she drifts.
 - WT, WH 5-8: Chilled to the Bone stop at 6.
-- Blistering Cold's 25 yd plus margin: the run past 29.5 yd.
 - WH (beacons 2 by 2, each pair over 10 yd from the next), against WT's three rows of two: pairs at
   the stair foot, the raid staged on the stairs. The spots sit on every straight line to the stage, so
   a bot still walking when a beacon lands stops 12 yd short and waits for the tombs rather than route
@@ -293,10 +297,10 @@ resets once the boss state leaves `IN_PROGRESS`.
 - The rescue taunt (`sg.gauntlet.taunt` `champion`, `warrior`) goes to the nearest tank with its taunt
   ready, skipping an add a taunt just landed on, within 30 yd and in sight; the tank then attacks it.
   Generic taunts stay free: these adds have no taunt DR.
-- The blade dodge (`sg.gauntlet.dodge` `melee`, `clear`, `blocked`): forced, inside 12.5 yd of a live
-  Frostblade 38199 to 14.5 yd, a melee bot keeping its target in reach where it can. A melee bot or tank
-  whose target stands within 14.5 yd of a blade gets no reach or charge, else reach walks it back in;
-  avoid aoe is blocked inside a blade.
+- The blade dodge (`sg.gauntlet.dodge` `melee`, `clear`, `blocked`): forced, cutting a cast, inside
+  12.5 yd of a live Frostblade 38199 to 14.5 yd, a melee bot keeping its target in reach where it
+  can. A melee bot or tank whose target stands within 14.5 yd of a blade gets no reach or charge, else
+  reach walks it back in; avoid aoe is blocked inside a blade.
 - The kick (`sg.gauntlet.kick` `sorceress`): while a Sorceress casts Ice Tomb, the lowest-guid duty bot
   whose Kick, Pummel, Shield Bash, Mind Freeze, Counterspell or Wind Shear reaches her interrupts it.
 - Freedom (`sg.gauntlet.free`, the spell): a member rooted by Frost Nova or Web within 12.5 yd of a
@@ -340,13 +344,14 @@ Rimefang's flights with no victim.
 - **Targets** (`sg.drake.target`): a player's skull (a braked bot ignores one on its focus drake), a
   tank's own drake, nothing if braked, then the focus drake: a skulled fighting one, else the first in
   kill order, Rimefang first, though melee take Spinestalker while Rimefang flies.
-- **Stands** (`sg.drake.stand`), latched, absolute, z 203.38, navprobed `--nav 0x09`: the owner on the
-  tank spot, free tanks and melee on the melee spot, ranged and healers on the ranged spot; with both
-  drakes fighting, healers split between the two ranged spots by guid, Rimefang's first. Each holds
-  only while its drake is landed and the spot 9.5 yd or more off every puddle and impact; melee and
-  ranged also need the drake within 8 yd of its landing spot. Sight clear from each ranged spot to its
-  landing and tank spots, Rimefang 25 yd up, and Spinestalker's melee spot. A fouled ranged spot gives
-  way to the first spot 5 then 10 yd round it (8 headings) clear of every hazard, on the floor
+- **Stands** (`sg.drake.stand`), latched (park 1 yd, walk back past 2.5), absolute, z 203.38, navprobed
+  `--nav 0x09`: the owner on the tank spot, 10 yd off the landing spot, so each drake turns its front
+  away from the others, free tanks and melee on the melee spot, ranged and healers on the ranged spot;
+  with both drakes fighting, healers split between the two ranged spots by guid, Rimefang's first. Each
+  holds only while its drake is landed and the spot 9.5 yd or more off every puddle and impact; melee
+  and ranged also need the drake within 8 yd of its landing spot. Sight clear from each ranged spot to
+  its landing and tank spots, Rimefang 25 yd up, and Spinestalker's melee spot. A fouled ranged spot
+  gives way to the first spot 5 then 10 yd round it (8 headings) clear of every hazard, on the floor
   (`ValidateStaticFloorPoint`, 1.5 yd), in static sight of the tank spot, within 40 yd of the landing
   spot (a 30 yd spell's reach; the hold blocks reach), a healer's within 38 yd of the tank spot and, for
   Spinestalker, 37 yd off his landing spot (`sg.drake.stand` `... alt`), kept until it fouls, a failed
@@ -359,13 +364,15 @@ Rimefang's flights with no victim.
   | ranged, healers | (4391.31, 2456.42) | (4384.13, 2526.89) |
 
 - **Brake** (`sg.drake.brake`, 90%/80%): free bot tanks all fight, everyone else but healers while
-  Rimefang is up (`sg.drake.air` `1`), against the owner, else a tank victim, else the top tank. Free
-  tanks' generic taunts are blocked; the owner keeps its own.
-- **Icy Blast** (`sg.drake.dodge` `blast`, `puddle`, `blocked`): a forced dodge from 7.5 yd to 9.5 yd
-  off puddles 38223 within 100 yd, the spot Rimefang is casting 71376 at (its target's when the cast
-  has no destination), and after the cast that spot for up to 4 s or until a puddle shows within 3 yd.
+  Rimefang is up (passive with gravity off, `sg.drake.air` `1`), against the owner, else a tank victim,
+  else the top tank; a braked bot's attacks on the drake and its area damage within 19 yd of it are
+  held. Free tanks' generic taunts are blocked; the owner keeps its own.
+- **Icy Blast** (`sg.drake.dodge` `blast`, `puddle`, `blocked`): a forced dodge, cutting a cast, from
+  7.5 yd to 9.5 yd off puddles 38223 within 100 yd, the spot Rimefang is casting 71376 at (its
+  target's when the cast has no destination), and after the cast that spot for up to 4 s or until a
+  puddle shows within 3 yd.
   The cast's own target ignores the live cast, since the missile follows it until the cast ends. Melee
-  keep their target in reach where they can.
+  keep their target within 3 yd of its edge where they can.
 - **Bellowing Roar**: `RaidAntiFear` from 8 s before the next roar can come (20 s after the first tick
   he fights, then 25 s after each cast seen) until he casts.
 - **Tank buttons** (`sg.drake.defensive`, `sg.drake.humancall`): a tank holding a drake under 40%,
@@ -373,17 +380,16 @@ Rimefang's flights with no victim.
   25%; a human tank called on the same every 500 ms.
 
 Decisions, source then choice: the blog, Rimefang first. The blog (out of his head and tail) and the
-25-man back cone: Spinestalker's melee on his flank. Bellowing Roar's 35 yd: his ranged 37 yd off. Both land defensive: stands only once a drake
-fights and has landed. A free tank on the melee stand that took a drake would turn its breath, cleave
-or tail onto melee: free tanks braked all fight, not only while Rimefang flies. The core's
-`Spell::_cast` takes the destination at cast end, and 71376 flies 15 yd/s and summons on hit: the
-impact stays a hazard after the cast. The stands are absolute: melee and ranged drop theirs once the
-drake is dragged 8 yd off its landing spot. The tanks of a double pull stand about 78 yd apart, out of
-one heal spot's reach: healers split. On 10-man his Tail Sweep reaches the melee flank, and only his
-front 82° is safe, where Cleave jumps from the tank: the flank stays, the sweep's 3.75-6.25k and
-knockback every 22-25 s costing less. Bellowing Roar reaches everyone within Tremor Totem's or Fear
-Ward's 30 yd of his tank but straight ahead of him, so the tank's and melee's fear stays with the class
-anti-fear nodes, and the ranged keep out of it.
+25-man back cone: Spinestalker's melee on his flank. Bellowing Roar's 35 yd: his ranged 37 yd off. Both
+land defensive: stands only once a drake fights and has landed. A free tank on the melee stand that took
+a drake would turn its breath, cleave or tail onto melee: free tanks braked all fight, not only while
+Rimefang flies. The core's `Spell::_cast` takes the destination at cast end, and 71376 flies 15 yd/s and
+summons on hit: the impact stays a hazard after the cast. The tanks of a double pull stand about 78 yd
+apart, out of one heal spot's reach: healers split. On 10-man his Tail Sweep reaches the melee flank,
+and only his front 82° is safe, where Cleave jumps from the tank: the flank stays, the sweep's
+3.75-6.25k and knockback every 22-25 s costing less. Bellowing Roar reaches everyone within Tremor
+Totem's or Fear Ward's 30 yd of his tank but straight ahead of him, so the tank's and melee's fear stays
+with the class anti-fear nodes, and the ranged keep out of it.
 
 Known gaps: no trace. A puddle drops a melee or tank spot for up to 40 s, and Spinestalker's ranged
 spot too once it also fouls his two alternates in reach (a healer's one). Melee have nothing to hit

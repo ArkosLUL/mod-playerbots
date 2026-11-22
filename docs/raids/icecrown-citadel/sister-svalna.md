@@ -26,30 +26,23 @@ Machine Gun 71788/71789 have spelldifficulty rows; nothing else here does.
   captains charge before she lands, so this covers the seconds before her state moves.
 - **Spear puller**: per spear, the nearest bot not impaled, charmed (25-man Dominate Mind) or in a
   vehicle, not locked to one ability (Bladestorm makes the click a no-op) and not a tank holding an
-  add; damage dealers rank first, then healers, then free tanks. It drops its cast (the victim loses
-  10% a second), walks forced to within 5 yd and clicks. The claim lapses once the spear is gone or
-  the puller fails any of these.
+  add; damage dealers rank first, then healers, then free tanks: everyone running for it pulled tanks
+  off the captains and healers off the victim. It drops its cast (the victim loses 10% a second),
+  walks forced to within 5 yd and clicks. The claim lapses once the spear is gone or the puller fails
+  any of these.
 - **Thrower**: elected among uncharmed bot holders by distance to her; drops form and cast before
-  using the item.
+  using the item. The throw waits for the shield: Hurl Spear's 10k matters little, the shield's
+  immunity and heal a lot, and the next shield comes with its own spear.
 - **Kicker**: per Arnath cast of Dominate Mind or Flash Heal, the nearest bot not casting, impaled,
   charmed or pulling a spear with a kick or silence ready, in reach and sight; one kicker per caster,
-  elected every 200 ms in the tick.
-- **Tank valve**: a bot tank a captain hits spends `NextTankDefensive` (physical) under 40%; the class
-  nodes keep theirs to 25%; a human tank in that state is called (`ss.humancall`).
+  elected every 200 ms in the tick. Dominate Mind is kicked, not cleared: its 2 s cast is the window.
+- **Tank valve**: a bot tank a captain hits spends `NextTankDefensive` (physical) under 40%, since no
+  captain hit is predictable enough for a timed button; the class nodes keep theirs to 25%; a human
+  tank in that state is called (`ss.humancall`).
 - **Targets**: a player's skull, a tank's own captain, the captains in kill order (a tank skips one
-  another tank holds), then her while unshielded.
-
-## Decisions
-
-- **One puller per spear**, damage dealers first: everyone running for it (the old answer) pulled
-  tanks off the captains and healers off the victim.
-- **The throw waits for the shield**: Hurl Spear's 10k matters little, the shield's immunity and heal
-  a lot, and the next shield comes with its own spear.
-- **Kill order** Arnath first: the blog leaves the order open; he heals the others and, on 25-man,
-  casts Dominate Mind, and putting damage dealers on him puts their interrupts on his casts.
-- **Dominate Mind is kicked, not cleared**: its 2 s cast is the window; a charm that lands runs its
-  15 s with no CC duty.
-- **Tank valve** at 40%: no captain hit is predictable enough for a timed button.
+  another tank holds), then her while unshielded. Arnath first, the blog leaving the order open: he
+  heals the others and, on 25-man, casts Dominate Mind, so damage dealers on him put their interrupts
+  on his casts.
 
 ## Svalna gauntlet
 
@@ -57,31 +50,33 @@ Definition `SvalnaGauntlet`, `ICC_BOSS_NONE`, `UnitGate` on Battle-Maiden 37132,
 Frostbinder 37127, Huntress 37134, Warlord 37133, Corrupted Ymirjar 38184 and Warhawk 38154, trace
 `svalna-gauntlet` opened by `IccMarkPull` from its tick while live; her state replaces it once she
 engages. Keys `ss.gauntlet.*`; nodes `icc sister svalna gauntlet` dodge, interrupt, tank defensive,
-taunt, target, which `ICC_PREFIXES` files under `sister-svalna` until it gets the gauntlet's row.
+taunt, target, which `ICC_PREFIXES` files under `sister-svalna` until it gets the gauntlet's row. Its
+nodes but the dodge sit below Svalna's: her captains rise while Corrupted Ymirjar may still fight.
 
-The hall's spawns span x 4340-4372: packs at y 2624-2643 (two Huntresses, a Warlord, two Battle-Maidens), y
-2570-2608 (two Deathbringer and Frostbinder pairs, two Huntresses, two Battle-Maidens) and on the
-upper platform at y 2510-2528 (two Huntresses, two Battle-Maidens, three Warlords). navprobe `--nav
-0x09` settles the lower hall at 351.10 and the platform at 358.43; the platform's east edge (x 4368,
-y 2520) is off the mesh. No stand is fixed: dodge spots come from the collision-checked sweep.
+The hall's spawns span x 4340-4372: packs at y 2624-2643 (two Huntresses, a Warlord, two
+Battle-Maidens), y 2570-2608 (two Deathbringer and Frostbinder pairs, two Huntresses, two
+Battle-Maidens) and on the upper platform at y 2510-2528 (two Huntresses, two Battle-Maidens, three
+Warlords). navprobe `--nav 0x09` settles the lower hall at 351.10 and the platform at 358.43; the
+platform's east edge (x 4368, y 2520) is off the mesh. No stand is fixed: dodge spots come from the
+collision-checked sweep.
 
 Empowered Shadow Bolt 69528/70281, the orb's blast 71286/71292 and Arctic Chill's tick 71271/71829 have
 spelldifficulty rows; nothing else here does.
 
 | Ability | Script | Guide | Bots |
 |---|---|---|---|
-| Pull | Crok pauses at waypoints 0-2 until the Ymirjar homed past y 2600/2550/2515 die; the casters keep 16 yd (the Frostbinder hovers in place) | Draw packs to Crok | Kill order by role (`ss.gauntlet.target`): ranged Deathbringer, melee Frostbinder first, then the other caster, Huntress, Battle-Maiden, Warlord, summons; area damage generic |
+| Pull | Crok pauses at waypoints 0-2 until the Ymirjar homed past y 2600/2550/2515 die; the casters keep 16 yd (the Frostbinder hovers in place) | Draw packs to Crok | Kill order by role (`ss.gauntlet.target`): ranged Deathbringer, melee Frostbinder first, then the other caster, Huntress, Battle-Maiden, Warlord, summons, the current pick kept while nothing of a better tier fights; tanks take the melee adds they hold, else the nearest no other tank holds, never a caster; area damage generic (the packs stand bunched, and a Deathbringer raises five) |
 | Melee Ymirjar | Warlord, Battle-Maiden, Corrupted Ymirjar melee their victim | Tank them | One elected rescue taunt per melee add on a non-tank (`ss.gauntlet.taunt`), generic taunts free; tank valve (`ss.gauntlet.defensive`) |
 | Empowered Shadow Bolt 69528/70281, Summon Undead 69516 | Deathbringer: a 2 s bolt every 2.5 s; from 5 s, every 45 s, a 2 s cast raising five Corrupted Ymirjar (71302), with no prevention type, so no kick or silence stops it and a stun does; its AI stops on silence | Ranged on Deathbringers | One elected stunner per Summon Undead (Hammer of Justice, Concussion Blow, Bash), then one elected kicker per bolt, kicks then silences (`ss.gauntlet.interrupt`) |
-| Whirlwind 41056 | Warlord, every 6 s: a 2 s cast, then 41057 a weapon hit 8 yd round him | — | Non-tanks within 8.75 yd step to 10.5 yd, melee keeping their target in reach where they can (`ss.gauntlet.dodge whirlwind`); reach toward a target inside it held |
-| Frozen Orb 71274 | Frostbinder, from 15-25 s every 40-50 s: a 10 s self-channel on its nearest player within 30 yd, its aura on that player (`SpellInfoCorrections` retargets it); as it runs out an orb (71285, 5 yd/s) flies to where the holder stood, and 71286 deals 15k frost (25-man 20k) within 6 yd. No prevention type: only a stun breaks the channel, and then nothing flies | — | One elected stunner per channel (`ss.gauntlet.interrupt orb`); the others within 6.75 yd of the holder step to 8.5 yd in its last 3 s, then everyone leaves the landing spot until the orb lands (`ss.gauntlet.dodge orb`) |
+| Whirlwind 41056 | Warlord, every 6 s: a 2 s cast, self-channelled so it sits in the channel slot, then 41057 a weapon hit 8 yd round him | — | Non-tanks within 8.75 yd step to 10.5 yd, forced, cutting a cast, melee keeping their target within 3 yd past its combat reach where they can (`ss.gauntlet.dodge whirlwind`); reach and charge toward a target inside it held |
+| Frozen Orb 71274 | Frostbinder, from 15-25 s every 40-50 s: a 10 s self-channel on its nearest player within 30 yd, its aura on that player (`SpellInfoCorrections` retargets it); as it runs out an orb (71285, 5 yd/s) flies to where the holder stood, and 71286 deals 15k frost (25-man 20k) within 6 yd. No prevention type: only a stun breaks the channel, and then nothing flies | — | One elected stunner per channel (`ss.gauntlet.interrupt orb`); a channel last seen within 0.6 s of its end counts as launched, one gone sooner as broken. A holder can't leave a circle round itself, so the dodge (`ss.gauntlet.dodge orb`, forced, cutting a cast) splits in two: the others within 6.75 yd of the holder step to 8.5 yd in its last 3 s, then everyone leaves the landing spot until the orb lands; reach and charge toward a target inside either circle held |
 | Arctic Chill 71270 | Frostbinder aura: 71271, 5k frost (25-man 7k) a second within 10 yd | Melee on Frostbinders anyway | None |
 | Huntress | Ice Trap, Rapid Shot channel, Volley (a rain round a point 10-35 yd off); 25-man Summon Warhawk 38154 | — | Generic; Volley's area left to avoid aoe |
 | Twisted Winds 71306 | Frostbinder swaps places and threat with a creature | — | None |
 
 Decisions: the blog's role split decides the opening tiers; no gauntlet opening positions, since Crok's
 escort and the player's pulls start each pack; Arctic Chill is taken, the blog putting melee on
-Frostbinders; the orb dodge splits in two because a holder can't leave a circle round itself.
+Frostbinders.
 
 ## Cheats
 

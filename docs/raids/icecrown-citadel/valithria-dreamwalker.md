@@ -16,10 +16,10 @@ Ids are 10N/25N/10H/25H where they differ; code remaps a difficulty row through
 | Adds | The Lich King controller summons at the doors, north corners on 10-man (x 4241), all four on 25-man, on decaying timers (floor 5 s), first at: Gluttonous Abomination 37886 5 s, Suppresser 37863 10 s (3 at each of 2 doors), Blistering Zombie 37934 15 s, Risen Archmage 37868 20 s, Blazing Skeleton 36791 30 s. Each attacks a random player within 200 yd; suppressers go for her. None obeys taunt DR | Skeletons and archmages, then worms and suppressers, then zombies and abominations | Resolver by tier, nearest her (`vd.target`) |
 | Lay Waste 69325/71730 | Skeleton, 15-20 s, every 2 s for 12 s 69326 (row 2095) on the raid and her | Kill skeletons first | Tier 1; fire resistance aura |
 | Frostbolt Volley 70759 (row 2112) | Archmage, 2 s cast every 8-15 s, 40 yd, slows 50% for 8 s, magic snare; archmages are silence immune | Interrupt | Tier 1; one elected kicker per cast (`vd.interrupt`); a slowed kiter freed (`vd.freedom`) |
-| Column of Frost 70704/71747 | Archmage, on a random player past 10 yd: a marker 37918 that 2 s later casts 70702 (row 2101) 11-20k and a knock-up within 3 yd | Move out | Forced dodge to 5.5 yd while the marker is under 2.5 s old (`vd.dodge column`) |
+| Column of Frost 70704/71747 | Archmage, on a random player past 10 yd: a marker 37918 that 2 s later casts 70702 (row 2101) 11-20k and a knock-up within 3 yd | Move out | Forced dodge, cutting a cast, to 5.5 yd while the marker is under 2.5 s old (`vd.dodge column`) |
 | Mana Void 71179/71741 | Archmage, on a mana user past 15 yd: a void 38068 burning mana within 6 yd every 0.5 s (71086, row 2100) for 36 s | Move out | Mana users step to 8.5 yd, finishing their cast first (`vd.void`) |
 | Suppression 70588 | Each suppresser channelling on her: -10% healing taken | Burn them, they have no threat | Tier 2 |
-| Acid Burst 70744 (row 2096) | A zombie at 1 health roots and casts it, 0.75 s: 9-20k within 15 yd plus a 20 s DoT, then turns unselectable 2 s before despawning | Nobody near a dying zombie | Everyone but its victim dodges forced to 17.5 yd from under 15% until it bursts (`vd.dodge burst`); kite legs keep out |
+| Acid Burst 70744 (row 2096) | A zombie at 1 health roots and casts it, 0.75 s: 9-20k within 15 yd plus a 20 s DoT, then turns unselectable 2 s before despawning | Nobody near a dying zombie | Everyone but its victim dodges forced, cutting a cast, to 17.5 yd from under 15% until it bursts (`vd.dodge burst`); kite legs keep out |
 | Zombie melee, Corrosion 70751 | Huge swings stacking -10% armour, 5 stacks; runs 5 yd/s against a player's 7 | Kite, snare with Chains of Ice, ranged only | Victim kites the 25 yd ring (`vd.kite`); one snare per zombie (`vd.snare`); melee never target one; area damage held within 10 yd of one |
 | Gut Spray 70633 (row 2002) | Abomination, 10-13 s, 8 yd cone at its victim: nature DoT, +25% physical taken, disease | One tank, faced away; cleanse | Tank roster (`vd.tank`); generic melee stand behind; class cleanses; tank valve (`vd.defensive`) |
 | Rot Worms 37907 | An abomination's death spawns them on random players: Flesh Rot 72963 stacks | AoE them, off the healers | Tier 2; tanks taunt them off healers |
@@ -45,40 +45,51 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
   10-man, two on 25-man, never the last bot healer. The rest take portals.
 - **Portal healers**: each claims the nearest unclaimed pre-effect, walks to it and parks within 1 yd
   (back past 2.5); a Mana Void on the spot waits for the portal to open, an open portal is worth a
-  dropped cast. It clicks the real portal within 5 yd. A claim ends in Dream State or when nothing
-  stands on the spot; a kited healer claims none, and one holding a claim kites.
-- **Healing her**: portal healers unless someone within 40 yd is under 40%, raid healers while
-  everyone within 40 yd is above 85%; inside 36 yd and in sight, else walk to 25 yd from her. By
-  class, renewing a heal over time with 2 s left: druid Lifebloom (3), Rejuvenation, Regrowth, Wild
+  dropped cast. It clicks the real portal within 5 yd, out of form and cast first: the click casts
+  Dream State, which a cast in progress refuses. A claim ends in Dream State or when nothing stands on
+  the spot; a kited healer claims none, and one holding a claim kites. Its reach is held, since a far
+  heal target would walk it off its portal.
+- **Healing her**: by name, the bot's best rank, since she is no party member and no generic heal
+  reaches her; portal healers unless someone within 40 yd is under 40%, raid healers while everyone
+  within 40 yd is above 85%; inside 36 yd and in sight, else walk to 25 yd from her. By class,
+  renewing a heal over time with 2 s left: druid Lifebloom (3), Rejuvenation, Regrowth, Wild
   Growth, Nourish, Healing Touch; priest Renew, Penance, Greater Heal, Flash Heal; shaman Riptide,
   Healing Wave, Lesser Healing Wave; paladin Holy Shock, Holy Light, Flash of Light. Earth Shield and
   Sacred Shield stay on the tank.
 - **Beacon of Light**: a paladin bot healer on the raid duty, or on any duty on heroic, keeps its
   beacon on her, recast inside 5 s of its end, the generic beacon nodes blocked (`vd.beacon`).
 - **Push** (`vd.push`): open while she is at 80%+, no bot healer is in Dream State and a healer carries
-  Emerald Vigor. The lowest-guid shaman bot able to, neither Sated nor Exhausted (the DBC allows that
-  cast), casts Heroism or Bloodlust when none runs, directly, since the base burst gate holds lust off
-  every target here; the lowest-guid priest bot able to casts
-  Guardian Spirit on her whenever hers has run out.
+  Emerald Vigor, the guides' 80% after a Dream State. The lowest-guid shaman bot able to, neither Sated
+  nor Exhausted (the DBC allows that cast), casts Heroism or Bloodlust when none runs, from this
+  encounter node, not a hook: the base burst gate holds lust off non-boss adds and a friendly boss, and
+  a per-boss window can only hold. The lowest-guid priest bot able to casts Guardian Spirit on her
+  whenever hers has run out.
 - **Dream flight**: straight 3D splines with the fly flags set by hand (no client answers the aura,
   and the generic movers fly only with a flying master). First the cloud nearest the bot until a
-  stack is newer than the dream; then the group of refreshed bot dreamers flies onto its lowest-guid
+  stack is newer than the dream (Vigor holds 19 s or more beyond what is left of Dream State: the dream
+  lasts 20 s, Vigor 40 s from its last cloud, so a smaller gap came from inside the dream); then the group of refreshed bot dreamers flies onto its lowest-guid
   leader when over 6 yd off, else to the shared cloud nearest the leader, left once the leader has
-  waited 1.3 s within 3 yd. A player in Dream State leads instead. Descent in the last 3.5 s; once
-  out, a bot still flagged drops through `MoveFall` and `HandleFall`. `PlayerbotAI::CastSpell`
+  waited 1.3 s within 3 yd. A player in Dream State leads instead. A flight re-aims once its point
+  moves 2 yd. The clouds are read from the combat trigger, which shares the Dream State phase; she
+  doesn't. Descent in the last 3.5 s; once out, a bot still flagged drops through `MoveFall` and
+  `HandleFall`, since no client sends the landing that applies fall damage. `PlayerbotAI::CastSpell`
   exempts Dream State 70766 from its in-flight refusal, as it does Gravity Lapse, so heroic dreamers
   heal each other.
 - **Targets**: tanks and damage dealers; a player's skull, a tank's own abomination, then the tiers,
   nearest her within 50 yd, the current pick kept inside its tier. Zombies are ranged only; damage
   dealers take an abomination only once a tank holds it.
 - **Tanks** (`vd.tank`): each abomination to the nearest free bot tank. A tank taunts its own back,
-  else a worm off a healer, else, holding none, a zombie off a healer; generic taunts are blocked.
+  else a worm off a healer, else, holding none, a zombie off a healer; generic taunts, which would pull
+  a zombie, are blocked.
 - **Kite**: a bot a zombie chases within 45 yd, unless it is a tank holding its abomination. It drops
   its cast, uses Nitro Boosts and walks forced along the ring, two points (30°) at a time away from
-  the zombie, else three, one, or back the other way; legs stay 6 yd off the zombie and clear of
-  live columns and other zombies' bursts. Meanwhile it only kites, dodges and frees itself.
+  the zombie, else three, one, or back the other way, boxed in the ring point farthest from it; legs
+  stay 6 yd off the zombie and clear of live columns and other zombies' bursts, and re-aim once their
+  point moves 2 yd. Meanwhile it only kites, dodges and frees itself; the freedom node runs above the
+  kite, which wins every tick a kiter walks.
 - **Snare**: per chasing unslowed zombie, the nearest non-healer bot with Chains of Ice (20 yd),
-  Concussive Shot (30) or Frost Shock (20) ready and in sight.
+  Concussive Shot (30) or Frost Shock (20) ready and in sight; ranged only, since `IccTryClassCC`'s
+  melee stuns and fears put bots in reach or scatter adds.
 - **Kicker** (`vd.interrupt`): per archmage casting Frostbolt Volley, the nearest bot not casting,
   dreaming or kiting with a kick ready, in reach and sight, one per archmage, elected in the 200 ms scan.
 - **Freedom** (`vd.freedom`): a kiter the Volley slowed frees itself where it can (Hand of Freedom,
@@ -87,6 +98,9 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
 - **Tank valve** (`vd.defensive`): a bot tank its abomination hits spends `NextTankDefensive`
   (physical) under 40%, 50% under Gut Spray; the class nodes keep theirs to 25%; a human tank in that
   state is called (`vd.humancall`).
+
+Rules: follow blocked, since it would walk a bot across the room to its master; avoid aoe blocked, since
+it flees 5 yd at most, against the dodges.
 
 ## Decisions
 
@@ -98,11 +112,9 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
   the guides' healer on her; they heal her too while the raid is topped (instant-carry).
 - **Dream group**: Wowhead's refresh-then-gather; the lowest guid leads so every bot agrees.
 - **Fall**: a bot still airborne takes the fall a player would, not a snap.
-- **Ring kite**: on a ring a pursuer settles inside it and behind, about 17 yd at these speeds, and
-  the kiter stays in heal range; a tank holding an abomination face-tanks rather than drag it.
-- **Snares** are ranged only: `IccTryClassCC`'s melee stuns and fears put bots in reach or scatter adds.
-- **Lust from the encounter node**, not a hook: the base gate holds lust off non-boss adds and a friendly
-  boss, and a per-boss window can only hold. The window is the guides' 80% after a Dream State.
+- **Ring kite**: on a ring a pursuer settles inside it and behind, about 17 yd at these speeds (outside
+  Acid Burst's 15 yd), and the kiter stays in heal range; a tank holding an abomination face-tanks
+  rather than drag it.
 - **Beacon on her** for raid healers and on heroic (WT and Wowhead heroic tips); Earth Shield stays on
   the tank, no guide asking for it on her and her rarely being hit.
 - **Volley is kicked** (both guides), and a kiter it still slows is freed, rather than the kite reversing.

@@ -175,7 +175,7 @@ bool IccBqlPactAction::Execute(Event /*event*/)
         if (inFlight->GetExactDist2d(leg) <= reaim)
             return true;
 
-    // Nitro Boosts refuse a bot mid-cast, so they go after the walk drops it
+    // boots after the walk, they refuse a bot mid-cast and the walk is what drops the cast
     bool const walked = WalkTo(leg, MovementPriority::MOVEMENT_FORCED, true);
     if (walked && bot->GetExactDist2d(spot) > PACT_NITRO_FROM && EncounterHelpers::NitroBoostsReady(bot))
         EncounterHelpers::UseNitroBoosts(bot);

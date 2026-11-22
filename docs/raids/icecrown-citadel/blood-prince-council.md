@@ -15,7 +15,7 @@ Ids and damage are 10N/25N/10H/25H where they differ; code remaps a difficulty r
 | Three princes | Valanar 37970, Keleseth 37972, Taldaram 37973, guid slots 21/19/20. Any engage pulls all three in one update; Valanar's sets `IN_PROGRESS`, his death is `DONE`, one death kills the others. Taunt DR (`flags_extra` 0x80000); immunities -361 block neither taunt nor attack-me. Berserk at 10 min; leaving the ellipse round (4660.95, 2769.19), 85 by 60 yd, evades them | 2-3 tanks: one on Valanar and Taldaram, one on Keleseth, or one each; spots picked in advance; a warlock can tank Keleseth | Tank roster (`bpc.tank`), with one tank in the raid a stand-in on Keleseth; recovery taunt below DR level 3, generic taunts blocked; threat brake on the empowered prince (`bpc.brake`) |
 | Invocation of Blood 70952/70981/70982 | Only its holder takes damage; on the others damage becomes threat. Valanar at the pull, then at 45 s and every 46 s on to a random one of the other two, the last, Valanar again, by a 25 yd/s missile; the next takes the current one's health | Kill the empowered one | Resolver on the empowered prince (`bpc.phase`, `bpc.target`) |
 | Kinetic Bomb 72053 | 1.5 s cast at 18-24 s, then every 30.5 s (10) or 20.5 s (25). A bomb 38454 appears 20 yd above a random point within 50 yd of Valanar, falls 2 yd/s (heroic 3) and explodes within 2 yd of its landing: 72052 10.8-13.2k/12.6-15.4k/16.2-19.8k/18-22k and a knockback within 50 yd. A damaging hit, melee included, never periodic or a DoT's application (Unstable 72059, `spell_proc` `SpellTypeMask` 1), gives it Kinetic Bomb Knockback 72087 for 3 s and lifts it 2 yd/s until 3 s after the last hit. Combat reach 0, so melee hits it within 5 yd, height included. Despawns after 60 s | A hunter or three pets juggle | One duty bot per bomb (`bpc.bomb`), melee only when no ranged one is free, shooting it within 5 s of landing (10 yd, heroic 15; melee add their walk) while it carries no knockback (`bpc.juggle`); one pet per bomb (`bpc.petbomb`); spells that deal no damage held on it |
-| Shock Vortex 72037 | 1.5 s cast at 15-20 s, then every 18-23 s while Valanar is not empowered: a vortex 38422 within 13 yd of a random player; from 4.5 s on, 71944 8k/10k/10k/12k and a knockback within 12 yd every 1.5 s, for its 30 s | Stay out; tanks move the princes off one | Nodes within 14.25 yd blocked and re-dealt; a bot without one dodges (`bpc.dodge`) |
+| Shock Vortex 72037 | 1.5 s cast at 15-20 s, then every 18-23 s while Valanar is not empowered: a vortex 38422 within 13 yd of a random player; from 4.5 s on, 71944 8k/10k/10k/12k and a knockback within 12 yd every 1.5 s, for its 30 s | Stay out; tanks move the princes off one | Nodes within 14.25 yd blocked and re-dealt; a bot without one dodges, forced, cutting a cast (its hits cost more than any cast), melee to within 4 yd of their target's edge (`bpc.dodge`) |
 | Empowered Shock Vortex 72039 (73037-73039) | Empowered, every 30 s instead: a 4.5 s cast (heroic 4), then 5k to every player within 30 yd of him and 72038 5k/6k/7k/8k plus a knockback within 12 yd of each of them | Everyone 12 yd apart; melee scatter toward the back, onto the dais | Healers and ranged already on nodes; everyone else runs to a free node it reaches before the cast ends, else to the reachable node that costs the fewest hits (`bpc.slot`, `bpc.hits`) |
 | Shadow Lance 71405, Empowered 71815 | Keleseth casts from 10 yd off his victim, 1.5 s casts: 15.6-16.4k/17.1-17.9k/18-19k/19-20k; empowered 78-82k/85-90k/90-95k/95-100k | Tank him; save cooldowns for his phase | His tank chains buttons through his phase (`bpc.defensive`); a stand-in spends `icc.personal` on a lance that would leave it under 25% |
 | Shadow Resonance 71943 | Every 10-15 s a Dark Nucleus 38369 at a random point within 60 yd of him, kept if past 35 yd and inside the room, else moved to the farthest such point in sight on that line. Area spells skip it (immunities -363); it takes the last unit to hit it directly (500M threat) and beams 71822 on it within 15 yd: -35% shadow taken, 1k a 3 s tick, one per nucleus. Taunts land, no DR. It damages itself and dies in about a minute | Keleseth's tank holds up to 6; nobody else touches them | His owner taunts them within 30 yd, a stand-in with no taunt hits them, and walks toward one outside his phase (`bpc.nucleus`); area damage held near them |
@@ -29,22 +29,24 @@ Ids and damage are 10N/25N/10H/25H where they differ; code remaps a difficulty r
 Every stand is a point of one triangular lattice with 13.5 yd sides (12 yd vortex plus two 0.75 yd park
 tolerances; neighbours sit 13.499 yd apart), navprobed with `--nav 0x09` to within 0.1 yd; every node
 sees all three tank spots and Keleseth's place 10 yd east of his (164 `los` rays), and paths to the dais
-nodes are normal. The floor is flat at 361.16 out to 45 yd from (4638.71, 2769.37); the dais east of
-x 4662 climbs to 364.1.
+nodes are normal. Stands park within 0.75 yd and walk back past 2.5. The floor is flat at 361.16 out to
+45 yd from (4638.71, 2769.37); the dais east of x 4662 climbs to 364.1.
 
 - **Tank spots**, at the stair foot: Valanar (4655.00, 2749.00), with Taldaram too under three tanks;
   Keleseth (4655.00, 2789.50), 40.5 yd north, outside Valanar's 30 yd; Taldaram's own tank (4643.31,
-  2742.25), 13.5 yd west of Valanar's, a spread node otherwise.
+  2742.25), 13.5 yd west of Valanar's, node 1, a spread node otherwise.
 - **Nodes** (`ICC_BPC_NODES`, 41): only 15 reach Valanar's spot within 28 yd, 14 with Taldaram's own
   spot. Healers stay out of that zone while a node outside it reaches a tank spot, each tank spot in use
-  reached within 36 yd by half
-  the healers rounded up, every healer node by one spot at least. The dais field, the five dais nodes
-  within 28 yd of his spot, is never a healer's and in his phase no ranged bot's: the melee scatter
-  there. Ranged take the nearest node within 28 yd (hunters 32) of the empowered prince, held to 31
-  (35). During Empowered Shock Vortex every other bot takes the nearest free node it runs to at 7 yd/s
-  in the cast left less 0.25 s, at most 28 yd; with none free, the reachable node whose vortex hits on
-  it and on the players it lands next to are fewest, shared if need be and only if that beats staying
-  put; it gives the node back 0.5 s after the cast. A bot without a node holds no stand.
+  reached within 36 yd (held to 38; heals pick targets out to 38.5) by half the healers rounded up, every healer node by one spot at
+  least; with no bot tank any node serves. The dais field, the five dais nodes within 28 yd of his
+  spot, is never a healer's and in his phase no ranged bot's: the melee scatter there. Ranged take the
+  nearest node within 28 yd (hunters 32) of the empowered prince, held to 31 (35): 30 yd spells
+  (hunters 35) plus both combat reaches, 1.5 and the princes' 1.75, less his drift. During Empowered
+  Shock Vortex every other bot takes the nearest free node it runs to at 7 yd/s in the cast left less
+  0.25 s, at most 28 yd, forced, cutting a cast: one short of its node when the vortices land takes
+  every neighbour's hit. With none free, the reachable node whose vortex hits on it and on the players
+  it lands next to are fewest, shared if need be and only if that beats staying put; it gives the node
+  back 0.5 s after the cast. A bot without a node holds no stand.
 
 ## Duties
 
@@ -57,45 +59,59 @@ x 4662 climbs to 364.1.
   within 12 yd of his spot and fights him there, dragging him back past 16; a ranged stand-in keeps
   the spot. A prince of its own on someone else is taunted only below DR level 3 (`icc bpc prince
   taunt`). A fourth tank fights the empowered prince under the brake.
-- **Keleseth's owner**: under 6 Shadow Resonance it taunts the nearest nucleus not on it within 30 yd,
-  or, with no taunt, takes it as its pick; outside his phase, taunt ready or none, it walks to 28 yd
-  of one farther off.
+- **Keleseth's owner**: under 6 Shadow Resonance (past six the ticks cost more than the cut saves) it
+  taunts the nearest nucleus not on it within 30 yd, or, with no taunt, takes it as its pick; outside
+  his phase (the stacks are for it, and he stays on his owner through it), taunt ready (else its stand
+  walks it straight back) or none, it walks to 28 yd of one farther off.
 - **Targets**: a stand-in's nucleus, owners their princes, a bomb shot, a player's skull, else the
   empowered prince. Area damage is held within 12 yd of a prince without the Invocation, whose damage
-  becomes threat, or of a nucleus. On a bomb shot or a nucleus grab, spells that deal no damage on
+  becomes threat, or of a nucleus: area searches skip it, but a cleave or chain takes it, and the
+  splash test can't tell them apart. On a bomb shot or a nucleus grab, spells that deal no damage on
   landing are held (`icc bpc direct hit`).
 - **Threat brake** (`bpc.brake`): a damage dealer that doesn't own the empowered prince is held off
-  him from 90% of his owner's threat, or his victim's with no owner on his list, until under 80%; a bot
-  holding him away from his owner too. It still shoots bombs and follows a skull on anything else; its
-  pickers, follow and random moves are blocked, its swing, Auto Shot or wand on him stops (`icc bpc brake`), and its
-  attacks on him and area damage within 15 yd of him are held.
+  him from 90% of his owner's threat (a prince past taunt DR level 3 comes back on threat alone), or
+  his victim's with no owner on his list, until under 80%; a bot holding him away from his owner too.
+  It still shoots bombs and follows a skull on anything else; its pickers, follow and random moves are
+  blocked, its swing, Auto Shot or wand on him stops (`icc bpc brake`), and its attacks on him and area
+  damage within 15 yd of him are held.
 - **Kinetic Bombs**: each bomb goes to the nearest free DPS bot within 60 yd, hunters first, then
   mages, then other ranged, melee last, kept while both live. The bot shoots it within 5 s of landing,
   plus its walk for melee, without Kinetic Bomb Knockback, else fights; it leaves its node only while
-  its node is out of range of the bomb, 30 yd with the height (hunters 35). Each bomb also gets the
-  nearest pet within 60 yd, hunter, warlock, DK, others, which stays on it while both live.
+  its node is out of range of the bomb, 30 yd with the height (hunters 35), so a shot never walks it
+  off its node in a cast window. Each bomb also gets the nearest pet within 60 yd, hunter, warlock,
+  DK, others, which stays on it while both live.
 - **Balls**: a chased bot walks to the nearest spot within 15 yd 16.5 yd from every other player and
   clear of vortices, else to the node within 20 yd with fewer players in 16.5 yd than where it stands.
   For a Ball of Inferno Flame with stacks, three non-tank bots without a bomb or a prince, melee first,
-  nearest its path: one within 6 yd of the path and 16.5 yd of the victim holds there (`icc bpc soak
-  hold`), any other walks to the first point it reaches before the ball, 16.5 yd short of the victim.
-  Soakers keep soaking through an Empowered Shock Vortex cast.
+  nearest its path: one within 6 yd of the path (Flare reaches 8.6 yd across the floor from a ball 5 yd
+  up) and 16.5 yd of the victim holds there (`icc bpc soak hold`), any other walks to the first point
+  it reaches before the ball, 16.5 yd short of the victim. Soakers keep soaking through an Empowered
+  Shock Vortex cast: an unsoaked 25H Inferno is 132k on the victim, a shared vortex 8k. Ball, soak and
+  nucleus walks re-aim once their point moves 2 yd.
 - **Defensives**: Keleseth's tank spends `NextTankDefensive` through his empowered phase while he hits
   it; any tank under 40% spends a physical button; class buttons are held to 25%. A human tank is
   called for both (`bpc.humancall`). A stand-in asks `GetRaidPersonalDefensive` on each lance at it,
-  as a victim keeper; the Inferno victim, 1.5 s out, spends `NextMagicDefensive` or Dispersion when
-  Flames plus the ball's stack bonus would leave it under 25%, never an immunity or Cloak of Shadows.
+  the hit due from the cast's end over 1 s of bolt flight, as a victim keeper: an immunity would drop
+  Keleseth off it. The Inferno victim, 1.5 s out, spends `NextMagicDefensive` or Dispersion, lasting
+  0.5 s past the predicted catch, when Flames plus the ball's stack bonus would leave it under 25%;
+  never an immunity (Flames ignores them) or Cloak of Shadows (Flames always hits,
+  `SPELL_ATTR3_ALWAYS_HIT`). Wowhead's Divine Guardian and Pain Suppression are externals no shared
+  dealer hands out.
 - **Glittering Sparks**: per carrier the nearest priest (Dispel Magic) or paladin (Cleanse) bot that can
-  land it now within 30 yd, kept while it can; nobody walks.
+  land it now within 30 yd, kept while it can; nobody walks and no Mass Dispel: the cone mostly hits
+  Taldaram's tank, and nodes block the walk.
 - **Hooks for the merge stage** (`HookRows()`): burst `IccBloodPrincesBurstWindow` (lust in Keleseth's
   phase, the guide's quietest), opener `GetBpcOpenerBosses` (Valanar), resist
   `IccBloodPrincesResistSchools` (shadow and fire all fight).
 
-Rules: targeting owned for the whole fight; node holders keep only attacks and resurrect reach, owners
-on their spot (a stand-in included) and soakers on the path only attacks; heroic prison hold; spell
-movers, avoid aoe (it flees a vortex 5 yd and the ball the soak walks into), generic taunts, Death Grip
-and Army of the Dead blocked; a stand-in's Soulshatter, Fade, Feign Death and Invisibility (Keleseth and one
-nucleus are the two attackers that fire them) and Misdirection blocked; tank druids kept out of caster form.
+Rules: targeting owned for the whole fight; node holders keep only attacks and resurrect reach (a
+healer walking off breaks the spread), owners
+on their spot (a stand-in included) and soakers on the path only attacks (reach would walk a soaker back
+to its target before the ball passes); heroic prison hold; spell movers, avoid aoe (it flees a vortex 5
+yd and the ball the soak walks into), generic taunts, Death Grip (it shares the princes' taunt DR) and
+Army of the Dead (a ghoul's hit takes a nucleus off its tank) blocked; a stand-in's Soulshatter, Fade,
+Feign Death and Invisibility (Keleseth and one nucleus are the two attackers that fire them) and
+Misdirection (it would hand his threat to the main tank) blocked; tank druids kept out of caster form.
 
 A bomb and a loose nucleus are the picks that can be out of combat: nobody may have hit a bomb yet, and a
 loose nucleus has no victim. Both exist only mid-fight, so they pull nothing, and drop target is blocked
@@ -113,7 +129,6 @@ while a bot holds either.
   healer on every spot, five of six 25-man healers sat in his 14-node zone and left the ranged and
   melee short. A runner with no free node shares one rather than stay in the melee stack: a shared node
   costs one extra 6-8k vortex, the stack round him one per neighbour.
-- Nodes block heal reach: a healer walking off breaks the spread.
 - A tank's own prince, a stand-in's nucleus and a bomb shot outrank a player's skull, as Rotface's
   kiter's ooze does: the bomb would land, the prince go to a DPS.
 - One tank: a warlock stands in first, as Warcraft Tavern and Wowhead tank Keleseth; a DK or paladin
@@ -123,18 +138,6 @@ while a bot holds either.
   landing, since heroic bombs fall faster. Only damaging hits proc Unstable, so mages rank above other
   casters and spells that deal no damage are held on a bomb. Pets stay on bombs all fight as the guides
   set them; melee juggle only when no ranged bot can, as they reach a bomb only at 5 yd.
-- A shooter whose node reaches the bomb shoots from it, so a bomb shot no longer walks it off its node
-  in a cast window. Soakers stay on the path through one: an unsoaked 25H Inferno is 132k on the
-  victim, a shared vortex 8k.
-- The brake reads the empowered prince's owner, since a prince past taunt DR level 3 comes back on
-  threat alone.
-- The Inferno victim never takes an immunity: Flames ignores them. Nor Cloak of Shadows: Flames always
-  hits (`SPELL_ATTR3_ALWAYS_HIT`). Wowhead's Divine Guardian and Pain Suppression are external, which no
-  shared dealer hands out.
-- Glittering Sparks: single dispels from where the dispeller stands; the cone mostly hits Taldaram's
-  tank, and nodes block the walk. No Mass Dispel.
-- Area damage is held near a nucleus though area searches skip it: the splash test can't tell plain
-  area damage from a cleave or chain, which take it.
 - No opening positions: every stand opens on Valanar's engage, and pre-pull stands would catch bots
   walking through.
 - Heroic holds generic movers all fight rather than past a stack count (old: 12, tanks 18).
@@ -164,7 +167,7 @@ None. The old floor snaps (an assist tank 6 yd off the floor, a bomb shooter abo
 - The soak path is the straight line from the ball to its victim; a kiting victim bends it. The
   fallback node can hop as players move.
 - Glittering Sparks on a carrier with no priest or paladin bot within 30 yd waits for the class
-  dispel nodes; no Mass Dispel.
+  dispel nodes.
 - The brake is blind at a threat wipe, a braked bot idles, and its pet keeps hitting the empowered
   prince: only the bot's own threat is braked (`--brake` against his target changes).
 - Humans hold no duty.
