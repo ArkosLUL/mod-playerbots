@@ -142,7 +142,7 @@ class Sparks(unittest.TestCase):
     STUCK = (1 << 32) | 5
     QUICK = (1 << 32) | 6
 
-    def spark_pull(self, evading: bool) -> list[dict]:
+    def spark_pull(self, evading: bool, released: bool = False) -> list[dict]:
         records = pull(heartbreak=True)
         end = records.pop()
         records += [
@@ -152,14 +152,17 @@ class Sparks(unittest.TestCase):
             {"t": 119990, "e": "aura", "d": HEALER, "sp": 65121, "r": 1},
         ]
         for t in range(110000, 160001, 5000):
-            rows = [[TANK, 898.0, -4.0, 410.1, 0, 100, 100, XT],
-                    [HEALER, 866.0, -6.0, 409.8, 0, 100, 100, self.STUCK if t < 140000 else XT],
+            back = released and t >= 145000
+            rows = [[TANK, 898.0, -4.0, 410.1, 0, 100, 100, self.STUCK if back else XT],
+                    [HEALER, 866.0, -6.0, 409.8, 0, 100, 100, self.STUCK if t < 140000 or back else XT],
                     [self.STUCK, 896.0, -5.0, 409.6, 0, 100, 0, HEALER]]
             if 120000 <= t <= 130000:
                 rows.append([self.QUICK, 846.0, -22.0, 409.6, 0, 50, 0, HEALER])
             records.append({"t": t, "e": "snap", "u": rows})
         if evading:
             records.append({"t": 112000, "e": "note", "g": HEALER, "k": "xt002.evading", "txt": str(self.STUCK)})
+        if released:
+            records.append({"t": 141000, "e": "note", "g": HEALER, "k": "xt002.evading", "txt": "none"})
         records.append({**end, "t": 160000})
         return records
 
@@ -170,8 +173,12 @@ class Sparks(unittest.TestCase):
             "  1:50.000 on Bulwark (tank) at (896, -5): lived 50 s, still up at the end, most bots on it at once 1\n"))
 
     def test_evade_note_shows_who_kept_hitting_it(self):
-        self.assertIn("    evading from 1:52.000 (bots noting it 1), most bots still on it 2 s later 1\n",
+        self.assertIn("    evading 1:52.000 on (bots noting it 1), most bots still on it 2 s in 1\n",
                       printed(xt.show_sparks, load(self.spark_pull(evading=True))))
+
+    def test_bots_back_on_a_released_spark_are_not_counted(self):
+        self.assertIn("    evading 1:52.000 to 2:21.000 (bots noting it 1), most bots still on it 2 s in 1\n",
+                      printed(xt.show_sparks, load(self.spark_pull(evading=True, released=True))))
 
 
 class EveryView(unittest.TestCase):

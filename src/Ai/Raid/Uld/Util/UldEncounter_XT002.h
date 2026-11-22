@@ -184,7 +184,7 @@ bool IsXT002AddEngageable(Unit* xt002, Unit* unit);
 Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float botReach);
 
 // Add that takes no damage: evading, or chasing a victim it can't path to. In a raid map the core never resets
-// the second kind, so it stays immune until the victim comes into reach, a Life Spark's Static Charged ticking on.
+// the second kind and a taunt misses it, so it stays immune until it has a victim it can reach.
 bool IsXT002AddEvading(Unit* unit);
 
 // This bot's formation slot. Every bot sorts the same roster, so none needs telling; healers take the centre

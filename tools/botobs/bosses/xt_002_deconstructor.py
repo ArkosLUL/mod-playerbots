@@ -285,22 +285,29 @@ def sparks(trace: Trace) -> list[dict]:
 
 
 def evading_from(trace: Trace) -> dict:
-    """Spark guid -> (first `xt002.evading` note naming it, how many bots named it)."""
-    first, bots = {}, collections.defaultdict(set)
+    """Spark guid -> (first `xt002.evading` note naming it, first later note from a bot that named it
+    and no longer does or None, how many bots named it). The notes only change, so the first bot to
+    drop the spark marks it hittable again."""
+    first, until, bots = {}, {}, collections.defaultdict(set)
+    named = collections.defaultdict(set)
     for rec in notes(trace, "xt002.evading"):
-        for token in rec.get("txt", "").split():
-            if token.isdigit():
-                first.setdefault(int(token), rec["t"])
-                bots[int(token)].add(rec.get("g"))
-    return {guid: (t, len(bots[guid])) for guid, t in first.items()}
+        now = {int(token) for token in rec.get("txt", "").split() if token.isdigit()}
+        for guid in named[rec.get("g")] - now:
+            until.setdefault(guid, rec["t"])
+        for guid in now:
+            first.setdefault(guid, rec["t"])
+            bots[guid].add(rec.get("g"))
+        named[rec.get("g")] = now
+    return {guid: (t, until.get(guid), len(bots[guid])) for guid, t in first.items()}
 
 
-def held_after(trace: Trace, guid, since: int) -> int:
-    """Most roster members still targeting this unit in one snapshot from `since` on."""
+def held_between(trace: Trace, guid, since: int, until) -> int:
+    """Most roster members targeting this unit in one snapshot from `since` until `until` (None: the end).
+    Bounded, because bots rightly go back to a spark once it can be hit."""
     roster = {member["g"] for member in trace.header.get("roster", [])}
     most = 0
     for snap in frames(trace):
-        if snap["t"] >= since:
+        if snap["t"] >= since and (until is None or snap["t"] < until):
             most = max(most, sum(1 for row in snap.get("u", []) if row[0] in roster and len(row) > 7
                                  and row[7] == guid))
     return most
@@ -330,10 +337,11 @@ def show_sparks(trace: Trace) -> None:
         print(f"  {clock(spark['first'])} {source} at ({spark['spot'][0]:.0f}, {spark['spot'][1]:.0f}):"
               f" lived {life / 1000:.0f} s{up}, most bots on it at once {spark['most']}")
         if spark["g"] in evading:
-            t, bots = evading[spark["g"]]
-            held = held_after(trace, spark["g"], t + SPARK_DROP_MS)
-            print(f"    evading from {clock(t)} (bots noting it {bots}),"
-                  f" most bots still on it {SPARK_DROP_MS // 1000} s later {held}")
+            t, until, bots = evading[spark["g"]]
+            held = held_between(trace, spark["g"], t + SPARK_DROP_MS, until)
+            span = f"{clock(t)} to {clock(until)}" if until is not None else f"{clock(t)} on"
+            print(f"    evading {span} (bots noting it {bots}),"
+                  f" most bots still on it {SPARK_DROP_MS // 1000} s in {held}")
 
 
 def mechanic(trace: Trace, death: dict) -> str:
