@@ -541,7 +541,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
     if (!hasBomb)
     {
         // Tanks stay put: dragging XT or a Pummeller costs more than the splash. No adds come after Heartbreak, so
-        // from then on a tank holding neither takes its spark to the spot like anyone.
+        // from then on a tank holding neither carries Searing Light to the spot like anyone.
         if (PlayerbotAI::IsTank(bot) && (!heartbreak || HoldsXT002OrPummeller(xt002)))
             return false;
 
