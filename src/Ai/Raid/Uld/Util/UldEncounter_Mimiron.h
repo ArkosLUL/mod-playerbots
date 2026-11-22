@@ -207,7 +207,7 @@ inline constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 inline constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
 
 // Escapes from that hold: item 46029 has duration 60, so a banked core expires, and below the health
-// release the phase ends before another core could be spent.
+// release a core in hand goes down without waiting for a second. Neither stops a fetch into empty bags.
 inline constexpr uint32 ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS = 10000;
 inline constexpr float ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT = 25.0f;
 

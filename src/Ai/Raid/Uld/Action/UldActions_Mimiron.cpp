@@ -1532,8 +1532,8 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     uint32 const held = bot->GetItemCount(ITEM_MIMIRON_MAGNETIC_CORE, false);
     Item* core = bot->GetItemByEntry(ITEM_MIMIRON_MAGNETIC_CORE);
 
-    // 46029 has item_template duration 60, so a banked core expires in the bags; no duration reads 0. With
-    // the unit this low the phase ends before another core could be spent.
+    // 46029 has item_template duration 60, so a banked core expires in the bags; no duration reads 0. At
+    // the release line one landing takes about what's left, so a core in hand doesn't wait for a second.
     uint32 const remaining = core ? core->GetUInt32Value(ITEM_FIELD_DURATION) : 0;
     bool const expiring = remaining && remaining * IN_MILLISECONDS <= ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS;
     bool const acuLow = aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT;
@@ -1560,9 +1560,10 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
                       true, MovementPriority::MOVEMENT_COMBAT, true);
     };
 
-    // Collect up to the bank first. Not while the held core is expiring or the phase is ending, or the
-    // chase loses the core in hand; nor while a chain has one to spend now.
-    if (held < ULDUAR_MIMIRON_CORE_BANK && !expiring && !acuLow && !(chaining && core && ready))
+    // Empty bags fetch at any unit health: airborne it takes so little damage it can sit under the release
+    // line for minutes.
+    bool const spendHeldNow = core && (expiring || acuLow || (chaining && ready));
+    if (held < ULDUAR_MIMIRON_CORE_BANK && !spendHeldNow)
     {
         Creature* corpse = GetMimironCoreCorpse(bot);
         if (!corpse && !core)
