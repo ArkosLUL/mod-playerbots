@@ -41,8 +41,10 @@ Before phase 3 it kills a tank under half health: on 22 Nov two died so in Molge
 with Divine Protection or Last Stand ready, each costing a Rebirth phase 3 then lacked. So in any phase
 a tank it is aimed at casts `NextMagicDefensive` for the remaining cast time when the punch would leave
 it under `RAID_DEFENSIVE_FLOOR_PCT` (25%), reckoned as the top of the roll × his damage-done auras ×
-average nature resist × the tank's damage-taken mods, absorbs ignored (`ironassembly.punch`). The swap partner
-often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
+average nature resist × the tank's damage-taken mods, absorbs ignored (`ironassembly.punch`), judged
+only in the cast's last 1.5 s (traced tanks always act in it, not always in the last 1 s): before
+phase 3 the bar sits at 74–91% health on 43–50k tanks, so a dip healed back by the hit would otherwise
+spend a later punch's button. The swap partner often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
 Regeneration at 33–57% health before phase 3, or a warrior's Shield Wall 3 s after a Rebirth.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,

@@ -262,12 +262,22 @@ would leave the tank under `RAID_DEFENSIVE_FLOOR_PCT` (25%): the top of the roll
 10-man) × Steelbreaker's `MOD_DAMAGE_PERCENT_DONE` for nature (Supercharge, Electrical Charge, Berserk) ×
 (1 − the tank's average nature resist, `Unit::GetEffectiveResistChance`) × its `MOD_DAMAGE_PERCENT_TAKEN`,
 absorbs ignored, the floor test `RaidDefensive`'s `EndsUnderFloor` uses. Before phase 3 a punch on a
-full tank reads `safe` (expected ~26k on 45k) and spends nothing, one on a tank under half health gets
-a button; in phase 3 most punches still read `under`, though a full bear (60k+) should read `safe` at
-0 charges and keep its button. New probe `ironassembly.punch` (`under`/`safe` + expected k, `idle` between punches); reader
+full tank reads `safe` (expected 22–28k) and spends nothing; it reads `under` below 25% + expected/max
+health, 74–91% on these 43–50k tanks; in phase 3 most punches still read `under`, though a full bear
+(60k+) should read `safe` at 0 charges and keep its button. New probe `ironassembly.punch` (`under`/`safe` + expected k, `idle` between punches); reader
 `--punches` lists every punch in every phase with verdict and button, `--empowered` adds the verdict.
 Holds for 10 and 25 (the roll is read off the cast spell) and both modes (normal mode only meets his
 first-phase punches). pb-check green.
+
+**Review.** The lane's version judged a punch from its cast start on current health. Replayed on
+window 8, that reads `under` on four punches before phase 3 besides the two that killed, all four
+landing at 88–100%: uld2 Uldyaa's 2:01.8 punch (77% mid cast, 100% at the hit) would have spent Last
+Stand, the button his 3:31.6 death had ready (his Shield Wall went at 2:37). Now judged only in the
+cast's last 1.5 s (`ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS`): uld2's 2:01.8 and 3:51.5 read
+`safe`, both deaths still `under`, and every traced punch had a tank action in that window (48 of 57
+in the last 1 s). Uld1 Uldxaa's 2:45.6 punch still reads `under` (73% in the window; fully absorbed,
+which the estimate ignores), so Divine Protection likely goes there and the 3:01.4 punch still finds
+none: a Molgeim-phase punch is expected to take about two thirds of his health.
 
 **Questions (plan changes).**
 1. *Hold the tanks' class defensive buttons through Iron Assembly (above 25% health), so only the
@@ -288,8 +298,8 @@ comp is at its 5-healer cap). The roster death knights' missing talents show her
 44k with no Vampiric Blood (`IMPOSSIBLE`; uld3's Uldzaz died at 100% to a 2-charge punch), and a raid that needs
 119-134 s alone with him, the race the charges decide.
 
-**Next window should show.** `--punches`: before Steelbreaker is alone, every punch on a tank under
-half health reads `under` and spends a button (`defensive <name>`), or `none` when nothing was ready;
-punches on a full tank read `safe` with no defensive. Fewer tank deaths to Fusion Punch in Molgeim's
-phase (window 8: 2 in 3 pulls) and no class `rebirth` spent there on a tank. Phase-3 deaths to punches
+**Next window should show.** `--punches`: before Steelbreaker is alone, a punch on a tank still under
+the bar in its cast's last 1.5 s reads `under` and spends a button (`defensive <name>`), or `none`
+when nothing was ready; punches on a tank topped up by then read `safe` with no defensive. Fewer tank
+deaths to Fusion Punch in Molgeim's phase (window 8: 2 in 3 pulls) and no class `rebirth` spent there on a tank. Phase-3 deaths to punches
 on tanks with no button stay until question 1 is answered.

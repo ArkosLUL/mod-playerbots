@@ -2168,6 +2168,10 @@ uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
         return 0;
     }
 
+    uint32 const remainingMs = static_cast<uint32>(std::max(punch->GetCastTimeRemaining(), 1));
+    if (remainingMs > ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS)
+        return 0;
+
     float const expected = IronAssemblyFusionPunchLanding(steelbreaker, bot, info);
     float const floor = bot->GetMaxHealth() * RAID_DEFENSIVE_FLOOR_PCT / 100.0f;
     bool const under = static_cast<float>(bot->GetHealth()) - expected < floor;
@@ -2179,7 +2183,7 @@ uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
         RaidObs::NoteDerived(bot, "ironassembly.punch", text);
     }
 
-    return under ? static_cast<uint32>(std::max(punch->GetCastTimeRemaining(), 1)) : 0;
+    return under ? remainingMs : 0;
 }
 
 uint8 IronAssemblyResistWantedSchools(PlayerbotAI* botAI, uint8 /*previous*/)

@@ -107,6 +107,10 @@ inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_STEP_OUT_MS = 3000;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_DANGER_RADIUS = 16.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 17.0f;
 
+// Fusion Punch is judged on the tank's health this close to the hit: a dip healed back up mid cast
+// shouldn't spend a button, and a tank still ticks at least once in it.
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS = 1500;
+
 // Rebirth reaches 30 yd. A druid casts inside CAST_REACH and walks to WALK_REACH of the body.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH = 28.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_WALK_REACH = 26.0f;
@@ -335,9 +339,10 @@ bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss);
 // gets it back from anyone who isn't a tank: this returns it while that is due, else nullptr.
 Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot);
 
-// How long until Steelbreaker's Fusion Punch lands on this tank, any phase, 0 when none is coming or the
-// tank stays over RAID_DEFENSIVE_FLOOR_PCT after it. A 3s cast, 35,000 nature in 25-man, +25% per
-// Supercharge and per Electrical Charge. One before phase 3 still kills a tank at half health.
+// How long until Steelbreaker's Fusion Punch lands on this tank, any phase. 0 when none is coming, while
+// more than ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS of the cast is left, or when the tank stays over
+// RAID_DEFENSIVE_FLOOR_PCT after it. A 3s cast, 35,000 nature in 25-man, +25% per Supercharge and per
+// Electrical Charge. One before phase 3 still kills a tank at half health.
 uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot);
 
 // Nature resistance: everything this fight hits with is nature. One hunter holds Aspect of the Wild while
