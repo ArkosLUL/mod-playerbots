@@ -141,12 +141,8 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
         return false;
     }
 
-    // Phase before the Guardian sweep: melee sit outside this leash for most of phases 2 and 3. The Guardian
-    // test holds a player-led raid until the first spawn. A bot-led one has nobody to follow in, so it walks
-    // at the pull.
-    bool const active = beyond && YoggSaronInPhase1Approach(bot) && YoggSaronInPhase1(botAI) &&
-                        (YoggSaronBotLedRaid(bot) ||
-                         bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance, true));
+    // From the door at the pull, Guardian up or not: Sara has started, so melee have to be on her anyway.
+    bool const active = beyond && YoggSaronInPhase1Approach(bot) && YoggSaronInPhase1(botAI);
 
     if (active != returning && RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.p1leash",
@@ -245,7 +241,7 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
-    // No sweep before the phase read: distances, plus a group scan only at the door.
+    // Distance only, no sweep, before the phase read.
     if (!YoggSaronInPhase1Approach(bot))
         return false;
 

@@ -41,20 +41,23 @@ appearing at 10.1-10.2 s.
 Sara, phase 2 Yogg with Shadow Barrier, phase 3 Yogg without it plus the Brain — and it writes
 `yogg.phase`. Sara lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by itself.
 
-**Phase 1 positioning waits for the room, not the pull.** The raid is 72-96 yd out at t=0, and with every
-mover firing at once ranged ran in through orbits 4 and 3 as clouds passed: two Guardians by 16 s. The
-station, spacing, leash and control triggers wait for `YoggSaronInPhase1Room` (outer orbit + reach,
-69.3 yd), a distance read ahead of the phase read. Combat is no gate (every Guardian's `Reset` calls
-`SetInCombatWithZone`, so the instance is in combat from ~10 s), and it stays out of `YoggSaronPhase`,
-whose read writes the shared `yogg.phase` latch. `--phases` counts P1 moves begun outside it with 2.5 yd
-of slack: `GetDistance2d` takes off the bot's 1.5 yd reach and the move lands a tick after the read.
+**Phase 1 positioning starts at the door, at the pull.** The raid is 72-96 yd out at t=0. The station, the
+leash and the walk guard take any bot inside Sara's 90 yd start radius (`YoggSaronInPhase1Approach`),
+Guardian up or not, so everyone walks in at the pull, and the walk guard keeps that walk off the clouds:
+with every mover firing at once, ranged once ran in through orbits 4 and 3 as clouds passed (two Guardians
+by 16 s). The spacing and control triggers, the nova covers and the focus re-pick still wait for
+`YoggSaronInPhase1Room` (outer orbit + reach, 69.3 yd), a distance read ahead of the phase read. Combat is
+no gate (every Guardian's `Reset` calls `SetInCombatWithZone`, so the instance is in combat from ~10 s),
+and it stays out of `YoggSaronPhase`, whose read writes the shared `yogg.phase` latch. `--phases` counts P1
+moves begun outside the room with 2.5 yd of slack (`GetDistance2d` takes off the bot's 1.5 yd reach and the
+move lands a tick after the read), marks the station's and leash's walk in, and prints when each role got
+inside.
 
-**A bot-led raid walks itself in.** With no real player in the group on the instance
-(`YoggSaronBotLedRaid`; the DC test driver is master but not in the group) nobody leads it in: four test
-pulls stood at DC's start, 84 yd out, for ~2 min while 7-8 Guardians piled onto the tanks, and Dark Volley
-wiped them. So `YoggSaronInPhase1Approach` opens the station, the leash and the walk guard out to 90 yd
-(Sara's start radius) for such a raid, and the leash skips its Guardian test: everyone walks in at the
-pull, cloud-guarded. `--phases` prints when each role got inside.
+**The walk-in does not wait for a real player** (user, 2026-11-22: a strategy runs the same code with or
+without one, so unattended pulls test what real raids run). Sara starts once anyone is within 90 yd, so the
+raid has to go in anyway, and waiting for the room left a bot-only raid nobody to follow: four test pulls
+stood at DC's start, 84 yd out, for ~2 min while 7-8 Guardians piled onto the tanks, and Dark Volley wiped
+them.
 
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase 3 control node; `IsDesignatedBotTank` falls back to the first living bot tank.
@@ -512,11 +515,10 @@ there to spend.
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
 (**6.5 yd**) the bot walks back to the middle and is released only at
 `ULDUAR_YOGG_SARON_P1_LEASH_RELEASE`, the **2.8 yd cloud-free radius**: anything between lets go of it
-where the innermost orbit sweeps. Unless the raid is bot-led (above), the node also needs a live Guardian in
-sight, so nothing walks back before the first spawn. **Why 6.5, not 15**: 15 is both 65719 reaching Sara and 65209/62714 reaching the
-raid, and the back line stands at 21.5, so a Guardian dying more than **21.5 − 15 = 6.5 yd** out catches
-everyone rather than the pile (novas at 2.2-4.0 yd hit 9-10 players, at 8.5-14.8 yd 22-24). The cost is a
-narrower band against `reach melee`; `yogg.p1leash` counts the flips.
+where the innermost orbit sweeps. **Why 6.5, not 15**: 15 is both 65719 reaching Sara and 65209/62714
+reaching the raid, and the back line stands at 21.5, so a Guardian dying more than **21.5 − 15 = 6.5 yd**
+out catches everyone rather than the pile (novas at 2.2-4.0 yd hit 9-10 players, at 8.5-14.8 yd 22-24).
+The cost is a narrower band against `reach melee`; `yogg.p1leash` counts the flips.
 
 **A melee bot that is neither tanking nor healing gets a tighter leash, because the pile wakes the inner
 orbit by standing still.** Orbit 1 is 11.6 yd out and wakes inside 8.5, so a foot past

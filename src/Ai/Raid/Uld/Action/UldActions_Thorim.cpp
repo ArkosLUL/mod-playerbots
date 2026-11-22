@@ -218,12 +218,10 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     FollowMasterStrategy followMasterStrategy(botAI);
 
     Player* leader = ThorimGauntletLeader(botAI);
-    if (!leader)
+    if (!leader || leader == bot)
         return false;
 
-    bool const botLed = ThorimBotLedGauntlet(botAI);
-    if (botLed && leader == bot)
-        return false;
+    bool const botLeads = ThorimGauntletLeaderIsBot(leader);
 
     if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
         bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
@@ -231,7 +229,9 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         if (MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
         {
-            if (!botLed && !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
+            // Only when the master is the one leading: otherwise following him walks the bot out of the squad.
+            if (leader == botAI->GetMaster() &&
+                !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
                 botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
                                       BotState::BOT_STATE_NON_COMBAT);
 
@@ -254,9 +254,9 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
 
     // Past the waypoints the leader is the only anchor left, and a trailing healer heals nobody. A bot leader
     // walks between waypoints too, so everyone closes up on him when too far behind.
-    float const trail = botLed && !PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE
-                                                              : ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
-    if ((botLed || PlayerbotAI::IsHeal(bot)) && bot->GetDistance2d(leader) > trail)
+    float const trail = botLeads && !PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE
+                                                                : ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
+    if ((botLeads || PlayerbotAI::IsHeal(bot)) && bot->GetDistance2d(leader) > trail)
         return MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
                       false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
 

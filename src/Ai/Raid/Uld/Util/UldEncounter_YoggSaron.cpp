@@ -3450,31 +3450,10 @@ bool YoggSaronInPhase1Room(Player* bot)
            ULDUAR_YOGG_SARON_P1_ROOM_RADIUS;
 }
 
-bool YoggSaronBotLedRaid(Player* bot)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
-            member->GetInstanceId() == bot->GetInstanceId() && !IsYoggSaronBot(member))
-            return false;
-    }
-
-    return true;
-}
-
 bool YoggSaronInPhase1Approach(Player* bot)
 {
-    float const fromSara =
-        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
-    if (fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS)
-        return true;
-
-    return fromSara <= ULDUAR_YOGG_SARON_P1_DOOR_RADIUS && YoggSaronBotLedRaid(bot);
+    return bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <=
+           ULDUAR_YOGG_SARON_P1_DOOR_RADIUS;
 }
 
 void YoggSaronNoteGuardianDeath(Unit* guardian)

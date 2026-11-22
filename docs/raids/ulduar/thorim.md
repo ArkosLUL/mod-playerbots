@@ -41,7 +41,8 @@ anywhere, so spending the single gauntlet tank slot on a human off-tank just lea
 short. **Set `MEMBER_FLAG_MAINTANK` in the raid frame**: without it `GetMainTankGuid` falls back to the
 first tank in roster order, so a human tank ahead of the bot main tank silently takes the role — which
 sends the bot main tank down the corridor and leaves the arena untanked. Human squad labels are
-written from position on a 500 ms tick — **label only, no bot ever moves a human** — and the bot
+written from position on a 500 ms tick, by the test that makes a human the
+[gauntlet leader](#known-gaps) — **no bot ever moves a human** — and the bot
 gauntlet is deliberately **not** sized down when a human walks the corridor, because squads latch at
 pull time while the human is still in the arena.
 
@@ -792,24 +793,33 @@ even spread, so a chain held in one cluster spends its late hops on pets rather 
 slot's players. **Human-owned pets are 13-30% of the bodies and are not steerable at all**, no
 `PlayerbotAI`. Logging pet damage in `Bot/Obs` is still what it would take to count the real hops.
 
-**A bot-led gauntlet** (`ThorimBotLedGauntlet`: no non-headless group member on the instance, which is how
-the unattended harness runs, its master being a headless GM bot off the map and slot 0, the arena main
-tank, the group leader). With a real player present nothing below applies and the corridor formation keys
-on the raid leader as before.
-- **Leader:** `ThorimGauntletLeader` is the gauntlet-squad tank, else the first living non-healer of the
-  squad. Everything that keyed on the raid leader (`ThorimGauntletPositioningTrigger`/`Action`,
-  `ThorimResolveGauntletIndex`, so the Runic Smash lane swap too) keys on him instead. The
-  `ThorimFallFromFloor` teleport still targets the group leader.
-- **Lever:** `ThorimGauntletLeverTrigger` is true for the leader once the lever (GO 194264) has lost
-  `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`; the action walks into
-  interact range and sends `CMSG_GAMEOBJ_USE`. A used lever toggles back, so `leverPulled` latches (also
-  when the lever is seen already used; the corridor is out of the 150 yd search range).
-- **Walk:** `ThorimGauntletLeadTrigger` steps the leader through the lane waypoints (`leadNext`, monotonic;
-  right lane, or the one the last Runic Smash telegraph left safe), at combat priority. He holds while a
-  squad non-healer is more than 30 yd behind, but at most 15 s per step, so a stuck bot cannot eat the 150 s
-  clock. Past the last waypoint he walks on to 30 yd from the Colossus, which the squad's own targeting then
-  engages. Followers take his waypoint as before; between waypoints they walk to him once more than 25 yd
-  (healers 20 yd) behind, and the follow-master strategy is not added.
+**Who leads the gauntlet: a real player in it, else a bot**, the same code in every raid (user,
+2026-11-22: unattended pulls must test what real raids run). Keying on the raid leader whenever a real
+player was on the instance left the corridor standing while he stayed in the arena.
+- **Leader:** `ThorimGauntletLeader` is the first living real player at the gate (within 10 yd of
+  `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION`, the lever ~5.5 yd from it) or past the portcullis (east of the
+  arena box within its y band, south of it, or in the balcony box; north of it is the way in), else the
+  gauntlet-squad tank, else the squad's first living non-healer bot. The split never picks a human, so
+  that position is his squad. Nobody leads in phase 2: the tether below would pull the squad off its
+  phase 2 spots and walk the balcony holds back down the corridor. The corridor formation
+  (`ThorimGauntletPositioningTrigger`/`Action`, `ThorimResolveGauntletIndex`, so the Runic Smash lane swap
+  too) keys on the leader. The `ThorimFallFromFloor` teleport still targets the group leader.
+- **Lever:** `ThorimGauntletLeverTrigger` is true for a bot leader once the lever (GO 194264,
+  (2173.3, −252.9)) has lost `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`;
+  the action walks into interact range and sends `CMSG_GAMEOBJ_USE`. A real player leading pulls it himself.
+  The lever resets after 6 s and the portcullis shuts 8 s after opening (template autoclose 6000 / 8000 ms),
+  so `leverPulled` latches on the pull and on a lever seen already used (the far corridor is out of the
+  150 yd search range). A bot leader past the portcullis latches it too unless the lever reads locked: taking
+  over from a human there, it would otherwise walk back to a reset lever, or, out of range, never start the
+  walk.
+- **Walk:** `ThorimGauntletLeadTrigger` steps a bot leader through the lane waypoints (`leadNext`, monotonic;
+  right lane, or the one the last Runic Smash telegraph left safe), at combat priority. Past the portcullis
+  it skips any waypoint north of him, since the lanes run south: a bot taking over mid-corridor from a human
+  walks on rather than back to the first. He holds while a squad non-healer is more than 30 yd behind, but
+  at most 15 s per step, so a stuck bot cannot eat the 150 s clock. Past the last waypoint he walks on to
+  30 yd from the Colossus, which the squad's own targeting then engages. Followers take his waypoint;
+  between waypoints they walk to him once more than 25 yd (healers 20 yd) behind. Behind a real player only
+  healers tether, and the gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
@@ -819,15 +829,15 @@ on the raid leader as before.
 **The last 67 yd of the lower corridor are unwaypointed** — waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
 where the smash is most dangerous. The formation hit the same wall: trigger and action both place the
-squad off `ThorimGauntletLaneIndex(master, …)`, which needs the master **standing inside a waypoint
+squad off `ThorimGauntletLaneIndex(leader, …)`, which needs the leader **standing inside a waypoint
 radius**, so once he walks past the chain the row goes quiet for everyone. DPS do not notice, since
 `reach melee` and `reach spell` chase their targets the rest of the way, but a healer chases nothing and
 `follow` cannot cover it, being `BOT_STATE_NON_COMBAT` in a running fight. Measured: the 11 non-healers
 reached **183-191 yd** out while the two healers stalled at **148 and 129**, one of them with **no move
 order at all** across 22 s, leaving the human 68.8 and 101.1 yd behind against the 40 yd heal range and
 his last outside heal 21 s before he died. `ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE` (20 yd) now walks a
-trailing healer to the master once the lane index fails — healers only, since a tether on the rest would
-fight `reach melee`.
+trailing healer to the leader once the lane index fails — behind a real player healers only, since a tether
+on the rest would fight `reach melee`.
 
 **The fall rescue still stops at 110 yd.** `ThorimFallFromFloorTrigger` bails past
 `ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last three
@@ -836,7 +846,7 @@ the master, same map only ([pitfalls](../../engine/pitfalls.md#before-the-pull-a
 gauntlet row no longer shares that gate: it reads `ULDUAR_THORIM_ENCOUNTER_PROXIMITY` (200), which
 covers the whole corridor.
 
-**The ~28 s opening wait is deliberate.** The squad does not move until the master reaches
+**The ~28 s opening wait is deliberate.** The squad does not move until the leader reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in
 because it is the difference between missing and making the clock.
 
