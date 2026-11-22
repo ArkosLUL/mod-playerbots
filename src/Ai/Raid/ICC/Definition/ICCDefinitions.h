@@ -34,8 +34,7 @@ EncounterDefinition const& IccRaidWideDefinition();
 // Raid-wide: strips the heroic buffs that never expire while no fight that hands them out is in progress.
 EncounterDefinition const& IccHeroicBuffsDefinition();
 
-// Every ICC encounter in node order. Don't reorder: equal relevances pop in insertion order. The contexts
-// and the strategy's tick walk it too.
+// don't reorder: equal relevances pop in insertion order, and the contexts and the strategy tick walk it too
 inline std::vector<EncounterDefinition const*> const& IccEncounterDefinitions()
 {
     static std::vector<EncounterDefinition const*> const definitions = {

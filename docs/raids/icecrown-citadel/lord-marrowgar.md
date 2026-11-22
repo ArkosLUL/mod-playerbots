@@ -34,8 +34,8 @@ Bots hold one latched stand each (park 1 yd, back past 2.5): `lm.stand`.
   round his back (the bearing from the tank spot to him), out of his parry arc and far from Bone
   Slice. A line starts 10.1 yd out with 4.5 yd reach, so nothing reaches 5.6 yd from him (Wowhead puts
   non-baits in melee for the spikes).
-- **Baits**: 3 (10) or 8 (25), every hunter first (he is inside their dead zone otherwise), then
-  warlock, priest, druid, shaman, mage; a healer only with no ranged dps. 31 yd from him, 20° apart
+- **Baits**: 3 (10) or 8 (25), every hunter first (he is inside their dead zone otherwise), then the
+  casters least hurt by moving: warlock, priest, druid, shaman, mage; a healer only with no ranged dps. 31 yd from him, 20° apart
   from the bearing away from the tank spot, at most 10 slots: the next heading either side falls
   behind a wall with him 6 yd west of his spot. One bait outside is all the core needs; the count
   follows the guides.
@@ -73,7 +73,8 @@ by guid over the spikes no melee reaches, else over all. Otherwise him. In a sto
 spikes within 10 yd (melee) or 28 yd (ranged) of the bot count: a heroic spike on an anchor is 32+ yd
 from the stack and nobody walks his lanes for it (it waits for healers or the storm's end). Spikes come
 from Impaled members' vehicle, no sweep. `icc lm targeting` holds the generic pickers while it picks. Once per
-instance a bot's saved rti of cross or star goes back to skull for the icon-led fights after him.
+instance a bot's saved rti of cross or star goes back to skull for the icon-led fights after him; only
+once, so a player's later order sticks.
 
 ## Coldflame
 
@@ -100,7 +101,9 @@ victim on every swing. Arrival after a storm is plain swings, not the spike.
   the first. A human tank in the victim's place gets `CallHumanTankDefensive` at the window and under 40%.
 - **Raid**: Bone Storm is physical and unreduced by armor, 6k / 6k / 12k / 14k a tick (10N / 25N / 10H /
   25H) divided by √(d − 9) past 10 yd. `GetRaidCover` gets each 6 s of ticks (three) as a hit: the tick
-  at 28 yd, the raid's mean distance as he ping-pongs between anchors, from the aura's remaining time.
+  at 28 yd, the raid's mean distance as he ping-pongs between anchors, from the aura's remaining time (the
+  core shortens the aura to the storm's 20 or 30 s just after it lands, so a longer reading means none has
+  passed).
   It deals a cooldown once three members would end under 25% health, one holder per cooldown: Divine
   Sacrifice (Divine Guardian), Divine Hymn, Tranquility. Aura Mastery needs a resistance aura of the hit's
   school, so physical never gets it. The hit is offered 3 s before its first tick and the class cover

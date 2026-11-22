@@ -45,18 +45,24 @@ Tank Protection 71770 protects whoever he hits from both adds' picks. He obeys t
   while a stand holds; healers keep heal reach. The rings (`pp.rings`) hold from his first coming within 10
   yd of the spot, so the raid's own reach follows his drag from the table; then they let go while anyone
   but a bot tank holds him more than 15 yd off the spot, and hold again within 10.
-- **Kite** (`pp.kite`): the bloated bot runs 10 yd legs straight away from its cloud, turning up to 120
+- **Kite** (`pp.kite`): the bloated bot runs 10 yd legs, each planned 3 yd before the last ends so it
+  never stops, straight away from its cloud, turning up to 120
   degrees round puddles, bombs and goo, clamped to a 36 yd disk round the centre so it follows the wall,
   scored for continuing its last leg. It cuts a cast to move and uses Nitro Boosts.
 - **Ooze stack** (`pp.stack`): ranged, healers and tanks holding nothing walk to within 3.5 yd of the rooted
   victim, ignoring every hazard, as soon as the adhesive lands; 6 yd off it on the ooze's side when it
   carries Unbound Plague. Carriers, the driver and the kiter don't.
 - **Abomination** (`pp.driver`, `pp.abom`): in P1-P2 one bot not holding him, once a tank holds him: the
-  assist tank, any free tank, else a damage dealer (melee, Death Knights and paladins last of them, then
-  ranged), never a healer; a bot already riding keeps it, a driver holds no slot. It walks to (4356.60,
-  3265.74), below the table, and uses it. While he is off every tank and no other tank stands on foot, a
-  riding tank exits (`exit`) and a tank driver on foot is dropped. Otherwise riding: Regurgitated Ooze
-  with 45 energy on a cloud not slowed, on an ooze only from 90 or once a cloud is slowed; else, unless its
+  assist tank, any free tank, else a damage dealer (melee first, since Mutated Slash replaces their
+  swings, Death Knights and paladins last of them, their taunt kept to pick him up if the holder dies;
+  then ranged), never a healer; a bot already riding keeps it, a driver holds no slot. It walks to
+  (4356.60, 3265.74), below the table, and uses it: the drink's 5 s aura (70308) summons the abomination
+  as it fades, and another drink would only restart it. Nothing else moves the driver: it walks to the
+  table and drives, attacking only through the abomination or, still on foot, with a pickup taunt; a
+  plague it carries on foot is passed first. A riding bot never shows as moving, so its walk is read off
+  the abomination. While he is off every tank and no other tank stands on foot, a riding tank exits
+  (`exit`) and a tank driver on foot is dropped. Otherwise riding: Regurgitated Ooze, on a unit within
+  45 yd and in sight, with 45 energy on a cloud not slowed, on an ooze only from 90 or once a cloud is slowed; else, unless its
   Unbound Plague pass is due, it eats the puddle crowding the spot most, latched until gone, from 1.5 yd
   inside its edge; else Mutated Slash
   and its swing on the ooze, the cloud or him. A refused vehicle cast answers true, so the energy is the
@@ -72,7 +78,8 @@ Tank Protection 71770 protects whoever he hits from both adds' picks. He obeys t
   of the application; without the button up by then it must survive bare or drops out to the tank. A
   tank takes him back once the stack lands, inside the sharer's 3 s taunt aura: the latest taunt wins.
   Never at the immune level of taunt DR or while a taunt aura from anyone he isn't hitting is on him.
-  Generic taunts and Death Grip are blocked.
+  Generic taunts and Death Grip are blocked; a grip would drag the ooze or the cloud off its scripted
+  path.
 - **Brake** (`pp.brake`): while live, any bot but a healer and the holder past 90% of the holder's threat
   holds damage on him and area spells within 18 yd, until under 80%. Its resolver hands it nothing on him;
   pickers, follow and random moves are blocked; a bear stays a bear.

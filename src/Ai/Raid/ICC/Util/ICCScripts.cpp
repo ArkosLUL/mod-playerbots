@@ -59,8 +59,7 @@ public:
         if (spellInfo->Id != SPELL_MALLEABLE_GOO_10N && spellInfo->Id != SPELL_MALLEABLE_GOO_BALCONY)
             return;
 
-        // Malleable Goo is cast triggered, so m_UniqueTargetInfo is not yet
-        // populated at this point; read the explicit unit target directly.
+        // goo is cast triggered, so m_UniqueTargetInfo is still empty here: read the explicit target
         Unit* target = spell->m_targets.GetUnitTarget();
         if (!target || !target->IsPlayer())
             return;

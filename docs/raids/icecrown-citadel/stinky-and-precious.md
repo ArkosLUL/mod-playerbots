@@ -15,7 +15,7 @@ Stinky 37025 (25-man 38064) stands in Festergut's room, Precious 37217 (38103) i
 |---|---|---|---|
 | Mortal Wound 71127 | On the victim every 1.5-2.5 s, −10% healing taken a stack, 15 s, ten at most; one id on every difficulty; `SPELL_ATTR0_NO_IMMUNITIES`, so no bubble removes it | Tank swap | Elected swap at 6 by a tank 4 stacks lighter (`dogs.swap`); the relieved tank yields until its stacks drop (`dogs.yield`); threat brake (`dogs.brake`) |
 | Decimate 71123 | From 20-25 s, every 20-25 s: 3 s cast, everyone within 100 yd (SpellInfoCorrections) above 15% health set to 15%, then the dog stuns itself 3 s | Healers ready for it | The holder spends a tank button in the cast; the raid cover while the dog is stunned (`icc.cover`) |
-| Plague Stench 71805 (Stinky) | Aura from the pull: 71160 (10) 3k, 71161 (25) 4.5k nature every 3 s within 100 yd, no heroic row | Heal through | Counted as two ticks in the Decimate cover |
+| Plague Stench 71805 (Stinky) | Aura from the pull: 71160 (10) 3k, 71161 (25) 4.5k nature every 3 s within 100 yd (row 1962, the tick remapped at the call), no heroic row | Heal through | Counted as two ticks in the Decimate cover |
 | Awaken Plagued Zombies 71159 (Precious) | From 25-30 s, every 20-25 s: 11 Plagued Zombies 38104, each opening on a random player, living until killed (SpellInfoCorrections sets the summon infinite); she despawns them when she dies. 63k / 101k health (10 / 25), 3.2-4.4k / 5.5-7.6k a 2 s swing before armour, each swing Infected Wound 71157 (+100 physical damage taken a stack, 99, 60 s) | Kill her, AoE the zombies | Everyone on her; the free tank, or with one tank the zombie guard, takes zombies on non-tanks; area damage free |
 
 Each dog has 3.15M (10) / 8.82M (25) health and swings every 2 s for 12.5-17.4k / 26.4-36.7k (Stinky) or
@@ -26,9 +26,11 @@ the damage modifier and the 2 s attack time. A zombie wave is 22% (10) or 13% (2
 
 - **Tanks**: generic taunts are blocked while a dog fights. Once the holder carries 6 Mortal Wound, or a
   non-tank holds the dog, the bot tank with 4 fewer stacks than the holder, the fewest, taunt ready in its
-  form within 30 yd, taunts it. A tank not holding the dog yields while it carries Mortal Wound or sits on
-  the threat brake (90% of the holder's threat, free under 80%, `dogs.brake`): off the dog, its pickers and
-  its spells and area damage near the dog held. A human partner is called to taunt when no bot can.
+  form within 30 yd, taunts it; nobody does while a taunt aura is on the dog, since one just landed and
+  its victim catches up next update. A tank not holding the dog yields while it carries Mortal Wound or
+  sits on the threat brake (90% of the holder's threat, free under 80%, `dogs.brake`): off the dog, its
+  pickers and its spells held, and its area damage within 15 yd of the dog (combat reach 9). A human
+  partner is called to taunt when no bot can.
 - **Zombie guard** (`dogs.guard`): on Precious with fewer than two tanks alive, the damage-dealing death
   knight, else paladin, with the lowest guid takes the free tank's zombies, and taunts the nearest zombie
   hitting a healer within 30 yd whenever its taunt is ready (`icc dogs zombie taunt`).
@@ -37,7 +39,8 @@ the damage modifier and the 2 s attack time. A zombie wave is 22% (10) or 13% (2
 - **Tank defensives** (`dogs.defensive`, physical only): the holder through Decimate's cast, any tank
   under 40%; class nodes held until 25%. A human holder gets the same windows as calls (`dogs.humancall`).
 - **Decimate cover**: while the dog stuns itself after Decimate, everyone at 15%, `GetRaidCover` deals one
-  cover on a 6 s hit stamped on the landing (Anti-Magic Zone dropped on Precious, whose zombies hit
+  cover on a 6 s hit stamped on the landing: two Plague Stench ticks on Stinky, no damage on Precious,
+  since everyone at 15% is under the cover floor anyway (Anti-Magic Zone dropped there, her zombies hit
   physical).
 - **Targets** (`dogs.target`): a player's skull, the holder its dog, a free tank or the zombie guard the
   zombie on a non-tank nearest it within 30 yd, else the dog; a yielding tank a zombie or nothing.

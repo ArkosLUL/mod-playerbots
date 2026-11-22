@@ -1,0 +1,5 @@
+src/Ai/Raid/ICC/Definition/ICCDefinitions.h	don't reorder: equal relevances pop in insertion order, and the contexts and the strategy tick walk it too
+src/Ai/Raid/ICC/ICCStrategy.cpp	don't reorder: the engine stops at the first multiplier that zeroes an action, and some act inside GetValue
+src/Ai/Raid/ICC/Util/ICCEncounterGate.h	must match DataTypes in core icecrown_citadel.h, a stale id keys a gate to another boss's state
+src/Ai/Raid/ICC/Util/ICCScripts.cpp	goo is cast triggered, so m_UniqueTargetInfo is still empty here: read the explicit target
+src/Ai/Raid/ICC/Util/ICCScripts.cpp	instance id 0 is the ICC parent map, which isn't an InstanceMap but ToInstanceMap() casts it anyway

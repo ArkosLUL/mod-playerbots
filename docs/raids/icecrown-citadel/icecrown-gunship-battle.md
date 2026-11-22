@@ -15,15 +15,18 @@ raid's deck lies past y 2042 and the enemy's short of 2025; the Horde raid's sho
 enemy's past 2445. Anyone at z 478 or more is airborne. A ship also dies when every living player sits in
 a vehicle (`WipeGunshipBlizzlike`). Bots put a unit on the ship on its side of the gap's middle (2033.5,
 2438), so a bot on a deck's very edge never reads as in flight; a dodge spot must lie inside the bound.
+Before the battle the ship still flies, so a bot's deck comes from its transport instead. The portal moves
+a boarder onto the raid's deck but leaves it its own ship's passenger, so bots scan both ships' passengers
+and place it by position.
 
 | Ability (ids) | Script, 10N / 25N / 10H / 25H | Guide | Bots |
 |---|---|---|---|
-| Cannons: Cannon Blast 69399/70172, Incinerating Blast 69401/70174 | 2 cannons on 10, 4 on 25 (spawn masks). Blast adds 6-10 heat, 500 ms; Incinerating spends it, 1000 + (heat - 10)² × 8, 1500 ms; 100 heat is Overheat 69487 (2.5 s) | spam Blast, Incinerate near full, aim the mortars | ranged DPS first, then melee, one per live cannon; Incinerate from 90 heat; mortars, then gunners, then anything on the enemy deck |
-| Below Zero 69705 | the freeze mage's 900 s channel stuns every cannon and ejects its gunner; first when the enemy ship falls under 90% and 45 s after his ship spawned, then 30-33.5 s after the last one dies | board, kill the mage, come back | see Boarding |
+| Cannons: Cannon Blast 69399/70172, Incinerating Blast 69401/70174 | 2 cannons on 10, 4 on 25 (spawn masks). Blast adds 6-10 heat, 500 ms; Incinerating spends it, 1000 + (heat - 10)² × 8, 1500 ms; 100 heat is Overheat 69487 (2.5 s); both reach 150 yd | spam Blast, Incinerate near full, aim the mortars | ranged DPS first, then melee, one per live cannon; Incinerate from 90 heat; mortars, then gunners, then anything on the enemy deck. A shot counts once the heat moves (`CastVehicleSpell` reports a refused cast as sent), and its cooldown is stamped on the cannon, which as a creature gets none of its own |
+| Below Zero 69705 | the freeze mage's 900 s channel stuns every cannon and ejects its gunner; first when the enemy ship falls under 90% and 45 s after his ship spawned, then 30-33.5 s after the last one dies | board, kill the mage, come back | see Boarding. The freeze mage is the one channelling Below Zero, else the one of his entry not channelling Shadow Channeling 43897, as the two portal mages do |
 | Captain (36939 / 36948), Battle Fury 69638 | attacks only players on his deck, never dies (his health is held at 1); each hit adds a stack, +10% on normal (72306 on 25), +12% on heroic (72307, 72308), 16 s, refreshed per stack; Cleave 15284, Rending Throw 70309 off melee, Taste of Blood 69634 under 65%; taunts diminish on him (`flags_extra` 0x80000) | a tank picks him up first and drags him to the edge; leave with the party; a defensive if the stacks climb | the board tank holds him and spends a button at +50% and at +100% of his hit ([Defensives](#defensives)); retreat at +200% |
 | Riflemen 36969 / Axethrowers 36968 | 4 on 10, 8 on 25, 30 s respawn; Shoot / Hurl Axe (2 s, rows 2195-2196) at players on the other ship | ranged clear them from the edge | home ranged, after boarders, in range only |
 | Mortars 36978 / Rocketeers 36982 | 2 on 10, 4 on 25, every 9 s: 69679, a 5 s cast at a player's spot on the raid's ship, the 71371 marker for 5 s from launch, then Explosion 4 yd centre to centre (69680, 69687; heroic 69688/69689 knock back) | move out; the cannons kill them, out of ranged reach (IC also sends the boarders) | dodge; cannons aim at them first |
-| Boarders: marines 36950 / reavers 36957, sergeants 36961 / 36960 | 12 s in, then every 60 s: 2 + 1 on 10, 4 + 2 on 25, through the portal to the raid's ship; Wounding Strike 69651; Bladestorm 69652, whose 69653 has no radius, so it hits nobody here; Desperate Resolve under 25%; Burning Pitch on the hull when no player is valid | the home tank collects them, the raid kills the oldest first | home tank at the portal exit, taunts, one button per wave on it ([Defensives](#defensives)); home melee and ranged by rank |
+| Boarders: marines 36950 / reavers 36957, sergeants 36961 / 36960 | 12 s in, then every 60 s: 2 + 1 on 10, 4 + 2 on 25, through the portal to the raid's ship; Wounding Strike 69651; Bladestorm 69652, whose 69653 has no radius, so it hits nobody here; Desperate Resolve under 25%; Burning Pitch (a 5 yd patch for 3 s) on the hull when no player is valid | the home tank collects them, the raid kills the oldest first | home tank at the portal exit, taunts, one button per wave on it ([Defensives](#defensives)); home melee and ranged by rank |
 | Battle Experience | adds rank up 100 s after reaching their slot, then 70, 60 and on heroic 90 more (71188, 71193, 71195, 72525) | "every 30 s" | rank orders the kills |
 | Check for Players 70332 | every 5 s, anyone 10 yd under the raid's ship creature is teleported back on deck | don't fall | nothing to do: the ground is 620 yd down, so a faller is back within ~6.5 s |
 | Rocket Pack 68645 (item 49278, shirt slot) | 40 yd jump, 1 s; needs Rocket Pack Useable 70348 (200 yd round Zafod 37184); flight aura 68721 until landing | jump across | the only cross-deck mover |
@@ -49,7 +52,7 @@ still without one holds no stand, since the stand would pull it back from Zafod.
 - A freeze sends the board tank across at once; the rest of the party walks to the launch point and
   waits until a tank holds the captain, or 15 s into the freeze.
 - Jumps run launch point ↔ landing point (24 yd Alliance, 30 yd Horde), walking there first, but not
-  while a hazard covers it.
+  while a hazard covers it. The bot stops before it jumps: a jump launched mid-stride misfires.
 - On the enemy deck the board tank taunts him off any non-tank and holds him 6 yd in from the landing
   point toward the mage (30 / 35 yd from the home edge), the board healers stand on the landing point and
   the melee kill the mage.
@@ -63,8 +66,8 @@ still without one holds no stand, since the stand would pull it back from Zafod.
   transport-local) while no boarder is on deck, and taunts any boarder not on a tank, one per cooldown.
 - Healers and ranged: edge slots 5 yd apart, 4 and 8.5 yd inboard of the cannon line (transport-local),
   healers nearest the landing.
-- Melee home DPS and ranged: boarders on the home deck, highest rank first; ranged then riflemen in
-  `reach spell` range, then mortars in range.
+- Melee home DPS and ranged: boarders on the home deck, highest rank first, then the closest to dying;
+  ranged then riflemen in `reach spell` range, then mortars in range.
 
 ## Movement
 
@@ -75,8 +78,11 @@ still without one holds no stand, since the stand would pull it back from Zafod.
   while live: each can walk a bot off the edge.
 - Stands latch (park within 1 yd, walk back past 2.5) and hold every generic mover but attacks.
 - **Dodge**: anyone on deck and out of a cannon who stands within 5.5 yd of a mortar cast's spot or a
-  71371 marker, or inside a Burning Pitch patch's reach + 1.5, walks to the nearest spot 6.5 yd clear
-  (reach + 2.5), `MOVEMENT_FORCED`, interrupting a cast only on heroic. The sweep stays inside a box per
+  71371 marker, or inside a Burning Pitch patch's reach + 1.5, walks to the spot 6.5 yd clear (reach +
+  2.5) nearest its stand, so the walk home is short, or just past the reach when overlapping blasts leave
+  nothing that clear; `MOVEMENT_FORCED`, interrupting a cast only on heroic, whose explosion knocks back,
+  off the deck at its edge. Generic movers are held inside that clearance, or they'd walk the bot back
+  in. The sweep stays inside a box per
   hull from the core's crew slots (Skybreaker x -31..10, y -21..15; Orgrim's Hammer x -13..30, y -21..27,
   transport-local) and on the bot's deck: `FindNearestPositionClearOfHazards`' navmesh check refuses
   every point on a transport deck.
@@ -108,7 +114,8 @@ entry-keyed exemption in the shared gate (`BurstCooldowns.cpp`, outside this ste
 ## Coordinates
 
 The world points (launch, landing, mage area) are kept from the old code and match the core's y bounds;
-the edge slots and the portal exit are transport-local from the core's spawns. Every deck is a
+the edge slots and the portal exit are transport-local from the core's spawns. Orgrim's Hammer's deck
+rises along x, as its axethrower slots do, and its edge slots' height follows it. Every deck is a
 gameobject floor: navprobe reads each point off mesh with terrain 620 yd below, so none can be checked
 offline, and gameobject collision needs a live server, so sight from a stand to a target is unchecked
 too.
@@ -164,7 +171,7 @@ falls (the rescue's teleport 67335) and to the captain, which settle the thresho
 |---|---|---|
 | `gsb.phase` | per bot | `fight`, `frozen` |
 | `gsb.duty` | per bot | the roster above |
-| `gsb.deck` | per bot | `friendly`, `enemy`, `between` (airborne), `cannon`, `falling` |
+| `gsb.deck` | per bot | `friendly`, `enemy`, `between` (airborne), `cannon`, `falling` (6 yd under the lowest deck point) |
 | `gsb.board` | per bot | Boarding |
 | `gsb.stand` | per bot | `tank`, `landing`, `launch`, `exit`, `edge`, `none` |
 | `gsb.target` | per bot | the pick's rule: `skull`, `captain`, `mage`, `boarder`, `gunner`, `mortar`, `none` |

@@ -37,9 +37,10 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
   yd north of it, a third's 1.5 yd south: all on the platform inside his melee reach, so he stays on
   his spot facing east. Generic taunts are blocked while he is live. When the rune lands on the
   holder or a non-tank holds him, the lowest-guid bot tank free of it, taunt ready in its form (bear,
-  Defensive Stance) and within 30 yd, taunts him (a rune tank only for a non-tank holder). The rune
+  Defensive Stance) and within 30 yd, taunts him (a rune tank only for a non-tank holder); nobody does
+  while a taunt aura is on him, since one just landed and his victim catches up next update. The rune
   tank not holding him drops its attack on him, its pickers blocked, and takes a beast on it or in
-  reach. The tank not holding him taunts the loose beast nearest its victim, only while its own rune
+  reach; a druid stays in bear form, which its non-combat nodes would drop with no target. The tank not holding him taunts the loose beast nearest its victim, only while its own rune
   has the taunt cooldown plus 0.5 s left or another bot tank free of the rune has its taunt ready, so
   the next swap is covered; Scent of Blood lifts that.
 - **Tank defensives** (`dbs.defensive`, physical only): the holder, or a tank carrying a Mark, spends
@@ -50,7 +51,8 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
   sits on a bot holder and no bot tank is free. The rune is no window: the swap ends it in a swing or
   two.
 - **Ranged and healers**: one latched slot each (`dbs.slot`). Healers take 1, 3, 2, 10, 11 first;
-  ranged, hunters leading, take 7, 6, 5, 4, 9, 8, 1, 3, 2, 10, 11; spare healers the inner rest; the
+  ranged, hunters leading (one can't shoot from the stack, inside its minimum range), take 7, 6, 5, 4,
+  9, 8, 1, 3, 2, 10, 11; spare healers the inner rest; the
   rest stack 3.5 yd behind him (12). Every slot sits within 31 yd of his spot, inside `reach spell`'s
   32. Bots park within 0.75 yd, so neighbours stay 12 yd apart. Reach, heal reach and spell movers are
   held while a slot holds. While fewer bots than Blood Nova needs (4 on 10, 10 on 25) hold a slot,
@@ -74,8 +76,10 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
   Blood and no Forbearance that fights with spells (no melee, hunter or tank) gets the nearest bot
   paladin with the hand ready within 30 yd and in sight. Ticks and splash are physical: the hand takes
   both and the Blood Power they feed.
-- A damage dealer's area damage and Army of the Dead are held; the opener holds damage until a tank
-  has him 2 s.
+- A damage dealer's area damage is held: he stands alone, and Resistant Skin takes 95% off it on the
+  beasts, so it only pulls them; tanks keep theirs for threat. Army of the Dead is held too, since its
+  ghouls taunt the beasts, which then feed him Blood Power. The opener holds damage until a tank has
+  him 2 s.
 
 Slots, navprobe-clean (`--nav 0x09`; settled z 539.28-539.29 west, 541.11 east and on the tank
 spots, stack 540.64), paths from the stack normal. `los` from every slot, the stack and each tank spot
