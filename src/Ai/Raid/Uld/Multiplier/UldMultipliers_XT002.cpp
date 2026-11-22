@@ -155,7 +155,8 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // hits on the Heart are blocked, or a bot would be left with no heals and no way to retarget.
     Unit* currentTarget = nullptr;
     bool heartHit = false;
-    if (!IsXT002HardModeActive(botAI) && !movement && !dynamic_cast<CastHealingSpellAction*>(action))
+    if (!IsXT002HardModeActive(botAI) && !movement && !dynamic_cast<CastHealingSpellAction*>(action) &&
+        !dynamic_cast<XT002BombCarrierHealAction*>(action))
     {
         currentTarget = AI_VALUE(Unit*, "current target");
         if (currentTarget && currentTarget->GetEntry() == NPC_HEART_OF_DECONSTRUCTOR)

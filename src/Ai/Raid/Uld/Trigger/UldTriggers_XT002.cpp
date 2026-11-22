@@ -123,6 +123,11 @@ bool XT002BombHealTrigger::IsActive()
     return carrier && bot->GetExactDist2d(carrier) > sPlayerbotAIConfig.HealDistance;
 }
 
+bool XT002BombCarrierHealTrigger::IsActive()
+{
+    return PlayerbotAI::IsHeal(bot) && GetXT002BombHealTarget(bot) != nullptr;
+}
+
 bool XT002SetDpsPriorityTrigger::IsActive()
 {
     Unit* xt002 = GetXT002(botAI);

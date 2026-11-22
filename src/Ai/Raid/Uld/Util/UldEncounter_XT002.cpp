@@ -449,6 +449,15 @@ Player* GetXT002BombHealCarrier(Player* bot)
     return nullptr;
 }
 
+Player* GetXT002BombHealTarget(Player* bot)
+{
+    Player* carrier = GetXT002BombHealCarrier(bot);
+    if (!carrier || carrier->GetHealthPct() > ULDUAR_XT002_BOMB_HEAL_TOP_PCT)
+        return nullptr;
+
+    return bot->GetExactDist2d(carrier) <= sPlayerbotAIConfig.HealDistance ? carrier : nullptr;
+}
+
 bool IsXT002AddEngageable(Unit* xt002, Unit* unit)
 {
     if (!unit)

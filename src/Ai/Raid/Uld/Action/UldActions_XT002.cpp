@@ -660,6 +660,46 @@ bool XT002BombHealAction::Execute(Event /*event*/)
     return false;
 }
 
+bool XT002BombCarrierHealAction::Execute(Event /*event*/)
+{
+    Player* carrier = GetXT002BombHealTarget(bot);
+    if (!carrier)
+        return false;
+
+    // Instants first: the healer is often still finishing its walk in, and nothing with a cast time goes off
+    // while moving.
+    std::vector<char const*> heals;
+    switch (bot->getClass())
+    {
+        case CLASS_PRIEST:
+            if (!botAI->HasAura("weakened soul", carrier))
+                heals.push_back("power word: shield");
+            heals.insert(heals.end(), {"penance", "flash heal"});
+            if (!botAI->HasAura("renew", carrier, false, true))
+                heals.push_back("renew");
+            break;
+        case CLASS_SHAMAN:
+            heals = {"riptide", "healing wave", "lesser healing wave"};
+            break;
+        case CLASS_PALADIN:
+            heals = {"holy shock", "holy light", "flash of light"};
+            break;
+        case CLASS_DRUID:
+            if (!botAI->HasAura("rejuvenation", carrier, false, true))
+                heals.push_back("rejuvenation");
+            heals.insert(heals.end(), {"swiftmend", "nourish"});
+            break;
+        default:
+            break;
+    }
+
+    for (char const* heal : heals)
+        if (botAI->CanCastSpell(heal, carrier) && botAI->CastSpell(heal, carrier))
+            return true;
+
+    return false;
+}
+
 bool XT002PummellerTauntAction::Execute(Event /*event*/)
 {
     Unit* pummeller = GetXT002EngageableAdd(botAI, bot, PB_NPC_XT002_PUMMELLER, ULDUAR_XT002_TAUNT_RANGE);

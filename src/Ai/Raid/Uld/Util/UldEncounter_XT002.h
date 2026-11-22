@@ -162,6 +162,10 @@ inline constexpr float ULDUAR_XT002_BOMB_HEAL_MARGIN = 5.0f;
 inline constexpr float ULDUAR_XT002_BOMB_HEAL_BEARING_STEP_DEG = 15.0f;
 inline constexpr int ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS = 3;
 
+// XT-002: the sent healer heals its bomb carrier first until it's above this. Below it the bomb's hit plus the
+// tantrum after it killed carriers from 36-86%.
+inline constexpr float ULDUAR_XT002_BOMB_HEAL_TOP_PCT = 90.0f;
+
 extern const Position ULDUAR_XT002_SPAWN;
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
@@ -230,6 +234,10 @@ bool IsXT002ThreatBraked(Player* bot, Unit* xt002);
 // the nearest bot healer not carrying a debuff, latched until the bomb comes off, so one healer goes and the pick
 // can't flip while both walk. Latched per instance, so every healer reads the same answer.
 Player* GetXT002BombHealCarrier(Player* bot);
+
+// The carrier this healer was sent to, while it's in heal range and not above ULDUAR_XT002_BOMB_HEAL_TOP_PCT, else
+// null. Trigger and action both ask, so they can't disagree.
+Player* GetXT002BombHealTarget(Player* bot);
 
 // Every living Gravity Bomb carrier in this bot's group.
 std::vector<Player*> GetXT002BombCarriers(Player* bot);

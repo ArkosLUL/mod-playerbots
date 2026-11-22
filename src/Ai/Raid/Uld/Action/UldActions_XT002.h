@@ -123,6 +123,18 @@ public:
     bool Execute(Event event) override;
 };
 
+// The sent healer's heals on its bomb carrier, ahead of the class picker, which takes whoever is lowest in range
+// and lets a carrier at 60-85% lose to a tank lower than that.
+class XT002BombCarrierHealAction : public Action
+{
+public:
+    static constexpr char const* Name = "xt002 bomb carrier heal action";
+
+    XT002BombCarrierHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class XT002PummellerTauntAction : public Action
 {
 public:
