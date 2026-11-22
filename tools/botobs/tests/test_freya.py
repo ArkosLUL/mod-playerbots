@@ -3,8 +3,8 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
-tank's Righteous Defense takes the Snaplasher, and the add tank dies; the shared v14 fixture shows every
-section reads empty elsewhere.
+tank's Righteous Defense takes the Snaplasher, and the add tank dies, plus two beam dodges and one healer
+in range; the shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ FULL_V14 = BOTOBS / "fixtures" / "full-v14.ndjson"
 MAIN = 7701
 ADD = 7702
 CASTER = 7703
+HEALER = 7704
 FREYA = (1 << 32) | 1
 SNAPLASHER = (1 << 32) | 2
 STORM = (1 << 32) | 3
@@ -40,7 +41,9 @@ def snap(t: int, freya_on: int, snap_on: int, gift: bool = True, trio: bool = Tr
         [MAIN, 2360.0, -43.0, 425.3, 0, 100, 100, FREYA],
         [ADD, 2355.0, -40.0, 425.3, 0, 100, 100, SNAPLASHER],
         [CASTER, 2340.0, -60.0, 425.3, 0, 100, 100, GIFT],
+        [HEALER, 2392.0, -40.0, 425.3, 0, 100, 100, 0],
         [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, freya_on],
+        [BEAM, 2340.0, -55.0, 425.3, 0, 100, 0, 0],
     ]
     if trio:
         units += [[SNAPLASHER, 2356.0, -40.0, 425.3, 0, 80, 0, snap_on],
@@ -55,13 +58,18 @@ def cast(t: int, caster: int, spell: int, target: int = 0) -> dict:
     return {"t": t, "e": "cast", "s": caster, "sp": spell, "tgt": target, "ct": 0}
 
 
+def move(t: int, mover: int, x: float, y: float) -> dict:
+    return {"t": t, "e": "move", "g": mover, "k": "point", "x": x, "y": y, "z": 425.3, "ok": 1, "by": fr.DODGE_ACTION}
+
+
 def pull() -> list[dict]:
     records = [
         {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
          "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
          "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
                     {"g": ADD, "n": "Bruin", "r": "tank", "c": 11, "h": 0},
-                    {"g": CASTER, "n": "Caster", "r": "ranged", "c": 8, "h": 0}]},
+                    {"g": CASTER, "n": "Caster", "r": "ranged", "c": 8, "h": 0},
+                    {"g": HEALER, "n": "Mender", "r": "heal", "c": 5, "h": 0}]},
         {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
         {"t": 0, "e": "unit", "g": SNAPLASHER, "en": 32916, "n": "Snaplasher"},
         {"t": 0, "e": "unit", "g": STORM, "en": 32919, "n": "Storm Lasher"},
@@ -79,6 +87,9 @@ def pull() -> list[dict]:
         cast(13500, ADD, 5209),
         cast(16200, MAIN, 31789, ADD),
         cast(16200, MAIN, 31789, ADD) | {"tr": 1},
+        move(12500, CASTER, 2330.0, -60.0),
+        move(13000, CASTER, 2330.0, -60.0),
+        move(15000, MAIN, 2364.0, -43.0),
         {"t": 22000, "e": "death", "g": ADD, "killer": SNAPLASHER, "x": 2355.0, "y": -40.0, "z": 425.3,
          "rewind": [[21900, SNAPLASHER, 0, 43481]]},
         {"t": 25000, "e": "death", "g": CASTER, "killer": CASTER, "x": 2340.0, "y": -60.0, "z": 425.3,
@@ -125,6 +136,17 @@ class Tanks(unittest.TestCase):
             "  Snaplasher 0:10.000 .. 0:24.000: Bruin/tank 87%, Bulwark/tank 13%\n"
             "  0:13.500 Bruin Challenging Roar\n"
             "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"))
+
+
+class Beams(unittest.TestCase):
+    def test_dodges_per_role_and_healers_on_the_holder(self):
+        trigger = fr.dodge_trigger_yd()
+        self.assertIsNotNone(trigger)
+        self.assertEqual(printed(fr.show_beams, load(pull())), (
+            "BEAMS\n"
+            f"  ranged    1 dodge(s), 0 from past {trigger:g} yd, median walk 10.0 yd, 1 ended farther from Freya\n"
+            f"  tank      1 dodge(s), 1 from past {trigger:g} yd, median walk 4.0 yd, 0 ended farther from Freya\n"
+            "  Snaplasher 0:10.000 .. 0:24.000: healers within 38.5 yd of its holder median 1, under 2 for 100% of it\n"))
 
 
 class Deaths(unittest.TestCase):

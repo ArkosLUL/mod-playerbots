@@ -66,12 +66,13 @@ enum UlduarFreyaIds
     SPELL_ARMY_OF_THE_DEAD = 42650,
 };
 
-// Hard mode: how far out of an Unstable Sun Beam bots step. The pool itself (62865) is only 5 yd.
-inline constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
+// Hard mode: inside this a bot leaves an Unstable Sun Beam. The pool (62865) is 5 yd in the DBC, and the
+// object sizes the searcher adds put its aura on players out to 7.3 yd, never past.
+inline constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 8.0f;
 
 // Aim 3 yd past the trigger radius as hysteresis: a one yard margin only gets a ~2 yd step from
 // FindNearestPositionClearOfHazards, and the next beam spawn re-triggers it.
-inline constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 15.0f;
+inline constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 11.0f;
 
 // Ceiling on the escape latch. Long enough to walk the clearance at 7 yd/s, short enough that a bot
 // rooted mid-dodge hands the tick back instead of holding it for the rest of the wave.
