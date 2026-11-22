@@ -423,6 +423,8 @@ KITE_GAP_MS = 3000
 KITE_HEAL_REACH = 30.0
 # a kite's healer distance is read this long after its last hop
 KITE_HEAL_AFTER_MS = 2000
+# a kite whose nearest chaser still hits the bot this soon after its first hop started inside its reach
+KITE_CATCH_MS = 2000
 # the chasers' distance after an escape or kite start, and the re-pick that should have dropped the bot
 CHASE_LOOKS_MS = (2000, 6000)
 DROPPED_MS = 9000
@@ -3071,11 +3073,12 @@ def show_damage(trace: Trace) -> None:
     if not rows:
         print("  no champion damage on the raid")
         return
-    total = sum(row["damage"] for row in rows)
+    total = max(sum(row["damage"] for row in rows), 1)
     print(f"  {'champion':20} {'spec':20} {'damage':>8} {'share':>6} {'kills':>5}  top spells | on roles")
     for row in rows:
         top = ", ".join(f"{name} {amount // 1000}k" for name, amount in row["spells"].most_common(3))
-        roles = " ".join(f"{role} {amount * 100 // row['damage']}%" for role, amount in row["roles"].most_common())
+        roles = " ".join(f"{role} {amount * 100 // max(row['damage'], 1)}%"
+                         for role, amount in row["roles"].most_common())
         print(f"  {trace.name(row['guid'])[:20]:20} {spec(trace, row['guid'])[:20]:20} {row['damage']:8}"
               f" {row['damage'] * 100 / total:5.0f}% {row['kills']:5}  {top} | {roles}")
     print("\n  melee control (* fc.danger named it):")
@@ -3212,6 +3215,31 @@ def kite_rows(trace: Trace) -> list[dict]:
     return [{"t": kite["t"], "bot": kite["bot"], "hops": kite["hops"], "secs": (kite["last"] - kite["t"]) / 1000,
              "heal": healer_gap(trace, kite["bot"], kite["last"] + KITE_HEAL_AFTER_MS),
              **chase_after(trace, kite["bot"], kite["t"])} for kite in kites]
+
+
+def kite_catches(trace: Trace, kites: list[dict] | None = None) -> dict[int, list[int]]:
+    """Per melee champion, `[starts, caught]` over the kites it was the nearest living melee champion with the
+    bot as target at the first hop of (last sample at or before it, ties to the lower guid), caught meaning it
+    dealt the bot damage within KITE_CATCH_MS of that hop."""
+    kites = kite_rows(trace) if kites is None else kites
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    hits: dict[tuple[int, int], list[int]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("s") in melee:
+            hits[(rec["s"], rec.get("d"))].append(rec["t"])
+    out: dict[int, list[int]] = {}
+    for kite in kites:
+        snap = snap_at(trace, kite["t"])
+        rows = snap.get("u", []) if snap else []
+        me = next((row for row in rows if row[0] == kite["bot"]), None)
+        on = [row for row in rows if row[0] in melee and row[5] > 0 and len(row) > 7 and row[7] == kite["bot"]]
+        if not me or not on:
+            continue
+        chaser = min(on, key=lambda row: (math.dist(row[1:3], me[1:3]), row[0]))[0]
+        cell = out.setdefault(chaser, [0, 0])
+        cell[0] += 1
+        cell[1] += any(kite["t"] <= when <= kite["t"] + KITE_CATCH_MS for when in hits[(chaser, kite["bot"])])
+    return out
 
 
 def chase_spacing(trace: Trace) -> list[dict]:
@@ -3352,6 +3380,11 @@ def show_personal(trace: Trace) -> None:
         far = [row for row in kites if row["heal"] is not None and row["heal"] > KITE_HEAL_REACH]
         print(f"  {KITE}: {len(kites)} kite(s), the chasers dropped the bot in {len(dropped)}; ending past"
               f" {KITE_HEAL_REACH:.0f} yd of every healer: {len(far)}")
+        catches = kite_catches(trace, kites)
+        if catches:
+            print(f"  hit by the nearest melee chaser within {KITE_CATCH_MS // 1000} s of the first hop: "
+                  + ", ".join(f"{trace.name(guid)} {caught} of {starts}"
+                              for guid, (starts, caught) in sorted(catches.items(), key=lambda item: -item[1][0])))
     else:
         print(f"  {KITE}: none")
     print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"

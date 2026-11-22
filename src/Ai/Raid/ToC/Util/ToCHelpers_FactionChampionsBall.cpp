@@ -125,9 +125,10 @@ constexpr uint32 KITE_STEP_MS = 2500;
 // a chaser dragged onto a healer would just re-pick the healer
 constexpr float KITE_HEALER_GAP = 10.0f;
 constexpr float KITE_HOLD = 45.0f;
-// a chaser this slow only catches a bot standing next to it, so its victim keeps casting till it's near
+// a chaser this slow only catches a bot standing next to it, so its victim keeps casting till it's this far
+// outside the chaser's melee reach on the run
 constexpr float KITE_CRAWL_RATE = 0.6f;
-constexpr float KITE_CRAWL_REACH = 10.0f;
+constexpr float KITE_CRAWL_MARGIN = 2.25f;
 // the Ret's Hammer of Justice goes on its target within 15 yd, so its victim leaves before that
 constexpr float KITE_CRAWL_REACH_RET = 17.0f;
 // the Hands' reach, heals go to 40 so the healers can drift a bit
@@ -396,12 +397,17 @@ bool Crawling(Unit* champion)
            champion->GetSpeedRate(MOVE_RUN) <= KITE_CRAWL_RATE;
 }
 
-float CrawlReach(Unit* champion)
+// both moving, the core adds its 2.66 yd leeway to melee range (Unit::IsWithinMeleeRange), so a kite has to
+// start outside that
+float KiteReach(Unit* chaser, Player* bot) { return chaser->GetMeleeRange(bot) + LEEWAY_BONUS_RANGE; }
+
+float CrawlReach(Unit* champion, Player* bot)
 {
     uint32 const entry = champion->GetEntry();
     bool const ret = entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION) ||
                      entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION);
-    return ret ? KITE_CRAWL_REACH_RET : KITE_CRAWL_REACH;
+    float const reach = KiteReach(champion, bot) + KITE_CRAWL_MARGIN;
+    return ret ? std::max(reach, KITE_CRAWL_REACH_RET) : reach;
 }
 
 // The ones its kite runs from, a crawling one only once it's near
@@ -409,7 +415,7 @@ std::vector<Unit*> KiteChasers(PlayerbotAI* botAI, Player* bot)
 {
     std::vector<Unit*> chasers = MeleeOn(botAI, bot, KITE_CLEAR);
     chasers.erase(std::remove_if(chasers.begin(), chasers.end(), [bot](Unit* chaser)
-                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > CrawlReach(chaser); }),
+                                 { return Crawling(chaser) && bot->GetExactDist2d(chaser) > CrawlReach(chaser, bot); }),
                   chasers.end());
     return chasers;
 }
@@ -582,7 +588,7 @@ void BreakChasedCasts(BallState& state, PlayerbotAI* botAI, std::vector<Player*>
         std::vector<Unit*> const chasers = KiteChasers(botAI, member);
         bool const caught = std::any_of(chasers.begin(), chasers.end(), [member, leftSec](Unit* chaser)
                                         {
-                                            return member->GetExactDist2d(chaser) - chaser->GetMeleeRange(member) <=
+                                            return member->GetExactDist2d(chaser) - KiteReach(chaser, member) <=
                                                    chaser->GetSpeed(MOVE_RUN) * leftSec;
                                         });
         if (!caught || !KiteFree(state, botAI, member))
