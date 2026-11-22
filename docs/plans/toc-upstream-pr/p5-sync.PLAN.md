@@ -12,6 +12,11 @@ adaptation list and the **`p5-sync`** paragraph bind this lane. Repeatable; runs
 3. Parity: the ported delta differs from Custom's only by RaidObs removal and listed adaptations.
 4. Checks on every touched branch; report the new export base.
 
+Custom's comment strip `c163ec11a` is ported as a step, not a delta: port up to `c163ec11a^`, run
+`python -I tools/commentstrip/commentstrip.py --root <PR worktree> strip --keep-from c163ec11a
+src/Ai/Raid/ToC` (plus the helper files) on the PR branch, commit, then port the rest; the export
+base moves past `c163ec11a` (user, 2026-11-22: PR branches lose their comments too).
+
 ## Task list
 
 ## Decisions for review
