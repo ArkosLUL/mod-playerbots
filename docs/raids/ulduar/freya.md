@@ -252,6 +252,15 @@ The add tank taunts the **Snaplasher and Conservator only**; the rest of its lad
 damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
 their own pickup ([below](#detonating-lasher-waves)).
 
+**Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
+so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
+tank: three Roars put her on the add tank for 5.7s each, and two of those tanks died to the Snaplasher
+6-14s later. A paladin's Hand of Reckoning falls back to Righteous Defense on its target's victim, which
+taunts that member's attackers: aimed at the add tank it took the Snaplasher, and the bear that Growled
+it back at full Hardened Bark died to one 43k swing. `freya area taunt hold` blocks both shouts for every
+tank all fight, and `freya righteous defense hold` blocks Righteous Defense while the bot's target is on
+another tank; the lasher pickup's direct casts skip both. A DK add tank has no area taunt.
+
 **A bot main tank holds the Storm Lasher** (not yet verified in a pull). Unheld, the Storm Lasher and
 Water Spirit spent **0%** of both trio waves on a tank and the Storm Lasher's swings did 73-75k a wave to
 melee DPS, while the main tank took **1.3-1.5k/s** (lowest 68-71%) against the add tank's 5.0-5.2k/s
@@ -296,7 +305,8 @@ lasher time stayed 11.7-18.3% (11-20% before).
 tank's current target, so it fired Hand of Reckoning every 8s at ghoul-held lashers and Righteous
 Defense on the ghoul itself five times, dragging them into the melee stack and leaving both on
 cooldown when two lashers killed a ret paladin at 1:45. `freya lasher taunt reserve` blocks the class
-taunts (incl. Death Grip, Mocking Blow, the shouts) for any tank whose current target is a lasher. The
+taunts (incl. Death Grip, Mocking Blow) for any tank whose current target is a lasher, the shouts all
+fight ([tanks](#tanks)). The
 pickup casts directly and only for lashers on a non-tank player, so the block skips it.
 
 A `GROUP_LASHERS` wave is **10** of them, 717k in 10-man and **2.35M in 25-man**, for **2** stacks each:
@@ -528,3 +538,11 @@ plus a LOS ray, tested on the entry first so only Healthy Spores and the two Sun
 `LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action can be
 `Playerbots.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the target list,
 because the Ground Tremor nodes run wherever the gate is open, trash included.
+
+## What a trace answers
+
+`tools/botobs/bosses/freya.py <trace>`, no probes. The banner reads hard mode off the Elders' empowers
+(Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since `cfg.hardmode` has no Freya key;
+`--waves` each add wave and Eonar's Gift, with raid deaths meanwhile; `--tanks` who held Freya and each
+Snaplasher, and every tank's Challenging Roar, Challenging Shout or Righteous Defense; `--deaths` by
+killer and spell.
