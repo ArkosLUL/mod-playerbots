@@ -97,8 +97,8 @@ the caches at (1967, -204) / (2036, -202), all 35+ yd outside anything derived h
   takes a fixed bearing into the open floor north-east of the centre. Out of combat it is re-taken
   every tick and latches on engage; a wipe drops the latch.
 - **The off-tank stands 4.5 off the point, square to the hold bearing**, so a Frozen Blows taunt walks
-  him ~6 yd sideways and leaves him on the fire either way. The tank Biting Cold shuttle runs its ±3 yd
-  legs on the same axis, for the same reason: neither end may drag him off the fire.
+  him ~6 yd sideways and leaves him on the fire either way. A tank's Biting Cold hops (or fallback ±3 yd
+  legs) run square to him for the same reason: neither end may drag him off the fire.
 - **Parked off the point, he is re-aimed.** He only walks toward whoever holds him, so once shoved past
   the spot (the tank flipping to a shelter after a freeze, a knockback) he parks with it already in
   reach — 5+ yd off for 80 s of 113 in centre windows, which also put the western Starlight zone
@@ -309,11 +309,10 @@ it 6.5 yd short of its dodge between two landed drifts, and a Disengaged hunter 
 back into the shelter. `ReleaseStalledWalk` clears `last movement` once the bot has stood still
 `ULDUAR_HODIR_STALL_MS` 500 short of the dodge's destination, the shelter or a shed leg.
 
-**Biting Cold sheds on sustained movement only, and jumping cannot fake it.** A stack comes off on the
-second *consecutive* tick where the server reads `isMoving()`, and any stationary tick between resets
-that progress, so it needs more than a second of unbroken travel: the shuttle walks 6 yd legs
-(`_SHUTTLE_HALF_LEG` 3.0), chaining down to `_SHED_FLOOR` **1**: the last stack ticks 400, takes 2 s of
-walking to drop, and 4 s standing puts it back. It arms at **4 stacks, 5 in Starlight**
+**Biting Cold sheds on two moving ticks in a row.** A stack comes off on the second *consecutive* tick
+where the server reads `isMoving()`, and any stationary tick between resets that progress. The shed
+runs down to `_SHED_FLOOR` **1**: the last stack ticks 400, takes two moving ticks to drop, and four
+still ones put it back. It arms at **4 stacks, 5 in Starlight**
 (`ULDUAR_HODIR_BITING_COLD_SHED_STACKS`); the tick is `200·2^stacks` and `62039` caps at 8. Arming at 2
 made the shuttle 32.4% of accepted moves (18.7% of won engine passes) while six raiders dipped under
 15% health. Arming at 5 stood bots through 3-5 stacks once ranged stopped standing in fires: Biting
@@ -329,6 +328,37 @@ it is not the bulk of the problem: **57.1%** of the 17,554/s the raid takes is t
 tick that nothing avoids. Passing 2 stacks also clears `bAchievGettingCold` (`boss_hodir::SetData(2,
 1)`, called from `spell_hodir_biting_cold_player_aura`), which the Rare Cache does not care about.
 
+**The shed hops on the spot, timed to the ticks** (user's call, 2026-11-22). Walking 6 yd legs shed
+as fast (0.38-0.60 stacks/s in three window-8 pulls) but ended a shed a median 6-17 yd off the bot's
+spot, with melee in reach of him 61-76% of it and Starlight held 67-82%.
+
+- **A jump counts as moving while it is up.** `isMoving()` reads `MOVEMENTFLAG_MASK_MOVING`, which
+  `MoveSplineInit::Launch` sets for any spline except one starting and ending on the same point
+  (orientation only), and `DisableSpline` clears as it finalizes. `MoveJump` lasts its length over
+  `speedXY` and drops a jump at `speedXY` ≤ 0.1, so `IntenseColdJumpAction`'s (Nexus) 0.01 yd hop at
+  run speed is up ~1.4 ms and never covers a tick. `JumpTo` takes `speedXY` / `speedZ` for this.
+- **Each hop stays up across the next two ticks**, so it drops a stack whatever tick came before:
+  flight is the aura's `GetPeriodicTimer()` plus one period plus `_SHED_HOP_TICK_MARGIN_MS` 150,
+  1.15-2.15 s, peaking ~0.4 yd (`_SHED_HOP_SPEED_Z` 4). That margin only absorbs rounding: the aura
+  ticks in `_UpdateSpells` before `UpdateSplineMovement` in the same `Unit::Update` and diff, and bot AI
+  runs after both (`OnPlayerAfterUpdate`).
+- **Ends sit `_SHED_HOP_HALF` 0.5 either side of where the shed started**, each hop to the far end, so
+  a bot never strays past half a yard. Spot and axis are latched per bot and re-taken once it is pushed
+  `_SHED_HOP_HOME_SLIP` 1.5 off. **Melee hop toward him and back**: a spline faces the bot along its
+  travel, `MoveJump` can't fix that (no `OrientationFixed`), and a player's swing needs him within 60°
+  of its facing unless it stands within 2 yd of his centre (`IsWithinBoundaryRadius`), so the inbound
+  hop keeps swinging. Everyone else hops square to the Starlight zone they stand in, else to him, so the
+  zone, the caster band, a Storm Cloud pulse and a tank's hold all stay.
+- **A hop holds the controlled motion slot**, so `CanMove` is false and every walk answers NotAllowed
+  until it lands: the icicle dodge and the shelter run cut it first (`CutShedHop`, `Clear(false)`,
+  since a reset stops the bot mid-air if nothing moves it next, plus the hop's `last movement`
+  booking). `IsHodirShedHopInFlight` matches the spline's destination, since a knockback takes the same
+  slot. Up, the shed returns false so instants go out. A normal cast is left to finish, since a hop
+  launches mid-cast and cancels it where a walk waits; a channel is broken.
+- **Walking legs remain only where no hop end works**: inside a live icicle's dodge trigger (4.5 / 7.5,
+  tanks exempt) or pulled within `_SHED_HOP_MIN_TRAVEL` 0.3 by the floor check. `hodir.shuttle` reads
+  `hop`, `cut`, or the fallback leg's rule.
+
 **A crowd or solo leg must travel at least `_SHUTTLE_HALF_LEG`** (`goesSomewhere` in
 `DeriveHodirShuttleLeg`), the travel floor of
 [pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops): at the room's edge two casters stood
@@ -337,20 +367,12 @@ between (108 of 284 crowd/solo legs to a standing bot over five pulls sat under 
 is a clean floor. The tank, shelter and Starlight branches take the farther of two fixed ends and
 cannot collapse.
 
-**Inside a landed shelter the shed keeps running through the freeze cast**, shuttling
-`_SHELTER_SHED_RADIUS` 3 across it, inside the 6 yd park so the run never fires on it; the hodir guard
-rules let it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast adds two stacks,
-and four of five freezes in one pull had a bot gain two.
+**Inside a landed shelter the shed keeps running through the freeze cast**, hopping on the spot (or
+walking `_SHELTER_SHED_RADIUS` 3 legs across it) inside the 6 yd park so the run never fires on it; the
+hodir guard rules let it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast adds
+two stacks, and four of five freezes in one pull had a bot gain two.
 
-`isMoving()` is the raw `MOVEMENTFLAG_MASK_MOVING` and does include the flags a jump raises, but
-`MotionMaster::MoveJump` splines to its point and takes the duration from `length / speedXY` — an
-in-place 0.01 yd hop is airborne **~1.4 ms** and never covers a tick, which is what
-`IntenseColdJumpAction` (the Nexus answer to the same mechanic) reports in its own comment.
-`IsDuplicateMove` also refuses a repeat within 0.01 yd, and `JumpTo` books the slot for 1,000 ms. A
-hop long enough to span two ticks is a 7 yd walk at run speed, which is the leg already. Only an
-optional `speedXY` on `JumpTo` would change that: 2 yd at 2 yd/s lasts a second.
-
-**The shed holds each leg**, latched like the dodge — re-derived on arrival, on the leg stopping being
+**The fallback holds each leg**, latched like the dodge — re-derived on arrival, on the leg stopping being
 clear of icicles, or on slipping past `_DODGE_SLIP`, and on arrival it derives the *next* leg rather
 than stopping, because the chain is what covers consecutive ticks. Stateless it issued **6,686 moves
 against 4,122 refusals**, the largest single source of churn in the fight. Its sweep takes allies at
@@ -489,7 +511,7 @@ was a mover overshooting. Each cause below is separate, and all of them are stil
   check on Hodir only, `reach spell` toward helper ice blocks still did it 50 times a pull.
 - **Tanks do not run the icicle dodge.** They ate a ~50 yd walk around the room and took Hodir with
   them; one ended up 70 yd from the boss while alive. Tanks eat the 14,000 instead — Ice Shards is
-  7-13 hits over 0-3:00, almost all on the tank — and the Biting Cold shuttle already gives them the
+  7-13 hits over 0-3:00, almost all on the tank — and the Biting Cold hops already give them the
   movement they need without leaving the spot.
 - **The dodge holds its destination through arrival.** `FindNearestPositionClearOfHazards` rings
   outward in 2 yd steps from wherever the bot is standing, so clearing `_dest` on arrival dropped
@@ -524,9 +546,10 @@ was a mover overshooting. Each cause below is separate, and all of them are stil
   reads `held noreach`, so a bot waiting for the boss to drift back is distinguishable from one with no
   zone at all.
 
-**Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
-`crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
-3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
+**Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` on walking
+legs (now the fallback) reversed `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the
+designed chain — `_SHUTTLE_HALF_LEG` 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did
+the same 192 times at 780 ms, which
 was the 45° lap step and is gone with the lap. Both are advance-on-arrival, and the volume is a
 symptom of how much walking the fight demands rather than of a latch that flaps.
 
@@ -555,7 +578,10 @@ sharing the cast's ms), the `hodir.defensive` values (`idle`, `wait`, `spent`, t
 spent out or timed out, the carrier's share within 2 yd of its rally, and how often a receiver parked
 at the rally stood inside the carrier's pulse;
 `--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the fire latch's runs
-held out of the band.
+held out of the band. `--shed` gives per role stacks shed a second, the share of Biting Cold ticks used
+(two a stack is all of them), samples moving, how far a shed took bots off their spot, hops, walked
+legs and cut hops, and how much of each shed a bot that started in Starlight, in melee reach or inside
+a Storm Cloud pulse stayed there.
 
 ## Pace
 

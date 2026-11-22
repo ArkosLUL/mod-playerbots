@@ -51,8 +51,9 @@ private:
     float _destDist = 0.0f;
 };
 
-// Shed Biting Cold by moving: a stack drops only on the second moving tick in a row, so this chains 6 yd
-// legs down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, each held until walked.
+// Shed Biting Cold by moving: a stack drops only on the second moving tick in a row, so this hops back
+// and forth on the bot's spot down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, each hop up across two ticks.
+// Walks 6 yd legs instead, each held until walked, where no hop end is clear.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
@@ -62,6 +63,8 @@ public:
     bool Execute(Event event) override;
 
 private:
+    void StopShedding();
+
     bool _shedding = false;
     // The leg being walked, and the closest the bot has got to it, so a drag away from it can be told
     // from ordinary walking.

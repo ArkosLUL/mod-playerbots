@@ -128,7 +128,8 @@ void MovementAction::CreateWp(Player* wpOwner, float x, float y, float z, float 
         wpCreature->SetObjectScale(0.5f);
 }
 
-bool MovementAction::JumpTo(uint32 mapId, float x, float y, float z, MovementPriority priority)
+bool MovementAction::JumpTo(uint32 mapId, float x, float y, float z, MovementPriority priority, float speedXY,
+                            float speedZ)
 {
     UpdateMovementState();
 
@@ -142,10 +143,10 @@ bool MovementAction::JumpTo(uint32 mapId, float x, float y, float z, MovementPri
 
     if (outcome == RaidObs::MoveOutcome::Issued)
     {
-        float speed = bot->GetSpeed(MOVE_RUN);
+        float const runSpeed = bot->GetSpeed(MOVE_RUN);
         MotionMaster& mm = *bot->GetMotionMaster();
         mm.Clear();
-        mm.MoveJump(x, y, z, speed, speed, 1);
+        mm.MoveJump(x, y, z, speedXY > 0.0f ? speedXY : runSpeed, speedZ > 0.0f ? speedZ : runSpeed, 1);
         AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), 1000, priority);
     }
 

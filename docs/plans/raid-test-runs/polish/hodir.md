@@ -269,3 +269,70 @@ it lands. Melee receivers leave by `reach melee` / `set behind` (generic, untouc
 fork's existing jump code (no port of upstream PR #3014). A hop must land about a yard away: a
 jump that lands on its start point leaves the movement flags off (`MoveSplineInit::Launch` treats it
 as orientation only), so `isMoving()` stays false and no stack drops.
+
+## Round 4 (2026-11-22, on Custom eda15422d)
+
+**Data.** No new pulls: round 3 (`e54259b02`) is merged but not pulled (window 9 is pulling round 2
+code), so the stop rules, the verdict on round 3 and the failure ranking are skipped. Window 8's three
+traces (round 3's table) re-read with the new `hodir.py --shed` as the walking baseline. Deaths by
+mechanic per pull, as round 3: uld1 1 (healer Freeze, 4 Biting Cold stacks), uld2 0, uld3 1 (off-tank
+Frozen Blows swing).
+
+**Built: the user's answer, hop instead of walk.** Walking legs (window 8, per pull, by role):
+
+| | uld1 | uld2 | uld3 |
+|---|---|---|---|
+| ranged: stacks/s, ticks used, off the spot p50 | 0.43, 83%, 11.3 yd | 0.50, 93%, 15.1 | 0.42, 82%, 6.5 |
+| melee | 0.42, 84%, 9.7 | 0.60, 104%, 9.6 | 0.41, 84%, 8.6 |
+| heal | 0.38, 87%, 6.0 | 0.43, 81%, 17.0 | 0.44, 82%, 12.7 |
+| tank | 0.47, 91%, 6.9 | 0.53, 100%, 3.2 | 0.48, 94%, 3.6 |
+| melee in reach / Starlight held, of sheds that started there | 61% / 70% (ranged), 67% (heal) | 76% / none | 64% / 82% |
+
+"Ticks used" is twice the stacks shed over the Biting Cold ticks (`62188` rows) in the shed, so 100% is
+a stack every two ticks, the most the aura allows. The walk already sheds near that rate; what it costs
+is the spot. Ice Shards 15 / 5 / 14 hits; Biting Cold 1.20 / 0.78 / 1.07 M.
+
+Core, checked: `spell_hodir_biting_cold_player_aura` (`boss_hodir.cpp:1257-1297`) reads `isMoving()`
+once per tick; two moving ticks in a row drop a stack. `isMoving()` is `MOVEMENTFLAG_MASK_MOVING`, which
+`MoveSplineInit::Launch` sets for any spline but a same-point one (`MoveSplineInit.cpp:69-90`) and
+`Unit::DisableSpline` clears on finalize (`Unit.cpp:718-722`). `MoveJump` (`MotionMaster.cpp:676-694`)
+lasts length over `speedXY` and returns at `speedXY` ≤ 0.1. In `Unit::Update` the aura ticks in
+`_UpdateSpells` (`:548`) before `UpdateSplineMovement` (`:642`), same diff, and bot AI runs after it
+(`OnPlayerAfterUpdate`), so a hop up past the second tick by any margin covers both.
+
+**Fix** (`UldEncounter_Hodir.h/.cpp`, `UldActions_Hodir.h/.cpp`; shared `MovementActions.h/.cpp`; reader
+`hodir.py --shed`, tests):
+- `HodirBitingColdShedAction` hops (`GetHodirShedHop`) between two ends `_SHED_HOP_HALF` 0.5 either side
+  of where the shed started, each hop to the far end (a yard). Flight is the aura's `GetPeriodicTimer()`
+  + one period + 150 ms, 1.15-2.15 s, so each hop covers the next two ticks and drops a stack; ~0.4 yd
+  high (`speedZ` 4). Spot and axis latched per bot, re-taken once pushed 1.5 yd off.
+- Axis: melee hop toward him and back, so the inbound hop faces him (a spline faces the bot along its
+  travel, and a player's swing needs him within 60° unless it stands within 2 yd of his centre);
+  everyone else square to the Starlight zone they stand in, else to him.
+- A hop holds the controlled motion slot (`CanMove` false), so the icicle dodge and the shelter run cut
+  it first (`CutShedHop`: `MotionMaster::Clear(false)` plus the `last movement` booking).
+  `IsHodirShedHopInFlight` matches the spline's destination, so a knockback isn't mistaken for one.
+- In flight the shed returns false (instants go out); a normal cast is left to finish, since a hop
+  launches mid-cast and cancels it; a channel is broken as before.
+- **Walking legs stay only where no hop end works**: an end inside a live icicle's dodge trigger
+  (4.5 / 7.5, tanks exempt, as they eat icicles), or both ends pulled within 0.3 yd by the floor check
+  (a wall; the room is open floor). Tank, shelter and Starlight legs keep their branches as fallback.
+- Shared: `MovementAction::JumpTo` takes optional `speedXY` / `speedZ`, defaulting to run speed as before,
+  so no other caller changes (Nexus, Naxx Thaddius, Sunwell Twins, Tempest Keep, Thorim, battlegrounds).
+- Probe `hodir.shuttle` adds `hop` and `cut`. Reader `--shed`: per role stacks/s, ticks used, samples
+  moving, offset off the spot p50/p90, hops, walked legs, cut hops, and how much of each shed a bot that
+  started in Starlight, in melee reach or inside a Storm Cloud pulse stayed there. `--churn`'s own-spot
+  leg count skips hops.
+- 10/25 and hard mode alike: Biting Cold is the same aura and timer in all four.
+
+**Next window should show** (`--shed`, against the table above): ticks used 90%+ and 0.45+ stacks/s
+for every role; off the spot p50 under 1 yd, p90 under 2 (a cut hop re-homes); hops far above walked
+legs; melee in reach 90%+ and Starlight held 90%+ of the sheds that started there; Storm Cloud pulse
+kept likewise where any. No more Ice Shards hits than 5-15 a pull (a hop that wasn't cut in time) and
+no Flash Freeze death (a shelter run held by a hop). Snapshots of a shedding bot should read `moving` 1
+with `movegen` 16 (effect) in flight.
+
+**Not built, watch.** The outbound melee hop faces away from him, so melee lose swings for about half
+of each shed beyond 2 yd of his centre: `MoveJump` can't keep the facing (`OrientationFixed` isn't
+reachable from it). If melee dps during sheds matters, the options are a module-side spline that sets
+`OrientationFixed` (shared movement code) or a core `MoveJump` option.
