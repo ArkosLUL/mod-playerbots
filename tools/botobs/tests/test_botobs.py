@@ -1205,6 +1205,18 @@ class YoggPhases(unittest.TestCase):
         dead = [[3000, 1, 2018.0, -18.0, 327.0, 0, 0.0]]
         self.assertIsNone(yogg_saron.station_arrival(dead, [spot], 1000))
 
+    def test_melee_reach_share_counts_positions_within_a_swing_of_the_brain(self):
+        # The melee spot (29.0 yd 3D), where reach melee stops (29.3), and 12.3 yd west at 30.15, out of a swing.
+        points = [(1977.0, -25.43, 236.30), (1972.92, -25.41, 236.9), (1969.0, -25.4, 237.474)]
+        self.assertEqual(yogg_saron.melee_reach_share(points), (2, 3))
+        self.assertEqual(yogg_saron.melee_reach_share([]), (0, 0))
+
+    def test_spot_reach_trades_counts_reach_melee_right_after_the_spot_walk(self):
+        spot, reach = "yogg-saron brain spot action", "reach melee"
+        moves = [(1000, spot), (1500, reach), (2000, spot), (4000, reach), (5000, reach), (6000, spot), (6400, reach)]
+        self.assertEqual(yogg_saron.spot_reach_trades(moves), 2)
+        self.assertEqual(yogg_saron.spot_reach_trades([(1000, reach), (1200, spot)]), 0)
+
     def test_stacked_heals_counts_each_marked_neighbour_inside_the_radius(self):
         # One beacon's three marks, two of them 8 yd apart and the third 25 yd off the first.
         self.assertEqual(yogg_saron.stacked_heals([(0.0, 0.0), (8.0, 0.0), (25.0, 0.0)]), [2, 3, 2])
