@@ -138,7 +138,8 @@ the raid has none): a melee bot leaving him makes a ~21 yd round trip. Tanks get
 follows his holder, so a tank walking 20 yd to a block drags him onto the ranged. Blocks are swept
 from the boss, not the bot, so every bot sees the same set. A block (32938, 110,675 hp) is summoned
 by the helper inside it, so `ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget`
-writes that kind before the guid.
+writes that kind before the guid. The helper entries come in `_10` and `_25` rows per faction: the
+`_10` row spawns in both sizes, the `_25` row only in 25-man.
 
 **A mage's fire lands ~9 s after its block breaks, and only the block time is a lever.**
 `npc_ulduar_hodir_mage` polls its release every 1 s (`EVENT_TRY_FREE_HELPER`), then
@@ -280,7 +281,8 @@ main tank takes him back once it drops (`HodirFrozenBlowsSwapTrigger`). The floo
 (`HodirTauntWouldBeSuicide`) applies only while another player holds him: with nobody on him the
 taunt is the rescue at any health, and how he comes off a pet. `hodir guard multiplier` blocks
 `Family::Taunt` on the same test, since the class "lose aggro" node taunts on its 8 s cooldown
-whenever someone else holds him, blind to Frozen Blows.
+whenever someone else holds him, blind to Frozen Blows. `HodirFrozenBlowsActive` keeps the difficulty
+lookup, since only the server's `spelldifficulty_dbc` maps 62478 to 63512 for 25-man.
 
 `hodir tank defensive action` casts `NextTankDefensive` by spell id once per tank per window
 (latched on the Frozen Blows aura's apply time), after he has been on that tank **1 s**
@@ -375,7 +377,8 @@ spot, with melee in reach of him 61-76% of it and Starlight held 67-82%.
   ticks in `_UpdateSpells` before `UpdateSplineMovement` in the same `Unit::Update` and diff, and bot AI
   runs after both (`OnPlayerAfterUpdate`).
 - **Ends sit `_SHED_HOP_HALF` 0.5 either side of where the shed started**, each hop to the far end, so
-  a bot never strays past half a yard. Spot and axis are latched per bot and re-taken once it is pushed
+  a bot never strays past half a yard; going to the far end first alternates them, so
+  `IsDuplicateMove` never sees the last hop's end again. Spot and axis are latched per bot and re-taken once it is pushed
   `_SHED_HOP_HOME_SLIP` 1.5 off. **Melee hop toward him and back**: a spline faces the bot along its
   travel, `MoveJump` can't fix that (no `OrientationFixed`), and a player's swing needs him within 60°
   of its facing unless it stands within 2 yd of his centre (`IsWithinBoundaryRadius`), so the inbound
@@ -417,7 +420,9 @@ for ranged and healers only — **Hodir at `_RANGED_MIN_BOSS_GAP`**. Allies alon
 an icicle inside fourteen seconds and left a warlock dead at 7.7 yd from the boss.
 
 **Ask `IsHodirBitingColdShedArmed`, never `HodirBitingColdTrigger`, before standing a node down for
-the shed.** The trigger fires on *any* stack because the action owns the shed-to-floor latch — but 87%
+the shed.** The trigger fires on *any* stack because the action owns the shed-to-floor latch (state held in a trigger is lost to the stack copy
+`isUseful` would build, so the Hodir actions carry no `isUseful`: each has one trigger node, already
+the gate) — but 87%
 of the time a bot holds Biting Cold it holds exactly one, **32.8% of the fight each**, and there the
 shuttle does nothing at all. `HodirRaidPositionTrigger` deferring to the trigger is what kept the
 ranged out of Starlight: a usable zone was in range on **85%** of their ticks while they stood in one
@@ -581,7 +586,8 @@ was a mover overshooting. Each cause below is separate, and all of them are stil
   minute. Latching but erasing whenever the stored point failed re-validation made it *worse* —
   **1,201 anchor moves at a median 320 ms** over as few as 14 distinct points — because the re-sweep
   hands the bot a different zone whenever Hodir drifts a yard past the caster band, which rejects next
-  tick and back. Hold the zone or fire until it is gone, re-validate the stored point against the band
+  tick and back. Two sweeps within `_STARLIGHT_ZONE_MATCH` 1 are one zone: the zones are static
+  dynamic objects, so it only absorbs float noise, not movement. Hold the zone or fire until it is gone, re-validate the stored point against the band
   every tick, and on a reject offer nothing that tick rather than dropping the latch. The walk gate is
   deliberately *not* re-checked: it decides which zone is worth starting for, and a bot already on its
   way is past that question. **Never dropping fails too**: casters sat `held noreach` on a zone left

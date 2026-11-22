@@ -60,7 +60,7 @@ fly facing their course (within 1° p90), so the centre falling behind one marks
 `ULDUAR_FL_LIFT_DROP_RADIUS` (20) it fires at once. Holding costs no crates: lifts respawn in 30 s and
 all 47 spawns on loops crossing the box are still shot once a pass. Only one loop (path `13682000`,
 10 spawns) crosses the middle; the other 37 bottom out 81-88 yd from the centre, so most drops gain
-little. `fl.lift` records each shot.
+little. `fl.lift` records each shot, once per lift (the rocket repeats every 250 ms until one lands).
 
 **Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and
 only despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
@@ -89,7 +89,8 @@ flight. It then throws one refresh once the duration is down to the last timed f
 loses the whole stack, early only a second of it), each adding a stack on the way to 10. A landing
 is timed off our own aura: a stack gained, or the duration jumping back up by over 250 ms. Barrels
 lob for 1-3 s, so the first refresh leads by `ULDUAR_FL_PYRITE_FLIGHT_MS` (3 s) until a landing is
-timed, and a barrel not seen landing by then counts as lost. Barrels go on him only. Refreshing at a
+timed (clamped to 0.5-5 s), and a barrel not seen landing within `ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS`
+(5 s) counts as lost. Barrels go on him only. Refreshing at a
 fixed time left, blind to barrels in flight, threw 2–3 per cycle at 10 stacks (~15–20 a minute
 against ~7).
 
@@ -159,7 +160,9 @@ despite the name**, and never ignites anything.
   holds its aim through it, or the drive turns the hull away. The interrupt outranks the urgent
   drive, so it never stops a hull that has a blast or hazard to leave, by the drive's own test.
 - **Pursued 62374** picks a random crewed siege engine or demolisher, never a chopper
-  (`FlameLeviathanPursuedTargetSelector`), every 31s and lasts 35s. `EVENT_PURSUE` waits out his
+  (`FlameLeviathanPursuedTargetSelector`), every 31s and lasts 35s. The aura lands on the ridden
+  vehicle or on the parent under it, so `FlameLeviathanIsPursued` checks both links and the state keys
+  on the vehicle, which folds a crew into one entry. `EVENT_PURSUE` waits out his
   casts, so it never lands mid-channel, and re-fires at once when he kills his victim. He drives at
   it and casts `Battering Ram 62376` on `GetVictim()` inside `IsWithinCombatRange(victim, 15)`. Its
   target is `TARGET_DEST_TARGET_ENEMY` at radius index 20, so the blast is a **25 yd sphere centred
@@ -180,7 +183,9 @@ despite the name**, and never ignites anything.
   last-move priority when Pursued ends so the next dodge does not wait out a kite leg. A Pursued
   engine is out of the vent-interrupter election: in 4 of 12 spans it turned to face him mid-escape.
   A Pursued demolisher runs 14 yd/s on Increased Speed, cast by its gunner and noted `fl.speed`
-  because no instant leaves a `cast` row; the crew of his threat victim gets it too. Neither hull
+  because no instant leaves a `cast` row; the crew of his threat victim gets it too. The aura, not the
+  cast's answer, says it landed (a refusal reads as success), so the speed buffs retry on
+  `ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS` (4 s). Neither hull
   detours round the Inferno trail while he is in range to fire: in one pull 62% of all Ram hull damage
   landed on `kite:detour` legs, against 0.7% of fleet health lost to the trail.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
@@ -233,7 +238,9 @@ its own action, since two owners of one vehicle bounce. The action is wired to t
 `drive urgent` at `ACTION_RAID + 3` (chased, or in a hazard) and the routine one at `+0.5` — the
 engine caches actions by name, so both nodes drive one instance and one latched destination. A
 branch with nothing left to do (a hazard already cleared) falls through to the next; failing the
-action would hand the tick to the on-foot rotation. Backing out of Battering Ram overshoots the
+action would hand the tick to the on-foot rotation, which is also why `DriveTo` returns true only
+while travelling and false once parked and facing: a move that silently failed then shows as a
+standing vehicle, not as this action quietly owning every tick. Backing out of Battering Ram overshoots the
 sphere by twice the arrival deadband, since `DriveTo` parks anywhere inside one.
 
 `DriveTo` re-issues only once the goal drifts `ULDUAR_FL_REPOSITION_EPSILON` (6 yd) or the hull has
@@ -514,6 +521,8 @@ so the next silent election failure is visible.
 - **No vehicle spell shows in the snapshot cast column**, which carries only spells with a cast time.
 - **`fl.corner` and `fl.station` name an assignment**, not what the hull drove; only `fl.drive` says
   that.
+- **`fl.vent hit` is a plain `Note`**, not a `NoteDerived`: a run of hits repeats one value and every
+  shot has to show up. `fl.pyrite` notes stacks only, since the duration changes every pass.
 - **A full Flame Vents channel is 11 `63847` ticks**, and only Electroshock ends one early, so fewer is
   an interrupt; a channel the pull ended under is not scored.
 - `--hulls` attributes hull loss by position, each `snap` health delta to the first matching cause, so

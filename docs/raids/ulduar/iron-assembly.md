@@ -77,7 +77,9 @@ buff chain runs dragonhawk, hawk, monkey and a veto keeps a node's fallbacks
 from 13–16% to 24%. Nature Resistance Totem is the same exclusive aura (+130, 30 yd raid aura), so
 it only covers what the hunter misses — in phase 3 the far side of the ring, five players for ~95%
 of it. A **spare** shaman bot drops it (no air totem, or one another shaman bot also drops; latched
-in `ironassembly.totem`), with a hold on its own air nodes and bar button, re-dropped where it stops
+in `ironassembly.totem`), with a hold on its own air nodes and bar button (the multi-cast air button Call of the Elements
+drops), ranked already-on-it, then a ring slot holder, then guid, bots only since a human shaman's
+totems are its own business, re-dropped where it stops
 once 10 yd off. Cast directly, since nothing removes an added `nature resistance` strategy, and by
 id, since the class action skips a cast while the bot stands in an older totem's aura, the very
 totem this one replaces. In the spread phase the hunter takes slot 0 and the shaman slot 8 (free
@@ -85,7 +87,7 @@ only while they are there), so every slot is within 31 yd of one of them. No spa
 
 **Every ability is difficulty-mapped through `Unit::CastSpell`**, so each id is a 10/25 pair and
 callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning
-Tendrils is **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power
+Tendrils is **18 yd** (61886/63485, 3,000 / 5,000 a second), not the 10 of the 61884 dummy; and **Overwhelming Power
 (64637/61888) is `DispelType 0`**, not dispellable.
 
 **Overwhelming Power goes to `GetVictim()`**, never a random player, and only raises the carrier's
@@ -135,7 +137,8 @@ on a tank killed before phase 3 spends one.
 
 **A risen tank gets its raid buffs back in combat** (`ironassembly.rebuff`). It stands up with none
 (Rebirth: 16–19% health), and the class buff nodes are non-combat only: traced 41.8k max health
-against 48.5k. For 30 s after any tank rises, bots already within 30 yd and sight put back Mark of
+against 48.5k. For 30 s after any tank rises (counted only once some buffer's call has seen it
+dead), bots already within 30 yd and sight put back Mark of
 the Wild, Power Word: Fortitude and, on a paladin tank, Arcane Intellect, one bot each, and each
 blessing its role gets from a different paladin (one blessing per paladin per target); a paladin
 tank is told by class, not power type, since a druid tank rises in caster form on mana. Dps cast
@@ -149,7 +152,8 @@ one GCD a buff.
 
 **Melee step out of a blast next to him.** A carrier that stays on him (`nopartner`, `late`, a swap
 that never came) stands ~7.6 yd in front of his centre; the melee hug him at 2.6–5 yd, 10–11.5 yd off
-it, and Meltdown is 15 yd **3D centre to centre**, no reach added. So in a carrier's last **3 s**, while
+it, and Meltdown is 15 yd **3D centre to centre**, no reach added (a carrier out on the Meltdown
+point is 46 yd off and reaches nobody in his melee). So in a carrier's last **3 s**, while
 it is within 17 yd + melee range of him, each non-tank melee bot within **16** of it steps straight
 behind him from it, a yard inside his melee range (9.8 yd: 17.4 off a 7.6 yd carrier), or out to **17**
 when that's too close (`ironassembly.meltstep` `behind` / `out`). There they're inside the 19.5 yd
@@ -172,7 +176,7 @@ current-target gate, since Righteous Defense targets the ally. Unguarded, a soul
 him off a human carrier, died 9s later and left nobody to inherit.
 
 `creature_immunities`: **Brundir (`0x24CB375F`) is vulnerable to STUN and INTERRUPT but immune to
-SILENCE** — kicks and stuns land, `silencing shot` and `spell lock` never do. Steelbreaker and
+SILENCE** — kicks and stuns land, `silencing shot` and `spell lock` never do (the encounter's own achievement is built on stunning him). Steelbreaker and
 Molgeim (`0x26CB3F7F`) add STUN and INTERRUPT, so **Brundir is the only member worth an interrupt
 node**. Lightning Whirl reaches 100 yd with no positional answer, so it takes the lowest-ranked
 interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns
@@ -185,9 +189,13 @@ slots, the shift heading and the alive mask must agree across the raid, and per-
 one pull six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in
 4.5s, 10 of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a
 50s Steelbreaker phase. It resets once all three are back at full health, never on leaving combat:
-Brundir spends 16 s of every Tendrils with no victim by design.
+Brundir spends 16 s of every Tendrils with no victim by design. The reset node never claims the
+tick (the pull still needs every node below it that tick) and fires only for a bot that holds
+encounter state, or it would swallow every tick before the pull, when all three are alive at full
+health by definition.
 
-Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
+Formation anchors on `(1587.18, 121.02, 427.27)`, the room centre, read off Brundir's out-of-combat
+wander in `boss_assembly_of_iron.cpp`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50
 — so **nothing anchor-centred sits outside 30 yd**, where every heading is clean; a ring on another
 centre earns its own probe. `ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS` 78 stops short of both hall doors,
@@ -256,7 +264,8 @@ Static Disruption's 6 yd blast wants. A slot a second rune covers inside the arc
 Melee still have only the escape. navprobe: 64/64 headings at 22 round the designed spot settle on
 the floor. Ranged beyond the ring's slots keep the stack point.
 
-**Two radii, not one.** DBC says 13, but the searcher applying the aura adds object size at both
+**Two radii, not one.** Rune of Death (62269/63490) ticks 2,750 shadow every half second for 30 s.
+DBC says 13 yd, but the searcher applying the aura adds object size at both
 ends and traces measured applications to **15.4 yd**: bots run inside **16**, stand at **21**. One
 radius put the escape spot exactly on the boundary — the search returns the nearest point that
 clears — and the aura came straight back, 31 times on one bot. The gap buys the invariant: every
@@ -273,7 +282,8 @@ its 21 yd circle at fixed 45° bearings, the short way, each chord staying 19.4 
 halfway because a line that only clears 16 grazes it and walks are not straight; goals share it, or
 one between the radii never clears and the detour circles forever. A walk whose nearest point is the
 bot itself only moves away and never counts as blocked — counting it spirals a bot inside 18.5
-inward. The static floor check pulls an off-floor detour point back along the bot's line, still
+inward. A detour point is at least a quarter step ahead of the bot's bearing, or a bot that just
+reached one picks the point it stands on. The static floor check pulls an off-floor detour point back along the bot's line, still
 outside 16. A covered goal, or a detour point inside a second rune, holds. **The tank holds at his
 escape spot** while a rune covers his: the ring stays on his spot, leaving its near arc ~12 yd from
 him inside Meltdown, safe only because a rune lasts 30s and the first Meltdown lands 43s into the
@@ -455,7 +465,13 @@ buffer's duty for a risen tank: `cast` / `hold:cast` and the tank, or `none:` `w
 Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep, 17 for Meltdown where melee step out to. Rune of Death
-and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
+and Rune of Power do, and are swept instead — only a swept hazard is tested against a death. A row
+carries the spell's own radius and the line the strategy draws as two numbers, since a bot dead at
+22 yd from a 20 yd blast is a different bug from one at 18. Rows are paced to one a second per
+instance, which doubles as their ttl (`NoteHazard` has no change latch, so 25 bots would write 25 a
+tick): fine for a 6 s Overload, close enough through a 16 s Tendrils. A row names the damage id read
+off whichever aura is up, because both Overload auras trigger 61878 and both Overwhelming Power auras
+61889 but the two Tendrils auras do not.
 
 `IronAssemblyScan` ([per-bot scan](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid))
 caches the three members and the Rune of Death sweep per bot per tick: a ranged bot asks for a member
