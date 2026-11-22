@@ -481,8 +481,7 @@ bool IsRazorscaleAtFirstLanding(Unit* boss)
 namespace
 {
 
-// Not MovementAction::GetFollowAngle: that reads the master's group, so a master outside the raid (a
-// console-driven run) puts every bot on angle 0 and the whole ranged stack on one spot.
+// One slot per group member, so no two ranged bots share a spot on the stack circle.
 float RazorscaleStackSlotAngle(Player* bot)
 {
     Group* group = bot->GetGroup();

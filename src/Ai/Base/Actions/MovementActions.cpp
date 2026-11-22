@@ -1000,24 +1000,27 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
 
 float MovementAction::GetFollowAngle()
 {
-    Player* master = GetMaster();
-    Group* group = master ? master->GetGroup() : bot->GetGroup();
+    Group* group = bot->GetGroup();
     if (!group)
         return 0.0f;
 
+    // The master gets no slot. A master outside the bot's group (a console-driven test run) has
+    // none to skip, and reading its group instead put every bot on angle 0.
+    Player* master = GetMaster();
+    bool const masterInGroup = master && master->GetGroup() == group;
+    uint32 const slots = group->GetMembersCount() - (masterInGroup ? 1 : 0);
     // Prevent bots with orphaned raid groups from dividing by 0, which freezes the server.
-    uint32 memberCount = group->GetMembersCount();
-    if (memberCount <= 1)
+    if (slots == 0)
         return 0.0f;
 
     uint32 index = 1;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
-        if (ref->GetSource() == master)
+        if (masterInGroup && ref->GetSource() == master)
             continue;
 
         if (ref->GetSource() == bot)
-            return 2 * M_PI / (memberCount - 1) * index;
+            return 2 * M_PI / slots * index;
 
         ++index;
     }

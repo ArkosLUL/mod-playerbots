@@ -43,10 +43,8 @@ is the freeze bug.
 
 **The ranged stack walks to a slot, never onto a patch.** A ranged bot outside the stack circle
 (12 yd round the arena centre, 18 yd round the first-landing offset) walks to its own slot on it,
-bearing from its place in the group (`GetRazorscaleRangedStackSpot`). Not `MoveInside`: its
-`GetFollowAngle` reads the master's group, so a master outside the raid (the DC console driver)
-gives every bot angle 0. Window 5 put all 14 ranged and healers on one spot, and a patch there killed
-9 of them 14 times. The slot turns along the circle, up to a quarter turn each way, off any patch the
+bearing from its place in the group (`GetRazorscaleRangedStackSpot`). Window 5 put all 14 ranged
+and healers on one spot, and a patch there killed 9 of them 14 times. The slot turns along the circle, up to a quarter turn each way, off any patch the
 dodge would move the bot out of, at the spot or on the walk; if none is clear the bot stays put. The
 dodge fires on `GetDistance2d`, which subtracts both combat reaches: ~10 yd from a patch's centre,
 not 7. So the spot clears `DEVOURING_FLAME_CLEAR_RADIUS` + both reaches +
