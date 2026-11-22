@@ -46,9 +46,9 @@ ranged and healer slot behind him.
 ## The camp sits in a 13.5 yd band, and both edges are invisible from the code
 
 Every healer and ranged bot takes a slot; a group is two files of five, files 3 yd apart across the
-camp bearing and rows 2.25 yd apart along it, at **boss-relative radii 27 / 29.25 / 31.5 / 33.75 / 36**.
-The two groups' inner files sit **5 yd** apart, near enough that one set of heals covers the camp and
-far enough that they are not one clump. Boss-relative because every distance the camp is built on is
+camp bearing and rows 2.25 yd apart along it, at **boss-relative radii 30.5 / 32.75 / 35 / 37.25 /
+39.5**. The two groups' inner files sit **5 yd** apart, near enough that one set of heals covers the camp
+and far enough that they are not one clump. Boss-relative because every distance the camp is built on is
 his, and a ranged pull can settle him yards off his spawn.
 
 **Both limits come from Vezax's combat reach, 12.6 since core update `2026_11_06_01` (8.0 before)**,
@@ -57,33 +57,35 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
 
 - **Floor 29.1 yd.** Mark of the Faceless picks at random from everyone the boss measures beyond
   15 yd, falling back to everyone inside when fewer than 9 qualify (4 in 10-man); his "15 yd" is
-  `15 + 12.6 + 1.5` of real distance, 3D. The rows were laid out for 24.5, so rows 0 and 1 sit inside
-  it or 0.3-0.7 yd past, and a 13-14 bot camp puts 5-10 past it: 7 of 37 full-raid marks in windows
-  7-10 went to melee or the main tank, each with at most 9 past 29.1; six had 12-14 past 24.5, the
-  seventh came with Vezax pulled into the camp. At 10-man the 5-6 camp bots fill rows 0-1, so nearly
-  every mark falls inside.
+  `15 + 12.6 + 1.5` of real distance, 3D. **Every row is past it, so the Mark only reaches ranged and
+  healers** (user's call): the whole camp is far, 13-14 at 25-man and 5 at 10-man, until deaths take
+  it under 9 or 4. With rows from 27, 7 of 37 full-raid marks in windows 7-10 went to melee or the main
+  tank, and 24 of 29 10-man marks in window 12 found under 4 far (15 went to melee or a tank); replayed
+  on the window 11-12 traces the far pool reads 10-14 (25-man) and 3-5 (10-man) as the camp stood,
+  13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd, under the 2.4 yd arrival deadband, so a
+  front-row bot parked short can still be near.
 - **Ceiling 42.6 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
-  against this formation at `ACTION_RAID` and the two deadlock.
+  against this formation at `ACTION_RAID` and the two deadlock. Only row 4's strafed slots pass it (to
+  44.5); a 13-14 bot camp fills rows 0-3, whose widest strafe reads 42.5.
 
-**Moving the rows out costs the healers the main tank.** The tank holds the anchor, and Vezax settles
-7-12 yd north of it, between tank and camp, having met the tank on its way in from the north.
-`PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30 points
-healthier, so a healer there picks the tank only when he is ~30 points lower than everyone else, and
-past 43 yd 3D (heal range 40 plus both reaches) no heal lands from the slot. Replayed on where both
-stood in six pulls, a slot at 27-29.25 yd is within 41.5 of the tank 86-100% of the time, 31.5 0-100%,
-33.75 0-72%, 36 and out 0-18%; every camp bot 4.5 yd further out cuts the time any healer is within
-41.5 of him from 43-93% to 10-42%. No radius both clears the floor with the 2.4 yd slot deadband and
-keeps a healer within 41.5 of him.
+**Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
+and Vezax settles 7-12 yd north of it, between tank and camp, having met the tank on its way in from the
+north. `PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30
+points healthier, so a healer there picks the tank only when he is ~30 points lower than everyone else,
+and past 43 yd 3D (heal range 40 plus both reaches) no heal lands from the slot. Replayed on where both
+stood, row 0 at 30.5 keeps a healer within 41.5 of the tank 74-100% of the time while Vezax settles up to
+~10 yd north, 0% where he settled 11.5 yd north; rows from 33.75 out reach him 72% of the time at best.
 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
 itself: a tank on the spawn point is what keeps Vezax there for every other radius here. The arrival
 deadband is twice the tolerance, so 1.5 or more would span the 3 yd gap between neighbours and let a bot
 settle on someone else's slot. 20 slots against a 25-man's 18 healers and ranged, so it does not overflow;
 a bot that finds none holds no position, which `vezax.block = unslotted` catches. Slots persist per
-instance until the holder leaves it or changes role, and fill in an alternating order (`L row 0`, `R row
-0`, …) so neither group fills first and healers spread across both; Ulduar's other bosses re-derive from a GUID rank every tick, which reshuffles the whole formation
-on a death.
+instance until the holder leaves it or changes role, and fill healers first, then everyone else, each in
+an alternating order (`L row 0`, `R row 0`, …) so neither group fills first and healers spread across
+both: a 25-man's 4 healers fill row 0. Ulduar's other bosses re-derive from a GUID rank every tick, which
+reshuffles the whole formation on a death.
 
 **Everything past 17.1 yd is in Shadow Crash range.** `SelectTarget` skips only what is inside
 `3 + 12.6 + 1.5`, so melee inside his 15.4 yd melee range are safe and a stray one is not: at his old
@@ -95,10 +97,25 @@ off his facing, so a 4 yd nudge apart fought it: melee bots moved in 26-40% of s
 a human melee, two thirds of their `set behind` moves following a nudge. What remains is his 750 ms
 turn to each crash target.
 
-All 20 slots, the tank spot, both arc spots and the southern spots are navprobe-verified on the bot
-filter (`--nav 0x09`), `distance to poly` ≤ 0.39. The WMO floor is flat at Z 342.378 out to ~24 yd
-north, then settles up to a yard lower on rubble, which `UpdateAllowedPositionZ` absorbs; none of the
-camp is off mesh. Raw terrain reads −27.707 in this room, so terrain height is meaningless here.
+Navprobe-verified on the bot filter (`--nav 0x09`): the tank spot and the southern spots at `distance to
+poly` ≤ 0.39, and at both spots he settles on, row 4, the outermost strafed slots and both arc spots at
+settled Z 341.6-342.4. The WMO floor is flat at Z 342.378 out to ~24 yd north, then settles up to a yard
+lower on rubble, which `UpdateAllowedPositionZ` absorbs. Raw terrain reads −27.707 in this room, so
+terrain height is meaningless here.
+
+**Every boss-relative destination is checked against the floor before the walk**, because he roams:
+after one collapse he chased loose ranged ~100 yd north, four camp bots strafed off the hall's north
+edge and fell under the map, and he regenerated to full where he could not reach them. The slot, the
+strafe and the mark spots go through `Map::CheckCollisionAndGetValidCoords` from the bot, like the hazard
+sweep's candidates, and the walk goes to its answer, which pulls a point past the navmesh edge back onto
+it. A failed call, or an answer more than 5 yd above or below the bot, is refused: for a player the call
+[settles an off-mesh point on the ground below](../../engine/pitfalls.md#movement-that-silently-no-ops)
+and still passes. A refused slot or mark spot holds the bot where it stands; a refused strafe, or one
+pulled back into the blast, falls to the hazard sweep, which here and in the melee mark break accepts
+only ground within 5 yd of the bot's height. The slot is checked only when the bot has to walk, since the
+position node runs every tick for every camp bot. The check is a straight line, so a navmesh hole between
+bot and slot strands the bot at its edge where a pathed walk goes round: `vezax.floor = edge` while he
+stands near his spawn means that.
 
 ## Mark of the Faceless is the fight
 
@@ -129,10 +146,10 @@ melee, not 100%) **and** putting those 7 inside a marked melee's leech: ~60 tick
 The camp stands far enough that a melee mark cannot reach it; the ball breaks out of its own.
 
 **A marked camp member arcs 40 yd around the boss on its own group's side**: arc length at the camp
-radius, so 72.8° off the camp bearing at a constant 31.5 yd from him. Crossing to the southern spots
+radius, so 65.5° off the camp bearing at a constant 35 yd from him. Crossing to the southern spots
 dragged the leech through the boss and the melee ball: one marked healer's path passed within 14 yd of
 Vezax and drained eight melee on the way. A marked melee has no camp side and takes the nearest of three
-spots south at 26 yd, ≥46 yd from every camp slot.
+spots south at 26 yd, ≥50 yd from every camp slot; one off the floor passes to the next.
 
 **An arc, not a sideways step, because of the strafe.** A 24 yd side-step looks like enough (the nearest
 same-side slot sits at tangential 5.5) until the dodge moves that whole group 15 yd the same way, and
@@ -152,7 +169,7 @@ move still in flight swallowed it.
 **Melee break out; the camp does not.** `VezaxMarkOfTheFacelessBreakTrigger` fires for anything not
 ranged and not the main tank, not itself marked, with a marked ally inside
 `ULDUAR_VEZAX_MARK_BREAK_DISTANCE` (18); the tank holds the boss whatever happens. Camp members are
-excluded because nothing marked in the ball reaches 27+ yd, and scattering them every 40s costs more
+excluded because nothing marked in the ball reaches 30.5+ yd, and scattering them every 40s costs more
 cast time than it saves. Nine melee out for ~10s is ~400k forgone against the 2.24M one window healed
 back.
 
@@ -167,13 +184,13 @@ was dead a minute later.
 their radius, so each group keeps its shape and the field lands on the vacated footprint for them to
 walk back into. The distance is set by the inner-file bot of the group that was hit, which has to cross
 the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against a 10 yd blast**, so
-widening the files widens the strafe. Flight time is not tight: the front rank's 27 yd is 2.7s against
+widening the files widens the strafe. Flight time is not tight: the front rank's 30.5 yd is 3.1s against
 a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against the impact;
-`FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe still in
-the blast. Position and soak both decline while an impact covers their destination, as on Algalon; without that the
-bot clears, walks straight back with the missile still inbound, and never casts. The dodge itself yields once
-the bot is clear, so the soak can walk it back into the field the missile leaves and class interrupts get the
-ticks between.
+`FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe off the
+floor or still in the blast. Position and soak both decline while an impact covers their destination, as
+on Algalon; without that the bot clears, walks straight back with the missile still inbound, and never
+casts. The dodge itself yields once the bot is clear, so the soak can walk it back into the field the
+missile leaves and class interrupts get the ticks between.
 
 **Key the dodge off the cast, never the field.** The boss is **never** in `UNIT_STATE_CASTING` for this
 one, so a trigger must not gate on that; crashes come every 10s, so one stored impact is enough. The
@@ -298,7 +315,7 @@ here keys on that too.
 presence gate had bots prepositioning through walls while their generic movers were already zeroed.
 `VezaxFormationActive` wants the bot within 45 yd of **him**, plus a 10 yd height band. Outside it the
 movement rule is inert, generic movement carries a bot in, and the gate opens on arrival, which holds only
-while the gate contains reach spell's 42.6 yd stop and the widest strafed slot (41.4), both measured from
+while the gate contains reach spell's 42.6 yd stop and the widest strafed slot (44.5), both measured from
 him. Widening it puts a bot back on a path through a wall; navprobe reads hall floor at 45 yd all round
 both spots he has settled on. Measured from the anchor instead, the gate broke the camp when he settled
 12.5 yd north of it: 6 of 14 casters and healers never got inside, and 13 bots ended on one point, where a
@@ -318,9 +335,10 @@ the low bit is the file. `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodg
 (`strafe`/`search`/`none`: which rule produced the destination, which the move record can't tell apart),
 `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`: a vapor is hard mode
 about to end, `none` the target guard with no source behind it), `vezax.meleespot` (`spot`/`none`),
-`vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside the helper that
-derives it so two call sites cannot disagree. Being change-only, `vezax.block` is written at each return: a
-probe mid-helper plus one at the return would read as a flap every tick. `vezax.formation`
+`vezax.floor` (`on`/`edge`/`off`: the last floor check took the point as asked, pulled it back over 1 yd,
+or refused it), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside
+the helper that derives it so two call sites cannot disagree. Being change-only, `vezax.block` is written
+at each return: a probe mid-helper plus one at the return would read as a flap every tick. `vezax.formation`
 (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
 (`off`/`pending`/`lost`/`animus`) are the exception: the encounter's tick writes them, since the
 formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
@@ -462,12 +480,6 @@ next pull. As off-tank it adds nothing to the Animus either: 0.6% mana from 2:30
 +19s. Nothing here treats it.
 
 **Backstab and Shred go unused on the Animus**, since the melee spot blocks `set behind`.
-
-**The camp follows him off the floor.** Slots and strafes are boss-relative and never checked against
-the navmesh, which holds only while he stands near his spawn. After one collapse he chased loose
-ranged ~100 yd north; four camp bots strafed to y 210, off the hall's north edge, and fell under the
-map, he followed to z 226, regenerated from 25% to full while unable to reach them, and the pull ran
-10 more minutes until mod-dungeon-clear's no-progress check.
 
 **A human main tank steps out alone.** A crash aimed at a human melee past the limit still lands on
 whoever stands with him; bots dodge it, the main tank does not.

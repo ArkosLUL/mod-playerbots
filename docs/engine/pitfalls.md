@@ -247,6 +247,14 @@ portal this way.
   last point, which can be the bot's own feet, so a flee that must escape needs a minimum-progress
   check ([Mimiron's flee fan](../raids/ulduar/mimiron.md#the-bearing-fan)).
 
+- **A floor check passes an off-mesh point for a player.** `PathGenerator::BuildPolyPath` treats any
+  source that isn't a creature as able to fly, so with no poly within 3 yd across and 50 yd up or down of
+  the destination (or the bot), `Map::CheckCollisionAndGetValidCoords` skips the raycast for the `0x11`
+  shortcut, clips only on the static LOS ray, settles Z on whatever ground lies below (terrain at
+  −27.7 under Vezax's hall) and returns true. `FindNearestPositionClearOfHazards` accepts such a
+  candidate too. Compare the settled Z with the bot's own and refuse a drop; for the sweep, an accept
+  callback reads the ground at the candidate ([Vezax](../raids/ulduar/vezax.md)).
+
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
   sitting on lava — Obsidian Sanctum's pull-drag corner is exactly that.

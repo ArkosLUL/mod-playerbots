@@ -283,6 +283,9 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (!VezaxPlaceOnFloor(bot, slot) || bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= tolerance)
+        return false;
+
     return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
