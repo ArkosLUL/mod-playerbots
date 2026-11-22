@@ -278,3 +278,94 @@ Thorim under z 429.6 within ~2 s and `thorim.p2start` set; no arena bot and no c
 `BALCONY_5` ever targeting him before that. A squad at the edge with Thorim untouched means the gate stays shut
 (read the step latch, LOS, and which multiplier zeroed `attack`). Then the Lightning Orb deaths stop and phase 2
 deaths become the read; Sif's clock (~170 s from the pull) is likely missed, so normal mode.
+
+## Round 5 (build d2874f536 with rounds 3 and 4)
+
+**Data:** window 11, one pull per pool, all valid (`start: step`, no DC veto row inside a pull):
+`tr-20261122-182719-4` (uld1), `-5` (uld2), `-6` (uld3); traces
+`env/dist/logs/botobs/603_{4,5,6}_thorim_{1795372129,1795372130,1795372131}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head d2874f536 --pulls 10` and throwaway scripts over `snap`
+(hp and position of Thorim, Sif, Colossus, Giant, Honor Guards, start pack), `note` (`thorim.leverpulled`,
+`thorim.balcony`, `thorim.dpstarget`, `thorim.p2start`), `act`/`move` (lever, lead, balcony), Sif's `cast` rows and
+`death` rows. `dmg` rows only carry damage to bots, so the first hit on Thorim is read off the pick and the drop.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795372129 | wipe 6:10 | ramp pile 13 (1:34-2:20: Iron Honor Guard 7, Colossus 3, Giant 2, Iron Ring Guard 1); corridor Iron Ring Guard 2 (1:20-1:24); Lightning Orb 11, Warbringer, Champion, Evoker 1 each (5:46-6:05) |
+| uld2 | 1795372130 | wipe 6:10 | ramp pile 11 (1:26-2:00: Iron Honor Guard 6, Iron Ring Guard 4, Colossus 1); corridor Runic Smash 3, Iron Ring Guard 1 (1:01-1:14); Champion 8, Lightning Orb 7, Warbringer 1 (5:47-6:06) |
+| uld3 | 1795372131 | **kill** 6:34, normal mode | Iron Ring Guard 1 (1:23), Colossus Smash 1 on the ramp (2:34), Thorim Chain Lightning 2 (4:33) |
+
+"Ramp pile" is every gauntlet death south of the Colossus' spawn (y < −395), where Colossus, Honor Guards and
+Giant were fought at once.
+
+**Hard mode: no pull.** Sif cast Touch of Dominion (62507) at 0:46.6 / 0:47.1 / 0:50.0 and 62565 on Thorim 150 s
+later, at 3:16.7 / 3:17.2 / 3:20.1 (uld1/2/3); uld3's phase 2 came at 3:51.2, 31 s late, and Sif was last seen
+at 3:25.0. Phase 1 starts 20 s after the sixth start-pack death (26.5 / 27.0 / 30.0 s), not at the pull.
+
+| Pull | lever action / pulled | lead aims at Giant | Colossus engaged / dead | Giant engaged / dead | balcony walk / `BALCONY_5` | phase 2 |
+|---|---|---|---|---|---|---|
+| uld1 | 0:27.0 / 0:32.8 | 1:07.9 | 1:19 / never (89% at 2:41, then reset) | ~1:59 / never | none | never |
+| uld2 | 0:27.2 / 0:32.0 | 1:04.7 | 1:20 / never | ~1:59 / never | none | never |
+| uld3 | 0:30.4 / 0:37.3 | 1:33.2 | 1:39 / ~3:08 | 1:59 / ~3:26 | 3:26.7 / 3:47.4 | 3:51.2 |
+
+**Round 3 verdict: lever held, Giant walk fires too early.** Lever pulled 4.8-6.9 s after the action started
+(was 25-198 s at the stop). The lead walk paths up the ramp and reaches the Giant in all three pulls, but it
+aimed at him with the Colossus alive and untouched each time (lead `move` rows to (2134.57, −440.32, 438.33) at
+the times above), so the squad fought Colossus, both Honor Guards and the Giant at once (uld1/uld2 also one
+Honor Guard the Giant spawned).
+uld1 and uld2 died there (24 deaths); uld3's bear tank held Colossus and Giant together and lived.
+
+**Round 4 verdict: held** (uld3, the only pull to reach the platform). Uldzau (hunter) latched `BALCONY_5` at
+3:47.44, took Thorim as `thorim.dpstarget` at 3:47.73 (the first pick of him by anyone), stepped to the edge at
+3:50.96; `thorim.p2start` at 3:51.15, Thorim under z 429.6 at 3:51.25. No arena bot targeted him before. One
+leak: at `BALCONY_4` (3:45.68) `dps assist` handed him to the same hunter, who cast one Serpent Sting (49001)
+before `thorim dps priority action` failed and `drop target` cleared him at 3:47.15; it did not start phase 2.
+Not fixed: harmless, 1.5 s.
+
+**Why uld1 and uld2 never started phase 2:** the whole corridor squad (12) died in the ramp pile by 2:20 / 2:00,
+so nobody killed the Giant (`ACTION_ALLOW_HIT` never sent) or reached the platform; the arena squad held until the
+not-in-time orb (phase 1 + 5 min, 5:46-5:47) and Berserk adds.
+
+**Stop rules:** not polished (one kill, normal mode). Not stuck: rounds 3, 4 and 5 picked three different causes,
+and rounds 3-4's targets now work (uld3 reached the Giant and started phase 2).
+
+**Failure ranking** (all pools): ramp pile 25 (+ the 30 orb/arena deaths of the two wipes it caused); corridor
+trash 7 (Iron Ring Guard 4, Runic Smash 3); phase 2 Chain Lightning 2.
+
+**Failure picked: the bot leader walks to the Rune Giant with the Colossus alive** (all three pulls).
+
+- Code: `ThorimGauntletLeadRuneGiant` (`UldEncounter_Thorim.cpp:1646`) gated the walk on the Giant without
+  `UNIT_FLAG_IMMUNE_TO_PC`. Past the last waypoint, `ThorimGauntletLeadColossus` (`:1632`) returns nothing once
+  the leader is inside 30 yd of the Colossus, or when the cached Colossus lookup reads empty (uld1 at 1:07.9: 37 yd
+  out), so the Giant check came next and passed.
+- Core/DB: the flag is set only on the 10-man templates (`2026_08_03_02`: 32872, 32873). In 25-man the creature's
+  template is the difficulty row (`Creature::InitEntry`, `m_creatureInfo`), and 33148/33149 have `unit_flags` 0, so
+  the 25-man Giant is pullable from the start. Trace: the Giant took player damage at ~1:59-2:01 in all three
+  pulls with the Colossus at 91-95%.
+- The Colossus' `JustDied` (`boss_thorim.cpp:1363-1377`) opens the first doors (GO 194557, (2227.7, −413.3))
+  before it clears the Giant's flag; Thorim's `Reset` → `CloseDoors` shuts them. Shut doors did not stop the walk.
+
+**Classification: bug.** Round 3's intent is "after the Colossus".
+
+**Fix** (`UldEncounter_Thorim.cpp`/`.h`, Thorim only): `ThorimColossusDoorsOpen` (`:1467`) reads the first doors
+(`GO_STATE_ACTIVE`), found once within 150 yd and cached by guid in `ThorimEncounterState::colossusDoorsGuid`;
+`ThorimGauntletLeadRuneGiant` gates on it instead of the flag. A miss reads as shut, so the leader holds as in
+round 2. Same code for 10/25 and both modes (at 10-man the doors and the flag change together); with a real
+player leading the gauntlet nothing changes, the lead nodes only run for a bot leader.
+
+**Seen, not fixed:** after uld3's Giant died at (2186.9, −438.5, 427.6), 8 of the 11 living corridor bots stood
+below z 429.6, so `ThorimBalconyOpen` skipped them and they walked back through the corridor (still there at
+4:20). The Giant was dragged down the ramp by a tank holding the Colossus; with the fix he should be fought at
+his spot (z 438). If window 12 still shows bots on the ramp below 429.6 after his death, that is a candidate.
+
+**Next read after this: Sif's clock.** Measured: last waypoint at 65-93 s, Colossus engaged at 1:19-1:39 here;
+alone he died 23-33 s after the engage in window 10 (`603_{6,7}`, 1:58 → 2:21 / 2:32), against ~86 s in uld3's
+pile. Giant ~30 s from full (uld3: 70% to dead in 21 s), balcony walk ~25 s, plus ~15 s up the ramp and the Honor
+Guards. Serial, that puts phase 2 around 3:10-3:50 against a 3:17-3:20 deadline: hard mode on a fast pull at best.
+No question yet: window 12 gives the serial timings.
+
+**Next window should show** (lead `move` rows, Colossus/Giant `snap` hp, `thorim.balcony`, Sif's 62565): no lead
+move aimed at (2134.57, −440.32, 438.33) while the Colossus is alive; the first such move within ~1 s of the
+Colossus' death; Honor Guards engaged only after that; no gauntlet deaths at y < −395 before the Colossus dies;
+the Giant dead and most of the corridor squad on the balcony chain; phase 2 in all three pulls, so no Lightning
+Orb wipe. Hard mode only where phase 2 lands before Sif's 62565 cast (`thorim.sifjoined` emitted).

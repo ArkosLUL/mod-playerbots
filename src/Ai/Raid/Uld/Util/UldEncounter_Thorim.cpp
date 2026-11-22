@@ -1452,6 +1452,7 @@ namespace
 {
 constexpr uint32 THORIM_ARENA_LEVER_ENTRY = 194264;
 constexpr float THORIM_LEVER_SEARCH_RANGE = 150.0f;
+constexpr uint32 THORIM_FIRST_COLOSSUS_DOORS_ENTRY = 194557;
 
 // boss_thorim summons him here, and he doesn't move until pulled.
 Position const THORIM_RUNE_GIANT_SPAWN(2134.57f, -440.318f, 438.331f);
@@ -1460,6 +1461,20 @@ bool OnThisInstance(Player const* member, Player const* bot)
 {
     return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
            member->GetInstanceId() == bot->GetInstanceId();
+}
+
+// Opened by the Colossus's death, shut by Thorim's reset. A miss reads as shut.
+bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    GameObject* doors = state.colossusDoorsGuid ? botAI->GetGameObject(state.colossusDoorsGuid) : nullptr;
+    if (!doors)
+    {
+        doors = bot->FindNearestGameObject(THORIM_FIRST_COLOSSUS_DOORS_ENTRY, ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE);
+        state.colossusDoorsGuid = doors ? doors->GetGUID() : ObjectGuid::Empty;
+    }
+
+    return doors && doors->GetGoState() == GO_STATE_ACTIVE;
 }
 }  // namespace
 
@@ -1638,10 +1653,13 @@ Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
         ThorimPhase2Active(botAI))
         return nullptr;
 
-    // His player immunity goes when the Colossus dies, along with the first doors. Not the Colossus lookup: arena
-    // melee scan that cache too, from out of range, so it can read empty while he's still alive.
     Unit* giant = GetThorimAncientRuneGiant(botAI);
-    if (!giant || giant->HasUnitFlag(UNIT_FLAG_IMMUNE_TO_PC) || giant->IsInCombat())
+    if (!giant || giant->IsInCombat())
+        return nullptr;
+
+    // note: the 25-man Giant spawns without his player immunity and the cached Colossus lookup can read empty while
+    // he lives, so neither works as this gate.
+    if (!ThorimColossusDoorsOpen(botAI, bot))
         return nullptr;
 
     return giant;

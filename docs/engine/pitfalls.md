@@ -580,7 +580,10 @@ Related traps:
   *which* thing is active, not just how many.
 - **`Creature::GetEntry` is the normal-difficulty entry on every difficulty** (`InitEntry`), so a
   `difficulty_entry_*` id in an entry list never matches, and the base entry alone covers all four
-  difficulties.
+  difficulties. **Its template, flags included, is the difficulty row's** (`m_creatureInfo`), so a
+  `unit_flags` bit set on the base entry alone is missing wherever a `difficulty_entry_*` row takes
+  over: Thorim's Rune Giant and Colossus spawn `UNIT_FLAG_IMMUNE_TO_PC` at 10-man only
+  (`2026_08_03_02` flags 32872/32873, not 33148/33149).
 - **`UNITHOOK_ON_UNIT_ENTER_COMBAT` fires once per engage** (`Creature::AtEngage`) **with the first
   target only.** A hook keyed on a player victim misses a pull a pet opens.
 - **A call site is not proof of its effect.** `InitFight` calls `me->SetInCombatWithZone()` on Sara,

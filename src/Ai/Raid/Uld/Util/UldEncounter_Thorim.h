@@ -374,6 +374,9 @@ struct ThorimEncounterState
     ObjectGuid runeGiantGuid;
     uint32 runeGiantScanMs = 0;
 
+    // The Colossus's first doors: a static spawn, found once and then read from the map.
+    ObjectGuid colossusDoorsGuid;
+
     RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
     // The one bot paladin on Frost Resistance Aura, latched. The shared boss-aura node answers only for the
