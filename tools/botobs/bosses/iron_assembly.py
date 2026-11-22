@@ -5,7 +5,7 @@ Steelbreaker's empowered phase, deaths by mechanic.
     iron_assembly.py <file>            every section
     iron_assembly.py <file> --phases   each member's death, with every healer's mana at that moment
     iron_assembly.py <file> --punches  every Fusion Punch, every phase, with the verdict and the button
-    iron_assembly.py <file> --revived  every tank that rose mid pull and the raid buffs put back on it
+    iron_assembly.py <file> --revived  every tank that rose mid pull, its walk to a healer, the raid buffs put back
     iron_assembly.py <file> --defensives  every tank defensive, who was on the tank and which node cast it
 
 What the generic views miss here:
@@ -64,6 +64,9 @@ MANA_RETURNS = {34433: "Shadowfiend", 64901: "Hymn of Hope", 16190: "Mana Tide T
 
 # ULDUAR_IRON_ASSEMBLY_REBUFF_WINDOW_MS: how long after a tank rises the strategy puts its raid buffs back.
 REBUFF_WINDOW_MS = 30000
+# A single-target heal's range, and the per-snapshot drift that still reads as standing.
+HEAL_REACH = 40.0
+STILL_YD = 0.3
 # A group buff and its single counterpart are one buff to the tank. Blessings fold Greater into the single.
 RAID_BUFFS = {"Mark of the Wild": "Mark of the Wild", "Gift of the Wild": "Mark of the Wild",
               "Power Word: Fortitude": "Fortitude", "Prayer of Fortitude": "Fortitude",
@@ -392,6 +395,27 @@ def raid_buffs_since(trace: Trace, guid: int, start: int, until: int) -> set[str
     return held
 
 
+def walk_back(trace: Trace, samples: Samples, guid: int, up: int, until: int) -> str:
+    """How long a risen tank took to get a living healer within HEAL_REACH, and its longest stand on the way:
+    a Soulstone raises it at the Meltdown point, out of every healer's reach."""
+    healer_ids = [h for h in healers(trace) if h != guid]
+    stood = longest = 0
+    last = None
+    for t, row in samples.rows.get(guid, []):
+        if t < up or t > until or row[5] <= 0:
+            continue
+        reachable = (samples.at(h, t) for h in healer_ids)
+        if any(other is not None and other[5] > 0 and dist2(row[1:3], other[1:3]) <= HEAL_REACH
+               for other in reachable):
+            reached = "at once" if t == up else f"after {(t - up) / 1000:.1f}s"
+            return f"a healer in {HEAL_REACH:.0f} yd {reached}, stood {longest / 1000:.1f}s on the way"
+        if last is not None:
+            stood = stood + (t - last[0]) if dist2(row[1:3], last[1][1:3]) < STILL_YD else 0
+            longest = max(longest, stood)
+        last = (t, row)
+    return f"no healer in {HEAL_REACH:.0f} yd before {clock(until)}, stood {longest / 1000:.1f}s"
+
+
 def show_revived(trace: Trace) -> None:
     """Every tank that stood up again mid pull, the raid buffs that went back on it inside the rebuff window,
     the `ironassembly.rebuff` verdicts that left one off, and which of the buffs it died with the first time
@@ -424,6 +448,8 @@ def show_revived(trace: Trace) -> None:
             # from the death.
             since = death["t"] + 1
             lines.append((up, f"  {clock(up)}  {trace.name(guid)} up at {row[5]:.0f}%, dead since {clock(death['t'])}"))
+            walk_until = later["t"] if later is not None else (ends[-1]["t"] if ends else up + REBUFF_WINDOW_MS)
+            lines.append((up, f"  {clock(up)}    walk: {walk_back(trace, samples, guid, up, walk_until)}"))
             for rec in trace.of("aura"):
                 if rec.get("d") == guid and not rec.get("r") and since <= rec["t"] <= end \
                         and raid_buff(trace.spells.get(rec.get("sp"))):
@@ -565,7 +591,8 @@ SECTIONS = (
     ("empowered", "Overwhelming Power carriers, Fusion Punches and Rebirths once Steelbreaker is alone",
      show_empowered),
     ("punches", "every Fusion Punch in every phase, with the strategy's verdict and the button spent", show_punches),
-    ("revived", "every tank that rose mid pull and the raid buffs put back on it", show_revived),
+    ("revived", "every tank that rose mid pull, how long it took to reach a healer and the raid buffs put back on it",
+     show_revived),
     ("defensives", "every tank defensive with its health, who was on it and which node cast it", show_defensives),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
