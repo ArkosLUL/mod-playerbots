@@ -5,12 +5,18 @@ Strategy key `ulduar`, one strategy for all 14 encounters. Cross-raid convention
 
 Files are split per boss: `Action/UldActions_<Boss>.{h,cpp}`, `Trigger/UldTriggers_<Boss>.{h,cpp}`,
 with `Action/UldActions.h` and `Trigger/UldTriggers.h` as **thin umbrella headers** including the
-parts, so `UldActionContext.h`, `UldTriggerContext.h` and the registration maps include one header each.
+parts, so `UldActionContext.h`, `UldTriggerContext.h` and the registration maps include one header
+each.
 
 Every boss is an [encounter definition](../README.md#file-layout-and-wiring) in
 `Definition/UldDefinition_<Boss>.cpp`, listed in `Definition/UldDefinitions.h`; the two contexts
 register only definitions, and `UldStrategy.cpp` adds each boss's nodes and multipliers in a fixed
-per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids.
+per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids; it and
+`Util/UldScripts.h` copy the boss ids, `GetCreature` data types, NPC entries and the Keeper bits of
+`PERSISTENT_DATA_WATCHERS_MASK` from the core's `ulduar.h`, which sits under `scripts/` and can't be
+included. The `UlduarBossData` values are indices into that file's `BossIds` enum, which
+`InstanceScript::GetCreature` takes, not NPC entries. `Util/UldData.h` holds only values no single encounter owns; a boss's ids, tuning and
+positions go in its `Util/UldEncounter_<Boss>.h`.
 
 Each boss doc records the upstream script and DBC facts its strategy keys off. Every one of them once
 silently disabled something, so re-check them after any parent-repo sync.
@@ -36,18 +42,18 @@ silently disabled something, so re-check them after any parent-repo sync.
 
 **Ulduar hard modes are a raid choice, not the 10/25 heroic flag**, so the "heroic comes free via a
 spell-id predicate" trick from other raids does not apply. Bots follow the **follower model**: they
-never *trigger* a hard mode, they react once the raid has. In an all-bot raid nobody triggers one —
-accepted.
+never *trigger* a hard mode, they react once the raid has; in an all-bot raid nobody triggers one
+(accepted).
 
 The four `Playerbots.Ulduar*HardMode` options (Vezax, Iron Assembly, XT-002, Mimiron; all default 0)
 are the **single source of truth**: each `Is*HardModeActive` is a plain config read. A live server
-signal on top of the config was removed: it depended on this core's scripting details, **silently
-disabled a whole boss's hard-mode handling** when a signal was missing, and was invisible to the
-operator who had turned the option on. **A boss gets an option only when its hard mode changes the
-plan before the mechanic shows** (vapors left alive, kill order, Heart burn, Firefighter camp). Flame
-Leviathan, Freya, Thorim and Yogg-Saron have none, so bots react whenever the raid triggers those. The
-per-boss triggers keep their own mechanic checks (hazard nearby, debuff on the bot, add alive), and
-**those are the real gate**.
+signal on top was removed: it depended on this core's scripting details, **silently disabled a whole
+boss's hard-mode handling** when a signal was missing, and was invisible to the operator who had set
+the option. **A boss gets an option only when its hard mode changes the plan before the mechanic
+shows** (vapors left alive, kill order, Heart burn, Firefighter camp). Flame Leviathan, Freya, Thorim
+and Yogg-Saron have none, so bots react whenever the raid triggers those. The per-boss triggers keep
+their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those are the real
+gate**.
 
 **The config check lives in the detector, not scattered across triggers**: detectors are the only
 coupling to server internals, and triggers stay thin.
@@ -55,8 +61,9 @@ coupling to server internals, and triggers stay thin.
 Still dynamic, because they are *phase* or target selection rather than hard-mode detection:
 `IsSteelbreakerEmpowered` (must not arm before phase 3), `GetIronAssemblyNextKillTarget`,
 `GetFlameLeviathanNearestTowerHazard`. `YoggActiveKeeperMask` and the file-static
-`GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
-`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone.
+`GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives**, still reading
+`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript` because Keepers are freed in-instance and
+config can't say which are up, so that dependency is not fully gone.
 
 Flame Leviathan's hazard callers pass `FL_TOWER_ALL`, and hazards are found by NPC entry, so destroyed
 towers contribute nothing. Thorim's Frost Resistance paladin waits for `sifJoined`, latched on Sif's
@@ -66,8 +73,8 @@ first Blizzard.
 
 Three hard modes tried it and found it wrong:
 
-- **Vezax** `GetData(1)` returns `lootMode == 3`, set only in `DoAction(2)` — i.e. **after** the
-  Saronite Animus dies. It is a completion flag, not a live signal; the truth is "Animus (33524) alive".
+- **Vezax** `GetData(1)` returns `lootMode == 3`, set only in `DoAction(2)`, **after** the Saronite
+  Animus dies: a completion flag, not a live signal. The truth is "Animus (33524) alive".
 - **Hodir** `GetData(3)` is the 3-minute timer flag; deliberately unused, because the buff
   optimisation is harmless past the window.
 - **Mimiron** `GetData(1)` is authoritative but lives on Mimiron himself, who sits in his pod and
@@ -81,7 +88,8 @@ exists: Flame Leviathan's tower auras tell you *which* towers are up, where
 ## Burst and Bloodlust windows
 
 `UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other
-raid. Two tiers are gated separately: `allowAll` covers every burst cooldown, `allowLust` covers
+raid. One multiplier serves every gated boss, so the `IsBurstCooldownAction` early-out runs once per
+action. Two tiers are gated separately: `allowAll` covers every burst cooldown, `allowLust` covers
 `bloodlust`/`heroism` only, because a 10-minute raid cooldown wants a later window than personal
 cooldowns that come back within a phase.
 
@@ -95,7 +103,7 @@ shaman-only.
 |---|---|---|---|
 | Razorscale | grounded (`Z <= 440`) | permanent ground phase (`IsGroundPhaseFor`) | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window, but a ~30 s knockdown is too short for a 10-minute cooldown |
 | Mimiron | always | P4: all three parts selectable, VX-001 riding, after `ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS` (15 s) | P1-P3 damage counts. A beaten or self-repairing mech stays alive but unselectable, so selectable is what counts as fighting; the raid spends the P4 opening running from the Frost Bomb |
-| Yogg-Saron | P2 or P3 | never | `yogg-saron phase 3 lust` owns lust, waiting for the raid to reach its spots. P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
+| Yogg-Saron | P2 or P3 | never | `yogg-saron phase 3 lust` owns lust, waiting for the raid to reach its spots. P1 damage lands on Sara and is wasted. Opens only on the Brain (P2; tentacles die anyway, and a cooldown spent on one is down for the next portal) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
 | Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
@@ -123,6 +131,11 @@ first flight point puts the whole raid on her threat list, so that read works at
 the function reaches its `return {}`, and `BurstWindow`'s member initialisers are both `true`, so the
 gate opens instead of closing. That fallback is ungated, so it runs in every other Ulduar fight too
 ([cost, open](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)).
+
+Two more fall back to a grid search, so no gated boss reaches that open default. **Mimiron's mechs**:
+the sweep lags the pull and skips unselectable units, which every mech is through a handover, and
+missing all three would fall through and lust. **Thorim**, near his encounter
+(`NearThorimEncounter`): his gauntlet runs about 190 yd up the corridor, past `SightDistance`.
 
 Open question that cannot be answered from source: whether the Mimiron mechs and the Assembly council
 members are `IsDungeonBoss()`-flagged. If they are not, lust never fires on them and those two gates
@@ -154,15 +167,15 @@ XT-002 is covered by `XT002TargetGuardMultiplier`, which vetoes for the whole en
 main tank is the wrong sink while a Pummeller is out.
 
 Iron Assembly leaves the veto off on purpose: its own redirect node at `ACTION_RAID + 2` outranks the
-class-generic nodes (`ACTION_HIGH + 7`) and spends the cooldown on whoever tanks the kill target, so they
-only fire with no kill target up.
+class-generic nodes (`ACTION_HIGH + 7`) and spends the cooldown on whoever tanks the kill target, so
+they only fire with no kill target up.
 
 **Razorscale's phase comes from the static `IsFlyingPhaseFor(Unit*)`**, which takes the unit the
 multiplier already holds, so `UpdateBossAI()` (which reassigns the main tank) never runs. It holds
 outside `IsGroundPhaseFor` (Z ≤ 440, under 50%, no stun aura), harpoon knockdowns included.
 
-A pull-window redirect uses BT's stateless `boss->GetHealthPct() > 95.0f`, not a combat clock: it needs
-no new state and doubles as the fresh-spawn / fresh-phase test. Use `GetUldUnitByEntry`, not
+A pull-window redirect uses BT's stateless `boss->GetHealthPct() > 95.0f`, not a combat clock: it
+needs no new state and doubles as the fresh-spawn / fresh-phase test. Use `GetUldUnitByEntry`, not
 `"find target"`, for multi-tank detection: a bot parked on boss A never resolves boss B.
 
 Hodir subclasses `RaidRedirectThreatAction` as `HodirRedirectThreatAction`, feeding whichever tank
@@ -182,8 +195,8 @@ Sev-1 fails **even with the raid cheat on**:
 Yogg Crusher/Constrictor tentacles, illusion-room adds and P2 movement (cheat instakill / teleport).
 Ominous Clouds are off this list: `yogg-saron phase 1 spacing` dodges them without the cheat.
 
-**No boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank swap**: each rolls its own
-detector instead (Thorim on the Unbalancing Strike debuff, Kologarn on Crunch Armor stacks, Hodir on
+**No boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank swap**: each rolls its
+own detector (Thorim on the Unbalancing Strike debuff, Kologarn on Crunch Armor stacks, Hodir on
 Frozen Blows). There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
 requirement.
 

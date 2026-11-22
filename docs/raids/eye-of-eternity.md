@@ -11,8 +11,9 @@ Verified against `boss_malygos.cpp`:
   yell, and `56430` is Arcane Overload. A Deep Breath dodge built on it was deleted: the bubbles are
   shelter, not a hazard (see P2).
 - **The P2 floor is not gone**: the platform is destroyed only at P3 start
-  (`EVENT_DESTROY_PLATFORM_0`). P2 anti-fall is a recenter on drift; the real P2 hazards are Arcane
-  Overload and the Surge of Power beam.
+  (`EVENT_DESTROY_PLATFORM_0`). P2 anti-fall is a recenter on drift: in P2 and the transition a bot
+  past `MALYGOS_ANTIFALL_RADIUS` (30 yd) from centre is walked back to 3 yd inside it. The real P2
+  hazards are Arcane Overload and the Surge of Power beam.
 - Ids: Static Field `57430` → `NPC_STATIC_FIELD 30592`, a tick is 9,425 in 30 yd; Arcane Storm
   `61693` (random target, unavoidable → heal through); Surge P2 `56505` → `NPC_SURGE_OF_POWER 30334`;
   Surge P3 `57407` (10) / `60936` (25); Arcane Pulse `57432` (self-cast every 3 s, **30 yd** around
@@ -27,9 +28,8 @@ Verified against `boss_malygos.cpp`:
 - **P1 suppresses no heal or buff cast.** The P1 rules block no `CastSpellAction` but the Blink,
   Disengage and Taunt families and, for everyone but his victim, Charge. "Disc priests never shield on
   Malygos" was a generic priest bug ([../classes/priest.md](../classes/priest.md)). P1 leaves healers
-  targetless; only `raid healer engine`
-  ([README.md](README.md#targeting-the-whole-fight)) keeps them on the combat engine, where the
-  shield lives.
+  targetless; only `raid healer engine` ([README.md](README.md#targeting-the-whole-fight)) keeps them
+  on the combat engine, where the shield lives.
 
 ## Phase model
 
@@ -40,7 +40,7 @@ combat, Malygos non-attackable, not mounted.
 P4 exists because during P2→P3 the boss is untargetable and the bot not yet on its drake: with no
 phase every override lifted and **the default raid strategy resumed on a collapsing platform**. An
 `Exclusive` rule holds the raid at centre on `malygos position`. P4 also catches the **pull intro**,
-which wants the P1 hold spots instead (below); full health separates the intro from the two real
+which wants the P1 hold spots instead (below); full health tells the intro from the two real
 transitions, both at 50%.
 
 `GetMalygos` falls back to `FindNearestCreature` so detection survives the non-attackable flag.
@@ -114,7 +114,8 @@ whenever another was marginally closer to him.
 outlasts the gap between spawns, so giving up boss uptime otherwise buys nothing), a spark within
 `POWER_SPARK_GRIP_ENGAGE_RADIUS` (45 yd) of the spot, and Malygos no closer to the spot than
 `POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE`. Casting the grip ends duty, and the position action walks the
-DK back to the stack next tick.
+DK back to the stack next tick. On duty he holds `POWER_SPARK_GRIP_TOLERANCE` (2 yd) instead of the
+5 yd P1 tolerance: the grip only lands right from the spot itself.
 
 **The grip is followed by Chains of Ice**, since the spark walks the pulled distance back off at
 6 yd/s. `GetPowerSparkToSnare` takes the nearest unchained spark inside `POWER_SPARK_SNARE_RADIUS`
@@ -187,6 +188,12 @@ spread (`combat formation move`) and were dragged back next tick. The spots need
 named. They only *target* — `AttackAction::Attack` stops nothing but a sub-combat-priority walk — so
 a melee bot peeling onto a spark stays put.
 
+His victim's Reach and ReachHeal are blocked too: he parks just outside what `ReachMeleeAction` calls
+melee, so reach would walk the tank in every tick against the position action. That action returns
+false once a bot is on its spot, the tank included, or it would outrank the rotation and stop him
+attacking. DPS have `drop target` blocked in P1, since any of them may hold a Power Spark rather than
+the boss.
+
 **Only the assigned tank pulls him back.** `MalygosTargetAction` puts an off-tank on the boss (the
 spark peel is gated on `IsDps`, which a tank spec fails) and parks him on the stack, so a taunt from
 there swings the cone through the raid. `lose aggro` → `taunt` / `hand of reckoning` /
@@ -214,17 +221,22 @@ damage taken**; the protected radius shrinks ~2% per tick over its 45 s life, so
 within 4 yd and ignore a bubble below `BUBBLE_MIN_USABLE_FACTOR` (35%) of its original radius. **The
 model does not shrink** (the core declares 56435 and never casts it), so the only honest size source
 is the tick count of the `creature_template_addon` aura applied at spawn (no aura means brand new).
+`SPELL_ARCANE_OVERLOAD_AURA` (56432) is that periodic aura, re-granting 56438 each tick; its other
+effects sit at 0 ticks and don't count.
 The NPC is non-attackable, never in `"possible targets"`: read it from the EoE creature cache.
 
 `malygos seek bubble` sits at `ACTION_EMERGENCY + 2`, above `avoid surge of power`, which is only the
 fallback for a bot that cannot reach one: it steps off the line from Malygos through the surge focus
-(`SURGE_BEAM_CLEAR_DISTANCE` to clear it, `SURGE_BEAM_SIDESTEP` across) and never fires for a disk
+(found within `EOE_SURGE_SEARCH_RADIUS`, 100 yd; `SURGE_BEAM_CLEAR_DISTANCE` to clear it,
+`SURGE_BEAM_SIDESTEP` across) and never fires for a disk
 rider or a sheltered bot, who are covered already and would be walked out for the beam's whole 10 s.
 The bubble is **latched by GUID** (the `SapphironFlightPositionAction` idiom) and spread by group
 slot index, or bots hop between bubbles as they shrink — unless that slot's bubble is more than half
 `BUBBLE_SEARCH_RADIUS` away, where survival beats spreading and the bot takes the nearest. Once the
 bot holds 56438 the action returns false so the rotation runs, and a P2 rule blocks reach and follow
-for ranged and healers on foot, heal reach excepted.
+for ranged and healers on foot, heal reach excepted. Melee and tanks skip the bubble while a Nexus
+Lord is within `BUBBLE_SEARCH_RADIUS`, or while a free disk waits for a disk-eligible bot with a Scion
+alive: they owe the raid a dead Lord and then a ride.
 
 **Targets.** `MalygosTargetAction` accepts a Nexus Lord / Scion only inside `spellDistance` by
 **`IsWithinCombatRange`**: the Scions hover 20–30 yd up, and a flat 2d distance claimed reach that
@@ -232,9 +244,9 @@ was not there. A held add is kept **by GUID** while it is alive, the right kind 
 matching on entry welded bots to an add they could never reach, and re-picking every tick flipped two
 equidistant Scions forever. Nexus Lords come first for everyone, ranged included — on the ground,
 tankable, quicker to die — and Scions are the ranged fallback once no Lord is in reach.
-`MalygosScionTankAssistMultiplier` zeroes `tank assist` onto a Scion. A P2 `Block` on `Flee` keeps
-the generic flee from walking bots off the edge; the anti-fall recenter in `malygos position` bails
-for anyone in a vehicle.
+`MalygosScionTankAssistMultiplier` zeroes `tank assist` onto a Scion: a tank that picks one ends up
+standing under it. A P2 `Block` on `Flee` keeps the generic flee from walking bots off the edge; the
+anti-fall recenter in `malygos position` bails for anyone in a vehicle.
 
 **Mages steal the Nexus Lords' Haste.** `npc_nexus_lord` self-casts `SPELL_HASTE` (57060) every
 20–30 s. `malygos spellsteal` takes it off the nearest Lord inside `spellDistance` by
@@ -247,11 +259,12 @@ friendly and clears `UNIT_FLAG_NOT_SELECTABLE`, so *landed + selectable + free s
 is dead. Melee DPS board it (`MalygosBoardDiskAction`, an `EnterVehicleAction` whose
 `HandleSpellClick` is required: the mount is `npc_spellclick_spells` 61421) and ride to the Scions,
 ~30 yd out and +20 yd up, otherwise unreachable in melee. Passengers are immune to both Arcane
-Overload and Surge of Power, which is why tanks, ranged and healers use bubbles instead.
+Overload and Surge of Power, which is why tanks, ranged and healers use bubbles instead. Boarding
+needs a Scion alive, so a rider never climbs back onto a disk once the Scions are dead.
 `MalygosRideDiskAction` steers the vehicle's own `MotionMaster` with a `POINT_MOTION_TYPE`
 anti-stutter guard and `generatePath = false`. The core floors a Scion disk's descent at
 `CenterPos.z + 20` (`MI_POINT_SCION`), so a fixed target Z is safe. A rider dismounts only once the
-disk is back at `MALYGOS_PLATFORM_Z`; stepping off at Scion altitude is a 20–30 yd drop. Ending the
+disk is back at `MALYGOS_PLATFORM_Z` (`DISK_DISMOUNT_MAX_HEIGHT`, 5 yd, is the most it may hover); stepping off at Scion altitude is a 20–30 yd drop. Ending the
 ride is manual — Scions can die before the Nexus Lords and the core keeps the disks until both are
 gone — and the descent is stamped straight over the approach rather than waiting for
 `POINT_MOTION_TYPE` to clear, because the disk is still flying at the dead Scion.
@@ -390,7 +403,9 @@ applications a minute against three's 7.5 (about 8% more damage at one minute) b
 between a 10 s aura and a 7 s cycle; three leaves 6 s of a 14 s aura, enough to survive a Static Field
 dodge or a moment out of range. Five gives 6 a minute. Opening at five buys nothing: every
 application recomputes the duration from the bank held then, so the next 3-point Engulf resets it to
-14 s, and the first stack is only delayed two globals.
+14 s, and the first stack is only delayed two globals. A DPS drake holds fire past
+`DRAKE_ATTACK_RANGE` (55 yd): its abilities reach 60, and the margin covers drakes parked on the far
+side of the stack.
 
 **Surge of Power cannot be dodged, so Flame Shield is timed.** The boss picks its victims and fires
 the damage as a **triggered instant 3 s later** (`me->m_Events.AddEventAtOffset` → `DoCastAOE`). It
@@ -420,13 +435,20 @@ fires regardless. It yields on an empty bank (`SPELL_FAILED_NO_COMBO_POINTS`, wh
 builders and never finish**, which keeps a point banked for the re-shield at t+5. Without it the
 rotation reaches 3 and dumps into Engulf, `DrakeSurgeShieldAction` hits `if (!comboPoints) return
 false`, and the re-shield silently drops. It costs one delayed finisher per fixate; the healer
-emergency rung (`DRAKE_BURST_EMERGENCY_PCT`) punches through it.
+emergency rung (`DRAKE_BURST_EMERGENCY_PCT`) punches through it. A shielded healer leaves the surge
+script for the ladder: from an empty bank it can't reach five points before the beam ends, so it
+never spends the re-shield's point.
 
 **The rotation reserves the energy.** A DPS drake's cycle keeps it near empty, so a fixated drake that
 kept spiking reached the beam without the shield's 25. Both rotations branch on `IsDrakeSurgeTarget`
 into one script: spend the bank on Engulf or Life Burst *only* while `DrakeCanAffordWithShield`
 covers the finisher and the shield, rebuild to `DRAKE_SHIELD_RESERVE_COMBO`, then stop and let the
 bar climb. A drake at zero combo always spikes: that one point is worth going under the reserve.
+Revivify is held back the same way (`DrakeCanAffordWithShield`): it is break-even against the regen,
+so a shielded drake that kept casting it would never climb back to the 25 its second shield costs.
+The script runs only while the pick is younger than `SURGE_BEAM_END_MS` (`GetDrakeSurgeElapsedMs`):
+the slots stay set for a whole `SURGE_CYCLE_MS`, so the raw flag would keep a drake quiet for more
+than twice the window it protects.
 
 **The reserve is one point, not two.** Two would cover the whole beam (at one, the last two ticks
 land at full price, 24,000 of the 72,000), but testing had fixated drakes reaching the beam with the
@@ -474,12 +496,16 @@ twenty-five bots on one small platform asking the same questions every tick is i
   (120 yd) covers the r 107 spark ring, everything else being inside r 56. That anchor needs a
   file-local check functor: `Acore::AllCreaturesOfEntryInRange::operator()` always runs `IsWithinDist`
   from the object it was built with, so visiting cells around another point does not move its range
-  test, and radius 0 filters everything rather than disabling it. Guids are cached, not pointers.
+  test, and radius 0 filters everything rather than disabling it. The searcher still takes the bot,
+  which only supplies the phase mask. Guids are cached, not pointers.
 - **`GetMalygosPhase` memoises per instance** for 500 ms (`EOE_PHASE_CACHE_MS`). The Skytalon check,
   the one per-bot part, runs first and uncached (a pointer read). Half a second of lag at a
   transition only affects which overrides are on.
 - `GetMalygos` asks the instance script (`GetCreature(DATA_MALYGOS)`, mirrored as `EOE_DATA_MALYGOS`)
-  before any search and caches the guid per instance. **Nothing uses `"find target" malygos`**: it
+  before any search and caches the guid per instance; a dead boss ends the lookup there, and only an
+  instance script that can't hand over the guid falls back to a 250 yd sweep
+  (`EOE_BOSS_FALLBACK_SWEEP`). His landing bearing is noise within `MALYGOS_BEARING_DEADZONE` (1 yd)
+  of centre. **Nothing uses `"find target" malygos`**: it
   costs a name conversion per threat entry, per bot, per tick
   ([cost](../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)), and answers only for
   units the bot already threatens ([things the bot cannot see](../engine/pitfalls.md#things-the-bot-cannot-see)).
@@ -490,6 +516,8 @@ twenty-five bots on one small platform asking the same questions every tick is i
   group). `GetDrakeFlightAndHealerRank` stays uncached: it reads live energy.
 - **All EoE caches and latches live in `RaidInstanceState`**; latches also carry `EOE_LATCH_STALE_MS`
   (5 min), so a re-pull in a still-loaded instance doesn't inherit the last pull's drake heading.
+  Surge fixates are keyed on the bot, not its drake: a Skytalon is summoned fresh every pull, so drake
+  keys would pile up for as long as the instance stays loaded.
 - `power spark`, `malygos bubble` and `surge of power` check every 200 ms and `malygos free disk`
   every 300 ms: each starts a walk, boarding or peel the `MotionMaster` carries on with. `malygos`,
   `malygos on disk` and `malygos drake flight` stay per-tick: they gate positioning and vehicle
