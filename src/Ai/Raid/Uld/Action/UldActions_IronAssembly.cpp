@@ -174,6 +174,7 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (_spotReached || distance <= ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE)
     {
         _spotReached = true;
+        _stallSeen = false;
         return false;
     }
 
@@ -181,8 +182,33 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
         return false;
 
-    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
-                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    return WalkToSpot(step);
+}
+
+bool IronAssemblyTankAssignmentAction::WalkToSpot(Position const& step)
+{
+    auto const walk = [&]()
+    {
+        return TryMoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
+                         false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    };
+
+    MoveOutcome const outcome = walk();
+    if (outcome != MoveOutcome::Duplicate || bot->isMoving() || bot->HasUnitState(UNIT_STATE_CASTING))
+    {
+        _stallSeen = false;
+        return outcome == MoveOutcome::Issued;
+    }
+
+    if (!_stallSeen)
+    {
+        _stallSeen = true;
+        return false;
+    }
+
+    _stallSeen = false;
+    AI_VALUE(LastMovement&, "last movement").clear();
+    return walk() == MoveOutcome::Issued;
 }
 
 bool IronAssemblyShieldOfRunesAction::Execute(Event /*event*/)

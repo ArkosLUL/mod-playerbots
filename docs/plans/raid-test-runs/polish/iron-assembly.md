@@ -479,3 +479,136 @@ Stand (12976, `SPELL_AURA_MOD_INCREASE_HEALTH`) takes its 30% back on fade down 
 the next and fades right after it lands (uld2 Uldyaa's 5:13 / 5:31 pair above). If round 7 shows a
 warrior dying just after a `covered` punch, the fix is shared: count a running row only if it outlasts
 the landing, and not Last Stand into its fade.
+
+## Round 7 (2026-11-22, window 11 on build d2874f536: round 6)
+
+**Data.** `raidtest.py report --boss iron-assembly --raid uld --head d2874f536 --pulls 10`: one pull per
+pool, all valid (`batch.py --strict --since d2874f536`), no DC veto, hard mode on: uld1
+`tr-20261122-183602-7` (`603_7_stormcaller-brundir_1795372611`, **kill 5:07, 2 deaths**, Steelbreaker
+last, hard mode triggered), uld2 `tr-20261122-183602-8` (`603_8_…_1795372614`, wipe 5:49, 33 deaths),
+uld3 `tr-20261122-183643-9` (`603_9_…_1795372644`, wipe 5:34, 33 deaths, lowest 4.4%). Window 10's
+traces (`603_10_…_1795365408`, `603_11_…_1795365440`, `603_9_…_1795365427`) re-read for the stall below.
+
+**Stop rules.** Not polished: two wipes. Picks so far: healer mana (r1), Meltdown on the melee (r2), the
+user's answers (r3, r5), Fusion Punch on the tanks (r4, r6). Fusion Punch killed 2 tanks outside a
+cascade here (window 10: 5 carriers), so it is not this round's pick and the three-round rule doesn't
+fire. This round picks a risen tank stranded at the Meltdown point (new) and asks about healer mana.
+
+**Deaths by mechanic.**
+
+| Pull | Phase timeline | Deaths |
+|---|---|---|
+| uld1 | Brundir 1:44, Molgeim 3:23, alone 104 s, **kill** | 2 Meltdown (carriers at the point) |
+| uld2 | Brundir 1:44, Molgeim 3:39, alone 126 s, lowest 24.9% | Molgeim phase: 1 Fusion Punch (tank Uldyaa 3:22.1 at 28% before the hit). Alone: 2 Meltdown, the carrier Uldyaz to three Steelbreaker swings (5:15.6, 17 s into its Overwhelming Power), then 23 High Voltage, 2 Fusion Punch (Uldyab 5:23.8 at 3 charges, Uldyaa at 23), 2 Static Disruption, 1 more Steelbreaker melee on a tank, 1 on a non-tank |
+| uld3 | Brundir 1:33, Molgeim 3:16, alone 134 s, lowest 4.4% (5:10.6) | Alone: 3 Meltdown, risen tank Uldzab to High Voltage (4:42.0, 7 s after its Soulstone), then 26 High Voltage, 2 Steelbreaker melee on tanks, 1 Fusion Punch (Uldzaz at 14 charges) |
+
+What started each wipe. uld2, healer mana: priests Uldyad and Uldyaf under 10% from 3:45 and 3:54 (6-15
+s into phase 3) to the end; at 5:12-5:15 the carrier Uldyaz took 16.6k, 18.6k and 14.9k swings from 91%
+with only HoT ticks and one Prayer of Mending on it since 5:06 (paladin Uldyac 11-16% mana), raid mean
+71% → 54%. uld3, the stranded risen tank: Uldzab died at the Meltdown point, +1 charge and +9.7% to a
+Steelbreaker who stood at 4.4% when the third carrier blew (5:10.6); the cascade began at 5:18 with a
+ranged High Voltage death, raid mean 46%, priests dry since 4:17 and 4:29.
+
+**Verdict on round 6 (class defensives under 25% only while a council member hits the tank): works, one
+gap.**
+- `--defensives` "class casts with nothing on the tank": 0 / 0 / 1 (window 10: 1 / 2 / 3). The one is uld3
+  Uldzaa (paladin) at 3:59.6, 0.5 s after its Soulstone rise at the point at 14%: `lay on hands on party`
+  with itself as target. The hold names `lay on hands` (the self node) and leaves `lay on hands on party`
+  free, whose target can be the caster. Its Forbearance left the next two punches (4:28.8 `under 41k`,
+  4:48.7 `under 46k`) with no button; both landed safe (34.9k at 98%, fully absorbed). It also lifted a
+  tank stranded 45 yd from its spot from 14% to full.
+- Vetoes after rises: uld1 Uldxam IBF and Vampiric Blood (4:45), uld2 Uldyaa Last Stand and Shield Wall
+  (4:51), Uldyab Survival Instincts, Frenzied Regeneration, Barkskin (4:59-5:00), Uldyaz Lay on Hands,
+  Divine Shield, Divine Protection (5:16.7), uld3 Uldzab Survival Instincts, Frenzied Regeneration,
+  Barkskin (4:35.6-4:36.8), Uldzaz Vampiric Blood (5:26.6). Last resorts with Steelbreaker on the tank
+  still went: uld1 Uldxam IBF at 12% (4:25.6), uld2 Uldyab Survival Instincts at 16% (5:19.4).
+- Risen tanks' next punch: uld2 Uldyaa (warrior) rose 3:22.5 at 13%, its 3:40.9 punch read `under` and
+  got Shield Wall (20.3k at 74%). uld3 Uldzaa (paladin): none, the Lay on Hands above. uld2 Uldyab (bear)
+  rose 4:58.6; its 5:23.8 punch (`under 62k`) read covered by its own Survival Instincts and killed it
+  (54.9k on 42.2k health).
+- Carriers dying to a punch before their Meltdown: 0 (window 10: 5).
+- The named risk, a risen tank dying to High Voltage before a heal: uld3 Uldzab at 4:42.0. Not the hold:
+  its held buttons were unusable (Survival Instincts in caster form, Frenzied Regeneration at ~10 rage,
+  Barkskin on cooldown from the 4:09 punch). Cause below.
+
+**Did round 6 make the wipes worse? No.** Every button it held in uld2 and uld3 was unusable (form,
+cooldown, the Avenging Wrath marker), worth little (Frenzied Regeneration on a bear just up with ~10
+rage) or held inside the cascade, bar uld2 Uldyaz's Lay on Hands and
+Divine Shield at 5:16.7 (its Forbearance dropped at its death): it lived 20 s more and died at 5:36.5 to a
+43.9k swing at 6 charges, past what either would have changed.
+
+**Healer mana: confirmed as the background of both cascades, but not a strategy bug.** Priests under 10%:
+uld1 4:29 / 4:43, uld2 3:45 / 3:54, uld3 4:17 / 4:29. Every mana return went out: Shadowfiend at 49-51%
+(0:52-1:13), Hymn of Hope 2:14-3:35, Mana Tide 3:39 / 4:17 / 3:08 (window 10's late one didn't repeat),
+one mana potion per healer, Innervate. Two of seven Innervates reached a priest, both from cat druids
+(`innervate on healer`: uld1 4:04, uld3 3:36); balance and resto cast their own on themselves (uld1 3:56,
+4:41; uld2 2:53, 4:53; uld3 5:07), so uld2 (roster B: balance and resto, no cat) put none on priests
+dry from 3:54. Overheal is ~40% in Brundir's phase (1.0-1.2M on 1.5-1.8M healed on tanks): class healing
+logic, shared. Plan question 1.
+
+**Picked: a risen tank stranded at the Meltdown point (bug).** A Soulstone raises a carrier where it blew,
+46 yd from his tank spot. uld3 Uldzab: the tank assignment walk went out at 4:35.64, the bot shifted to
+bear, `healthstone` fired while it moved and `UseItemAction` stopped it (`UseItemAction.cpp:337`: only a
+potion is usable on the move), the healing potion went, and every re-send of the same point read `dup`
+(`IsDuplicateMove`, `MaxWaitForMove` 5000 ms) until 4:40.6. It stood at (1606.7, 101.5) from 4:36.0 to
+4:41.0 at 8-20%, healers 42-63 yd off, and died at 4:42.0 to the second High Voltage tick, 10 yd from the
+point. Every Soulstone rise at the point in the two wipes stalled the same way: uld2 Uldyab 5:00.3-5:03.9
+(3.5 s, 42 yd off, a healer happened to be in reach), uld3 Uldzaa 4:00.8-4:04.6 (3.8 s, at 81% after its
+Lay on Hands); window 10 uld3 Uldzab 4:48.1-4:51.5 (3.4 s). Shorter stalls of the same walk: 1.2-3.3 s
+at the pull (18-34 yd off) and 1-3.3 s mid fight.
+
+**Fix.** `IronAssemblyTankAssignmentAction::WalkToSpot` (`UldActions_IronAssembly.cpp:188`): a `Duplicate`
+while the bot stands (not moving, not casting) is re-sent on the second such tick after clearing `last
+movement`, as the battle rez walk does. The first still tick goes to the lower nodes: re-sent at once, the
+walk (relevance 66) outranks the healthstone (21), which would stop every re-sent walk. On uld3 Uldzab
+that walks again at ~4:36.8 instead of 4:41. No size, mode or real-player input. Reader: `--revived` adds
+per rise "walk: a healer in 40 yd after X s, stood Y s on the way" (uld3 here: 7.5 / 4.8 s and 6.8 / 4.8
+s; every other rise in windows 10-11 at once or within 2.6 s, bar uld2 Uldyaa's 3:22.5 rise at 4.2 / 3.5 s,
+held 10 yd off its spot by design: a Rune of Death on the spot from 2:56 to 3:26, the route step refuses
+and no `move` row goes out). pb-check green.
+
+**PickDefensive (shared, waiting on the user): 0 deaths this window.** Unaffordable button once: uld1
+Uldxam 4:24.2 got Vampiric Blood, the cast failed, the class IBF at 12% saved it. Fading Last Stand as
+cover: none (uld1 Uldxaz's ran out 0.2 s before the 5:03 punch and the node cast Shield Wall). Related,
+not the two named: a running Survival Instincts read as cover for uld2 Uldyab's 5:23.8 punch with Barkskin
+ready (its 20% leaves it ~1.7k short), and weakest-first gave uld2 Uldyaa Last Stand at 28% for the 3:22
+punch (died by 1.4k; Shield Wall's 60% without Last Stand's health leaves it ~1.4k short too).
+
+**Also seen, not picked.** uld2's Molgeim-phase tank death: a Rune of Death on the stack point (2:55.9)
+sent the stack to the 270° heading (1587.18, 96.02) while Steelbreaker's tank escaped to (1572.0, 141.6),
+48 yd apart; no healer within 40 yd of it from ~3:00 to its 3:22 death (88% → 27% on HoTs, then the
+punch), and again 8 s after the 3:33 rune. In uld1 and uld3 the runes landed off the point and the healers
+stayed in reach (median 28-38 yd). `DisplaceIronAssemblyStackPoint` takes the clear heading nearest the
+stack, tanks unread. Plan question 2.
+
+**Questions (plan changes).**
+1. *Balance and resto druid bots give Innervate to a healer low on mana in Iron Assembly, as the cat's
+   `innervate on healer` does, instead of themselves?* Recommended: yes. Five of seven went on the druid
+   itself; uld2 had no cat and its priests sat dry from 3:54 to the wipe. Each one is ~7.9k mana over 10 s,
+   close to a third of a priest's bar.
+2. *When a Rune of Death moves the stack, prefer a clear heading that keeps Steelbreaker's tank within 40
+   yd?* Recommended: yes, in Molgeim's phase: his punch is what kills a tank there. In uld2 the other
+   heading equally near the stack (90°) was 16 yd from him, though 43 yd from Molgeim's tank for the rune's
+   30 s.
+3. *Hold a paladin tank's `lay on hands on party` when it targets itself (round 6's gap)?* Recommended: not
+   yet. Its one cast lifted a tank stranded at the point to full, and the two punches its Forbearance left
+   without Divine Protection landed safe; judge it once risen tanks walk straight back.
+
+**Next window should show.** `--revived`: every rise "a healer in 40 yd" within ~3 s and "stood" ≤ ~1 s
+(uld3 here: 7.5 / 4.8 s and 6.8 / 4.8 s), bar a rise held off its spot by a Rune of Death on it (no
+`move` rows from the walk while it lasts); no risen tank dying to High Voltage at the Meltdown point.
+`postmortem.py --bot <risen tank>`: `move ... r:dup` from `iron assembly tank assignment action` lasts one
+still tick, then an `ok:1` re-send. Healer mana unchanged until question 1.
+
+**Review.** Root cause holds in the trace: uld3 Uldzab's walk went out at 4:35.639, `healthstone` FAILED
+at 4:35.986 on the move (`UseItemAction` stops the bot first), the track sits at (1606.7, 101.5) from
+4:35.98 to 4:40.77 and every walk tick reads `dup` to 4:40.603. Uld2 Uldyab (4:59.578), uld3 Uldzaa
+(3:59.975) and window 10 uld3 Uldzab (4:47.300) start the same way, each with a `healthstone` FAILED on
+the move. The fix holds at 10 and 25, both modes, and with a player tank (it re-sends only a bot tank's
+own walk; no size, mode or player input). It also shortens another stall: after a Charge or Feral Charge
+at the pull or mid fight a tank stood 2-3 s at the boss, 4-34 yd from its spot, with the walk `dup`
+(every pull of windows 10-11); it now walks back ~1 s after the charge, as "stand, do not drag" intends.
+Watch the pull for a council member leaving its tank in the first 5 s. The branch predates the comment
+strip `c163ec11a`: the two source files it touches are stripped here (`commentstrip.py strip --keep-from
+c163ec11a`, token check clean, now equal to Custom's bar the fix), so the merge carries no comment and
+the other Ulduar files come from Custom as they are.

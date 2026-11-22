@@ -73,7 +73,10 @@ public:
     bool Execute(Event event) override;
 
 private:
+    bool WalkToSpot(Position const& step);
+
     bool _spotReached = false;
+    bool _stallSeen = false;
 };
 
 class IronAssemblyShieldOfRunesAction : public Action

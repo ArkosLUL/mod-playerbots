@@ -66,7 +66,8 @@ Protection, a paladin tank's one button, for 2 min), while Steelbreaker lives, a
 node casts by id, so it alone spends them. Under 25% the class nodes are the last resort, but only while
 a council member has the tank as victim: a risen tank (13–19%) or a swapped-out carrier has nothing on
 it, and on 22 Nov rises spent Last Stand, Survival Instincts and a Divine Shield that left three punches
-without Divine Protection.
+without Divine Protection. **Known-open:** `lay on hands on party` stays free and can pick the paladin
+itself, once at a rise.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS` (the boss state,
@@ -232,6 +233,14 @@ Tank and raid spots are reach-then-hold, re-walked only past twice the tolerance
 3, a rune 2): a move per yard of drift restarts the spline, and a moving bot never casts or kicks
 Lightning Whirl.
 
+**A stopped walk to the tank spot is re-sent on its second still tick**: `MoveTo` refuses the same
+point for `MaxWaitForMove` ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)),
+and a healthstone used on the move stops the bot. The first still tick goes to the lower nodes, or
+the healthstone, ranked below the walk, stops every re-sent one. It matters most after a Soulstone,
+which raises a carrier on the Meltdown point, often out of every healer's reach: on 22 Nov two stood
+there 4.8 s, 42–63 yd from the healers, and a bear at 8–20% died to two High Voltage ticks, a charge
+for a Steelbreaker at 4.4%.
+
 **Hazards land on the stack point.** `DoCastRandomTarget` puts Rune of Death on a random member, so
 on a stacked raid it covers the stack — four of four in one traced pull, one exactly on it — and it
 repeats every 30–40s for ~30s from Molgeim's phase 2. Overload rides Brundir, so a loose one covers
@@ -245,7 +254,10 @@ until it stops clearing: a rune holds still, but Overload walks with Brundir, an
 tick would flip the winner mid-cast. With no heading clear the raid holds formation and each bot
 escapes alone. **Known-open:** on the exact stack point a rune lands 0 yd from every caster, and one
 killed four casters in one pull and a healer in another at 2:47 — at 50–65% they started moving
-0.2–2.2s late (cause unverified) and died walking out.
+0.2–2.2s late (cause unverified) and died walking out. **Known-open:** the heading ignores the
+tanks. A rune on the stack point sent it to 270° while Steelbreaker's tank escaped to the rune's far
+side, 48 yd apart: no healer within 40 yd of him for 20 s, then a punch killed him at 28% (22 Nov,
+Molgeim's phase).
 
 **The spread ring centres on Steelbreaker's tank spot, at 22 yd.** Meltdown lands on whoever is
 tanking him, so a ring built on the stack point runs its near arc 6.6 yd from the carrier: 5 of 16
@@ -405,7 +417,8 @@ Voltage and the first non-tank death set off the cascade. Uld1 still took him to
 A healer's Shadowfiend waits for ≤ 50% mana ([priest](../../classes/priest.md#cross-spec)): ungated,
 it fired 8–23 s in at 80–95% mana here, the full bar capping the return at 5–19%, and the second came
 back at 5:08, after the cascade. With the gate and 5 healers (22 Nov) priests ran dry at 3:42–4:49
-and his lowest was 0.4%, 23% and 24%.
+and his lowest was 0.4%, 23% and 24%. Only a cat druid gives Innervate to a healer low on mana; balance
+and resto cast it on themselves.
 
 **One round goes at the pull**, by the user's call, to speed the fight up: while all three are up
 and within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health;
@@ -441,8 +454,9 @@ takes either, with `IsDps` on the name branch since a healer's Shadowfiend is ma
 **Reading a pull:** `bosses/iron_assembly.py <file>` (`--phases`: each member's death with healer
 mana and mana returns; `--empowered`: Overwhelming Power carriers with whoever else each blast killed,
 Fusion Punches and Rebirths; `--punches`: every phase's Fusion Punches with verdict and button;
-`--revived`: every tank that rose mid pull, the raid buffs put back inside the window, and what it still
-lacked at its next death or the end; `--defensives`: every tank defensive with the tank's health, the
+`--revived`: every tank that rose mid pull, when a healer first stood within 40 yd and its longest stand
+before that, the raid buffs put back inside the window, and what it still lacked at its next death or
+the end; `--defensives`: every tank defensive with the tank's health, the
 member on it and the node that cast it; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
 verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
 `hdr.cfg.hardmode` toggle alone proves nothing.

@@ -212,6 +212,22 @@ class Revived(unittest.TestCase):
         self.assertIn("2:39.900    Prayer of Fortitude from Mender", text)
         self.assertIn("4:20.010  Rampart died again, every raid buff back", text)
 
+    def test_how_long_a_tank_risen_out_of_reach_took_to_reach_a_healer(self):
+        records = pull()
+
+        def at(t: int, x: float, y: float) -> dict:
+            return {"t": t, "e": "snap", "u": [[PARTNER, x, y, 427.3, 0, 15, 100, 0],
+                                               [PRIEST, 1560.0, 150.0, 427.3, 0, 100, 50, 0]]}
+
+        records[-1:-1] = [
+            {"t": 150000, "e": "death", "g": PARTNER, "killer": PARTNER, "x": 1608.4, "y": 99.8, "z": 427.3,
+             "auras": [], "rewind": []},
+            at(160000, 1608.4, 99.8), at(160500, 1608.4, 99.8), at(161000, 1608.4, 99.8),
+            at(161500, 1600.0, 108.0), at(162000, 1592.0, 116.0), at(162500, 1585.0, 124.0),
+        ]
+        text = printed(ia.show_revived, load(records))
+        self.assertIn("2:40.000    walk: a healer in 40 yd after 2.5s, stood 1.0s on the way", text)
+
 
 class Defensives(unittest.TestCase):
     def test_who_was_on_the_tank_and_which_node_cast_it(self):
