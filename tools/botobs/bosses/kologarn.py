@@ -28,7 +28,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import frames  # noqa: E402
-from raidobs.trace import Trace, clock, combat_deaths, roster_guids  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, own_blow, own_blow_spell, roster_guids  # noqa: E402
 
 ENCOUNTER = "kologarn"
 
@@ -210,9 +210,9 @@ def show_trash(trace: Trace) -> None:
 
 def mechanic(trace: Trace, death: dict) -> str:
     killer = entry(trace, death.get("killer"))
-    blow = death.get("blow") or []
-    if blow and blow[0] == death.get("g"):
-        return "fall"
+    if own_blow(death):
+        own = own_blow_spell(death)
+        return (trace.spells.get(own) or f"spell {own}") if own else "fall"
     rewind = sorted(death.get("rewind") or [], key=lambda row: row[0])
     spell_id = rewind[-1][2] if rewind else 0
     spell = (trace.spells.get(spell_id) or f"spell {spell_id}") if spell_id else ""

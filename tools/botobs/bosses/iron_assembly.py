@@ -29,7 +29,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import dist2, frames  # noqa: E402
-from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, notes, own_blow_spell  # noqa: E402
 
 ENCOUNTER = "iron-assembly"
 
@@ -293,7 +293,10 @@ def mechanic(trace: Trace, death: dict) -> str:
     spell_id = rewind[-1][2] if rewind else 0
     if killer == death["g"]:
         held = {row[0] for row in death.get("auras") or []}
-        return "Meltdown" if held & set(SPELL_OVERWHELMING_POWER) else "own blow"
+        if held & set(SPELL_OVERWHELMING_POWER):
+            return "Meltdown"
+        own = own_blow_spell(death)
+        return (trace.spells.get(own) or f"spell {own}") if own else "own blow"
     if spell_id:
         return trace.spells.get(spell_id) or f"spell {spell_id}"
     who = MEMBERS.get(trace.entries.get(killer), trace.name(killer))

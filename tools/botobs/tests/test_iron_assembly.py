@@ -139,6 +139,14 @@ class Deaths(unittest.TestCase):
         self.assertIn("1  High Voltage", text)
         self.assertIn("not a Meltdown: Rampart (tank) at 4:20.010, Fusion Punch", text)
 
+    def test_a_spell_the_victim_cast_on_itself_is_named(self):
+        trace = load(pull())
+        own = {"t": 250000, "g": PRIEST, "killer": PRIEST, "blow": [PRIEST, 6111],
+               "rewind": [[249990, PRIEST, 63526, 6111]]}
+        self.assertEqual(ia.mechanic(trace, own), "High Voltage")
+        fall = {"t": 250000, "g": PRIEST, "killer": PRIEST, "blow": [PRIEST, 30000], "rewind": []}
+        self.assertEqual(ia.mechanic(trace, fall), "own blow")
+
 
 class OtherFights(unittest.TestCase):
     def test_every_section_reads_empty(self):

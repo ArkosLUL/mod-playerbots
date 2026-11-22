@@ -126,6 +126,16 @@ class Deaths(unittest.TestCase):
     def test_banner(self):
         self.assertIn("outcome wipe at 1:00.000, 2 death(s)", printed(kolo.show_banner, load(pull())))
 
+    def test_a_stone_grip_tick_from_the_victim_is_not_a_fall(self):
+        trace = load(pull())
+        trace.spells[64292] = "Stone Grip"
+        grip = {"t": 50000, "g": RUNNER, "killer": RUNNER, "blow": [RUNNER, 2458],
+                "rewind": [[48900, RUNNER, 64292, 2458], [49900, RUNNER, 64292, 2458]]}
+        self.assertEqual(kolo.mechanic(trace, grip), "Stone Grip")
+        fall = {"t": 50000, "g": RUNNER, "killer": RUNNER, "blow": [RUNNER, 30000],
+                "rewind": [[49900, RUNNER, 64292, 2458]]}
+        self.assertEqual(kolo.mechanic(trace, fall), "fall")
+
 
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):

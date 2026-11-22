@@ -315,8 +315,10 @@ so the hook feeding `blow` never fires and `killer` is the victim itself: `reset
 `wipe` command (`WipeAction`), `self` any other script's kill - Yogg's Insane running out, the Brain
 killing whoever hits it before its tentacles die. Falling, lava and `.die` on yourself do pass
 `DealDamage`, reading as a `blow` from the victim with no `dmg` row, since none reaches the combat log;
-`--verify` allows that. Absent whenever there is a `blow`. `postmortem.py` numbers `--death N` over the
-others and counts resets separately.
+`--verify` allows that. A self-cast spell (Biting Cold `62188`, Stone Grip `64292`) is a `blow` from the
+victim too, but logged: the rewind ends on the victim's row of the blow's amount, which
+`trace.own_blow_spell` names. `cause` is absent whenever there is a `blow`. `postmortem.py` numbers
+`--death N` over the others and counts resets separately.
 
 **An aura that kills its owner when it comes off writes one death twice.** Yogg's Insane calls
 `Unit::Kill` from `OnRemove` and dying strips it, so the kill re-enters and `OnUnitDeath` fires nested

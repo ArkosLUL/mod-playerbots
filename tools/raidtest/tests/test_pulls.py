@@ -212,13 +212,18 @@ class CauseTest(unittest.TestCase):
                 return {1: "Bot", 2: "Boss"}.get(guid, "-")
 
             def spell(self, spell):
-                return f"spell {spell}"
+                return {62188: "Biting Cold 62188"}.get(spell, f"spell {spell}")
 
         trace = FakeTrace()
         self.assertEqual(pulls.death_cause(trace, {"g": 1, "cause": "reset"}), "the wipe command")
         self.assertIn("script", pulls.death_cause(trace, {"g": 1, "cause": "self"}))
-        self.assertIn("own blow", pulls.death_cause(trace, {"g": 1, "blow": [1, 500]}))
+        self.assertEqual(pulls.death_cause(trace, {"g": 1, "blow": [1, 500]}), "its own blow: a fall, lava or .die")
         self.assertEqual(pulls.death_cause(trace, {"g": 1, "killer": 2, "blow": [2, 500]}), "Boss")
+        biting_cold = {"g": 1, "killer": 1, "blow": [1, 1087],
+                       "rewind": [[180935, 2, 64545, 2716], [181924, 1, 62188, 1087]]}
+        self.assertEqual(pulls.death_cause(trace, biting_cold), "its own Biting Cold 62188")
+        fall = {"g": 1, "killer": 1, "blow": [1, 30000], "rewind": [[181924, 1, 62188, 1087]]}
+        self.assertEqual(pulls.death_cause(trace, fall), "its own blow: a fall, lava or .die")
 
 
 if __name__ == "__main__":

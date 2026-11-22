@@ -41,7 +41,7 @@ from raidobs.probes import (  # noqa: E402
     HOLDER, LATCH, Series, declared_keys, holder_spans, latch_spans, latch_windows, resolve_guids,
 )
 from raidobs.stuck import idle_windows  # noqa: E402
-from raidobs.trace import Trace, combat_deaths, death_records  # noqa: E402
+from raidobs.trace import Trace, combat_deaths, death_records, own_blow, own_blow_spell  # noqa: E402
 from raidobs.verify import verify_checks  # noqa: E402
 
 FIXTURE = BOTOBS / "fixtures" / "coverage-v12.ndjson"
@@ -2020,6 +2020,28 @@ class DuplicateDeaths(unittest.TestCase):
         self.assertEqual(first["killer"], 7)
 
 
+class OwnBlows(unittest.TestCase):
+    """A killing blow from the victim itself: a fall, lava or .die, or a tick it cast on itself."""
+
+    def test_a_self_cast_tick_is_named_by_its_spell(self):
+        death = {"g": 5, "blow": [5, 544], "rewind": [[100, 9, 64545, 3104], [226809, 9, 64545, 3104],
+                                                       [226809, 5, 62188, 544]]}
+        self.assertTrue(own_blow(death))
+        self.assertEqual(own_blow_spell(death), 62188)
+
+    def test_a_fall_after_an_earlier_tick_names_none(self):
+        self.assertEqual(own_blow_spell({"g": 5, "blow": [5, 30000], "rewind": [[100, 5, 62188, 544]]}), 0)
+        self.assertEqual(own_blow_spell({"g": 5, "blow": [5, 544], "rewind": [[100, 5, 62188, 544],
+                                                                               [200, 9, 64545, 3104]]}), 0)
+        self.assertEqual(own_blow_spell({"g": 5, "blow": [5, 39878]}), 0)
+
+    def test_a_blow_from_someone_else_is_not_an_own_blow(self):
+        death = {"g": 5, "blow": [9, 544], "rewind": [[200, 5, 62188, 544]]}
+        self.assertFalse(own_blow(death))
+        self.assertEqual(own_blow_spell(death), 0)
+        self.assertFalse(own_blow({"g": 5, "cause": "self"}))
+
+
 class ShortRows(unittest.TestCase):
     """Columns 8 to 11 arrived in v8, so an older row raises if one is read without checking."""
 
@@ -2184,7 +2206,19 @@ class RichFixture(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             deathreport.death_block(trace, death, 0, True)
-        self.assertIn("killed by its own blow", buffer.getvalue())
+        self.assertIn("killed by its own blow: .die, a fall or lava", buffer.getvalue())
+
+    def test_a_blow_from_a_spell_the_victim_cast_on_itself_names_the_spell(self):
+        trace = rich()
+        trace.spells[62188] = "Biting Cold"
+        death = trace.of("death")[0]
+        death["blow"] = [death["g"], 1087]
+        death["rewind"] = [[1500, 4294967400, 104, 12000], [1890, death["g"], 62188, 1087]]
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            deathreport.death_block(trace, death, 0, True)
+        self.assertIn("killed by its own Biting Cold 62188\n", buffer.getvalue())
+        self.assertNotIn("own blow", buffer.getvalue())
 
     def test_a_death_written_twice_is_caught(self):
         trace = rich()
