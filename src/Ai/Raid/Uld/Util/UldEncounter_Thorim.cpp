@@ -137,6 +137,15 @@ std::array<Position const*, ULDUAR_THORIM_BALCONY_WAYPOINTS> const balconyWaypoi
     &ULDUAR_THORIM_JUMP_START_POINT,
 }};
 
+// Passing a waypoint's y counts as reaching it: the hallway runs one way, so a bot shoved north of a
+// point is done with it.
+bool ThorimBalconyWaypointReached(Player const* bot, uint8 index)
+{
+    Position const& here = GetThorimBalconyWaypoint(index);
+    return bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
+           bot->GetPositionY() > here.GetPositionY();
+}
+
 ThorimEncounterState* FindState(Player const* bot)
 {
     return bot ? thorimStates.Find(bot->GetInstanceId()) : nullptr;
@@ -1156,7 +1165,32 @@ bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target)
 
     // Phase 1: neither he nor Sif can be hit from the floor, and both sit above the arena box, which the
     // arena target guard shuts a bot down for.
-    return target != boss && target->GetEntry() != NPC_SIF;
+    if (target == boss)
+        return ThorimBalconyHitAllowed(botAI, botAI->GetBot());
+
+    return target->GetEntry() != NPC_SIF;
+}
+
+bool ThorimBalconyHitAllowed(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    if (!ThorimSplitActive(botAI) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    // A chase to him from short of BALCONY_5 crosses a Paralytic Field. Where the bot stands, not just the
+    // latch: until the walk runs again, a step left from an earlier pull reads as past it from the Giant's ramp.
+    if (!ThorimBalconyWaypointReached(bot, ULDUAR_THORIM_BALCONY_WAYPOINTS - 2))
+        return false;
+
+    // Read only, the walk owns this latch.
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    auto const itr = state->balconyStep.find(bot->GetGUID());
+    return itr != state->balconyStep.end() && itr->second >= ULDUAR_THORIM_BALCONY_WAYPOINTS - 1;
 }
 
 namespace
@@ -1253,9 +1287,9 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
         if (targets.runeGiant)
             return NoteThorimDpsTarget(bot, targets.runeGiant);
 
-        // Phase 2 only starts on damage from a player above z 430. Gated on the bot's own height, or a
-        // corridor bot at z 412 gets pulled 150 yd out of its lane.
-        if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        // Phase 2 only starts on damage from a player above z 430. Only past BALCONY_5: from the corridor a chase
+        // pulls the bot 150 yd out of its lane, from the hallway across a Paralytic Field.
+        if (ThorimBalconyHitAllowed(botAI, bot))
             return NoteThorimDpsTarget(bot, boss);
 
         return NoteThorimDpsTarget(bot, nullptr);
@@ -1705,23 +1739,14 @@ uint8 ThorimAdvanceBalconyStep(Player* bot)
     auto const itr = steps.find(bot->GetGUID());
     uint8 step = itr == steps.end() ? 0 : itr->second;
 
-    // Passing a waypoint's y counts as reaching it: the hallway runs one way, so a bot shoved north of a
-    // point is done with it.
-    auto const reached = [bot](uint8 index)
-    {
-        Position const& here = GetThorimBalconyWaypoint(index);
-        return bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
-               bot->GetPositionY() > here.GetPositionY();
-    };
-
     // Down first: a step held over from an earlier pull hands a bot on the ramp a mid-chain waypoint,
     // and the straight line there crosses a Paralytic Field bunny.
-    while (step > 0 && !reached(step - 1))
+    while (step > 0 && !ThorimBalconyWaypointReached(bot, step - 1))
         --step;
 
     // ULDUAR_THORIM_BALCONY_WAYPOINTS means arrived, and that has to be a latch: on the platform the squad
     // drifts while fighting, and re-anchoring it every tick would fight "reach melee".
-    while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS && reached(step))
+    while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS && ThorimBalconyWaypointReached(bot, step))
         ++step;
 
     state->balconyStep[bot->GetGUID()] = step;

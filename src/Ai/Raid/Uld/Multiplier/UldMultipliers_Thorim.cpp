@@ -116,5 +116,8 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     Unit* boss = GetThorim(botAI);
-    return (target == boss || target->GetEntry() == NPC_SIF) ? 0.0f : 1.0f;
+    if (target == boss)
+        return ThorimBalconyHitAllowed(botAI, bot) ? 1.0f : 0.0f;
+
+    return target->GetEntry() == NPC_SIF ? 0.0f : 1.0f;
 }
