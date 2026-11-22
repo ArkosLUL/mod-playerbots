@@ -1,6 +1,0 @@
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	returns a copy on purpose: a sweep nested in the caller's loop clears the guid list
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	keep this read in the loop, side 0's grip may have just failed
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	RuneCost is in RuneType order, same as Spell::CheckRuneCost reads it
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	read both focuses before the skull check, their latches have to stay current under a skull
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	has to list everyone SwarmHealTier ranks under SWARM_HEAL_TIERS, so change both together
-src/Ai/Raid/ToC/Util/ToCHelpers_Anubarak.cpp	only read the plan here, judging it can call back into the dodge (the kiter's own ticks judge it)

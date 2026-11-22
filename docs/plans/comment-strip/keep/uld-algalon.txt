@@ -1,5 +1,0 @@
-src/Ai/Raid/Uld/Action/UldActions_Algalon.cpp	Attack before clearing the booking: it stops a walk booked below combat, and a dodge under way is forced.
-src/Ai/Raid/Uld/Action/UldActions_Auriaya.cpp	Read the victim before taunting, the taunt moves it.
-src/Ai/Raid/Uld/Trigger/UldTriggers_Vezax.cpp	Keep this above the target check: the dwell only counts if it's asked every tick.
-src/Ai/Raid/Uld/Util/UldEncounter_Vezax.cpp	emplace, not assign: a second hush would save passive as the stance to give back.
-src/Ai/Raid/Uld/Util/UldEncounter_Algalon.h	algalon.phase writes these numbers and algalon.py's PHASE_NAMES maps them back, renumber both together.
