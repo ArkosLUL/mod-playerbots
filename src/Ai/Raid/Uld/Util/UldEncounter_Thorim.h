@@ -264,6 +264,8 @@ struct ThorimEncounterState
     ObjectGuid runeGiantGuid;
     uint32 runeGiantScanMs = 0;
 
+    ObjectGuid colossusDoorsGuid;
+
     RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
     RaidObs::ObsValue<ObjectGuid> frostAuraPaladin{"thorim.frostaura"};

@@ -1324,6 +1324,7 @@ namespace
 {
 constexpr uint32 THORIM_ARENA_LEVER_ENTRY = 194264;
 constexpr float THORIM_LEVER_SEARCH_RANGE = 150.0f;
+constexpr uint32 THORIM_FIRST_COLOSSUS_DOORS_ENTRY = 194557;
 
 Position const THORIM_RUNE_GIANT_SPAWN(2134.57f, -440.318f, 438.331f);
 
@@ -1331,6 +1332,19 @@ bool OnThisInstance(Player const* member, Player const* bot)
 {
     return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
            member->GetInstanceId() == bot->GetInstanceId();
+}
+
+bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    GameObject* doors = state.colossusDoorsGuid ? botAI->GetGameObject(state.colossusDoorsGuid) : nullptr;
+    if (!doors)
+    {
+        doors = bot->FindNearestGameObject(THORIM_FIRST_COLOSSUS_DOORS_ENTRY, ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE);
+        state.colossusDoorsGuid = doors ? doors->GetGUID() : ObjectGuid::Empty;
+    }
+
+    return doors && doors->GetGoState() == GO_STATE_ACTIVE;
 }
 }
 
@@ -1497,7 +1511,10 @@ Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
         return nullptr;
 
     Unit* giant = GetThorimAncientRuneGiant(botAI);
-    if (!giant || giant->HasUnitFlag(UNIT_FLAG_IMMUNE_TO_PC) || giant->IsInCombat())
+    if (!giant || giant->IsInCombat())
+        return nullptr;
+
+    if (!ThorimColossusDoorsOpen(botAI, bot))
         return nullptr;
 
     return giant;

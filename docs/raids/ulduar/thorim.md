@@ -4,10 +4,11 @@ Two halves that share nothing: a corridor gauntlet past the Runic Colossus and t
 then a stationary fight on the arena floor once Thorim drops off his balcony. `GetPositionZ() < 429.6`
 separates the two everywhere in the strategy.
 
-**The whole fight is on a ~170 s clock.** `EVENT_THORIM_START_PHASE1` fires 20 s after the pull and
-sends `ACTION_SIF_START_DOMINION`; 150 s later `EVENT_SIF_FINISH_DOMINION` despawns Sif. Reach Thorim
-before it and she joins the fight instead: that is hard mode. Every gauntlet decision below is sized
-against the whole budget, not the 150 s timer alone.
+**The whole fight is on a ~170 s clock.** `EVENT_THORIM_START_PHASE1` fires 20 s after the sixth
+start-pack death (26-30 s into a bot-led pull) and sends `ACTION_SIF_START_DOMINION`, which a trace
+shows as her Touch of Dominion (62507) cast; 150 s later `EVENT_SIF_FINISH_DOMINION` despawns Sif.
+Reach Thorim before it and she joins the fight instead: that is hard mode. Every gauntlet decision
+below is sized against the whole budget, not the 150 s timer alone.
 
 ## Phase 1 split
 
@@ -181,7 +182,8 @@ waypoint a chase to him crosses a Paralytic Field, and from the corridor it pull
 its lane. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's end is the
 firing spot. Every other bot stays off him and Sif while he is up there (`ThorimDpsTargetAllowed`,
 `ThorimBalconyGuardMultiplier`, the arena target guard). A real player changes nothing: the first
-corridor bot there starts phase 2 if he has not. Unmeasured: needs a bot-led squad on the platform.
+corridor bot there starts phase 2 if he has not. Measured once (25-man): the first corridor bot to
+latch `BALCONY_5` picked him 0.3 s later, and phase 2 started 3.4 s after the pick.
 
 The healer split (arena 13 bodies / 1.48 M / 2 healers against gauntlet 11 / 0.69 M / 2) is left
 uneven on purpose: the gauntlet's clock is the lever, not its survivability.
@@ -959,8 +961,12 @@ player was on the instance left the corridor standing while he stayed in the are
   30 yd from the Colossus, which the squad's own targeting then engages. Once the Colossus is dead he walks
   on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick range: in
   all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the orb. Gated
-  on the Giant losing `UNIT_FLAG_IMMUNE_TO_PC`, which the Colossus' death clears, since arena melee scan the
-  cached Colossus lookup from out of range and it can read empty while he lives; and on the leader past the
+  on the first doors (GO 194557, (2227.7, −413.3)) standing open, which the Colossus' death does in both
+  sizes. The Giant's `UNIT_FLAG_IMMUNE_TO_PC` is on the 10-man template only
+  ([pitfalls](../../engine/pitfalls.md#detection-that-never-fires)): gated on it, all three 25-man
+  leaders walked past an untouched Colossus, shut doors and all, into the Iron Honor Guards and the Giant
+  (24 deaths in the two pulls that wiped). The cached Colossus lookup can't gate it either: arena melee
+  scan it from out of range, so it can read empty while he lives. Also gated on the leader past the
   portcullis and within 150 yd of the Giant's spawn, since a scan from farther out (the arena, the left
   lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
   own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
@@ -972,7 +978,9 @@ player was on the instance left the corridor standing while he stayed in the are
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
   across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
-  one, about 100-125 s from the lever. Unmeasured: needs a live pull.
+  one, about 100-125 s from the lever. Measured on 25-man: lever pulled 32-37 s into the pull, last
+  waypoint passed at 65-93 s; the one pull to reach phase 2 did so 194 s after the lever, 31 s past Sif's
+  62565, with Colossus, Honor Guards and Giant all pulled at once.
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
