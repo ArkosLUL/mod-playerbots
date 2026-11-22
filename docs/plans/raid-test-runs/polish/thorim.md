@@ -253,12 +253,15 @@ offers him for that, and the balcony walk leaves the edge tick "to whatever shoo
 (`UldActions_Thorim.cpp:360`). Without a human nothing ever starts phase 2.
 
 **Fix** (Thorim files only, no size, mode or player branch):
-- `ThorimBalconyHitAllowed` (`UldEncounter_Thorim.cpp:1165`, header `:501`): a bot above the floor line, in the
+- `ThorimBalconyHitAllowed` (`UldEncounter_Thorim.cpp:1174`, header `:500`): a bot above the floor line, in the
   corridor squad, during the split (Thorim in combat on his balcony), whose `thorim.balcony` latch has passed
   `ULDUAR_THORIM_BALCONY_5` (read, never advanced: the walk owns it). The ranged hold spots use the same step gate;
   the latch only advances along the chain, so both Paralytic Fields are behind the bot.
+- Review: the bot must also stand at or past `BALCONY_5` (`ThorimBalconyWaypointReached`, `:142`, the latch's own
+  test). The walk only rereads the latch once the Giant is dead, so a step left from an earlier pull on the same
+  instance could read as past it from the Giant's ramp and hand him to a bot ~140 yd off, behind the second doors.
 - `ThorimDpsTargetAllowed` allows Thorim for that bot (Sif stays forbidden); `GetThorimDpsTarget` offers him only
-  to that bot (`:1279`); `ThorimBalconyGuardMultiplier` passes Attack/Reach on him for it (`:120`).
+  to that bot (`:1292`); `ThorimBalconyGuardMultiplier` passes Attack/Reach on him for it (`:120`).
 - Geometry: the jump edge (2137.1, −291.2) is 8.9 yd from Thorim (2131.0, −297.6), inside his 9.08 yd melee
   reach, so the walk's end is the firing spot for melee and ranged; `BALCONY_5` is 21.4 yd from him, and the
   north trap (2134.9, −339.7) is south of both.

@@ -142,8 +142,9 @@ applies only `UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_PACIFIED` and a root — he is 
 throughout — so a raid that never hits him from up there leaves him at 100% forever.
 
 **The corridor squad starts it.** `ThorimBalconyHitAllowed` gives him to a corridor bot still above the
-floor line whose walk latch has passed `ULDUAR_THORIM_BALCONY_5`; from any earlier waypoint a chase to him
-crosses a Paralytic Field. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's
+floor line that both stands and has latched at or past `ULDUAR_THORIM_BALCONY_5` (until the walk runs
+again, a latch left from an earlier pull reads as past it from the Giant's ramp); from any earlier waypoint
+a chase to him crosses a Paralytic Field. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's
 end is the firing spot. Every other bot stays off him and Sif while he is up there
 (`ThorimDpsTargetAllowed`, `ThorimBalconyGuardMultiplier`, the arena target guard). A real player changes
 nothing: the first corridor bot there starts phase 2 if he has not. Unmeasured: needs a bot-led squad on
