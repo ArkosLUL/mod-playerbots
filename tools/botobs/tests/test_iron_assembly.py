@@ -170,6 +170,33 @@ class Punches(unittest.TestCase):
         self.assertIn("4:04.000  Rebirth from Grove on Bulwark (tank)", text)
 
 
+class Revived(unittest.TestCase):
+    def test_buffs_back_inside_the_window_and_what_it_died_without(self):
+        records = pull()
+        records[1:1] = [{"t": 0, "e": "spell", "sp": sp, "n": name} for sp, name in
+                        ((48469, "Mark of the Wild"), (20217, "Blessing of Kings"),
+                         (25898, "Greater Blessing of Kings"), (48162, "Prayer of Fortitude"))]
+        records[-1:-1] = [
+            {"t": 150000, "e": "death", "g": PARTNER, "killer": STEEL, "x": 1575.9, "y": 132.3, "z": 427.3,
+             "auras": [[25898, 1, 0, TANK, -1, -1, 1], [48162, 1, 0, PRIEST, -1, -1, 1]],
+             "rewind": [[150000, STEEL, 63493, 50000]]},
+            {"t": 160000, "e": "snap", "u": [[PARTNER, 1575.9, 132.3, 427.3, 0, 18, 100, 0]]},
+            {"t": 161000, "e": "aura", "d": PARTNER, "s": DRUID, "sp": 48469, "st": 1, "dur": 1800000, "p": 1},
+            {"t": 161200, "e": "note", "g": PRIEST, "k": "ironassembly.rebuff", "txt": f"none:nobody {PARTNER}"},
+            {"t": 161500, "e": "aura", "d": PARTNER, "s": TANK, "sp": 20217, "st": 1, "dur": 600000, "p": 1},
+            {"t": 200500, "e": "aura", "d": PARTNER, "s": PRIEST, "sp": 48162, "st": 1, "dur": 3600000, "p": 1},
+        ]
+        punched = next(rec for rec in records if rec.get("e") == "death" and rec["t"] == 260010)
+        punched["auras"] = [[20217, 1, 0, TANK, 161500, -1, 1], [48469, 1, 0, DRUID, 161000, -1, 1]]
+        text = printed(ia.show_revived, load(records))
+        self.assertIn("2:40.000  Rampart up at 18%, dead since 2:30.000", text)
+        self.assertIn("2:41.000    Mark of the Wild from Grove", text)
+        self.assertIn("2:41.200    Mender: none:nobody", text)
+        self.assertIn("2:41.500    Blessing of Kings from Bulwark", text)
+        self.assertNotIn("Prayer of Fortitude from", text)
+        self.assertIn("4:20.010  Rampart died again, without Fortitude", text)
+
+
 class Deaths(unittest.TestCase):
     def test_by_mechanic_and_the_first_one_that_was_not_a_meltdown(self):
         text = printed(ia.show_deaths, load(pull()))
@@ -192,7 +219,7 @@ class OtherFights(unittest.TestCase):
     def test_every_section_reads_empty(self):
         trace = Trace(FULL_V14)
         self.assertIn("not an Assembly of Iron pull", printed(ia.show_banner, trace))
-        for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_deaths):
+        for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_revived, ia.show_deaths):
             self.assertEqual(len(printed(show, trace).splitlines()), 1)
 
 

@@ -5,6 +5,7 @@ Steelbreaker's empowered phase, deaths by mechanic.
     iron_assembly.py <file>            every section
     iron_assembly.py <file> --phases   each member's death, with every healer's mana at that moment
     iron_assembly.py <file> --punches  every Fusion Punch, every phase, with the verdict and the button
+    iron_assembly.py <file> --revived  every tank that rose mid pull and the raid buffs put back on it
 
 What the generic views miss here:
 
@@ -59,6 +60,15 @@ DRY_MANA_PCT = 10.0
 SPELL_INNERVATE = 29166
 MANA_RETURNS = {34433: "Shadowfiend", 64901: "Hymn of Hope", 16190: "Mana Tide Totem", SPELL_INNERVATE: "Innervate",
                 54428: "Divine Plea"}
+
+# ULDUAR_IRON_ASSEMBLY_REBUFF_WINDOW_MS: how long after a tank rises the strategy puts its raid buffs back.
+REBUFF_WINDOW_MS = 30000
+# A group buff and its single counterpart are one buff to the tank. Blessings fold Greater into the single.
+RAID_BUFFS = {"Mark of the Wild": "Mark of the Wild", "Gift of the Wild": "Mark of the Wild",
+              "Power Word: Fortitude": "Fortitude", "Prayer of Fortitude": "Fortitude",
+              "Arcane Intellect": "Arcane Intellect", "Arcane Brilliance": "Arcane Intellect"}
+HELD_AT_DEATH_MS = 250
+CLASS_PALADIN = 2
 
 
 def mine(trace: Trace) -> bool:
@@ -337,6 +347,90 @@ def show_empowered(trace: Trace) -> None:
         print(line)
 
 
+def raid_buff(name: str | None) -> str | None:
+    """The buff a tank loses on dying and the strategy puts back, or None for anything else."""
+    if not name:
+        return None
+    if name.startswith("Greater Blessing of "):
+        return name[len("Greater "):]
+    return name if name.startswith("Blessing of ") else RAID_BUFFS.get(name)
+
+
+def held_raid_buffs(trace: Trace, death: dict) -> set[str]:
+    """Dying strips every buff, so one held to the end reads removed at the death or a tick before it."""
+    return {buff for row in death.get("auras") or []
+            if len(row) > 5 and (row[5] == -1 or row[5] >= death["t"] - HELD_AT_DEATH_MS)
+            for buff in [raid_buff(trace.spells.get(row[0]))] if buff}
+
+
+def raid_buffs_since(trace: Trace, guid: int, start: int, until: int) -> set[str]:
+    """The raid buffs on `guid` at `until`, from its aura rows since `start` (a rise, so it held none then)."""
+    held = set()
+    for rec in trace.of("aura"):
+        buff = raid_buff(trace.spells.get(rec.get("sp")))
+        if rec.get("d") != guid or not buff or not start <= rec["t"] <= until:
+            continue
+        if rec.get("r"):
+            held.discard(buff)
+        else:
+            held.add(buff)
+    return held
+
+
+def show_revived(trace: Trace) -> None:
+    """Every tank that stood up again mid pull, the raid buffs that went back on it inside the rebuff window,
+    the `ironassembly.rebuff` verdicts that left one off, and which of the buffs it died with the first time
+    it lacked at its next death or the pull's end."""
+    print("REVIVED TANKS")
+    if not mine(trace):
+        return
+    samples = Samples(trace)
+    deaths = collections.defaultdict(list)
+    for death in combat_deaths(trace):
+        if trace.role(death["g"]) == "tank":
+            deaths[death["g"]].append(death)
+    ends = trace.of("end")
+    classes = {member["g"]: member.get("c") for member in trace.header.get("roster", [])}
+    lines = []
+    for guid, rows in deaths.items():
+        before = held_raid_buffs(trace, rows[0])
+        if classes.get(guid) != CLASS_PALADIN:
+            # the strategy only puts it back on a mana tank
+            before.discard("Arcane Intellect")
+        for index, death in enumerate(rows):
+            later = rows[index + 1] if index + 1 < len(rows) else None
+            rose = next(((t, row) for t, row in samples.rows.get(guid, [])
+                         if t > death["t"] and row[5] > 0 and (later is None or t < later["t"])), None)
+            if rose is None:
+                continue
+            up, row = rose
+            end = up + REBUFF_WINDOW_MS
+            lines.append((up, f"  {clock(up)}  {trace.name(guid)} up at {row[5]:.0f}%, dead since {clock(death['t'])}"))
+            for rec in trace.of("aura"):
+                if rec.get("d") == guid and not rec.get("r") and up <= rec["t"] <= end \
+                        and raid_buff(trace.spells.get(rec.get("sp"))):
+                    lines.append((rec["t"], f"  {clock(rec['t'])}    {trace.spells[rec['sp']]} from "
+                                            f"{trace.name(rec.get('s'))}"))
+            for rec in notes(trace, "ironassembly.rebuff"):
+                how, _, about = str(rec.get("txt", "")).partition(" ")
+                if up <= rec["t"] <= end and about == str(guid) and how in ("none:nobody", "hold:cast"):
+                    lines.append((rec["t"], f"  {clock(rec['t'])}    {trace.name(rec.get('g'))}: {how}"))
+            if later is not None:
+                t, label, held = later["t"], "died again", held_raid_buffs(trace, later)
+            elif ends:
+                t, label = ends[-1]["t"], "at the end"
+                held = raid_buffs_since(trace, guid, up, t)
+            else:
+                continue
+            lost = sorted(before - held)
+            lines.append((t, f"  {clock(t)}  {trace.name(guid)} {label}, "
+                             f"{'without ' + ', '.join(lost) if lost else 'every raid buff back'}"))
+    if not lines:
+        print("  none")
+    for _, line in sorted(lines, key=lambda item: item[0]):
+        print(line)
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     killer = death.get("killer")
     rewind = death.get("rewind") or []
@@ -383,6 +477,7 @@ SECTIONS = (
     ("empowered", "Overwhelming Power carriers, Fusion Punches and Rebirths once Steelbreaker is alone",
      show_empowered),
     ("punches", "every Fusion Punch in every phase, with the strategy's verdict and the button spent", show_punches),
+    ("revived", "every tank that rose mid pull and the raid buffs put back on it", show_revived),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
 
