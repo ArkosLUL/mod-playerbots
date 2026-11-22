@@ -945,6 +945,17 @@ class HodirReader(unittest.TestCase):
         self.assertAlmostEqual(
             hodir.usable_within((20.0, 0.0), boss, [(10.5, 0.0)], 1.5, band=hodir.STARLIGHT_BAND), 8.0)
 
+    def test_a_starlight_stand_inside_his_melee_range_is_not_usable(self):
+        boss = (0.0, 0.0)
+        # The stand 1.5 past a zone 8.5 yd out, toward the bot, is 10 from him, inside his 10.33 melee range.
+        self.assertIsNone(
+            hodir.usable_within((20.0, 0.0), boss, [(8.5, 0.0)], 1.5, band=hodir.STARLIGHT_BAND))
+
+    def test_breaker_motion_splits_moving_the_position_node_and_distance(self):
+        samples = [(True, hodir.POSITION, 20.0), (True, hodir.DODGE, 40.0), (False, "", 30.0), (False, "", None)]
+        self.assertEqual(hodir.breaker_motion(samples), (50.0, 25.0, 25.0))
+        self.assertEqual(hodir.breaker_motion([]), (0.0, 0.0, 0.0))
+
     def test_starlight_rule_drops_the_zone_and_keeps_held(self):
         self.assertEqual(hodir.starlight_rule("stand 2004,-240,433"), "stand")
         self.assertEqual(hodir.starlight_rule("held noreach"), "held noreach")

@@ -164,17 +164,8 @@ inline constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
 static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
               "the caster band has to have room between its ends");
 
-// +50% haste is worth standing near the melee for, but still outside his 7.8 yd melee range (combat
-// reach 5, a raider's 1.5, plus 4/3).
-inline constexpr float ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP = 10.0f;
-static_assert(ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP <= ULDUAR_HODIR_RANGED_MIN_BOSS_GAP,
-              "Starlight is the one stand allowed inside the caster gap, never one kept further out");
-
-// He stops about 4 yd short of whoever holds him, so the tank stands this far past the point.
-inline constexpr float ULDUAR_HODIR_HOLD_TANK_OFFSET = 4.5f;
-
 // Measured from ULDUAR_HODIR_CENTRE, not from him, so he never ends up further out than this and every
-// tank spot stays 40+ yd inside the y band he evades outside.
+// tank spot stays 28+ yd inside the y band he evades outside.
 inline constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 25.0f;
 
 // Closer than this and a bearing from Hodir to the point means nothing, so the tank takes the fixed

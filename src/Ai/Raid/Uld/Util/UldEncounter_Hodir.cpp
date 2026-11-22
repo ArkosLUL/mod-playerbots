@@ -406,13 +406,15 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
 
 // Off-tank a quarter turn off the main tank's line, so a Frozen Blows taunt leaves him on the fire.
 // Static floor check: the campfire is in the dynamic tree, and the normal one clips this spot to its near edge.
-static Position HodirTankSpot(Player* bot, HodirHoldLatch const& hold, bool offTank)
+static Position HodirTankSpot(Player* bot, Unit* hodir, HodirHoldLatch const& hold, bool offTank)
 {
+    // His chase stops at both combat reaches plus CONTACT_DISTANCE, so a tank that far past the point has
+    // him stop on it
+    float const offset = hodir->GetCombatReach() + bot->GetCombatReach() + CONTACT_DISTANCE;
     float const angle = offTank ? hold.bearing - static_cast<float>(M_PI) / 2.0f : hold.bearing;
     return ValidateStaticFloorPoint(
-        bot, Position(hold.point.GetPositionX() + std::cos(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
-                      hold.point.GetPositionY() + std::sin(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
-                      hold.point.GetPositionZ()));
+        bot, Position(hold.point.GetPositionX() + std::cos(angle) * offset,
+                      hold.point.GetPositionY() + std::sin(angle) * offset, hold.point.GetPositionZ()));
 }
 
 Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot)
@@ -510,12 +512,12 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     // already on its way is past that question.
     auto standRejects = [&](Position const& stand) -> char const*
     {
-        // Starlight's own inner edge and the caster band's outer one. A zone the bot cannot shoot the
-        // boss from is not a throughput lever, whatever haste it carries.
+        // Outside his melee range, where aggro pulls at 110% of the tank's threat, and inside the caster
+        // band's outer edge. A zone the bot can't shoot him from is worth nothing, whatever haste it carries.
         if (hodir)
         {
             float const gap = stand.GetExactDist2d(hodir);
-            if (gap < ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+            if (gap < hodir->GetMeleeRange(bot) || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
                 return "noreach";
         }
 
@@ -861,7 +863,7 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         if (!hold)
             return false;
 
-        Position const spot = HodirTankSpot(bot, *hold, !mainTank);
+        Position const spot = HodirTankSpot(bot, GetHodir(botAI), *hold, !mainTank);
 
         float const axis = hold->bearing + static_cast<float>(M_PI) / 2.0f;
         float const dx = std::cos(axis) * ULDUAR_HODIR_SHUTTLE_HALF_LEG;
@@ -1157,7 +1159,7 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
         if (!hold)
             return false;
 
-        out = HodirTankSpot(bot, *hold, !mainTank);
+        out = HodirTankSpot(bot, GetHodir(botAI), *hold, !mainTank);
         tolerance = ULDUAR_HODIR_TANK_HOLD_TOLERANCE;
         return true;
     }

@@ -22,6 +22,7 @@ from raidobs.trace import Trace, clock, combat_deaths, notes, roster_guids  # no
 NPC_HODIR = 32845
 NPC_ICICLE_SMALL = 33169
 NPC_HELPER_BLOCK = 32938
+NPC_TRAPPED_BLOCK = 32926
 
 SPELL_FLASH_FREEZE = 61968
 SPELL_STARLIGHT = 62807
@@ -98,8 +99,10 @@ BUFF_WALK = 15.0
 # What a bot with neither Starlight nor a fire walks; the short one is for a bot that already holds one.
 BUFF_WALK_UNBUFFED = 30.0
 BAND = (15.0, 35.0)
-# A Starlight stand may come closer than the band's inner edge.
-STARLIGHT_BAND = (10.0, 35.0)
+# His melee range against a raider: combat reaches 7.5 and 1.5 plus 4/3. The code reads it live.
+HODIR_MELEE_RANGE = 7.5 + 1.5 + 4.0 / 3.0
+# A Starlight stand may come closer than the band's inner edge, as far in as his melee range.
+STARLIGHT_BAND = (HODIR_MELEE_RANGE, 35.0)
 # Melee this close to him are the pack a fire at his feet is meant to cover.
 MELEE_NEAR_YD = 10.0
 # Inside this one a melee bot is actually swinging, so it is the uptime number the pack share needs
@@ -132,6 +135,11 @@ PROBE_PAUSES = (SHED, SHELTER, "hodir collect storm power", "hodir spread storm 
 OWN_SPOT_YD = 0.5
 # An instant still costs the global cooldown, so the breaker split counts it as this much casting.
 CAST_FLOOR_MS = 1000
+# A breaker this far from its block is past any spell's reach of it.
+BLOCK_FAR_YD = 35.0
+POSITION = "hodir raid position action"
+# A sample counts as moved by the last accepted move this recent.
+MOVER_WINDOW_MS = 4000
 
 
 # Pure pieces, kept free of the trace so the tests can hand them numbers.
@@ -363,6 +371,17 @@ def breaker_cast_split(casts: list[tuple[int, int | None]], own: int, blocks: se
             where = "other"
         out[where] += max(ms, CAST_FLOOR_MS)
     return out
+
+
+def breaker_motion(samples: list[tuple[bool, str, float | None]], far: float = BLOCK_FAR_YD) -> tuple[float, float, float]:
+    """`(moving %, moved by the position node %, over `far` from the block %)` over `(moving, last mover,
+    gap to the block)` samples of ranged bots shooting a block."""
+    if not samples:
+        return 0.0, 0.0, 0.0
+    moving = sum(1 for move, _, _ in samples if move)
+    by_position = sum(1 for move, mover, _ in samples if move and mover == POSITION)
+    distant = sum(1 for _, _, gap in samples if gap is not None and gap > far)
+    return tuple(count / len(samples) * 100 for count in (moving, by_position, distant))
 
 
 def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple[float, tuple[float, ...]]:
@@ -1544,6 +1563,43 @@ def show_blocks(trace: Trace) -> None:
         for guid, rows in sorted(batch, key=lambda item: item[1][-1][0]):
             life = (rows[-1][0] - rows[0][0]) / 1000
             print(f"    {kinds.get(guid, '?'):6} {life:5.1f}s  died {clock(rows[-1][0])}")
+
+    # Ranged shooting ice, read off the snapshot target: a breaker walked off its block deals nothing
+    # to it, and the wave holds up the next fire for as long as the block lives.
+    ice = guids_of_entry(trace, NPC_HELPER_BLOCK) | guids_of_entry(trace, NPC_TRAPPED_BLOCK)
+    movers: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") == 1:
+            movers[rec["g"]].append((rec["t"], str(rec.get("by", ""))))
+    stamps = {guid: [when for when, _ in rows] for guid, rows in movers.items()}
+    samples: list[tuple[bool, str, float | None]] = []
+    dealt = collections.Counter()
+    last: dict[int, tuple[int, int, int]] = {}
+    for snap in frames(trace):
+        when = snap["t"]
+        rows = {row[0]: row for row in snap.get("u", [])}
+        for guid, row in rows.items():
+            if trace.role(guid) != "ranged" or guid in trace.humans or len(row) <= 11:
+                continue
+            if 0 <= when < end and guid in last and row[5] > 0:
+                place = "ice" if last[guid][2] in ice else ("boss" if last[guid][2] == boss else "")
+                if place:
+                    dealt[place] += row[11] - last[guid][1]
+                    dealt[place + " ms"] += when - last[guid][0]
+            last[guid] = (when, row[11], row[7])
+            if not 0 <= when < end or row[5] <= 0 or row[7] not in ice:
+                continue
+            index = bisect.bisect_right(stamps.get(guid, []), when) - 1
+            mover = movers[guid][index][1] if index >= 0 and when - movers[guid][index][0] < MOVER_WINDOW_MS else ""
+            block = rows.get(row[7])
+            gap = math.hypot(row[1] - block[1], row[2] - block[2]) if block else None
+            samples.append((bool(row[8]), mover, gap))
+    if samples:
+        moving, by_position, distant = breaker_motion(samples)
+        rate = {place: dealt[place] / max(1, dealt[place + " ms"]) for place in ("ice", "boss")}
+        print(f"  ranged shooting ice {dealt['ice ms'] / 1000:.0f} bot-seconds, {rate['ice']:.1f}k a second against"
+              f" {rate['boss']:.1f}k on Hodir; moving {moving:.0f}% of it, walked by the position node {by_position:.0f}%,"
+              f" over {BLOCK_FAR_YD:.0f} yd from the block {distant:.0f}%")
 
 
 def show_deaths(trace: Trace) -> None:
