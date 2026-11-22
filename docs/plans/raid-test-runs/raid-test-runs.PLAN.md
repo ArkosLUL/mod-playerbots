@@ -4,7 +4,7 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 
 ## Resume here
 
-The polish loop runs on the user's standing go ("Polish loop" below). Resumed 2026-11-22 11:00 after a PC shutdown. Window 7 runs on build `61011f323` + DC `5443dbc` (job file `scratchpad/window7-jobs.json`: Twins 10h, Beasts 25h, FC smoke on toc1; Hodir, Iron Assembly, Auriaya, Razorscale, XT-002 at 25n; Kologarn and Ignis 10n; Vezax smoke on uld1, Mimiron smoke on uld2; Thorim, Freya, Yogg-Saron, Algalon data). Lanes in flight: polish XT-002 r3 (`rt/polish-xt-002-r3`), Beasts r4 (`rt/polish-northrend-beasts-r4`), Hodir r2 (`rt/polish-hodir-r2`), runner lane R (`rt/r`, `r-runner-unrefreshed.PLAN.md`); a read-only Shadowfiend investigation for the user. Per boss, at the last update:
+The polish loop runs on the user's standing go ("Polish loop" below). Resumed 2026-11-22 11:00 after a PC shutdown. Window 7 runs on build `61011f323` + DC `5443dbc` (job file `scratchpad/window7-jobs.json`: Twins 10h, Beasts 25h, FC smoke on toc1; Hodir, Iron Assembly, Auriaya, Razorscale, XT-002 at 25n; Kologarn and Ignis 10n; Vezax smoke on uld1, Mimiron smoke on uld2; Thorim, Freya, Yogg-Saron, Algalon data). Lanes in flight: polish XT-002 r3 (`rt/polish-xt-002-r3`), Beasts r4 (`rt/polish-northrend-beasts-r4`), Hodir r2 (`rt/polish-hodir-r2`), Auriaya r2 and Iron Assembly r2 (`rt/polish-<slug>-r2`, from window 7's pulls). Merged since the build: lane R, the shared Shadowfiend gate, the Kologarn alias; the next build carries them. Per boss, at the last update:
 
 | Boss | State | Next |
 |---|---|---|
