@@ -92,8 +92,6 @@ constexpr OpenerSpell DASH{{33357, 9821, 1850, 0, 0, 0}};
 // the circle has to put this much more ground between the bot and the melee on it
 constexpr float ESCAPE_MIN_GAIN = 12.0f;
 constexpr float BLINK_DIST = 20.0f;
-// an AoE's search counts both ends' size on top of its radius
-constexpr float ESCAPE_AOE_SLACK = 2.0f;
 constexpr uint32 SPELL_BLINK = 1953;
 constexpr uint32 SPELL_DEMONIC_CIRCLE_TELEPORT = 48020;
 // on the warlock while its circle is within the teleport's 40 yd
@@ -869,6 +867,13 @@ SpellInfo const* KnownReady(Player* bot, uint32 spellId)
     return spellId && bot->HasSpell(spellId) ? ReadyInstant(bot, spellId) : nullptr;
 }
 
+// A player's AoE reaches a creature its combat reach past the radius (the core's area search): the Tauren two
+// 6.075 yd, the rest 2.25
+bool InAoe(Unit* champion, Position const& centre, float radius)
+{
+    return champion->GetExactDist2d(&centre) <= radius + champion->GetCombatReach();
+}
+
 // Nothing a hit of ours would free, nothing a pull needs, and no fear on the kill target, which would run the
 // kill squad around the arena
 bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bool fear)
@@ -876,7 +881,7 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
     Unit* kill = fear ? FactionChampionsKillTarget(botAI) : nullptr;
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
-        if (champion->GetExactDist2d(&centre) > radius + ESCAPE_AOE_SLACK)
+        if (!InAoe(champion, centre, radius))
             continue;
 
         // a duty still casting or a root peel loses nothing to it, a landed Polymorph or Fear would
@@ -891,8 +896,9 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
 // Entrapment's root would pop an iced champion's trinket, its Chains going with it, and end a grip in the air
 bool FrostTrapClear(PlayerbotAI* botAI, Position const& centre)
 {
+    // the slick is a dynamic object, whose own size adds to its reach
     for (Unit* champion : FactionChampionsInCombat(botAI))
-        if (champion->GetExactDist2d(&centre) <= FROST_TRAP_SLICK + ESCAPE_AOE_SLACK &&
+        if (InAoe(champion, centre, FROST_TRAP_SLICK + DEFAULT_WORLD_OBJECT_SIZE) &&
             (FactionChampionsIced(botAI, champion) || FactionChampionsGripGuarded(botAI, champion)))
             return false;
 

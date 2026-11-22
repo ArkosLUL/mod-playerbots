@@ -136,7 +136,7 @@ constexpr uint32 SPELL_WING_CLIP = 2974;
 constexpr uint32 SPELL_CONCUSSIVE_SHOT = 5116;
 constexpr std::array<uint32, 7> FROST_SHOCK_RANKS = {49236, 49235, 25464, 10473, 10472, 8058, 8056};
 
-// A melee champion this far past its swing reach off a victim off the tanks is on it. A Warrior champion
+// A melee champion within its swing reach plus this of a victim off the tanks is on it. A Warrior champion
 // gets disarmed before Bladestorm once this many of ours stand in its radius.
 constexpr float PEEL_VICTIM_MARGIN = 2.25f;
 constexpr uint32 PEEL_BLADESTORM_UNITS = 2;

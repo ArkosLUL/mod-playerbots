@@ -231,6 +231,22 @@ yd (this window 0, 2, 0, snapshot lag), the Tauren's catches and deaths at or be
 **Question for the user.** Q1 again, with this window's numbers: may a disarm peel (Disarm, Dismantle) go on an
 iced champion whose victim is no tank? Narrhok catches 40% of kites and Broln 41%, over the ~35% bar, but iced
 the disarm's reach is smaller: iced Narrhok 33% (19 of 57), iced Broln 41% of which melee 14% (Earth Shock
-ignores a disarm), and an iced Tauren killed 2 of 41 (Narrhok on toc1; Broln's two came after his DK died). Recommended: not yet; this round's reach fix changes escapes,
-step-offs and externals against both, so judge the iced split again next window and build it only if iced
-Narrhok still catches over ~35% or the iced Tauren top the deaths.
+ignores a disarm), and an iced Tauren killed 2 of 41 (Narrhok on toc1; Broln's two came after his DK died).
+Recommended: not yet; this round's reach fix changes escapes, step-offs and externals against both, so judge the
+iced split again next window and build it only if iced Narrhok still catches over ~35% or the iced Tauren top the
+deaths.
+
+**Review.** Both causes hold. Reread with the snapshot at or before each hit: white swings on non-tank raiders,
+Narrhok a median 8.4, 8.1, 8.3 yd (55-64% past 8), Broln 11.3 (88%), the rest 4.6-6.9; Tauren swings on mages,
+warlocks, priests and hunters with no melee champion within 8 yd 43 of 80, the rest 19 of 118 (lag included). The
+class Concussive Shot ran as `concussive shot on snare target` (55, 17, 45 OK rows), no guard veto. No size, mode or
+player branch.
+
+- Review fix: the escape now fires on a Tauren 7.7-11.6 yd off, but `AoeEscapeClear` counted champions within the
+  radius + 2 yd, while a player's AoE reaches a creature its combat reach past the radius
+  (`WorldObjectSpellAreaTargetCheck`): a Tauren kill target hitting a priest from 10-11.6 yd would take its
+  Psychic Scream (reach 14.1). `FrostTrapClear` had the same flat 12 yd against a slick reaching 10 + 0.39 (the
+  dynamic object) + combat reach, 16.5 on a Tauren. Both read the champion's combat reach now (`InAoe`).
+- Left: the opener's grip-guard check (`CollectTrinketsInReach`, radius + 1) misses a guarded champion its AoE
+  reaches at radius + 1-2.25, a Tauren up to radius + 6.075; battle res and corpse crowding count champions within a
+  flat 8 yd. Neither is this round's failure.
