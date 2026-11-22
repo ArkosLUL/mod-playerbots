@@ -120,6 +120,12 @@ BITING_COLD_ARM_IN_STARLIGHT = 5
 # Both arm points drop this much while he carries Frozen Blows.
 BITING_COLD_ARM_FROZEN_BLOWS_DROP = 1
 SHED = "hodir biting cold shed"
+# Where a shed stops (ULDUAR_HODIR_BITING_COLD_SHED_FLOOR).
+BITING_COLD_SHED_FLOOR = 1
+# OK verdicts of the shed this close together are one shed, and it ends this long after its last one at
+# the latest: a hop launched on the last verdict stays up across the next two ticks.
+SHED_GAP_MS = 3000
+SHED_TAIL_MS = 2500
 # Movers that run while the position node stands down; a dodge isn't one, it re-reads the anchor.
 PROBE_PAUSES = (SHED, SHELTER, "hodir collect storm power", "hodir spread storm cloud")
 # A shed leg this close to where the bot already stands goes nowhere: MoveTo calls it there or a dup.
@@ -521,6 +527,54 @@ def own_spot_legs(moves: list[tuple[int, float, float]], rows: list[tuple[int, f
         if not moving and math.hypot(x - px, y - py) < within:
             count += 1
     return count
+
+
+def shed_spans(oks: list[int], changes: list[tuple[int, int]], gap: int = SHED_GAP_MS,
+               floor: int = BITING_COLD_SHED_FLOOR, tail: int = SHED_TAIL_MS) -> list[tuple[int, int]]:
+    """One bot's sheds as `(start, stop)`: runs of the shed's OK verdicts `oks` no more than `gap` apart,
+    each stopping where its stacks first fall to `floor` or below, but no later than `tail` past its last
+    verdict: a shed cut short (a fire, the freeze) only reaches the floor later by other means."""
+    runs: list[list[int]] = []
+    for when in sorted(oks):
+        if runs and when - runs[-1][1] <= gap:
+            runs[-1][1] = when
+        else:
+            runs.append([when, when])
+    out = []
+    for start, last in runs:
+        stop = last + tail
+        for when, stacks in changes:
+            if start < when <= stop and stacks <= floor:
+                stop = when
+                break
+        out.append((start, stop))
+    return out
+
+
+def stacks_shed(changes: list[tuple[int, int]], low: int, high: int) -> int:
+    """Stacks that came off in `(low, high]`, the aura's removal included."""
+    shed = 0
+    held = stacks_before(changes, low)
+    for when, stacks in changes:
+        if low < when <= high:
+            shed += max(0, held - stacks)
+            held = stacks
+    return shed
+
+
+def kept_near(seg: list[tuple[int, float, float]], other: list[tuple[int, float, float]],
+              radius: float) -> float | None:
+    """Share of one bot's samples `seg` within `radius` of `other`'s latest sample at or before each, or None
+    when the first one isn't: only a bot that started there can lose it. Both are `(t, x, y)` in time order."""
+    stamps = [row[0] for row in other]
+
+    def near(when: int, x: float, y: float) -> bool:
+        index = bisect.bisect_right(stamps, when) - 1
+        return index >= 0 and math.hypot(x - other[index][1], y - other[index][2]) <= radius
+
+    if not seg or not near(*seg[0]):
+        return None
+    return sum(1 for row in seg if near(*row)) / len(seg)
 
 
 def rare_cache(outcome: str, end: int, shatter: int | None) -> str:
@@ -1220,6 +1274,87 @@ def show_storm(trace: Trace) -> None:
               f" {STORM_PULSE_YD:.0f} yd {inside / parked * 100:.0f}% of {parked} samples")
 
 
+def show_shed(trace: Trace) -> None:
+    print("SHED (per role: stacks shed a second, Biting Cold ticks used, how far the shed took bots off their spot)")
+    end = fight_end(trace)
+    boss = boss_guid(trace)
+    team = bots(trace)
+    oks: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("act"):
+        if rec.get("a") == SHED and rec.get("vd") == "OK" and rec.get("g") in team and 0 <= rec["t"] < end:
+            oks[rec["g"]].append(rec["t"])
+    if not oks:
+        print("  no shed")
+        return
+
+    ticks: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") == SPELL_BITING_COLD_DAMAGE and rec.get("d") in team:
+            ticks[rec["d"]].append(rec["t"])
+    moves = collections.Counter()
+    for rec in trace.of("move"):
+        if rec.get("by") == SHED and rec.get("ok") and rec.get("g") in team and 0 <= rec["t"] < end:
+            moves[(trace.role(rec["g"]), rec.get("k", "?"))] += 1
+    cuts = collections.Counter(trace.role(rec["g"]) for rec in notes(trace, "hodir.shuttle")
+                               if rec.get("txt") == "cut" and rec["t"] < end)
+
+    changes = stack_changes(trace)
+    samples = track(trace, team, ("t", "x", "y", "moving"))
+    him = [(row[0], row[1], row[2]) for row in boss_rows(trace, boss)] if boss is not None else []
+    stars = aura_spans(trace, [SPELL_STARLIGHT])
+    clouds = aura_spans(trace, SPELL_STORM_CLOUD)
+    stats: dict[str, dict[str, list]] = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    for guid, times in oks.items():
+        role = trace.role(guid)
+        rows = samples.get(guid, [])
+        stamps = [row[0] for row in rows]
+        for start, stop in shed_spans(times, changes.get(guid, [])):
+            window = rows[bisect.bisect_left(stamps, start):bisect.bisect_right(stamps, stop)]
+            seg = [(row[0], row[1], row[2]) for row in window]
+            if len(seg) < 2:
+                continue
+            table = stats[role]
+            table["seconds"].append((stop - start) / 1000)
+            table["shed"].append(stacks_shed(changes.get(guid, []), start, stop))
+            table["ticks"].append(sum(1 for when in ticks.get(guid, []) if start < when <= stop))
+            table["moving"].append(sum(1 for row in window if row[3]) / len(window))
+            origin = (seg[0][1], seg[0][2])
+            table["offset"].append(max(math.hypot(x - origin[0], y - origin[1]) for _, x, y in seg))
+            if covered(stars.get(guid, []), start, start + 1):
+                table["starlight"].append(covered(stars.get(guid, []), start, stop) / max(1, stop - start))
+            if role == "melee":
+                kept = kept_near(seg, him, MELEE_REACH_YD)
+                if kept is not None:
+                    table["reach"].append(kept)
+            carriers = [carrier for carrier, spans in clouds.items()
+                        if carrier != guid and covered(spans, start, start + 1)]
+            if carriers:
+                kept = kept_near(seg, [(row[0], row[1], row[2]) for row in samples.get(carriers[0], [])],
+                                 STORM_PULSE_YD)
+                if kept is not None:
+                    table["pulse"].append(kept)
+
+    for role in ("ranged", "melee", "heal", "tank"):
+        table = stats.get(role)
+        if not table:
+            continue
+        seconds = sum(table["seconds"])
+        shed = sum(table["shed"])
+        ticked = sum(table["ticks"])
+        offsets = sorted(table["offset"])
+        print(f"  {role:6} {len(offsets):3} sheds, {shed} stacks in {seconds:.0f}s = {shed / max(1e-9, seconds):.2f}/s,"
+              f" {shed * 2 / max(1, ticked) * 100:.0f}% of {ticked} ticks used (2 a stack),"
+              f" moving {statistics.mean(table['moving']) * 100:.0f}% of samples;"
+              f" off the spot p50 {statistics.median(offsets):.1f} p90 {offsets[int(0.9 * (len(offsets) - 1))]:.1f} yd;"
+              f" hops {moves[(role, 'jump')]}, walked legs {moves[(role, 'point')]}, hops cut {cuts[role]}")
+        for name, started in (("starlight", "in Starlight"), ("reach", "in melee reach of him"),
+                              ("pulse", "inside a Storm Cloud pulse")):
+            if table[name]:
+                print(f"         {len(table[name])} started {started}, still there"
+                      f" {statistics.mean(table[name]) * 100:.0f}% of the shed")
+
+
 def show_churn(trace: Trace) -> None:
     print("CHURN")
     end = fight_end(trace)
@@ -1283,7 +1418,7 @@ def show_churn(trace: Trace) -> None:
     # can't see it.
     legs: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
     for rec in moves:
-        if rec.get("by") == SHED and rec.get("x") is not None:
+        if rec.get("by") == SHED and rec.get("x") is not None and rec.get("k") != "jump":
             legs[rec["g"]].append((rec["t"], rec["x"], rec["y"]))
     nowhere = sum(own_spot_legs(sequence, samples.get(guid, [])) for guid, sequence in legs.items())
     print(f"  shed legs sent to where the bot already stood (under {OWN_SPOT_YD} yd): {nowhere} of"
@@ -1481,6 +1616,7 @@ SECTIONS = (
     ("singed", "Singed on the boss by caster kind, modelled stacks", show_singed),
     ("buffs", "Starlight, fire, Storm Power, Biting Cold by role", show_buffs),
     ("storm", "Storm Cloud carries, Storm Power per cloud, collect walks against the carrier", show_storm),
+    ("shed", "Biting Cold sheds by role: stacks a second, ticks used, hops, distance off the spot", show_shed),
     ("churn", "walking undone, A-B-A flips, moves by action, dodge walk-backs", show_churn),
     ("blocks", "helper ice blocks per freeze and the next fire", show_blocks),
     ("deaths", "each death's killing spell, Biting Cold stacks and Frozen Blows window", show_deaths),

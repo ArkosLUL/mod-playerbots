@@ -10,6 +10,7 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "Group.h"
+#include "MotionMaster.h"
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -17,6 +18,7 @@
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "RaidTankDefensive.h"
+#include "SpellAuraEffects.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
@@ -26,6 +28,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <list>
 #include <string>
@@ -148,6 +151,14 @@ struct HodirHoldLatch
     uint32 offSince = 0;  // when he parked off the point, 0 while on it
 };
 
+// Where a shed hops: two ends either side of home on axis. to is the end of the hop last launched.
+struct HodirShedHopLatch
+{
+    Position home;
+    float axis = 0.0f;
+    Position to;
+};
+
 // A window is told apart by its Frozen Blows aura's apply time, so a wipe needs no reset.
 struct HodirTankDefensiveLatch
 {
@@ -162,6 +173,7 @@ struct HodirBotLatches
     std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
     std::unordered_map<ObjectGuid, HodirFireLatch> fireStand;
     std::unordered_map<ObjectGuid, HodirStormRally> stormRally;
+    std::unordered_map<ObjectGuid, HodirShedHopLatch> shedHop;
 
     // Where each ice-breaking candidate stood when the first block of a wave went up. Cleared once no
     // block is left, so the next wave reads fresh positions.
@@ -978,6 +990,136 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
         RaidObs::NoteDerived(bot, "hodir.shuttle", how);
 
     return found;
+}
+
+// Melee hop toward him and back. A spline turns the bot the way it travels, and a swing only lands with
+// him within 60 degrees of its facing (or the bot within 2 yd of his centre), so every other hop keeps
+// swinging. Tanks hop square to him so the hold doesn't move, the rest square to the Starlight zone they
+// stand in, else to him, so the caster band holds.
+static float HodirShedHopAxis(PlayerbotAI* botAI, Player* bot)
+{
+    auto const bearingFrom = [bot](Position const& from)
+    {
+        return std::atan2(bot->GetPositionY() - from.GetPositionY(), bot->GetPositionX() - from.GetPositionX());
+    };
+    float const square = static_cast<float>(M_PI) / 2.0f;
+
+    Unit* hodir = GetHodir(botAI);
+    bool const offHodir = hodir && bot->GetExactDist2d(hodir) >= ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL;
+    bool const tank = PlayerbotAI::IsTank(bot);
+    if (offHodir && PlayerbotAI::IsMelee(bot) && !tank)
+        return bearingFrom(hodir->GetPosition());
+
+    Position zone;
+    if (!tank && GetHodirStarlightZoneAt(botAI, bot, zone) &&
+        bot->GetExactDist2d(&zone) >= ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL)
+        return bearingFrom(zone) + square;
+
+    if (offHodir)
+        return bearingFrom(hodir->GetPosition()) + square;
+
+    return bot->GetOrientation() + square;
+}
+
+bool GetHodirShedHop(PlayerbotAI* botAI, Player* bot, Position& out, uint32& flightMs)
+{
+    Aura* cold = bot ? bot->GetAura(SPELL_BITING_COLD_PLAYER_AURA) : nullptr;
+    if (!cold)
+        return false;
+
+    // A dropped home is (0, 0), never within the slip, so the next shed takes a fresh one.
+    auto& latches = HodirLatchesFor(bot).shedHop;
+    auto latched = latches.find(bot->GetGUID());
+    if (latched == latches.end() || bot->GetExactDist2d(&latched->second.home) > ULDUAR_HODIR_SHED_HOP_HOME_SLIP)
+    {
+        Position const to = latched == latches.end() ? Position() : latched->second.to;
+        latched = latches
+                      .insert_or_assign(bot->GetGUID(),
+                                        HodirShedHopLatch{bot->GetPosition(), HodirShedHopAxis(botAI, bot), to})
+                      .first;
+    }
+
+    Position const& home = latched->second.home;
+
+    // A melee spot is only worth keeping while what it hits is in reach. Every Frozen Blows taunt moves
+    // him, and the walking legs close on him where a hop would stay put.
+    if (PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot))
+        if (Unit* victim = bot->GetVictim())
+            if (victim->GetExactDist2d(&home) > bot->GetMeleeRange(victim))
+                return false;
+
+    float const dx = std::cos(latched->second.axis) * ULDUAR_HODIR_SHED_HOP_HALF;
+    float const dy = std::sin(latched->second.axis) * ULDUAR_HODIR_SHED_HOP_HALF;
+    std::array<Position, 2> ends = {
+        ValidateStaticFloorPoint(bot, Position(home.GetPositionX() + dx, home.GetPositionY() + dy, home.GetPositionZ())),
+        ValidateStaticFloorPoint(bot, Position(home.GetPositionX() - dx, home.GetPositionY() - dy, home.GetPositionZ()))};
+
+    // Farther end first: that alternates them, and IsDuplicateMove never sees the last hop's end again.
+    if (bot->GetExactDist2d(&ends[1]) > bot->GetExactDist2d(&ends[0]))
+        std::swap(ends[0], ends[1]);
+
+    bool picked = false;
+    for (Position const& end : ends)
+    {
+        if (bot->GetExactDist2d(&end) < ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL)
+            continue;
+
+        // Tanks eat icicles, everyone else would only land in the dodge's trigger and get walked out.
+        if (!PlayerbotAI::IsTank(bot) &&
+            IsHodirWalkThroughLiveIcicle(bot, end, ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
+                                         ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
+            continue;
+
+        out = end;
+        picked = true;
+        break;
+    }
+
+    if (!picked)
+        return false;
+
+    // Up from now until just past the second tick: two moving ticks in a row drop a stack, whatever the
+    // tick before them was.
+    AuraEffect const* tick = cold->GetEffect(EFFECT_0);
+    int32 const period = tick && tick->GetAmplitude() > 0 ? tick->GetAmplitude()
+                                                          : static_cast<int32>(ULDUAR_HODIR_BITING_COLD_TICK_MS);
+    int32 const next = tick ? std::clamp(tick->GetPeriodicTimer(), 0, period) : period;
+    flightMs = static_cast<uint32>(next + period) + ULDUAR_HODIR_SHED_HOP_TICK_MARGIN_MS;
+    return true;
+}
+
+void LatchHodirShedHop(Player* bot, Position const& to)
+{
+    auto& latches = HodirLatchesFor(bot).shedHop;
+    auto const latched = latches.find(bot->GetGUID());
+    if (latched != latches.end())
+        latched->second.to = to;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.shuttle", "hop");
+}
+
+bool IsHodirShedHopInFlight(Player* bot)
+{
+    if (!bot || bot->GetMotionMaster()->GetMotionSlotType(MOTION_SLOT_CONTROLLED) != EFFECT_MOTION_TYPE)
+        return false;
+
+    auto const& latches = HodirLatchesFor(bot).shedHop;
+    auto const latched = latches.find(bot->GetGUID());
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    return latched != latches.end() && bot->GetMotionMaster()->GetDestination(x, y, z) &&
+           latched->second.to.GetExactDist2d(x, y) < 0.1f;
+}
+
+void DropHodirShedHop(Player* bot)
+{
+    // Keeps to: a hop can still be up when the shed reaches its floor.
+    auto& latches = HodirLatchesFor(bot).shedHop;
+    auto const latched = latches.find(bot->GetGUID());
+    if (latched != latches.end())
+        latched->second.home = Position();
 }
 
 bool IsHodirBitingColdShedArmed(PlayerbotAI* botAI, Player* bot)

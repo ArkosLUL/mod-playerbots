@@ -11,6 +11,7 @@
 #include "Group.h"
 #include "LastMovementValue.h"
 #include "Map.h"
+#include "MotionMaster.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -61,6 +62,21 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
         last.clear();
 }
 
+// A shed hop holds the controlled motion slot for up to 2.2 s, and every walk answers NotAllowed till it
+// lands. Too long under a 3.7 s icicle fuse, so the dodge and the shelter run cut it first.
+void CutShedHop(PlayerbotAI* botAI, Player* bot)
+{
+    if (!IsHodirShedHopInFlight(bot))
+        return;
+
+    // No reset: the idle generator's reset stops the bot mid-air if nothing moves it next.
+    bot->GetMotionMaster()->Clear(false);
+    botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get().clear();
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.shuttle", "cut");
+}
+
 }  // namespace
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
@@ -68,6 +84,7 @@ bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
     // The trigger fires only outside the release ring with somewhere to shelter on the floor, so
     // reaching here always means the bot has to cross ground it is not standing on yet.
     BreakCastPinningTheFeet(botAI, bot);
+    CutShedHop(botAI, bot);
 
     Creature* shelter = GetHodirShelter(botAI, bot);
     if (!shelter)
@@ -91,6 +108,7 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     // The trigger fires only inside a lethal radius, and it stands tanks down, so every bot that
     // reaches here is standing somewhere that kills and has about 3s of icicle fuse to leave it.
     BreakCastPinningTheFeet(botAI, bot);
+    CutShedHop(botAI, bot);
 
     std::vector<HazardCircle> const hazards = CollectHodirIcicleHazards(
         bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR);
@@ -155,8 +173,7 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
     Aura* cold = bot->GetAura(SPELL_BITING_COLD_PLAYER_AURA);
     if (!cold)
     {
-        _shedding = false;
-        _leg = Position();
+        StopShedding();
         return false;
     }
 
@@ -166,23 +183,48 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
         return false;
 
     // Once started, go down to the floor: a stack only drops on the second moving tick in a row, so
-    // stopping between stacks wastes the walk already done.
+    // stopping between stacks wastes the moving already done.
     if (_shedding && cold->GetStackAmount() <= ULDUAR_HODIR_BITING_COLD_SHED_FLOOR)
     {
-        _shedding = false;
-        _leg = Position();
+        StopShedding();
         return false;
     }
 
     _shedding = true;
 
-    // A channel pins the feet for its whole length, so legs get accepted and never walked. A normal cast
-    // ends and then walks, so only a channel is broken.
-    if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) && bot->IsMovementPreventedByCasting())
-        botAI->RequestSpellInterrupt();
+    // false so instants still go out mid-hop. Cast-time spells are refused while moving anyway.
+    if (IsHodirShedHopInFlight(bot))
+        return false;
 
-    // Hold one leg till it's walked instead of re-deriving under the walk. On arrival derive the next leg,
-    // don't stop: only the chain covers consecutive aura ticks.
+    // A channel pins the feet for its whole length, so it's broken. A normal cast is left to finish: a walk
+    // waits for it, but a hop launches mid-cast and cancels it.
+    if (bot->IsMovementPreventedByCasting())
+    {
+        if (!bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            return false;
+
+        botAI->RequestSpellInterrupt();
+    }
+
+    Position hop;
+    uint32 flightMs = 0;
+    if (GetHodirShedHop(botAI, bot, hop, flightMs))
+    {
+        _leg = Position();
+        ReleaseStalledWalk(botAI, bot);
+
+        float const speedXY = bot->GetExactDist(&hop) * IN_MILLISECONDS / flightMs;
+        if (!JumpTo(bot->GetMapId(), hop.GetPositionX(), hop.GetPositionY(), hop.GetPositionZ(),
+                    MovementPriority::MOVEMENT_COMBAT, speedXY, ULDUAR_HODIR_SHED_HOP_SPEED_Z))
+            return false;
+
+        LatchHodirShedHop(bot, hop);
+        return true;
+    }
+
+    // No hop (a live icicle, the floor check pulled both ends in, a melee spot out of reach), so walk. Hold one leg
+    // till it's walked instead of re-deriving under the walk. On arrival derive the next leg, don't stop:
+    // only the chain covers consecutive aura ticks.
     if (!IsEmptyPosition(_leg))
     {
         float const remaining = bot->GetExactDist2d(&_leg);
@@ -215,6 +257,13 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), leg.GetPositionX(), leg.GetPositionY(), leg.GetPositionZ(), false,
                   false, false, false, MovementPriority::MOVEMENT_COMBAT);
+}
+
+void HodirBitingColdShedAction::StopShedding()
+{
+    _shedding = false;
+    _leg = Position();
+    DropHodirShedHop(bot);
 }
 
 bool HodirRaidPositionAction::Execute(Event /*event*/)

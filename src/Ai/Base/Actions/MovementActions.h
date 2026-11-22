@@ -44,7 +44,10 @@ public:
     MovementAction(PlayerbotAI* botAI, std::string const name);
 
 protected:
-    bool JumpTo(uint32 mapId, float x, float y, float z, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
+    // speedXY and speedZ default to run speed. The jump lasts its length over speedXY, and MoveJump
+    // drops one at a speedXY of 0.1 or less.
+    bool JumpTo(uint32 mapId, float x, float y, float z, MovementPriority priority = MovementPriority::MOVEMENT_NORMAL,
+                float speedXY = 0.0f, float speedZ = 0.0f);
     bool MoveNear(uint32 mapId, float x, float y, float z, float distance = sPlayerbotAIConfig.ContactDistance,
                   MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
     bool MoveToLOS(WorldObject* target, bool ranged = false);

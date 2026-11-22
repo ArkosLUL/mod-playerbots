@@ -1028,6 +1028,26 @@ class HodirReader(unittest.TestCase):
         self.assertEqual(hodir.still_armed_ms(samples, [(0, 3)], [], [], 0, 2000, blows=[(1000, 5000)]), 1000)
         self.assertEqual(hodir.still_armed_ms(samples, [(0, 3)], [], [(0, 2000)], 0, 2000, blows=[(0, 5000)]), 0)
 
+    def test_a_shed_runs_from_its_first_verdict_to_the_floor(self):
+        changes = [(0, 4), (3000, 3), (5000, 2), (7000, 1), (20000, 4), (40000, 1)]
+        oks = [1000, 3000, 5000, 21000, 23000]
+        # The second shed was cut short: the floor came long after its last verdict.
+        self.assertEqual(hodir.shed_spans(oks, changes), [(1000, 7000), (21000, 25500)])
+        self.assertEqual(hodir.shed_spans([1000, 5000], changes, gap=3000), [(1000, 3500), (5000, 7000)])
+
+    def test_stacks_shed_counts_every_drop_and_the_removal(self):
+        changes = [(0, 4), (2000, 3), (2500, 4), (4000, 2), (6000, 0)]
+        self.assertEqual(hodir.stacks_shed(changes, 0, 6000), 5)
+        self.assertEqual(hodir.stacks_shed(changes, 2000, 4000), 2)
+        self.assertEqual(hodir.stacks_shed([], 0, 1000), 0)
+
+    def test_kept_near_only_scores_a_bot_that_started_there(self):
+        other = [(0, 0.0, 0.0), (1000, 10.0, 0.0)]
+        seg = [(0, 1.0, 0.0), (500, 2.0, 0.0), (1000, 2.0, 0.0), (1500, 9.0, 0.0)]
+        self.assertAlmostEqual(hodir.kept_near(seg, other, 3.0), 0.75)
+        self.assertIsNone(hodir.kept_near([(0, 5.0, 0.0)], other, 3.0))
+        self.assertIsNone(hodir.kept_near(seg, [], 3.0))
+
     def test_the_rare_cache_counts_only_a_kill_with_no_shatter(self):
         self.assertIn("kept", hodir.rare_cache("kill", 178151, None))
         self.assertIn("1.8s inside", hodir.rare_cache("kill", 178151, None))

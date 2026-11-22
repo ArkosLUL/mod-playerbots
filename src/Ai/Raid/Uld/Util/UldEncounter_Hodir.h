@@ -186,10 +186,36 @@ inline constexpr float ULDUAR_HODIR_HOLD_BEARING_MIN_GAP = 3.0f;
 inline constexpr float ULDUAR_HODIR_HOLD_REAIM_GAP = 5.0f;
 inline constexpr uint32 ULDUAR_HODIR_HOLD_REAIM_MS = 2000;
 
-// A Biting Cold stack only comes off on the second moving tick in a row, so shedding needs over a second
-// of unbroken travel: 6 yd legs, chained. A jump in place can't fake it, MoveJump is airborne ~1.4 ms.
+// A Biting Cold stack only comes off on the second moving tick in a row. The walking fallback gets that
+// from 6 yd legs, chained.
 inline constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
 inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 4;
+
+// 62039's period. The hop reads the live timer off the aura, this is only for the checks below.
+inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_TICK_MS = 1000;
+
+// The shed hops between two ends this far either side of where it started, so each hop lands a yard
+// off its start and the bot never strays more than this from its spot.
+inline constexpr float ULDUAR_HODIR_SHED_HOP_HALF = 0.5f;
+
+// An end the floor check pulls back closer than this to the bot isn't a hop.
+inline constexpr float ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL = 0.3f;
+
+// How long a hop stays up past the second tick it covers. The aura ticks before the spline moves in the
+// same unit update, so this only absorbs rounding.
+inline constexpr uint32 ULDUAR_HODIR_SHED_HOP_TICK_MARGIN_MS = 150;
+static_assert(ULDUAR_HODIR_SHED_HOP_MIN_TRAVEL * 1000.0f /
+                      (2 * ULDUAR_HODIR_BITING_COLD_TICK_MS + ULDUAR_HODIR_SHED_HOP_TICK_MARGIN_MS) >
+                  0.1f,
+              "MoveJump drops a jump at 0.1 yd/s or slower, and the shortest hop over the longest flight is that slow");
+
+// Peaks about 0.4 yd up.
+inline constexpr float ULDUAR_HODIR_SHED_HOP_SPEED_Z = 4.0f;
+
+// Pushed this far off its spot (a dodge, a knockback), a shedding bot hops around where it stands now.
+inline constexpr float ULDUAR_HODIR_SHED_HOP_HOME_SLIP = 1.5f;
+static_assert(ULDUAR_HODIR_SHED_HOP_HALF * 2.0f < ULDUAR_HODIR_SHED_HOP_HOME_SLIP,
+              "landing on the far end must not count as being pushed off the spot");
 
 // Standing in Starlight is worth a stack: +50% to every cast and swing against what the tick costs.
 inline constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 5;
@@ -328,9 +354,24 @@ bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& toler
 // shuttle can be laid out around it.
 bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
 
-// Tanks shuttle square to the line he's held on, so neither end drags him off it. A bot in a landed
-// shelter or in Starlight shuttles across it, the rest take the nearest leg clear of raid and icicles.
+// Walking fallback for when no hop works. Tanks shuttle square to the line he's held on, so neither end
+// drags him off it. A bot in a landed shelter or in Starlight shuttles across it, the rest take the
+// nearest leg clear of raid and icicles.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
+
+// The shed's next hop: whichever end of a 1 yd line through the bot's spot it isn't standing on, and how
+// long the hop has to stay up to cover the next two Biting Cold ticks. False when no end is usable (a live
+// icicle, or the floor check pulled it in) or a melee spot is out of its target's reach, and then the shed
+// walks.
+bool GetHodirShedHop(PlayerbotAI* botAI, Player* bot, Position& out, uint32& flightMs);
+
+void LatchHodirShedHop(Player* bot, Position const& to);
+
+// True while the bot is up in a hop the shed launched. A knockback replaces the spline, so it isn't one.
+bool IsHodirShedHopInFlight(Player* bot);
+
+// Shed over, so the next one hops around wherever the bot stands by then.
+void DropHodirShedHop(Player* bot);
 
 // True when the shed would start walking a bot standing still out of a fire. Nodes that step aside for
 // the shed ask this, not HodirBitingColdTrigger, which fires on any stack since the action owns the latch.
