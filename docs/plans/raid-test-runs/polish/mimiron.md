@@ -245,3 +245,111 @@ row with verdict `OK` from a bot between step 1 and phase 2, and no `follow`/`mi
 A-B-A in the Z and H spans (`--flips`).
 
 **Questions for the user:** none.
+
+## Round 4 (build 697052475, rounds 1-3 built)
+
+**Data:** `raidtest.py report --boss mimiron --raid uld --head 697052475 --pulls 10 --runs
+tr-20261122-164334-10,tr-20261122-164414-11,tr-20261122-164434-12,tr-20261122-164836-13`. No DC veto
+inside any pull. Trace scripts in the lane scratchpad (`mim4/`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `…-164334-10` | `603_12_…_1795365867` | wipe 8:44 in P3, ACU ~74% | 32: P1 Proximity Mine 2; P2 Flames 8 (3 melee at 3:26-3:28 crossing fire in a Frost Bomb escape under Heat Wave, 5 at 4:03-4:10 after a barrage), Heat Wave 1; P3 Bomb Bot 10, Water Spray 6, Assault Bot 3, Junk Bot 2 |
+| uld3 | `…-164414-11` | `603_13_…_1795365908` | wipe 10:30 in P3 at Berserk, ACU ~18% | 32: P2 Flames 1; P3 Bomb Bot 12, Water Spray 7, Junk Bot 2, Assault Bot 1, Berserk Plasma Ball 9 |
+| uld2 | `…-164836-13` | `603_15_…_1795366169` | wipe 10:30 in P4 at Berserk, parts at 20-23% | 31: P1 Plasma Blast on the main tank 1; P4 Rocket Strike 2, Hand Pulse 2; Berserk 26 |
+| uld2 | `…-164434-12` | `603_14_…_1795365875` | voided: "kill" 2:42, 2 deaths | normal mode, see below |
+
+Three valid pulls, 95 deaths: Berserk 35, Bomb Bot 22, Water Spray 13, Flames 9 (all P2), Assault and Junk
+Bots 4 each, P4 Rocket Strike and Hand Pulse 2 each, mines 2, Heat Wave 1, Plasma Blast 1. First phase 4
+of a bot-only pull (uld2, 8:24).
+
+**Verdict on rounds 1-3 (handover):** held. Every pull ran `mimiron.handover` 1, 2, 3 once, walk in
+12.9-13.2 s before P2, one hold band (240, 240, 150 deg, 0 fire). Raid median 36-40 yd out at +10 s and
+the walk in, 18 yd at P2; on a P2 slot at P2 22, 24 and 19 of 25. Handover fire deaths 0 (window 8: 10
+in three of four pulls), handover Flames 14k/106k/22k (window 8: 206k-1.75M). Healer mana across it:
+3 of 12 healers lost 5-15 points (window 8: 10 of 16 lost 5-22). The mana wall is gone: P2 ran 103, 78
+and 83 s (window 8: 136-258 s, human 80-89 s) with 9, 0 and 1 deaths (window 8: two pulls wiped in P2).
+Still no handover drink in any pull. Round 3's player-led path can't show in bot-only pulls.
+
+**Voided uld2 run `tr-20261122-164434-12` (DC side, for the orchestrator).** Not a hard-mode pull and not
+a real kill:
+
+1. The pool arrived straight from its Iron Assembly kill (`tr-…-163606-9`, instance 11) unrefreshed: the
+   first snapshot (t 168 ms) has all 25 stacked on the drop (2717.0, 2570.7) at 20-100% health and 0-99%
+   mana, no pre-roll snapshot at all, and DC's record shows `start: engaged`, `startStep: object` never
+   reached, status only "preparing pull 1". The engage came ~3 s after the run start.
+2. What engaged him: the moonkin Uldyas had cast Starfall (53201) at Iron Assembly 1 s before that kill
+   (`603_11_stormcaller-brundir_1795365440`, t 365206). AzerothCore keeps a positive aura's remaining time
+   across logout (`PlayerStorage.cpp` `_LoadAuras`, only negative or `AURA_EXPIRES_OFFLINE` auras tick
+   offline), so it came back live 70 s later, which only a logout between the runs explains (a 10 s aura);
+   at t 2 ms its stars (53195, 53198) hit Mimiron, whose seat on
+   the MK II at (2744.65, 2569.46) is 27.7 yd from the drop, inside Starfall's 30 yd.
+3. So no button: normal mode. Phase 1 opened 7.7 s in (normal script: talk, sit at 6 s, +2 s; hard mode
+   13 s), no Flames 64566 and no Emergency Mode in the trace.
+4. The "kill": the raid also damaged Mimiron himself (33350, 1,742,400 hp): 100 → 83% in the first 20 s
+   (Starfall), then 82 → 0% across 2:01-2:42 in P2 (pets, Lightning Bolt, Corruption, Devastate and procs
+   targeting him; 120 casts at him in the first 10 s, ~560 in 1:50-2:40). His death set `BOSS_MIMIRON` DONE
+   (`BossAI` death), so RaidObs closed `kill` and DC's `bossState(10)==3` predicate called success. In the
+   ten hard-mode traces he never leaves 100% (at most 7 casts at him, in two human-led pulls). Why he is hittable only
+   here is not traced; the likely difference is that the Starfall put him into combat before
+   `JustEngagedWith` made him NOT_SELECTABLE.
+
+For DC: strip carried-over auras (or at least periodic damage ones such as Starfall, Hurricane, Volley,
+Blizzard, Death and Decay) at spawn or before the teleport, or keep the drop over 30 yd from his seat;
+and a refresh-before-teleport would also have stopped the low-health arrival. The runner's void was right.
+
+**Failure picked: the Magnetic Core loop stops once the Aerial Command Unit is at or below 25%.**
+Berserk (35) is the largest bucket, and phase 3 is where the time goes: 244 s+ (uld1), 375 s (uld3), 196 s
+(uld2). Airborne the unit loses 0.04-0.18%/s (grounded 0.42-1.77%/s), so after two landings it is all
+cores. In uld3 the second landing ended at 6:17 with the unit at 28%, 23% by 6:29; the third Assault Bot
+died at 6:39 and its carrier Uldzay wrote `mimiron.corestep no-corpse` at 6:40, then three more corpses
+(7:40, 9:19, 9:37) went unlooted (`no-corpse` again from the next carriers at 9:19 and 9:52). The unit sat at
+18-23% for 211 s until Berserk, the 15% fire bot sweep never came (fire bots 8.8 alive on average, 20 at
+most), and 24 of uld3's 32 deaths fell in that stretch (Bomb Bot 7, Water Spray 6, Junk Bot 2, Berserk 9).
+uld2 hit the same gate: its third Assault Bot died at 6:44 with the unit at ~10%, `no-corpse` at 6:45, and
+the unit took until 7:52 to die airborne; phase 4 then hit Berserk with the parts at 20-23%, ~65 s short.
+
+Root cause: `MimironMagneticCoreAction::Execute` (`UldActions_Mimiron.cpp:1565`) gated the fetch on
+`!acuLow` (`GetHealthPct() <= ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT`) whether or not a core was in hand. The
+trigger still fired on the corpse, the action skipped collecting and fell through to `if (!core)` →
+`no-corpse`. The 25% line is one of the hold's escapes ("where the phase ends before another core
+matters"), written for a core in hand; at 0.04-0.18%/s airborne a bot raid's phase does not end.
+
+**Classification:** bug. The strategy means every corpse to become a landing (the core is the phase's only
+killable window, the hold ends once the next Assault Bot is up); the 25% gate was meant to spend a held
+core, not to stop fetching one.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player):
+`MimironMagneticCoreAction::Execute` skips the fetch only when the core in hand is due now
+(`core && (expiring || acuLow || (chaining && ready))`); with empty bags the carrier fetches at any unit
+health. Unchanged above 25%, and a held core at or under 25% still goes down at once. Header comment and
+findings doc say the escapes end the hold, never the fetch.
+
+**Next window should show** (`mimiron.py --p3`, `--notes mimiron.corestep`):
+
+- With the unit at or under 25% airborne and an Assault Bot corpse up, `loot` then `use` from the carrier,
+  never `no-corpse` (uld3 3, uld2 1 this window), and a third landing in pulls that reach 25%.
+- Phase 3 shorter in those pulls: the stretch at or under 25% airborne ~30-60 s, not 211 s (uld3) or 68 s
+  (uld2); a uld3-like pull reaching the 15% fire bot sweep and phase 4.
+- Nothing different above 25% (core steps, landings and their cadence as this window).
+
+**Not picked.**
+
+- Bomb Bots (22, uld1 10, uld3 12; uld2 0). In uld2 ranged cast at Bomb Bots 2.8 times a second of
+  bomb-alive time and killed all eight; in uld1 and uld3 0.7, and from 6:51 on uld3's got 0-3 casts each.
+  Ranged with the bomb as target spent GCDs on `corruption on attacker`, `shadow word: pain on attacker`
+  and the like (rel 15-19.5, above the nukes at 0.5-5) on other units, and dodged fire bot lanes. Part of
+  it is phase 3 length (fewer living ranged, bigger fire bot pile), which this fix shortens; the "on
+  attacker" DoTs during a Bomb Bot are the candidate for round 5.
+- Water Spray (13) with 7.5-8.8 fire bots alive on average (15-20 at most) in uld1 and uld3: the findings
+  doc's own cull warning ("nine to fifteen alive ... would say a cull was right"). uld3's pile came from the
+  missing 15% sweep (above). uld1 never got the unit under 74%, so its pile was the kept-bot plan itself; a
+  plan question if it persists after this fix.
+- uld1 P2 Flames (8): melee crossing fire in the 3:26 Frost Bomb escape under Heat Wave, and four ranged
+  and a healer after the 4:06 barrage.
+- Phase 4 core: in uld2 the carrier looted a phase 3 corpse at phase 4 start (8:24), held it, and walked it
+  toward the unit from 9:19 to Berserk, a melee off the rendezvous. The core is a phase 3 tool; a small
+  `IsMimironPhase3` gate on `MimironMagneticCoreTrigger` would stop it.
+- Handover drinks still 0.
+
+**Questions for the user:** none.
