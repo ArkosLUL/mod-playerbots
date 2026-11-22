@@ -993,6 +993,7 @@ struct MimironFightState
     std::unordered_set<ObjectGuid> coreCorpses;
 
     uint32 coreSpentMs = 0;
+    ObjectGuid playerCoreCarrier;
 
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
@@ -1672,25 +1673,41 @@ Player* GetMimironCoreCarrier(PlayerbotAI* botAI)
     if (!botAI)
         return nullptr;
 
-    Group* group = botAI->GetBot()->GetGroup();
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
     if (!group)
         return nullptr;
 
+    MimironFightState& state = MimironFightStateFor(bot);
+
+    Player* melee = nullptr;
     Player* fallback = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !GET_PLAYERBOT_AI(member))
+        if (!member || !member->IsAlive() || member->GetMap() != bot->GetMap())
             continue;
+
+        if (IsRealPlayer(member))
+        {
+            if (member->GetGUID() == state.playerCoreCarrier ||
+                member->HasItemCount(ITEM_MIMIRON_MAGNETIC_CORE, 1, false))
+            {
+                state.playerCoreCarrier = member->GetGUID();
+                return member;
+            }
+
+            continue;
+        }
 
         if (!fallback)
             fallback = member;
 
-        if (!PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsTank(member))
-            return member;
+        if (!melee && !PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsTank(member))
+            melee = member;
     }
 
-    return fallback;
+    return melee ? melee : fallback;
 }
 
 namespace
