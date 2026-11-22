@@ -1463,7 +1463,6 @@ bool OnThisInstance(Player const* member, Player const* bot)
            member->GetInstanceId() == bot->GetInstanceId();
 }
 
-// Opened by the Colossus's death, shut by Thorim's reset. A miss reads as shut.
 bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -1657,8 +1656,6 @@ Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
     if (!giant || giant->IsInCombat())
         return nullptr;
 
-    // note: the 25-man Giant spawns without his player immunity and the cached Colossus lookup can read empty while
-    // he lives, so neither works as this gate.
     if (!ThorimColossusDoorsOpen(botAI, bot))
         return nullptr;
 

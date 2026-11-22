@@ -336,8 +336,8 @@ trash 7 (Iron Ring Guard 4, Runic Smash 3); phase 2 Chain Lightning 2.
 
 - Code: `ThorimGauntletLeadRuneGiant` (`UldEncounter_Thorim.cpp:1646`) gated the walk on the Giant without
   `UNIT_FLAG_IMMUNE_TO_PC`. Past the last waypoint, `ThorimGauntletLeadColossus` (`:1632`) returns nothing once
-  the leader is inside 30 yd of the Colossus, or when the cached Colossus lookup reads empty (uld1 at 1:07.9: 37 yd
-  out), so the Giant check came next and passed.
+  the leader is inside 30 yd of the Colossus, or when the cached Colossus lookup reads empty (all three pulls: the
+  leader stood 37 / 72 / 58 yd out), so the Giant check came next and passed.
 - Core/DB: the flag is set only on the 10-man templates (`2026_08_03_02`: 32872, 32873). In 25-man the creature's
   template is the difficulty row (`Creature::InitEntry`, `m_creatureInfo`), and 33148/33149 have `unit_flags` 0, so
   the 25-man Giant is pullable from the start. Trace: the Giant took player damage at ~1:59-2:01 in all three

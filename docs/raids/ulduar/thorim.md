@@ -183,7 +183,7 @@ its lane. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so t
 firing spot. Every other bot stays off him and Sif while he is up there (`ThorimDpsTargetAllowed`,
 `ThorimBalconyGuardMultiplier`, the arena target guard). A real player changes nothing: the first
 corridor bot there starts phase 2 if he has not. Measured once (25-man): the first corridor bot to
-latch `BALCONY_5` picked him 0.3 s later, and phase 2 started 3.7 s after that.
+latch `BALCONY_5` picked him 0.3 s later, and phase 2 started 3.4 s after the pick.
 
 The healer split (arena 13 bodies / 1.48 M / 2 healers against gauntlet 11 / 0.69 M / 2) is left
 uneven on purpose: the gauntlet's clock is the lever, not its survivability.
