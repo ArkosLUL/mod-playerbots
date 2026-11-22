@@ -361,3 +361,128 @@ the walking table.
   no regression; radial hops would trade it for a full outbound half facing away.
 - Next window adds: `--shed` melee walked legs above zero (the out-of-reach sheds), with melee in
   reach still the figure to judge.
+
+## Round 5 (2026-11-22, on Custom cbc0f206b)
+
+**Data.** Window 10 (build `697052475`: rounds 3 and 4, roster DKs re-specced to 71 points),
+`raidtest.py report --boss hodir --raid uld --head 697052475 --pulls 10`; windows 5, 7, 8 and 9 re-read
+beside it (window 9, round 2 code: `603_30_hodir_1795357824`, `603_31_hodir_1795358182`,
+`603_33_hodir_1795358594`, kills 3:49 / 3:55 / 3:25). Scratch scripts in the session scratchpad
+`hodir-r5/` (role and slice split from snapshot `dealt` by target, buff states, breakers, hold geometry).
+
+| Pool | Run | Trace | Out | Cache | Deaths | Pace 0-3:00 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261122-165800-16` | `603_18_hodir_1795366726` | kill 3:27 | shattered 3:00.1 | 0 | 203.6k |
+| uld2 | `tr-20261122-171946-23` | `603_25_hodir_1795368040` | kill 3:23 | shattered 3:00.0 | 0 | 205.0k |
+| uld3 | `tr-20261122-170422-19` | `603_21_hodir_1795367106` | kill 3:23 | shattered 3:00.0 | 1: off-tank (bear) Frozen Blows swing 2:09.8, in a window, Frenzied Regeneration up | 197.6k |
+
+Window 9 deaths: uld1 2 (the un-respecced DK off-tank, Frozen Blows swing in a window, no button up,
+1:19.8 and 3:39.1), uld2 1 (ranged Freeze 3:04.5, 3 Biting Cold stacks, outside a window), uld3 0.
+
+**Stop rules.** Not polished: kills on all three with 0/0/1 deaths, but the cache shattered in all
+three (234.6k wanted). Pace is picked for the second time (rounds 3 and 5), not three running.
+
+**Round 4 verdict (hops), against window 9's walking legs.** The raid walked less and kept its spots;
+Biting Cold did not fall.
+- Walked 10.6-11.3k yd a pull against 11.6-14.6k (w9) and 12.8-15.5k (w8); 31-36% undone within 5 s
+  against 35-41%.
+- `--shed` (w9 → w10): ranged 0.41-0.48 → 0.49-0.53 stacks/s, ticks used 86-93% → 95-115%, off the
+  spot p50 8.6-10.9 → 0.5 yd (p90 12.4-22.9 → 4.1-6.3); healers p50 4.0-10.2 → 0.3-0.6; tanks
+  4.1-13.3 → 0.5; melee p50 10.5-11.4 → 0.5-3.1, ticks 74-98% → 83-100%. Melee in reach through
+  sheds that started there 53-100% → 70 / 90 / 100%; Starlight held 74-100% (ranged and healers).
+  Hops 11-126 a role against 0-30 walked legs (uld2 melee 30: the out-of-reach sheds).
+- Biting Cold 0-3:00 0.78-0.89M → 0.92-1.01M, bot-seconds at 4+ stacks 30-36 → 37-58, standing still
+  at the arm point 15-32 → 21-29; no Biting Cold death in either window. Ice Shards 6-12 → 9-17 hits;
+  no Flash Freeze death. Snapshots read `moving` 1 / `movegen` 16 in flight.
+- Cost: melee deal 0.57-0.69 of their standing rate while shedding (walking legs 0.64-0.70), and
+  shedding is 2-5% of melee time, so the whole melee shed costs 0.3-1.6k dps a pull.
+- **Melee hop facing, measured:** of melee shedding samples beyond 2 yd of him, 45-53% face more than
+  60° off him (walking legs 56-72%). A facing fix would buy back at most about half of the 0.3-1.6k
+  above, so no question to the user.
+
+**Round 3 verdict (first data).** Fire latch held out of the band with no stand: 3 / 11 / 8 runs,
+longest 4.3 / 7.3 / 3.6 s (w8: runs of 20-43 s). Ranged in a legal fire over the first fire window
+47 / 51 / 60% (target 45%+; w8 15-22% in four of six). Storm Cloud: carrier within 2 yd of its rally
+50 / 68 / 41% (w7-w8 18-27%); parked receivers inside the pulse 57 / 45 / 41% (target 50%+); clouds
+timed out with charges left 2 / 3 / 2 (target none). Boss dps 0:20-0:57 265 / 287 / 223k (w7-w8
+213-263k). Held, the storm part only in part.
+
+**Round 2's mechanic:** one off-tank Frozen Blows death in 9 windows (w8 1 in 12), button up. Option
+(b) stays unbuilt.
+
+**Picked: pace.** Where the 30-37k goes, boss dps from his health per slice (open 0-~20 s, first fire
+window to the first landing, then landing to landing), w5 (uld1 236k, uld3 216k) → w10:
+
+| Slice | w5 | w9 | w10 | w10 against w5, over 0-3:00 |
+|---|---|---|---|---|
+| open | 67-71k | 46-66k | 59-78k | 0 |
+| first fire window | 325-331k | 182-245k | 221-286k | −14.6k |
+| cycle 2 | 242-265k | 192-226k | 177-244k | −9.9k |
+| cycle 3 | 203-207k | 195-206k | 180-262k | +1.3k |
+| to 3:00 | 120-198k | 143-197k | 147-239k | +4.3k |
+
+By role, damage on Hodir off snapshot `dealt` by target (~95% of his health loss; helpers deal the
+rest): ranged w5 125k / 78k → w9 67-89k → w10 72-82k; melee w5 92k / 120k → w9 85-94k → w10
+103-112k (both DKs 4-6k each → 10-14k each after the re-spec, so non-DK melee are flat to down);
+tanks 6-8k, healers 0. With a fire burning boss dps ran 263-283k (w5) against 215-244k (w10); with
+none 150-155k against 129-175k. The first fire window's loss is ranged: 206 / 171k (w5) against
+96 / 167 / 104k, with Storm Power on ranged 52-67% of it against 4 / 69 / 17% (the first carrier was
+a melee bot or a healer standing away from the fires, the boss's pick) and their fires 26-31 yd from
+him against 21-23 (where the freed mages dropped them).
+
+Per ranged bot, total dealt per second: ~20k in a fire with Storm Power, ~10k in a fire, 4-6k with
+neither. The largest share the strategy controls is **ice**: ranged spend 27-32% of their time
+shooting helper and trapped blocks (w7-w10; w5 uld1 18%) at 4.6-6.7k a second against 9.5-14.5k on
+Hodir, moving 39-48% of it. New `--blocks` line, w10: 543 / 552 / 486 bot-seconds, 5.8 / 5.1 / 6.1k a
+second (on Hodir 10.9 / 12.3 / 13.2k), moving 46 / 45 / 44%, walked by `hodir raid position action`
+19 / 23 / 23%, over 35 yd from the block 22 / 27 / 26% (w5 uld1 330 bot-seconds, 28%, 11%).
+
+**Root cause, bug** (the findings doc's open item): the targeting node hands a ranged bot a block, and
+`HodirRaidPositionTrigger` (relevance +0, so it runs whenever the bot's casting leaves room) walks it
+to its Starlight or fire stand, or by the band and declump rules, away from the block. Of its accepted
+moves on a bot targeting a block, those under a Starlight stand went away from the block 48-74% of the
+time and ended past 30 yd of it 41-79% (w9-w10, 111-143 such moves a pull); under no stand, 32-60%
+ended past 30 yd. `reach spell` then walks it back (2-10% of on-block samples).
+
+**Fix** (`UldTriggers_Hodir.cpp`): `HodirRaidPositionTrigger::IsActive` stands down for a ranged
+non-healer whose `current target` is a live helper (32938) or trapped-raider (32926) block, and notes
+`hodir.stand` `block`. Healers are left out: nothing hands them a block, yet in w10 uld1 their snapshot
+target was a block 100-112 s each. Dodge, shelter run and shed are separate nodes and still fire. Holds for 10
+and 25 and hard mode alike: the blocks and the breaker budget are the same, and nothing here reads a
+player.
+
+**Second, the reach audit's Hodir row, confirmed** (his combat reach 7.5 since `2026_11_06_01`):
+- Tank hold: still, he sat a median 2.5-5.0 yd off the hold point (p90 5.3-9.5) in windows 5-10; his
+  holder was a median 5.4-9.2 yd away, up to his chase stop of 9.5 (7.5 + 1.5 + `CONTACT_DISTANCE`); 26 / 37 /
+  29% of the melee within 10.33 yd of him stood outside the held fire's 11 yd (w9 16-36%, w5 19-26%),
+  none of them would with him on the point. Fix (`UldEncounter_Hodir.cpp`, `.h`): `HodirTankSpot`
+  stands both tanks the live chase stop off the point (`GetCombatReach` of both plus
+  `CONTACT_DISTANCE`, 9.5 here) instead of the fixed 4.5, so he stops on it; the off-tank's spot is
+  already inside his chase stop when it taunts, so the taunt leaves him there. The spot still goes
+  through `ValidateStaticFloorPoint`; the farthest one now sits 34.5 yd from the centre against 29.5
+  (not navprobed: no Docker in this lane).
+- Starlight: a stand 10.0-10.33 yd from him was inside his melee range; starlit casters stood there in
+  0.1-2.6% of their starlit samples, and he turned on a healer or ranged bot in 0-9 samples a pull.
+  Fix: the stand's inner edge is his live `GetMeleeRange(bot)`; `ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP`
+  and `_HOLD_TANK_OFFSET` deleted. Reader `STARLIGHT_BAND` follows (10.33).
+
+Reader (`hodir.py`, tests): `--blocks` ends with the ranged-on-ice line above; `STARLIGHT_BAND` from
+his melee range. Findings doc: breakers, tank hold, Starlight gap, Storm Power's aura 61 (`MOD_SCALE`,
+not haste), the pace split.
+
+**Next window should show** (`--blocks`, `--hold`, `--pace`):
+- ranged shooting ice: walked by the position node near 0% (19-23%), moving under ~30% (44-46%), over
+  35 yd from the block under ~10% (22-27%), dealt per second up from 5.1-6.1k, bot-seconds under 400
+  (486-552); mage blocks and "next fire" after each landing sooner (15-23 s); `hodir.stand` `block`
+  in the notes.
+- `--hold`: "Hodir more than 5 yd off the hold point" in fire windows well under this window's 20-30 s;
+  melee within 10 yd of him inside the held fire 90%+ (72-81%).
+- pace 0-3:00 up roughly 10k from 198-205k: ~150 bot-seconds back on Hodir at ~11k plus earlier fires.
+  Still short of 234.6k; what is left sits with Storm Power on ranged in the first fire window.
+- watch: breakers standing within 15 yd of him (icicle or Freeze shared with the melee), ranged Ice
+  Shards hits, and no main-tank death from the tanks standing 9.5 yd off.
+
+**Also seen, not picked.** Storm Power per cloud 5.5-6.1 with 2-3 clouds a pull timing out: a healer
+or ranged carrier standing out of a fire and away from the others (uld3 25.8-55.8 s: three charges in
+30 s) gathers nobody inside the 15 yd collect leash. The fourth helper wave (~2:35, him at 21-29%)
+costs 98-154 bot-seconds on ice for a fire that lands ~2:50-2:55; roughly a wash before 3:00.
