@@ -196,7 +196,9 @@ definition alone:
     40%; class buttons held to 25%; `lk.defensive`, `lk.humancall`), plus `icc lich king brake`
     (non-holders at 90% of the holder's threat, frees at 80%).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
-  open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
+  open and not live, its positions navprobed in the stem's helpers. No raid-wide staging. A stem's
+  target row sits above its stand row, so a bot takes a new pick before it walks back to its spot.
+- duties: humans hold none, and each stem's `IsDutyBot` counts a selfbot as a human.
 
 **The root only dispatches.** `ICCStrategy.cpp` adds nodes and runs `OnTick` in
 `IccEncounterDefinitions()` order, and adds multipliers in its own: Marrowgar, Deathwhisper,
