@@ -152,6 +152,16 @@ bool FlashHealOnPartyMemberTrigger::IsActive()
     return !penanceId || bot->HasSpellCooldown(penanceId);
 }
 
+bool ShadowfiendTrigger::IsActive()
+{
+    if (!SpellNoCooldownTrigger::IsActive())
+        return false;
+
+    // the fiend returns a fixed ~60% of the bar on a 5 min cooldown, so a healer casting it near full
+    // loses most of it to the cap; shadow casts it on cooldown for the damage
+    return !PlayerbotAI::IsHeal(bot) || AI_VALUE2(uint8, "mana", "self target") <= HEALER_MANA_PCT;
+}
+
 bool PriestHymnOfHopeTrigger::IsActive()
 {
     if (!AI_VALUE2(bool, "has mana", "self target"))

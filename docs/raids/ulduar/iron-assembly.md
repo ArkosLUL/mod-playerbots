@@ -290,10 +290,9 @@ phase. Hard mode only — the normal order kills him first, so it would never re
 each member takes ~100 s and Steelbreaker is alone at 3:20–4:00. In all three pulls of 21 Nov at
 least two healers were under 10% mana within 25 s of it, priests first (2:49–3:37); the raid sagged under High
 Voltage and the first non-tank death set off the cascade. Uld1 still took him to 7%.
-**`iron assembly shadowfiend hold`** keeps a healer's Shadowfiend until its mana is ≤ 50%: it
-returns about half the bar (traced 1.8% → 54.7%) on a 5 min cooldown, so one counts per pull: the
-class node fired it 8–23 s in at 80–95% mana, where the full bar capped the return at 5–19%, and the
-second came back at 5:08, after the cascade.
+A healer's Shadowfiend waits for ≤ 50% mana ([priest](../../classes/priest.md#cross-spec)): ungated,
+it fired 8–23 s in at 80–95% mana here, the full bar capping the return at 5–19%, and the second came
+back at 5:08, after the cascade.
 
 **One round goes at the pull**, by the user's call, to speed the fight up: while all three are up and
 within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health), trinkets,

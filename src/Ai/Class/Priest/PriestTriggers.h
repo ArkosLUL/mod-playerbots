@@ -59,6 +59,10 @@ class ShadowfiendTrigger : public SpellNoCooldownTrigger
 {
 public:
     ShadowfiendTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "shadowfiend") {}
+
+    bool IsActive() override;
+
+    static constexpr uint8 HEALER_MANA_PCT = 50;
 };
 
 class InnerFocusTrigger : public SpellNoCooldownTrigger

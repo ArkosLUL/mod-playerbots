@@ -107,9 +107,6 @@ void DefineIronAssembly(EncounterBuilder& e)
             {"wrath of air totem", "windfury totem", "set wrath of air totem", "set windfury totem",
              "set grounding totem"});
 
-    // The class node fires it the moment it's off cooldown, at the pull, on a near full bar.
-    e.Block("iron assembly shadowfiend hold", Role::Heal, IronAssemblyShadowfiendHeld, 0, {"shadowfiend"});
-
     // Potions and tinkers are on the burst list.
     e.Multiplier<IronAssemblyHoldDpsCooldownsMultiplier>(Family::AnyAction);
     e.Multiplier<IronAssemblyTauntGuardMultiplier>(Family::Spell);

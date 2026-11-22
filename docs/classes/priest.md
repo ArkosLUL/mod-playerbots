@@ -35,8 +35,11 @@ Inherited nodes the ladders must not collide with: `CombatStrategy` — `drop ta
 
 ## Cross-spec
 
-- **Shadowfiend** is a `SpellNoCooldownTrigger` (known and off cooldown, no mana gate): Disc and Holy
-  23, Shadow 21. `CastShadowfiendAction::GetTarget` falls back to the `grind target` when a healer has
+- **Shadowfiend** (`ShadowfiendTrigger`): off cooldown, and for a healer only at ≤ 50% mana
+  (`HEALER_MANA_PCT`); Shadow casts it on cooldown. Disc and Holy 23, Shadow 21. It returns a fixed
+  ~60% of the bar (12 Mana Leech hits × 5%), so ungated healers cast it ~9 s in at a median 95% mana
+  and kept ~13% (~56% from 30–50%), and priests were the first healer dry in 33 of 42 pulls where
+  one ran dry (604 casts, Ulduar and ToC, 2026-11-22). `CastShadowfiendAction::GetTarget` falls back to the `grind target` when a healer has
   nothing selected. Its exemption from the per-boss phase holds is in
   [consumables](../systems/consumables-and-burst.md#the-burst-gate) and must survive any rebinding.
 - **Power Infusion** is Discipline only, self-cast on `medium group heal setting` @36.4, and passes

@@ -1586,13 +1586,6 @@ bool IronAssemblyOpenerBurstWindowOpen(PlayerbotAI* botAI)
            GetMSTimeDiffToNow(state->engagedAtMs) < ULDUAR_IRON_ASSEMBLY_OPENER_BURST_WINDOW_MS;
 }
 
-bool IronAssemblyShadowfiendHeld(PlayerbotAI* botAI)
-{
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    return bot && bot->GetPowerPct(POWER_MANA) > ULDUAR_IRON_ASSEMBLY_SHADOWFIEND_MANA_PCT &&
-           IronAssemblyFormationActive(botAI);
-}
-
 bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
 {
     if (!botAI || !member)
