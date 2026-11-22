@@ -229,3 +229,8 @@ Unstable Energy (62451) is 4 yd, inside the 8 yd trigger; no size, mode or playe
   ghouls. Low lashers are in the ranged escape hazards, so read ranged Detonate deaths next window.
 - Left for a later round (roots, not beams): `ULDUAR_FREYA_ROOTED_BEAM_RADIUS` 6 yd misses the 80 of 1159
   applications past 6, so a bot rooted 6-7.3 yd from a beam gets no Blink, Hand of Freedom or break.
+
+**User answers (2026-11-22) to round 2's questions:** (1) option (b): while no add tank is alive, DPS stop
+hitting the Snaplasher until its Hardened Bark stacks reset, then the main tank or a risen add tank takes it;
+(3) yes: while ghouls hold the lasher pack, ranged with no lasher in reach walk to SpellDistance of the
+pack's focus lasher instead of shooting Freya. Question 2 (bear add tank health) waits for window 10.
