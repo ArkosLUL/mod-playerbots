@@ -1694,6 +1694,12 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
 
     if (!due.empty())
     {
+        // No due kill lands in the void's aftermath while anyone is still under the line. Kills only: a star
+        // draining into it isn't made due for it.
+        int32 const recovery = state.lastBigBangEndMs ? MsUntil(state.lastBigBangEndMs, now) +
+                                                            static_cast<int32>(ULDUAR_ALGALON_STAR_VOID_RECOVERY_MS)
+                                                      : 0;
+        bool const drained = recovery > 0 && !RaidAffordsExplosion(bot, group);
         char const* blocked = "near";
         AlgalonScanUnit const* fallback = nullptr;
         int32 fallbackSeparation = -1;
@@ -1705,7 +1711,8 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
                     continue;
 
                 StarSpan const finish = FinishBand(state, group, *candidate);
-                char const* collision = StarCollision(plan, finish, candidate, gap);
+                bool const inRecovery = drained && finish.from < recovery;
+                char const* collision = inRecovery ? "recovery" : StarCollision(plan, finish, candidate, gap);
                 if (!collision)
                 {
                     star = candidate;
@@ -1714,6 +1721,9 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
 
                 if (!std::strcmp(blocked, "near"))
                     blocked = collision;
+
+                if (inRecovery)
+                    continue;
 
                 int32 const separation = StarSeparation(plan, finish, candidate);
                 if (separation > fallbackSeparation)
