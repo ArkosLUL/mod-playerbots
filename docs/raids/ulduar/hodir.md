@@ -32,7 +32,9 @@ position trigger down, so trimming it just moves churn from the dodge to the anc
 stack on `isMoving() || HasAura(62821)`, so a bot standing in one sheds on every tick without walking a
 step, and magic damage cast from inside one procs Singed on its target. `62821` measures true to its
 11 yd (with-aura p90 11.9). Its own aura is +4 Spirit and nothing else (aura 29, misc 4), so
-everything a fire is worth comes from the shed and Singed.
+everything a fire is worth comes from the shed and Singed. With Singed at 25 that leaves little for a
+bot standing in one: ×1.08 for ranged, nothing for melee (paired within a bot, standing on him, no
+Storm Power), where Starlight gives ×1.30 / ×1.38.
 
 **The caster band is 15-35** (`_RANGED_MIN_BOSS_GAP` / `_CASTER_MAX_BOSS_GAP`). Spell range is
 measured to the target's bounding radius and Hodir is a giant, so the book 30 understates him: ranged
@@ -123,9 +125,11 @@ everything with the pack in it. Modelled +1 a proc, he holds a mean **16-21 stac
 (+32-42% magic damage taken), capped from ~0:45 in two of three pulls. A lapsing fire is what loses it: one pull sat at 0 for
 11 s **with a fire still burning that nobody stood in**, and the climb back to 25 takes 13-20 s after
 the next one lands. Ranged in a fire he is *not* held on can carry Singed alone (60 of one pull's 140
-procs). A player can Singe itself too: Biting Cold's tick (`CastCustomSpell(target,
-SPELL_BITING_COLD_DAMAGE)` in `spell_hodir_biting_cold_player_aura`) is a magic-negative cast by the
-player on the player.
+procs): a proc refreshes the stack, so one caster in any live fire hitting him keeps 25 up. Each
+missing stack costs ~1.5k dps (2% of ~75k base magic damage on him); lapses cost 2-7k over 0-3:00 in
+four of six pulls, one of them with a fire 17.5 yd from him burning 12 s empty. A player can Singe
+itself too: Biting Cold's tick (`CastCustomSpell(target, SPELL_BITING_COLD_DAMAGE)` in
+`spell_hodir_biting_cold_player_aura`) is a magic-negative cast by the player on the player.
 
 **Helper blocks are broken mage first** (`GetHodirAssignedHelperBlock`):
 `ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** each, then druid, shaman, priest at one each, inside the
@@ -181,7 +185,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing (the damage itself is `63511`) plus a 3,999 raid tick every 2s (`64545`). All four rows are named "Frozen Blows"; the aura ids apply, the damage ids hit |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
-| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
+| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s — and the pulse spending the last buffs everyone in it. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
 | Toasty Fire | 62821 → 65280 | 11 yd, 60s, at the mage's feet every 10s, the first 6s after the mage is freed. Sheds Biting Cold every tick exactly as movement does. Procs **Singed** at 33% on ranged/magic damage *done*. **Flash Freeze wipes every fire** (62148) |
 | Berserk | 26662 | 8 min, unhandled — no enrage awareness exists anywhere in the module |
 
@@ -466,8 +470,9 @@ for **22%**.
   Lapping the ring therefore spent the charges one bot at a time: raiders sat inside the pulse on
   **4.4%** of samples during a live carry, p50 **0-1** of them, and the carrier's 3rd-nearest damage
   dealer was 7.0 yd away. Coverage ran **31%**, where buckets over 50% averaged **198,857 dps against
-  123,105** under (r = +0.54) and the per-bot lift measured **+108%** — an upper bound, since a bot
-  holding it is also a bot standing still. **26.2%** of delivery went to healers and the tank, who
+  123,105** under (r = +0.54); paired within a bot (standing on him, Singed 20+) it is worth
+  **×1.7-1.9** to ranged and melee alike, ~+4.9k a bot-second on a damage dealer's all-states rate, so
+  how many get it matters, not which role. **26.2%** of delivery went to healers and the tank, who
   produced 2.1% of the damage. The carrier end wastes more and nothing here fixes it: the boss picks
   whoever he likes, and **14 of 53** carries in one pull went to a tank and 6 more to healers — every
   one a dead window, since tanks refuse to carry at all.
@@ -494,10 +499,13 @@ for **22%**.
   the target sits 45° ahead of a moving bot forever while `std::max` locks in every yard of outward
   drift — one carry walked **213 yd**, ended **142 yd** from the boss outside the room, and died there
   alone. Greedy re-targeting is the Auriaya corridor dance.
-- **Storm Power is at its cap — not a lever, do not re-open it.** 10-12 Storm Cloud windows a pull
-  delivered 43-55 Storm Power, **5.4-5.5 per cloud against a hard 6**, because every application
-  spends a charge (`spell_hodir_storm_power_aura::OnApply`). Only the split is arguably wrong: melee
-  took 31 of 55. The exception is a cloud that runs out of time first (the rally above).
+- **A cloud has no cap: its last pulse buffs everyone inside.** `spell_hodir_storm_power_aura::OnApply`
+  spends a charge per receiver and the cloud goes at zero, but the pulse that empties it has already
+  picked its targets, and all of them keep Storm Power: single clouds gave 10-13 from 6 charges, single
+  pulses 9-11. The carrier takes the first pulse itself; a bot already holding it is refreshed and
+  spends nothing (a carrier stood 30 s in its own pulse and the cloud kept 3). What holds a cloud to
+  ~6 is receivers arriving one pulse at a time: every damage dealer lacking it within the 15 yd leash
+  sharing one pulse would add 125-520 Storm Power bot-seconds a pull (windows 10-11).
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -669,12 +677,15 @@ blocks break 2-4 s later, the first fire lands at 19-22 s against 18, and fires 
 ranged, one of which he is then held on (the fire latch above). Melee lost less, mostly 0:57-2:34, not
 traced beyond the Storm Cloud rally above.
 
-**The gap left sits in the fire windows, ranged most.** With a fire burning boss dps ran 263-283k in
-the pulls that kept or nearly kept the cache and 215-244k in the 198-205k ones; with none, 129-175k in
-both. A ranged bot deals ~20k a second in a fire with Storm Power, ~10k in a fire, 4-6k with neither,
-and whether ranged get Storm Power in the first fire window rests on who carries Storm Cloud, since
-receivers come only within 15 yd of the carrier's rally. The biggest lever the strategy holds is ice
-time (breakers above).
+**At ilvl 226 the levers the strategy holds fall short of the cache.** Windows 10-11 paced 198-215k,
+a 20-37k gap. A ranged bot's per-state rates (~20k a second in a fire with Storm Power, ~10k in one,
+4-6k with neither) measure Storm Power and lust, not the fire, which is worth little once Singed is
+capped (above). Sized over 0-3:00 on window 11: one shared Storm Power pulse within the 15 yd leash
++8-14k (+12-20k if every bot made it), within 20 yd +13-19k; Singed never lapsing 0-7k; skipping the
+fourth helper wave −4 to +5k; Storm Power to ranged rather than melee in the first fire window ≤3k;
+ranged fire placement ≤1k; two clouds timing out on a carrier far from the raid ~4k (one pull); the
+south drop ~3.5k (harness). Together ~18-22k against 20-27k: the cache needs every lever at its
+ceiling at once.
 
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at
