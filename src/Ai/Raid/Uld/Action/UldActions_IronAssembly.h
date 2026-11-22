@@ -149,8 +149,6 @@ public:
 
     IronAssemblyTankBattleRezAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
-    // Rebirth won't go out in cat or bear form
-    std::vector<NextAction> getPrerequisites() override { return {NextAction("caster form")}; }
 };
 
 // The weakest magic defensive that covers the cast's remaining time.

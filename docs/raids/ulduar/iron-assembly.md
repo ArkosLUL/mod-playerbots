@@ -86,8 +86,9 @@ uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s p
 Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (a pending res, Soulstone
 or Reincarnation counts), the closest pair of bot tank body and non-tank druid bot in the hall with
 Rebirth ready and affordable is latched (`rezdruid`, `reztank`): the druid casts inside 28 yd, else
-walks straight at the body to 26, and the tank stands up where the druid is. `ACTION_RAID + 7`, above
-every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead, or the
+walks straight at the body to 26, and the tank stands up where the druid is. Cat or moonkin form drops
+only for the cast: a `caster form` prerequisite skips a druid under 65% mana (`MediumHealth`) and trades
+shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`, above every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead, or the
 cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` never walks, casting only
 on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown point with the
 druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast killed 5 melee.

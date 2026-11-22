@@ -365,7 +365,7 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
         };
 
         // Stopped short by something else, the same goal re-sent within MaxWaitForMove reads as a duplicate
-        // and the body waits out the rest of it.
+        // and the druid stands idle for the rest of that wait.
         MoveOutcome outcome = walk();
         if (outcome == MoveOutcome::Duplicate && !bot->isMoving())
         {
@@ -387,6 +387,9 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
         last.clear();
     }
 
+    // Rebirth fails in cat, bear and moonkin form. Not the caster form prereq: it skips a druid under
+    // MediumHealth mana, and on the walk it trades shifts with the spec's own form every tick.
+    botAI->RemoveShapeshift();
     return duty.spellId && botAI->CastSpell(duty.spellId, duty.tank);
 }
 

@@ -164,8 +164,9 @@ resto druid Uldyba stood 35.2 yd from Uldyaa's body and 41.8 from Uldyab's, the 
 Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (pending res, Soulstone
 or Reincarnation counts as up), the closest (non-tank druid bot with Rebirth ready and affordable, bot
 tank body in the hall) pair is latched in the instance state; the druid casts Rebirth inside 28 yd,
-else walks straight at the body to 26 (caster form first). Holds while the walk's end is within 17 yd
-of a carrier inside its 10 s swap lead, or a cast would still run within 16 yd of a carrier's last 3 s.
+else walks straight at the body to 26 (out of cat or moonkin form only for the cast). Holds while the
+walk's end is within 17 yd of a carrier inside its 10 s swap lead, or a cast would still run within 16
+yd of a carrier's last 3 s.
 In uld2 it would have sent Uldyba 9.2 yd toward Uldyaa at 4:56, the tank back ~4 s later 22 yd from
 the tank spot, ~25 s before the next swap. Kept in Iron Assembly's files (`IronAssemblyBattleRezDuty`):
 `CastRebirthAction` is untouched, and the class `rebirth` still casts on any body in range.

@@ -471,7 +471,7 @@ bool IronAssemblyMeltdownDueNear(Player* bot, Position const& spot, uint32 withi
 constexpr uint32 IRON_ASSEMBLY_REBIRTH_RANKS[] = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 
 // The druid's highest Rebirth while it is off cooldown and affordable, else 0. Not CanCastSpell: that says
-// no in cat or bear form, and the action shifts out first.
+// no in cat, bear or moonkin form, and the action shifts out first.
 uint32 IronAssemblyRebirthReady(Player* druid)
 {
     if (druid->getClass() != CLASS_DRUID)
@@ -1740,9 +1740,10 @@ bool IronAssemblyMeltdownMeleeWindow(PlayerbotAI* botAI)
 
 static bool DeriveIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, Position& spot, char const*& how)
 {
-    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
+    Unit* steelbreaker =
+        IronAssemblyMeltdownMeleeWindow(botAI) ? GetIronAssemblyMember(botAI, NPC_STEELBREAKER) : nullptr;
     Player* carrier = steelbreaker ? IronAssemblyBlowingCarrier(bot, steelbreaker) : nullptr;
-    if (!carrier || !IronAssemblyMeltdownMeleeWindow(botAI))
+    if (!carrier)
     {
         how = "none";
         return false;
