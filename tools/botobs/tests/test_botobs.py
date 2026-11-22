@@ -1202,6 +1202,11 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.damage_band(guardian, None, False), "guardian ?")
         self.assertEqual(yogg_saron.damage_band(None, None, False), "other")
 
+    def test_dot_uptime_counts_overlaps_once_and_clips_to_the_window(self):
+        casts = [(0, 18000), (10000, 18000), (40000, 15000), (95000, 18000)]
+        self.assertEqual(yogg_saron.dot_uptime(casts, 5000, 100000), 23000 + 15000 + 5000)
+        self.assertEqual(yogg_saron.dot_uptime([], 0, 1000), 0)
+
     def test_room_entry_is_the_first_live_sample_inside_after_the_pull(self):
         x, y = yogg_saron.BODY
         door = x - 84.0

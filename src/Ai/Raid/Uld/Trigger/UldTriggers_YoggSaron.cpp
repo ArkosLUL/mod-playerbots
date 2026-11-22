@@ -727,6 +727,12 @@ bool YoggSaronBeaconBearFormTrigger::IsActive()
     return botAI->CanCastSpell("dire bear form", bot) || botAI->CanCastSpell("bear form", bot);
 }
 
+bool YoggSaronPhase3YoggDotTrigger::IsActive()
+{
+    Unit* yogg = nullptr;
+    return YoggSaronPhase3YoggDot(botAI, yogg) != nullptr;
+}
+
 bool YoggSaronPhase3LustTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_SHAMAN || bot->HasAura(SPELL_SATED) || bot->HasAura(SPELL_EXHAUSTION))

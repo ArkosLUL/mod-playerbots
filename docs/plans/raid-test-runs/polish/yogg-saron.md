@@ -330,3 +330,58 @@ another tank 9}); fewer fresh Guardians swinging at a non-tank before the first 
 
 **User answer (2026-11-22) to the Empowering Shadows question:** no, the risk is too great. Instead, ranged
 DPS keep their DoTs up on Yogg-Saron in phase 3: today they mostly use area damage and do little to Yogg.
+
+## Round 5 (2026-11-22, no pulls on round 4: merged, not built)
+
+**Data.** Builds the user's answer above on the four phase 3s already logged (deaths by mechanic under rounds 3
+and 4): window 12 (`--head ebe746ad1`) uld1 `603_18_yogg-saron_1795378786`, uld3 `603_17_yogg-saron_1795378545`;
+window 10 uld1 `603_26_yogg-saron_1795368118`, uld3 `603_28_yogg-saron_1795368595`. Read with the new `--phase3`
+`ranged DoTs on Yogg` and scratch scripts over cast rows and snapshots. Stop rules, verdict and ranking skipped:
+nothing ran on round 4.
+
+**Measured.** Uptime over each bot's living time, from its casts at Yogg at base durations (a floor: creature
+auras have no row). Cast share counts each ranged bot's casts at area / Guardian / tentacle / Yogg, buffs and
+heals left out.
+
+| Pull | Phase 3 | Ranged | Casts | DoT uptime on Yogg, % |
+|---|---|---|---|---|
+| w12 uld1 | 182 s, Yogg 30 → 16.7% | 80.2k/s, 0 on Yogg | 25 / 33 / 33 / 7% | affliction Corruption 69, UA 32, CoA 17; destruction Corruption 23, Immolate 0; demonology (alive 40 s) 100 / 75; shadow SW:P 85, VT 71, DP 0; balance IS 21, MF 7; hunters Serpent Sting 18, 38; fire Living Bomb 14; arcane, elemental none |
+| w10 uld1 | 207 s, 30 → 13.1% | 82.2k/s, 0.1k on Yogg | 32 / 45 / 12 / 10% | affliction 90 / 45 / 48; destruction 26 / 0; demonology 100 / 36; shadow 83 / 62 / 0; balance 33 / 13; hunters 29, 16; fire 13 |
+| w12 uld3 | 82 s, 30 → 25.5% | 38.3k/s, 0 on Yogg | 1 / 1 / 89 / 7% | shadow 96 / 73; one warlock Corruption 100, Immolate 70; hunter 69; two warlocks, fire, arcane, elemental none |
+| w10 uld3 | 87 s, 30 → 29.3% | 9.5k/s, 0 on Yogg | 0 / 0 / 98 / 1% | one warlock Corruption 27; hunter 96 (alive 31 s); the rest none |
+
+Instead, in uld1 the area casts (Volley, Blizzard, Flamestrike, Hurricane, Seed of Corruption, Mind Sear, Chain
+Lightning) and Guardian single target took 58-77% of ranged casts, tentacles the rest; in uld3 the leftovers took
+89-98%. Yogg only got a DoT from the class "on attacker" nodes, which take any attacker without one: uld1 w12's
+affliction warlock put Corruption on Guardians 15 times and on Yogg 6. Ranged damage by target was 0-0.1k/s on
+Yogg. A DoT tick is credited to the bot's current target (`dealt` is cumulative), so the trace cannot isolate it:
+Yogg's loss minus the melee's target-credited damage leaves −6.2 to +2.6k/s, so DoTs, pets and splash on Yogg came
+to a few k/s at most.
+
+**Change (user's answer, so not a bug fix).** `yogg-saron phase 3 yogg dot` (`UldEncounter_YoggSaron.h/.cpp`
+`YoggSaronPhase3YoggDot`, `UldTriggers_YoggSaron.h/.cpp`, `UldActions_YoggSaron.h/.cpp`, `UldDefinition_YoggSaron.cpp`,
+`ACTION_HIGH + 5`): a ranged non-healer bot in phase 3, off the brain level, casts its first DoT missing on Yogg or
+ending within its cast time + 1 s, by `CastSpell` on Yogg, so its target stays with the resolver, guardian control
+and the 30% floor. Warlock Corruption, then Unstable Affliction or, without it, Immolate; shadow priest Vampiric
+Touch, Shadow Word: Pain, Devouring Plague; balance druid Insect Swarm, Moonfire; hunter Serpent Sting; fire mage
+Living Bomb. Only in range and sight and never during a Lunatic Gaze (the cast faces Yogg). Left out: curses (the
+class curse choice owns them) and Flame Shock (it shares the shock cooldown the main target's Lava Burst crit
+needs). Same at 10 and 25, normal and hard mode, with or without a player. Reader: `--phase3` `ranged DoTs on
+Yogg` and `yogg.p3dot` by spell.
+
+**Gain, estimated.** Per-DoT rates at ~3,000 spell power with the usual talents (affliction Corruption and UA
+~0.6k/s each, Immolate ~0.45k, VT and SW:P ~0.5k, DP ~0.35k, IS and MF ~0.35-0.4k, Serpent Sting ~0.2k, Living
+Bomb ~0.5k). Raising w12 uld1's uptimes to ~90% adds ~2.8k/s on Yogg (2.5-4k/s) beside the melee's 42k/s: ~0.5M over
+its 182 s phase 3, 0.8-1.3% of Yogg's 57.2M where 16.7% was left. Each DoT user moves ~5% of its GCDs off Guardians
+and tentacles. Not a kill by itself: phase 3 still ends on the tank deaths.
+
+**Next window should show:** `ranged DoTs on Yogg` at 85%+ for each listed DoT of a living ranged bot (here 0-48%
+for most); `yogg.p3dot` rows for every listed spell; Lunatic Gaze sanity on ranged no higher; ranged damage by
+target otherwise unchanged. Yogg's phase 3 loss rate rises too little to read in one window. Round 4's checks
+(`class taunts held`, `tank taunts by aim`, fresh Guardians on non-tanks, first tank death) land in the same window.
+
+**Review fixes.** Living Bomb and Devouring Plague now wait for their own to run out. A refresh never explodes the
+bomb (`spell_mage_living_bomb` fires only on expiry or dispel), so the 1 s lead cost a third of each bomb's
+damage; refreshing a leech restarts its tick timer (`AuraEffect::CalculatePeriodic` keeps it only for periodic
+damage). The node moved to `ACTION_HIGH + 4.1`, under the shadow priest's Shadowform (24.2: a DoT keeps the crit
+it was cast with) and low-mana Dispersion (25, a tie before).

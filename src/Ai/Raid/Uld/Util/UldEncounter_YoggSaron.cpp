@@ -1921,6 +1921,79 @@ char const* YoggSaronWarlockSummon(PlayerbotAI* botAI)
     return nullptr;
 }
 
+namespace
+{
+struct YoggSaronDot
+{
+    char const* spell;
+    bool refreshEarly;
+};
+
+std::vector<YoggSaronDot> YoggSaronDotSpells(PlayerbotAI* botAI)
+{
+    switch (botAI->GetBot()->getClass())
+    {
+        case CLASS_WARLOCK:
+            if (botAI->HasSpell("unstable affliction"))
+                return {{"corruption", true}, {"unstable affliction", true}};
+            return {{"corruption", true}, {"immolate", true}};
+        case CLASS_PRIEST:
+            return {{"vampiric touch", true}, {"shadow word: pain", true}, {"devouring plague", false}};
+        case CLASS_DRUID:
+            return {{"insect swarm", true}, {"moonfire", true}};
+        case CLASS_HUNTER:
+            return {{"serpent sting", true}};
+        case CLASS_MAGE:
+            return {{"living bomb", false}};
+        default:
+            return {};
+    }
+}
+}
+
+char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg)
+{
+    yogg = nullptr;
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) ||
+        YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
+        return nullptr;
+
+    std::vector<YoggSaronDot> const dots = YoggSaronDotSpells(botAI);
+    if (dots.empty())
+        return nullptr;
+
+    Creature* boss = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!boss || !boss->IsAlive() || boss->HasAura(SPELL_LUNATIC_GAZE_YS))
+        return nullptr;
+
+    for (YoggSaronDot const& dot : dots)
+    {
+        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", dot.spell)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || !bot->IsWithinCombatRange(boss, info->GetMaxRange(false, bot)))
+            continue;
+
+        if (Aura const* aura = boss->GetAura(spellId, bot->GetGUID()))
+        {
+            int32 const lead = static_cast<int32>(info->CalcCastTime(bot)) + ULDUAR_YOGG_SARON_PHASE_3_DOT_REFRESH_MS;
+            if (!dot.refreshEarly || aura->GetDuration() > lead)
+                continue;
+        }
+
+        if (!bot->IsWithinLOSInMap(boss))
+            return nullptr;
+
+        if (!botAI->CanCastSpell(dot.spell, boss))
+            continue;
+
+        yogg = boss;
+        return dot.spell;
+    }
+
+    return nullptr;
+}
+
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

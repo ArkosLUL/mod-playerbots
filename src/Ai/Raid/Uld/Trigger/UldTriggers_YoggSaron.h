@@ -352,6 +352,15 @@ public:
     bool IsActive() override;
 };
 
+class YoggSaronPhase3YoggDotTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron phase 3 yogg dot trigger";
+
+    YoggSaronPhase3YoggDotTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronPhase3PositioningTrigger : public YoggSaronTrigger
 {
 public:

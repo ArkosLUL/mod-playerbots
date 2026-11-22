@@ -294,6 +294,7 @@ inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT = 10.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS = 8.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_PHASE_3_AREA_MIN_WORTH = 3;
+inline constexpr int32 ULDUAR_YOGG_SARON_PHASE_3_DOT_REFRESH_MS = 1000;
 inline constexpr float ULDUAR_YOGG_SARON_COMBAT_REACH = 30.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE = 0.8f;
@@ -680,6 +681,8 @@ uint32 YoggSaronPileHealedOn(Player* tank);
 Unit* YoggSaronMortalStrikeTarget(PlayerbotAI* botAI, char const*& reason);
 
 char const* YoggSaronWarlockSummon(PlayerbotAI* botAI);
+
+char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg);
 
 Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
 
