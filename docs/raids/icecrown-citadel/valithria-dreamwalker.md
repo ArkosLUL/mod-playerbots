@@ -50,19 +50,20 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
   the spot; a kited healer claims none, and one holding a claim kites. Its reach is held, since a far
   heal target would walk it off its portal.
 - **Healing her**: by name, the bot's best rank, since she is no party member and no generic heal
-  reaches her; portal healers unless someone within 40 yd is under 40%, raid healers while
-  everyone within 40 yd is above 85%; inside 36 yd and in sight, else walk to 25 yd from her. By
-  class, renewing a heal over time with 2 s left: druid Lifebloom (3), Rejuvenation, Regrowth, Wild
+  reaches her; portal healers unless someone within 40 yd is under 40%, raid healers while everyone
+  within 40 yd is above 85%; inside 36 yd and in sight, else walk to 25 yd from her. By class,
+  renewing a heal over time with 2 s left: druid Lifebloom (3), Rejuvenation, Regrowth, Wild
   Growth, Nourish, Healing Touch; priest Renew, Penance, Greater Heal, Flash Heal; shaman Riptide,
   Healing Wave, Lesser Healing Wave; paladin Holy Shock, Holy Light, Flash of Light. Earth Shield and
   Sacred Shield stay on the tank.
 - **Beacon of Light**: a paladin bot healer on the raid duty, or on any duty on heroic, keeps its
   beacon on her, recast inside 5 s of its end, the generic beacon nodes blocked (`vd.beacon`).
 - **Push** (`vd.push`): open while she is at 80%+, no bot healer is in Dream State and a healer carries
-  Emerald Vigor. The lowest-guid shaman bot able to, neither Sated nor Exhausted (the DBC allows that
-  cast), casts Heroism or Bloodlust when none runs, directly, since the base burst gate holds lust off
-  every target here; the lowest-guid priest bot able to casts
-  Guardian Spirit on her whenever hers has run out.
+  Emerald Vigor, the guides' 80% after a Dream State. The lowest-guid shaman bot able to, neither Sated
+  nor Exhausted (the DBC allows that cast), casts Heroism or Bloodlust when none runs, from this
+  encounter node, not a hook: the base burst gate holds lust off non-boss adds and a friendly boss, and
+  a per-boss window can only hold. The lowest-guid priest bot able to casts Guardian Spirit on her
+  whenever hers has run out.
 - **Dream flight**: straight 3D splines with the fly flags set by hand (no client answers the aura,
   and the generic movers fly only with a flying master). First the cloud nearest the bot until a
   stack is newer than the dream; then the group of refreshed bot dreamers flies onto its lowest-guid
@@ -86,7 +87,8 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
   point moves 2 yd. Meanwhile it only kites, dodges and frees itself; the freedom node runs above the
   kite, which wins every tick a kiter walks.
 - **Snare**: per chasing unslowed zombie, the nearest non-healer bot with Chains of Ice (20 yd),
-  Concussive Shot (30) or Frost Shock (20) ready and in sight.
+  Concussive Shot (30) or Frost Shock (20) ready and in sight; ranged only, since `IccTryClassCC`'s
+  melee stuns and fears put bots in reach or scatter adds.
 - **Kicker** (`vd.interrupt`): per archmage casting Frostbolt Volley, the nearest bot not casting,
   dreaming or kiting with a kick ready, in reach and sight, one per archmage, elected in the 200 ms scan.
 - **Freedom** (`vd.freedom`): a kiter the Volley slowed frees itself where it can (Hand of Freedom,
@@ -110,11 +112,8 @@ it flees 5 yd at most, against the dodges.
 - **Dream group**: Wowhead's refresh-then-gather; the lowest guid leads so every bot agrees.
 - **Fall**: a bot still airborne takes the fall a player would, not a snap.
 - **Ring kite**: on a ring a pursuer settles inside it and behind, about 17 yd at these speeds (outside
-  Acid Burst's 15 yd), and
-  the kiter stays in heal range; a tank holding an abomination face-tanks rather than drag it.
-- **Snares** are ranged only: `IccTryClassCC`'s melee stuns and fears put bots in reach or scatter adds.
-- **Lust from the encounter node**, not a hook: the base gate holds lust off non-boss adds and a friendly
-  boss, and a per-boss window can only hold. The window is the guides' 80% after a Dream State.
+  Acid Burst's 15 yd), and the kiter stays in heal range; a tank holding an abomination face-tanks
+  rather than drag it.
 - **Beacon on her** for raid healers and on heroic (WT and Wowhead heroic tips); Earth Shield stays on
   the tank, no guide asking for it on her and her rarely being hit.
 - **Volley is kicked** (both guides), and a kiter it still slows is freed, rather than the kite reversing.

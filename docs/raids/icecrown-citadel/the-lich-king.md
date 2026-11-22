@@ -42,7 +42,7 @@ Val'kyr drop triggers (22515, Z 845.9) stand 64-68 yd out.
 | Vile Spirits 70498 (37799) | after the second Quake 20 s, then 30 s (heroic: delayed 52.5 s by Harvest Souls); 0.5 s cast, 10 (25-man) or 8 (10-man) spirits within 13 yd of him, 13 yd up. They wander 15 s, then each chases a random player, descending; anyone within 5 yd sets off Spirit Burst 70503/73806/73807/73808: 18.8-21.2k/23.6-26.4k/28.3-31.7k/35.1-36.9k shadow within 5 yd. Stun and snare land | the raid runs to the far side; a tank with cooldowns, Divine Shield or Dispersion pops them; Frost Trap between | the holder drags him to the other side spot and the raid follows; one elected soaker, an immunity first, stands between; hunters trap |
 | Harvest Soul, normal, 68980/74325 | after the second Quake 14 s, then 75 s (10 s retry); instant on a random non-tank within 55 yd in sight: 6 s stun, 7.5k/15k shadow per s. At 6.25 s the victim enters Frostmourne, the 40 yd round F (495.71, -2523.76, 1049.95). Terenas 36823 at half health (Light's Favor 69382: 5k per s, damage up by his health %) fights the Spirit Warden 36824 (taunt-immune, interruptible; Soul Rip 69397, an 8 s magic channel on its victim, 5k × tick number, 12-15 s then 23-27 s; Dark Hunger 69383 heals it for half its damage). The warden's death sends the victim back (Restore Soul 72595). At 60 s, or with Terenas dead, Destroy Soul 74086 kills the victim and gives him Harvested Soul 72679/74318 (+100%/+200% damage, 15 s) | heal the victim through the drain; inside, DPS kill the warden and kick Soul Rip, healers keep Terenas up and dispel it | healers heal the victim; inside, DPS kill the warden and kick, healers heal Terenas and dispel |
 | Harvest Souls, heroic, 73654/74296/74297 | after the second Quake 14 s, then 100-110 s: the whole raid stunned 6 s for 2.5k/4k shadow per s (the aura has no duration and ends with his channel), then sent 2-20 yd off F at 6.25 s, taking 2k per s inside (73655). He stays passive until 1 s after the return. Terenas 39217 (immune) channels Restore Souls 73650 for 40 s from 8 s. Spirit Bombs 39189: one a second within 25 yd of F, one every 2 s 30 yd above a random player, falling about 3.5 yd/s and exploding 1 s after landing (73804/73805: 18.8-21.2k/23.6-26.4k within 10 yd). 23 Wicked Spirits 39190 hang at Z 1069.6; one wakes every 3 s from 9 s, 13 in all, and chases a random player to Spirit Burst within 5 yd; immune to taunt, stun and snare. Each death inside gives him Harvested Soul 74319/74320 (+100%/+500%, 15 s) | group up and move together off the bombs; ranged kill the Wicked Spirits early; nobody dies in the last 15 s; spread at once on the return for Defile | the raid stacks on one leader who steps off falling bombs, reach held; ranged kill the woken spirit nearest the group within 30 yd; Defile handling on the return |
-| Fury of Frostmourne 72350 | at 10%: combat is disallowed and a 2.6 s cast kills the raid; Terenas raises it about 2:40 later; he takes damage only while levitating, once Frostmourne breaks | finish him | the resolver hands everyone the levitating Lich King |
+| Fury of Frostmourne 72350 | at 10%: combat is disallowed and a 2.6 s cast kills the raid; Terenas raises it about 2:40 later; he takes damage only while levitating, once Frostmourne breaks | finish him | the resolver hands everyone the levitating Lich King, out of combat, since he can't be pulled |
 
 ## Phase
 
@@ -155,14 +155,14 @@ trap reach goes on the stand row, since it dodges nothing.
   its side of the stack, else 16, 12 or 8 yd straight out. Others within 13 yd of it or its spot step
   13 yd off both. Anyone within 10 × scale + 2 yd of a puddle steps out; spots keep 10 × scale + 3,
   walks 10 × scale + 1.5.
-- **Val'kyrs** (`lk.valkyr`): while one carries (heroic: above 50%), DPS bots and a free tank no
-  Raging Spirit holds (it would drag the spirit into the raid) are bucketed, balanced, melee to the nearest, dealt again only when the carriers
-  change. One stun in flight and one slow kept up per Val'kyr, the next caster at 0.5 s left, a 1 s
-  grace for a cast in flight, one duty per bot, never the holder. Melee chase while the line clears
-  every puddle, ranged past 30 yd too; healers stay. A melee chaser with a puddle in the line walks a
-  waypoint beside the first one, latched until reached, reach held (`round`). Heroic siphoners
-  (attackable, so not a fresh Val'kyr; no 68985, Z above 850, within 20 yd of C): the free tank
-  taunts each once taunts land, at its siphon spot, never-taunted first, then longest ago
+- **Val'kyrs** (`lk.valkyr`): while one carries (heroic: above 50%), DPS bots and a free tank no Raging
+  Spirit holds (it would drag the spirit into the raid) are bucketed, balanced, melee to the nearest,
+  dealt again only when the carriers change. One stun in flight and one slow kept up per Val'kyr, the
+  next caster at 0.5 s left, a 1 s grace for a cast in flight, one duty per bot, never the holder. Melee
+  chase while the line clears every puddle, ranged past 30 yd too; healers stay. A melee chaser with a
+  puddle in the line walks a waypoint beside the first one, latched until reached, reach held (`round`).
+  Heroic siphoners (attackable, so not a fresh Val'kyr; no 68985, Z above 850, within 20 yd of C): the
+  free tank taunts each once taunts land, at its siphon spot, never-taunted first, then longest ago
   (`lk.siphon`), and ranged kill the lowest once their bucket has no carrier.
 - **Vile Spirits** (`lk.side`, `lk.vile`): east from the second Quake, flipped at each cast; the holder
   drags him over and the raid follows. One soaker, a bot with Divine Shield, Dispersion, Cloak of
@@ -248,9 +248,7 @@ Source, then the choice:
   last since it roots the mage, then the free tank whether or not it has a button.
 - WH: inside normal Frostmourne, DPS on the warden with a kick, healers on Terenas with a dispel. WH,
   IC: heroic Frostmourne moves as one group behind a leader, so reach is held there.
-- Harvest Souls 73654 has no duration and ends with his channel: Harvest Soul's hold needs its stun.
-- Script (combat disallowed, he can't be pulled): in the outro the resolver hands out him levitating,
-  out of combat.
+- Harvest Soul's hold keys on its stun: Harvest Souls 73654 has no duration.
 
 ## Cheats
 

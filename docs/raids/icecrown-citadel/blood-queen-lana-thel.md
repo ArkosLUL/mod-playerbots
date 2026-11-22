@@ -32,31 +32,32 @@ on players: centre to centre.
 ## Phase
 
 `IccBqlPhaseOf` publishes `bql.phase` from her own state: `center` while passive with gravity on (the
-walk and Incite Terror), `air` from takeoff until she lands, `ground` otherwise. It replaced a height
-test plus three latches that saw the walk late and misread her tanked off-spot near the centre.
+walk and Incite Terror), `air` from takeoff until she lands, `ground` otherwise. Not a height test plus
+latches: they saw the walk late and misread her tanked off-spot near the centre.
 
 ## Layout
 
 A stand parks within 0.75 yd and walks back past 2.5. Every point is navprobed with `--nav 0x09` and
-settles within 0.1 yd of its Z; every node's 3x3 grid at
-1 yd sees her ramp spot and her air spot 22 yd above the centre, and those in 38 yd of the tank spot see
-it and the group spots. The bowl is flat at 400.14 out to 37.5-39 yd from the centre (4595.71, 2769.42)
-on the sides and past 41 yd at the south end; the dais north of it is flat at 401.75 from 27 to 37.5 yd
-north, 12-14 yd either side of the tank spot, over a ramp, and drops to the council room below at
-38.5 yd.
+settles within 0.1 yd of its Z; every node's 3x3 grid at 1 yd sees her ramp spot and her air spot 22 yd
+above the centre, and those in 38 yd of the tank spot see it and the group spots. The bowl is flat at
+400.14 out to 37.5-39 yd from the centre (4595.71, 2769.42) on the sides and past 41 yd at the south
+end; the dais north of it is flat at 401.75 from 27 to 37.5 yd north, 12-14 yd either side of the tank
+spot, over a ramp, and drops to the council room below at 38.5 yd.
 
 - **Tank spot** (4630.71, 2769.42, 401.75), 3.5 yd short of the dais edge (the old one was 1 yd). She
   stops 9.2 yd short of a tank she chases, on the ramp at (4621.51, 2769.42).
-- **Nodes** (`ICC_BQL_NODES`, 45): one triangular lattice with 7.5 yd sides (6 yd splash plus two
-  0.75 yd park tolerances) within 25 yd of the centre, so a shadow on the inner lane misses it, plus
+- **Nodes** (`ICC_BQL_NODES`, 45): one triangular lattice for ground and air (rings round the centre,
+  the old air slots, can't hold the ground rules) with 7.5 yd sides (6 yd splash plus two 0.75 yd park tolerances) within
+  25 yd of the centre, so a shadow on the inner lane misses it, plus
   three of its points on the dais edge 33-35 yd north, outside the lanes' ends and 8.3 yd or more off
   them: (4627.46, 2758.18) on the dais, (4627.46, 2784.16) on its slope, (4623.71, 2751.68) on the bowl,
   each with a straight bot path from the centre. The 30 ground nodes keep 12 yd off the first Pact spot
   and 9 yd off her default group spots: 20 are in caster reach of her ramp spot, 14 in heal reach of the
   tank spot too. The rest are air nodes.
-- **Pact spots**: 6 yd south of the centre, then 8 yd either side when a shadow fouls it.
+- **Pact spots**: 6 yd south of the centre, then 8 yd either side when a shadow fouls it. Not on the
+  medallion: still in the middle, and the lattice keeps three more caster and four more healer nodes.
 - **Lanes**: arcs of 35.5 and 30.5 yd round the centre, 40 degrees either side of north round the south
-  end, a point every 5 yd.
+  end, a point every 5 yd: a horseshoe, so three live trails fit.
 - **Melee groups**: 7.5 yd from her latched spot, behind her and 60 degrees either side (two groups 45
   degrees), stepped 30 degrees at a time to at most 120 off her back when a shadow or a closer group
   fouls one; on floor within 2.5 yd of her height, 36 yd of the centre. Groups 60 degrees apart are
@@ -68,9 +69,9 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
   spares. With a human main tank in the group, the first bot tank is the mirror. With one tank player in
   the raid, human or bot, the mirror is the sturdiest damage dealer: plate melee (DK, warrior, paladin),
   then other melee, then ranged, most health, latched so the link doesn't hop as buffs move health; it
-  skips groups, nodes, CC and kills. The main
-  tank holds the tank spot all fight, air phase included, leaving it only to fetch her while she is on
-  someone else more than 15 yd off it; the mirror stands on it (1.5 yd beside a bot parked on the
+  skips groups, nodes, CC and kills. The main tank holds the tank spot all fight, air phase included,
+  leaving it only to fetch her while she is on someone else more than 15 yd off it (its taunt reaches
+  30 yd, her landing spot is 35 yd away); the mirror stands on it (1.5 yd beside a bot parked on the
   spot, else on the main tank) and takes an air node until the Whirl ends; spares join the melee groups.
   The main tank taunts her back below DR level 3 when she is on somebody else on the ground.
 - **Targets and brake** (`bql.target`, `bql.brake`): a player's skull on her or a mind-controlled
@@ -94,11 +95,13 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
   other than vampires, CC holders and the mirror take the nearest and drop their stands.
 - **Pact**: members walk to the latched spot (`bql.pact`) at forced priority, with Nitro Boosts past
   12 yd, and stop within 1 yd. A human member still over 4 yd off it 3 s after the Pact landed is walked
-  to instead, the lowest guid of several, the bots stopping within 2 yd of him.
+  to instead (he holds no duty, and the Pact ends only on a meeting), the lowest guid of several, the
+  bots stopping within 2 yd of him.
 - **Detours** (`bql.detour`): a bite or Pact walk whose straight line crosses a shadow's 4.5 yd goes
   through the nearest point within 16 yd clear of shadows by 5.75 yd whose two legs miss them, at most
-  8 yd longer, kept while its legs stay clear; with none it walks straight. Shadows the bot or its goal
-  stands in don't count. A walk to a player re-aims once the player moves 1.5 yd.
+  8 yd longer (about the second a crossing costs in shadow ticks), kept while its legs stay clear; with
+  none it walks straight. Shadows the bot or its goal stands in don't count. A walk to a player
+  re-aims once the player moves 1.5 yd.
 - **Swarming Shadows** (`bql.curve`): the carrier takes the lane and direction with the shortest walk to
   a point clear of shadows by 5.5 yd and the longest clear run (45 yd wanted, the 6 s trail at a run),
   the outer lane first, walks it point to point at forced priority, cutting a cast since a shadow drops
@@ -111,37 +114,37 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
   would land there.
 - **Spread** (`bql.slot`, `bql.airslot`, `bql.group`): healers keep a ground node in 36 yd (held to
   38) of the main tank and her; ranged one in 35.5 yd of her (hunters 40, held to 37.5 and 42), a 30 yd
-  spell reaching 38.7 yd past her 7.2 combat reach. While she
-  walks or flies held nodes stay put. From her walk to the centre until the Whirl ends, every bot but the
-  main tank without a ground node takes the nearest free node. Melee and spares split into up to three
-  balanced groups by guid. Nodes and spots within 5.75 yd of a shadow are given up.
+  spell reaching 38.7 yd past her 7.2 combat reach. While she walks or flies held nodes stay put. From
+  her walk to the centre until the Whirl ends, every bot but the main tank without a ground node takes
+  the nearest free node. Melee and spares split into up to three balanced groups by guid. Nodes and
+  spots within 5.75 yd of a shadow are given up.
 - **Defensives**: raid cover and personal buttons over the Whirl (a third of a bolt per tick left, each
   landing 850 ms after its tick, plus Shroud's ticks, heroic Presence counted; frenzied bots skip it),
-  class cover nodes held over its
-  lead-in; any tank or damage-dealer mirror under 40%, and her holder and the mirror in the last minute
-  before Berserk, spend `NextTankDefensive` (a damage dealer `NextPhysicalDefensive`, `bql.defensive`),
-  tank class buttons held to 25% until that minute; a human tank is called for both (`bql.humancall`).
+  class cover nodes held over its lead-in. Any tank or damage-dealer mirror under 40%, and her holder
+  and the mirror in the last minute before Berserk, spend `NextTankDefensive` (a damage dealer
+  `NextPhysicalDefensive`, `bql.defensive`), tank class buttons held to 25% until that minute: no hit of
+  hers is predictable, and Wowhead saves them for the end. A human tank is called for both
+  (`bql.humancall`).
 - **Fear**: `RaidAntiFear` from 8 s before her predicted walk (124/127 s in, then 120/100 s after she
-  reaches the centre, taken as 3 s after the walk starts until a bot sees her arrive) until takeoff: Tremor Totem, earth totems held, Fear Ward on each priest knowing
-  Mass Dispel, else the shared main tank or healer. Under Incite Terror each unfeared priest takes the
+  reaches the centre, taken as 3 s after the walk starts until a bot sees her arrive) until takeoff:
+  Tremor Totem, earth totems held, Fear Ward on each priest knowing Mass Dispel, else the shared main
+  tank or healer. Under Incite Terror each unfeared priest takes the
   feared player with the most feared within 15 yd (at most 10, at least 3, fear outlasting the 1.5 s
   cast), in 30 yd and sight, leaving out those within 15 yd of another free priest's pick
   (`bql.massdispel`), and casts Mass Dispel there, stopping a walk first.
-- **Hooks** (`HookRows()`): burst `IccBloodQueenBurstWindow` (lust once vampires
-  reach 8, 16 on 25-man, or 280 s in), opener `GetBqlOpenerBosses` (her), resist
+- **Hooks** (`HookRows()`): burst `IccBloodQueenBurstWindow` (lust at the vampire peak, after Wowhead:
+  once vampires reach 8, 16 on 25-man, or 280 s in), opener `GetBqlOpenerBosses` (her), resist
   `IccBloodQueenResistSchools` (shadow all fight).
 
 Rules: targeting owned for the whole fight; a braked bot's pickers held; a frenzied bot runs only the
 bite and a shadows carrier only its lane; Pact members and stand holders keep attacks and resurrect
-reach only, the main tank and mirror on their stands, any role, attacks only; spell movers, avoid aoe
+reach only (every healer node covers the tank spot and her), the main tank and mirror on their stands,
+any role, attacks only; spell movers, avoid aoe
 (it flees a shadow 5 yd), generic taunts (a mirror tank's would move Blood Mirror), Death Grip (it
 shares her taunt DR and drags her off the tank spot) and tank caster form blocked.
 
 ## Decisions
 
-- Pact spot 6 yd south of the centre rather than on the medallion: still in the middle, and the same
-  lattice keeps three more caster and four more healer nodes.
-- One lattice for ground and air: rings round the centre (old air slots) can't hold the ground rules.
 - The mirror, a damage dealer too, stays off her until the first vampire and is bitten after the other
   damage dealers: her bite takes the linked player, not only DPS, and a frenzied mirror walks off the
   main tank.
@@ -158,19 +161,9 @@ shares her taunt DR and drags her off the tank spot) and tank caster form blocke
   kill dear (+900% on 25-man), and a vampire's doubled damage is worth more on her.
 - Priests ward themselves rather than the main tank, after Warcraft Tavern and Wowhead: she is passive
   through the fear, so a feared tank costs nothing, and a warded priest can Mass Dispel the rest.
-- Bite and Pact walks detour by at most 8 yd, about the second a crossing costs in shadow ticks.
-- Bots walk to a human Pact member who doesn't come: he holds no duty, and the Pact only ends on a
-  meeting.
 - Three dais-edge nodes for the 25-man shortage rather than overflow onto the air nodes by the Pact spot,
   which every Pact walk-in reaches.
-- The main tank fetches her once she chases someone else 15 yd off the spot: its taunt reaches 30 yd,
-  and her landing spot is 35 yd away.
-- Lust at the vampire peak, after Wowhead.
-- Tank buttons wait for a low tank or the last minute: no hit of hers is predictable, and Wowhead saves
-  them for the end.
-- Lanes as a horseshoe through the south end, so three live trails fit.
 - No opening positions: her aggro radius is 23 yd, and the gate is open everywhere between pulls.
-- Nodes block heal reach: every healer node covers the tank spot and her.
 
 ## Cheats
 
