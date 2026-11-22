@@ -516,9 +516,8 @@ nothing. Fires and Starlight zones reach a trace only as `snap.hz` rows, cluster
 boss dps comes off his health column, since `dealt` counts the ice blocks too; and a helper's kind
 comes only from `hodir.dpstarget`, so it reads `?` before the centre-hold build. Shed legs sent onto
 the bot's own spot are refused, so the stall count cannot see them; the reader counts them apart.
-**A Biting Cold death reads as "its own blow: a fall, lava or .die"** in `postmortem.py` and the
-runner's report: the victim casts `62188` on itself. `--deaths` names each death's killing spell,
-stacks and Frozen Blows window.
+**A Biting Cold death is the victim's own blow**: it casts `62188` on itself. `--deaths` names each
+death's killing spell, stacks and Frozen Blows window.
 
 ## Pace
 
