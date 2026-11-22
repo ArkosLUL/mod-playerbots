@@ -216,11 +216,14 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
 
 - not during the Big Bang cast (the raid is running for holes);
 - the kill under way continues while its finish stays 6 s clear, or while dropping it wouldn't help: dropped,
-  a star keeps dying at its own slope, capped at 5 %/s, from casts in flight, channels and DoTs (22 % went in
-  3.8 s), as one did into an impact and one 1.5 s into a cast; one barely hit only drains (one dropped at 9% lost
-  1.4 %/s and went off 0.4 s before three meteors, 4 dead). So a kill is dropped only if the star would die clear
-  anywhere from that capped slope to the drain alone, or sooner than the kill lands. Its log is kept: a flat
-  5 %/s made a star never hit look due, and the team was sent back to it 4 times in 2 s;
+  a star keeps its own slope, capped at 5 %/s, for 4 s of casts in flight, channels and DoTs (22 % went in
+  3.8 s), as one did into an impact and one 1.5 s into a cast, then drains; one barely hit only drains (one
+  dropped at 9% lost 1.4 %/s and went off 0.4 s before three meteors, 4 dead). So a kill is dropped only if the
+  star would die clear anywhere from that carry to the drain alone, or sooner than the kill lands; for a kill
+  landing on another explosion or Big Bang, meteors in that span don't count. Without the carry a kill under
+  5 %/s never dropped: two landed 1.8 and 3.0 s from another star's drain death at Big Bang's cast, 10-11 dead
+  each. Its log is kept: a flat 5 %/s made a star never hit look due, and the team was sent back to it 4 times
+  in 2 s;
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
 - a **due** star is opened whatever the raid's health, soonest death first: its own death isn't clear and is

@@ -1344,6 +1344,18 @@ int32 StarDeathAt(AlgalonScanUnit const& star, float lossPctPerSec)
     return static_cast<int32>(star.healthPct / lossPctPerSec * IN_MILLISECONDS);
 }
 
+// Soonest a star the team stops on can die: its slope, capped, for the carry, then the drain.
+int32 DroppedDeathMs(AlgalonScanUnit const& star)
+{
+    float const carry = std::min(star.lossPctPerSec, ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC);
+    float const carried = carry * ULDUAR_ALGALON_STAR_DROP_CARRY_MS / IN_MILLISECONDS;
+    if (star.healthPct <= carried)
+        return StarDeathAt(star, carry);
+
+    return static_cast<int32>(ULDUAR_ALGALON_STAR_DROP_CARRY_MS) +
+           static_cast<int32>((star.healthPct - carried) / ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC * IN_MILLISECONDS);
+}
+
 struct StarBlackout
 {
     StarSpan span;
@@ -1457,10 +1469,12 @@ int32 ForecastDeath(StarPlan const& plan, AlgalonScanUnit const* star)
 
 // Why an explosion somewhere in `when` would land badly, or nullptr. A span, because a kill's finish is only
 // known to within the team's speed.
-char const* StarCollision(StarPlan const& plan, StarSpan when, AlgalonScanUnit const* self, int32 separation)
+char const* StarCollision(StarPlan const& plan, StarSpan when, AlgalonScanUnit const* self, int32 separation,
+                          bool meteors = true)
 {
     for (StarBlackout const& blackout : plan.blackouts)
-        if (when.from <= blackout.span.to && when.to >= blackout.span.from)
+        if ((meteors || std::strcmp(blackout.label, "smash")) && when.from <= blackout.span.to &&
+            when.to >= blackout.span.from)
             return blackout.label;
 
     if (plan.hadDeath && when.from < plan.lastDeath + separation)
@@ -1626,9 +1640,10 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     StarPlan const plan = PlanStars(state, now);
     int32 const gap = static_cast<int32>(ULDUAR_ALGALON_STAR_PACING_GAP_MS);
 
-    // Ahead of the gap, or any other death drops a kill half done. Dropped, a star dies anywhere from its own slope
-    // up to the cap to the drain alone (one dropped at 9% lost 1.4 %/s and went off under three meteors), so a drop
-    // only goes when that whole span is clear or ends before the kill lands.
+    // Ahead of the gap, or any other death drops a kill half done. Dropped, a star keeps its slope for the carry,
+    // then drains (one dropped at 9% lost 1.4 %/s and went off under three meteors), so a drop only goes when that
+    // span is clear or ends before the kill lands. A kill landing on another explosion or on Big Bang still drops
+    // when the span only meets a meteor, which costs fewer lives.
     AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get());
     if (focus && !focus->under)
     {
@@ -1641,13 +1656,13 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
         {
             int32 const keep = static_cast<int32>(ULDUAR_ALGALON_STAR_KEEP_GAP_MS);
             StarSpan const finish = FinishBand(state, group, *focus);
-            int32 const fast =
-                StarDeathAt(*focus, std::min(focus->lossPctPerSec, ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC));
+            int32 const fast = DroppedDeathMs(*focus);
             int32 const slow =
                 std::max(fast, focus->tickHp ? DrainDeathMs(*focus)
                                              : StarDeathAt(*focus, ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC));
+            bool const meteors = !StarCollision(plan, finish, focus, keep, false);
             if (!StarCollision(plan, finish, focus, keep) ||
-                (StarCollision(plan, {fast, slow}, focus, keep) && finish.to <= slow))
+                (StarCollision(plan, {fast, slow}, focus, keep, meteors) && finish.to <= slow))
             {
                 star = focus;
                 return state.focusByDeadline ? "deadline" : "open";
