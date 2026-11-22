@@ -103,7 +103,7 @@ public:
     bool Execute(Event event) override;
 };
 
-// Cast by id: the class action of the same name is held for the windows.
+// By spell id: the hold blocks the class actions for these buttons.
 class HodirTankDefensiveAction : public Action
 {
 public:

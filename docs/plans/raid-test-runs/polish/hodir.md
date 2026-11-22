@@ -145,3 +145,24 @@ block, with the Winter Revenant pack despawned (DC `e8c3b0c`). Shared `MovementA
 now spreads bots under the DC driver (`61011f323`): window 5 gave every bot angle 0, so every
 `MoveInside` park (shelter run, Storm Cloud spread and collect) put them all on one point at the park
 radius. Window 5's shelter and Storm Power figures can move without a Hodir change.
+
+**Window 7, read at review** (landed during this round; build `61011f323` = round 1, the new drop and
+the spread fix; all three started by the step, so refreshed):
+
+| Pool | Run | Trace | Out | Cache | Deaths | Pace 0-3:00 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261122-091848-4` | `603_4_hodir_1795339196` | kill 3:45 | shattered | 2: off-tank Frozen Blows swing | 183k |
+| uld2 | `tr-20261122-091848-5` | `603_6_hodir_1795339202` | kill 4:02 | shattered | 1: off-tank Frozen Blows swing | 175k |
+| uld3 | `tr-20261122-091848-6` | `603_5_hodir_1795339205` | kill 3:42 | shattered | 2: off-tank Frozen Blows swing, melee Hodir melee (outside a window) | 193k |
+
+- *Round 1 verdict:* its mechanic stopped. No ranged or healer died; standing still at the arm point
+  41 / 22 / 28 bot-seconds (target under ~100).
+- *Its cost check failed:* pace fell from window 5's 216-236k, so no pool kept the cache. Drop and
+  spread angle changed in the same build, so the cause is open; uld1's `hodir.shuttle` churn went
+  72 → 202 against window 5. Round 3 should split it.
+- *Round 2's pick holds:* all four off-tank deaths came inside a window with `--tanks` "button up:
+  none", and uld3's bear again spent all three buttons in window 1 (1:11.9-1:14.8).
+- *Watch the main tank:* its first 1 s+ stint in a window took no swing in 12 of 23 windows (w5 + w7),
+  with him barely moving, so the node spends there. In window 5 uld1's paladin would have spent
+  Divine Protection at ~1:06 with no swing, leaving none for window 3, where he took two (51k).
+  Main-tank deaths after such a spend mean the hold should wait for the first swing.
