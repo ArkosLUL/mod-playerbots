@@ -70,3 +70,7 @@ phase 1's adds come 20 s after its sixth death, so walking 35-40 yd at the pull 
 the runner counts it; no non-tank with a target before the pull; the first in-pull snapshot's pack
 on the DC main tank (aggro start on the Behemoth); a full refresh (all 25 near full health and mana
 at the open). Only then do the in-fight deaths say anything; round 2 reads them.
+
+**User answer (2026-11-22):** yes. If the next window shows the pull starting early from the
+Behemoth's Acid Breath, round 2 holds the arena group at the drop until Thorim is in combat and
+walks it to its spots at the pull.
