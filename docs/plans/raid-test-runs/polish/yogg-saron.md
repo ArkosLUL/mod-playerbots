@@ -379,3 +379,9 @@ and tentacles. Not a kill by itself: phase 3 still ends on the tank deaths.
 for most); `yogg.p3dot` rows for every listed spell; Lunatic Gaze sanity on ranged no higher; ranged damage by
 target otherwise unchanged. Yogg's phase 3 loss rate rises too little to read in one window. Round 4's checks
 (`class taunts held`, `tank taunts by aim`, fresh Guardians on non-tanks, first tank death) land in the same window.
+
+**Review fixes.** Living Bomb and Devouring Plague now wait for their own to run out. A refresh never explodes the
+bomb (`spell_mage_living_bomb` fires only on expiry or dispel), so the 1 s lead cost a third of each bomb's
+damage; refreshing a leech restarts its tick timer (`AuraEffect::CalculatePeriodic` keeps it only for periodic
+damage). The node moved to `ACTION_HIGH + 4.1`, under the shadow priest's Shadowform (24.2: a DoT keeps the crit
+it was cast with) and low-mana Dispersion (25, a tie before).

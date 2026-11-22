@@ -1923,22 +1923,28 @@ char const* YoggSaronWarlockSummon(PlayerbotAI* botAI)
 
 namespace
 {
-std::vector<char const*> YoggSaronDotSpells(PlayerbotAI* botAI)
+struct YoggSaronDot
+{
+    char const* spell;
+    bool refreshEarly;
+};
+
+std::vector<YoggSaronDot> YoggSaronDotSpells(PlayerbotAI* botAI)
 {
     switch (botAI->GetBot()->getClass())
     {
         case CLASS_WARLOCK:
             if (botAI->HasSpell("unstable affliction"))
-                return {"corruption", "unstable affliction"};
-            return {"corruption", "immolate"};
+                return {{"corruption", true}, {"unstable affliction", true}};
+            return {{"corruption", true}, {"immolate", true}};
         case CLASS_PRIEST:
-            return {"vampiric touch", "shadow word: pain", "devouring plague"};
+            return {{"vampiric touch", true}, {"shadow word: pain", true}, {"devouring plague", false}};
         case CLASS_DRUID:
-            return {"insect swarm", "moonfire"};
+            return {{"insect swarm", true}, {"moonfire", true}};
         case CLASS_HUNTER:
-            return {"serpent sting"};
+            return {{"serpent sting", true}};
         case CLASS_MAGE:
-            return {"living bomb"};
+            return {{"living bomb", false}};
         default:
             return {};
     }
@@ -1953,33 +1959,36 @@ char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg)
         YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
         return nullptr;
 
-    std::vector<char const*> const spells = YoggSaronDotSpells(botAI);
-    if (spells.empty())
+    std::vector<YoggSaronDot> const dots = YoggSaronDotSpells(botAI);
+    if (dots.empty())
         return nullptr;
 
     Creature* boss = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!boss || !boss->IsAlive() || boss->HasAura(SPELL_LUNATIC_GAZE_YS))
         return nullptr;
 
-    for (char const* spell : spells)
+    for (YoggSaronDot const& dot : dots)
     {
-        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", dot.spell)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
         if (!info || !bot->IsWithinCombatRange(boss, info->GetMaxRange(false, bot)))
             continue;
 
         if (Aura const* aura = boss->GetAura(spellId, bot->GetGUID()))
-            if (aura->GetDuration() > static_cast<int32>(info->CalcCastTime(bot)) + ULDUAR_YOGG_SARON_PHASE_3_DOT_REFRESH_MS)
+        {
+            int32 const lead = static_cast<int32>(info->CalcCastTime(bot)) + ULDUAR_YOGG_SARON_PHASE_3_DOT_REFRESH_MS;
+            if (!dot.refreshEarly || aura->GetDuration() > lead)
                 continue;
+        }
 
         if (!bot->IsWithinLOSInMap(boss))
             return nullptr;
 
-        if (!botAI->CanCastSpell(spell, boss))
+        if (!botAI->CanCastSpell(dot.spell, boss))
             continue;
 
         yogg = boss;
-        return spell;
+        return dot.spell;
     }
 
     return nullptr;
