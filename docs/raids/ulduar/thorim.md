@@ -624,6 +624,15 @@ they alternate with `ThorimDpsPriorityAction` instead of losing to it: the row g
 holds its pick, the engine falls through to `dps assist` at 50, and that retargets. A traced arena squad
 switched target twice a second all fight.
 
+**`ThorimDpsPriorityTrigger` waits for Thorim's combat.** The `ulduar` strategy runs out of combat too
+and the gate is open between pulls, while the start pack (Behemoth, Captain, three Soldiers, Acolyte
+32886) fights itself until a player or pet damages one; then all six turn on that player and Thorim
+zone-combats the raid. Ungated, DPS bots `Attack()`ed the Acolyte, the first tier, from 2-3 s before the
+engage, opening all three harness pulls of 2026-11-22 before DC's start step. Its spawn is 50.6 yd from
+the drop at (2152, −232), inside the picker's 50 yd since `GetDistance` nets out both combat reaches. An
+in-combat filter on the pick would not do, since the mock fight keeps the Behemoth, Captain and Soldiers
+in combat with each other.
+
 **Phase 1's elites outlive phase 1.** 7-9 are still standing when Thorim lands — 5 Champions (0.61 M),
 7 Warbringers (0.53 M), 6 Evokers (0.41 M) — and deal **113-214k** over the rest of the fight; the
 Commoners die on their own (47 units to 9 by +27 s). One Evoker's Lightning Shock was 26k of the 55k that

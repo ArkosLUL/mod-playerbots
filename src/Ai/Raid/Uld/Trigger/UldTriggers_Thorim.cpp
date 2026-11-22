@@ -25,6 +25,12 @@ bool ThorimDpsPriorityTrigger::IsActive()
     if (!NearThorimEncounter(bot))
         return false;
 
+    // Runs out of combat too. Before the pull the Acolyte heads the pick list and is in range from the arena
+    // gate, and one hit on the start pack starts the encounter.
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsInCombat())
+        return false;
+
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
     // A healer's target drives its wand and its offensive dispels rather than a rotation, so steering

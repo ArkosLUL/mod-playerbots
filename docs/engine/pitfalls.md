@@ -695,7 +695,8 @@ Related traps:
     Test only below the floor; narrowing an existing band to that changes play, so log it.
 - **A direct `Attack()` has no out-of-combat guard** and reaches `SightDistance` (100 yd), so every
   branch of a resolver feeding it needs an in-combat unit, or the raid pulls itself
-  ([kologarn.md](../raids/ulduar/kologarn.md)).
+  ([kologarn.md](../raids/ulduar/kologarn.md)). A scripted mock fight passes that test, so gate on the
+  boss's combat there ([thorim.md](../raids/ulduar/thorim.md#the-arena-adds-and-what-to-kill-first)).
 - **A creature's aggro radius is its detection range plus its level lead over the player**
   (`Creature::GetAggroRange`, 1 yd per level): a level-83 boss with detection 20 pulls a level-80
   player at 23 yd, which rules out pre-pull stands behind most raid bosses.
