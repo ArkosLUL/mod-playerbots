@@ -75,24 +75,41 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
     return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD) ? 1.0f : 0.0f;
 }
 
-float VezaxAnimusThreatMultiplier::GetValue(Action* action)
+float VezaxThreatMultiplier::GetValue(Action* action)
 {
     if (!action || PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot) || !IsVezaxDamageAction(action))
         return 1.0f;
 
-    Unit* animus = AI_VALUE(Unit*, "current target");
-    if (!animus || animus->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS || !animus->IsAlive())
+    Unit* boss = AI_VALUE(Unit*, "current target");
+    if (!boss || !boss->IsAlive() ||
+        (boss->GetEntry() != NPC_VEZAX && boss->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS))
         return 1.0f;
 
     Player* mainTank = GetGroupMainTank(bot);
     if (!mainTank || mainTank == bot)
         return 1.0f;
 
+    ThreatManager& threat = boss->GetThreatMgr();
+
+    // A main tank not on Vezax's list isn't fighting him, and holding on him then would park the raid.
+    // The Animus spawns with an empty list, and there the switch already waits for the tanks.
+    if (boss->GetEntry() == NPC_VEZAX && !threat.IsThreatenedBy(mainTank))
+        return 1.0f;
+
     // Off the threat list, not the "threat" value: that one is a uint8 percentage, and a bot far enough
-    // past the tank to be holding the Animus wraps around to a small number.
-    ThreatManager& threat = animus->GetThreatMgr();
+    // past the tank to be holding the boss wraps around to a small number.
     float const own = threat.GetThreat(bot);
-    return own > 0.0f && own >= ULDUAR_VEZAX_ANIMUS_THREAT_SHARE * threat.GetThreat(mainTank) ? 0.0f : 1.0f;
+    return own > 0.0f && own >= ULDUAR_VEZAX_THREAT_SHARE * threat.GetThreat(mainTank) ? 0.0f : 1.0f;
+}
+
+float VezaxTricksOnTankMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<CastTricksOfTheTradeAction*>(action) || !VezaxEncounterActive(botAI))
+        return 1.0f;
+
+    Unit* target = AI_VALUE(Unit*, "tricks of the trade target");
+    Player* player = target ? target->ToPlayer() : nullptr;
+    return player && PlayerbotAI::IsTank(player) ? 1.0f : 0.0f;
 }
 
 float VezaxDamageHoldMultiplier::GetValue(Action* action)

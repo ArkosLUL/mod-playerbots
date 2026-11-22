@@ -558,6 +558,30 @@ bool VezaxDamageHeld(PlayerbotAI* botAI)
     return held;
 }
 
+namespace
+{
+bool VezaxLiveVaporNear(Unit* centre)
+{
+    std::list<Creature*> vapors;
+    centre->GetCreatureListWithEntryInGrid(vapors, NPC_VEZAX_SARONITE_VAPORS, ULDUAR_VEZAX_VAPOR_AREA_CLEARANCE);
+    return std::any_of(vapors.begin(), vapors.end(), [](Creature* vapor) { return vapor->IsAlive(); });
+}
+}  // namespace
+
+bool VezaxVaporInAreaReach(PlayerbotAI* botAI)
+{
+    if (!VezaxHardModePending(botAI))
+        return false;
+
+    Player* bot = botAI->GetBot();
+    if (VezaxLiveVaporNear(bot))
+        return true;
+
+    // Death and Decay, Pestilence, Blizzard and the like land around the target, not the caster.
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target != bot && VezaxLiveVaporNear(target);
+}
+
 void VezaxHushPet(Creature* pet)
 {
     // First stance only, or a second hush would save passive as the one to give back.

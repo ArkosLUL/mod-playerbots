@@ -5,14 +5,14 @@ where they disagree, and they do disagree.**
 
 | Spell | Id | Effect |
 |---|---|---|
-| Aura of Despair | 62692 → 64848 | On aggro. No mana regen, −20% melee attack speed, **and immunity to every mana return there is**: 62692 carries `EFFECT_IMMUNITY` to `SPELL_EFFECT_ENERGIZE`, 64848 adds `STATE_IMMUNITY` to aura types `OBS_MOD_POWER` and `PERIODIC_ENERGIZE`. Life Tap, mana gems, Evocation, Innervate, Judgement of Wisdom, Replenishment and Divine Plea all return **nothing** |
+| Aura of Despair | 62692 → 64848 | On aggro. No mana regen, −20% melee attack speed, **and immunity to every mana return there is**: 62692 carries `EFFECT_IMMUNITY` to `SPELL_EFFECT_ENERGIZE`, 64848 adds `STATE_IMMUNITY` to aura types `OBS_MOD_POWER` and `PERIODIC_ENERGIZE`. Life Tap, mana gems, Evocation, Innervate, Judgement of Wisdom, Replenishment, Divine Plea and Shadowfiend all return **nothing** |
 | Shadow Crash (cast) | 62660 | Every 10s from 13s. **Instant, missile `Speed` 10, `TARGET_DEST_TARGET_ENEMY`** — the destination freezes at cast time, so it is dodgeable. Random player **beyond 12.5 yd** (`3` plus both combat reaches, measured 3D), falling back to *any* target |
 | Shadow Crash (impact) | 62659 | 11,310 **plus `KNOCK_BACK_DEST`**, **10 yd**. The 2.7-3.6s of missile flight (4.8s at ~48 yd, the longest traced) is the whole reaction window |
 | Shadow Crash (field) | 63277 + 65269 | **8 yd, 20s.** +100% magic and +75% shadow damage done, +100% cast speed, −70% mana cost, **−75% healing done**. `SPELL_EFFECT_PERSISTENT_AREA_AURA`, so it exists as a `DynamicObject`. 63277 pulls 65269 in via `spell_linked_spell` type 2, so a bot inside carries **both** — **63277's own DBC row is only the damage and healing halves**, and reading it alone says the field does nothing for mana |
 | Searing Flames | 62661 | On the tank, **radius 100 yd** = the whole raid. 13,875-16,125 fire, −75% armour 10s, every **8s (25m) / 15s (10m)**. **2000 ms cast, `PreventionType = 1`** — genuinely interruptible |
 | Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, 10s — the slow is **on Vezax**, not the raid. Delays the Searing Flames group 10s |
 | Mark of the Faceless | 63276 → 63278 | 20s from pull, repeats 40s. **10 ticks at 1/s**; each casts 63278 at the marked bot, leeching 5,000 from everyone else in range and healing him ~10× that. See below — it is the fight |
-| Saronite Vapors (NPC 33488) | summon 63081 | Every 30s at a **random point 45 yd out** (`TARGET_DEST_CASTER_RADIUS`, radius index 11). `NullCreatureAI` + `MoveRandom(4.0f)`, no addon auras: **the living cloud is harmless, never chases, and cannot be pulled**. Its puddle (63323 → 63322, 8 yd, `100 · 2^stacks` every 2s for half back as mana) drops **only from `JustDied`**, never from the script's own despawn |
+| Saronite Vapors (NPC 33488) | summon 63081 | Every 30s at a **random point 45 yd out** (`TARGET_DEST_CASTER_RADIUS`, radius index 11), but `MovePositionToFirstCollision` lands it on the first navmesh edge in the way, or on him when that raycast fails: **one can land in the melee**. `NullCreatureAI` + `MoveRandom(4.0f)`, no addon auras: **the living cloud is harmless, never chases, and cannot be pulled**. Its puddle (63323 → 63322, 8 yd, `100 · 2^stacks` every 2s for half back as mana) drops **only from `JustDied`**, never from the script's own despawn |
 | Saronite Animus | NPC 33524 | Hard mode. At vapor #6 (3:00) with none killed, every vapor charges the anchor and merges; it spawns 8s later. **Taunt-immune**: immunity set -287 blocks `ATTACK_ME` and `MOD_TAUNT` |
 | Saronite Barrier | 63364 | −99% damage taken on Vezax until the Animus dies |
 | Profound Darkness | 63420 | Animus self-cast every 2s. 749 damage plus **+10% shadow damage taken per stack, 180s**. **Radius index 28 = 50,000 yd — room-wide and unavoidable** |
@@ -233,6 +233,18 @@ attacks the boss for anyone not already on him or on the Animus. **That node is 
 target source** ([action-selection](../../engine/action-selection.md#multiplier-semantics)): while it
 waited for a vapor already held it never fired, and two pulls ended at 99% boss health.
 
+**Dps hold under the main tank's threat, on Vezax as on the Animus** (`vezax threat multiplier`): damage
+from non-tank, non-healer bots holds once their threat reaches 90% of the main tank's on that boss's
+threat list. No bot runs the `threat` strategy, and a field outruns any tank: an affliction warlock in one
+passed 130% of a DK and of a warrior main tank, and Vezax walked into the camp and killed four. On Vezax
+it stands down while the main tank isn't on his list, so a tank that never engages can't park the raid.
+Auto-attack already swinging goes on.
+
+**Tricks of the Trade goes only to a tank** (`vezax tricks on tank multiplier`). At the pull the generic
+pick decides the tank needs no redirect ([pitfalls](../../engine/pitfalls.md)) and takes the
+hardest-hitting melee: both rogues' opener went to a fury warrior, who then held Vezax ~30 s in every
+pull.
+
 Each multiplier and rule writes a `veto` row naming the action it zeroed, so a trace says outright
 whether it fired. That caught the guard running raid-wide: `VezaxEncounterActive` asked only whether he
 was alive, `InstanceScript::GetCreature` answers from anywhere on the map, and all 116 `dps assist`
@@ -289,8 +301,8 @@ the vapors themselves are never sampled. The camp is read from `vezax.slot` as w
 which is only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was
 open.
 
-**Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as idle
-by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
+**Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
+hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
 boss-relative: radius from the anchor is off by a median 7.8-15.6 yd, wider than the band, so use the
 reader's `--band`. `--during` pools every bot's rows and cannot scope a `vezax.` key.
 
@@ -319,9 +331,8 @@ it:
   casts both on the main tank in its first 6s, once the caster is on the Animus, because the window
   opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s there. The generic ones follow the
   caster's current target: Tricks went to a dps 0.6s before the spawn, and that dps had it 1s in.
-- **Dps hold at 90% of the main tank's threat** (`vezax animus threat multiplier`): damage from non-tank,
-  non-healer bots on the Animus, read off its threat list. It leaves room for a cast in flight and lets him
-  retake it at 110%.
+- **Dps hold at 90% of the main tank's threat** (`vezax threat multiplier`, as on Vezax). It leaves room
+  for a cast in flight and lets him retake it at 110%.
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
   chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the position node stands
   down for that bot; it had walked him back 5 times from the chase.
@@ -361,12 +372,22 @@ keep him), until the summon, the Barrier or a vapor death:
 Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at each change and at the
 Animus spawn.
 
-Before the stop line the vapor guard is only the target guard and hold-target node: no AoE suppression
-and no pet control. **A stray cleave or an off-passive pet can still kill one**, and that silently ends
+Before the stop line, area damage holds only near a vapor (`vezax vapor area hold`): while hard mode is
+pending, the area spells by name, for a bot with a live vapor within 15 yd of it or its target. Whirlwind,
+Divine Storm, Death and Decay and Pestilence killed one that landed in the melee in 16 s. Pets stay
+uncontrolled, so **a felguard's Cleave or an off-passive pet can still kill one**, and that silently ends
 hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor, and when
 `vezax.hardmode` went `lost`.
 
 ## Known gaps
+
+**At ilvl 226 the Animus is a DPS race the rosters lose.** It spawns at 3:08 with 12,236,737 health
+(25-man) and Vezax at 21-27%. The raid does 118-125k/s on it with Heroism, less than on Vezax the minute
+before, so it needs ~100 s; by ~75 s Profound Darkness at 37-40 stacks outruns four healers and the raid
+collapses with it at 22-27% (both pulls that kept their main tank that long). The Barrier only cuts
+damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die under
+40+ stacks. Ranged still hold 33-91% mana at the collapse, since the field cast hold runs through the
+Animus phase.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the
