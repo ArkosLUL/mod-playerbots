@@ -503,7 +503,7 @@ on toc2, 4 of 36, behind Ruj'kah 9 and iced Broln 5. With one free melee champio
 - `FactionChampionsKiteAction::Execute` (`ToCActions_FactionChampionsBall.cpp:133-149` before the fix) walks each hop at
   `MOVEMENT_FORCED`. The kite re-plans on arrival or after `KITE_STEP_MS` 2.5 s (`ToCHelpers_FactionChampionsBall.cpp:94`,
   latch `:1045-1055`), but the hop in flight holds a lock of its length over the run speed at issue
-  (`MovementActions.cpp:339-346`, capped 5 s), and `IsWaitingForLastMove` (`:1059-1070`) refuses an equal priority: a
+  (`MovementActions.cpp:366-372`, capped 5 s), and `IsWaitingForLastMove` (`:1059-1070`) refuses an equal priority: a
   Dazed kiter's 15 yd hop locks 4.3 s, so its next hop waits ~1.8 s; a healthy one arriving 2 yd short waits ~0.3 s.
 - Move rows: 303 `faction champions kite` re-hops waited behind the bot's own kite walk (3 behind another action's), 276
   issued within 6 s: median 0.3, 1.2, 0.3 s, 110 over 1 s. At the refusal the stale walk ended a median 15.4 yd from the
@@ -513,8 +513,7 @@ on toc2, 4 of 36, behind Ruj'kah 9 and iced Broln 5. With one free melee champio
   was refused twice (`hms` 1720 ms, then 696) and issued at 0:43.4 as the lock ran out, while it walked on to the stale
   spot and Broln closed 5.0 → 1.6 yd; 92% → 8%, dead at 0:44.3.
 - 13 of the 17 deaths melee champions did half of (the round's script; the reader counts 18) had such a wait in the 5 s
-  before (an active kite re-plans every ~2.5
-  s, so this bounds the gain rather than measures it).
+  before (an active kite re-plans every ~2.5 s, so this bounds the gain rather than measures it).
 - For an ice DK round 5's ice reach already slipped in: its kite refused, the ice reach lowered the kite's booking and
   walked toward its champion, and the kite re-issued 0.1 s later (Tocxal 2:05-2:10).
 
@@ -538,8 +537,7 @@ Gorgrim 10/26, Narrhok 4/21, Broln 6/19; toc2 Narrhok 13/47, Gorgrim 25/37, Maz'
   Chains range of its champion?
 - The DK tank's CC (Blind, Intimidating Shout) lapsed Broln's Chains for 7 s in toc1's opening.
 - Tocyak's Greater Fire Elemental (15438) had Ruj'kah as target in 79% of his toc2 samples off the kill target and out
-  of CC, which holds
-  Polymorph, Fear and Hex off him (CC'd 35% against Ginselle 58%, Harkzog 51%).
+  of CC, which holds Polymorph, Fear and Hex off him (CC'd 35% against Ginselle 58%, Harkzog 51%).
 - The wall grip also refuses its own re-aim: 79 such waits, median 1.6 s.
 - Iced Gorgrim kills at range: Tocxap (toc1 0:41.6) took Death Coil and Icy Touch from 13-17 yd, his Chains, then Frost
   Strike.
