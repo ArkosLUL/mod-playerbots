@@ -402,7 +402,11 @@ for **22%**.
   follow angle on a 2 yd ring, so once `GetFollowAngle` spread the raid (`61011f323`) a carrier and a
   receiver could stand 4 yd apart, outside the pulse: parked receivers lacking the buff stood in it
   20-45% of the time against 43-70%, Storm Power a cloud fell by a tenth, and 7 clouds in six pulls ran
-  out of time with charges left against none in three.
+  out of time with charges left against none in three. **The position node stands down** for a
+  carrier, and for a receiver inside park of the rally still lacking the buff, which waits there for
+  the 1 s pulse. Its anchor or declump walked both off: carriers stood within 2 yd of their rally
+  18-27% of carry samples (windows 7-8), it was a parked ranged receiver's commonest next mover, and
+  its `MOVEMENT_COMBAT` lock refused the walk back until it landed.
   Seeding from the carrier is what keeps a melee carrier gathering melee and a ranged one gathering
   the casters, instead of walking half the raid across the room for six seconds of buff. No cast is
   broken for it — that is for the 14,000 hits, not a buff.
@@ -548,7 +552,8 @@ death's killing spell, stacks and Frozen Blows window. `--tanks` gives per windo
 (his snapshot target), the swings each took, every tank button as `node` or `class` (the OK `act` row
 sharing the cast's ms), the `hodir.defensive` values (`idle`, `wait`, `spent`, the button, `covered`,
 `none`), and the button up at each tank death. `--storm` gives clouds, Storm Power a cloud by role, clouds
-spent out or timed out, and how often a receiver parked at the rally stood inside the carrier's pulse;
+spent out or timed out, the carrier's share within 2 yd of its rally, and how often a receiver parked
+at the rally stood inside the carrier's pulse;
 `--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the fire latch's runs
 held out of the band.
 

@@ -248,3 +248,19 @@ ranged and healers. If melee pace stays down, try the drop for ranged and healer
    `MoveNear` meant to stack bots on one point into a ring of that radius; 40 calls outside Hodir
    (Yogg-Saron, Razorscale, Naxx, Sunwell, Tempest Keep, Black Temple). *Recommended:* check each stack
    point when its raid is next pulled.
+
+**Review (round 3).** Cause 1 holds: w8 uld1 Uldxaq latched the fire at (2001, -251), the tank held
+Hodir at (2000, -248), its stand sat 11.9 yd from him until 58 s. Cause 2 only in part: of the w7/w8
+parked receivers outside the pulse, the 2 yd ring is a minority. The carrier stood within 2 yd of its
+rally 18-27% of carry samples (w5 14/19/59%), ranged carriers over 4 yd off it 43-66%, and
+`hodir raid position action` was the commonest next mover of a parked ranged receiver and moved ranged
+and healer carriers off the rally: once the spread (2 yd) or collect (4 yd) stands down, the anchor or
+declump walks the bot to its stand, and that walk's `MOVEMENT_COMBAT` lock refuses the walk back until
+it lands. Melee receivers leave by `reach melee` / `set behind` (generic, untouched).
+- Fix: `HodirRaidPositionTrigger` stands down for a carrier (`HodirSpreadStormCloudTrigger`) and for
+  a receiver within park 2 of the rally without Storm Power (`GetHodirStormPowerRally`, now shared
+  with the collect trigger).
+- Reader: `--storm` adds the carrier's share within 2 yd of its rally; a fire latch run stops at a
+  shed, shelter, collect or spread act or a carry, where the position node stands down and both probes
+  go stale; the first fire window ends at the first landing after the first fire.
+- Next window adds: `--storm` carrier within 2 yd of its rally well above 18-27%.

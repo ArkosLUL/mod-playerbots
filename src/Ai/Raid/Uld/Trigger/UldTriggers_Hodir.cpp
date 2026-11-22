@@ -19,6 +19,29 @@ static Creature* NearestHodirIcicle(Player* bot, uint32 entry, float radius)
     return IsHodirIcicleLethal(icicle) ? icicle : nullptr;
 }
 
+// The rally a damage dealer still missing Storm Power gathers on, when there's one in reach.
+static bool GetHodirStormPowerRally(PlayerbotAI* botAI, Player* bot, Position& rally)
+{
+    if (!GetHodir(botAI))
+        return false;
+
+    // Tanks never leave the boss for a damage buff, and a charge spent on a healer is wasted.
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
+        return false;
+
+    // Already holding it: the pulse would be spent on a bot that can't use it, and the walk is
+    // downtime for nothing.
+    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
+        return false;
+
+    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
+    if (!carrier || carrier == bot)
+        return false;
+
+    return GetHodirStormCloudRally(bot, carrier, rally) &&
+           bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH;
+}
+
 bool HodirBitingColdTrigger::IsActive()
 {
     if (!IsHodirEngaged(botAI))
@@ -118,6 +141,17 @@ bool HodirRaidPositionTrigger::IsActive()
     // The arm threshold, not HodirBitingColdTrigger: that fires on any stack, and at one stack the shuttle
     // does nothing, so standing down for it keeps ranged out of Starlight.
     if (IsHodirBitingColdShedArmed(botAI, bot))
+        return false;
+
+    // Carrier holds still, and a receiver that walked in waits on the rally for the next 1 s pulse. The
+    // anchor would walk either one off it, and that walk's move lock refuses the way back till it lands.
+    HodirSpreadStormCloudTrigger spread(botAI);
+    if (spread.IsActive())
+        return false;
+
+    Position rally;
+    if (GetHodirStormPowerRally(botAI, bot, rally) &&
+        bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
         return false;
 
     // With a spot in hand (tank hold or buff stand) the only question is walk there or stay. Both finders
@@ -235,28 +269,8 @@ bool HodirSpreadStormCloudTrigger::IsActive()
 
 bool HodirCollectStormPowerTrigger::IsActive()
 {
-    if (!GetHodir(botAI))
-        return false;
-
-    // Tanks never leave the boss for a damage buff, and a charge spent on a healer is wasted.
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
-        return false;
-
-    // Already holding it: the pulse would be spent on a bot that can't use it, and the walk is
-    // downtime for nothing.
-    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
-        return false;
-
-    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
-    if (!carrier || carrier == bot)
-        return false;
-
     Position rally;
-    if (!GetHodirStormCloudRally(bot, carrier, rally))
-        return false;
-
-    float const gap = bot->GetExactDist2d(&rally);
-    if (gap > ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH)
+    if (!GetHodirStormPowerRally(botAI, bot, rally))
         return false;
 
     // Wait out an icicle between the bot and the rally rather than walk back into the pool the dodge
@@ -265,7 +279,6 @@ bool HodirCollectStormPowerTrigger::IsActive()
                                      ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
         return false;
 
-    // Release, not the park distance: one number at both ends stands this down the tick the bot arrives,
-    // and the position anchor walks it straight back out.
-    return gap > ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
+    // Release, not the park distance: a shed shuttle swings 3 yd each way off the rally and stays inside it
+    return bot->GetExactDist2d(&rally) > ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
 }

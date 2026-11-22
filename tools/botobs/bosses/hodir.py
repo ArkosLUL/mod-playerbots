@@ -34,6 +34,8 @@ SPELL_STORM_CLOUD = (65123, 65133)
 STORM_PULSE_YD = 3.0
 # Inside this of the rally a receiver stops walking (ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE).
 STORM_COLLECT_RELEASE_YD = 4.0
+# Inside this a carrier stops walking back to its rally (ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK).
+STORM_PARK_YD = 2.0
 # A cloud removed with less than this left ran its time out rather than its charges.
 STORM_CLOUD_EXPIRY_MS = 500
 SPELL_BITING_COLD = 62039
@@ -118,6 +120,8 @@ BITING_COLD_ARM_IN_STARLIGHT = 5
 # Both arm points drop this much while he carries Frozen Blows.
 BITING_COLD_ARM_FROZEN_BLOWS_DROP = 1
 SHED = "hodir biting cold shed"
+# Movers that run while the position node stands down; a dodge isn't one, it re-reads the anchor.
+PROBE_PAUSES = (SHED, SHELTER, "hodir collect storm power", "hodir spread storm cloud")
 # A shed leg this close to where the bot already stands goes nowhere: MoveTo calls it there or a dup.
 OWN_SPOT_YD = 0.5
 # An instant still costs the global cooldown, so the breaker split counts it as this much casting.
@@ -318,6 +322,14 @@ def storm_carries(rows: list[tuple[int, int, int, bool, int]]) -> list[dict]:
         carries.append(carry)
         open_on[carrier] = carry
     return carries
+
+
+def run_until_paused(low: int, high: int, pauses: list[int], spans: list[tuple[int, int]]) -> int:
+    """Where a probe run over `[low, high)` stops counting: the first pause time in it, or a span
+    open at or opening after `low`, else `high`."""
+    cuts = [when for when in pauses if low <= when < high]
+    cuts += [max(low, start) for start, stop in spans if start < high and stop > low]
+    return min(cuts, default=high)
 
 
 def starlight_rule(value: str) -> str:
@@ -1045,6 +1057,8 @@ def show_buffs(trace: Trace) -> None:
         print("  hodir.stand " + ", ".join(f"{kind} {count}" for kind, count in stands.most_common()))
 
     # The fire probe goes stale while a bot holds Starlight, so a held fire only counts with no stand.
+    # Both probes also go stale while the position node stands down, so a run stops at a shed or
+    # shelter move, a Storm Cloud walk, or a carry.
     fire_marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
     for rec in notes(trace, "hodir.firestand"):
         fire_marks[rec["g"]].append((rec["t"], starlight_rule(str(rec.get("txt", "")))))
@@ -1052,9 +1066,18 @@ def show_buffs(trace: Trace) -> None:
     for rec in notes(trace, "hodir.stand"):
         stand_marks[rec["g"]].append((rec["t"], str(rec.get("txt", ""))))
     if fire_marks:
-        runs = [high - low for guid in casters
-                for low, high in both_runs(sorted(fire_marks.get(guid, [])), sorted(stand_marks.get(guid, [])), 0,
-                                           min(end, dead.get(guid, end)), "held noreach", "none")]
+        pauses: dict[int, list[int]] = collections.defaultdict(list)
+        for rec in trace.of("act"):
+            if rec.get("vd") == "OK" and rec.get("a") in PROBE_PAUSES:
+                pauses[rec["g"]].append(rec["t"])
+        clouds = aura_spans(trace, SPELL_STORM_CLOUD)
+        runs = []
+        for guid in casters:
+            for low, high in both_runs(sorted(fire_marks.get(guid, [])), sorted(stand_marks.get(guid, [])), 0,
+                                       min(end, dead.get(guid, end)), "held noreach", "none"):
+                stop = run_until_paused(low, high, pauses.get(guid, []), clouds.get(guid, []))
+                if stop > low:
+                    runs.append(stop - low)
         print(f"  fire latch held out of the band with no stand: {len(runs)} runs, {sum(runs) / 1000:.0f} bot-seconds,"
               f" longest {max(runs, default=0) / 1000:.1f}s")
 
@@ -1062,7 +1085,7 @@ def show_buffs(trace: Trace) -> None:
     starts = fire_starts(trace)
     landings = [cast + FREEZE_LANDS_MS for cast in freeze_casts(trace, boss)] if boss is not None else []
     if boss is not None and starts:
-        first_window = (starts[0], landings[0] if landings else end)
+        first_window = (starts[0], next((landing for landing in landings if landing > starts[0]), end))
         ranged_bots = {guid for guid in bots(trace) if trace.role(guid) == "ranged"}
         shares = []
         for low, high in (first_window, (0, min(end, DEADLINE_MS))):
@@ -1169,7 +1192,7 @@ def show_storm(trace: Trace) -> None:
             continue
     holding = aura_spans(trace, SPELL_STORM_POWER)
     dealers = {guid for guid in bots(trace) if trace.role(guid) in ("melee", "ranged")}
-    parked = inside = 0
+    parked = inside = held = on_rally = 0
     for snap in frames(trace):
         when = snap["t"]
         live = [carry for carry in carries if carry["start"] <= when <= (carry["end"] or end)]
@@ -1181,6 +1204,8 @@ def show_storm(trace: Trace) -> None:
         him = rows.get(carrier)
         if not marks or not him:
             continue
+        held += 1
+        on_rally += inside_circle((him[1], him[2]), marks[-1], STORM_PARK_YD)
         for guid in dealers - {carrier}:
             row = rows.get(guid)
             if not row or row[5] <= 0 or covered(holding.get(guid, []), when, when + 1):
@@ -1188,6 +1213,8 @@ def show_storm(trace: Trace) -> None:
             if inside_circle((row[1], row[2]), marks[-1], STORM_COLLECT_RELEASE_YD):
                 parked += 1
                 inside += inside_circle((row[1], row[2]), (him[1], him[2]), STORM_PULSE_YD)
+    if held:
+        print(f"  carrier within {STORM_PARK_YD:.0f} yd of its rally {on_rally / held * 100:.0f}% of {held} samples")
     if parked:
         print(f"  damage dealers parked at the rally without Storm Power: inside the carrier's"
               f" {STORM_PULSE_YD:.0f} yd {inside / parked * 100:.0f}% of {parked} samples")

@@ -75,8 +75,8 @@ static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
 // on a carrier that holds still.
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
 
-// Receiver park and release, 2 yd apart like the shelter run so arriving doesn't release the bot.
-// Park sits a yard inside the pulse, about what a bot covers between two snapshots.
+// A receiver walks onto the rally and waits inside park for its pulse, and only walks back once pushed
+// past release. Park sits a yard inside the pulse, about what a bot covers between two snapshots.
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK = 2.0f;
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 4.0f;
 static_assert(ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK < ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS,

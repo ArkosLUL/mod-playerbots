@@ -1090,6 +1090,13 @@ class HodirReader(unittest.TestCase):
         stand = [(0, "fire"), (2000, "none"), (3000, "none"), (6000, "fire")]
         self.assertEqual(hodir.both_runs(fire, stand, 0, 8000, "held noreach", "none"), [(2000, 5000)])
 
+    def test_a_probe_run_stops_at_the_first_stand_down(self):
+        self.assertEqual(hodir.run_until_paused(1000, 5000, [500, 3000, 4000], []), 3000)
+        self.assertEqual(hodir.run_until_paused(1000, 5000, [], [(4000, 9000)]), 4000)
+        # Already carrying a cloud when the run opened: nothing of it counts.
+        self.assertEqual(hodir.run_until_paused(1000, 5000, [3000], [(0, 1500)]), 1000)
+        self.assertEqual(hodir.run_until_paused(1000, 5000, [500, 6000], [(5000, 6000)]), 5000)
+
     def test_a_storm_cloud_ends_spent_or_expired(self):
         rows = [(0, 7, 6, False, 30000), (1000, 7, 4, False, 29000), (4000, 7, 1, True, 26000),
                 (10000, 8, 6, False, 30000), (40000, 8, 2, True, 0),
