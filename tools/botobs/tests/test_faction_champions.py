@@ -1918,6 +1918,30 @@ class FocusAndRepick(unittest.TestCase):
         iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
         self.assertEqual(catches(late + iced + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1, 1, 1]})
 
+    def test_a_kite_re_hop_refused_by_its_own_walk_waits_until_the_next_hop_issues(self):
+        def waits(extra: list[dict]) -> dict:
+            with tempfile.TemporaryDirectory() as folder:
+                path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+                path.write_text("\n".join(json.dumps(rec) for rec in focus_pull() + extra) + "\n", encoding="utf-8")
+                return fc.kite_waits(Trace(path))
+
+        def move(when: int, ok: bool, by: str = fc.KITE_ACTION) -> dict:
+            return {"t": when, "e": "move", "g": MAGE, "k": "point", "x": 0.0, "y": 0.0, "z": 0.0, "by": by,
+                    "ok": int(ok), "r": "" if ok else "wait", "pr": "forced"}
+
+        # refused at 3.5 and 4.0 s behind the 1.0 s hop, issued at 5.0 s; the rogue's 4.5 s hit lands meanwhile
+        held = waits([move(1000, True), move(3500, False), move(4000, False), move(5000, True),
+                      dmg(4500, ROGUE_C, MAGE, 0), dmg(5500, ROGUE_C, MAGE, 0)])
+        self.assertEqual(held, {"hops": 2, "waits": [1500], "dropped": 0, "damage": 1000})
+        # a refusal behind another action's walk isn't the kite's own
+        dodge = move(2000, True, "faction champions avoid aoe")
+        self.assertEqual(waits([move(1000, True), dodge, move(2500, False), move(3000, True)])["waits"], [])
+        # one issued over 6 s later, or never, was dropped
+        late = [move(1000, True), move(2000, False), move(8500, True), move(9000, False)]
+        self.assertEqual(waits(late)["dropped"], 2)
+        self.assertIn("re-hops refused by the bot's own kite walk: 0 of 0 hops, 0 over 1 s, waited median -, 0 never"
+                      " issued; melee champion damage on the bot meanwhile 0k", self.render(fc.show_personal))
+
     def test_a_kite_reads_the_nearest_living_healer_after_its_last_hop(self):
         # the mage ends 5 yd off the priest; the moonkin's kite ends with no healer alive
         self.assertEqual([row["heal"] for row in fc.kite_rows(self.trace)], [5.0, None])

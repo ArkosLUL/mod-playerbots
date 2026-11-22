@@ -66,6 +66,9 @@ public:
 
     FactionChampionsKiteAction(PlayerbotAI* botAI) : NorthrendBeastsWalkAction(botAI, Name) {}
     bool Execute(Event event) override;
+
+private:
+    Position _hop;
 };
 
 class FactionChampionsSpeedBoostAction : public Action

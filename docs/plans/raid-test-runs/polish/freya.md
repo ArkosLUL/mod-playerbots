@@ -776,3 +776,7 @@ distance), and (2) the trio taking the ranged off an unfinished tail.
 
 Next window, read the Q5 check as "ranged on the tail while it is in reach and no trio member is under
 30%".
+
+**User answer (2026-11-22) to Q4, after the 25-man check:** drop the Snaplasher hold (rounds 3 and 5).
+Kite a loose Snaplasher only while its live speed is below the kiter's (its stacks slow it at 10-man only);
+otherwise, with no add tank alive, the raid kills it.
