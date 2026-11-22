@@ -74,6 +74,11 @@ MAX_STEP_MS = 2000
 # Past the 30 s redirect cooldown, so one spent before the spawn still shows
 REDIRECT_LOOKBACK_MS = 45000
 ANIMUS_VICTIMS_SHOWN = 12
+# Under four fifths of the sampled roster alive the raid is wiping, and cast and mana figures past it
+# measure the wipe, not the fight.
+COLLAPSE_ALIVE_SHARE = 0.8
+# A dead creature leaves the snapshots at a sliver of health; one still above this went missing instead.
+KILL_LAST_HEALTH_PCT = 5.0
 
 
 def pull_end(trace: Trace) -> int:
@@ -776,6 +781,79 @@ def animus_switches(trace: Trace, spawn: int) -> dict[int, int]:
     return out
 
 
+def animus_window(trace: Trace, samples: Samples, spawn: int) -> tuple[int, str]:
+    """`(t, why)` where the Animus fight stops being worth measuring: `kill` when it leaves the
+    snapshots dying, `collapse` once under four fifths of the sampled roster lives, else the pull's
+    `end`."""
+    end = pull_end(trace)
+    stamps, rows = samples.rows[animus_guid(trace)]
+    gone = stamps[-1] if stamps[-1] < end - MAX_STEP_MS and rows[-1][5] < KILL_LAST_HEALTH_PCT else None
+    roster = [guid for guid in roster_guids(trace) if guid in samples.rows]
+    for _, when, _ in samples.steps(spawn, end):
+        if gone is not None and when > gone:
+            return gone, "kill"
+        alive = sum(1 for guid in roster if (row := samples.row(guid, when)) and row[5] > 0)
+        if alive < COLLAPSE_ALIVE_SHARE * len(roster):
+            return when, "collapse"
+    return (gone, "kill") if gone is not None else (end, "end")
+
+
+def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
+    """The Animus fight from the spawn to `animus_window`: its health, the raid's damage, and per
+    ranged and healer bot what it cast, how much of it from a field, damage dealt, mana and cast holds.
+    None when it never spawned."""
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    if spawn is None:
+        return None
+    samples = samples or Samples(trace)
+    stop, why = animus_window(trace, samples, spawn)
+    field = aura_spans(trace, SPELL_FIELD)
+    casts = [rec for rec in trace.of("cast") if not rec.get("tr") and spawn <= rec["t"] <= stop]
+    holds = collections.Counter(rec.get("g") for rec in trace.of("veto")
+                                if rec.get("m") == HOLD and spawn <= rec["t"] <= stop)
+
+    def dealt(guid: int, when: int) -> float:
+        row = samples.row(guid, when)
+        return row[11] if row and len(row) > 11 else 0.0
+
+    def mana(guid: int, when: int) -> float | None:
+        """At the bot's last living sample by `when`: the collapse tick itself reads the dead as 0."""
+        found = samples.rows.get(guid)
+        if not found:
+            return None
+        index = bisect.bisect_right(found[0], when)
+        living = next((row for row in reversed(found[1][:index]) if row[5] > 0), None)
+        return living[6] if living else None
+
+    rows = []
+    for guid in sorted(roster_guids(trace), key=lambda guid: (trace.role(guid), trace.name(guid))):
+        at_spawn = samples.row(guid, spawn)
+        if trace.role(guid) not in ("ranged", "heal") or not at_spawn or at_spawn[5] <= 0:
+            continue
+        mine = [rec for rec in casts if rec.get("s") == guid]
+        rows.append({
+            "guid": guid,
+            "casts": len(mine),
+            "on_animus": sum(1 for rec in mine if rec.get("tgt") == animus),
+            "outside": sum(1 for rec in mine if not inside(field.get(guid, []), rec["t"])),
+            "field": covered(field.get(guid, []), spawn, stop),
+            "dealt": dealt(guid, stop) - dealt(guid, spawn),
+            "mana": (mana(guid, spawn), mana(guid, stop)),
+            "holds": holds.get(guid, 0),
+        })
+
+    health = (samples.row(animus, spawn)[5], samples.row(animus, stop)[5])
+    return {
+        "spawn": spawn,
+        "stop": stop,
+        "why": why,
+        "health": (health[0], 0.0 if why == "kill" else health[1]),
+        "raid": sum(dealt(guid, stop) - dealt(guid, spawn) for guid in roster_guids(trace)),
+        "rows": rows,
+    }
+
+
 def show_animus(trace: Trace) -> None:
     print("SARONITE ANIMUS")
     animus = animus_guid(trace)
@@ -822,6 +900,8 @@ def show_animus(trace: Trace) -> None:
     if not lust:
         print("  no lust cast")
 
+    show_animus_casters(trace, animus_casters(trace, samples))
+
     deaths = [death for death in combat_deaths(trace) if death["t"] >= spawn]
     if deaths:
         print(f"  {len(deaths)} death(s) after the spawn:")
@@ -829,6 +909,38 @@ def show_animus(trace: Trace) -> None:
             blow = death.get("blow") or [0, 0]
             print(f"    {clock(death['t'])} {trace.name(death.get('g'))[:14]:14} {trace.role(death.get('g')):6}"
                   f" {trace.name(death.get('killer'))} {blow[1] if len(blow) > 1 else ''}")
+
+
+def show_animus_casters(trace: Trace, fight: dict | None) -> None:
+    if not fight:
+        return
+    span = (fight["stop"] - fight["spawn"]) / 1000.0
+    if span <= 0:
+        return
+    start, left = fight["health"]
+    rate = (start - left) / span
+    if fight["why"] == "kill":
+        pace = f"killed in {span:.0f} s"
+    else:
+        pace = f"a kill takes ~{start / rate:.0f} s" if rate > 0 else "no progress"
+    rows = fight["rows"]
+    ranged = sum(row["dealt"] for row in rows if trace.role(row["guid"]) == "ranged")
+    print(f"  spawn to {fight['why']} at {clock(fight['stop'])} ({span:.1f} s): Animus {start:.1f}% to"
+          f" {left:.1f}%, {rate:.2f} %/s ({pace}); raid {fight['raid'] / span / 1000:.0f}k/s,"
+          f" ranged {ranged / span / 1000:.0f}k/s")
+
+    def pct(value):
+        return "-" if value is None else f"{value:.0f}"
+
+    print(f"    {'bot':14} {'role':6} {'casts/min':>9} {'on it':>6} {'outside':>8} {'field':>6} {'dealt/s':>8}"
+          f" {'mana':>9} {'held':>5}")
+    for row in rows:
+        mana = f"{pct(row['mana'][0])}>{pct(row['mana'][1])}"
+        print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6}"
+              f" {row['casts'] * 60.0 / span:9.1f} {row['on_animus']:6} {row['outside']:8}"
+              f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {row['holds']:5}")
+    print("    casts are starts, outside is those made out of a field, mana is at the spawn and the stop,"
+          " held is cast hold vetoes")
 
 
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
@@ -898,7 +1010,7 @@ SECTIONS = (
     ("field", "field uptime, in-field casts, soak, cast hold", show_field),
     ("mana", "mana, Life Tap and what it returned", show_mana),
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),
-    ("animus", "who held the Animus, redirects, lust, deaths", show_animus),
+    ("animus", "who held the Animus, redirects, lust, its pace and casters, deaths", show_animus),
     ("band", "each camp member's distance from the boss", show_band),
 )
 

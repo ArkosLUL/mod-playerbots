@@ -118,6 +118,7 @@ def vezax_pull() -> list[dict]:
         {"t": 13500, "e": "act", "g": AGONY, "a": gv.ANIMUS_SWITCH, "rel": 65.0, "vd": "OK"},
         {"t": 13600, "e": "act", "g": AGONY, "a": gv.ANIMUS_SWITCH, "rel": 65.0, "vd": "OK"},
         {"t": 14500, "e": "cast", "s": BULWARK, "sp": 32182, "tgt": 0, "ct": 0},
+        {"t": 13500, "e": "veto", "g": AGONY, "m": gv.HOLD, "a": "shadow bolt"},
         {"t": 15000, "e": "end", "out": "wipe"},
     ]
     # Agony holds the vapor on the first half of the samples only.
@@ -217,6 +218,70 @@ class SyntheticPull(unittest.TestCase):
         spans = gv.latch_spans_for(self.trace, "vezax.formation", "on")
         self.assertEqual(set(spans), {AGONY, TREE})
         self.assertEqual(spans[AGONY], [(10, 15000)])
+
+    def test_the_animus_fight_runs_to_the_pull_end_while_the_raid_stands(self):
+        # Fel is never sampled, so it neither counts as dead nor gets a row.
+        fight = gv.animus_casters(self.trace)
+        self.assertEqual((fight["spawn"], fight["stop"], fight["why"]), (12000, 15000, "end"))
+        self.assertEqual(fight["health"], (100.0, 97.0))
+        self.assertEqual([row["guid"] for row in fight["rows"]], [TREE, AGONY])
+        agony = fight["rows"][1]
+        # The 13 s bolt is aimed at Vezax a second after the field ran out.
+        self.assertEqual((agony["casts"], agony["on_animus"], agony["outside"], agony["field"]), (1, 0, 1, 0))
+        self.assertEqual(agony["mana"], (68.0, 65.0))
+        self.assertEqual(agony["holds"], 1)
+
+
+DART = 6001   # ranged
+CHOPS = [6002, 6003, 6004, 6005]
+LATE_ANIMUS = 4294969300
+
+
+def animus_pull(collapse: bool) -> list[dict]:
+    """Five bots and an Animus from 2 s. With `collapse` Dart and two others die at 6 s, else the
+    Animus leaves the snapshots at 2% after 4 s and the raid stands to the 10 s end."""
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 5, "diff": 1,
+         "boss": "general-vezax", "roster": [{"g": DART, "n": "Dart", "r": "ranged", "c": "mage", "h": 0}]
+         + [{"g": guid, "n": f"Chop{guid}", "r": "melee", "c": "rogue", "h": 0} for guid in CHOPS]},
+        {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
+        {"t": 1, "e": "unit", "g": LATE_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
+        {"t": 10000, "e": "end", "out": "wipe" if collapse else "kill"},
+    ]
+    for when in range(0, 11000, 1000):
+        dead = collapse and when >= 6000
+        units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0, 0, 0, 0, 0],
+                 [DART, 30.0, 0.0, 0.0, 0.0, 0.0 if dead else 100.0, 0.0 if dead else 60.0 - when / 500.0,
+                  LATE_ANIMUS, 0, 0, 0, when * 10.0]]
+        units += [[guid, 1.0, 1.0, 0.0, 0.0, 0.0 if dead and index < 2 else 100.0, 0.0, LATE_ANIMUS, 0, 0, 0, 0]
+                  for index, guid in enumerate(CHOPS)]
+        if when >= 2000 and (collapse or when <= 4000):
+            health = 100.0 - (when - 2000) / 1000.0 * (10.0 if collapse else 49.0)
+            units.append([LATE_ANIMUS, 1.0, 1.0, 0.0, 0.0, health, 0.0, CHOPS[0], 0, 0, 0, 0])
+        records.append({"t": when, "e": "snap", "u": units})
+    return records
+
+
+class AnimusWindow(unittest.TestCase):
+    def trace_of(self, collapse: bool) -> Trace:
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "603_5_general-vezax_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in animus_pull(collapse)) + "\n", encoding="utf-8")
+        return Trace(path)
+
+    def test_a_collapse_reads_mana_from_the_last_living_sample(self):
+        fight = gv.animus_casters(self.trace_of(collapse=True))
+        self.assertEqual((fight["stop"], fight["why"]), (6000, "collapse"))
+        dart = fight["rows"][0]
+        self.assertEqual(dart["mana"], (56.0, 50.0))
+        self.assertEqual(dart["dealt"], 40000.0)
+
+    def test_an_animus_gone_at_a_sliver_is_a_kill(self):
+        fight = gv.animus_casters(self.trace_of(collapse=False))
+        self.assertEqual((fight["stop"], fight["why"]), (4000, "kill"))
+        self.assertEqual(fight["health"], (100.0, 0.0))
 
 
 class EveryView(unittest.TestCase):

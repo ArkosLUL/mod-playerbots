@@ -26,7 +26,9 @@ public:
 };
 
 // Ranged dps don't cast outside a Shadow Crash field: full price buys mana that can't be made back.
-// Healers are exempt, since a held heal lands inside the leech spikes that kill people.
+// Healers are exempt, since a held heal lands inside the leech spikes that kill people. No hold on the
+// Animus either: its Profound Darkness stacks up until the raid can't be healed, so time is the limit
+// there, not mana.
 class VezaxHoldCastOutsideFieldMultiplier : public Multiplier
 {
 public:

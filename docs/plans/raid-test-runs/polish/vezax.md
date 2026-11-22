@@ -134,3 +134,58 @@ Harmless here, recorded in `docs/raids/ulduar/vezax.md`.
 **User answers (2026-11-22):** (1) keep polishing on the 226 rosters, the stop rule waived as for
 Algalon; (2) yes, lift the ranged "no casting outside a field" hold while the Animus lives; (3) no
 shared Tricks of the Trade fix, so the Vezax-only Tricks guard stays.
+
+## Round 2 (2026-11-22, branch from `eda15422d`)
+
+**Data.** No new pull: window 9 did not pull Vezax after round 1 merged (`0f303c478`); window 10 will. So
+`raidtest.py report --boss vezax --raid uld --head 02925e260 --pulls 10` still shows window 8's three.
+No stop rule, verdict or failure ranking this round (stop rule waived by answer 1; round 1 unjudged).
+Deaths by mechanic: none new, round 1's table stands.
+
+**Picked: answer 2, the field cast hold on the Animus (user-decided tactic).** Baseline re-measured on
+the round 1 traces with the new `general_vezax.py --animus` caster table (spawn to the collapse, the
+first sample under 4/5 of the sampled roster alive):
+
+| Pull | Window | Animus | Raid / ranged | Ranged casts/min | Outside-field casts | Field share | Ranged mana at the collapse | Holds per ranged |
+|---|---|---|---|---|---|---|---|---|
+| w8 uld3 | 3:08.5-4:28.6, 80 s | 100→22.9%, 0.96 %/s, kill ~104 s | 118k / 56k/s | 15.7-28.5 | 0-4 per bot | 49-68% | 0-93, median 47 | 19-44 |
+| w7 uld1 | 3:08.6-4:28.6, 80 s | 100→19.2%, 1.01 %/s, kill ~99 s | 124k / 67k/s | 13.5-24.0 | 1-5 | 49-69% | 0-100, median 42 | 16-43 |
+| w8 uld1 | 3:08.8-4:03.4, 55 s (main tank dead 4:00) | 100→57.8%, 0.77 %/s | 95k / 39k/s | 16.5-24.2 | 0-3 | 45-62% | 8-81 | 12-29 |
+
+Cause: `VezaxHoldCastOutsideFieldMultiplier::GetValue` (`UldMultipliers_Vezax.cpp:61`) zeroed every ranged
+damage action outside a 63277 field for the whole encounter, Animus included.
+
+**Fix** (`UldMultipliers_Vezax.{h,cpp}` only): the hold returns 1 for a bot whose current target is the
+live Animus (entry 33524). Keyed on the target, not the Barrier: in the first 2-6 s after the spawn ranged
+still sit on Vezax behind the Barrier (1% damage) and stay held there. Healers were never under this hold
+(the multiplier exempts `IsHeal`), and no other Vezax rule holds a healer's casts, so nothing changes for
+them. 10/25 and normal/hard: the Animus only exists in hard mode, so normal mode keeps the hold as before.
+Reader: `general_vezax.py --animus` gains the pace and caster table above (`animus_casters`, tests in
+`tools/botobs/tests/test_general_vezax.py`). Docs: `docs/raids/ulduar/vezax.md` (field hold, the trace,
+known gaps).
+
+Expected size: outside a field a caster loses +100% damage and +100% cast speed, so a second of casting
+there does about a quarter of an in-field one. With ranged out of a field 31-51% of the phase that is
+roughly +10k/s, ~8-10% on the Animus: ~0.96-1.01 → ~1.05-1.1 %/s, a kill in ~90-95 s, still past the
+~80 s collapse. Not enough alone, as round 1 said.
+
+**Next window should show** (`general_vezax.py --animus`, pulls that keep the main tank to the collapse):
+
+- ranged `outside` casts on the Animus up from 0-5 per bot to a share near their out-of-field time
+  (31-51%), casts/min up from a 14-29 range, and `held` 0 once a bot is on the Animus (holds before the
+  switch, on Vezax behind the Barrier, are expected);
+- ranged damage on the Animus above 56-67k/s and raid above 118-124k/s; the Animus pace above
+  0.96-1.01 %/s, a projected kill under ~99-104 s;
+- ranged mana at the collapse well under the median 42-47%; a ranged at 0 well before the collapse
+  means full-price casting outran the pool and the gain fell short;
+- Animus victim still a tank (`time on target`) and `vezax threat multiplier` vetoes on ranged on the
+  Animus: more casting pushes them toward the 90% cap, and a ranged pull of the taunt-immune Animus
+  would cost more than the gain.
+- Round 1's checks still stand (no 57934 on a non-tank, no non-tank killed by his melee before the
+  Animus, no area cast at a vapor).
+
+**Observation, not chased.** Elemental shamans' mana climbed in the Animus phase in all three pulls
+(67→81, 70→93, 73→100) while every other caster's fell: something still returns mana under Aura of
+Despair. Unchecked; the doc's "immune to every mana return" may have an exception.
+
+**Questions.** None new.

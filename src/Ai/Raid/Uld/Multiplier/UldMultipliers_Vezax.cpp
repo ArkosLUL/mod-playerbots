@@ -72,7 +72,12 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // 63277, not the linked 65269 with the cost cut: the link trails the field, and a bot can't fix that.
-    return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD) ? 1.0f : 0.0f;
+    if (bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD))
+        return 1.0f;
+
+    // The target, not the Barrier: a bot still on Vezax behind it would pay full price for 1% of the damage.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->IsAlive() && target->GetEntry() == NPC_VEZAX_SARONITE_ANIMUS ? 1.0f : 0.0f;
 }
 
 float VezaxThreatMultiplier::GetValue(Action* action)
