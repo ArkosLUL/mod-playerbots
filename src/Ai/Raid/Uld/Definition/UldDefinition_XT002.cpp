@@ -39,6 +39,8 @@ void DefineXT002(EncounterBuilder& e)
     // add wave's priority action starves it, and killing a Scrapbot beats standing on a spot.
     e.Node<XT002PummellerTauntTrigger, XT002PummellerTauntAction>(ACTION_RAID + 4);
     e.Node<XT002SetDpsPriorityTrigger, XT002SetDpsPriorityAction>(ACTION_RAID + 3);
+    // Above every heal, or the healer sent to an out of range bomb carrier keeps healing from its slot.
+    e.Node<XT002BombHealTrigger, XT002BombHealAction>(ACTION_RAID + 2);
     e.Node<XT002RedirectThreatTrigger, XT002RedirectThreatAction>(ACTION_RAID + 1);
     e.Node<XT002RaidPositionTrigger, XT002RaidPositionAction>(ACTION_RAID);
 

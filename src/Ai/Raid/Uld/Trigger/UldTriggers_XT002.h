@@ -30,8 +30,18 @@ public:
     bool IsActive() override;
 };
 
+// The healer sent to a Gravity Bomb carrier, while that carrier is out of its heal range.
+class XT002BombHealTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "xt002 bomb heal trigger";
+
+    XT002BombHealTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // Anchors the tank XT is on, ranged and healers once XT is in combat, or bots walk there before the pull.
-// Stands down for any dodge, a tank without aggro, and healers with someone out of range.
+// Stands down for any dodge, a tank without aggro, and the healer sent to a bomb carrier.
 class XT002RaidPositionTrigger : public Trigger
 {
 public:

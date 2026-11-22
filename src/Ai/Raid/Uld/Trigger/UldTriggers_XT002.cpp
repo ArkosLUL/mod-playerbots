@@ -3,7 +3,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
-#include "RangeTriggers.h"
+#include "PlayerbotAIConfig.h"
 #include "UldEncounter_XT002.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -100,14 +100,10 @@ bool XT002RaidPositionTrigger::IsActive()
     if (tank)
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
 
-    if (PlayerbotAI::IsHeal(bot))
-    {
-        // Stands down while anyone is out of heal range: this outranks "reach party member to heal", and the far
-        // cells are 55 yd from the anchor.
-        PartyMemberToHealOutOfSpellRangeTrigger outOfHealRange(botAI);
-        if (outOfHealRange.IsActive())
-            return false;
-    }
+    // The healer sent to a bomb carrier holds where it got in range until the bomb is off. Only that one: with
+    // "reach party member to heal" pinned, standing another healer down for a far heal target strands it.
+    if (PlayerbotAI::IsHeal(bot) && GetXT002BombHealCarrier(bot))
+        return false;
 
     // Same call the action makes, so the two cannot disagree about which slot is this bot's.
     Position slot;
@@ -115,6 +111,16 @@ bool XT002RaidPositionTrigger::IsActive()
         return false;
 
     return bot->GetExactDist(slot) > ULDUAR_XT002_RANGED_SPOT_TOLERANCE;
+}
+
+bool XT002BombHealTrigger::IsActive()
+{
+    // Role first: every bot runs this row, and the latch walks the group.
+    if (!PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Player* carrier = GetXT002BombHealCarrier(bot);
+    return carrier && bot->GetExactDist2d(carrier) > sPlayerbotAIConfig.HealDistance;
 }
 
 bool XT002SetDpsPriorityTrigger::IsActive()

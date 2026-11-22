@@ -155,6 +155,13 @@ inline constexpr float ULDUAR_XT002_AREA_THREAT_REACH = 25.0f;
 static_assert(ULDUAR_XT002_THREAT_RELEASE < ULDUAR_XT002_THREAT_CAP && ULDUAR_XT002_THREAT_CAP < 1.1f,
               "the brake holds short of the 110% that takes XT off his holder");
 
+// XT-002: a bomb healer stops this far inside heal range of its carrier, who is still walking to a cell.
+inline constexpr float ULDUAR_XT002_BOMB_HEAL_MARGIN = 5.0f;
+
+// XT-002: sideways tries round the straight line to the carrier when a puddle or another carrier blocks it.
+inline constexpr float ULDUAR_XT002_BOMB_HEAL_BEARING_STEP_DEG = 15.0f;
+inline constexpr int ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS = 3;
+
 extern const Position ULDUAR_XT002_SPAWN;
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
@@ -218,6 +225,14 @@ Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell);
 // bot: an engage adds none, and neither does walking XT to the spot. Latched per instance, so the multiplier and
 // the priority action agree. False for tanks and healers, out of XT's combat, or with no living tank.
 bool IsXT002ThreatBraked(Player* bot, Unit* xt002);
+
+// The Gravity Bomb carrier this healer bot walks out to, else null. A carrier out of every healer's heal range gets
+// the nearest bot healer not carrying a debuff, latched until the bomb comes off, so one healer goes and the pick
+// can't flip while both walk. Latched per instance, so every healer reads the same answer.
+Player* GetXT002BombHealCarrier(Player* bot);
+
+// Every living Gravity Bomb carrier in this bot's group.
+std::vector<Player*> GetXT002BombCarriers(Player* bot);
 
 // Close enough to XT to engage; anything further is still at its toy pile. True without an XT, so the gate
 // never strands a bot with nothing to hit.
