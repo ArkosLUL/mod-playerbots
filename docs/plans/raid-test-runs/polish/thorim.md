@@ -445,20 +445,32 @@ Uldzaj). 32 / 54 / 56% of all Chain Lightning damage landed on hops after the ch
   1; uld3 +132.4: slot 0 solved 248° stood at −86..−100°, 7.3 yd from slot 1.
 - Core: `Spell::SearchChainTargets` hops to the closest unhit target with `IsWithinDist(unit, 5.0)` (3D, both combat
   reaches; `spell_jump_distance` 5.0 for 62131/64390, `2026_03_11_00`).
-- Code: `ThorimRingWantsMove` (`UldEncounter_Thorim.cpp:2580`) keeps an arrived ring bot until it is 5 yd
-  (`GetDistance`, ~6.5 exact) off its point, unless `RingSpotBeatsTheDeadband` (`:634`) sees it in the lit cone or a
+- Code: `ThorimRingWantsMove` (`UldEncounter_Thorim.cpp:2590`) keeps an arrived ring bot until it is 5 yd
+  (`GetDistance`, ~6.5 exact) off its point, unless `RingSpotBeatsTheDeadband` (`:644`) sees it in the lit cone or a
   Blizzard zone; nothing re-checks the separation the solver (`RingBearingSeparated`, 60°) put between the points.
 
 **Classification: bug.** The solver means the slots to sit out of each other's jump; the deadband undoes it.
 
-**Fix** (`UldEncounter_Thorim.cpp`/`.h`, Thorim only): `RingBodyBridgesChain` (`:604`) is true when a ring bot stands
+**Fix** (`UldEncounter_Thorim.cpp`/`.h`, Thorim only): `RingBodyBridgesChain` (`:610`) is true when a ring bot stands
 within `ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` (5) + `ULDUAR_THORIM_RING_CHAIN_MARGIN` (0.5) of a living floor body outside
 its own slot (another slot, a tank, the camp; the core's `IsWithinDist`), and its own point is clear of every such body
 by the same measure. `RingSpotBeatsTheDeadband` ORs it in, after the zone check (no walk into a Blizzard) and only for a
 point outside the lit cone. A point that is not clear stays put, so the other bot, whose point is clear, is the one
-that moves. Pure read, no latch. No size, mode or player branch: a real player's body counts like a bot's, and a human
-in a melee slot keeps his slot entry. Replayed on these snapshots it would fire in 14-31% of ring snapshots, ~2-3 new
-moves per ring bot per minute; the tank-to-slot-2 bridge stays (slot 2's point is 7.1 yd from the off-tank spot).
+that moves. Pure read, no latch. No size, mode or player branch: a real player's body counts like a bot's; a human
+never gets a melee slot entry (`EnsureMeleeSlot` runs only for the bot itself), so a human melee is a body outside every
+slot. Replayed on these snapshots it would fire in 14-31% of ring snapshots, ~2-3 new moves per ring bot per minute; the
+tank-to-slot-2 bridge stays (slot 2's point is 7.1 yd from the off-tank spot).
+
+**Review:** counting another slot's ring body where it stands deadlocked the commonest bridge. Two adjacent slots at
+the solver's minimum (8.8 yd apart), each drifted toward the other, block each other's points, so neither moves: in the
+replay 24 / 36 / 14% of phase 2 snapshots (uld1/2/3) kept a ring-to-ring pair inside 8 yd that neither escape clears,
+the stuck pairs' points a median 8.8 yd apart. `RingBodyBridgesChain` now counts another slot's ring bot at its slot's
+point (`RingSlotPointsApart`, `:604`, the chord between the composed bearings), since it walks back too, and every
+other body where it stands; and a bot within `ULDUAR_THORIM_RING_CHAIN_MIN_STEP` (1 yd) of its point never moves for a
+bridge, so a body that won't leave can't make it reissue the move every tick. Replayed: such stuck pairs in 9 / 9 / 13%
+of snapshots; the escape fires in 24-38% of ring snapshots, 2.5-3.2 new moves per ring bot per minute. Both lethal
+slot-to-slot casts still fire through the 6 s before the cast (uld2's drifted slot 1 bots now too, blocked before by
+slot 0's bodies).
 
 **Questions for the user** (plan changes, not built):
 1. Hard mode at ilvl 226 is now a race the rosters lose at the mana wall (+100-120 s) or the stack ceiling (+190 s).

@@ -601,11 +601,19 @@ bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position>
     return true;
 }
 
+float RingSlotPointsApart(ThorimEncounterState const& state, uint8 first, uint8 second)
+{
+    float const delta = AbsAngleDelta(state.ringSlots[first].composed, state.ringSlots[second].composed);
+    return 2.0f * ULDUAR_THORIM_MELEE_RING_RADIUS * std::sin(delta / 2.0f);
+}
+
 bool RingBodyBridgesChain(Player* bot, Position const& spot)
 {
     Group* group = bot->GetGroup();
+    ThorimEncounterState const* state = FindState(bot);
     uint8 ownSlot = 0;
-    if (!group || !MeleeSlotOf(bot, ownSlot))
+    if (!group || !state || !state->ringLatched || !MeleeSlotOf(bot, ownSlot) ||
+        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_THORIM_RING_CHAIN_MIN_STEP)
         return false;
 
     float const jump = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + ULDUAR_THORIM_RING_CHAIN_MARGIN;
@@ -618,10 +626,12 @@ bool RingBodyBridgesChain(Player* bot, Position const& spot)
             continue;
 
         uint8 slot = 0;
-        if (MeleeSlotOf(member, slot) && slot == ownSlot)
+        bool const ringBody = MeleeSlotOf(member, slot);
+        if (ringBody && slot == ownSlot)
             continue;
 
-        if (member->GetExactDist(spot) <= jump + bot->GetCombatReach() + member->GetCombatReach())
+        float const apart = ringBody ? RingSlotPointsApart(*state, ownSlot, slot) : member->GetExactDist(spot);
+        if (apart <= jump + bot->GetCombatReach() + member->GetCombatReach())
             return false;
 
         if (bot->IsWithinDist(member, jump))

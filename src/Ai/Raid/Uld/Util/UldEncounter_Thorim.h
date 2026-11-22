@@ -104,6 +104,7 @@ inline constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;
 
 inline constexpr float ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP = 5.0f;
 inline constexpr float ULDUAR_THORIM_RING_CHAIN_MARGIN = 0.5f;
+inline constexpr float ULDUAR_THORIM_RING_CHAIN_MIN_STEP = 1.0f;
 
 inline constexpr float ULDUAR_THORIM_PET_SLOT_TOLERANCE = 0.3927f;
 

@@ -316,10 +316,15 @@ retried.
 **It breaks for a Chain Lightning bridge too.** The solver keeps slot points 8.8-12.4 yd apart, but the
 deadband lets a body rest up to ~6.5 yd off its point, so two slots' bodies stood inside the jump in
 **60-78%** of hard-mode phase 2 snapshots while their points did under 10% of the time, and two casts
-crossed slots to kill five melee. So `RingBodyBridgesChain` breaks it for a ring bot within the jump
+crossed slots to kill five melee. So `RingBodyBridgesChain` breaks it for a ring bot more than
+`ULDUAR_THORIM_RING_CHAIN_MIN_STEP` (1 yd) off its point and within the jump
 (`ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` 5 + `ULDUAR_THORIM_RING_CHAIN_MARGIN` 0.5, the core's
-`IsWithinDist`) of a living floor body outside its slot, when its own point clears every such body; if
-not, moving would still bridge, and the other bot moves instead.
+`IsWithinDist`) of a living floor body outside its slot, when its point clears every such body; if not,
+moving would still bridge. **Another slot's ring bot counts at its slot's point**, since it walks back
+too: counted where it stands, two slots drifting toward each other block each other's points, and a
+replay of three pulls left such a bridge unbroken in 14-36% of phase 2 snapshots (9-13% counted at
+points). The 1 yd floor stops a bot on its point reissuing the move while a body that won't leave
+bridges it.
 
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
