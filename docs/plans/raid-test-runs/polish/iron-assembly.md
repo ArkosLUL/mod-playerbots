@@ -612,3 +612,103 @@ Watch the pull for a council member leaving its tank in the first 5 s. The branc
 strip `c163ec11a`: the two source files it touches are stripped here (`commentstrip.py strip --keep-from
 c163ec11a`, token check clean, now equal to Custom's bar the fix), so the merge carries no comment and
 the other Ulduar files come from Custom as they are.
+
+## Round 8 (2026-11-22, window 12 on build ebe746ad1: round 7)
+
+**Data.** `raidtest.py report --boss iron-assembly --raid uld --head ebe746ad1 --pulls 10`: one pull per
+pool, all valid (`batch.py --strict --since ebe746ad1`), no DC veto, hard mode on, Steelbreaker last in
+all three: uld1 `tr-20261122-195033-8` (`603_8_stormcaller-brundir_1795377075`, wipe 5:48, 32 deaths),
+uld2 `tr-20261122-194932-7` (`603_7_…_1795377014`, wipe 5:22, 32), uld3 `tr-20261122-195053-9`
+(`603_9_…_1795377095`, wipe 6:03, 33). Windows 9-11's traces re-read for the falls and round 7's checks
+(`603_32_…_1795358187` is window 9's uld3, never read in round 6).
+
+**Stop rules.** Not polished: three wipes. Picks so far: healer mana (r1), Meltdown on the melee (r2),
+the user's answers (r3, r5), Fusion Punch on the tanks (r4, r6), a stranded risen tank (r7). This round
+picks members walking through a hole in the floor (new), so no three-round repeat.
+
+**Did round 7 cause the wipes? No.** It changes only a bot tank's re-sent walk to its spot.
+- First 5 s (council members' victims from the snapshots): every member stays on a tank in all three
+  pulls bar Brundir on a melee for 0.2 s (uld1 0:00.99), as windows 10-11 did (0.3-0.5 s). Steelbreaker
+  passes between tanks for 3-8 s exactly as before (uld1 3.5 → 4.6 → 8.7 s; window 10 uld1 3.4 → 8.4 s).
+- No walk loop: per tank 3-16 accepted walks a pull and 1-7 re-sends after a `dup` (window 11: 2-12 and
+  0-6). `flip.move.by:iron assembly tank assignment action` 1.05 against 0.67-2.20 before.
+- The three wipes start elsewhere (below). The one moved metric is uld1's raid position flips
+  (`spread <-> spread-rune`, 12.4/min against 1.2-5.3): two ranged, Uldxap and Uldxas, flipped ~25 times
+  3:33-3:59 next to Molgeim's last rune, a ranged mover, not the tank walk (cause not read).
+- Priests ran dry earlier in uld1 (3:48.8 / 4:01.5 against 4:19-4:43 in windows 10-11) and uld2 (3:14.5
+  against 3:45-4:30), uld3 within range (3:52.5 / 3:53.2 against 3:48-4:28). Phase lengths match (Brundir
+  1:41-1:47, Molgeim 3:30-3:37), and round 7 touches no healer or damage taken.
+
+**Verdict on round 7 (re-send a stopped tank walk): works.** All ten rises in the window read "a healer
+in 40 yd at once, stood 0.0s" (`--revived`; window 11 uld3: 7.5 / 4.8 s and 6.8 / 4.8 s); no risen tank
+died to High Voltage at the Meltdown point.
+
+**Deaths by mechanic.**
+
+| Pull | Phase timeline | Deaths |
+|---|---|---|
+| uld1 | Brundir 1:41, Molgeim 3:30, alone 134 s, lowest 16.0% (4:51.5) | 23 High Voltage, 2 Meltdown (carriers at the point), 2 Fusion Punch (carrier Uldxaz 5:08.1, 15 s in, 3 charges, nothing castable; risen Uldxaa 5:27.1 at 63%, 4 charges, Divine Protection on), 2 Steelbreaker melee on tanks (carrier Uldxam 4 s in), 2 on non-tanks, 1 Static Disruption |
+| uld2 | Brundir 1:47, Molgeim 3:36, alone 102 s, lowest 36.5% (4:49.0) | 27 High Voltage (the first two: priests Uldyaf 4:12.0 at Z 224 and Uldyad 4:21.0 at Z 340, under the floor), 2 Fusion Punch (risen Uldyaa 4:49.1 at 95%, 3 charges, Last Stand and Shield Wall spent at 2:42 / 3:37; Uldyab 5:05.4 at 32%, 5 charges), 1 Meltdown, 1 Steelbreaker melee on a tank, 1 on a non-tank |
+| uld3 | Brundir 1:46, Molgeim 3:37, alone 143 s, lowest 1.9% (5:31.7) | Molgeim phase: 1 Rune of Death (Uldzaq 3:03.3). Alone: 25 High Voltage, 3 Meltdown (carriers at the point), 2 Fusion Punch (carrier Uldzab 5:36.2, 3 s in at 77%, 3 charges, Barkskin on; Uldzaz at 23), 1 Static Disruption, 1 Steelbreaker melee on a tank |
+
+What started each wipe. uld1: healer mana (priests under 10% from 3:48.8 and 4:01.5), a ranged High
+Voltage death at 4:57.0, then the third carrier's punch at 5:08.1. uld2: two priests walked through the
+floor at 3:37.7 and 3:43.5, out of every heal's reach, and died there; the two tanks then died to punches
+at 3 and 5 charges. uld3: 1.9% when the third carrier blew at 5:31.8 (+1 charge, +9.7%), four of five
+healers under 10% by 5:21.8, then the fourth carrier's punch 3 s into its Overwhelming Power.
+
+**Picked: members walking through a hole in the floor (bug).** New `--floor`: in uld2 Uldyad sank from
+3:37.7 (walking from the stack point to (1552.7, 157.5), `spread`) and Uldyaf from 3:43.5 (to (1548.0,
+150.4), `spread`, sinking 2.5 yd short of it) at the run speed, both by `iron assembly raid position
+action`; window 9's uld3 lost Uldzae 3:45.5, Uldzac 3:54.3 and Uldzaq 3:55.5 the same way (to (1548.3,
+89.0), (1553.8, 85.7), (1546.7, 90.5)), the two healers its first deaths bar a Meltdown. No other Iron
+Assembly trace on disk (19 more) has a member under the floor. Cause:
+- The spread ring centres on `TryGetIronAssemblyBossTankSpot` (`DeriveIronAssemblyRaidSpot`,
+  `UldEncounter_IronAssembly.cpp:1229` before), which a Rune of Power near the designed spot moves
+  (`:883`-`:929` before). The Meltdown circles show where Steelbreaker's tank stood: uld2 (1568.0, 140.9)
+  for 24 s, window 9 uld3 (1562.2, 106.0); every fallen slot sits 22 yd from those spots (uld2's fit
+  (1568.3, 142.0) exactly), 48-51 yd from the anchor at 133°-143° and 217°-227°, past the 40 yd where
+  the doc's navprobe found the diagonals off the floor. Shifted rings without a fall: window 12 uld3 and
+  window 11 uld2 (1572.0, 141.6), window 10 uld3 (1573.0, 140.3), ~10 yd off the designed spot.
+- `PathGenerator::NormalizePath` runs `UpdateAllowedPositionZ` on every path point, which for a player is
+  `GetMapWaterOrGroundLevel(x, y, z)`; over a hole it returns that hole's ground, so the end point drops
+  hundreds of yards and the spline runs through the floor. Uldyad's line from (1577.1, 121.1, 427.3)
+  moved 1.9 yd across in 5 s while dropping 37, the slope of its 44 yd walk to an end point ~860 yd down
+  (the doc's hole reads Z −438); Uldyaf walked the floor to its last navmesh corner, then went straight
+  down.
+
+**Fix.** The ring samples its 64 bearings for floor with that same call (`IronAssemblyOnFloor`: ground
+within `ULDUAR_IRON_ASSEMBLY_FLOOR_TOLERANCE` 2 yd of the spot's Z), cached per instance per ring centre
+(`IronAssemblyRingOnFloor`, 64 queries when the centre moves). An off-floor bearing is
+blocked like a rune-covered one in the squeeze (`SqueezeIronAssemblyRing`, label `spread-floor`); when
+some bearing is off the floor the slot's own point is checked too and, still off, snaps to the nearest
+clear sample (rune-free and on the floor), else the nearest on the floor, else the stack point
+(`spread-nofloor`); that point check is the one query per bot per tick, and only while a bearing is off
+the floor. A ring wholly on the floor reads as before, rune-only squeezes included. No size, mode or player input (the ring is phase 3 only, so normal mode never
+reaches it). pb-check green (compile, pblint, codestyle, botobs).
+
+**Also seen, not picked.**
+- Fusion Punch: 6 deaths, 2 per pull, none from a strategy gap that is ours to fix this round. uld1
+  Uldxaz's 5:08.1 punch (`under 59k`) found nothing castable: Shield Wall read `IMPOSSIBLE` at 4:50.4 and
+  was never cast this pull (cast in window 11's uld1; cause not read), and its Last Stand ran to 5:08.5,
+  so the shared `PickDefensive` would have read it `covered` anyway; it died at 100% under Last Stand. The
+  rest are healing or buttons gone at 3+ charges. Shared `PickDefensive` questions: 0 deaths again.
+- uld2 Uldyab's Overwhelming Power ran out at 4:55.4 with the carrier alive and no Meltdown death (cause
+  not read).
+
+**Numbers for the open questions (not built).**
+1. *Innervate from balance/resto druids to priests:* 7 Innervates; 2 on a priest, both from cats (uld1
+   Uldxba 3:28.3 at 15%, uld3 Uldzac 3:51.6 at 12%); 5 on the druid itself (balance 4:15.1 at 40%, 4:09.9
+   at 41%; resto 5:22.6 at 39%, 2:47.7 at 58%, 3:56.7 at 61%). uld2 (no cat) put none on a priest, dry
+   from 3:14.5. Priests under 10%: uld1 3:48.8 / 4:01.5, uld2 3:14.5, uld3 3:52.5 / 3:53.2.
+2. *Rune heading keeping Steelbreaker's tank within 40 yd in Molgeim's phase:* 5 stack shifts in 3 pulls;
+   2 left Steelbreaker's tank with no living healer within 40 yd, uld2 Uldyaa 2:26.5-2:52.5 (25.9 s,
+   nearest healer up to 43.6 yd, down to 23%) and uld3 Uldzaa 2:28.3-2:52.7 (24.5 s, 48.0 yd, 23%); the
+   other three kept a healer within 10.1 yd. No tank died in Molgeim's phase (window 11: 1, after 21.5 s
+   out of reach); both took their punch in that gap under a button the punch node spent, Last Stand (uld2
+   2:43.4 at 73%) and Divine Protection (uld3 2:45.7 at 50%).
+
+**Next window should show.** `--floor`: "none" in every pull. `postmortem.py --notes ironassembly.spot`:
+`spread-floor` rows only in a pull whose Steelbreaker spot moved (Meltdown circle off (1575.9, 132.3)),
+and its ranged at slots 22 yd from that centre on the floor; `spread-nofloor` never. Pulls with the
+designed spot read as before (`spread` / `spread-rune`). Rises still "at once" (round 7).

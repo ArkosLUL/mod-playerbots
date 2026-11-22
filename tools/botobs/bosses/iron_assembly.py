@@ -7,6 +7,7 @@ Steelbreaker's empowered phase, deaths by mechanic.
     iron_assembly.py <file> --punches  every Fusion Punch, every phase, with the verdict and the button
     iron_assembly.py <file> --revived  every tank that rose mid pull, its walk to a healer, the raid buffs put back
     iron_assembly.py <file> --defensives  every tank defensive, who was on the tank and which node cast it
+    iron_assembly.py <file> --floor    every member that sank under the hall floor, and where it was walking
 
 What the generic views miss here:
 
@@ -82,6 +83,10 @@ TANK_DEFENSIVES = {12975: "Last Stand", 871: "Shield Wall", 498: "Divine Protect
 SPELL_LAY_ON_HANDS = (48788, 27154, 10310, 2800, 633)
 # Snapshots come every ~250 ms and a dead member drops out of them, so an older row says nothing about now.
 SNAPSHOT_FRESH_MS = 1000
+
+# hall floor, same Z as ULDUAR_IRON_ASSEMBLY_ANCHOR. a member this far under it is walking down a hole in the floor
+FLOOR_Z = 427.27
+SUNK_YD = 3.0
 
 
 def mine(trace: Trace) -> bool:
@@ -545,6 +550,47 @@ def show_defensives(trace: Trace) -> None:
         print(f"  class casts with nothing on the tank: {loose}")
 
 
+def show_floor(trace: Trace) -> None:
+    """Members that sank under the hall floor, and where they were walking when it started."""
+    print("BELOW THE FLOOR")
+    if not mine(trace):
+        return
+    samples = Samples(trace)
+    moves = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok"):
+            moves[rec["g"]].append(rec)
+    spots = collections.defaultdict(list)
+    for rec in notes(trace, "ironassembly.spot"):
+        spots[rec["g"]].append(rec)
+    deaths = {}
+    for death in combat_deaths(trace):
+        deaths.setdefault(death["g"], []).append(death["t"])
+    lines = []
+    for guid, rows in samples.rows.items():
+        sunk = next(((t, row) for t, row in rows if t >= 0 and row[5] > 0 and row[3] < FLOOR_Z - SUNK_YD), None)
+        if sunk is None:
+            continue
+        t, row = sunk
+        move = next((rec for rec in reversed(moves[guid]) if rec["t"] <= t), None)
+        spot = next((rec["txt"] for rec in reversed(spots[guid]) if rec["t"] <= t), None)
+        lowest = min(r[3] for row_t, r in rows if row_t >= t)
+        line = f"  {clock(t)}  {trace.name(guid)} ({trace.role(guid)}) sank at ({row[1]:.1f}, {row[2]:.1f})"
+        if move:
+            line += f", walking to ({move['x']:.1f}, {move['y']:.1f}) by {move.get('by') or '?'}"
+        if spot:
+            line += f", spot {spot}"
+        line += f", down to Z {lowest:.0f}"
+        died = next((d for d in deaths.get(guid, []) if d >= t), None)
+        if died is not None:
+            line += f", died at {clock(died)}"
+        lines.append((t, line))
+    for _, line in sorted(lines):
+        print(line)
+    if not lines:
+        print("  none")
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     killer = death.get("killer")
     rewind = death.get("rewind") or []
@@ -594,6 +640,7 @@ SECTIONS = (
     ("revived", "every tank that rose mid pull, how long it took to reach a healer and the raid buffs put back on it",
      show_revived),
     ("defensives", "every tank defensive with its health, who was on it and which node cast it", show_defensives),
+    ("floor", "every member that sank under the hall floor, and the spot it was walking to", show_floor),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
 
