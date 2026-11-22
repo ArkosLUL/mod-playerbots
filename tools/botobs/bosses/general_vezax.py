@@ -800,8 +800,8 @@ def animus_window(trace: Trace, samples: Samples, spawn: int) -> tuple[int, str]
 
 def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     """The Animus fight from the spawn to `animus_window`: its health, the raid's damage, and per
-    ranged and healer bot what it cast, how much of it from a field, damage dealt, mana and cast holds.
-    None when it never spawned."""
+    ranged and healer bot what it cast, how much of it from a field, damage dealt, mana and cast holds,
+    all and those with the Animus as its sampled target. None when it never spawned."""
     animus = animus_guid(trace)
     spawn = first_seen(trace, [animus]) if animus else None
     if spawn is None:
@@ -810,12 +810,15 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     stop, why = animus_window(trace, samples, spawn)
     field = aura_spans(trace, SPELL_FIELD)
     casts = [rec for rec in trace.of("cast") if not rec.get("tr") and spawn <= rec["t"] <= stop]
-    holds = collections.Counter(rec.get("g") for rec in trace.of("veto")
-                                if rec.get("m") == HOLD and spawn <= rec["t"] <= stop)
+    holds = [rec for rec in trace.of("veto") if rec.get("m") == HOLD and spawn <= rec["t"] <= stop]
 
     def dealt(guid: int, when: int) -> float:
         row = samples.row(guid, when)
         return row[11] if row and len(row) > 11 else 0.0
+
+    def on_animus(guid: int, when: int) -> bool:
+        row = samples.row(guid, when)
+        return bool(row) and len(row) > 7 and row[7] == animus
 
     def mana(guid: int, when: int) -> float | None:
         """At the bot's last living sample by `when`: the collapse tick itself reads the dead as 0."""
@@ -832,6 +835,7 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
         if trace.role(guid) not in ("ranged", "heal") or not at_spawn or at_spawn[5] <= 0:
             continue
         mine = [rec for rec in casts if rec.get("s") == guid]
+        held = [rec for rec in holds if rec.get("g") == guid]
         rows.append({
             "guid": guid,
             "casts": len(mine),
@@ -840,7 +844,8 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
             "field": covered(field.get(guid, []), spawn, stop),
             "dealt": dealt(guid, stop) - dealt(guid, spawn),
             "mana": (mana(guid, spawn), mana(guid, stop)),
-            "holds": holds.get(guid, 0),
+            "holds": len(held),
+            "held_on": sum(1 for rec in held if on_animus(guid, rec["t"])),
         })
 
     health = (samples.row(animus, spawn)[5], samples.row(animus, stop)[5])
@@ -933,14 +938,15 @@ def show_animus_casters(trace: Trace, fight: dict | None) -> None:
         return "-" if value is None else f"{value:.0f}"
 
     print(f"    {'bot':14} {'role':6} {'casts/min':>9} {'on it':>6} {'outside':>8} {'field':>6} {'dealt/s':>8}"
-          f" {'mana':>9} {'held':>5}")
+          f" {'mana':>9} {'held':>7}")
     for row in rows:
         mana = f"{pct(row['mana'][0])}>{pct(row['mana'][1])}"
+        held = f"{row['holds']}/{row['held_on']}"
         print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6}"
               f" {row['casts'] * 60.0 / span:9.1f} {row['on_animus']:6} {row['outside']:8}"
-              f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {row['holds']:5}")
+              f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {held:>7}")
     print("    casts are starts, outside is those made out of a field, mana is at the spawn and the stop,"
-          " held is cast hold vetoes")
+          " held is cast hold vetoes, all/with the Animus targeted")
 
 
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:

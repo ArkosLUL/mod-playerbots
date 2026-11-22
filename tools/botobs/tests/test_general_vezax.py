@@ -229,7 +229,8 @@ class SyntheticPull(unittest.TestCase):
         # The 13 s bolt is aimed at Vezax a second after the field ran out.
         self.assertEqual((agony["casts"], agony["on_animus"], agony["outside"], agony["field"]), (1, 0, 1, 0))
         self.assertEqual(agony["mana"], (68.0, 65.0))
-        self.assertEqual(agony["holds"], 1)
+        # Agony's samples never target the Animus, so its 13.5 s veto is held but not held on it.
+        self.assertEqual((agony["holds"], agony["held_on"]), (1, 0))
 
 
 DART = 6001   # ranged
@@ -247,6 +248,7 @@ def animus_pull(collapse: bool) -> list[dict]:
         {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
         {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
         {"t": 1, "e": "unit", "g": LATE_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
+        {"t": 3500, "e": "veto", "g": DART, "m": gv.HOLD, "a": "frostbolt"},
         {"t": 10000, "e": "end", "out": "wipe" if collapse else "kill"},
     ]
     for when in range(0, 11000, 1000):
@@ -277,6 +279,7 @@ class AnimusWindow(unittest.TestCase):
         dart = fight["rows"][0]
         self.assertEqual(dart["mana"], (56.0, 50.0))
         self.assertEqual(dart["dealt"], 40000.0)
+        self.assertEqual((dart["holds"], dart["held_on"]), (1, 1))
 
     def test_an_animus_gone_at_a_sliver_is_a_kill(self):
         fight = gv.animus_casters(self.trace_of(collapse=False))

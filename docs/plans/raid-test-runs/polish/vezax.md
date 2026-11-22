@@ -167,13 +167,15 @@ known gaps).
 Expected size: outside a field a caster loses +100% damage and +100% cast speed, so a second of casting
 there does about a quarter of an in-field one. With ranged out of a field 31-51% of the phase that is
 roughly +10k/s, ~8-10% on the Animus: ~0.96-1.01 → ~1.05-1.1 %/s, a kill in ~90-95 s, still past the
-~80 s collapse. Not enough alone, as round 1 said.
+~80 s collapse. Not enough alone, as round 1 said. uld2's only Animus pull, from a build before window 7
+(`603_7_general-vezax_1795299665`), came closest: 143k/s, 1.15 %/s to its collapse at +84 s, the Animus
+dead at +94.5 s with 9 of 25 alive, then a wipe on Vezax at 5:32.
 
 **Next window should show** (`general_vezax.py --animus`, pulls that keep the main tank to the collapse):
 
 - ranged `outside` casts on the Animus up from 0-5 per bot to a share near their out-of-field time
-  (31-51%), casts/min up from a 14-29 range, and `held` 0 once a bot is on the Animus (holds before the
-  switch, on Vezax behind the Barrier, are expected);
+  (31-51%), casts/min up from a 14-29 range, and `held` at n/0, n being holds on Vezax behind the
+  Barrier before the switch;
 - ranged damage on the Animus above 56-67k/s and raid above 118-124k/s; the Animus pace above
   0.96-1.01 %/s, a projected kill under ~99-104 s;
 - ranged mana at the collapse well under the median 42-47%; a ranged at 0 well before the collapse
