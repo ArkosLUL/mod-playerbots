@@ -852,26 +852,12 @@ bool MimironProximityMineAction::isUseful()
 
 bool MimironProximityMineAction::Execute(Event /*event*/)
 {
-    Unit* nearest = nullptr;
-    float nearestDist = ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS;
-
-    // Mines are non-selectable, so they only show up on the raw nearby-npc list.
-    for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_PROXIMITY_MINE)
-            continue;
-
-        float const dist = bot->GetExactDist2d(unit);
-        if (dist < nearestDist)
-        {
-            nearestDist = dist;
-            nearest = unit;
-        }
-    }
-
+    // The trigger's grid lookup: "nearest npcs" drops a mine out of sight, as in the west alcove.
+    Creature* nearest = bot->FindNearestCreature(NPC_PROXIMITY_MINE, ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS);
     if (!nearest)
         return false;
+
+    float const nearestDist = bot->GetExactDist2d(nearest);
 
     // Just past the 3 yd blast, capped so a fresh field means a sidestep, not a run across the room. No
     // unfiltered fallback: one mine for another isn't worth the travel, and one blast is healable.

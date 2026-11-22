@@ -52,6 +52,17 @@ const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COU
 
 namespace
 {
+// Grid search, not "nearest npcs": that list drops anything out of sight, and the closed west door's model
+// (194776) spans the alcove the MK II is held in, so bots there lose sight of the node they stand on.
+std::list<Creature*> FindMimironFloorUnits(Player* bot, std::vector<uint32> const& entries)
+{
+    std::list<Creature*> units;
+    if (bot)
+        bot->GetCreatureListWithEntryInGrid(units, entries, sPlayerbotAIConfig.SightDistance);
+
+    return units;
+}
+
 // Where NPC 33576 will be `seconds` from now: it laps the room clockwise, so rotate it about the room
 // centre. Radius is read live, since its waypoint path isn't a true circle.
 Position MimironOrbitAhead(Position const& now, float seconds)
@@ -136,17 +147,12 @@ bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
     if (!bot)
         return true;
 
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    if (!botAI)
-        return true;
-
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    for (Creature* mine : FindMimironFloorUnits(bot, {NPC_PROXIMITY_MINE}))
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_PROXIMITY_MINE)
+        if (!mine->IsAlive())
             continue;
 
-        if (dest.GetExactDist2d(unit->GetPositionX(), unit->GetPositionY()) < clearance)
+        if (dest.GetExactDist2d(mine->GetPositionX(), mine->GetPositionY()) < clearance)
             return false;
     }
 
@@ -163,10 +169,10 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
 
     // Only spread flames draw a spray: the fire bot searches for NPC_FLAMES_SPREAD alone.
     std::vector<Position> spread;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    for (Creature* unit :
+         FindMimironFloorUnits(botAI->GetBot(), {NPC_FLAMES_SPREAD, NPC_FROST_BOMB, NPC_EMERGENCY_FIRE_BOT}))
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!unit->IsAlive())
             continue;
 
         switch (unit->GetEntry())
@@ -309,10 +315,9 @@ struct MimironMarkers
 MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
 {
     MimironMarkers markers;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    for (Creature* unit : FindMimironFloorUnits(botAI->GetBot(), {NPC_PROXIMITY_MINE, NPC_ROCKET_STRIKE_N}))
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!unit->IsAlive())
             continue;
 
         if (unit->GetEntry() == NPC_PROXIMITY_MINE)
