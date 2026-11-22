@@ -486,3 +486,125 @@ two ring slots within 8 yd in well under 60-78% of phase 2 snapshots (target und
 ring slot straight to another; melee Chain Lightning deaths in the ring from 5 toward 0 (tank-to-slot-2 bridges remain);
 melee still on Thorim in 98%+ of snapshots and raid damage on him no lower than 0.41-0.47%/s. Gauntlet unchanged: phase
 2 in hard mode (`thorim.sifjoined`) in all three, no phase 1 deaths. The pulls still wipe at the mana wall or the ceiling.
+
+## Round 7 (build a55056c40 with round 6)
+
+**Data:** window 13, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261122-205906-4`
+(uld1), `-5` (uld2), `-6` (uld3); traces `env/dist/logs/botobs/603_{4,5,6}_thorim_{1795381228,1795381235,1795381236}.ndjson`,
+read through `raidtest.py report --boss thorim --raid uld --head a55056c40 --pulls 10` and throwaway scripts (session
+scratchpad `thorim_r7/`) over `snap` (hp, position, target and `dealt` of every unit), `note` (`thorim.leverpulled`,
+`thorim.balcony`, `thorim.p2start`, `thorim.sifjoined`, `thorim.squad`, `thorim.smashside`), `move` and `act` rows, Sif's
+`cast` rows and `death`. Window 12's three pulls (`603_{4,5,6}_thorim_{1795376561,1795376561,1795376560}`) re-read for the
+gauntlet. `thorim.squad` notes are missing from uld2/uld3 again; the corridor squad was read off positions.
+
+**Three kills, all normal mode.** Sif cast 62565 at 3:13.5 / 3:17.9 / 3:15.6 in all three pulls (uld1 included: the
+orchestrator's note said uld1 was hard mode, it was not), no `thorim.sifjoined`, and Sif dealt no damage; phase 2 came at
+3:32.1 / 3:34.9 / 3:24.2. Not polished: no kill counts.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795381228 | kill 6:03, normal | Iron Ring Guard Impale 3 (melee 1:09.5, gauntlet tank 1:11.1, ranged 1:17.6); Runic Smash 1 (the same tank after his soulstone, 1:17.2); Rune Detonation 1 (melee, 2:38.3) |
+| uld2 | 1795381235 | kill 5:58, normal | Iron Honor Guard melee 1 (ranged, 2:47.6) |
+| uld3 | 1795381236 | kill 5:41, normal | none |
+
+**Round 6 verdict: held.** Bodies of two ring slots within 8 yd in 18.6 / 11.8 / 9.7% of phase 2 snapshots (window 12:
+60.7 / 59.9 / 77.9%); no Chain Lightning death and no slot-to-slot hop; melee on Thorim in 100% of snapshots from P2 +15 s to
++100 s. Chain Lightning still crosses from the tanks into a slot (uld2: 80% of its 117k after a crossing, every cast seeded
+on a tank), the bridge the pending off-tank spot question is about. Phase 2 was normal mode, so its intake says nothing
+about the hard-mode race. The gauntlet half of the check failed: phase 2 missed Sif in all three and phase 1 had 6 deaths.
+
+**Why uld1 had 5 deaths.** After pack 1's Acolyte died (0:49.7), the gauntlet picker's first tier (acolytes within 50 yd)
+handed the squad pack 2's Acolyte 35-45 yd south, still out of combat; chasing it pulled pack 2's two Iron Ring Guards
+(0:57.5, 0:59.3) with pack 1's two at 50-60%, so four guards lived from 0:59 to 1:11 and Impale killed three bots in 8 s.
+The gauntlet tank, at 1-23% health, was moving south toward the Colossus approach while tanking; he died at 1:11.1, took his
+soulstone (15%), and the lead walk to the 30 yd Colossus stop (straight `MoveTo`, unwaypointed, no smash check) put him at
+(2228.9, −358.7), 7 yd from the y −359 Left Hand bunny row, as the 62058 smash landed (1:17.2). The Rune Detonation death was a
+melee on the Giant. The same double pull happened in all six pulls of windows 12 and 13; only uld1 lost bots to it.
+
+**Step timeline** (pack dead = 62507 − 20 s):
+
+| Pull | pack dead | lever | Colossus engaged / dead | lead at Giant | Honor Guards engaged | Giant engaged / dead | `BALCONY_5` | phase 2 | 62565 |
+|---|---|---|---|---|---|---|---|---|---|
+| uld1 | 0:23.5 | 0:29.6 | 1:26.8 / 2:01.8 | 2:02.2 | 2:11.8, 2:14.7 | 2:23.3 / 3:13.2 | 3:29.8 | 3:32.1 | 3:13.5 |
+| uld2 | 0:27.8 | 0:33.0 | 1:47.3 / 2:11.8 | 2:12.4 | 2:18.0, 2:19.1 | 2:28.8 / 3:15.3 | 3:31.7 | 3:34.9 | 3:17.9 |
+| uld3 | 0:25.5 | 0:32.1 | 1:37.7 / 2:03.4 | 2:04.2 | 2:10.7, 2:13.5 | 2:22.4 / 3:07.4 | 3:20.8 | 3:24.2 | 3:15.6 |
+
+**Where the gauntlet loses time** (seconds per segment from the lever; the deadline is 62565, 163.5-165.0 s after the lever):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | Giant dead to hit | lever to phase 2 | vs 62565 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w13 uld1 | 6.1 | 12.4 | 39.3 | 5.5 | 35.0 | 10.0 | 61.5 | 18.9 | 182.5 | +18.6 |
+| w13 uld2 | 5.1 | 16.8 | 40.5 | 17.0 | 24.4 | 6.3 | 57.3 | 19.6 | 181.9 | +16.9 |
+| w13 uld3 | 6.6 | 14.3 | 44.3 | 7.0 | 25.7 | 7.3 | 56.7 | 16.8 | 172.1 | +8.6 |
+| w12 uld1 | 7.7 | 15.7 | 33.0 | 9.5 | 18.5 | 7.8 | 59.0 | 16.3 | 159.8 | made |
+| w12 uld2 | 6.6 | 17.0 | 34.5 | 11.5 | 25.2 | 5.3 | 53.8 | 17.1 | 164.4 | made |
+| w12 uld3 | 6.3 | 12.7 | 34.4 | 3.5 | 29.7 | 7.5 | 51.1 | 17.3 | 156.2 | made |
+
+No shared code changed between the two builds' gauntlets; window 13 is the same strategy on worse luck. The fights run well
+below what the squad can do: 3.9-4.2 M of corridor health at 23.5-33k average against 40-56k on the Colossus. The Honor
+Guard, Acolyte and Giant segment is the largest (51-62 s; the adds alone took 29-42 s for 652k), then the corridor trash
+(33-44 s for 1.09 M). Moving-without-damage DPS bot-seconds by the move's source, six pulls of nine DPS bots: Honor Guards +
+Giant 580 `thorim gauntlet positioning action`, 233 `reach melee`, 104 `flee`; corridor trash 423 `thorim runic smash
+action` (the lane dodge, needed), 180 `reach melee`, 139 positioning; to the Colossus 124 smash, 102 positioning.
+
+**Failure picked: the bot-led gauntlet tether drags DPS off live targets** (the biggest time loss that is a bug).
+
+- Code: `ThorimGauntletPositioningTrigger` (`UldTriggers_Thorim.cpp:45`) and its action's trail branch
+  (`UldActions_Thorim.cpp:231`) walk every non-healer to a bot leader's position once more than
+  `ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE` (25 yd) away, at `ACTION_RAID`, whatever the bot is fighting. The leader walks on in the
+  fight at combat priority: down the corridor while tanking Iron Ring Guards, and up the ramp to the Giant "until he is in
+  combat" (round 3), leaving the Honor Guards and the Acolyte on the DPS and pets at the ramp foot.
+- Trace: between the first trash pull and the Giant's death, 517 tether orders went to a DPS bot holding a live gauntlet
+  target, 443 of them from this branch (57-91 a pull; the lane formation branch 74); 279 of the 517 sent a melee or ranged
+  bot farther from its target and out of its reach. uld1, melee Uldxat on the ramp Acolyte at 1-5 yd:
+  tethered toward the leader at 2:18.8, 2:19.5, 2:21.3, 2:22.0, 2:22.6, 2:26.6, each answered by `set behind` or `reach
+  melee`; ranged Uldxaq on the foot Honor Guard at 6-8 yd sent 67 and 94 yd up the ramp (2:22.6, 2:31.2). That Honor Guard,
+  held by a hunter pet, went 83% → 16% in 30 s (2:17-2:47, ~7k dps). Per pull, 116-185 DPS bot-seconds moving without
+  damage behind the tether and the reach back to the target, three quarters of it on the Honor Guards and Giant.
+- The boss doc already says a tether on non-healers "would fight `reach melee`"; the bot-leader branch did exactly that.
+
+**Classification: bug.** The tether is meant to keep the squad with the leader between fights, not to pull it off the mob it
+is killing.
+
+**Fix** (Thorim files only, no size or mode branch): `ThorimGauntletFighting` (`UldEncounter_Thorim.cpp:1435`) is true while
+the bot's current target is an Iron Ring or Honor Guard, a gauntlet Acolyte (33110), the Colossus or the Giant, alive, hostile,
+in combat and within the 50 yd pick range. `ThorimTrailsGauntletLeader` (`:1457`) holds the 25 yd trail for a non-healer
+while it fights; healers keep their 20 yd tether, and the gate walk and the lane formation are unchanged. Trigger and action
+share it. With nothing left in range the tether walks the bot to the leader as before, where the picker hands it his target.
+A real player leading changes nothing: non-healers never trailed a human leader.
+
+**Not fixed, measured** (all six pulls):
+- **The squad is pinned at the last waypoint while the leader waits at his 30 yd Colossus stop.** The Runic Smash dodge keeps
+  followers swapping between the two last waypoints (y −329), 55-65 yd from the Colossus, outside the 50 yd pick range, until
+  one drifts in: leader at the stop to engage 15.0 (he arrived mid-trash) / ~9 / 4.8 s (w13), 3.9 / 4.2 / 1.7 s (w12). Question 3.
+- **Generic `flee` paths below the corridor floor** in the right lane: a 4-5 yd ranged or healer flee west at the ramp foot
+  (2217, −423) sank 6 / 1 bots (w13 uld1/uld3) and 7 / 2 (w12) to z ~390 and back over 6.5-7 s; at (2219, −354) one ranged
+  went to z 264 for 56 s (w13 uld1), outside the fall rescue's 110 yd. Needs navprobe; next-round candidate (hold `flee` for
+  corridor bots there, or fix the spot).
+- **The Runic Smash latch is still cleared by arena scans** (round 6's watch item): `thorim.smashside` flips to 0 from arena
+  bots about every second. Its only smash death this window was on the unwaypointed approach, where the lane logic does not
+  run, so it stays unfixed.
+
+**Stop rules:** not polished (three normal-mode kills). Not stuck: rounds 3-7 picked five different causes; each fix held.
+
+**Questions for the user** (new tactics, not built; seconds per pull from these traces):
+1. **A balcony runner.** One corridor ranged DPS starts the balcony walk once no Honor Guard or Acolyte lives and the Giant is
+   under ~70%, so it stands at `BALCONY_5` when he dies and starts phase 2 at once. The walk from his death to the hit took
+   16.8-19.6 s (w13) and 16.3-17.3 s (w12); the runner's lost damage on the Giant is ~1.5-2 s. Saves ~12-14 s. Recommended: yes.
+2. **The gauntlet tank waits at the lever** once the main tank has the start pack, instead of walking to it after the sixth
+   death: the lever went 5.1-6.6 s (w13) and 6.3-7.7 s (w12) after that death, Sif's clock having started at it. Saves ~5-6 s.
+   Recommended: yes.
+3. **The gauntlet tank pulls the Colossus himself** at his 30 yd stop once no corridor trash lives near him (the smash stops at
+   the engage and the squad's tether brings it in), instead of waiting for a follower to drift inside 50 yd. Saves 2-9 s,
+   ~4 s on average. Recommended: yes.
+The pending off-tank spot question (2107.25, −252.65) is unchanged and not built. Window 13 missed the deadline by 8.6 / 16.9 /
+18.6 s; the fix (est. 6-10 s) plus questions 1 and 2 would cover all three.
+
+**Next window should show** (`move` rows by `thorim gauntlet positioning action`, `snap` target and `dealt`, segment times):
+non-healer trail orders (to the leader's position) issued while the bot's target is a live, in-combat gauntlet mob within
+50 yd near 0 (was 57-91 a pull); DPS bot-seconds moving without damage behind the tether and the reach back from 116-185 a pull
+toward ~20; the Honor Guard + Acolyte + Giant segment from 51-62 s toward ~45 s and the corridor trash no longer; lever to phase
+2 under the 163-165 s budget on the faster pulls, so `thorim.sifjoined` in at least one. Watch: DPS finishing the ramp-foot adds
+without healers (healers still trail the leader to the Giant), so Honor Guard or Acolyte deaths at the foot; bots idle there
+with no target for more than ~3 s after their adds die (the tether should walk them up); longer lead stalls in the corridor
+(the leader waits up to 15 s a step while DPS finish trash).

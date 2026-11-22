@@ -202,8 +202,6 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     if (!leader || leader == bot)
         return false;
 
-    bool const botLeads = ThorimGauntletLeaderIsBot(leader);
-
     if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
         bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
     {
@@ -230,9 +228,7 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
-    float const trail = botLeads && !PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE
-                                                                : ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
-    if ((botLeads || PlayerbotAI::IsHeal(bot)) && bot->GetDistance2d(leader) > trail)
+    if (ThorimTrailsGauntletLeader(botAI, bot, leader))
         return MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
                       false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
 

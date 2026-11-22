@@ -73,11 +73,7 @@ bool ThorimGauntletPositioningTrigger::IsActive()
         return false;
     }
 
-    if (ThorimGauntletLeaderIsBot(leader))
-        return bot->GetDistance2d(leader) >
-               (PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE : ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE);
-
-    return PlayerbotAI::IsHeal(bot) && bot->GetDistance2d(leader) > ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
+    return ThorimTrailsGauntletLeader(botAI, bot, leader);
 }
 
 bool ThorimGauntletLeverTrigger::IsActive()

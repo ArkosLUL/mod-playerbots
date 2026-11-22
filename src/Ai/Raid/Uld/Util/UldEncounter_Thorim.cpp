@@ -1432,6 +1432,44 @@ bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot)
     return IsBotPlayer(bot) && ThorimGauntletLeader(botAI) == bot;
 }
 
+bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive() || !target->IsInCombat() || !target->IsHostileTo(bot))
+        return false;
+
+    switch (target->GetEntry())
+    {
+        case NPC_IRON_RING_GUARD:
+        case NPC_IRON_HONOR_GUARD:
+        case NPC_DARK_RUNE_ACOLYTE_G:
+        case NPC_RUNIC_COLOSSUS:
+        case NPC_ANCIENT_RUNE_GIANT:
+            return bot->GetDistance(target) <= ULDUAR_THORIM_DPS_TARGET_RANGE;
+        default:
+            return false;
+    }
+}
+
+bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
+{
+    if (!bot || !leader)
+        return false;
+
+    bool const healer = PlayerbotAI::IsHeal(bot);
+    if (!healer && !ThorimGauntletLeaderIsBot(leader))
+        return false;
+
+    float const trail = healer ? ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE : ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE;
+    if (bot->GetDistance2d(leader) <= trail)
+        return false;
+
+    return healer || !ThorimGauntletFighting(botAI, bot);
+}
+
 bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
 {
     ThorimEncounterState* state = FindState(bot);

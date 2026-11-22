@@ -997,15 +997,19 @@ player was on the instance left the corridor standing while he stayed in the are
   own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
   once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until he is pulled, and the squad
   picks guards first. Followers take his waypoint; between waypoints they walk to him once more than 25 yd
-  (healers 20 yd) behind. Behind a real player only
-  healers tether, and the gate walk re-adds follow-master only when the leader is the bot's master.
+  (healers 20 yd) behind, except a non-healer fighting a gauntlet mob in combat within the 50 yd pick range
+  (`ThorimGauntletFighting`): that tether fought `reach melee` whenever he walked on mid-fight, 116-185 DPS
+  bot-seconds a pull of moving without damage, three quarters of it on the Honor Guards and Giant. Behind a
+  real player only healers tether, and the gate walk re-adds follow-master only when the leader is the bot's
+  master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
-  led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
-  across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
-  one, about 100-125 s from the lever. Measured on 25-man (three pulls): lever pulled 33-36 s into the
-  pull, Colossus engaged 1:24-1:37 and dead 1:53-2:02, the walk to the Giant within 0.5 s of that, Giant
-  dead 2:52-3:01, phase 2 at 3:09-3:19: hard mode in all three, 0-8 s inside Sif's 62507 + 150 s.
+  led squad accepts. The corridor fights set the clock. Measured on 25-man (six bot-led pulls): the lever
+  pulled 5-8 s after the sixth start-pack death, leaving 163-165 s to Sif's 62565; from it, the walk to the
+  trash 12-17 s, the trash 33-44 s, on to the Colossus 3.5-17 s, the Colossus 18-35 s, the ramp 5-10 s
+  (the walk to the Giant starts 0.4-0.8 s after the Colossus dies), Honor Guards, Acolyte and Giant
+  51-62 s, his death to the balcony hit 16-20 s. Phase 2 came 156-183 s after the lever: hard mode in three
+  pulls, 8.6-18.6 s late in the other three.
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
@@ -1025,7 +1029,9 @@ tether on the rest would fight `reach melee`).
 waypoints at **117.3 / 120.8 / 126.1 yd** and of the corridor's far end, and it `NearTeleportTo`s onto
 the master, same map only ([pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)). The
 gauntlet row no longer shares that gate: it reads `ULDUAR_THORIM_ENCOUNTER_PROXIMITY` (200), which
-covers the whole corridor.
+covers the whole corridor. Bots do sink there: a ranged or healer `flee` of 4-5 yd west in the right lane,
+at (2219, −354) and the ramp foot (2217, −423), paths below the floor to z ~390 and back over 6.5-7 s
+(1-7 bots in four of six 25-man pulls), once to z 264 for 56 s. Not navprobed.
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the leader reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It stays: it

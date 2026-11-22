@@ -379,6 +379,10 @@ bool ThorimGauntletLeaderIsBot(Player const* leader);
 
 bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
 
+bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot);
+
+bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader);
+
 bool ThorimLeverUsable(Player* bot, ObjectGuid& lever);
 void ThorimNoteLeverPulled(Player* bot);
 
