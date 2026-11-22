@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks, deaths."""
+"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks, deaths, tanks."""
 from __future__ import annotations
 
 import bisect
@@ -37,6 +37,17 @@ SPELL_FROZEN_BLOWS = (62478, 63512)
 FROZEN_BLOWS_MS = 20000
 # His miss of the hard mode: the 65272 timer ticks at 3:00 after the engage and he casts this on the cache.
 SPELL_SHATTER_CHEST = 62501
+# The swing's own damage, 10 and 25, which lands only on whoever he is hitting.
+SPELL_FROZEN_BLOWS_SWING = (62867, 63511)
+# The tank buttons NextTankDefensive offers, by the cast row's spell. Last Stand's cast is a dummy that
+# puts up 12976, which is the row a death's auras carry.
+TANK_DEFENSIVES = {
+    12975: "last stand", 871: "shield wall", 498: "divine protection", 22812: "barkskin",
+    22842: "frenzied regeneration", 61336: "survival instincts", 48707: "anti magic shell",
+    55233: "vampiric blood", 48792: "icebound fortitude",
+}
+TANK_DEFENSIVE_AURAS = {12976 if spell == 12975 else spell: name for spell, name in TANK_DEFENSIVES.items()}
+TANK_DEFENSIVE_NODE = "hodir tank defensive action"
 # What killed a raider, by the spell of the killing blow. Biting Cold's tick is cast by the victim on itself.
 DEATH_SPELLS = {
     62867: "Frozen Blows swing", 63511: "Frozen Blows swing",
@@ -481,6 +492,27 @@ def death_mechanic(death: dict) -> str:
     if spell in DEATH_SPELLS:
         return DEATH_SPELLS[spell]
     return "Hodir melee" if spell == 0 else f"spell {spell}"
+
+
+def button_up_at_death(death: dict, settle_ms: int = 1500) -> str | None:
+    """The tank button still up as it died, or None. Same settle as the Biting Cold count."""
+    for row in death.get("auras") or []:
+        if len(row) >= 6 and row[0] in TANK_DEFENSIVE_AURAS and (row[5] == -1 or row[5] >= death["t"] - settle_ms):
+            return TANK_DEFENSIVE_AURAS[row[0]]
+    return None
+
+
+def victim_stints(samples: list[tuple[int, int]], low: int, high: int) -> list[tuple[int, int, int]]:
+    """`(start, stop, target)` runs of his target over `[low, high)`, each ending where the next begins.
+    Samples are ~250 ms apart, so a taunt answered at once shows as a run of one sample."""
+    runs: list[list[int]] = []
+    for when, target in samples:
+        if not low <= when < high or (runs and runs[-1][2] == target):
+            continue
+        if runs:
+            runs[-1][1] = when
+        runs.append([when, high, target])
+    return [(start, stop, target) for start, stop, target in runs]
 
 
 # Trace readers.
@@ -1209,6 +1241,52 @@ def show_deaths(trace: Trace) -> None:
               f" {death_mechanic(death):22} Biting Cold x{cold_stacks_at_death(death)}  {where}")
 
 
+def show_tanks(trace: Trace) -> None:
+    print("TANKS (per Frozen Blows window: time he spent on each tank, swings landed, buttons and who cast them)")
+    boss = boss_guid(trace)
+    tanks = sorted(guid for guid in roster_guids(trace) if trace.role(guid) == "tank")
+    if boss is None or not tanks:
+        print("  no Hodir or no tanks in the trace")
+        return
+    end = fight_end(trace)
+    blows = [(start, min(stop, end)) for start, stop in frozen_blows_windows(trace, boss) if start < end]
+    targets = [(row[0], row[4]) for row in boss_rows(trace, boss)]
+    swings = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_FROZEN_BLOWS_SWING and rec.get("d") in tanks]
+    # A cast row and the verdict of the action that cast it share the millisecond.
+    acted = {(rec["g"], rec["t"]): rec["a"] for rec in trace.of("act") if rec.get("vd") == "OK"}
+    casts = [rec for rec in trace.of("cast")
+             if rec.get("sp") in TANK_DEFENSIVES and rec.get("s") in tanks and rec["t"] < end]
+    probes = [rec for rec in notes(trace, "hodir.defensive") if rec.get("g") in tanks]
+
+    def button(rec: dict) -> str:
+        by = "node" if acted.get((rec["s"], rec["t"])) == TANK_DEFENSIVE_NODE else "class"
+        return f"{TANK_DEFENSIVES[rec['sp']]} {clock(rec['t'])[:7]} {by}"
+
+    for start, stop in blows:
+        stints = victim_stints(targets, start, stop)
+        print(f"  {clock(start)[:7]}")
+        for tank in tanks:
+            mine = [(low, high) for low, high, target in stints if target == tank]
+            hits = [rec.get("a", 0) for rec in swings if rec["d"] == tank and start <= rec["t"] < stop]
+            spent = [button(rec) for rec in casts if rec["s"] == tank and start <= rec["t"] < stop]
+            seen = [rec["txt"] for rec in probes if rec["g"] == tank and start <= rec["t"] < stop
+                    and rec["txt"] not in ("idle", "wait")]
+            print(f"    {trace.name(tank):10} held {sum(high - low for low, high in mine) / 1000:4.1f}s in"
+                  f" {len(mine)} stint(s), {len(hits)} swing(s) {sum(hits):,}; "
+                  + (", ".join(spent) or "no button")
+                  + (f"  [hodir.defensive: {', '.join(dict.fromkeys(seen))}]" if seen else ""))
+
+    outside = [button(rec) + f" ({trace.name(rec['s'])})" for rec in casts
+               if not any(start <= rec["t"] < stop for start, stop in blows)]
+    print("  outside every window: " + (", ".join(outside) or "none"))
+    for death in combat_deaths(trace):
+        if death["g"] not in tanks:
+            continue
+        where = "in Frozen Blows" if any(start <= death["t"] < stop for start, stop in blows) else "outside"
+        print(f"  died {clock(death['t'])} {trace.name(death['g']):10} {death_mechanic(death):20} {where},"
+              f" button up: {button_up_at_death(death) or 'none'}")
+
+
 SECTIONS = (
     ("pace", "health, boss dps per 15 s, 0-3:00 against the cache pace", show_pace),
     ("hold", "hodir.tankhold windows and the fire gaps after each freeze", show_hold),
@@ -1217,6 +1295,7 @@ SECTIONS = (
     ("churn", "walking undone, A-B-A flips, moves by action, dodge walk-backs", show_churn),
     ("blocks", "helper ice blocks per freeze and the next fire", show_blocks),
     ("deaths", "each death's killing spell, Biting Cold stacks and Frozen Blows window", show_deaths),
+    ("tanks", "per Frozen Blows window: his time on each tank, swings, defensives cast", show_tanks),
 )
 
 

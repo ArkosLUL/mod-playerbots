@@ -250,6 +250,14 @@ inline constexpr float ULDUAR_HODIR_LAST_WAVE_HEALTH_PCT = 12.0f;
 // below this a taunt into an open window is a death.
 inline constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
 
+// How long he has to stay on a tank in a Frozen Blows window before it spends a button. The other
+// tank answers a swap taunt with its own, so he flips for under a second, and a button spent on that
+// flip runs out before the stint that takes the swings.
+inline constexpr uint32 ULDUAR_HODIR_TANK_DEFENSIVE_HOLD_MS = 1000;
+
+// Under this the class defensive nodes get the tank's buttons back, window or not.
+inline constexpr float ULDUAR_HODIR_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
+
 // Lust waits for the first Toasty Fire, but no longer than this into the pull, past where first fires
 // normally land. A 10 minute cooldown shouldn't sit idle.
 inline constexpr uint32 ULDUAR_HODIR_LUST_FALLBACK_MS = 30000;
@@ -280,6 +288,16 @@ bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot);
 // True when a taunt now would kill this bot: Frozen Blows up, under ULDUAR_HODIR_TAUNT_HEALTH_FLOOR and
 // someone else holding him. With nobody on him the taunt is the save, so it's allowed.
 bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot);
+
+// The defensive this tank casts now, or 0. One per Frozen Blows window, and only once he's been on it
+// for ULDUAR_HODIR_TANK_DEFENSIVE_HOLD_MS, so a tank he isn't hitting keeps its button. Notes noteKind.
+uint32 GetHodirTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind);
+
+void LatchHodirTankDefensive(PlayerbotAI* botAI, Player* bot);
+
+// Class defensive nodes stay off a tank while he's engaged, so the buttons are still there when its
+// window comes. Released under ULDUAR_HODIR_TANK_DEFENSIVE_LAST_RESORT_PCT.
+bool IsHodirTankDefensiveHeld(PlayerbotAI* botAI);
 
 // Nearest Snowpacked Icicle Target, or during the cast the nearest drift still falling, since the
 // target spawns on the drift's spot. Latched per bot until the pick leaves the floor.

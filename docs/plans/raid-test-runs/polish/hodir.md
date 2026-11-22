@@ -1,7 +1,7 @@
 # Polish log: Hodir (25-man hard mode)
 
-Trace slug `hodir`, raid `uld`, scenario `uld-hodir` (drop at (1998, -262), in his room ~20 yd south
-of the frozen helpers, aggro start). Hard mode is a timer, not a toggle: a kill counts only if Hodir
+Trace slug `hodir`, raid `uld`, scenario `uld-hodir` (aggro start; drop at (1998, -262), ~20 yd south
+of the frozen helpers, through window 5, then (1998, -288) from DC `e8c3b0c`, see round 2). Hard mode is a timer, not a toggle: a kill counts only if Hodir
 never cast Shatter Chest `62501` (it goes out ~180 s after the engage). `tools/botobs/bosses/hodir.py
 <trace>` prints `Rare Cache kept` / `shattered` in its banner; `--deaths` lists each death's killing
 spell, Biting Cold stacks and Frozen Blows window. The runner's "hard mode" column reads `-` here.
@@ -78,3 +78,70 @@ of a fire. Watch the cost: pace 0-3:00 should not drop below this window's 216-2
 landed, above `_LAST_WAVE_HEALTH_PCT` 12, so the raid spent 102 bot-seconds breaking blocks whose fire
 came at 2:59.5; skipping them would still have ended ~3:16. `set behind` right after a dodge ended in
 a live icicle pool 22-36 times a pull (no death).
+
+## Round 2 (2026-11-22, on Custom 61011f323)
+
+**Data.** No new pulls: round 1 (`5f16288c8`) has not been pulled yet, so the stop rules, the verdict
+on round 1 and the failure ranking are skipped. Window 5's three traces (round 1's table) re-read for
+the tanks with the new `hodir.py --tanks`. Deaths by mechanic per pull, as round 1: uld1 1 (off-tank
+Frozen Blows swing); uld2 13 (Frozen Blows raid tick 6, Biting Cold 5, Freeze 2); uld3 5 (off-tank
+Frozen Blows swing 2, raid tick 2, Biting Cold 1).
+
+**Picked: the off-tank dying to Frozen Blows swings** (uld1 Uldxam 2:56.1, uld3 Uldzab 2:08.3 and
+2:56.2), with the user's answer (2026-11-22) to round 1's question 2: option (c), each tank spends a
+defensive in its own Frozen Blows window. Option (b), deliberate alternating taunts, only if off-tanks
+still die once (c) has been pulled; not built.
+
+Evidence (`--tanks`, death auras):
+- All three died inside a window with no tank button up: the bear had none ready, the DK had
+  Anti-Magic Shell.
+- uld1, blood DK: the class `low health` node (`GenericDKStrategy.cpp:68`) cast Icebound Fortitude at
+  1:18.25 in window 1 after an 18.6k swing, so it was on cooldown for window 3; Anti-Magic Shell was
+  never cast all pull (no class node casts it on a tank: it is only `anti magic zone`'s fallback,
+  `GenericDKStrategy.cpp:40-42`, which nothing triggers); `vampiric blood` came back IMPOSSIBLE twice.
+  Window 3: 29.9k at 91.8% (2:51.0), then 26.6k at 53.4% (2:56.1) killed.
+- uld3, bear: after a 27.3k swing the class nodes cast Survival Instincts 1:11.12, Frenzied
+  Regeneration 1:11.96 and Barkskin 1:12.24 (`FeralDruidStrategy.cpp:87`, `BearDruidStrategy.cpp:123`,
+  `GenericDruidStrategy.cpp:58` at `almost full health`, 85%), all in window 1. Window 2 (1:51) had
+  nothing ready (Barkskin back at 2:12): 27.3k, 30.7k, 25.0k in 5 s with a Lay on Hands between, dead
+  2:08.3. Barkskin again at 2:24.96, between windows, so window 3 had nothing either: dead 2:56.2.
+- uld2's bear cast Barkskin six times by class node: at 0:15.97 between windows, and once in each of
+  the five windows, including two (1:08.06, 4:28.65) where he held it under a second.
+- Flips: each swap taunt drew the other tank's taunt 0.1-0.6 s later. Over the 11 windows, stints with
+  no swing ran 0.18-0.71 s for flips and 1.4-6.5 s for the main tank (mostly at a window's start);
+  stints that took a swing ran 1.6-18.5 s.
+
+Root cause: nothing ties a tank's button to its window. The class nodes react to health
+(`TankWarriorStrategy.cpp:237`/`245`, `BloodDKStrategy.cpp:153` too) and spend the buttons after the
+swing that hurt, all at once, or between windows.
+
+**Fix** (`UldEncounter_Hodir.h/.cpp`, `UldTriggers_Hodir.h/.cpp`, `UldActions_Hodir.h/.cpp`,
+`UldDefinition_Hodir.cpp`; reader `tools/botobs/bosses/hodir.py`, tests in `test_botobs.py`):
+- `hodir tank defensive` (`ACTION_RAID + 4`, `UldDefinition_Hodir.cpp:86`): `GetHodirTankDefensive`
+  (`UldEncounter_Hodir.cpp:176`) returns `NextTankDefensive(..., physicalOnly false)` for a tank Hodir
+  has held `ULDUAR_HODIR_TANK_DEFENSIVE_HOLD_MS` 1000 inside a Frozen Blows window, once per tank per
+  window (`HodirTankDefensiveLatch::spentWindow`, the aura's apply time). 1 s clears every flip and
+  catches every stint that took a swing above. `63511` is frost (school 16, magic), so Anti-Magic
+  Shell counts.
+- `hodir tank defensive hold` (`:107`): `HeldTankDefensiveNames()` blocked for `Role::Tank` while he is
+  engaged and the tank is at 25% (`_LAST_RESORT_PCT`) or more.
+- Probe `hodir.defensive`: `idle`, `wait`, `spent`, the button, `covered`, `none`.
+- Button order is `NextTankDefensive`'s, shortest cooldown first: DK Anti-Magic Shell (45 s, every
+  window), then Vampiric Blood, Icebound Fortitude; bear Barkskin, then Frenzied Regeneration,
+  Survival Instincts; warrior Last Stand, Shield Wall; paladin Divine Protection only (3 min).
+- Holds for 10 and 25 and for hard mode: Frozen Blows is the same aura by difficulty (62478 / 63512),
+  and hard mode is only the timer.
+- Cost: a main tank holding him 1 s+ at a window's start spends its button there even with no swing
+  (uld1's paladin held 5-6 s at the start of windows 1 and 2 with none), and a paladin's one button
+  then misses the next three windows.
+
+**Next window should show** (`--tanks`, `--deaths`): in every window each tank he holds 1 s+ casts one
+button by `node`, none inside a flip; no `class` button above 25% health, between windows or in them;
+fewer than window 5's 3 off-tank Frozen Blows deaths over 11 windows, and any that remain with
+`hodir.defensive` reading `none` (nothing ready) or a button up. Off-tanks still dying means (b).
+
+**Harness, from the next build.** The `uld-hodir` drop is (1998, -288), 46 yd from the nearest ice
+block, with the Winter Revenant pack despawned (DC `e8c3b0c`). Shared `MovementAction::GetFollowAngle`
+now spreads bots under the DC driver (`61011f323`): window 5 gave every bot angle 0, so every
+`MoveInside` park (shelter run, Storm Cloud spread and collect) put them all on one point at the park
+radius. Window 5's shelter and Storm Power figures can move without a Hodir change.

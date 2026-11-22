@@ -79,6 +79,16 @@ public:
     bool IsActive() override;
 };
 
+// A tank Hodir is hitting in a Frozen Blows window, with no button spent in it yet.
+class HodirTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "hodir tank defensive";
+
+    HodirTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // The bot carries Storm Cloud, so it holds its rally point until the charges are spent.
 class HodirSpreadStormCloudTrigger : public Trigger
 {

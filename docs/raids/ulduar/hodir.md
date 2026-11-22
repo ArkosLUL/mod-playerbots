@@ -259,6 +259,23 @@ covers the two bots that need it 100% of the time against 82% for a DPS paladin 
 the shelter. The raid loses about ten points of coverage, which is the right trade: a resist point is
 ~6,000 off a swing that kills a tank and ~700 off a tick the healers already cover.
 
+## One tank button per Frozen Blows window
+
+`hodir tank defensive action` casts `NextTankDefensive` once per tank per window (latched on the
+Frozen Blows aura's apply time), after he has been on that tank **1 s**
+(`ULDUAR_HODIR_TANK_DEFENSIVE_HOLD_MS`) inside it. Not physical-only: `63511` is frost, so
+Anti-Magic Shell counts.
+
+- **The hold keeps the button off the flip.** Each swap taunt drew the other tank's taunt 0.1-0.6 s
+  later: across 11 windows of three 25-man pulls flips held him 0.2-0.7 s, stints that took swings
+  1.6-18.5 s. Cast on the flip, a 5 s Anti-Magic Shell runs out before the stint that kills.
+- **The class nodes are held for tanks while he is engaged** (`hodir tank defensive hold`,
+  `HeldTankDefensiveNames`), released under `_LAST_RESORT_PCT` 25. They fire on health alone
+  (barkskin under 85%) and left all three off-tank deaths with no button up: a bear spent Survival
+  Instincts, Frenzied Regeneration and Barkskin within 1.1 s of one swing, then Barkskin between
+  windows, and died in the next two with nothing ready. No class node casts Anti-Magic Shell on a tank
+  (only as anti magic zone's fallback), so the DK died with it never used.
+
 ## Two icicle pools, and a dodge that leaves on one radius and lands on another
 
 Icicle **33169** leaves Ice Shards `62457` in **4 yd**; the drift **33173** leaves `65370` in **7 yd**.
@@ -410,17 +427,18 @@ for **22%**.
   outranks Hodir while it lives, assigned or not, so holding the current one parked the raid on helper
   ice for the rest of the fight.
 - **Node relevance is a survival ranking**, since the engine stops at the first action that succeeds:
-  shelter run `ACTION_RAID + 6`, icicle dodge +5, Frozen Blows swap and threat redirect +4, targeting
-  +3, Storm Cloud carry and collect +2, Biting Cold shed +1, Frost Resistance and raid position +0.
-  Sheltering is the only failure that is death outright; targeting sits over the shed, which moves for
-  seconds and would starve it, and costs nothing since it returns false once the target is right;
-  position is last. The redirect never contends with the swap (hunters and rogues against tanks) and
-  outranks targeting so the charges go out before a bot switches to a block. It stands down while the
-  shed is armed: its dump Steady Shots (1.6 s casts) pinned a hunter 3.5 s at 4-5 stacks, which killed it.
+  shelter run `ACTION_RAID + 6`, icicle dodge +5, Frozen Blows swap, tank defensive and threat redirect
+  +4, targeting +3, Storm Cloud carry and collect +2, Biting Cold shed +1, Frost Resistance and raid
+  position +0. Sheltering is the only failure that is death outright; targeting sits over the shed,
+  which moves for seconds and would starve it, and costs nothing since it returns false once the target
+  is right; position is last. The +4 nodes never contend: the swap fires for a tank he isn't hitting,
+  the defensive for the one he is, the redirect for hunters and rogues. The redirect outranks targeting
+  so the charges go out before a bot switches to a block. It stands down while the shed is armed: its
+  dump Steady Shots (1.6 s casts) pinned a hunter 3.5 s at 4-5 stacks, which killed it.
 - **Damage on a helper block before the pull pulls Hodir** onto the attacker
-  (`npc_ulduar_flash_freeze::DamageTaken` while `NOT_STARTED`). The blocks sit 20-35 yd from the
-  `uld-hodir` drop, inside Starfall's 30: a balance druid's Starfall there engaged him before the harness
-  started the pull.
+  (`npc_ulduar_flash_freeze::DamageTaken` while `NOT_STARTED`). The blocks sat 20-35 yd from the old
+  `uld-hodir` drop (1998, -262), inside Starfall's 30, and a balance druid's Starfall there engaged him
+  before the harness started the pull; DC `e8c3b0c` moved it to (1998, -288), 46 yd from the nearest.
 
 ## Every mover here thrashes unless it latches
 
@@ -518,7 +536,10 @@ comes only from `hodir.dpstarget`, so it reads `?` before the centre-hold build.
 the bot's own spot are refused, so the stall count cannot see them; the reader counts them apart.
 **A Biting Cold death reads as "its own blow: a fall, lava or .die"** in `postmortem.py` and the
 runner's report: the victim casts `62188` on itself. `--deaths` names each death's killing spell,
-stacks and Frozen Blows window.
+stacks and Frozen Blows window. `--tanks` gives per window his time on each tank (his snapshot target),
+the swings each took, every tank button as `node` or `class` (the OK `act` row sharing the cast's ms),
+the `hodir.defensive` values (`idle`, `wait`, `spent`, the button, `covered`, `none`), and the button
+up at each tank death.
 
 ## Pace
 
@@ -541,8 +562,6 @@ landed; from the first fire it covers that fire's window to the landing. The pul
   targeted in one pull, 77 of them holding a Starlight stand. Both pass `OwnMovement`, since
   `Family::Reach` is kept. Fix shape: `HodirRaidPositionTrigger::IsActive` stands down while the
   current target is an ice block.
-- **No tank defensive cooldown is tied to a Frozen Blows window** — the tanks spent four and six in
-  six minutes, unprompted.
 - **Who eats Frozen Blows is not stable between pulls.** In one kill the bot tank took **27 of the
   35 `63511` hits** for 506k against the human paladin's 8 and died three times; the pull before was 19
   against 10 the other way with no tank death, and `hodir frozen blows swap action` produced **7 `OK`
@@ -554,7 +573,9 @@ landed; from the first fire it covers that fire's window to the landing. The pul
   defense` (relevance 27) fire 0.1-0.6 s after each off-tank swap taunt, since only
   `HodirTauntSuicide` blocks them, and flip him back for part of the window. The flips also cost him
   swings (3-5 a window across both tanks, against ~8 on a steady holder), and every tank death so
-  far was the off-tank in a window, so fixing it alone may kill more off-tanks.
+  far was the off-tank in a window, so fixing it alone may kill more off-tanks. User's call
+  (2026-11-22): the window's tank button first (above); deliberate alternating taunts only if
+  off-tanks still die.
 - **The tank drags Hodir every 48s.** He moves **1.72 yd/s** during shelter runs against **1.27** the
   rest of the fight, because the tank walked 39-56 yd per window and Hodir follows whoever holds him;
   the hold and Starlight latches re-derive against that drift every tick. Taking the nearest shelter

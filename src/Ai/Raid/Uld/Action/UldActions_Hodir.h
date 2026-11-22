@@ -103,6 +103,16 @@ public:
     bool Execute(Event event) override;
 };
 
+// Cast by id: the class action of the same name is held for the windows.
+class HodirTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "hodir tank defensive action";
+
+    HodirTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 // Misdirection and Tricks go to whichever tank holds Hodir now. A taunt only matches top threat, so the
 // incoming tank is level with the best DPS and the redirect buys back the lead.
 class HodirRedirectThreatAction : public RaidRedirectThreatAction
