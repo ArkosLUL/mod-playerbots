@@ -158,6 +158,29 @@ bool OnThorimBalcony(WorldObject const* who)
            y >= ULDUAR_THORIM_BALCONY_BOX_MIN_Y && y <= ULDUAR_THORIM_BALCONY_BOX_MAX_Y;
 }
 
+// The corridor east and south of the arena box, and the hallway above. North of the box is the way in.
+bool PastThorimPortcullis(Player const* who)
+{
+    if (!NearThorimEncounter(who))
+        return false;
+
+    if (OnThorimBalcony(who))
+        return true;
+
+    float const x = who->GetPositionX();
+    float const y = who->GetPositionY();
+    return y < ULDUAR_THORIM_ARENA_BOX_MIN_Y ||
+           (x > ULDUAR_THORIM_ARENA_BOX_MAX_X && y < ULDUAR_THORIM_ARENA_BOX_MAX_Y);
+}
+
+// A human's squad comes from where he stands, since the split only picks bots: at the gate or past the portcullis
+// he's doing the gauntlet.
+bool HumanInGauntlet(Player const* member)
+{
+    return member->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS ||
+           PastThorimPortcullis(member);
+}
+
 bool MemberCounts(Player const* member, uint32 instanceId)
 {
     return member && member->IsAlive() && member->GetMapId() == ULDUAR_MAP_ID &&
@@ -506,8 +529,8 @@ void AssignThorimSquads(Player* bot)
     state.squadsAssigned = true;
 }
 
-// Labels humans by position, for the trace only: every GetThorimSquad consumer runs for bots, and the
-// latched split is never touched.
+// Labels humans by position for the trace, by the rule ThorimGauntletLeader reads live. The latched split is never
+// touched.
 void TickHumanSquads(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -527,10 +550,8 @@ void TickHumanSquads(Player* bot)
         if (!member || IsBotPlayer(member) || member->GetMapId() != ULDUAR_MAP_ID)
             continue;
 
-        // The same boundary the arena leash and the pet leash use, so "in the arena" means one thing
-        // across the encounter. Anywhere else near Thorim is the corridor or the hallway above it.
         state.squads[member->GetGUID()] =
-            static_cast<uint8>(ThorimInArenaBox(member) ? ThorimSquad::Arena : ThorimSquad::Gauntlet);
+            static_cast<uint8>(HumanInGauntlet(member) ? ThorimSquad::Gauntlet : ThorimSquad::Arena);
     }
 }
 
@@ -1406,53 +1427,47 @@ bool OnThisInstance(Player const* member, Player const* bot)
 }
 }  // namespace
 
-bool ThorimBotLedGauntlet(PlayerbotAI* botAI)
+Player* ThorimGauntletLeader(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     Group* group = bot ? bot->GetGroup() : nullptr;
-    if (!group)
-        return false;
+    ThorimEncounterState const* state = FindState(bot);
+    if (!group || !state || !state->squadsAssigned)
+        return nullptr;
 
+    Player* tank = nullptr;
+    Player* fallback = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (OnThisInstance(member, bot) && !IsBotPlayer(member))
-            return false;
-    }
+        if (!OnThisInstance(member, bot) || !member->IsAlive())
+            continue;
 
-    return true;
-}
+        if (!IsBotPlayer(member))
+        {
+            if (HumanInGauntlet(member))
+                return member;
 
-Player* ThorimGauntletLeader(PlayerbotAI* botAI)
-{
-    if (!ThorimBotLedGauntlet(botAI))
-        return GetRaidLeaderOnInstance(botAI);
+            continue;
+        }
 
-    Player* bot = botAI->GetBot();
-    ThorimEncounterState const* state = FindState(bot);
-    if (!state || !state->squadsAssigned)
-        return nullptr;
-
-    Player* fallback = nullptr;
-    for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!OnThisInstance(member, bot) || !member->IsAlive() || SquadOf(*state, member) != ThorimSquad::Gauntlet)
+        if (SquadOf(*state, member) != ThorimSquad::Gauntlet)
             continue;
 
         if (PlayerbotAI::IsTank(member))
-            return member;
-
-        if (!fallback && !PlayerbotAI::IsHeal(member))
+            tank = tank ? tank : member;
+        else if (!fallback && !PlayerbotAI::IsHeal(member))
             fallback = member;
     }
 
-    return fallback;
+    return tank ? tank : fallback;
 }
+
+bool ThorimGauntletLeaderIsBot(Player const* leader) { return IsBotPlayer(leader); }
 
 bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot)
 {
-    return botAI && bot && ThorimBotLedGauntlet(botAI) && ThorimGauntletLeader(botAI) == bot;
+    return IsBotPlayer(bot) && ThorimGauntletLeader(botAI) == bot;
 }
 
 bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
@@ -1462,11 +1477,20 @@ bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
         return false;
 
     GameObject* lever = bot->FindNearestGameObject(THORIM_ARENA_LEVER_ENTRY, THORIM_LEVER_SEARCH_RANGE);
-    if (!lever)
-        return false;
 
     // Locked until six of the start pack are dead (not selectable); a pulled one leaves the ready state.
-    if (lever->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
+    bool const locked = lever && lever->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE);
+
+    // Only someone else's pull gets a bot past the portcullis. Without the latch a bot taking over from a human
+    // in the corridor walks back to a lever that has reset, or never starts when it's out of range.
+    if (!locked && PastThorimPortcullis(bot))
+    {
+        state->leverPulled = true;
+        state->leadStepMs = getMSTime();
+        return false;
+    }
+
+    if (!lever || locked)
         return false;
 
     if (lever->GetGoState() != GO_STATE_READY)

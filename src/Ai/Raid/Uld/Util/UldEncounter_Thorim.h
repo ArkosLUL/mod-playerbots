@@ -93,11 +93,12 @@ inline constexpr float ULDUAR_THORIM_SWEEP_ANGLE_STEP = static_cast<float>(M_PI)
 // Arena and corridor, short of the upper hallway.
 inline constexpr float ULDUAR_THORIM_FLOOR_RANGE = 110.0f;
 
-// The corridor squad regroups on a master standing this close to the gate, until within the follow distance.
+// The corridor squad regroups on a leader standing this close to the gate, until within the follow distance. A real
+// player standing here is in the gauntlet squad.
 inline constexpr float ULDUAR_THORIM_GATE_RADIUS = 10.0f;
 inline constexpr float ULDUAR_THORIM_GATE_FOLLOW_DISTANCE = 5.0f;
 
-// How far a corridor healer may trail the master once the lane waypoints run out. Inside heal range with
+// How far a corridor healer may trail the leader once the lane waypoints run out. Inside heal range with
 // room to spare, since the squad spreads: a healer that stops has no chase of its own to catch up on.
 inline constexpr float ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE = 20.0f;
 
@@ -526,19 +527,19 @@ inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE = 30.0f;
 // How far a squad member may trail a bot leader that stands on no waypoint before it walks to him.
 inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
 
-// True while no real player is in the raid group on this instance. Then nobody can lead the corridor or pull
-// the lever, so a squad bot does.
-bool ThorimBotLedGauntlet(PlayerbotAI* botAI);
-
-// Who the corridor squad forms on: the raid leader with a real player present, else the gauntlet tank (any
-// non-healer of the squad when he is dead). nullptr when nobody qualifies.
+// Who the corridor squad forms on: a living real player at the gate or past the portcullis, else the gauntlet tank
+// (any non-healer of the squad when he is dead). nullptr when nobody qualifies.
 Player* ThorimGauntletLeader(PlayerbotAI* botAI);
 
-// True for the one bot that leads a bot-led gauntlet.
+// A bot leader pulls the lever and walks the lanes himself, and the squad closes up on him between waypoints. A real
+// player does both his own way.
+bool ThorimGauntletLeaderIsBot(Player const* leader);
+
+// True for the one bot that leads the gauntlet, which is nobody while a real player is in it.
 bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
 
-// The arena lever's guid once it is unlocked and still unused. A lever found already used is latched as
-// pulled, since the corridor is out of search range of it.
+// The arena lever's guid once it is unlocked and still unused. A lever found already used, or a caller already past
+// the portcullis, latches it as pulled, since the corridor is out of search range of it.
 bool ThorimLeverUsable(Player* bot, ObjectGuid& lever);
 void ThorimNoteLeverPulled(Player* bot);
 
