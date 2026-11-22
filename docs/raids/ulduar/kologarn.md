@@ -16,21 +16,19 @@ last is what stops DoTs landing on whatever the bot drifted onto.
 | Ranged DPS (`IsRangedDps`, excludes healers) | rubble while any live, else as melee |
 
 Rubble duty is **derived, never stored** — the off-tank is whoever is not holding the body — so it
-follows the taunt swap on its own. Its pickup takes the nearest rubble not already on it, so it sweeps
-the loose ones first instead of re-taunting what it holds, else the nearest of any. Triggers and
-actions must both pick through `GetKologarnDpsTarget`, or they disagree and the bot retargets every
-tick.
+follows the taunt swap on its own. Its pickup takes the nearest rubble not already on it, sweeping the
+loose ones before re-taunting what it holds, else the nearest of any. Triggers and actions both pick
+through `GetKologarnDpsTarget`, or they disagree and the bot retargets every tick.
 
 **Nothing engages before the boss does.** Every Kologarn trigger resolves him through
 `GetUldUnitByEntry`, a pure `Playerbots.SightDistance` proximity scan — 100 yd, no line of
 sight — that answers "is he nearby", never "is he engaged", and `AttackAction::Attack()` has no
 out-of-combat guard, so ungated the raid pulled itself from up to 100 yd out. `KologarnEncounterActive`
 is `kologarn && kologarn->IsInCombat()`, the VoA `EmalonEncounterActive` shape, and gates the triggers
-and the targeting multiplier alike. The body is the only authority: arms and rubble are its summons,
-and `boss_kologarn` never calls `SetInCombatWithZone`, so it flips exactly when someone engages him.
-The targeting rule waits for it too: before the pull the per-role pickers are inert, so silencing the
-generic ones would leave none, and trash within 100 yd of him would be unfightable. Resolving by entry
-rather than through
+and the targeting multiplier alike. Only the body counts: arms and rubble are its summons, and
+`boss_kologarn` never calls `SetInCombatWithZone`, so it flips exactly when someone engages him. The
+targeting rule waits for it too: before the pull the per-role pickers are inert, so silencing the
+generic ones would leave trash within 100 yd unfightable. Resolving by entry rather than through
 [`find target`](../../engine/pitfalls.md#things-the-bot-cannot-see) is deliberate: a tank parked on the
 body never has the arms on its threat list, so the per-role focus split collapses without it.
 
@@ -71,8 +69,8 @@ thresholds, so no AoE action exists.
 along the walkway, then back toward the boss. Turning that corner matters — the eye outlives the ~5s
 of -X runway. Bystanders `FleePosition` off the nearest eye within `ULDUAR_KOLOGARN_EYEBEAM_REACT_RADIUS`
 (8 yd); the chased bot runs whatever the range. The eye `MoveChase`s its summoner, so its victim is the
-spell target, and it can still be closing from past 8 yd, so that lookup sweeps the whole room. None of
-it needs the raid cheat. Each step is cut
+spell target; it can still be closing from past 8 yd, so that lookup sweeps the room. None of it needs
+the raid cheat. Each step is cut
 where a navmesh ray from the bot leaves the floor (`Map::CheckCollisionAndGetValidCoords`); a failed
 or < 3 yd step is skipped. Clamped to the box alone, the box's off-floor corners sent 7 of 21 runs
 into the antechamber, every first wave among them, and its trash wiped the raid.
