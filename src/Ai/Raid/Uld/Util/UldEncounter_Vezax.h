@@ -103,8 +103,9 @@ inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 // Camp bearing: north, the side the raid comes in from. The southern half is left for the Mark spots.
 inline constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
-// Two groups of two files by five rows, boss-relative. Rows 27 to 36 sit between the Mark floor (15)
-// and reach spell's stop (28.5), each plus both combat reaches, with ~2 yd slack at each end.
+// Two groups of two files by five rows, boss-relative, rows 27 to 36. Mark floor 29.1 (15 plus his 12.6
+// reach and the player's 1.5), reach spell's stop 42.6. Past ~31.5 a healer loses the main tank, who
+// stands ~10 yd off him on the far side.
 inline constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
 inline constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
 inline constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;

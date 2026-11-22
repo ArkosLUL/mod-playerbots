@@ -44,6 +44,12 @@ bool VezaxMarkOfTheFacelessTrigger::IsActive()
     if (!VezaxEncounterActive(botAI))
         return false;
 
+    // Whoever he's hitting stays put: he follows it, and the spot is measured from him, so it runs
+    // ahead all the way out of his room and he goes berserk.
+    Unit* vezax = GetVezax(botAI);
+    if (vezax && vezax->GetVictim() == bot)
+        return false;
+
     Position spot;
     if (!TryGetVezaxMarkSpot(bot, spot))
         return false;

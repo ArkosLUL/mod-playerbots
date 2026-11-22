@@ -6,7 +6,7 @@ where they disagree, and they do disagree.**
 | Spell | Id | Effect |
 |---|---|---|
 | Aura of Despair | 62692 → 64848 | On aggro. No mana regen, −20% melee attack speed, **and immunity to every mana return there is**: 62692 carries `EFFECT_IMMUNITY` to `SPELL_EFFECT_ENERGIZE`, 64848 adds it to `ENERGIZE_PCT` (Shadowfiend's Mana Leech 34650) and `STATE_IMMUNITY` to aura types `OBS_MOD_POWER` and `PERIODIC_ENERGIZE`. Life Tap, mana gems, Evocation, Innervate, Judgement of Wisdom, Replenishment, Divine Plea and Shadowfiend all return **nothing** |
-| Shadow Crash (cast) | 62660 | Every 10s from 13s. **Instant, missile `Speed` 10, `TARGET_DEST_TARGET_ENEMY`** — the destination freezes at cast time, so it is dodgeable. Random player **beyond 12.5 yd** (`3` plus both combat reaches, measured 3D), falling back to *any* target |
+| Shadow Crash (cast) | 62660 | Every 10s from 13s. **Instant, missile `Speed` 10, `TARGET_DEST_TARGET_ENEMY`** — the destination freezes at cast time, so it is dodgeable. Random player **beyond 17.1 yd** (`3` plus both combat reaches, measured 3D), falling back to *any* target |
 | Shadow Crash (impact) | 62659 | 11,310 **plus `KNOCK_BACK_DEST`**, **10 yd**. The 2.7-3.6s of missile flight (4.8s at ~48 yd, the longest traced) is the whole reaction window |
 | Shadow Crash (field) | 63277 + 65269 | **8 yd, 20s.** +100% magic and +75% shadow damage done, +100% cast speed, −70% mana cost, **−75% healing done**. `SPELL_EFFECT_PERSISTENT_AREA_AURA`, so it exists as a `DynamicObject`. 63277 pulls 65269 in via `spell_linked_spell` type 2, so a bot inside carries **both** — **63277's own DBC row is only the damage and healing halves**, and reading it alone says the field does nothing for mana |
 | Searing Flames | 62661 | On the tank, **radius 100 yd** = the whole raid. 13,875-16,125 fire, −75% armour 10s, every **8s (25m) / 15s (10m)**. **2000 ms cast, `PreventionType = 1`** — genuinely interruptible |
@@ -51,17 +51,28 @@ The two groups' inner files sit **5 yd** apart, near enough that one set of heal
 far enough that they are not one clump. Boss-relative because every distance the camp is built on is
 his, and a ranged pull can settle him yards off his spawn.
 
-**Both limits come from Vezax's `creature_model_info.CombatReach` of 8.0**, which `WorldObject::GetDistance`
-and `Unit::IsWithinCombatRange` both fold in ([reach](../../engine/raid-mechanics-lessons.md#range-and-reach)):
+**Both limits come from Vezax's combat reach, 12.6 since core update `2026_11_06_01` (8.0 before)**,
+which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
+([reach](../../engine/raid-mechanics-lessons.md#range-and-reach)):
 
-- **Floor 24.5 yd.** Mark of the Faceless picks at random from everyone the boss measures beyond
+- **Floor 29.1 yd.** Mark of the Faceless picks at random from everyone the boss measures beyond
   15 yd, falling back to everyone inside when fewer than 9 qualify (4 in 10-man); his "15 yd" is
-  `15 + 8.0 + 1.5` of real distance. Rows from 22 put the front rank in the melee ball's pool: the
-  outside count ran 8-12 against a threshold of 9, and three of nine marks in one pull landed on the
-  tank.
-- **Ceiling 38 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
+  `15 + 12.6 + 1.5` of real distance, 3D. The rows were laid out for 24.5, so rows 0 and 1 sit inside
+  it or 0.3-0.7 yd past, and a 13-14 bot camp puts 5-10 past it: 7 of 37 full-raid marks in windows
+  7-10 went to melee or the main tank, each with at most 9 past 29.1; six had 12-14 past 24.5, the
+  seventh came with Vezax pulled into the camp. At 10-man the 5-6 camp bots fill rows 0-1, so nearly
+  every mark falls inside.
+- **Ceiling 42.6 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
   against this formation at `ACTION_RAID` and the two deadlock.
+
+**Moving the rows out costs the healers the main tank.** The tank holds the anchor, and Vezax settles
+7-12 yd north of it, between tank and camp, having met the tank on its way in from the north.
+`PartyMemberToHeal` picks only within `HealDistance` 38.5 plus both reaches, 41.5 yd 2D. Replayed on
+where both stood in six pulls, a slot at 27-29.25 yd reaches the tank 86-100% of the time, 31.5 0-100%,
+33.75 0-72%, 36 and out 0-18%; every camp bot 4.5 yd further out cuts the time any healer can pick him
+from 43-93% to 10-42%. No radius both clears the floor with the 2.4 yd slot deadband and keeps a healer
+on him.
 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
 itself: a tank on the spawn point is what keeps Vezax there for every other radius here. 20 slots
@@ -71,10 +82,10 @@ alternating order (`L row 0`, `R row 0`, …) so neither group fills first and h
 both; Ulduar's other bosses re-derive from a GUID rank every tick, which reshuffles the whole formation
 on a death.
 
-**Nothing here is out of Shadow Crash range, melee included.** `SelectTarget` skips only what is inside
-`3 + 8 + 1.5` = **12.5 yd**, and a melee bot at boss combat reach sits right on that line: one pull
-crashed a rogue at 16.1 yd and caught three more melee with it. Everyone but the main tank dodges
-(`VezaxDodgesShadowCrash`); moving him drags the boss.
+**Everything past 17.1 yd is in Shadow Crash range.** `SelectTarget` skips only what is inside
+`3 + 12.6 + 1.5`, so melee inside his 15.4 yd melee range are safe and a stray one is not: at his old
+12.5 one pull crashed a rogue at 16.1 yd and caught three more melee with it. Everyone but the main
+tank dodges (`VezaxDodgesShadowCrash`); moving him drags the boss.
 
 **Melee are not spread.** `set behind` sends a melee bot in his front half to one of two points ±108°
 off his facing, so a 4 yd nudge apart fought it: melee bots moved in 26-40% of samples against 0-1% for
@@ -110,7 +121,7 @@ creature is never logged. Read it off the boss HP trajectory in `snap.u`, never 
 
 **Who gets marked is not a free choice.** Melee read ~0 on `GetDistance` and can never be in the far
 pool, so the rule structurally prefers the camp, the only thing that is far. Forcing it the other way
-means pulling ~7 camp members inside 24.5 yd, making the pick a random draw over the near pool (~61%
+means pulling ~7 camp members inside the floor, making the pick a random draw over the near pool (~61%
 melee, not 100%) **and** putting those 7 inside a marked melee's leech: ~60 ticks a window against ~30.
 The camp stands far enough that a melee mark cannot reach it; the ball breaks out of its own.
 
@@ -141,6 +152,11 @@ ranged and not the main tank, not itself marked, with a marked ally inside
 excluded because nothing marked in the ball reaches 27+ yd, and scattering them every 40s costs more
 cast time than it saves. Nine melee out for ~10s is ~400k forgone against the 2.24M one window healed
 back.
+
+**Whoever he is hitting keeps its mark where it stands** (`VezaxMarkOfTheFacelessTrigger`), and the
+melee break off it as off anyone. Its spot is measured from him and he follows it, so it runs ahead: a
+marked DK main tank walked him from y 89 to y 17 in 10 s, past the berserk line at y 20, and the raid
+was dead a minute later.
 
 ## Shadow Crash
 
@@ -260,7 +276,7 @@ here keys on that too.
 presence gate had bots prepositioning through walls while their generic movers were already zeroed.
 `VezaxFormationActive` wants the bot within 45 yd of **him**, plus a 10 yd height band. Outside it the
 movement rule is inert, generic movement carries a bot in, and the gate opens on arrival, which holds only
-while the gate contains reach spell's 38 yd stop and the widest strafed slot (41.4), both measured from
+while the gate contains reach spell's 42.6 yd stop and the widest strafed slot (41.4), both measured from
 him. Widening it puts a bot back on a path through a wall; navprobe reads hall floor at 45 yd all round
 both spots he has settled on. Measured from the anchor instead, the gate broke the camp when he settled
 12.5 yd north of it: 6 of 14 casters and healers never got inside, and 13 bots ended on one point, where a
@@ -284,8 +300,9 @@ disagree. `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode
 formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
 come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
 the instance lookup came back empty and every formation gate is shut, which nothing else in the trace
-says. `vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura. A
-kicked Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast.
+says. `vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura;
+its `far` counts the living past the floor at each mark, against the 9 or 4 the core wants. A kicked
+Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world object
 until it lands. Take the destination from `spell->m_targets`, never `GetUniqueTargetInfo()`: 62660's
@@ -343,7 +360,7 @@ it:
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
   chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the position node stands
   down for that bot; it had walked him back 5 times from the chase.
-- **Melee stay inside his crash limit** (`vezax animus melee spot`), the 12.5 yd skip, measured 3D
+- **Melee stay inside his crash limit** (`vezax animus melee spot`), the 17.1 yd skip, measured 3D
   (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
   tank, 6 of 16 after. The Animus (reach 8) takes his spot by the tank, he steps 8-9 yd round it, and `set
   behind` walked melee to the Animus's far side, 13-20 yd from him. At 24 Profound Darkness stacks a crash
@@ -411,6 +428,12 @@ next pull. As off-tank it adds nothing to the Animus either: 0.6% mana from 2:30
 +19s. Nothing here treats it.
 
 **Backstab and Shred go unused on the Animus**, since the melee spot blocks `set behind`.
+
+**The camp follows him off the floor.** Slots and strafes are boss-relative and never checked against
+the navmesh, which holds only while he stands near his spawn. After one collapse he chased loose
+ranged ~100 yd north; four camp bots strafed to y 210, off the hall's north edge, and fell under the
+map, he followed to z 226, regenerated from 25% to full while unable to reach them, and the pull ran
+10 more minutes until mod-dungeon-clear's no-progress check.
 
 **A human main tank steps out alone.** A crash aimed at a human melee past the limit still lands on
 whoever stands with him; bots dodge it, the main tank does not.
