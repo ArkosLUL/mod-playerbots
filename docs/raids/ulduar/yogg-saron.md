@@ -1787,6 +1787,17 @@ a soulstoned tank taunts straight back in and dies again. It moves the whole pil
 and the holder's cooldown, not a lighter load. `yogg.tankswap` (`take`), `yogg.tankshed`, `yogg.tankhold`
 `swap defense` / `swap taunt`.
 
+**The control owns every phase 3 taunt** (`yogg-saron phase 3 taunt hold`: `Family::Taunt` on bot tanks; the
+control's casts, swap and drag included, go through `PlayerbotAI::CastSpell`, which no rule sees). Left to `lose
+aggro`, the class nodes spent 26 taunts in four phase 3s on rooted tentacles (9), on Guardians the other tank held (14,
+Righteous Defense on that tank taking up to three outside the swap rule) or on the caster's own (3), none on a loose
+one, each costing the 8 s cooldown the next spawn needed. `--phase3`: `tank taunts by aim` (`tentacle` / `own` /
+`another tank` / `loose`), `class taunts held`.
+
+**A fresh Guardian leaves stasis on zero threat**: at 4 s or its first hit, `DoZoneInCombat` adds every player at 0
+and the first in the map's player list becomes its victim (`--phase3` `first victim`: one fixed melee at +4.0 s), so
+the first heal anywhere takes it.
+
 **Lay on Hands is kept for the tanks, by the user's choice**: pulls spent all four on dps in phase 1 and had
 none for phase 3, where tank deaths ended them. Blocked (`yogg-saron lay on hands hold`): `lay on hands on
 party` all fight, `lay on hands` for non-tanks all fight and for tanks before phase 3. In phase 3

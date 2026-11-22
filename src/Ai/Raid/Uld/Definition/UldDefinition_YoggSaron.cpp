@@ -209,6 +209,8 @@ void DefineYoggSaron(EncounterBuilder& e)
             {"consecration", "hammer of the righteous", "avenger's shield", "hand of reckoning",
              "righteous defense"});
 
+    e.Block("yogg-saron phase 3 taunt hold", Role::Tank, YoggSaronInPhase3, Family::Taunt);
+
     e.Block("yogg-saron tank wrath hold", Role::Tank, YoggSaronTankWrathHeld, 0, {"avenging wrath"});
 
     e.Block("yogg-saron tank sacrifice hold", Role::Tank, YoggSaronInPhase3, 0, {"hand of sacrifice on party"});
