@@ -6,16 +6,26 @@
 
 #include "UldDefinitions.h"
 
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
 #include "Strategy.h"
 #include "UldActions_XT002.h"
 #include "UldEncounterGate.h"
 #include "UldMultipliers_XT002.h"
+#include "UldScripts.h"
 #include "UldTriggers_XT002.h"
 
 namespace Family = RaidEncounterRules::Family;
+namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
+bool XT002TauntWasted(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->GetEntry() == NPC_XT002;
+}
+
 void DefineXT002(EncounterBuilder& e)
 {
     // Hazard dodge above the rest and the carrier above that, since only the carrier can solve its mechanic.
@@ -34,6 +44,10 @@ void DefineXT002(EncounterBuilder& e)
     // floor stops anything that would land a hit.
     e.Multiplier<XT002BurstWindowMultiplier>(Family::AnyAction);
     e.Multiplier<XT002TargetGuardMultiplier>(Family::AnyAction);
+
+    // The class "lose aggro" nodes taunt XT whenever another tank holds him, and he's taunt-immune, so a
+    // paladin burns a global on Righteous Defense every 8 s. Taunts at a Pummeller still go out.
+    e.Block("xt002 taunt guard", Role::Tank, XT002TauntWasted, Family::Taunt);
 }
 }  // namespace
 

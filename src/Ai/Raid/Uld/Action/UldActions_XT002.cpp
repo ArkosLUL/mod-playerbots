@@ -624,36 +624,14 @@ bool XT002RedirectThreatAction::isUseful()
 
 Player* XT002RedirectThreatAction::GetRedirectTank(Unit* xt002)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
+    XT002TankRoles const roles = GetXT002TankRoles(bot, xt002);
 
-    // A Pummeller is the off-tank's job, and it is the add most likely to peel onto a redirecter. One
-    // still out at a toy pile is nobody's, so the leash decides whether there is really one in play.
+    // A Pummeller is the add most likely to peel onto a redirecter. One still out at a toy pile is nobody's,
+    // so the leash decides whether there is really one in play.
     if (GetXT002EngageableAdd(botAI, bot, PB_NPC_XT002_PUMMELLER, ULDUAR_XT002_ADD_LEASH_RADIUS))
-    {
-        if (Player* assistTank = GetGroupAssistTank(bot, 0))
-            return assistTank;
-    }
+        return roles.pummeller;
 
-    // Otherwise feed whoever is actually holding XT, which survives a tank swap or a tank death.
-    if (xt002)
-    {
-        if (Unit* victim = xt002->GetVictim())
-        {
-            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-            {
-                Player* member = ref->GetSource();
-                if (!member || !member->IsAlive() || member == bot)
-                    continue;
-
-                if (PlayerbotAI::IsTank(member) && member == victim)
-                    return member;
-            }
-        }
-    }
-
-    return GetGroupMainTank(bot);
+    return roles.holder;
 }
 
 bool XT002RedirectThreatAction::Execute(Event /*event*/)
@@ -685,7 +663,8 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
 
 bool XT002RaidPositionAction::Execute(Event /*event*/)
 {
-    if (PlayerbotAI::IsMainTank(bot))
+    // The trigger only fires for the tank XT is on.
+    if (PlayerbotAI::IsTank(bot))
     {
         if (bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) <= ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE)
             return false;
@@ -716,7 +695,7 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
         return false;
 
     // How far this bot will travel for an add. Tanks are exempt because this runs over their list too,
-    // and the off-tank is supposed to walk to the Pummeller.
+    // and the tank XT isn't on is supposed to walk to the Pummeller.
     float const reach = PlayerbotAI::IsMelee(bot) ? ULDUAR_XT002_MELEE_ENGAGE_RANGE
                                             : ULDUAR_XT002_RANGED_ENGAGE_RANGE;
     bool const inReach = PlayerbotAI::IsTank(bot) || unit->GetExactDist2d(bot) <= reach;
@@ -857,7 +836,8 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
 
         // Taunt reaches 30 yd and the toy piles are 80 yd out, so the add comes to the tank on XT. Only a tank with
         // someone else on the boss chases it.
-        if (IsXT002PummellerTank(bot) && PlayerbotAI::GetGroupTankNum(bot) > 1)
+        XT002TankRoles const roles = GetXT002TankRoles(bot, xt002);
+        if (roles.pummeller == bot && roles.holder != bot)
             tankPriority.emplace_back(PB_NPC_XT002_PUMMELLER,
                                       SelectByEntry(currentTarget, PB_NPC_XT002_PUMMELLER, pummellers));
 

@@ -21,6 +21,9 @@ What the generic views miss here:
   view lists the ones that lived longer, with the carrier they spawned on and the `xt002.evading` notes.
 - **A tank carrier only walks out after Heartbreak, and only holding neither XT nor a Pummeller.** The
   sparks view lists each spark a tank dropped with its distance from the Searing Light spot.
+- **Tank duties follow whoever XT is on**, since nothing can taunt him back. The tanks view lists who XT
+  was on and how far that tank stood off the tank spot, each tank's `xt002.tank` duty notes, and the
+  taunts still cast at him.
 """
 from __future__ import annotations
 
@@ -55,7 +58,15 @@ SPELL_STAND = 37752
 HEARTBREAK = (64193, 65737)
 SEARING_LIGHT = (63018, 65121)
 SEARING_LIGHT_SPOT = "ULDUAR_XT002_SEARING_LIGHT_SPOT"
+TANK_SPOT = "ULDUAR_XT002_MAINTANK_SPOT"
 CLASS_HUNTER = 3
+
+# Taunt, Growl, Dark Command, Hand of Reckoning, Death Grip, Challenging Shout, Challenging Roar, Mocking Blow
+TAUNTS = {355, 6795, 56222, 62124, 49576, 1161, 5209, 694}
+# cast on the ally XT is hitting, not on XT
+RIGHTEOUS_DEFENSE = 31789
+# walking XT from where he turned to the tank spot takes a holder up to this long
+SETTLE_MS = 15000
 
 # 25-man hard mode traces: sparks the raid could hit died in 5-17 s, ones it couldn't lived 39-90 s
 SPARK_LONG_MS = 20000
@@ -354,6 +365,69 @@ def show_sparks(trace: Trace) -> None:
                   f" lived {(spark['last'] - spark['first']) / 1000:.0f} s")
 
 
+def holders(trace: Trace) -> list[dict]:
+    """Runs of XT's victim, snapshot by snapshot: `t`, `g` (0 while he attacks nobody), `until`, and the
+    victim's own spots during the run."""
+    runs = []
+    for snap in frames(trace):
+        rows = {row[0]: row for row in snap.get("u", [])}
+        xt = next((row for guid, row in rows.items() if entry(trace, guid) == NPC_XT002 and len(row) > 7), None)
+        if not xt:
+            continue
+        if not runs or runs[-1]["g"] != xt[7]:
+            runs.append({"t": snap["t"], "g": xt[7], "spots": []})
+        runs[-1]["last"] = snap["t"]
+        victim = rows.get(xt[7])
+        if victim:
+            runs[-1]["spots"].append((snap["t"], victim[1], victim[2]))
+    for run, after in zip(runs, runs[1:] + [None]):
+        run["until"] = after["t"] if after else run["last"]
+    return runs
+
+
+def taunts_at_xt(trace: Trace, runs: list[dict]) -> collections.Counter:
+    """Taunts tanks cast at XT, per (tank, spell name). Righteous Defense counts when its ally is XT's victim."""
+    xt = {guid for guid, en in trace.entries.items() if en == NPC_XT002}
+    out = collections.Counter()
+    for rec in trace.of("cast"):
+        if trace.role(rec.get("s")) != "tank":
+            continue
+        spell = rec.get("sp")
+        if spell == RIGHTEOUS_DEFENSE:
+            victim = next((run["g"] for run in reversed(runs) if run["t"] <= rec["t"]), 0)
+            hit = victim and rec.get("tgt") == victim
+        else:
+            hit = spell in TAUNTS and rec.get("tgt") in xt
+        if hit:
+            out[(rec["s"], trace.spells.get(spell) or f"spell {spell}")] += 1
+    return out
+
+
+def show_tanks(trace: Trace) -> None:
+    print("TANKS")
+    if not mine(trace):
+        return
+    runs = holders(trace)
+    if not runs:
+        print("  XT never sampled")
+    spot = anchor(TANK_SPOT)
+    for run in runs:
+        who = f"{trace.name(run['g'])} ({trace.role(run['g'])})" if run["g"] else "nobody"
+        line = f"  {clock(run['t'])}  {who} for {(run['until'] - run['t']) / 1000:.1f} s"
+        settled = [dist2((x, y), spot) for t, x, y in run["spots"] if t >= run["t"] + SETTLE_MS]
+        if run["g"] and trace.role(run["g"]) == "tank" and settled:
+            line += f", {statistics.median(settled):.0f} yd off the tank spot from {SETTLE_MS // 1000} s in"
+        print(line)
+    duties = collections.defaultdict(list)
+    for rec in notes(trace, "xt002.tank"):
+        duties[rec.get("g")].append(f"{rec.get('txt')} {clock(rec['t'])}")
+    for guid, changes in duties.items():
+        print(f"  {trace.name(guid)}: {', '.join(changes)}")
+    taunts = taunts_at_xt(trace, runs)
+    shown = ", ".join(f"{trace.name(g)} {name} {n}" for (g, name), n in taunts.most_common())
+    print(f"  taunts at XT: {sum(taunts.values())}" + (f" ({shown})" if shown else ""))
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     killer = entry(trace, death.get("killer"))
     rewind = death.get("rewind") or []
@@ -390,6 +464,7 @@ SECTIONS = (
     ("adds", "adds per toy pile", show_adds),
     ("trash", "Scrapyard trash pulls and what called them", show_trash),
     ("sparks", "Life Sparks that lived long, their carrier and evade notes", show_sparks),
+    ("tanks", "who XT was on and how far off the tank spot, tank duty notes, taunts at him", show_tanks),
     ("deaths", "deaths by mechanic", show_deaths),
 )
 

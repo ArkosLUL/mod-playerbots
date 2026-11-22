@@ -94,21 +94,99 @@ uint32 GetXT002GravityBombSpellId(Player* bot)
     return sSpellMgr->GetSpellIdForDifficulty(SPELL_XT002_GRAVITY_BOMB, bot);
 }
 
-bool IsXT002PummellerTank(Player* bot)
+static std::string DescribeXT002TankDuty(XT002TankRoles const& roles, Player* bot)
 {
-    if (!PlayerbotAI::IsTank(bot))
-        return false;
+    if (roles.holder == bot && roles.pummeller == bot)
+        return "holds XT, pummellers";
+    if (roles.holder == bot)
+        return "holds XT";
+    return roles.pummeller == bot ? "pummellers" : "none";
+}
 
-    // Whoever holds XT keeps holding him, so the add belongs to the first assist tank and only falls
-    // to the main tank when there is no second tank left.
-    if (Player* assistTank = GetGroupAssistTank(bot, 0))
-        return assistTank == bot;
+XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002)
+{
+    // Living tanks ranked like GetGroupAssistTank: flagged main tank, then raid assistants, then the rest.
+    // Every fallback below takes the first, and the Pummellers go to the first that isn't the holder.
+    std::vector<Player*> tanks;
+    if (Group* group = bot->GetGroup())
+    {
+        ObjectGuid const flagged = PlayerbotAI::GetMainTankGuid(group);
+        std::vector<Player*> rest;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId() ||
+                !PlayerbotAI::IsTank(member))
+                continue;
 
-    if (Player* mainTank = GetGroupMainTank(bot))
-        return mainTank == bot;
+            if (member->GetGUID() == flagged)
+                tanks.insert(tanks.begin(), member);
+            else if (group->IsAssistant(member->GetGUID()))
+                tanks.push_back(member);
+            else
+                rest.push_back(member);
+        }
 
-    // Neither resolves only when this bot is the last tank standing, so it owns the add by default.
-    return true;
+        tanks.insert(tanks.end(), rest.begin(), rest.end());
+    }
+    else if (bot->IsAlive() && PlayerbotAI::IsTank(bot))
+        tanks.push_back(bot);
+
+    XT002TankRoles roles;
+    if (tanks.empty())
+        return roles;
+
+    if (xt002)
+    {
+        // Submerged he attacks nobody, but the threat list keeps picking whom he turns on once he stands.
+        Unit* victim = xt002->GetVictim();
+        if (!victim && xt002->CanHaveThreatList())
+            victim = xt002->GetThreatMgr().GetLastVictim();
+
+        auto const held = std::find(tanks.begin(), tanks.end(), victim);
+        if (held != tanks.end())
+            roles.holder = *held;
+        else
+        {
+            // XT on a non-tank, e.g. right after his holder died: the tank with most threat gets him back first.
+            float most = 0.0f;
+            for (Player* tank : tanks)
+            {
+                float const threat = xt002->GetThreatMgr().GetThreat(tank);
+                if (threat > most)
+                {
+                    most = threat;
+                    roles.holder = tank;
+                }
+            }
+        }
+    }
+
+    if (!roles.holder)
+        roles.holder = tanks.front();
+
+    for (Player* tank : tanks)
+    {
+        if (tank != roles.holder)
+        {
+            roles.pummeller = tank;
+            break;
+        }
+    }
+
+    if (!roles.pummeller)
+        roles.pummeller = roles.holder;
+
+    // Tanks only: a hunter or rogue reading the roles for its redirect has no duty to note.
+    if (RaidObs::Active() && PlayerbotAI::IsTank(bot))
+        RaidObs::NoteDerived(bot, "xt002.tank", DescribeXT002TankDuty(roles, bot));
+
+    return roles;
+}
+
+bool IsXT002PummellerTank(Player* bot, Unit* xt002)
+{
+    return PlayerbotAI::IsTank(bot) && GetXT002TankRoles(bot, xt002).pummeller == bot;
 }
 
 bool IsXT002AddEngageable(Unit* xt002, Unit* unit)
