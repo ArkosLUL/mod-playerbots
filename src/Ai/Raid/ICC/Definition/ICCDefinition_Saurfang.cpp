@@ -30,7 +30,6 @@ void DefineSaurfang(EncounterBuilder& e)
     e.Node<IccDbsBeastTauntTrigger, IccDbsBeastTauntAction>(ACTION_RAID + 5);
     e.Node<IccDbsBeastControlTrigger, IccDbsBeastControlAction>(ACTION_RAID + 4);
     e.Node<IccDbsMarkHealTrigger, IccDbsMarkHealAction>(ACTION_RAID + 3);
-    // Above the stand: a bot takes a new pick before it walks back to its spot
     e.Node<IccDbsTargetTrigger, IccDbsTargetAction>(ACTION_RAID + 2);
     e.Node<IccDbsStandTrigger, IccDbsStandAction>(ACTION_RAID + 1, EncounterRow::Mover);
 
@@ -39,28 +38,22 @@ void DefineSaurfang(EncounterBuilder& e)
 
     e.OwnTargeting("icc dbs targeting", Role::Any, &IccResolverPicks<&GetDbsTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // The rune tank's resolver hands it nothing but a beast, so no picker may give it him back
     e.Block("icc dbs rune yield", Role::Tank, &IsDbsRuneYielding,
             Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti);
-    // A slot walked off by reach breaks the Blood Nova spread, and every slot is in reach already
     e.OwnMovement("icc dbs slot hold", Role::Any, &IsDbsHoldingSpreadStand, Family::Attack,
                   {IccDbsStandAction::Name, "reach party member to resurrect"});
     e.OwnMovement("icc dbs tank hold", Role::Tank, &IsDbsHoldingTankStand, Family::Attack | Family::Reach,
                   {IccDbsStandAction::Name});
     e.Block("icc dbs spell movers", Role::Any, &IsDbsHoldingStand, Family::Charge | Family::Blink | Family::Disengage);
-    // He obeys taunt diminishing returns, so only the swap and the beast taunt spend a tank's taunt
     e.Block("icc dbs taunts", Role::Tank, &IsDbsLive, Family::Taunt);
-    // Its ghouls taunt the beasts, which then feed him Blood Power
     e.Block("icc dbs army", Role::Any, &IsDbsArmyHeld, 0, {"army of the dead"});
-    // A yielding tank has no target, and a druid's non-combat nodes drop bear form
     e.Block("icc dbs tank form", Role::Tank, &IsDbsLive, 0, {"caster form"});
-    // The tank buttons wait for Blood Power, Frenzy or a low tank
     e.Block("icc dbs tank defensive hold", Role::Tank, &IsDbsTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickDbsEncounter);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccSaurfangDefinition()
 {

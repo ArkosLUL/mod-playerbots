@@ -271,6 +271,10 @@ share one build schedule.
 - **Shared code:** a lane changes only its boss's files; a shared change is named in its report and
   every boss using it is pulled again next window.
 - **Reports:** in chat after every window: pulls, kills, deaths by mechanic, what changed, questions.
+- **No code comments:** raid code comments were stripped on Custom (`c163ec11a`, knowledge in the
+  boss docs). A lane branched before it runs `python -I tools/commentstrip/commentstrip.py strip
+  --keep-from c163ec11a src/Ai/Raid/<Raid>` on its branch and commits that before merging; `file:line`
+  refs written before it point at `c163ec11a^`.
 
 ### Wave 5
 Research only: Flame Leviathan (vehicle driving), Thorim (gauntlet walk), Algalon (console + key),

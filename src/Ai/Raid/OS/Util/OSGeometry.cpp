@@ -32,28 +32,17 @@ Position const TENEBRON_TANK_SPOT = { 3249.8467f, 563.38010f, 59.4240f, 0.0f };
 Position const SHADRON_TANK_SPOT  = { 3228.9385f, 534.65955f, 59.5600f, 0.0f };
 Position const VESPERON_TANK_SPOT = { 3266.0000f, 556.00000f, 59.5130f, 0.0f };
 
-// Whole-number spawn offsets straight out of FlameTsunamiLeftOffsets / FlameTsunamiRightOffsets. The
-// two sets are disjoint, which is what makes the truncating comparison below exact.
 std::array<int32, 9> const LEFT_WAVE_Y = { 476, 484, 492, 524, 532, 540, 572, 580, 588 };
 std::array<int32, 6> const RIGHT_WAVE_Y = { 500, 508, 516, 548, 556, 564 };
 
-// Spell 57491 radius 7.0 plus the player's 1.5yd combat reach. The caster's own reach is not added.
 constexpr float TSUNAMI_LETHAL_HALF_WIDTH = 8.5f;
 
-// SendLavaWaves(false) strips the damage aura and shrinks the wave to 0.1 scale in the same call, 11s
-// after the summon. A wave is 1.0 before and during its run, so scale tells a spent wave from a live
-// one without the ambiguity the aura carries - it is also absent for the first 3.6s, while the wave is
-// still parked at its spawn X and very much coming.
 constexpr float TSUNAMI_SPENT_SCALE = 0.5f;
 
-// How long a wave's lane is worth drawing on a trace timeline: the damage aura goes on 3.6s after the
-// summon and comes off 7.4s later, in the same call that shrinks the wave.
 constexpr uint32 TSUNAMI_HAZARD_TTL_MS = 11000;
 
-// Base flight speed 7.0 at the rate the script sets right before MovePoint(POINT_LANDING).
 constexpr float DRAKE_LANDING_SPEED = 21.0f;
 
-// Anything below this is the pre-call patrol, which runs at rate 1.0.
 constexpr float DRAKE_LANDING_SPEED_RATE = 2.0f;
 
 namespace
@@ -106,11 +95,6 @@ TsunamiWave WaveSideOf(Creature const* tsunami)
     return TsunamiWave::None;
 }
 
-// Everything a shifted bot knows about the platform comes through here. Phase 16 filters the tsunamis
-// out of its own searches, so it asks someone who is still outside - which is what a raid does over
-// voice. The two tanks are who it asks: ResolveAssignments skips every tank bar the second assist, so
-// the main tank and the first off-tank are the only two bots that can never be in the realm. Coordinates
-// are shared across phases, so their list still answers "can it reach me" against the shifted bot's own X.
 Player* PlatformEyes(Player* bot)
 {
     if (!bot)
@@ -136,8 +120,6 @@ Player* PlatformEyes(Player* bot)
         if (PlayerbotAI::IsMainTank(member) || IsOffTank(member))
             return member;
 
-        // Both tanks down. Anyone left outside answers the same question - the side is a property of the
-        // wave, not of who is looking at it.
         if (!fallback)
             fallback = member;
     }
@@ -163,12 +145,6 @@ TsunamiWave ClassifyTsunamiWave(Player* bot)
         if (!tsunami || !tsunami->IsAlive() || tsunami->GetObjectScale() < TSUNAMI_SPENT_SCALE)
             continue;
 
-        // Left waves spawn at X 3211 and travel +X, right waves at 3286 travelling -X. A wave that has
-        // already swept past this bot cannot come back, so it stops counting even though the creature
-        // is on the map until its 13.5s despawn. Waiting for that despawn is what left the raid sitting
-        // on the wrong hold for 5s after every wave. The pre-launch window still counts: the wave is
-        // parked at its spawn X, which reads as coming, and those 3.6s are the head start a 15.5yd
-        // corridor swap needs.
         switch (WaveSideOf(tsunami))
         {
             case TsunamiWave::Left:
@@ -187,9 +163,6 @@ TsunamiWave ClassifyTsunamiWave(Player* bot)
             break;
     }
 
-    // What this bot believes, which is not the same as what the lane records say: the reach test runs
-    // against the bot's own X, so two bots on the same hold can legitimately disagree, and that
-    // disagreement is what a half-and-half corridor split looks like from inside a trace.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "sartharion.wave", WaveName(live));
 
@@ -210,8 +183,6 @@ void NoteTsunamiHazards(Player* bot, std::unordered_set<ObjectGuid>& traced)
         if (side == TsunamiWave::None)
             continue;
 
-        // Enough to redraw the lane by hand: the line it stands on, which pattern it belongs to, and
-        // the half width every hold on the platform was measured against.
         char params[64];
         snprintf(params, sizeof(params), "\"y\":%d,\"side\":\"%s\",\"half\":%.1f",
                  int32(tsunami->GetPositionY()), WaveName(side), TSUNAMI_LETHAL_HALF_WIDTH);
@@ -223,8 +194,6 @@ void NoteTsunamiHazards(Player* bot, std::unordered_set<ObjectGuid>& traced)
 
 bool WaveClearsY(float y, TsunamiWave wave)
 {
-    // The lethal half width plus the raid-wide arrival tolerance, so a hold that passes here is safe
-    // across the whole disc a bot can idle on rather than only at the coordinate itself.
     float const margin = TSUNAMI_LETHAL_HALF_WIDTH + CORRIDOR_ARRIVAL_TOLERANCE;
 
     switch (wave)
@@ -243,15 +212,9 @@ CorridorGroup CorridorGroupFor(Player* bot)
     if (!bot)
         return CorridorGroup::Raid;
 
-    // In the realm the boss is unresolvable, and the melee and tank splits below are all about his cones,
-    // none of which exist in phase 16. Everyone shifted takes the raid pair.
     if (HasTwilightShift(bot))
         return CorridorGroup::Raid;
 
-    // Healers and ranged never leave the raid corridor, whatever they are shooting at. Sartharion
-    // parks 36.8yd from their home hold and 50.5yd from the left one, so he is out of their 28.5yd
-    // spell range for the whole fight and they are on the drakes and the adds instead. Closing that
-    // gap means walking in behind him, into a 30yd Tail Lash, which costs more than the uptime.
     if (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot))
         return CorridorGroup::Raid;
 
@@ -259,41 +222,19 @@ CorridorGroup CorridorGroupFor(Player* bot)
     if (!boss)
         return CorridorGroup::Raid;
 
-    // The main tank keeps his own pair for the whole fight, drakes up or not. His two holds are the
-    // only spots on the platform south of where the drag parks Sartharion, and that is what keeps the
-    // boss facing away from everyone else - walking him up to the raid line to shorten their range
-    // would turn him around and put the line in a 60yd frontal cone.
     if (PlayerbotAI::IsMainTank(bot))
         return CorridorGroup::Tank;
 
-    // Melee and the off-tank dodge in the corridor their own target is standing in. The off-tank is
-    // locked off Sartharion for the whole fight, so he is always Raid.
-    //
-    // Melee on the boss get their own profile rather than the tank's, because his right hold is one
-    // place they cannot follow him to: the platform is 11yd wide below Y 492, so the clamp puts them
-    // 39.5 degrees off his facing - inside a 98-degree Flame Breath - with the healers 46yd away and
-    // nothing able to heal it off. The 524.5-539.5 band is no better, everything in it inside his
-    // 20.83yd melee range being inside a 30yd Tail Lash, so they give the right wave up instead.
     return bot->GetVictim() == boss ? CorridorGroup::Melee : CorridorGroup::Raid;
 }
 
 float SafeCorridorY(Player* bot)
 {
-    // Home and away, with no shared state behind it. Each group idles on the hold that is safe under
-    // one wave pattern and steps out for the other, so the tank only ever moves for a right wave and
-    // the raid only for a left one.
-    //
-    // Bots at different X release at slightly different times, since each reads the wave against its
-    // own position and the raid band is 16yd wide - about 1.5s of spread. That is safe: the release
-    // means the wave is already past that bot's X, and the walk home only changes Y.
     CorridorGroup const group = CorridorGroupFor(bot);
     TsunamiWave const wave = ClassifyTsunamiWave(bot);
 
     float y;
 
-    // Melee keep the tank's lane except under a right wave, where they take the raid's. It costs them
-    // the ~11s a wave is in the air - 31yd from the boss is well outside melee range - and buys them
-    // the only Y under a right wave that is neither in one of his cones nor out of heal range.
     if (group == CorridorGroup::Melee)
         y = wave == TsunamiWave::Right ? RAID_CORRIDOR_RIGHT_Y : TANK_CORRIDOR_LEFT_Y;
     else if (group == CorridorGroup::Tank)
@@ -301,9 +242,6 @@ float SafeCorridorY(Player* bot)
     else
         y = wave == TsunamiWave::Left ? RAID_CORRIDOR_LEFT_Y : RAID_CORRIDOR_RIGHT_Y;
 
-    // The group is the rule and the Y names which of its two holds the wave picked. The coordinate on
-    // its own is already a move record; what it cannot say is which profile the bot was sorted into,
-    // and a bot in the wrong profile holds the wrong lane all fight without ever missing a dodge.
     if (RaidObs::Active())
     {
         char note[32];
@@ -371,17 +309,12 @@ float PlatformMinX(float y)
 
 void ClampToPlatform(float& x, float& y)
 {
-    // Y first: both X edges are functions of it, so clamping X against an out-of-range Y would pick
-    // the wrong band.
     y = std::clamp(y, PLATFORM_MIN_Y, PLATFORM_MAX_Y);
     x = std::clamp(x, PlatformMinX(y), PlatformMaxX(y));
 }
 
 void ClampToRangeMarker(float& x, float& y)
 {
-    // Y is the safety axis - it is what a tsunami dodge just bought - so the destination is pulled
-    // along X only, onto the chord the marker circle cuts at this Y. The marker whose chord is wider
-    // here wins; on the corridor holds that is always the northern trigger.
     Position const* anchor = nullptr;
     float bestChord = -1.0f;
     for (Position const* candidate : { &SAFE_AREA_SOUTH, &SAFE_AREA_NORTH })
@@ -400,8 +333,6 @@ void ClampToRangeMarker(float& x, float& y)
 
     if (bestChord <= 0.0f)
     {
-        // This Y is further from both markers than their radius, so no X on the line is covered.
-        // Give up the Y and pull straight at the marker rather than leave the bot in Pyrobuffet.
         float const dx = x - anchor->GetPositionX();
         float const dy = y - anchor->GetPositionY();
         float const dist = std::sqrt(dx * dx + dy * dy);
@@ -507,9 +438,6 @@ bool FissureBlocks(Player* bot, float x, float y)
     if (!bot)
         return false;
 
-    // Searched around the bot, so the radius has to reach a destination he is not standing on yet as
-    // well as the fissure's own reach around it. FindUnitByEntries cannot answer this - it ranks by
-    // distance to the bot rather than to the point.
     float const radius = FISSURE_CLEAR_RADIUS + bot->GetExactDist2d(x, y);
 
     std::list<Creature*> found;
@@ -542,10 +470,6 @@ Unit* FindInboundDrake(Player* bot)
         if (!drake || !drake->IsAlive() || !drake->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
             continue;
 
-        // The script raises flight rate to 3.0 in the same handler that issues
-        // MovePoint(POINT_LANDING) and leaves the pre-call patrol at 1.0, so the speed rate splits
-        // "coming down" from "circling the room" exactly. Distance on its own reports a 3s ETA
-        // minutes early, every time a patrol waypoint happens to pass near a landing spot.
         if (drake->GetSpeedRate(MOVE_FLIGHT) < DRAKE_LANDING_SPEED_RATE)
             continue;
 
@@ -598,10 +522,6 @@ std::vector<Unit*> LandedDrakes(Player* bot)
 
 Unit* NewestLandedDrake(Player* bot)
 {
-    // Sartharion calls them on a fixed schedule - Tenebron, Shadron, Vesperon - so reverse call order
-    // is landing recency, and the newest is the one nobody has threat on yet. The drake he leaves still
-    // has him top of its threat table, so it trails him onto the new spot rather than staying on its
-    // own; the two overlap until the older one dies.
     static std::array<std::vector<uint32>, 3> const drakeOrder = { {
         { NpcId::Vesperon, NpcId::VesperonH },
         { NpcId::Shadron, NpcId::ShadronH },
@@ -625,8 +545,6 @@ Unit* OffTankChargeFor(Player* bot)
     if (Unit* drake = NewestLandedDrake(bot))
         return drake;
 
-    // Lava Blazes spawn on a random player and whelps hatch mid-platform, so both are taken at taunt
-    // range and never chased across the room.
     return FindUnitByEntries(bot, OFFTANK_PICKUP_ENTRIES, LAVA_BLAZE_TAUNT_RANGE);
 }
 
@@ -635,22 +553,12 @@ Position OffTankAnchor(Player* bot)
     if (!bot)
         return Position();
 
-    // Drakes and nothing else. Taunt reaches 30yd and a Lava Blaze or a whelp walks to him, so letting
-    // one set the anchor only bought a 32yd round trip every time one spawned or died inside that
-    // radius. With nothing down he waits on Tenebron's spot rather than beside the boss: it is the
-    // first drake called, so he is standing where he will tank it 20s before it lands, and the spot is
-    // 60yd from Sartharion, which is the other half of keeping him off the boss entirely.
     Unit* drake = NewestLandedDrake(bot);
     Position const* spot = drake ? DrakeTankSpotFor(drake->GetEntry()) : &TENEBRON_TANK_SPOT;
 
-    // The spot gives way only to a wave that can actually reach it. Shadron's clears every right line
-    // and Vesperon's every left one, and walking 28yd to a corridor that is no safer costs the trip
-    // twice.
     bool const onSpot = WaveClearsY(spot->GetPositionY(), ClassifyTsunamiWave(bot));
     float const y = onSpot ? spot->GetPositionY() : SafeCorridorY(bot);
 
-    // Which drake put him there, and whether a wave took the spot's own Y off him. A handover walks him
-    // 35.5yd, and the move record alone cannot say which of the two drakes he is walking to.
     if (RaidObs::Active())
     {
         std::string const anchor = std::string(drake ? drake->GetName() : "none") +
@@ -682,8 +590,6 @@ bool BehindDrake(Unit* drake, Position const& point)
     if (!drake)
         return false;
 
-    // Doubled because HasInArc takes the full arc: 140 degrees off the facing either way is the
-    // 280-degree front arc, and behind is what is left of it.
     float const front = 2.0f * DRAKE_REAR_GATE_DEGREES * static_cast<float>(M_PI) / 180.0f;
     return !drake->HasInArc(front, &point);
 }
@@ -697,8 +603,6 @@ bool InSartharionCone(Unit* boss, Position const& point)
                       static_cast<float>(M_PI) / 180.0f;
     float const dist = boss->GetExactDist2d(point.GetPositionX(), point.GetPositionY());
 
-    // The same primitives the spell engine picks cone targets with, so this cannot drift from the
-    // mechanic: HasInArc takes the full arc, and a rear cone is its complement (Unit::isInBack).
     if (dist <= FLAME_BREATH_RANGE && boss->HasInArc(arc, &point))
         return true;
 

@@ -16,9 +16,9 @@ centre.
 | Mutated Infection 69674/71224/73022/73023 | From 14 s on one random player but his victim, every 14 s; 25-man only, 2 s shorter every 90 s down to 6 s at 6:00. Disease, 12 s, 3.4-3.6k (10N), 3.9-4.1k (25N, 10H), 4.9-5.1k (25H) a second, healing taken -50% (-75% heroic). Its removal, by expiry, cure or death, summons a Little Ooze on the spot | Bring the ooze to the Big Ooze; hold the first cure, cure the second at once beside the first ooze, later ones beside the Big Ooze | Carrier walk (`rf.carrier`), a cure duty (`rf.dispel`), a walk to the carrier with no curer in reach (`rf.curewalk`) |
 | Little Ooze 36897 | 500k threat on its player, taunt-immune, 8 yd/s. Weak Radiating Ooze 10 yd every 2 s; Sticky Ooze on its victim 5 s in, then every 15 s. Merges with another Little Ooze within 8 yd (every 0.5 s) into a Big Ooze | Move it out of the raid | Carrier walk; area damage held near it; all but carriers and the kiter keep 10 yd off |
 | Big Ooze 36899 (25: 38123) | 4 yd/s. Opens on the nearest player, then threat only. Swings average 31k (10) and 54k (25) before armor (DamageModifier 88.2 and 152.5, level 82). Radiating Ooze 10 yd every 2 s; absorbs a Little Ooze (+1) or a Big Ooze (stacks added) within 8 yd: Unstable Ooze 69558, +20% a stack. Taunt diminishing returns (0x80000); immune to snares, stuns, roots (-361) | Off-tank grabs every ooze, builds threat while it is weak, kites it later; brings a second Big Ooze to the first | The kiter (`rf.kiter`, `rf.bigooze`) |
-| Unstable Ooze Explosion 69839 | At 5 stacks, 4 s cast. At its end a stalker 38107 marks where every player and pet stands, and a missile flies there from the ooze at 5 yd/s: 9.8-10.3k (10N), 11.7-12.3k (25N, 10H), 14.6-15.4k (25H) within 6 yd. The ooze turns invisible 2 s later | Everyone steps 6+ yd at the cast's end, never onto another's spot; melee to the other leg | Everyone, kiter and carriers included, keeps 12.5 yd off it through the cast; then a dodge clear of every mark until it lands |
+| Unstable Ooze Explosion 69839 | At 5 stacks, 4 s cast. At its end a stalker 38107 marks where every player and pet stands, and a missile flies there from the ooze at 5 yd/s: 9.8-10.3k (10N), 11.7-12.3k (25N, 10H), 14.6-15.4k (25H) within 6 yd. The ooze turns invisible 2 s later and lingers so for a minute; the bots' scan skips it | Everyone steps 6+ yd at the cast's end, never onto another's spot; melee to the other leg | Everyone, kiter and carriers included, keeps 12.5 yd off it through the cast; then a dodge clear of every mark until it lands |
 | Sticky Ooze 37006 | A 30 s puddle: 2.9-3.1k (10), 3.9-4.1k (25) a second within 6 yd, -50% speed with no mechanic, so no freedom clears it | Avoid | Dodge; slots and kite legs keep clear |
-| Slime Spray 69508 | From 20 s, every 20 s, at a random non-tank: a stalker 37986 at the target, 1.5 s cast, 5 s channel. Each second 69507/71213/73189/73190 hits a 25° cone (10N, `spell_cone`) or 24° (others) at any range, and anyone within 2 yd of him | Melee run through him; ranged step aside | Dodge out of the cone |
+| Slime Spray 69508 | From 20 s, every 20 s, at a random non-tank: a stalker 37986 at the target, 1.5 s cast, 5 s channel. He casts on himself and faces the stalker, so it is the cone's axis. Each second 69507/71213/73189/73190 hits a 25° cone (10N, `spell_cone`) or 24° (others) at any range, and anyone within 2 yd of him | Melee run through him; ranged step aside | Dodge out of the cone |
 | Ooze Flood | From 8 s, every 25 s, one quadrant: random first, then counter-clockwise. Its two ground stalkers 37013 carry 69783/69797/69799/69802 for 5 s, then 69788 for 20 s, each casting 69789/71215/71587/71588 every second within 25 yd: 4.4-4.6k (10N), 5.4-5.6k (25N, 10H), 6.3-6.7k (25H), a snare of -25% (normal) or -10% a stack to 10 (heroic). Never within 13.9 yd of his spawn | Avoid the wet quadrant; the kiter crosses it, freed by Hand of Freedom or Anti-Magic Shell. Warcraft Tavern's "no slow on normal" is wrong: 69789 and 71215 slow | Slots there swap at the warning; dodge; kite legs stay dry and wade only with no dry leg left; the freedom duty (`rf.freedom`); `rf.flood` |
 | Vile Gas, heroic | Putricide casts 69240 (73019/73020) from 15-20 s, every 15-20 s, triggered, at a random player more than 14.5 yd from him when 3 (10) or 8 (25) stand there, else anyone. 8 yd round the victim at cast; 6 s: damage, -50% speed and confusion (69248), and every carrier hits allies in 8 yd every 2 s | Ranged and healers 8 yd apart | Spread slots; others step out of 8 yd round a carrier; a gassed kiter with its ooze within 20 yd spends a defensive |
 
@@ -34,15 +34,17 @@ on him being in combat, the splash multiplier waits for live.
   4.5 yd off it, the stand moves 9 yd past the spawn on the far side from him until he is back within 2.5.
 - **Kiter** (`rf.kiter`): one bot tank, not the one holding him, an assist tank first, kept while it can;
   with none, a Death Knight, then a paladin damage dealer, kept until a tank other than the main tank is
-  free. Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it taunts a
-  Big Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt diminishing
-  returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd of it, else
-  kites it: once the ooze is within 15 yd, a leg 10-40 degrees along the kite ring (36 yd),
-  counter-clockwise first, to a point 16 yd from the ooze, dry by 28 yd, clear of puddles, its walk not
-  through the ooze's aura or a flood. With no dry leg either way it wades (`wade`), the longest leg first;
-  floods leave its dodge, and one under it moves it on whatever the ooze does. It drops a cast that pins it
-  once the ooze is within 10 yd or it stands wet. It holds while it carries an ooze itself. Towing its ooze
-  or off its bursting one, it never dodges within 32.5 yd of his spawn. Generic taunts are blocked for it.
+  free (the main tank is free whenever he drops his victim for a moment, and would take the duty for one
+  refresh). Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it
+  taunts a Big Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt
+  diminishing returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd
+  of it, else kites it: once the ooze is within 15 yd, a leg of 20, 30, 10 or 40 degrees in that order
+  (20 degrees is 12.5 yd) along the kite ring (36 yd), counter-clockwise first, to a point 16 yd from the
+  ooze, dry by 28 yd, clear of puddles, its walk not through the ooze's aura or a flood. With no dry leg
+  either way it wades (`wade`), the longest leg first; floods leave its dodge, and one under it moves it
+  on whatever the ooze does. It drops a cast that pins it once the ooze is within 10 yd or it stands wet.
+  It holds while it carries an ooze itself. Towing its ooze or off its bursting one, it never dodges
+  within 32.5 yd of his spawn. Generic taunts are blocked for it.
 - **Damage dealer kiter**: never stands for a Big Ooze (no `tank`, no `hold`). It waits 30 degrees
   counter-clockwise of the ooze spot, walks to 20 yd of an ooze it has to taunt from past 25 yd, is cured at
   once while it tows, and with a Little Ooze on it lets the Big Ooze to 9 yd so the two merge behind it.
@@ -51,7 +53,9 @@ on him being in combat, the splash multiplier waits for live.
   sight casts Hand of Freedom on it. A Death Knight kiter in a ticking flood, not its warning, casts
   Anti-Magic Shell.
 - **Ooze spot** (`rf.oozespot`): the kite ring point at the middle of the quadrant opposite the latest
-  flood, so it moves on a quadrant with each flood and never floods while it is the spot.
+  flood, so it moves on a quadrant with each flood and never floods while it is the spot; the south-west
+  one before the first flood. At a handover the old flood's last tick can overlap the next warning, so
+  the warned quadrant counts (`rf.flood` too).
 - **Carriers** (`rf.carrier`): a bot with Mutated Infection or a Little Ooze on it walks to the Big Ooze
   (the kiter's first), else another Little Ooze, else the ooze spot, and stops within 4 yd.
 - **Cure duty** (`rf.dispel`): an infected player within 6 yd of the Big Ooze, or of another Little Ooze,
@@ -67,10 +71,9 @@ on him being in combat, the splash multiplier waits for live.
   each on the other ring when theirs is full, hunters outer only, the rest the stack 8 yd behind him. A
   healer's first slot leaves the widest gap to the other healers, so with two or more one always reaches
   the kiter (inner slots 90 degrees off it are 38 yd away). A lone bot healer takes the inner slot nearest
-  the kiter, again once its own is 30 yd from it.
-  Every slot is 9.5 yd or more from every other. A slot within 1.75 yd of a flood or puddle or 11.75 of a
-  Big Ooze changes for the nearest usable one. Reach, heal reach and spell movers are held while a stand
-  holds.
+  the kiter, again once its own is 30 yd from it. Every slot is 9.5 yd or more from every other. A slot
+  within 1.75 yd of a flood or puddle or 11.75 of a Big Ooze changes for the nearest usable one. Reach,
+  heal reach and spell movers are held while a stand holds.
 - **Dodge** (`rf.dodge`, emergency, forced): within half a yard of a hazard (Slime Spray cone, a mark not
   yet landed, a puddle, a flood or its warning but for a towing kiter, a Vile Gas carrier for others, a Big
   Ooze casting its explosion for all by 12.5 yd, any other Big or Little Ooze for all but the kiter and
@@ -82,7 +85,8 @@ on him being in combat, the splash multiplier waits for live.
 - **Targets** (`rf.target`): the kiter's Big Ooze, then a player's skull on him or an ooze for all but the
   tank holding him, else him. Area damage from a damage dealer but the kiter is held while an ooze is within
   15 yd of it or its target. Army of the Dead (ghouls taunt the oozes) and Death Grip (all three are grip
-  immune) are held. The kiter's pet attacks him, never the kited ooze.
+  immune) are held. The kiter's pet attacks him, never the kited ooze: there it would pull the ooze off a
+  kiter that can't reach it, and die to its swings.
 - **Tank defensives** (`rf.defensive`): a tank kiter under a Big Ooze of 4 stacks within 6 yd, a damage
   dealer kiter under any within 6 yd (its physical buttons), the kiter gassed with its ooze within 20 yd,
   any tank under 40%; class buttons held to 25%. A human tank gets the same as calls (`rf.humancall`).
@@ -127,7 +131,7 @@ outside the north-west flood.
 
 ## Cheats
 
-None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. The skull icon write is gone.
+None: `rf.nitro`, `rf.spitefulfury` and the skull icon write are gone.
 
 ## Known gaps
 
@@ -138,8 +142,8 @@ None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. Th
   paladin beyond 30 yd never walks to free one. The shell a wading Death Knight spends isn't there for a
   4-stack ooze. A wade can find no leg at all (every point a puddle or past the ooze); the kiter then stands
   in the flood, which its dodge no longer sees. A damage dealer kiter's pick-up walk ignores floods its
-  dodge still sees, so the two can trade steps at a flood's edge until the ooze is within 25 yd
-  (reviewer): `rf.dodge` `flood` rows between `rf.bigooze` `pickup` rows show it.
+  dodge still sees, so the two can trade steps at a flood's edge until the ooze is within 25 yd:
+  `rf.dodge` `flood` rows between `rf.bigooze` `pickup` rows show it.
 - A carrier's walk still crosses the raid; those within 10 yd step off its Little Ooze after the first tick.
 - Call of the Elements can drop a Cleansing Totem again; it pulses until the next tick replaces it (only
   with the opt-in `cleansing` water totem strategy).

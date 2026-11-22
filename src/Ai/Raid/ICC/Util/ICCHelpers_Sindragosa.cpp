@@ -52,77 +52,57 @@ constexpr uint32 SCAN_MS = 200;
 constexpr uint32 DUTY_MS = 250;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 
-// Within this of the far station she is over one of the two
 constexpr float STATIONS_RADIUS = 50.0f;
 constexpr size_t BOMBS_PER_AIR_PHASE = 4;
 
-// A walk parks within PARK and walks back once pushed past UNPARK. Her live spot, which the stands hang off,
-// re-latches once she has drifted ANCHOR_DRIFT off it.
 constexpr float PARK = 1.0f;
 constexpr float UNPARK = 2.5f;
 constexpr float ANCHOR_DRIFT = 3.0f;
 static_assert(PARK < UNPARK, "a walk has to end inside its own trigger");
-// A floor check that pulls a spot back further than this turns it down
 constexpr float FLOOR_TOLERANCE = 1.5f;
 
-// Blistering Cold reaches 25 yd from her centre: a creature's area spell adds no target size
 constexpr float COLD_RANGE = 29.5f;
 
 constexpr uint32 UNCHAINED_HOLD_STACKS = 3;
-// Backlash's 20 yd plus a margin
 constexpr float BACKLASH_KEEP = 23.0f;
-// A carrier's node keeps Backlash off the raid's spots and off every other carrier with both parked a yard or two
-// out, and stays outside Blistering Cold
 constexpr float UNCHAINED_RAID_KEEP = 24.0f;
 constexpr float UNCHAINED_CARRIER_APART = 25.0f;
 constexpr float UNCHAINED_HER_KEEP = 28.0f;
-// A 30 yd spell reaches her from here: both combat reaches count
 constexpr float UNCHAINED_CAST_REACH = 46.0f;
-// Heroic Frost Breath is a 24 degree cone out to 60 yd, and Tail Smash hits 20 yd round a point 20 yd behind her
 constexpr float BREATH_REACH = 62.0f;
 constexpr float BREATH_KEEP_DEG = 22.0f;
 constexpr float TAIL_KEEP = 23.0f;
-// navprobe's default collision height, the eye of a sight ray
 constexpr float SIGHT_EYE = 2.0f;
 constexpr uint32 CHILLED_STOP_STACKS = 6;
 
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
 
-// Ice Tomb hits everyone within 10 yd of the beacon
 constexpr float SPLASH_TRIGGER = 12.0f;
 constexpr float SPLASH_CLEAR = 13.5f;
 constexpr float SPLASH_SWEEP = 25.0f;
 constexpr uint32 SPLASH_RETRY_MS = 1000;
 
 constexpr float BOMB_HIDE_BEHIND = 3.5f;
-// The script drops a marker at least 3 yd off every ice block
 constexpr float BOMB_TOMB_MIN = 3.0f;
 constexpr float BUFFET_HIDE_BEHIND = 4.0f;
 constexpr uint32 BUFFET_HIDE_STACKS = 3;
-// The free tank resets from one stack, so it can take the swap at SWAP_BUFFET_MAX or under
 constexpr uint32 FREE_TANK_HIDE_STACKS = 1;
-// Heals pick targets out to 38.5 yd
 constexpr float HEAL_REACH = 38.0f;
-// A live tomb this close to a last phase tomb spot fouls it
 constexpr float TOMB_SPOT_FOUL = 6.0f;
-// A Blistering Cold run past a tomb this close paths round it
 constexpr float ESCAPE_TOMB_KEEP = 8.0f;
 constexpr float PRISONER_MATCH = 3.0f;
 
-// 20% of a 25-man tomb is 90k, enough for damage still in flight. A 10-man tomb has 113k, so it stops at 45k.
 constexpr float TOMB_FLOOR_PCT_25 = 20.0f;
 constexpr float TOMB_FLOOR_PCT_10 = 40.0f;
 constexpr float PRISONER_LOW_PCT = 40.0f;
 
 constexpr uint32 SWAP_WALK_MS = 12000;
 constexpr uint32 SWAP_TAUNT_MS = 16000;
-// A taunt lands at once: still not her victim this long after it, the swapper missed
 constexpr uint32 SWAP_MISS_MS = 1000;
 constexpr uint32 SWAP_BUFFET_MAX = 1;
 constexpr float TAUNT_RANGE = 30.0f;
 
-// Her next breath comes 20-25 s after the last, and every external below lasts 8 s or more
 constexpr uint32 COVER_FROM_MS = 18000;
 constexpr uint32 COVER_BUFFET_STACKS = 5;
 constexpr float COVER_RANGE = 40.0f;
@@ -141,28 +121,21 @@ constexpr float TANK_LAST_RESORT_PCT = 25.0f;
 
 constexpr uint32 SPELL_WEAKENED_SOUL = 6788;
 
-// Stands are polar from her live spot in the room frame: degrees from +x toward +y, then yards
 struct Polar
 {
     float deg;
     float r;
 };
 
-// The holder 20 yd west, the raid on her south flank toward the stairs, all clear of the 20 yd Tail Smash
-// circle 20 yd behind her and of Frost Breath's cone toward the holder
 constexpr Polar STAND_HOLDER{90.0f, 20.0f};
 constexpr Polar COLD_HOLDER{90.0f, 30.0f};
 constexpr Polar STAND_MELEE{170.0f, 14.0f};
 constexpr Polar STAND_RANGED{180.0f, 30.0f};
 constexpr Polar COLD_ESCAPES[] = {{150.0f, 30.0f}, {180.0f, 30.0f}, {210.0f, 30.0f}};
-// Last phase tombs, alternating, outside her 21.6 yd melee and 25 yd Blistering Cold
 constexpr Polar TOMB_SPOTS[] = {{140.0f, 31.0f}, {215.0f, 31.0f}};
 constexpr uint8 BEACON_SPOT_A = 7;
 constexpr Polar TAIL_SMASH{270.0f, 20.0f};
 
-// Heroic Unchained Magic nodes: a 5 yd grid round her landing spot, row i at x + 5 (i + UNCHAINED_GRID_I0), bit j
-// at y + 5 (j + UNCHAINED_GRID_J0). navprobe --nav 0x09 settles every set node within 0.01 of 203.38, with static
-// sight to her at her landing spot and 15 and 30 yd west of it. A carrier picks its node live, since she drifts.
 constexpr int UNCHAINED_GRID_I0 = -13;
 constexpr int UNCHAINED_GRID_J0 = -11;
 constexpr int UNCHAINED_GRID_COLS = 25;
@@ -208,15 +181,10 @@ struct TombInfo
     ObjectGuid guid;
     Position pos;
     float healthPct = 100.0f;
-    // Prisoner: 0 tank, 1 healer, 2 anyone else
     uint8 tier = 2;
-    // Asphyxiation or a prisoner under PRISONER_LOW_PCT. Under the bombs only Asphyxiation counts: the tomb
-    // soaks 99% of the prisoner's frost damage, and its 16k hit alone puts casters under 40%.
     bool danger = false;
     bool asphyxiating = false;
-    // A player's skull is on it, which overrides the hold
     bool skulled = false;
-    // Formed in an air phase
     bool air = false;
     uint32 seenMs = 0;
 };
@@ -240,11 +208,9 @@ struct SgBotState
     Position walkSpot;
     bool walkParked = false;
     bool owned = false;
-    // Its stand waits out a beacon, so a stand walk still in flight has to stop
     bool halt = false;
 
     bool cold = false;
-    // Outside Blistering Cold while she casts it: nothing may walk the bot in
     bool coldHold = false;
     Position coldSpot;
     std::string coldNote = "none";
@@ -257,14 +223,12 @@ struct SgBotState
     ObjectGuid hideTomb;
     Position hideSpot;
     bool hidThisAir = false;
-    // The tomb of its last bomb hide this air phase, which it damages between bombs too
     ObjectGuid coverTomb;
 
     ObjectGuid buffetTomb;
     Position buffetSpot;
     ObjectGuid buffetTried;
 
-    // The unchained node this bot walks to
     uint16 unchainedFor = 0;
     Position unchainedSpot;
     bool unchainedValid = false;
@@ -274,8 +238,6 @@ struct SgBotState
     bool chilled = false;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -297,26 +259,20 @@ struct SgState
     uint32 dutyMs = 0;
     bool dutiesRan = false;
     IccSindragosaPhaseId phase = IccSindragosaPhaseId::Ground;
-    // Her live spot, or her landing spot before the pull
     Position anchor = ICC_SG_LAND;
 
-    // Her victim when a group tank, else the last holder while it lives, else the group's main tank
     ObjectGuid holder;
-    // TankRole per tank bot
     RaidObs::ObsGuidMap<uint8> tank{"sg.tank"};
     RaidObs::ObsGuidSet brake{"sg.brake"};
     RaidObs::ObsValue<uint32> breath{"sg.breath"};
     bool breathCasting = false;
     uint32 lastBreathMs = 0;
 
-    // The free tank taking her over before the next last phase breath
     ObjectGuid swapper;
     uint32 swapBreath = 0;
     bool swapTaunted = false;
     uint32 swapTauntMs = 0;
-    // Its taunt went out and she stayed on the holder, who then takes the breath
     bool swapMissed = false;
-    // The breath whose swap has gone out
     uint32 swappedBreath = 0;
 
     uint32 airStartMs = 0;
@@ -326,23 +282,15 @@ struct SgState
     RaidObs::ObsValue<uint32> bombs{"sg.bombs"};
     RaidObs::ObsValue<bool> tombhold{"sg.tombhold"};
 
-    // Spot 1-6 in the air, 7 or 8 in the last phase, per beaconed bot
     RaidObs::ObsGuidMap<uint8> beacon{"sg.beacon"};
     std::unordered_map<ObjectGuid, Position> beaconSpots;
-    // Every beaconed member not yet in its tomb, humans too
     std::vector<ObjectGuid> beaconed;
-    // Living members carrying neither Unchained Magic nor Instability, for heroic Backlash
     std::vector<Position> nonCarriers;
 
-    // Heroic carrier -> its unchained node
     std::unordered_map<ObjectGuid, uint16> unchained;
-    // Paladin -> the tank it frees
     std::unordered_map<ObjectGuid, ObjectGuid> freedom;
-    // The healer spending an external on a holder no swap relieves
     ObjectGuid coverBy;
-    // The newest tomb formed in the last phase, which the raid hides behind
     ObjectGuid newestTomb;
-    // Air tombs some bot hides behind from a live bomb
     std::unordered_set<ObjectGuid> coverTombs;
 
     uint32 humanCallMs = 0;
@@ -353,7 +301,6 @@ struct SgState
 };
 
 RaidInstanceState<SgState> sgStates;
-// Bots whose saved rti was checked this instance, so a player's later order sticks
 RaidInstanceState<std::unordered_set<ObjectGuid>> sgRtiChecked;
 
 bool IsTankPlayer(Player* player)
@@ -361,7 +308,6 @@ bool IsTankPlayer(Player* player)
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
 }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return player && GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsHealer(Player* player) { return player && PlayerbotAI::IsHeal(player) && !IsTankPlayer(player); }
@@ -378,7 +324,6 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -402,7 +347,6 @@ Position PolarSpot(Position const& anchor, Polar const& polar)
                     anchor.GetPositionY() + polar.r * std::sin(angle), anchor.GetPositionZ());
 }
 
-// `behind` yd past `cover` on the line from `from`
 Position Behind(Position const& from, Position const& cover, float behind)
 {
     float const dx = cover.GetPositionX() - from.GetPositionX();
@@ -412,7 +356,6 @@ Position Behind(Position const& from, Position const& cover, float behind)
                     cover.GetPositionZ());
 }
 
-// The floor under the spot as the bot can walk to it, or false when the walk would stop short of it
 bool FloorSpot(Player* bot, Position const& wanted, Position& out)
 {
     Position const floor = ValidateStaticFloorPoint(bot, wanted);
@@ -423,8 +366,6 @@ bool FloorSpot(Player* bot, Position const& wanted, Position& out)
     return true;
 }
 
-// The straight walk from `from` to `to` keeps `keep` off every hazard, or at least never gets closer to one
-// than `from` already is
 bool SegmentClear(std::vector<Position> const& hazards, Position const& from, Position const& to, float keep)
 {
     float const dx = to.GetPositionX() - from.GetPositionX();
@@ -474,7 +415,6 @@ Creature* BossUnit(Player* bot)
 
 IccSindragosaPhaseId PhaseOf(Unit const* boss)
 {
-    // Her air phase sets her passive at takeoff and aggressive again at touchdown, and nothing else does
     Creature const* const creature = boss ? boss->ToCreature() : nullptr;
     if (!creature || !boss->IsInCombat())
         return IccSindragosaPhaseId::Ground;
@@ -575,13 +515,11 @@ Player* PlayerOf(Player* bot, ObjectGuid const& guid)
     return player && player->IsAlive() && IccSameInstance(bot, player) ? player : nullptr;
 }
 
-// Asphyxiation starts about as the 4th bomb lands, so a tomb covering a bot from a live bomb stays up
 bool AirBreakable(SgState const& st, TombInfo const& tomb)
 {
     return tomb.asphyxiating && !st.coverTombs.count(tomb.guid);
 }
 
-// An air tomb while she still bombs, or the newest last phase tomb, unless its prisoner can't wait
 bool TombHeld(SgState const& st, TombInfo const& tomb)
 {
     if (tomb.skulled)
@@ -722,7 +660,6 @@ void UpdatePhase(SgState& st, Creature* boss, uint32 now)
 
     st.tombhold = phase == IccSindragosaPhaseId::Air && !st.released;
 
-    // Before the pull the stands hang off her landing spot; in the air the last one holds
     if (!boss->IsInCombat())
         st.anchor = ICC_SG_LAND;
     else if (phase != IccSindragosaPhaseId::Air && boss->GetExactDist2d(st.anchor) > ANCHOR_DRIFT)
@@ -741,7 +678,6 @@ void UpdateBreath(SgState& st, Creature* boss, uint32 now)
     st.breathCasting = casting;
 }
 
-// Main tank, then the assist tanks in their order, then guid
 std::vector<Player*> RankedTanks(std::vector<Player*> const& members)
 {
     std::vector<std::pair<uint8, Player*>> ranked;
@@ -776,7 +712,6 @@ void AssignTanks(SgState& st, Player* bot, std::vector<Player*> const& members, 
     for (Player* member : members)
         roster.insert(member->GetGUID());
 
-    // An air tomb can take a tank, and a tombed holder could never taunt her back
     auto const holds = [&](Player* player)
     {
         return player && player->IsAlive() && roster.count(player->GetGUID()) && IsTankPlayer(player) &&
@@ -811,8 +746,6 @@ void AssignTanks(SgState& st, Player* bot, std::vector<Player*> const& members, 
             static_cast<uint8>(tank->GetGUID() == st.holder ? TankRole::Holder : TankRole::Free);
 }
 
-// From SWAP_WALK_MS after a last phase breath, the first free bot tank shed of Mystic Buffet walks to the
-// holder's spot, then taunts at SWAP_TAUNT_MS. Her next breath lands 20-25 s after the last.
 void UpdateSwap(SgState& st, Player* bot, std::vector<Player*> const& tanks, Creature* boss, uint32 now)
 {
     if (st.swapper)
@@ -822,7 +755,6 @@ void UpdateSwap(SgState& st, Player* bot, std::vector<Player*> const& tanks, Cre
         bool const stale = !swapper || st.breath.Get() != st.swapBreath || st.phase != IccSindragosaPhaseId::Last;
         if (!done && !stale)
         {
-            // It goes back to the melee stand rather than share the breath with the holder
             if (st.swapTaunted && getMSTimeDiff(st.swapTauntMs, now) >= SWAP_MISS_MS)
                 st.swapMissed = true;
             return;
@@ -872,7 +804,6 @@ bool TombSpotFree(SgState const& st, Position const& spot)
                         [&](TombInfo const& tomb) { return tomb.pos.GetExactDist2d(spot) < TOMB_SPOT_FOUL; });
 }
 
-// Air beacons take their spots in guid order. A last phase beacon takes A, or B while a tomb sits on A.
 void AssignBeacons(SgState& st, Player* bot, std::vector<Player*> const& members)
 {
     st.beaconed.clear();
@@ -892,7 +823,6 @@ void AssignBeacons(SgState& st, Player* bot, std::vector<Player*> const& members
     for (Player* member : beacons)
         roster.insert(member->GetGUID());
 
-    // A beacon ending is news: its tomb has formed or it was cleansed
     std::vector<ObjectGuid> ended;
     for (auto const& entry : st.beacon)
         if (!roster.count(entry.first))
@@ -946,8 +876,6 @@ void AssignBeacons(SgState& st, Player* bot, std::vector<Player*> const& members
     }
 }
 
-// Where the raid stands or runs, which a carrier's Backlash must not reach: the stands, the Blistering Cold
-// runs and, in the last phase, both tomb spots and the hides behind them
 std::vector<Position> UnchainedRaidSpots(SgState const& st)
 {
     std::vector<Position> spots = {PolarSpot(st.anchor, STAND_HOLDER), PolarSpot(st.anchor, COLD_HOLDER),
@@ -965,7 +893,6 @@ std::vector<Position> UnchainedRaidSpots(SgState const& st)
     return spots;
 }
 
-// Outside Blistering Cold, her breath toward the holder, Tail Smash and the raid
 bool UnchainedNodeClear(Position const& anchor, std::vector<Position> const& raid, Position const& node)
 {
     float const her = node.GetExactDist2d(anchor);
@@ -985,9 +912,6 @@ bool UnchainedNodeClear(Position const& anchor, std::vector<Position> const& rai
                         [&](Position const& spot) { return spot.GetExactDist2d(node) < UNCHAINED_RAID_KEEP; });
 }
 
-// A node clear of her, the raid and the other carriers' nodes, or -1. Others need her within spell reach and
-// take the node nearest the ranged stand. Healers want the holder in heal reach and sight, else the ranged
-// stand in reach, else the node nearest it.
 int PickUnchainedNode(SgState const& st, Player* bot, std::vector<Position> const& raid, bool healer)
 {
     std::vector<Position> taken;
@@ -1003,7 +927,6 @@ int PickUnchainedNode(SgState const& st, Player* bot, std::vector<Position> cons
 
     Position const holder = PolarSpot(st.anchor, STAND_HOLDER);
     Position const ranged = PolarSpot(st.anchor, STAND_RANGED);
-    // reach tier, distance to the ranged stand, node
     std::vector<std::tuple<uint8, float, uint16>> ranked;
     for (int row = 0; row < UNCHAINED_GRID_ROWS; ++row)
         for (int col = 0; col < UNCHAINED_GRID_COLS; ++col)
@@ -1026,7 +949,6 @@ int PickUnchainedNode(SgState const& st, Player* bot, std::vector<Position> cons
         }
 
     std::sort(ranked.begin(), ranked.end());
-    // The holder counts only where sight reaches it: the north wall hides the holder once she has drifted west
     uint8 tries = 0;
     for (auto& entry : ranked)
     {
@@ -1076,7 +998,6 @@ void AssignUnchained(SgState& st, Player* bot, std::vector<Player*> const& membe
     for (Player* member : others)
         roster.insert(member->GetGUID());
 
-    // Nodes never move, so two kept nodes stay apart: a node goes only when her drift fouls it
     std::vector<Position> const raid = UnchainedRaidSpots(st);
     for (auto itr = st.unchained.begin(); itr != st.unchained.end();)
     {
@@ -1086,7 +1007,6 @@ void AssignUnchained(SgState& st, Player* bot, std::vector<Player*> const& membe
         itr = keep ? std::next(itr) : st.unchained.erase(itr);
     }
 
-    // Others first: they need her within spell reach, which leaves them fewer nodes
     for (Player* member : others)
         if (!st.unchained.count(member->GetGUID()))
             if (int const node = PickUnchainedNode(st, bot, raid, false); node >= 0)
@@ -1098,8 +1018,6 @@ void AssignUnchained(SgState& st, Player* bot, std::vector<Player*> const& membe
                 st.unchained[member->GetGUID()] = static_cast<uint16>(node);
 }
 
-// One paladin per tank: each tank slowed by Frost Breath in the first seconds of an air phase, and the
-// holder at FREEDOM_HOLDER_STACKS breaths on the ground
 void AssignFreedom(SgState& st, Player* bot, std::vector<Player*> const& members, Creature* boss, uint32 now)
 {
     st.freedom.clear();
@@ -1158,7 +1076,6 @@ bool Covered(Player* holder)
            holder->HasAura(SPELL_SG_HAND_OF_SACRIFICE);
 }
 
-// The external this healer can put on the holder from where it stands, or null
 char const* CoverSpell(Player* healer, Unit* holder)
 {
     PlayerbotAI* ai = GET_PLAYERBOT_AI(healer);
@@ -1171,8 +1088,6 @@ char const* CoverSpell(Player* healer, Unit* holder)
     else if (healer->getClass() == CLASS_PALADIN)
         names = {"hand of sacrifice"};
 
-    // CanCastSpell passes an out of range target, and Hand of Sacrifice's 30 yd doesn't reach the holder from
-    // the ranged stand
     for (char const* name : names)
     {
         uint32 const spellId = ai->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
@@ -1185,8 +1100,6 @@ char const* CoverSpell(Player* healer, Unit* holder)
     return nullptr;
 }
 
-// A holder no swap relieves takes the next breath on all its Mystic Buffet stacks, so from COVER_FROM_MS after
-// the last breath, or through one, the nearest healer puts an external on it from COVER_BUFFET_STACKS
 void AssignCover(SgState& st, Player* bot, std::vector<Player*> const& members, Creature* boss, uint32 now)
 {
     st.coverBy.Clear();
@@ -1257,7 +1170,6 @@ void RefreshDuties(SgState& st, Player* bot, Creature* boss, uint32 now)
             st.coverTombs.insert(entry.second.hideTomb);
 }
 
-// Past BRAKE_CAP of the holder's threat until under BRAKE_RELEASE, read from her threat list
 void UpdateBrake(SgState& st, Player* bot, Creature* boss)
 {
     bool hold = false;
@@ -1337,7 +1249,6 @@ float NearestHazard(std::vector<Position> const& hazards, Position const& pos)
     return nearest;
 }
 
-// A run past a tomb paths round it, and one into a beacon's splash ends in a tomb of its own
 bool EscapeFouled(SgState const& st, std::vector<Position> const& hazards, Position const& spot)
 {
     return NearestHazard(hazards, spot) < SPLASH_TRIGGER ||
@@ -1376,7 +1287,6 @@ void UpdateCold(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
         return;
     }
 
-    // The nearest clear escape, else the nearest
     std::vector<Position> const hazards = BeaconHazards(st, bot);
     size_t best = 0;
     std::pair<bool, float> bestKey;
@@ -1395,7 +1305,6 @@ void UpdateCold(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
     bs.coldNote = "escape " + std::to_string(best + 1);
 }
 
-// Out of every beacon's 10 yd: to where the bot is going when that is clear, else the nearest clear spot
 void UpdateSplash(SgBotState& bs, Player* bot, std::vector<Position> const& hazards, Position const* destination)
 {
     if (hazards.empty() || IsBeaconed(bot) || IsTombed(bot))
@@ -1416,7 +1325,6 @@ void UpdateSplash(SgBotState& bs, Player* bot, std::vector<Position> const& haza
     if (bs.splash && NearestHazard(hazards, bs.splashSpot) >= SPLASH_CLEAR)
         return;
 
-    // Only where the straight walk there doesn't cut past another beacon
     if (destination && NearestHazard(hazards, *destination) >= SPLASH_CLEAR &&
         SegmentClear(hazards, bot->GetPosition(), *destination, SPLASH_TRIGGER))
     {
@@ -1426,7 +1334,6 @@ void UpdateSplash(SgBotState& bs, Player* bot, std::vector<Position> const& haza
         return;
     }
 
-    // A sweep asks the navmesh up to 240 times, so a blocked one waits before the next
     uint32 const now = getMSTime();
     if (bs.splashBlockedMs && getMSTimeDiff(bs.splashBlockedMs, now) < SPLASH_RETRY_MS)
         return;
@@ -1462,7 +1369,6 @@ MarkerInfo const* OldestMarker(SgState const& st)
     return oldest;
 }
 
-// Behind a tomb from the marker that goes off first, the hide nearest the bot, latched per marker
 void UpdateBombHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
 {
     MarkerInfo const* marker = OldestMarker(st);
@@ -1502,9 +1408,6 @@ void UpdateBombHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
     }
 }
 
-// Behind the newest tomb from her once Mystic Buffet reaches BUFFET_HIDE_STACKS (the free tank
-// FREE_TANK_HIDE_STACKS), until it drops or the tomb goes. A healer only where the holder stays in heal
-// reach, the holder and swapper never, a heroic carrier only without Instability.
 void UpdateBuffetHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
 {
     uint32 const stacks = BuffetStacks(bot, boss);
@@ -1525,7 +1428,6 @@ void UpdateBuffetHide(SgState& st, SgBotState& bs, Player* bot, Creature* boss)
     if (!tomb)
         return;
 
-    // One try per tomb: the reach and the floor only change once a newer tomb forms
     bs.buffetTried = tomb->guid;
     Position const wanted = Behind(boss->GetPosition(), tomb->pos, BUFFET_HIDE_BEHIND);
     if (IsHealer(bot))
@@ -1556,7 +1458,6 @@ StandKind StandFor(SgState const& st, Player* bot, Creature* boss, uint32 now)
         return StandKind::None;
 
     bool const live = boss->IsInCombat();
-    // Before the pull, only through her fly-in: she stands idle at her landing spot after a wipe
     if (!live && !boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
         return StandKind::None;
 
@@ -1660,7 +1561,6 @@ void NoteSwap(SgState const& st, Player* bot)
     NoteDerived(bot, "sg.swap", value);
 }
 
-// The walk the bot owes now, highest first, and whether anything of this fight owns its feet
 void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint32 now)
 {
     if (!bot->IsAlive())
@@ -1679,7 +1579,6 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
     bool const live = boss->IsInCombat();
     bool const unchainedWalk = live && bs.unchainedValid && CarriesUnchained(bot);
 
-    // Where the bot heads once out of the splash: the walk it would take with no beacon out
     Position const* destination = nullptr;
     if (bs.hideTomb && bs.hideMarker)
         destination = &bs.hideSpot;
@@ -1695,8 +1594,6 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
 
     auto const beaconSpot = st.beaconSpots.find(bot->GetGUID());
     bool const beaconWalk = live && IsBeaconed(bot) && !IsTombed(bot) && beaconSpot != st.beaconSpots.end();
-    // A stand inside a beacon's splash, or one whose straight walk cuts through it (the stair foot spots sit on the
-    // way to the stage), waits where the bot is or where the dodge left it
     bool const standYields = stand != StandKind::None && !hazards.empty() &&
                              (NearestHazard(hazards, standSpot) < SPLASH_TRIGGER ||
                               !SegmentClear(hazards, bot->GetPosition(), standSpot, SPLASH_TRIGGER));
@@ -1720,7 +1617,6 @@ void UpdateWalks(SgState& st, SgBotState& bs, Player* bot, Creature* boss, uint3
     else
         SetWalk(bs, bot, WalkKind::None, Position());
 
-    // Between bombs the raid waits behind the tombs; once the tombs are released it closes on them
     bool const airHold = live && st.phase == IccSindragosaPhaseId::Air && !st.released && bs.hidThisAir &&
                          !IsTombed(bot);
     bs.owned = bs.walk != WalkKind::None || bs.coldHold || standYields || airHold;
@@ -1750,8 +1646,6 @@ Unit* TombUnit(Player* bot, TombInfo const& tomb)
     return unit && unit->IsAlive() && bot->IsValidAttackTarget(unit) ? unit : nullptr;
 }
 
-// The first tomb `wanted` lets through that the bot can attack: prisoners in danger first, then tank prisoners,
-// healers, anyone else, the lowest tomb first in each
 Unit* PickTomb(SgState const& st, Player* bot, bool (*wanted)(SgState const&, TombInfo const&))
 {
     std::vector<TombInfo const*> ranked;
@@ -1771,7 +1665,6 @@ Unit* PickTomb(SgState const& st, Player* bot, bool (*wanted)(SgState const&, To
 
 bool AnyTomb(SgState const&, TombInfo const&) { return true; }
 
-// On the ground: air leftovers, last phase tombs other than the newest, and any whose prisoner can't wait
 bool Breakable(SgState const& st, TombInfo const& tomb)
 {
     return tomb.danger || tomb.air || tomb.guid != st.newestTomb;
@@ -1807,7 +1700,6 @@ Unit* AirTombPick(PlayerbotAI* botAI, SgState const& st, SgBotState const* bs, s
     if (!ranged)
         return nullptr;
 
-    // The highest held tomb the bot can attack
     std::vector<TombInfo const*> held;
     for (TombInfo const& tomb : st.tombs)
         if (TombHeld(st, tomb) && tomb.healthPct > floorPct)
@@ -1847,7 +1739,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
             return skull;
         }
 
-    // Permeating Chill procs and threat build only on her, so tombs stay open to a braked or chilled bot
     std::string rule;
     if (st.phase == IccSindragosaPhaseId::Air)
     {
@@ -1883,7 +1774,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SgState const& st, Creature* boss)
     return boss;
 }
 
-// A human tank has no trigger, so it gets told: on the holder's breath windows and when low
 void CallHumanTank(SgState& st, Player* sender, Creature* boss, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -1913,7 +1803,7 @@ void CallHumanTank(SgState& st, Player* sender, Creature* boss, uint32 now)
                                    "sg.humancall");
     }
 }
-}  // namespace
+}
 
 IccSindragosaPhaseId IccSindragosaPhase(Player* bot, Unit const* boss)
 {
@@ -1986,7 +1876,7 @@ bool WalkOf(PlayerbotAI* botAI, WalkKind kind, Position& spot)
     spot = bs->walkSpot;
     return true;
 }
-}  // namespace
+}
 
 bool GetSgColdWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Cold, spot); }
 bool GetSgSplashWalk(PlayerbotAI* botAI, Position& spot) { return WalkOf(botAI, WalkKind::Splash, spot); }
@@ -2031,7 +1921,6 @@ Unit* GetSgTauntTarget(PlayerbotAI* botAI, bool& swap)
         return boss;
     }
 
-    // She has no taunt diminishing returns. On another tank she is that tank's: the roles follow her.
     Player* held = victim->ToPlayer();
     if (st->holder == bot->GetGUID() && !(held && IsTankPlayer(held)))
         return boss;
@@ -2058,7 +1947,6 @@ Unit* GetSgCoverTarget(PlayerbotAI* botAI, std::string& spell)
     if (!st || !IsHealer(bot) || !IsDutyBot(bot))
         return nullptr;
 
-    // Held since the last duty pass: another cast stacks Instability
     SgBotState const* bs = BotOf(*st, bot);
     bool const held = bs && bs->unchainedHeld;
     Player* holder = st->coverBy == bot->GetGUID() && !held ? PlayerOf(bot, st->holder) : nullptr;
@@ -2159,14 +2047,12 @@ uint32 GetSgTankDefensive(PlayerbotAI* botAI, char const* noteKind)
                          bot->GetHealthPct() < HOLDER_LOW_PCT);
     if (!low && !window)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             NoteDerived(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // Frost Breath is frost, so Anti-Magic Shell counts
     return NextTankDefensive(botAI, bot, noteKind, false);
 }
 
@@ -2252,7 +2138,6 @@ void TickSgEncounter(PlayerbotAI* botAI)
         bot->GetExactDist2d(ICC_SG_LAND) > GATE_RANGE)
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every duty
     Creature* unit = BossUnit(bot);
     SgState* found = sgStates.Find(bot->GetInstanceId());
     if (!unit || !unit->IsAlive() || (found && found->pullMs && !unit->IsInCombat()))
@@ -2266,7 +2151,6 @@ void TickSgEncounter(PlayerbotAI* botAI)
     if (!live && !unit->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
         return;
 
-    // A saved rti of cross or star kept bots on the old air groups' tombs
     if (sgRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
     {
         Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");

@@ -21,7 +21,6 @@ public:
     bool IsActive() override;
 };
 
-// A bot mid-cast runs no triggers of its own, so another bot's tick has to spot it.
 class JaraxxusPinnedCastTrigger : public Trigger
 {
 public:
@@ -40,7 +39,6 @@ public:
     bool IsActive() override;
 };
 
-// Every bot's tick runs it, which also drops a finished deal
 class JaraxxusRaidCoverTrigger : public Trigger
 {
 public:

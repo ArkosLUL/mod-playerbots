@@ -22,7 +22,6 @@ bool WantsEssenceFor(PlayerbotAI* botAI, Player* bot, TwinEssenceReason reason)
     return want.reason == reason && TwinEssenceGossipDue(bot, want);
 }
 
-// the max range check Spell::CheckRange makes, Hawk Eye included
 bool InAutoShotRange(Player* bot, Unit* target)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(SPELL_AUTO_SHOT);
@@ -33,7 +32,7 @@ bool InAutoShotRange(Player* bot, Unit* target)
     bot->ApplySpellMod(info->Id, SPELLMOD_RANGE, range);
     return bot->IsWithinCombatRange(target, range);
 }
-}  // namespace
+}
 
 bool TwinValkyrPactInterruptDutyTrigger::IsActive()
 {
@@ -95,7 +94,6 @@ bool TwinValkyrDarkbaneNeedsAssistTankTrigger::IsActive()
     if (!IsTwinAttackable(eydis) || !IsTwinTank(bot, eydis))
         return false;
 
-    // a lone tank holds both twins from the main tank node
     Unit* fjola = GetFjola(botAI);
     return !fjola || !IsTwinTank(bot, fjola);
 }
@@ -116,8 +114,6 @@ bool TwinValkyrRedirectThreatTrigger::IsActive()
     if (!tank || tank == bot || !tank->IsAlive())
         return false;
 
-    // Misdirection's 4 s transfer starts on the hunter's next attack, Kill Command included. Cast
-    // while the twins fly in from 90 yd and it runs out before the first shot.
     return bot->getClass() != CLASS_HUNTER || InAutoShotRange(bot, twin);
 }
 

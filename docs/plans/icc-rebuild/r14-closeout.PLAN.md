@@ -36,7 +36,9 @@ gaps.
      and records itself, and Yogg-Saron no longer checks the raid cheat.
    - Update `docs/raids/README.md`'s ICC row.
    - Delete `docs/plans/icc-rebuild/`.
-   - Fold with `compact-docs-writer`.
+   - Fold with `compact-docs-writer`. The boss docs already carry what the code comments held (they
+     were stripped in `c163ec11a`), so fold without repeating it; `file:line` refs in this folder
+     written before that commit point at `c163ec11a^`.
 
 ## Owns
 

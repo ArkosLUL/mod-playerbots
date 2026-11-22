@@ -22,11 +22,8 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// A carrier aims this far inside the melee range, since it stops short and he drifts with the drag
 constexpr float CARRIER_AIM_INSET = 3.0f;
-// A latched carrier spot still counts while it sits this far inside the range
 constexpr float CARRIER_KEEP_INSET = 1.0f;
-// Room past the clearance: a caster on his centre has all of it to walk
 constexpr float STOMP_SWEEP_RADIUS = 30.0f;
 
 void NoteBomb(Player* bot, std::string const& branch)
@@ -51,20 +48,16 @@ bool GormokTankHoldBossAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != gormok)
         return Attack(gormok);
 
-    // Only take him back off a non-tank. The swap tank taunts on its own node, and a hold that taunted
-    // back whenever it lost him would undo every swap.
     Unit* victim = gormok->GetVictim();
     Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
     if (victim && !(victimPlayer && IsBeastsTank(victimPlayer)) && CastClassTaunt(botAI, gormok))
         return true;
 
-    // Every Icehowl charge line crosses the centre, so no drag toward it while one is latched
     Position chargeStart;
     Position chargeEnd;
     if (IcehowlChargeLatched(botAI, chargeStart, chargeEnd))
         return false;
 
-    // Keep the boss near the centre of the arena so ranged can spread and melee have room
     return DragBossToAnchor(gormok, ARENA_CENTER);
 }
 
@@ -82,7 +75,6 @@ bool GormokTankSwapTauntAction::Execute(Event /*event*/)
     if (CastClassTaunt(botAI, gormok))
         return true;
 
-    // Taunt on cooldown or resisted: build threat on him meanwhile
     if (AI_VALUE(Unit*, "current target") != gormok)
         return Attack(gormok);
 
@@ -143,7 +135,6 @@ bool GormokLeaveStompRangeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Without the bombs a caster walks back into one it just dodged, and the two trade it until impact
     std::vector<Position> young;
     std::vector<Position> old;
     GetFireBombs(botAI, young, old);
@@ -153,7 +144,6 @@ bool GormokLeaveStompRangeAction::Execute(Event /*event*/)
             (!_spotClearsBombs || ClearsBombs(*spot, young, FIRE_BOMB_CLEARANCE)))
             return true;
 
-    // Ties go toward his tank, so healers stay in range of whoever they're keeping up
     Position tank;
     Position const* preferNear = nullptr;
     if (Unit* victim = gormok->GetVictim())
@@ -210,8 +200,6 @@ bool GormokDodgeFireBombAction::Execute(Event /*event*/)
         return true;
     }
 
-    // WalkTo refuses under a pinning cast anyway, so skip the sweep. The hit isn't lethal, let the cast
-    // finish.
     if (bot->IsMovementPreventedByCasting())
     {
         NoteBomb(bot, "pinned");
@@ -221,8 +209,6 @@ bool GormokDodgeFireBombAction::Execute(Event /*event*/)
     Position anchor;
     Position const* preferNear = GetFireBombDodgeAnchor(botAI, anchor) ? &anchor : nullptr;
 
-    // Most important first, so each fallback drops the tail: young bombs, then the pulses of landed
-    // ones, then Gormok's stomp for a caster, whom the stomp walk would pull straight back.
     std::vector<HazardCircle> circles;
     for (Position const& bomb : young)
         circles.emplace_back(bomb, FIRE_BOMB_CLEARANCE);
@@ -270,7 +256,6 @@ bool GormokDodgeFireBombAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Our own walk still holds the FORCED booking, and a booking only yields to a higher priority
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const lowered = inFlight && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)

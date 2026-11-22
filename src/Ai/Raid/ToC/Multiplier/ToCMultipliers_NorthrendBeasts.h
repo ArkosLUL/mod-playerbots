@@ -4,7 +4,6 @@
 #include "Multiplier.h"
 #include "RaidBurstWindow.h"
 
-// Keep beast tanks anchored instead of drifting with the combat formation
 class NorthrendBeastsControlTankMovementMultiplier : public Multiplier
 {
 public:
@@ -13,8 +12,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Class taunts on a beast only for its duty holder. Beasts obey taunt diminishing returns, and a
-// generic taunt from the other tank undoes the deal.
 class NorthrendBeastsTauntGuardMultiplier : public Multiplier
 {
 public:

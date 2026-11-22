@@ -22,15 +22,13 @@ void DefineFrostGiant(EncounterBuilder& e)
 {
     e.Node<IccRottingFrostGiantPlagueTrigger, IccRottingFrostGiantPlagueAction>(ACTION_RAID + 5, EncounterRow::Mover);
 
-    // A carrier stays by its partner until it ticks, and nothing walks a clean bot back into a carrier's reach.
     e.Exclusive("rotting frost giant plague", Role::Any, &RfgPlagueDuty, 0, {IccRottingFrostGiantPlagueAction::Name});
-    // Between the reach and the clearance, or reach and dodge take turns walking the bot in and out.
     e.Block("rotting frost giant plague band", Role::Any, &RfgNearCarrier,
             Family::Reach | Family::ReachHeal | Family::Follow | Family::CombatFormationMove | Family::Charge);
 
     e.Tick(&RfgTick);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccFrostGiantDefinition()
 {

@@ -22,8 +22,6 @@
 
 namespace
 {
-// One row per encounter that fills a hook, in IccEncounterDefinitions() order. Its functions live in the
-// encounter's own stem files.
 std::vector<IccEncounterHooks> const& HookRows()
 {
     static std::vector<IccEncounterHooks> const rows = {
@@ -44,7 +42,7 @@ std::vector<IccEncounterHooks> const& HookRows()
     };
     return rows;
 }
-}  // namespace
+}
 
 IccEncounterHooks const* IccLiveHooks(PlayerbotAI* botAI)
 {

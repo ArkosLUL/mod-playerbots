@@ -23,9 +23,7 @@ public:
     IccGunshipWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet
     bool WalkTo(Position const& spot, MovementPriority priority);
     void DropWalk() { walking = false; }
 
@@ -37,7 +35,6 @@ private:
     bool walking = false;
 };
 
-// One forced walk to the nearest deck spot clear of every hazard, left running while that spot stays clear
 class IccGunshipDodgeAction : public MovementAction
 {
 public:
@@ -47,7 +44,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Walks to the launch or landing point, then jumps across with the rocket pack
 class IccGunshipRocketJumpAction : public IccGunshipWalkAction
 {
 public:

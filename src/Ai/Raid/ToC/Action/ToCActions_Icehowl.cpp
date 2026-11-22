@@ -22,16 +22,10 @@ namespace
 {
 constexpr float DODGE_SEARCH_RADIUS = 30.0f;
 constexpr float DODGE_ARRIVE = 1.0f;
-// Ceiling on holding the tick for one walk, so a bot rooted mid walk still gets a fresh spot
 constexpr uint32 DODGE_LATCH_MS = 5000;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 DODGE_STALL_MS = 500;
 constexpr float DODGE_SPOT_TOLERANCE = 0.5f;
-// Circles along the whole line, so the sweep throws out a spot inside the corridor before paying for
-// its collision check. At this spacing they miss under 0.2 yd of it, and accept catches the rest.
 constexpr float LANE_CIRCLE_SPACING = 4.0f;
-// The daze's length: one try per daze, since a use that fails leaves the boots ready and the trigger
-// would take every tick from the walk
 constexpr uint32 DAZE_NITRO_RETRY_MS = 15000;
 
 void NoteDodge(Player* bot, std::string const& branch)
@@ -75,7 +69,7 @@ bool InAnyCircle(std::vector<HazardCircle> const& circles, Position const& at)
     return std::any_of(circles.begin(), circles.end(),
                        [&at](HazardCircle const& circle) { return circle.first.GetExactDist2d(at) < circle.second; });
 }
-}  // namespace
+}
 
 bool IcehowlTankHoldBossAction::Execute(Event /*event*/)
 {
@@ -83,7 +77,6 @@ bool IcehowlTankHoldBossAction::Execute(Event /*event*/)
     if (!icehowl)
         return false;
 
-    // Passive only inside the charge cycle, where he takes no victim at all
     Creature* creature = icehowl->ToCreature();
     bool const passive = creature && creature->GetReactState() == REACT_PASSIVE;
     Unit* victim = icehowl->GetVictim();
@@ -108,7 +101,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Massive Crash keeps the whole raid stunned through the gaze
     if (!botAI->CanMove())
     {
         NoteDodge(bot, "stunned");
@@ -119,7 +111,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     bool const inLane = fromLane < ICEHOWL_TRAMPLE_RADIUS;
     uint32 const now = getMSTime();
 
-    // Every MoveTo clears the MotionMaster, so a walk still carrying the bot out is left alone.
     bool replacing = false;
     if (_hasDodgeSpot)
     {
@@ -134,7 +125,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
                 return false;
             }
 
-            // A walk some other node issued since isn't ours, and it can be heading into the lane
             LastMovement& last = AI_VALUE(LastMovement&, "last movement");
             bool const bookedHere = std::fabs(last.lastMoveToX - _dodgeSpot.GetPositionX()) <= DODGE_SPOT_TOLERANCE &&
                                     std::fabs(last.lastMoveToY - _dodgeSpot.GetPositionY()) <= DODGE_SPOT_TOLERANCE;
@@ -151,14 +141,11 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     }
 
     HazardSweepCache sweep;
-    // The worms' pools can outlive them into this fight
     std::vector<HazardCircle> const pools = GetSlimePoolCircles(botAI, WORM_POOL_SOON_TICKS, WORM_POOL_CLEARANCE_PAD);
     bool tight = false;
     Position spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_CLEARANCE, pools, &sweep);
     if (spot == Position())
     {
-        // Already past the tight line, which is all the fallback could buy. Parked, so the next tick
-        // skips the sweep.
         if (fromLane >= ICEHOWL_CHARGE_TIGHT_CLEARANCE && !InAnyCircle(pools, bot->GetPosition()))
         {
             _dodgeSpot = bot->GetPosition();
@@ -171,7 +158,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
 
         tight = true;
         spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_TIGHT_CLEARANCE, pools, &sweep);
-        // Trample is 50k, a pool tick 8-10k
         if (spot == Position() && !pools.empty())
             spot = FindLaneClearSpot(bot, start, end, ICEHOWL_CHARGE_TIGHT_CLEARANCE, {}, &sweep);
     }
@@ -182,7 +168,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
         return inLane;
     }
 
-    // PointMovementGenerator never starts a spline under a cast that pins the feet
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
@@ -214,7 +199,6 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
 
 MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& spot, bool replacing)
 {
-    // Our own stale walk holds the booking at this priority and would refuse its replacement.
     if (replacing)
         AI_VALUE(LastMovement&, "last movement").clear();
 
@@ -231,8 +215,6 @@ MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& spot, bool 
     if (bot->isMoving())
         return outcome == MoveOutcome::Duplicate ? MoveOutcome::Issued : outcome;
 
-    // The knockback or stun ended the walk that still holds the booking, and the booking would refuse
-    // this one until it expires.
     AI_VALUE(LastMovement&, "last movement").clear();
     return issue();
 }
@@ -259,7 +241,6 @@ bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
                                    stand.trigger))
             return true;
 
-    // A breath is healable, so a pinning cast finishes first
     return WalkTo(stand.spot);
 }
 

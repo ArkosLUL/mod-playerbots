@@ -4,9 +4,6 @@
 #include "Multiplier.h"
 #include "RaidCombatHelpers.h"
 
-// From his jump to the centre to the end of the charge only attacks, the dodge and the pool walks move
-// anyone. Anything else can walk a bot into the line, like melee chasing him to where the jump back
-// lands, or leap it off him into a pool just before the crash stuns it there.
 class IcehowlChargeGuardMultiplier : public Multiplier
 {
 public:
@@ -17,8 +14,6 @@ private:
     RaidActionCache<bool> _competes;
 };
 
-// Keeps the combat formation off a bot holding an Arctic Breath bearing: each breath turns his facing for
-// 5 s, and `set behind` would follow it off the bearing.
 class IcehowlBreathSpreadGuardMultiplier : public Multiplier
 {
 public:

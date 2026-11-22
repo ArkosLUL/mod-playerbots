@@ -9,6 +9,11 @@ Ulduar hard mode options in `src/PlayerbotAIConfig.{h,cpp}` and `conf/playerbots
 adaptations as `p3-ulduar.PLAN.md`. If upstream was merged into `Custom` since, first merge the same upstream commit
 into each PR branch. Parity-check the delta, commit one per branch, then write the new base into the Status line.
 
+Custom's comment strip `c163ec11a` is ported as a step, not a delta: port up to `c163ec11a^`, run
+`python -I tools/commentstrip/commentstrip.py --root <PR worktree> strip --keep-from c163ec11a
+src/Ai/Raid/Uld` (plus the helper files) on the PR branch, commit, then port the rest; the export
+base moves past `c163ec11a` (user, 2026-11-22: PR branches lose their comments too).
+
 ## Task list
 
 ## Decisions for review

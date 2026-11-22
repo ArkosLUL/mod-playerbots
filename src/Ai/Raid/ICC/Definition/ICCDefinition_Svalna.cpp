@@ -30,13 +30,12 @@ void DefineSvalna(EncounterBuilder& e)
 
     e.OwnTargeting("icc sister svalna targeting", Role::Any, &IccResolverPicks<&GetSsTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // The tank buttons wait for a captain to have the tank low
     e.Block("icc sister svalna tank defensive hold", Role::Tank, &IsSsTankDefensiveHeld, 0,
             HeldTankDefensiveNames());
 
     e.Tick(&TickSsEncounter);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccSvalnaDefinition()
 {

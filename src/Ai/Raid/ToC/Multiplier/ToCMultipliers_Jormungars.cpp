@@ -17,8 +17,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// Spells that move the bot: the charge family leaps it back to its target, blink and disengage throw
-// it a fixed distance. The last two by name, so no class headers.
 bool IsSpellMover(Action* action)
 {
     if (!dynamic_cast<CastSpellAction*>(action))
@@ -36,11 +34,10 @@ bool StaysFree(std::string const& name)
     if (name == "avoid aoe")
         return true;
 
-    // The reposition walk itself, and on heroic Gormok's walks and Icehowl's charge dodge
     ToCEncounter encounter = ToCEncounter::None;
     return ToCEncounterOfName(name, encounter) && encounter == ToCEncounter::NorthrendBeasts;
 }
-}  // namespace
+}
 
 float NorthrendWormsMoveGuardMultiplier::GetValue(Action* action)
 {
@@ -48,7 +45,6 @@ float NorthrendWormsMoveGuardMultiplier::GetValue(Action* action)
     {
         Facts facts;
         facts.spellMover = IsSpellMover(action);
-        // AttackAction is a MovementAction too, and zeroing it would leave the bot without a target
         facts.mover = dynamic_cast<MovementAction*>(action) && !dynamic_cast<AttackAction*>(action);
         facts.staysFree = !facts.spellMover && facts.mover && StaysFree(action->getName());
         return facts;

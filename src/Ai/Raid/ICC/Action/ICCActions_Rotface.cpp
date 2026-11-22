@@ -20,9 +20,7 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A carrier or a curer re-aims its walk once the spot it walks to has moved this far
 constexpr float CARRIER_REAIM = 2.0f;
 
 void NoteDodge(Player* bot, std::string const& branch)
@@ -31,17 +29,15 @@ void NoteDodge(Player* bot, std::string const& branch)
         RaidObs::NoteDerived(bot, "rf.dodge", branch);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDodge(Player* bot, char const* branch)
 {
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "rf.dodge", branch);
 }
-}  // namespace
+}
 
 Position const* IccRotfaceWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -50,12 +46,9 @@ Position const* IccRotfaceWalkAction::WalkInFlight()
 
 bool IccRotfaceWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -107,11 +100,9 @@ bool IccRotfaceDodgeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Spray, a landing mark, a puddle or a flood tick: each costs more than the cast
     if (interrupt && bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
-    // Our own walk still holds the FORCED booking, and a booking only yields to a higher priority
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const lowered = inFlight && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
@@ -170,7 +161,6 @@ bool IccRotfaceOozeTauntAction::Execute(Event /*event*/)
     if (!ooze || !IccCastClassTaunt(bot, botAI, ooze))
         return false;
 
-    // A taunt moves the ooze, not the bot's own target
     AttackDirect(ooze);
     return true;
 }
@@ -190,7 +180,6 @@ bool IccRotfaceKiteAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A cast that pins the kiter's feet costs less than the ooze catching it
     if (bot->IsMovementPreventedByCasting() && IsRfKiteUrgent(botAI))
         bot->InterruptNonMeleeSpells(true);
 
@@ -239,7 +228,6 @@ bool IccRotfaceTargetAction::Execute(Event /*event*/)
     if (!pick)
         return false;
 
-    // Sent every call, since the generic pet attack node is off; the kiter's pet has a pick of its own
     EncounterHelpers::CommandPetAttack(botAI, GetRfPetTarget(botAI));
     if (AI_VALUE(Unit*, "current target") == pick)
         return false;

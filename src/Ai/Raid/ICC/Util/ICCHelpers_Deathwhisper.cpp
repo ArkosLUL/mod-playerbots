@@ -38,16 +38,12 @@ namespace
 constexpr float LDW_SCAN_RANGE = 100.0f;
 constexpr uint32 LDW_SCAN_MS = 200;
 constexpr uint32 LDW_CC_UPDATE_MS = 200;
-// A duty that has landed nothing this long goes to the next caster.
 constexpr uint32 LDW_CC_DUTY_TIMEOUT_MS = 4000;
-// A victim held this much longer needs no caster yet. Under Cyclone the victim is immune to every cast,
-// so its caster only gets into place until the fade.
 constexpr int32 LDW_CC_HELD_MS = 1000;
 constexpr float LDW_CC_WALK = 10.0f;
 constexpr float LDW_MELEE_INTERRUPT_RANGE = 5.0f;
 constexpr uint32 LDW_HUMAN_CALL_MS = 250;
 
-// Best first: Cyclone and Hammer of Justice don't break on damage, the rest do.
 struct LdwCcSpell
 {
     uint8 cls;
@@ -69,7 +65,6 @@ struct LdwState
 {
     RaidObs::ObsGuidMap<ObjectGuid> ccDuty{"ldw.cc"};
     std::unordered_map<ObjectGuid, uint32> ccSince;
-    // Dominate Mind victims that have had a control aura this domination.
     std::unordered_set<ObjectGuid> ccSeen;
     uint32 ccUpdatedMs = 0;
 
@@ -86,7 +81,6 @@ RaidInstanceState<LdwState> sLdwState;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// A bot of its own, not a player, selfbot included: players hold no duty.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsDominated(Unit* unit) { return unit && unit->HasAura(SPELL_LDW_DOMINATE_MIND); }
@@ -169,8 +163,6 @@ bool IsLdwFightUnit(Unit* unit)
     }
 }
 
-// The add's place in this bot's kill order, lower first, -1 when its damage school can't touch it.
-// Melee and hunters take the adherents first, casters the fanatics.
 int AddTier(Unit* add, bool physical)
 {
     bool const shrouded = add->HasAura(SPELL_LDW_SHROUD_OF_THE_OCCULT);
@@ -262,7 +254,6 @@ Unit* DpsPick(Player* bot, Creature* boss, LdwState& state, Unit* current, char 
     return nullptr;
 }
 
-// Bot tanks alive on the map and not dominated, the main tank first.
 std::vector<Player*> BotTanks(Player* bot)
 {
     std::vector<Player*> tanks;
@@ -286,8 +277,6 @@ bool HeldByTank(Unit* add)
     return victim && victim->IsPlayer() && IsTankPlayer(victim->ToPlayer());
 }
 
-// While the barrier holds each tank owns the adds on one side of her, the main tank the east door.
-// After it, the tank she is on keeps her and the others take any loose add.
 Unit* TankPick(Player* bot, Creature* boss, LdwState& state, Unit* current, char const*& why)
 {
     std::vector<Player*> const tanks = BotTanks(bot);
@@ -352,8 +341,6 @@ Unit* TankPick(Player* bot, Creature* boss, LdwState& state, Unit* current, char
     return nullptr;
 }
 
-// Per bot and ms: the rules ask these for every action the bot weighs, and a bot never ticks twice in
-// one ms.
 struct TargetMemo
 {
     ObjectGuid bot;
@@ -441,7 +428,6 @@ float SpellRange(PlayerbotAI* memberAI, Player* member, Unit* victim, char const
 
 bool CanPayFor(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -458,13 +444,9 @@ SpellInfo const* CcSpellInfo(PlayerbotAI* memberAI, char const* spell)
 struct CcPick
 {
     char const* spell = nullptr;
-    // Lower is better: the spell's order, doubled, plus one when the bot has to leave a form first.
     size_t key = 0;
 };
 
-// CanCastSpell passes SPELL_FAILED_NOT_SHAPESHIFT, but a direct cast in the wrong form fails: Cyclone
-// from cat form or Tree of Life, Hex from Ghost Wolf. The action leaves a druid's or shaman's form;
-// RemoveShapeshift can't end any other, such as Metamorphosis.
 bool NeedsFormLeft(Player* member, SpellInfo const* info)
 {
     return info->CheckShapeshift(member->GetShapeshiftForm()) != SPELL_CAST_OK;
@@ -476,16 +458,12 @@ bool LeavesFormToCast(Player* member, SpellInfo const* info)
            info->CheckShapeshift(FORM_NONE) == SPELL_CAST_OK;
 }
 
-// A Cycloned victim is immune to every cast, so CanCastSpell refuses it. The duty is still handed out
-// for its last second, on what CanCastSpell would test without the victim.
 bool ReadyOnOwnTerms(Player* member, uint32 spellId)
 {
     return member->HasSpell(spellId) && !member->HasSpellCooldown(spellId) &&
            !member->HasUnitState(UNIT_STATE_LOST_CONTROL) && !member->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
 }
 
-// The member's best CC spell for the victim, range aside. A victim that already had a control aura
-// takes an instant spell first: a cast time would leave it free for the cast.
 bool ReadyCcSpell(Player* member, Unit* victim, bool followUp, CcPick& pick)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -565,7 +543,6 @@ char const* KindName(LdwHazardKind kind)
     }
 }
 
-// Most lethal first, the order a bot inside several reports them.
 int Danger(LdwHazardKind kind)
 {
     switch (kind)
@@ -581,8 +558,6 @@ int Danger(LdwHazardKind kind)
     }
 }
 
-// What is about to hit a tank hard: a Deformed Fanatic on it in melee, a Frostbolt no kick will stop,
-// or low health. A bot's or a human's.
 struct Incoming
 {
     bool deformed = false;
@@ -591,7 +566,6 @@ struct Incoming
     uint32 hitMs = 0;
 
     bool Any() const { return deformed || frostbolt || low; }
-    // The Deformed Fanatic's hit is physical; Anti-Magic Shell would be wasted on it.
     bool Physical() const { return deformed && !frostbolt && !low; }
 };
 
@@ -623,7 +597,6 @@ Incoming IncomingFor(Player* tank, Creature* boss, LdwState& state)
         }
     }
 
-    // Read the bolt's own target: a taunt swap mid-cast leaves it on the tank who is no longer her victim.
     Spell* cast = boss->FindCurrentSpellBySpellId(sSpellMgr->GetSpellIdForDifficulty(SPELL_LDW_FROSTBOLT, boss));
     if (cast && cast->m_targets.GetUnitTargetGUID() == tank->GetGUID())
     {
@@ -666,8 +639,6 @@ void CallHumanTanks(PlayerbotAI* botAI, Creature* boss, LdwState& state)
     }
 }
 
-// A damage dealer past 90% of the top tank's threat holds fire on her until it falls under 80%. Read from
-// the threat list, not the "threat" value: that one is a uint8 percentage and wraps past 255%.
 void UpdateBrake(Player* bot, Creature* boss, LdwState& state)
 {
     bool hold = false;
@@ -707,7 +678,7 @@ void HeroicBuffs(PlayerbotAI* botAI, Creature* boss)
         IccNoteCheat(bot, "ldw.spitefulfury");
     }
 }
-}  // namespace
+}
 
 Creature* LdwBoss(PlayerbotAI* botAI)
 {
@@ -730,7 +701,6 @@ bool LdwBarrierUp(Player* bot, Unit* boss)
 
 Unit* LdwTarget(PlayerbotAI* botAI)
 {
-    // Asked by the trigger, the action and the targeting rule for every action the bot weighs.
     thread_local TargetMemo memo;
     Player* bot = botAI->GetBot();
     uint32 const now = getMSTime();
@@ -833,7 +803,6 @@ void LdwUpdateCcDuties(PlayerbotAI* botAI)
             state.ccSeen.insert(candidate->GetGUID());
 
     std::vector<ObjectGuid> released;
-    // Skipped below for this pass, or the best-ranked caster that timed out is picked straight back.
     std::vector<ObjectGuid> timedOut;
     for (auto const& [caster, victimGuid] : state.ccDuty)
     {
@@ -962,7 +931,6 @@ char const* LdwReadyInterrupt(Player* bot, Unit* boss)
     if (!botAI || bot->HasUnitState(UNIT_STATE_CASTING))
         return nullptr;
 
-    // She is immune to silence, so Silence and Silencing Shot never land.
     static char const* const interrupts[] = {"kick",        "pummel",       "shield bash",
                                              "mind freeze", "counterspell", "wind shear"};
 
@@ -970,7 +938,6 @@ char const* LdwReadyInterrupt(Player* bot, Unit* boss)
     {
         uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", interrupt)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-        // A false ready here would hold every other kicker back from the election.
         if (!info || !CanPayFor(bot, info) || info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
             continue;
 
@@ -1053,7 +1020,7 @@ std::vector<LdwHazard> BuildHazards(PlayerbotAI* botAI)
 
     return hazards;
 }
-}  // namespace
+}
 
 LdwHazardKind LdwDodgeKind(PlayerbotAI* botAI)
 {
@@ -1076,7 +1043,6 @@ bool LdwNearHazard(PlayerbotAI* botAI)
         if (bot->GetExactDist2d(hazard.pos) < hazard.clear)
             return true;
 
-        // A melee bot's reach would walk it into the pool its target stands in.
         if (target && hazard.kind == LdwHazardKind::DeathAndDecay &&
             target->GetExactDist2d(hazard.pos) < hazard.trigger)
             return true;
@@ -1106,7 +1072,6 @@ std::vector<LdwHazard> BuildDarkReckoningHazards(PlayerbotAI* botAI)
                                 [](Player* member) { return member->HasAura(SPELL_DARK_RECKONING); }))
         return hazards;
 
-    // A marked tank keeps the priest where he is and a player decides for himself, so the raid clears them.
     bool const walksAway = marked && !IsTankPlayer(bot);
     for (Player* member : members)
     {
@@ -1122,7 +1087,7 @@ std::vector<LdwHazard> BuildDarkReckoningHazards(PlayerbotAI* botAI)
 
     return hazards;
 }
-}  // namespace
+}
 
 bool LdwDarkReckoningDodging(PlayerbotAI* botAI)
 {

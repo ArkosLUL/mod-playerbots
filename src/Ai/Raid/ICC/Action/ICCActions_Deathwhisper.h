@@ -16,7 +16,6 @@
 #include "RaidDirectTargeting.h"
 #include "RaidRedirectThreat.h"
 
-// One forced walk to the nearest spot clear of every hazard, left running while its spot stays clear.
 class IccDeathwhisperDodgeAction : public MovementAction
 {
 public:

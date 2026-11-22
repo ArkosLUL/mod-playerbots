@@ -1,3 +1,0 @@
-src/Ai/Raid/Uld/Action/UldActions_FlameLeviathan.cpp	Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
-src/Ai/Raid/Uld/Util/UldEncounter_FlameLeviathan.cpp	Check the entry too, index 0 is some other boss in any instance that isn't Ulduar.
-src/Ai/Raid/Uld/Action/UldActions_Hodir.cpp	Clear(false) on purpose, a reset stops the bot mid-air if nothing moves it next.

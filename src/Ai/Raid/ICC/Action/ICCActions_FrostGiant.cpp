@@ -15,9 +15,8 @@
 namespace
 {
 constexpr float RFG_DODGE_SWEEP = 25.0f;
-// A walk already headed this close to the partner is left running.
 constexpr float RFG_REAIM = 2.0f;
-}  // namespace
+}
 
 bool IccRottingFrostGiantPlagueAction::Execute(Event /*event*/)
 {
@@ -26,7 +25,6 @@ bool IccRottingFrostGiantPlagueAction::Execute(Event /*event*/)
         LastMovement& last = AI_VALUE(LastMovement&, "last movement");
         if (walk.toSpot)
         {
-            // In place nothing is left to do, so casts go on.
             if (bot->GetExactDist2d(walk.spot) <= RFG_SPOT_ARRIVE)
                 return false;
 
@@ -53,7 +51,6 @@ bool IccRottingFrostGiantPlagueAction::Execute(Event /*event*/)
     if (carriers.empty())
         return false;
 
-    // Without a preferred point the sweep takes a fixed compass heading, often away from the giant.
     Unit* target = AI_VALUE(Unit*, "current target");
     Position const prefer = target ? target->GetPosition() : bot->GetPosition();
     Position const spot = EncounterHelpers::FindNearestPositionClearOfHazards(

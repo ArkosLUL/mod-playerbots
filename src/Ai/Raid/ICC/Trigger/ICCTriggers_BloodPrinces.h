@@ -100,7 +100,6 @@ public:
     bool IsActive() override;
 };
 
-// Fires while the bot is off its pick, or its pet off the bomb it juggles or the bot's pick
 class IccBpcTargetTrigger : public Trigger
 {
 public:

@@ -18,12 +18,10 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// Nitro Boosts for a walk this long
 constexpr float NITRO_FROM = 15.0f;
 constexpr float FM_FLOOR_REACH = 50.0f;
-}  // namespace
+}
 
 bool IccLkWalkAction::WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementPriority priority, bool interrupt,
                               bool nitro)
@@ -49,7 +47,6 @@ bool IccLkWalkAction::WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementP
 
 Position const* IccLkWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -58,8 +55,6 @@ Position const* IccLkWalkAction::WalkInFlight()
 
 bool IccLkWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -68,14 +63,12 @@ bool IccLkWalkAction::WalkTo(Position const& spot, MovementPriority priority, bo
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const ours = walking && BookedOnWalkSpot();
     if (ours && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS)
         last.clear();
 
-    // A booking only yields to a higher priority, so our own forced walk would refuse its next leg
     bool const lowered = ours && bot->isMoving() && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
@@ -83,8 +76,6 @@ bool IccLkWalkAction::WalkTo(Position const& spot, MovementPriority priority, bo
     walkSpot = spot;
     walking = true;
     walkIssuedMs = now;
-    // Neither floor is on the navmesh, so the path search refuses any spot the gameobject collision doesn't
-    // answer for: a straight line at the floor's own height, which every walk here is planned as
     float const z = spot.GetExactDist2d(LK_FROSTMOURNE) <= FM_FLOOR_REACH ? LK_FROSTMOURNE.GetPositionZ()
                                                                           : LK_CENTER.GetPositionZ();
     if (MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), z, false, false, false, true, priority))
@@ -105,13 +96,11 @@ bool IccLkWalkAction::BookedOnWalkSpot()
 
 bool IccLichKingQuakeAction::Execute(Event /*event*/)
 {
-    // The ring shatters 5 s after the 1.5 s cast
     return WalkFor(&GetLkQuakeWalk, MovementPriority::MOVEMENT_FORCED, true, true);
 }
 
 bool IccLichKingShadowTrapAction::Execute(Event /*event*/)
 {
-    // The trap arms 5 s after it lands, and its knockback throws everyone within 10 yd off the platform
     return WalkFor(&GetLkTrapWalk, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
@@ -145,7 +134,6 @@ bool IccLichKingPlagueCureAction::Execute(Event /*event*/)
 
 bool IccLichKingPlagueWalkAction::Execute(Event /*event*/)
 {
-    // First tick 5 s after the plague lands, no time to finish a cast first
     return WalkFor(&GetLkPlagueWalk, MovementPriority::MOVEMENT_FORCED, true, true);
 }
 
@@ -206,7 +194,6 @@ bool IccLichKingBrakeStopAction::Execute(Event /*event*/)
 
 bool IccLichKingStandAction::Execute(Event /*event*/)
 {
-    // Winter slots race Remorseless Winter's first ticks, phase one stands don't
     bool const urgent = IsLkStandUrgent(botAI);
     return WalkFor(&GetLkStandWalk, urgent ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT,
                    false, urgent);

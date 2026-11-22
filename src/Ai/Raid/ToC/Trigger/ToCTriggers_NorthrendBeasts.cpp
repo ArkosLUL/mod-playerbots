@@ -24,7 +24,7 @@ bool BelongsToStem(Unit* unit, NorthrendBeastsStem stem)
 
     return false;
 }
-}  // namespace
+}
 
 bool NorthrendBeastsDpsTargetTrigger::IsActive()
 {

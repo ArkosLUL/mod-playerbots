@@ -11,8 +11,7 @@
 
 class PlayerbotAI;
 
-// Boss state ids as InstanceScript keys them. Mirrors icecrown_citadel.h's DataTypes, which is under
-// scripts/ and can't be included from here.
+// must match DataTypes in core icecrown_citadel.h, a stale id keys a gate to another boss's state
 enum IccEncounterId : uint32
 {
     ICC_BOSS_LORD_MARROWGAR = 0,
@@ -31,12 +30,9 @@ enum IccEncounterId : uint32
     ICC_BOSS_SINDRAGOSA_GAUNTLET = 13,
     ICC_BOSS_BLOOD_PRINCE_TRASH = 14,
 
-    // No boss state: Stinky and Precious and the Rotting Frost Giants, gated on their units, and the
-    // raid-wide definitions.
     ICC_BOSS_NONE = 255
 };
 
-// For a raid-wide definition, with ICC_BOSS_NONE and no trace name: open in every fight, never live.
 inline bool IccRaidWideGateOpen(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return true; }
 inline bool IccRaidWideGateLive(PlayerbotAI* /*botAI*/, uint32 /*encounterId*/) { return false; }
 inline constexpr EncounterGate IccRaidWideGate{&IccRaidWideGateOpen, &IccRaidWideGateLive};

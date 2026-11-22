@@ -10,8 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds a damage dealer's area damage near an ooze: the damage buys threat on it, and a Big Ooze taken off
-// its kiter walks into the raid.
 class IccRotfaceOozeSplashMultiplier : public Multiplier
 {
 public:
@@ -22,8 +20,6 @@ private:
     RaidSplashCache _splash;
 };
 
-// A paladin's own disease cures register as "cleanse disease" and "purify disease" but are named "cleanse"
-// and "purify", so the cure rule's name list never matches them.
 class IccRotfaceSelfCureMultiplier : public Multiplier
 {
 public:

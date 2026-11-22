@@ -15,9 +15,8 @@
 
 namespace
 {
-// His combat reach is 8: a tank's area spell from this close reaches him
 constexpr float BRAKE_AREA_REACH = 14.0f;
-}  // namespace
+}
 
 float IccFestergutBrakeMultiplier::GetValue(Action* action)
 {

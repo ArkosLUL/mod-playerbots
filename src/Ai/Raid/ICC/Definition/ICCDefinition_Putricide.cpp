@@ -32,7 +32,6 @@ bool IsPpDutyHeld(PlayerbotAI* botAI)
     return IsPpStacking(botAI) || IsPpPlagueCarrier(botAI) || IsPpPlagueReceiving(botAI);
 }
 
-// Playerbots.EnableICCBuffs on heroic, for every group member, humans too.
 void TickHeroicBuffs(PlayerbotAI* botAI)
 {
     if (!sPlayerbotAIConfig.EnableICCBuffs)
@@ -74,7 +73,6 @@ void TickPutricide(PlayerbotAI* botAI)
 void DefinePutricide(EncounterBuilder& e)
 {
     e.Node<IccPutricideDodgeTrigger, IccPutricideDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
-    // The taunt lands in the second before Mutated Plague, so nothing below may hold it back
     e.Node<IccPutricideSwapTrigger, IccPutricideSwapAction>(ACTION_RAID + 11);
     e.Node<IccPutricideTankDefensiveTrigger, IccPutricideCastTankDefensiveAction>(ACTION_RAID + 10);
     e.Node<IccPutricideKiteTrigger, IccPutricideKiteAction>(ACTION_RAID + 9, EncounterRow::Mover);
@@ -82,7 +80,6 @@ void DefinePutricide(EncounterBuilder& e)
     e.Node<IccPutricideStackTrigger, IccPutricideStackAction>(ACTION_RAID + 7, EncounterRow::Mover);
     e.Node<IccPutricideAbominationTrigger, IccPutricideAbominationAction>(ACTION_RAID + 6, EncounterRow::Mover);
     e.Node<IccPutricideBrakeTrigger, IccPutricideBrakeStopAction>(ACTION_RAID + 5);
-    // Above the stand: a bot takes a new pick before it walks back to its spot
     e.Node<IccPutricideTargetTrigger, IccPutricideTargetAction>(ACTION_RAID + 4);
     e.Node<IccPutricideStandTrigger, IccPutricideStandAction>(ACTION_RAID + 3, EncounterRow::Mover);
 
@@ -90,38 +87,27 @@ void DefinePutricide(EncounterBuilder& e)
 
     e.OwnTargeting("icc putricide targeting", Role::Any, &IccResolverPicks<&GetPpTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // A braked bot's resolver hands it nothing on him, so no picker may give him back, and with no target
-    // nothing may walk it off to its master
     e.Block("icc putricide brake hold", Role::Any, &IsPpBraked,
             Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti | Family::Follow |
                 Family::MoveRandom);
-    // Every slot is in reach of him already, and reach would walk a slot off the ring. Healers keep theirs
-    // for the kiter and the ooze stack.
     e.OwnMovement("icc putricide stand hold", Role::Any, &IsPpHoldingStand, Family::Attack | Family::ReachHeal,
                   {IccPutricideStandAction::Name, IccPutricideDodgeAction::Name, "reach party member to resurrect"});
     e.OwnMovement("icc putricide kite hold", Role::Any, &IsPpKiter, Family::Attack, {IccPutricideKiteAction::Name});
     e.OwnMovement("icc putricide duty hold", Role::Any, &IsPpDutyHeld, Family::Attack,
                   {IccPutricideStackAction::Name, IccPutricidePlagueAction::Name, IccPutricideDodgeAction::Name});
-    // The driver walks to the table and then drives: nothing else moves it, and it attacks only through the
-    // abomination, or with a pickup taunt while still on foot. A plague it carries on foot is passed first.
     e.OwnMovement("icc putricide driver hold", Role::Any, &IsPpDriver, 0,
                   {IccPutricideAbominationAction::Name, IccPutricideSwapAction::Name, IccPutricidePlagueAction::Name});
     e.Block("icc putricide spell movers", Role::Any, &IsPpMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
-    // avoid aoe sees the puddles and flees them 5 yd at most, against the dodge
     e.Block("icc putricide avoid aoe", Role::Any, &IsPpLive, Family::AvoidAoe);
-    // He obeys taunt diminishing returns, so only the swap spends a taunt on him. Death Grip is in the
-    // family too, and would drag the ooze or the cloud off the path the script gives it.
     e.Block("icc putricide taunts", Role::Any, &IsPpLive, Family::Taunt);
-    // A braked tank has no target, and a druid's non-combat nodes drop bear form
     e.Block("icc putricide tank form", Role::Tank, &IsPpLive, 0, {"caster form"});
-    // The tank buttons wait for a phase 3 hold or a low tank
     e.Block("icc putricide tank defensive hold", Role::Tank, &IsPpTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickPutricide);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccPutricideDefinition()
 {

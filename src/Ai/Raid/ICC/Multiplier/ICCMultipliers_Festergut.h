@@ -10,7 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds a braked tank's spells and swings on him, and its area damage near him. Heals pass.
 class IccFestergutBrakeMultiplier : public Multiplier
 {
 public:

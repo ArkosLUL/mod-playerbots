@@ -8,12 +8,11 @@
 
 enum class NorthrendBeastsStem : uint8
 {
-    Gormok,  // snobolds too
+    Gormok,
     Worms,
     Icehowl
 };
 
-// One per stem, firing only for the stem's own beasts, so the three never act on one pick.
 class NorthrendBeastsDpsTargetTrigger : public Trigger
 {
 public:

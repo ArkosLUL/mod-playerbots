@@ -211,6 +211,7 @@ inline constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
+inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_AREA_HOLD_SLACK = 2.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
 inline constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
@@ -755,6 +756,8 @@ std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searc
 bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius);
 
 bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher);
+
+bool YoggSaronInSwingingCrusherReach(PlayerbotAI* botAI, float slack);
 
 bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position const& destination);
 

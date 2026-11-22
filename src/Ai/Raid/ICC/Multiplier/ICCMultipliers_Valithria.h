@@ -10,8 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds a damage dealer's area damage near a Blistering Zombie on somebody else: the threat would turn the
-// zombie onto the dealer, and its swings one-shot all but a tank.
 class IccValithriaSplashMultiplier : public Multiplier
 {
 public:

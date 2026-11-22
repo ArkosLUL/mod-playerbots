@@ -360,8 +360,8 @@ alone overrides `RouteAcceptable` to reject a straight walk passing inside it �
 leave one beats standing in it, crossing a cloud costs a Guardian. Each cloud enters the set twice, where
 it is and `ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` (6 s) ahead along its orbit; without the lead, destinations
 were no further from clouds than standing still. The lead has to outlast a crossing, ~5.7 s of a cloud
-over a standing bot, and is projected along the cloud's own orientation at its run speed, since an
-escort-AI creature faces the leg it is walking.
+over a standing bot, and is projected along the cloud's own orientation at its run speed, since
+[a walking unit faces its path](../../engine/pitfalls.md#arc-and-geometry-defaults).
 
 **Nothing may jump in this room.** Blink, Disengage and the gap-closers land a bot somewhere nobody
 picked, here a ring: 13 of 20 phase 1 casts in one pull left the bot with more orbits in reach than
@@ -741,9 +741,20 @@ whoever is swung at, so a clear bot becomes collinear without moving. `IsAllowed
   which the Judgement node replaces.
 
 **The tentacle cannot be tanked or steered**: `DamageTaken` does `DoResetThreatList(); AddThreat(who,
-100000); AttackStart(who)` on any direct damage, so it re-faces whoever hit it last. Melee exposure is the
-root cause (in reach of a live Crusher in 36% of samples against 16% for ranged), and the brain team takes
-melee out of the arena for every window.
+100000); AttackStart(who)` on any white swing (`DIRECT_DAMAGE`), so it re-faces whoever hit it last.
+Melee exposure is the root cause (in reach of a live Crusher in 36% of samples against 16% for ranged),
+and the brain team takes melee out of the arena for every window.
+
+**Area damage reaches a Crusher the resolver never hands out.** Spell damage never fires that grab, but
+each Diminish Power cast zeroes the threat list, so area threat from a bot beside it can take the victim,
+and a melee-class hit (Swipe, Maul, Whirlwind) breaks the channel, so it swings at once. A bear's Swipe on
+a Corruptor 5 yd from a channelling Crusher did both, and Crush coned the three melee and the warrior tank
+stacked on that Corruptor dead in 4 s; a fury warrior's Whirlwind did the same, and he died in place. So
+`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action,
+plus Maul (glyphed), Hammer of the Righteous, Heart Strike and Avenger's Shield, which also hit enemies
+next to their target, in phases 2 and 3 while the bot stands within a Crusher's live melee range +
+`…_CRUSHER_AREA_HOLD_SLACK` (2 yd) and its stun does not hold. Area damage from outside the reach stays:
+a victim the Crusher can't reach is never swung at. `--crush` counts its vetoes by action.
 
 **Shattered Illusion is the one exception.** `64173` stuns every platform tentacle (its `conditions`
 rows) from the moment a brain room clears until Induce Madness lands, and `UNIT_STATE_CANNOT_AUTOATTACK`
@@ -1041,9 +1052,10 @@ every melee on the brain team the stun is left to ranged, pets and the tank.
 itself, and drops the link if either dies or they end up more than 10 yd apart vertically. Neither 63803
 (apart: DBC damage plus −2 Sanity on **both** ends past **20 yd**) nor 63804 (together) leaves an aura, so
 no aura test can name the partner, and `TooFarFromPlayerWithAura` cannot help — it measures the gap to
-*other holders of the same aura*. But the aura casts one of the two at the partner **every second**, so an
-`AllSpellScript` on `ALLSPELLHOOK_ON_PREPARE` in `UldBotScripts.cpp` latches the pair per instance,
-expiring after three missed ticks. Both ends walk, unless one is under z 300.
+*other holders of the same aura*. But the aura casts one of the two at the partner **every second**
+(63803 also back at its owner, a self-cast that names nobody), so an `AllSpellScript` on
+`ALLSPELLHOOK_ON_PREPARE` in `UldBotScripts.cpp` latches the pair per instance, skipping the
+self-cast, and expires it after three missed ticks. Both ends walk, unless one is under z 300.
 
 They walk to their **midpoint**: one bot chasing another moving away at the same speed never arrives, and
 links left open cost a pull ~480k damage and ~680 Sanity. A midpoint inside the ring, which two bots on
@@ -1485,8 +1497,9 @@ stopping in reach would spread the ranged round Yogg.
 The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive is +10% damage done, plus
 Freya +20% healing, Mimiron +20% speed, Thorim +20% health and Titanic Storm; Freya-only rooms ran 4-9 s
 slower than a three-Keeper kill. Handled cases: **Thorim only** and **Freya only**, a **raid choice** with
-no config option. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK`, preferred over Sara's
-`GetData(DATA_GET_KEEPERS_COUNT)`, a count only, because it names **which** Keeper.
+no config option. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK`, bits 0-3, the bits Sara's
+`GetData(DATA_GET_KEEPERS_COUNT)` counts; it is preferred over that count because it names **which**
+Keeper.
 
 What Thorim-only removes: no Freya means **no Sanity Wells, so Sanity (63050, 100 stacks) is a one-way
 drain**; no Hodir means no Protective Gaze absorb; no Mimiron means no haste clouds and therefore a slower

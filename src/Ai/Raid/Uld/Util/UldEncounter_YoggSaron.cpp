@@ -3847,6 +3847,22 @@ bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher)
            induceMadness->GetCastTimeRemaining() > static_cast<int32>(lead);
 }
 
+bool YoggSaronInSwingingCrusherReach(PlayerbotAI* botAI, float slack)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE,
+                                        ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS + slack);
+
+    for (Creature* crusher : crushers)
+        if (crusher->IsAlive() && bot->GetExactDist2d(crusher) <= crusher->GetMeleeRange(bot) + slack &&
+            !YoggSaronCrusherStunHolds(botAI, crusher))
+            return true;
+
+    return false;
+}
+
 bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius)
 {
     Player* bot = botAI->GetBot();

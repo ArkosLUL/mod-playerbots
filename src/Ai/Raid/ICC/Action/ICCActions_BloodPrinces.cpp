@@ -21,15 +21,12 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A ball, soak or nucleus walk re-aims once its point has moved this far
 constexpr float REAIM = 2.0f;
-}  // namespace
+}
 
 Position const* IccBpcWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -38,8 +35,6 @@ Position const* IccBpcWalkAction::WalkInFlight()
 
 bool IccBpcWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -48,7 +43,6 @@ bool IccBpcWalkAction::WalkTo(Position const& spot, MovementPriority priority, b
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -82,7 +76,6 @@ bool IccBpcDodgeAction::Execute(Event /*event*/)
     if (!FindBpcDodgeSpot(botAI, spot))
         return false;
 
-    // The vortex knocks back and hits for 8k or more every 1.5 s for 25 s, which costs more than any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -141,7 +134,6 @@ bool IccBpcBrakeStopAction::Execute(Event /*event*/)
         stopped = true;
     }
 
-    // AttackStop leaves Auto Shot and wands running
     Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
     if (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == prince)
     {
@@ -165,7 +157,6 @@ bool IccBpcTargetAction::Execute(Event /*event*/)
     if (petPick == pick)
         return AttackDirect(pick);
 
-    // The pet stays on its bomb while the bot fights on
     EncounterHelpers::CommandPetAttack(botAI, petPick);
     return pick && AI_VALUE(Unit*, "current target") != pick && Attack(pick);
 }
@@ -192,14 +183,12 @@ bool IccBpcPrinceTauntAction::Execute(Event /*event*/)
     if (!prince || !IccCastClassTaunt(bot, botAI, prince))
         return false;
 
-    // A taunt moves the prince, not the bot's own target
     AttackDirect(prince);
     return true;
 }
 
 bool IccBpcNucleusAction::Execute(Event /*event*/)
 {
-    // A taunt moves the nucleus onto the tank, which stays on Keleseth
     if (Unit* nucleus = GetBpcNucleusToTaunt(botAI))
     {
         DropWalk();
@@ -249,7 +238,6 @@ bool IccBpcStandAction::Execute(Event /*event*/)
         if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
             return true;
 
-    // A bot still short of its node when Empowered Shock Vortex lands takes every neighbour's hit
     bool const scattering = IsBpcScattering(botAI);
     return WalkTo(spot, scattering ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT,
                   scattering);

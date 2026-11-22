@@ -69,7 +69,6 @@ bool MalygosSeekBubbleAction::isUseful() { return !bot->GetVehicle() && !IsSafel
 
 bool MalygosSeekBubbleAction::Execute(Event /*event*/)
 {
-    // Arcane Overload is non-attackable, so it never shows up in "possible targets".
     std::vector<Unit*> found;
     GetEoECreatures(bot, NPC_ARCANE_OVERLOAD, found);
 
@@ -175,13 +174,10 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
 
     MotionMaster* mm = disk->GetMotionMaster();
 
-    // The core keeps the P2 summons until both add types are dead, so the ride is ended by hand.
-    // Fly back down first; stepping off at Scion altitude is a long drop.
     if (!scion)
     {
         if (disk->GetPositionZ() > MALYGOS_PLATFORM_Z + DISK_DISMOUNT_MAX_HEIGHT)
         {
-            // Stamped over the approach in progress rather than waiting for POINT to clear.
             if (!_descending || mm->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
             {
                 mm->Clear(false);
@@ -226,7 +222,6 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
         float tx = scion->GetPositionX() + dx / len * reach;
         float ty = scion->GetPositionY() + dy / len * reach;
 
-        // Straight 3d spline: a generated path is 2d and drops the destination onto the platform.
         mm->Clear(false);
         mm->MovePoint(0, tx, ty, scion->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.0f, 0.0f,
                       /*generatePath*/ false, /*forceDestination*/ true);
@@ -246,11 +241,9 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
 
 bool AvoidSurgeOfPowerAction::isUseful()
 {
-    // Riders and sheltered bots are already covered; peeling would only walk them out of it.
     if (bot->GetVehicle() || IsSafelySheltered(bot))
         return false;
 
-    // The beam runs from Malygos through the surge focus; stepping off that line clears it.
     Unit* surge = GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, EOE_SURGE_SEARCH_RADIUS);
     if (!surge || bot->GetExactDist2d(surge) >= SURGE_BEAM_CLEAR_DISTANCE)
         return false;

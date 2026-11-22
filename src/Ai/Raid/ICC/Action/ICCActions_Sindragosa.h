@@ -17,16 +17,12 @@
 #include "Position.h"
 #include "RaidDirectTargeting.h"
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccSindragosaBossWalkAction : public MovementAction
 {
 public:
     IccSindragosaBossWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // Walks to the spot the getter hands out, booking `priority`. `interrupt` drops a cast that pins the
-    // bot's feet; `nitro` spends Nitro Boosts on a long walk.
     bool WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementPriority priority, bool interrupt, bool nitro);
 
 private:

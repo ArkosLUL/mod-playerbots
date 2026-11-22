@@ -13,8 +13,6 @@
 
 namespace
 {
-// Where the DK stands decides where the spark lands, so the grip is cast from the parking spot or
-// not at all. The walk there belongs to MalygosPositionAction.
 Unit* GetPowerSparkToGrip(PlayerbotAI* botAI)
 {
     if (!IsOnPowerSparkGripDuty(botAI))
@@ -39,8 +37,6 @@ bool PullPowerSparkAction::isUseful()
         return true;
     }
 
-    // The grip only buys the distance back once, and the spark covers 6 yd/s walking it off again.
-    // Its immunity mask (creature_immunities -335) carries neither root nor snare, so this lands.
     Unit* snare = GetPowerSparkToSnare(botAI);
     if (!snare || !botAI->CanCastSpell("chains of ice", snare))
         return false;
@@ -58,7 +54,6 @@ bool PullPowerSparkAction::Execute(Event /*event*/)
 
 bool KillPowerSparkAction::isUseful()
 {
-    // Only a spark reachable standing still, nobody walks in P1. DK grips are PullPowerSparkAction.
     MalygosAggro const& aggro = GetMalygosAggro(botAI);
     if (!PlayerbotAI::IsDps(bot) || aggro.mainTank || aggro.victim)
         return false;

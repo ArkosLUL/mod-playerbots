@@ -10,7 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds a yielding tank's spells and swings on the dog, and its area damage near it. Heals pass.
 class IccDogsYieldMultiplier : public Multiplier
 {
 public:

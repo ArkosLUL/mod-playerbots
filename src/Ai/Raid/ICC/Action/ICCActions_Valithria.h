@@ -18,17 +18,13 @@
 
 class Creature;
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccVdWalkAction : public MovementAction
 {
 public:
     IccVdWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast
     bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
     void DropWalk() { walking = false; }
 
@@ -58,7 +54,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Flies in Dream State on straight splines: the navmesh would pull an airborne point down to the floor.
 class IccValithriaDreamAction : public MovementAction
 {
 public:
@@ -146,7 +141,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Cast here rather than through the generic node: the burst gate holds lust off every target in this fight
 class IccValithriaLustAction : public Action
 {
 public:
@@ -174,7 +168,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Heals her by name, the bot's best rank: she is no party member, so no generic heal reaches her
 class IccValithriaHealAction : public MovementAction
 {
 public:

@@ -21,23 +21,18 @@
 
 namespace
 {
-// His combat reach is 5.5: an area spell from this close reaches him
 constexpr float BRAKE_AREA_REACH = 15.0f;
-// Area damage centred this close to an add can reach it
 constexpr float SPLASH_RANGE = 12.0f;
 
 constexpr uint8 CURE_DISEASE = 1;
-// Cast for a poison, curse or magic effect, it takes a disease with it
 constexpr uint8 CURE_ALSO_DISEASE = 2;
-}  // namespace
+}
 
 float IccLichKingBrakeMultiplier::GetValue(Action* action)
 {
-    // The swap taunt goes out braked: the taunt is what moves him onto the free tank
     if (!action || dynamic_cast<CastHealingSpellAction*>(action) || action->getName() == IccLichKingTauntAction::Name)
         return 1.0f;
 
-    // Asked for every action the bot weighs, and a bot never ticks twice in one ms
     uint32 const now = getMSTime();
     if (now != _checkedMs)
     {
@@ -70,11 +65,9 @@ bool IccLichKingSplashMultiplier::Splashes(Action* action)
 
 float IccLichKingSplashMultiplier::GetValue(Action* action)
 {
-    // The add tank's own area threat is what holds the pile
     if (!action || dynamic_cast<CastHealingSpellAction*>(action) || IsLkTankPlayer(bot) || !Splashes(action))
         return 1.0f;
 
-    // Asked for every action the bot weighs, and a bot never ticks twice in one ms
     uint32 const now = getMSTime();
     if (now != _checkedMs)
     {

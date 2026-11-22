@@ -10,8 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds a damage dealer's area damage: the boss stands alone and Resistant Skin takes 95% off it on the
-// beasts, so it only pulls them. Tanks keep theirs for threat.
 class IccDbsAreaDamageMultiplier : public Multiplier
 {
 public:
@@ -22,8 +20,6 @@ private:
     RaidSplashCache _splash;
 };
 
-// A paladin on Mark duty keeps its Beacon of Light on the mark, so its class beacon nodes would move it
-// back to a tank. Those nodes are named after the spell, which no rule can list.
 class IccDbsBeaconDutyMultiplier : public Multiplier
 {
 public:

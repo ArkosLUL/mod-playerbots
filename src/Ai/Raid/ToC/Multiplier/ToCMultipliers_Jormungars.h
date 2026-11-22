@@ -5,8 +5,6 @@
 #include "RaidCombatHelpers.h"
 #include "RaidSplash.h"
 
-// Holds other movers while a reposition walk is in flight, since every MoveTo clears the MotionMaster
-// and any of them would cancel it. Attacks, `avoid aoe` and the beasts' own movers stay.
 class NorthrendWormsMoveGuardMultiplier : public Multiplier
 {
 public:
@@ -24,8 +22,6 @@ private:
     RaidActionCache<Facts> _facts;
 };
 
-// A Burning Bile carrier the reposition walked off the raid stays off it: its pulse hits everyone
-// within 10 yd, melee included, and `reach melee` or a charge would put it back in the stack.
 class NorthrendWormsBileReachGuardMultiplier : public Multiplier
 {
 public:
@@ -37,8 +33,6 @@ private:
     RaidActionCache<bool> _reach;
 };
 
-// The class redirects pick one tank for the whole raid. Here each worm has its own holder, and the
-// encounter's redirect node casts them.
 class NorthrendWormsRedirectGuardMultiplier : public Multiplier
 {
 public:
@@ -49,8 +43,6 @@ private:
     RaidActionCache<bool> _classRedirect;
 };
 
-// A braked DPS bot casts nothing at its worm, area spells near it included. Swings already running and
-// DoTs already on it keep going.
 class NorthrendWormsThreatBrakeMultiplier : public Multiplier
 {
 public:

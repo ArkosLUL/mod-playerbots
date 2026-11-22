@@ -27,7 +27,6 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// Playerbots.EnableICCBuffs on heroic, for every group member, humans too.
 void ApplyHeroicBuffs(PlayerbotAI* botAI)
 {
     if (!sPlayerbotAIConfig.EnableICCBuffs || !IccSindragosaDefinition().Live(botAI))
@@ -79,7 +78,6 @@ void DefineSindragosa(EncounterBuilder& e)
     e.Node<IccSindragosaFreedomTrigger, IccSindragosaFreedomAction>(ACTION_RAID + 6);
     e.Node<IccSindragosaBeaconHealTrigger, IccSindragosaBeaconHealAction>(ACTION_RAID + 5);
     e.Node<IccSindragosaHoldTrigger, IccSindragosaHoldAction>(ACTION_RAID + 4);
-    // Above the stand: a bot takes a new pick before it walks back to its spot
     e.Node<IccSindragosaTargetTrigger, IccSindragosaTargetAction>(ACTION_RAID + 3);
     e.Node<IccSindragosaStandTrigger, IccSindragosaStandAction>(ACTION_RAID + 2, EncounterRow::Mover);
 
@@ -88,32 +86,23 @@ void DefineSindragosa(EncounterBuilder& e)
 
     e.OwnTargeting("icc sindragosa targeting", Role::Any, &IccResolverPicks<&GetSgTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // A held, braked, chilled or hiding bot's resolver hands it nothing, so no picker may give her back, and with
-    // no target nothing may walk it off to its master
     e.Block("icc sindragosa target hold", Role::Any, &IsSgTargetHeld,
             Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti | Family::Follow |
                 Family::MoveRandom | Family::PetAttack);
-    // Every spell a carrier finishes stacks Instability, and Backlash goes off when it drops
     e.Block("icc sindragosa unchained hold", Role::Any, &IsSgUnchainedHeld, Family::Spell,
             {IccSindragosaFreedomAction::Name, IccSindragosaCoverAction::Name, IccSindragosaBeaconHealAction::Name});
-    // The stands are in reach of her and of the holder, and reach would walk a bot off its spot
     e.OwnMovement("icc sindragosa movement", Role::Any, &IsSgMovementOwned, Family::Attack);
     e.Block("icc sindragosa spell movers", Role::Any, &IsSgMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
-    // avoid aoe flees a few yards at most, against the forced runs
     e.Block("icc sindragosa avoid aoe", Role::Any, &IsSgLive, Family::AvoidAoe);
-    // Only the holder's taunt back and the elected swap move her
     e.Block("icc sindragosa taunts", Role::Tank, &IsSgLive, Family::Taunt);
-    // A braked tank has no target, and a druid's non-combat nodes drop bear form, out of combat through her
-    // fly-in too
     e.Block("icc sindragosa tank form", Role::Tank, &IsSgPresent, 0, {"caster form"});
-    // The tank buttons wait for the breath windows or a low tank
     e.Block("icc sindragosa tank defensive hold", Role::Tank, &IsSgTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickSindragosa);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccSindragosaDefinition()
 {

@@ -42,8 +42,9 @@ gives away the east end; each band was swept at 0.5 yd and is 100% ground:
 | 487–492 | 3220–3231 |
 | 492–496 | 3220–3242 |
 | 496–504 | 3220–3250, the main tank's drag lane |
-| 504–520, 566–569 | 3227–3266 |
+| 504–520 | 3220–3266, the main tank's left hold |
 | 520–566 | 3227–**3268**: corridors, drake spots, off-tank |
+| 566–569 | 3227–3266 |
 
 The west edge runs out to 3219.75 from Y 490 north, so the southern bands start at 3220: the tank's
 right hold needs that yard. The floor clamp doubles as the freeze guard: with movement suppression
@@ -131,8 +132,9 @@ Timing: first summon at +20 s, then every 25 s. Damage aura up at +3.6 s, down a
 ## Molten Fury — why hunters matter here
 
 The tsunami damage aura 57492 has a second periodic effect pulsing **60430 Molten Fury** every 800 ms
-in **6 yd**: `DispelType 9 = DISPEL_ENRAGE`, +200% health, +100% damage, 30 s. **No `conditions`
-rows**, so it lands on anything in range — Lava Blaze, a drake, or Sartharion himself.
+in **6 yd**: `DispelType 9 = DISPEL_ENRAGE`, +200% health, +100% damage, 30 s. It targets through
+`TARGET_UNIT_SRC_AREA_ENTRY`, and a `conditions` row (13/7/60430) pins it to living Lava Blazes
+(30643), so a wave sweeping a drake or Sartharion never enrages them.
 
 Tranquilizing Shot 19801: two `SPELL_EFFECT_DISPEL` effects (MiscValue 9 enrage, 1 magic), 8 s
 cooldown, 35 yd. Targets are assigned by hunter index modulo the enraged list so several hunters
@@ -158,9 +160,9 @@ line, whose east end is 9.5 yd away. Each spot's Y against the lines (8.5 yd kil
 each is inside one pattern or the other. From the north he settles around (3267, 549) facing up the empty
 rim, 17 yd from the raid's home hold (outside the 15 yd breath), its left-wave hold 71° off his
 facing. No spot is safe under **both** wave patterns, so a live wave takes the raid corridor Y and
-keeps X; the east anchor is only for blazes and whelps. Shadron's spot clears every right line and
-Vesperon's every left one. Under a right wave Tenebron's is the long walk, 27.9 yd to the raid
-corridor, and the wave needs 6.2 s from its summon to reach that X.
+keeps X. Shadron's spot clears every right line and Vesperon's every left one. Under a right wave
+Tenebron's is the long walk, 27.9 yd to the raid corridor, and the wave needs 6.2 s from its summon
+to reach that X.
 
 The drakes are **boss-flagged**: `instance_encounters` credit rows for 30452/30451/30449 make
 `ObjectMgr` OR in `CREATURE_FLAG_EXTRA_DUNGEON_BOSS`, and the heroic entries carry `type_flags 108`
@@ -191,8 +193,9 @@ waypoint passes near a landing spot.
 zone-in ([../engine/pitfalls.md](../engine/pitfalls.md#before-the-pull-and-out-of-combat)). Stamped
 on first sight, every clock started then: the staleness branch could not fire, the drag always timed
 out, the redirect pull window was already expired, and the portal squad was picked over whoever was
-on the map. `StateFor` rebuilds on the **out-of-combat edge** instead, and also once nothing has asked
-for it in 15 s (`STALE_STATE_MS`), which is how the corridor and portal squad get re-derived.
+on the map. `StateFor` rebuilds on every read while he is **out of combat** instead, which
+re-derives the corridor and portal squad at a wipe, and also once nothing has asked for it in 15 s
+(`STALE_STATE_MS`).
 
 ## The raid splits across two corridors
 
@@ -245,11 +248,11 @@ Accepted degradation: a Lava Blaze spawning on a player in the far corridor is o
 
 A corridor is 15 yd wide with 4 yd margins, so each group is effectively collinear along X and
 ordering is the only tool. **West to east, offsets from `RAID_ENTRY_ANCHOR_X` 3228.58: Sartharion +
-main tank (+0, the boss +7) → ranged/healers (+20) → off-tank (+33).** The boss faces the main tank,
-so his cones point west into the empty strip. Ranged and healers hold an 8 yd band along X
-(`RAID_LINE_TOLERANCE_X`), not a point, so a dozen bots don't pile onto one coordinate and fight the
-collision mover; Y keeps the tight corridor tolerance. Two rules enforce "only the off-tank eats
-it":
+main tank (+0, the boss +7) → ranged/healers (+20)**, with the off-tank on each drake's own spot
+([Drakes](#drakes)). The boss faces the main tank, so his cones point west into the empty strip.
+Ranged and healers hold an 8 yd band along X (`RAID_LINE_TOLERANCE_X`), not a point, so a dozen
+bots don't pile onto one coordinate and fight the collision mover; Y keeps the tight corridor
+tolerance. Two rules enforce "only the off-tank eats it":
 
 1. **Nobody crosses west of a drake.** Everyone meets a landing 4 yd **east** of its coord, so the
    drake faces east into empty platform on touchdown, and the ranged line clears Shadron's
@@ -280,7 +283,8 @@ Under a live wave the flank and drake-rear points keep X and take the wave-clear
 lands around Y 518.7, 5.3 yd off the left line at 524; without this the corridor dodge and these
 actions alternated for the whole ~11 s a wave was up.
 
-The east anchor is clamped as the **east end of the line**, with the off-tank derived from it.
+The off-tank's anchor (`OffTankAnchor`) is the newest landed drake's spot, Tenebron's while none is
+down, never a Lava Blaze or a whelp: he picks those up from where he stands.
 
 ## Only the main tank ever touches Sartharion
 
@@ -640,9 +644,5 @@ Twilight Eggs before it reaches one.
   table, so it follows him onto the newer drake's spot. Not unsafe — both stay off the raid line with
   their cones pointed away — but the measured spots only ever described a drake held alone. The fix,
   if it bites: a second assist tank.
-- **Who Molten Fury can land on is unsettled.** The Molten Fury section says no `conditions` rows, so
-  it reaches drakes and Sartharion too. The hunter code instead assumes `TARGET_UNIT_SRC_AREA_ENTRY`
-  with a `conditions` row pinning it to Lava Blaze 30643, so only blazes carry it. Check the
-  `conditions` table for 60430 before trusting either.
 - Whether phase-16 bots are truly immune to tsunamis is **assumed, not confirmed** — the tsunami
   creatures are phase 1, so they should not interact, but verify before relying on it.

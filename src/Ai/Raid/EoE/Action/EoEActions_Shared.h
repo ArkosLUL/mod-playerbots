@@ -11,7 +11,6 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 
-// Owns where a bot stands in P1, P2 and the transition hold.
 class MalygosPositionAction : public MovementAction
 {
 public:

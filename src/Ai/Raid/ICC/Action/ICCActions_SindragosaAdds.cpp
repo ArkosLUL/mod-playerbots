@@ -18,13 +18,11 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-}  // namespace
+}
 
 Position const* IccSgAddsWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -33,8 +31,6 @@ Position const* IccSgAddsWalkAction::WalkInFlight()
 
 bool IccSgAddsWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -43,14 +39,12 @@ bool IccSgAddsWalkAction::WalkTo(Position const& spot, MovementPriority priority
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const ours = walking && BookedOnWalkSpot();
     if (ours && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS)
         last.clear();
 
-    // A booking only yields to a higher priority, so our own forced walk would refuse its next leg
     bool const lowered = ours && bot->isMoving() && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
@@ -90,7 +84,6 @@ bool IccSgDrakeDodgeAction::Execute(Event /*event*/)
     if (!FindSgDrakeDodgeSpot(botAI, spot))
         return false;
 
-    // An Icy Blast lands for 5-6k, and its puddle slows by 75% while it ticks for 40 s
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -155,7 +148,6 @@ bool IccSgGauntletDodgeAction::Execute(Event /*event*/)
     if (!FindSgGauntletDodgeSpot(botAI, spot))
         return false;
 
-    // The whirl hits every second for 6 s and comes back 9 s later, which costs more than any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -179,7 +171,6 @@ bool IccSgGauntletTauntAction::Execute(Event /*event*/)
     if (!add || !IccCastClassTaunt(bot, botAI, add))
         return false;
 
-    // A taunt moves the add, not the bot's own target
     AttackDirect(add);
     return true;
 }

@@ -21,7 +21,6 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
 constexpr float DODGE_STEP = 1.5f;
 constexpr float DODGE_SWEEP = 12.0f;
@@ -35,8 +34,6 @@ bool ClearOf(std::vector<EncounterHelpers::HazardCircle> const& hazards, float x
                         { return hazard.first.GetExactDist2d(x, y) < hazard.second + margin; });
 }
 
-// The nearest ring holding a deck spot this clear, and on that ring the spot nearest `prefer`. The deck is
-// a gameobject floor with no navmesh, so the spot is tested against the hull box, not a collision check.
 bool SweepDeck(Player* bot, GsbDeck deck, std::vector<EncounterHelpers::HazardCircle> const& hazards, float margin,
                Position const& prefer, Position& spot)
 {
@@ -68,11 +65,10 @@ bool SweepDeck(Player* bot, GsbDeck deck, std::vector<EncounterHelpers::HazardCi
 
     return false;
 }
-}  // namespace
+}
 
 Position const* IccGunshipWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -81,12 +77,9 @@ Position const* IccGunshipWalkAction::WalkInFlight()
 
 bool IccGunshipWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // A stun or a channel stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -123,7 +116,6 @@ bool IccGunshipDodgeAction::Execute(Event /*event*/)
         ClearOf(hazards, last.lastMoveToX, last.lastMoveToY, GSB_DODGE_TRIGGER_MARGIN))
         return true;
 
-    // Back toward the bot's stand where one holds, so the walk home is short
     Position prefer = bot->GetPosition();
     Position stand;
     if (GsbStandOf(botAI, stand) != GsbStandKind::None)
@@ -131,16 +123,13 @@ bool IccGunshipDodgeAction::Execute(Event /*event*/)
 
     GsbDeck const deck = GsbDeckOf(*side, bot);
     Position spot;
-    // Overlapping blasts can leave nothing clear by the margin, but clearing the reach still saves the hit
     if (!SweepDeck(bot, deck, hazards, GSB_DODGE_CLEAR_MARGIN, prefer, spot) &&
         !SweepDeck(bot, deck, hazards, GSB_DODGE_TRIGGER_MARGIN + 0.5f, prefer, spot))
         return false;
 
-    // The heroic explosion knocks back, off the deck at its edge
     if (bot->GetMap()->IsHeroic() && bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
-    // The bot's own forced walk would refuse this re-aim at the same priority
     last.clear();
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                   false, MovementPriority::MOVEMENT_FORCED, true);
@@ -168,7 +157,6 @@ bool IccGunshipRocketJumpAction::Execute(Event /*event*/)
         bot->IsNonMeleeSpellCast(true))
         return false;
 
-    // A jump launched mid-stride misfires
     if (bot->isMoving())
     {
         bot->GetMotionMaster()->Clear();
@@ -204,7 +192,6 @@ bool IccGunshipTauntAction::Execute(Event /*event*/)
     if (!target || !IccCastClassTaunt(bot, botAI, target))
         return false;
 
-    // A taunt moves the add, not the bot's own target
     AttackDirect(target);
     return true;
 }
@@ -238,7 +225,6 @@ bool IccGunshipEnterCannonAction::Execute(Event /*event*/)
     if (!bot->IsOnVehicle(cannon))
         return false;
 
-    // A mounted bot can board a vehicle
     WorldPacket emptyPacket;
     bot->GetSession()->HandleCancelMountAuraOpcode(emptyPacket);
     return true;
@@ -254,7 +240,6 @@ bool IccCannonFireAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // From 90 heat a Cannon Blast can reach 100 and overheat, so only Incinerating Blast fires
     if (cannon->GetPower(POWER_ENERGY) >= GSB_INCINERATE_HEAT)
         return TryCast("incinerating blast", target, cannon);
 
@@ -269,11 +254,9 @@ bool IccCannonFireAction::TryCast(char const* spell, Unit* target, Unit* cannon)
         return false;
 
     uint32 const heat = cannon->GetPower(POWER_ENERGY);
-    // CastVehicleSpell reports a refused cast as sent, so the heat changing is the receipt
     if (!botAI->CastVehicleSpell(spellId, target) || cannon->GetPower(POWER_ENERGY) == heat)
         return false;
 
-    // A creature caster gets no cooldown of its own, so the spell's is stamped here
     cannon->AddSpellCooldown(spellId, 0, std::max(info->RecoveryTime, info->CategoryRecoveryTime));
     return true;
 }

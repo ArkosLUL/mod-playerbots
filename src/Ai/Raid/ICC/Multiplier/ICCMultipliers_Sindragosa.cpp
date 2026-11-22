@@ -18,15 +18,12 @@
 
 namespace
 {
-// Her combat reach is 18.75: an area spell from this close reaches her
 constexpr float BRAKE_AREA_REACH = 30.0f;
-// Area damage this close to a held tomb can reach it
 constexpr float TOMB_SPLASH_RANGE = 12.0f;
 
 constexpr uint8 KIND_DOT = 1 << 0;
 constexpr uint8 KIND_SPLASH = 1 << 1;
 
-// More of its damage comes from ticks than from the hit, at base values
 bool MostlyPeriodic(SpellInfo const* info, Player* caster)
 {
     if (!info || info->IsChanneled())
@@ -61,7 +58,7 @@ bool MostlyPeriodic(SpellInfo const* info, Player* caster)
 
     return periodic > direct;
 }
-}  // namespace
+}
 
 float IccSindragosaBrakeMultiplier::GetValue(Action* action)
 {
@@ -105,7 +102,6 @@ float IccSindragosaTombMultiplier::GetValue(Action* action)
     if (!action || dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    // Asked for every action the bot weighs, and a bot never ticks twice in one ms
     uint32 const now = getMSTime();
     if (now != _checkedMs)
     {

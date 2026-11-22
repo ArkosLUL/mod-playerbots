@@ -15,9 +15,8 @@
 
 namespace
 {
-// A drake's combat reach is 9: an area spell from this close reaches it
 constexpr float BRAKE_AREA_REACH = 19.0f;
-}  // namespace
+}
 
 float IccSgDrakeBrakeMultiplier::GetValue(Action* action)
 {

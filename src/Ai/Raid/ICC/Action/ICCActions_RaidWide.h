@@ -14,7 +14,6 @@
 #include "RaidOpener.h"
 #include "RaidResistAura.h"
 
-// Base for an encounter's direct-targeting action: attacks its resolver's pick, sending the pet along.
 class IccDirectAttackAction : public RaidDirectAttackAction
 {
 public:

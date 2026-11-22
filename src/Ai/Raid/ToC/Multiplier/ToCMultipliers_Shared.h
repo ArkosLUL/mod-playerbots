@@ -5,7 +5,6 @@
 
 class PlayerbotAI;
 
-// The live encounter's burst row, answered by its stem's ToC<Stem>BurstWindow. Default between pulls.
 RaidBurstWindow ToCLiveBurstWindow(PlayerbotAI* botAI);
 
 #endif

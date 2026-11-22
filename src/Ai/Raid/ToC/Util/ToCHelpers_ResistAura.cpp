@@ -20,20 +20,18 @@ uint8 SchoolsOfArrival(ToCStagingBoss arrival)
         case ToCStagingBoss::Icehowl:
             return RAID_RESIST_FROST;
         case ToCStagingBoss::Jaraxxus:
-            // Fel Lightning is fire + nature and resists by the lower one
             return RAID_RESIST_FIRE | RAID_RESIST_NATURE;
         case ToCStagingBoss::Twins:
             return RAID_RESIST_FIRE | RAID_RESIST_SHADOW;
         case ToCStagingBoss::Anubarak:
-            return RAID_RESIST_FROST;  // nature joins from phase 2: scarab Mandibles, then Leeching Swarm
+            return RAID_RESIST_FROST;
         case ToCStagingBoss::Champions:
-            return RAID_RESIST_FIRE;  // mostly physical, but the hunter, warlock and enhancement shaman burn
+            return RAID_RESIST_FIRE;
         default:
             return 0;
     }
 }
 
-// A heroic overlap has two beasts up at once, so their sets add up
 uint8 SchoolsOfBeastsStage(uint32 mask)
 {
     uint8 schools = 0;
@@ -46,7 +44,7 @@ uint8 SchoolsOfBeastsStage(uint32 mask)
 
     return schools;
 }
-}  // namespace
+}
 
 bool ToCResistFireWantsMastery(PlayerbotAI* botAI)
 {
@@ -69,8 +67,6 @@ uint8 ToCResistWantedSchools(PlayerbotAI* botAI, uint8 previous)
     {
         case ToCEncounter::NorthrendBeasts:
         {
-            // The gate finds Icehowl by its own search, so for a moment the stage mask can trail it.
-            // An empty set here would drop every holder for that tick.
             uint8 const schools = SchoolsOfBeastsStage(GetBeastsStageMask(botAI));
             return schools ? schools : previous;
         }

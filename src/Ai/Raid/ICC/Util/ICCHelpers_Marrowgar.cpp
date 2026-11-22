@@ -48,28 +48,19 @@ namespace
 {
 constexpr float BOSS_SEARCH_RADIUS = 200.0f;
 constexpr uint32 BOSS_RESCAN_MS = 1000;
-// Swept from him, so one refresh covers the room whichever bot asks
 constexpr float HAZARD_SEARCH_RADIUS = 110.0f;
 constexpr uint32 HAZARD_SCAN_MS = 100;
 constexpr uint32 ROSTER_REFRESH_MS = 1000;
-// He has settled once he drifts less than this for BOSS_SETTLE_MS
 constexpr float BOSS_SETTLE_DRIFT = 0.5f;
 constexpr uint32 BOSS_SETTLE_MS = 500;
-// While he moves, stands round him hold on where they latched until he is this far from it
 constexpr float BOSS_HOLD_DRIFT = 3.0f;
-// A head waits 450 ms before its first step, stops for good at a wall, and is done after 12 s
 constexpr float HEAD_MOVED = 0.5f;
 constexpr uint32 HEAD_STALL_MS = 700;
 constexpr uint32 HEAD_LIFETIME_MS = 12500;
-// The patches a head is still to lay that count, about 1.35 s of its walk
 constexpr uint32 HEAD_LOOKAHEAD = 3;
-// While he charges, the nearest two patches of each line of the cross he drops where he stops. The heads
-// cover the rest once they spawn.
 constexpr float CROSS_FIRST = 2.5f;
 constexpr uint32 CROSS_LOOKAHEAD = 2;
 constexpr uint32 CROSS_NOTE_TTL_MS = 3000;
-// Re-centre: settled past START from his spot, the main tank walks PULL yd beyond the spot so he stops
-// near it, done within DONE. Pulls that keep failing are given up until the next storm.
 constexpr float RECENTRE_START = 8.0f;
 constexpr float RECENTRE_DONE = 5.0f;
 constexpr float RECENTRE_PULL = 18.0f;
@@ -121,7 +112,6 @@ struct Stand
     StandKind kind = StandKind::Tank;
     Position raw;
     Position spot;
-    // Where he stood when a stand round him latched
     Position boss;
     bool held = false;
     bool parked = false;
@@ -139,7 +129,7 @@ struct LmState
 {
     ObjectGuid boss;
     uint32 bossScanMs = 0;
-    bool bossScanned = false;  // 0 is a real getMSTime value
+    bool bossScanned = false;
     Position bossLast;
     uint32 bossMovedMs = 0;
     bool bossTracked = false;
@@ -147,7 +137,6 @@ struct LmState
     uint32 rosterMs = 0;
     bool rosterBuilt = false;
     RaidObs::ObsGuidMap<uint8> duty{"lm.duty"};
-    // 1 for the anchor at 180 degrees, every tank's, 2 and 3 for 60 and 300
     RaidObs::ObsGuidMap<uint8> anchor{"lm.anchor"};
     std::vector<ObjectGuid> offTanks;
     std::vector<ObjectGuid> inner;
@@ -158,7 +147,6 @@ struct LmState
     Position pull;
     uint32 pulls = 0;
 
-    // Bone Slice is off in a storm and resumes LM_SLICE_DELAY_MS after it. sliceWindow counts the windows.
     bool sliceArmed = false;
     uint32 sliceOpenMs = 0;
     uint32 sliceWindow = 0;
@@ -185,7 +173,6 @@ struct LmState
 };
 
 RaidInstanceState<LmState> lmStates;
-// Bots whose saved rti was checked this instance, so a player's later order sticks
 RaidInstanceState<std::unordered_set<ObjectGuid>> lmRtiChecked;
 
 LmState* LiveState(PlayerbotAI* botAI)
@@ -246,7 +233,6 @@ Player* GetMainTank(Player* bot)
     return mainTank;
 }
 
-// Who baits Coldflame first: hunters can't shoot from inside him, then the casters least hurt by moving
 uint8 BaitRank(Player* player)
 {
     switch (player->getClass())
@@ -274,7 +260,6 @@ Position Offset(Position const& origin, float angle, float distance)
                     origin.GetPositionY() + distance * std::sin(angle), origin.GetPositionZ());
 }
 
-// From the bearing away from the tank spot outwards, alternating sides in rank order
 Position BaitSlot(Position const& from, size_t index)
 {
     int32 const rank = static_cast<int32>(index);
@@ -348,15 +333,12 @@ void RefreshRoster(LmState& state, Player* bot, uint32 now)
     for (Player* member : ranged)
         if ((member->getClass() == CLASS_HUNTER || baits.size() < wanted) && baits.size() < LM_BAIT_SLOTS)
             baits.push_back(member);
-    // One bait outside is all the core needs to keep Coldflame off everyone inside
     if (baits.empty() && !healers.empty())
         baits.push_back(healers.front());
 
     auto const isBait = [&baits](Player* member)
     { return std::find(baits.begin(), baits.end(), member) != baits.end(); };
 
-    // Every tank takes the anchor by the tank spot, and an anchor no tank holds the bait whose ring slot
-    // is nearest it
     std::unordered_map<ObjectGuid, uint8> slots;
     if (mainTank && GET_PLAYERBOT_AI(mainTank))
         slots[mainTank->GetGUID()] = 1;
@@ -415,7 +397,6 @@ void RefreshRoster(LmState& state, Player* bot, uint32 now)
         if (!slots.count(guid))
             state.stack.push_back(guid);
     }
-    // Rank order, not guid order: bait slots fan out from the middle, so hunters take the centre ones
     for (Player* member : baits)
         state.baits.push_back(member->GetGUID());
 
@@ -463,8 +444,6 @@ Position const& AnchorSpot(uint8 slot)
     }
 }
 
-// The main tank holds him at the tank spot. Settled off his spot after a storm, it walks a pull point past
-// the spot first, so he follows back onto it.
 void MainTankSpot(LmState& state, Player* bot, Creature* boss, uint32 now, StandKind& kind, Position& raw)
 {
     if (BossSettled(state, now) && boss->GetVictim() == bot)
@@ -491,8 +470,6 @@ void MainTankSpot(LmState& state, Player* bot, Creature* boss, uint32 now, Stand
     raw = state.pulling ? state.pull : ICC_LM_TANK_SPOT;
 }
 
-// The boss position a stand round him derives from: where he settled, or while he moves, where a held stand
-// of this kind latched, as long as he is still near it. Otherwise reach follows him until he settles.
 bool StandBoss(LmState const& state, ObjectGuid guid, StandKind kind, Creature* boss, uint32 now, Position& from)
 {
     if (BossSettled(state, now))
@@ -526,7 +503,6 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
         return true;
     }
 
-    // A spike pick hands the bot to reach, or the stand would walk it back off the spike
     if (Unit* pick = GetLmTarget(botAI); pick && pick != boss)
         return false;
 
@@ -545,7 +521,6 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
     switch (static_cast<IccLmDuty>(DutyOf(state, guid)))
     {
         case IccLmDuty::MainTank:
-            // Taken off it, the class taunt brings him back from wherever reach takes the tank
             if (boss->GetVictim() && boss->GetVictim() != bot)
                 return false;
 
@@ -558,7 +533,6 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
             if (!mainTank || mainTank == bot || mainTank->isMoving() || index < 0)
                 return false;
 
-            // Beside it across his bearing: both in his reach, both inside Bone Slice's 5 yd
             float const across = mainTank->GetAngle(boss) + static_cast<float>(M_PI) / 2.0f;
             float const side = index % 2 ? -1.0f : 1.0f;
             float const distance = index < 2 ? LM_TANK_STACK_OFFSET : 1.75f * LM_TANK_STACK_OFFSET;
@@ -572,7 +546,6 @@ bool DesiredStand(LmState& state, PlayerbotAI* botAI, Creature* boss, IccLmPhase
             if (index < 0 || !StandBoss(state, guid, StandKind::Inner, boss, now, from))
                 return false;
 
-            // He faces the main tank on the tank spot, so his back is the bearing from it to him
             size_t const count = state.inner.size();
             float const share = count > 1 ? static_cast<float>(index) / static_cast<float>(count - 1) - 0.5f : 0.0f;
             kind = StandKind::Inner;
@@ -745,7 +718,6 @@ void ReadSpikes(LmState& state, Player* bot, uint32 now)
                       if (!mainTank && PlayerbotAI::IsMainTank(member))
                           mainTank = member;
 
-                      // The victim rides its spike, so the aura finds every spike without a sweep
                       if (member->HasAura(SPELL_LM_IMPALED))
                       {
                           Unit* base = member->GetVehicleBase();
@@ -779,7 +751,6 @@ void NoteSpike(Player* bot, char const* rule)
         RaidObs::NoteDerived(bot, "lm.spike", rule);
 }
 
-// The aura lands when the 3 s cast ends, and he starts to spin then
 IccLmPhase ReadPhase(Creature* boss)
 {
     if (boss->HasAura(SPELL_LM_BONE_STORM))
@@ -794,8 +765,6 @@ bool HoldsAnchor(Player* player)
     return state && AnchorOf(*state, player->GetGUID()) != 0;
 }
 
-// Bone Storm lasts 20 s on 10-man and 30 s on 25-man (EVENT_BEGIN_BONE_STORM). The core shortens the aura
-// just after it lands, so a longer reading means no time has passed.
 uint32 StormElapsedMs(Aura const* storm, bool raid25)
 {
     uint32 const total = raid25 ? 30000 : 20000;
@@ -803,10 +772,8 @@ uint32 StormElapsedMs(Aura const* storm, bool raid25)
     return left < 0 || static_cast<uint32>(left) > total ? 0 : total - static_cast<uint32>(left);
 }
 
-// Signed, so a time already past reads negative
 int32 UntilMs(uint32 when, uint32 now) { return static_cast<int32>(when - now); }
 
-// Bone Slice is off from the storm cast, and resumes LM_SLICE_DELAY_MS after the aura ends
 void ArmWindows(LmState& state, Player* bot, Creature* boss, IccLmPhase phase, uint32 now)
 {
     if (phase != IccLmPhase::Normal)
@@ -828,8 +795,6 @@ void ArmWindows(LmState& state, Player* bot, Creature* boss, IccLmPhase phase, u
     }
 }
 
-// Where the window sits for a tank: due from LM_DEFENSIVE_LEAD_MS before Bone Slice resumes until
-// LM_DEFENSIVE_SPAN_MS after
 bool InSliceWindow(LmState const& state, uint32 now)
 {
     int32 const until = UntilMs(state.sliceOpenMs, now);
@@ -839,7 +804,6 @@ bool InSliceWindow(LmState const& state, uint32 now)
 
 bool SlicingNow(LmState const& state, uint32 now) { return state.sliceArmed && UntilMs(state.sliceOpenMs, now) <= 0; }
 
-// The human main tank gets the same window as a bot tank, as a call he presses himself
 void CallHumanTank(LmState& state, Player* sender, Creature* boss, uint32 now)
 {
     Unit* victim = boss->GetVictim();
@@ -862,7 +826,7 @@ void CallHumanTank(LmState& state, Player* sender, Creature* boss, uint32 now)
         window)
         state.humanCallWindow = state.sliceWindow;
 }
-}  // namespace
+}
 
 bool IsLmLive(PlayerbotAI* botAI)
 {
@@ -927,7 +891,6 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
 
     ReadSpikes(*state, bot, getMSTime());
     Map* map = bot->GetMap();
-    // A walk to a spike in a heroic storm crosses his lanes, so only one the bot reaches from its stand counts
     bool const storm = !state->spikes.empty() && ReadPhase(boss) != IccLmPhase::Normal;
     float const stormReach = PlayerbotAI::IsRanged(bot) ? LM_STORM_RANGED_REACH : LM_MELEE_SPIKE_REACH;
     std::vector<Creature*> spikes;
@@ -951,7 +914,6 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
 
     if (!PlayerbotAI::IsRanged(bot))
     {
-        // Cleave the spikes in reach, never one next to the main tank, where Bone Slice would hit the melee
         Player* mainTank = GetMainTank(bot);
         Creature* pick = nullptr;
         for (Creature* spike : spikes)
@@ -967,7 +929,6 @@ Unit* GetLmTarget(PlayerbotAI* botAI)
         return pick ? pick : boss;
     }
 
-    // Ranged take the spikes no melee reaches first, split evenly by guid, then help on the rest
     std::vector<Creature*> const& pool = farSpikes.empty() ? spikes : farSpikes;
     int32 const index = IndexOf(state->rangedDps, bot->GetGUID());
     if (index < 0)
@@ -1012,7 +973,6 @@ bool GetLmStandWalk(PlayerbotAI* botAI, Position& spot)
     if (!stand || stand->parked)
         return false;
 
-    // Nothing walks a bot back onto a line the dodge just took it off
     std::vector<Position> circles;
     GetLmColdflame(botAI, circles);
     Player* bot = botAI->GetBot();
@@ -1048,7 +1008,6 @@ bool IsLmInColdflame(PlayerbotAI* botAI)
     GetLmColdflame(botAI, circles);
     bool const inside = !ClearOf(bot->GetPosition(), circles, LM_DODGE_TRIGGER);
 
-    // lm.dodge is change-only and the dodge only runs inside, so the way out is written here
     if (!inside && RaidObs::Active())
         RaidObs::NoteDerived(bot, "lm.dodge", "clear");
 
@@ -1077,7 +1036,6 @@ uint32 GetLmTankDefensive(PlayerbotAI* botAI, char const* noteKind)
     bool const emergency = SlicingNow(*state, now) && bot->GetHealthPct() < LM_TANK_DEFENSIVE_PCT;
     if (!windowOpen && !emergency)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind && RaidObs::Active())
             RaidObs::NoteDerived(bot, noteKind, "idle");
 
@@ -1109,7 +1067,6 @@ bool GetLmStormHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     if (!tick || storm->GetDuration() < 0)
         return false;
 
-    // The first window that hasn't passed its late edge, counted from the storm's first tick
     uint32 const windowMs = LM_STORM_TICK_MS * LM_STORM_WINDOW_TICKS;
     uint32 const now = getMSTime();
     uint32 const firstTick = state->stormStartMs + LM_STORM_TICK_MS;
@@ -1159,7 +1116,6 @@ void TickLmEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A saved rti of cross or star keeps a bot off the skull in the icon-led fights after him
     if (lmRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
     {
         Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");
@@ -1167,7 +1123,6 @@ void TickLmEncounter(PlayerbotAI* botAI)
             rti->Set("skull");
     }
 
-    // A wipe or a kill ends the pull: the next one rebuilds the roster and every latch
     if (!IsLmLive(botAI))
     {
         if (lmStates.Find(bot->GetInstanceId()))
@@ -1175,7 +1130,6 @@ void TickLmEncounter(PlayerbotAI* botAI)
         return;
     }
 
-    // Evading home he is out of combat but still in progress, and nothing holds a stand round him
     Creature* boss = GetLmBoss(botAI);
     if (!boss)
     {

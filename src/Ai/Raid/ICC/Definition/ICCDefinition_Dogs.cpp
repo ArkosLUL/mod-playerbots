@@ -23,7 +23,6 @@ namespace
 {
 void DefineDogs(EncounterBuilder& e)
 {
-    // Only the zombie guard, a damage dealer, ever asks it: no tank row competes
     e.Node<IccDogsZombieTauntTrigger, IccDogsZombieTauntAction>(ACTION_RAID + 7);
     e.Node<IccDogsTankDefensiveTrigger, IccDogsCastTankDefensiveAction>(ACTION_RAID + 6);
     e.Node<IccDogsDecimateCoverTrigger, IccDogsCastDecimateCoverAction>(ACTION_RAID + 5);
@@ -35,18 +34,15 @@ void DefineDogs(EncounterBuilder& e)
 
     e.OwnTargeting("icc dogs targeting", Role::Any, &IccResolverPicks<&GetDogsTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // A yielding tank's resolver hands it a zombie or nothing, so no picker may give it the dog back
     e.Block("icc dogs yield hold", Role::Tank, &IsDogsYielding,
             Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti);
-    // The free tank's generic taunt would take the dog straight back off its partner
     e.Block("icc dogs taunts", Role::Tank, &IsDogsLive, Family::Taunt);
-    // The tank buttons wait for Decimate or a low tank
     e.Block("icc dogs tank defensive hold", Role::Tank, &IsDogsTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickDogsEncounter);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccDogsDefinition()
 {

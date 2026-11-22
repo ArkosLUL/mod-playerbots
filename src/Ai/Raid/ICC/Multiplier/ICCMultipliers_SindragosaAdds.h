@@ -11,8 +11,6 @@
 #include "RaidAntiFear.h"
 #include "RaidSplash.h"
 
-// A braked bot's attacks on its drake and its area damage next to it: its threat would take the drake
-// off its holder
 class IccSgDrakeBrakeMultiplier : public Multiplier
 {
 public:

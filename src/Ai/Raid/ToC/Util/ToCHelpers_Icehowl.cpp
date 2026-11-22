@@ -30,7 +30,6 @@ namespace TrialOfTheCrusaderHelpers
 {
 namespace
 {
-// Also the nb.charge value
 enum class IcehowlChargePhase : uint8
 {
     None = 0,
@@ -44,12 +43,8 @@ enum class IcehowlChargePhase : uint8
 constexpr float GATE_ANGLE_MIN = 1.0f;
 constexpr float GATE_ANGLE_MAX = 2.0f;
 
-// A cycle runs about 9 s from his jump to the centre to the end of the charge, so a line older than
-// this is stale whatever he's doing.
 constexpr uint32 CHARGE_LATCH_MAX_MS = 12000;
 
-// Shorter than the 30 s he always spends out of a cycle, so a silence this long means the end of the
-// last one went unseen.
 constexpr uint32 CHARGE_REFRESH_GAP_MS = 20000;
 
 constexpr uint32 LANE_NOTE_TTL_MS = 4000;
@@ -60,7 +55,7 @@ struct IcehowlChargeState
     RaidObs::ObsValue<ObjectGuid> gaze{"nb.gaze"};
 
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
 
     bool inCycle = false;
     uint32 cycleMs = 0;
@@ -97,7 +92,6 @@ void NoteLane(Map* map, IcehowlChargeState const& state)
     RaidObs::NoteHazard(map, SPELL_TRAMPLE, state.start, "lane", params, LANE_NOTE_TTL_MS);
 }
 
-// Same maths as EVENT_JUMP_BACK, angle measured from the centre toward the charge's end.
 void LatchLane(Map* map, IcehowlChargeState& state, float angle, uint32 now, bool note)
 {
     float const cx = ARENA_CENTER.GetPositionX();
@@ -121,8 +115,6 @@ void LatchLane(Map* map, IcehowlChargeState& state, float angle, uint32 now, boo
         NoteLane(map, state);
 }
 
-// He is REACT_PASSIVE in combat only from the jump to the centre until the charge ends, so the cycle reads
-// off that. The gaze stuns the raid, so the line matters only from the jump back, where he stands on it.
 IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -165,15 +157,12 @@ IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
 
     state.lastPassiveMs = now;
 
-    // Sticky until he leaves passive, or a charge that never arrives would keep every bot's movers off
-    // for the rest of the pull.
     if (state.latched && getMSTimeDiff(state.latchMs, now) > CHARGE_LATCH_MAX_MS)
     {
         state.latched = false;
         state.expired = true;
     }
 
-    // GetPlayer finds a dead gaze target too, which the script still charges at.
     Player* target = ObjectAccessor::GetPlayer(*creature, creature->GetTarget());
     bool const atCentre = creature->GetExactDist2d(ARENA_CENTER.GetPositionX(), ARENA_CENTER.GetPositionY()) <=
                           ICEHOWL_CENTRE_TOLERANCE;
@@ -190,7 +179,6 @@ IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
     }
     else if (atCentre)
     {
-        // A gaze target dying mid gaze leaves the line where it was.
         if (!state.gazeTarget.IsEmpty())
             phase = IcehowlChargePhase::Gaze;
     }
@@ -213,10 +201,9 @@ IcehowlChargeState* RefreshCharge(PlayerbotAI* botAI)
 
 constexpr uint32 BREATH_ROSTER_INTERVAL_MS = 1000;
 constexpr float BREATH_POOL_STEP = 1.0f;
-// Bearing counts land on whole multiples of the step, this only absorbs float noise
 constexpr float BEARING_EPSILON_DEG = 0.001f;
 
-// Also the deal order: melee before ranged, or the few bearings near his back fill with ranged first
+// order is the deal order: melee before ranged, or ranged take the few bearings near his back
 enum class BreathRole : uint8
 {
     Healer,
@@ -232,18 +219,17 @@ struct BreathMember
 
 struct BreathBearing
 {
-    int32 step;      // steps round from straight behind him, negative one way
-    float room;      // clear floor out along it
-    bool meleeOnly;  // too short for the healer and ranged bands
+    int32 step;
+    float room;
+    bool meleeOnly;
 };
 
-// Also the nb.breath value
 enum class BreathSpread : uint8
 {
     Off = 0,
     Up = 1,
-    Grace = 2,   // his victim stepped out of his reach, the layout holds as latched
-    Moving = 3,  // he walks or just stopped, the layout holds as latched with no stands
+    Grace = 2,
+    Moving = 3,
     Daze = 4,
 };
 
@@ -253,26 +239,25 @@ struct IcehowlBreathState
     RaidObs::ObsValue<uint8> breath{"nb.breath"};
 
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
 
     BreathSpread spread = BreathSpread::Off;
     bool active = false;
     bool latched = false;
     bool victimOut = false;
     uint32 victimOutMs = 0;
-    bool movedSeen = false;  // 0 is a real getMSTime value
+    bool movedSeen = false;
     uint32 lastMovingMs = 0;
     Position spot;
-    float front = 0.0f;  // bearing to his victim
+    float front = 0.0f;
     float anchor = 0.0f;
     float stepDeg = 0.0f;
     std::vector<BreathBearing> bearings;
-    // Slime Pools the worms left behind, at their size 5 s on
     std::vector<EncounterHelpers::HazardCircle> pools;
 
     uint32 rosterMs = 0;
     bool rosterValid = false;
-    std::vector<BreathMember> roster;  // deal order
+    std::vector<BreathMember> roster;
 
     std::unordered_map<ObjectGuid, int32> slots;
     bool dealDirty = false;
@@ -287,7 +272,6 @@ float AngleBetween(float lhs, float rhs)
     return std::fabs(std::remainder(lhs - rhs, 2.0f * static_cast<float>(M_PI)));
 }
 
-// 60° on 10N from its spell_cone row, the other three ids have none
 float BreathStepDeg(Unit* icehowl)
 {
     float cone = ICEHOWL_BREATH_DEFAULT_CONE_DEG;
@@ -322,8 +306,6 @@ float BearingAngle(IcehowlBreathState const& state, int32 step)
     return state.anchor + DegToRad(static_cast<float>(step) * state.stepDeg);
 }
 
-// How far out along the bearing from (x, y) the first pool ahead starts. A pool round the start itself
-// is left to the stand check, which looks for a distance past it.
 float PoolCut(std::vector<EncounterHelpers::HazardCircle> const& pools, float x, float y, float angle)
 {
     float const dx = std::cos(angle);
@@ -351,8 +333,6 @@ bool InPool(std::vector<EncounterHelpers::HazardCircle> const& pools, float x, f
                        { return pool.first.GetExactDist2d(x, y) < pool.second; });
 }
 
-// The probe measured from the latched spot, and he may have drifted along the bearing since. Pools grow,
-// so they cut it afresh from where he stands.
 float RoomLeft(IcehowlBreathState const& state, BreathBearing const& bearing, Unit* icehowl)
 {
     float const angle = BearingAngle(state, bearing.step);
@@ -372,7 +352,6 @@ bool RoomRanShort(IcehowlBreathState const& state, Unit* icehowl)
                        });
 }
 
-// Past 90° off his back he parries melee and hastes his next swing
 bool InMeleeArc(IcehowlBreathState const& state, int32 step)
 {
     return static_cast<float>(std::abs(step)) * state.stepDeg <= ICEHOWL_SPREAD_MELEE_ARC_DEG + BEARING_EPSILON_DEG;
@@ -383,8 +362,6 @@ bool CanSeat(IcehowlBreathState const& state, BreathRole role, BreathBearing con
     return role == BreathRole::Melee ? InMeleeArc(state, bearing.step) : !bearing.meleeOnly;
 }
 
-// Outward from his back (k = 0, 1, -1, 2, ...), short of his front by a step plus the re-latch turn, so a
-// breath on his victim misses them all. Walled bearings are skipped, inside the melee arc kept for melee.
 void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
 {
     state.bearings.clear();
@@ -407,7 +384,6 @@ void ProbeBearings(Player* bot, Map* map, IcehowlBreathState& state)
         float y = sy + ICEHOWL_SPREAD_PROBE * std::sin(angle);
         float z = sz;
 
-        // From the bot: the floor is a gameobject, and the walk out takes a player's path over it
         float const wall =
             map->CheckCollisionAndGetValidCoords(bot, sx, sy, sz, x, y, z) ? std::hypot(x - sx, y - sy) : 0.0f;
         float const room = std::min(wall, PoolCut(state.pools, sx, sy, angle));
@@ -440,7 +416,6 @@ BreathRole RoleOf(Player* member)
     return PlayerbotAI::IsRanged(member) ? BreathRole::Ranged : BreathRole::Melee;
 }
 
-// Humans can't be moved and tanks hold him
 bool CanHoldBearing(Player* member, uint32 instanceId)
 {
     return member && member->IsInWorld() && member->IsAlive() &&
@@ -475,7 +450,6 @@ void RebuildRoster(Player* bot, IcehowlBreathState& state, uint32 now)
                   return lhs.guid < rhs.guid;
               });
 
-    // Dead or gone. A bot coming back is dealt a bearing afresh.
     for (auto it = state.slots.begin(); it != state.slots.end();)
     {
         if (FindMember(state, it->first))
@@ -489,8 +463,6 @@ void RebuildRoster(Player* bot, IcehowlBreathState& state, uint32 now)
     state.dealDirty = true;
 }
 
-// Sticky while a bearing holds at most one over the emptiest its role may take. Healers pick first, one to a
-// bearing near 60° off his back; the rest fill the emptiest nearest his back.
 void DealBreath(IcehowlBreathState& state)
 {
     size_t const count = state.bearings.size();
@@ -506,7 +478,6 @@ void DealBreath(IcehowlBreathState& state)
             ++healers[index];
     };
 
-    // Per roster member, its bearing's index, or count while unseated
     size_t const members = state.roster.size();
     std::vector<size_t> seats(members, count);
     for (size_t i = 0; i < members; ++i)
@@ -527,7 +498,6 @@ void DealBreath(IcehowlBreathState& state)
             state.slots.erase(slot);
     }
 
-    // Moving a bot needs a gap of 2, or it would only swap which bearing holds the extra one
     for (size_t i = members; i-- > 0;)
     {
         if (seats[i] == count)
@@ -590,12 +560,9 @@ void DealBreath(IcehowlBreathState& state)
     }
 }
 
-// Off under a charge and in a heroic overlap. A latched layout holds while he walks, and for the grace
-// while his victim is out of reach, since a tank at the edge of it flickers in and out.
 BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathState& state, uint32 now,
                               Unit*& victim)
 {
-    // Stamped on every read, so the first latch after a charge also waits for him to settle
     if (icehowl->isMoving())
     {
         state.lastMovingMs = now;
@@ -614,8 +581,6 @@ BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathSt
     if (IcehowlChargeLatched(botAI, start, end))
         return BreathSpread::Off;
 
-    // The stun holds his events 15 s, so the next breath lands 5-8 s after it ends, usually once a Whirl
-    // has moved him anyway. A stand walk here only eats the burn window.
     if (IsIcehowlStaggered(icehowl))
         return BreathSpread::Daze;
 
@@ -625,7 +590,6 @@ BreathSpread ReadBreathSpread(PlayerbotAI* botAI, Unit* icehowl, IcehowlBreathSt
 
     if (state.movedSeen && getMSTimeDiff(state.lastMovingMs, now) < ICEHOWL_SPREAD_SETTLE_MS)
     {
-        // The grace counts only while he stands, or a chase would use it up
         state.victimOut = false;
         return state.latched ? BreathSpread::Moving : BreathSpread::Off;
     }
@@ -663,7 +627,6 @@ void SetSpread(IcehowlBreathState& state, BreathSpread spread)
     state.breath = static_cast<uint8>(spread);
 }
 
-// Every bot's trigger, action and multiplier ask, so one read per instance per ms.
 IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -700,8 +663,6 @@ IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
         return &state;
     }
 
-    // A drift toward a wall gets re-probed before it eats into a kept bearing's bands. Not in the grace,
-    // where the bearing to a victim out of his reach is no front to latch, nor while he moves.
     if (spread == BreathSpread::Up)
     {
         float const front = icehowl->GetAngle(victim);
@@ -711,7 +672,6 @@ IcehowlBreathState* RefreshBreath(PlayerbotAI* botAI)
             LatchBreath(bot, map, icehowl, front, state);
     }
 
-    // Walled in on every bearing. Stays latched, or the walls get probed again every ms until he moves.
     if (state.bearings.empty())
     {
         state.active = false;
@@ -742,7 +702,6 @@ BreathBearing const* SlotOf(IcehowlBreathState const& state, ObjectGuid const& g
     return slot != state.slots.end() ? FindBearing(state, slot->second) : nullptr;
 }
 
-// Clamp, don't chase: the bot keeps its own distance to him inside its band
 bool ResolveBreathStand(PlayerbotAI* botAI, Player* bot, IcehowlBreathState const& state,
                         IcehowlBreathStand& stand, int32& step)
 {
@@ -780,7 +739,6 @@ bool ResolveBreathStand(PlayerbotAI* botAI, Player* bot, IcehowlBreathState cons
     float const hx = icehowl->GetPositionX();
     float const hy = icehowl->GetPositionY();
 
-    // A pool round him: the band distance nearest the bot's own that clears it, else no stand
     if (InPool(state.pools, hx + distance * std::cos(angle), hy + distance * std::sin(angle)))
     {
         bool found = false;
@@ -810,7 +768,7 @@ bool ResolveBreathStand(PlayerbotAI* botAI, Player* bot, IcehowlBreathState cons
     step = bearing->step;
     return true;
 }
-}  // namespace
+}
 
 bool IcehowlChargeLatched(PlayerbotAI* botAI, Position& start, Position& end)
 {
@@ -829,7 +787,6 @@ bool IcehowlChargeCycleActive(PlayerbotAI* botAI)
     if (!state || !state->inCycle)
         return false;
 
-    // Nothing latches before the gaze, so that stretch gets a latch's cap from the jump
     return state->latched || getMSTimeDiff(state->cycleMs, getMSTime()) <= CHARGE_LATCH_MAX_MS;
 }
 

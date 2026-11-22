@@ -5,7 +5,6 @@
 #include "RaidBurstWindow.h"
 #include "RaidCombatHelpers.h"
 
-// Keeps a twin's tank on her instead of drifting with the combat formation
 class TwinValkyrControlTankMovementMultiplier : public Multiplier
 {
 public:
@@ -14,7 +13,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// No taunting the twin another living tank holds
 class TwinValkyrTauntGuardMultiplier : public Multiplier
 {
 public:
@@ -29,8 +27,6 @@ enum class TwinInterruptKind : uint8
     Refused
 };
 
-// Holds kicks while a shield makes the twin immune to them, and silences and stuns, which never land
-// on the twins
 class TwinValkyrInterruptHoldMultiplier : public Multiplier
 {
 public:
@@ -39,12 +35,9 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    // Read off the action's name, which never changes
     RaidActionCache<TwinInterruptKind> _kinds;
 };
 
-// The class redirects pick one tank for the whole raid, and the opener's fires while the twins
-// are still flying in. Here each twin has her own tank, and the encounter's redirect node casts them.
 class TwinValkyrRedirectGuardMultiplier : public Multiplier
 {
 public:
@@ -53,7 +46,6 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    // Whether the action is one of the class redirects, fixed by its type
     RaidActionCache<bool> _redirects;
 };
 

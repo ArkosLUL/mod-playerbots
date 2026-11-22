@@ -54,13 +54,10 @@ public:
         if (!caster || !spellInfo)
             return;
 
-        // Neither id has a spelldifficulty row, so they hold on every difficulty. The missiles and
-        // impacts they trigger carry Putricide as their unit target, which the player test refuses.
         if (spellInfo->Id != SPELL_MALLEABLE_GOO_10N && spellInfo->Id != SPELL_MALLEABLE_GOO_BALCONY)
             return;
 
-        // Malleable Goo is cast triggered, so m_UniqueTargetInfo is not yet
-        // populated at this point; read the explicit unit target directly.
+        // goo is cast triggered, so m_UniqueTargetInfo is still empty here: read the explicit target
         Unit* target = spell->m_targets.GetUnitTarget();
         if (!target || !target->IsPlayer())
             return;
@@ -74,11 +71,8 @@ public:
         auto& impacts = IcecrownHelpers::IccState(caster->GetMap()->GetInstanceId()).malleableGoo;
         impacts.push_back(impact);
 
-        // Festergut's avoid trigger reads an impact as 12 yd for 8 s, the widest model any consumer uses.
         RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, impact.position, 12.0f, 8000);
 
-        // Evict stale entries to keep the list bounded. Retention covers the
-        // longest consumer window (Festergut avoid: 8s) + slack.
         impacts.erase(
             std::remove_if(impacts.begin(), impacts.end(),
                            [now](IcecrownHelpers::MalleableGooImpact const& i)
@@ -94,12 +88,9 @@ public:
 
     void OnSpellCast(Spell* spell, Unit* caster, SpellInfo const* spellInfo, bool /*skipCheck*/) override
     {
-        // Professor Putricide casts Vile Gas from the balcony during Rotface heroic. Festergut casts the
-        // same spell himself, so the caster entry is what scopes this hook to Rotface.
         if (!caster || !spellInfo || caster->GetEntry() != NPC_PROFESSOR_PUTRICIDE)
             return;
 
-        // Heroic only, so the Spell constructor has already remapped the base id to 73019 or 73020.
         if (spellInfo->Id != sSpellMgr->GetSpellIdForDifficulty(SPELL_VILE_GAS_H, caster))
             return;
 
@@ -121,9 +112,6 @@ class IccLichKingListenerScript : public AllSpellScript
 public:
     IccLichKingListenerScript() : AllSpellScript("IccLichKingListenerScript") { }
 
-    // OnSpellPrepare fires at cast START (Spell::prepare). OnSpellCast fires
-    // at cast END, which for Defile (2s cast time) is too late - the puddle
-    // is already spawning and bots have no time to move out.
     void OnSpellPrepare(Spell* spell, Unit* caster, SpellInfo const* spellInfo) override
     {
         if (!caster || !spellInfo)
@@ -141,15 +129,12 @@ public:
         entry.targetGuid = target->GetGUID();
         entry.castTime = getMSTime();
 
-        // Where the puddle lands, 10 yd at its spawn scale of 1; once down it is a creature the trace samples.
         RaidObs::Note(target->ToPlayer(), "lk.defile", std::to_string(spellInfo->Id));
         RaidObs::NoteHazardCircle(caster->GetMap(), spellInfo->Id, target->GetPosition(), 10.0f,
                                   static_cast<uint32>(std::max(spell->GetCastTime(), 0)));
     }
 };
 
-// Keyed on boss state rather than on a boss in combat: Gunship, Valithria, Svalna and two of the
-// three princes are not dungeon bosses, so their latches used to outlive a wipe.
 class IccBossStateResetScript : public AllMapScript
 {
 public:
@@ -184,8 +169,6 @@ public:
     }
 };
 
-// Boss state 14 never goes IN_PROGRESS and none of this trash is boss flagged, so nothing else opens
-// its trace.
 class IccBloodPrinceTrashScript : public UnitScript
 {
 public:
@@ -212,7 +195,6 @@ public:
 
 void AddSC_IcecrownBotScripts()
 {
-    // Ids are the core's DATA_* boss order in icecrown_citadel.h.
     RaidObs::NameBossStates(ICC_MAP_ID, {
         {0, "lord-marrowgar"},
         {1, "lady-deathwhisper"},

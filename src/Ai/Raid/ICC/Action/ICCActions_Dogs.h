@@ -48,7 +48,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the attack on the dog while this tank still carries Mortal Wound or sits on the threat brake
 class IccDogsYieldAction : public Action
 {
 public:

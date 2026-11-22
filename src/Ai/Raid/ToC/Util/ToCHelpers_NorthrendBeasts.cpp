@@ -31,20 +31,15 @@ namespace
 constexpr size_t BEAST_COUNT = 4;
 constexpr size_t DUTY_COUNT = 6;
 
-// Gormok has to come before GormokSwap: pass 1 gives his victim the hold, never the swap.
+// keep Gormok before GormokSwap: pass 1 gives his victim the hold, never the swap
 constexpr std::array<BeastsTankDuty, 5> DEAL_ORDER = {
     BeastsTankDuty::Gormok,     BeastsTankDuty::Icehowl,        BeastsTankDuty::WormMobile,
     BeastsTankDuty::GormokSwap, BeastsTankDuty::WormStationary,
 };
 
-// Same reach as the encounter gate's: the arena spans about 80 yd from ARENA_CENTER.
 constexpr float ICEHOWL_SEARCH_RADIUS = 200.0f;
-// A miss walks the whole grid, and he's absent for the first two stages. He walks in for 10 s
-// before he attacks, so a second's delay costs nothing.
 constexpr uint32 ICEHOWL_SEARCH_INTERVAL_MS = 1000;
 
-// Health points Dreadscale has to drop under Acidmaw before melee move to Acidmaw, and climb back over
-// before they return. With melee on one and ranged on the other the two stay within about 1.5.
 constexpr float MELEE_ACIDMAW_MARGIN = 5.0f;
 
 struct BeastsState
@@ -52,15 +47,13 @@ struct BeastsState
     RaidObs::ObsValue<uint32> stage{"nb.stage"};
 
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
     uint32 icehowlSearchMs = 0;
     bool icehowlSearched = false;
 
     std::array<ObjectGuid, BEAST_COUNT> beasts;
-    // Engaged beast per duty this ms, empty while it isn't up
     std::array<ObjectGuid, DUTY_COUNT> dutyBeast;
     std::array<ObjectGuid, DUTY_COUNT> holder;
-    // One switch for the raid, so melee move together
     bool meleeOnAcidmaw = false;
 };
 
@@ -93,7 +86,6 @@ bool IsEngaged(Creature const* creature) { return creature && creature->IsAlive(
 
 Creature* Resolve(Map* map, ObjectGuid const& guid) { return guid.IsEmpty() ? nullptr : map->GetCreature(guid); }
 
-// A guid resolves map-wide, hence the combat test.
 Creature* ResolveEngaged(Map* map, ObjectGuid const& guid)
 {
     Creature* creature = Resolve(map, guid);
@@ -102,8 +94,6 @@ Creature* ResolveEngaged(Map* map, ObjectGuid const& guid)
 
 ObjectGuid GuidOf(Creature const* creature) { return creature ? creature->GetGUID() : ObjectGuid::Empty; }
 
-// Icehowl has no guid slot in the script. A cached guid is kept while it resolves, corpse included;
-// a wipe despawns him and the next attempt summons a new one.
 void RefreshIcehowl(Player* bot, Map* map, BeastsState& state, uint32 now)
 {
     ObjectGuid& guid = state.beasts[Index(NorthrendBeast::Icehowl)];
@@ -129,8 +119,6 @@ void RefreshIcehowl(Player* bot, Map* map, BeastsState& state, uint32 now)
     }
 }
 
-// Neither in mobile form leaves Acidmaw on WormMobile. A lone survivor is WormMobile whatever its
-// form, so one holder keeps it through every form change.
 void SplitWorms(Creature* acidmaw, Creature* dreadscale, Creature*& mobile, Creature*& stationary)
 {
     if (acidmaw && dreadscale)
@@ -152,8 +140,6 @@ bool CountsForRoster(Player* member, uint32 instanceId)
            GET_PLAYERBOT_AI(member) && IsBeastsTank(member);
 }
 
-// Bots only: a human can't be handed a duty, so he only gets one in pass 1 for what he's tanking.
-// Flagged main tank first, then by guid, which every bot sorts the same way.
 std::vector<Player*> GatherRoster(Player* bot)
 {
     std::vector<Player*> roster;
@@ -210,8 +196,6 @@ void Deal(Player* bot, BeastsState& state, std::array<Creature*, DUTY_COUNT> con
     if (std::none_of(dutyCreature.begin(), dutyCreature.end(), [](Creature* beast) { return beast != nullptr; }))
         return;
 
-    // Pass 1: a duty stays with the tank its beast is on, so a swap or a worm changing form only
-    // moves the tanks that have to move.
     for (BeastsTankDuty duty : DEAL_ORDER)
     {
         Creature* beast = dutyCreature[Index(duty)];
@@ -226,8 +210,6 @@ void Deal(Player* bot, BeastsState& state, std::array<Creature*, DUTY_COUNT> con
     auto const inRoster = [&roster](ObjectGuid const& guid)
     { return std::any_of(roster.begin(), roster.end(), [&guid](Player* tank) { return tank->GetGUID() == guid; }); };
 
-    // Pass 2: the rest in priority order. Out of free tanks, a duty takes the one on the
-    // lowest-priority duty below it, but never a human's.
     for (size_t i = 0; i < DEAL_ORDER.size(); ++i)
     {
         size_t const duty = Index(DEAL_ORDER[i]);
@@ -261,8 +243,6 @@ void Deal(Player* bot, BeastsState& state, std::array<Creature*, DUTY_COUNT> con
     }
 }
 
-// Null off a ToC instance. Every trigger and multiplier on every bot asks, so one read per instance
-// per ms.
 BeastsState* ReadBeasts(PlayerbotAI* botAI, Map*& map)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -370,7 +350,6 @@ BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
 {
     if (Unit* skull = GetRaidHumanSkull(botAI, &IsBeastsSkullTarget))
     {
-        // only for its trace note, the skull wins
         if (RaidObs::Active())
             GetGormokSnoboldPick(botAI);
 
@@ -383,8 +362,6 @@ BeastsDpsPick ResolveDpsPick(PlayerbotAI* botAI)
     if (Unit* gormok = GetEngagedBeast(botAI, NorthrendBeast::Gormok))
         return {gormok, BeastsDpsBranch::Gormok};
 
-    // Acidmaw first: alone, its Toxin has no Bile left to cure it. Melee stay on the mobile worm, out of
-    // the stationary one's Sweep, unless Dreadscale falls well under Acidmaw.
     Unit* worm = GetBeastOfDuty(botAI, BeastsTankDuty::WormMobile);
     Unit* acidmaw = GetEngagedBeast(botAI, NorthrendBeast::Acidmaw);
     if (acidmaw && !IsWormSubmerged(acidmaw))

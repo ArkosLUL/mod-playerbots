@@ -1,4 +1,0 @@
-src/Ai/Raid/Uld/Action/UldActions_Razorscale.cpp	Whole steps on purpose: summing M_PI/8 as a float overshoots M_PI/2 and drops the two widest bearings.
-src/Ai/Raid/Uld/Action/UldActions_Razorscale.cpp	Copy on purpose: the loop runs on after MoveAway, and a scan refill would pull a reference out from under it.
-src/Ai/Raid/Uld/Trigger/UldTriggers_Razorscale.cpp	Keep this below UpdateBossAI(): that call assigns the tank roles as a side effect.
-src/Ai/Raid/Uld/Util/UldEncounter_Mimiron.cpp	On a tie leaves sort before enters, so two burns that only touch don't count as stacked.

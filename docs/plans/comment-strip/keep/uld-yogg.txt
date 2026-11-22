@@ -1,5 +1,0 @@
-src/Ai/Raid/Uld/Action/UldActions_YoggSaron.cpp	2D on purpose: the booked walk stores the ground height it pathed to, not the z we asked for.
-src/Ai/Raid/Uld/Action/UldActions_YoggSaron.cpp	emplace on purpose: a second hush must not save passive as the stance to give back.
-src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.cpp	Signed on purpose: getMSTimeDiff would read an end still ahead as a timer wrap.
-src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.cpp	Signed on purpose: getMSTimeDiff reads a wave still ahead as a timer wrap, ~4.29e9 ms late.
-src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.cpp	Signed on purpose: a start a few ms early wraps getMSTimeDiff and lets a second paladin press.

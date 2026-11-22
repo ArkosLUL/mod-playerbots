@@ -3,7 +3,6 @@
 
 #include "Trigger.h"
 
-// Raid-wide, so its gate never closes: the window is its own gate
 class ToCStagingStandTrigger : public Trigger
 {
 public:

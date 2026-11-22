@@ -69,17 +69,13 @@ public:
     IccSvalnaTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetSsTarget) {}
 };
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccSsWalkAction : public MovementAction
 {
 public:
     IccSsWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // A dodge that must land drops the cast in progress first: a cast pins the bot's feet
     bool WalkTo(Position const& spot, MovementPriority priority);
     void DropWalk() { walking = false; }
 

@@ -1,2 +1,0 @@
-src/Ai/Raid/EoE/Action/EoEActions_Drakes.cpp	keep above the shield check, it restamps the fixate clock or the next pick reads as this one
-src/Ai/Raid/Uld/UldEncounterGate.h	must match the boss ids in core ulduar.h (AC #28079 renumbered them), a stale one keeps that boss's gate shut

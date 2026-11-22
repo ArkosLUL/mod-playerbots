@@ -49,7 +49,6 @@ void DefineLichKing(EncounterBuilder& e)
     e.Node<IccLichKingValkyrControlTrigger, IccLichKingValkyrControlAction>(ACTION_RAID + 7);
     e.Node<IccLichKingSilenceDispelTrigger, IccLichKingSilenceDispelAction>(ACTION_RAID + 6);
     e.Node<IccLichKingHarvestSoulTrigger, IccLichKingHarvestSoulAction>(ACTION_RAID + 5);
-    // Above the stands: a bot takes a new pick before it walks back to its spot
     e.Node<IccLichKingTargetTrigger, IccLichKingTargetAction>(ACTION_RAID + 4);
     e.Node<IccLichKingStackTrigger, IccLichKingStackAction>(ACTION_RAID + 3, EncounterRow::Mover);
     e.Node<IccLichKingStandTrigger, IccLichKingStandAction>(ACTION_RAID + 2, EncounterRow::Mover);
@@ -61,32 +60,23 @@ void DefineLichKing(EncounterBuilder& e)
 
     e.OwnTargeting("icc lich king targeting", Role::Any, &IccResolverPicks<&GetLkTarget>,
                    Family::DpsAssist | Family::TankAssist | Family::DpsAoe);
-    // A held or braked bot's resolver hands it nothing, so no picker may give him back, and with no target
-    // nothing may walk it off to its master
     e.Block("icc lich king target hold", Role::Any, &IsLkTargetHeld,
             Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
                 Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti | Family::Follow |
                 Family::MoveRandom | Family::PetAttack);
-    // Winter slots sit out of spell range of most picks, and reach would walk a bot into Remorseless Winter
     e.OwnMovement("icc lich king movement", Role::Any, &IsLkMovementOwned, Family::Attack);
-    // Keeps reach: a Harvest Soul victim walks to the Spirit Warden, far stack nodes step into melee
     e.OwnMovement("icc lich king late movement", Role::Any, &IsLkLateMovementOwned);
-    // Heroic Frostmourne moves as one stack, and a chaser's straight reach would cross the puddle it walks round
     e.OwnMovement("icc lich king late reach hold", Role::Any, &IsLkLateReachHeld, Family::Attack);
     e.Block("icc lich king spell movers", Role::Any, &IsLkAnyMovementOwned,
             Family::Charge | Family::Blink | Family::Disengage);
-    // avoid aoe flees a few yards at most, against the forced runs
     e.Block("icc lich king avoid aoe", Role::Any, &IsLkLive, Family::AvoidAoe);
-    // Only the elected taunts move him and his adds
     e.Block("icc lich king taunts", Role::Tank, &IsLkLive, Family::Taunt);
-    // A braked tank has no target, and a druid's non-combat nodes drop bear form
     e.Block("icc lich king tank form", Role::Tank, &IsLkLive, 0, {"caster form"});
-    // The tank buttons wait for Soul Reaper, the siphon ramp, an unanswered Enrage or a low tank
     e.Block("icc lich king tank defensive hold", Role::Tank, &IsLkTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Tick(&TickLichKing);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccLichKingDefinition()
 {

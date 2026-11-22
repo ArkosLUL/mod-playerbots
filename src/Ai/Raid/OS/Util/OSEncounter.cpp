@@ -27,8 +27,6 @@ namespace OsHelpers
 namespace
 {
 
-// The bots poll this several times a second during a pull, so a gap this long means combat stopped
-// and the corridor and portal squad have to be re-derived.
 constexpr uint32 STALE_STATE_MS = 15000;
 
 struct EncounterState
@@ -36,42 +34,23 @@ struct EncounterState
     ObjectGuid bossGuid;
     uint32 fightStartMs = 0;
     uint32 lastSeenMs = 0;
-    // One-way. Set when the pull drag has actually landed Sartharion, so it never runs twice.
     RaidObs::ObsValue<bool> mainTankDragged{"sartharion.dragdone"};
-    // When the tank reached the drag corner, 0 while he is off it.
     uint32 mainTankDragArrivedMs = 0;
-    // When the drag itself began, so its timeout does not ride on the encounter clock.
     uint32 mainTankDragStartedMs = 0;
-    // One-way. Set the first tick Shadron is seen on the ground.
     RaidObs::ObsValue<bool> burstWindowOpen{"sartharion.burstwindow"};
-    // One-way. Set the first tick Shadron is seen at or below MAIN_TANK_COOLDOWN_SHADRON_PCT, or once
-    // he is gone for good. The panic escape hatch is not latched and rides on top of this.
     RaidObs::ObsValue<bool> tankCooldownWindowOpen{"sartharion.tankcdwindow"};
     bool assignmentsResolved = false;
     RaidObs::ObsGuidSet portalSquad{"sartharion.portalsquad"};
     bool offTankWarned = false;
-    // Wave creatures whose lane has already been drawn on the trace. Bookkeeping, so it stays bare -
-    // dropping it on the reset below is what re-arms the lanes for the next pull.
     std::unordered_set<ObjectGuid> tsunamiTraced;
 };
 
-// One state per instance, shared by every bot and by every trigger/action/multiplier: they each hold
-// separate helper instances and cannot agree through a member. The corridor in particular has to be
-// raid-wide, or half the raid dodges to one gap and half to the other.
 RaidInstanceState<EncounterState> encounterStates;
 
 EncounterState& StateFor(Unit* boss)
 {
     EncounterState& state = encounterStates.For(boss->GetInstanceId());
     uint32 const now = getMSTime();
-    // Rebuilt every tick he is out of combat, so fightStartMs lands within a tick of the pull and every
-    // latch below re-arms on a wipe. The staleness check cannot do that on its own: PortalSquadMember
-    // resolves through here with no encounter gate, and the boss is already inside the 200yd search
-    // from the instance entrance, so lastSeenMs is refreshed from the moment the raid zones in.
-    //
-    // Member-wise, so the traced latches snap back without writing a note. That is what is wanted: a
-    // reset is not an assignment, and this runs every tick he is out of combat, so an emitting one
-    // would cost a note per tick per bot for the whole run-back.
     if (state.bossGuid != boss->GetGUID() || !boss->IsInCombat() ||
         (state.lastSeenMs && getMSTimeDiff(state.lastSeenMs, now) > STALE_STATE_MS))
     {
@@ -120,7 +99,6 @@ bool SartharionEncounterActive(Player* bot)
     if (!boss || !boss->IsInCombat())
         return false;
 
-    // Refreshes the pull's state, which is rebuilt once nothing has asked for it in STALE_STATE_MS.
     StateFor(boss);
     return true;
 }
@@ -145,7 +123,6 @@ SartharionSnapshot const& SartharionSnapshotFor(PlayerbotAI* botAI)
         return cached;
 
     cached.boss = GetSartharion(bot);
-    // requireSelectable off, same as the trigger: the fissure carries that flag for its whole life.
     cached.dodgeLive = ClassifyTsunamiWave(bot) != TsunamiWave::None ||
                        FindUnitByEntries(bot, { NpcId::TwilightFissure, NpcId::TwilightFissureH },
                                          FISSURE_CLEAR_RADIUS, false) != nullptr;
@@ -154,8 +131,6 @@ SartharionSnapshot const& SartharionSnapshotFor(PlayerbotAI* botAI)
 
 void TickSartharionObs(Player* bot)
 {
-    // One bot per instance does the sweep: it costs a grid search, and ClassifyTsunamiWave already
-    // spends ten of those per bot per tick.
     if (!RaidObs::Active() || !IsMechanicTrackerBot(bot, OS_MAP_ID))
         return;
 
@@ -203,32 +178,21 @@ bool OnThePlatform(Player* bot)
 
 bool NeedsPlatformReturn(PlayerbotAI* /*botAI*/, Player* bot)
 {
-    // Not gated on OnThePlatform: that excludes shifted bots, and the Twilight Realm sits on the same
-    // coordinates. A shifted bot cannot resolve Sartharion anyway, so the encounter gate covers it.
-    // Bounded by the 200yd Sartharion search, so this catches a bot on its first step off the arena
-    // rather than one that is already halfway across the zone.
     if (bot->GetMapId() != OS_MAP_ID || !SartharionEncounterActive(bot))
         return false;
 
     if (!InsideRoom(bot))
         return true;
 
-    // The pull drag corner is a hand-measured position 1.74yd south of PLATFORM_MIN_Y, so the one bot
-    // meant to stand off the box is exempt until the drag latches.
     Unit* boss = GetSartharion(bot);
     if (PlayerbotAI::IsMainTank(bot) && boss && !MainTankDragDone(boss))
         return false;
 
-    // The room box is 18yd wider than the platform on X, so without this a bot standing in the lava
-    // off the east rim reads as in the fight and nothing ever walks it back.
     return OffThePlatform(bot);
 }
 
 bool NeedsTsunamiDodge(Player* bot)
 {
-    // Not a dodge: nothing in phase 16 can be touched by a wave. This is where the bot will be standing
-    // when the shift is stripped, which the raid's shared portal refcount only allows once the last
-    // acolyte is dead, so it lands on a tick nobody chooses.
     if (HasTwilightShift(bot))
     {
         if (!TwilightRealmWaveWait(bot) || WaveClearsY(bot->GetPositionY(), ClassifyTsunamiWave(bot)))
@@ -244,10 +208,6 @@ bool NeedsTsunamiDodge(Player* bot)
     if (wave == TsunamiWave::None)
         return false;
 
-    // A bot already standing where this pattern cannot reach stays put. The corridor holds are the
-    // fallback, not the only safe ground: the off-tank's drake spots and melee behind a drake clear
-    // some of the lines outright, and walking them 28yd to a lane that is no safer costs the trip
-    // twice - and the walk back is what their own hold spends the next tick undoing.
     if (WaveClearsY(bot->GetPositionY(), wave))
         return false;
 
@@ -259,8 +219,6 @@ bool NeedsFissureDodge(Player* bot)
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
-    // requireSelectable off. The fissure is UNIT_FLAG_NOT_SELECTABLE for its whole life, so the
-    // default search skipped it and this trigger had never fired.
     return FindUnitByEntries(bot, { NpcId::TwilightFissure, NpcId::TwilightFissureH },
                              FISSURE_CLEAR_RADIUS, false) != nullptr;
 }
@@ -378,8 +336,6 @@ char const* TauntSpellFor(Player* bot)
 namespace
 {
 
-// Resolved once per pull and never reshuffled, so a healer who dies is not silently replaced
-// mid-fight by whoever sorts next.
 void ResolveAssignments(EncounterState& state, Player* bot)
 {
     if (state.assignmentsResolved)
@@ -399,14 +355,12 @@ void ResolveAssignments(EncounterState& state, Player* bot)
         if (!member || !member->IsAlive() || member->GetMapId() != OS_MAP_ID)
             continue;
 
-        // Tested ahead of the tank skip below, because he is one.
         if (PlayerbotAI::IsAssistTankOfIndex(member, 1, true))
         {
             secondOffTank = member;
             continue;
         }
 
-        // The main tank keeps Sartharion and the first off-tank keeps the drakes, so neither goes.
         if (PlayerbotAI::IsTank(member))
             continue;
 
@@ -423,8 +377,6 @@ void ResolveAssignments(EncounterState& state, Player* bot)
     for (size_t i = 0; i < healers.size() && i < PORTAL_SQUAD_HEALERS; ++i)
         state.portalSquad.insert(healers[i]->GetGUID());
 
-    // Every one of them, melee included. The acolyte is what the trip is for and it dies to whatever
-    // the raid brings; leaving half the damage on the platform only lengthens the immunity.
     for (Player const* member : dps)
         state.portalSquad.insert(member->GetGUID());
 
@@ -471,7 +423,6 @@ void SetMainTankDragArrivedMs(Unit* boss, uint32 arrivedMs)
 
 Unit* LandedShadron(Player* bot)
 {
-    // Selectable-only, which is the whole test: the flag comes off in MovementInform(POINT_LANDING).
     return FindUnitByEntries(bot, { NpcId::Shadron, NpcId::ShadronH }, ROOM_SEARCH_RADIUS);
 }
 
@@ -480,8 +431,6 @@ bool ShadronGone(Player* bot)
     if (!bot || LandedShadron(bot))
         return false;
 
-    // The elapsed guard covers the tick or two between Sartharion engaging and the drake's own cast
-    // landing, where the aura is not up yet and nothing is on the ground either.
     return EncounterElapsedMs(bot) > PULL_WINDOW_MS && !bot->HasAura(SpellId::PowerOfShadron);
 }
 
@@ -538,13 +487,6 @@ void SetMainTankDragged(Unit* boss)
 
 Unit* PriorityTarget(Player* bot)
 {
-    // One flat order serves both phases: the realm adds are phase 16 and the drakes phase 1, so a
-    // bot only ever sees the half of this list it can actually reach.
-    //
-    // The Acolyte of Shadron tops it unconditionally - it grants Gift of Twilight, which makes
-    // Sartharion immune to every school, so nothing else the raid hits counts while it lives. Twilight
-    // Eggs are not on it at all: they carry their own 25s fuse and hatch into phase-1 whelps the
-    // off-tank already picks up, so hitting one trades a raid debuff for nothing.
     static std::vector<std::vector<uint32>> const priority = {
         { NpcId::AcolyteOfShadron, NpcId::AcolyteOfShadronH },
         { NpcId::AcolyteOfVesperon, NpcId::AcolyteOfVesperonH },
@@ -565,8 +507,6 @@ Unit* PriorityTarget(Player* bot)
             break;
     }
 
-    // Where the bot was sent. A trace can otherwise only show GetVictim(), which is where it ended up -
-    // and the two differ for exactly as long as a bot is failing to switch.
     if (RaidObs::Active())
     {
         RaidObs::NoteDerived(bot, "sartharion.target",
@@ -582,9 +522,6 @@ Unit* TranquilizeTargetFor(Player* bot)
     if (index < 0)
         return nullptr;
 
-    // Lava Blazes and nothing else can carry it. Molten Fury (60430) picks its targets through
-    // TARGET_UNIT_SRC_AREA_ENTRY, and its conditions row pins the entry to 30643, so a wave sweeping
-    // over Sartharion or a drake cannot enrage them however much it looks like it should.
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, { NpcId::LavaBlaze, NpcId::LavaBlazeH },
                                         TRANQUILIZING_SHOT_RANGE);
@@ -605,8 +542,6 @@ Unit* TranquilizeTargetFor(Player* bot)
     if (enraged.empty())
         return nullptr;
 
-    // Stable order so every hunter builds the same list and the index below hands out distinct
-    // targets instead of stacking three dispels on one blaze.
     std::sort(enraged.begin(), enraged.end(),
               [](Unit const* lhs, Unit const* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
 

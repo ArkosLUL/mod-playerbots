@@ -17,14 +17,12 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// The dps target trigger's test, so the rule and the node cover the same window
 bool TwinValkyrDpsTargetOwned(PlayerbotAI* botAI)
 {
     return IsRaidDpsBot(botAI->GetBot()) && ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr) &&
            GetTwinDpsTarget(botAI);
 }
 
-// The two hold triggers' twin tests, so a tank keeps tank assist only while no hold covers it
 bool TwinValkyrTankTargetOwned(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -41,7 +39,6 @@ void DefineTwinValkyr(EncounterBuilder& e)
     e.Node<TwinValkyrPactInterruptDutyTrigger, TwinValkyrInterruptPactAction>(ACTION_EMERGENCY + 8);
     e.Node<TwinValkyrVortexRequiresEssenceTrigger, TwinValkyrSwapEssenceForVortexAction>(ACTION_EMERGENCY + 7);
 
-    // a Touch ticks only on the touched bot, and an essence of the Touch's colour absorbs it all
     e.Node<TwinValkyrTouchedRequiresEssenceTrigger, TwinValkyrSwapEssenceForTouchAction>(ACTION_EMERGENCY + 6);
     e.Node<TwinValkyrVortexRaidCoverTrigger, TwinValkyrCastVortexRaidCoverAction>(ACTION_EMERGENCY + 5);
     e.Node<TwinValkyrVortexDefensiveTrigger, TwinValkyrCastVortexDefensiveAction>(ACTION_EMERGENCY + 4);
@@ -62,8 +59,6 @@ void DefineTwinValkyr(EncounterBuilder& e)
     e.OwnTargeting("twin valkyr dps target guard", Role::Any, TwinValkyrDpsTargetOwned, Family::DpsAssist);
     e.OwnTargeting("twin valkyr tank target guard", Role::Any, TwinValkyrTankTargetOwned, Family::TankAssist);
 
-    // the tunnel is past every orb, so the raid only leaves it for a portal, and those walks are the
-    // encounter's own movers
     e.Block("twin valkyr door hold", Role::Any, TwinValkyrDoorHold,
             Family::Reach | Family::ReachHeal | Family::SetBehind | Family::RearFlank | Family::CombatFormationMove |
                 Family::Follow | Family::Flee | Family::RunAway | Family::MoveRandom | Family::Charge | Family::Blink |
@@ -71,11 +66,10 @@ void DefineTwinValkyr(EncounterBuilder& e)
 
     e.Block("twin valkyr raid cover hold", Role::Any, TwinValkyrRaidCoverHeld, 0, RaidCoverClassNodes());
 
-    // the burst row's flag covers every role, and a healer holds only this one for lust
     e.Block("twin valkyr power infusion hold", Role::Heal, TwinValkyrBurstHeld, 0,
             {"power infusion", "power infusion on party"});
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCTwinValkyrDefinition()
 {

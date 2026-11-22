@@ -9,8 +9,6 @@
 
 #include "Multiplier.h"
 
-// Zeroes a reach, heal reach or charge at a unit on the other deck: the walk goes straight off the edge.
-// A rule can't see the action's target, hence a hand-written one.
 class IccGunshipDeckGuardMultiplier : public Multiplier
 {
 public:

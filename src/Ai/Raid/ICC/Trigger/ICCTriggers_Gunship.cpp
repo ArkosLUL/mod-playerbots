@@ -40,5 +40,4 @@ bool IccGunshipStandTrigger::IsActive()
     return GsbStandWalk(botAI, spot);
 }
 
-// Before the battle too
 bool IccGunshipRocketPackSetupTrigger::IsActive() { return GsbNeedsRocketPack(bot); }

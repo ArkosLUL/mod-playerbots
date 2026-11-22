@@ -31,10 +31,8 @@ namespace TrialOfTheCrusaderHelpers
 
 namespace
 {
-// Whole arena from anywhere on its floor
 constexpr float SNOBOLD_SEARCH_RADIUS = 200.0f;
 
-// Rank order: a lower value is killed first
 enum class SnoboldRider : uint8
 {
     Heal,
@@ -43,12 +41,10 @@ enum class SnoboldRider : uint8
     Tank
 };
 
-// Every snobold in the arena, seated, in hand or riding. Guids, so one that despawns inside the window
-// just stops resolving.
 struct SnoboldCache
 {
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
     std::vector<ObjectGuid> guids;
 };
 
@@ -82,7 +78,6 @@ std::vector<std::pair<Creature*, Player*>> GetRidingSnobolds(Player* bot)
         if (!snobold || !snobold->IsAlive())
             continue;
 
-        // Seated and in-hand ones ride Gormok
         Unit* base = snobold->GetVehicleBase();
         Player* rider = base ? base->ToPlayer() : nullptr;
         if (rider && rider->IsAlive())
@@ -118,7 +113,6 @@ char const* RiderName(SnoboldRider rider)
 
 bool IsCarryingSnobold(Player* bot)
 {
-    // The aura lands 1.5 s after the seat, so the seat itself covers the gap
     if (bot->HasAura(SPELL_SNOBOLLED))
         return true;
 
@@ -134,7 +128,6 @@ bool IsRangedDpsOrHealer(PlayerbotAI* /*botAI*/, Player* bot)
     return !IsBeastsTank(bot) && (PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsRanged(bot));
 }
 
-// Same reach as the snobold search: bombs land anywhere on the arena floor
 constexpr float FIRE_BOMB_SEARCH_RADIUS = 200.0f;
 
 constexpr std::array<NorthrendBeast, 4> ALL_BEASTS = {
@@ -143,9 +136,7 @@ constexpr std::array<NorthrendBeast, 4> ALL_BEASTS = {
 struct FireBomb
 {
     ObjectGuid guid;
-    // Age at which 66317 hits
     uint32 impactAgeMs = 0;
-    // Ages a bomb that isn't a TempSummon
     uint32 firstSeenMs = 0;
     bool noted = false;
 };
@@ -153,7 +144,7 @@ struct FireBomb
 struct FireBombCache
 {
     uint32 scanMs = 0;
-    bool scanned = false;  // 0 is a real getMSTime value
+    bool scanned = false;
     std::vector<FireBomb> bombs;
 };
 
@@ -170,7 +161,6 @@ uint32 FireBombAge(Creature* bomb, FireBomb const& entry, uint32 now)
     return getMSTimeDiff(entry.firstSeenMs, now);
 }
 
-// Measured from the snobold that threw it, else from Gormok, whose seat it threw from
 uint32 ModelFireBombImpact(Map* map, Creature* bomb)
 {
     Unit* source = nullptr;
@@ -213,8 +203,6 @@ bool IsYoungFireBomb(Creature* bomb, FireBomb const& entry, uint32 now)
     return FireBombAge(bomb, entry, now) < entry.impactAgeMs;
 }
 
-// Null off a ToC instance. Drops bombs that stopped resolving, and rescans the grid only while one
-// can still be thrown or is still in flight.
 FireBombCache* ReadFireBombs(PlayerbotAI* botAI, Map*& map)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -264,7 +252,6 @@ FireBombCache* ReadFireBombs(PlayerbotAI* botAI, Map*& map)
         }
     }
 
-    // Once per bomb, as soon as a trace can take it, with what's left of the flight as its ttl
     for (FireBomb& entry : bombs)
     {
         if (entry.noted)
@@ -291,18 +278,17 @@ FireBombCache* ReadFireBombs(PlayerbotAI* botAI, Map*& map)
 
     return &cache;
 }
-}  // namespace
+}
 
 namespace
 {
 constexpr uint32 HOP_FORBEARANCE = 25771;
-// Hand of Protection is instant, so a deal its caster hasn't cast this long after has failed
 constexpr uint32 HOP_DEAL_MS = 3000;
 
 struct ImpaleResetState
 {
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
     ObjectGuid target;
     ObjectGuid caster;
     uint32 dealtMs = 0;
@@ -315,7 +301,6 @@ bool OnMap(Player* member, Map* map)
     return member && member->IsInWorld() && member->IsAlive() && member->GetMap() == map;
 }
 
-// Never a beast's victim: the immunity suppresses its threat, and the beast turns to the next in line
 bool NeedsImpaleReset(Player* member, std::vector<Unit*> const& victims)
 {
     return IsBeastsTank(member) && std::find(victims.begin(), victims.end(), member) == victims.end() &&
@@ -335,7 +320,6 @@ bool CanProtect(Player* paladin, Player* target)
            paladin->IsWithinLOSInMap(target) && paladinAI->CanCastSpell(spellId, target);
 }
 
-// The tank itself first, then Retribution, Protection, Holy: a healer's global cooldown costs the most
 uint32 CasterRank(Player* paladin, Player* target)
 {
     if (paladin == target)
@@ -423,7 +407,7 @@ ImpaleResetState* RefreshImpaleReset(PlayerbotAI* botAI, Map*& map)
 
     return &state;
 }
-}  // namespace
+}
 
 uint32 GetGormokImpaleStacks(Unit* unit)
 {
@@ -511,7 +495,6 @@ Unit* GetGormokSnoboldPick(PlayerbotAI* botAI)
     if (IsBeastsTank(bot) || PlayerbotAI::IsHeal(bot))
         return nullptr;
 
-    // Melee and tank riders are already next to the melee, so ranged stay on Gormok while he's up
     bool const melee = !PlayerbotAI::IsRanged(bot);
     bool const gormokEngaged = GetEngagedBeast(botAI, NorthrendBeast::Gormok) != nullptr;
 
@@ -563,7 +546,6 @@ Unit* GetGormokStompThreat(PlayerbotAI* botAI)
     if (!gormok || bot->GetExactDist2d(gormok) >= GORMOK_STOMP_TRIGGER)
         return nullptr;
 
-    // A carrier belongs in his melee until its snobold dies
     return IsCarryingSnobold(bot) ? nullptr : gormok;
 }
 
@@ -591,7 +573,6 @@ bool GetFireBombDodgeAnchor(PlayerbotAI* botAI, Position& anchor)
         return true;
     }
 
-    // Healers and casters stay in reach of whoever he's hitting
     Unit* victim = gormok->GetVictim();
     if (!victim)
         return false;
@@ -638,8 +619,6 @@ bool IsInFireBombImpact(PlayerbotAI* botAI)
                                     { return bot->GetExactDist2d(bomb) <= FIRE_BOMB_TRIGGER; });
     bool const dodging = inside && !IsEngagedBeastVictim(botAI, bot);
 
-    // nb.bomb is change-only and the dodge only runs inside a trigger, so its end is written here.
-    // Without it a bomb whose dodge repeats the last one's branch writes nothing.
     if (!dodging && RaidObs::Active())
         RaidObs::NoteDerived(bot, "nb.bomb", "clear");
 

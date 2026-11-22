@@ -2,7 +2,7 @@
 
 Strategy key `icc`, one strategy for every encounter. Cross-raid conventions are in
 [../README.md](../README.md). Mechanics source: `src/server/scripts/Northrend/IcecrownCitadel/`. A
-code comment calling the core bugged is checked against it; the boss doc gives the verdict, with issue
+claim that the core is bugged is checked against it; the boss doc gives the verdict, with issue
 text when it holds. During an upstream merge ICC keeps ours; the merge report lists upstream's ICC
 changes so the user can pick which to port. Tactics come from the guides in
 [guide-sources.md](../../systems/guide-sources.md), converted into `build-icc-wt/_guides/`
@@ -42,6 +42,9 @@ Raid-wide parts:
   `RaidWide` (`Trigger/ICCTriggers_RaidWide`, `Action/ICCActions_RaidWide`,
   `Definition/ICCDefinition_RaidWide.cpp`: the opener and resistance aura rows, their holds, and the
   direct-targeting bases) and `Definition/ICCDefinition_HeroicBuffs.cpp` (the strip, [Cheats](#cheats)).
+  Their rows sit on half steps (`ACTION_RAID + 1.5` the aura, `+ 2.5` the opener swing), so no encounter
+  row ties with them; the swing sits above the aura since it lands on the next attack timer, not the
+  next GCD.
 - `Util/ICCScripts.{h,cpp}`: per-instance state, the spell listeners, the state reset, the Blood
   Prince trash hook and the RaidObs name table, registered by `AddSC_IcecrownBotScripts` from
   `src/Script/Playerbots.cpp`.
@@ -94,8 +97,9 @@ definition alone:
   rules (`OwnMovement`, `OwnTargeting`, `Block`, `Exclusive`) and `Tick` likewise, rules after the
   stem's multipliers.
 - direct targeting: a resolver `Unit* (PlayerbotAI*)` in the stem's helpers, `GetRaidHumanSkull` its
-  first branch, every branch an in-combat unit, its pick probed there. A trigger class on
-  `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their `Name` and the resolver;
+  first branch, every branch an in-combat unit (`Attack()` has no pre-pull guard), its pick probed
+  there. A trigger class on `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their
+  `Name` and the resolver;
   one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
   pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`), Saurfang (`GetDbsTarget`),
@@ -116,7 +120,11 @@ definition alone:
   its damage on a listed boss until a group tank has held it 2 s, or 5 s after it came into combat.
   `resistSchools` and `fireWantsMastery` feed the aura election (`RaidResistAura.h`, `icc.aura`): one
   bot paladin per wanted fire, frost or shadow school, the nature hunter's Aspect of the Wild, and the
-  hold rules keep each holder's own auras or aspects off. With no hook the opener and aura triggers neither fire nor note.
+  hold rules keep each holder's own auras or aspects off. The aura slot is exclusive, so a paladin's own
+  buff strategy would take it back on the next GCD; the hold also lists the resistance auras, which the
+  raise action casts outside the queue, and for the hunter every aspect, since a vetoed node still pushes
+  its alternatives (dragonhawk, hawk, monkey). With no hook the opener and aura triggers neither fire
+  nor note.
   Rows: Marrowgar's opener (boss 36612), Deathwhisper's burst window (lust waits for phase 2),
   Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy), Festergut's resist
   schools (shadow: Gaseous Blight, Blighted Spores, Pungent Blight), Putricide's opener (boss 36678),
@@ -188,7 +196,9 @@ definition alone:
     40%; class buttons held to 25%; `lk.defensive`, `lk.humancall`), plus `icc lich king brake`
     (non-holders at 90% of the holder's threat, frees at 80%).
 - opening positions: a `Mover` row in the definition whose trigger holds the stand while the gate is
-  open and not live, its positions navprobed in the stem's helpers. No raid-wide staging.
+  open and not live, its positions navprobed in the stem's helpers. No raid-wide staging. A stem's
+  target row sits above its stand row, so a bot takes a new pick before it walks back to its spot.
+- duties: humans hold none, and each stem's `IsDutyBot` counts a selfbot as a human.
 
 **The root only dispatches.** `ICCStrategy.cpp` adds nodes and runs `OnTick` in
 `IccEncounterDefinitions()` order, and adds multipliers in its own: Marrowgar, Deathwhisper,
@@ -235,11 +245,11 @@ pull. Nothing renames a slug-named trace afterwards.
 `icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
 read silent on every other ICC pull. An encounter with a phase publishes it as `<prefix>.phase`;
 `tools/botobs/bosses/icecrown_citadel.py --phases` reads it as one raid-wide timeline, each step from
-the first bot to note it. Festergut and Rotface engage before their state moves, so their traces open
-on the engage, named by the DBC encounter credit, which matches the slug. The last three rows open
-through `IccMarkPull` from their definitions' ticks while the gate is live, the Blood Prince trash
-through a hook in `Util/ICCScripts.cpp` ([its section](blood-prince-council.md#blood-prince-trash)).
-Rimefang and Spinestalker's tick opens a `sindragosa` trace the same way.
+the first bot to note it. Festergut's and Rotface's traces open on the engage, before their state
+moves, named by the DBC encounter credit, which matches the slug. The last three rows, and Rimefang and
+Spinestalker as `sindragosa`, open through `IccMarkPull` ([Gates](#code-layout-and-registration)); the
+Blood Prince trash through a hook in `Util/ICCScripts.cpp`
+([its section](blood-prince-council.md#blood-prince-trash)).
 The dungeon bosses are the kill-credit creatures: Marrowgar, Deathwhisper, Saurfang, Festergut,
 Rotface, Putricide, Valanar, the Blood-Queen, Sindragosa, the Lich King. Gunship and Valithria credit
 by spell (72959, 72706), Svalna not at all.
@@ -277,12 +287,13 @@ replaced it.
 Threat), recorded when it adds any, on members in the bot's own instance only. Experienced 71188 and
 1% Threat 70115 never expire, so `IccHeroicBuffsDefinition`'s tick takes both off whenever none of the
 fights handing them out (Deathwhisper, Putricide, Sindragosa, the Lich King) is `IN_PROGRESS`: each bot
-off itself, and the first bot past a 1 s per-instance throttle off every human on the map. Every
-raid-gated site keeps the cheat's exact behaviour while the raid cheat is
-on; off, the site skips the cheat. The cleanup halves (Cyclone, 1% Threat removal) stay ungated.
+off itself, and the first bot past a 1 s per-instance throttle off every human on the map. A
+raid-gated site runs its cheat unchanged with the raid cheat on, and skips it off. The cleanup halves
+(Cyclone, 1% Threat removal) stay ungated.
 
 **The class taunt** (`IccCastClassTaunt`, every encounter but Marrowgar and the giant) casts the real taunt, at most once per 500 ms
-per bot; a taunt on cooldown fails with no ranged pull, which would face the add. The 1M threat with
+per bot, else a ranged pull when the bot has no taunt or it failed off cooldown; a taunt on cooldown fails
+with no ranged pull, which would face the add. The 1M threat with
 `FixateTarget` and the cooldown reset are gone, so:
 
 - a caller taunting several units in a row reaches one per cooldown (8 s on every class): the gunship
@@ -368,9 +379,11 @@ id.
   Putricide times each landing from where he stood at its first scan after the cast and keeps it
   16 s (the listener evicts at 9 s only on the next cast), Festergut uses 5 yd, 8.5 s.
 - **Vile Gas**: Putricide's balcony cast on Rotface heroic, 69240 remapped by the `Spell` constructor to
-  73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`. Notes `rf.vilegas`
+  73019 (10H) or 73020 (25H), so it is matched through `GetSpellIdForDifficulty`, and on Putricide's
+  entry, since Festergut casts the same spell himself. Notes `rf.vilegas`
   on the victim; no Rotface code reads `rotfaceVileGas` any more.
-- **Defile** 72762, a 2 s cast with no difficulty row, read at `OnSpellPrepare`. Notes `lk.defile` on
+- **Defile** 72762, a 2 s cast with no difficulty row, read at `OnSpellPrepare`, the cast's start
+  (`OnSpellCast` fires at its end, too late for bots to move out). Notes `lk.defile` on
   the target and a 10 yd hazard circle (the script's 10 × scale, spawn scale 1) for the cast time;
   the puddle that follows is a sampled creature.
 

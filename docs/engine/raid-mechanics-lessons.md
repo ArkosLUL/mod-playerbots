@@ -210,7 +210,9 @@ Every distance helper measures differently, and a large-model boss inflates all 
   isolates. A persistent area aura is the exception: `DynObjAura::FillTargetMap` adds the
   target's size whoever cast it, plus the dynobject's own 0.39 for an ally or `TARGET_DEST_DYNOBJ_NONE`
   effect, so a 9 yd Inferno reaches a siege engine (7.7) at 16.7 yd
-  ([Flame Leviathan](../raids/ulduar/flame-leviathan.md#hard-mode)).
+  ([Flame Leviathan](../raids/ulduar/flame-leviathan.md#hard-mode)). A unit's own area aura
+  (`UnitAura::FillTargetMap`, in 3D) adds the target's reach too, and for a party, raid or friend
+  aura its owner's as well.
 - **`Spell::CheckRange` adds `GetMeleeRange` to a spell's *minimum*** for `SPELL_RANGE_RANGED`, so a
   20-reach boss turns a hunter's 5 yd minimum into ~28 yd centre-to-centre and every shot returns
   `SPELL_FAILED_TOO_CLOSE`. **Hunters are the only class with a minimum range** — do not relocate the

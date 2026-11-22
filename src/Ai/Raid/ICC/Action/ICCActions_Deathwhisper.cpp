@@ -18,13 +18,10 @@
 
 namespace
 {
-// MoveTo refuses a repeat of its last point for up to 5 s even once the bot has stopped, so a walk a
-// knockback or an item use cut short is dropped this long after it went out.
 constexpr uint32 LDW_STALL_MS = 500;
-// A walk passing this close to the shade chasing the bot gets swung at on the way.
 constexpr float LDW_SHADE_CONTACT = 6.0f;
 constexpr float LDW_CC_STANDOFF = 3.0f;
-}  // namespace
+}
 
 bool IccDeathwhisperDodgeAction::Dodge(std::vector<LdwHazard> const& hazards, LdwHazardKind kind)
 {
@@ -61,12 +58,9 @@ bool IccDeathwhisperDodgeAction::Dodge(std::vector<LdwHazard> const& hazards, Ld
         return true;
     };
 
-    // Melee keep as close to their target as the hazards allow.
     Unit* target = AI_VALUE(Unit*, "current target");
     Position const prefer = target ? target->GetPosition() : from;
 
-    // A spot behind a torch post costs the bot its target, but a shade's blast kills, so there the
-    // nearest clear spot wins.
     bool const lethal = kind == LdwHazardKind::Shade || kind == LdwHazardKind::Blast;
     auto acceptInSight = [&accept, target, &from, lethal](float x, float y)
     { return accept(x, y) && (lethal || !target || target->IsWithinLOS(x, y, from.GetPositionZ())); };
@@ -84,7 +78,6 @@ bool IccDeathwhisperDodgeAction::Dodge(std::vector<LdwHazard> const& hazards, Ld
 
     if (LdwIsEmpty(spot))
     {
-        // Overlapping pools can leave nothing clear by the margin; clearing the reach itself still saves the hit.
         circles.clear();
         for (LdwHazard const& hazard : hazards)
             circles.push_back({hazard.pos, hazard.trigger + 0.5f});
@@ -96,14 +89,12 @@ bool IccDeathwhisperDodgeAction::Dodge(std::vector<LdwHazard> const& hazards, Ld
     if (LdwIsEmpty(spot))
         return false;
 
-    // A shade or its blast kills, so a cast that would pin the bot gives way.
     if ((kind == LdwHazardKind::Shade || kind == LdwHazardKind::Blast) && bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
     if (kind == LdwHazardKind::Shade && EncounterHelpers::NitroBoostsReady(bot))
         EncounterHelpers::UseNitroBoosts(bot);
 
-    // The bot's own forced walk would refuse this re-aim at the same priority.
     last.clear();
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                   false, MovementPriority::MOVEMENT_FORCED, true);
@@ -153,7 +144,6 @@ bool IccLadyDeathwhisperDominateMindAction::Execute(Event /*event*/)
     if (!bot->IsWithinCombatRange(victim, range) || !bot->IsWithinLOSInMap(victim))
         return MoveTo(victim, std::max(range - LDW_CC_STANDOFF, 1.0f), MovementPriority::MOVEMENT_COMBAT);
 
-    // In place under a Cyclone: the cast goes out the tick it fades.
     if (waiting)
         return false;
 
@@ -170,7 +160,6 @@ bool IccLadyDeathwhisperTauntAction::Execute(Event /*event*/)
     if (!target || !IccCastClassTaunt(bot, botAI, target))
         return false;
 
-    // A taunt moves the add, not the bot's own target.
     AttackDirect(target);
     return true;
 }

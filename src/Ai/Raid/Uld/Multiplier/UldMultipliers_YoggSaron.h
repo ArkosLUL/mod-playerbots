@@ -10,6 +10,7 @@
 #include "Define.h"
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
+#include "RaidSplash.h"
 
 class CastSpellAction;
 class Unit;
@@ -84,6 +85,20 @@ public:
     YoggSaronPhase3AreaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "yogg-saron phase 3 area multiplier") {}
 
     float GetValue(Action* action) override;
+};
+
+class YoggSaronCrusherAreaHoldMultiplier : public Multiplier
+{
+public:
+    YoggSaronCrusherAreaHoldMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron crusher area hold multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 class YoggSaronPhase1WalkGuardMultiplier : public Multiplier

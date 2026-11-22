@@ -21,13 +21,11 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-}  // namespace
+}
 
 Position const* IccFestergutWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -36,12 +34,9 @@ Position const* IccFestergutWalkAction::WalkInFlight()
 
 bool IccFestergutWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // A stun or a channel stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -81,11 +76,9 @@ bool IccFestergutDodgeGooAction::Execute(Event /*event*/)
     if (!GetFgGooDodge(botAI, spot))
         return false;
 
-    // 15k and a 20 s slow to swings and casts: the cast is worth less than the step out
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
-    // Our own walk still holds the FORCED booking, and a booking only yields to a higher priority
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const lowered = inFlight && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
@@ -124,7 +117,6 @@ bool IccFestergutCastPungentCoverAction::Execute(Event /*event*/)
     if (!spellId)
         return false;
 
-    // A cast in progress fails this one's check, and a moving bot breaks its own channel
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
@@ -169,7 +161,6 @@ bool IccFestergutBloatClearAction::Execute(Event /*event*/)
     if (!botAI->CastSpell(SPELL_FG_DIVINE_SHIELD, bot))
         return false;
 
-    // Left up, the immunity hands him to the next player on his threat list for 12 s
     bot->RemoveAurasDueToSpell(SPELL_FG_DIVINE_SHIELD);
     return true;
 }
