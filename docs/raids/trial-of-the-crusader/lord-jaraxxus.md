@@ -167,8 +167,9 @@ The Warcraft Tavern guide, reconciled with the script:
 - **Legion Flame**: the carrier keeps moving for its 8 s, away from the boss and the raid and within
   30 yd of a living healer other than itself; everyone else steps clear of the flames. Its first leg
   heads away from the boss (`ARENA_CENTER` without him), each next one on along the last, never back
-  over the trail; a leg runs 6+ yd to a spot 8 yd off other members and 15 off the boss. A bot within
-  4 yd of a flame dodges to a spot 6 clear of every flame, searched within 15. A leg bends
+  over the trail; a leg runs 6+ yd to a spot 8 yd off other members and 15 off the boss. A dodge picked before
+  the flame landed on the bot is dropped at the first leg, and a 2 s gap between ticks starts a new
+  flame with nothing latched. A bot within 4 yd of a flame dodges to a spot 6 clear of every flame, searched within 15. A leg bends
   round the healer ring: the sweep keeps the first ring's clear spot nearest the heading among those in
   reach, and drops the reach only when no clear spot has it. On the 25H kill carriers ended 30-48 yd
   from the nearest healer. Legs keep 14 yd off a heroic portal, the straight walk included (never
@@ -183,6 +184,9 @@ The Warcraft Tavern guide, reconciled with the script:
   the flame it had just left: a warlock looped 20 times over 29 s at a third of its damage. A tank
   carrier takes the boss with it, rare now: the marker keeps a tank off Legion Flame while he swings
   at it.
+- **Tank guards**: `jaraxxus taunt guard` zeroes a class taunt on him while another tank holds him;
+  `jaraxxus control tank movement` zeroes the combat formation for a tank whose victim is him or an
+  add, while the gate is open.
 - **Mistress' Kiss**: a kissed bot casts instants only; a cast already running is broken from outside.
 - **Lust** at the pull (default burst row): the heroic Portal at 20 s falls inside it, and Berserk is
   10 min out.
@@ -219,7 +223,8 @@ plugs in by predicting its own hit and wiring the two nodes and the holds below.
   under 25% of its health: `NextMagicDefensive` for the rest of the hit; on a lethal hit with no row,
   Dispersion, then `GetSelfImmunitySpell`, then a healthstone (not on the move). Nothing while
   Anti-Magic Shell, Cloak, Dispersion, Ice Block or Divine Shield runs or while it channels a cover.
-  A Legion Flame carrier under 50% counts the rest of its trail the same way.
+  A Legion Flame carrier under 50% counts the rest of its trail the same way. An Inferno running on
+  others but not on the bot gives it no hit.
 - `jaraxxus raid cover hold` blocks the five class nodes before the first damage, so none goes early
   or twice; `jaraxxus magic button guard` blocks Evasion and Deterrence during an Inferno and on a
   carrier, where neither does anything against fire on everyone or a burning trail. Never

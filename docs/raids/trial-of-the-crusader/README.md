@@ -289,12 +289,14 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 
 - Opens at the gossip, not before, so bots stay with the player while they buff, eat or talk: no
   Barrett gossip after one was seen at this stage. The latch keeps the gap after a kill closed until
-  the next stage's Barrett shows. A lost one is searched for at once, else every 500 ms, so a gossip
+  the next stage's Barrett shows. He is searched for within 250 yd (he stands ~50 yd from the centre), a lost one at once, else every 500 ms, so a gossip
   picked as he spawns is still seen.
 - Stage 3 (a Jaraxxus retry) opens during the gossip too, since it frees him at once. Stage 9 opens
   with no Barrett test.
-- The next beast by guid slot: Gormok while slot 4 is empty or alive, else the worms while slot 6 or 7
-  is, else Icehowl. A dead beast keeps its slot until a wipe's cleanup clears it.
+- The next beast by guid slot, newest first, since a slot empties once its corpse despawns (Gormok's
+  after 30 s, a worm's 10 s) and each next beast shows up before that: Icehowl (8) while his slot
+  resolves, else the worms (6, 7), alive ones meaning worms and none Icehowl, else Gormok (5), alive
+  meaning Gormok and dead the worms; all empty means Gormok. A wipe despawns them all.
 - Per bot: alive, fighting nothing it could attack (no unsuppressed PvP ref, no PvE ref to a live
   unit neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`), and in the arrival's room (the arena: within
   80 yd 2D of `ARENA_CENTER`, z > 380; Anub'arak's: x > 661.6, z < 200) with its master, else the

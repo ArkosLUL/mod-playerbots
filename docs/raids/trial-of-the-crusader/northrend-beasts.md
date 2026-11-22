@@ -24,7 +24,7 @@ Mechanics from `boss_northrend_beasts.cpp`, `instance_trial_of_the_crusader.cpp`
 `RaidInstanceState`, so every bot gets one answer. Nothing resolves off map 649.
 
 - **Beasts.** Gormok, Dreadscale and Acidmaw by `GetGuidData` 5, 6, 7; Icehowl by entry within 200 yd
-  of the reading bot, his guid cached while it resolves and re-searched at most once a second
+  of the reading bot (his script slot, 8, only the gate and staging read), his guid cached while it resolves and re-searched at most once a second
   (he walks in for 10 s first). Engaged = alive and in combat. The mask of engaged beasts,
   1 Gormok, 2 a worm, 4 Icehowl, is `nb.stage`.
 - **Worm form** by native display id (`IsWormMobile`; Submerge's transform shows an invisible
@@ -363,8 +363,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     holder pairs with a member within 11 yd of the up stationary worm, whose cure spots all lie
     inside the Sweep path's 16: others take the next carrier, a Toxin'd stationary holder waits for
     the submerge. When the ring search misses that disc (its rays fan 22.5° apart), they take the
-    nearest safe of 16 points 5 yd round the partner, 1 inside the cure reach since the partner keeps
-    moving (`direct`); when every straight walk to those crosses a pool or Sweep, the first leg of the
+    nearest safe of 16 points a yard inside the partner reach, since the partner keeps moving: 5 yd round
+    it for a cure walk, 7.5 for a run to a snared carrier (`direct`); when every straight walk to those crosses a pool or Sweep, the first leg of the
     shortest two-leg walk to one, turning on 6 yd rings out to 30 (`detour`): on heroic the mobile
     holder stands at the wall in front of its worm, the newest pool between them and the raid, and
     on 25H (2026-11-21) a runner found no straight walk for 20 s while the paralysed tank lost
@@ -406,8 +406,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     | Spray | all but a cure walk, of the target of a Spray being cast where it stands; the target, of every other member within 24 yd where they stand; both Sprays, urgent | 12 / 13 | the splash takes everyone within 10 yd of the target as the cast ends; on 25H most casters hit stood 4-7.4 yd from it at the cast's start, melee 0-3, so only both walking opens 10 yd within the 1.1 s cast |
     | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too. Fresh carriers sharing a pulse are dealt spots (below) |
     | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) or is a stationary worm only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
-    | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12°, out to 57.5 yd | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
     | Clump | ranged and healers carrying neither debuff, not on a cure walk, of the up mobile worm; kept in every tier, `nospread` and the Spray dodge included | 9.3 / 11.3 | pools drop at its feet: on 25H a caster's `nospread` spots ended 3.7 yd from it, and paralysed there it died in the growing pool |
+    | Spew | everyone, of the up mobile worm's cone while armed: spewing, or within 4 s of its next Spew (11 s past its engage, its emerge, 22 s past its last cast start) | cone + 5° / + 12°, out to 57.5 yd | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm. A cone kept up all the time turns with the Emerge cast's 40-80° facing swings, which beat any hysteresis |
     | Spread | ranged and healers carrying neither debuff, of each other carrying neither (below), and of the up mobile worm's melee as one 19.3 / 22.3 circle on it; while a stationary worm is up, a lone survivor too | 10 / 13 | the Spray's 10 yd splash, centre to centre, cast only by the stationary worm; guide `/range 10`. Spacing off all 24, melee and tanks included, fed the 25N oscillation. Carriers keep their Bile and cure rules |
     | Melee | a melee bot (not a tank) with neither debuff whose target is the up mobile worm, held to its stand | 2.5 off it / — | worms parry from the front |
     | Reach | a bot holding no beast whose `reach melee` or `reach spell` walk to its stop point, 30 yd at most, would cross a pool or end in one, or (neither debuff) in a Bile pulse | — | the reposition goes round it |
