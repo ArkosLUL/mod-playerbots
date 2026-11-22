@@ -62,8 +62,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Target, taunt and park in one node: a tank that has its boss but is standing in the wrong place is
-// as wrong as one that does not have it.
 class IronAssemblyTankAssignmentAction : public AttackAction
 {
 public:
@@ -102,8 +100,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Standalone rather than built on the Naxx redirect base: Ulduar has no other Naxx include, and
-// Freya's redirect is the same shape one file over.
 class IronAssemblyRedirectThreatAction : public Action
 {
 public:
@@ -144,7 +140,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Walk and cast in one node, so the walk and the cast can't pick different bodies.
 class IronAssemblyTankBattleRezAction : public MovementAction
 {
 public:
@@ -163,7 +158,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// The weakest magic defensive that covers the cast's remaining time.
 class IronAssemblyFusionPunchDefensiveAction : public Action
 {
 public:
@@ -184,8 +178,6 @@ public:
     }
 };
 
-// Cast directly, not through ChangeStrategy: nothing removes an added "nature resistance", so it would
-// outlive the fight. The totem hold rule keeps the shaman's own air nodes off the slot meanwhile.
 class IronAssemblyNatureTotemAction : public Action
 {
 public:

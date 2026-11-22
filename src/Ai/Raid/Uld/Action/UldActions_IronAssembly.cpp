@@ -30,16 +30,12 @@ bool IronAssemblyResetEncounterStateAction::Execute(Event /*event*/)
 {
     ResetIronAssemblyEncounterState(bot, false);
 
-    // Never claims the tick: clearing state is bookkeeping, and the pull still needs every node below
-    // this one to run on the same tick.
     return false;
 }
 
 namespace
 {
 
-// Where a bot stands when nothing is chasing it: its formation slot, its tank spot, or the boss the
-// raid is killing.
 bool TryGetIronAssemblyStation(PlayerbotAI* botAI, Player* bot, Position& station)
 {
     if (TryGetIronAssemblyRaidSpot(botAI, bot, station))
@@ -57,8 +53,6 @@ bool TryGetIronAssemblyStation(PlayerbotAI* botAI, Player* bot, Position& statio
     return false;
 }
 
-// Not FleePosition: it clamps travel to Playerbots.FleeDistance, short of a 20 yd blast, and reads
-// one hazard. Ties break toward the bot's station, which holds still, so the answer doesn't slide.
 bool TryGetIronAssemblyEscapeSpot(PlayerbotAI* botAI, Player* bot, std::vector<HazardCircle> const& hazards,
                                   Position& spot)
 {
@@ -82,7 +76,7 @@ void AddIronAssemblyHazards(std::vector<Position> const& centres, float clearanc
         hazards.emplace_back(centre, clearance);
 }
 
-}  // namespace
+}
 
 bool IronAssemblyLightningTendrilsAction::Execute(Event /*event*/)
 {
@@ -90,15 +84,12 @@ bool IronAssemblyLightningTendrilsAction::Execute(Event /*event*/)
     if (!brundir)
         return false;
 
-    // 2d on purpose: he is hovering while the tendrils tick, and the damage is projected on the floor
-    // under him rather than measured to where he is floating.
     std::vector<HazardCircle> hazards = {{brundir->GetPosition(), ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE}};
 
     Position spot;
     if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
-    // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -111,8 +102,6 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
 
     std::vector<HazardCircle> hazards = {{brundir->GetPosition(), ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE}};
 
-    // Runes of Death too, or this escape walks into one. Each at its own clearance: Overload's would waste
-    // four yards per rune inside a 5.5s cast.
     std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     AddIronAssemblyHazards(runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, hazards);
 
@@ -120,7 +109,6 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
     if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
-    // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -138,7 +126,6 @@ bool IronAssemblyRuneOfDeathAction::Execute(Event /*event*/)
     if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
-    // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -168,19 +155,13 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 
-    // Shared empowered Steelbreaker: leave him on the other tank, bar the Meltdown swap, which takes him
-    // off a carrier in the last SWAP_LEAD so it can walk out. IronAssemblyTauntGuardMultiplier covers the
-    // class taunt nodes but never sees this direct cast.
     Unit* const victim = boss->GetVictim();
     bool const shared = IsSteelbreakerEmpowered(botAI) && boss->GetEntry() == NPC_STEELBREAKER;
     bool const swap = shared && IronAssemblyMeltdownRoleFor(botAI, bot) == IronAssemblyMeltdownRole::Taunt;
 
-    // Stand, do not drag. The tank walks to its spot and the boss follows it there, which never
-    // routes a boss through the ranged stack the way a dragged pull does.
     if (victim != bot && (swap || !(shared && IronAssemblyHeldByOtherTank(bot, boss))) && CastClassTaunt(botAI, boss))
         return true;
 
-    // Same boss the assignment above returned, rather than ranking the tanks a second time.
     Position spot;
     if (!TryGetIronAssemblyBossTankSpot(botAI, boss, spot))
         return false;
@@ -197,8 +178,6 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A rune on the spot holds him where the escape parked him. The ring stays on the spot, its near arc
-    // ~12 yd from him inside Meltdown: fine, a rune lasts 30s and the first Meltdown lands 43s in.
     Position step;
     if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
         return false;
@@ -214,8 +193,6 @@ bool IronAssemblyTankAssignmentAction::WalkToSpot(Position const& step)
                          false, true, MovementPriority::MOVEMENT_COMBAT, true);
     };
 
-    // MoveTo refuses its last point for MaxWaitForMove even after a healthstone stopped the bot. First
-    // still tick goes to the lower nodes, or that healthstone stops every re-sent walk.
     MoveOutcome const outcome = walk();
     if (outcome != MoveOutcome::Duplicate || bot->isMoving() || bot->HasUnitState(UNIT_STATE_CASTING))
     {
@@ -240,8 +217,6 @@ bool IronAssemblyShieldOfRunesAction::Execute(Event /*event*/)
     if (!molgeim || !IronAssemblyShieldOfRunesUp(molgeim))
         return false;
 
-    // Offensive magic dispel: spellsteal (mage), purge (shaman), dispel magic (priest). Stripping the
-    // shield denies the +50% damage buff it pays out when it is drained instead.
     static std::vector<std::string> const dispels = {"spellsteal", "purge", "dispel magic"};
     for (std::string const& dispel : dispels)
         if (botAI->CanCastSpell(dispel, molgeim))
@@ -286,8 +261,6 @@ Player* IronAssemblyRedirectThreatAction::GetRedirectTank()
     if (!group)
         return nullptr;
 
-    // Feed whoever holds the kill target: with one tank per member, the group main tank is wrong for two
-    // of the three.
     Unit* focus = IronAssemblyFocusTarget(botAI);
     if (focus)
     {
@@ -316,15 +289,12 @@ bool IronAssemblyRedirectThreatAction::Execute(Event /*event*/)
 
     if (bot->getClass() == CLASS_ROGUE)
     {
-        // Tricks redirects everything the rogue does for the next 6s, so there is no dump shot.
         return botAI->CanCastSpell("tricks of the trade", tank) && botAI->CastSpell("tricks of the trade", tank);
     }
 
     if (botAI->CanCastSpell("misdirection", tank))
         return botAI->CastSpell("misdirection", tank);
 
-    // Misdirection only moves the threat of the next three shots. Spend them on the kill target
-    // rather than leaving them to whatever the rotation picks.
     Unit* focus = IronAssemblyFocusTarget(botAI);
     if (focus && bot->HasAura(SPELL_MISDIRECTION) && botAI->CanCastSpell("steady shot", focus))
         return botAI->CastSpell("steady shot", focus);
@@ -356,8 +326,6 @@ bool IronAssemblyMeltdownRunOutAction::Execute(Event /*event*/)
 
     IronAssemblyUseNitroBoosts(bot, bot->GetExactDist2d(point.GetPositionX(), point.GetPositionY()), "meltdown");
 
-    // MOVEMENT_FORCED and claiming every tick: a carrier that stops to swing takes him straight back,
-    // its threat matching the taunter's after the taunt.
     return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -394,8 +362,6 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
                              false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
         };
 
-        // Stopped short by something else, the same goal re-sent within MaxWaitForMove reads as a duplicate
-        // and the druid stands idle for the rest of that wait.
         MoveOutcome outcome = walk();
         if (outcome == MoveOutcome::Duplicate && !bot->isMoving())
         {
@@ -406,7 +372,6 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
         return outcome == MoveOutcome::Issued;
     }
 
-    // CastSpell refuses a cast-time spell while the bot walks. A FORCED leg is a dodge, so it finishes first.
     if (bot->isMoving())
     {
         LastMovement& last = AI_VALUE(LastMovement&, "last movement");
@@ -417,8 +382,6 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
         last.clear();
     }
 
-    // Rebirth fails in cat, bear and moonkin form. Not the caster form prereq: it skips a druid under
-    // MediumHealth mana, and on the walk it trades shifts with the spec's own form every tick.
     botAI->RemoveShapeshift();
     return duty.spellId && botAI->CastSpell(duty.spellId, duty.tank);
 }
@@ -429,7 +392,6 @@ bool IronAssemblyTankRebuffAction::Execute(Event /*event*/)
     if (!IronAssemblyTankRebuffDuty(botAI, bot, duty))
         return false;
 
-    // Mark of the Wild fails in cat form only: moonkin and tree are stance forms to the core.
     SpellInfo const* info = sSpellMgr->GetSpellInfo(duty.spellId);
     if (info && info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
         botAI->RemoveShapeshift();
@@ -455,8 +417,6 @@ bool IronAssemblyNatureTotemAction::Execute(Event /*event*/)
             return botAI->DoSpecificAction("set nature resistance totem", Event(), true);
         case IronAssemblyNatureTotemStep::Drop:
         {
-            // By id: the class action skips the cast while the bot still stands in an older totem's aura,
-            // which is exactly the totem this one replaces.
             uint32 const totem = IronAssemblyNatureTotemSpell(bot);
             return totem && botAI->CastSpell(totem, bot);
         }
@@ -483,12 +443,8 @@ bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)
     if (!focus)
         return false;
 
-    // Every tick and above the early return: PetAttackAction's node is commented out globally, so a pet
-    // keeps whatever it latched onto. No-op when the pet is already there.
     CommandPetAttack(botAI, focus);
 
-    // Returning false once the bot is already on the right member is what lets the lower nodes run:
-    // the engine ends the tick at the first action that succeeds.
     if (AI_VALUE(Unit*, "current target") == focus)
         return false;
 
@@ -507,8 +463,6 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
 
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
 
-    // Reach then hold, with a deadband: a move per yard of drift restarts the spline, and a moving bot
-    // never casts or kicks Lightning Whirl.
     if (_spotReached && distance > tolerance * 2.0f)
         _spotReached = false;
 
@@ -522,7 +476,6 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
     if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
         return false;
 
-    // Phase 3 only: the walk out to the spread ring, while Static Disruption is already looking for a stack.
     if (IsSteelbreakerEmpowered(botAI))
         IronAssemblyUseNitroBoosts(bot, distance, "spread");
 
