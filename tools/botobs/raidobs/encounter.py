@@ -36,6 +36,8 @@ BOSS_ALIASES = {
     "elder-stonebark": "freya",
     "xt002": "xt-002",
     "xt-002-deconstructor": "xt-002",
+    "left-arm": "kologarn",
+    "right-arm": "kologarn",
     "general-vezax": "vezax",
     "algalon-the-observer": "algalon",
     "yogg-saron-": "yogg-saron",
