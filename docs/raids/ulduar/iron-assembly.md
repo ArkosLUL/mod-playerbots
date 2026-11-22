@@ -44,8 +44,11 @@ it under `RAID_DEFENSIVE_FLOOR_PCT` (25%), reckoned as the top of the roll × hi
 average nature resist × the tank's damage-taken mods, absorbs ignored (`ironassembly.punch`), judged
 only in the cast's last 1.5 s (traced tanks always act in it, not always in the last 1 s): before
 phase 3 the bar sits at 74–91% health on 43–50k tanks, so a dip healed back by the hit would otherwise
-spend a later punch's button. The swap partner often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
-Regeneration at 33–57% health before phase 3, or a warrior's Shield Wall 3 s after a Rebirth.
+spend a later punch's button. The class nodes spend the same buttons on health alone (IBF, Survival
+Instincts or Frenzied Regeneration at 33–57% before phase 3, a warrior's Shield Wall at ~60% 3 s after a
+Rebirth), so the swap partner often had none left: **`iron assembly tank defensive hold`** blocks their
+`HeldTankDefensiveNames()` for every tank at 25%+ health all fight, as on Hodir. The punch node casts by
+id, so it alone spends them; under 25% the class nodes are the last resort.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
@@ -101,8 +104,18 @@ cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` n
 on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown point with the
 druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast killed 5 melee.
 The budget is the non-tank druids' Rebirths, one each a pull, and a class `rebirth` on a tank killed
-before phase 3 spends one. A rezzed tank stands up without raid buffs, the class buff nodes being
-non-combat only: traced 41.8k max health against 48.5k before.
+before phase 3 spends one.
+
+**A risen tank gets its raid buffs back in combat** (`ironassembly.rebuff`). Rebirth or a Soulstone stands
+it up at 16–19% health with none, and the class buff nodes are non-combat only: traced 41.8k max health
+against 48.5k. For 30 s after any tank rises, bots already within 30 yd and sight put back Mark of the
+Wild, Power Word: Fortitude and, on a mana tank, Arcane Intellect, one bot each, and each blessing its
+role gets from a different paladin (one blessing per paladin per target). Dps cast first, then healers,
+paladin tanks last, never a bear; a cat shifts out for Mark of the Wild, while moonkin and Tree of Life
+are stance forms to the core and cast it as they are. The blessings follow the class planner's per-member wants (role
+priorities, no Sanctuary under Renewed Hope bar a paladin tank's, one per bot paladin), not the planner
+itself: it picks one cast for the whole raid, so a pet raised in the same window could block a tank's
+blessing. `ACTION_RAID + 2`, above heals, one GCD a buff.
 
 **Melee step out of a blast next to him.** A carrier that stays on him (`nopartner`, `late`, a swap
 that never came) stands ~7.6 yd in front of his centre; the melee hug him at 2.6–5 yd, 10–11.5 yd off
@@ -361,7 +374,8 @@ takes either, with `IsDps` on the name branch since a healer's Shadowfiend is ma
 **Reading a pull:** `bosses/iron_assembly.py <file>` (`--phases`: each member's death with healer
 mana and mana returns; `--empowered`: Overwhelming Power carriers with whoever else each blast killed,
 Fusion Punches and Rebirths; `--punches`: every phase's Fusion Punches with verdict and button;
-`--deaths`: by mechanic per phase). Its banner gives the **hard mode
+`--revived`: every tank that rose mid pull, the raid buffs put back inside the window, and what it still
+lacked at its next death or the end; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
 verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
 `hdr.cfg.hardmode` toggle alone proves nothing.
 `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
@@ -378,7 +392,9 @@ stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `r
 `clear` outside the blast, `none`), `rez` (a druid's battle rez: `walk` / `cast` / `hold:meltdown` and
 the tank, or `none:` why not), `rezdruid` / `reztank` (the latched pair), `nitro` (an event per boots
 use: `spread` / `meltdown`), `aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punch` (a punch's verdict:
-`under` / `safe` and the expected landing in k, `idle` between), `punchdef` (the defensive cast on it), `unheld` (a taunt-back, naming the member).
+`under` / `safe` and the expected landing in k, `idle` between), `punchdef` (the defensive cast on it), `unheld` (a taunt-back, naming the member), `rebuff` (a
+buffer's duty for a risen tank: `cast` / `hold:cast` and the tank, or `none:` `window` / `covered` /
+`other` / `nobody`).
 Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep, 17 for Meltdown where melee step out to. Rune of Death
