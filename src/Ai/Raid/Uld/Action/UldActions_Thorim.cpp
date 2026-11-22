@@ -279,8 +279,10 @@ bool ThorimGauntletLeverAction::Execute(Event /*event*/)
     if (!lever)
         return false;
 
+    // Walk right up: the use check is 5 yd around the model, but GetDistance nets out both sizes (scale 3 lever),
+    // so a stop past ~2.5 yd leaves the bot outside it on some sides.
     if (!lever->IsAtInteractDistance(bot))
-        return MoveTo(lever, fmaxf(lever->GetInteractionDistance() - 1.0f, 0.0f));
+        return MoveTo(lever, 0.0f);
 
     WorldPacket data(CMSG_GAMEOBJ_USE);
     data << lever->GetGUID();
@@ -304,6 +306,12 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
 
     if (Unit* colossus = ThorimGauntletLeadColossus(botAI, bot))
         return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
+
+    // Pathed to his own spot: he's up a ramp, and a point on the straight line can land off the mesh. All the way
+    // in, no stand-off: guards keep spawning off him until he's pulled, and the squad picks guards first.
+    if (Unit* giant = ThorimGauntletLeadRuneGiant(botAI, bot))
+        return MoveTo(giant->GetMapId(), giant->GetPositionX(), giant->GetPositionY(), giant->GetPositionZ(), false,
+                      false, false, false, MovementPriority::MOVEMENT_COMBAT);
 
     return false;
 }

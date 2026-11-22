@@ -432,7 +432,7 @@ struct ThorimEncounterState
 
     // Bot-led gauntlet: the lever has been pulled this pull, the next lane waypoint the leader walks to, and
     // when that last changed. Lever state is only readable from the arena, so the latch outlives the walk.
-    bool leverPulled = false;
+    RaidObs::ObsValue<bool> leverPulled{"thorim.leverpulled"};
     uint8 leadNext = 0;
     uint32 leadStepMs = 0;
 
@@ -549,6 +549,10 @@ bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The Runic Colossus once the leader is past the last waypoint and still short of ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE.
 Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot);
+
+// The Ancient Rune Giant once the Colossus is dead, until he's pulled. He's up a ramp ~100 yd on, past the squad's
+// 50 yd pick range, so nothing else takes a bot-led squad there.
+Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot);
 
 // The squad's waypoint index: the leader's (ThorimGauntletLeader), or this bot's own when the leader is on
 // none (centre line, or off on an add).

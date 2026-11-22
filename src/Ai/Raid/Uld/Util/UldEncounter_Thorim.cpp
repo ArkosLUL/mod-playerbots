@@ -1591,6 +1591,24 @@ Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
     return colossus;
 }
 
+Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
+{
+    // Past the portcullis only: from the arena he's beyond the 150 yd scan, and that cached miss reads as a dead
+    // Giant to the balcony walk.
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS || !PastThorimPortcullis(bot) ||
+        ThorimPhase2Active(botAI))
+        return nullptr;
+
+    // His player immunity goes when the Colossus dies, along with the first doors. Not the Colossus lookup: arena
+    // melee scan that cache too, from out of range, so it can read empty while he's still alive.
+    Unit* giant = GetThorimAncientRuneGiant(botAI);
+    if (!giant || giant->HasUnitFlag(UNIT_FLAG_IMMUNE_TO_PC) || giant->IsInCombat())
+        return nullptr;
+
+    return giant;
+}
+
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;

@@ -112,7 +112,8 @@ bool ThorimGauntletLeadTrigger::IsActive()
         return false;
 
     Position next;
-    return ThorimGauntletLeadStep(botAI, bot, next) || ThorimGauntletLeadColossus(botAI, bot);
+    return ThorimGauntletLeadStep(botAI, bot, next) || ThorimGauntletLeadColossus(botAI, bot) ||
+           ThorimGauntletLeadRuneGiant(botAI, bot);
 }
 
 bool ThorimBalconyAdvanceTrigger::IsActive()
