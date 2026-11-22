@@ -2709,6 +2709,11 @@ class KiteBlocked(unittest.TestCase):
         self.assertIn("kite blocked 10.0 s: the handler taunted with one held and a hole spare (none loose but one in"
                       " the air 4.0 s, taunt cooling 6.0 s)", [line for _, line in al.failures(self.trace)])
 
+    def test_two_holes_kept_for_a_big_bang_within_a_minute_are_not_spare(self):
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, kite_blocked_pull() + [cast(40000, ALGALON, al.SPELL_BIG_BANG[1], 0, 8000)])
+            self.assertEqual(al.kite_blocked(trace), {"stuck": 0, "cooling": 0})
+
     def test_a_stale_taunt_with_nothing_in_the_air_is_not_blocked_by_a_stuck_one(self):
         landed = []
         for rec in kite_blocked_pull():
