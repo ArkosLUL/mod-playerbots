@@ -218,13 +218,14 @@ inline constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
 inline constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 
-// Past the outer orbit's reach no cloud can touch a bot, so a player-led raid's phase 1 positioning waits until the
-// bot is inside it.
+// Past the outer orbit's reach no cloud can touch a bot, so phase 1 nodes other than the walk in wait until the bot
+// is inside it.
 // Combat is no gate: every Guardian's Reset puts the whole instance in combat.
 inline constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[5] + ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
 
-// Sara starts the fight on any player within 90 yd, so a bot between this and the room radius is at the door.
+// Sara starts the fight on any player within 90 yd, so from here the raid has to go in, led or not: the station,
+// leash and walk guard reach this far.
 inline constexpr float ULDUAR_YOGG_SARON_P1_DOOR_RADIUS = 90.0f;
 
 // Melee/tanks stay within 6.5 yd of Sara (21.5 less 15): a nova beyond it hits the 21.5 yd back line, a kill beyond 15
@@ -939,11 +940,7 @@ bool YoggSaronGuardianOnTheStack(Unit* guardian);
 // Inside ULDUAR_YOGG_SARON_P1_ROOM_RADIUS. Plain distance, no sweep, so it goes ahead of the phase read.
 bool YoggSaronInPhase1Room(Player* bot);
 
-// No real player in the raid group on this instance, so nobody leads the raid into the room.
-bool YoggSaronBotLedRaid(Player* bot);
-
-// Where the phase 1 station, leash and walk guard take a bot: inside the room, or at the door of a bot-led raid, which
-// walks in by itself. Group scan only between the two radii.
+// Inside ULDUAR_YOGG_SARON_P1_DOOR_RADIUS, where the phase 1 station, leash and walk guard take over. Plain distance.
 bool YoggSaronInPhase1Approach(Player* bot);
 
 // Record a Guardian's death, from the spell hook that sees its 65719 go out.

@@ -125,14 +125,15 @@ REZ_WINDOW_MS = 5000
 REZ_AGAIN_MS = 60000
 INFORM_CLOUD_MIN_RANGE = 20.0
 
-# Past the outer orbit's reach no cloud touches a bot, and the phase 1 movers wait until a bot is inside.
-# A move that started further out means the gate failed, or an old build.
+# Past the outer orbit's reach no cloud touches a bot, and the dodge and control movers wait until a bot is
+# inside, so one of theirs starting further out means the gate failed, or an old build. The station and the
+# leash walk the raid in from Sara's 90 yd start radius.
 P1_ROOM_RADIUS = CLOUD_ORBITS[-1] + CLOUD_SUMMON_REACH
 # The gate reads GetDistance2d(x, y), which takes the bot's own 1.5 yd combat reach off, and the move
 # lands up to a bot tick after that read: another ~1 yd at run speed.
 ROOM_GATE_SLACK = 2.5
-P1_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron phase 1 spacing action",
-             "yogg-saron guardian positioning action", "yogg-saron guardian control action")
+DOOR_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron guardian positioning action")
+P1_MOVERS = DOOR_MOVERS + ("yogg-saron phase 1 spacing action", "yogg-saron guardian control action")
 
 # Two Guardian deaths closer than this land both novas on whoever is inside both before the heals catch up.
 NOVA_GAP_MS = 6000
@@ -751,10 +752,9 @@ def show_room_gate(trace: Trace, p1_end: int) -> None:
             outside[rec["by"]] += 1
 
     counts = ", ".join(f"{mover} {count}" for mover, count in outside.most_common()) or "none"
-    # With no human in the raid nobody leads it in, so the station and leash walk it in from the door.
-    led = "  (bot-led raid: the walk in from the door)" if outside and not trace.humans else ""
+    door = "  (station and leash: the walk in from the door)" if any(m in DOOR_MOVERS for m in outside) else ""
     print(f"  moves begun outside the room (over {P1_ROOM_RADIUS:.1f} yd, "
-          f"{ROOM_GATE_SLACK:.1f} yd slack): {counts}{led}")
+          f"{ROOM_GATE_SLACK:.1f} yd slack): {counts}{door}")
 
     roster = roster_guids(trace)
     entered = room_entries(tracks(trace, roster, cols=("t", "x", "y", "hp")), p1_end)
