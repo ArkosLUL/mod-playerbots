@@ -529,8 +529,7 @@ void AssignThorimSquads(Player* bot)
     state.squadsAssigned = true;
 }
 
-// Labels humans by position for the trace, by the rule ThorimGauntletLeader reads live. The latched split is never
-// touched.
+// Labels humans by position, by the rule ThorimGauntletLeader reads live. The latched split is never touched.
 void TickHumanSquads(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -1435,6 +1434,11 @@ Player* ThorimGauntletLeader(PlayerbotAI* botAI)
     if (!group || !state || !state->squadsAssigned)
         return nullptr;
 
+    // Corridor's done once he drops. A tether to the leader then would pull the squad off its phase 2 spots and
+    // walk the balcony holds back down the corridor.
+    if (ThorimPhase2Active(botAI))
+        return nullptr;
+
     Player* tank = nullptr;
     Player* fallback = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -1528,6 +1532,22 @@ bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out)
     ThorimPreferredGauntletLane(botAI, leftLane);
 
     uint32 const now = getMSTime();
+
+    // Past the portcullis the lanes run south, so a waypoint north of him is behind him. Otherwise a bot taking
+    // over mid-corridor from a player walks the squad back to the first one.
+    if (PastThorimPortcullis(bot))
+    {
+        while (state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS &&
+               bot->GetPositionY() < GetThorimGauntletWaypoint(leftLane, state->leadNext).GetPositionY())
+        {
+            ++state->leadNext;
+            state->leadStepMs = now;
+        }
+
+        if (state->leadNext >= ULDUAR_THORIM_GAUNTLET_WAYPOINTS)
+            return false;
+    }
+
     uint8 index = 0;
     if (ThorimGauntletLaneIndexInLane(bot, leftLane, index) && index >= state->leadNext)
     {

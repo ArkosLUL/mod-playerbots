@@ -800,9 +800,10 @@ player was on the instance left the corridor standing while he stayed in the are
   `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION`, the lever ~5.5 yd from it) or past the portcullis (east of the
   arena box within its y band, south of it, or in the balcony box; north of it is the way in), else the
   gauntlet-squad tank, else the squad's first living non-healer bot. The split never picks a human, so
-  that position is his squad. The corridor formation (`ThorimGauntletPositioningTrigger`/`Action`,
-  `ThorimResolveGauntletIndex`, so the Runic Smash lane swap too) keys on the leader. The
-  `ThorimFallFromFloor` teleport still targets the group leader.
+  that position is his squad. Nobody leads in phase 2: the tether below would pull the squad off its
+  phase 2 spots and walk the balcony holds back down the corridor. The corridor formation
+  (`ThorimGauntletPositioningTrigger`/`Action`, `ThorimResolveGauntletIndex`, so the Runic Smash lane swap
+  too) keys on the leader. The `ThorimFallFromFloor` teleport still targets the group leader.
 - **Lever:** `ThorimGauntletLeverTrigger` is true for a bot leader once the lever (GO 194264,
   (2173.3, −252.9)) has lost `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`;
   the action walks into interact range and sends `CMSG_GAMEOBJ_USE`. A real player leading pulls it himself.
@@ -812,14 +813,13 @@ player was on the instance left the corridor standing while he stayed in the are
   over from a human there, it would otherwise walk back to a reset lever, or, out of range, never start the
   walk.
 - **Walk:** `ThorimGauntletLeadTrigger` steps a bot leader through the lane waypoints (`leadNext`, monotonic;
-  right lane, or the one the last Runic Smash telegraph left safe), at combat priority. He holds while a
-  squad non-healer is more than 30 yd behind, but at most 15 s per step, so a stuck bot cannot eat the 150 s
-  clock. Past the last waypoint he walks on to 30 yd from the Colossus, which the squad's own targeting then
-  engages. Followers take his waypoint; between waypoints they walk to him once more than 25 yd (healers
-  20 yd) behind. Behind a real player only healers tether, and the gate walk re-adds follow-master only when
-  the leader is the bot's master.
-- **Takeover gap:** only a bot leader advances `leadNext`, so a bot taking over mid-corridor from a human
-  walks back to the first waypoint unless it stands on a later one.
+  right lane, or the one the last Runic Smash telegraph left safe), at combat priority. Past the portcullis
+  it skips any waypoint north of him, since the lanes run south: a bot taking over mid-corridor from a human
+  walks on rather than back to the first. He holds while a squad non-healer is more than 30 yd behind, but
+  at most 15 s per step, so a stuck bot cannot eat the 150 s clock. Past the last waypoint he walks on to
+  30 yd from the Colossus, which the squad's own targeting then engages. Followers take his waypoint;
+  between waypoints they walk to him once more than 25 yd (healers 20 yd) behind. Behind a real player only
+  healers tether, and the gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical

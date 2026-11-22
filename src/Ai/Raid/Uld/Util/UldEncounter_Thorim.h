@@ -528,7 +528,7 @@ inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE = 30.0f;
 inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
 
 // Who the corridor squad forms on: a living real player at the gate or past the portcullis, else the gauntlet tank
-// (any non-healer of the squad when he is dead). nullptr when nobody qualifies.
+// (any non-healer of the squad when he is dead). nullptr when nobody qualifies, and in phase 2.
 Player* ThorimGauntletLeader(PlayerbotAI* botAI);
 
 // A bot leader pulls the lever and walks the lanes himself, and the squad closes up on him between waypoints. A real
@@ -543,8 +543,8 @@ bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
 bool ThorimLeverUsable(Player* bot, ObjectGuid& lever);
 void ThorimNoteLeverPulled(Player* bot);
 
-// The next lane waypoint the bot-led leader walks to. False when he should hold: lever not pulled, squad not
-// closed up (until the stall timer runs out), or past the last waypoint.
+// The next lane waypoint the bot-led leader walks to, skipping any he is already south of. False when he should
+// hold: lever not pulled, squad not closed up (until the stall timer runs out), or past the last waypoint.
 bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The Runic Colossus once the leader is past the last waypoint and still short of ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE.
