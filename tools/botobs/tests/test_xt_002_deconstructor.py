@@ -313,6 +313,13 @@ class Bombs(unittest.TestCase):
                       " at expiry, carrier 50% at expiry, killed\n",
                       printed(xt.show_bombs, load(self.bomb_pull(sent=False))))
 
+    def test_healer_sent_after_the_last_snapshot_gets_no_distance(self):
+        records = self.bomb_pull(sent=True)
+        next(rec for rec in records if rec.get("k") == "xt002.bombheal")["t"] = 208500
+        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:28.500, 2 heals from it,"
+                      " back on its slot 4 s after, nearest healer 34 yd at expiry, carrier 50% at expiry\n",
+                      printed(xt.show_bombs, load(records)))
+
 
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):

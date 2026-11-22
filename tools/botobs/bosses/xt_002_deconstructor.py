@@ -670,9 +670,12 @@ def show_bombs(trace: Trace) -> None:
         if row["out"] is not None:
             line += f" out of range from {clock(row['out'])}"
         if row["healer"]:
-            line += (f", {trace.name(row['healer'])} sent {clock(row['sent'])}, closest"
-                     f" {row['closest']:.0f} yd{' (inside the pull)' if row['closest'] < pull else ''},"
-                     f" {row['at_expiry']:.0f} yd at expiry, {row['heals']} heals from it")
+            line += f", {trace.name(row['healer'])} sent {clock(row['sent'])}"
+            # no distance when the healer died or the latch came in the bomb's last snapshot gap
+            if row["closest"] is not None:
+                line += (f", closest {row['closest']:.0f} yd{' (inside the pull)' if row['closest'] < pull else ''},"
+                         f" {row['at_expiry']:.0f} yd at expiry")
+            line += f", {row['heals']} heals from it"
             back = back_on_slot(trace, row["healer"], row["until"])
             line += f", back on its slot {back / 1000:.0f} s after" if back is not None else ", never back on its slot"
         elif row["out"] is not None:
