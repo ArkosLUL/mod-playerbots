@@ -79,7 +79,7 @@ inline constexpr float ULDUAR_VEZAX_HOLD_HEALTH_PCT = 15.0f;
 inline constexpr float ULDUAR_VEZAX_TANK_HOLD_HEALTH_PCT = 2.0f;
 // Close enough that the Animus, following its victim, ends up in the main tank's melee range.
 inline constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
-// Shadow Crash skips anyone within this plus both combat reaches (SelectTarget -3, 3D), so 12.5 yd for
+// Shadow Crash skips anyone within this plus both combat reaches (SelectTarget -3, 3D), so 17.1 yd for
 // most players. The margin covers the two bosses shuffling.
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE = 3.0f;
 inline constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN = 2.0f;
@@ -104,8 +104,8 @@ inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 inline constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
 // Two groups of two files by five rows, boss-relative, rows 27 to 36. Mark floor 29.1 (15 plus his 12.6
-// reach and the player's 1.5), reach spell's stop 42.6. Past ~31.5 a healer loses the main tank, who
-// stands ~10 yd off him on the far side.
+// reach and the player's 1.5), reach spell's stop 42.6. Past ~31.5 the main tank, ~10 yd off him on the
+// far side, is often past 41.5, where heal targeting ranks him 30 points healthier than he is.
 inline constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 31.5f;
 inline constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 2.25f;
 inline constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
@@ -127,7 +127,7 @@ inline constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 inline constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
 inline constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
-// Off him, and wide enough for reach spell's 38 yd stop and the widest strafed slot (41.4) so the gate
+// Off him, and wide enough for reach spell's 42.6 yd stop and the widest strafed slot (41.4) so the gate
 // opens on arrival. Any wider puts bots on paths through walls.
 inline constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
 inline constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;

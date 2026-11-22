@@ -1017,7 +1017,7 @@ def show_band(trace: Trace) -> None:
         return
 
     print(f"\n  {'bot':14} {'role':6} {'blk':4} {'on':>5} {'median':>7} {'<' + format(BAND_FLOOR, '.1f'):>7}"
-          f" {'>' + format(BAND_CEILING, '.0f'):>7}")
+          f" {'>' + format(BAND_CEILING, '.1f'):>7}")
     for row in rows:
         figures = (f"{'-':>7} {'-':>7} {'-':>7}" if row["median"] is None else
                    f"{row['median']:7.1f} {row['inside'] * 100:6.1f}% {row['past'] * 100:6.1f}%")

@@ -279,12 +279,14 @@ player in the raid.
   are past, row 1 is 0.3-0.7 yd past when exactly on its slot, row 0 inside. At 10-man the camp fills rows
   0-1, so nearly every mark falls inside.
 - *Why not moved.* Vezax settles 7.1-11.5 yd north of his anchor, between the main tank on it and the camp
-  (he meets the tank on its way in). `PartyMemberToHeal` picks only within 41.5 yd 2D
-  (`PartyMemberToHeal.cpp:40-75`, `GetDistance2d` > 38.5). Replayed on where both really stood 0:15-3:00
-  in six pulls: a slot at 27-29.25 reaches the main tank 86-100% of samples, 31.5 0-100%, 33.75 0-72%,
-  36+ 0-18%; every camp bot as it stood plus 4.5 yd cuts the share of time *any* healer can pick him
-  from 43-93% to 10-42%. So no radius clears 29.1 with the 2.4 yd deadband and keeps the healers on the
-  tank: where the camp goes is a positions call (Q1). The victim guard above removes the outcome that
+  (he meets the tank on its way in). Past 41.5 yd 2D `PartyMemberToHeal` scores a member as 30 points
+  healthier (`PartyMemberToHeal.cpp:88-95`, `GetDistance2d` > 38.5), so the tank is picked there only
+  when ~30 points lower than everyone else, and past 43 yd 3D (heal range 40 plus both reaches,
+  `Spell::CheckRange`) no heal lands. Replayed on where both really stood 0:15-3:00 in six pulls: a
+  slot at 27-29.25 is within 41.5 of the main tank 86-100% of samples, 31.5 0-100%, 33.75 0-72%, 36+
+  0-18%; every camp bot as it stood plus 4.5 yd cuts the share of time *any* healer is within 41.5 of
+  him from 43-93% to 10-42%. So no radius clears 29.1 with the 2.4 yd deadband and keeps the healers on
+  the tank: where the camp goes is a positions call (Q1). The victim guard above removes the outcome that
   made the floor lethal.
 
 **Reader.** `general_vezax.py`: band floor and ceiling on reach 12.6 (29.1 / 42.6); `--mark` gains a

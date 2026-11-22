@@ -68,11 +68,13 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
 
 **Moving the rows out costs the healers the main tank.** The tank holds the anchor, and Vezax settles
 7-12 yd north of it, between tank and camp, having met the tank on its way in from the north.
-`PartyMemberToHeal` picks only within `HealDistance` 38.5 plus both reaches, 41.5 yd 2D. Replayed on
-where both stood in six pulls, a slot at 27-29.25 yd reaches the tank 86-100% of the time, 31.5 0-100%,
-33.75 0-72%, 36 and out 0-18%; every camp bot 4.5 yd further out cuts the time any healer can pick him
-from 43-93% to 10-42%. No radius both clears the floor with the 2.4 yd slot deadband and keeps a healer
-on him.
+`PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30 points
+healthier, so a healer there picks the tank only when he is ~30 points lower than everyone else, and
+past 43 yd 3D (heal range 40 plus both reaches) no heal lands from the slot. Replayed on where both
+stood in six pulls, a slot at 27-29.25 yd is within 41.5 of the tank 86-100% of the time, 31.5 0-100%,
+33.75 0-72%, 36 and out 0-18%; every camp bot 4.5 yd further out cuts the time any healer is within
+41.5 of him from 43-93% to 10-42%. No radius both clears the floor with the 2.4 yd slot deadband and
+keeps a healer within 41.5 of him.
 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
 itself: a tank on the spawn point is what keeps Vezax there for every other radius here. 20 slots
@@ -362,12 +364,12 @@ it:
   down for that bot; it had walked him back 5 times from the chase.
 - **Melee stay inside his crash limit** (`vezax animus melee spot`), the 17.1 yd skip, measured 3D
   (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
-  tank, 6 of 16 after. The Animus (reach 8) takes his spot by the tank, he steps 8-9 yd round it, and `set
-  behind` walked melee to the Animus's far side, 13-20 yd from him. At 24 Profound Darkness stacks a crash
-  did 26-40k, at ~40 57-60k: one pull lost 7 melee to two crashes; in another a crash on the off-tank,
-  7.6 yd from the main tank, threw her 36 yd, both bosses followed, and she died. Melee bots take a lane
-  on the Animus-Vezax line within that limit minus 2, by guid rank, and the movement rule blocks `set
-  behind` for melee while the Barrier is up.
+  tank, 6 of 16 after. The Animus (reach 8 then, 7 now) takes his spot by the tank, he steps 8-9 yd
+  round it, and `set behind` walked melee to the Animus's far side, 13-20 yd from him. At 24 Profound
+  Darkness stacks a crash did 26-40k, at ~40 57-60k: one pull lost 7 melee to two crashes; in another
+  a crash on the off-tank, 7.6 yd from the main tank, threw her 36 yd, both bosses followed, and she
+  died. Melee bots take a lane on the Animus-Vezax line within that limit minus 2, by guid rank, and
+  the movement rule blocks `set behind` for melee while the Barrier is up.
 
 **Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first vapor
 death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
