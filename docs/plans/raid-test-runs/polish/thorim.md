@@ -573,6 +573,11 @@ while it fights; healers keep their 20 yd tether, and the gate walk and the lane
 share it. With nothing left in range the tether walks the bot to the leader as before, where the picker hands it his target.
 A real player leading changes nothing: non-healers never trailed a human leader.
 
+**Review:** that bot-leader-only trail (`ThorimGauntletLeaderIsBot`, now removed) was a bot-only branch, and its one reason,
+a tether fighting `reach melee`, is what the fighting gate removes. Non-healers now trail a real player leader the same way,
+one code path for every raid; bot-led pulls are unchanged. Replayed on the six pulls, the gate holds ~400 of the 443 trail
+orders sent to a DPS with a live gauntlet target; the rest had a mob at full health with no target (23) or past 50 yd (19).
+
 **Not fixed, measured** (all six pulls):
 - **The squad is pinned at the last waypoint while the leader waits at his 30 yd Colossus stop.** The Runic Smash dodge keeps
   followers swapping between the two last waypoints (y −329), 55-65 yd from the Colossus, outside the 50 yd pick range, until

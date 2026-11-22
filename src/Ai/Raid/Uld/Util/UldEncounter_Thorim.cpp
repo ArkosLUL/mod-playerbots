@@ -1425,8 +1425,6 @@ Player* ThorimGauntletLeader(PlayerbotAI* botAI)
     return tank ? tank : fallback;
 }
 
-bool ThorimGauntletLeaderIsBot(Player const* leader) { return IsBotPlayer(leader); }
-
 bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot)
 {
     return IsBotPlayer(bot) && ThorimGauntletLeader(botAI) == bot;
@@ -1460,9 +1458,6 @@ bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
         return false;
 
     bool const healer = PlayerbotAI::IsHeal(bot);
-    if (!healer && !ThorimGauntletLeaderIsBot(leader))
-        return false;
-
     float const trail = healer ? ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE : ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE;
     if (bot->GetDistance2d(leader) <= trail)
         return false;

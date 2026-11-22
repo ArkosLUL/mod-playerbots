@@ -375,8 +375,6 @@ inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
 
 Player* ThorimGauntletLeader(PlayerbotAI* botAI);
 
-bool ThorimGauntletLeaderIsBot(Player const* leader);
-
 bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot);

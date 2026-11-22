@@ -996,12 +996,12 @@ player was on the instance left the corridor standing while he stayed in the are
   lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
   own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
   once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until he is pulled, and the squad
-  picks guards first. Followers take his waypoint; between waypoints they walk to him once more than 25 yd
-  (healers 20 yd) behind, except a non-healer fighting a gauntlet mob in combat within the 50 yd pick range
-  (`ThorimGauntletFighting`): that tether fought `reach melee` whenever he walked on mid-fight, 116-185 DPS
-  bot-seconds a pull of moving without damage, three quarters of it on the Honor Guards and Giant. Behind a
-  real player only healers tether, and the gate walk re-adds follow-master only when the leader is the bot's
-  master.
+  picks guards first. Followers, behind a bot or a real player alike, take the leader's waypoint; between
+  waypoints they walk to him once more than 25 yd (healers 20 yd) behind, except a non-healer fighting a
+  gauntlet mob in combat within the 50 yd pick range (`ThorimGauntletFighting`): that tether fought `reach
+  melee` whenever he walked on mid-fight, 116-185 DPS bot-seconds a pull of moving without damage, three
+  quarters of it on the Honor Guards and Giant. The gate walk re-adds follow-master only when the leader is
+  the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
   led squad accepts. The corridor fights set the clock. Measured on 25-man (six bot-led pulls): the lever
@@ -1021,8 +1021,7 @@ radius**, so once he walks past the chain the row goes quiet for everyone. DPS d
 reached **183-191 yd** out while the two healers stalled at **148 and 129**, one of them with **no move
 order at all** across 22 s, leaving the human 68.8 and 101.1 yd behind against the 40 yd heal range and
 his last outside heal 21 s before he died. `ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE` (20 yd) now walks a
-trailing healer to the leader once the lane index fails (behind a real player healers only, since a
-tether on the rest would fight `reach melee`).
+trailing healer to the leader once the lane index fails; non-healers trail as in **Walk** above.
 
 **The fall rescue still stops at 110 yd.** `ThorimFallFromFloorTrigger` bails past
 `ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last three
@@ -1037,8 +1036,9 @@ at (2219, −354) and the ramp foot (2217, −423), paths below the floor to z ~
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It stays: it
 is the difference between missing and making the clock.
 
-**The clock is no longer the problem**: 10 of the last 12 traced pulls made it, at +6.8 to +37.9 s
-from the Touch of Dominion cast. The spread is corridor-trash time and it is still Iron Honor Guard:
+**Human-led, the clock was not the problem**: 10 of 12 traced pulls (September-October) made it, at
+margins of +6.8 to +37.9 s from the Touch of Dominion cast; bot-led it still is (**Clock** above). The
+spread is corridor-trash time and it is still Iron Honor Guard:
 **92.8 s** held on the slow pull against **48.6-51.4 s** on the rest, with Colossus and Rune Giant time
 identical. Snapshot cadence never moved (p50 227-229 ms), so it is bot behaviour, not load.
 
