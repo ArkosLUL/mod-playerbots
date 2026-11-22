@@ -192,8 +192,8 @@ Also Magic: Entangling Roots 65857 (Balance, random within 30 yd), Frost Nova 65
 (6 s) and Earth Shock (row 65973, 2 s) lock the school of the cast they interrupt, dispels included
 (`Player::ProhibitSpellSchool`).
 
-**Melee champions on a kiter** run at our speed (25H 2026-10-23 late: p90 7-8 yd/s, bots 7), so running only
-holds a gap an escape, CC or snare opened. Still, a moving victim takes about half their damage, in contact
+**Melee champions on a kiter** run at 8.0 yd/s (`speed_run` 1.14286; 25H 2026-10-23 late, p90 7-8) against
+a player's 7, so running only holds a gap an escape, CC or snare opened. Still, a moving victim takes about half their damage, in contact
 too (25H 2026-10-25, ranged: 3.7-4.5 against 7.9-8.2k/s; within 5 yd, unsnared, 2.9-3.6 against 5.0-8.7k/s).
 Their melee range on a player is 5.1 yd, the Tauren Warrior's and Enhancement's 8.9 (combat reach 6.075
 since `2026_11_06_01`, the rest 2.25), plus 2.66 yd while both move (`Unit::IsWithinMeleeRange`'s leeway):
@@ -239,8 +239,7 @@ Retaliation, Blade Flurry, Bladestorm.
 
 **Crowd AoE.** `EnemiesInRange` measures `GetDistance2d`, which subtracts both combat reaches
 (champions 0-2.6, players 1.5), and counts every unit on the threat list, pets included. A creature's
-AoE hits centre to centre. Champions run at 8.0 yd/s (`speed_run` 1.14286) against a player's 7, so
-a melee champion can't be outrun.
+AoE hits centre to centre.
 
 - **Bladestorm** 65947, Warrior, 3+ within 8 yd, every 90 s: 8 s aura ticking 65946 each second for
   50% weapon damage to all within 8 yd. Slows him 30%, to 5.6 yd/s.
@@ -368,13 +367,13 @@ Hellfire kick) ignores Auto Shot and a firing wand.
 - `fc.nextfocus` is unscored until a trace carries it.
 - No bot grips a champion out of the pack but on the player's `pull`. With one bot DK and no human DK the champion
   stops ~27 yd off, inside its friends' heal reach. Without a DK bot nothing grips, a melee champion to the wall included.
-- Nothing but CC and the kite holds the casters.
+- Nothing but CC and the kite holds the casters, who take almost anyone within 50-57 yd, the healers
+  and the kill target's melee included.
 - 25H 2026-11-16 kill (7 deaths): bursts from full no reaction beats (Elemena, DoT ticks and Frostbolt in 0.3 s; Smartface, the hunter's 26k in 0.2 s). The Ret's Hammer of Justice still landed 9 times despite its 17 yd kite (4.4 s held, dispels). `AttackersValue::hasRealThreat` drops only Polymorphed units, so a Feared one still loops a healer through assist and `drop target` outside this fight.
 - 25H 2026-10-29 kill (3 deaths): burst from full during a stun (Totemist, Hammer of Justice; Agony, Warrior and hunter 28k in one tick, the hunter's Polymorph broken 0.6 s before). Peels run dry on the un-iced Warrior: roots diminish, both Hammers of Justice on cooldown, and Freezing Arrow and Blind wait for no raid member hitting or targeting it (`ClearOfOurHits`), and Auto Shot kept hunters off the peel duty until 2026-11-22, so Freezing Arrow went out 0-1 times a pull over five pulls. Three externals go out in the first 2.5 s on the predicted picks; none was ready in reach at the later deaths.
 - A Fury warrior bot never Disarms: Berserker Stance can't cast it.
 - Escapes, step-offs, Nitro `contact` and Sprint or Dash read contact at a flat 8 yd, inside the Tauren
   Warrior's and Enhancement's 8.9 yd melee range.
-- Casters take almost anyone within 50-57 yd, the healers and the kill target's melee included.
 - A healer whose heal target is past its reach stalls until someone else is lower (`PartyMemberToHeal`
   adds 30 past HealDistance).
 - With no eligible champion left, physical attackers keep swinging at the Hand of Protection target.
