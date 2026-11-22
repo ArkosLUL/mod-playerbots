@@ -142,7 +142,8 @@ public:
     bool IsActive() override;
 };
 
-// Empowered Steelbreaker is casting Fusion Punch at this tank and it has a magic defensive for it.
+// Steelbreaker is casting a Fusion Punch at this tank that would leave it under the floor, and it has a
+// magic defensive for it.
 class IronAssemblyFusionPunchDefensiveTrigger : public Trigger
 {
 public:

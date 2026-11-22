@@ -15,6 +15,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidDefensive.h"
 #include "RaidEncounter.h"
 #include "RaidInstanceState.h"
 #include "EncounterHelpers.h"
@@ -2135,22 +2136,54 @@ bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss)
     return holder && holder != bot && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
 }
 
+// Top of the roll times Supercharge and Electrical Charge, less the bot's average nature resist and damage
+// taken mods. Absorbs not counted.
+static float IronAssemblyFusionPunchLanding(Unit* steelbreaker, Player* bot, SpellInfo const* punch)
+{
+    SpellEffectInfo const& hit = punch->Effects[EFFECT_0];
+    float const raw = static_cast<float>(hit.BasePoints + std::max(hit.DieSides, 1));
+    float const done =
+        steelbreaker->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_DONE, SPELL_SCHOOL_MASK_NATURE);
+    float const resist = Unit::GetEffectiveResistChance(steelbreaker, SPELL_SCHOOL_MASK_NATURE, bot, punch);
+    float const taken =
+        bot->GetTotalAuraMultiplierByMiscMask(SPELL_AURA_MOD_DAMAGE_PERCENT_TAKEN, SPELL_SCHOOL_MASK_NATURE);
+    return raw * done * (1.0f - resist) * taken;
+}
+
 uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !bot || !PlayerbotAI::IsTank(bot) || !IronAssemblyFormationActive(botAI) ||
-        !IsSteelbreakerEmpowered(botAI))
+    if (!botAI || !bot || !PlayerbotAI::IsTank(bot) || !IronAssemblyFormationActive(botAI))
         return 0;
 
     Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
     Spell* punch = steelbreaker ? steelbreaker->GetCurrentSpell(CURRENT_GENERIC_SPELL) : nullptr;
-    if (!punch || punch->m_targets.GetUnitTarget() != bot)
+    SpellInfo const* info = punch ? punch->GetSpellInfo() : nullptr;
+    if (!info || punch->m_targets.GetUnitTarget() != bot ||
+        (info->Id != SPELL_FUSION_PUNCH_10_MAN && info->Id != SPELL_FUSION_PUNCH_25_MAN))
+    {
+        // reset between punches, so two in a row with the same verdict still get a row each
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "ironassembly.punch", "idle");
+
+        return 0;
+    }
+
+    uint32 const remainingMs = static_cast<uint32>(std::max(punch->GetCastTimeRemaining(), 1));
+    if (remainingMs > ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS)
         return 0;
 
-    uint32 const spellId = punch->GetSpellInfo()->Id;
-    if (spellId != SPELL_FUSION_PUNCH_10_MAN && spellId != SPELL_FUSION_PUNCH_25_MAN)
-        return 0;
+    float const expected = IronAssemblyFusionPunchLanding(steelbreaker, bot, info);
+    float const floor = bot->GetMaxHealth() * RAID_DEFENSIVE_FLOOR_PCT / 100.0f;
+    bool const under = static_cast<float>(bot->GetHealth()) - expected < floor;
 
-    return static_cast<uint32>(std::max(punch->GetCastTimeRemaining(), 1));
+    if (RaidObs::Active())
+    {
+        char text[24];
+        snprintf(text, sizeof(text), "%s %.0fk", under ? "under" : "safe", expected / 1000.0f);
+        RaidObs::NoteDerived(bot, "ironassembly.punch", text);
+    }
+
+    return under ? remainingMs : 0;
 }
 
 uint8 IronAssemblyResistWantedSchools(PlayerbotAI* botAI, uint8 /*previous*/)

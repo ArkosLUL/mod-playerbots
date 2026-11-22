@@ -194,3 +194,112 @@ two bot tanks left, a "Rebirth from <druid> on <tank> (tank)" within ~10 s, and 
 blast next to him (`nopartner`/`late`): no "N more killed", melee `ironassembly.meltstep` `behind` rows
 in its last 3 s, and `VETO iron assembly meltdown melee guard` on reach or set behind. Melee uptime in
 those 3 s holds (cast rate on him).
+
+## Round 4 (2026-11-22, window 8 on build c8b94dbce + 02925e260, rounds 2 and 3)
+
+**Data.** Window 8, one pull per pool, all valid (`batch.py --strict --since 02925e260`), no DC veto:
+uld1 `tr-20261122-112837-7` (`603_7_stormcaller-brundir_1795346976`, wipe 6:01, 34 deaths), uld2
+`tr-20261122-112858-8` (`603_9_…_1795347008`, wipe 6:19, 33), uld3 `tr-20261122-112858-9`
+(`603_8_…_1795347027`, **kill 5:29, 3 deaths**). The uld3 kill is the first Iron Assembly kill and a
+real hard mode one: the last `ironassembly.alive` is `1`, Steelbreaker died last (banner "hard mode
+triggered").
+
+**Stop rules.** Not polished: one kill of three. Picks so far: healer mana (r1), Meltdown on the melee
+(r2), the user's two answers (r3), Fusion Punch on the tanks (r4), so no three-round repeat.
+
+**Verdict on round 2 (swapped carrier holds its point): works.** Every carrier that stayed swapped blew
+0 yd from the Meltdown point (2 of 2 in each pool; window 7 uld3's was 14 yd short). The hold vetoed a
+carrier's `reach melee`/`reach spell` 4-5 times a pull and its Charge or Feral Charge once each in uld2
+and uld3. No melee died to Meltdown (window 7: 10). The one blast off the point was uld2's third carrier
+Uldyaz: parked at the point, it turned `nopartner` when its partner died 2.7 s before the blast and
+walked back, blowing 22 yd off the point (one member hit for 20k, no death). Cause: the
+`meltdownRunners` latch is only read inside the `IronAssemblySwappedOut` branch, which needs a tank on
+Steelbreaker (`UldEncounter_IronAssembly.cpp`, `DeriveIronAssemblyMeltdownRole`).
+
+**Verdict on round 3 (tank battle rez, melee step out): works.** Five duty rezzes, latch to cast in
+0.9-6.1 s (uld1 4:53.0 → 4:56.3 and 5:23.5 instant, uld2 5:10.7 → 5:16.8 through one
+`hold:meltdown`, uld3 4:40.0 → 4:41.0 and 5:16.2 → 5:18.4). By design they wait until the second
+tank swaps out, 27-32 s after the Meltdown death. Two limits: the budget is the non-tank druids'
+Rebirths (2 in rosters B and C, 3 in A), and a class `rebirth` on a tank killed in Molgeim's phase
+spends one (uld1 3:02, uld2 3:36), so uld2's third tank death (Uldyab at the point, 5:20.5) read
+`none:nodruid`. A rezzed tank stands up without raid buffs: uld2 Uldyaa had no Kings, Fortitude or Gift
+of the Wild at his 5:53.7 death, 41.8k max health against 48.5k before. The step out never had a blast
+next to him to answer: uld2's walk-back carrier ended 22 yd out and all 7 melee read `meltstep` `clear`.
+
+**Deaths by mechanic.**
+
+| Pull | Phase timeline | Deaths |
+|---|---|---|
+| uld1 | Brundir 1:44, Molgeim 3:44, alone 133 s, lowest 23.1% (5:18) | Molgeim phase: 1 Fusion Punch (tank). Alone: 22 High Voltage, 3 Fusion Punch (carrier 20 s in at 3 charges, partner at 5, a melee at 32), 3 Static Disruption, 2 Meltdown (carriers at the point), 2 Steelbreaker melee on non-tanks, 1 on a tank |
+| uld2 | Brundir 1:51, Molgeim 4:01, alone 134 s, lowest 9.3% (5:53.6) | Molgeim phase: 1 Fusion Punch (tank). Alone: 24 High Voltage, 4 Steelbreaker melee on non-tanks, 3 Meltdown (carriers: 2 at the point, 1 at 22 yd), 1 Fusion Punch (partner, 2 charges) |
+| uld3 | Brundir 1:45, Molgeim 3:31, alone 119 s, **kill** | 2 Meltdown (carriers at the point), 1 Fusion Punch (carrier 1.8 s after its swap, 2 charges) |
+
+What started each wipe: uld1, healers dry (4 of 5 under 10% by 5:19, Uldxba from 3:52), a ranged High
+Voltage death at 5:18 (2 charges), then Fusion Punch on the carrier before its swap (5:23, 59.1k at
+79%) and on the rezzed partner (5:39, 63.3k at 81%). uld2, Steelbreaker at **9.3%** when Fusion Punch
+killed partner Uldyaa at 86% (5:53.7, 44.3k, 2 charges) with no button left and no tank behind him;
+he went to the ranged and the charges took the raid.
+
+**Picked: Fusion Punch kills tanks** (6 tank deaths over the window, part of both wipes). Two causes:
+
+1. *Before phase 3, a bug: the punch defensive waits for Steelbreaker to be alone.*
+   `IronAssemblyFusionPunchIncomingMs` returned 0 unless `IsSteelbreakerEmpowered`, but his punch is
+   cast all fight and kills a low tank in Molgeim's phase too. uld1 Uldxaa (paladin, 45.2k) died at
+   3:01.4 to 22.8k at 42% with Divine Protection castable through the whole cast (no Forbearance, no
+   Avenging Wrath marker until his own Avenging Wrath at 3:00.87): healers put 3.4k on him in the 16 s
+   before against 52.8k taken. uld2 Uldyaa (warrior, 48.5k) died at 3:31.6 to 35.2k at 45% with Last
+   Stand ready (cast at 3:51.5 after his Rebirth), unresisted because Aspect of the Wild was off him
+   3:11-3:37. Each death spent a druid's Rebirth that phase 3 then lacked.
+2. *In phase 3, a plan question: no button left.* The node fired on every punch, weakest first, but
+   the class nodes spend the same buttons on health alone: uld2 Uldyaa's Shield Wall 3 s after his
+   Rebirth (5:19.9, not tanking) and Last Stand at 3:51.5; uld1 Uldxaz's Last Stand (4:57.4) and Shield
+   Wall (5:07.9, after the punch it was meant for) in one 10 s stint, so the 3-charge punch at 5:23
+   found nothing; uld3's death knight Uldzaz (44.1k, about 25 talent points) had used Anti-Magic Shell
+   and Icebound Fortitude on the two punches before.
+
+**Fix (cause 1).** `IronAssemblyFusionPunchIncomingMs` answers in every phase, but only for a punch that
+would leave the tank under `RAID_DEFENSIVE_FLOOR_PCT` (25%): the top of the roll (35,000 25-man, 21,150
+10-man) × Steelbreaker's `MOD_DAMAGE_PERCENT_DONE` for nature (Supercharge, Electrical Charge, Berserk) ×
+(1 − the tank's average nature resist, `Unit::GetEffectiveResistChance`) × its `MOD_DAMAGE_PERCENT_TAKEN`,
+absorbs ignored, the floor test `RaidDefensive`'s `EndsUnderFloor` uses. Before phase 3 a punch on a
+full tank reads `safe` (expected 22–28k) and spends nothing; it reads `under` below 25% + expected/max
+health, 74–91% on these 43–50k tanks; in phase 3 most punches still read `under`, though a full bear
+(60k+) should read `safe` at 0 charges and keep its button. New probe `ironassembly.punch` (`under`/`safe` + expected k, `idle` between punches); reader
+`--punches` lists every punch in every phase with verdict and button, `--empowered` adds the verdict.
+Holds for 10 and 25 (the roll is read off the cast spell) and both modes (normal mode only meets his
+first-phase punches). pb-check green.
+
+**Review.** The lane's version judged a punch from its cast start on current health. Replayed on
+window 8, that reads `under` on four punches before phase 3 besides the two that killed, all four
+landing at 88–100%: uld2 Uldyaa's 2:01.8 punch (77% mid cast, 100% at the hit) would have spent Last
+Stand, the button his 3:31.6 death had ready (his Shield Wall went at 2:37). Now judged only in the
+cast's last 1.5 s (`ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS`): uld2's 2:01.8 and 3:51.5 read
+`safe`, both deaths still `under`, and every traced punch had a tank action in that window (48 of 57
+in the last 1 s). Uld1 Uldxaa's 2:45.6 punch still reads `under` (73% in the window; fully absorbed,
+which the estimate ignores), so Divine Protection likely goes there and the 3:01.4 punch still finds
+none: a Molgeim-phase punch is expected to take about two thirds of his health.
+
+**Questions (plan changes).**
+1. *Hold the tanks' class defensive buttons through Iron Assembly (above 25% health), so only the
+   Fusion Punch node spends them, as Hodir's round 2 does?* Recommended: yes. uld2 was a likely kill:
+   Steelbreaker at 9.3% when the partner died to a punch that a ready Shield Wall (60%) would have left
+   at ~18k, and that Shield Wall went 3 s after his Rebirth with nothing on him.
+2. *Roster warlocks soulstone the tanks?* Recommended: yes. The roster design says "a soulstone per
+   tank", but bots default to `ss self` (`AiFactory.cpp:657`): in uld1 and uld2 every soulstone sat on
+   a warlock, and no tank died with one. Three tank soulstones would cover three tank deaths without a Rebirth. A DC roster setting
+   (`nc +ss tank`) or the fork's default for roster bots; not this boss's code.
+3. *Rebuff a tank the duty rezzed, in combat?* Recommended: yes, after 1 and 2: the class buff nodes are
+   non-combat only, so a rezzed partner stays ~14% short on health and loses Gift of the Wild's resist
+   for the rest of the pull.
+
+**Also seen, not picked.** The walk-back carrier above (0 deaths; recommended: a latched runner stays
+parked when it can't reach Steelbreaker with time to spare). uld1's healer mana (round 1's failure; the
+comp is at its 5-healer cap). The roster death knights' missing talents show here twice: DK tanks at
+44k with no Vampiric Blood (`IMPOSSIBLE`; uld3's Uldzaz died at 100% to a 2-charge punch), and a raid that needs
+119-134 s alone with him, the race the charges decide.
+
+**Next window should show.** `--punches`: before Steelbreaker is alone, a punch on a tank still under
+the bar in its cast's last 1.5 s reads `under` and spends a button (`defensive <name>`), or `none`
+when nothing was ready; punches on a tank topped up by then read `safe` with no defensive. Fewer tank
+deaths to Fusion Punch in Molgeim's phase (window 8: 2 in 3 pulls) and no class `rebirth` spent there on a tank. Phase-3 deaths to punches
+on tanks with no button stay until question 1 is answered.
