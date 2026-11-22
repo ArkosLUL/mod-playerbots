@@ -32,7 +32,7 @@
                                            at an escape and after, whether they dropped the bot and it lived, the
                                            kites each melee champion caught, iced or not, the re-hops a kite's own
                                            walk refused and how long they waited
-    faction_champions.py <file> --focus   4+ champions on one raid member: episodes, the externals and
+    faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
                                            far the champion moved, the share on the DK, its other victims and the
