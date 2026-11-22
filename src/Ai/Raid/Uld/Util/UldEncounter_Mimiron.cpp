@@ -618,8 +618,10 @@ float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot)
     return PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : botAI->GetRange("spell");
 }
 
-bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
-                              Position& out)
+namespace
+{
+bool FindMimironApproachSpot(PlayerbotAI* botAI, Player* bot, Unit* target, float range, bool roundFire,
+                             Position& out)
 {
     if (!botAI || !bot || !target)
         return false;
@@ -628,7 +630,7 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
         return false;
 
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    if (hazards.flames.empty())
+    if (roundFire && hazards.flames.empty())
         return false;
 
     MimironMarkers const markers = GetMimironMarkers(botAI);
@@ -638,7 +640,8 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     auto const standable = [&](Position const& spot)
     {
         return IsMimironSpotStandable(bot, spot, markers, hazards) &&
-               IsMimironSpotRapidBurstSafe(vx001, burst, spot);
+               IsMimironSpotRapidBurstSafe(vx001, burst, spot) &&
+               (roundFire || IsMimironLegMineSafe(bot->GetPosition(), markers.mines, spot));
     };
 
     float const stop = range + bot->GetCombatReach() + target->GetCombatReach();
@@ -655,7 +658,7 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
         if (!standable(candidate))
             continue;
 
-        if (step == 0)
+        if (roundFire && step == 0)
             return false;
 
         out = candidate;
@@ -663,6 +666,19 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     }
 
     return false;
+}
+}
+
+bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                              Position& out)
+{
+    return FindMimironApproachSpot(botAI, bot, target, range, true, out);
+}
+
+bool GetMimironSightApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                             Position& out)
+{
+    return FindMimironApproachSpot(botAI, bot, target, range, false, out);
 }
 
 std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,
@@ -1487,6 +1503,39 @@ bool IsMimironFireHoldActive(Player* bot)
     std::unordered_map<ObjectGuid, uint32> const& dodges = MimironFireDodgesFor(bot);
     auto const it = dodges.find(bot->GetGUID());
     return it != dodges.end() && GetMSTimeDiffToNow(it->second) < ULDUAR_MIMIRON_FLAMES_HOLD_MS;
+}
+
+bool IsMimironNearFrostBomb(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
+        return false;
+
+    float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;
+    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
+    return bomb && bot->GetExactDist2d(bomb) < hold;
+}
+
+bool IsMimironNearRocket(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsNearMimironRoom(bot))
+        return false;
+
+    float const hold = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN;
+    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
+    return rocket && bot->GetExactDist2d(rocket) < hold;
+}
+
+bool IsMimironHeldByFire(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
+        return false;
+
+    return IsMimironFireHoldActive(bot) ||
+           IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition(),
+                                       ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH);
 }
 
 bool ClaimMimironPlasmaWindow(Player* bot)

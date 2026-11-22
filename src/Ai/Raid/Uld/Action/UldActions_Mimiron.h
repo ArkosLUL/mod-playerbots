@@ -217,6 +217,8 @@ private:
 
     Unit* ResolveTarget(Unit* currentTarget, bool allowFallback);
 
+    bool ApproachOutOfSight(Unit* target);
+
     static char const* DescribeTargetRule(Unit* unit);
 };
 
