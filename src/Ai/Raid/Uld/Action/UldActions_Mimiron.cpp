@@ -1219,11 +1219,31 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
         return true;
     }
 
+    if (PlayerbotAI::IsMelee(bot) && !bot->IsWithinLOSInMap(target))
+        return ApproachOutOfSight(target);
+
     bool needsAttack = currentTarget != target;
     if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
     return needsAttack ? Attack(target) : false;
+}
+
+bool MimironSetDpsPriorityAction::ApproachOutOfSight(Unit* target)
+{
+    Position approach;
+    if (!GetMimironSightApproach(botAI, bot, target, GetMimironApproachRange(botAI, bot), approach))
+        return false;
+
+    if (TryMoveTo(bot->GetMapId(), approach.GetPositionX(), approach.GetPositionY(),
+                  approach.GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT, true) != MoveOutcome::Issued)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "mimiron.close", "sight");
+
+    return true;
 }
 
 bool MimironPlasmaBlastDefensiveAction::isUseful()

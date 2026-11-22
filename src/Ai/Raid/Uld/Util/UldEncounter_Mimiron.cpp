@@ -618,8 +618,10 @@ float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot)
     return PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : botAI->GetRange("spell");
 }
 
-bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
-                              Position& out)
+namespace
+{
+bool FindMimironApproachSpot(PlayerbotAI* botAI, Player* bot, Unit* target, float range, bool roundFire,
+                             Position& out)
 {
     if (!botAI || !bot || !target)
         return false;
@@ -628,7 +630,7 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
         return false;
 
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    if (hazards.flames.empty())
+    if (roundFire && hazards.flames.empty())
         return false;
 
     MimironMarkers const markers = GetMimironMarkers(botAI);
@@ -638,7 +640,8 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     auto const standable = [&](Position const& spot)
     {
         return IsMimironSpotStandable(bot, spot, markers, hazards) &&
-               IsMimironSpotRapidBurstSafe(vx001, burst, spot);
+               IsMimironSpotRapidBurstSafe(vx001, burst, spot) &&
+               (roundFire || IsMimironLegMineSafe(bot->GetPosition(), markers.mines, spot));
     };
 
     float const stop = range + bot->GetCombatReach() + target->GetCombatReach();
@@ -655,7 +658,7 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
         if (!standable(candidate))
             continue;
 
-        if (step == 0)
+        if (roundFire && step == 0)
             return false;
 
         out = candidate;
@@ -663,6 +666,19 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     }
 
     return false;
+}
+}
+
+bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                              Position& out)
+{
+    return FindMimironApproachSpot(botAI, bot, target, range, true, out);
+}
+
+bool GetMimironSightApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                             Position& out)
+{
+    return FindMimironApproachSpot(botAI, bot, target, range, false, out);
 }
 
 std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,

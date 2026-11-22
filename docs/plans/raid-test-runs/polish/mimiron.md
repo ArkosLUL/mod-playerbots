@@ -469,3 +469,80 @@ one holding a banked core too; with no such player the bot pick is unchanged. Bo
 - Flames 5, phase 2 4, uld1's phase 4 4.
 
 **Questions for the user:** none.
+
+## Round 6 (build a55056c40, round 5 built)
+
+**Data:** `raidtest.py report --boss mimiron --raid uld --head a55056c40 --pulls 10`: one valid pull per
+pool, no DC veto inside any. Scripts in the lane scratchpad (`mim6/`: `p1.py`, `p1melee.py`,
+`melee_ev.py`, `pos.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261122-212514-14` | `603_14_…_1795382759` | wipe 10:18 in P4 at Berserk | 33: P1 Flames 2; P3 Bomb Bot 1, Plasma Ball 1, Water Spray 1; P4 Plasma Ball 2, Hand Pulse 2; Berserk 24 |
+| uld2 | `tr-20261122-212635-15` | `603_15_…_1795382838` | wipe 10:19 in P4 at Berserk | 30: H1 Flames 2 (one bot twice); P2 Rocket Strike 1; P3 Bomb Bot 1; P4 Plasma Ball 4, Flames 2, mine 1; Berserk 19 |
+| uld3 | `tr-20261122-212434-13` | `603_13_…_1795382716` | wipe 10:29 in P4 at Berserk | 32: P2 Rapid Burst 2; H3 Bomb Bot 1; P4 Hand Pulse 4 (melee), Plasma Ball 1, revived bot 2; Berserk 22 |
+
+95 deaths: Berserk 65, phase 4 before it 18, everything else 12. Water Spray 1.
+
+**Stop rules:** no kill: not polished. No failure picked three times (phase 1 is new).
+
+**Verdict on round 5 (spray crossing, 18 yd lanes): held.** Water Spray hits on the roster 5 (window 10:
+26), deaths 1 (11), `spray unsafe` notes 0 (20), hits within 5 s of one 0 (14). Escapes: `ok` 170/103/67,
+`none` 18/17/10, `locked` 95/63/42. Phase 3 ran 151, 151 and 130 s (window 10: 143, 208, 237) with 3, 1
+and 0 deaths (3, 2, 17). The carrier change had no player-led pull to show it.
+
+**The clock, phase by phase** (Berserk 64238 at 10:00; the transitions Z1, Z2, H1-H3 cost ~117 s
+fixed):
+
+| Pull | P1 | P2 | P3 | P4 reached | P4 before Berserk |
+|---|---|---|---|---|---|
+| window 10 uld1 kill | 86.0 | 92.0 | 143.2 | 7:18.4 | needed 153.4 |
+| uld1 | **115.2** | 91.3 | 151.3 | 7:55.6 | 124 |
+| uld2 | **136.8** | 90.4 | 150.7 | 8:15.3 | 105 |
+| uld3 | **127.4** | 86.2 | 129.6 | 7:41.7 | 138 |
+
+Phase 3 now fits; phase 1 lost the clock. With the kill's 86 s phase 1, phase 4 would have had 153, 156
+and 179 s. Phase 1 across the last 14 traces is bimodal: 84-98 s or 112-154 s.
+
+**Failure picked: after a Shock Blast escape, melee stand out of sight with no target for the rest of
+phase 1.** Raid damage on the MK II runs the same to ~1:04 in fast and slow pulls (42-44% left); then
+the slow ones lose half their rate. Melee dealt 3.45/3.54/3.59M in phase 1 against 5.43/5.67/5.75M in
+three fast pulls; their aim at the MK II was 48/53/40% against 96-100%. Per 10 s (`p1melee.py`), melee
+in uld1 had no target from 1:10 to 1:59 at 24-28 yd, uld3 none from 1:10 to phase end (2:20), uld2 77%
+none from 1:10; round 5's slow uld2 (`603_14_…_1795373390`, 115 s) shows the same.
+
+- uld1 1:04.322: nine melee run the Shock Blast escape (`MimironShockBlastAction`,
+  `UldActions_Mimiron.cpp:338`) west from the MK II at (2686.4, 2569.7) to x 2671.8-2675.3, Z 365.4-365.9,
+  the raised alcove floor; at 1:04.429 every one fires `drop target` (`invalid target`, which needs
+  `AttackersValue::IsValidTarget`: possible target and `IsWithinLOSInMap`, `AttackersValue.cpp:249`).
+- 1:10-1:50: `mimiron set dps priority action` FAILED 31 times; `mimiron.dpsrule` stays `mkii`, so
+  `ResolveTarget` picks the MK II and `Attack` refuses it at its sight check (`AttackAction.cpp:149`).
+  `mimiron target guard` vetoes `dps assist`; `reach melee` and `mimiron approach target action` need a
+  current target. The bots fall to non-combat actions (`loot roll`, `suggest dungeon`) and stand.
+- The MK II moved to (2698.5, 2560.6) at ~1:14, 22-35 yd from them, and nothing brought them back.
+
+navprobe was not run (no Docker in this lane); sight is read from the server's own verdict above.
+
+**Classification:** bug. The strategy means melee to hit the MK II after every Shock Blast; they stood.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player): `MimironSetDpsPriorityAction`
+walks a melee bot that cannot see its resolved target to a standable spot in melee range on its side,
+over a mine-safe leg (`GetMimironSightApproach`, the bearing fan `GetMimironTargetApproach` already
+uses, without its fire-only gate), noted `mimiron.close sight`. Shock Blast (`ACTION_RAID + 5.5`) still
+holds the tick through the cast, and the spot is refused inside the circle.
+
+**Next window should show:**
+
+- Phase 1 at 84-98 s in every pull (this window 115/137/127).
+- Melee aim at the MK II in phase 1 near 100% (`p1.py`; 48/53/40%) and melee phase 1 damage near 5.5M.
+- `mimiron.close sight` notes after Shock Blast casts, followed by `mkii` attacks within a few seconds,
+  and no melee run of non-combat actions in phase 1.
+- Phase 4 reached by ~7:20 with ~150 s before Berserk.
+
+**Not picked.**
+
+- Phase 4 Plasma Ball and Hand Pulse attrition before Berserk (18): it is ~150 s long and the kill
+  only needs the clock.
+- Bomb Bots 3, Flames 6.
+
+**Questions for the user:** none.

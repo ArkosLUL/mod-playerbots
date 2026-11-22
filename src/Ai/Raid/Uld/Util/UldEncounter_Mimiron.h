@@ -278,6 +278,9 @@ bool IsMimironFireHoldActive(Player* bot);
 bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
                               Position& out);
 
+bool GetMimironSightApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                             Position& out);
+
 float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot);
 
 float GetMimironPhase1DisperseDistance(PlayerbotAI* botAI);

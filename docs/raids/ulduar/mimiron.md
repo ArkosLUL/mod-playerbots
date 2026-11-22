@@ -389,6 +389,14 @@ casting 63631, inside `IsMimironSpotSafe` so arc spread holds, and in the fan fo
 included: it once excepted the escape, reasoning about where the bot starts while the test is on where
 it ends.
 
+**An escape can end out of sight, so the bot walks back.** Fleeing an MK II drifted west lands melee on
+the raised alcove floor (Z ~365.5) behind its walls: `invalid target` drops the MK II
+([out of sight is an invalid target](../../engine/pitfalls.md#things-the-bot-cannot-see)), `Attack`
+refuses it, and `reach melee` and `mimiron approach target action` need a current target, so melee
+idled 55-75 s and phase 1 ran 29-51 s past a kill's 86. `MimironSetDpsPriorityAction` walks a melee bot
+that cannot see its resolved target to a standable melee spot on its side over a mine-safe leg
+(`GetMimironSightApproach`, `mimiron.close` `sight`).
+
 **The escape aims past the line.** It hops `ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN` (2) beyond the screen,
 since a hop landing exactly on 18 failed the `>= 18` test to float noise or a wall-shortened leg; if
 every bearing is refused it sweeps again as `shock fire` with fire allowed (a node is ~3.1k/s against
