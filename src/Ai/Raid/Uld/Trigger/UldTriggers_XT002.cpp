@@ -168,5 +168,8 @@ bool XT002HolderBuffTrigger::IsActive()
     if (bot->getClass() != classId || !PlayerbotAI::IsHeal(bot))
         return false;
 
+    if (strategy && !botAI->HasStrategy(strategy, BOT_STATE_COMBAT))
+        return false;
+
     return GetXT002BuffTarget(botAI, spell) != nullptr;
 }

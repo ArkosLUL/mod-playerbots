@@ -74,12 +74,13 @@ void DefineXT002(EncounterBuilder& e)
         [](PlayerbotAI* botAI) -> Action*
         { return new XT002HolderBuffAction(botAI, "xt002 holder earth shield action", "earth shield"); },
         ACTION_MEDIUM_HEAL + 6);
+    // Disc only, like the class node: a holy priest's shield would also lock disc's out with Weakened Soul.
     e.Node(
         "xt002 holder power word shield trigger",
         [](PlayerbotAI* botAI) -> Trigger*
         {
             return new XT002HolderBuffTrigger(botAI, "xt002 holder power word shield trigger", CLASS_PRIEST,
-                                              "power word: shield");
+                                              "power word: shield", "disc");
         },
         "xt002 holder power word shield action",
         [](PlayerbotAI* botAI) -> Action*

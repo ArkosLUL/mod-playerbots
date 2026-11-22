@@ -70,13 +70,14 @@ public:
     bool IsActive() override;
 };
 
-// One healer tank buff, for the tank XT is on. One row per buff, each at the relevance of the class node it
-// stands in for, so the healer's rotation keeps its order and only the target changes.
+// One healer tank buff for the XT-002 buff tank. strategy: only healers running that combat strategy, for a
+// buff the class node casts in one spec only.
 class XT002HolderBuffTrigger : public Trigger
 {
 public:
-    XT002HolderBuffTrigger(PlayerbotAI* botAI, std::string const name, uint8 classId, std::string const spell)
-        : Trigger(botAI, name), classId(classId), spell(spell)
+    XT002HolderBuffTrigger(PlayerbotAI* botAI, std::string const name, uint8 classId, std::string const spell,
+                           char const* strategy = nullptr)
+        : Trigger(botAI, name), classId(classId), spell(spell), strategy(strategy)
     {
     }
 
@@ -85,6 +86,7 @@ public:
 private:
     uint8 classId;
     std::string spell;
+    char const* strategy;
 };
 
 #endif
