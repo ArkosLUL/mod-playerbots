@@ -12,6 +12,7 @@
 #include "BossResistanceMultipliers.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "UldActions_Freya.h"
 #include "UldEncounterGate.h"
@@ -103,6 +104,9 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaNaturesFuryBailTrigger, FreyaNaturesFuryBailAction>(ACTION_RAID + 4);
     e.Node<FreyaStepOutOfSunbeamTrigger, FreyaStepOutOfSunbeamAction>(ACTION_RAID + 4);
 
+    e.Node<FreyaAddTankDefensiveTrigger, FreyaAddTankDefensiveAction>(ACTION_RAID + 4);
+    e.Node<FreyaAddTankExternalTrigger, FreyaAddTankExternalAction>(ACTION_RAID + 4);
+
     e.Node<FreyaLasherAboutToBlowTrigger, FreyaLasherAboutToBlowAction>(ACTION_RAID + 3);
     e.Node<FreyaFrostNovaLashersTrigger, FreyaFrostNovaLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaTrapLashersTrigger, FreyaTrapLashersAction>(ACTION_RAID + 2);
@@ -155,6 +159,8 @@ void DefineFreya(EncounterBuilder& e)
     e.Block("freya area taunt hold", Role::Tank, FreyaAlive, 0, {"challenging shout", "challenging roar"});
 
     e.Block("freya righteous defense hold", Role::Tank, FreyaTargetOnOtherTank, 0, {"righteous defense"});
+
+    e.Block("freya add tank defensive hold", Role::Tank, IsFreyaAddTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     e.Block("freya nature bomb melee guard", Role::Melee, FreyaMeleeNearBomb, 0, {"set behind"});
 

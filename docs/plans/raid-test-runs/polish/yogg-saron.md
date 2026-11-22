@@ -327,3 +327,6 @@ another tank 9}); fewer fresh Guardians swinging at a non-tank before the first 
   through the ring for ~40 s (uld3: 4 of 10 never reached their station).
 - uld2's nova cluster: roster B has one paladin with Aura Mastery and Divine Sacrifice, and 6 of 12 Guardian deaths fell
   over 6.5 yd out, catching the back line.
+
+**User answer (2026-11-22) to the Empowering Shadows question:** no, the risk is too great. Instead, ranged
+DPS keep their DoTs up on Yogg-Saron in phase 3: today they mostly use area damage and do little to Yogg.

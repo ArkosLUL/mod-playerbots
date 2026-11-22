@@ -214,7 +214,9 @@ bool BigBangDueWithin(AlgalonEncounterState const& state, uint32 seconds, uint32
 
 uint8 ReservedHoles(AlgalonEncounterState const& state, uint32 now)
 {
-    return state.bigBangCasting || BigBangDueWithin(state, ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS, now) ? 1 : 0;
+    return state.bigBangCasting || BigBangDueWithin(state, ULDUAR_ALGALON_KITE_RESERVE_SECONDS, now)
+               ? ULDUAR_ALGALON_KITE_RESERVED_HOLES
+               : 0;
 }
 
 AlgalonScanUnit const* FindScanned(std::vector<AlgalonScanUnit> const& units, ObjectGuid const& guid)
@@ -277,24 +279,23 @@ AlgalonScanUnit const* ShelterHole(Player* bot, AlgalonEncounterState const& sta
     return NearestShelter(state, bot->GetPosition());
 }
 
-AlgalonScanUnit const* RaidShelterHole(AlgalonEncounterState const& state, uint32 now)
+bool IsRaidShelterHole(AlgalonEncounterState const& state, ObjectGuid const& guid, uint32 now)
 {
-    if (!ReservedHoles(state, now) || state.holes.size() < 2)
-        return nullptr;
+    uint8 const reserved = ReservedHoles(state, now);
+    AlgalonScanUnit const* hole = reserved ? FindScanned(state.holes, guid) : nullptr;
+    if (!hole)
+        return false;
 
-    AlgalonScanUnit const* nearest = nullptr;
-    float bestDistance = std::numeric_limits<float>::max();
-    for (AlgalonScanUnit const& hole : state.holes)
+    float const distance = hole->position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT);
+    uint8 nearer = 0;
+    for (AlgalonScanUnit const& other : state.holes)
     {
-        float const distance = hole.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT);
-        if (distance < bestDistance)
-        {
-            nearest = &hole;
-            bestDistance = distance;
-        }
+        float const otherDistance = other.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT);
+        if (other.guid != guid && (otherDistance < distance || (otherDistance == distance && other.guid < guid)))
+            ++nearer;
     }
 
-    return nearest;
+    return nearer < reserved;
 }
 
 struct AlgalonRoomCreatureCheck
@@ -4454,10 +4455,9 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
     else if (held)
         branch = "kept";
 
-    AlgalonScanUnit const* raidHole = RaidShelterHole(*state, now);
     auto const kite = state->kiteHoleAssignments.find(bot->GetGUID());
     bool const keepKite = held && gathering &&
-                          !(raidHole && kite != state->kiteHoleAssignments.end() && kite->second == raidHole->guid);
+                          !(kite != state->kiteHoleAssignments.end() && IsRaidShelterHole(*state, kite->second, now));
     if (!chosen && !keepKite)
         state->kiteHoleAssignments.erase(bot->GetGUID());
 
@@ -4500,7 +4500,7 @@ bool KiteSpotNear(AlgalonEncounterState const& state, AlgalonScanUnit const& hol
 
 bool KiteableHole(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, uint32 now)
 {
-    if (state.kiteRefusedHoles.count(hole.guid) || &hole == RaidShelterHole(state, now))
+    if (state.kiteRefusedHoles.count(hole.guid) || IsRaidShelterHole(state, hole.guid, now))
         return false;
 
     if (hole.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT) > ULDUAR_ALGALON_TANK_SHELTER_REACH)

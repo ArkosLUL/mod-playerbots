@@ -377,3 +377,53 @@ his reach in all three pulls), and a pair tank had him within 0.3 s.
 12 s with the handler standing still (window 11: uld1 4 × 12.6 s); a hole the floor check refuses reads
 `stuck`, then the handler kites another hole or taunts. Constellations between 5 and 7.5 yd up count as
 low: taunted and kited like the rest. Big Bang 2's hole losses won't change until Q4 is answered.
+
+**User answer (2026-11-22) to Q4:** (a): keep two holes out of the constellation kite from 60 s before
+each Big Bang.
+
+## Round 5 (2026-11-23, Custom `b21cda8ee`; round 4 merged, not built)
+
+**Data.** No new pulls. Round 4's "window 11" pulls are window 12's (build `ebe746ad1`; window 11 ran no
+Algalon). Replay read windows 10 (uld1 `603_33`, uld2 `603_36`, uld3 `603_34`) and 12 (uld1 `603_21`, uld2
+`603_19`, uld3 `603_20`); deaths by mechanic per pull are in rounds 3 and 4 (scratch `replay.py`,
+`bb2deaths.py`). Stop rules, verdict and ranking skipped: no pulls on round 4.
+
+**Built: the user's Q4 (a).** From 60 s before each Big Bang through its cast the two holes nearest the hold
+spot are kept out of the kite (was one from 30 s): `ULDUAR_ALGALON_KITE_RESERVE_SECONDS` 60,
+`ULDUAR_ALGALON_KITE_RESERVED_HOLES` 2. `ReservedHoles` returns 2 in that span, so the handler kites a held
+one, or taunts from `behind`, only with a third hole up; `IsRaidShelterHole` (fewer than 2 holes nearer the
+hold spot, ties by guid) replaces `RaidShelterHole` in `KiteableHole` and the gather's kite-hole keep.
+`urgent` keeps its 30 s. Reader: `kite_blocked` counts a taunt only with more than 2 holes inside 60 s of a
+cast (test added). 10 and 25-man alike, nothing keyed on a real player.
+
+**Replay on Big Bang 2.** From the real stock 60 s before the cast: a hole a constellation on the handler
+ate at its kite hole is kept while 2 or fewer stood, else the kite takes the spare nearest it; every other
+loss (dives on healers, the handler's constellation eating a hole off its kite hole) happens to the same
+hole if it is still there. Tanks reach about 43 yd in the cast (`603_36`: `noshelter` at 45-46 yd).
+
+| Pull | Holes at the cast, now → rule (yd from the tank slot) | At the hit | Deaths, cast to hit + 16 s | What changes |
+|---|---|---|---|---|
+| w10 uld1 | 1 (59) → 2 (59, 69) | 0 → 1 (69) | 19: loose 7, star explosion 6, Barrage 4, on tank 2 | kite at 3:09.5 kept; a hole survives the 3:33.6 dive, so no `urgent` and no 3:41.2 kill (6 dead) |
+| w10 uld2 | 2 (49, 52) → same | 2 → 2 | 1: Cosmic Smash | none |
+| w10 uld3 | 3 (28, 37, 71) → 4 | 3 → 4 | 0 | kite at 2:29.6 kept; a tank hole either way |
+| w12 uld1 | 3 (62-65) → same | 2 → 2 | 4: star explosion 2, Big Bang 1, on tank 1 | none: the hole 11 yd from the tank slot went to a dive on the healer Uldxad (3:16.5) |
+| w12 uld2 | 1 (61) → 2 (51, 61) | 1 → 2 | 0 | kite at 2:33.5 kept |
+| w12 uld3 | 0 → 1 (50) | 1 → 2 | 19: star explosion 11 (`urgent` kills in the cast), Big Bang 8 | kite at 2:45.7 takes the spare at 58 yd, at 2:55.7 kept; the raid has a hole, no `urgent` |
+
+So the raid keeps a hole it lost in w12 uld3 (at the cast) and w10 uld1 (at the hit); no pull gains one in
+the tanks' reach, since dives on healers took the near holes (w12 uld1, w12 uld3: Q4 (b)'s case). Big Bang 1:
+w10 uld3 (1:50.0) and w12 uld2 (1:42.5) keep a kite hole, 2 holes at the cast instead of 1. Cost: 4 of 6 pulls
+hold one more constellation into Big Bang 2 (one Barrage every 5 s; it follows the handler into its hole);
+Barrage deaths in the minute before Big Bang 2: 1 in 6 pulls.
+
+**Left alone.** The handler's held constellations ate a hole off its kite hole: w10 uld1 1:44.1 (the only hole,
+12 s before Big Bang 1, round 3's `urgent` at 1:47.2), w10 uld2 3:10.0 (the reserved hole), w12 uld2 3:31.7 (in
+the cast). The reserve doesn't cover these, and the handler now holds them twice as long.
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --holes`, `--constellations`, `--bigbang`): no `algalon.holelost kite`
+in the 60 s before a cast while 2 or fewer holes stood; holes at Big Bang 2's cast at least window 12's (3, 1,
+0), unless dives on healers took them; `urgent` before Big Bang 2 near zero. Watch: `stray` losses eaten by a
+constellation on the handler, Barrage deaths before Big Bang 2 (windows 10 and 12: 1), and round 4's checks
+(no 12 s `cross`/`stage` stills; constellations 5-7.5 yd up kited).

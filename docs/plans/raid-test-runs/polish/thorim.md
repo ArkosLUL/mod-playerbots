@@ -613,3 +613,9 @@ toward ~20; the Honor Guard + Acolyte + Giant segment from 51-62 s toward ~45 s 
 without healers (healers still trail the leader to the Giant), so Honor Guard or Acolyte deaths at the foot; bots idle there
 with no target for more than ~3 s after their adds die (the tether should walk them up); longer lead stalls in the corridor
 (the leader waits up to 15 s a step while DPS finish trash).
+
+**User answers (2026-11-22):** Q1: keep polishing on the 226 rosters with the stop rule waived. Q2: move
+the off-tank spot to (2107.25, -252.65), navprobed on the floor at z 419.371 with a straight path from the
+tank spot, then compare before and after, since boss positioning affects other things. Only the waiting
+tank stands there (the holder takes the anchor), 3.5 yd from it like today, so a trade stays inside the
+ring's 5 yd reposition tolerance.

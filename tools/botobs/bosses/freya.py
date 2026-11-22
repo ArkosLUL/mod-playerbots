@@ -8,6 +8,8 @@
                              Snaplasher's holder in heal range
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
     freya.py <file> --blasts per lasher wave, Detonate on the melee and their walks into a low lasher's blast
+    freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
+                             hitting a player shot, and the back line's bails from one hitting them
 
 What the generic views miss here:
 
@@ -31,6 +33,8 @@ What the generic views miss here:
   (Hardened Bark stack casts) and the deaths to a Snaplasher until the next change.
 - **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
   while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
+- **A low lasher is a stretch under the bail line.** `--lows` ends a stretch when a heal lifts the lasher back over it,
+  calls a stretch of 8 s or more lingering, and counts a lasher as hitting a player when its victim is a raid member.
 - **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
   order whose point lies inside the blast edge of a lasher under the bail line in the snapshot before it. Tanks
   are left out: they never bail.
@@ -86,6 +90,9 @@ HEAL_RANGE_YD = 38.5
 HEALERS_WANTED = 2
 HOLD_NOTE = "freya.snaphold"
 HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
+COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
+# not casts, the probes write these so the same button cast again next wave still gets its own row
+COOLDOWN_NO_PICK = {"covered", "none"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
 BARK_STACKS = (62663, 64190)
 NPC_ARMY_GHOUL = 24207
@@ -96,6 +103,9 @@ SPELL_RANGE_YD = 28.5
 DETONATE_REACH_YD = 15.5
 # The last lashers blow as they die, after their last sample alive.
 BLAST_TAIL_MS = 1000
+# A lasher under the bail line usually blows within about 4 s; one still up after this is being left alone.
+LINGER_MS = 8000
+CAMP_ACTION = "freya ranged camp"
 
 
 def mine(trace: Trace) -> bool:
@@ -225,6 +235,9 @@ def show_tanks(trace: Trace) -> None:
         if rec.get("sp") in AREA_TAUNTS and trace.role(rec.get("s")) == "tank" and not rec.get("tr"):
             target = f" on {holder_label(trace, rec['tgt'])}" if rec.get("tgt") else ""
             print(f"  {clock(rec['t'])} {trace.name(rec['s'])} {AREA_TAUNTS[rec['sp']]}{target}")
+    for rec in trace.of("note"):
+        if rec.get("k") in COOLDOWN_NOTES and rec.get("txt") not in COOLDOWN_NO_PICK:
+            print(f"  {clock(rec['t'])} {trace.name(rec.get('g'))} {COOLDOWN_NOTES[rec['k']]}: {rec.get('txt')}")
     for change in hold_changes(trace):
         state = change["state"]
         line = f"  {clock(change['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}"
@@ -448,6 +461,88 @@ def show_blasts(trace: Trace) -> None:
         print("  no lasher wave")
 
 
+def low_lasher_counts(trace: Trace, wave: dict) -> dict:
+    """One lasher wave: its lashers that went under the bail line and how many stayed there LINGER_MS or more, the
+    ranged DPS in reach of a low lasher hitting a player and whether they shot one, and the back line's bail orders
+    away from a low lasher hitting one of them. A ranged bot counts once a snapshot, however many such lashers it
+    reaches, so shooting the lowest of two is on one, not on another lasher."""
+    low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    end = wave["end"] + BLAST_TAIL_MS
+    members = {member["g"] for member in wave["members"]}
+    spans: dict[int, list[dict]] = {}
+    in_reach = on_it = on_other = 0
+    for snap in snaps:
+        if not wave["t"] <= snap["t"] <= end:
+            continue
+        rows = [row for row in snap.get("u", []) if row[5] > 0]
+        for row in rows:
+            if row[0] not in members:
+                continue
+            open_spans = spans.setdefault(row[0], [])
+            if row[5] >= low_pct:
+                if open_spans:
+                    open_spans[-1]["closed"] = True
+                continue
+            if not open_spans or open_spans[-1].get("closed"):
+                open_spans.append({"first": snap["t"], "player": 0, "samples": 0})
+            span = open_spans[-1]
+            span["last"] = snap["t"]
+            span["samples"] += 1
+            if trace.role(row[7]) != "?":
+                span["player"] += 1
+        hitting = [row for row in rows if trace.entries.get(row[0]) == NPC_DETONATING_LASHER and row[5] < low_pct
+                   and trace.role(row[7]) != "?"]
+        for other in rows:
+            if trace.role(other[0]) != "ranged":
+                continue
+            near = {row[0] for row in hitting if dist2(other[1:3], row[1:3]) <= SPELL_RANGE_YD}
+            if not near & members:
+                continue
+            in_reach += 1
+            if other[7] in near:
+                on_it += 1
+            elif trace.entries.get(other[7]) == NPC_DETONATING_LASHER:
+                on_other += 1
+    found = [span for lasher in spans.values() for span in lasher]
+    lingered = [span for span in found if span["last"] - span["first"] >= LINGER_MS]
+    bails = 0
+    for rec in trace.of("move"):
+        if rec.get("by") != CAMP_ACTION or not rec.get("ok") or not wave["t"] <= rec["t"] <= end:
+            continue
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        rows = {row[0]: row for row in snaps[index].get("u", [])} if index >= 0 else {}
+        me = rows.get(rec.get("g"))
+        bails += bool(me) and any(
+            trace.entries.get(row[0]) == NPC_DETONATING_LASHER and 0 < row[5] < low_pct
+            and trace.role(row[7]) in ("ranged", "heal") and dist2(row[1:3], me[1:3]) <= DETONATE_REACH_YD
+            for row in rows.values())
+    return {"low": sum(1 for lasher in spans.values() if lasher), "lingered": len(lingered),
+            "on_player": sum(1 for span in lingered if 2 * span["player"] > span["samples"]),
+            "in_reach": in_reach, "on_it": on_it, "on_other": on_other, "bails": bails}
+
+
+def show_lows(trace: Trace) -> None:
+    print("LOWS")
+    if not mine(trace):
+        return
+    found = False
+    for wave in waves(trace):
+        if wave["kind"] != "lashers":
+            continue
+        found = True
+        c = low_lasher_counts(trace, wave)
+        reach = c["in_reach"] or 1
+        print(f"  {clock(wave['t'])} lashers: {c['low']} under the bail line, {c['lingered']} of them "
+              f"{LINGER_MS // 1000}s+ there ({c['on_player']} hitting a player); ranged DPS in reach of a low lasher "
+              f"hitting a player: {c['in_reach']} sample(s), {100.0 * c['on_it'] / reach:.0f}% on one, "
+              f"{100.0 * c['on_other'] / reach:.0f}% on another lasher; {c['bails']} back-line bail order(s) from "
+              f"one hitting the back line")
+    if not found:
+        print("  no lasher wave")
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     own = own_blow_spell(death)
     if own:
@@ -477,6 +572,8 @@ SECTIONS = (
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
     ("blasts", "per lasher wave, Detonate on the melee and their approach orders into a low lasher's blast",
      show_blasts),
+    ("lows", "per lasher wave, lashers left under the bail line, what the ranged in reach shot, back-line bails",
+     show_lows),
     ("deaths", "deaths by killer and spell", show_deaths),
 )
 

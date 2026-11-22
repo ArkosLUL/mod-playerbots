@@ -22,7 +22,8 @@ rules stand the generic pickers down. The trio target changes several times per 
 converges, which a group icon cannot carry without one bot spamming `SetTargetIcon` for the rest to
 read back a tick later. A human's own marks are not honoured here.
 
-Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya; once any trio
+Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya (a lasher tail
+goes ahead of the trio for ranged, [below](#detonating-lasher-waves)); once any trio
 member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once
 every member is in the release band nothing pulls a bot away. A bot keeps its current target unless
 something strictly higher on that list is up, so add churn cannot reset swing timers; the trio slot is
@@ -37,7 +38,14 @@ bots take a Gift from full to dead in 4.2-6.3s, so five clear it inside the 12s 
 the other half. Sending every ranged emptied the pack for 4.7-6.5s at 84% and 86% pack health in the
 two waves that wiped, against 10% in the one that did not. **Known-open:** `TakesEonarsGift` starts the
 head start the first tick it sees both the Gift and a live pack, so a Gift summoned just before a wave
-gets it from the pack's spawn, whatever the Gift's own age.
+gets it from the pack's spawn, whatever the Gift's own age. **Known-open:** a Gift that spawns far from
+the back line lives: the nine that healed in three pulls spawned a median 38-79 yd from the ranged, and
+at most 7 of them reached it; in five, during lasher and Conservator waves, at most one did, each `reach
+spell` step undone by the spore node or the back-line bail from a low lasher chasing them
+([below](#detonating-lasher-waves)). `freya ranged camp`'s gather also pulled them back, so it stands down
+for a ranged DPS bot whose target is a Gift; the bail still runs. **A Gift that lives is why a lasher wave
+outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
+it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%).
 
 ## The trio wave
 
@@ -80,10 +88,12 @@ whoever takes it off the tank dies (six deaths in two resets). Capped, it lands 
 tank, against ~40k health on a DK and ~55k on a bear in form: one swing kills the DK from full, two in one
 gap kill the bear, with four healers in range. Each add tank that held a trio wave to its end had Survival
 Instincts, Frenzied Regeneration, Vampiric Blood or Icebound Fortitude up; deaths came with them spent
-earlier (Icebound Fortitude in a Conservator wave; a bear's Barkskin and Frenzied Regeneration in a lasher
-wave, Survival Instincts before or in the first trio) or unpressed (Vampiric Blood), and once with Survival
-Instincts up, to two swings 2.4s apart. Pain Suppression, Guardian Spirit, Lay on Hands and Hand of
-Sacrifice went to DPS, healers and a pet, never the add tank.
+earlier (Icebound Fortitude in a Conservator or lasher wave; a bear's Barkskin and Frenzied Regeneration in
+a lasher wave, all three once on a lasher pile 4s before the trio; Survival Instincts before or in the first
+trio) or unpressed (Vampiric Blood), and once with Survival Instincts up, to two swings 2.4s apart. Pain
+Suppression, Guardian Spirit, Lay on Hands and Hand of Sacrifice mostly went to DPS, healers and pets; the
+add tank got Lay on Hands outside the trio or right after a soulstone rise, and once each Pain Suppression
+and Hand of Sacrifice after a soulstone rise, dying under both.
 
 **A damage dealer near the tank's threat on the Snaplasher moves to a sibling** (`ShedSnaplasherThreat`,
 not yet verified in a pull). The generic `threat` strategy is never added (`AiFactory`), so nothing
@@ -285,6 +295,16 @@ The add tank taunts the **Snaplasher and Conservator only**; the rest of its lad
 damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
 their own pickup ([below](#detonating-lasher-waves)).
 
+**The add tank's cooldowns wait for a stacked Snaplasher** (user's choice; not yet verified in a pull),
+since every add-tank death came with them spent in an earlier wave ([Hardened Bark](#the-trio-wave)).
+`freya add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for
+assist tank 0 while Freya lives and is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT`
+(25%). Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, `freya add
+tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one, so they chain
+through the wave; `freya add tank external` has a healer cast Pain Suppression, Guardian Spirit or Hand of
+Sacrifice on him whenever none of the three is up. Notes `freya.adddef`, `freya.addext`: the button cast,
+else `covered` or `none`, so the trace's repeat filter keeps a later cast of the same button.
+
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
 tank: three Roars put her on the add tank for 3-6s each. A paladin's Hand of Reckoning falls back to
@@ -346,6 +366,10 @@ own hit (auto-repeat, pets, lingering area cast past 15 yd or still running); th
 unholy DK's Wandering Plague, which hits everything within 8 yd of an enemy its diseases tick on (the
 Snaplasher, or Freya and the siblings beside it), and Seed of Corruption and Living Bomb bursts placed
 earlier. Without the bots' share those traces still reset 5-12s in.
+
+**A hold on a nearly dead Snaplasher costs the wave.** One began with it at 13% and its siblings at
+9-20%; they died 5s later and revived 11s after that while it sat held at 1-5%, and the trio never died
+together again: 4.5 minutes and Berserk. Nothing in the hold looks at the siblings' revive timers.
 
 The first time no stack is left the hold latches free (note `2`, `IsFreyaHeldSnaplasherFree`), so the
 stacks a tank's own pickup hits add don't turn him away. From then tanks may act on it: a living add
@@ -446,7 +470,7 @@ Tanks never flee the blast; they eat it. The gate is per lasher on purpose: the 
 step out` asked for 3+ under 20% inside one 8 yd pack and fired once in six pulls
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)).
 
-**Nothing walks a bailed melee bot back in** (not yet verified in a pull). The bail stops at the blast's
+**Nothing walks a bailed melee bot back in.** The bail stops at the blast's
 edge, and `reach melee` re-aimed the bot at its target inside it: 559 of 862 melee Detonate hits over 16
 pulls came after a bail and a reach back, and 33-57% of melee reach and set-behind orders in a lasher wave
 ended inside a low lasher's blast, three in four of them for Freya. `freya lasher blast reach guard` zeroes
@@ -454,7 +478,8 @@ ended inside a low lasher's blast, three in four of them for Freya. `freya lashe
 lasher blast behind guard` set behind, for a non-tank melee bot whose walk would end within
 `ULDUAR_FREYA_DETONATE_RADIUS` + 1 of a lasher under the bail line: reach melee's stop on the bot's side of
 its target, or either of set behind's flank points (3/5 π off its facing). The bot waits outside until that
-lasher blows.
+lasher blows. Since: 2-11% of melee approach orders a wave end in a low blast (37-57%), 1-13 melee Detonate
+hits a wave (40-65), none fatal, and melee damage over a wave's first 40s held (72-101k/s, 50-99k before).
 
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
@@ -465,7 +490,10 @@ nothing clears 18), never off the healthy pack. It stays on the camp node, under
 roots what is chasing it before walking. Not yet verified in a pull. One shared computed spot, with each
 bot stopping 6 yd short on its own side, sent bots between pile and spot to 12 yd: 80-100% of camp orders
 aimed inside 15.5 yd, costing 48 back-line Detonate hits and three dead, where a back line 25 yd off a
-ghoul-held pile took 0 of 70.
+ghoul-held pile took 0 of 70. A low lasher hitting a back-line bot runs with it at 8.0 yd/s, so this bail
+can't clear it: every bot it passes bails again and stops casting (249 orders in three pulls, against 39 in
+six), and the back line drifted to a median 57 yd from Freya; hence the ranged finish it first
+([ranged focus](#detonating-lasher-waves)).
 
 **Otherwise the back line gathers**, except while any lasher within `_HAZARD_SEARCH_RADIUS` is low: then
 a bot outside the blasts stays put, since the walk to the ball crosses one. The camp is
@@ -551,6 +579,22 @@ Below `_FINISH_PCT` (20%) with 3 up, `FreyaLasherFinishAoeMultiplier` shuts non-
 self-stabilising) picks them off one at a time so the blasts stagger. Both read
 `GetFreyaFinishingPackNear`, measured from the **pack's** centre. That conjunction held **once in six
 pulls**: lashers scatter and die one at a time.
+
+**A low lasher hitting a player comes first** (`GetFreyaLowLasherOnPlayer`; not yet verified in a pull):
+a ranged DPS bot's lasher pick is the lowest lasher under `_LASHER_BAIL_PCT` whose victim is a player and
+that sits inside `SpellDistance`, ahead of the pack focus. The bails and the melee guards hold everyone
+outside such a lasher on the premise that it blows in seconds, but off the pile nothing aimed at it: with
+one in reach, 11-52% of the ranged in reach shot another lasher and 0-40% shot one, and 12 of them stayed
+under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed four of them back to
+65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
+Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in.
+
+**A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
+trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a
+ranged DPS bot's lasher pick above goes ahead of the trio slot until a trio member drops under
+`ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT`; out of reach it falls through to the trio.
+The 60s timer brings a trio onto an unfinished lasher wave, and the next Gift heals what is left: four
+lashers at 76% summed went to 228%, three at 15% to 130%.
 
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment
 it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. They switch
@@ -675,7 +719,8 @@ about what is up.
 
 ## What a trace answers
 
-`tools/botobs/bosses/freya.py <trace>`; one probe, the `freya.snaphold` note. A pull files under the first
+`tools/botobs/bosses/freya.py <trace>`; probes are the notes `freya.snaphold`, `freya.adddef` and
+`freya.addext`. A pull files under the first
 Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
 living Elder into combat before Freya's own hook runs, and the recorder never renames a named trace.
 `cfg.hardmode` has no Freya key, so the report's column reads `-`; the banner reads hard mode off the
@@ -684,10 +729,13 @@ Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core 
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, and each hold change (on, bark gone, off), each "on" with its bark procs and deaths to
-the Snaplasher; `--beams` Unstable Sun Beam dodges per role
+the Snaplasher, and each cooldown a tank or healer spent under a stacked Snaplasher; `--beams` Unstable Sun
+Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
 28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--blasts` per lasher
 wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
-blast, and their samples inside one; `--deaths` by killer and spell.
+blast, and their samples inside one; `--lows` per lasher wave, its lashers under the bail line, those there
+8s or more and hitting a player, what the ranged in reach of one hitting a player shot, and the back line's
+bails from one hitting them; `--deaths` by killer and spell.

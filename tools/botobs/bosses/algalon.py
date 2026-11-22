@@ -132,6 +132,8 @@ BIG_BANG_CAST_MS = 8000
 # the soaker latch clears to 0 a tick or two after the hit
 SOAKER_TAIL_MS = 1500
 SHELTER_WINDOW_MS = 30000
+KITE_RESERVE_MS = 60000
+KITE_RESERVED_HOLES = 2
 GATHER_LEAD_MS = 10000
 # every class taunt the handler can be (Taunt, Hand of Reckoning, Growl, Dark Command)
 TAUNT_COOLDOWN_MS = 8000
@@ -3811,7 +3813,7 @@ def kite_blocked(trace: Trace) -> dict[str, int]:
                 lead = min(ahead) if ahead else None
                 if lead is not None and lead <= GATHER_LEAD_MS:
                     continue
-                reserved = 1 if lead is not None and lead <= SHELTER_WINDOW_MS else 0
+                reserved = KITE_RESERVED_HOLES if lead is not None and lead <= KITE_RESERVE_MS else 0
                 if int(value_at(holes, when) or 0) <= reserved:
                     continue
                 frame = [(guid, row) for guid, row in samples.units[index].items()

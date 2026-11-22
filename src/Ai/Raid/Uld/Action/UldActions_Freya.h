@@ -106,6 +106,24 @@ private:
     uint32 releasedMs = 0;
 };
 
+class FreyaAddTankDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "freya add tank defensive";
+
+    FreyaAddTankDefensiveAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+class FreyaAddTankExternalAction : public Action
+{
+public:
+    static constexpr char const* Name = "freya add tank external";
+
+    FreyaAddTankExternalAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class FreyaRedirectThreatAction : public Action
 {
 public:

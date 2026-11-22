@@ -443,3 +443,108 @@ issued 18 legs against 200 refused `wait`. Two side effects to watch: a champion
 wall grip from anyone, also while Hand of Freedom makes Chains useless (such holds gave 2-3 grips this window); and the
 ice reach now replaces a generic `avoid aoe` flee in flight (`MOVEMENT_COMBAT`, retried after 1 s), none seen for an
 ice DK in window 12.
+
+## Round 6 (2026-11-22, window 13 on build a55056c40)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head a55056c40 --pulls 10`, rounds 1-5 in it: toc1
+`tr-20261122-205905-1` wipe 5:19, 29 deaths (`649_1_caiphus-the-stern_1795381276`), toc2 `tr-20261122-205905-2` kill
+7:02, 3 (`649_2_thrakgar_1795381255`), toc3 `tr-20261122-205905-3` kill 7:30, 4 (`649_3_thrakgar_1795381274`). Windows
+11 and 12 reread for comparison. Scripts in the round's scratchpad `fc6/` (gone with it); the reader's new `--personal`
+line covers the key one.
+
+**Stop rules.** A wipe: not polished. Round 6 picks a different failure.
+
+**Lineups.** toc1 drew window 11 toc1's: healers Liandra, Caiphus, Erin; Maz'dinah, Narrhok, Ruj'kah, Broln, Gorgrim,
+Harkzog, Ginselle. Four melee champions against three bot DKs (DK tank Tocxam on Broln, Tocxah on Maz'dinah, Tocxal on
+Gorgrim), so Narrhok is never iced. toc2 (Liandra, Caiphus, Thrakgar; Birana for Broln) and toc3 (Liandra, Thrakgar,
+Erin; Vivienne for Broln) have three melee champions against two DPS DKs: Narrhok free until a DK's champion died (4:29,
+5:08).
+
+**Deaths by killing blow.** Iced: the duty's DK's Chains on it in the 10 s before; lapsed: older, the DK alive.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 wipe | 29 | Ruj'kah 7, iced Broln 5 + lapsed 1, Ginselle 4, iced Maz'dinah 3 + 1 after her DK died, iced Gorgrim 2 + lapsed 2, Narrhok (never iced) 2, Harkzog 2. 6 dead by 0:45, 4 to Broln; 16 in the collapse from 3:38 |
+| toc2 kill | 3 | Narrhok (free) 2, iced Gorgrim 1 |
+| toc3 kill | 4 | Ruj'kah 2, Vivienne 2 |
+
+**Why toc1 wiped (it killed with 5 deaths on the same lineup in window 11).** The opening: Broln, iced all pull, dealt
+240k in the first 60 s against 81k in window 11 and killed 4 of the first 6. His DK, the tank Tocxam, was Blinded by
+Maz'dinah at 0:11.6 and Intimidating-Shouted by Narrhok at 0:14.4 until 0:22.4, so his Chains lapsed 0:16-0:23; kiters he
+reached were Dazed (12 of the 29 deaths pinned by Dazed). Three of the eight CC bots died by 0:45 (Tocxas, Tocxap,
+Tocxak), the casters then held only 34-45% of their time off the kill target, the three healers took 3:00 to kill, raid
+DPS fell to 70k (median 106k), and Ruj'kah killed 7. Narrhok, never iced, killed 2, both in the collapse.
+
+**Verdict on round 5 (own wall grip, stale ice reach): held.**
+
+- `--ice` Chains due: toc1 0, 0, 0 of 27, 19, 27 wall holds; toc2 0, 0, 0 of 29, 44, 11; toc3 1, 1, 0 of 36, 61, 4 (window
+  12: 18-118 per duty). Grips 5, 5, 6; 7, 7, 2; 6, 8, 2 (window 12: 9, 7, 7; 6, 4; 6, 3).
+- Uptime 98/77/94%, 96/97/98%, 98/97/97%, longest gaps 3.1/33.1/7.1, 7.8/6.6/1.5, 2.3/5.6/2.9 s (window 12: 93/84/93,
+  96/68, 96/97; 11.8/19.1/12.5, 6.2/44.0, 8.0/3.1 s). Recasts a median 6.1-6.7 s apart.
+- `faction champions ice reach` `wait` rows 0, 0, 0 (window 12: 518, 462, 120), legs issued 116, 59, 68 (45, 47, 11).
+  Chains lapse time with the DK alive by state: out of range 35 s, in range 14 s, kiting another champion 37 s (window
+  12: 150, 28, 2.5; window 11: 166, 18, 1.3).
+- Lapsed-champion deaths 3 (window 12: 2), from two new causes: Broln's while his DK was CC'd (Tocxas 0:21), and
+  Gorgrim's while his DK Tocxal kited Broln (Tocxaj 4:03.8; Tocxah 4:08.6, Maz'dinah's ice DK, with iced Maz'dinah 41%).
+
+**Q2 (ice order) not due.** Never-iced champions did not top the deaths: Narrhok killed 2 never iced on toc1 and 2 free
+on toc2, 4 of 36, behind Ruj'kah 9 and iced Broln 5. With one free melee champion the danger peel held Narrhok: CC 88,
+141, 95 s, danger 203-290 s.
+
+**Failure ranking (36 deaths).**
+
+1. Melee champions, 19: iced 11 (Broln 5, Maz'dinah 3, Gorgrim 3), lapsed 3, free Narrhok 4, Maz'dinah after her DK
+   died 1. Melee champions did half the damage or more on 15 of 29, 3 of 3 and 0 of 4 deaths.
+2. Casters, 17: Ruj'kah 9, Ginselle 4, Harkzog 2, Vivienne 2; 13 on toc1, most in its collapse. Off the kill target they
+   were CC'd 34-45% of their time on toc1 with nobody on them; no bot fault found, they follow the melee losses.
+
+**Picked: a kite re-hop is refused by the bot's own kite walk (bug).**
+
+- `FactionChampionsKiteAction::Execute` (`ToCActions_FactionChampionsBall.cpp:133-149` before the fix) walks each hop at
+  `MOVEMENT_FORCED`. The kite re-plans on arrival or after `KITE_STEP_MS` 2.5 s (`ToCHelpers_FactionChampionsBall.cpp:94`,
+  latch `:1045-1055`), but the hop in flight holds a lock of its length over the run speed at issue
+  (`MovementActions.cpp:366-372`, capped 5 s), and `IsWaitingForLastMove` (`:1059-1070`) refuses an equal priority: a
+  Dazed kiter's 15 yd hop locks 4.3 s, so its next hop waits ~1.8 s; a healthy one arriving 2 yd short waits ~0.3 s.
+- Move rows: 303 `faction champions kite` re-hops waited behind the bot's own kite walk (3 behind another action's), 276
+  issued within 6 s: median 0.3, 1.2, 0.3 s, 110 over 1 s. At the refusal the stale walk ended a median 15.4 yd from the
+  chaser against the refused hop's 26.1 (nearer in 102 of the 110 long ones); melee champion damage on the waiting bots
+  229k, 290k, 121k (639k). Window 12 the same: 313 refusals with a chaser on the bot, 97 over 1 s, 586k.
+- toc1 0:39.1-0:44.3: Tocxao (shadow priest, Dazed at 0:37.0) hopped 14.4 yd at 3.4 yd/s; its next hop off Broln, 0:41.6,
+  was refused twice (`hms` 1720 ms, then 696) and issued at 0:43.4 as the lock ran out, while it walked on to the stale
+  spot and Broln closed 5.0 → 1.6 yd; 92% → 8%, dead at 0:44.3.
+- 13 of the 17 deaths melee champions did half of (the round's script; the reader counts 18) had such a wait in the 5 s
+  before (an active kite re-plans every ~2.5 s, so this bounds the gain rather than measures it).
+- For an ice DK round 5's ice reach already slipped in: its kite refused, the ice reach lowered the kite's booking and
+  walked toward its champion, and the kite re-issued 0.1 s later (Tocxal 2:05-2:10).
+
+**Fix** (`ToCActions_FactionChampionsBall.{h,cpp}`). The kite remembers its last issued hop; when the booking in flight is
+that hop at `MOVEMENT_FORCED`, it lowers it to `MOVEMENT_COMBAT` before walking the new hop and restores it when nothing
+issued (pitfalls: a single mover is refused its own re-target). A dodge, Nitro run or wall grip in flight still holds. The
+latch keeps re-hops to arrival or 2.5 s, so the legs don't flip. Reader `--personal`: re-hops refused by the bot's own kite
+walk, how many over 1 s, the median wait, those never issued, the melee champion damage meanwhile (`kite_waits`).
+
+**Next window should show.** `--personal` "re-hops refused by the bot's own kite walk" near 0 (this window 86 of 232, 93
+of 228, 97 of 258 hops; 30, 50, 30 over 1 s; 229k, 290k, 121k meanwhile); `faction champions kite` `wait` move rows near
+0 (410); hops per kite not far above this window's (113, 128, 143 kites). Kite catches no higher (toc1 Maz'dinah 7/29,
+Gorgrim 10/26, Narrhok 4/21, Broln 6/19; toc2 Narrhok 13/47, Gorgrim 25/37, Maz'dinah 9/33; toc3 Narrhok 18/46, Gorgrim
+17/45, Maz'dinah 9/41) and fewer deaths melee champions did half of (15/29, 3/3, 0/4).
+
+**Seen, not picked.**
+
+- An ice DK kites another champion off its own: Tocxal kited iced Broln 2:02-2:43 up to 63 yd from Gorgrim (Chains gap 33
+  s) and again 3:59-4:09; lapsed Gorgrim then killed Tocxaj and Tocxah. The kite takes any melee champion on a non-tank
+  (the user's call) and the ice reach sits under it. If it recurs, a plan question: should an ice DK's hops stay within
+  Chains range of its champion?
+- The DK tank's CC (Blind, Intimidating Shout) lapsed Broln's Chains for 7 s in toc1's opening.
+- Tocyak's Greater Fire Elemental (15438) had Ruj'kah as target in 79% of his toc2 samples off the kill target and out
+  of CC, which holds Polymorph, Fear and Hex off him (CC'd 35% against Ginselle 58%, Harkzog 51%).
+- The wall grip also refuses its own re-aim: 79 such waits, median 1.6 s.
+- Iced Gorgrim kills at range: Tocxap (toc1 0:41.6) took Death Coil and Icy Touch from 13-17 yd, his Chains, then Frost
+  Strike.
+
+**Questions for the user.** Q1, this window's numbers: iced Broln killed 5 on toc1 (one more lapsed) and dealt 240k in
+its first 60 s; he caught 6 of 19 kites (32%), and iced Gorgrim 7 of 19, 25 of 37, 16 of 44, mostly Death Coil and Icy
+Touch. Recommendation unchanged: yes, Disarm and Dismantle only. Q2: not due (above); recommendation unchanged.
+
+**User answer (2026-11-22) to Q1:** yes: a disarm peel (warrior Disarm, rogue Dismantle) may go on an iced
+Tauren champion whose victim is not a tank.

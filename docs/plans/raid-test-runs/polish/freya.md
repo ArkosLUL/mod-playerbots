@@ -545,3 +545,238 @@ spell in the DBC, `IsFreyaLingeringAreaDamage` matches only the findings doc's l
 
 Left for the next window's read: a Felguard's Cleave beside it (2 procs in uld2's second hold) and
 Soulshatter, whose 50 yd pulse hit it once from 22 yd (uld2 5:59.7), past the 15 yd area reach.
+
+## Round 6 (build ebe746ad1: round 4 built, round 5 merged but not built)
+
+**Data:** `report --boss freya --raid uld --head ebe746ad1 --pulls 10`, one valid pull per pool, no DC veto
+inside a pull: `tr-20261122-200637-14` (uld1, DK add tank), `-200417-13` (uld2, bear), `-200818-15` (uld3,
+bear); traces `env/dist/logs/botobs/603_{14,13,15}_elder-stonebark_{1795378042,1795377898,
+1795378140}.ndjson`. Windows 10 and 11 are the baseline. Ad hoc scripts: `scratchpad/freya-r6/`.
+
+**Hard mode.** All three pulls 3 of 3 Elders from their essence channels. No kill.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795378042 | wipe 10:22 at Berserk, 32 | Berserk 20 (Freya melee 7 from 10:00.6, Ground Tremor 12 at 10:15.6, Sunbeam 1), Snaplasher 8 (the DK add tank at 5:21.3, then 7 non-tanks in a 25.5s hold), Detonating Lasher 2 (ranged, 2:36.9, 3:06.4), Unstable Energy 1, own Iron Roots 1 |
+| uld2 | 1795377898 | wipe 5:58, 30 | Detonating Lasher 12 (9 in the second wave's first 41s, 7 of them ranged; 3 in the trio wave to lashers Eonar's Gift healed back), Snaplasher 10 (the bear add tank at 5:08.1, the main tank at 5:29.4, 8 non-tanks), Sunbeam 2, Unstable Energy 2, Freya melee 2 (after the main tank), Storm Lasher 1 (the risen bear), Tidal Wave 1 |
+| uld3 | 1795378140 | wipe 4:51, 32 | Detonating Lasher 13 (3 under the second wave's ghouls, a melee and the bear add tank at 3:36.8 after they expired, then 8 healers and ranged 3:46.8-4:40.4 to two low lashers the 3:32 Gift healed back), Snaplasher 7 (the risen bear at 3:53.5, the main tank at 4:36.5, 5 non-tanks), Tidal Wave 4, Unstable Energy 3, Freya 3, Conservator 1, Storm Lasher 1 |
+
+**Stop rules:** no kill, not polished. No failure picked three rounds running (round 4 the melee blast
+walk-back, round 5 the hold's bark, now the low lashers).
+
+**Round 4 verdict: held, at no melee damage cost.** `--blasts` per lasher wave: melee approach orders into
+a low lasher's blast 6/234, 5/113, 4/105, 23/219, 3/131, 14/241 (2-11%; round 4's window 37-57%, round 5's
+38-49%); melee inside a low blast 13-23% of samples (37-48%); melee Detonate hits 13, 12, 1, 9, 2, 1 a wave
+(40-65); no melee Detonate death (round 5's window: 5). Melee damage over each wave's first 40s
+(`melee_dps40.py`): 74.4, 78.3, 101.0, 71.6, 81.3, 92.6k/s, against 49.6-99.2k on windows 10-11's waves
+with the melee intact.
+
+**Round 3's hold without round 5's release** (round 5's baseline; `--tanks`): uld1 25.5s, 35 bark hits, 7
+deaths to the Snaplasher; uld2 8.7s / 4 / 2 and 15.3s / 16 / 4 (pull ended); uld3 3.0s / 0 / 0 (the trio
+spawned 0.3s after the add tank died to lashers; he rose and took it), 16.7s / 24 / 3 (ended when it turned
+on the main tank, no reset), 4.6s / 3 / 1 (pull ended). Round 5's window: 14.6, 25.7, 8.9, 18.8s; 23, 21, 5,
+53 hits; 5, 5, 2, 5 deaths. New: uld1's hold began at 5:21.35 with the Snaplasher at 13% and its siblings
+at 9-20%. They died at 5:26.0 and 5:26.5 and revived at 5:37.3-5:37.7 while it sat held at 1-5%; the risen DK
+took it at 5:47.3, it died at 5:52.5 and revived at 6:04.0, and the trio never died together again. With 18
+alive and Gifts living at 6:31, 7:17 and 8:46 (healing all three back to 70-94%), it lasted to Berserk: 27
+of the pull's 32 deaths follow from that hold. Question 4.
+
+**Question 2's numbers** (`freya-r5/addtank.py`). Every add-tank death came with its defensives spent in
+the wave before: uld1's DK used Icebound Fortitude at 3:26.8 in a lasher wave (ready again 5:26.8) and
+Vampiric Blood 11s into trio 2 (off at 4:57.4), and died at 5:21.3 to 31.3k and 34.2k swings 2.4s apart.
+uld2's bear pressed Survival Instincts, Frenzied Regeneration and Barkskin at 4:24.8-4:28.8 with four
+lashers on him, 4s before trio 2 spawned; all were gone by 4:44.8 and he died at 5:08.1 to 25.9k, 33.0k and
+34.8k in 4.9s under Divine Guardian. uld3's bear spent Frenzied Regeneration and Barkskin on lashers at
+3:19.6 and 3:26.8, died to lasher melee (11 hits) at 3:36.8 as trio 2 spawned, rose on his soulstone at
+3:37.1, got Lay on Hands at 3:37.4 and Pain Suppression at 3:46.8 (the first external other than Lay on
+Hands on an add tank in four windows) and died under it at 3:53.5 to 22.6k and 21.0k. Lay on Hands reached
+uld1's DK twice, both outside trio 2; Hand of Sacrifice reached uld2's bear at 5:26.5, risen on his
+soulstone, who died under it at 5:32.5 to a Lightning Lash.
+
+**Rounds 1-3 still hold.** No tank Roar, Shout or Righteous Defense across the split; Righteous Defense
+only on melee (uld1 10:04.8, 10:12.9 after the main tank died; uld3 3:41.5). One Challenging Roar: uld2's bear
+at 5:17.1, right after rising, from the generic `challenging roar` node (a `tank assist` act just before
+it), so Freya's rules were not running for him (below); Freya never left the main tank. Beam dodges from
+past 8 yd: heal 17%, melee 8%, ranged 17%, tank 5% (round 5's window 3-9%); ended farther from Freya heal
+39%, melee 59%, ranged 46%, tank 68%. Healers on the add tank in trio 1: median 4, never under 2. Unstable
+Energy 6 deaths (1), 3 of them in uld3's collapse. `--ghouls`: no lasher in reach 0-12%, on Freya 0-3%,
+0-6 `freya reach held pack` orders; inside 18 yd of a lasher 15-100% (17-51%), from where the waves
+spawned (below).
+
+**Ranking.** (1) The trio-2 chain: Snaplasher 25 (8, 10, 7) plus uld1's Berserk 20 that followed from the
+hold. The add tank's deaths are question 2, the hold's length round 5 and question 4, the hold's sync loss
+question 4 (new option below). (2) Lashers left under the bail line: 10 deaths to low lashers Eonar's Gift
+healed back (uld3 8, uld2 2), and uld1's 2:46 Gift healing the packs while the back line bailed from one.
+(3) uld2's second wave start: 9 deaths in its first 41s. (4) Singles: Unstable Energy 6, Tidal Wave 5.
+Picked (2), the largest cause nothing pending targets.
+
+**Failure picked: low lashers hitting a player are left alone, so the bails never end.**
+
+- `--lows` (new): lashers under the bail line 8s or more while hitting a player, per wave 4, 0, 0, 3, 0, 5 (12
+  in three pulls; windows 10-11: 6 in six). Measured from first under 15% to death: median 3.6s, but those on a
+  tank median 8.0s (6 of 15 past 8s) and those on the back line 9.7s (4 of 7); windows 10-11: on a tank
+  3.6-6.4s (3 of 11 past 8s), on the back line 4 in all, none past 8s. Ghoul-held ones blow a median 3.2s
+  (3.4-4.2 before).
+- Nothing aims at them: of the ranged DPS samples in reach of a low lasher hitting a player, 31, 29, 40, 5,
+  0, 34% shot one and 39, 26, 11, 12, 52, 37% another lasher (the rest the Gift, the trio, Freya). uld3
+  3:21.5-3:23.8: 68928 at 13-14% on Uldzah, 7-8 ranged DPS 15.5-28.5 yd off it, every one on another lasher.
+  Their pick is `GetFreyaRangedLasherAim`, the pack focus (most lashers within 8 yd, lowest GUID), else the
+  nearest lasher in reach (`UldActions_Freya.cpp:558-568` at `a55056c40`); the lowest-health pick
+  (`GetFreyaRangedLasherFocus`) only runs for a finishing pack of 3+ (`UldEncounter_Freya.cpp:1098-1134`).
+  Melee keep out by design (bail, round 4's guards); tanks hold them and don't bail.
+- One hitting a back-line bot runs with it at 8.0 yd/s, so the back-line bail (`freya ranged camp`,
+  `MOVEMENT_FORCED`, cast interrupt) can't clear it: 249 bail orders from a low lasher hitting the back line
+  (62, 4, 0, 70, 0, 113 a wave; 39 in windows 10-11's six pulls), about 60 of them by its own victim. uld3
+  3:19-3:44: lasher 68928 sat at 5-13% chasing Uldzah then Uldzal; Uldzah (the camp anchor) took 8 bail hops
+  of 4 yd east at 3:19.9-3:25.5 and the back line drifted to a median 47-57 yd from Freya, the bots around the
+  lasher targeting it but moving (`who_on.py`).
+- The cost: the Gift at 3:32.2 spawned 79 yd from the ranged, lived 14.5s and healed 68928 and 68934 from
+  5-6% to ~65%; with the trio up at 3:36.5 (it outranks lashers) they ran loose and killed Uldzal, Uldzad,
+  Uldzak, Uldzae, Uldzaq, Uldzah, Uldzar, Uldzan (3:46.8-4:40.4). uld2: 68983 and 68984, low from 4:29-4:35,
+  healed back at 5:15 by the 5:03 Gift (ranged 46-62 yd off, alternating `freya ranged camp` and `reach
+  spell`), killed 2. uld1: 68903, low 2:37-2:52 on the back line; the 2:46 Gift lived with all ten ranged on it
+  43-56 yd off, none in reach, the anchor Uldxag alternating `reach spell` with bails from it.
+
+**Classification: bug.** The bails and round 4's guards hold every bot outside a low lasher because it
+"blows in seconds" (findings doc); nothing makes that true for one off the pile.
+
+**Fix** (Freya files only, any size or difficulty, no player branch): `GetFreyaLowLasherOnPlayer` returns
+the lowest lasher under `ULDUAR_FREYA_LASHER_BAIL_PCT` whose victim is a player and that is within
+`SpellDistance` of the bot (GUID ties); `ResolveFreyaDpsTarget` gives a ranged DPS bot that ahead of the
+pack focus, inside the lasher rung (Gift, Conservator and trio still come first). Ghoul-held lashers keep
+the pile's AoE. A bot inside its blast still bails first, then shoots from 18 yd. Reader: `--lows`, tested.
+
+**Next window should show** (`freya.py --lows`, `--waves`):
+
+- Lashers 8s+ under the bail line while hitting a player near windows 10-11's 1 a pull (here 4, 3, 5: uld1's
+  first lasher wave, uld2's and uld3's second); ranged in reach of one shooting another lasher near 0%
+  (11-52%), on one well up (0-40%); back-line bail orders from one hitting the back line well under 249 for
+  three pulls.
+- No lasher healed back from under 15% by a Gift; no healer or ranged death to such a lasher in a trio
+  wave (10 here).
+- Ghoul-held waves no slower: those lashers blow a median 3.2-4.2s after going low.
+- Round 5's checks as written there; rounds 1-4 still holding.
+
+**Not picked:**
+
+- uld2's second wave start (9 deaths, 3:37.5-4:13.0): the back line stood where the pack spawned after the
+  Conservator wave (back-line centroid (2370, -31), pack (2365, -31), Freya 9 yd off), the Army came 3.8s
+  after the spawn behind a Ground Tremor cast (the trigger waits it out by design), three lashers' first
+  swings killed Uldyaq at 3:37.46, and with the back line a median 2.5-4.5 yd from a lasher the ghouls held
+  2-6 of 9 (wave 1, back line 22-29 yd off once held: 10 of 10). A camp position question if it repeats.
+- A risen bot runs generic code until it is back on Freya's threat list: `FreyaAlive` reads `GetFreyaScan
+  (botAI).Boss()`, a `find target` threat-list walk, so `freya area taunt hold` and the `tank assist` zero
+  were off for uld2's bear at 5:16.8-5:17.1. No swap followed; one Roar.
+- Gifts living when the back line starts far off (all nine that healed spawned a median 38-79 yd from the
+  ranged; findings doc known-open). This fix shortens the bail half of it.
+- Unstable Energy 6, Tidal Wave 5.
+
+**Questions:**
+
+2. (pending, this window's numbers above) The add tank's defensives were spent in the wave before every
+   death this window, twice on lashers right before the trio. Recommendation unchanged: (c), the add tank
+   keeps its class defensives for the trio waves and chains them once the Snaplasher on it is stacked, plus
+   healers' tank externals on it.
+4. (pending, this window's numbers above) Without the release the holds ran 3-25.5s, and uld1's shows a cost
+   none of (a)-(c) covers: a hold that starts on a nearly dead Snaplasher lets its siblings revive. New
+   option (d): no hold while a sibling of its wave is down or the Snaplasher is under the trio sync window
+   (30%); the raid finishes it inside the siblings' 11s. Recommendation: (a) with (d) for the next window;
+   (b) if holds still run past ~8s with the release.
+5. Lashers left when a trio wave spawns: the trio slot outranks lashers and no tank takes lashers during a
+   trio wave, so Eonar's Gift heals them and they kill the back line (uld2: four at 73-84% summed at the
+   spawn, the last three healed from 52% to 229% at 5:15, 3 deaths; uld3's 8 above). This round's fix finishes low ones before the
+   trio comes, not higher ones after. Options: (a) keep the trio first; (b) ranged finish lashers left
+   from an earlier wave before the trio slot while their summed health is under one lasher's (100%, ~235k);
+   (c) the main tank taunts them. Recommendation: (b).
+
+**User answers (2026-11-22):** Q2 (c): the add tank keeps its class defensives for the trio waves and
+chains them once the Snaplasher on it is stacked, and healers put tank externals (Pain Suppression,
+Guardian Spirit, Hand of Sacrifice) on it then. Q4: drop the Snaplasher hold; the user would kite it at
+high stacks because the stacks slow it. Orchestrator check: only the 10-man stack 62663 slows (aura 33,
+-5% a stack); the 25-man 64190 has no speed aura (DBC; the core casts 62664 at both sizes and the 25-man
+proc is 64191 -> 64190), so the 25-man replacement went back to the user. Q5 (b): ranged finish lashers
+left from an earlier wave before the trio while their summed health is under one lasher's; the user's aim
+is that a wave is cleared before the next arrives, so find why it is not.
+
+## Round 7 (on Custom b21cda8ee, no new pulls)
+
+**Data:** none new. Rounds 5 and 6 are merged but not built, so no verdict, stop rule or ranking. Built the
+user's Q2 (c) and Q5 (b), and read windows 10-12 (`report --head ebe746ad1`, the traces of rounds 4-6) for
+why a lasher wave outlives the next spawn. Ad hoc scripts: `scratchpad/freya-r7/` (`wave_timeline.py`,
+`gift_reach.py`, `gift_camp.py`).
+
+**Why a lasher wave is not cleared before the next.** The core spawns the next wave 60s after the last, or
+5s after the current set dies (`boss_freya.cpp` `EVENT_FREYA_ADDS_SPAM`, `ACTION_ADD_DIED`). With the raid
+intact, windows 10-11's lasher waves died in 31-49s; window 12's ran 85s (uld1 1:56), and past the pull's end
+(uld2 3:32, uld3 2:36). In all three an Eonar's Gift lived its full cast mid-wave and healed the lashers
+about 60% each:
+
+- uld1: the 2:01 Gift (14.6s) took the pack from 693% to 869% summed; the 2:46 one (14.5s) took the last two
+  from 8% and 12% to 66% and 67%, and the next lasher wave spawned on them at 2:56.
+- uld2: the trio came on the 60s timer at 4:32.5 with four lashers at 76% summed; ranged went to the trio
+  (it outranks lashers), and the 5:03 Gift took the last three from 50% to 228%.
+- uld3: the 2:47 Gift took the pack from 560% to 746%; the 3:32 one took three at 15% to two at 130%, and
+  the trio spawned at 3:36.5.
+
+The Gifts that lived spawned a median 38-79 yd from the ranged; 0-2 ranged were within 28.5 yd for most of
+each life. Ranged move orders during them: `reach spell` against `freya ranged camp`, 47/46, 8/27, 35/12,
+23/48. Of those camp orders, 100 were bails from a low lasher on the back line (round 6's target, though a
+Gift outranks that pick) and 25 the camp's gather pulling a ranged bot whose target was the Gift back to
+the anchor (15, 2, 2, 6). So: (1) a Gift living, because the back line can't reach it (bails, gather,
+distance), and (2) the trio taking the ranged off an unfinished tail.
+
+**Built** (Freya files only, any size or difficulty, no player branch):
+
+- Q5 (b): `IsFreyaLasherTail` (living lashers summing under one lasher's max health); while a trio member
+  lives, a ranged DPS bot's lasher pick (low one on a player, else the ranged aim, else the nearest in
+  reach) goes ahead of the trio slot in `ResolveFreyaDpsTarget`. Out of reach it falls through to the trio.
+- Bug, cause (1): `freya ranged camp`'s gather stands down for a ranged DPS bot whose target is a Gift, as it
+  does for a ghoul-held pack; the bail still runs. The strategy makes the Gift a ranged job, and the gather
+  undid their walk to it.
+- Q2 (c): `freya add tank defensive hold` blocks `HeldTankDefensiveNames` for assist tank 0 while Freya lives
+  and is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank defensive`
+  (`ACTION_RAID + 4`): a tank with a Snaplasher of 25+ bark stacks on him (`GetFreyaStackedSnaplasherTank`,
+  about 4s into its wave) casts `NextTankDefensive` (physical), which waits while one runs, so they chain.
+  `freya add tank external` (`ACTION_RAID + 4`): a healer casts Pain Suppression, Guardian Spirit or Hand of
+  Sacrifice on that tank whenever none of the three is up. Notes `freya.adddef`, `freya.addext`; `--tanks`
+  lists them, tested.
+- Not touched: the Snaplasher hold (Q4, with the user).
+
+**Next window should show** (`freya.py --tanks`, `--waves`, `--lows`; `gift_reach.py`, `gift_camp.py`):
+
+- Q2: no add-tank cooldown in a lasher or Conservator wave above 25% health; in each trio wave a
+  `freya.adddef` row about 4s in, then the next as each runs out, and `freya.addext` rows on the add tank;
+  add-tank deaths to the Snaplasher under rounds 4-6's 1-2 a pull.
+- Q5: no trio spawning onto lashers summing under 100% that are then healed back by a Gift; ranged on the
+  tail while it is in reach.
+- Gift: no gather order from a ranged bot targeting a Gift; fewer Gifts living 12s+ in lasher waves (window
+  12: 5 in its three long waves), and lasher waves done before the next spawn.
+- Rounds 5 and 6 checks as written there; rounds 1-4 still holding.
+
+**Questions:**
+
+6. A Gift outranks a low lasher hitting a back-line bot, so the ranged keep bailing from it instead of
+   walking to the Gift: 100 of the bails above. Options: (a) keep the Gift first; (b) a ranged DPS bot with
+   a low lasher on a player inside `SpellDistance` shoots it before the Gift (12-35k left, one or two casts),
+   then the Gift. Recommendation: (b), read after round 6's low-lasher pick is built.
+
+**Review:** the cause holds. Reproduced on window 12 (`wave_timeline.py`, `gift_camp.py`): uld1 693% to
+869% at 2:11-2:16 and the 8/12% tail to 66/67% by 3:02; uld2's four lashers at 76% when the trio came at
+4:33, then 50% to 228% at 5:14-5:19; uld3's 15% to 130% at 3:39-3:44; 100 bails and 25 gathers (15, 2, 2,
+6) during the four Gifts. Windows 10-11's intact lasher waves ran 31-49s. Fixed:
+
+- The tail pick also ran with the trio locked, against "once any trio member is below 30% the trio
+  outranks the other adds" (findings doc), so ranged could leave a sync kill for a lasher. It now waits
+  for `!trioLocked`, as the Conservator does. uld3's tail (2 lashers at 99%, 4:05) still had ~17s before
+  the lock (Water Spirit under 30% at 4:22).
+- `freya.adddef` and `freya.addext` were written only on a cast, and `NoteDerived` drops a value equal
+  to the bot's last one for that key, so the same button cast in a later trio wave left no row. The
+  defensive trigger now notes too (`covered` while one runs, `none` with nothing left), and a healer
+  with nothing to cast under a stacked Snaplasher notes `none`; `--tanks` hides both, tested.
+
+Next window, read the Q5 check as "ranged on the tail while it is in reach and no trio member is under
+30%".
+
+**User answer (2026-11-22) to Q4, after the 25-man check:** drop the Snaplasher hold (rounds 3 and 5).
+Kite a loose Snaplasher only while its live speed is below the kiter's (its stacks slow it at 10-man only);
+otherwise, with no add tank alive, the raid kills it.
