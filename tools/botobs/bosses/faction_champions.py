@@ -263,6 +263,7 @@ FC_MULTIPLIERS = (
     "faction champions grip guard multiplier",
     "faction champions late interrupt multiplier",
     "faction champions concussive guard",
+    "faction champions ice guard multiplier",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
@@ -2177,6 +2178,26 @@ def snare_casts(trace: Trace) -> list[dict]:
     return out
 
 
+def iced_holds(trace: Trace) -> list[dict]:
+    """Every raid or pet cast that pops a trinket (TRINKET_POPPERS) aimed at a champion an ice duty holds in Chains
+    of Ice (`iced_at`): `t`, `by` (the roster member, a pet's owner), `spell` (its name), `target`, and `trinket`,
+    the champion's PvP trinket inside TRINKET_CAUSE_MS after it."""
+    targets = champions(trace)
+    duties = ice_duties(trace)
+    trinkets = champion_trinkets(trace)
+    out = []
+    for rec in trace.of("cast"):
+        name = TRINKET_POPPERS.get(rec.get("sp"))
+        target = rec.get("tgt")
+        caster = raid_caster(trace, rec.get("s")) if name else None
+        if caster is None or target not in targets or not iced_at(duties, target, rec["t"]):
+            continue
+        trinket = any(champion == target and rec["t"] <= when <= rec["t"] + TRINKET_CAUSE_MS
+                      for when, champion in trinkets)
+        out.append({"t": rec["t"], "by": caster, "spell": name, "target": target, "trinket": trinket})
+    return out
+
+
 def full_speed_chases(trace: Trace) -> dict[int, list[int]]:
     """Per melee champion, `[steps, snared]` over the RUN_STEP_MS steps from the pull where it ran
     RUN_FULL_SPEED or faster since the step before, within RUN_NEAR of the living raider it had as target, no
@@ -2377,6 +2398,16 @@ def show_peel(trace: Trace) -> None:
                   f" / {needed.count(None)}; iced {sum(row['iced'] for row in rows)}")
     else:
         print("  no snare on a champion")
+    holds = iced_holds(trace)
+    if holds:
+        grouped: dict[tuple[str, str], list[bool]] = collections.defaultdict(list)
+        for row in holds:
+            grouped[(row["spell"], klass.get(row["by"], "?"))].append(row["trinket"])
+        print("  trinket poppers aimed at a champion an ice duty holds in Chains of Ice, by spell and class (its"
+              " trinket after): " + ", ".join(f"{spell} {name} {len(popped)} ({sum(popped)})"
+                                              for (spell, name), popped in sorted(grouped.items())))
+    else:
+        print("  no trinket popper aimed at a champion an ice duty holds in Chains of Ice")
     chases = full_speed_chases(trace)
     if chases:
         steps = sum(cell[0] for cell in chases.values())
@@ -3681,6 +3712,21 @@ def trinket_triggers(trace: Trace) -> list[dict]:
     return out
 
 
+def iced_trinkets(trace: Trace, rows: list[dict] | None = None) -> list[dict]:
+    """The `trinket_triggers` rows whose champion an ice duty held in Chains of Ice (`iced_at`), each with `back`,
+    ms from the trinket to that duty DK's next Chains of Ice on it inside the duty, None without one."""
+    rows = trinket_triggers(trace) if rows is None else rows
+    duties = ice_duties(trace)
+    out = []
+    for row in rows:
+        if not iced_at(duties, row["champion"], row["t"]):
+            continue
+        after = [cast_at for _, iced, start, stop, casts in duties
+                 if iced == row["champion"] and start <= row["t"] <= stop for cast_at in casts if cast_at > row["t"]]
+        out.append({**row, "back": min(after) - row["t"] if after else None})
+    return out
+
+
 def trigger_name(trace: Trace, spell: int | None) -> str:
     if spell is None:
         return "none seen"
@@ -3712,6 +3758,16 @@ def show_trinket(trace: Trace) -> None:
     burned = [row for row in rows if row["spell"] in OPENER_SPELLS]
     print(f"  burned by opener AoE: {len(burned)} of {len(rows)} ({100 * len(burned) / len(rows):.0f}%),"
           f" {sum(row['opener'] for row in burned)} by an {OPENER} holder")
+    iced = iced_trinkets(trace, rows)
+    if iced:
+        backs = [row["back"] for row in iced if row["back"] is not None]
+        tally = collections.Counter(trigger_name(trace, row["spell"]) for row in iced)
+        print(f"  on a champion an ice duty held in Chains of Ice: {len(iced)}, "
+              + ", ".join(f"{name} {count}" for name, count in sorted(tally.items(), key=lambda kv: (-kv[1], kv[0])))
+              + (f"; its DK's Chains back a median {statistics.median(backs) / 1000:.1f} s after" if backs else "")
+              + f", never {len(iced) - len(backs)}")
+    else:
+        print("  on a champion an ice duty held in Chains of Ice: none")
     print(f"  a trigger is the latest opener AoE (a fear or Frost Nova) in the {TRINKET_CAUSE_MS / 1000:.1f} s"
           f" before the trinket whose caster stood within {NOVA_REACH:.0f} yd of the champion (aoe), else the"
           f" latest raid or pet fear, stun or confuse on it; before is how long ahead of the trinket it went out;"

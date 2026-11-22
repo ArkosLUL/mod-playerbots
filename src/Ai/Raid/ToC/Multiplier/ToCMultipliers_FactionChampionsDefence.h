@@ -71,4 +71,16 @@ private:
     RaidActionCache<Facts> _facts;
 };
 
+// a stun on an iced champion pops its trinket, and the Chains go with it
+class FactionChampionsIceGuardMultiplier : public Multiplier
+{
+public:
+    FactionChampionsIceGuardMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions ice guard multiplier") {}
+    float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _classHammer;
+};
+
 #endif
