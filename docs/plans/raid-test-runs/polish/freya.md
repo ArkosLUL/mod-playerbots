@@ -106,3 +106,111 @@ tanks, so the collapse they open has a different cause.
   Righteous Defense swap did not raise the swing.
 - Round 2 candidates: the add tank's Sun Beam dodges carrying the Snaplasher out of heal range (bug); a
   ~45k bear add tank against 29-43k capped Snaplasher swings (plan question: tank choice or cooldowns).
+
+## Round 2 (build 1b45df985, DC 2ce3824)
+
+**Data:** window 9, round 1 code plus the Elder trash despawn, one valid pull per pool, all 3 of 3 Elders,
+no DC veto inside a pull: `tr-20261122-135748-19` (uld1, DK add tank), `-140131-20` (uld2, bear),
+`-140816-23` (uld3, bear); traces `env/dist/logs/botobs/603_{19,20,23}_elder-stonebark_{1795355920,
+1795356142,1795356548}.ndjson`. Window 8's three pulls (`603_33_…_1795350333`, `603_32_…_1795350272`,
+`603_31_…_1795350071`, wipes) ran a binary built before round 1 merged and serve as extra baseline. Ad hoc
+scripts: `scratchpad/freya-r2/`.
+
+Wave order: uld1 Conservator 0:10, trio 0:58, lashers 1:58, Conservator 2:58; uld2 Conservator, lashers
+0:58, trio 1:38, trio 2:39; uld3 trio, Conservator, lashers 1:49, Conservator, trio 3:22, lashers 4:23.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795355920 | wipe 3:24, 33 | Detonating Lasher 22 (melee 18, Flame Lash 4; the raid was down to 21 when the wave came), Snaplasher 9 (the add tank at 1:12 and again after he rose at 1:15, then 7 DPS), Unstable Energy 1, Conservator melee 1 |
+| uld2 | 1795356142 | wipe 2:54, 31 | Snaplasher 14 (add tank 1:59, main tank 2:14, then 12 others), Freya melee 6 (after the main tank), Water Spirit 4 (Tidal Wave 3), Storm Lasher 4, Detonate 3 (first lasher wave) |
+| uld3 | 1795356548 | wipe 7:22, 32 | all in the second lasher wave (4:23), none before: Detonating Lasher 22 (Flame Lash 12, melee 10), Nature Bomb 3, Freya melee 3, Ground Tremor 2, own Iron Roots 2 |
+
+**Round 1 verdict: held.** `freya.py --tanks` lists no Challenging Roar, Challenging Shout or Righteous
+Defense from a tank in any pull (window 7: three Roars, two Righteous Defenses on the add tank). Freya
+never sat on the add tank while both tanks lived; her only other spans are the uld1 opener (0:01.3-0:02.8,
+the DK's Dark Command, as before) and after the main tank died. uld3's bear held each Snaplasher 95% and
+100% of its wave (window 7's second waves: 30%, 56%). The add tanks still die: uld1's DK 14 s and uld2's
+bear 20 s into the trio, both to the Snaplasher with no taunt involved, which round 1's review expected.
+
+**Trash despawn: worked.** None of the 16 Elder trash units (33525-33528) appear in window 9's traces,
+against four of each in windows 7 and 8. No trash death.
+
+**Ranking.** (1) The Snaplasher kills its tank and then the raid: uld1 and uld2, 23 Snaplasher deaths plus
+the collapse behind them; the Snaplasher killed its holder in 7 of the last 9 pulls. (2) The second lasher
+wave on an intact raid: uld3, 31 deaths. Picked (1).
+
+**Failure picked: the beam escapes take the healers out of range of the add tank.**
+
+- uld2: the healers stood 26-27 yd from the bear at 1:42-1:46. A Sunbeam step-out at 1:46.1 took three
+  of them ~11 yd along +x to (2379, -46); an Unstable Sun Beam landed on them at 1:47.9 (0.4-2.2 yd)
+  and the dodge walked them 14-16 yd further +x to (2393, -46). Five `reach spell` walks back
+  (1:50-1:57) were each undone by a re-dodge from 11.5-12.7 yd (1:52.0, 1:56.5). The bear's last 10 s:
+  0.9 healers within 38.5 yd on average, 6.5k of heals against 76k taken (Tidal Wave 12.5k, Snaplasher
+  30.1k and 32.4k). The one priest in range (28-33 yd) wanded the trio.
+- Window 7 uld2 (round 1's review): the bear's own dodges (3:03.6 from 1.1 yd, 14 yd walk; 3:06.8 from
+  11.9 yd) took him 40-48 yd from the healers; 0.1 in range at his death.
+- Code: the trigger fires inside `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` 12 yd
+  (`UldTriggers_Freya.cpp:147`) and walks to `_SUN_BEAM_CLEARANCE` 15 yd (`UldEncounter_Freya.h:74`),
+  while Unstable Energy 62865 never landed past 7.3 yd (1159 applications over ten pulls, p99 6.5). The
+  sweep without `preferNear` returns its first clear angle (`EncounterHelpers.cpp:756-757`), angle 0 = +x:
+  177 of 338 escapes from on top of a beam went +x and 74% ended farther from Freya.
+- `freya.py --beams`, window 9: 37-78% of each role's dodges started past 8 yd; 57-100% ended farther
+  from Freya; fewer than 2 healers had the Snaplasher's holder in range for 26% of uld2's first trio
+  wave, 9% of uld1's, 1% and 0% of uld3's.
+- Not this cause: uld1's DK died with all four healers in range (41.7k healed in one second) to a 7.0k
+  Sunbeam plus a 40.4k swing from full, on 43.5k health with about 25 of 71 talents (re-spec before
+  window 10). He rose at 1:15 and a 41.7k swing killed him again at 1:19.6.
+
+**Classification: bug.** The 12 yd constant was a recorded open gap against the DBC, and the camp code
+already says healers must keep the tanks in range.
+
+**Fix** (Freya files only, any size or difficulty):
+
+- `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` 12 → 8 yd, `_SUN_BEAM_CLEARANCE` 15 → 11 yd (3 yd hysteresis
+  kept; the radius + 1 fallback is 9). Brightleaf's own beam (62217) is 4 yd, covered. Every escape that
+  routes around beams uses the same clearance.
+- Both beam escapes (`freya dodge unstable sun beam`, `freya step out of sunbeam`) pass Freya as
+  `preferNear` (`GetFreyaBeamEscapeBias`), in every fallback; ties inside one ring only, so no walk gets
+  longer.
+- Reader: `freya.py --beams` (dodges per role from past the trigger, walk, farther from Freya; healers
+  within 38.5 yd of each Snaplasher's holder), with a test.
+
+**Next window should show** (`freya.py --beams`, `--tanks`):
+
+- No Unstable Sun Beam dodge started past 8 yd (window 9: 37-78% by role), median walk at most 11 yd, and
+  far fewer than window 9's 57-100% of dodges ending farther from Freya.
+- Healers within 38.5 yd of the Snaplasher's holder: median 3+, fewer than 2 for under 10% of each trio
+  wave (uld2: 26%).
+- Unstable Energy no worse: 1 death; 36 / 59 / 114 hits on 12 / 9 / 27 beams.
+- Round 1 still held: no area taunt or Righteous Defense on a tank.
+- An add tank that still dies to the Snaplasher with 2+ healers in range is question 2, not this fix.
+
+**Not picked:**
+
+- uld3's second lasher wave (31 deaths, Army on time at 4:26.3, ghouls 4:27-5:02): the pack sat on Freya
+  under the ghouls while the ranged camp, anchored on the lowest-GUID ranged bot, drifted with its beam
+  escapes to 30-43 yd off. 43% of ranged ticks under the ghouls had no lasher inside SpellDistance
+  (28.5), so `ResolveFreyaDpsTarget` handed them Freya (7.7 of 9 ranged on her at 4:40). The pack was
+  at 350% (7 lashers) when the ghouls went, against 15% in uld2's first wave (uld3's first died under
+  its ghouls); Eonar's
+  Gift (5:03) lived 14.4 s and took it from 262% to 521%. Question 3. Window 10's re-specced DKs change
+  this wave's damage too, so read it again there.
+- The loose Snaplasher after its tank dies (question 1) and the add tank's health (question 2).
+
+**Questions:**
+
+1. Who takes the Snaplasher once the add tank is dead? Today nobody: uld1's killed 8 in 32 s, uld2's the
+   main tank and 11 more. Its 30-43k swings come from Hardened Bark alone, which resets after 4 s without
+   a hit, and a tank that rises re-taunts it capped (uld1's DK died 4 s after rising). Options: (a) the
+   main tank taunts it and holds Freya too; (b) with no add tank alive, DPS hold damage on the Snaplasher
+   until its bark resets, then the main tank or a risen add tank takes it. Recommendation: (b).
+2. A bear add tank (42-43k health) against capped Snaplasher swings of 30-43k: two landed swings without
+   a heal between kill it. Options: (a) keep the bears and spend a tank defensive (Barkskin, Survival
+   Instincts, Icebound Fortitude, Shield Wall, Divine Protection) while the add tank holds a Snaplasher
+   past N stacks, as Iron Assembly's punch node; (b) make the roster's highest-health tank the add tank.
+   Recommendation: wait for window 10 (heal range fixed, DKs re-specced); if add tanks still die with 2+
+   healers in range, (a).
+3. While ghouls hold the lasher pack, should ranged with no lasher in reach walk to SpellDistance of the
+   pack focus instead of shooting Freya? It is a new position (the reach cap was set so a focus out of
+   reach never walks a bot into a blast, but a held pack 30-43 yd off is not chasing anyone).
+   Recommendation: yes, only while a ghoul holds the focus lasher.
