@@ -218,7 +218,8 @@ inline constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
 inline constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 
-// Past the outer orbit's reach no cloud can touch a bot, so phase 1 positioning waits until the bot is inside it.
+// Past the outer orbit's reach no cloud can touch a bot, so a player-led raid's phase 1 positioning waits until the
+// bot is inside it.
 // Combat is no gate: every Guardian's Reset puts the whole instance in combat.
 inline constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[5] + ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;

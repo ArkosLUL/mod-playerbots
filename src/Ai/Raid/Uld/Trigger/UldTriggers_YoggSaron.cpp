@@ -245,7 +245,7 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Distance only, no sweep, so both reads cost nothing before the phase read.
+    // No sweep before the phase read: distances, plus a group scan only at the door.
     if (!YoggSaronInPhase1Approach(bot))
         return false;
 

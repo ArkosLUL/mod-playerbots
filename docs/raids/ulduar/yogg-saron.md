@@ -51,7 +51,7 @@ of slack: `GetDistance2d` takes off the bot's 1.5 yd reach and the move lands a 
 
 **A bot-led raid walks itself in.** With no real player in the group on the instance
 (`YoggSaronBotLedRaid`; the DC test driver is master but not in the group) nobody leads it in: four test
-pulls stood at DC's start, 84 yd out, for ~2 min while 13-19 Guardians piled onto the tanks, and Dark Volley
+pulls stood at DC's start, 84 yd out, for ~2 min while 7-8 Guardians piled onto the tanks, and Dark Volley
 wiped them. So `YoggSaronInPhase1Approach` opens the station, the leash and the walk guard out to 90 yd
 (Sara's start radius) for such a raid, and the leash skips its Guardian test: everyone walks in at the
 pull, cloud-guarded. `--phases` prints when each role got inside.
