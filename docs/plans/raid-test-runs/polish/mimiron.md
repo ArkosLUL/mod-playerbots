@@ -255,7 +255,7 @@ inside any pull. Trace scripts in the lane scratchpad (`mim4/`).
 | Pool | Run | Trace | Out | Deaths by mechanic |
 |---|---|---|---|---|
 | uld1 | `…-164334-10` | `603_12_…_1795365867` | wipe 8:44 in P3, ACU ~74% | 32: P1 Proximity Mine 2; P2 Flames 8 (3 melee at 3:26-3:28 crossing fire in a Frost Bomb escape under Heat Wave, 5 at 4:03-4:10 after a barrage), Heat Wave 1; P3 Bomb Bot 10, Water Spray 6, Assault Bot 3, Junk Bot 2 |
-| uld3 | `…-164414-11` | `603_13_…_1795365908` | wipe 10:30 in P3 at Berserk, ACU ~18% | 32: P2 Flames 1; P3 Bomb Bot 12, Water Spray 7, Junk Bot 2, Assault Bot 1, Berserk Plasma Ball 9 |
+| uld3 | `…-164414-11` | `603_13_…_1795365908` | wipe 10:30 in P3 at Berserk, ACU ~16% | 32: P2 Flames 1; P3 Bomb Bot 12, Water Spray 7, Junk Bot 2, Assault Bot 1, Berserk Plasma Ball 9 |
 | uld2 | `…-164836-13` | `603_15_…_1795366169` | wipe 10:30 in P4 at Berserk, parts at 20-23% | 31: P1 Plasma Blast on the main tank 1; P4 Rocket Strike 2, Hand Pulse 2; Berserk 26 |
 | uld2 | `…-164434-12` | `603_14_…_1795365875` | voided: "kill" 2:42, 2 deaths | normal mode, see below |
 
@@ -304,7 +304,7 @@ Berserk (35) is the largest bucket, and phase 3 is where the time goes: 244 s+ (
 cores. In uld3 the second landing ended at 6:17 with the unit at 28%, 23% by 6:29; the third Assault Bot
 died at 6:39 and its carrier Uldzay wrote `mimiron.corestep no-corpse` at 6:40, then three more corpses
 (7:40, 9:19, 9:37) went unlooted (`no-corpse` again from the next carriers at 9:19 and 9:52). The unit sat at
-18-23% for 211 s until Berserk, the 15% fire bot sweep never came (fire bots 8.8 alive on average, 20 at
+16-23% for 211 s until Berserk (16% at 10:00), the 15% fire bot sweep never came (fire bots 8.8 alive on average, 20 at
 most), and 24 of uld3's 32 deaths fell in that stretch (Bomb Bot 7, Water Spray 6, Junk Bot 2, Berserk 9).
 uld2 hit the same gate: its third Assault Bot died at 6:44 with the unit at ~10%, `no-corpse` at 6:45, and
 the unit took until 7:52 to die airborne; phase 4 then hit Berserk with the parts at 20-23%, ~65 s short.
@@ -323,7 +323,10 @@ core, not to stop fetching one.
 `MimironMagneticCoreAction::Execute` skips the fetch only when the core in hand is due now
 (`core && (expiring || acuLow || (chaining && ready))`); with empty bags the carrier fetches at any unit
 health. Unchanged above 25%, and a held core at or under 25% still goes down at once. Header comment and
-findings doc say the escapes end the hold, never the fetch.
+findings doc say the escapes end the hold, never the fetch. Review: the action's own comment still gave
+the old reason for the 25% line (the phase ends there) and now gives the new one (one landing takes
+about what's left). The 3→4 handover is untouched: the beaten unit is NOT_SELECTABLE, so
+`GetUldUnitByEntry` misses it and the trigger is off.
 
 **Next window should show** (`mimiron.py --p3`, `--notes mimiron.corestep`):
 

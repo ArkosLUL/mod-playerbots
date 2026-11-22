@@ -888,7 +888,7 @@ below `_CORE_HOLD_RELEASE_PCT` (25%), about what one landing takes; or the next 
 33-45 s late.
 
 **Escapes end the hold, never the fetch.** Empty bags fetch at any unit health: airborne, a bot raid
-takes it 0.04-0.18%/s, and a fetch also gated at 25% left one at 18-23% for 211 s, four corpses
+takes it 0.04-0.18%/s, and a fetch also gated at 25% left one at 16-23% for 211 s, four corpses
 unlooted, until Berserk.
 
 **The chain needs a latch, because the count cannot tell**: one core left after spending the first of a
