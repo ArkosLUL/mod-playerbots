@@ -9,7 +9,7 @@ Raid-wide facts and the code layout: [README.md](README.md). Mechanics source:
   `UNIT_FLAG_NON_ATTACKABLE` and passive for the ~50 s scene. The release (stage 3) clears the flag
   and attacks `SelectNearestTarget(200)`, so whoever stands nearest takes the first swings.
 - He is a `BossAI` on boss state `BOSS_JARAXXUS` (1): `_JustEngagedWith` sets it `IN_PROGRESS`.
-  `MoveInLineOfSight` is empty, so he never aggros by proximity.
+  `MoveInLineOfSight` is empty, so he never aggros by proximity. Combat reach 5 (display 29615).
 - **Wipe**: evade despawns his summons, sets `NON_ATTACKABLE` and `TYPE_FAILED`; the cleanup (Tirion)
   respawns him at the centre chained (67924), unattackable and passive, and sets `FAIL`. The stage
   stays 3, so the gate stays open; the retry gossip frees him straight into a forced attack on the
@@ -119,12 +119,15 @@ The Warcraft Tavern guide, reconciled with the script:
 - **Kill order**, everyone but tanks and healers, oldest (lowest guid) first: heroic Portal, Volcano,
   Mistress, Infernal; normal Mistress, then Infernal. Portal and Volcano stop the spawns.
 - **Tanks**: main tank on the boss; assist tank 0 on Mistresses, assist tank 1 on Infernals, taunting
-  its add back off anyone else, tanks included; a lone assist tank takes Mistresses first. The boss
+  its add back off anyone else, tanks included; a lone assist tank takes Mistresses first. Tank 1
+  takes an Infernal on another player first (Fel Streak lands on anyone, and its 50,000 threat keeps
+  it there), then the one on itself, so it never drops its own for another; with no Infernal it takes
+  the second Mistress. Tank 0 takes Infernals only with no living tank 1. The boss
   is not walked to the portal for cleave: it spawns 15 yd from him anyway.
 - **Heroic Portal**: melee DPS bots targeting one or inside 12 yd of it keep 14 yd from it, from 1 s
-  before its next Mistress (its aura's periodic timer) until each of its Mistresses has a victim;
-  ranged keep killing it. The guide has no such step; it follows from her arrival hit and
-  nearest-unit opener. A portal living past 12 s drops a second Mistress: on three 25H kills
+  before its next Mistress (its aura's periodic timer) until each of its Mistresses has a victim,
+  stepping out toward him, where the melee go once she has picked; ranged keep killing it. The guide
+  has no such step; it follows from her arrival hit and nearest-unit opener. A portal living past 12 s drops a second Mistress: on three 25H kills
   (2026-10-22 to 10-25) with a human assist tank, the old hold (until she was on a tank) kept melee
   off portal 2 for 3-7 s, it lived 12.3-13.5 s, and the extra Mistress roamed onto a mage and killed
   it.
@@ -136,7 +139,9 @@ The Warcraft Tavern guide, reconciled with the script:
   warrior pulled him three times and held him 18-26 s, and the two tanks' 8 taunts in 20 s ran into
   his taunt diminishing returns (flags_extra 0x80000).
 - **Fel Fireball**: one interrupter per cast, the lowest guid among bots with an interrupt ready,
-  affordable, in range and not mid-cast. It is the backstop: on the 2026-10-16 25N kill the generic
+  affordable, in range and not mid-cast. Spell Lock is left out: `CanCastSpell` answers a pet spell
+  true without its cooldown ([action-selection.md](../../engine/action-selection.md)). It is the
+  backstop: on the 2026-10-16 25N kill the generic
   interrupt nodes kicked all 11 casts 7-103 ms in, one kick each, before the duty holder latched, so
   coverage reads `fel fireball interruptible` NEVER and `interrupter` never `1` (18 of 18 on 25H,
   median 43 ms). `interrupter` is change-only, so a trace can't tell a duty node beaten to the kick
@@ -159,7 +164,10 @@ The Warcraft Tavern guide, reconciled with the script:
   under the absorb. A kissed healer casts instants only.
 - **Burning Inferno** is covered before it lands ([Raid cover](#raid-cover)).
 - **Legion Flame**: the carrier keeps moving for its 8 s, away from the boss and the raid and within
-  30 yd of a living healer other than itself; everyone else steps clear of the flames. A leg bends
+  30 yd of a living healer other than itself; everyone else steps clear of the flames. Its first leg
+  heads away from the boss (`ARENA_CENTER` without him), each next one on along the last, never back
+  over the trail; a leg runs 6+ yd to a spot 8 yd off other members and 15 off the boss. A bot within
+  4 yd of a flame dodges to a spot 6 clear of every flame, searched within 15. A leg bends
   round the healer ring: the sweep keeps the first ring's clear spot nearest the heading among those in
   reach, and drops the reach only when no clear spot has it. On the 25H kill carriers ended 30-48 yd
   from the nearest healer. Legs keep 14 yd off a heroic portal, the straight walk included (never
@@ -168,9 +176,10 @@ The Warcraft Tavern guide, reconciled with the script:
 - **Flame dodge** keeps the bot in reach of its current target (`GetRange("spell")` for ranged and
   healers, `MeleeDistance` for melee, plus both combat reaches, 0.5 yd inside), walking past no flame;
   melee prefer their target. Out of reach only when no such spot is clear, and off the portal its
-  melee hold names. `jaraxxus flame stand` blocks set behind, rear flank and formation within 10 yd of
-  a flame. Before this, reach spell or reach melee walked the bot back into the flame it had just left:
-  a warlock looped 20 times over 29 s at a third of its damage. A tank carrier takes the boss with it, rare now: the marker keeps a tank off
+  melee hold names. A leg or dodge in flight keeps its spot up to 3 s while it stays clear.
+  `jaraxxus flame stand` blocks set behind, rear flank and formation within 10 yd of a flame: they
+  pick spots blind to the flames. Before this, reach spell or reach melee walked the bot back into
+  the flame it had just left: a warlock looped 20 times over 29 s at a third of its damage. A tank carrier takes the boss with it, rare now: the marker keeps a tank off
   Legion Flame while he swings at it.
 - **Mistress' Kiss**: a kissed bot casts instants only; a cast already running is broken from outside.
 - **Lust** at the pull (default burst row): the heroic Portal at 20 s falls inside it, and Berserk is
@@ -201,7 +210,9 @@ plugs in by predicting its own hit and wiring the two nodes and the holds below.
   within 2 s are one), cast from 1.5 s before the first damage to 1 s after. Divine Sacrifice comes
   off right after the cast once Divine Guardian (70940, 20% less damage within 30 yd for 6 s) is up:
   its 30% redirect drains the paladin under a hit on everyone. A holder mid-cast inside its window is
-  broken from another bot's tick, as the kiss is.
+  broken from another bot's tick, as the kiss is. The cover action breaks the holder's own channel
+  first (a channel fails any other cast's check) and stops a moving holder before a channelled
+  cover, which moving would break.
 - **Personal**: from 1 s before the first damage to its end, when what the hit leaves the bot is
   under 25% of its health: `NextMagicDefensive` for the rest of the hit; on a lethal hit with no row,
   Dispersion, then `GetSelfImmunitySpell`, then a healthstone (not on the move). Nothing while
@@ -209,7 +220,8 @@ plugs in by predicting its own hit and wiring the two nodes and the holds below.
   A Legion Flame carrier under 50% counts the rest of its trail the same way.
 - `jaraxxus raid cover hold` blocks the five class nodes before the first damage, so none goes early
   or twice; `jaraxxus magic button guard` blocks Evasion and Deterrence during an Inferno and on a
-  carrier. Never fight-long: after the first damage the class nodes run again.
+  carrier, where neither does anything against fire on everyone or a burning trail. Never
+  fight-long: after the first damage the class nodes run again.
 - The 25H kill's six Infernos drew their first raid cooldown 1.2-1.7 s after the first tick in four,
   none in two.
 
@@ -237,7 +249,7 @@ is never an assist tank), so their order is arbitrary.
 | `personal defensive` → `cast personal defensive` | `+8.4` | The same, for a carrier under 50% |
 | `legion flame nearby` → `avoid legion flame` | `+8` | Beats every hold, so a carrying tank walks and he follows; breaks the bot's own cast first. The only flame mover: `AvoidAoeAction` is vetoed ([Legion Flame](#boss-abilities)) |
 | `pinned cast` → `break pinned cast` | `+7` | Breaks a kissed, carrying or cover-due bot's cast from another bot's tick ([Mistress of Pain](#adds)). Returns `false`: costs nothing, and no RAID node returning `true` can skip it |
-| `portal spawn` → `leave portal` | `+6` | Under the flame walk, which the leg's `MOVEMENT_COMBAT` yields to; drops a booking of its own priority first. `jaraxxus portal hold` blocks reach melee, set behind, rear flank, formation, follow, move random and charge meanwhile |
+| `portal spawn` → `leave portal` | `+6` | Under the flame walk, which the leg's `MOVEMENT_COMBAT` yields to; drops a booking of its own priority first. `jaraxxus portal hold` blocks reach melee, set behind, rear flank, formation, follow, move random and charge meanwhile, reach by name so a walk to a battle res isn't blocked |
 | `engaged by main tank` → `main tank hold boss` | `ACTION_RAID + 5` | Only while he is in combat ([Pull and wipe](#pull-and-wipe)). The drag to `ARENA_CENTER` tests only its next 5 yd step, since a tank-carried trail lies along the whole way back; a flame there sends the tank around the trail |
 | `add needs assist tank` → `assist tank hold add` | `+4` | Assist tank 0 |
 | `second add needs assist tank` → `assist tank hold second add` | `+3` | Assist tank 1 |
@@ -249,7 +261,8 @@ is never an assist tank), so their order is arbitrary.
 
 Read once per group per ms ([`ToCGroupMemo`](README.md#code-layout)): the pinned casters, the
 Incinerate target, whether a non-healing remover lives, the Fel Fireball interrupter and whether
-assist tank 1 lives.
+assist tank 1 lives. The scan of him, his adds and the flames (200 yd) refreshes only from a bot
+within 120 yd of `ARENA_CENTER`, so it covers the ~80 yd floor; one further out reads the last scan.
 
 ## Traps
 

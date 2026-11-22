@@ -126,8 +126,9 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
 **What the bots do.**
 
 - **Hold** (`gormok tank duty` → `gormok tank hold boss`): duty `Gormok`; class taunt only while his
-  victim isn't a tank; `DragBossToAnchor` toward `ARENA_CENTER`, except while an Icehowl charge is
-  latched: every charge line crosses the centre.
+  victim isn't a tank (the swap taunts on its own node, and a hold that took him back off a tank would
+  undo every swap); `DragBossToAnchor` toward `ARENA_CENTER`, so ranged can spread and melee have
+  room, except while an Icehowl charge is latched: every charge line crosses the centre.
 - **Swap** (`gormok tank swap needed` → `gormok tank swap taunt`): duty `GormokSwap`, his victim the
   `Gormok` holder at ≥ 3 Impale stacks (`GORMOK_IMPALE_SWAP_STACKS`), the bot at 0; a failed taunt
   attacks him. 3 on every difficulty (guide: 3, heroic 2-3), and only once the bot's own Impale is
@@ -145,7 +146,8 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
   tank, bot or human (user's call), with ≥ 2 stacks (`GORMOK_HOP_RESET_STACKS`) that no engaged
   beast is hitting, so the one just swapped off, or the last holder once Gormok is dead, before the
   worms; no Forbearance, no physical immunity. Caster: a free bot paladin with HoP ready, in 30 yd
-  and sight, not a beast's victim: the tank itself, then Retribution, Protection, Holy. A bot tank
+  and sight, not a beast's victim: the tank itself, then Retribution, Protection, Holy (a healer's
+  global cooldown costs the most). A bot tank
   carrying HoP and no Impale cancels it (`gormok cancel hand of protection`, `ACTION_EMERGENCY + 1`),
   since it pacifies. The swap keeps its 3 stacks and `wait mine`, now cleared within a GCD instead
   of Impale's 45 s (25H 2026-10-28: the human held to 6 stacks while the bot waited). The user
@@ -153,18 +155,22 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
   Protection for 2 min. `nb.hop`.
 - **Snobolds**, the DPS resolver's second branch (`GetGormokSnoboldPick`): one pick per DPS, ranked
   by rider healer > ranged > melee > tank, then snobold guid. Healer and ranged riders' snobolds are
-  for every DPS, melee and tank riders' for melee only; once Gormok isn't engaged, every rider's for
+  for every DPS, melee and tank riders' for melee only, since those riders already stand by the melee
+  and ranged stay on Gormok; once Gormok isn't engaged, every rider's for
   every DPS (guide: free healers first, both DPS roles attack them). A candidate is alive and rides a
   living player: the seated ones never count, and a dead rider's snobold returns to Gormok.
   `nb.snobold`.
 - **Carrier** (`gormok snobolled` → `gormok bring snobold to melee`): a ranged DPS or healer carrying
-  one while Gormok is engaged walks to 10 yd of his centre for melee to free it (guide);
+  one (Snobolled!, or the seat for the 1.5 s before it lands) while Gormok is engaged walks in past
+  10 yd of his centre for melee to free it (guide). It aims at 7, since it stops short and he drifts
+  with the drag, and a latched spot holds while within 9;
   `GormokSnoboldCarrierMultiplier` holds its other movers until the snobold dies, `blink` and
   `disengage` included (both fire that close to him), except `AttackAction`, `avoid aoe` and every
   Beasts-prefixed node, so a heroic carrier still dodges the worms and Icehowl's charge.
 - **Stomp** (`gormok stomp range` → `gormok leave stomp range`): a ranged DPS or healer with no
-  snobold inside 22 yd of his centre steps out to 24, near his victim: the lockout is 20 yd centre to
-  centre, and `spellDistance` 28.5 alone doesn't keep casters past it. Its spot also clears young
+  snobold inside 22 yd of his centre steps out to 24, searched within 30, near his victim so healers
+  stay in reach of whoever they keep up: the lockout is 20 yd centre to centre, and `spellDistance`
+  28.5 alone doesn't keep casters past it. Its spot also clears young
   bombs (below) by 11 yd where one can, so stomp and dodge don't trade a caster until the impact; a
   bomb landing within 11 of that spot mid walk re-plans it.
 - **Fire Bomb** (`gormok fire bomb incoming` → `gormok dodge fire bomb`, `ACTION_EMERGENCY + 2`):
@@ -175,7 +181,8 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
     moving his victim drags the beast and its melee, and 5-6k on a tank is healable.
   - **Where**: the nearest spot within 20 yd clear of young bombs by 11, landed bombs by 6 (past
     `avoid aoe`'s 4.5, whose flee can step back into a young bomb's trigger) and, for a ranged DPS
-    or healer with no snobold, Gormok by the stomp's 24. Ties go near Gormok for melee DPS and
+    or healer with no snobold, Gormok by the stomp's 24 (else the stomp walk pulls it straight
+    back). Ties go near Gormok for melee DPS and
     carriers, else near his victim. With no spot it drops Gormok's circle, then the landed bombs,
     then takes young bombs alone at 9.5 (`tight`). 66317 is a creature's 8 yd area, centre to
     centre, and a dodge lands past its own trigger ([pitfalls.md](../../engine/pitfalls.md)).
@@ -187,7 +194,8 @@ Combat reach 10.5 (display 29614; 6.5 before core DB update `2026_11_06_01`), so
 
 ## Acidmaw & Dreadscale
 
-Combat reach follows the form's display (6.5 for both before `2026_11_06_01`): mobile 12, so melee
+Combat reach follows the form's display (mobile 24564 / 29816, stationary 26935 / 29815; 6.5 for
+both before `2026_11_06_01`): mobile 12, so melee
 range 14.8 and a hunter's dead zone 19.8 (`Spell::CheckRange`: 5 + melee range); stationary 5, so
 7.8 and 12.8 (`WormMeleeRange` reads a submerged worm's coming form, since the under-ground model
 has its own reach). A mobile worm settles 7-10 yd from a tank that walked, not the 14 of contact +
@@ -357,7 +365,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     holder, Sweep. Only that holder pairs with a member within 11 yd of the up stationary worm,
     whose cure spots all lie inside the Sweep path's 16: others take the next carrier, a Toxin'd
     stationary holder waits for the submerge. When the ring search misses that disc (its rays fan
-    22.5° apart), they take the nearest safe of 16 points 5 yd round the partner (`direct`); when every
+    22.5° apart), they take the nearest safe of 16 points 5 yd round the partner, 1 inside the cure
+    reach since the partner keeps moving (`direct`); when every
     straight walk to those crosses a pool or Sweep, the first leg of the shortest two-leg walk to one,
     turning on 6 yd rings out to 30 (`detour`): on heroic the mobile holder stands at the wall in front
     of its worm, the newest pool between them and the raid, and on 25H (2026-11-21) a runner found no
@@ -429,7 +438,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     holder no up stationary worm within 16, and no armed Spew danger (the spot's cone + 12° and
     front disc; a cure or run walk only a Spew under way, since it races Toxin); a circle the bot
     starts in only has to be left, heading out, and a cone left for good, inside no longer than a
-    straight step off its axis + 4. A `cross` spot skips this. Checked only at its end, a 25N Bile
+    straight step off its axis + 4 (deep in a 25-man cone the search's 22.5° bearings miss that step
+    by up to 2 yd). A `cross` spot skips this. Checked only at its end, a 25N Bile
     carrier's spot ran its walk 2 yd from a pool's centre and killed it; with no cone in it, four
     25H melee dodged Dreadscale's emerge Spew, then walked 59-65 yd through it to their stands
     behind him and died (2026-11-21).
@@ -528,11 +538,13 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
     bot all Bile long ([pitfalls.md](../../engine/pitfalls.md), the Hodir case); leaving melee out
     of the rule instead would put the pulse, up to 9.7k every 2 s, on the whole stack.
 - **Pools outlive the worms** (25H: 60 s, into Icehowl). The pool list stays read while the Beasts
-  gate is open, engaged or not; on 25H 2026-10-28 a pool from Dreadscale's last seconds killed 6
+  gate is open, engaged or not, rescanned every 500 ms (a new pool starts at 2 yd, so a late find
+  costs nothing); on 25H 2026-10-28 a pool from Dreadscale's last seconds killed 6
   once the breath stands walked 17 bots into it.
   - `northrend worms pool after worms` → `northrend worms leave pool` (`ACTION_EMERGENCY + 6`): with
     no worm engaged, a bot inside a pool's radius + 1 (as big as it grows before its pinned cast
-    ends) walks to the nearest spot clear of every pool 5 s on + 2, on the floor, path-tested,
+    ends) walks to the nearest spot clear of every pool 5 s on + 2, on the floor, path-tested
+    (dropped last: walking through a pool beats standing in one),
     in reach of its target first, off a latched charge lane, `MOVEMENT_FORCED`, latched till
     arrival. `icehowl charge guard` spares it: the crash stuns a bot in a pool there. The
     per-instance read breaks a pinning cast in a pool for it. `nb.poolmove`.
@@ -603,7 +615,8 @@ centre) about 100 ms into the charge, and again on arrival (`DoTrampleIfValid`).
 once — `EventMap::ExecuteEvent` erases it, the "no PopEvent" comment is stale — and with a 100 ms map
 update (`AC_MAP_UPDATE_INTERVAL`) it lands 100-200 ms in, 6.5-13 yd past his start. A hit casts Trample
 66734 (50k, 12 yd) and Frothing Rage (66759 / 67657 / 67658 / 67659: +50 / 50 / 75 / 100% damage and
-haste, 15 s, enrage) and he fights from there. A clean charge ends in Staggered Daze 66758 (15 s stun,
+haste, 15 s, enrage) and he fights from there; Trample has no difficulty row. A clean charge ends in
+Staggered Daze 66758 (15 s stun,
 +100% damage taken, no difficulty row) with his events held 15 s: the burn window. The charge's end
 schedules Whirl at 2-5 s and the breath at 5-8 s, so after a daze the breath usually lands as he
 finishes following the Whirl-thrown tank: both post-daze breaths on 25H came 2.4-2.8 s after the
@@ -616,17 +629,20 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 
 - **Charge state**, per instance, active while he is engaged and passive. Phase 1 has no target; 2 (gaze)
   while `GetTarget()` names a living player and he is within 3 yd of `ARENA_CENTER`, the line running
-  centre → that player; 3 once he is further out, the line his position → centre, frozen to the
+  centre → that player, left where it was if that player dies mid gaze (the script still charges at
+  a dead one); 3 once he is further out, the line his position → centre, frozen to the
   cycle's end. Not his facing: after the jump back he faces away from the line. The lane runs from
   35 yd behind the centre to 50 ahead (46 for an angle in (1, 2) rad). Leaving passive writes 4 under
-  the daze, 5 under Frothing Rage, else 0; a latch older than 12 s drops. `nb.charge`, `nb.gaze`, a
-  `lane` hazard row.
+  the daze, 5 under Frothing Rage, else 0; a latch older than 12 s drops, or a charge that never
+  arrives would hold every bot's movers for the rest of the pull. 20 s with no passive read starts a
+  new cycle (he spends 30+ s out of each), since the last one's end went unseen. `nb.charge`,
+  `nb.gaze`, a `lane` hazard row.
 - **Dodge** (`icehowl charge incoming` → `icehowl clear charge path`, `ACTION_EMERGENCY + 8`): a bot
   within 14 yd of the lane walks to the nearest spot 16 yd clear of it (13 if none within 30 yd; a
   bot already 13 clear stays put, since a 13 yd spot sits inside the trigger and re-fires it), at
-  `MOVEMENT_FORCED`, interrupting a cast that pins it, destination latched
-  ([pitfalls.md](../../engine/pitfalls.md): movement lock, cast pin). The whole lane, not the two
-  contact points: a server stall moves the first test along it (guide: strafe out of the way).
+  `MOVEMENT_FORCED`, interrupting a cast that pins it, destination latched up to 5 s, so a bot rooted
+  mid walk still gets a fresh spot ([pitfalls.md](../../engine/pitfalls.md): movement lock, cast
+  pin). The whole lane, not the two contact points: a server stall moves the first test along it (guide: strafe out of the way).
   `nb.dodge`.
 - **`icehowl charge guard`**, from his jump to the centre (at most 12 s before the gaze) to the
   charge's end, every bot: zeroes every mover but attacks, the dodge and the two pool walks, and gap
@@ -667,13 +683,14 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
     ends there and his tank arrives from the centre, the reverse of the guide's tank with *its* back
     to a wall. They re-latch, `k` kept, when he moves 8 yd, his victim's bearing turns 30° (Whirl
     throws the tank ~31 yd every 16 s and he follows), or his drift cuts a kept bearing's room
-    under its own floor.
+    under its own floor. Walled in on every bearing, the empty layout still latches, or the walls
+    would be probed again every ms until he moves.
   - **Deal**: living non-tank bots of the group (humans can't be moved, tanks hold him), rebuilt
     each second, dealt healers, melee, then ranged, each by guid, or ranged fill the few bearings
     near his back first. Sticky while its bearing is kept and holds fewer than 2 bots over the
-    emptiest one its role may take; past that, bots leave it last in deal order first and are dealt
-    again. On 25N every melee held −3, the only rear bearing at the latch, and stayed there after
-    re-latches added more. A healer takes the bearing with fewest healers, then nearest 60° off his
+    emptiest one its role may take (moving a bot at a gap of 1 would only swap which bearing holds the
+    extra one); past that, bots leave it last in deal order first and are dealt again. On 25N every
+    melee held −3, the only rear bearing at the latch, and stayed there after re-latches added more. A healer takes the bearing with fewest healers, then nearest 60° off his
     back (~27 yd from the tank at 17 yd out, ~30 straight behind), then fewest bots; anyone else the
     fewest bots nearest his back. About two share a bearing on 25-man, melee inside ranged: victims
     per breath step with spacing ([pitfalls.md](../../engine/pitfalls.md)), and 20 bots spaced

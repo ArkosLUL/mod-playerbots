@@ -43,9 +43,10 @@ reads three things:
   Jaraxxus and Anub'arak set it on engage. An evade (`TYPE_FAILED`) or an all-dead cleanup sets every
   `IN_PROGRESS` boss to `FAIL` (RaidObs closes the trace `wipe`).
 - **`GetGuidData`** reads the script's object-data registry, `TrialOfTheCrusaderObjectData` (implicit
-  values, mirrored as `TOC_DATA_*`): Gormok 5, Dreadscale 6, Acidmaw 7, Icehowl 8, Jaraxxus 10, Fjola
-  11, Eydis 12, Anub'arak 14 (also while submerged). Champions only by entry. A guid empties once its
-  creature leaves the world, a despawned corpse included. Resolve with
+  values, mirrored as `TOC_DATA_*`; recheck them when the core adds an entry): Gormok 5, Dreadscale
+  6, Acidmaw 7, Icehowl 8, Jaraxxus 10, Fjola 11, Eydis 12, Anub'arak 14 (also while submerged).
+  Champions only by entry. A guid empties once its creature leaves the world, a despawned corpse
+  included. Resolve with
   `map->GetCreature(GetGuidData(type))`. A guid resolves map-wide, so an "encounter running" test also
   needs the unit in combat ([pitfalls.md](../../engine/pitfalls.md)).
 
@@ -150,8 +151,8 @@ and the action context registers its action. The four registration sites name on
 **List order is behaviour**: equal relevances pop in insertion order.
 
 **Encounter gate** (`Util/ToCEncounterGate.{h,cpp}`), read from the instance script once per
-instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` adapts both to an
-`EncounterGate` (id `static_cast<uint32>(ToCEncounter::X)`).
+instance per ms. Off map 649 the gate is open (ungated beats dead) and nothing is live. `ToCGate`
+adapts both to an `EncounterGate` (id `static_cast<uint32>(ToCEncounter::X)`).
 
 - **Open** (`ToCEncounterGateOpen`, gates triggers and Definition rules): the stage's encounter is
   this one, pulled or not, so pre-pull prep (an essence before the twins) runs. Beasts at stage 2
@@ -161,10 +162,12 @@ instance per ms. Off map 649 the gate is open and nothing is live. `ToCGate` ada
 - **Live** (`ToCEncounterIsLive`, `ToCLiveEncounter`, gates multipliers and burst rows): also
   `IsEncounterInProgress()` and one of its units alive and in combat, which keeps walk-ins, the
   Fizzlebang intro and the Lich King scene closed. Icehowl, Jaraxxus and the champions are found by
-  entry within 200 yd of the bot, since the arena reaches about 80 yd from `ARENA_CENTER`.
+  entry within 200 yd of the bot, since the arena reaches about 80 yd from `ARENA_CENTER` (gate 77,
+  stands 64).
 - Encounter trigger and action names lead with `gormok`, `northrend worms`, `icehowl`, `jaraxxus`,
   `faction champions`, `twin valkyr` or `anubarak`: RaidObs coverage files nodes by it, and the beast
-  move guards (`ToCEncounterOfName`) let a beast's own movers through. Raid-wide names take none.
+  move guards (`ToCEncounterOfName`) let a beast's own movers through. Raid-wide names take none. No
+  prefix is a prefix of another, so the first match wins.
 - A gated row trigger firing while live calls `RaidObs::NamePull` with its definition's trace slug. The
   engage hook names every ToC trace first, so this only renames one it left under the map name.
 - Not `BossStateGate`, though core #28117 gave ToC boss states: the core marks a boss `IN_PROGRESS`
@@ -304,8 +307,8 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 within one. Bots only, by guid: duty stands first, then healers (`IsHeal`), ranged (`IsRangedDps`)
 and melee (the rest, off-duty tanks included), each role taking the least taken slot first in its own
 order, so an overflow doubles up. Arena slots past 44 yd of the centre are dropped. A stand that moves
-is floor-checked once with `ValidateFloorPoint`, kept if it lands within 3 yd, else the raw stand;
-park within 1 yd, walk back past 2.5.
+over 0.5 yd drops the park and is floor-checked once with `ValidateFloorPoint`, kept if it lands
+within 3 yd, else the raw stand; park within 1 yd, walk back past 2.5.
 
 - **Forced arrivals**: the duty tank 3 yd from the release point; every other non-tank stand past the
   release clearance, `ReleaseClearance(reach)` = 3 + 5 + boss reach + 1.5 + 0.5. The 5 covers a 1 yd
@@ -366,7 +369,8 @@ reads it, never inside `IsActive`. Rules (`ToCDefinition_Staging.cpp`):
 - `toc staging rest guard` blocks food and drink while walking or on a forced arrival's duty stand
   (eating blinds 12-18 s). A parked bot elsewhere may eat and drink: a player-pulled wait has no time
   limit.
-- `toc staging tank form guard` blocks `caster form` for tanks.
+- `toc staging tank form guard` blocks `caster form` for tanks: a druid tank drops bear form out of
+  combat and nothing shifts it back.
 
 **Resistance.** Fire, Frost and Shadow Resistance Aura rank 5 (48947, 48945, 48943) and Aspect of the
 Wild rank 4 (49071, nature) are `APPLY_AREA_AURA_RAID` + `MOD_RESISTANCE_EXCLUSIVE` 130: one holder
@@ -394,8 +398,9 @@ The `ResistAura` stem picks:
   fire; Twins fire, then shadow (the raid starts Dark and takes Light's fire);
   Anub'arak frost, plus nature in phases 2 and 3 (scarab Mandibles, then Leeching Swarm; a 2026-10-26
   main tank died at 24.9k Mandible ticks). The live encounter's set (Beasts by stage mask, unioned in a heroic
-  overlap; an empty mask keeps the last set), else the staged arrival's, else none, so paladins go
-  back to their own aura between pulls.
+  overlap; an empty mask keeps the last set, since the mask can trail the gate's own Icehowl search
+  for a moment and an empty set would drop every holder), else the staged arrival's, else none, so
+  paladins go back to their own aura between pulls.
 - **Paladins**: one bot holder per school, fire, frost, shadow in that order, re-elected every second
   and at once when the set changes. A school a human paladin holds on himself is skipped. Holders
   that still qualify are kept first; each empty school then takes the lowest of: own aura strategy
@@ -411,10 +416,14 @@ The `ResistAura` stem picks:
 - **Hunter**: Aspect of the Wild for `GetNatureResistanceHunter` while nature is wanted; it hands the
   duty on by mana, through Viper. In 2026-10-22 traces it held the aura on the worms, Jaraxxus and
   Anub'arak only (nature 7%, 45% with Fel Lightning, 58% of damage taken).
-- `toc resistance aura` → `toc raise resistance aura` (`ACTION_RAID + 1`, above the staging walk)
-  casts through `DoSpecificAction`, outside the queue, never `ChangeStrategy`: `toc resistance aura
-  hold` zeroes all eight paladin aura nodes on the holder, `toc nature aspect hold` the hunter's other
-  six aspects. A paladin's own aura is read by its application
+- `toc resistance aura` → `toc raise resistance aura` (`ACTION_RAID + 1`, above the staging walk,
+  which holds the tick while in flight; the aura is instant) casts through `DoSpecificAction`,
+  outside the queue, never `ChangeStrategy`: `toc resistance aura hold` zeroes all eight paladin aura
+  nodes on the holder, the resistance auras too since the raise casts outside the queue (the aura
+  slot is exclusive, so the paladin's own buff strategy would trade it back on the next GCD), and
+  `toc nature aspect hold` the hunter's other six aspects, every one since a vetoed node still
+  pushes its alternatives (the buff chain runs Dragonhawk, Hawk, Monkey). A paladin's own aura is
+  read by its application
   ([pitfalls.md](../../engine/pitfalls.md#detection-that-never-fires)).
 
 **Known gaps.**
@@ -442,7 +451,8 @@ boss is free it stays free until it leaves combat.
 
 - `toc opener hold` zeroes spells and attacks on a held boss and area damage within 30 yd of one.
   The first pick of the boss goes through, so melee walk in; `toc opener stop swing` ends the swing
-  that pick started, and a repeat pick stays zeroed.
+  that pick started, and a repeat pick stays zeroed. It sits at `ACTION_RAID + 2`, above the
+  resistance aura, since the swing lands on the next attack timer, not the next GCD.
 - A hunter or rogue whose Misdirection (34477, 35079) or Tricks of the Trade (57934, 59628) is
   running is free. `toc opener redirect` casts it on the tank holding the boss.
 - Pets aren't held. Probe `toc.opener` per DPS bot (`hold`, `free`); vetoes show as `toc opener hold`.

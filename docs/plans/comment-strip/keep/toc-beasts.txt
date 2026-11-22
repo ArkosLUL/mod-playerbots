@@ -1,0 +1,3 @@
+src/Ai/Raid/ToC/Util/ToCHelpers_Icehowl.cpp	order is the deal order: melee before ranged, or ranged take the few bearings near his back
+src/Ai/Raid/ToC/Util/ToCHelpers_Jormungars.h	order is the rule priority: FirstFailedRule compares these, the first rule a spot fails wins
+src/Ai/Raid/ToC/Util/ToCHelpers_NorthrendBeasts.cpp	keep Gormok before GormokSwap: pass 1 gives his victim the hold, never the swap

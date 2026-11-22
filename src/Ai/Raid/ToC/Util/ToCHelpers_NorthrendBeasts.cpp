@@ -31,7 +31,7 @@ namespace
 constexpr size_t BEAST_COUNT = 4;
 constexpr size_t DUTY_COUNT = 6;
 
-// Gormok has to come before GormokSwap: pass 1 gives his victim the hold, never the swap.
+// keep Gormok before GormokSwap: pass 1 gives his victim the hold, never the swap
 constexpr std::array<BeastsTankDuty, 5> DEAL_ORDER = {
     BeastsTankDuty::Gormok,     BeastsTankDuty::Icehowl,        BeastsTankDuty::WormMobile,
     BeastsTankDuty::GormokSwap, BeastsTankDuty::WormStationary,
