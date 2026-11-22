@@ -204,11 +204,6 @@ No ties, since a tie falls to insertion order:
 | EMERGENCY+2 | `anubarak penetrating cold self save` → `anubarak penetrating cold self save` | `Swarm`, a non-healer bot carrying Penetrating Cold with a tick due and none of these up; or a bubble up | the first of Cloak of Shadows, Ice Block, Divine Shield, Anti-Magic Shell, Dispersion, Divine Protection, Shamanistic Rage, Barkskin (a tank: Anti-Magic Shell, Divine Protection; Forbearance and Hypothermia checked, which `CanCastSpell`'s probe misses), `anub.coldself`; a bubble it cast cancelled within 3 s |
 | EMERGENCY+1 | `anubarak lust due` → `anubarak lust` | phase 3, `AnubarakLustOpen`, a living unmarked shaman bot, not Sated or Exhausted | `heroism` or `bloodlust` on itself, whatever it has selected, over the stand walks and swarm heals since it is instant and castable on the move: the class trigger wants the boss selected (BY +33 s, 18 s after the burst opened, the DPS shamans on burrowers and Elemena with nothing) |
 | RAID+7.5 | `anubarak kite cat drop` → `anubarak kite cat drop` | a tank (by strategy: a cat DPS with Thick Hide reads as a tank by spec), healer or ranged DPS druid bot in Cat Form, not [held there](#the-kite-planner) | drops the form, past caster form's mana gate; off the GCD, so ahead of the battle res and every heal that won't cast from Cat Form |
-
-No shaman takes Ghost Wolf on the mark: it is outdoors only (Attributes 0x18000 in the server's Spell.dbc,
-no `spell_dbc` row), and the floor is an indoor group of `Nd_Argentcrusadecoliseum_Instance.wmo` (group
-26336, mogp 0x2805 with no 0x8, WMOAreaTable flags 2), checked unconditionally in `Spell::CheckCast`:
-`vmap.enableIndoorCheck` is only logged.
 | RAID+7 | `anubarak side tank dead` → `anubarak battle res side tank` | the lowest-guid bot druid with Rebirth known and off cooldown (`CanCastSpell` says no in cat or bear form, which the action leaves first), a tank only when no other can, never the pickup tank while he is up; a dead side tank's corpse with no self-res pending, else the lowest-guid dead healer bot's (BS: Tree died at 2:14 and stayed dead), so one spent on a healer isn't there for a later side tank | caster form, walks to 26 yd, Rebirth |
 | RAID+6.5 | `anubarak side tank needs defensive` → `anubarak side tank defensive` | a side tank at Expose Weakness 5+ (67721 remapped: 25-man carries 67847) or under 50%, a physical defensive ready (any in `Swarm`), not one kept | `NextTankDefensive` on self, physical only outside `Swarm`: burrowers melee, so no Anti-Magic Shell (Felesta cast it 5× against them, 2026-10-26), but the swarm was 99k of Felesta's last 117k (CK). **Kept** (user call, 2026-11-04; `anub.defensive` `kept`): heroic, from his 50% until `Swarm`, a pick with a 120 s+ cooldown while the tank is at 50%+ (Icebound Fortitude, Divine Protection, Survival Instincts, Frenzied Regeneration, Last Stand, Shield Wall; not Vampiric Blood, Barkskin): CJ and CK Felesta spent Icebound Fortitude at his 42.9% and 36.0% at 86-100% and died in phase 3 with it down |
 | RAID+6 | `anubarak leeching swarm on tank` → `anubarak tank defensive` | his victim in `Swarm`, a defensive ready | `NextTankDefensive` on self |
@@ -233,6 +228,11 @@ no `spell_dbc` row), and the floor is an indoor group of `Nd_Argentcrusadecolise
 | RAID-1 | `anubarak mana top up` → `anubarak top up mana` | every difficulty, his health at or under 40% and no `Swarm` yet, an unmarked bot off escort and sphere duty: a warlock under 95% mana and over 50% health, a mage under 60% while he is down (`anub.topup` `tap`/`evocation`/`none`) | Life Tap, Evocation |
 | HIGH+5 | `anubarak light judge due` → `anubarak judge light` | every difficulty, phase 3, the [light judge](#how-the-bots-play-it) with his Judgement of Light missing or under 3 s | Judgement of Light on him, whatever it targets |
 | MEDIUM_HEAL+5 | `anubarak penetrating cold on raid` → `anubarak heal penetrating cold` | healer outside heroic phase 3, a carrier below 90% or one it can [cover](#how-the-bots-play-it) | on the lowest, the cover, else under 90% the first direct heal `CanCastSpell` allows |
+
+No shaman takes Ghost Wolf on the mark: it is outdoors only (Attributes 0x18000 in the server's Spell.dbc,
+no `spell_dbc` row), and the floor is an indoor group of `Nd_Argentcrusadecoliseum_Instance.wmo` (group
+26336, mogp 0x2805 with no 0x8, WMOAreaTable flags 2), checked unconditionally in `Spell::CheckCast`:
+`vmap.enableIndoorCheck` is only logged.
 
 The **pickup tank** is the main tank while alive, else the side tank he is on (a human who taunted
 him keeps him, no bot taunts him back), else the first bot side tank; while he is up its burrowers go
@@ -583,7 +583,7 @@ Strike on a lone one is still its best threat), and any
 other area spell with one of the other side's within 10 yd plus its reach of the bot or its target.
 
 **DPS target directly, no raid icon** (`GetAnubarakDpsTarget`, DPS by `IsToCDpsBot`, only while
-he is engaged), first match:
+he is engaged).
 
 **DPS split by side** (user call), every difficulty: the living DPS bots of each role by guid serve
 side 0 and 1 in turn (`anub.dside`), split again at each wave so a death rebalances. Each side has its
@@ -894,92 +894,6 @@ ended on a patch under 10 s 29 times and passed a tank patch 46 and the raid 95;
 (both from starts where every path passed a tank patch) and 15, its patch ends 13.2 s or later
 (median 14.7), 114 ending caught for want of a Hand.
 
-Baseline 2026-10-31 late, 25H on that planner (BK 649_2_anub-arak_1793481371 wipe P3 6:58 18.7%, BL
-…481941 wipe P3 8:39 14.6% after a third submerge, BM …482612 reset P1c 6:00 46.3% with both side 1
-tank patches lost, BN …483135 wipe P3 7:35 15.4%): fresh kites ended on a kite patch 13.5-17.3 s in,
-`--kitesim` matching (BK median 14.5 against 14.3), no bot kite passing a tank patch, patch ends under
-10 s 1, 2, 0, 0. Own immunities ended 8 kites at 13-18 s, 6 with 15+ s of life left; speed boosts went
-3 times on base-speed spikes; 13 kites planned a Hand, 2 landed; main tanks died 26-51 s into phase 3.
-
-Baseline 2026-11-01, 25H on refine-20 (`ce5fdfc39`; Ecoterrorist a bot; BO …524813 wipe P1c 6:04
-35.7%, side tank Felesta dead 2:54 to burrowers at 9 Expose Weakness, main tank 5:23; BP …525315 P1c
-ended at 30.4%, wipe P3 7:44 25.9%, P2c with no kite patch): fresh kites ended on a kite patch
-13.5-17.3 s in or `patch+hand` 18.6-21.3, no tank patch spent, no next leg past a patch, 5 Hands cast
-0.0 s after the claim; 4 of 5 own immunities 1.5-3.6 s in on base-speed spikes, BP Felesta's walk-in,
-BO Fel's refused Hand.
-
-Baseline 2026-11-01, 25H on refine-21 (`297f14857`; BQ 649_2_anub-arak_1793557563, P1c ended at
-33.7%, third submerge, wipe P3 9:35 7.5%): 7 kites, 0 Impales, 4 patch ends 13.5-24.9 s, 3 runs to
-the emerge 20.2-28.9 s; the behind stands latched empty at 6:00 (as BP) so no healer walked behind in
-P3; Holylight died to a wave 9 burrower, then both side tanks.
-
-Baseline 2026-11-02, 25H on refine-22 (`5ed464d7f`; BR 649_2_anub-arak_1793574219 P3 from 30.0% at
-5:49, wipe 6:53 19.7%; BS …574963 P3 from 30.1% at 5:51, wipe 6:38 21.4%): 6 kites each, every
-Nitro and Dash on its pick's second, BR 0 Impales; BS Tree's flinch the only kite death. Phase 3 is
-the open race: BR held him at 27.5% 5:59-6:14 while DPS spent 48% of samples on the 4 burrowers
-carried in, BS lost both side tanks 10-12 s in.
-
-Baseline 2026-11-02, 25H on refine-23 (`8772f7e75` and the upstream merge; BT
-649_2_anub-arak_1793641400 P3 from 30.0% at 5:49, wipe 7:23 17.8%): 6 kites, 0 Impales on kiters, no
-death before P3. P3 opened on wave 6's burrowers, both side tanks at Expose Weakness 6-8, their
-defensives spent in P1c: Felesta 100% to dead 5:51.5-5:55.7 (73k, only her own Death Strike healing
-her), Bulwark at 22% meanwhile.
-
-Baseline 2026-11-03, 25H on refine-24 (`9b42ae717`), `649_…`: BU `2_…1793655469` (third submerge at 31.1%,
-no kite sphere left, 3 kiters dead to Impale), BV `54_…1793659375` and BX `54_…1793660225` (reset after wave
-1-2 burrowers killed Bulwark, Trueshot, Tree, Assasin), BW `54_…1793659605` (P3 from 30.1% at 5:52.9, wipe
-7:03.7 at 18.6%), BY `54_…1793660401` (P3 from 30.0% at 7:23.4 after P2c, wipe 8:36.9 at 21.4%). Both P3s
-opened on a wave up 11-16 s, killed in 25.5 and 36.9 s while he went 30.0 → 29.5% and → 30.8%; the next
-landed +29 and +34 s; the main tank died +34.5 and +49.6 s, the raid within 25 s more. Roster damage
-155-195k/s, about 166k/s net on him once a wave is dead; healers 10-19k/s each while alive.
-
-Baseline 2026-11-04, 25H on refine-27 (`fa41b0760`), `649_54_anub-arak_…`: CD `1793813520` (main tank dead
-0:29, wipe 6:05 at 30.2%), CE `1793814021` (P3 from 5:51, wipe 7:43 at 6.2%), CF `1793814928` and CG
-`1793815172` (reset 1:59 and 1:44, side 1's tank patch spent in P2), CH `1793815405` (P3 from 5:47.8, wipe
-8:25 at 9.4%). Every submerge of CD, CE, CH spent both kite patches, the first 19.5-26.6 s and the second
-38.5-47.3 s into phase 2, each kite 13-22 s in; Hands cast 1, 1, 0; no Demonic Circle teleport; shot kite
-patches 19.1-84.9 yd off the nearest tank patch, three under 30.
-
-Baseline 2026-11-04, 25H on refine-29 (`391288e51`), `649_3_anub-arak_…`: CJ `1793826735` (P3 from 5:50.5,
-wipe 7:49.8 at 4.8%), CK `1793827587` (P3 from 5:40.4, wipe 7:10.9 at 8.9%), no death in phases 1-2. Felesta
-first dead in both (CJ 7:16.7, CK 6:27.1); side tanks under 2 healers within 40 yd at the first phase 3
-wave CJ 3.5 s, CK 3.8 + 3.1 s (CI 5.3); Death and Decay 6/6 and 6/7 cast, 0 `FAILED`; burst from his 50%
-to phase 3 CJ 35 (13 not `behind`), CK 15 (11).
-
-Baseline 2026-11-04, 25H on refine-30 (`63ade6a51`): CL `1793831836` (Ecoterrorist dead 0:29.3 to a
-first-wave burrower and his 37.7k swing, rezzed; P3 from 5:55.8, wipe 7:48.8 at 5.9%), CM `1793832446`
-(P3 from 5:45.6, wipe 7:37.8 at 9.1%). First phase 3 deaths CL Mighty 6:31.8, Elemena 6:54.8, Prayer
-7:03.8; CM Felesta 6:43.0, her burrowers then four more; burst released `behind` at his 50% in both;
-phase 3 Righteous Defense all within 40 yd; carriers' own saves CL 5, CM 2.
-
-Baseline, 25H on refine-31 (`cb42837b9`): CN `1793918278` (wipe 7:30.2 at 11.6%, Felesta dead to
-her burrowers 6:40.6 and again 7:10.4), CO `1793918863` (wipe in P1c at 50.3%: Stormweaver and
-Malediction impaled kiting, Ecoterrorist dead 4:53.8 to Freezing Slash and a 21.4k swing), CP
-`1794147150` (Holylight and Prayer with no party heal dead to the swarm 6:27.8-7:18.8, wipe 7:52.3 at
-4.2%), CQ `1794147772` (kill 8:03.2; Trueshot and Prayer dead to the swarm, Angry, Prayer and
-Nightwarrior to Penetrating Cold, Stormweaver to a scarab at Mandibles 9 in P1c). Phase 3 side tank
-under 2 healers CQ Felesta 0.2 s; F-list saves on bots carrying neither 1; mages 74-76% mana 30 s in;
-first Penetrating Cold ticks survived 31 of 35; herd rows 6.
-
-Baseline, 25H on refine-32 (`44b6dcaa0`): CR `1794263639` (wipe in P1c at 48.4%: he went down by
-side 0's patch, spent 1.6 s into the first kite; Obliteration, Bulwark, Hellflame and Malediction
-impaled; 5 burrower submerges with their tank alive; Bulwark dead 5:01.2 under four, the main tank
-5:07.96 to Expose Weakness from a loose one), CS `1794264114` (kill 7:19.3, no deaths). CS: no circle
-summon in the first 10 s, 15 `hot` casts, herd rows 2, the two sides' burrowers never within 12 yd.
-
-Baseline, 25H on refine-33 (`0ff058cb1`): CT `1794829976` (kill 7:27.4, one death), CU `1794938939`
-(kill 8:10.1: side 1's patch spent at 4:41.7 (below), re-latched 71 yd off its spot; phase 3 healers
-40-47 yd from one side tank for 90-104 s, Elemena and Felesta dead to burrowers, four to the swarm
-and Penetrating Cold; phase 3 142.3 s against CT's 104.0). Both: no escort under a burrower, no
-Righteous Defense take, no burrower submerge.
-
-CV `1795027085` (2026-11-18, the upstream-PR cleanup's clear; refine-34 live): wipe in phase 3, `.die`
-at 4.7%. The cleanup kept behaviour: renames and `inline` constants only, c5's group memos fill what
-the old walks tested, the same 82 nodes as CT, the other four bosses killed. Phases 1-2b clean, boosted
-kite move points 10.7 yd ahead (median). Phase 3: Prayer, Tree and Holylight died to the swarm's
-minimum tick (see `floor`), then their cold carriers; healers under 5% in phase 3: CT 3-15 s each
-(down to 1.25%), CU 7-29 s (Prayer dead to a 190 tick at 7:31).
-
 **The move** (`anub.kite`): the plan's track 8.4 yd past its point nearest the kiter, at most 1.2 s
 on, floor-checked (1.2 s on Nitro reached 21 yd: CU 4:41.7 Stormweaver cut the ring 0.7 s ahead of
 his plan and ran the spike onto side 1's patch 9.6 yd off, 0.47 s before its despawn, where the plan
@@ -1115,9 +1029,9 @@ into an `own` kite to 11 Mandibles stacks from escorting, 17.3k a tick), a non-p
 Hand with 0.8 s of the hand left (cast after, Impale's next tick can land first: P Nightwarrior), or
 0.6 s before the catch as the failed plan's last resort with no claim, that one only on a spike at
 least as fast as the kiter or at 50% health or lower (BP 1:58 Justice's Divine Shield after one Impale
-from a 3.5 yd/s spike). Only Hand of Protection keeps
-the spike on it; the others, like a death, hand it on at its current speed, so a paladin takes Divine
-Shield only with no patch ending ahead and the emerge over 10 s off, or for an `own` plan.
+from a 3.5 yd/s spike). Only Hand of Protection keeps the mark ([spike](#pursuing-spike-34660)),
+so a paladin takes Divine Shield only with no patch ending ahead and the emerge over 10 s off, or for
+an `own` plan.
 
 **Immunities wait for the kites** (`anubarak kite immunity reserve`): heroic phase 2 blocks the
 class `divine shield`, `ice block`, `vanish` and `feign death` for an unmarked bot; the kite casts
@@ -1301,7 +1215,7 @@ resists and absorbs, so every heal on a healthy non-tank goes back to him: in 20
   only under Weakened Soul; power word: shield (no Weakened Soul); holy shock, riptide, swiftmend (on
   Rejuvenation or Regrowth); the first of flash of light, flash heal, lesser healing wave, nourish,
   regrowth, holy light, greater heal, healing wave whose cast time + 0.3 s lands before the tick; else
-  the cover. Otherwise a priest shields a tank first, the absorb never healing him; a bare carrier gets the **cover**, the first of
+  the cover. Otherwise a priest shields a tank first (an absorb never heals him); a bare carrier gets the **cover**, the first of
   power word: shield (no Weakened Soul), renew, rejuvenation, lifebloom and riptide, none from a paladin
   (Sacred Shield stays on the tank). Then `CastRaidThroughputHeal`, never Wild Growth: it heals five
   round the target, and the swarm hands the other four back to him. `anubarak
@@ -1464,7 +1378,6 @@ personal burst is unrestricted.
 - A rescue Righteous Defense (member under 50%) from 40+ yd buys only its 3 s: Bulwark lost 9 of 9 in
   CE, 15 of 15 in CH.
 - Deathsong, the human, took 3 of Felesta's 9 lost CI taunts.
-
 - Untargeted raid AoE still pops spheres, all of it in normal (Starfall made every patch in the
   2026-10-16 kill), all but Starfall in heroic.
 - A melee bot capped on him, or on a burrower other than its side's focus, keeps white-swinging, so it
@@ -1654,298 +1567,257 @@ The per-bot keys are change only: a bot that takes the same branch twice writes 
 
 `tools/botobs/bosses/anub_arak.py` reads the rest, keying him on entry 34564 since the spike shares
 his name and boss flag, and checking map 649 since Azjol-Nerub's boss shares the `anub-arak` slug.
-`--phases` (spans, his health at each edge, deaths per phase), `--pull` (who stood west of the Web
-Door or above z 200 at the pull and when each got in, stage 9 to the pull, the player nearest his wait
-point and each bot tank's yards at the engage, one inside 23 yd flagged), `--spike` (each 67574
-window: kiter, `kite` branches, seconds, outcome, when the spike first came within 12 yd, Hand of
-Protection on the kiter, its own Divine Shield, Ice Block, Feign Death or Vanish, `protect` rows; Impale on anyone else;
-`dodge`, `protect`), `--spheres` (flying above z 150 and patches below 146 from the 34606 rows, a low
-one with no Permafrost `hz` centre on it falling; patches gone within 3 s of a mark ending, heroic
-spheres left, `sphere` and casts at a sphere; per mark, tank and other patches, flying and falling
-spheres and the `sphere` holders in the window; per duty span, the holder's casts at any sphere,
-since the note names the duty and not the sphere, and its `drop target` rows), `--burrowers` (life,
-submerges, share of samples within 6.4 yd of a Permafrost centre, Shadow Strike casts and whether
-66134 damage followed, `interrupter`; each burrower's time holding `focus` and the share of living
-DPS bot samples on it meanwhile; `dps`), `--threat` (per surfaced window: his target by role, time
-from each emerge to a tank; his legs, runs of samples flagged moving of 2 yd or more start to stop,
-their yards and reversals past 120°; his median distance from the drag anchor over samples with both
-tank patches latched, before the window's first `submerge` row; taunts on him, Righteous Defense
-counted when its friend was his victim, split bot and human; `pickup` and `anubarak threat cap` veto
-rows per bot), `--swarm` (phase 3 length, 66240 per bot, lust against the phase 3 start; per 5 s his
-health, the median tank and non-tank health, the swarm and the healers' heals onto tanks, carriers and
-others; bot heals cast onto a non-tank with no Penetrating Cold, a healer itself included, items left
-out; DPS samples on him and on
-burrowers up at its start or newer; those burrowers' last death against lust and `burst` `open`; bot
-burst cast from his 50% (the code's `ANUBARAK_BURST_HOLD_PCT`) to phase 3, flagged unless `behind`; Penetrating Cold windows and heals onto the
-carriers, `defensive`, deaths). Also: `--burrowers` each burrower's
-exit, side at the spawn then each owner after (a dead side tank moves them all, so the last says
-little), seconds to the first tank and to its owning side's tank, the spawn side tank's distance from
-its spot, per wave the focus start against the next wave, DPS bot casts at a burrower other than the
-held `focus` (by caster and spell; triggered ones, humans and casts during the target's Shadow Strike
-left out) and each `focusdue` drop with the focus still sampled; `--spheres` what downed each sphere (hit
-rows on spheres, logged from the pull and asked again at every phase edge for a trace opened later, else the last cast at it; pet to owner, DoT or area flagged),
-where a tank patch landed against its spot, each grip, whether it landed (from the DK's spot at the
-cast) and the side that latched it against the side it served, each side's first patch (grip or
-shots, killer, off-spot distance), and per submerge the tank patches spent against `allow` (`over`
-past it, heroic): side, when it went (its sphere's last sample), the mark that ended within 3 s of it
-or ran then, seconds in, its last `kitestage`, and when the side's patch came back after the emerge;
-`--frost` seconds carrying Permafrost (the 67857 `aura` stream) per group (main, side and other tanks,
-melee, ranged, heal; humans left out) and bot, he up and down, every stint over 3 s with its target
-at the start, `leave` counts; `--spike` seconds per
-`kitestage`, the boosts and immunities cast, an own immunity with no `protect` `self` in the 2 s
-before flagged `unasked`, the spike's distance from the gather (the living bots holding `gather`
-since he went under, the kiter left out) at each mark's end and the kite patch alive, an end by death
-or own immunity within 20 yd of it flagged, the spike's closest approach to each latched tank
-patch, under 11.5 yd flagged (a spent patch's last read is about 11), a window that spent a tank patch,
-and a kiter marked within 7.5 yd of a Permafrost centre; `--burrowers` per burrower when
-it came up and whether it died inside 30 s, counted per wave, per `focus` pick its seconds since it
-came up and distance to the nearest side tank and patch (flagged `before its tank` unless a tank within
-5 yd has it or it is under 10%), per burrower held on a side tank its median distance from that
-side's patch centre, `sidetank` `gather` and `mstand` rows; `--threat` the main tank's share of samples inside 7.5 yd of a patch
-and his distance to each tank patch at every submerge, under 25 yd flagged. More: `--spike` the
-spike's and kiter's speeds at each immunity, one on a spike no faster flagged (speeds are medians of
-moving 250 ms snapshot steps, 0.2 yd/s slack), seconds stalled per window (under 1.5 yd in 1 s), a tank
-patch spent in `run` or `boost` flagged, per submerge the living players within 8/12/20 yd of where he
-went down by role and the first kiter's distance from the spike; `--spheres` each grip's
-`gripstep` reaching `kill` or dropping to `none`, a gripped sphere back above z 150, `spot0`/`spot1`
-changes (off-spot read from them once written); `--burrowers` per submerge where it went under, the
-nearest patch, patches alive, its side tank alive and how far, its target (pets and ghouls as
-"Name (Owner)") and why it could go under; `--healers` per healer and phase the median distance to
-the main and each side tank, seconds over 35 yd from a side tank a burrower is on, `follow` rows,
-each engine's pass count (no row names the engine per tick, so a total), `raid healer engine` in
-the coverage, `hstand` rows, per side tank the seconds with no healer within 40 yd; `--tanks` per
-wave and side tank the Expose Weakness peak and seconds at 5+, each `defensive` with its stack and
-health (a magic-only one on a side tank flagged), each tank death with damage by source, heals and
-absorbs in the 12 s before, each tank's defensives from its cast rows (`anub.defensive` writes only
-on a change). Then: `--spike` per kite a walk flip-flop (move targets 5+ yd apart reversing 3+
-times in 2 s), the nearest Hand of Protection-ready paladin when the spike first came within 12 yd
-(ready: a bot, alive, unmarked, its Hand cooldown off `anub.hands`, else 300 s since its last, no
-Forbearance on the kiter; past 30 yd
-flagged), Feign Death dropped within 100 ms; `--scarabs` scarabs alive at each emerge +0/10/20/30 s
-with targets, the main tank's Mandibles stacks then, lives per phase, Mandibles damage and peak stacks
-per player per phase; `--redirects` each Misdirection and Tricks with caster, recipient, the caster's
-target and a burrower's target 1-8 s on; `--burrowers` each opener (the encounter's own creatures
-skipped) and the three players nearest its exit at the spawn; `--pursuit` pure pursuit replayed per
-kite at 3 and 6 s, end and patch-pass error, flagged past a 1.5 yd p90. Late baseline, the
-2026-10-26 25H wipes F, G, H: Misdirection 18/17/28 all to the main tank, Tricks 22/18/27 with
-19/12/19 to melee DPS; openers on a non-tank 23/24, 22/24, 26/32; main tank Mandibles stacks at the
-emerges 11, 4 / 9, 13 / 0, 10, 7; raid Mandibles a phase 1 443-829k; pursuit patch-pass p90 0.3-0.4;
-flip-flops G Mighty 2:09, H Prayer 6:16 (and four short ones); paladin past 30 yd at 3 of 5, 2 of 3,
-1 of 5 kites. Then: `--dps` per phase and role (bots) the share by target kind, moving, yards a bot
-split by the `by` of the last `move` row within 4 s (steps under 0.3 or over 30 yd left out), damage
-per second by target kind; his health lost per phase 1, under 20% flagged; `dps` rows per role; each
-`dside` group per wave; melee walks across the midline between `spot0` and `spot1` (5 yd either side
-counts as neither), into the other group's half flagged `astray`. `--burrowers` reads `focus0`/
-`focus1` with a side column (older traces `focus`, side `-`), the share on a focus over its side's
-group, a cast off focus only when neither side's focus held it, and says when `focusdue` is absent.
-`--spike` per kite its `kiteplan` terminals and `used` (a tank patch spent for `patch`, the hand on
-the kiter for `hand`, both for `patch+hand`, its own immunity for `own`), a value carried from the
-last kiter counting only with no row of its own within 1 s of the mark; tallies and a kiter dead
-with its terminal unused. `--spike` per patch kite its turn (the first `bridge` row, else the first
-`patch` stage, `immune` for `patch+hand`), the `kitemove` then, the patch, and whether the spike
-failed on it; per `patch+hand` the Hand at the turn, turned without, or asked and never landed
-(older traces: Hand of Protection casts within 1.5 s of the turn); the spike's first pass within 14.5
-of a patch before the turn, a patch it spawned inside counting once it leaves; Impale on a side tank.
-`--burrowers` each burrower pulled off its side tank by a non-tank within 15 s of coming up, with the
-seconds it had held and the puller's casts on it in the 3 s before, triggered ones marked `*`. `--tanks` each run of the main
-tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared aura's row names only
-the first caster), his area casts from 5 s before. `--threat` per window the longest stretch 10+ yd off the anchor with no
-drag leg, cut at the first submerge leg, 10 s or more listed. `--spike` per `patch+hand` kite its
-Hand against the catch the reader predicts (the kiter on its heading at its measured speed, then the
-ring; spike steps from its last restart), the spike's speed and distance
-then, whether the patch followed under it; a `hand` row with no `ask` before it is the Hand at the
-catch, its turn the first `patch` stage after; after a `turn` the nearest ready paladin; per submerge
-the seconds into phase 2 when its first tank patch went (its `patchN` latch let go). `--spheres` per
-far grip each link (DK, cast, landing, distance to the spot before and after) and `relay` rows; a
-Death Grip whose 49576 triggered no 49560 from its caster within 5 ms flagged `no pull`, tallied per
-caster. `--spike` per kite the escort's distance at the claim, at the kiter's boost before any Hand and at
-the end, its seconds in Permafrost, its walk and dodge swaps within 1 s, a kiter dead to anything but the
-spike with its own unused,
-claim to cast; then a kiter within 15.5 yd of a tank patch under a hand, an own after a hand
-ran out, a boost in a hand's first 8 s, `second` grants, and per submerge the seconds kited and
-idle, the terminals, the seconds after its first tank patch and kiter deaths; heroic, kite tools
-(Sprint, Dash, Nitro, Divine Shield, Ice Block, Vanish, Feign Death) a bot spent off its mark before
-phase 3 and still on its base cooldown as a submerge's spike came up, per phase; each Demonic Circle
-teleport with the spike off the kiter and the circle (where it landed when the summon came before the
-trace), the boost before it and its pass by the circle, and the seconds stood on landing; each Hand of
-Protection on a bot warlock kiter, its circle in reach flagged; per submerge
-his distance from the gather; Cat Form and Feral Charge among the boosts; per kite `kitepred` at the
-mark against the real end, the `kitepath` picks with seconds held, a turn past 90° within 1 s of the
-last flagged `reversal`, and the first predicted hazard against the first real one (the planner's
-rules: a tank patch, a kite patch other than the pick's or under 12 s of spike age, the gather,
-Impale or death); a pick carried from an earlier mark counts only with no row within 1 s of it. The
-patch kite's turn reads `bridge` on older traces, else the first `patch` stage. `--burrowers` per wave
-and side the seconds from coming up to its first `focus0`/`focus1` pick and the side tank's peak
-Expose Weakness to the next wave; in phase 3 the `p3wave` rows (merged over bots), when the wave died
-and each side tank's fate. `--kitesim` (25H) the planner ported (its `Rules` read from the header, a
-missing one refused) replayed from each bot kite's start (spike step off its measured speed, patches
-by kind off the latches, the gather as formed 10 s into the submerge, life from the submerge, 7 yd/s,
-the world frozen at the start; no Hands, own immunities, speed boosts or bystanders; the next leg
-and the hand-on raid pass ported, the own immunity's faster-spike rule only in its tests), closed loop
-as the native test's: per kite the first pick as `kitepred`, the replay's end and the real one, raid
-and tank passes; for fresh-spike kites patch ends under 10 s, tank and raid passes. `--spike` per kite
-the kiter closing 2+ s on a spike no faster than itself (its speed within 1 s), ending within 12 yd,
-with the gap, summed per pull. `--tanks` a tank form or stance (Dire Bear, Bear, Defensive Stance,
-Righteous Fury, Frost Presence) lost while he is up and not at a death, with the `act` row and
-prerequisite that dropped it and when it came back. `--spheres`
-heroic, per submerge each kite sphere downed from 30 s before he went down, its spend and the kite it
-ended, under 15 s in flagged, a spike that came up with no kite patch down flagged, the kite patches on
-the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows. `--threat` when the submerge drag left,
-and each Freezing Slash on its tank from 3 s before it set out (pre-step or `subhold` included; CR +1.5
-s, CS -0.4). `--burrowers` each side tank Righteous Defense that took the other side's burrowers, with
-the member's health (CR Elemena 100%). `--spike` per side tank and phase the seconds on escort duty
-with a living burrower on it (CR Bulwark P2b 35.3). `--spike` the kite move points' yards ahead of
-a kiter running over 9 yd/s against one running (CU median 15.6 vs 9.4). `--burrowers` side changes
-after a burrower's first owner with both side tanks alive, per phase (CU P1c 4, P3 6). `--swarm` each healer's phase 3 seconds under 5% health and its lowest,
-a death to a swarm tick of 250 or less flagged (CV Prayer, Tree, Holylight). `--healers` also the main tank's seconds with no healer within 40 yd.
-`--burrowers` Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it,
-`anubarak burrower threat cap` vetoes per bot. `--threat` drag pre-steps (counted as legs) and
-`subspot` rows per window with how far he went down from the last spot, `no submerge leg` (no
-`submerge` or `prestep` row after its first search) with its `subhold` rows. `--burrowers` each run
-of 3+ burrowers on one side tank with its taunts in the second before (Righteous Defense once per
-burrower) and, per phase, the samples with the two sides' burrowers within 12 yd. `--spike` per
-submerge the bystanders' gather/dodge swaps within 1.5 s and dodge walks. `--spike` a Hand of
-Protection with a boost the kiter cast later in its kite, patch kites turned within 3 s of a boost
-going out, and each `escort` `patch` wait: where, its yards to the kite patch and the kiter at the Hand
-or the kite's end. `--tanks` side tank area casts per surfaced phase by spell (triggered ones left out)
-and `saoe` rows, and per side tank ground area the burrowers on it at the cast inside each second
-(Death and Decay on their midpoint within 15 yd), empty half its duration flagged. `--spheres` each
-grip landing's yards to the other side's patch, or to a sphere its earlier grip landed that it latched
-later, under 20 flagged `never latches`, and each heroic kite sphere's yards to the nearest tank patch
-as it came down, under 30.75 `near`. `--spike` each `+tp@` plan with its cast or `never cast`; per patch
-fail with the next mark 3-5 s on, the spike's walk over the idle (range, median) and its yards then to a
-tank patch, under 16.75 flagged; per patch kite's turn the Hand-ready paladins within 30 yd and a
-warlock's circle in reach. `--healers` each bot paladin's `toc.aura` seconds per resistance, a tank on
-one flagged. `--swarm` per Penetrating Cold carrier in phase 3 its seconds with no HoT or shield of
-those carried, a death flagged. `--healers` each healer's first `hbehind` `go` and the seconds until it
-stood at its stand (`hstand` `hold`, under 1.5 yd in 1 s), and each burrower within 5 yd of a healer
-in phase 3 with no step from its exit or emerge within 7.5 yd of a Permafrost centre. `--swarm` the
-`swarmheal` counts per healer, `healduty` and `coldheal` spans, and per phase 3 Penetrating Cold wave
-its first ticks survived, the frost holder, Aura Mastery up at ticks 1-2, `mastery` rows, the resisted
-share per tick and per carrier its health at the landing, its margin at the first tick (the reader's
-own risk model: health × (1 − drain)³ against the tick, no absorbs or timers; a survived tick's margin
-clamped to 0, the pool read at first sight), fate, heals and absorbs before it by source and its
-`coldheal` healer; a herd is 2+ healers' heals on one carrier within 1.5 s while another at risk got
-none; each phase 3 Lay on Hands, Pain Suppression, Guardian Spirit and Hand of Sacrifice with its
-target's health and its caster dead within 10 s, and the tank dips under 35% with the first of them onto
-it, else whether it died. `--burrowers` each tank taunt onto a burrower kept or lost 1.5 s after its 3 s,
-by its yards at the cast, within 40 and beyond, and the lost ones with no hit from the tank inside them (a
-cast at it, or a side tank area spell with it within 11.5 yd); each Bladestorm's burrower closest over the
-spin, inside 9.5 yd flagged. `--tanks` per side tank and area spell its `anub.saoe` picks, its casts, and
-the area threat or rotation cast `FAILED` under that pick. `--healers` per side tank its phase 3 seconds
-with under 2 living healers within 40 yd, each stretch of 0.5 s+ with its move rows' `by` from 6 s before;
-`--swarm` per class the phase 3 Penetrating Cold windows with the carrier's own save inside, and `coldself`;
-per class save and heal item of the self save hold its phase 3 casts by non-tank bots carrying
-Penetrating Cold, a burrower on it, or neither, and the hold's vetoes per bot.
-`--healers` a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the
-shield's caster, overheal over gross, HPS, share; pets and totems to their owner); the trace has no
-heals onto pets and no swarm heal on him. `--burrowers` each pulled-off burrower's seconds until a tank
-had it back and the taunt that did it. `--spike` per kite each Sprint, Dash or Nitro with the spike's
-speed (-0.5 to +1 s) against the kiter's run over the 1.5 s before, one no faster flagged; the first
-against its pick's `+boost@` (on time within 0.5 s; only on traces carrying one); the `standby`
-escort's yards to the kiter at the first `protect` `hop`, past 30 flagged; after an own ending or a
-patch end, the next mark's leg until the spike is within 12 yd of its kiter or its spot at the mark,
-any patch it passes within 11.5 yd (BM 1:22 Vanish spent side 1's tank patch +1.1 s in, BM 3:44 #1118
-+4.1 s, BL 1:39 #576 +2.6 s); summed per pull. `--healers` each healer's mana at phase 3's start and
-30 s in, and its Divine Plea, Innervate (with target) and Hymn of Hope casts by phase. `--burrowers`
-per melee bot the seconds on a burrower no tank within 5 yd held, by `anub.dps` (BK-BN 14-36 s, about
-70% `loose`). `--dps` per phase 1 its first `push` with his health and seconds left, the submerge drag
-after it with its `drag` row, and whether phase 3 or a submerge ended it. `--swings` per phase, role and
-move pair the walks to one goal, 8+ yd off to another and back within 5 yd inside 15 s, with yards (CC P2
-melee gather/stand 47, P1b side tank ready/follow 42). `--pull` per role the bots' median yards from him at
-the engage and seconds to a target in reach, and per warlock bot its Demonic Circle: Summon casts in the first
-10 s with yards off the centre. `--burrowers` per heroic phase 3 focus pick its depth from
-the nearest centre, the phase 3 ring's reach and its side's melee on it. `--burrowers` `anub.dps` `capped` rows per ranged bot. `--spike` per submerge
-the most `kitespent`, over 1 before the third flagged, and each Hand of Protection with its caster's
-cooldown off `hands` (CA: Holylight 4:00.7 180 s, Bulwark 6:57.2 300 s). `--healers` per warlock and
-mage bot its mana at phase 3's start and 30 s in, and its Life Taps and Evocations from his 40%.
-`--scarabs` per victim its Mandibles stacks gained moving or standing with the median gap to the
-scarab, and the seconds one within 15 yd was on it by `scarabkite` (CA Trueshot 5 moving, 4 standing,
-median 5.8 yd). `--swarm` per non-tank its effective heals received a second alive by kind (healers,
-own, Judgement of Light, Vampiric Embrace, Healing Stream, other, items), the swarm's drain, `bare` (less
-the healers, the items and a healer's own; under 0.3 flagged `short`), `gap` (the longest stretch alive
-with no Healing Stream or Vampiric Embrace tick, 5 s+ flagged `long`, - with none; CQ Holylight 16.0,
-Elemena 12.6, Prayer 7.5) and the party heals that reached it, the HoTs cast onto a non-tank under
-1.2k with no Penetrating Cold (their ticks left out of the breach line), Judgement of
-Light's uptime on him read off the casts (a creature aura, never recorded: 20 s each, cut at that
-paladin's next judgement), each paladin's judgements, `judge` rows, and each shaman's water totem at
-phase 3's start and 10 s in. Baseline, the 2026-11-03 25H pulls on `9f9731e30`: BZ reset at 1:24.1
-(Elemena and Felesta dead to burrowers); CA phase 1s 25.3/20.7/22.8% (P1c to 31.0%), phase 3 from 30.1%
-at 7:16.6 for 118 s, wipe 9:14.7 at 12.7%; warlocks Life Tap 8 each from his 40% at 5:40.8. Baseline, the
-2026-11-04 25H pulls on `45e2f6963`, `649_54_anub-arak_…`: CB `1793794923` push `on:21:29` at 42.4%, phase 3
-from 30.1% at 5:58.5, wipe 7:40.0 at 21.1%; CC `1793795524` `on:28:29` at 43.7%, phase 3 at 5:59.9, wipe
-7:33.6 at 12.8%; both wipes burrowers after a side tank fell, phase 3 pace 0.089 and 0.184%/s against the
-0.125 the Berserk needs. Baseline, the 2026-10-27 25H wipes I,
-J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%; melee 142-255 yd a
-bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J P1c 64.8 s.
-Baseline, the 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K
-22.0/19.1/17.7/9.2%, L 20.8/21.5/11.7/11.6/3.4%; melee 105-218 yd a bot a phase 1; kites K 10, L 13,
-L's four deaths with a patch unused (Prayer 1:22 and 8:51, Druidica 3:44, Stormweaver 8:29); K 1:22
-Power's spike 14.2 yd from a tank patch 8.7 s in, never turned; Impale ×6 on Felesta K 6:57; the main
-tank at Expose Weakness 5 L 3:31.
-Baseline, the 2026-10-27 evening 25H wipes M, N (`5d6963920`): his health a phase 1 M
-25.1/17.3/3.9/0.4%, N 25.6/12.3/4.1%; the first tank patch of each submerge M 11.9/7.1/15.2 s, N
-15.2/10.2 s into phase 2; patch walks taken M 3/3, N 2/2; kite deaths M 7 of 15 (a human's first,
-then 5 in the gather), N 3 of 9; far grips 46-49 yd off side 1's spot; N P1b drag held 56.3 s.
-Baseline, the 2026-10-27 night 25H wipes O 4:17 (59.8%), P 8:08 in phase 3 (28.4%), Q 6:54 (43.1%)
-(`fdb3a950f`): his health a phase 1 O 23.6/16.4, P 23.9/19.1/17.8/8.9, Q 24.2/20.9/11.8%; tank
-patches spent a submerge O 1/1, P 2/1/2, Q 2/1/1, 5 of the 14 in `run`; the first of each submerge O
-13.7/11.9, P 37.9/15.9/18.6, Q 14.4/15.2/14.4 s into phase 2; kite deaths O 2, P 2, Q 5; flip-flops
-O 2, P 2, Q 3; Death Grip with no pull Q Felesta 2 of 7, Obliteration 1 of 4, Deathsong 1 of 2.
-Baseline, the 2026-10-28 morning 25H wipes R 8:13 in P1d (36.1%), S 6:01 (43.9%) (`4cad7660b`): the
-first tank patch R 33.9/27.9/10.3, S 33.9/5.7 s into phase 2; kiter deaths R 0, S 4; gather/dodge
-swaps within 1.5 s R 1,555, S 427; Impales on bystanders R 7, S 5; runs of 3+ burrowers on one side
-tank R 8, S 7; the two sides' burrowers within 12 yd S P1b 99 of 200 samples.
-Baseline, the 2026-10-28 evening 25H wipes T 0:48 in P1, U 5:23 in P1c (56.8%), V 9:03 in P3 (15.7%)
-(`076b7ce55`; main tank human in T and U): tank patches spent a submerge U 1/2, V 2/2/0 (no sphere left
-for V P2c, 3 kiters dead there); kiter deaths U 1, V 4; hand kites with the escort within 30 yd at
-the claim U 1 of 3, V 2 of 4; main tank with no healer in 40 yd T 8.8 s.
-Baseline, the 2026-10-29 25H wipes W 6:53 in P2c, X 8:27 and Y 8:33 in P3 (`32ba6602d`; main tank and
-Deathsong human): boss at the third submerge W 35.5, X 42.2, Y 35.3%; tank patches spent a submerge W
-2/2/1, X 2/1/1, Y 2/2/1, every sphere; a side bare with burrowers out W 81, X 87, Y 84 s; kiter deaths
-W 1, X 1, Y 0, all in P2c; Hand within 1.1 s of the catch in 9 of 9 patch+hand kites.
-Baseline, the 2026-10-30 25H wipe Z 6:55 in P2c (`e131b1990`; Ecoterrorist the bot main tank, Deathsong
-human, 4 healers): boss at the third submerge 47.3% (phases 1 -23.2/-17.3/-12.1); side-tank deaths 4,
-3 in the 40 s drag; no tank patch spent by a kite; no kite patch down as P2's and P2c's spikes came
-up; flip-flops Justice 6:06.9, Tree 6:34.3; Hellflame's teleport at 4:25.8 landed 25.6 yd off the
-spike.
-Baseline, the 2026-10-30 25H wipe AA 7:05.6 in P3 at 15.7% (`f87f49475`; as Z): two submerges, phases 1
--26.0/-22.1/-21.9, phase 3 at 5:56.5; Bulwark pulled him at 21.2 yd; in phase 3 his net loss 0.14%/s
-for 25 s, then 0.42%/s, swarm 3.61M (non-tanks 2.89M), healer heals onto non-tanks 1.98M against 0.96M
-onto tanks, DPS on burrowers 35% melee / 48% ranged, 42 burst casts in P1c, the three tanks dead
-6:35-6:43, 31 deaths.
-Baseline, the 2026-10-30 evening 25H wipes BA 8:29 in P3 at 26.8% (three submerges, P1c -19.5%) and BD
-7:15 in P3 at 7.0% (`06fd22497`; Ecoterrorist and Deathsong human): BD phases 1 -27.3/-20.4/-22.1,
-phase 3 30 → 7.0% in 78.8 s, Heroism at +15.3 s; one kite patch down as he went under in each of BD's
-submerges.
-Baseline, the 2026-10-30 night 25H wipes BF 6:51 at 15.2% (`06fd22497`) and BG 6:55.8 at 14.3%
-(refine-17 without the 10 yd step; as BA): BG no death before phase 3, six kites, no kiter death,
-side tanks' area casts every phase, phases 1 -30.9/-20.4/-18.5; its first kite spent tank patch 1 (he
-went down 17.8 yd off it under the human main tank). Phase 3 from the Chronicle logs (`log_file`
-d242a72b BG, fd225ee8 BF): BG 66.4 s, 7.48M to him (113k/s), the swarm healing him 1.94M (29k/s); BF
-54.1 s, 7.45M (138k/s), 2.20M (41k/s); his phase 3 pool is 10.6M (35.35M = DB 27.19M ×
-`AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_HEROIC_BOSS_HEALTH` 1.3), so about 110-125 s at that damage. Raid
-healing the first 30 s 70k HPS (Holylight 22-24k, other healers 7-10k, non-healers 18-21k). BG's
-healers died to Penetrating Cold from +29 s (Holylight, Prayer, Elemena), then the tanks; carriers
-surviving their first tick 9 of 20 (5/2/2/0 a wave). BF's healers died to burrowers (6:30.8-6:34.8,
-refine-16's healer stand). A real 25H kill's healing table (Warcraft Logs, 90.8 s): five healers
-24.0/9.9/9.0/7.2/5.8k HPS at 1-16% overheal, non-healers 19.5k, 75.5k in all, so throughput matched;
-the gap was who got healed in the 3 s before a first tick.
-Baseline, the 2026-10-31 evening 25H pulls BH (wipe 7:05.5 in phase 3 at 11.5%), BI (reset in P2b at
-4:51.8, 49.1%, every patch spent) and BJ (reset in P1c at 5:01.5, 55.7%) (`a27289245`; Ecoterrorist
-and Deathsong human): first kites spent a kite patch BH 7.9, BI 8.7, BJ 4.6 s in; BI P2b both tank
-patches (Angry 4.5 s, Assasin 13.7 s); BJ Obliteration 4.1 s in side 1's slow, Assasin's Vanish 19 yd
-from the gather handing the spike to two Ice Blocks, Druidica dead with no Hand within 39 yd, Elemena's
-spike restarted 11 yd off a tank patch and spent it in 0.9 s. BH phase 3: 11 of 15 carriers through
-their first tick, no healer dead to Penetrating Cold, Aura Mastery at 6:12.959; Felesta dead 5:54.2 at
-9 stacks, wave 6's focus 14 s late, 41.5k in her last second; wave 7 (6:22.2) left to the side tanks,
-who died 6:30.7 and 6:34.8.
-Baseline, the 2026-10-26 25H wipes C, D, E: Hand of Protection on a
-slower spike C 1:22, E 1:22 and 1:47; patches spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13
-players within 20 yd at each first submerge; `raid healer engine` absent, healers 13-19 yd from the
-main tank with 7-45% of passes on the non-combat engine; Anti-Magic Shell on a side tank 5 times. The banner names declared probes the pull never wrote, and each side's
-tanks in order when short of 2 (25-man) or 1 (10-man) or a human holds one, and a side with a tank
-but no tank patch for 15+ s while he was up with burrowers out.
+Its banner names declared probes the pull never wrote, each side's tanks in order when short of 2
+(25-man) or 1 (10-man) or a human holds one, and a side with a tank but no tank patch for 15+ s while
+he was up with burrowers out. Per flag:
+
+- `--phases`: spans, his health at each edge, deaths per phase.
+- `--pull`: who stood west of the Web Door or above z 200 at the pull and when each got in, stage 9 to
+  the pull, the player nearest his wait point and each bot tank's yards at the engage, one inside 23 yd
+  flagged; per role the bots' median yards from him at the engage and seconds to a target in reach, and
+  per warlock bot its Demonic Circle: Summon casts in the first 10 s with yards off the centre.
+- `--spike`:
+  - each 67574 window: kiter, `kite` branches, seconds, outcome, when the spike first came within 12 yd,
+    Hand of Protection on the kiter, its own Divine Shield, Ice Block, Feign Death or Vanish, `protect`
+    rows; Impale on anyone else; `dodge`, `protect`.
+  - seconds per `kitestage`, the boosts and immunities cast, an own immunity with no `protect` `self` in
+    the 2 s before flagged `unasked`, the spike's distance from the gather (the living bots holding
+    `gather` since he went under, the kiter left out) at each mark's end and the kite patch alive, an end
+    by death or own immunity within 20 yd of it flagged, the spike's closest approach to each latched
+    tank patch, under 11.5 yd flagged (a spent patch's last read is about 11), a window that spent a tank
+    patch, and a kiter marked within 7.5 yd of a Permafrost centre.
+  - the spike's and kiter's speeds at each immunity, one on a spike no faster flagged (speeds are medians
+    of moving 250 ms snapshot steps, 0.2 yd/s slack), seconds stalled per window (under 1.5 yd in 1 s), a
+    tank patch spent in `run` or `boost` flagged, per submerge the living players within 8/12/20 yd of
+    where he went down by role and the first kiter's distance from the spike.
+  - per kite a walk flip-flop (move targets 5+ yd apart reversing 3+ times in 2 s), the nearest Hand of
+    Protection-ready paladin when the spike first came within 12 yd (ready: a bot, alive, unmarked, its
+    Hand cooldown off `anub.hands`, else 300 s since its last, no Forbearance on the kiter; past 30 yd
+    flagged), Feign Death dropped within 100 ms.
+  - per kite its `kiteplan` terminals and `used` (a tank patch spent for `patch`, the hand on the kiter
+    for `hand`, both for `patch+hand`, its own immunity for `own`), a value carried from the last kiter
+    counting only with no row of its own within 1 s of the mark; tallies and a kiter dead with its
+    terminal unused.
+  - per patch kite its turn (the first `bridge` row, else the first `patch` stage, `immune` for
+    `patch+hand`), the `kitemove` then, the patch, and whether the spike failed on it; per `patch+hand`
+    the Hand at the turn, turned without, or asked and never landed (older traces: Hand of Protection
+    casts within 1.5 s of the turn); the spike's first pass within 14.5 of a patch before the turn, a
+    patch it spawned inside counting once it leaves; Impale on a side tank.
+  - per `patch+hand` kite its Hand against the catch the reader predicts (the kiter on its heading at its
+    measured speed, then the ring; spike steps from its last restart), the spike's speed and distance
+    then, whether the patch followed under it; a `hand` row with no `ask` before it is the Hand at the
+    catch, its turn the first `patch` stage after; after a `turn` the nearest ready paladin; per submerge
+    the seconds into phase 2 when its first tank patch went (its `patchN` latch let go).
+  - per kite the escort's distance at the claim, at the kiter's boost before any Hand and at the end, its
+    seconds in Permafrost, its walk and dodge swaps within 1 s, a kiter dead to anything but the spike
+    with its own unused, claim to cast; then a kiter within 15.5 yd of a tank patch under a hand, an own
+    after a hand ran out, a boost in a hand's first 8 s, `second` grants, and per submerge the seconds
+    kited and idle, the terminals, the seconds after its first tank patch and kiter deaths; heroic, kite
+    tools (Sprint, Dash, Nitro, Divine Shield, Ice Block, Vanish, Feign Death) a bot spent off its mark
+    before phase 3 and still on its base cooldown as a submerge's spike came up, per phase; each Demonic
+    Circle teleport with the spike off the kiter and the circle (where it landed when the summon came
+    before the trace), the boost before it and its pass by the circle, and the seconds stood on landing;
+    each Hand of Protection on a bot warlock kiter, its circle in reach flagged; per submerge his
+    distance from the gather; Cat Form and Feral Charge among the boosts; per kite `kitepred` at the mark
+    against the real end, the `kitepath` picks with seconds held, a turn past 90° within 1 s of the last
+    flagged `reversal`, and the first predicted hazard against the first real one (the planner's rules: a
+    tank patch, a kite patch other than the pick's or under 12 s of spike age, the gather, Impale or
+    death); a pick carried from an earlier mark counts only with no row within 1 s of it.
+  - per kite the kiter closing 2+ s on a spike no faster than itself (its speed within 1 s), ending
+    within 12 yd, with the gap, summed per pull.
+  - per side tank and phase the seconds on escort duty with a living burrower on it (CR Bulwark P2b
+    35.3).
+  - the kite move points' yards ahead of a kiter running over 9 yd/s against one running (CU median 15.6
+    vs 9.4).
+  - per submerge the bystanders' gather/dodge swaps within 1.5 s and dodge walks.
+  - a Hand of Protection with a boost the kiter cast later in its kite, patch kites turned within 3 s of
+    a boost going out, and each `escort` `patch` wait: where, its yards to the kite patch and the kiter
+    at the Hand or the kite's end.
+  - each `+tp@` plan with its cast or `never cast`; per patch fail with the next mark 3-5 s on, the
+    spike's walk over the idle (range, median) and its yards then to a tank patch, under 16.75 flagged;
+    per patch kite's turn the Hand-ready paladins within 30 yd and a warlock's circle in reach.
+  - per kite each Sprint, Dash or Nitro with the spike's speed (-0.5 to +1 s) against the kiter's run
+    over the 1.5 s before, one no faster flagged; the first against its pick's `+boost@` (on time within
+    0.5 s; only on traces carrying one); the `standby` escort's yards to the kiter at the first `protect`
+    `hop`, past 30 flagged; after an own ending or a patch end, the next mark's leg until the spike is
+    within 12 yd of its kiter or its spot at the mark, any patch it passes within 11.5 yd (BM 1:22 Vanish
+    spent side 1's tank patch +1.1 s in, BM 3:44 #1118 +4.1 s, BL 1:39 #576 +2.6 s); summed per pull.
+  - per submerge the most `kitespent`, over 1 before the third flagged, and each Hand of Protection with
+    its caster's cooldown off `hands` (CA: Holylight 4:00.7 180 s, Bulwark 6:57.2 300 s).
+- `--pursuit`: pure pursuit replayed per kite at 3 and 6 s, end and patch-pass error, flagged past a 1.5
+  yd p90.
+- `--kitesim` (25H): the planner ported (its `Rules` read from the header, a missing one refused)
+  replayed from each bot kite's start (spike step off its measured speed, patches by kind off the
+  latches, the gather as formed 10 s into the submerge, life from the submerge, 7 yd/s, the world frozen
+  at the start; no Hands, own immunities, speed boosts or bystanders; the next leg and the hand-on raid
+  pass ported, the own immunity's faster-spike rule only in its tests), closed loop as the native test's:
+  per kite the first pick as `kitepred`, the replay's end and the real one, raid and tank passes; for
+  fresh-spike kites patch ends under 10 s, tank and raid passes.
+- `--spheres`:
+  - flying above z 150 and patches below 146 from the 34606 rows, a low one with no Permafrost `hz`
+    centre on it falling; patches gone within 3 s of a mark ending, heroic spheres left, `sphere` and
+    casts at a sphere; per mark, tank and other patches, flying and falling spheres and the `sphere`
+    holders in the window; per duty span, the holder's casts at any sphere, since the note names the duty
+    and not the sphere, and its `drop target` rows.
+  - what downed each sphere (hit rows on spheres, logged from the pull and asked again at every phase
+    edge for a trace opened later, else the last cast at it; pet to owner, DoT or area flagged), where a
+    tank patch landed against its spot, each grip, whether it landed (from the DK's spot at the cast) and
+    the side that latched it against the side it served, each side's first patch (grip or shots, killer,
+    off-spot distance), and per submerge the tank patches spent against `allow` (`over` past it, heroic):
+    side, when it went (its sphere's last sample), the mark that ended within 3 s of it or ran then,
+    seconds in, its last `kitestage`, and when the side's patch came back after the emerge.
+  - each grip's `gripstep` reaching `kill` or dropping to `none`, a gripped sphere back above z 150,
+    `spot0`/`spot1` changes (off-spot read from them once written).
+  - per far grip each link (DK, cast, landing, distance to the spot before and after) and `relay` rows; a
+    Death Grip whose 49576 triggered no 49560 from its caster within 5 ms flagged `no pull`, tallied per
+    caster.
+  - heroic, per submerge each kite sphere downed from 30 s before he went down, its spend and the kite it
+    ended, under 15 s in flagged, a spike that came up with no kite patch down flagged, the kite patches
+    on the floor as he went down, under 2 flagged, and allowance 0 with no `allow` rows.
+  - each grip landing's yards to the other side's patch, or to a sphere its earlier grip landed that it
+    latched later, under 20 flagged `never latches`, and each heroic kite sphere's yards to the nearest
+    tank patch as it came down, under 30.75 `near`.
+- `--burrowers`:
+  - life, submerges, share of samples within 6.4 yd of a Permafrost centre, Shadow Strike casts and
+    whether 66134 damage followed, `interrupter`; each burrower's time holding `focus` and the share of
+    living DPS bot samples on it meanwhile; `dps`.
+  - each burrower's exit, side at the spawn then each owner after (a dead side tank moves them all, so
+    the last says little), seconds to the first tank and to its owning side's tank, the spawn side tank's
+    distance from its spot, per wave the focus start against the next wave, DPS bot casts at a burrower
+    other than the held `focus` (by caster and spell; triggered ones, humans and casts during the
+    target's Shadow Strike left out) and each `focusdue` drop with the focus still sampled.
+  - per burrower when it came up and whether it died inside 30 s, counted per wave, per `focus` pick its
+    seconds since it came up and distance to the nearest side tank and patch (flagged `before its tank`
+    unless a tank within 5 yd has it or it is under 10%), per burrower held on a side tank its median
+    distance from that side's patch centre, `sidetank` `gather` and `mstand` rows.
+  - per submerge where it went under, the nearest patch, patches alive, its side tank alive and how far,
+    its target (pets and ghouls as "Name (Owner)") and why it could go under.
+  - each opener (the encounter's own creatures skipped) and the three players nearest its exit at the
+    spawn.
+  - `focus0`/`focus1` with a side column (older traces `focus`, side `-`), the share on a focus
+    over its side's group, a cast off focus only when neither side's focus held it, and says when
+    `focusdue` is absent.
+  - each burrower pulled off its side tank by a non-tank within 15 s of coming up, with the seconds it
+    had held and the puller's casts on it in the 3 s before, triggered ones marked `*`.
+  - per wave and side the seconds from coming up to its first `focus0`/`focus1` pick and the side tank's
+    peak Expose Weakness to the next wave; in phase 3 the `p3wave` rows (merged over bots), when the wave
+    died and each side tank's fate.
+  - each side tank Righteous Defense that took the other side's burrowers, with the member's health (CR
+    Elemena 100%).
+  - side changes after a burrower's first owner with both side tanks alive, per phase (CU P1c 4, P3 6).
+  - Bladestorm casts with a burrower within 25 yd, `anubarak burrower guard` vetoes on it, `anubarak
+    burrower threat cap` vetoes per bot.
+  - each run of 3+ burrowers on one side tank with its taunts in the second before (Righteous Defense
+    once per burrower) and, per phase, the samples with the two sides' burrowers within 12 yd.
+  - each tank taunt onto a burrower kept or lost 1.5 s after its 3 s, by its yards at the cast, within 40
+    and beyond, and the lost ones with no hit from the tank inside them (a cast at it, or a side tank
+    area spell with it within 11.5 yd); each Bladestorm's burrower closest over the spin, inside 9.5 yd
+    flagged.
+  - each pulled-off burrower's seconds until a tank had it back and the taunt that did it.
+  - per melee bot the seconds on a burrower no tank within 5 yd held, by `anub.dps` (BK-BN 14-36 s, about
+    70% `loose`).
+  - per heroic phase 3 focus pick its depth from the nearest centre, the phase 3 ring's reach and its
+    side's melee on it.
+  - `anub.dps` `capped` rows per ranged bot.
+- `--threat`:
+  - per surfaced window: his target by role, time from each emerge to a tank; his legs, runs of samples
+    flagged moving of 2 yd or more start to stop, their yards and reversals past 120°; his median
+    distance from the drag anchor over samples with both tank patches latched, before the window's first
+    `submerge` row; taunts on him, Righteous Defense counted when its friend was his victim, split bot
+    and human; `pickup` and `anubarak threat cap` veto rows per bot.
+  - the main tank's share of samples inside 7.5 yd of a patch and his distance to each tank patch at
+    every submerge, under 25 yd flagged.
+  - per window the longest stretch 10+ yd off the anchor with no drag leg, cut at the first submerge leg,
+    10 s or more listed.
+  - when the submerge drag left, and each Freezing Slash on its tank from 3 s before it set out (pre-step
+    or `subhold` included; CR +1.5 s, CS -0.4).
+  - drag pre-steps (counted as legs) and `subspot` rows per window with how far he went down from the
+    last spot, `no submerge leg` (no `submerge` or `prestep` row after its first search) with its
+    `subhold` rows.
+- `--dps`: per phase and role (bots) the share by target kind, moving, yards a bot split by the `by` of
+  the last `move` row within 4 s (steps under 0.3 or over 30 yd left out), damage per second by target
+  kind; his health lost per phase 1, under 20% flagged; `dps` rows per role; each `dside` group per wave;
+  melee walks across the midline between `spot0` and `spot1` (5 yd either side counts as neither), into
+  the other group's half flagged `astray`; per phase 1 its first `push` with his health and seconds left,
+  the submerge drag after it with its `drag` row, and whether phase 3 or a submerge ended it.
+- `--swings`: per phase, role and move pair the walks to one goal, 8+ yd off to another and back within 5
+  yd inside 15 s, with yards (CC P2 melee gather/stand 47, P1b side tank ready/follow 42).
+- `--frost`: seconds carrying Permafrost (the 67857 `aura` stream) per group (main, side and other tanks,
+  melee, ranged, heal; humans left out) and bot, he up and down, every stint over 3 s with its target at
+  the start, `leave` counts.
+- `--tanks`:
+  - per wave and side tank the Expose Weakness peak and seconds at 5+, each `defensive` with its stack
+    and health (a magic-only one on a side tank flagged), each tank death with damage by source, heals
+    and absorbs in the 12 s before, each tank's defensives from its cast rows (`anub.defensive` writes
+    only on a change).
+  - each run of the main tank's Expose Weakness: its peak, the burrowers on him at a stack (the shared
+    aura's row names only the first caster), his area casts from 5 s before.
+  - a tank form or stance (Dire Bear, Bear, Defensive Stance, Righteous Fury, Frost Presence) lost while
+    he is up and not at a death, with the `act` row and prerequisite that dropped it and when it came
+    back.
+  - side tank area casts per surfaced phase by spell (triggered ones left out) and `saoe` rows, and per
+    side tank ground area the burrowers on it at the cast inside each second (Death and Decay on their
+    midpoint within 15 yd), empty half its duration flagged.
+  - per side tank and area spell its `anub.saoe` picks, its casts, and the area threat or rotation cast
+    `FAILED` under that pick.
+- `--healers`:
+  - per healer and phase the median distance to the main and each side tank, seconds over 35 yd from a
+    side tank a burrower is on, `follow` rows, each engine's pass count (no row names the engine per
+    tick, so a total), `raid healer engine` in the coverage, `hstand` rows, per side tank and the main
+    tank the seconds with no healer within 40 yd.
+  - each bot paladin's `toc.aura` seconds per resistance, a tank on one flagged.
+  - each healer's first `hbehind` `go` and the seconds until it stood at its stand (`hstand` `hold`,
+    under 1.5 yd in 1 s), and each burrower within 5 yd of a healer in phase 3 with no step from its exit
+    or emerge within 7.5 yd of a Permafrost centre.
+  - per side tank its phase 3 seconds with under 2 living healers within 40 yd, each stretch of 0.5 s+
+    with its move rows' `by` from 6 s before.
+  - a healing table per phase on Warcraft Logs' rules (effective plus absorbs to the shield's caster,
+    overheal over gross, HPS, share; pets and totems to their owner); the trace has no heals onto pets
+    and no swarm heal on him.
+  - each healer's mana at phase 3's start and 30 s in, and its Divine Plea, Innervate (with target) and
+    Hymn of Hope casts by phase.
+  - per warlock and mage bot its mana at phase 3's start and 30 s in, and its Life Taps and Evocations
+    from his 40%.
+- `--swarm`:
+  - phase 3 length, 66240 per bot, lust against the phase 3 start; per 5 s his health, the median tank
+    and non-tank health, the swarm and the healers' heals onto tanks, carriers and others; bot heals cast
+    onto a non-tank with no Penetrating Cold, a healer itself included, items left out; DPS samples on
+    him and on burrowers up at its start or newer; those burrowers' last death against lust and `burst`
+    `open`; bot burst cast from his 50% (the code's `ANUBARAK_BURST_HOLD_PCT`) to phase 3, flagged unless
+    `behind`; Penetrating Cold windows and heals onto the carriers, `defensive`, deaths.
+  - each healer's phase 3 seconds under 5% health and its lowest, a death to a swarm tick of 250 or less
+    flagged (CV Prayer, Tree, Holylight).
+  - per Penetrating Cold carrier in phase 3 its seconds with no HoT or shield of those carried, a death
+    flagged.
+  - the `swarmheal` counts per healer, `healduty` and `coldheal` spans, and per phase 3 Penetrating Cold
+    wave its first ticks survived, the frost holder, Aura Mastery up at ticks 1-2, `mastery` rows, the
+    resisted share per tick and per carrier its health at the landing, its margin at the first tick (the
+    reader's own risk model: health × (1 − drain)³ against the tick, no absorbs or timers; a survived
+    tick's margin clamped to 0, the pool read at first sight), fate, heals and absorbs before it by
+    source and its `coldheal` healer; a herd is 2+ healers' heals on one carrier within 1.5 s while
+    another at risk got none; each phase 3 Lay on Hands, Pain Suppression, Guardian Spirit and Hand of
+    Sacrifice with its target's health and its caster dead within 10 s, and the tank dips under 35% with
+    the first of them onto it, else whether it died.
+  - per class the phase 3 Penetrating Cold windows with the carrier's own save inside, and `coldself`;
+    per class save and heal item of the self save hold its phase 3 casts by non-tank bots carrying
+    Penetrating Cold, a burrower on it, or neither, and the hold's vetoes per bot.
+  - per non-tank its effective heals received a second alive by kind (healers, own, Judgement of Light,
+    Vampiric Embrace, Healing Stream, other, items), the swarm's drain, `bare` (less the healers, the
+    items and a healer's own; under 0.3 flagged `short`), `gap` (the longest stretch alive with no
+    Healing Stream or Vampiric Embrace tick, 5 s+ flagged `long`, - with none; CQ Holylight 16.0, Elemena
+    12.6, Prayer 7.5) and the party heals that reached it, the HoTs cast onto a non-tank under 1.2k with
+    no Penetrating Cold (their ticks left out of the breach line), Judgement of Light's uptime on him
+    read off the casts (a creature aura, never recorded: 20 s each, cut at that paladin's next
+    judgement), each paladin's judgements, `judge` rows, and each shaman's water totem at phase 3's start
+    and 10 s in.
+- `--scarabs`: scarabs alive at each emerge +0/10/20/30 s with targets, the main tank's Mandibles stacks
+  then, lives per phase, Mandibles damage and peak stacks per player per phase; per victim its Mandibles
+  stacks gained moving or standing with the median gap to the scarab, and the seconds one within 15 yd
+  was on it by `scarabkite` (CA Trueshot 5 moving, 4 standing, median 5.8 yd).
+- `--redirects`: each Misdirection and Tricks with caster, recipient, the caster's target and a
+  burrower's target 1-8 s on.
+
+Caveats:
 
 - **A `patch` outcome is an inference:** the mark came off with no Impale and no death. A patch seen
   going within 3 s confirms it; an immunity reads the same without one. `emerge` is a mark that
@@ -1955,3 +1827,157 @@ but no tank patch for 15+ s while he was up with burrowers out.
   full, after 5 s unsampled or as a 15-point jump, and its Permafrost as its distance from a
   Permafrost centre: 6 yd plus its own size, the core's 0.389 default since its display has none,
   not a player's 1.5.
+
+Baselines:
+
+- 2026-10-26 25H wipes C, D, E: Hand of Protection on a slower spike C 1:22, E 1:22 and 1:47; patches
+  spent in `run` C 1:57, 4:13, D 2:03, E 1:44; 10-13 players within 20 yd at each first submerge; `raid
+  healer engine` absent, healers 13-19 yd from the main tank with 7-45% of passes on the non-combat
+  engine; Anti-Magic Shell on a side tank 5 times.
+- 2026-10-26 late 25H wipes F, G, H: Misdirection 18/17/28 all to the main tank, Tricks 22/18/27 with 19/12/19
+  to melee DPS; openers on a non-tank 23/24, 22/24, 26/32; main tank Mandibles stacks at the emerges 11,
+  4 / 9, 13 / 0, 10, 7; raid Mandibles a phase 1 443-829k; pursuit patch-pass p90 0.3-0.4; flip-flops G
+  Mighty 2:09, H Prayer 6:16 (and four short ones); paladin past 30 yd at 3 of 5, 2 of 3, 1 of 5 kites.
+- 2026-10-27 25H wipes I, J (`1496982cf`): his health a phase 1 I 24.8/13.7/14.3/14.8%, J 19.6/16.1/4.0%;
+  melee 142-255 yd a bot a phase 1, moving 24-59%, 17-55 midline crossings; ranged 27-43 yd; held off J
+  P1c 64.8 s.
+- 2026-10-27 afternoon 25H wipes K, L (`8145d288f`): his health a phase 1 K 22.0/19.1/17.7/9.2%, L
+  20.8/21.5/11.7/11.6/3.4%; melee 105-218 yd a bot a phase 1; kites K 10, L 13, L's four deaths with a
+  patch unused (Prayer 1:22 and 8:51, Druidica 3:44, Stormweaver 8:29); K 1:22 Power's spike 14.2 yd from
+  a tank patch 8.7 s in, never turned; Impale ×6 on Felesta K 6:57; the main tank at Expose Weakness 5 L
+  3:31.
+- 2026-10-27 evening 25H wipes M, N (`5d6963920`): his health a phase 1 M 25.1/17.3/3.9/0.4%, N
+  25.6/12.3/4.1%; the first tank patch of each submerge M 11.9/7.1/15.2 s, N 15.2/10.2 s into phase 2;
+  patch walks taken M 3/3, N 2/2; kite deaths M 7 of 15 (a human's first, then 5 in the gather), N 3 of
+  9; far grips 46-49 yd off side 1's spot; N P1b drag held 56.3 s.
+- 2026-10-27 night 25H wipes O 4:17 (59.8%), P 8:08 in phase 3 (28.4%), Q 6:54 (43.1%) (`fdb3a950f`): his
+  health a phase 1 O 23.6/16.4, P 23.9/19.1/17.8/8.9, Q 24.2/20.9/11.8%; tank patches spent a submerge O
+  1/1, P 2/1/2, Q 2/1/1, 5 of the 14 in `run`; the first of each submerge O 13.7/11.9, P 37.9/15.9/18.6,
+  Q 14.4/15.2/14.4 s into phase 2; kite deaths O 2, P 2, Q 5; flip-flops O 2, P 2, Q 3; Death Grip with
+  no pull Q Felesta 2 of 7, Obliteration 1 of 4, Deathsong 1 of 2.
+- 2026-10-28 morning 25H wipes R 8:13 in P1d (36.1%), S 6:01 (43.9%) (`4cad7660b`): the first tank patch
+  R 33.9/27.9/10.3, S 33.9/5.7 s into phase 2; kiter deaths R 0, S 4; gather/dodge swaps within 1.5 s R
+  1,555, S 427; Impales on bystanders R 7, S 5; runs of 3+ burrowers on one side tank R 8, S 7; the two
+  sides' burrowers within 12 yd S P1b 99 of 200 samples.
+- 2026-10-28 evening 25H wipes T 0:48 in P1, U 5:23 in P1c (56.8%), V 9:03 in P3 (15.7%) (`076b7ce55`;
+  main tank human in T and U): tank patches spent a submerge U 1/2, V 2/2/0 (no sphere left for V P2c, 3
+  kiters dead there); kiter deaths U 1, V 4; hand kites with the escort within 30 yd at the claim U 1 of
+  3, V 2 of 4; main tank with no healer in 40 yd T 8.8 s.
+- 2026-10-29 25H wipes W 6:53 in P2c, X 8:27 and Y 8:33 in P3 (`32ba6602d`; main tank and Deathsong
+  human): boss at the third submerge W 35.5, X 42.2, Y 35.3%; tank patches spent a submerge W 2/2/1, X
+  2/1/1, Y 2/2/1, every sphere; a side bare with burrowers out W 81, X 87, Y 84 s; kiter deaths W 1, X 1,
+  Y 0, all in P2c; Hand within 1.1 s of the catch in 9 of 9 patch+hand kites.
+- 2026-10-30 25H wipe Z 6:55 in P2c (`e131b1990`; Ecoterrorist the bot main tank, Deathsong human, 4
+  healers): boss at the third submerge 47.3% (phases 1 -23.2/-17.3/-12.1); side-tank deaths 4, 3 in the
+  40 s drag; no tank patch spent by a kite; no kite patch down as P2's and P2c's spikes came up;
+  flip-flops Justice 6:06.9, Tree 6:34.3; Hellflame's teleport at 4:25.8 landed 25.6 yd off the spike.
+- 2026-10-30 25H wipe AA 7:05.6 in P3 at 15.7% (`f87f49475`; as Z): two submerges, phases 1
+  -26.0/-22.1/-21.9, phase 3 at 5:56.5; Bulwark pulled him at 21.2 yd; in phase 3 his net loss 0.14%/s
+  for 25 s, then 0.42%/s, swarm 3.61M (non-tanks 2.89M), healer heals onto non-tanks 1.98M against 0.96M
+  onto tanks, DPS on burrowers 35% melee / 48% ranged, 42 burst casts in P1c, the three tanks dead
+  6:35-6:43, 31 deaths.
+- 2026-10-30 evening 25H wipes BA 8:29 in P3 at 26.8% (three submerges, P1c -19.5%) and BD 7:15 in P3 at
+  7.0% (`06fd22497`; Ecoterrorist and Deathsong human): BD phases 1 -27.3/-20.4/-22.1, phase 3 30 → 7.0%
+  in 78.8 s, Heroism at +15.3 s; one kite patch down as he went under in each of BD's submerges.
+- 2026-10-30 night 25H wipes BF 6:51 at 15.2% (`06fd22497`) and BG 6:55.8 at 14.3% (refine-17 without the
+  10 yd step; as BA): BG no death before phase 3, six kites, no kiter death, side tanks' area casts every
+  phase, phases 1 -30.9/-20.4/-18.5; its first kite spent tank patch 1 (he went down 17.8 yd off it under
+  the human main tank). Phase 3 from the Chronicle logs (`log_file` d242a72b BG, fd225ee8 BF): BG 66.4 s,
+  7.48M to him (113k/s), the swarm healing him 1.94M (29k/s); BF 54.1 s, 7.45M (138k/s), 2.20M (41k/s);
+  his phase 3 pool is 10.6M (35.35M = DB 27.19M ×
+  `AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_HEROIC_BOSS_HEALTH` 1.3), so about 110-125 s at that damage. Raid
+  healing the first 30 s 70k HPS (Holylight 22-24k, other healers 7-10k, non-healers 18-21k). BG's
+  healers died to Penetrating Cold from +29 s (Holylight, Prayer, Elemena), then the tanks; carriers
+  surviving their first tick 9 of 20 (5/2/2/0 a wave). BF's healers died to burrowers (6:30.8-6:34.8,
+  refine-16's healer stand). A real 25H kill's healing table (Warcraft Logs, 90.8 s): five healers
+  24.0/9.9/9.0/7.2/5.8k HPS at 1-16% overheal, non-healers 19.5k, 75.5k in all, so throughput matched;
+  the gap was who got healed in the 3 s before a first tick.
+- 2026-10-31 evening 25H pulls BH (wipe 7:05.5 in phase 3 at 11.5%), BI (reset in P2b at 4:51.8, 49.1%,
+  every patch spent) and BJ (reset in P1c at 5:01.5, 55.7%) (`a27289245`; Ecoterrorist and Deathsong
+  human): first kites spent a kite patch BH 7.9, BI 8.7, BJ 4.6 s in; BI P2b both tank patches (Angry 4.5
+  s, Assasin 13.7 s); BJ Obliteration 4.1 s in side 1's slow, Assasin's Vanish 19 yd from the gather
+  handing the spike to two Ice Blocks, Druidica dead with no Hand within 39 yd, Elemena's spike restarted
+  11 yd off a tank patch and spent it in 0.9 s. BH phase 3: 11 of 15 carriers through their first tick,
+  no healer dead to Penetrating Cold, Aura Mastery at 6:12.959; Felesta dead 5:54.2 at 9 stacks, wave 6's
+  focus 14 s late, 41.5k in her last second; wave 7 (6:22.2) left to the side tanks, who died 6:30.7 and
+  6:34.8.
+- 2026-10-31 late 25H on the new [kite planner](#the-kite-planner) (BK 649_2_anub-arak_1793481371 wipe P3 6:58 18.7%, BL
+  …481941 wipe P3 8:39 14.6% after a third submerge, BM …482612 reset P1c 6:00 46.3% with both side 1
+  tank patches lost, BN …483135 wipe P3 7:35 15.4%): fresh kites ended on a kite patch 13.5-17.3 s in,
+  `--kitesim` matching (BK median 14.5 against 14.3), no bot kite passing a tank patch, patch ends under
+  10 s 1, 2, 0, 0. Own immunities ended 8 kites at 13-18 s, 6 with 15+ s of life left; speed boosts went
+  3 times on base-speed spikes; 13 kites planned a Hand, 2 landed; main tanks died 26-51 s into phase 3.
+- 2026-11-01 25H on refine-20 (`ce5fdfc39`; Ecoterrorist a bot; BO …524813 wipe P1c 6:04
+  35.7%, side tank Felesta dead 2:54 to burrowers at 9 Expose Weakness, main tank 5:23; BP …525315 P1c
+  ended at 30.4%, wipe P3 7:44 25.9%, P2c with no kite patch): fresh kites ended on a kite patch
+  13.5-17.3 s in or `patch+hand` 18.6-21.3, no tank patch spent, no next leg past a patch, 5 Hands cast
+  0.0 s after the claim; 4 of 5 own immunities 1.5-3.6 s in on base-speed spikes, BP Felesta's walk-in,
+  BO Fel's refused Hand.
+- 2026-11-01 25H on refine-21 (`297f14857`; BQ 649_2_anub-arak_1793557563, P1c ended at
+  33.7%, third submerge, wipe P3 9:35 7.5%): 7 kites, 0 Impales, 4 patch ends 13.5-24.9 s, 3 runs to
+  the emerge 20.2-28.9 s; the behind stands latched empty at 6:00 (as BP) so no healer walked behind in
+  P3; Holylight died to a wave 9 burrower, then both side tanks.
+- 2026-11-02 25H on refine-22 (`5ed464d7f`; BR 649_2_anub-arak_1793574219 P3 from 30.0% at
+  5:49, wipe 6:53 19.7%; BS …574963 P3 from 30.1% at 5:51, wipe 6:38 21.4%): 6 kites each, every
+  Nitro and Dash on its pick's second, BR 0 Impales; BS Tree's flinch the only kite death. Phase 3 is
+  the open race: BR held him at 27.5% 5:59-6:14 while DPS spent 48% of samples on the 4 burrowers
+  carried in, BS lost both side tanks 10-12 s in.
+- 2026-11-02 25H on refine-23 (`8772f7e75` and the upstream merge; BT
+  649_2_anub-arak_1793641400 P3 from 30.0% at 5:49, wipe 7:23 17.8%): 6 kites, 0 Impales on kiters, no
+  death before P3. P3 opened on wave 6's burrowers, both side tanks at Expose Weakness 6-8, their
+  defensives spent in P1c: Felesta 100% to dead 5:51.5-5:55.7 (73k, only her own Death Strike healing
+  her), Bulwark at 22% meanwhile.
+- 2026-11-03 25H on refine-24 (`9b42ae717`), `649_…`: BU `2_…1793655469` (third submerge at 31.1%,
+  no kite sphere left, 3 kiters dead to Impale), BV `54_…1793659375` and BX `54_…1793660225` (reset after wave
+  1-2 burrowers killed Bulwark, Trueshot, Tree, Assasin), BW `54_…1793659605` (P3 from 30.1% at 5:52.9, wipe
+  7:03.7 at 18.6%), BY `54_…1793660401` (P3 from 30.0% at 7:23.4 after P2c, wipe 8:36.9 at 21.4%). Both P3s
+  opened on a wave up 11-16 s, killed in 25.5 and 36.9 s while he went 30.0 → 29.5% and → 30.8%; the next
+  landed +29 and +34 s; the main tank died +34.5 and +49.6 s, the raid within 25 s more. Roster damage
+  155-195k/s, about 166k/s net on him once a wave is dead; healers 10-19k/s each while alive.
+- 2026-11-03 25H pulls on `9f9731e30`: BZ reset at 1:24.1 (Elemena and Felesta dead to burrowers); CA
+  phase 1s 25.3/20.7/22.8% (P1c to 31.0%), phase 3 from 30.1% at 7:16.6 for 118 s, wipe 9:14.7 at 12.7%;
+  warlocks Life Tap 8 each from his 40% at 5:40.8.
+- 2026-11-04 25H pulls on `45e2f6963`, `649_54_anub-arak_…`: CB `1793794923` push `on:21:29` at 42.4%,
+  phase 3 from 30.1% at 5:58.5, wipe 7:40.0 at 21.1%; CC `1793795524` `on:28:29` at 43.7%, phase 3 at
+  5:59.9, wipe 7:33.6 at 12.8%; both wipes burrowers after a side tank fell, phase 3 pace 0.089 and
+  0.184%/s against the 0.125 the Berserk needs.
+- 2026-11-04 25H on refine-27 (`fa41b0760`), `649_54_anub-arak_…`: CD `1793813520` (main tank dead
+  0:29, wipe 6:05 at 30.2%), CE `1793814021` (P3 from 5:51, wipe 7:43 at 6.2%), CF `1793814928` and CG
+  `1793815172` (reset 1:59 and 1:44, side 1's tank patch spent in P2), CH `1793815405` (P3 from 5:47.8, wipe
+  8:25 at 9.4%). Every submerge of CD, CE, CH spent both kite patches, the first 19.5-26.6 s and the second
+  38.5-47.3 s into phase 2, each kite 13-22 s in; Hands cast 1, 1, 0; no Demonic Circle teleport; shot kite
+  patches 19.1-84.9 yd off the nearest tank patch, three under 30.
+- 2026-11-04 25H on refine-29 (`391288e51`), `649_3_anub-arak_…`: CJ `1793826735` (P3 from 5:50.5,
+  wipe 7:49.8 at 4.8%), CK `1793827587` (P3 from 5:40.4, wipe 7:10.9 at 8.9%), no death in phases 1-2. Felesta
+  first dead in both (CJ 7:16.7, CK 6:27.1); side tanks under 2 healers within 40 yd at the first phase 3
+  wave CJ 3.5 s, CK 3.8 + 3.1 s (CI 5.3); Death and Decay 6/6 and 6/7 cast, 0 `FAILED`; burst from his 50%
+  to phase 3 CJ 35 (13 not `behind`), CK 15 (11).
+- 2026-11-04 25H on refine-30 (`63ade6a51`): CL `1793831836` (Ecoterrorist dead 0:29.3 to a
+  first-wave burrower and his 37.7k swing, rezzed; P3 from 5:55.8, wipe 7:48.8 at 5.9%), CM `1793832446`
+  (P3 from 5:45.6, wipe 7:37.8 at 9.1%). First phase 3 deaths CL Mighty 6:31.8, Elemena 6:54.8, Prayer
+  7:03.8; CM Felesta 6:43.0, her burrowers then four more; burst released `behind` at his 50% in both;
+  phase 3 Righteous Defense all within 40 yd; carriers' own saves CL 5, CM 2.
+- 25H on refine-31 (`cb42837b9`): CN `1793918278` (wipe 7:30.2 at 11.6%, Felesta dead to
+  her burrowers 6:40.6 and again 7:10.4), CO `1793918863` (wipe in P1c at 50.3%: Stormweaver and
+  Malediction impaled kiting, Ecoterrorist dead 4:53.8 to Freezing Slash and a 21.4k swing), CP
+  `1794147150` (Holylight and Prayer with no party heal dead to the swarm 6:27.8-7:18.8, wipe 7:52.3 at
+  4.2%), CQ `1794147772` (kill 8:03.2; Trueshot and Prayer dead to the swarm, Angry, Prayer and
+  Nightwarrior to Penetrating Cold, Stormweaver to a scarab at Mandibles 9 in P1c). Phase 3 side tank
+  under 2 healers CQ Felesta 0.2 s; F-list saves on bots carrying neither 1; mages 74-76% mana 30 s in;
+  first Penetrating Cold ticks survived 31 of 35; herd rows 6.
+- 25H on refine-32 (`44b6dcaa0`): CR `1794263639` (wipe in P1c at 48.4%: he went down by
+  side 0's patch, spent 1.6 s into the first kite; Obliteration, Bulwark, Hellflame and Malediction
+  impaled; 5 burrower submerges with their tank alive; Bulwark dead 5:01.2 under four, the main tank
+  5:07.96 to Expose Weakness from a loose one), CS `1794264114` (kill 7:19.3, no deaths). CS: no circle
+  summon in the first 10 s, 15 `hot` casts, herd rows 2, the two sides' burrowers never within 12 yd.
+- 25H on refine-33 (`0ff058cb1`): CT `1794829976` (kill 7:27.4, one death), CU `1794938939`
+  (kill 8:10.1: side 1's patch spent at 4:41.7 ([the move](#the-kite-planner)), re-latched 71 yd off its spot; phase 3 healers
+  40-47 yd from one side tank for 90-104 s, Elemena and Felesta dead to burrowers, four to the swarm
+  and Penetrating Cold; phase 3 142.3 s against CT's 104.0). Both: no escort under a burrower, no
+  Righteous Defense take, no burrower submerge.
+- CV `1795027085` (2026-11-18, the upstream-PR cleanup's clear; refine-34 live): wipe in phase 3, `.die`
+  at 4.7%. The cleanup kept behaviour: renames and `inline` constants only, c5's group memos fill what
+  the old walks tested, the same 82 nodes as CT, the other four bosses killed. Phases 1-2b clean, boosted
+  kite move points 10.7 yd ahead (median). Phase 3: Prayer, Tree and Holylight died to the swarm's
+  minimum tick (see `floor`), then their cold carriers; healers under 5% in phase 3: CT 3-15 s each
+  (down to 1.25%), CU 7-29 s (Prayer dead to a 190 tick at 7:31).
