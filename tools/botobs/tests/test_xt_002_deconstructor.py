@@ -350,6 +350,11 @@ class Bombs(unittest.TestCase):
         self.assertIn("  after Heartbreak 1 bombs hit 2 other raiders, 1 dead within 5 s; melee carriers' 1 hit 2\n",
                       printed(xt.show_bombs, load(records)))
 
+    def test_a_tank_carrier_counts_with_the_melee_lot(self):
+        records = self.bomb_pull(sent=False)
+        records[0]["roster"][-1]["r"] = "tank"
+        self.assertIn("melee carriers' 1 hit 0\n", printed(xt.show_bombs, load(records)))
+
     def test_no_bystander_line_without_heartbreak(self):
         records = [rec for rec in self.bomb_pull(sent=False) if not (rec.get("e") == "cast" and rec.get("sp") == 64193)]
         self.assertNotIn("after Heartbreak", printed(xt.show_bombs, load(records)))

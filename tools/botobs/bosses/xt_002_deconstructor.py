@@ -82,6 +82,8 @@ BOMB_DEATH_MS = 5000
 BOMB_HIT_MS = 1000
 # the splash on everyone else near the carrier, 0-500 ms after the aura's removal
 BOMB_SPLASH = (63025, 64233)
+# tanks are melee to `PlayerbotAI::IsMelee`, so their bombs go to the melee lot too
+MELEE_LOT_ROLES = ("melee", "tank")
 # the point at the end of an `xt002.slot` note, "<slot>/<of> x,y,z"
 SLOT_POINT = re.compile(r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),-?\d+(?:\.\d+)?$")
 SEARING_LIGHT_SPOT = "ULDUAR_XT002_SEARING_LIGHT_SPOT"
@@ -732,7 +734,7 @@ def bystanders_line(trace: Trace, bombs: list[dict], deaths: list[dict]) -> str 
             continue
         victims = {rec["d"] for rec in splashes
                    if rec.get("d") != bomb["g"] and 0 <= rec["t"] - bomb["until"] <= BOMB_HIT_MS}
-        melee = trace.role(bomb["g"]) == "melee"
+        melee = trace.role(bomb["g"]) in MELEE_LOT_ROLES
         total += 1
         melee_bombs += melee
         hit += len(victims)

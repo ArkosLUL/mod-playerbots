@@ -407,7 +407,7 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
     cellX = cells.front().x;
     cellY = cells.front().y;
 
-    bool const wantClear = cells.front().clearOfRaid;
+    bool const wantClear = cells.front().reachable && cells.front().clearOfRaid;
     float nearestDistance = std::numeric_limits<float>::max();
     for (Cell const& cell : cells)
         if (cell.clearOfRaid || !wantClear)
