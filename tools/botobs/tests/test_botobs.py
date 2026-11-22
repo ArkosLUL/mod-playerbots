@@ -1144,6 +1144,17 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.damage_band(guardian, None, False), "guardian ?")
         self.assertEqual(yogg_saron.damage_band(None, None, False), "other")
 
+    def test_room_entry_is_the_first_live_sample_inside_after_the_pull(self):
+        x, y = yogg_saron.BODY
+        door = x - 84.0
+        samples = {
+            1: [(-5000, x, y, 100.0), (2000, door, y, 100.0), (9000, x - 21.5, y, 100.0)],
+            2: [(1000, door, y, 100.0), (60000, door, y, 100.0)],
+            3: [(1000, door, y, 100.0), (8000, x - 2.0, y, 0.0)],
+            4: [(1000, door, y, 100.0), (90000, x - 21.5, y, 100.0)],
+        }
+        self.assertEqual(yogg_saron.room_entries(samples, 80000), {1: 9000, 2: None, 3: None, 4: None})
+
     def test_roar_verdict_needs_a_press_and_no_silence(self):
         self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
         self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")

@@ -223,6 +223,9 @@ inline constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 inline constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[5] + ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
 
+// Sara starts the fight on any player within 90 yd, so a bot between this and the room radius is at the door.
+inline constexpr float ULDUAR_YOGG_SARON_P1_DOOR_RADIUS = 90.0f;
+
 // Melee/tanks stay within 6.5 yd of Sara (21.5 less 15): a nova beyond it hits the 21.5 yd back line, a kill beyond 15
 // does nothing. Release is the cloud-free radius: anything between lets go of the bot where the innermost orbit sweeps.
 inline constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
@@ -934,6 +937,13 @@ bool YoggSaronGuardianOnTheStack(Unit* guardian);
 
 // Inside ULDUAR_YOGG_SARON_P1_ROOM_RADIUS. Plain distance, no sweep, so it goes ahead of the phase read.
 bool YoggSaronInPhase1Room(Player* bot);
+
+// No real player in the raid group on this instance, so nobody leads the raid into the room.
+bool YoggSaronBotLedRaid(Player* bot);
+
+// Where the phase 1 station, leash and walk guard take a bot: inside the room, or at the door of a bot-led raid, which
+// walks in by itself. Group scan only between the two radii.
+bool YoggSaronInPhase1Approach(Player* bot);
 
 // Record a Guardian's death, from the spell hook that sees its 65719 go out.
 void YoggSaronNoteGuardianDeath(Unit* guardian);

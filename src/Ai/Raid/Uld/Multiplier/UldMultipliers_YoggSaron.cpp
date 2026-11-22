@@ -368,7 +368,8 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
 
     // Plain distance and height before any sweep: this weighs every reach in Ulduar, and the brain room
     // sits under the middle of the platform.
-    if (!YoggSaronInPhase1Room(bot) || bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+    if (!YoggSaronInPhase1Approach(bot) ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
     // After phase 1 no station or leash keeps a step-out and the body detour hauls it back: hold on Fervor's radius.

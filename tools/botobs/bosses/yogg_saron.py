@@ -751,8 +751,37 @@ def show_room_gate(trace: Trace, p1_end: int) -> None:
             outside[rec["by"]] += 1
 
     counts = ", ".join(f"{mover} {count}" for mover, count in outside.most_common()) or "none"
+    # With no human in the raid nobody leads it in, so the station and leash walk it in from the door.
+    led = "  (bot-led raid: the walk in from the door)" if outside and not trace.humans else ""
     print(f"  moves begun outside the room (over {P1_ROOM_RADIUS:.1f} yd, "
-          f"{ROOM_GATE_SLACK:.1f} yd slack): {counts}")
+          f"{ROOM_GATE_SLACK:.1f} yd slack): {counts}{led}")
+
+    roster = roster_guids(trace)
+    entered = room_entries(tracks(trace, roster, cols=("t", "x", "y", "hp")), p1_end)
+    by_role: dict[str, list[int]] = collections.defaultdict(list)
+    never = []
+    for guid, when in entered.items():
+        if when is None:
+            never.append(trace.name(guid))
+        else:
+            by_role[trace.role(guid)].append(when)
+    if by_role or never:
+        print("  inside the room after the pull:")
+        for role, times in sorted(by_role.items()):
+            print(f"    {role:7} {len(times):2}  median {clock(int(statistics.median(times)))}, "
+                  f"last {clock(max(times))}")
+        if never:
+            print(f"    never inside alive in phase 1: {len(never)}  {', '.join(sorted(never))}")
+
+
+def room_entries(samples: dict[int, list[tuple]], p1_end: int) -> dict[int, int | None]:
+    """Per guid, the first (t, x, y, hp) sample from the pull to the end of phase 1 that is alive and inside the
+    room, or None for a bot that never got there alive."""
+    out: dict[int, int | None] = {}
+    for guid, pts in samples.items():
+        out[guid] = next((t for t, x, y, hp in pts
+                          if 0 <= t <= p1_end and hp > 0 and math.dist((x, y), BODY) <= P1_ROOM_RADIUS), None)
+    return out
 
 
 def show_handover(trace: Trace) -> None:
