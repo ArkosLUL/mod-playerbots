@@ -30,7 +30,8 @@ His 2 s swing before armour and Inhaled Blight: 35.2-48.5k / 57.5-79.2k / 54.4-7
 2 s attack time).
 
 His boss state moves to `IN_PROGRESS` only once Putricide reaches his balcony point, about 7 s in, so
-the trace opens on the engage and every bot rule reads his combat, not the state. He obeys taunt
+the trace opens on the engage and every bot rule reads his combat, not the state, with the bot within 60
+yd of his spawn (his boundary lies 55-63 yd off it). He obeys taunt
 diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is x 4205-4325, y
 3082-3195.
 
@@ -41,12 +42,15 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   legs, and while it holds him trades stands with the tank-spot tank carrying the most Gastric Bloat.
   Generic taunts are blocked while he fights. Once the holder carries 9 Gastric Bloat, or a non-tank
   holds him, the bot tank with the fewest stacks, at most 7, taunt ready in its form within 30 yd, taunts
-  him, one on a tank spot before a third tank. A tank not holding him stops attacking him at 90% of the
-  holder's threat, its pickers and its area damage near him held, until under 80%. A human partner is
+  him, one on a tank spot before a third tank; nobody does while a taunt aura is on him, since one just
+  landed and his victim catches up next update. A tank not holding him stops attacking him at 90% of the
+  holder's threat, its pickers and its area damage within 14 yd of him held, until under 80%; a braked
+  druid stays in bear form, which its non-combat nodes would drop with no target. A human partner is
   called to taunt when no bot can.
-- **Nobody to take him** at 9 (one tank, or none able): a bot paladin holder casts Divine Shield and
-  cancels it as it lands (`fg.bloatclear`), at once when no other tank lives, else 6 s after the 9th stack;
-  a human paladin holder is called to. No other class can: his stacks need 100 s to drop, and no damage
+- **Nobody to take him** at 9 (one tank, or none able): a bot paladin holder free of Forbearance and
+  61987 (either refuses the bubble, `spell_pal_immunities`) casts Divine Shield and cancels it as it
+  lands (`fg.bloatclear`), at once when no other tank lives, else 6 s after the 9th stack; a human
+  paladin holder is called to. No other class can: his stacks need 100 s to drop, and no damage
   dealer outlives his swing that long.
 - **Drag**: once he stands 3.5 yd off his spawn outside a spore wave, a bot holder walks past his spawn,
   on the far side from him, by the distance his chase stops at: both combat reaches plus 0.5, 10 yd and
@@ -58,10 +62,12 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
 - **Melee**: both stand on one leg, 7 yd out south-east or north-east, behind him whichever tank he faces;
   `fg.leg` flips to the other once goo lands within 8.25 yd of the one in use and the other is clear. The
   legs release once he stands 3.5 yd off his spawn, until the drag brings him back.
-- **Ranged and healers**: one latched slot each (`fg.slot`), released once he is 10 yd off his spawn.
+- **Ranged and healers**: one latched slot each (`fg.slot`), released once he is 10 yd off his spawn
+  (reach stays blocked on a slot, so a holder would watch him walk out of range).
   Healers take 1, 2, 3, 8, 9, 10 first; from there both tank spots and all but two or three slots are in
   40 yd. While fewer than 3 (10) or 8 (25) stand out, bots on slots plus players in ranged or healer specs,
-  melee fill the free ones. Reach and spell movers are held on a stand, heal reach is not.
+  melee fill the free ones, nearest the legs first. Reach and spell movers are held on a stand, heal reach
+  is not.
 - **Spores**: per wave, the tanks and melee are the close group, stacking on the anchor between the tank
   spots, the ranged and healers the far group, on slot 1 east of him or 5 north (`fg.sporespot`, flipped
   like the legs once goo lands within 10.75 yd). A group with no spore takes the one nearest it off a group
@@ -74,10 +80,11 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   (`fg.closeshift`, `fg.farshift`): the nearest to its stack within 6.75 yd of its fixed player (the player
   it rings, else for the close group the holder), so his burst still lands; failing that the nearest clear
   spot within 12 yd, the fixed player left out (value 2). It holds for the wave unless goo fouls it or the
-  fixed player walks 7.25 yd off it.
+  fixed player walks 7.25 yd off it. With no clear spot at all the group goes back to its stack and dodges
+  one by one.
 - **Malleable Goo**: a bot other than the holder within 6.5 yd of a live impact interrupts its cast and
   walks, forced, to its own stand if that is 7.5 yd clear, else to the nearest clear spot, a ranged one
-  8.5 yd from everyone outside a spore window. A stand under goo waits until the impact ages out.
+  8.5 yd from everyone (so one Vile Gas still takes one player) outside a spore window. A stand under goo waits until the impact ages out.
 - **Pungent Blight**: during the cast the raid cover is dealt on the lowest Inoculated stack on the map,
   its class nodes held over the lead-in; each bot asks for its own button on its own stacks, so a bot
   short of Inoculated takes an immunity or a healthstone.
@@ -114,7 +121,7 @@ stacks kept within 40 yd, need no probe of their own. Gameobject collision isn't
 
 ## Cheats
 
-None before, none now.
+None ever.
 
 ## Known gaps
 

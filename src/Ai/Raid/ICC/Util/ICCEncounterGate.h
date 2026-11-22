@@ -11,8 +11,7 @@
 
 class PlayerbotAI;
 
-// Boss state ids as InstanceScript keys them. Mirrors icecrown_citadel.h's DataTypes, which is under
-// scripts/ and can't be included from here.
+// must match DataTypes in core icecrown_citadel.h, a stale id keys a gate to another boss's state
 enum IccEncounterId : uint32
 {
     ICC_BOSS_LORD_MARROWGAR = 0,

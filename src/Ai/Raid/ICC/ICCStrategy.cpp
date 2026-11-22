@@ -22,8 +22,7 @@ void RaidIccStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         encounter->AddTriggerNodes(triggers);
 }
 
-// Not the node order, and don't reorder: the engine stops at the first multiplier that zeroes an action and
-// credits it with the veto, and some of these act inside GetValue.
+// don't reorder: the engine stops at the first multiplier that zeroes an action, and some act inside GetValue
 void RaidIccStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     IccMarrowgarDefinition().AddMultipliers(botAI, multipliers);
