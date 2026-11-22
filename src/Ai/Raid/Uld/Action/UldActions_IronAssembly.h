@@ -151,6 +151,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class IronAssemblyTankRebuffAction : public Action
+{
+public:
+    static constexpr char const* Name = "iron assembly tank rebuff action";
+
+    IronAssemblyTankRebuffAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 // The weakest magic defensive that covers the cast's remaining time.
 class IronAssemblyFusionPunchDefensiveAction : public Action
 {

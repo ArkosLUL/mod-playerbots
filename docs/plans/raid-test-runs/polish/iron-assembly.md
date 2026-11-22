@@ -307,3 +307,61 @@ on tanks with no button stay until question 1 is answered.
 **User answers (2026-11-22) to round 4:** yes to both. (1) Hold the tanks' class defensive buttons
 above 25% health through Iron Assembly, so only the Fusion Punch node spends them (as Hodir round
 2). (2) Rebuff a battle-rezzed tank in combat.
+
+## Round 5 (2026-11-22, on Custom eda15422d: the user's two answers)
+
+**Data.** None new: round 4 (`ab0d6db9d`) is merged but not pulled, and window 9 pulls Iron Assembly on
+`1b45df985` (rounds 2-3 code). Stop rules, verdict and failure ranking skipped; this round builds the
+two decided plan changes. Window 8's traces (`603_7`, `603_8`, `603_9`) re-read for both. Seven tank
+rises: six at 16-19% health (Rebirth), one at 100%; each had a druid, a priest and a paladin bot within
+30 yd 1-6 s later. No class defensive went in a rise's first second; uld2 Uldyaa's Shield Wall 1.2 s
+after his 5:18.7 rise went at ~60% health with nothing on him. What the risen tanks lacked at their next
+death or the end (new `--revived`): Kings and Might on warrior/DK tanks, plus Wisdom on a bear, plus
+Sanctuary and Arcane Intellect on a paladin tank, and Fortitude and Mark of the Wild on all.
+
+**Change 1, tank defensive hold** (`iron assembly tank defensive hold`, Block, `Role::Tank`,
+`HeldTankDefensiveNames()`), as Hodir round 2: while the council is engaged, a tank at 25%+ health
+gets no class Last Stand, Shield Wall, Divine Protection, Barkskin, Frenzied Regeneration, Survival
+Instincts, Anti-Magic Shell, Vampiric Blood or Icebound Fortitude. The Fusion Punch node casts by spell
+id, so it's untouched. Holds for 10/25 and both modes.
+
+**Change 2, in-combat rebuff** (`iron assembly tank rebuff`, `ACTION_RAID + 2`,
+`IronAssemblyTankRebuffDuty`, probe `ironassembly.rebuff`). Any tank seen dead and up again (Rebirth,
+Soulstone, a class rez) is risen for 30 s. In that window, from bots already within 30 yd and in sight
+that know the spell, are off cooldown and can pay for it: Mark of the Wild, Power Word: Fortitude and,
+on a paladin tank, Arcane Intellect, one bot each (dps before healers, then guid; never a bear); and each
+blessing the tank's role gets, from a different paladin (a paladin already blessing it is spent), by the
+class planner's per-member wants (role priorities, no Sanctuary under Renewed Hope bar a paladin tank's,
+at most one per bot paladin) with paladin tanks last. Not the planner itself: it picks one cast for the
+whole raid, so a hunter's pet revived in the window could block a tank's blessing for good. A cat
+shifts out for Mark of the Wild; moonkin and Tree of Life cast it in form (stance forms to the core).
+Single-target ranks only, no reagents. The window covers DC `4d3978b`'s tank soulstones too.
+
+Reader: `--revived` lists each tank's rise, the raid buffs put back inside the window with their
+caster, `none:nobody` / `hold:cast` verdicts on it, and what it still lacked at its next death or the
+end against its first death. pb-check green (compile, pblint, codestyle, botobs).
+
+**Shared code.** None changed. The rebuff reads the paladin blessing registry and role priorities
+(`PaladinBlessingHelper.h`, `PaladinBlessingTypes.h`) as they are.
+
+**Review.** Window 8's rises re-checked with the new reader: seven, at 16-19% bar Uldyaa's 3:37.8 at
+100%, a druid, a priest and a paladin bot within 30 yd of each 1-6 s later; uld2 Uldyaa's Shield Wall
+at 5:19.9 (59.6%) and uld3 Uldzab's Barkskin at 5:21.0 (82.6%) are the class casts the hold now stops.
+Two fixes. Arcane Intellect keyed on the tank's power type, and a bear rises from Rebirth in caster
+form on mana (uld3 Uldzab had a mage 28 yd off 1 s after its rise), so a mage would spend a GCD on it: now
+paladin tanks only, as the reader already assumed. A paladin's `ironassembly.rebuff` verdict carried
+the previous tank's `none:nobody` onto a later, fully blessed tank (two tanks share a window in uld1,
+4:58-5:55); it now names only a tank still lacking a blessing, `none:nobody` over `none:other`.
+
+**Watch.** Round 1 left the hold out because tanks dropped to 8-38% in Molgeim's phase, where those
+buttons kept them up; between 25 and 38% they now wait for a dangerous punch.
+
+**Next window should show.** `--revived`: within ~5 s of each rise the tank's Mark of the Wild,
+Fortitude and blessings back, and at its next death or the end "every raid buff back" (Arcane
+Intellect only on a paladin tank); `none:nobody` only with no buffer within 30 yd. One expected gap:
+a paladin tank with three bot paladins (uld1's roster) gets its own wants, Sanctuary, Might and Wisdom, so
+"without Blessing of Kings" there is the class-wide greater it died with, not a miss. `postmortem.py`
+vetoes: `iron assembly tank defensive hold` on class defensives at 25%+ health, none cast there.
+`--punches`: phase-3 punches on tanks find a button (`defensive <name>`), fewer `no defensive` than
+window 8, and fewer tank deaths to Fusion Punch. Check tank deaths in Molgeim's phase against window 8
+(2 in 3 pulls, both punches) for the risk above.

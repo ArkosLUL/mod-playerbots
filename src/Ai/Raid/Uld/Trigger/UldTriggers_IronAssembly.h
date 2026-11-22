@@ -142,6 +142,16 @@ public:
     bool IsActive() override;
 };
 
+// A tank rose mid fight and this bot is the one to put a raid buff back on it.
+class IronAssemblyTankRebuffTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "iron assembly tank rebuff trigger";
+
+    IronAssemblyTankRebuffTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // Steelbreaker is casting a Fusion Punch at this tank that would leave it under the floor, and it has a
 // magic defensive for it.
 class IronAssemblyFusionPunchDefensiveTrigger : public Trigger

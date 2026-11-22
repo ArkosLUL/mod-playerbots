@@ -111,9 +111,17 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 17.0f;
 // shouldn't spend a button, and a tank still ticks at least once in it.
 inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_FUSION_PUNCH_DECIDE_MS = 1500;
 
+// Tanks' class defensive nodes are held above this, so only the punch node spends the buttons.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
+
 // Rebirth reaches 30 yd. A druid casts inside CAST_REACH and walks to WALK_REACH of the body.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH = 28.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_WALK_REACH = 26.0f;
+
+// A tank raised mid fight has no raid buffs and the class buff nodes only run out of combat. They go back
+// on for this long after it rises, from bots already in REACH, nobody walks for one.
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_REBUFF_WINDOW_MS = 30000;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_REBUFF_REACH = 30.0f;
 
 // Phase 3 walks over this go on Nitro Boosts. Ranged spend them on the walk to their spread slot, tanks
 // keep theirs for the Meltdown run, their one long walk in the phase.
@@ -412,6 +420,16 @@ struct IronAssemblyBattleRez
 // Rebirth ready walks into range of a dead bot tank's body and raises it. Druid and body are latched, the
 // pair closest together when elected.
 bool IronAssemblyBattleRezDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyBattleRez& duty);
+
+struct IronAssemblyTankRebuff
+{
+    Player* tank = nullptr;
+    uint32 spellId = 0;
+};
+
+// What this bot puts back on a tank that rose inside REBUFF_WINDOW_MS: Mark of the Wild, Fortitude, Arcane
+// Intellect on a paladin tank, one bot each, plus each blessing its role gets from a separate paladin.
+bool IronAssemblyTankRebuffDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyTankRebuff& duty);
 
 // Uses the bot's Nitro Boosts for a walk of this length, if it's long enough and they're ready. why
 // names the walk in the trace.

@@ -12,6 +12,7 @@
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "ObjectGuid.h"
+#include "PaladinBlessingHelper.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -37,6 +38,7 @@
 #include <cmath>
 #include <cstdio>
 #include <list>
+#include <optional>
 #include <set>
 #include <string>
 #include <tuple>
@@ -82,6 +84,9 @@ struct IronAssemblyEncounterState
     // trade the walk.
     RaidObs::ObsValue<ObjectGuid> rezDruid{"ironassembly.rezdruid"};
     RaidObs::ObsValue<ObjectGuid> rezTank{"ironassembly.reztank"};
+
+    // Tanks seen dead this pull, with when each was first seen up again, 0 while still down.
+    std::unordered_map<ObjectGuid, uint32> tankUpAtMs;
 
     // The shaman dropping Nature Resistance Totem. Latched until it dies or leaves, so the duty never
     // trades back and forth between two spares.
@@ -405,6 +410,7 @@ void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
             state.meltdownRunners.clear();
             state.rezDruid = ObjectGuid::Empty;
             state.rezTank = ObjectGuid::Empty;
+            state.tankUpAtMs.clear();
         }
 
         return;
@@ -1957,6 +1963,288 @@ bool IronAssemblyBattleRezDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyBatt
         RaidObs::NoteDerived(bot, "ironassembly.rez",
                              duty.tank ? std::string(how) + " " + RaidObs::DescribeAssignment(duty.tank->GetGUID())
                                        : std::string(how));
+
+    return due;
+}
+
+namespace
+{
+// Either name on the tank means it has the buff, the same pair the class trigger tests.
+struct IronAssemblyRaidBuff
+{
+    uint8 playerClass;
+    uint32 firstRank;
+    char const* single;
+    char const* group;
+    // By class, not power type: a druid tank stands up from a rez in caster form, on mana.
+    bool paladinTanksOnly;
+};
+
+std::array<IronAssemblyRaidBuff, 3> const IRON_ASSEMBLY_RAID_BUFFS = {{
+    {CLASS_DRUID, 1126, "mark of the wild", "gift of the wild", false},
+    {CLASS_PRIEST, 1243, "power word: fortitude", "prayer of fortitude", false},
+    {CLASS_MAGE, 1459, "arcane intellect", "arcane brilliance", true},
+}};
+
+IronAssemblyRaidBuff const* IronAssemblyRaidBuffOf(uint8 playerClass)
+{
+    for (IronAssemblyRaidBuff const& buff : IRON_ASSEMBLY_RAID_BUFFS)
+    {
+        if (buff.playerClass == playerClass)
+            return &buff;
+    }
+
+    return nullptr;
+}
+
+// dps first: a tank's GCDs are its threat, a healer's mana is the raid's.
+bool IronAssemblyRebuffsFirst(Player* lhs, Player* rhs)
+{
+    auto const order = [](Player* member)
+    { return PlayerbotAI::IsTank(member) ? 2 : (PlayerbotAI::IsHeal(member) ? 1 : 0); };
+
+    int const left = order(lhs);
+    int const right = order(rhs);
+    return left != right ? left < right : lhs->GetGUID() < rhs->GetGUID();
+}
+
+uint32 IronAssemblyHighestKnownRank(Player* member, uint32 firstRank)
+{
+    uint32 known = 0;
+    for (uint32 rank = firstRank; rank; rank = sSpellMgr->GetNextSpellInChain(rank))
+    {
+        if (member->HasSpell(rank))
+            known = rank;
+    }
+
+    return known;
+}
+
+bool IronAssemblyRebuffCaster(Player* member, uint32 instanceId)
+{
+    return IronAssemblyMemberCounts(member, instanceId) && GET_PLAYERBOT_AI(member) && IronAssemblyBotInHall(member);
+}
+
+// Answerable for any member, unlike CanCastSpell. Ignores a druid's form, the action shifts out first.
+bool IronAssemblyCanRebuff(Player* member, Player* tank, uint32 spellId)
+{
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return info && !member->HasSpellCooldown(spellId) &&
+           static_cast<int32>(member->GetPower(POWER_MANA)) >= info->CalcPowerCost(member, info->GetSchoolMask()) &&
+           member->IsWithinDistInMap(tank, ULDUAR_IRON_ASSEMBLY_REBUFF_REACH) && member->IsWithinLOSInMap(tank);
+}
+
+// Tanks that rose under REBUFF_WINDOW_MS ago. One only counts once some buffer's call saw it dead.
+void GatherIronAssemblyRevivedTanks(Player* bot, Group* group, std::vector<Player*>& revived)
+{
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+    uint32 const now = std::max<uint32>(getMSTime(), 1);
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->GetMapId() != ULDUAR_MAP_ID || member->GetInstanceId() != bot->GetInstanceId())
+            continue;
+
+        // IsTank last: every buffer asks every tick, and most members are up and never died
+        auto const up = state.tankUpAtMs.find(member->GetGUID());
+        if ((member->IsAlive() && up == state.tankUpAtMs.end()) || !PlayerbotAI::IsTank(member))
+            continue;
+
+        if (!member->IsAlive())
+        {
+            state.tankUpAtMs[member->GetGUID()] = 0;
+            continue;
+        }
+
+        if (!up->second)
+            up->second = now;
+
+        if (getMSTimeDiff(up->second, now) < ULDUAR_IRON_ASSEMBLY_REBUFF_WINDOW_MS && IronAssemblyBotInHall(member))
+            revived.push_back(member);
+    }
+}
+
+// The class planner's wants per member, not the planner: it picks one cast for the whole raid, so a pet
+// raised in the same window could block a tank's blessing for good. One blessing per paladin per target.
+bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> const& revived,
+                                IronAssemblyTankRebuff& duty, char const*& how, Player*& about)
+{
+    using namespace ai::blessing;
+
+    std::vector<Player*> paladins;
+    bool renewedHope = false;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->GetMapId() != ULDUAR_MAP_ID || member->GetInstanceId() != bot->GetInstanceId())
+            continue;
+
+        if (member->getClass() == CLASS_PRIEST &&
+            (member->HasAura(SPELL_RENEWED_HOPE_R1) || member->HasAura(SPELL_RENEWED_HOPE_R2)))
+            renewedHope = true;
+
+        if (member->getClass() == CLASS_PALADIN && GET_PLAYERBOT_AI(member))
+            paladins.push_back(member);
+    }
+
+    std::sort(paladins.begin(), paladins.end(), IronAssemblyRebuffsFirst);
+
+    for (Player* tank : revived)
+    {
+        std::array<bool, BLESSING_CATEGORY_SLOTS> present{};
+        std::vector<Player*> free = paladins;
+        for (auto const& applied : tank->GetAppliedAuras())
+        {
+            Aura const* aura = applied.second ? applied.second->GetBase() : nullptr;
+            BaseBlessingCategory const category = aura ? CategoryOfSpell(aura->GetId()) : BASE_NONE;
+            if (category == BASE_NONE)
+                continue;
+
+            present[category] = true;
+            ObjectGuid const caster = aura->GetCasterGUID();
+            free.erase(std::remove_if(free.begin(), free.end(),
+                                      [&caster](Player* paladin) { return paladin->GetGUID() == caster; }),
+                       free.end());
+        }
+
+        RoleProfile const role = ResolveRoleProfile(tank);
+        std::size_t wanted = 0;
+        bool lacking = false;
+        bool nobody = false;
+        for (BaseBlessingCategory const category : BASE_BLESSING_PRIORITIES[role].priorities)
+        {
+            if (category == BASE_NONE || wanted == paladins.size())
+                break;
+
+            if (renewedHope && category == BASE_SANCTUARY && role != ROLE_PALADIN_TANK)
+                continue;
+
+            if (std::none_of(paladins.begin(), paladins.end(), [category](Player* paladin)
+                             { return HighestKnownBlessingRank(paladin, category, false).has_value(); }))
+                continue;
+
+            ++wanted;
+            if (present[category])
+                continue;
+
+            lacking = true;
+            bool assigned = false;
+            for (auto paladin = free.begin(); paladin != free.end(); ++paladin)
+            {
+                std::optional<uint32> const spell = HighestKnownBlessingRank(*paladin, category, false);
+                if (!spell || !IronAssemblyRebuffCaster(*paladin, bot->GetInstanceId()) ||
+                    !IronAssemblyCanRebuff(*paladin, tank, *spell))
+                    continue;
+
+                if (*paladin == bot)
+                {
+                    duty.tank = tank;
+                    duty.spellId = *spell;
+                    about = tank;
+                    how = "cast";
+                    return true;
+                }
+
+                assigned = true;
+                free.erase(paladin);
+                break;
+            }
+
+            nobody = nobody || !assigned;
+        }
+
+        if (lacking)
+        {
+            about = tank;
+            how = nobody ? "none:nobody" : "none:other";
+        }
+    }
+
+    return false;
+}
+}  // namespace
+
+static bool DeriveIronAssemblyTankRebuff(PlayerbotAI* botAI, Player* bot, IronAssemblyTankRebuff& duty,
+                                         char const*& how, Player*& about)
+{
+    std::vector<Player*> revived;
+    Group* group = bot->GetGroup();
+    if (group)
+        GatherIronAssemblyRevivedTanks(bot, group, revived);
+
+    if (revived.empty())
+    {
+        how = "none:window";
+        return false;
+    }
+
+    how = "none:covered";
+    if (bot->getClass() == CLASS_PALADIN)
+        return DeriveIronAssemblyBlessing(bot, group, revived, duty, how, about);
+
+    IronAssemblyRaidBuff const* buff = IronAssemblyRaidBuffOf(bot->getClass());
+    for (Player* tank : revived)
+    {
+        if ((buff->paladinTanksOnly && tank->getClass() != CLASS_PALADIN) || botAI->HasAura(buff->single, tank) ||
+            botAI->HasAura(buff->group, tank))
+            continue;
+
+        about = tank;
+        Player* caster = nullptr;
+        uint32 casterSpell = 0;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            // never a bear, shifting out loses it the boss
+            if (!member || member->getClass() != buff->playerClass || PlayerbotAI::IsTank(member) ||
+                !IronAssemblyRebuffCaster(member, bot->GetInstanceId()) ||
+                (caster && !IronAssemblyRebuffsFirst(member, caster)))
+                continue;
+
+            uint32 const spell = IronAssemblyHighestKnownRank(member, buff->firstRank);
+            if (spell && IronAssemblyCanRebuff(member, tank, spell))
+            {
+                caster = member;
+                casterSpell = spell;
+            }
+        }
+
+        if (caster == bot)
+        {
+            duty.tank = tank;
+            duty.spellId = casterSpell;
+            how = "cast";
+            return true;
+        }
+
+        how = caster ? "none:other" : "none:nobody";
+    }
+
+    return false;
+}
+
+bool IronAssemblyTankRebuffDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyTankRebuff& duty)
+{
+    duty = IronAssemblyTankRebuff();
+    if (!botAI || !bot || (bot->getClass() != CLASS_PALADIN && !IronAssemblyRaidBuffOf(bot->getClass())) ||
+        !IronAssemblyFormationActive(botAI))
+        return false;
+
+    char const* how = "none:window";
+    Player* about = nullptr;
+    bool due = DeriveIronAssemblyTankRebuff(botAI, bot, duty, how, about);
+
+    // Only for the bot that's due: catches a silence, or a stronger aura the buff would bounce off.
+    if (due && !botAI->CanCastSpell(duty.spellId, duty.tank))
+    {
+        how = "hold:cast";
+        due = false;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "ironassembly.rebuff",
+                             about ? std::string(how) + " " + RaidObs::DescribeAssignment(about->GetGUID())
+                                   : std::string(how));
 
     return due;
 }

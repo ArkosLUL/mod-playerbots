@@ -6,7 +6,9 @@
 
 #include "UldDefinitions.h"
 
+#include "Player.h"
 #include "PlayerbotAI.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "UldActions_IronAssembly.h"
 #include "UldEncounterGate.h"
@@ -57,6 +59,12 @@ bool IronAssemblyTankPinned(PlayerbotAI* botAI)
     return IronAssemblyFormationActive(botAI) && IronAssemblyAssignedBoss(botAI, botAI->GetBot());
 }
 
+bool IronAssemblyTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return IronAssemblyFormationActive(botAI) &&
+           botAI->GetBot()->GetHealthPct() >= ULDUAR_IRON_ASSEMBLY_TANK_DEFENSIVE_LAST_RESORT_PCT;
+}
+
 void DefineIronAssembly(EncounterBuilder& e)
 {
     // First success ends the tick, so this is a survival order. Interrupt sits above every class interrupt
@@ -80,6 +88,8 @@ void DefineIronAssembly(EncounterBuilder& e)
     e.Node<IronAssemblyFusionPunchDispelTrigger, IronAssemblyFusionPunchDispelAction>(ACTION_RAID + 3);
     e.Node<IronAssemblyNatureAspectTrigger, IronAssemblyNatureAspectAction>(ACTION_RAID + 2);
     e.Node<IronAssemblyNatureTotemTrigger, IronAssemblyNatureTotemAction>(ACTION_RAID + 2);
+    // Above heals on purpose, one GCD per buff: a raised tank stands up ~14% short on health without them.
+    e.Node<IronAssemblyTankRebuffTrigger, IronAssemblyTankRebuffAction>(ACTION_RAID + 2);
     e.Node<IronAssemblyRedirectThreatTrigger, IronAssemblyRedirectThreatAction>(ACTION_RAID + 2);
     e.Node<IronAssemblyRuneOfPowerMeleeTrigger, IronAssemblyRuneOfPowerMeleeAction>(ACTION_RAID + 1,
                                                                                    EncounterRow::Mover);
@@ -110,6 +120,11 @@ void DefineIronAssembly(EncounterBuilder& e)
                   {IronAssemblyMeltdownStepOutAction::Name, IronAssemblyRuneOfDeathAction::Name});
     e.Block("iron assembly meltdown melee charge guard", Role::Melee, IronAssemblyMeltdownMeleeWindow,
             Family::Charge);
+
+    // The class nodes spend these on health alone and would leave the Fusion Punch node nothing. Under the
+    // floor they go through as a last resort.
+    e.Block("iron assembly tank defensive hold", Role::Tank, IronAssemblyTankDefensiveHeld, 0,
+            HeldTankDefensiveNames());
 
     // Tank face is a second mover at the tank spot's priority, and the two alternate. Set facing is a
     // separate node.

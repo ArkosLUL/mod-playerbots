@@ -15,6 +15,8 @@
 #include "RaidObs.h"
 #include "RaidTankDefensive.h"
 #include "ServerFacade.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include "UldData.h"
 #include "UldEncounter_IronAssembly.h"
@@ -391,6 +393,20 @@ bool IronAssemblyTankBattleRezAction::Execute(Event /*event*/)
     // MediumHealth mana, and on the walk it trades shifts with the spec's own form every tick.
     botAI->RemoveShapeshift();
     return duty.spellId && botAI->CastSpell(duty.spellId, duty.tank);
+}
+
+bool IronAssemblyTankRebuffAction::Execute(Event /*event*/)
+{
+    IronAssemblyTankRebuff duty;
+    if (!IronAssemblyTankRebuffDuty(botAI, bot, duty))
+        return false;
+
+    // Mark of the Wild fails in cat form only: moonkin and tree are stance forms to the core.
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(duty.spellId);
+    if (info && info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
+        botAI->RemoveShapeshift();
+
+    return botAI->CastSpell(duty.spellId, duty.tank);
 }
 
 bool IronAssemblyFusionPunchDefensiveAction::Execute(Event /*event*/)

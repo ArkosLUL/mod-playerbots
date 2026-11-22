@@ -166,6 +166,12 @@ bool IronAssemblyTankBattleRezTrigger::IsActive()
     return IronAssemblyBattleRezDuty(botAI, bot, duty);
 }
 
+bool IronAssemblyTankRebuffTrigger::IsActive()
+{
+    IronAssemblyTankRebuff duty;
+    return IronAssemblyTankRebuffDuty(botAI, bot, duty);
+}
+
 bool IronAssemblyFusionPunchDefensiveTrigger::IsActive()
 {
     uint32 const needMs = IronAssemblyFusionPunchIncomingMs(botAI, bot);
