@@ -3,6 +3,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "SpellMgr.h"
 #include "UldEncounter_Hodir.h"
 #include "UldScripts.h"
@@ -127,6 +128,21 @@ bool HodirRaidPositionTrigger::IsActive()
 
     if (bot->HasAura(SPELL_HODIR_FLASH_FREEZE_TRAPPED))
         return false;
+
+    // A breaker stays where reach spell put it: its buff stand and the band rules both walk it out of
+    // range of the block. Healers are left out since nothing hands them a block.
+    if (PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
+    {
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (target && target->IsAlive() &&
+            (target->GetEntry() == NPC_HODIR_FLASH_FREEZE_BLOCK || target->GetEntry() == NPC_HODIR_FLASH_FREEZE_PLAYER))
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "hodir.stand", "block");
+
+            return false;
+        }
+    }
 
     // Surviving beats standing on a spot, and letting the anchor fight a dodge is what makes bots
     // step out and get walked straight back in.

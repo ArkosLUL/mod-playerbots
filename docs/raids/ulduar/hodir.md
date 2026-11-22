@@ -40,20 +40,22 @@ dealt **7,693 dps each from 30-35 yd against 7,844 from 20-25**, casts aimed at 
 40.1 (p99 36.2), and 35-40 is where it falls off (4,854).
 
 **15 keeps casters off the melee, not off his swings**, which land only on his victim; nothing else
-in his kit cares how close a raider stands. Melee stand within ~6.5 yd of him, so an icicle (4 yd) or
-Freeze (10 yd) on one catches the other, and inside his melee range, **7.8 yd** (combat reach 5 +
-1.5 + 4/3), a raider pulls aggro at 110% of the victim's threat rather than 130%. So **a Starlight
-stand may come to 10** (`_STARLIGHT_MIN_BOSS_GAP`): the druids cast next to him, 46% of zone samples
-sat inside 15 yd of him, and a stand within 15 yd walk rose from 32.6% of caster samples at 15 to
-48.3% at 10. Fire stands, the position rules and the crowd shed keep 15.
+in his kit cares how close a raider stands. Melee stand a median 6-8 yd from him, so an icicle (4 yd)
+or Freeze (10 yd) on one catches the other, and inside his melee range, **10.33 yd** (combat reach 7.5
+since core DB update `2026_11_06_01`, was 5, + 1.5 + 4/3), a raider pulls aggro at 110% of the
+victim's threat rather than 130%. So **a Starlight stand may come to his melee range**, read live
+(`GetMeleeRange`): the druids cast next to him, 46% of zone samples sat inside 15 yd of him, and a
+stand within 15 yd walk rose from 32.6% of caster samples at 15 to 48.3% at 10. Fire stands, the
+position rules and the crowd shed keep 15.
 
 **Ranged and healers have no home spot.** Nothing in his kit asks them to stand anywhere in
 particular, so `DeriveHodirAnchor` offers a **buff stand or nothing**: Starlight first, since +50%
 haste beats what a fire gives, else the nearest point of a live fire, capped at `_FIRE_STAND_RADIUS` 8
 of its centre — park 8 / release 10 inside the aura's 11, and a bot already inside keeps the spot it
-is on. Either only when the stand sits in its band (Starlight's starts at 10) and inside the walk the
-bot will make. The fire *he* is held on needs no special case: with him on it, nothing within 8 yd of
-it is 15 from him. `hodir.stand` reads `starlight` / `fire` / `none`. Two concentric rings round a
+is on. Either only when the stand sits in its band (Starlight's starts at his melee range) and inside
+the walk the bot will make. The fire *he* is held on needs no special case: with him on it, nothing
+within 8 yd of it is 15 from him. `hodir.stand` reads `starlight` / `fire` / `none`, or `block` while
+the bot breaks ice (below). Two concentric rings round a
 fixed anchor were deleted: a usable stand sat within 15 yd on 55-73% of samples while ranged held a
 buff 23-24% of the time, and the ring anchor, 12-14% of every accepted move, walked bots off zones they
 had reached.
@@ -69,7 +71,7 @@ legal stands up and 30 reaches 30.5%.
 **One hold point per instance, read by both tanks** (`DeriveHodirHold`, `HodirBotLatches::hold`): the
 centre, or the live Toasty Fire nearest the centre that is within `_HOLD_FIRE_LEASH` **25** of it —
 and the point is **the fire itself**, not a spot beside it. Measured from the centre, never from him,
-so he never ends up more than 25 yd out and every tank spot stays 40+ yd inside the y band he evades
+so he never ends up more than 25 yd out and every tank spot stays 27+ yd inside the y band he evades
 outside. Melee wrap round him rather than lining up behind — p50 **1.2 yd behind his centre**, p10 6.3
 behind, p90 4.1 in front, |lateral| p50 3.0, pets p50 3.3 behind — so a fire at his feet covers **98%**
 of melee and pet samples against 92 / 91% for one 5 yd behind him and 80 / 73% at 8. The fire procs
@@ -90,15 +92,16 @@ the ordinary floor check pulled tank anchors to the fire's near edge, and he par
 his back to the melee. The only solid gameobjects in the room are the two doors at y -166 / -298 and
 the caches at (1967, -204) / (2036, -202), all 35+ yd outside anything derived here.
 
-- **The main tank stands `_HOLD_TANK_OFFSET` 4.5 past the point**, on the far side from where he stood
-  when it was adopted. He stops a median 5.0 yd from whoever holds him (p10 3.9, p90 7.0) and 3.6-4.2
-  back along the drag, so he lands on it. 13 parked him ~9 yd short of the fire and left far-side
-  melee outside its 11 yd. Within `_HOLD_BEARING_MIN_GAP` 3 of the point there is no far side, so it
-  takes a fixed bearing into the open floor north-east of the centre. Out of combat it is re-taken
-  every tick and latches on engage; a wipe drops the latch.
-- **The off-tank stands 4.5 off the point, square to the hold bearing**, so a Frozen Blows taunt walks
-  him ~6 yd sideways and leaves him on the fire either way. A tank's Biting Cold hops (or fallback ±3 yd
-  legs) run square to him for the same reason: neither end may drag him off the fire.
+- **The main tank stands his chase stop past the point**, on the far side from where he stood when it
+  was adopted, so he trails onto it: a chasing creature stops at both combat reaches plus
+  `CONTACT_DISTANCE`, read live (9.5). A fixed 4.5, set when his reach was 5, parked him a median
+  2.5-5.0 yd short once it was 7.5 (his holder a median 5-9 yd off), and left 26-37% of the melee in
+  his reach outside the held fire's 11 yd. Within `_HOLD_BEARING_MIN_GAP` 3 of the point there is no
+  far side, so it takes a fixed bearing into the open floor north-east of the centre. Out of combat it
+  is re-taken every tick and latches on engage; a wipe drops the latch.
+- **The off-tank stands as far off the point, square to the hold bearing**, so a Frozen Blows taunt
+  finds him already inside its chase stop and leaves him on the fire. A tank's Biting Cold hops (or
+  fallback ±3 yd legs) run square to him for the same reason: neither end may drag him off the fire.
 - **Parked off the point, he is re-aimed.** He only walks toward whoever holds him, so once shoved past
   the spot (the tank flipping to a shelter after a freeze, a knockback) he parks with it already in
   reach — 5+ yd off for 80 s of 113 in centre windows, which also put the western Starlight zone
@@ -152,6 +155,13 @@ after the freeze against 14.3-15.6. So Hodir's `OwnTargeting` blocks `Family::De
 Kologarn and Vezax do (single-target DoTs stay), and `HodirBreakerAoeHoldMultiplier` zeroes
 `ActionThreatType::Aoe` spells, heals aside, while the target is an ice block.
 
+**Breakers stay in reach of their block.** Ranged spend 27-32% of their time shooting helper ice, at
+4.6-6.7k a second against 9.5-14.5k on Hodir, and moved 39-48% of it: the position node walked them
+19-28% of those samples, to a Starlight or fire stand or by the band and declump rules, and they stood
+over 35 yd from the block 16-27% of it, so `reach spell` walked them back. `HodirRaidPositionTrigger`
+therefore stands down for a ranged non-healer whose current target is a helper or trapped-raider
+block. Healers are left out: nothing hands them a block, yet their target can still be one.
+
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
 
@@ -164,7 +174,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing (the damage itself is `63511`) plus a 3,999 raid tick (`64545`). All four rows are named "Frozen Blows"; the aura ids apply, the damage ids hit |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
-| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163) and +20% cast haste (aura 61)** |
+| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
 | Toasty Fire | 62821 → 65280 | 11 yd, 60s, at the mage's feet every 10s, the first 6s after the mage is freed. Sheds Biting Cold every tick exactly as movement does. Procs **Singed** at 33% on ranged/magic damage *done*. **Flash Freeze wipes every fire** (62148) |
 | Berserk | 26662 | 8 min, unhandled — no enrage awareness exists anywhere in the module |
 
@@ -582,12 +592,15 @@ at the rally stood inside the carrier's pulse;
 held out of the band. `--shed` gives per role stacks shed a second, the share of Biting Cold ticks used
 (two a stack is all of them), samples moving, how far a shed took bots off their spot, hops, walked
 legs and cut hops, and how much of each shed a bot that started in Starlight, in melee reach or inside
-a Storm Cloud pulse stayed there.
+a Storm Cloud pulse stayed there. `--blocks` gives per wave the bots on ice and the next fire, and over
+the pull the ranged shooting ice: bot-seconds, dps there against on Hodir, moving, walked by the
+position node, and over 35 yd from the block.
 
 ## Pace
 
-**The cache wants 216.5k over 0-3:00** against a 38.97 M pool (38.57 M at 24 raiders: his health scales
-with the roster), and kills at **2:57 and 2:54 with no deaths** have made it (219.0k, 223.3k). Boss
+**The cache wants his health over 180 s**: 234.6k for the 42.22 M pool of a 25-bot test raid, 216.5k
+for 38.97 M in earlier pulls (his health scales with the roster). Kills at **2:57 and 2:54 with no
+deaths** made it on the smaller pool (219.0k, 223.3k), one test kill at 2:58 (236.1k). Boss
 dps runs ~250k with a Toasty Fire burning against 145-174k with none, and over 21 buckets casting%
 correlates with boss dps at **r = +0.75**, moving% at −0.63 and fire coverage at +0.78: cast uptime is
 the metric to move, and the fire is how.
@@ -599,6 +612,13 @@ blocks break 2-4 s later, the first fire lands at 19-22 s against 18, and fires 
 ranged, one of which he is then held on (the fire latch above). Melee lost less, mostly 0:57-2:34, not
 traced beyond the Storm Cloud rally above.
 
+**The gap left sits in the fire windows, ranged most.** With a fire burning boss dps ran 263-283k in
+the pulls that kept or nearly kept the cache and 215-244k in the 198-205k ones; with none, 129-175k in
+both. A ranged bot deals ~20k a second in a fire with Storm Power, ~10k in a fire, 4-6k with neither,
+and whether ranged get Storm Power in the first fire window rests on who carries Storm Cloud, since
+receivers come only within 15 yd of the carrier's rally. The biggest lever the strategy holds is ice
+time (breakers above).
+
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at
 the pull it spent 12.5 s on a 94k opener with no fire and no Singed and ran out 12 s before the freeze
@@ -607,11 +627,6 @@ landed; from the first fire it covers that fire's window to the landing. The pul
 
 ## Still open
 
-- **A breaker's Starlight stand walks it back out of range of its block.** `reach spell` walks the
-  breaker in and `hodir raid position action` walks it back, every ~0.5 s: 80 flips with a mage block
-  targeted in one pull, 77 of them holding a Starlight stand. Both pass `OwnMovement`, since
-  `Family::Reach` is kept. Fix shape: `HodirRaidPositionTrigger::IsActive` stands down while the
-  current target is an ice block.
 - **Who eats Frozen Blows is not stable between pulls.** In one kill the bot tank took **27 of the
   35 `63511` hits** for 506k against the human paladin's 8 and died three times; the pull before was 19
   against 10 the other way with no tank death, and `hodir frozen blows swap action` produced **7 `OK`
