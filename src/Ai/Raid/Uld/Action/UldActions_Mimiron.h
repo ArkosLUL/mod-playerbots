@@ -45,13 +45,14 @@ protected:
     bool MoveTowardClearOfMines(Position const& dest,
                                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                                 bool fallbackUnfiltered = true, bool interrupt = false,
-                                char const* what = "step", bool allowFire = false);
+                                char const* what = "step", bool allowFire = false,
+                                bool sirenScreen = true);
 
 private:
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
                  bool fallbackUnfiltered, bool interrupt, char const* what, float clearRadius = 0.0f,
                  bool allowFire = false, bool sectorScreen = false,
-                 std::optional<float> toward = std::nullopt);
+                 std::optional<float> toward = std::nullopt, bool sirenScreen = true);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,

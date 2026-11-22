@@ -901,7 +901,9 @@ and three killing blows.
 
 `GetMimironCoreCarrier` is the first alive non-tank melee bot in group order (still group order, so every
 bot agrees); `IsMechanicTrackerBot`, the first alive bot regardless of role, was usually a ranged bot 22 yd
-out, never in loot range (`ULDUAR_MIMIRON_CORE_LOOT_RANGE` 5). The corpse search covers the room
+out, never in loot range (`ULDUAR_MIMIRON_CORE_LOOT_RANGE` 5). A living real player who holds a core, or
+has since the last handover, takes the job and every bot stands down, even one holding a banked core: a
+bot carrier raced a player looting his own. The corpse search covers the room
 (`ULDUAR_MIMIRON_CORE_SEARCH_RANGE` 90: 80 yd across, ~13 s), and the action walks to the corpse before
 looting. Corpses last 25 s (`TEMPSUMMON_CORPSE_TIMED_DESPAWN`), the entire window.
 
@@ -1023,21 +1025,27 @@ plus the totem and trap summoners by name, and leaves heals alone.
 **Water Spray one-shots, so it outranks the fire.** Cast time index 1, 0 ms: no cast to see, only the hit,
 **23-26k against a 22-24k pool**, a single tick on a standing victim. Three fixes keep bots out of the
 line: `MimironDodgeFlamesTrigger` stands down while the bot is inside a live spray line (the flames node at
-`+ 4` outranks the fire bot node at `+ 3`, so the ladder cannot); the spray escape passes `FleeFan` a flag
-dropping the ground-fire screen, since a node is 3.1k a second against the whole pool and a fan refusing
-all eleven bearings for fire fell back unscreened; and `mimiron fire hold guard` zeroes its movers while
-the bot stands in a line (a `reach melee` 3.5 s earlier had walked the victims in).
+`+ 4` outranks the fire bot node at `+ 3`, so the ladder cannot); the spray escape fans out to the near
+side, then across the lane to the far side, both without the ground-fire screen (a node is 3.1k a second
+against the whole pool, and a fan refusing all eleven bearings for fire fell back unscreened) or the
+siren's (a silence costs a cast), since where lanes cross every near-side spot lies in another lane or
+the siren's 17 yd and the bot stood in the line (`spray unsafe`: 6 of 11 spray deaths in one window); and
+`mimiron fire hold guard` zeroes its movers while the bot stands in a line (a `reach melee` 3.5 s earlier
+had walked the victims in).
 
 **The spray has to be predicted.** The script faces the nearest `NPC_FLAMES_SPREAD` every 15 s, or 5 s
 after a spray, and sprays at once if it is within 5 yd, else walks to 5 yd short and sprays on arrival
 facing the way it walked. The live line, the bot's current facing, appears only as it fires (1 of 14
 victims had been in it 0.5 s before). The lane toward the nearest spread flame from
 `ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH` (5) short of it, read 2 s ahead, pointed within 20° of the real spray
-in 90% of 126 and held 13 of the 14 victims. `ReadMimironFirefighterHazards` puts both in `sprayLanes`
-and every spray test walks them (a lane reaches forward only: `HasInLine` checks the front half-circle first), cheaply: 0.76 of ~18 living raid members stood in some lane at a time.
+in 90% of 126 and held 13 of the 14 victims. A lane runs `_SPRAY_LENGTH` (18) ahead: radius 15 plus the
+victim's 1.5 combat reach, and hits landed to 16.3 yd from where the bot sprayed.
+`ReadMimironFirefighterHazards` puts both in `sprayLanes` and every spray test walks them (a lane reaches
+forward only: `HasInLine` checks the front half-circle first), cheaply: 0.76 of ~18 living raid members
+stood in some lane at a time.
 The bot's own spot is judged at 3.5 each side, a destination at `_SPRAY_STAND_HALF_WIDTH` (4.5), and the
 sidestep lands at 5.0, since a lane jumps whenever a spray puts out its flame. `IsMimironSpotFireBotSafe`
-refuses every spray lane (16 ahead) for everyone and the siren's 13 yd (its 10 plus both object sizes,
+refuses every spray lane for everyone and the siren's 13 yd (its 10 plus both object sizes,
 as area auras count them) for casters and healers in 25-man,
 in `IsMimironSpotSafe` and the fan; `mimiron fire bot action` (`ACTION_RAID + 3`) steps sideways out of the
 lane, or away from the siren without interrupting, since losing a cast to leave a silence defeats the
@@ -1386,7 +1394,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 |---|---|
 | `phase` | 0 none, 1-4 the phase, 5 a handover. 0 also covers the 1→2 handover until VX-001 is summoned ~17 s in (`GetMimironStagingFocus` sees only VX-001 and the Aerial Command Unit), so `mimiron.py` prints it as a `Z` span, then `H`. Per instance |
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
-| `carrier` | Who is fetching the core. Per instance |
+| `carrier` | Who is fetching the core, a real player included. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point. `none` is noted too: without it a bot the formation skips by design (melee) and one its shape refused, a bug, read as the same silence |
 | `handover` | The Firefighter 1→2 handover's step: 0 none, 1 hold, 2 late (VX-001 summoned), 3 walk in. Per instance |
@@ -1396,7 +1404,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing) or `cross N` (yd of burn walked through); `none mines` when only a walk past mines was left |
 | `close` | A melee approach steered round the fire instead of straight at the target |

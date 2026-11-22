@@ -62,7 +62,7 @@ bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distanc
 
 bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPriority priority,
                                                bool fallbackUnfiltered, bool interrupt,
-                                               char const* what, bool allowFire)
+                                               char const* what, bool allowFire, bool sirenScreen)
 {
     float const distance = bot->GetExactDist2d(dest.GetPositionX(), dest.GetPositionY());
     if (distance <= 0.0f)
@@ -72,13 +72,13 @@ bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPri
                           2.0f * bot->GetPositionY() - dest.GetPositionY(), bot->GetPositionZ());
 
     return FleeFan(mirror, nullptr, distance, priority, fallbackUnfiltered, interrupt, what, 0.0f,
-                   allowFire);
+                   allowFire, false, std::nullopt, sirenScreen);
 }
 
 bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
                                 MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
                                 char const* what, float clearRadius, bool allowFire, bool sectorScreen,
-                                std::optional<float> toward)
+                                std::optional<float> toward, bool sirenScreen)
 {
     if (distance <= 0.0f)
         return false;
@@ -239,7 +239,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                     continue;
                 }
 
-                if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
+                if (!IsMimironSpotFireBotSafe(bot, hazards, dest,
+                                              sirenScreen ? ULDUAR_MIMIRON_FIREBOT_SIREN_STAND : 0.0f,
                                               ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
                 {
                     ++refusedSpray;
@@ -268,7 +269,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 
     if (sector.valid)
         return FleeFan(from, fallbackFrom, distance, priority, fallbackUnfiltered, interrupt, what,
-                       clearRadius, allowFire, false, toward);
+                       clearRadius, allowFire, false, toward, sirenScreen);
 
     if (!fallbackUnfiltered)
     {
@@ -907,14 +908,21 @@ bool MimironFireBotAction::Execute(Event /*event*/)
             std::fabs(side) >= ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
             continue;
 
-        float const step =
-            ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP - std::fabs(side);
         float const out = side >= 0.0f ? 1.0f : -1.0f;
-        Position const dest(bot->GetPositionX() - out * step * std::sin(facing),
-                            bot->GetPositionY() + out * step * std::cos(facing), bot->GetPositionZ());
+        for (float const across : {1.0f, -1.0f})
+        {
+            float const step = ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + ULDUAR_MIMIRON_FIREBOT_SPRAY_SIDESTEP -
+                               across * std::fabs(side);
+            float const dir = across * out;
+            Position const dest(bot->GetPositionX() - dir * step * std::sin(facing),
+                                bot->GetPositionY() + dir * step * std::cos(facing), bot->GetPositionZ());
 
-        return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, true, true, "spray",
-                                      true);
+            if (MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, across < 0.0f, true, "spray",
+                                       true, false))
+                return true;
+        }
+
+        return false;
     }
 
     Position const* nearest = nullptr;

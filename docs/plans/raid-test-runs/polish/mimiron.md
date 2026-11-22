@@ -356,3 +356,116 @@ about what's left). The 3→4 handover is untouched: the beaten unit is NOT_SELE
 - Handover drinks still 0.
 
 **Questions for the user:** none.
+
+## Round 5 (build d2874f536, round 4 built)
+
+**Data:** `raidtest.py report --boss mimiron --raid uld --head d2874f536 --pulls 10`: one valid pull per
+pool, no DC veto inside any. Trace scripts in the lane scratchpad (`mim5/`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261122-184807-13` | `603_13_…_1795373329` | **kill** 10:09, parts down 9:51.9 | 9: P1 Proximity Mine 1; P2 Flames 1; H2 Heat Wave 1, Flames 1; P3 Water Spray 1; P4 Hand Pulse 2, Plasma Ball 1, Shock Blast 1 |
+| uld2 | `tr-20261122-184907-14` | `603_14_…_1795373390` | wipe 10:25 in P4 at Berserk | 30: P1 Flames 1 (0:17); P2 Rapid Burst/Heat Wave 3 (melee, 3:57); P3 Water Spray 2; P4 Berserk 24 (10:01-10:20) |
+| uld3 | `tr-20261122-184928-15` | `603_15_…_1795373410` | wipe 10:06 in P4 at Berserk | 31: P3 Water Spray 8, Bomb Bot 7, Flames 2; P4 Hand Pulse 7, Plasma Ball 4, Assault Bot 1 (8:56-10:00), Berserk 2 |
+
+70 deaths: Berserk 26, phase 4 attrition before it 16, Water Spray 11, Bomb Bot 7, Flames 5, P2/H2 Heat
+Wave and Rapid Burst 4, mine 1. Deaths count revives: uld3's Uldzad died three times in phase 3.
+
+**The uld1 kill was hard mode.** Mimiron cast Summon Flames (Initial) 64563 at 7.1 s and every 30 s
+after, an event scheduled only with `_hardmode`, which only the button's `SetData(0, 7)` sets; phase 1
+opened at 13.2 s (the hard-mode intro); Flames 64566 ticked from 15 s (348k in phase 1); VX-001 cast
+Emergency Mode 64582 at phase 2 start and every phase 3 bot cast it; the clock is the 10-minute one (uld2
+and uld3 cast Berserk 64238 at 10:00.1-10:00.3), and uld1's parts went down at 9:51.9, before it.
+
+**Stop rules:** one kill of three, 9 deaths in it: not polished. No failure picked three times.
+
+**Verdict on round 4 (core fetch at or under 25%): held.** `no-corpse` 0 in all three (window 9: uld3 3,
+uld2 1); every corpse at or under 25% was looted and used (uld1 6:32 → 6:34, uld2 7:59 → 8:05, uld3 7:55 →
+8:01). Airborne at or under 25%: 15.5, 18.5 and 54 s (window 9: uld2 68, uld3 211 s). All three reached phase 4
+(window 9: one); phase 3 ran 143, 208 and 237 s in uld1-3 (window 9: 244+, 196, 375). Above 25% as before: landings
+53-59 s apart, the core held 3-22 s for `hold-bot-up`.
+
+**What still wipes is the clock, and phase 3 sets it.** With phase 4 at ~150 s (uld1: 153 s), the
+10-minute Berserk leaves phase 3 ~157 s; uld1 used 143 and killed 8 s short of it, uld2 (208 s, plus a
+115 s phase 1 against 85-86) reached phase 4 with 66 s left, uld3 (237 s) with 71. A landing comes every
+~54 s (the core goes down as the next Assault Bot spawns, and each landing delays the add timers 25 s),
+so phase 3 is landings × 54 s, and the count is set by what a landing takes: uld1 35.2/34.7/6.8 points,
+uld2 15.3/24.8/21.8/10.7, uld3 27.0/25.6/21.9/6.0. Airborne the unit takes almost nothing (0.12-0.24%/s).
+
+- uld3's landings lost their ranged: alive at its four landings 7.7, 5.0, 3.1, 1.8 (ranged on the floor
+  2.89M against 3.87M in uld1 and 4.70M in uld2). 15 of its 17 phase 3 deaths were Water Spray (8) and Bomb
+  Bots (7), 11 deaths in the first 85 s. Its phase 4 attrition (12) is that raid, two healers short,
+  in a 71 s phase 4 Berserk ended anyway.
+- uld2's first landing took 15.3 points: its six melee moved 72% of it, 69 `mimiron fire bot action` moves
+  against 86 `reach melee` (spray lanes under the landed unit), 0.47M against 1.67M from uld1's eight.
+
+**Failure picked: bots stand in a Water Spray line their escape cannot leave.** 11 deaths, 8 in the pull
+that lost its phase 3; the same lanes drive the uld2 churn above.
+
+1. **The escape dead-ends where lanes cross.** 14 of 26 hits came within 5 s of an `unsafe ... spray11`
+   note from the victim, 6 of the 11 deaths (uld3 Uldzao and Uldzat 4:50.7, Uldzad 4:56.4, Uldzae 7:22.7;
+   uld2 Uldyah 6:41.9, Uldyat 7:16.4): the fan refused all eleven bearings for spray, then the unfiltered
+   fallback found its straight sidestep in a lane too, and the bot stood. `MimironFireBotAction::Execute`
+   (`UldActions_Mimiron.cpp:910-917`) stepped to 5.0 yd off the first lane, near side only, and `FleeFan`
+   refused any spot within 4.5 yd of any lane or, for casters and healers in 25-man, 17 yd of any fire bot
+   (`:242`, `IsMimironSpotFireBotSafe`). Fire bots arrive three at a time and walk to nearby flames, each
+   with a live and a predicted lane: at 4:50.2 in uld3 melee Uldzao stood in three lanes of two fire bots
+   9.3 and 12.3 yd off, and every spot 4 yd around it lay in one to four. Replay (lanes rebuilt from the
+   snapshot before each of the 677 `spray` notes, 18 yd lanes): where the bot stood in a lane, near side
+   then far side without the siren screen cleared every `unsafe` note in uld2 and uld3 and three of four
+   in uld1. Each half alone falls short (uld3, 16 yd lanes): the siren screen dropped, 1 of 20 `unsafe`
+   notes; the far side with the screen kept, 18 of 20. The screen alone blocked most casters' `fallback`
+   notes (uld3 21 of 24).
+2. **The lane was short.** Water Spray is radius 15 (`EffectRadiusIndex` 18) and the cone test adds the
+   victim's 1.5 combat reach, 16.5 yd; hits measured from where the fire bot stood after spraying reach 16.3
+   yd, against `ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH` 16. uld3 Uldzad (4:45.2, 16.3 yd) drew no `spray` note.
+
+The other four deaths were bots already moving under the lock (`spray locked`: uld1 Uldxau, uld3 Uldzal,
+and uld3 Uldzad and Uldzaq at 5:18, revived seconds before).
+
+**Classification:** bug. The strategy means the spray escape to leave the line (the sidestep to 5.0, the
+ground-fire screen already dropped for it); it stood in it.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player):
+
+- `MimironFireBotAction`: the near side first, then across the lane to the far side (5.0 + |side| yd),
+  the unfiltered fallback only after the far side.
+- The spray escape's fans skip the siren screen (`sirenScreen` on `MoveTowardClearOfMines`/`FleeFan`, on
+  for every other caller): a silence costs a cast, the spray kills.
+- `ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH` 16 → 18, everywhere a lane is tested (escape, trigger, formation
+  spots, the reader's lane test).
+
+**Also fixed (round 4's review): a real player carrying a core.** `GetMimironCoreCarrier` picked only bots,
+so a player looting and using cores raced the bot carrier for corpses. Now a living real player on the map
+who holds a core, or has held one since the last handover (`MimironFightState::playerCoreCarrier`, reset
+with the fight state at each handover and wipe), is the carrier, and every bot's core trigger stands down,
+one holding a banked core too; with no such player the bot pick is unchanged. Bot-only pulls cannot show it.
+
+**Next window should show** (`mimiron.py --p3`; `spray.py`, `sim.py`, `p3time.py`, `landings.py` in
+`mim5/`):
+
+- Water Spray deaths well under 11 (uld3 8); no hit within 5 s of the victim's `spray unsafe` note (14 of
+  26 this window); `spray none` followed by a far-side `ok` where lanes cross.
+- No hit at 16-18 yd from a bot with no `spray` note.
+- Phase 3 ranged alive at the landings near full (uld3 7.7 → 1.8), and fewer landings needed.
+- Deafening Siren on phase 3 casters and healers not much up (window 10: ranged 76/118/102, healers
+  10/40/46 applications), since the escape may now land within 17 yd of a fire bot.
+- No new A-B-A from the far-side crossing: phase 3 `fire bot <-> reach melee` 148/230/163, `arc spread <->
+  fire bot` 39/127/106, `fire bot <-> reach spell` 63/77/63 this window.
+- Carrier: bot-only pulls unchanged (`mimiron.carrier` Uldxay, Uldyay, Uldzay). A player-led pull (needs
+  the user): a player who loots a core shows as `mimiron.carrier`, and no bot writes `corestep` while he
+  lives.
+
+**Not picked.**
+
+- Bomb Bots (7, all uld3): nine bombs, 7-27 casts each, four exploded at 25-59%; round 4's candidate (the
+  "on attacker" DoTs while a Bomb Bot is up) stands.
+- The spray step-out against `reach melee` under a landed unit (uld2's first landing above): a predicted
+  lane counts from the moment a fire bot picks its flame, however far it still has to walk. Timing it is
+  a change to the lane model; next if the churn outlives this fix.
+- uld2's 115 s phase 1 (30 s of the clock), not traced. The fire bot pile reached 6.0 average and 11 at
+  most in uld3, near the findings doc's cull line (nine to fifteen); a plan question if spray deaths
+  persist after this fix.
+- Flames 5, phase 2 4, uld1's phase 4 4.
+
+**Questions for the user:** none.
