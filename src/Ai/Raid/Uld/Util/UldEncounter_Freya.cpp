@@ -250,6 +250,26 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state)
     return best;
 }
 
+Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range)
+{
+    Unit* best = nullptr;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= ULDUAR_FREYA_LASHER_BAIL_PCT)
+            continue;
+
+        Unit* victim = lasher->GetVictim();
+        if (!victim || !victim->IsPlayer() || bot->GetExactDist2d(lasher) > range)
+            continue;
+
+        if (!best || lasher->GetHealth() < best->GetHealth() ||
+            (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))
+            best = lasher;
+    }
+
+    return best;
+}
+
 Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range)
 {
     Player* bot = botAI->GetBot();

@@ -7,7 +7,9 @@ tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets
 while two hits keep its bark up, plus three beam dodges (one off a beam the next snapshot first shows)
 and one healer in range. A second one pins a lasher wave a ghoul holds for two snapshots, with one
 ranged bot out of reach on Freya. A third pins a melee bot walking back into a low lasher's blast and
-dying to its Detonate. The shared v14 fixture shows every section reads empty elsewhere.
+dying to its Detonate. A fourth pins a low lasher chasing a ranged bot for 9 s while another ranged bot
+in reach shoots a ghoul-held lasher and bails from it once. The shared v14 fixture shows every section
+reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -196,6 +198,37 @@ def blast_pull() -> list[dict]:
     ]
 
 
+def low_snap(t: int, low_hp: float, near_on: int) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, low_hp, 0, FAR],
+        [LASHERS[1], 2344.0, -60.0, 425.3, 0, 90, 0, GHOUL],
+        [GHOUL, 2344.0, -61.0, 425.3, 0, 100, 0, LASHERS[1]],
+        [FAR, 2343.0, -50.0, 425.3, 0, 100, 100, LASHERS[0]],
+        [NEAR, 2352.0, -50.0, 425.3, 0, 100, 100, near_on],
+    ]}
+
+
+def low_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": FAR, "n": "Chased", "r": "ranged", "c": 8, "h": 0},
+                    {"g": NEAR, "n": "Nearby", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS[:2]),
+        {"t": 0, "e": "unit", "g": GHOUL, "en": 24207, "n": "Army of the Dead Ghoul"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        low_snap(60000, 10, LASHERS[1]),
+        low_snap(64000, 10, LASHERS[1]),
+        low_snap(69000, 8, LASHERS[0]),
+        {"t": 64500, "e": "move", "g": NEAR, "k": "point", "x": 2360.0, "y": -50.0, "z": 425.3, "ok": 1,
+         "by": fr.CAMP_ACTION},
+        {"t": 70000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -283,6 +316,18 @@ class Blasts(unittest.TestCase):
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_blasts, load(pull())), "BLASTS\n  no lasher wave\n")
+
+
+class Lows(unittest.TestCase):
+    def test_a_low_lasher_left_chasing_the_back_line(self):
+        self.assertEqual(printed(fr.show_lows, load(low_pull())), (
+            "LOWS\n"
+            "  1:00.000 lashers: 1 under the bail line, 1 of them 8s+ there (1 hitting a player); ranged DPS in reach "
+            "of a low lasher hitting a player: 6 sample(s), 67% on it, 33% on another lasher; 1 back-line bail "
+            "order(s) from one hitting the back line\n"))
+
+    def test_trio_pull_has_no_lasher_wave(self):
+        self.assertEqual(printed(fr.show_lows, load(pull())), "LOWS\n  no lasher wave\n")
 
 
 class Deaths(unittest.TestCase):
