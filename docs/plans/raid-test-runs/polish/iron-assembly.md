@@ -557,13 +557,15 @@ point. Every Soulstone rise at the point in the two wipes stalled the same way: 
 Lay on Hands); window 10 uld3 Uldzab 4:48.1-4:51.5 (3.4 s). Shorter stalls of the same walk: 1.2-3.3 s
 at the pull (18-34 yd off) and 1-3.3 s mid fight.
 
-**Fix.** `IronAssemblyTankAssignmentAction::WalkToSpot` (`UldActions_IronAssembly.cpp:209`): a `Duplicate`
+**Fix.** `IronAssemblyTankAssignmentAction::WalkToSpot` (`UldActions_IronAssembly.cpp:188`): a `Duplicate`
 while the bot stands (not moving, not casting) is re-sent on the second such tick after clearing `last
 movement`, as the battle rez walk does. The first still tick goes to the lower nodes: re-sent at once, the
 walk (relevance 66) outranks the healthstone (21), which would stop every re-sent walk. On uld3 Uldzab
 that walks again at ~4:36.8 instead of 4:41. No size, mode or real-player input. Reader: `--revived` adds
 per rise "walk: a healer in 40 yd after X s, stood Y s on the way" (uld3 here: 7.5 / 4.8 s and 6.8 / 4.8
-s; every other rise in windows 10-11 at once or within 2.6 s). pb-check green.
+s; every other rise in windows 10-11 at once or within 2.6 s, bar uld2 Uldyaa's 3:22.5 rise at 4.2 / 3.5 s,
+held 10 yd off its spot by design: a Rune of Death on the spot from 2:56 to 3:26, the route step refuses
+and no `move` row goes out). pb-check green.
 
 **PickDefensive (shared, waiting on the user): 0 deaths this window.** Unaffordable button once: uld1
 Uldxam 4:24.2 got Vampiric Blood, the cast failed, the class IBF at 12% saved it. Fading Last Stand as
@@ -593,6 +595,20 @@ stack, tanks unread. Plan question 2.
    without Divine Protection landed safe; judge it once risen tanks walk straight back.
 
 **Next window should show.** `--revived`: every rise "a healer in 40 yd" within ~3 s and "stood" ≤ ~1 s
-(uld3 here: 7.5 / 4.8 s and 6.8 / 4.8 s); no risen tank dying to High Voltage at the Meltdown point.
+(uld3 here: 7.5 / 4.8 s and 6.8 / 4.8 s), bar a rise held off its spot by a Rune of Death on it (no
+`move` rows from the walk while it lasts); no risen tank dying to High Voltage at the Meltdown point.
 `postmortem.py --bot <risen tank>`: `move ... r:dup` from `iron assembly tank assignment action` lasts one
 still tick, then an `ok:1` re-send. Healer mana unchanged until question 1.
+
+**Review.** Root cause holds in the trace: uld3 Uldzab's walk went out at 4:35.639, `healthstone` FAILED
+at 4:35.986 on the move (`UseItemAction` stops the bot first), the track sits at (1606.7, 101.5) from
+4:35.98 to 4:40.77 and every walk tick reads `dup` to 4:40.603. Uld2 Uldyab (4:59.578), uld3 Uldzaa
+(3:59.975) and window 10 uld3 Uldzab (4:47.300) start the same way, each with a `healthstone` FAILED on
+the move. The fix holds at 10 and 25, both modes, and with a player tank (it re-sends only a bot tank's
+own walk; no size, mode or player input). It also shortens another stall: after a Charge or Feral Charge
+at the pull or mid fight a tank stood 2-3 s at the boss, 4-34 yd from its spot, with the walk `dup`
+(every pull of windows 10-11); it now walks back ~1 s after the charge, as "stand, do not drag" intends.
+Watch the pull for a council member leaving its tank in the first 5 s. The branch predates the comment
+strip `c163ec11a`: the two source files it touches are stripped here (`commentstrip.py strip --keep-from
+c163ec11a`, token check clean, now equal to Custom's bar the fix), so the merge carries no comment and
+the other Ulduar files come from Custom as they are.
