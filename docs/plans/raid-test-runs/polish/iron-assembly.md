@@ -303,3 +303,7 @@ the bar in its cast's last 1.5 s reads `under` and spends a button (`defensive <
 when nothing was ready; punches on a tank topped up by then read `safe` with no defensive. Fewer tank
 deaths to Fusion Punch in Molgeim's phase (window 8: 2 in 3 pulls) and no class `rebirth` spent there on a tank. Phase-3 deaths to punches
 on tanks with no button stay until question 1 is answered.
+
+**User answers (2026-11-22) to round 4:** yes to both. (1) Hold the tanks' class defensive buttons
+above 25% health through Iron Assembly, so only the Fusion Punch node spends them (as Hodir round
+2). (2) Rebuff a battle-rezzed tank in combat.

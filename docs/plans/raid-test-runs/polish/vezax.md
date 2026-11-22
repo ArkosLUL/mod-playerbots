@@ -130,3 +130,7 @@ Harmless here, recorded in `docs/raids/ulduar/vezax.md`.
   still being built.
   *Recommended: yes, as its own lane*; every boss with a rogue gets pulled again, and the Vezax and
   Mimiron guards can then go.
+
+**User answers (2026-11-22):** (1) keep polishing on the 226 rosters, the stop rule waived as for
+Algalon; (2) yes, lift the ranged "no casting outside a field" hold while the Animus lives; (3) no
+shared Tricks of the Trade fix, so the Vezax-only Tricks guard stays.

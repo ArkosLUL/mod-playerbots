@@ -126,3 +126,7 @@ which no trigger interrupts; the handover rule should move it before the cast st
 - **Q2: the DK talent fix** (open on the plan's roster row) matters here: P2 length is the mana wall
   and uld1 lost to Berserk with the ACU at ~15%. Recommendation: fix provisioning before judging P2
   and P3 output on these rosters.
+
+**User answer (2026-11-22):** yes. A bot-only raid gets its own phase 1 to 2 handover position:
+out to clean ground about 45 yd from the centre, back in over the last ~10 s, triggered by no real
+player in the raid (like Yogg-Saron's walk-in).

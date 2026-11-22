@@ -264,3 +264,8 @@ it lands. Melee receivers leave by `reach melee` / `set behind` (generic, untouc
   shed, shelter, collect or spread act or a carry, where the position node stands down and both probes
   go stale; the first fire window ends at the first landing after the first fire.
 - Next window adds: `--storm` carrier within 2 yd of its rally well above 18-27%.
+
+**User answer (2026-11-22):** shed Biting Cold with short hops instead of walking legs, using the
+fork's existing jump code (no port of upstream PR #3014). A hop must land about a yard away: a
+jump that lands on its start point leaves the movement flags off (`MoveSplineInit::Launch` treats it
+as orientation only), so `isMoving()` stays false and no stack drops.
