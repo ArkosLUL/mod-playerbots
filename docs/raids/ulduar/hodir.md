@@ -71,7 +71,7 @@ legal stands up and 30 reaches 30.5%.
 **One hold point per instance, read by both tanks** (`DeriveHodirHold`, `HodirBotLatches::hold`): the
 centre, or the live Toasty Fire nearest the centre that is within `_HOLD_FIRE_LEASH` **25** of it —
 and the point is **the fire itself**, not a spot beside it. Measured from the centre, never from him,
-so he never ends up more than 25 yd out and every tank spot stays 28+ yd inside the y band he evades
+so he never ends up more than 25 yd out and every tank spot stays 27+ yd inside the y band he evades
 outside. Melee wrap round him rather than lining up behind — p50 **1.2 yd behind his centre**, p10 6.3
 behind, p90 4.1 in front, |lateral| p50 3.0, pets p50 3.3 behind — so a fire at his feet covers **98%**
 of melee and pet samples against 92 / 91% for one 5 yd behind him and 80 / 73% at 8. The fire procs

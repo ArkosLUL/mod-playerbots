@@ -409,7 +409,7 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
 static Position HodirTankSpot(Player* bot, Unit* hodir, HodirHoldLatch const& hold, bool offTank)
 {
     // His chase stops at both combat reaches plus CONTACT_DISTANCE, so a tank that far past the point has
-    // him stop on it
+    // him stop on it.
     float const offset = hodir->GetCombatReach() + bot->GetCombatReach() + CONTACT_DISTANCE;
     float const angle = offTank ? hold.bearing - static_cast<float>(M_PI) / 2.0f : hold.bearing;
     return ValidateStaticFloorPoint(
@@ -857,15 +857,15 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     bool const mainTank = PlayerbotAI::IsMainTank(bot);
     if (mainTank || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
     {
-        // Two fixed ends square to the hold line, since he follows: neither drags him off the fire, and
-        // 6 yd apart spans two aura ticks.
+        // Two fixed ends square to the tank's own line from the point, since he follows: neither end leaves
+        // his melee range with him on the fire, and 6 yd apart spans two aura ticks.
         HodirHoldLatch const* hold = DeriveHodirHold(botAI, bot);
         if (!hold)
             return false;
 
         Position const spot = HodirTankSpot(bot, GetHodir(botAI), *hold, !mainTank);
 
-        float const axis = hold->bearing + static_cast<float>(M_PI) / 2.0f;
+        float const axis = mainTank ? hold->bearing + static_cast<float>(M_PI) / 2.0f : hold->bearing;
         float const dx = std::cos(axis) * ULDUAR_HODIR_SHUTTLE_HALF_LEG;
         float const dy = std::sin(axis) * ULDUAR_HODIR_SHUTTLE_HALF_LEG;
 

@@ -165,7 +165,7 @@ static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GA
               "the caster band has to have room between its ends");
 
 // Measured from ULDUAR_HODIR_CENTRE, not from him, so he never ends up further out than this and every
-// tank spot stays 28+ yd inside the y band he evades outside.
+// tank spot stays 27+ yd inside the y band he evades outside.
 inline constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 25.0f;
 
 // Closer than this and a bearing from Hodir to the point means nothing, so the tank takes the fixed

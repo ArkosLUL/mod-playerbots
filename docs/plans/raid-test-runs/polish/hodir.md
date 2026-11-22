@@ -486,3 +486,17 @@ not haste), the pace split.
 or ranged carrier standing out of a fire and away from the others (uld3 25.8-55.8 s: three charges in
 30 s) gathers nobody inside the 15 yd collect leash. The fourth helper wave (~2:35, him at 21-29%)
 costs 98-154 bot-seconds on ice for a fire that lands ~2:50-2:55; roughly a wash before 3:00.
+
+**Review (round 5).** The root cause holds: `--blocks` reproduces the w10 line, and on w9 uld1 and
+all three w10 pulls the position node was the commonest accepted mover of a ranged bot targeting ice
+(112-145 moves a pull, against 45-115 for `reach spell`); under a Starlight stand 57-77% of its moves
+went away from the block. The 9.5 chase stop matches the core (`TargetedMovementGenerator.cpp:256`,
+`CONTACT_DISTANCE` + both reaches).
+- Fixed, bug: the tank walking legs (the shed's fallback when no hop end works) ran square to the
+  hold bearing for both tanks, which is radial for the off-tank. At the old 4.5 offset both ends
+  stayed in his reach; at 9.5 the far end sat 12.5 yd from the point, past his 10.33 melee range, so
+  with the off-tank holding him in a Frozen Blows window a leg would drag him off the fire. Each tank's
+  legs now run square to its own line from the point (ends 9.96 yd out).
+- Watch: the main tank now stands 9.5 yd from a held fire's centre, 1.5 inside its 11 yd aura (4.5
+  before), so a tank standing 1.5 yd further out than its spot loses the fire and sheds Biting Cold
+  itself.

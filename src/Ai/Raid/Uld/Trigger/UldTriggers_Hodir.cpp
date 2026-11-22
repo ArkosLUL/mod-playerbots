@@ -130,7 +130,7 @@ bool HodirRaidPositionTrigger::IsActive()
         return false;
 
     // A breaker stays where reach spell put it: its buff stand and the band rules both walk it out of
-    // range of the block. Healers are left out since nothing hands them a block
+    // range of the block. Healers are left out since nothing hands them a block.
     if (PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
     {
         Unit* target = AI_VALUE(Unit*, "current target");
