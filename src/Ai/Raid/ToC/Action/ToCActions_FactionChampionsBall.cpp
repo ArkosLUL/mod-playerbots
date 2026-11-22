@@ -145,7 +145,20 @@ bool FactionChampionsKiteAction::Execute(Event /*event*/)
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
-    return WalkTo(spot, MovementPriority::MOVEMENT_FORCED);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    MovementPriority const held = last.priority;
+    bool const ownHop = _hop.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) < SAME_SPOT;
+    if (held == MovementPriority::MOVEMENT_FORCED && ownHop)
+        last.priority = MovementPriority::MOVEMENT_COMBAT;
+
+    if (WalkTo(spot, MovementPriority::MOVEMENT_FORCED))
+    {
+        _hop = spot;
+        return true;
+    }
+
+    last.priority = held;
+    return false;
 }
 
 bool FactionChampionsSpeedBoostAction::Execute(Event /*event*/)
