@@ -491,8 +491,13 @@ struct ThorimEncounterTargets
 void GatherThorimEncounterTargets(PlayerbotAI* botAI, ThorimEncounterTargets& out);
 
 // False for Thorim and Sif while he's on the balcony: ThorimArenaTargetGuardMultiplier reads a target
-// outside the arena box as a reason to stop acting, so a bot holding one does nothing at all.
+// outside the arena box as a reason to stop acting, so a bot holding one does nothing at all. Except
+// Thorim for a bot ThorimBalconyHitAllowed lets start phase 2.
 bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target);
+
+// Corridor bot on the balcony past ULDUAR_THORIM_BALCONY_5, clear of both Paralytic Fields, while Thorim's
+// still up there. Phase 2 only starts on a player's hit from above z 430, so these are the bots that start it.
+bool ThorimBalconyHitAllowed(PlayerbotAI* botAI, Player* bot);
 
 // nullptr leaves the generic picker alone. Not a raid icon: RtiTargetValue hands an icon back before the
 // smart picker runs and IsHighPriority pins it, so a wrong mark sticks until the bot leaves combat.

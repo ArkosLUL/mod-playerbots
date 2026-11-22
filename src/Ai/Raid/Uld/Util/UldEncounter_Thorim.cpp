@@ -1156,7 +1156,27 @@ bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target)
 
     // Phase 1: neither he nor Sif can be hit from the floor, and both sit above the arena box, which the
     // arena target guard shuts a bot down for.
-    return target != boss && target->GetEntry() != NPC_SIF;
+    if (target == boss)
+        return ThorimBalconyHitAllowed(botAI, botAI->GetBot());
+
+    return target->GetEntry() != NPC_SIF;
+}
+
+bool ThorimBalconyHitAllowed(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    if (!ThorimSplitActive(botAI) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    // Read only, the walk owns this latch. A chase to him from short of BALCONY_5 crosses a Paralytic Field.
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    auto const itr = state->balconyStep.find(bot->GetGUID());
+    return itr != state->balconyStep.end() && itr->second >= ULDUAR_THORIM_BALCONY_WAYPOINTS - 1;
 }
 
 namespace
@@ -1253,9 +1273,9 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
         if (targets.runeGiant)
             return NoteThorimDpsTarget(bot, targets.runeGiant);
 
-        // Phase 2 only starts on damage from a player above z 430. Gated on the bot's own height, or a
-        // corridor bot at z 412 gets pulled 150 yd out of its lane.
-        if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        // Phase 2 only starts on damage from a player above z 430. Only past BALCONY_5: from the corridor a chase
+        // pulls the bot 150 yd out of its lane, from the hallway across a Paralytic Field.
+        if (ThorimBalconyHitAllowed(botAI, bot))
             return NoteThorimDpsTarget(bot, boss);
 
         return NoteThorimDpsTarget(bot, nullptr);

@@ -29,7 +29,8 @@ public:
 };
 
 // Thorim: the corridor squad on the platform. The generic picker reads threat, not range, so it holds the
-// untouchable boss from far out and "reach melee" walks it up the middle into the Paralytic Field bunnies.
+// boss from far down the hallway and "reach melee" walks it up the middle into the Paralytic Field bunnies.
+// Not past BALCONY_5: the fields are behind the bot there, and its hit is what starts phase 2.
 class ThorimBalconyGuardMultiplier : public Multiplier
 {
 public:

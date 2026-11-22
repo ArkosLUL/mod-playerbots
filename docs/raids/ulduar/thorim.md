@@ -136,10 +136,18 @@ centre → east wall → centre. The chain's worst leg clears a bunny by **15.8 
 - **A pet chasing down the corridor pulls packs the gauntlet squad has not reached**, which is what
   `ThorimStrayPets` / `ThorimRecallPet` stop.
 
-**Phase 2 only starts when a player above z 430 damages Thorim** (`boss_thorim::DamageTaken`), once
-the Rune Giant's death has sent `ACTION_ALLOW_HIT`. `DisableThorim(true)` applies only
-`UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_PACIFIED` and a root — he is hostile and attackable throughout —
-so a raid that never hits him from up there leaves him at 100% forever.
+**Phase 2 only starts when a player above z 430 damages Thorim** (`boss_thorim::DamageTaken`; a pet's
+damage does not count), once the Rune Giant's death has sent `ACTION_ALLOW_HIT`. `DisableThorim(true)`
+applies only `UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_PACIFIED` and a root — he is hostile and attackable
+throughout — so a raid that never hits him from up there leaves him at 100% forever.
+
+**The corridor squad starts it.** `ThorimBalconyHitAllowed` gives him to a corridor bot still above the
+floor line whose walk latch has passed `ULDUAR_THORIM_BALCONY_5`; from any earlier waypoint a chase to him
+crosses a Paralytic Field. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's
+end is the firing spot. Every other bot stays off him and Sif while he is up there
+(`ThorimDpsTargetAllowed`, `ThorimBalconyGuardMultiplier`, the arena target guard). A real player changes
+nothing: the first corridor bot there starts phase 2 if he has not. Unmeasured: needs a bot-led squad on
+the platform.
 
 The healer split (arena 13 bodies / 1.48 M / 2 healers against gauntlet 11 / 0.69 M / 2) is left
 uneven on purpose: the gauntlet's clock is the lever, not its survivability.
@@ -839,10 +847,6 @@ player was on the instance left the corridor standing while he stayed in the are
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
   across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
   one, about 100-125 s from the lever. Unmeasured: needs a live pull.
-- **Open: no bot may hit him from the balcony in phase 1**, so only a player starts phase 2.
-  `GetThorimDpsTarget` hands him to a corridor bot above the floor line, but `ThorimDpsTargetAllowed`
-  forbids him to every bot while he is up there, and `ThorimBalconyGuardMultiplier` zeroes Attack/Reach on
-  him for corridor bots above it during the split.
 
 **The last 67 yd of the lower corridor are unwaypointed** — waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
