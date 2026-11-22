@@ -879,7 +879,8 @@ the only patch.
 a turn past 90° waits until it is 1 s old. Re-picked freely, the two headings left at the rim swapped every tick (G 2:09
 Mighty and H 6:16 Prayer stalled 5-6 s, Prayer to death; O 1:22 Hellflame reversed 10 times).
 
-**A human kiter** gets no candidates: its motion since the last plan, held, judged once with a Hand,
+**A human kiter** gets no candidates: its motion between plans 0.1-1 s apart (else its facing while
+it moves), held, judged once with a Hand,
 so the claim, the escort and the dodge still read its catch.
 
 Why (2026-10-31 BH, BI, BJ): the lane step and ring commit before it judged the spike's pass only
@@ -959,7 +960,8 @@ R, each on its slot 3 yd round it (`anub.gather`), walking once 6 yd off; the ma
 off R away from where he went down, the spike's summon 2.5 s in, and it picks up scarabs from there.
 The melee hit him to the submerge (user: the damage is vital) and walk once he is down. `anubarak gather hold` blocks `reach melee`, `reach
 spell`, `reach party member to heal`, `anubarak melee burrower stand`, set behind, flank, formation,
-follow, flee and charges meanwhile; the dodge, the scarab kite and the burrower lead still outrank it. A
+follow, flee and charges meanwhile; the dodge, the scarab kite and the burrower lead still outrank it. A bot holding a dodge still
+counts as gathered for that block, so no other walk takes it; only the gather walk waits. A
 gathered melee bot's pick is only a scarab or a loose burrower within 10 yd, else none (`anub.dps`
 `none`), so the ranged take the burrowers on the patches: its side's focus walked CC's melee 20 yd out and
 back every ~6 s (P2 1,322 yd), and the class flee stepped gathered casters off every scarab (CC 268 yd).
@@ -1006,7 +1008,7 @@ back.
 Shield, Ice Block or Forbearance on it: 1 s before the plan's catch ([above](#the-kite-planner)), the
 spike within Impale's reach plus 1.5 s of its closing speed, a base-speed spike inside Impale's reach
 of a boosted kiter counting only once it outlasts its next 1.5 s test (S 3:50: the submerge's last
-Hand went 0.6 s into a kite with Nitro running), never while the kiter outruns the spike (2026-10-30
+Hand went 0.6 s into a kite with Nitro running; a plan with no catch is read as 20 s off), never while the kiter outruns the spike (2026-10-30
 Hands landed on BD Ecoterrorist on Dash at 19.0 yd/s against 11.4, BA Deathsong on Nitro), and on a
 heroic bot not while its speed boost is still ready and the plan fires it before the Hand lands (user
 call, 2026-10-30: BD Angry's and BC Power's Nitro went 9.1 s after their Hands, BC Agony's 0.5 s after
