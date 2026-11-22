@@ -394,6 +394,10 @@ TAUNT_COOLDOWN_MS = 8000
 # What a tank can turn a Guardian back with: the class taunts, Growl 6795 and Righteous Defense 31789,
 # whose cast row on the Guardian sits beside the one on the friendly target.
 GUARDIAN_TAUNTS = set(TAUNT_SPELLS) | {6795, 31789}
+# A tank's taunts by where they land: Righteous Defense's 31789 lands on the ally, its 31790 on each attacker.
+TANK_TAUNT_SPELLS = {355, 62124, 56222, 6795, 31790}
+# Holds the bot tanks' class taunt actions in phase 3; guardian control casts its own directly.
+PHASE_3_TAUNT_HOLD = "yogg-saron phase 3 taunt hold"
 
 # Phase 3 split: ranged hit a Guardian only above the floor, otherwise Yogg; under it only in a gaze,
 # never once Weakened. Melee stay on Yogg except for a gaze or a beacon-healed Guardian over the floor on a tank.
@@ -3910,6 +3914,16 @@ def target_kind(target: int, entry: int | None) -> str:
     return "yogg" if entry == NPC_YOGG_SARON else "other"
 
 
+def taunt_aim(caster: int, aim: str, victim: int | None, tanks: set) -> str:
+    """What a tank's phase 3 taunt went on, from `target_kind` of its target and that Guardian's victim just before:
+    a rooted `tentacle`, a Guardian already on the caster (`own`) or on `another tank`, a `loose` one, else `other`."""
+    if aim != "guardian":
+        return "tentacle" if aim == "tentacle" else "other"
+    if victim == caster:
+        return "own"
+    return "another tank" if victim in tanks else "loose"
+
+
 def first_off_tank(rows: list[list], tanks: set) -> list | None:
     """The first snapshot_rows row on which this Guardian had a victim that was not a tank."""
     return next((row for row in rows if row[8] and row[8] not in tanks), None)
@@ -4254,6 +4268,18 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
             back = sum(1 for when, aim in own if taunt_bounced(victims[aim], tank, when, tanks))
             print(f"    taunts by {trace.name(tank):14}: {len(own)}, on another tank {TAUNT_BOUNCE_MS // 1000} s"
                   f" later {back}")
+    aims = collections.Counter()
+    for rec in trace.of("cast"):
+        if rec.get("s") in tanks and rec.get("sp") in TANK_TAUNT_SPELLS and start <= rec["t"] <= stop:
+            aim = rec.get("tgt", 0)
+            row = row_before(rows.get(aim, []), rec["t"]) if aim in guardians else None
+            aims[taunt_aim(rec["s"], target_kind(aim, trace.entries.get(aim)), row[8] if row else None, tanks)] += 1
+    if aims:
+        print(f"    tank taunts by aim: {dict(aims)}")
+    held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
+                               if rec.get("m") == PHASE_3_TAUNT_HOLD and start <= rec["t"] <= stop)
+    if held:
+        print(f"    class taunts held : {dict(held)}")
     redirects = collections.Counter(trace.name(rec.get("tgt", 0)) for rec in trace.of("cast")
                                     if rec.get("sp") == SPELL_MISDIRECTION and start <= rec["t"] <= stop)
     if redirects:

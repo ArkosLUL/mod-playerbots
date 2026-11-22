@@ -1261,6 +1261,15 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.flip_cause("heal", set()), "heal threat")
         self.assertEqual(yogg_saron.flip_cause("ranged", set()), "none")
 
+    def test_taunt_aim_splits_tentacles_own_another_tank_and_loose(self):
+        tanks = {1, 2}
+        self.assertEqual(yogg_saron.taunt_aim(1, "tentacle", None, tanks), "tentacle")
+        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 1, tanks), "own")
+        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 2, tanks), "another tank")
+        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 7, tanks), "loose")
+        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", None, tanks), "loose")
+        self.assertEqual(yogg_saron.taunt_aim(1, "yogg", None, tanks), "other")
+
     def test_area_worth_counts_yogg_by_his_reach_and_only_held_guardians_over_the_floor(self):
         guardian = yogg_saron.NPC_IMMORTAL_GUARDIAN
         # A full Guardian joining three low ones by the pile, Yogg 18.5 yd off: two worth hitting.

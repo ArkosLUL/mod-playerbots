@@ -243,3 +243,85 @@ get the 11 / 13 yd circle. The new hold reads the live reach.
   staged at door open and the team 149-166 yd from the melee spot.
 - uld2's 2:28.09 double nova, during the handover: two Guardians at 0.1% and 2.8%, 5.5 yd apart, the second killed
   in the same tick by the first's nova chain, the simultaneous pair the nova gap cannot cover.
+
+## Round 4 (2026-11-22, window head ebe746ad1)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head ebe746ad1 --pulls 10`: one valid pull per pool, 0
+humans, holds round 3; Freya's 62670 on the raid in all three. Read with the report's `yogg_saron.py` views and scratch
+scripts over snapshots, `act` and `cast` rows (per phase 3 Guardian: victims from spawn, taunts at it by source node and
+range, each tank's taunts cooling when it came within 30 yd).
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per descent | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261122-201901-18` | `603_18_yogg-saron_1795378786` | wipe 13:01, 34 deaths | 138 s | 443 s, 5 waves: 22.3, 15.6, 4.5, 21.8, 5.8 | from 9:41, 213 s, Yogg 30 → 16.7% |
+| uld2 | `tr-20261122-201159-16` | `603_16_yogg-saron_1795378365` | wipe 8:25, 29 deaths | 156 s | 312 s, 3 waves: 4.1, 13.4, 0.6 (Brain at 81.9%) | never |
+| uld3 | `tr-20261122-201459-17` | `603_17_yogg-saron_1795378545` | wipe 11:30, 31 deaths | 155 s | 434 s, 5 waves: 16.6, 21.9, 9.1, 15.9, 6.5 | from 9:49, 112 s, Yogg 30 → 25.5% |
+
+Against window 10 (8:07-13:23) the same shape, neither shorter nor worse: uld1 reached phase 3 at 9:41 (9:37) and left
+Yogg at 16.7% (13.2%); uld3 one descent sooner, 9:49 (11:07), at 25.5% (28.5%); uld2 again an Induce Madness wipe in
+phase 2. Deaths 34 / 29 / 31 against 34 / 29 / 32.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 2 (Uldxai twice); phase 2 none; phase 3 Immortal Guardian 32 (one by Drain Life). Before
+  the first tank death (11:48.6, +128 s), 7, every one a fresh Guardian 4.6-10.7 s old swinging at a ranged or healer
+  before a tank held it; then the tanks and the pile.
+- uld2: phase 1 Shadow Nova 7 (four melee at 1:45.24 with nothing raid-wide left, the one paladin's Aura Mastery and
+  Divine Sacrifice spent at 1:02.7; novas caught the back line three times), Dark Volley 2 (melee, 2:18.3); phase 2
+  Insane 11 (one in wave 1, ten of the wave 3 Stormwind team, out late after a 49.4 s clear with 2 melee on the team),
+  charmed raiders 4, Squeeze 3, Corruptor 2.
+- uld3: phase 1 Shadow Nova 1; phase 2 Grim Reprisal 1; phase 3 Immortal Guardian 29. Before the first tank death
+  (10:32.5, +43 s), 5: the first Guardian spawned 66 yd from the melee spot among the brain team walking back from
+  (1924.7, −25.4), out of every taunt, and killed four there (9:53.9-10:03.1); a fresh one took a healer at 10:29.1.
+
+**Verdict on round 3: fixed.** Crush deaths 5 / 1 → 0 / 0 / 0, Crush hits 0 / 0 / 2 (uld3, the cone past its victim
+onto a melee, 10.8k; were 21 on uld2's tanks and 3 on a melee). `--crush` `area held in a swinging Crusher's reach` 14 /
+15 / 2 (Avenger's Shield, Hammer of the Righteous, Heart Strike, Consecration, Death and Decay; Thunder Clap, Shockwave,
+Cleave, Bladestorm, Sweeping Strikes). Platform tentacle damage live / stunned 50.6 / 65.2k and 42.3 / 65.3k, not under
+43.1 / 67.9k and 40.9 / 56.1k; uld2 12.6 / 15.1k against 20.9 / 11.0k with 7 melee dead in phase 1.
+
+**Stop rules.** No kill. Phase 3 is picked a second time (round 3 asked its throughput question).
+
+**Ranking** across pools: phase 3 Immortal Guardians 61; uld2's phase 2 collapse 20, downstream of its phase 1 (a brain
+team of 4 healers, 10 ranged and 2 melee took the Brain 4.1 / 13.4 / 0.6%); Shadow Nova 10 and Dark Volley 2 (9 in
+uld2); Grim Reprisal 1.
+
+**Top: phase 3, still the throughput race the pending question covers** (not built). Its numbers here: uld1's three
+beacons before the wipe (10:36, 11:24, 12:09) drew 3.93M / 3.67M / 0.91M of raid damage into the healed Guardians during
+the heal, which still ended them at 13-100%, 28-93% and 72-100%; Yogg −0.13 /
+−1.11 / −0.98% over each 20 s. Ranged 80.2k/s, 76% into Guardians over 30%, 19% tentacles, none on Yogg; Yogg fell
+0.077%/s on melee (29.7 → 16.7% in 170 s). uld3 had one beacon (10:44) with both tanks dead within 3 s, and its ranged
+spent 94% on the 6 leftovers (5.52M at phase 3). By round 3's sum (three healed Guardians back to the floor cost ~1.2M),
+leaving the first two heals alone would have moved ~5.2M, ~9% of Yogg's 57.2M, against 16.7% left: not a kill alone.
+
+**Picked inside it, a bug: the class taunts spend the guardian control's cooldowns.** The deaths before each collapse
+are fresh Guardians, and each loose one met tanks with no taunt ready: two tanks hold two or three taunts per 8 s
+against a spawn every 10 s, and uld1 swapped 12 times (the taker's taunt plus the holder's 8 s shed). The `lose aggro` nodes
+(`TankPaladinStrategy.cpp:125` hand of reckoning → righteous defense → avenger's shield, `BearDruidStrategy.cpp:139`
+growl, `BloodDKStrategy.cpp:134` dark command, `TankWarriorStrategy.cpp:219` taunt) ran on the tank's current target
+whenever `yogg-saron guardian control` had nothing to do. Over this window's and round 3's phase 3s, before the first tank
+death, they cast 26 taunts (4 / 7 / 8 / 7), none taking a Guardian off a non-tank: 9 on rooted tentacles (uld3 9:52-10:01:
+Hand of Reckoning twice on a Corruptor, Growl twice on a Crusher, Righteous Defense on Uldzab taunting two Corruptors and
+a Crusher), 14 on Guardians the other tank held (uld1 11:07.7: Righteous Defense on the DK took three, 9 s after the
+10:58.5 swap had given them to him), 3 on the caster's own. Round 3's uld1 paladin met the 11:38.2 and 12:10.2 spawns
+with Hand of Reckoning spent by the class node 2.7 / 2.3 s earlier; both swung at a non-tank first.
+
+Bug, not a plan change: the strategy gives phase 3 taunting to the control (loose Guardians first, one pile moved only by
+the swap rule, never a dragged mark). Fix (`UldDefinition_YoggSaron.cpp`): `yogg-saron phase 3 taunt hold`, a `Block` on
+`Family::Taunt` for bot tanks while `YoggSaronInPhase3`. The control, swap and drag cast through `PlayerbotAI::CastSpell`
+and are untouched; fallbacks run past the veto (Heroic Throw, Avenger's Shield). Same at 10 and 25, normal and hard mode,
+with or without a player. Reader: `--phase3` prints `tank taunts by aim` and `class taunts held`.
+
+**Next window should show:** `class taunts held` rows (hand of reckoning, righteous defense, growl, dark command, taunt);
+`tank taunts by aim` with no `tentacle` or `own` (here uld1 {loose 27, another tank 23}, uld3 {tentacle 10, loose 7,
+another tank 9}); fewer fresh Guardians swinging at a non-tank before the first tank death than 4 of 13 / 2 of 4 (round 3:
+4 / 1); the first tank death later than +128 s / +43 s. Phase 3 still ends on the pile until the user answers.
+
+**Seen, not picked.**
+
+- Righteous Defense at stasis end from 56-68 yd, on the zero-threat first victim: its 3 s end mid-walk, and 2 of 4 such
+  Guardians in uld1 (10:45.5, 11:15.7) reached a non-tank. The doc means it to reach one still walking in.
+- The brain team surfaces at (1924.7, −25.4), 74 yd from the melee spot just outside the Guardian spawn ring, and walks
+  through the ring for ~40 s (uld3: 4 of 10 never reached their station).
+- uld2's nova cluster: roster B has one paladin with Aura Mastery and Divine Sacrifice, and 6 of 12 Guardian deaths fell
+  over 6.5 yd out, catching the back line.
