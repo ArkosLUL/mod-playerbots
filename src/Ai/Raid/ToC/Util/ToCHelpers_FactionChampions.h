@@ -66,6 +66,10 @@ bool IsFactionChampionHealer(uint32 entry);
 // DK, Warrior, Rogue, Enhancement Shaman or Retribution Paladin
 bool IsFactionChampionMelee(uint32 entry);
 
+// How far the champion's swings reach the victim while both move: GetMeleeRange plus the core's 2.66 yd
+// leeway (Unit::IsWithinMeleeRange). Read live, the Tauren two reach ~4 yd farther than the rest.
+float FactionChampionsSwingReach(Unit* champion, Unit* victim);
+
 // The raid's one kill target, latched per instance. Moves on its death, combat drop or full immunity, to a
 // player's skull, or to a healer gripped out of the pack. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);

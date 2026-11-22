@@ -45,9 +45,8 @@ constexpr float CYCLONE_STAND_MARGIN = 2.0f;
 // The Cyclone stand's rings round the kill target. 30 yd still sits inside Wrath's 33 with Nature's Reach.
 constexpr std::array<float, 3> CYCLONE_RINGS = {20.0f, 26.0f, 30.0f};
 
-// a healer steps off melee champions this close, this far, then stands again for a while so one that
+// a healer steps off melee champions in swing reach, this far, then stands again for a while so one that
 // follows doesn't turn it into a kite
-constexpr float STEP_OFF_TRIGGER = 8.0f;
 constexpr float STEP_OFF_DIST = 10.0f;
 constexpr uint32 STEP_OFF_MS = 2500;
 constexpr uint32 STEP_OFF_REST_MS = 3000;
@@ -56,8 +55,6 @@ constexpr uint32 STEP_OFF_REST_MS = 3000;
 constexpr uint32 NITRO_FOCUS = 3;
 // lower, the boots no longer outrun the hits
 constexpr float NITRO_MIN_HEALTH_PCT = 30.0f;
-// a free melee champion this close keeps hitting through a kite, only a speed boost opens a gap on it
-constexpr float BOOST_CONTACT = 8.0f;
 // each bearing's run steps back this much from the boost's reach till it ends on clear floor
 constexpr float NITRO_STEP_BACK = 5.0f;
 constexpr float NITRO_MIN_RUN = 15.0f;
@@ -92,13 +89,9 @@ constexpr std::array<OpenerSpell, 5> OPENER_SPELLS = {INTIMIDATING_SHOUT, PSYCHI
 constexpr OpenerSpell SPRINT{{11305, 8696, 2983, 0, 0, 0}};
 constexpr OpenerSpell DASH{{33357, 9821, 1850, 0, 0, 0}};
 
-// A healer or ranged bot runs or CCs its way out once a melee champion on it is this close
-constexpr float ESCAPE_MELEE_REACH = 8.0f;
 // the circle has to put this much more ground between the bot and the melee on it
 constexpr float ESCAPE_MIN_GAIN = 12.0f;
 constexpr float BLINK_DIST = 20.0f;
-// an AoE's search counts both ends' size on top of its radius
-constexpr float ESCAPE_AOE_SLACK = 2.0f;
 constexpr uint32 SPELL_BLINK = 1953;
 constexpr uint32 SPELL_DEMONIC_CIRCLE_TELEPORT = 48020;
 // on the warlock while its circle is within the teleport's 40 yd
@@ -115,7 +108,6 @@ constexpr uint32 SPELL_DISENGAGE = 781;
 // goes off at 2.5 yd, laying a 10 yd slick that slows 50% for 30 s; Entrapment adds a root there.
 constexpr uint32 SPELL_FROST_TRAP = 13809;
 constexpr float FROST_TRAP_SLICK = 10.0f;
-constexpr float DISENGAGE_REACH = 5.0f;
 constexpr float DISENGAGE_DIST = 15.0f;
 
 // cloth beats a plate DPS in melee for the re-pick up to ~27 yd, plus the 110% switch margin
@@ -391,22 +383,24 @@ bool Unhindered(Unit* champion)
            !champion->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED);
 }
 
+// a free one in swing reach keeps hitting through a kite, only a speed boost opens a gap on it
+bool InContact(Unit* champion, Player* bot)
+{
+    return Unhindered(champion) && bot->GetExactDist2d(champion) <= FactionChampionsSwingReach(champion, bot);
+}
+
 bool Crawling(Unit* champion)
 {
     return champion->HasUnitState(UNIT_STATE_LOST_CONTROL) || champion->HasAuraType(SPELL_AURA_MOD_ROOT) ||
            champion->GetSpeedRate(MOVE_RUN) <= KITE_CRAWL_RATE;
 }
 
-// both moving, the core adds its 2.66 yd leeway to melee range (Unit::IsWithinMeleeRange), so a kite has to
-// start outside that
-float KiteReach(Unit* chaser, Player* bot) { return chaser->GetMeleeRange(bot) + LEEWAY_BONUS_RANGE; }
-
 float CrawlReach(Unit* champion, Player* bot)
 {
     uint32 const entry = champion->GetEntry();
     bool const ret = entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION) ||
                      entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION);
-    float const reach = KiteReach(champion, bot) + KITE_CRAWL_MARGIN;
+    float const reach = FactionChampionsSwingReach(champion, bot) + KITE_CRAWL_MARGIN;
     return ret ? std::max(reach, KITE_CRAWL_REACH_RET) : reach;
 }
 
@@ -588,7 +582,8 @@ void BreakChasedCasts(BallState& state, PlayerbotAI* botAI, std::vector<Player*>
         std::vector<Unit*> const chasers = KiteChasers(botAI, member);
         bool const caught = std::any_of(chasers.begin(), chasers.end(), [member, leftSec](Unit* chaser)
                                         {
-                                            return member->GetExactDist2d(chaser) - KiteReach(chaser, member) <=
+                                            return member->GetExactDist2d(chaser) -
+                                                       FactionChampionsSwingReach(chaser, member) <=
                                                    chaser->GetSpeed(MOVE_RUN) * leftSec;
                                         });
         if (!caught || !KiteFree(state, botAI, member))
@@ -695,7 +690,7 @@ bool FactionChampionsStepOff(PlayerbotAI* botAI, Position& spot)
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
         if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-            bot->GetExactDist2d(champion) > STEP_OFF_TRIGGER)
+            bot->GetExactDist2d(champion) > FactionChampionsSwingReach(champion, bot))
             continue;
 
         ++nearby;
@@ -795,7 +790,7 @@ bool FactionChampionsChased(PlayerbotAI* botAI, Position& spot)
                 ++meleeOn;
                 meleeSum[0] += champion->GetPositionX();
                 meleeSum[1] += champion->GetPositionY();
-                if (bot->GetExactDist2d(champion) <= BOOST_CONTACT && Unhindered(champion))
+                if (InContact(champion, bot))
                     ++contact;
             }
         }
@@ -872,6 +867,13 @@ SpellInfo const* KnownReady(Player* bot, uint32 spellId)
     return spellId && bot->HasSpell(spellId) ? ReadyInstant(bot, spellId) : nullptr;
 }
 
+// A player's AoE reaches a creature its combat reach past the radius (the core's area search): the Tauren two
+// 6.075 yd, the rest 2.25
+bool InAoe(Unit* champion, Position const& centre, float radius)
+{
+    return champion->GetExactDist2d(&centre) <= radius + champion->GetCombatReach();
+}
+
 // Nothing a hit of ours would free, nothing a pull needs, and no fear on the kill target, which would run the
 // kill squad around the arena
 bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bool fear)
@@ -879,7 +881,7 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
     Unit* kill = fear ? FactionChampionsKillTarget(botAI) : nullptr;
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
-        if (champion->GetExactDist2d(&centre) > radius + ESCAPE_AOE_SLACK)
+        if (!InAoe(champion, centre, radius))
             continue;
 
         // a duty still casting or a root peel loses nothing to it, a landed Polymorph or Fear would
@@ -894,8 +896,9 @@ bool AoeEscapeClear(PlayerbotAI* botAI, Position const& centre, float radius, bo
 // Entrapment's root would pop an iced champion's trinket, its Chains going with it, and end a grip in the air
 bool FrostTrapClear(PlayerbotAI* botAI, Position const& centre)
 {
+    // the slick is a dynamic object, whose own size adds to its reach
     for (Unit* champion : FactionChampionsInCombat(botAI))
-        if (champion->GetExactDist2d(&centre) <= FROST_TRAP_SLICK + ESCAPE_AOE_SLACK &&
+        if (InAoe(champion, centre, FROST_TRAP_SLICK + DEFAULT_WORLD_OBJECT_SIZE) &&
             (FactionChampionsIced(botAI, champion) || FactionChampionsGripGuarded(botAI, champion)))
             return false;
 
@@ -928,18 +931,27 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
     std::vector<Unit*> melee;
     float sumX = 0.0f;
     float sumY = 0.0f;
+    // the one deepest inside its reach
     Unit* nearest = nullptr;
+    float nearestGap = 0.0f;
     for (Unit* champion : FactionChampionsInCombat(botAI))
     {
         if (!IsFactionChampionMelee(champion->GetEntry()) || champion->GetVictim() != bot ||
-            champion->HasUnitState(UNIT_STATE_LOST_CONTROL) || bot->GetExactDist2d(champion) > ESCAPE_MELEE_REACH)
+            champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
+            continue;
+
+        float const gap = bot->GetExactDist2d(champion) - FactionChampionsSwingReach(champion, bot);
+        if (gap > 0.0f)
             continue;
 
         melee.push_back(champion);
         sumX += champion->GetPositionX();
         sumY += champion->GetPositionY();
-        if (!nearest || bot->GetExactDist2d(champion) < bot->GetExactDist2d(nearest))
+        if (!nearest || gap < nearestGap)
+        {
             nearest = champion;
+            nearestGap = gap;
+        }
     }
 
     if (!nearest)
@@ -1058,7 +1070,7 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
                 return true;
             }
 
-            if (bot->GetExactDist2d(nearest) > DISENGAGE_REACH || !KnownReady(bot, SPELL_DISENGAGE))
+            if (bot->GetExactDist2d(nearest) > nearest->GetMeleeRange(bot) || !KnownReady(bot, SPELL_DISENGAGE))
                 return false;
 
             // leaps backwards off its facing, so face the nearest first
@@ -1188,8 +1200,10 @@ uint32 FactionChampionsSpeedBoost(PlayerbotAI* botAI)
         state->runs.count(bot->GetGUID()) || FactionChampionsHasCcDuty(botAI, bot->GetGUID()))
         return 0;
 
-    std::vector<Unit*> const chasers = MeleeOn(botAI, bot, BOOST_CONTACT);
-    return std::any_of(chasers.begin(), chasers.end(), Unhindered) ? rank : 0;
+    std::vector<Unit*> const chasers = MeleeOn(botAI, bot, KITE_CLEAR);
+    return std::any_of(chasers.begin(), chasers.end(), [bot](Unit* chaser) { return InContact(chaser, bot); })
+               ? rank
+               : 0;
 }
 
 bool FactionChampionsCircleDue(PlayerbotAI* botAI)

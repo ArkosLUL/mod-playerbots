@@ -172,8 +172,10 @@ At scale, match on `getName()` instead: `CastSpellAction`'s constructor passes t
 `Action(botAI, spell)`, so the name is a reliable identifier and does not require including 25 class
 headers. Racials and trinkets follow the same convention (`"berserking"`, `"blood fury"`,
 `"use trinket"`). A rule matches `getName()` too, so it lists the name a class reports, which pblint
-resolves against the literal its constructor passes the base (`tree form` reports `tree of life`, the
-paladin's `beacon of light on main tank` `beacon of light`). A name several classes report
+resolves against the literal its constructor passes the base plus any suffix the base's `getName()` adds
+(`tree form` reports `tree of life`, the paladin's `beacon of light on main tank` `beacon of light`,
+`CastSnareSpellAction` appends ` on snare target`). A creators[] key also passes pblint, even when its class
+reports another name: a rule listing `concussive shot` matches nothing. A name several classes report
 (`cleanse disease`, `cleanse poison` and `cleanse magic` all report `cleanse`) vetoes them all: for
 one, a narrow `dynamic_cast` multiplier on the concrete class (Rotface's `icc rotface self cure`).
 

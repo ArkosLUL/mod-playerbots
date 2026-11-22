@@ -1842,9 +1842,12 @@ class FocusAndRepick(unittest.TestCase):
                           for row in rows],
                          [(1000, MAGE, "Blink", 2, 2, True), (3000, PRIEST, "Psychic Scream", 2, 2, False)])
         self.assertEqual(round(rows[1]["hp"]), 80)
+        # the rogue and the warrior tie 20-25 yd off, so the lower guid is the nearest
+        self.assertEqual([(row["chaser"], round(row["at"])) for row in rows], [(ROGUE_C, 20), (ROGUE_C, 25)])
         text = self.render(fc.show_personal)
-        self.assertRegex(text, r"0:03\.000 Mercy +Psychic Scream +2\+2 +80% +- +- +-  no")
+        self.assertRegex(text, r"0:03\.000 Mercy +Psychic Scream +2\+2 +80% +- +- +-  no  Irieth 25\.0")
         self.assertIn("fc.escape: Blink 1, Psychic Scream 1", text)
+        self.assertIn("with the nearest melee champion past 8 yd: 2, Irieth 2", text)
 
     def test_an_escape_reads_how_far_its_chasers_are_after_and_whether_they_dropped_it(self):
         # the four leave the mage for the priest at 2 s, 20 yd off it; the priest is dead at 5 s
@@ -1873,8 +1876,8 @@ class FocusAndRepick(unittest.TestCase):
 
     def test_a_kite_counts_a_hit_from_its_nearest_chaser_soon_after_its_first_hop(self):
         # the rogue and the warrior tie on the mage at its 1.1 s hop, so the lower guid is the chaser
-        self.assertEqual(fc.kite_catches(self.trace), {ROGUE_C: [1, 0]})
-        self.assertIn("hit by the nearest melee chaser within 2 s of the first hop: Irieth 0 of 1",
+        self.assertEqual(fc.kite_catches(self.trace), {ROGUE_C: [1, 0, 0, 0]})
+        self.assertIn("hit by the nearest melee chaser within 2 s of the first hop: Irieth 0 of 1 (iced 0 of 0)",
                       self.render(fc.show_personal))
 
         def catches(extra: list[dict]) -> dict:
@@ -1885,8 +1888,11 @@ class FocusAndRepick(unittest.TestCase):
 
         # the warrior isn't the chaser and the rogue's 3.2 s hit is too late, its 3.0 s one counts
         late = [dmg(2000, WARRIOR_C, MAGE, 0), dmg(3200, ROGUE_C, MAGE, 0)]
-        self.assertEqual(catches(late), {ROGUE_C: [1, 0]})
-        self.assertEqual(catches(late + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1]})
+        self.assertEqual(catches(late), {ROGUE_C: [1, 0, 0, 0]})
+        self.assertEqual(catches(late + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1, 0, 0]})
+        # an ice duty's Chains of Ice on the rogue 1.1 s before the hop counts the kite iced
+        iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
+        self.assertEqual(catches(late + iced + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1, 1, 1]})
 
     def test_a_kite_reads_the_nearest_living_healer_after_its_last_hop(self):
         # the mage ends 5 yd off the priest; the moonkin's kite ends with no healer alive

@@ -148,6 +148,31 @@ class RowTest(unittest.TestCase):
         """))
         self.assertEqual([f.check for f in findings], ["unresolved-rule-action"])
 
+    def test_a_rule_can_name_an_action_by_its_base_suffixed_name(self):
+        # CastSnareSpellAction's getName() appends " on snare target" to the name its subclass hands it
+        bases = """
+            class CastSnareSpellAction : public CastDebuffSpellAction
+            {
+            public:
+                std::string const getName() override { return spell + " on snare target"; }
+            };
+
+            class XShotAction : public CastSnareSpellAction
+            {
+            public:
+                XShotAction(PlayerbotAI* botAI) :
+                    CastSnareSpellAction(botAI, "x shot") {}
+            };
+        """
+        findings = self.run_check(pblint.check_unresolved, self.tree("""
+            e.Block("x hold", Role::Any, XActive, 0, {"x shot on snare target"});
+        """, Raid__X__XShot=bases))
+        self.assertEqual(findings, [])
+        findings = self.run_check(pblint.check_unresolved, self.tree("""
+            e.Block("x hold", Role::Any, XActive, 0, {"x shot on attacker"});
+        """, Raid__X__XShot=bases))
+        self.assertEqual([f.check for f in findings], ["unresolved-rule-action"])
+
     def test_the_rule_name_itself_is_not_an_action(self):
         findings = self.run_check(pblint.check_unresolved, self.tree("""
             e.OwnMovement("x control movement multiplier", Role::Ranged, XActive, Family::Attack,
