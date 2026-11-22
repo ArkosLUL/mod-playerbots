@@ -41,8 +41,12 @@ rooted and rotation-locked for those 3 s and the patch spawns from the orientati
 start, 20 yd along it (`spell_ignis_scorch_aura`'s last tick). With Ignis on the anchor the step is
 free and leaves him 17.3 yd from the patch — 26.1 on the 120° wrap from the third slot to the first —
 outside its 13 yd burn, where standing still would have left him 10.5 yd from its centre. The slot is
-latched per instance id. A reactive "step out once it lands" was rejected: it is the
+latched per instance id, and only the main tank advances it: anyone else asking would eat the rising
+edge. A reactive "step out once it lands" was rejected: it is the
 [dodge-and-hold oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates).
+
+Reaching the spot latches it: he moves again only past twice `ULDUAR_IGNIS_TANK_SPOT_TOLERANCE` (2 yd),
+since re-issuing a move on every drift inside the tolerance left him sliding and never landing a swing.
 
 **Nothing pre-positions**: the tank walks the boss to the anchor in combat, from wherever the pull
 happened. Ignis runs at 10 yd/s against a player's 7, so he keeps up with a tank at full speed, but
@@ -62,6 +66,12 @@ Kiting is **assist-tank only, on purpose**: a main tank pulled off Ignis drags t
 the construct, and a DPS holding a Molten one dies. A raid without an assist tank skips the loop and
 lets the Strength stacks climb; with one, tank 1 never finds a construct anyway, since
 `GetIgnisDrivenConstruct` excludes whatever the other tank holds.
+
+**A tank's construct is sticky**: kept until Brittle or dead, never handed to a closer new one, since
+Molten wiped its threat and letting go releases it into the raid. With no lit patch yet he holds it
+where it stands; within 18 yd of the pool he holds still for the poll rather than walk it back out.
+The claim is kept per instance, since the same tank GUID comes back on a re-pull and in a second raid
+running the fight.
 
 **The walk stops 12 yd short of the trigger** (`ULDUAR_IGNIS_WATER_STANDOFF`), never on it: the
 trigger sits in a channel whose surface is ~1.8 yd below the room floor of 360.802, so a tank parked
@@ -93,10 +103,15 @@ The Brittle pick is the **lowest GUID** raid-wide, so every bot converges with n
 agree through. Ranged and casters take it, with a designated per-class burst spell (Pyroblast,
 Chimera Shot, Chaos Bolt, Mind Blast, Starfire, Lava Burst) because rotation filler often will not
 reach the 5000/3000 alone. Melee are let in only for the last 7 s of the 15 s window: Shatter deals
-18850 in 13 yd, inside melee range of the thing they would be swinging at.
+18850 in 13 yd, inside melee range of the thing they would be swinging at. Tanks never join: pulling
+one off Ignis or off a construct Molten wiped costs far more than the hit. The trigger stays hot once
+the construct is targeted, so the action can fire the burst spell; with none castable it returns false
+and the rotation runs rather than wait on a cooldown.
 
 With the generic pickers off, `ignis attack boss trigger` is also what puts the **main tank** on
-Ignis — it excludes a construct tank only while that tank holds a construct.
+Ignis — it excludes a construct tank only while that tank holds a construct. It yields to the Brittle
+trigger, testing "already on the boss?" first: that settles most ticks, and the Brittle test scans
+every construct.
 
 ## Everything else
 
@@ -104,23 +119,33 @@ Ignis — it excludes a construct tank only while that tank holds a construct.
 knockback and start no new one that would not finish either; instants and short heals keep going.
 The 6 s lockout afterwards is unavoidable — this only stops feeding casts into it.
 
-**Slag Pot** (62717 / 63477) is a vehicle ride: healers pour direct heals into the victim, and the
-victim's movement actions are suppressed, since orders only fight the ride and leave it facing the
-wrong way when it drops. Neither tank can be potted — the core skips the boss's victim and every
+**Slag Pot** (62717 / 63477) is a vehicle ride the victim cannot be moved or shielded out of for its
+10 s of ticks: healers pour direct heals into it, and its movement actions are suppressed, since orders
+only fight the ride and leave it facing the wrong way when it drops. The heal node outranks every other
+heal (`ACTION_EMERGENCY + 1`), so it waits for the victim to drop under
+`ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT` (85), or the whole team tops off a full-health victim while the tank
+takes Flame Jets unhealed. Neither tank can be potted — the core skips the boss's victim and every
 construct's victim.
 
 Hazard radii are sized against the spells, not the visuals: the Scorched Ground dodge is 15 yd
-(62548 burns in 13), the Molten avoid 15 yd (sized against Shatter's 13, not the ~7 yd pulse).
+(62548 burns in 13), the Molten avoid 15 yd (sized against Shatter's 13, not the ~7 yd pulse). The
+Molten avoid keys on the aura, not the entry, so a construct still being walked through the fire does
+not scatter the raid, and skips two bots: the tank holding a construct (the pulse is his job; between
+constructs he clears it like anyone) and Ignis' own tank, who would drag the boss and his Flame Jets
+through the raid.
 
-The placed tanks are blocked from **both** AoE dodges, this encounter's and the generic `avoid aoe`:
-the construct tank is parked in a patch on purpose and the main tank's arc already steps him clear.
+The main-tank spot and the kite share `ACTION_RAID + 4`, above the raid's damage, since no bot is ever
+both. The placed tanks are blocked from **both** AoE dodges, this encounter's and the generic `avoid aoe`:
+the construct tank is parked in a patch on purpose (the construct following him into melee stacks Heat)
+and the main tank's arc already steps him clear.
 The generic one is what matters — at `ACTION_EMERGENCY` it sits above the kite's `ACTION_RAID + 4`,
 so left on it outranks the walk on nearly every tick spent in the fire.
 
 The `ignis tank movement` rule takes the generic movers off the main tank while Ignis is on him and
 a construct tank while it holds a construct, and nobody else. A main tank that lost Ignis gets them
 back, or nothing walks him into taunt range again. Non-tanks keep everything, which is what
-spreads the ranged half without an anchor of their own.
+spreads the ranged half without an anchor of their own, and a blanket block would freeze the whole raid
+if a replacement mover ever failed quietly.
 
 Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, Scorch's 25-man
 remap of 62546 included (**`SPELL_IGNIS_SCORCH_25` = 63474**,
@@ -129,10 +154,18 @@ remap of 62546 included (**`SPELL_IGNIS_SCORCH_25` = 63474**,
 Every node is gated on `IsIgnisEngaged` — alive **and** in combat, since the boss is visible from
 the whole 200 yd room. Lookups go through `GetIgnis`, not `"find target"`: a bot parked on a
 construct never has Ignis on its threat list, and a dormant construct carries
-`UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely. The room is wider
+`UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely, plus aura 38757
+(`SPELL_IGNIS_CONSTRUCT_INACTIVE`, stripped by Activate Construct); it counts as activated once both are
+gone. The room is wider
 than SightDistance too, so the cached `"nearest npcs"` list goes blind at the pools: constructs spawn
 at x 543..631 / y 217..338 and Ignis starts at (586.5, 378.8), so a tank at a pool is ~120 yd from him,
-hence `ULDUAR_IGNIS_ROOM_SEARCH_RADIUS` 200.
+hence `ULDUAR_IGNIS_ROOM_SEARCH_RADIUS` 200. The Scorched Ground trigger and its action share
+`GetIgnisNearestScorchedGround`: an action on `"nearest npcs"` leaves the trigger hot on a patch it
+cannot see, and the bot burns.
+
+Construct scans run `GetCreatureListWithEntryInGrid`'s own body into a vector: one allocation per scan,
+same visit order, so ties break the same. The Flame Jets multiplier runs against every candidate action,
+so it memoises the boss lookup for the tick.
 
 **`GetIgnisIf` never searches the grid.** It reads `instance->GetCreature(ULD_BOSS_IGNIS)` through the
 acceptance test `FindNearestCreature` would apply

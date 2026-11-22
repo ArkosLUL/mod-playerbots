@@ -72,8 +72,7 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
     RazorscaleBossHelper::CollectDevouringFlames(bot, step + RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS,
                                                  flames);
 
-    // Counted in whole steps: a float delta accumulating M_PI/8 overshoots the M_PI/2 bound on the
-    // last iteration, which silently drops the two widest escape bearings.
+    // Whole steps on purpose: summing M_PI/8 as a float overshoots M_PI/2 and drops the two widest bearings.
     constexpr int SWEEP_STEPS = 4;
     constexpr double SWEEP_STEP_ANGLE = M_PI / 8.0;
     for (int i = 0; i <= SWEEP_STEPS; ++i)
@@ -134,7 +133,7 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
         return false;
 
     float const radius = RazorscaleBossHelper::SENTINEL_AVOID_RADIUS;
-    // Copied: the walk continues after MoveAway, so a refill mid-loop can't pull the list out from under it.
+    // Copy on purpose: the loop runs on after MoveAway, and a scan refill would pull a reference out from under it.
     GuidVector const npcs = GetRazorscaleScan(botAI).Hostiles();
 
     bool movedAway = false;
