@@ -119,17 +119,18 @@ bool CanPayDefensive(Player* bot, uint32 spellId)
            static_cast<int32>(bot->GetPower(Powers(info->PowerType)));
 }
 
+uint32 CoverMs(TankDefensive const& entry, uint32 needMs)
+{
+    return entry.cutPct ? needMs : needMs + HEALTH_ROW_AFTER_HIT_MS;
+}
+
 bool CoversHit(TankDefensive const& entry, Aura const* aura, uint32 needMs)
 {
-    if (aura->GetDuration() < 0)
-        return true;
-
-    uint32 const after = entry.cutPct ? 0 : HEALTH_ROW_AFTER_HIT_MS;
-    return static_cast<uint32>(aura->GetDuration()) > needMs + after;
+    return aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) >= CoverMs(entry, needMs);
 }
 
 // The row the bot would cast, or the one already running on it, or nullptr. `running` says which of the
-// two came back: a button still up means nothing else should go on top of it.
+// two came back: a button still up past the hit means nothing else should go on top of it.
 TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physicalOnly, bool tankOnly,
                                    uint32 needMs, bool& running)
 {
@@ -157,7 +158,7 @@ TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physica
             continue;
         }
 
-        if (entry.windowMs < needMs)
+        if (entry.windowMs < CoverMs(entry, needMs))
             continue;
 
         if (!weakest && botAI->CanCastSpell(entry.spellId, bot) && CanPayDefensive(bot, entry.spellId))

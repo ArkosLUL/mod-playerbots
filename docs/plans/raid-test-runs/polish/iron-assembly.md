@@ -761,3 +761,20 @@ FAILED on cost (Vampiric Blood with no Blood or Death rune); a warrior's `under`
 Stand ending under 3 s after it gets Shield Wall rather than `covered`. Re-pull every Ulduar and ToC
 boss on the picker: Iron Assembly, Yogg-Saron, Algalon, Mimiron, Hodir, Thorim; Northrend Beasts,
 Anub'arak, Jaraxxus, Faction Champions, Twin Val'kyr.
+
+**Review.** Root cause holds: window 10 uld1 Uldxam's 4:32.177 `punchdef = vampiric blood` FAILED
+after Icy Touch, Heart Strike, Blood Strike and Death Coil all FAILED at 4:31.5, runic power 15% in
+every snapshot from 4:30.1; window 12 uld1 (`603_8_…_1795377075`) Uldxaz read `under 59k` at 5:06.7
+with no `punchdef` (Last Stand from 4:48.5, 20 s) and died to the 5:08.1 punch. `RunesReady` matches
+`Spell::CheckRuneCost`. One fix: a row was cast when its window reached the hit (`windowMs >= needMs`)
+but counted as cover only with 3 s more for a health row (strictly more for a cut row), so with a
+`needMs` that counts down it read a row as no cover the tick after casting it and stacked the next (a
+DK's Vampiric Blood for a `PickPersonal` hit 7-10 s out, then Icebound Fortitude). Both gates now use
+`CoverMs` with `>=`. Left: (1) `yogg.novadef` passes a fixed `needMs` (5 s,
+`ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS`) and its trigger ignores running buttons, so a DK's 5 s
+Anti-Magic Shell stops covering a tick after its cast and Vampiric Blood or Icebound Fortitude goes on
+top while the guardian sits under 10% (a druid's Barkskin 7 s in, then Frenzied Regeneration); before,
+any running row was cover. Watch it in the Yogg re-pull; the fix is Yogg's (a countdown to the nova).
+(2) `CallHumanTankDefensive` still skips a call while any of the human's buttons runs, a fading Last
+Stand included: not in the user's `PickDefensive` answer, and Iron Assembly makes no human calls.
+pb-check green.

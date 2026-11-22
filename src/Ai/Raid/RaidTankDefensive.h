@@ -15,8 +15,9 @@
 class Player;
 class PlayerbotAI;
 
-// The weakest cooldown the tank can cast right now, or 0 - either because none is off cooldown or
-// because one is already running. Ordered by cooldown length, which is what "weakest" means here.
+// The weakest cooldown the tank can cast and pay for right now, or 0 - either because none is ready or
+// because one already running lasts past the hit. Ordered by cooldown length, which is what "weakest"
+// means here.
 // `noteKind` names the trace row to record the pick under, or nullptr for no row: the act stream sees
 // one action name whichever button it ends up casting, and the order they go in is the whole point.
 // `physicalOnly` skips what only helps against magic, for a hit Anti-Magic Shell would waste itself on.
