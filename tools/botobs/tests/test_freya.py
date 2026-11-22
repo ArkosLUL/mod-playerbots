@@ -3,8 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
-tank's Righteous Defense takes the Snaplasher, and the add tank dies, plus two beam dodges and one healer
-in range; the shared v14 fixture shows every section reads empty elsewhere.
+tank's Righteous Defense takes the Snaplasher, and the add tank dies, plus three beam dodges (one off a
+beam the next snapshot first shows) and one healer in range; the shared v14 fixture shows every section
+reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ STORM = (1 << 32) | 3
 SPIRIT = (1 << 32) | 4
 GIFT = (1 << 32) | 5
 BEAM = (1 << 32) | 6
+FRESH_BEAM = (1 << 32) | 7
 
 
 def snap(t: int, freya_on: int, snap_on: int, gift: bool = True, trio: bool = True) -> dict:
@@ -45,6 +47,8 @@ def snap(t: int, freya_on: int, snap_on: int, gift: bool = True, trio: bool = Tr
         [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, freya_on],
         [BEAM, 2340.0, -55.0, 425.3, 0, 100, 0, 0],
     ]
+    if t >= 12000:
+        units.append([FRESH_BEAM, 2392.0, -40.0, 425.3, 0, 100, 0, 0])
     if trio:
         units += [[SNAPLASHER, 2356.0, -40.0, 425.3, 0, 80, 0, snap_on],
                   [STORM, 2358.0, -41.0, 425.3, 0, 80, 0, MAIN],
@@ -76,6 +80,7 @@ def pull() -> list[dict]:
         {"t": 0, "e": "unit", "g": SPIRIT, "en": 33202, "n": "Ancient Water Spirit"},
         {"t": 0, "e": "unit", "g": GIFT, "en": 33228, "n": "Eonar's Gift"},
         {"t": 0, "e": "unit", "g": BEAM, "en": 33170, "n": "Sun Beam"},
+        {"t": 0, "e": "unit", "g": FRESH_BEAM, "en": 33170, "n": "Sun Beam"},
         {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
         cast(1000, FREYA, 62859),
     ]
@@ -90,6 +95,7 @@ def pull() -> list[dict]:
         move(12500, CASTER, 2330.0, -60.0),
         move(13000, CASTER, 2330.0, -60.0),
         move(15000, MAIN, 2364.0, -43.0),
+        move(11000, HEALER, 2381.0, -40.0),
         {"t": 22000, "e": "death", "g": ADD, "killer": SNAPLASHER, "x": 2355.0, "y": -40.0, "z": 425.3,
          "rewind": [[21900, SNAPLASHER, 0, 43481]]},
         {"t": 25000, "e": "death", "g": CASTER, "killer": CASTER, "x": 2340.0, "y": -60.0, "z": 425.3,
@@ -144,6 +150,7 @@ class Beams(unittest.TestCase):
         self.assertIsNotNone(trigger)
         self.assertEqual(printed(fr.show_beams, load(pull())), (
             "BEAMS\n"
+            f"  heal      1 dodge(s), 0 from past {trigger:g} yd, median walk 11.0 yd, 0 ended farther from Freya\n"
             f"  ranged    1 dodge(s), 0 from past {trigger:g} yd, median walk 10.0 yd, 1 ended farther from Freya\n"
             f"  tank      1 dodge(s), 1 from past {trigger:g} yd, median walk 4.0 yd, 0 ended farther from Freya\n"
             "  Snaplasher 0:10.000 .. 0:24.000: healers within 38.5 yd of its holder median 1, under 2 for 100% of it\n"))

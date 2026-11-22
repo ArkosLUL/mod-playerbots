@@ -207,7 +207,8 @@ def dodges(trace: Trace) -> list[dict]:
         start = at(trace, guid, rec["t"])
         if not fresh or index < 0 or start is None:
             continue
-        beams = [row[1:3] for row in snaps[index].get("u", [])
+        # A beam lands at a bot's feet and the dodge often goes out before the next snapshot shows it.
+        beams = [row[1:3] for snap in snaps[index:index + 2] for row in snap.get("u", [])
                  if trace.entries.get(row[0]) in (NPC_SUN_BEAM, NPC_BRIGHTLEAF_SUN_BEAM)]
         if not beams:
             continue

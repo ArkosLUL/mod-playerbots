@@ -522,8 +522,8 @@ root, which died 1 ms after it. Roots of 9.2s and 20.6s recur, at 4.6k per 2s on
 
 **Unstable Sun Beam.** Three stationary stalkers (33170) a cast in 25-man, one in 10, at players' feet
 for ~10s. Unstable Energy **62865** is `EffectRadiusIndex 8` = **5 yd** (effect 27, persistent area
-aura); with the searcher's object sizes it lands out to **7.3 yd** (1159 applications, p99 6.5).
-Brightleaf's own beam (33050, Unstable Energy 62217) is 4 yd. The dodge fires inside
+aura; 10-man 62451 is 4 yd); with the searcher's object sizes it lands out to **7.3 yd** (1159
+applications, p99 6.5). Brightleaf's own beam (33050, Unstable Energy 62217) is 4 yd. The dodge fires inside
 `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` (**8 yd**) and rings outward to a spot clear of every beam in
 range by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (**11 yd**), not the radius
 ([dodge clearance](../../engine/pitfalls.md#movement-that-silently-no-ops)): radius plus a yard gave a
@@ -533,12 +533,12 @@ returning true without calling `MoveTo` while the walk is in flight
 ([oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates)).
 
 **A beam escape must not cost the tanks their healers** (not yet verified in a pull). At 12 / 15 yd,
-37-78% of each role's dodges fired from past 8 yd, where no pool reaches, each undoing a healer's
-`reach spell` back to its tank: three healers sat 52-56 yd from a bear add tank for his last 10s, and
-the loose Snaplasher led a 27-death collapse. **Both beam escapes take the side toward Freya**
-(`GetFreyaBeamEscapeBias` as `preferNear`), since the sweep's first clear angle is always +x: 177 of
-338 escapes from on top of a beam went that way, 74% ending farther from her. `preferNear` only breaks
-ties inside one ring, so no walk gets longer.
+32-67% of each role's dodges fired from past 8 yd, where no pool reaches, re-dodges from 11.5-12.7 yd
+undoing healers' `reach spell` back to their tank: two of a bear add tank's three living healers sat
+52-56 yd off for his last 10s, and the loose Snaplasher led a 27-death collapse. **Both beam escapes
+take the side toward Freya** (`GetFreyaBeamEscapeBias` as `preferNear`), since the sweep tries +x
+first: 177 of 338 escapes from on top of a beam went that way, 74% ending farther from her.
+`preferNear` only breaks ties inside one ring, so no walk gets longer.
 
 ## Per-tick scan
 

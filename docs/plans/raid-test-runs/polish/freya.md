@@ -154,7 +154,7 @@ wave on an intact raid: uld3, 31 deaths. Picked (1).
   while Unstable Energy 62865 never landed past 7.3 yd (1159 applications over ten pulls, p99 6.5). The
   sweep without `preferNear` returns its first clear angle (`EncounterHelpers.cpp:756-757`), angle 0 = +x:
   177 of 338 escapes from on top of a beam went +x and 74% ended farther from Freya.
-- `freya.py --beams`, window 9: 37-78% of each role's dodges started past 8 yd; 57-100% ended farther
+- `freya.py --beams`, window 9: 32-67% of each role's dodges started past 8 yd; 53-100% ended farther
   from Freya; fewer than 2 healers had the Snaplasher's holder in range for 26% of uld2's first trio
   wave, 9% of uld1's, 1% and 0% of uld3's.
 - Not this cause: uld1's DK died with all four healers in range (41.7k healed in one second) to a 7.0k
@@ -177,8 +177,9 @@ already says healers must keep the tanks in range.
 
 **Next window should show** (`freya.py --beams`, `--tanks`):
 
-- No Unstable Sun Beam dodge started past 8 yd (window 9: 37-78% by role), median walk at most 11 yd, and
-  far fewer than window 9's 57-100% of dodges ending farther from Freya.
+- Unstable Sun Beam dodges from past 8 yd down from window 9's 32-67% by role to the reading lag: window 9
+  read 8-14% of its dodges past its own 12 yd trigger, all but 11 of 55 within a yard of it. Median walk
+  at most 11 yd, and far fewer than window 9's 53-100% of dodges ending farther from Freya.
 - Healers within 38.5 yd of the Snaplasher's holder: median 3+, fewer than 2 for under 10% of each trio
   wave (uld2: 26%).
 - Unstable Energy no worse: 1 death; 36 / 59 / 114 hits on 12 / 9 / 27 beams.
@@ -214,3 +215,17 @@ already says healers must keep the tanks in range.
    pack focus instead of shooting Freya? It is a new position (the reach cap was set so a focus out of
    reach never walks a bot into a blast, but a held pack 30-43 yd off is not chasing anyone).
    Recommendation: yes, only while a ghoul holds the focus lasher.
+
+**Review:** the cause holds and the fix addresses it. Reproduced: Unstable Energy applications max 7.3 yd
+over the ten pulls, 177 of 338 on-top escapes +x, uld2's healers re-dodging at 11.5-12.7 yd. 10-man
+Unstable Energy (62451) is 4 yd, inside the 8 yd trigger; no size, mode or player branch.
+
+- Reader fixed: `--beams` dropped a dodge episode whose first order went out before the snapshot showing
+  its beam (59 of 475 in window 9, 51 of them from on top of it), which inflated the past-8-yd share.
+  It now reads that snapshot's beams too; the window 9 figures above are the corrected ones.
+- Damage ticks of 62865 land out to 9.8 yd (p95 8.4) because the aura stays on a bot walking out until the
+  next update; reach comes from applications, not damage.
+- Watch in lasher waves: the Freya bias also pulls the ranged camp's escapes toward the pack under the
+  ghouls. Low lashers are in the ranged escape hazards, so read ranged Detonate deaths next window.
+- Left for a later round (roots, not beams): `ULDUAR_FREYA_ROOTED_BEAM_RADIUS` 6 yd misses the 80 of 1159
+  applications past 6, so a bot rooted 6-7.3 yd from a beam gets no Blink, Hand of Freedom or break.

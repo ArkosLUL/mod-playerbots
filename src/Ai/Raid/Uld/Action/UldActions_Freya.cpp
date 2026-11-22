@@ -50,8 +50,8 @@ bool FreyaBotCannotWalk(Player* bot)
     return bot->HasUnitState(UNIT_STATE_NOT_MOVE) || IsFreyaArmyChanneling(bot);
 }
 
-// Tiebreak for the beam escapes. Left alone the sweep takes its first clear angle, always +x, which
-// walks healers away from the add tank. Toward Freya keeps both tanks in range.
+// Tiebreak for the beam escapes. Left alone the sweep takes the first clear bearing counting from +x, a fixed
+// compass direction that can walk healers out of the add tank's range. Toward Freya keeps both tanks in range.
 Position const* GetFreyaBeamEscapeBias(PlayerbotAI* botAI)
 {
     Unit* freya = GetFreyaScan(botAI).Boss();
