@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidCombatHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -187,4 +188,29 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return currentTarget == heart ? 0.0f : 1.0f;
+}
+
+float XT002ThreatBrakeMultiplier::GetValue(Action* action)
+{
+    // Buffs, cures and heals go on: only damage puts threat on XT.
+    if (!action || !IsRaidDpsBot(bot) || GetDpsHoldValue(bot, action) > 0.0f ||
+        dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
+    if (aimed && aimed->GetEntry() == NPC_XT002)
+        return IsXT002ThreatBraked(bot, aimed) ? 0.0f : 1.0f;
+
+    if (!IsRaidAreaDamage(botAI, action, _splash))
+        return 1.0f;
+
+    // Submerged he's unselectable and out of every splash, so the adds walking in to him get the raid's AoE.
+    Unit* xt002 = GetXT002(botAI);
+    if (!xt002 || IsXT002Submerged(xt002) || !IsXT002ThreatBraked(bot, xt002))
+        return 1.0f;
+
+    bool const reaches = xt002->GetExactDist2d(bot) <= ULDUAR_XT002_AREA_THREAT_REACH ||
+                         (aimed && xt002->GetExactDist2d(aimed) <= ULDUAR_XT002_AREA_THREAT_REACH);
+    return reaches ? 0.0f : 1.0f;
 }

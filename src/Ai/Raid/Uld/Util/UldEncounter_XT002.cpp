@@ -12,9 +12,11 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidCombatHelpers.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SpellMgr.h"
+#include "ThreatManager.h"
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -23,6 +25,7 @@
 #include <algorithm>
 #include <list>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -273,6 +276,54 @@ Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell)
         return nullptr;
 
     return botAI->CanCastSpell(spell, tank) ? tank : nullptr;
+}
+
+namespace
+{
+struct XT002ThreatBrakeState
+{
+    RaidObs::ObsGuidSet braked{"xt002.brake"};
+    // Per bot, the ms its brake was last worked out: the multiplier asks once per candidate action.
+    std::unordered_map<ObjectGuid, uint32> readMs;
+};
+
+RaidInstanceState<XT002ThreatBrakeState> xt002ThreatBrakeStates;
+}  // namespace
+
+bool IsXT002ThreatBraked(Player* bot, Unit* xt002)
+{
+    if (!bot || !bot->GetInstanceId() || !IsRaidDpsBot(bot))
+        return false;
+
+    XT002ThreatBrakeState& state = xt002ThreatBrakeStates.For(bot->GetInstanceId());
+    ObjectGuid const guid = bot->GetGUID();
+    bool const held = state.braked.count(guid) != 0;
+
+    uint32 const now = getMSTime();
+    auto const stamp = state.readMs.find(guid);
+    if (stamp != state.readMs.end() && stamp->second == now)
+        return held;
+
+    state.readMs[guid] = now;
+
+    bool brake = false;
+    if (bot->IsAlive() && xt002 && xt002->IsAlive() && xt002->IsInCombat() && xt002->CanHaveThreatList())
+    {
+        if (Player* holder = GetXT002TankRoles(bot, xt002).holder)
+        {
+            // Off the threat list, not the "threat" value: that one is a uint8 share and wraps past 255%.
+            ThreatManager& threat = xt002->GetThreatMgr();
+            float const share = held ? ULDUAR_XT002_THREAT_RELEASE : ULDUAR_XT002_THREAT_CAP;
+            brake = threat.GetThreat(bot) >= share * threat.GetThreat(holder);
+        }
+    }
+
+    if (brake && !held)
+        state.braked.insert(guid);
+    else if (!brake && held)
+        state.braked.erase(guid);
+
+    return brake;
 }
 
 bool IsXT002AddEngageable(Unit* xt002, Unit* unit)
