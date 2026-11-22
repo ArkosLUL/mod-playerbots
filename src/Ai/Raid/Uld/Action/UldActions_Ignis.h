@@ -10,7 +10,6 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-// Ignis the Furnace Master
 class IgnisScorchedGroundAction : public MovementAction
 {
 public:
@@ -21,7 +20,6 @@ public:
     bool isUseful() override;
 };
 
-// Holds the boss on a three-slot arc around the room centre, which picks where every Scorch patch lands.
 class IgnisMainTankPositionAction : public MovementAction
 {
 public:
@@ -35,8 +33,6 @@ private:
     bool _spotReached = false;
 };
 
-// Walks an activated construct through the only chain that kills it: Scorched Ground until it turns
-// Molten, then this tank's own water pool until it turns Brittle.
 class IgnisConstructTankAction : public AttackAction
 {
 public:
@@ -47,7 +43,6 @@ public:
     bool isUseful() override;
 };
 
-// One hit of 5000 (10-man) / 3000 (25-man) shatters a Brittle construct, the only way it dies.
 class IgnisAttackBrittleConstructAction : public AttackAction
 {
 public:
@@ -84,8 +79,6 @@ public:
     bool isUseful() override;
 };
 
-// Flame Jets knocks the whole raid back and locks casting for six seconds afterwards, so a cast that
-// cannot land before it hits is thrown away either way.
 class IgnisFlameJetsHoldCastAction : public Action
 {
 public:

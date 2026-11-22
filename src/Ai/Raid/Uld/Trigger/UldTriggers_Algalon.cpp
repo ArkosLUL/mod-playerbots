@@ -14,10 +14,6 @@
 
 using namespace EncounterHelpers;
 
-// Algalon the Observer
-
-// Big Bang is physical, so a tank soaks on armour and a physical button, also one with no hole in reach.
-// The button follows what the bot can cast, not its slot: a promoted backup is still a priest.
 bool AlgalonBigBangSoakTrigger::IsActive()
 {
     if (IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot) || (!AlgalonStaysOut(bot) && !AlgalonTankCaughtOut(bot)))
@@ -44,7 +40,6 @@ bool AlgalonBigBangExternalTrigger::IsActive()
     if (AlgalonBigBangRemainingMs(botAI) < ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS)
         return false;
 
-    // Dispersion leaves a priest about 6k of the hit; these belong on the tanks.
     Player* soaker = GetAlgalonBigBangSoaker(botAI);
     if (!soaker || soaker == bot || GetAlgalonBigBangBackup(botAI) == bot || soaker->HasSpell(SPELL_ALGALON_DISPERSION))
         return false;
@@ -52,8 +47,6 @@ bool AlgalonBigBangExternalTrigger::IsActive()
     return GetAlgalonSoakerExternal(botAI, soaker) != nullptr;
 }
 
-// One layer per healer while it still has a global cooldown to spare before its walk to the hole: the
-// healers are phased for a second after the hit, and whatever is already ticking on him is all he has.
 bool AlgalonSoakerPrepTrigger::IsActive()
 {
     if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || !PlayerbotAI::IsHeal(bot) ||
@@ -67,7 +60,6 @@ bool AlgalonSoakerPrepTrigger::IsActive()
     return GetAlgalonSoakerPrep(botAI, soaker) != nullptr;
 }
 
-// Once out of the field, a healer's first cast goes on the soaker while he is low.
 bool AlgalonSoakerRescueTrigger::IsActive()
 {
     Player* soaker = GetAlgalonRescueTarget(botAI);
@@ -78,8 +70,6 @@ bool AlgalonSoakerRescueTrigger::IsActive()
     return GetAlgalonRescueSpell(botAI, soaker) != nullptr;
 }
 
-// A tank healer's tank gets its fastest heal ahead of the slot walk; the rest of its healing waits behind the
-// mana tools. The class rotations heal whoever is lowest in percent, and the encounter vetoes those for it.
 bool AlgalonTankHealCriticalTrigger::IsActive()
 {
     if (!IsAlgalonTankHealer(bot))
@@ -98,7 +88,6 @@ bool AlgalonTankHealTrigger::IsActive()
     return pick.target && !pick.critical && GetAlgalonTankHealSpell(botAI, pick);
 }
 
-// Beacon on the swap tank he isn't hitting doubles every heal on the holder onto the partner.
 bool AlgalonTankBeaconTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_PALADIN || !IsAlgalonTankHealer(bot) || IsAlgalonPhased(bot) ||
@@ -140,7 +129,6 @@ bool AlgalonCosmicSmashTrigger::IsActive()
     if (RaidObs::Active())
     {
         RaidObs::NoteDerived(bot, "algalon.hazard", smash ? "smash" : (star ? "star" : "none"));
-        // The dodge writes its branch change-only, so without a reset two waves dodged the same way read as one.
         if (!smash && !star)
             RaidObs::NoteDerived(bot, "algalon.dodge", "idle");
     }
@@ -148,8 +136,6 @@ bool AlgalonCosmicSmashTrigger::IsActive()
     return smash || star;
 }
 
-// A bot still inside the field when its 10s phase ends is phased again within a second, and while
-// phased it can't see the hole at all, only the cached position.
 bool AlgalonLeaveBlackHoleTrigger::IsActive()
 {
     if (!AlgalonEngaged(botAI))
@@ -162,8 +148,6 @@ bool AlgalonLeaveBlackHoleTrigger::IsActive()
     return !AlgalonBigBangCasting(botAI) && AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS);
 }
 
-// Misdirection and Tricks on the pull go to the tank holding him. Out of range the rogue waits: the class
-// value would give Tricks to a dps, who then pulls him.
 bool AlgalonThreatRedirectTrigger::IsActive()
 {
     char const* spell = AlgalonThreatRedirectSpell(bot);
@@ -179,8 +163,6 @@ bool AlgalonThreatRedirectTrigger::IsActive()
     return bot->GetExactDist(tank) <= range && botAI->CanCastSpell(spell, tank);
 }
 
-// At the end of the intro he swings at a random player, and a phased tank drops him the same way. A holder
-// that got him by threat still targets whatever it hit before, a constellation for a former handler.
 bool AlgalonTankPickupTrigger::IsActive()
 {
     if (AlgalonShouldPickUp(bot))
@@ -194,7 +176,6 @@ bool AlgalonTankPickupTrigger::IsActive()
 
 bool AlgalonPhasePunchSwapTrigger::IsActive() { return AlgalonShouldSwap(bot); }
 
-// Auto-attack is no action, so the damage guard never stops it, and white swings alone take him back.
 bool AlgalonYieldBossTrigger::IsActive()
 {
     Unit* boss = GetAlgalon(botAI);
@@ -236,7 +217,6 @@ bool AlgalonStarTeamTrigger::IsActive()
     return star && AI_VALUE(Unit*, "current target") != star;
 }
 
-// For the humans in the raid. Not skull: every bot's "attack rti target" reads skull.
 bool AlgalonStarMarkTrigger::IsActive()
 {
     if (!IsMechanicTrackerBot(bot, ULDUAR_MAP_ID) || !AlgalonEngaged(botAI))
@@ -247,21 +227,17 @@ bool AlgalonStarMarkTrigger::IsActive()
     return star && group && group->GetTargetIcon(RtiTargetValue::starIndex) != star->GetGUID();
 }
 
-// Presence gated, not combat gated: the intro is the only free window to put the raid on its spots.
 bool AlgalonRaidPositionTrigger::IsActive()
 {
     if (!AlgalonPresent(botAI))
         return false;
 
-    // A hider belongs to its hole from the moment it runs; the soaker and backup keep their spots.
     if (AlgalonShouldRunForShelter(bot))
         return false;
 
-    // The swap tank not holding him works the adds from wherever they are; its spot is for idle time.
     if (AlgalonOffTankWorking(bot))
         return false;
 
-    // With a pickup or swap due the spot is the way back to him; the constellations follow.
     Unit* constellation = GetAlgalonHandlerConstellation(bot);
     return !constellation || constellation->GetVictim() != bot || AlgalonTakesBossNow(bot);
 }

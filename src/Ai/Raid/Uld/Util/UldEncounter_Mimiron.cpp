@@ -47,14 +47,12 @@ const Position ULDUAR_MIMIRON_PHASE3_STAGE = Position(2762.65f, 2569.46f, 364.31
 const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT = Position(2691.5762f, 2568.5315f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT] = {
-    Position(2716.0465f, 2579.9422f, 364.3138f),  // 25 deg off the tank spot
-    Position(2717.6562f, 2561.5434f, 364.3138f),  // 345
+    Position(2716.0465f, 2579.9422f, 364.3138f),
+    Position(2717.6562f, 2561.5434f, 364.3138f),
 };
 
 namespace
 {
-// Grid search, not "nearest npcs": that list drops anything out of sight, and the closed west door's model
-// (194776) spans the alcove the MK II is held in, so bots there lose sight of the node they stand on.
 std::list<Creature*> FindMimironFloorUnits(Player* bot, std::vector<uint32> const& entries)
 {
     std::list<Creature*> units;
@@ -64,8 +62,6 @@ std::list<Creature*> FindMimironFloorUnits(Player* bot, std::vector<uint32> cons
     return units;
 }
 
-// Where NPC 33576 will be `seconds` from now: it laps the room clockwise, so rotate it about the room
-// centre. Radius is read live, since its waypoint path isn't a true circle.
 Position MimironOrbitAhead(Position const& now, float seconds)
 {
     float const dx = now.GetPositionX() - ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX();
@@ -82,7 +78,7 @@ Position MimironOrbitAhead(Position const& now, float seconds)
                     ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + dx * sn + dy * c,
                     now.GetPositionZ());
 }
-}  // namespace
+}
 
 float GetMimironSpinningUpSeconds(Unit* vx001)
 {
@@ -93,23 +89,17 @@ float GetMimironSpinningUpSeconds(Unit* vx001)
     if (!spinningUp)
         return -1.0f;
 
-    // Clamped. The channel timer is decremented before the tick that ends the channel, so the last pass
-    // can read a negative, and a negative here would predict the ignition backwards.
     return std::max(0.0f, static_cast<float>(spinningUp->GetCastTimeRemaining()) / IN_MILLISECONDS);
 }
 
 namespace
 {
-// The raw read. The public wrapper below folds it onto the trigger pass: it costs a 250 yd grid
-// scan for the DB Target, and four nodes ask for the same cone on the same pass.
 MimironBarrageWindow ReadMimironBarrageWindow(Player* bot, Unit* vx001)
 {
     MimironBarrageWindow window;
     if (!bot || !vx001)
         return window;
 
-    // Both timers read live, the 4 s Spinning Up channel and then the 10 s aura, so a bot joining
-    // mid-cast still gets the right window.
     float fire = ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS;
     float const spinning = GetMimironSpinningUpSeconds(vx001);
     if (spinning >= 0.0f)
@@ -124,7 +114,6 @@ MimironBarrageWindow ReadMimironBarrageWindow(Player* bot, Unit* vx001)
     Creature* dbTarget = bot->FindNearestCreature(NPC_MIMIRON_DB_TARGET, ULDUAR_MIMIRON_DB_TARGET_SEARCH_RANGE);
     if (!dbTarget)
     {
-        // Without 33576 FaceBarrageArc returns early and the cone stays frozen, so model a static wedge.
         window.lead = vx001->GetOrientation();
         return window;
     }
@@ -141,7 +130,7 @@ MimironBarrageWindow ReadMimironBarrageWindow(Player* bot, Unit* vx001)
 
     return window;
 }
-}  // namespace
+}
 
 bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
 {
@@ -168,7 +157,6 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
     if (!botAI || !IsMimironHardModeActive(botAI))
         return hazards;
 
-    // Only spread flames draw a spray: the fire bot searches for NPC_FLAMES_SPREAD alone.
     std::vector<Position> spread;
     for (Creature* unit :
          FindMimironFloorUnits(botAI->GetBot(), {NPC_FLAMES_SPREAD, NPC_FROST_BOMB, NPC_EMERGENCY_FIRE_BOT}))
@@ -180,8 +168,6 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
         {
             case NPC_FLAMES_SPREAD:
                 spread.push_back(unit->GetPosition());
-                // Only a node with the aura burns. The Flames (Initial) seed never does, and a put-out node drops
-                // the aura 2.5 s before it despawns.
                 if (unit->HasAura(SPELL_MIMIRON_FLAMES_AURA))
                     hazards.flames.push_back(unit->GetPosition());
                 break;
@@ -196,8 +182,6 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
         }
     }
 
-    // Two lanes per bot: the live line, for a spray already lined up, and the one its next check
-    // aims, toward the nearest spread flame from where the walk there stops.
     for (Position const& fireBot : hazards.fireBots)
     {
         hazards.sprayLanes.push_back(fireBot);
@@ -226,7 +210,7 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
 
     return hazards;
 }
-}  // namespace
+}
 
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest)
 {
@@ -263,7 +247,6 @@ bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Posit
         float const dx = dest.GetPositionX() - lane.GetPositionX();
         float const dy = dest.GetPositionY() - lane.GetPositionY();
 
-        // The line only reaches forward: HasInLine checks the front half-circle first.
         float const facing = lane.GetOrientation();
         float const ahead = dx * std::cos(facing) + dy * std::sin(facing);
         float const side = dy * std::cos(facing) - dx * std::sin(facing);
@@ -303,8 +286,6 @@ bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
 
 namespace
 {
-// The standing hazards MimironFirefighterHazards leaves out: mines, live Rocket Strike markers and a
-// Shock Blast being cast. Gathered once, so screening a batch of candidate spots costs one scan.
 struct MimironMarkers
 {
     std::vector<Position> mines;
@@ -337,8 +318,6 @@ MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
     return markers;
 }
 
-// Hazard reads cached for one trigger pass: four triggers ask, and each read walks the fire field or
-// the group. Actions and multipliers may run after the world changed, so they always read live.
 struct MimironPassReads
 {
     PlayerbotAI* botAI = nullptr;
@@ -357,10 +336,8 @@ struct MimironPassReads
     MimironBarrageWindow barrage;
 };
 
-// thread_local is fine: a whole pass runs on one map thread.
 thread_local MimironPassReads mimironPassReads;
 
-// Null outside a trigger pass, meaning read live.
 MimironPassReads* MimironPassReadsFor(PlayerbotAI* botAI)
 {
     uint32 const passId = EncounterTriggerPassId(botAI);
@@ -408,14 +385,11 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
                              ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST)
         return false;
 
-    // Fire and bomb too, or the formation pulls a bot straight back into what its dodge just left.
     return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest) &&
            IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
                                     ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH);
 }
 
-// How many of a set of hazards of one radius the straight walk from `from` to `dest` passes. Hazards
-// `from` already stands in are left out, since walking out of those is the point.
 uint32 CountMimironLegHazards(Position const& from, std::vector<Position> const& nodes, float radius,
                               Position const& dest)
 {
@@ -435,7 +409,6 @@ uint32 CountMimironLegHazards(Position const& from, std::vector<Position> const&
         if (std::sqrt(nx * nx + ny * ny) < radius)
             continue;
 
-        // Closest point of the walk to this node.
         float const t = std::clamp((nx * dx + ny * dy) / lengthSq, 0.0f, 1.0f);
         float const ox = nx - t * dx;
         float const oy = ny - t * dy;
@@ -460,12 +433,10 @@ bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const&
 
 struct MimironLegBurn
 {
-    float yards = 0.0f;   // of the walk inside any burn
-    uint32 overlap = 0;   // most burns at one point of it
+    float yards = 0.0f;
+    uint32 overlap = 0;
 };
 
-// Counts the burn the walk starts inside too, unlike IsMimironLegClearOf: leaving it still ticks, and it
-// stacks with the next one.
 MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHazards const& hazards,
                                      Position const& dest)
 {
@@ -482,8 +453,6 @@ MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHaz
     float const uy = dy / length;
     float const radius = ULDUAR_MIMIRON_FLAMES_BURN_RADIUS;
 
-    // Each node's chord along the walk as an interval of distance from `from`, then a sweep over the
-    // ends for the union and the deepest overlap.
     std::vector<std::pair<float, int>> ends;
     for (Position const& node : hazards.flames)
     {
@@ -524,14 +493,13 @@ MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHaz
 
     return burn;
 }
-}  // namespace
+}
 
 std::vector<Position> GetMimironMines(PlayerbotAI* botAI)
 {
     return botAI ? GetMimironMarkers(botAI).mines : std::vector<Position>();
 }
 
-// Pathing knows nothing about mines, and the slot screen only covers where the walk ends.
 bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest)
 {
     return IsMimironLegClearOf(from, mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);
@@ -552,7 +520,6 @@ bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Posi
     if (!mineNear)
         return true;
 
-    // No path: the mover refuses the leg itself. Two points: the straight walk the leg test judged.
     PathGenerator path(bot);
     if (!path.CalculatePath(dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ()) ||
         (path.GetPathType() & PATHFIND_NOPATH))
@@ -562,7 +529,6 @@ bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Posi
     if (points.size() <= 2)
         return true;
 
-    // A mine beside a waypoint is skipped by the segment leaving it, but the one arriving there catches it.
     for (size_t i = 1; i < points.size(); ++i)
     {
         Position const start(points[i - 1].x, points[i - 1].y, points[i - 1].z);
@@ -678,8 +644,6 @@ bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, flo
     float const stop = range + bot->GetCombatReach() + target->GetCombatReach();
     float const radius = std::max(1.0f, stop - ULDUAR_MIMIRON_APPROACH_INSET);
 
-    // Bearing toward the bot first, which is where the generic reach nodes would stop, then out
-    // to either side. Step 0 clear means there is nothing here to fix.
     float const towardBot = target->GetAngle(bot->GetPositionX(), bot->GetPositionY());
     for (uint32 step = 0; step < ULDUAR_MIMIRON_STAND_IN_BEARINGS; ++step)
     {
@@ -715,7 +679,6 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     MimironBarrageWindow const barrage =
         vx001 ? GetMimironBarrageWindow(bot, vx001) : MimironBarrageWindow();
 
-    // Cone judged at arrival: these are the fight's longest legs, and the cone turns ~10.6 degrees a second.
     float const speed = bot->GetSpeed(MOVE_RUN);
     auto const coneClear = [&](Position const& spot)
     {
@@ -735,21 +698,15 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     char const* how = "direct";
     if (!IsMimironSpotStandable(bot, slot, markers, hazards) || !coneClear(slot))
     {
-        // Already on clear ground beside it: stay. A substitute moves every time the fire grows, and
-        // chasing it is a walk every tick.
         if (bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <=
                 ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS &&
             IsMimironSpotStandable(bot, bot->GetPosition(), markers, hazards))
             return approaches;
 
-        // Phase 1 keeps its slots. Its camp moves off its own fire by switching anchors, and a stand-in
-        // squeezed between 6 yd rows is how two bots end up under one Napalm Shell.
         if (!vx001 && GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
             !GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
             return approaches;
 
-        // Hard-mode phase 2 melee: a stand-in must reach VX-001 without going under it or into the wedge's
-        // line, and skips the Napalm spacing test, which the tightly packed ring always fails.
         bool const meleeRing = vx001 && !PlayerbotAI::IsRanged(bot) && IsMimironPhase2(botAI);
         MimironBurstSector const sector =
             meleeRing ? GetMimironOtherGroupSector(botAI, bot, vx001) : MimironBurstSector();
@@ -767,11 +724,8 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
             }
         }
 
-        // Nearest ring first, and on each ring the bearing toward the bot first, so the stand-in is on
-        // the near side of the slot.
         float const towardBot = slot.GetAngle(bot->GetPositionX(), bot->GetPositionY());
         bool found = false;
-        // Phase 1 has already returned above, so this is the wide ring.
         for (float radius = ULDUAR_MIMIRON_STAND_IN_RING_STEP;
              radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE + 0.01f && !found;
              radius += ULDUAR_MIMIRON_STAND_IN_RING_STEP)
@@ -815,8 +769,6 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
 
         if (!found)
         {
-            // An empty answer stands the formation down, and without this it is indistinguishable
-            // in a trace from the trigger never firing.
             if (RaidObs::Active())
                 RaidObs::NoteDerived(bot, "mimiron.approach", "none");
 
@@ -835,8 +787,6 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         return approaches;
     }
 
-    // A healthy bot steps through a thin band rather than walk round it. Never through two burns at
-    // once: that's the dodge's own trigger, and it would throw the bot back out halfway.
     if (!directFireSafe && directMineSafe &&
         bot->GetHealthPct() >= ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT)
     {
@@ -848,8 +798,6 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     auto const legSafe = [&](Position const& start, Position const& end)
     { return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers.mines, end); };
 
-    // Round the fire and the mines instead: one waypoint over the walk's midpoint, whose legs both
-    // miss them.
     float const distance = from.GetExactDist2d(goal.GetPositionX(), goal.GetPositionY());
     float const bearing = from.GetAngle(goal.GetPositionX(), goal.GetPositionY());
     for (float degrees : ULDUAR_MIMIRON_DETOUR_TURNS_DEG)
@@ -866,8 +814,6 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         }
     }
 
-    // Mines rank last, so the straight walk is still the last resort when the fire leaves it open, but past
-    // one mine at most and only with the health for it: a healer walked one past five and died to two.
     if (directFireSafe)
     {
         if (bot->GetHealthPct() >= ULDUAR_MIMIRON_MINE_CROSS_HEALTH_PCT &&
@@ -892,8 +838,6 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
     float const clearance = ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE + ULDUAR_MIMIRON_BARRAGE_MARGIN;
     float const twoPi = 2.0f * static_cast<float>(M_PI);
 
-    // Grow the band's trailing edge by the sweep during the walk. Not while spinning up: `sweep` already
-    // spans the whole fire. The barrage dodge zeroes its rate the same way, and the two must agree.
     float const rate = window.untilLive > 0.0f ? 0.0f : window.rate;
     float const grown =
         std::min(window.sweep + rate * std::max(travelSeconds, 0.0f), twoPi - 2.0f * clearance);
@@ -961,7 +905,6 @@ bool IsMimironAcuAirborne(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot)
         return false;
 
-    // Phase 4 has it attackable too, sitting on the chassis.
     return GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) && !IsMimironPhase4(bot) &&
            !IsMimironAcuGrounded(botAI);
 }
@@ -995,40 +938,31 @@ Unit* GetMimironStagingFocus(Player* bot)
     Creature* aerialCommandUnit =
         bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
 
-    // VX-001 only rides anything in phase 4, so once it boards, the phase 4 spots are worth walking to.
     if (vx001 && vx001->GetVehicleBase())
         return vx001;
 
     if (aerialCommandUnit)
         return aerialCommandUnit;
 
-    // Nothing before the pull or after a wipe: the MK II is NOT_SELECTABLE until it is pulled, and
-    // evade despawns VX-001 and the Aerial Command Unit outright.
     return vx001;
 }
 
 namespace
 {
-// Which constructs are up. Read against this enum, not guessed from the number: a trace records the
-// raw value, and the handover is the state that matters most and is not a phase number at all.
 enum MimironTracedPhase : uint32
 {
-    MIMIRON_TRACE_NONE = 0,      // nothing in the room: before the pull, or after a wipe
-    MIMIRON_TRACE_MKII = 1,      // phase 1
-    MIMIRON_TRACE_VX001 = 2,     // phase 2
-    MIMIRON_TRACE_ACU = 3,       // phase 3
-    MIMIRON_TRACE_ALL = 4,       // phase 4, all three assembled
-    MIMIRON_TRACE_HANDOVER = 5,  // a construct exists but nothing is attackable yet
+    MIMIRON_TRACE_NONE = 0,
+    MIMIRON_TRACE_MKII = 1,
+    MIMIRON_TRACE_VX001 = 2,
+    MIMIRON_TRACE_ACU = 3,
+    MIMIRON_TRACE_ALL = 4,
+    MIMIRON_TRACE_HANDOVER = 5,
 };
 
-// Trace-only state, folded once per instance per tick. Phase, core window and carrier are derived
-// fresh everywhere else and stored nowhere, so the trace would otherwise have none of them.
 struct MimironObsState
 {
     RaidObs::ObsValue<uint32> phase{"mimiron.phase"};
 
-    // Aura 64436 sits on the Aerial Command Unit, and RaidObs records auras for roster players only,
-    // so the one window phase 3 can be shortened in is otherwise invisible.
     RaidObs::ObsValue<bool> acuGrounded{"mimiron.core"};
 
     RaidObs::ObsValue<ObjectGuid> coreCarrier{"mimiron.carrier"};
@@ -1040,12 +974,8 @@ RaidInstanceState<MimironObsState> mimironObsStates;
 
 MimironObsState& MimironObsStateFor(Player* bot) { return mimironObsStates.For(bot->GetInstanceId()); }
 
-// Raid-wide answers, the same for every bot in the instance: a per-bot tank latch would start the
-// formation walking while the tank still builds threat, and a per-bot stack anchor is no stack.
 struct MimironFightState
 {
-    // One-way per pull. Set when the main tank's threat lead on the MK II is real, or when the hold
-    // times out; until then he has no anchor and stands on the boss.
     bool tankDragReady = false;
     uint32 tankHoldStartedMs = 0;
 
@@ -1053,7 +983,6 @@ struct MimironFightState
     uint32 stackPickedMs = 0;
     uint32 stackScanMs = 0;
 
-    // Extra turn on the phase 1 camp toward the room, radians, so every slot keeps sight of the MK II.
     float campTurn = 0.0f;
     uint32 campTurnScanMs = 0;
     uint32 campTurnRaisedMs = 0;
@@ -1061,26 +990,20 @@ struct MimironFightState
     ObjectGuid plasmaClaimedBy;
     uint32 plasmaWindowMs = 0;
 
-    // Assault Bot corpses that already gave their Magnetic Core.
     std::unordered_set<ObjectGuid> coreCorpses;
 
-    // When the last Magnetic Core went in, so the next one waits its arming out.
     uint32 coreSpentMs = 0;
 
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
 
-    // Where the Firefighter wedge points once a barrage has moved it off the east centreline. A
-    // bearing of zero is a real one, so wedgeAimedMs is what says whether it has been aimed.
     float wedgeBearing = 0.0f;
     uint32 wedgeAimedMs = 0;
 
-    // The wedge slide in force, and the focus it was worked out against.
     uint32 shiftFocusEntry = 0;
     float shiftX = 0.0f;
     float shiftY = 0.0f;
 
-    // Where the phase 4 tank holds the MK II under Firefighter. Zero picked means the fixed spot.
     Position tankSpot;
     uint32 tankSpotPickedMs = 0;
     uint32 tankSpotScanMs = 0;
@@ -1088,8 +1011,6 @@ struct MimironFightState
 
 RaidInstanceState<MimironFightState> mimironFightStates;
 
-// Each bot's last fire dodge. Kept out of MimironFightState, which resets on every handover scan,
-// right when the raid follows its master through the fire and most needs the hold.
 RaidInstanceState<std::unordered_map<ObjectGuid, uint32>> mimironFireDodges;
 
 std::unordered_map<ObjectGuid, uint32>& MimironFireDodgesFor(Player* bot)
@@ -1099,15 +1020,13 @@ std::unordered_map<ObjectGuid, uint32>& MimironFireDodgesFor(Player* bot)
 
 MimironFightState& MimironFightStateFor(Player* bot) { return mimironFightStates.For(bot->GetInstanceId()); }
 
-// Raid-wide, kept by the encounter tick: every bot has to walk to the same band and leave it together.
-// Out of MimironFightState, which the handover resets on every scan.
 struct MimironHandoverState
 {
     RaidObs::ObsValue<MimironHandoverStep> step{"mimiron.handover"};
     uint32 scanMs = 0;
 
     bool picked = false;
-    float bearing = 0.0f;  // hold band centreline from the room centre
+    float bearing = 0.0f;
 };
 
 RaidInstanceState<MimironHandoverState> mimironHandoverStates;
@@ -1123,8 +1042,6 @@ MimironHandoverStep CachedMimironHandoverStep(Player* bot)
     return state.step;
 }
 
-// Read off the boss script's own clock: the MK II beaten, VX-001 summoned 17 s in, Mimiron aboard it
-// at 35 s, phase 2 at 47.75 s. Grid scans, since every mech is NOT_SELECTABLE until its phase.
 MimironHandoverStep ReadMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
 {
     if (!IsMimironHardModeActive(botAI) || !BossStateGateLive(botAI, ULD_BOSS_MIMIRON))
@@ -1142,12 +1059,10 @@ MimironHandoverStep ReadMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
     if (!vx001)
         return MimironHandoverStep::Hold;
 
-    // Riding is phase 4. Spent is the 5 s before the 2 to 3 handover summons the Aerial Command Unit.
     if (!vx001->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || vx001->GetVehicleBase() ||
         vx001->GetHealthPct() < ULDUAR_MIMIRON_SPENT_HEALTH_PCT)
         return MimironHandoverStep::None;
 
-    // Seat 0 at 35 s, seat 1 at 44 s.
     if (Vehicle* kit = vx001->GetVehicleKit())
     {
         for (int8 seat : {0, 1})
@@ -1161,8 +1076,6 @@ MimironHandoverStep ReadMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
     return MimironHandoverStep::Late;
 }
 
-// Fewest burning nodes round the band's middle, ties to the one nearest the phase 1 tank spot: the
-// handover's own seeds then land beside the phase 1 field, one fire for the first Frost Bomb to clear.
 float PickMimironHoldBearing(PlayerbotAI* botAI, Player* bot)
 {
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
@@ -1204,7 +1117,6 @@ float PickMimironHoldBearing(PlayerbotAI* botAI, Player* bot)
     return bestBearing;
 }
 
-// Called from the tick with nothing attackable. The band is picked once, on the fire phase 1 left.
 void UpdateMimironHandover(PlayerbotAI* botAI, Player* bot)
 {
     MimironHandoverState& state = MimironHandoverStateFor(bot);
@@ -1232,8 +1144,6 @@ void ResetMimironHandover(Player* bot)
     state.picked = false;
 }
 
-// Everything the trace needs once per instance per tick rather than once per bot: the phase, the
-// Magnetic Core window, who holds the core, and the Laser Barrage cone.
 void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
@@ -1249,12 +1159,8 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
     Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 
-    // Off the constructs, never off the calling bot's combat state: one bot dropping combat is not a
-    // wipe, and a latch left set would leave the re-pull with nothing to emit.
     if (!leviathanMkII && !vx001 && !aerialCommandUnit)
     {
-        // Handover or empty room. GetMimironStagingFocus scans creatures, not the target list, so it still
-        // finds a NOT_SELECTABLE mech mid-handover, and an evade despawns both constructs it looks for.
         state.phase = GetMimironStagingFocus(bot) ? MIMIRON_TRACE_HANDOVER : MIMIRON_TRACE_NONE;
         state.acuGrounded = false;
         state.coreCarrier = ObjectGuid::Empty;
@@ -1276,8 +1182,6 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 
     state.acuGrounded = IsMimironAcuGrounded(botAI);
 
-    // Past here the work is only worth doing for a trace: the carrier election walks the group, and
-    // reading the barrage window costs a grid scan for the DB Target.
     if (!RaidObs::Active())
         return;
 
@@ -1287,8 +1191,6 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
     if (!vx001)
         return;
 
-    // The cone has no world object, and the DB Target it aims at isn't hostile, so the snapshot sweep
-    // sees neither. Only this row says where the cone points.
     MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
     if (!window.valid)
         return;
@@ -1297,13 +1199,11 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
     snprintf(params, sizeof(params), "\"lead\":%.2f,\"sweep\":%.2f,\"rate\":%.2f,\"live\":%.1f",
              window.lead, window.sweep, window.rate, window.untilLive);
 
-    // Two spell ids so Spinning Up and the barrage read as separate stages. Origin resampled every pass,
-    // since in phase 4 VX-001 rides the chassis and the apex drifts.
     RaidObs::NoteHazard(bot->GetMap(),
                         window.untilLive > 0.0f ? SPELL_SPINNING_UP : SPELL_P3WX2_LASER_BARRAGE_AURA_1,
                         vx001->GetPosition(), "sweep", params, ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS);
 }
-}  // namespace
+}
 
 void MimironTick(PlayerbotAI* botAI) { TickMimironObs(botAI, botAI->GetBot()); }
 
@@ -1317,8 +1217,6 @@ MimironHandoverStep GetMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
 
 bool IsMimironEngaged(PlayerbotAI* botAI)
 {
-    // Any construct in combat. Mid-handover the outgoing one is passive and unselectable before the next
-    // calls SetInCombatWithZone, so there's nothing to target then anyway.
     Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001);
     Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
@@ -1336,19 +1234,12 @@ bool IsMimironPhase4(Player* bot)
     if (!botAI)
         return false;
 
-    // Cached lookups only. This is asked several times per bot per tick, from the target list, the
-    // tank node and the pet node, so a grid sweep here would cost the whole raid every phase.
-
-    // VX-001 and the Aerial Command Unit both ride something from phase 4 on, and neither does before
-    // it, so either one answers on its own while it is still attackable.
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
         return vx001->GetVehicleBase() != nullptr;
 
     if (Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return aerialCommandUnit->GetVehicleBase() != nullptr;
 
-    // Both under 15000 and NON_ATTACKABLE, so only the chassis is left. Its seat 3 holds the cannon in
-    // phase 1 and VX-001 from phase 4 on, readable whatever flags the passengers carry.
     if (Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         if (Vehicle* kit = leviathanMkII->GetVehicleKit())
             if (Unit* seated = kit->GetPassenger(3))
@@ -1387,8 +1278,6 @@ Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot)
     if (!group)
         return nullptr;
 
-    // The fire carrier is whoever holds "rfire", dead or not, so frost doesn't hop when that pick dies.
-    // Nobody holding it means the node hasn't run yet, and it'll pick the first alive paladin.
     Player* fire = nullptr;
     Player* firstAlive = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -1468,8 +1357,6 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (parts.empty())
         return nullptr;
 
-    // Banded, ties to the fixed entry order: the band stops the ground pair trading the lead, and a pure
-    // function of world state keeps the tank node, this node and the pets on the same part.
     auto const highest = [](std::vector<Unit*> const& candidates) -> Unit*
     {
         auto const band = [](Unit* unit)
@@ -1483,16 +1370,12 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
         return best;
     };
 
-    // Fewer than three attackable: one is already in Self Repair and its 15 s clock runs, so every
-    // restriction comes off, melee on the Aerial Command Unit included.
     if (parts.size() < 3)
         return highest(parts);
 
     std::vector<Unit*> allowed;
     for (Unit* part : parts)
     {
-        // Ranged DPS own the Aerial Command Unit, melee only get it below. IsRangedDps, not IsRanged, so a
-        // healer is never steered onto it or into the hold.
         if (part->GetEntry() == NPC_AERIAL_COMMAND_UNIT && (melee || !PlayerbotAI::IsRangedDps(bot)))
             continue;
 
@@ -1502,7 +1385,6 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (allowed.empty())
         return nullptr;
 
-    // All three levelled out, so stop holding and push them under together.
     bool levelled = true;
     for (Unit* part : parts)
         if (part->GetHealthPct() > ULDUAR_MIMIRON_PHASE4_HOLD_PCT)
@@ -1511,8 +1393,6 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (levelled)
         return highest(allowed);
 
-    // Floor paced to the part furthest from death, not a fixed percentage: the Aerial Command Unit always
-    // arrives last, since most of the AoE meant for it lands on the other two.
     float leader = 0.0f;
     for (Unit* part : parts)
         leader = std::max(leader, part->GetHealthPct());
@@ -1528,8 +1408,6 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (!aboveFloor.empty())
         return highest(aboveFloor);
 
-    // Both ground mechs at the floor: melee and pets hit the leading unit to close the gap, but only
-    // within two converge steps, since cleave still splashes the pair. Past that, hold.
     if (melee)
     {
         Unit* aerialCommandUnit = nullptr;
@@ -1574,15 +1452,12 @@ Spell* GetMimironPlasmaBlastCast(Unit* cannon)
 
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot)
 {
-    // Phases 1 and 4 both park the MK II, and both are the phases it lays mines in.
     return botAI && bot && PlayerbotAI::IsMainTank(bot) &&
            GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) != nullptr;
 }
 
 float GetMimironPhase1DisperseDistance(PlayerbotAI* /*botAI*/)
 {
-    // Both modes. The Firefighter camp deals its own 6 yd slots, and a threshold equal to that would
-    // have the unstacker judge every bot on its slot too close and shove it off.
     return ULDUAR_MIMIRON_DISPERSE_DISTANCE;
 }
 
@@ -1645,8 +1520,6 @@ bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot)
         state.tankHoldStartedMs = getMSTime();
     else if (GetMSTimeDiffToNow(state.tankHoldStartedMs) >= ULDUAR_MIMIRON_TANK_HOLD_MAX_MS)
     {
-        // Nobody is going to win this threat table. Walking a boss somebody else is holding is still
-        // better than standing at the pull spot burning the middle of the room down.
         state.tankDragReady = true;
         return true;
     }
@@ -1663,8 +1536,6 @@ bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot)
     if (!group)
         return false;
 
-    // Against the raid rather than against the runner-up tank: an off-tank above the lead is fine,
-    // it is a dps crossing the line that stops the boss dead halfway through the drag.
     float highest = 0.0f;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -1689,8 +1560,6 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
 
     MimironFightState& state = MimironFightStateFor(bot);
 
-    // Gathering the field costs a scan of every nearby npc, and twenty-five bots ask for this every
-    // tick, so the answer is folded on the same interval the observability pass uses.
     if (state.stackScanMs &&
         GetMSTimeDiffToNow(state.stackScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
         return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[state.stackAnchor];
@@ -1729,8 +1598,6 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
     state.stackAnchor = best;
     state.stackPickedMs = getMSTime();
 
-    // Both counts, not just the winner: a switch that traded two nodes for one is the raid pacing,
-    // and that reads identically to a good one unless the number it left behind is on the line.
     if (RaidObs::Active())
     {
         char line[48];
@@ -1769,7 +1636,7 @@ MimironRapidBurstWindow ReadMimironRapidBurstWindow(PlayerbotAI* botAI, Player* 
     window.centreline = vx001->GetAngle(carrier->GetPositionX(), carrier->GetPositionY());
     return window;
 }
-}  // namespace
+}
 
 MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
@@ -1830,11 +1697,10 @@ namespace
 {
 enum : int32
 {
-    MIMIRON_CORE_NOT_IN_LOOT = -1,  // loot never filled for this corpse
+    MIMIRON_CORE_NOT_IN_LOOT = -1,
     MIMIRON_CORE_ALREADY_TAKEN = -2
 };
 
-// The loot slot holding this corpse's Magnetic Core, or one of the two codes above.
 int32 MimironCoreLootSlot(Creature* corpse)
 {
     int32 result = MIMIRON_CORE_NOT_IN_LOOT;
@@ -1852,7 +1718,7 @@ int32 MimironCoreLootSlot(Creature* corpse)
 
     return result;
 }
-}  // namespace
+}
 
 Creature* GetMimironCoreCorpse(Player* bot)
 {
@@ -1903,8 +1769,6 @@ bool TakeMimironCore(Player* bot, Creature* corpse)
 
     MimironFightStateFor(bot).coreCorpses.insert(corpse->GetGUID());
 
-    // Same bookkeeping as Player::StoreLootItem and the creature branch of DoLootRelease, so the
-    // corpse shows nothing left to a player who opens it afterwards.
     int32 const slot = MimironCoreLootSlot(corpse);
     if (slot >= 0)
     {
@@ -1936,8 +1800,6 @@ bool IsMimironCoreUseReady(PlayerbotAI* botAI, Player* bot)
         !aerialCommandUnit->HasUnitMovementFlag(MOVEMENTFLAG_HOVER))
         return false;
 
-    // Hover stays set through a core's arming and comes back while an aura is still on, and the placed
-    // core isn't findable for its first few hundred ms, so each spend is stamped too.
     MimironFightState const& state = MimironFightStateFor(bot);
     if (state.coreSpentMs && GetMSTimeDiffToNow(state.coreSpentMs) < ULDUAR_MIMIRON_CORE_ARM_MS)
         return false;
@@ -1961,8 +1823,6 @@ std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
         aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT)
         return {};
 
-    // A grid scan, since "possible targets" is per bot and the kept pair has to be the same for
-    // everyone. Folded on the observability interval, like the stack anchor.
     MimironFightState& state = MimironFightStateFor(bot);
     if (!state.fireBotScanMs ||
         GetMSTimeDiffToNow(state.fireBotScanMs) >= ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
@@ -1973,7 +1833,6 @@ std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
         bot->GetCreatureListWithEntryInGrid(fireBots, NPC_EMERGENCY_FIRE_BOT,
                                             ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
 
-        // Every one: with no flame within 150 yd a fire bot stops and never sprays, so a cleared field quiets them.
         std::vector<ObjectGuid> alive;
         for (Creature* fireBot : fireBots)
             if (fireBot && fireBot->IsAlive())
@@ -1997,8 +1856,6 @@ bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot)
 
 namespace
 {
-// Keeps a formation anchor on the floor. Moves the anchor, never a single slot: per-slot clamping
-// deforms the formation into the clumps the spread exists to prevent.
 Position ClampMimironAnchorToRoom(Position anchor)
 {
     float const z = ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ();
@@ -2017,8 +1874,6 @@ Position ClampMimironAnchorToRoom(Position anchor)
     return anchor;
 }
 
-// How many rows `count` bots need, capped at `maxRows`. Past that they pack tighter, since giving up
-// spacing is cheaper than giving up range.
 uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count, float halfAngle, float spacing)
 {
     uint32 held = 0;
@@ -2033,13 +1888,11 @@ uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count, float half
     return maxRows;
 }
 
-// Slot `index` of `count`, dealt row by row from the inside out and then spread edge to edge along
-// whichever row it landed in.
 void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, float halfAngle,
                       float spacing, float& outRadius, float& outOffset)
 {
     uint32 const base = count / rows;
-    uint32 const extra = count % rows;  // the first `extra` rows carry one more
+    uint32 const extra = count % rows;
 
     uint32 row = 0;
     uint32 filled = 0;
@@ -2059,8 +1912,6 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
     outOffset = size <= 1 ? 0.0f : -halfAngle + 2.0f * halfAngle * slot / (size - 1);
 }
 
-// Casting reach to `focus` as IsWithinCombatRange measures it in 3D, with a default player reach
-// rather than the asking bot's own, so a gnome and a tauren build the same wedge.
 float MimironWedgeReach(Unit* focus)
 {
     return std::max(sPlayerbotAIConfig.SpellDistance + focus->GetCombatReach() + DEFAULT_COMBAT_REACH -
@@ -2068,7 +1919,6 @@ float MimironWedgeReach(Unit* focus)
                     1.0f);
 }
 
-// How far past `reach` of `focus` a slot sits once slid, on the floor. Negative inside it.
 float MimironSlotExcess(Position const& slot, Unit* focus, float reach, float shiftX, float shiftY)
 {
     float const dz = focus->GetPositionZ() - slot.GetPositionZ();
@@ -2076,7 +1926,6 @@ float MimironSlotExcess(Position const& slot, Unit* focus, float reach, float sh
     return focus->GetExactDist2d(slot.GetPositionX() + shiftX, slot.GetPositionY() + shiftY) - floor;
 }
 
-// `inset` pulls the limit in, so the farthest slot lands that far inside it.
 void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, float& shiftX, float& shiftY,
                            float inset = 0.0f)
 {
@@ -2087,8 +1936,6 @@ void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, floa
 
     float const reach = std::max(MimironWedgeReach(focus) - inset, 1.0f);
 
-    // One pass puts the farthest slot on the limit, but a rigid move can leave a second one just past
-    // it at a different bearing, so settle it a couple more times.
     for (uint32 pass = 0; pass < 3; ++pass)
     {
         float worst = 0.0f;
@@ -2114,8 +1961,6 @@ void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, floa
     }
 }
 
-// MimironShiftIntoRange held raid-wide: computed SLACK inside the limit, kept until a slot leaves
-// range or the fresh answer moves SLACK away, so the wedge doesn't walk after every yard of drift.
 void MimironStickyShiftIntoRange(Player* bot, std::vector<Position> const& slots, Unit* focus, float& shiftX,
                                  float& shiftY)
 {
@@ -2146,14 +1991,11 @@ void MimironStickyShiftIntoRange(Player* bot, std::vector<Position> const& slots
     state.shiftY = shiftY;
 }
 
-// Every slot of the Firefighter phase 1 camp: a wedge on the tank spot through the live stack anchor,
-// turned `turn` toward the room. Fixed so the fire gathers in one place, sliding only to stay in range.
 std::vector<Position> MimironPhase1CampSlots(Position const& anchor, Unit* focus, uint32 count, float turn)
 {
     Position const& hub = ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
     float centreline = hub.GetAngle(anchor.GetPositionX(), anchor.GetPositionY());
 
-    // Never past the room's own bearing, or the two anchors cross over.
     float toRoom = Position::NormalizeOrientation(
         hub.GetAngle(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX(), ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY()) -
         centreline);
@@ -2165,8 +2007,6 @@ std::vector<Position> MimironPhase1CampSlots(Position const& anchor, Unit* focus
         MimironWedgeRows(ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW, ULDUAR_MIMIRON_PHASE1_CAMP_ROWS, count,
                          ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE, ULDUAR_MIMIRON_PHASE1_CAMP_SPACING);
 
-    // Every slot, not just this one: the shift is set by whichever is farthest out, and every bot has
-    // to derive the same shift or the wedge deforms into the lopsided blob the slots exist to prevent.
     std::vector<Position> slots;
     slots.reserve(count);
     for (uint32 i = 0; i < count; ++i)
@@ -2192,8 +2032,6 @@ std::vector<Position> MimironPhase1CampSlots(Position const& anchor, Unit* focus
     return slots;
 }
 
-// Whether a player standing on `slot` sees `focus`. Same ray IsWithinLOSInMap casts from a player: its
-// eye to the creature's hit sphere point. Out of sight is an invalid target and the bot drops it.
 bool MimironSlotSeesFocus(Position const& slot, Unit* focus)
 {
     Position const eye(slot.GetPositionX(), slot.GetPositionY(),
@@ -2205,8 +2043,6 @@ bool MimironSlotSeesFocus(Position const& slot, Unit* focus)
                                             VMAP::ModelIgnoreFlags::Nothing);
 }
 
-// Smallest turn at which every camp slot sees the MK II, raid-wide so every bot builds the same camp.
-// Rises at once, falls only after ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS, holds when no step clears.
 float MimironPhase1CampTurn(Player* bot, Position const& anchor, Unit* focus, uint32 count)
 {
     MimironFightState& state = MimironFightStateFor(bot);
@@ -2262,13 +2098,9 @@ Position MimironPhase1CampSlot(Player* bot, Position const& anchor, Unit* focus,
     return slots[std::min(index, count - 1)];
 }
 
-// Phase 3 east wedge: the add pads sit on west, north-east and south-east arms, so a ring would put
-// lone ranged bots in an add's path.
 bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out, uint32& index,
                           uint32& count)
 {
-    // No melee slots: adds walk in from outside the wedge, and a slot at ACTION_RAID would beat the chase
-    // at ACTION_HIGH every tick.
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
@@ -2290,7 +2122,6 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     if (count == 0)
         return false;
 
-    // Built to fit casting range: rows stop there and pack tighter past it.
     float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance -
                                            ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
                                            ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
@@ -2300,8 +2131,6 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
         1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
         ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
 
-    // Anchored on the room centre, so a Bomb Bot spawning on the unit has ~30 yd to cross. Centreline on
-    // the staging point, the gap between the east arms that nothing walks in from.
     Position const& anchor = ULDUAR_MIMIRON_ROOM_CENTER;
     float const centreline = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
         ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(), ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY());
@@ -2322,8 +2151,6 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
                            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     }
 
-    // Shifted toward the unit only as far as casting range needs: it hovers ~16 yd up, so floor distance
-    // understates range. Never onto it, or raid and unit circle the room together.
     float shiftX = 0.0f;
     float shiftY = 0.0f;
     MimironStickyShiftIntoRange(bot, slots, focus, shiftX, shiftY);
@@ -2336,8 +2163,6 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     return true;
 }
 
-// Firefighter wedge centreline: the east gap, re-aimed onto a barrage's safe sector before it ignites.
-// That sector's bisector is lead + pi - sweep/2, and it's about the wedge's own width, so aim exactly.
 float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
 {
     float const east = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
@@ -2350,8 +2175,6 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
     if (!vx001)
         return current;
 
-    // Only while spinning up: once lit, lead and sweep describe what's left of the cast and the bisector
-    // moves every tick. One re-aim a barrage, latched for everyone.
     MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
     if (!window.valid || window.untilLive <= 0.0f)
         return current;
@@ -2359,8 +2182,6 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
     if (state.wedgeAimedMs && GetMSTimeDiffToNow(state.wedgeAimedMs) < ULDUAR_MIMIRON_WEDGE_REAIM_MS)
         return current;
 
-    // A cone that misses the wedge is worth sitting through: moving costs 25 bots a walk each, and
-    // the fire convergence the wedge exists for is paid for in where it sits.
     auto const onWedge = [&](float bearing)
     {
         return Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() +
@@ -2393,8 +2214,6 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
     return state.wedgeBearing;
 }
 
-// Phase 4 Firefighter tank spot: the fixed one until fire gathers, then the ring point with least fire.
-// Raid-wide on the observability interval, since trigger, action and formation guard must agree.
 Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
 {
     MimironFightState& state = MimironFightStateFor(bot);
@@ -2410,7 +2229,6 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
         GetMSTimeDiffToNow(state.tankSpotPickedMs) < ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS)
         return live;
 
-    // Never mid-barrage: VX-001 rides the chassis and the cone radiates from wherever it stands.
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         if (GetMimironSpinningUpSeconds(vx001) >= 0.0f ||
@@ -2435,7 +2253,6 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
     if (liveFire <= ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT)
         return live;
 
-    // Ties go to the shorter drag.
     Position best = live;
     uint32 bestFire = liveFire;
     auto const consider = [&](Position const& candidate)
@@ -2479,8 +2296,6 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
     return best;
 }
 
-// Every living member on the map gets one, tanks and melee too: outer row first, each row centred
-// on the band's bearing.
 bool GetMimironHoldSlot(Player* bot, Group* group, Position& out, uint32& index, uint32& count)
 {
     MimironHandoverState const& state = MimironHandoverStateFor(bot);
@@ -2516,8 +2331,6 @@ bool GetMimironHoldSlot(Player* bot, Group* group, Position& out, uint32& index,
     return true;
 }
 
-// `branch` names the shape that answered, for the trace: a coordinate alone can't tell a wedge slot
-// from a ring slot that lands near it.
 bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, char const*& branch,
                              uint32& index, uint32& count)
 {
@@ -2532,15 +2345,11 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     if (!group)
         return false;
 
-    // Nothing attackable means a handover, with every mech NOT_SELECTABLE. The staging focus finds them
-    // anyway, for the one spot handed out then.
     Unit* focus = GetMimironRingFocus(botAI);
     bool const staging = focus == nullptr;
     bool walkIn = false;
     if (staging)
     {
-        // Firefighter 1 to 2: off the phase 1 field onto clean ground, then the phase 2 slot, worked out
-        // on VX-001 as if it were up.
         MimironHandoverStep const step = CachedMimironHandoverStep(bot);
         if (step == MimironHandoverStep::Hold || step == MimironHandoverStep::Late)
         {
@@ -2555,15 +2364,11 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     if (!focus)
         return false;
 
-    // The phase 4 tank holds the chassis still, since it carries the barrage apex. Phase 4 by the vehicle
-    // seat: a part in Self Repair is NON_ATTACKABLE and would fail a three-attackable test.
     bool const phase4 = staging ? focus->GetEntry() == NPC_VX001 && focus->GetVehicleBase() != nullptr
                                 : IsMimironPhase4(bot);
 
     if (PlayerbotAI::IsMainTank(bot) && phase4)
     {
-        // Only while the MK II is his. The chassis walks after whoever it is hitting, so a spot would
-        // keep him away from it; with none, reach melee and his taunt take him back.
         if (!staging)
         {
             Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
@@ -2571,21 +2376,15 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                 return false;
         }
 
-        // Under Firefighter the spot moves off the fire, so the melee on the chassis stand clear.
-        // During the handover it stays fixed: that is where the chassis arrives.
         branch = "p4tank";
         out = staging || !IsMimironHardModeActive(botAI) ? ULDUAR_MIMIRON_PHASE4_TANK_SPOT
                                                          : GetMimironPhase4TankSpot(botAI, bot);
         return true;
     }
 
-    // Nobody else gets a spot in a handover bar the Firefighter walk in: refusing hands the tick to follow, and a
-    // raid walking with its master stays ahead of the fire. After p4tank on purpose, since that spot holds the boss.
     if (staging && !walkIn)
         return false;
 
-    // Phase 3 tank spot, for the Magnetic Core: the unit holds 30 yd from its tank and the core grounds it
-    // where it is, so the tank's spot decides where the raid spends the 20 s window.
     if (PlayerbotAI::IsMainTank(bot) && focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT)
     {
         branch = "p3tank";
@@ -2599,15 +2398,11 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return GetMimironPhase3Slot(bot, group, focus, out, index, count);
     }
 
-    // Phase 1 tank spot: the tank flees every Shock Blast and the boss follows, so nothing else brings it
-    // back. Firefighter holds it 53 yd west, keeping the fire off the ground VX-001 is summoned onto.
     bool const phase1 = !phase4 && focus->GetEntry() == NPC_LEVIATHAN_MKII;
     bool const firefighter = IsMimironHardModeActive(botAI);
 
     if (PlayerbotAI::IsMainTank(bot) && phase1)
     {
-        // No anchor until the boss is his, so "reach melee" keeps him on it building threat. Firefighter
-        // only: normal mode's anchor is the centre, where the MK II already stands.
         if (firefighter && !IsMimironTankDragReady(botAI, bot))
             return false;
 
@@ -2616,8 +2411,6 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Hard-mode melee in phases 2 and 4: a sector opposite the ranged wedge, out of its burst and pulse
-    // cones, on the barrage dodge's ring round VX-001. The phase 4 main tank holds the MK II instead.
     if (firefighter && focus->GetEntry() == NPC_VX001 && (phase4 || !focus->GetVehicleBase()) &&
         !PlayerbotAI::IsRanged(bot))
     {
@@ -2650,7 +2443,6 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Melee stand on whatever they are hitting, so only ranged and healers get a slot from here on.
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
@@ -2670,8 +2462,6 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     if (count == 0)
         return false;
 
-    // One camp rather than the ring, so every chain grows toward the same place. The anchor it points at
-    // is raid-wide and moves off the fire.
     if (phase1 && firefighter)
     {
         branch = "p1stack";
@@ -2679,13 +2469,9 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Centred on the mech, which its tank drags about. A slot past range deadlocks rather than correcting:
-    // "reach spell" is ACTION_HIGH and this ring ACTION_RAID.
     Position const anchor = ClampMimironAnchorToRoom(Position(
         focus->GetPositionX(), focus->GetPositionY(), ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
 
-    // Firefighter, mid-phase: a wedge rather than a ring, so the chains converge on one sector and the
-    // Frost Bomb, which only summons on a burning node, lands there and clears it.
     if (firefighter)
     {
         branch = "hmwedge";
@@ -2705,8 +2491,6 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                          ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING, radius,
                          offset);
 
-        // Centreline from the room centre, not the anchor, so the sector stays put for the fire to pile up
-        // in. Only a barrage re-aim moves it.
         float const bearing =
             Position::NormalizeOrientation(GetMimironWedgeCentreline(botAI, bot) + offset);
 
@@ -2724,7 +2508,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
 }
-}  // namespace
+}
 
 MimironBurstSector GetMimironOtherGroupSector(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
@@ -2757,8 +2541,6 @@ bool IsMimironSpotInSector(Unit* vx001, MimironBurstSector const& sector, Positi
 
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 {
-    // Ahead of the derivation and of the trace row it writes. Every caller here is registered for
-    // the whole raid, and the staging fallback inside is two 200 yd grid scans.
     if (!IsNearMimironRoom(bot))
         return false;
 
@@ -2769,8 +2551,6 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 
     if (RaidObs::Active())
     {
-        // "none" is noted too: without the row, a bot the formation skips by design (melee) and one its
-        // shape refused, which is a bug, read as the same silence.
         std::string value = "none";
         if (found)
         {

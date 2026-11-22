@@ -13,8 +13,6 @@
 #include "UldEncounter_YoggSaron.h"
 #include "UldMultipliers.h"
 
-// The kept Emergency Fire Bots put out Mimiron's fire. Excluding them here covers every picker at once,
-// tank, dps, dps aoe and attackers, where Mimiron's own guards only reach dps assist
 void RaidUlduarStrategy::AppendTargetExclusionsFor(GuidSet& exclusions, TargetValueExclusionType type,
                                                    GuidVector const& candidates)
 {
@@ -23,8 +21,6 @@ void RaidUlduarStrategy::AppendTargetExclusionsFor(GuidSet& exclusions, TargetVa
 
     AppendAlgalonTargetExclusions(botAI, exclusions);
 
-    // Dps and pets only, the tank still has to hold the shielded Guardian or it walks at the back line.
-    // Stops the DoTs, cleaves and pets the focus rule misses from killing it beside its neighbour
     if (type == TargetValueExclusionType::DpsTarget || type == TargetValueExclusionType::DebuffTarget)
         AppendYoggSaronTargetExclusions(botAI, exclusions, candidates);
 }
@@ -78,10 +74,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldThorimDefinition().AddMultipliers(botAI, multipliers);
 
-    // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));
 
-    // Hold the burst cooldowns on the bosses whose DPS check is not the pull
     multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
 
     UldRazorscaleDefinition().AddMultipliers(botAI, multipliers);

@@ -30,8 +30,6 @@ Unit* GetKologarnRightArm(PlayerbotAI* botAI) { return GetUldUnitByEntry(botAI, 
 
 bool KologarnEncounterActive(PlayerbotAI* botAI)
 {
-    // The body is the only authority: the arms and the rubble are its summons, and boss_kologarn
-    // never calls SetInCombatWithZone, so this flips exactly when someone engages him.
     Unit* kologarn = GetKologarn(botAI);
     return kologarn && kologarn->IsInCombat();
 }
@@ -205,8 +203,6 @@ Unit* GetKologarnEyebeamChasing(Player* bot)
     if (!bot)
         return nullptr;
 
-    // The eye MoveChases its summoner, so its victim is the spell target. It can still be closing from
-    // past the react radius, so this sweeps the whole room.
     Unit* eye = GetKologarnNearestEyebeam(bot, ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS);
     return eye && eye->GetVictim() == bot ? eye : nullptr;
 }
@@ -216,7 +212,6 @@ Position GetKologarnRubbleHoldSpot(PlayerbotAI* botAI, Unit* rubble)
     Player* bot = botAI->GetBot();
     Unit* kologarn = GetKologarn(botAI);
 
-    // Rubble drop at the dead arm's side, so their own Y says which way to drag them out of the raid.
     float const raidY = kologarn ? kologarn->GetPositionY() : bot->GetPositionY();
     float const side = rubble && rubble->GetPositionY() >= raidY ? 1.0f : -1.0f;
 
@@ -234,8 +229,6 @@ Position GetKologarnEyebeamEscapeStep(Player* bot, Unit* eye)
     float const botY = bot->GetPositionY();
     float const botZ = bot->GetPositionZ();
 
-    // Toward the entrance first, then along the walkway, and only then back toward the boss. X never
-    // reaches the broken span, so even the last resort stays out of the pit.
     float const lateralSign = botY >= (ULDUAR_KOLOGARN_WALKWAY_Y_MIN + ULDUAR_KOLOGARN_WALKWAY_Y_MAX) / 2.0f
                                   ? 1.0f
                                   : -1.0f;
@@ -251,14 +244,11 @@ Position GetKologarnEyebeamEscapeStep(Player* bot, Unit* eye)
         float y = std::clamp(botY + dy, ULDUAR_KOLOGARN_WALKWAY_Y_MIN, ULDUAR_KOLOGARN_WALKWAY_Y_MAX);
         float z = ULDUAR_KOLOGARN_WALKWAY_Z;
 
-        // Box corners are off the floor, and a walk to one still paths: out the door, down into the
-        // antechamber trash. Cut the step where a navmesh ray from the bot runs off the walkway.
         if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, botX, botY, botZ, x, y, z, false))
             continue;
 
         Position candidate(x, y, z, bot->GetOrientation());
 
-        // Clamped flat against a wall: no ground gained, so no distance from the beam.
         float const moved = candidate.GetExactDist2d(botX, botY);
         if (moved < ULDUAR_KOLOGARN_EYEBEAM_RADIUS)
             continue;

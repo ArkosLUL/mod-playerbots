@@ -39,7 +39,6 @@
 
 using namespace EncounterHelpers;
 
-// Ignis the Furnace Master
 float IgnisFlameJetsHoldCastMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
@@ -61,7 +60,6 @@ float IgnisFlameJetsHoldCastMultiplier::GetValue(Action* action)
     if (!spellInfo)
         return 1.0f;
 
-    // Only casts Flame Jets would eat are held, so healers keep their short heals through the window.
     uint32 const castTime = spellInfo->CalcCastTime();
     if (castTime == 0 && !spellInfo->IsChanneled())
         return 1.0f;

@@ -11,7 +11,6 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-// Both tank nodes want the same two things: be on the boss, then pull him off whoever has him.
 class ThorimTakeBossAction : public AttackAction
 {
 public:
@@ -33,8 +32,6 @@ public:
     bool isUseful() override;
 };
 
-// Nothing else puts a tank on him at the phase change: the dps picker's tank branch can't fire once he's off
-// the balcony, and phase 2 positioning only walks him once he's already tanked.
 class ThorimTankPickupAction : public ThorimTakeBossAction
 {
 public:
@@ -45,8 +42,6 @@ public:
     bool isUseful() override;
 };
 
-// Attacks the add directly, never through a raid icon: RtiTargetValue hands an icon back ahead of the smart
-// picker until the bot leaves combat, so a wrong mark can't be taken back.
 class ThorimDpsPriorityAction : public AttackAction
 {
 public:
@@ -69,7 +64,6 @@ public:
     bool isUseful() override;
 };
 
-// Shared by the two nodes that walk the corridor lanes, so the six-waypoint walk exists once.
 class ThorimLaneMovementAction : public MovementAction
 {
 public:
@@ -93,7 +87,6 @@ public:
     bool isUseful() override;
 };
 
-// Bot-led gauntlet only: the leader pulls the arena lever once it unlocks.
 class ThorimGauntletLeverAction : public MovementAction
 {
 public:
@@ -105,7 +98,6 @@ public:
     bool isUseful() override;
 };
 
-// Bot-led gauntlet only: the leader walks the lane chain, then on to the Colossus.
 class ThorimGauntletLeadAction : public MovementAction
 {
 public:
@@ -117,7 +109,6 @@ public:
     bool isUseful() override;
 };
 
-// Walks the upper hallway to Thorim's platform, then drops into the arena behind him. Owns the jump.
 class ThorimBalconyAdvanceAction : public MovementAction
 {
 public:
@@ -129,7 +120,6 @@ public:
     bool isUseful() override;
 };
 
-// Cross to the same progress point in the lane the Runic Colossus is not smashing.
 class ThorimRunicSmashAction : public ThorimLaneMovementAction
 {
 public:
@@ -141,8 +131,6 @@ public:
     bool isUseful() override;
 };
 
-// Step out of the damage shield's reach without dropping the target, so ranged and instant abilities
-// keep landing while the bot heals back up.
 class ThorimRunicBarrierBailAction : public MovementAction
 {
 public:
@@ -154,8 +142,6 @@ public:
     bool isUseful() override;
 };
 
-// Puts Frost Resistance Aura on the one elected paladin. No ChangeStrategy, for the reason
-// BossNatureResistanceAction records: the added strategy is never taken off again and outlives the raid.
 class ThorimFrostAuraAction : public Action
 {
 public:
@@ -166,7 +152,6 @@ public:
     bool isUseful() override;
 };
 
-// Spends this bot's own survival button on the Lightning Charge.
 class ThorimCastPersonalDefensiveAction : public Action
 {
 public:
@@ -177,8 +162,6 @@ public:
     bool isUseful() override;
 };
 
-// Sends a strayed pet back to the arena. Not a MovementAction: it moves the pet, not the bot, so it
-// has no business in the movement guards or the leash exemption lists.
 class ThorimPetLeashAction : public Action
 {
 public:
@@ -189,7 +172,6 @@ public:
     bool isUseful() override;
 };
 
-// Steps out of the charged Thunder Orb's field, by the shortest way out rather than across the room.
 class ThorimChargedOrbAction : public MovementAction
 {
 public:
@@ -201,7 +183,6 @@ public:
     bool isUseful() override;
 };
 
-// Walks an arena squad member back inside the box boss_thorim.cpp scans for a living player.
 class ThorimArenaLeashAction : public MovementAction
 {
 public:
@@ -244,8 +225,6 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode: clear Sif's moving Blizzard ground AoE. The phase 2 camp takes a short cone-safe step off
-// the zones instead of the generic flee. Anyone else still gets the flee.
 class ThorimSifBlizzardAction : public MoveAwayFromCreatureAction
 {
 public:

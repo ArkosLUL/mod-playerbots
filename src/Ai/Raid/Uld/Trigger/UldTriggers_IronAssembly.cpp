@@ -29,15 +29,11 @@ bool IronAssemblyLightningTendrilsTrigger::IsActive()
     if (!brundir || !IronAssemblyTendrilsActive(brundir))
         return false;
 
-    // Gate on the hazard itself rather than a wider round number, so the reaction distance and the
-    // radius it is protecting against can never drift apart.
     return bot->GetDistance2d(brundir) < ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE;
 }
 
 bool IronAssemblyOverloadTrigger::IsActive()
 {
-    // Tanks hold through it: 20,000 nature is survivable in plate, and leaving costs uptime and lets
-    // Brundir drift toward the raid.
     if (PlayerbotAI::IsTank(bot))
         return false;
 
@@ -57,8 +53,6 @@ bool IronAssemblyRuneOfDeathTrigger::IsActive()
     if (runes.empty())
         return false;
 
-    // DANGER, not CLEARANCE: this asks whether the bot is being ticked, and the escape action it
-    // fires takes it the extra yards. Testing at the clearance would re-fire on every yard of drift.
     return !IsIronAssemblyPositionClearOfRunes(bot->GetPosition(), runes,
                                                ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS);
 }
@@ -69,8 +63,6 @@ bool IronAssemblyInterruptTrigger::IsActive()
     if (!brundir)
         return false;
 
-    // Which cast is up and who owes it are one decision, made in the encounter helper so the trigger
-    // and the trace cannot end up describing different elections.
     return IronAssemblyInterruptDuty(botAI, bot, brundir) != nullptr;
 }
 
@@ -86,8 +78,6 @@ bool IronAssemblyTankAssignmentTrigger::IsActive()
     if (boss->GetVictim() != bot)
         return true;
 
-    // The boss above, not a second assignment: deriving it ranks the bot tanks and walks the group
-    // again, and both answers come from the same tick anyway.
     Position spot;
     if (!TryGetIronAssemblyBossTankSpot(botAI, boss, spot))
         return false;
@@ -190,7 +180,6 @@ bool IronAssemblyUnheldTauntTrigger::IsActive()
 
 bool IronAssemblySetDpsPriorityTrigger::IsActive()
 {
-    // Tanks have their own assignment node; this one owns every other target in the fight.
     if (PlayerbotAI::IsTank(bot))
         return false;
 

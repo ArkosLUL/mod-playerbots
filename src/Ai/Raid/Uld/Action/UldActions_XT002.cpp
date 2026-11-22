@@ -31,8 +31,6 @@ XT002MoveClearAction::MoveIssue XT002MoveClearAction::IssueMove(float x, float y
         case MoveOutcome::NotAllowed:
             return MoveIssue::Refused;
         default:
-            // Issued, or already headed there: Duplicate (same destination) or Waiting (an equal or higher
-            // priority command in flight). Re-picking on either slides the bot in place.
             return MoveIssue::Taken;
     }
 }
@@ -42,8 +40,6 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
     if (avoid.empty())
         return false;
 
-    // Worst shortfall against any unit's own clearance, capped at zero so every spot clearing the whole list
-    // ties and the nearest one wins.
     auto score = [&avoid](float x, float y)
     {
         float worst = std::numeric_limits<float>::max();
@@ -63,7 +59,6 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
     int const directions = 8;
     float const increment = 3.0f;
 
-    // A packed 25-man often has no spot that clears everyone, so take any gain over standing still.
     float const standingScore = score(bot->GetPositionX(), bot->GetPositionY());
 
     struct Candidate
@@ -83,8 +78,6 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
             float const moveX = bot->GetPositionX() + distance * cos(angle);
             float const moveY = bot->GetPositionY() + distance * sin(angle);
 
-            // No LOS test: the building geometry ends at y -29, so rays from the raid clip its rim and reject spots
-            // whose path is clean.
             float const candidate = score(moveX, moveY);
             if (candidate > standingScore)
                 candidates.push_back({moveX, moveY, candidate, distance});
@@ -94,7 +87,6 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
     if (candidates.empty())
         return false;
 
-    // Best clearance first, nearest among equals.
     std::sort(candidates.begin(), candidates.end(), [](Candidate const& left, Candidate const& right)
     {
         if (left.score != right.score)
@@ -156,8 +148,6 @@ bool XT002DebuffCarrierAction::StandingInVoidZone(std::list<Creature*> const& vo
 
 bool XT002DebuffCarrierAction::InsideParkingLot() const
 {
-    // Each grid is axis-aligned, so its extent is a rectangle. The margin is the re-engage band, which
-    // is what the carrier already tolerates as "on a cell".
     float const margin = ULDUAR_XT002_BOMB_CELL_REENGAGE;
 
     for (XT002BombLot const& lot : GetXT002BombLots(bot))
@@ -201,20 +191,14 @@ bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach
     float const stopY = bot->GetPositionY() + runY * scale;
     float const stopZ = bot->GetPositionZ();
 
-    // A carrier that can't make its cell dies to Consumption plus the expiry hit, so the stop point needs a
-    // cell's clearance too. Refusing hands the tick to the ring search.
     for (Creature* voidZone : voidZones)
         if (voidZone->GetExactDist2d(stopX, stopY) < ULDUAR_XT002_VOID_ZONE_RADIUS)
             return false;
 
-    // No LOS test either: the bearing into the lot is exactly where rays clip the building rim, and IssueMove
-    // already rejects a point the pathfinder won't take.
     Group* group = bot->GetGroup();
     if (!group)
         return false;
 
-    // Worth stopping here only if the expiry burst misses the raid from it. The pull matters more
-    // than the damage: 20 yd of yank drops whoever it catches into the puddle that just landed.
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -265,7 +249,6 @@ bool XT002DebuffCarrierAction::HoldsXT002OrPummeller(Unit* xt002) const
 
 bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
 {
-    // Nothing drops a puddle before XT carries Heartbreak, so normal mode skips the grid scan entirely.
     std::list<Creature*> voidZones;
     if (heartbreak)
         bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
@@ -283,7 +266,6 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
     float const spotY = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionY();
     float const spotZ = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionZ();
 
-    // Built once for the spot and all eight alternates, not once per candidate.
     std::vector<Position> const formation = GetXT002OtherFormationSlots(bot);
 
     auto usable = [&clearOfPuddles, &formation](float x, float y)
@@ -301,8 +283,6 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
     if (bot->GetExactDist(ULDUAR_XT002_SEARING_LIGHT_SPOT) < 1.0f && usable(spotX, spotY))
         return false;
 
-    // The spot itself, then a ring of alternates around it. The headings that point back at the
-    // formation are what the clearance test drops.
     struct Candidate
     {
         float x;
@@ -325,7 +305,6 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
             candidates.push_back({ringX, ringY, RaidClearance(ringX, ringY)});
     }
 
-    // Roomiest first, never nearest: the nearest alternates lie back towards the raid.
     std::sort(candidates.begin(), candidates.end(), [](Candidate const& left, Candidate const& right)
     {
         return left.clearance > right.clearance;
@@ -366,8 +345,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
     std::vector<Cell> cells;
     float nearestDistance = std::numeric_limits<float>::max();
 
-    // Every lot the role owns goes into one pool. Ranged and healers have one on each side of the
-    // formation, and the shortest-walk tie-break below is what sends a carrier to the near one.
     for (XT002BombLot const& lot : GetXT002BombLots(bot))
     {
         for (int cell = 0; cell < lot.xCells * lot.yCells; ++cell)
@@ -377,8 +354,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
             float const candidateY =
                 lot.origin.GetPositionY() + lot.yDirection * (cell / lot.xCells) * ULDUAR_XT002_BOMB_GRID_STEP;
 
-            // Measured against where the puddles actually are rather than the cells they were aimed at, so
-            // a drop that landed off-centre blocks whatever it is really near.
             float nearestVoidZone = std::numeric_limits<float>::max();
             for (Creature* voidZone : voidZones)
                 nearestVoidZone = std::min(nearestVoidZone, voidZone->GetExactDist2d(candidateX, candidateY));
@@ -388,8 +363,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
 
             float const distance = bot->GetExactDist2d(candidateX, candidateY);
 
-            // Reachable first: a cell the bomb beats the bot to is worthless. Then the walk in, which matters more
-            // than room at the cell, since a walk through a puddle ticks Consumption the whole way.
             bool const reachable = distance + ULDUAR_XT002_BOMB_CELL_ARRIVED <= reach;
             float const lane = std::min(ApproachClearance(candidateX, candidateY, voidZones),
                                         ULDUAR_XT002_BOMB_APPROACH_CLEARANCE);
@@ -421,8 +394,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
     cellX = cells.front().x;
     cellY = cells.front().y;
 
-    // Arrival is against the nearest free cell, not the best-ranked one; both bands stay under the grid step so
-    // only one cell can answer. Never parked inside Consumption, even within re-engage of a cell.
     bool const inVoidZone = StandingInVoidZone(voidZones);
 
     if (parked && !inVoidZone && nearestDistance <= ULDUAR_XT002_BOMB_CELL_REENGAGE)
@@ -444,7 +415,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
         return ParkResult::Parked;
     }
 
-    // Nothing in the lot is close enough to walk to inside the debuff.
     if (!cells.front().reachable)
         return ParkResult::OutOfReach;
 
@@ -466,8 +436,6 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std:
         }
     }
 
-    // Every reachable cell was refused. The bearing to the best of them still points out of the raid,
-    // so hand it to the stop-short fallback rather than to the ring search.
     return ParkResult::OutOfReach;
 }
 
@@ -481,19 +449,12 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         return false;
     }
 
-    // One lookup for the whole carrier tick, since finding XT is a scan.
     Unit* xt002 = GetXT002(botAI);
 
-    // Void Zones only drop once XT carries Heartbreak, so before then a bomb carrier just needs somewhere the
-    // splash misses, which keeps melee uptime.
     bool const heartbreak = IsXT002HeartbreakActive(bot, xt002);
 
-    // A Searing Light carrier standing in a lot just had its bomb go off underfoot: it steps off its own puddle
-    // there rather than walking the splash back through the raid.
     bool const steppingOffOwnBomb = !hasBomb && heartbreak && InsideParkingLot();
 
-    // One scan for the whole tick: the cell ranking, the stop-short fallback and the ring search all
-    // need the same puddles, and each of them standing in Consumption is what kills a carrier.
     std::list<Creature*> voidZones;
     if (heartbreak && xt002)
         xt002->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE,
@@ -501,8 +462,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
 
     if (heartbreak && (hasBomb || steppingOffOwnBomb))
     {
-        // Only a bot actually holding the bomb runs against a clock. Stepping off one's own puddle is
-        // a single grid step with nothing about to go off, so it is allowed the whole lot.
         float reach = std::numeric_limits<float>::max();
         if (hasBomb)
             if (Aura* bomb = bot->GetAura(GetXT002GravityBombSpellId(bot)))
@@ -516,8 +475,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
             {
                 case ParkResult::Moving:
                     return true;
-                // Standing on the cell with movement stopped. Yielding the tick is what lets a healer
-                // carrier keep healing and a hunter keep shooting for the rest of the debuff.
                 case ParkResult::Parked:
                     return false;
                 case ParkResult::OutOfReach:
@@ -529,8 +486,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
             }
         }
 
-        // Without a bomb, reaching here means every cell is taken. Hold position: the splash expires over an empty
-        // lot wherever the bot stands in it.
         if (steppingOffOwnBomb)
             return false;
     }
@@ -541,8 +496,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
 
     if (!hasBomb)
     {
-        // Tanks stay put: dragging XT or a Pummeller costs more than the splash. No adds come after Heartbreak, so
-        // from then on a tank holding neither carries Searing Light to the spot like anyone.
         if (PlayerbotAI::IsTank(bot) && (!heartbreak || HoldsXT002OrPummeller(xt002)))
             return false;
 
@@ -563,7 +516,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         avoid.emplace_back(member, ULDUAR_XT002_DEBUFF_CLEAR_RADIUS);
     }
 
-    // Puddles go in too: this is the last resort for a carrier that can neither reach a cell nor stop short.
     for (Creature* voidZone : voidZones)
         avoid.emplace_back(voidZone, ULDUAR_XT002_VOID_ZONE_RADIUS);
 
@@ -572,8 +524,6 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
 
 bool XT002AvoidHazardAction::Execute(Event /*event*/)
 {
-    // A carrier's puddles belong to the carrier action, which picks its cell and walks it off its own bomb, and
-    // this search would undo both. Boombots still apply to everyone.
     bool const carryingDebuff = bot->HasAura(GetXT002SearingLightSpellId(bot)) ||
                                 bot->HasAura(GetXT002GravityBombSpellId(bot));
 
@@ -585,11 +535,8 @@ bool XT002AvoidHazardAction::Execute(Event /*event*/)
         if (!unit || !unit->IsAlive())
             continue;
 
-        // Ranged already stand outside the blast, so pulling them out too would only break their casts.
         if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && PlayerbotAI::IsMelee(bot))
             hazards.emplace_back(unit, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS);
-        // Margin over the trigger's radius: FindNearestCreature subtracts both object sizes and MoveClearOf scores
-        // centre to centre capped at zero, so in that gap the trigger fires while nothing beats standing still.
         else if (unit->GetEntry() == PB_NPC_XT002_VOID_ZONE && !carryingDebuff)
             hazards.emplace_back(unit, ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED);
     }
@@ -608,7 +555,6 @@ bool XT002BombHealAction::Execute(Event /*event*/)
     std::list<Creature*> voidZones;
     bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
 
-    // The hazard dodge's own clearance, or it walks the healer straight back off the point.
     float const puddleClearance = ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED;
     float const stand = healRange - ULDUAR_XT002_BOMB_HEAL_MARGIN;
     float const bearing = carrier->GetAngle(bot);
@@ -620,7 +566,6 @@ bool XT002BombHealAction::Execute(Event /*event*/)
         float distance;
     };
 
-    // On the line back to the healer first, the shortest walk off its slot, then sideways round anything in the way.
     std::vector<Candidate> candidates;
     for (int step = -ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS; step <= ULDUAR_XT002_BOMB_HEAL_BEARING_STEPS; ++step)
     {
@@ -666,8 +611,6 @@ bool XT002BombCarrierHealAction::Execute(Event /*event*/)
     if (!carrier)
         return false;
 
-    // Instants first: the healer is often still finishing its walk in, and nothing with a cast time goes off
-    // while moving.
     std::vector<char const*> heals;
     switch (bot->getClass())
     {
@@ -730,8 +673,6 @@ Player* XT002RedirectThreatAction::GetRedirectTank(Unit* xt002)
 {
     XT002TankRoles const roles = GetXT002TankRoles(bot, xt002);
 
-    // A Pummeller is the add most likely to peel onto a redirecter. One still out at a toy pile is nobody's,
-    // so the leash decides whether there is really one in play.
     if (GetXT002EngageableAdd(botAI, bot, PB_NPC_XT002_PUMMELLER, ULDUAR_XT002_ADD_LEASH_RADIUS))
         return roles.pummeller;
 
@@ -740,7 +681,6 @@ Player* XT002RedirectThreatAction::GetRedirectTank(Unit* xt002)
 
 bool XT002RedirectThreatAction::Execute(Event /*event*/)
 {
-    // One lookup for the whole evaluation, since finding XT is a scan.
     Unit* xt002 = GetXT002(botAI);
 
     Player* tank = GetRedirectTank(xt002);
@@ -749,15 +689,12 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
 
     if (bot->getClass() == CLASS_ROGUE)
     {
-        // Tricks redirects everything the rogue does for the next 6s, so there is no dump shot.
         return botAI->CanCastSpell("tricks of the trade", tank) && botAI->CastSpell("tricks of the trade", tank);
     }
 
     if (botAI->CanCastSpell("misdirection", tank))
         return botAI->CastSpell("misdirection", tank);
 
-    // Misdirection only moves the threat of the next three shots, so spend them on XT, never on whatever the
-    // rotation picks or an add the tank doesn't want.
     if (xt002 && !IsXT002Submerged(xt002) && bot->HasAura(SPELL_MISDIRECTION) &&
         botAI->CanCastSpell("steady shot", xt002))
         return botAI->CastSpell("steady shot", xt002);
@@ -773,7 +710,6 @@ bool XT002HolderBuffAction::Execute(Event /*event*/)
 
 bool XT002RaidPositionAction::Execute(Event /*event*/)
 {
-    // The trigger only fires for the tank XT is on.
     if (PlayerbotAI::IsTank(bot))
     {
         if (bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) <= ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE)
@@ -799,13 +735,9 @@ bool XT002RaidPositionAction::Execute(Event /*event*/)
 
 bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 {
-    // The Heart is hidden, not despawned, when its window shuts, and XT while submerged. The core refuses an
-    // untargetable unit, so a bot holding one queues spells that all fail.
     if (!unit || !unit->IsAlive() || unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
 
-    // How far this bot will travel for an add. Tanks are exempt because this runs over their list too,
-    // and the tank XT isn't on is supposed to walk to the Pummeller.
     float const reach = PlayerbotAI::IsMelee(bot) ? ULDUAR_XT002_MELEE_ENGAGE_RANGE
                                             : ULDUAR_XT002_RANGED_ENGAGE_RANGE;
     bool const inReach = PlayerbotAI::IsTank(bot) || unit->GetExactDist2d(bot) <= reach;
@@ -813,8 +745,6 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
     switch (unit->GetEntry())
     {
         case PB_NPC_XT002_LIFE_SPARK:
-            // No leash: it spawns on the Searing Light carrier and chases players. Static Charged reaches 500 yd,
-            // so there's nothing to dodge; it just has to die.
             return inReach && !IsXT002AddEvading(unit);
 
         case NPC_XS013_SCRAPBOT:
@@ -822,22 +752,16 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
             return inReach && IsXT002AddEngageable(xt002, unit) && !IsXT002AddEvading(unit);
 
         case PB_NPC_XT002_BOOMBOT:
-            // Melee must never pick one up, and ranged only from outside the blast: closer than that
-            // the avoid action should be moving the bot, not this one holding it in place.
             return !PlayerbotAI::IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS &&
                    inReach && IsXT002AddEngageable(xt002, unit) && !IsXT002AddEvading(unit);
 
         case NPC_HEART_OF_DECONSTRUCTOR:
-            // Damage only reaches XT while the Heart channels Exposed Heart.
             if (!unit->HasAura(SPELL_XT002_EXPOSED_HEART))
                 return false;
 
-            // Only a Life Spark is worth breaking off for: Static Charged is a raid-wide aura that
-            // runs until the spark dies, and no amount of distance reduces it.
             if (GetUldUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
                 return false;
 
-            // Config flag, not the Heartbreak aura: this states intent and has to hold before the Heart breaks.
             if (IsXT002HardModeActive(botAI))
                 return true;
 
@@ -854,15 +778,11 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 Unit* XT002SetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 entry,
                                                std::vector<Unit*> const& candidates) const
 {
-    // Never hold or pick an evading one: the gate drops it, and this entry's slot would then hide a hittable
-    // add of the same kind standing next to it.
     Unit* selected = nullptr;
     if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == entry &&
         !IsXT002AddEvading(currentTarget))
         selected = currentTarget;
 
-    // Adds come from toy piles on both flanks, so nearest-to-the-bot beats measuring from a raid
-    // anchor. The margin stops two similar adds from trading the bot back and forth every tick.
     float const switchMargin = 10.0f;
     for (Unit* candidate : candidates)
     {
@@ -894,7 +814,6 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
     bool const probing = RaidObs::Active();
     std::string evadingSparks;
 
-    // One scan for the whole action: the same pass hands back XT for the gates, so they need none.
     GuidVector const& npcs = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const& guid : npcs)
     {
@@ -906,7 +825,6 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
         {
             case NPC_XT002:
                 boss = unit;
-                // First match, which is what GetXT002 returns; `boss` keeps the last one.
                 if (!xt002)
                     xt002 = unit;
                 break;
@@ -932,27 +850,20 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
         }
     }
 
-    // Tells a stuck spark apart from one nobody shot at, which hp and position alone can't.
     if (probing)
         RaidObs::NoteDerived(bot, "xt002.evading", evadingSparks.empty() ? "none" : evadingSparks);
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    // A tank is only ever handed the boss. The generic smart tank targeting ranks every add the tank
-    // has no aggro on above XT, so a tank left on it walks into the add pile and the boss follows.
     if (PlayerbotAI::IsTank(bot))
     {
         std::vector<std::pair<uint32, Unit*>> tankPriority;
 
-        // Taunt reaches 30 yd and the toy piles are 80 yd out, so the add comes to the tank on XT. Only a tank with
-        // someone else on the boss chases it.
         XT002TankRoles const roles = GetXT002TankRoles(bot, xt002);
         if (roles.pummeller == bot && roles.holder != bot)
             tankPriority.emplace_back(PB_NPC_XT002_PUMMELLER,
                                       SelectByEntry(currentTarget, PB_NPC_XT002_PUMMELLER, pummellers));
 
-        // Hard mode: XT is submerged the whole Heart window, so tanks join the burn. Normal mode keeps them off,
-        // since one stray tank hit flips the raid into hard mode.
         if (IsXT002HardModeActive(botAI))
             tankPriority.emplace_back(NPC_HEART_OF_DECONSTRUCTOR, heart);
 
@@ -960,8 +871,6 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
         return tankPriority;
     }
 
-    // Sparks keep Static Charged on the raid and Scrapbots heal XT; Boombots only cost damage and a Pummeller
-    // can be tanked. Hard mode puts the Heart first, since the whole mode is decided in its 30 s window.
     bool const hardMode = IsXT002HardModeActive(botAI);
 
     std::vector<std::pair<uint32, Unit*>> priority;
@@ -1013,14 +922,10 @@ Unit* XT002SetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         return priority.size();
     };
 
-    // Hold the current target unless something strictly more urgent is up, so Scrapbot churn can't reset swing
-    // and cast timers. Never hold one the gates just rejected.
     size_t const currentIndex = priorityIndex(currentTarget);
     if (currentIndex < priority.size() && currentIndex <= priorityIndex(target))
         target = currentTarget;
 
-    // No "dps target" fallback: it has no leash and hands back the add at a toy pile the gates rejected. An
-    // empty list means XT is submerged, so falling through to the anchor is right.
     return target;
 }
 
@@ -1028,14 +933,10 @@ bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    // Healers get a target too: without one a bot never enters combat and loses every combat-engine heal.
-    // XT002TargetGuardMultiplier keeps them from walking at an add.
     Unit* target = ResolveTarget(currentTarget);
     if (!target)
         return false;
 
-    // A braked bot keeps XT selected but stops what XT002ThreatBrakeMultiplier can't veto: the swing, Auto Shot,
-    // a wand and a channel on him.
     if (target->GetEntry() == NPC_XT002 && IsXT002ThreatBraked(bot, target))
     {
         bool const selected = SelectTarget(botAI, target);
@@ -1043,8 +944,6 @@ bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
         return selected;
     }
 
-    // Returning false once the bot is already on the right target is what lets the lower-priority
-    // nodes run at all: the engine ends the tick at the first action that succeeds.
     bool needsAttack = currentTarget != target;
     if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);

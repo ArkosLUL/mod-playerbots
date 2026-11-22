@@ -11,11 +11,6 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-// No isUseful overrides: each action has exactly one trigger node, which is already the gate, and
-// building that trigger on the stack to check silently breaks any trigger with per-bot state.
-
-// Run to the Snowpacked Icicle Target the rest of the raid is running to. Standing inside its Safe
-// Area is the only way to survive Flash Freeze.
 class HodirMoveSnowpackedIcicleAction : public MovementAction
 {
 public:
@@ -25,8 +20,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Cast directly, not via ChangeStrategy: the shared node adds "rfrost" and nothing removes it, so the
-// pick outlives the encounter. The hodir paladin aura rule holds the slot open meanwhile.
 class HodirFrostResistanceAction : public Action
 {
 public:
@@ -36,7 +29,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Step out from under an icicle that has not detonated yet.
 class HodirIcicleDodgeAction : public MovementAction
 {
 public:
@@ -47,13 +39,9 @@ public:
 
 private:
     Position _dest;
-    // Closest the bot has got to _dest so far, so a drag away from it can be told from ordinary walking.
     float _destDist = 0.0f;
 };
 
-// Shed Biting Cold by moving: a stack drops only on the second moving tick in a row, so this hops back
-// and forth on the bot's spot down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, each hop up across two ticks.
-// Walks 6 yd legs instead, each held until walked, where no hop works.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
@@ -66,14 +54,10 @@ private:
     void StopShedding();
 
     bool _shedding = false;
-    // The leg being walked, and the closest the bot has got to it, so a drag away from it can be told
-    // from ordinary walking.
     Position _leg;
     float _legDist = 0.0f;
 };
 
-// Hold the bot's anchor: a spot just past the hold point for the two tanks, a Starlight or fire
-// stand for ranged and healers, and the nearest spot that fixes a broken constraint when there is none.
 class HodirRaidPositionAction : public MovementAction
 {
 public:
@@ -83,7 +67,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Trapped raiders, then flash-frozen helpers, then the boss.
 class HodirSetDpsPriorityAction : public AttackAction
 {
 public:
@@ -96,7 +79,6 @@ private:
     Unit* ResolveTarget();
 };
 
-// Taunt Hodir off the tank Frozen Blows would kill, and take him back when it drops.
 class HodirFrozenBlowsSwapAction : public AttackAction
 {
 public:
@@ -106,7 +88,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// By spell id: the hold blocks the class actions for these buttons.
 class HodirTankDefensiveAction : public Action
 {
 public:
@@ -116,8 +97,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Misdirection and Tricks go to whichever tank holds Hodir now. A taunt only matches top threat, so the
-// incoming tank is level with the best DPS and the redirect buys back the lead.
 class HodirRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
@@ -130,8 +109,6 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-// Hold the carrier on its rally so the charges pulse into a gathering stack. State is in the shared
-// per-carry latch, not here, since the receivers read the same point.
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:
@@ -141,7 +118,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Step inside the 3 yd pulse of somebody else's carry.
 class HodirCollectStormPowerAction : public MovementAction
 {
 public:

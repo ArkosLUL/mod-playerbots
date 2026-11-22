@@ -20,8 +20,6 @@ public:
     bool isUseful() override;
 
 private:
-    // isUseful() and Execute() run back to back on the same tick and ask the same question, so the
-    // boss lookup, the radius and the patch search are done once and reused.
     struct FlameScan
     {
         uint32 atMs = 0;
@@ -95,8 +93,6 @@ public:
     bool isUseful() override;
 };
 
-// Sole owner of the skull icon for this encounter: adds while she is airborne, the boss herself the
-// moment she is on the floor. DpsTargetValue prefers the RTI target, so this is what the raid hits.
 class RazorscaleKillTargetAction : public Action
 {
 public:
@@ -107,8 +103,6 @@ public:
     bool isUseful() override;
 };
 
-// The generic pet-attack node is commented out engine-wide, so a pet keeps whatever it last hit
-// unless a script hands it a new order.
 class RazorscalePetControlAction : public Action
 {
 public:

@@ -10,8 +10,6 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Thorim: Runic Barrier answers every melee swing with 2000 arcane, so a bot backed out on the health band must
-// not walk back in. Holds only the swing and the chase: the target stays and everything else carries on.
 class ThorimRunicBarrierMultiplier : public Multiplier
 {
 public:
@@ -19,8 +17,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Without this the leash and the chase take turns: the leash walks the bot back, the picker still
-// holds the corridor mob, and it walks straight out again. Zeroing the attack drops the target instead.
 class ThorimArenaTargetGuardMultiplier : public Multiplier
 {
 public:
@@ -28,9 +24,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Thorim: the corridor squad on the platform. The generic picker reads threat, not range, so it holds the
-// boss from far down the hallway and "reach melee" walks it up the middle into the Paralytic Field bunnies.
-// Not past BALCONY_5: the fields are behind the bot there, and its hit is what starts phase 2.
 class ThorimBalconyGuardMultiplier : public Multiplier
 {
 public:

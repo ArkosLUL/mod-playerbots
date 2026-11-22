@@ -43,14 +43,11 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// SetBehindTargetAction's two spots, either side of the target's facing.
 constexpr float SET_BEHIND_SPOT_ANGLE = 3.0f * static_cast<float>(M_PI) / 5.0f;
-}  // namespace
+}
 
 float YoggSaronMovementGuardMultiplier::FleeGuard()
 {
-    // Ranged and healers only: the station owns their feet; stepping off it hands the second orbit a stacked back line.
-    // Melee and the tank keep it, since the leash already owns them.
     if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         return 1.0f;
 
@@ -59,19 +56,13 @@ float YoggSaronMovementGuardMultiplier::FleeGuard()
 
 bool YoggSaronMovementGuardMultiplier::ReachIsWrong(Action* action)
 {
-    // The spell reach too, for pile fighters: taunt and judgement are 30 yd casts, so chasing a Guardian
-    // with either walks the bot off the middle. The back line keeps its own, the 21.5 yd station holds range.
     std::string const name = action->getName();
     bool const spellReach =
         name == "reach spell" && !PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot);
 
-    // Only these two pay the phase read, so every other reach keeps the cheap ring arithmetic below
-    // ahead of it.
     if ((name != "reach melee" && !spellReach) || !YoggSaronInPhase1(botAI))
         return false;
 
-    // Walking at a Guardian that is not on the stack leaves the cloud-free circle. The tank taunts it in instead,
-    // but only if a tank is alive, or the melee half of the raid has nothing to close on.
     Unit* target = AI_VALUE(Unit*, "current target");
 
     return target && !YoggSaronGuardianOnTheStack(target) && YoggSaronBotTankAlive(botAI);
@@ -79,8 +70,6 @@ bool YoggSaronMovementGuardMultiplier::ReachIsWrong(Action* action)
 
 bool YoggSaronMovementGuardMultiplier::CrusherReachIsWrong()
 {
-    // Crush is a sure proc on the tentacle's swing and an idle Crusher cannot cast it, so walking in is the cost.
-    // The resolver bars them, but a raid mark or tank picker can still hand one over. Stunned, it can't act.
     if (!PlayerbotAI::IsMelee(bot))
         return false;
 
@@ -92,7 +81,6 @@ bool YoggSaronMovementGuardMultiplier::CrusherReachIsWrong()
 
 float YoggSaronMovementGuardMultiplier::SetBehindGuard()
 {
-    // Arithmetic first. Below the platform there is no body.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
@@ -100,8 +88,6 @@ float YoggSaronMovementGuardMultiplier::SetBehindGuard()
     if (!target)
         return 1.0f;
 
-    // Both SetBehindTargetAction::Execute spots (108 degrees either side of the facing) often land inside the ring:
-    // Guardians are tanked 18.5 yd out and are yards across. No frontal attack, so skipping it costs parries only.
     float const distance =
         std::max(bot->GetExactDist(target), bot->GetMeleeRange(target) / 2.0f) - bot->GetCombatReach();
     Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
@@ -138,13 +124,9 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (!dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 
-    // The heal reach is what keeps a healer in range of somebody no station can see, and it never walks
-    // anyone into the body. Leave it alone.
     if (action->getName() == "reach party member to heal")
         return 1.0f;
 
-    // Both windows sit near the platform middle, so the arithmetic goes first.
-    // The brain room middle is 2.3 yd from the platform middle in 2d: the ring test would veto reach on the Brain.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
@@ -154,8 +136,6 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (CrusherReachIsWrong())
         return 0.0f;
 
-    // Above the radius test: the handover anchor is outside the ring, so an arrived bot would get reach back and leave.
-    // Spans the phase boundary: the window is phase 1, the hold that outlives it is phase 2.
     if (YoggSaronHandoverState(botAI).clearing)
         return 0.0f;
 
@@ -166,8 +146,6 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 
     uint32 const phase = YoggSaronPhase(botAI);
 
-    // Exactly the radius the phase 2 spacing trigger fires at, so reach stands down only while that node owns the bot.
-    // A wider band leaves a ring where neither node moves anybody. The spacing node runs in phase 3 too.
     if ((phase == 2 || phase == 3) && fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS)
         return 0.0f;
 
@@ -182,11 +160,9 @@ float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
     if (dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    // Brain level first: no grid sweep for the bots under the floor.
     if (YoggSaronOnBrainLevel(bot))
         return 1.0f;
 
-    // Past phase 1 only the Guardians left over from it matter, and the sweep finds none once they're dead.
     bool const hold = YoggSaronInPhase1(botAI) ? YoggSaronPhase1AoeHold(botAI) : YoggSaronLeftoverAoeHold(botAI);
     return hold ? 0.0f : 1.0f;
 }
@@ -196,7 +172,6 @@ float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)
     if (!action || dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    // Under the floor first, so the bots on the platform pay one compare.
     if (bot->GetPositionZ() >= ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
@@ -221,7 +196,6 @@ float YoggSaronExitHoldCastMultiplier::GetValue(Action* action)
     if (!spellInfo)
         return 1.0f;
 
-    // Bladestorm and Killing Spree fail the portal's untriggered cast for as long as they run.
     bool const locks = spellInfo->HasAura(SPELL_AURA_ALLOW_ONLY_ABILITY);
 
     return spellInfo->CalcCastTime() || spellInfo->IsChanneled() || locks ? 0.0f : 1.0f;
@@ -233,7 +207,6 @@ float YoggSaronHeldTargetCastMultiplier::GetValue(Action* action)
     if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID)
         return 1.0f;
 
-    // Both reads are map lookups, no sweep. Immortal Guardians only ever stand on the platform.
     bool const brainDots = YoggSaronOnBrainLevel(bot) && YoggSaronBrainDotHeld(botAI);
     bool const hunterHold = !brainDots && YoggSaronBeaconHunterHold(botAI);
     bool const platform =
@@ -273,7 +246,6 @@ bool YoggSaronHeldTargetCastMultiplier::GuardianThreatHeld(CastSpellAction* spel
     if ((entry != NPC_IMMORTAL_GUARDIAN && entry != NPC_MARKED_IMMORTAL_GUARDIAN) || PlayerbotAI::IsTank(bot))
         return false;
 
-    // Kicks still go, a Drain Life left running costs more than the threat.
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spellAction->getSpell()));
     if (spellInfo && spellInfo->HasEffect(SPELL_EFFECT_INTERRUPT_CAST))
         return false;
@@ -283,8 +255,6 @@ bool YoggSaronHeldTargetCastMultiplier::GuardianThreatHeld(CastSpellAction* spel
 
 float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
 {
-    // Only spells that hit each target for less than the single-target spell they replace. Divine Storm,
-    // Whirlwind, Chain Lightning, Starfall, Multi-Shot etc. hit the main target in full and stay out.
     static std::set<std::string> const areaActions = {
         "blizzard", "flamestrike", "blast wave", "dragon's breath", "cone of cold", "hurricane", "typhoon",
         "volley", "mind sear", "rain of fire", "seed of corruption", "seed of corruption on attacker",
@@ -303,21 +273,16 @@ float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
     if (!target || !YoggSaronInPhase3(botAI))
         return 1.0f;
 
-    // The area trigger's own test: distance minus the unit's size. Yogg's reach is 30, so he counts from
-    // 38 yd off his middle, and the sweep has to reach that far.
     std::list<Creature*> nearby;
     target->GetCreatureListWithEntryInGrid(nearby,
                                            {NPC_YOGG_SARON, NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN,
                                             NPC_CRUSHER_TENTACLE, NPC_CORRUPTOR_TENTACLE, NPC_CONSTRICTOR_TENTACLE},
                                            ULDUAR_YOGG_SARON_PHASE_3_AREA_RADIUS + ULDUAR_YOGG_SARON_COMBAT_REACH);
 
-    // Same lines the dps resolver keeps: with Thorim down to Weakened, without him to the floor and
-    // never a marked one.
     bool const thorim = YoggThorimKeeperActive(botAI);
     float const floorPct =
         thorim ? ULDUAR_YOGG_SARON_GUARDIAN_WEAKENED_PCT : ULDUAR_YOGG_SARON_PHASE_3_GUARDIAN_FLOOR_PCT;
 
-    // Mind Sear never hits its own target.
     bool const sear = action->getName() == "mind sear";
 
     uint32 worth = 0;
@@ -330,7 +295,6 @@ float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
         uint32 const entry = unit->GetEntry();
         if (entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN)
         {
-            // One no tank holds yet turns on whoever hits it, and a dragged one is on its dragger.
             if (!YoggSaronGuardianThreatAllows(bot, unit, false))
             {
                 if (RaidObs::Active())
@@ -366,14 +330,10 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
         name != "yogg-saron body detour action" && name != "combat formation move")
         return 1.0f;
 
-    // Plain distance and height before any sweep: this weighs every reach in Ulduar, and the brain room
-    // sits under the middle of the platform.
     if (!YoggSaronInPhase1Approach(bot) ||
         bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
-    // After phase 1 no station or leash keeps a step-out and the body detour hauls it back: hold on Fervor's radius.
-    // Phase 3 too. The sweep misses Immortal Guardians (36064), so a low one that cannot die pins nobody.
     if (!YoggSaronInPhase1(botAI))
         return GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty() ? 1.0f
                                                                                             : 0.0f;
@@ -386,7 +346,6 @@ float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
     if (!fervor && !WalkCrossesCloud(station, reachMelee))
         return 1.0f;
 
-    // The positioning node's ring walk at the handover heads out, away from both.
     return positioning && YoggSaronHandoverState(botAI).clearing ? 1.0f : 0.0f;
 }
 
@@ -394,15 +353,11 @@ bool YoggSaronPhase1WalkGuardMultiplier::WalkCrossesCloud(bool station, bool rea
 {
     if (station)
     {
-        // The second orbit passing over the stack is the station's own cost, and one more bot joining
-        // it summons nothing extra.
         Position const& spot = ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
         return YoggSaronWalkCrossesCloud(
             bot, spot, &spot, ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS + ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS);
     }
 
-    // Never inside the leash: the inner orbit reaches most of it, so a step on the stack would be held
-    // every time that cloud came round.
     Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
     if (bot->GetDistance2d(middle.GetPositionX(), middle.GetPositionY()) <= ULDUAR_YOGG_SARON_P1_LEASH)
         return false;

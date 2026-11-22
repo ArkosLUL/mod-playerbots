@@ -39,8 +39,6 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// One round at the pull. Lust is out by name: Sated makes it once per 10 min. Trinkets and tinkers go
-// through by name since the action carries no spell to measure.
 bool IronAssemblyOpenerBurstAllowed(PlayerbotAI* botAI, Player* bot, std::string const& name)
 {
     if (name == "offensive potion" || name == "bloodlust" || name == "heroism")
@@ -55,17 +53,13 @@ bool IronAssemblyOpenerBurstAllowed(PlayerbotAI* botAI, Player* bot, std::string
     uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", name)->Get();
     return spellId && SpellCooldownMs(bot, spellId) <= ULDUAR_IRON_ASSEMBLY_OPENER_BURST_MAX_COOLDOWN_MS;
 }
-}  // namespace
+}
 
-// Iron Assembly
 float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
 {
     if (!IsIronAssemblyHardModeActive(botAI))
         return 1.0f;
 
-    // Both predicates, each misses some: IsDpsCooldownAction has no potion, tinker or priest case, and its
-    // racial branch keys on race, not HasSpell. IsDps keeps healers and tanks out of the name branch,
-    // bar Hysteria, which a tank casts for the dps.
     std::string const name = action->getName();
     if (IsManaReturnCooldown(bot, name))
         return 1.0f;
@@ -78,8 +72,6 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
     if (!IronAssemblyFormationActive(botAI))
         return 1.0f;
 
-    // Released the moment Steelbreaker is the last one standing. Under the normal order he dies first
-    // and this would never release, which is why it is gated on the option rather than the phase.
     if (IsSteelbreakerEmpowered(botAI))
         return 1.0f;
 
@@ -88,15 +80,12 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
 
 float IronAssemblyTauntGuardMultiplier::GetValue(Action* action)
 {
-    // Taunts first: this runs on every popped action and the lookups below reach the council sweep.
     if (!action || !IsTauntAction(bot, action))
         return 1.0f;
 
     if (!IronAssemblyFormationActive(botAI) || !IsSteelbreakerEmpowered(botAI))
         return 1.0f;
 
-    // No current target check, unlike Thorim's guard: righteous defense goes on the ally, and nothing
-    // else in this phase is worth a taunt. The Meltdown swap is the one taunt off another tank.
     if (!IronAssemblyHeldByOtherTank(bot, GetIronAssemblyMember(botAI, NPC_STEELBREAKER)))
         return 1.0f;
 

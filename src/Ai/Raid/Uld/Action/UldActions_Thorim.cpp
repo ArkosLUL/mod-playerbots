@@ -34,14 +34,10 @@ bool ThorimDpsPriorityAction::isUseful()
 
 bool ThorimDpsPriorityAction::Execute(Event /*event*/)
 {
-    // Before anything is read: a pinned target outranks every pick made below, so clearing has to
-    // happen first or this action spends the pull losing to a mark it already replaced.
     ThorimClearStaleMarks(botAI, bot);
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    // Drop a forbidden target even with nothing better in reach: the arena target guard shuts down a bot
-    // holding one, and an empty target lets the generic picker retry next tick.
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
     {
         bot->AttackStop();
@@ -81,8 +77,6 @@ bool ThorimArenaPositioningAction::Execute(Event /*event*/)
         ThorimNoteFollowMasterStripped(bot);
     }
 
-    // Reach then hold. A tight deadband has the bot sliding on its spot forever, and a moving bot
-    // casts nothing.
     if (!ThorimArenaAnchorNeedsMove(botAI, bot, anchor))
         return false;
 
@@ -132,19 +126,14 @@ bool ThorimPetLeashAction::Execute(Event /*event*/)
 {
     std::vector<Unit*> pets;
 
-    // All of them in one pass. A bot can have a pet and a guardian up at once, and leaving the second
-    // one out there for another tick is a pack pulled for no reason.
     if (ThorimStrayPets(botAI, bot, pets))
         for (Unit* pet : pets)
             ThorimRecallPet(bot, pet);
 
-    // Home before bearing: a pet out in the corridor pulls packs, one off its slot only bridges Chain Lightning.
-    // The recall stamps the same throttle, so a pet just sent home isn't redirected.
     if (ThorimPetsOffRingSlot(botAI, bot, pets))
         for (Unit* pet : pets)
             ThorimSendPetToRingSlot(botAI, bot, pet);
 
-    // False on purpose: this moved a pet, not the bot, so the bot's own node still gets this tick.
     return false;
 }
 
@@ -162,8 +151,6 @@ bool ThorimChargedOrbAction::Execute(Event /*event*/)
 
     ThorimNoteOrbEscape(bot, escape);
 
-    // No arrival latch here, unlike the anchor: the escape point stops being offered the moment the
-    // bot is out of the field, so there is nothing for a deadband to damp.
     return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
@@ -176,8 +163,6 @@ bool ThorimArenaLeashAction::isUseful()
 
 bool ThorimArenaLeashAction::Execute(Event /*event*/)
 {
-    // Straying is the symptom; the master walking off down the corridor is usually the cause, so take
-    // "follow master" here as well rather than waiting for the arena node to catch a quiet moment.
     FollowMasterStrategy followMasterStrategy(botAI);
     if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
     {
@@ -185,8 +170,6 @@ bool ThorimArenaLeashAction::Execute(Event /*event*/)
         ThorimNoteFollowMasterStripped(bot);
     }
 
-    // This bot's own spot, not the middle, or every fence trip collapses the formation the fence protects.
-    // The middle is only the fallback, never the nearest box edge: there a rounding error is a wipe.
     Position anchor = ULDUAR_THORIM_NEAR_ARENA_CENTER;
     GetThorimArenaAnchor(botAI, bot, anchor);
 
@@ -198,8 +181,6 @@ bool ThorimLaneMovementAction::MoveToGauntletWaypoint(bool leftLane, uint8 index
 {
     Position const& waypoint = GetThorimGauntletWaypoint(leftLane, index);
 
-    // The second waypoint moves at combat priority without the shortened delay, in both lanes: it's where
-    // the squad rounds into the Colossus's line of sight.
     bool const combat = forceCombatPriority || index == 1;
 
     return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
@@ -229,7 +210,6 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         if (MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
         {
-            // Only when the master is the one leading: otherwise following him walks the bot out of the squad.
             if (leader == botAI->GetMaster() &&
                 !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
                 botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
@@ -243,8 +223,6 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     bool leftLane = false;
     if (ThorimGauntletLaneIndex(leader, index, leftLane))
     {
-        // The leader's progress, but in the lane the last Runic Smash telegraph left safe, or the formation
-        // walks everyone back into the blast.
         bool preferredLane = false;
         if (ThorimPreferredGauntletLane(botAI, preferredLane))
             leftLane = preferredLane;
@@ -252,8 +230,6 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
-    // Past the waypoints the leader is the only anchor left, and a trailing healer heals nobody. A bot leader
-    // walks between waypoints too, so everyone closes up on him when too far behind.
     float const trail = botLeads && !PlayerbotAI::IsHeal(bot) ? ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE
                                                                 : ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE;
     if ((botLeads || PlayerbotAI::IsHeal(bot)) && bot->GetDistance2d(leader) > trail)
@@ -279,8 +255,6 @@ bool ThorimGauntletLeverAction::Execute(Event /*event*/)
     if (!lever)
         return false;
 
-    // Walk right up: the use check is 5 yd around the model, but GetDistance nets out both sizes (scale 3 lever),
-    // so a stop past ~2.7 yd leaves the bot outside it on some sides.
     if (!lever->IsAtInteractDistance(bot))
         return MoveTo(lever, 0.0f);
 
@@ -307,8 +281,6 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
     if (Unit* colossus = ThorimGauntletLeadColossus(botAI, bot))
         return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
 
-    // Pathed to his own spot: he's up a ramp, and a point on the straight line can land off the mesh. All the way
-    // in, no stand-off: guards keep spawning off him until he's pulled, and the squad picks guards first.
     if (Unit* giant = ThorimGauntletLeadRuneGiant(botAI, bot))
         return MoveTo(giant->GetMapId(), giant->GetPositionX(), giant->GetPositionY(), giant->GetPositionZ(), false,
                       false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -328,11 +300,8 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Still walked as the chain once he's down: the edge and both Paralytic Field bunnies sit on the centre line,
-    // so a straight line from south of the second doors crosses one. The chain ends at the jump point anyway.
     bool const bossDown = boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 
-    // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
     uint8 const step = ThorimAdvanceBalconyStep(bot);
 
     // Has to stay ahead of the jump test: hold 2 sits inside the edge tolerance.
@@ -346,8 +315,6 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
                       false, true, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
-    // Distance, never the latch alone: a step left over from an earlier pull fires the jump from the top of the
-    // ramp. Same tolerance as the step latch, so a bot the walk counts as arrived also jumps.
     bool const atEdge =
         bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE;
 
@@ -356,16 +323,11 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
                       ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
                       MovementPriority::MOVEMENT_COMBAT);
 
-    // Standing on the edge with him still up: done walking, and the tick belongs to whatever shoots him.
     if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS && atEdge)
         return false;
 
-    // Clamps to the last waypoint, the edge, so a bot knocked past the end walks back instead of stalling.
-    // Both bunnies are well south, so nothing to cross from up there.
     Position const& waypoint = GetThorimBalconyWaypoint(step);
 
-    // Combat priority: at normal, every step loses to "reach melee" on a boss nothing up here can reach, which
-    // holds the mover up to 5s and aims straight up the middle, over both Paralytic Field bunnies.
     return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
                   false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
@@ -405,15 +367,11 @@ bool ThorimRunicBarrierBailAction::Execute(Event /*event*/)
     if (currentDistance >= ULDUAR_THORIM_BARRIER_BAIL_DISTANCE)
         return false;
 
-    // No AttackStop: the target stays, so everything but a melee swing keeps landing from out here.
-    // Not FleePosition: it clamps travel to Playerbots.FleeDistance and can leave the bot inside the shield's reach.
     return MoveAway(colossus, ULDUAR_THORIM_BARRIER_BAIL_DISTANCE - currentDistance);
 }
 
 bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
 {
-    // Hand "follow master" back before the record of having taken it goes with the rest of the state,
-    // or an arena squad bot never follows anyone again after the kill.
     if (ThorimFollowMasterStripped(bot))
     {
         FollowMasterStrategy followMasterStrategy(botAI);
@@ -424,8 +382,6 @@ bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
 
     ResetThorimEncounterState(bot, false);
 
-    // Never claims the tick: clearing state is bookkeeping, and the pull still needs every node below
-    // this one to run on the same tick.
     return false;
 }
 
@@ -456,8 +412,6 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 
     bool const ringSlot = role == ThorimPhase2Role::MeleeRing;
 
-    // Arrival is set by the trigger and cleared here as the move goes out, so the "stay" branch below only
-    // runs if the spot changed between the trigger's ask and this one.
     if (ringSlot)
     {
         if (!ThorimRingWantsMove(botAI, bot, targetPosition))
@@ -469,7 +423,6 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
         ThorimRingClearArrived(bot);
     }
 
-    // The main tank backs into his spot so he keeps facing the boss he is dragging south.
     bool const backward = role == ThorimPhase2Role::MainTank;
 
     MoveTo(bot->GetMapId(), targetPosition.GetPositionX(), targetPosition.GetPositionY(), targetPosition.GetPositionZ(),
@@ -492,13 +445,10 @@ bool ThorimSifBlizzardAction::Execute(Event event)
     if (!ThorimPhase2Active(botAI) || GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::Ranged)
         return MoveAwayFromCreatureAction::Execute(event);
 
-    // Nothing clear and cone-safe in reach: stand and take the tick rather than run the trail.
     Position escape;
     if (!ThorimCampBlizzardEscape(botAI, bot, escape))
         return false;
 
-    // Forced, or a walk home already under way at combat priority turns the step away with "wait" until
-    // it finishes, and the bot keeps standing in the zone meanwhile.
     return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true);
 }

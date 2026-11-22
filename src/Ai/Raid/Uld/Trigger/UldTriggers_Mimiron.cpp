@@ -22,12 +22,9 @@ using namespace EncounterHelpers;
 
 bool MimironResetEncounterStateTrigger::IsActive()
 {
-    // -1 is the DisperseDistanceValue default, so anything at or above zero was set by somebody.
     if (bot->GetMapId() != ULDUAR_MAP_ID || AI_VALUE(float, "disperse distance") < 0.0f)
         return false;
 
-    // Same scan the phase 1 node does. Sight distance caps "possible targets" at 100 yd, so at any
-    // other boss in here this finds nothing and the value goes back to default before the pull.
     for (auto const& guid : AI_VALUE(GuidVector, "possible targets"))
     {
         Unit* target = botAI->GetUnit(guid);
@@ -44,8 +41,6 @@ bool MimironResetEncounterStateTrigger::IsActive()
 
 bool MimironShockBlastTrigger::IsActive()
 {
-    // By entry, not through "find target": that value walks the bot's own threat list, so it only ever
-    // resolves a boss this bot is already on. A bot that has not damaged the mech has to dodge it too.
     Unit* boss = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 
     if (!boss || !boss->IsAlive())
@@ -57,7 +52,6 @@ bool MimironShockBlastTrigger::IsActive()
     if (PlayerbotAI::IsMelee(bot))
         return true;
 
-    // Centre to centre: GetDistance2d takes off the MK II's 8 yd reach and the bot's 1.5 first.
     return bot->GetExactDist2d(boss) < ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
 }
 
@@ -86,22 +80,16 @@ bool MimironPhase1PositioningTrigger::IsActive()
     if (!leviathanMkII || !leviathanMkII->IsAlive())
         return false;
 
-    // The movement layer resets "disperse distance" when it rebuilds a formation, so this re-asserts it.
-    // Same accessor as the action, never a literal: if the two drift apart this fires every tick.
     return AI_VALUE(float, "disperse distance") != GetMimironPhase1DisperseDistance(botAI);
 }
 
 bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 {
-    // By entry. VX-001 never calls DoZoneInCombat in phase 4, so "find target" leaves any bot that has
-    // not damaged it blind to a cone that kills in a single tick.
     Unit* boss = GetUldUnitByEntry(botAI, NPC_VX001);
 
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Spinning Up is a channel on VX-001, never an aura: 63414 puts its effects on the DB Target and the
-    // MK II. Only the barrage itself, 63274/63300, is an aura on VX-001.
     return GetMimironSpinningUpSeconds(boss) >= 0.0f ||
            boss->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1) ||
            boss->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_2);
@@ -109,19 +97,13 @@ bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 
 bool MimironArcSpreadTrigger::IsActive()
 {
-    // No "is a mech up" gate of its own. GetMimironSpreadSlot answers false when neither a live nor a
-    // staging focus resolves, and that is also what keeps this quiet before the pull and after a wipe.
     Position slot;
     if (!GetMimironSpreadSlot(botAI, bot, slot))
         return false;
 
-    // First, because it is the cheap one and most bots are standing on their slot: everything below
-    // gathers the fire field.
     if (bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= ULDUAR_MIMIRON_SPREAD_TOLERANCE)
         return false;
 
-    // Walks during a barrage only inside the safe sector: it's under half a turn wide, so two clear
-    // endpoints mean a clear leg. The leg stays at MOVEMENT_COMBAT so a FORCED dodge can still cut it.
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
@@ -138,13 +120,10 @@ bool MimironArcSpreadTrigger::IsActive()
         }
     }
 
-    // Screens the slot and the walk, not the bot: a bot that dodged a rocket is clear while its slot may
-    // still have the marker. The tank anchor is exempt, the MK II parks it on its own mines.
     if (!IsMimironTankAnchorSlot(botAI, bot) &&
         GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)).empty())
         return false;
 
-    // Never walk a bot into a live Rapid Burst: wait the 3 s out wherever it stands.
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironRapidBurstWindow const burst = GetMimironRapidBurstWindow(botAI, bot, vx001);
@@ -157,7 +136,6 @@ bool MimironArcSpreadTrigger::IsActive()
 
 bool MimironAerialCommandUnitTrigger::IsActive()
 {
-    // Phase 3 only: the Aerial Command Unit is up on its own.
     Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     if (!aerialCommandUnit || GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
         GetUldUnitByEntry(botAI, NPC_VX001))
@@ -172,12 +150,9 @@ bool MimironAerialCommandUnitTrigger::IsActive()
         Unit* assaultBot = GetUldUnitByEntry(botAI, NPC_ASSAULT_BOT);
         Unit* focus = assaultBot ? assaultBot : aerialCommandUnit;
 
-        // Purely so the icon tracks what the raid is actually killing; no bot reads it back.
         return group->GetTargetIcon(RtiTargetValue::skullIndex) != focus->GetGUID();
     }
 
-    // Nothing for anyone else: the phase 3 slots already sit ULDUAR_MIMIRON_PHASE3_SPACING apart, past a
-    // Bomb Bot's 5 yd blast.
     return false;
 }
 
@@ -193,7 +168,6 @@ bool MimironRocketStrikeTrigger::IsActive()
     if (!rocketStrikeN)
         return false;
 
-    // Centre to centre against the 3 yd blast: GetDistance2d would take off both object sizes first.
     return bot->GetExactDist2d(rocketStrikeN) <= ULDUAR_MIMIRON_ROCKET_RUN_RADIUS;
 }
 
@@ -204,24 +178,18 @@ bool MimironPhase4FocusTrigger::IsActive()
 
     if (PlayerbotAI::IsMainTank(bot))
     {
-        // Only to switch. Claiming the tick while already on it would starve the taunt.
         Unit* const focus = GetMimironPhase4TankFocus(botAI, bot);
         return focus && AI_VALUE(Unit*, "current target") != focus;
     }
 
-    // Non-tanks only come here to be spread for Hand Pulse; their target belongs to
-    // "mimiron set dps priority".
     return AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE;
 }
 
 bool MimironProximityMineTrigger::IsActive()
 {
-    // Melee stand in the mine field, so they take the hits while a mech is up. Between phases they dodge:
-    // the mines outlive the MK II, and following the master walks melee across them.
     if (PlayerbotAI::IsMelee(bot) && GetMimironRingFocus(botAI))
         return false;
 
-    // Off during a barrage: the barrage dodge hands a clear bot's tick down, and this node can't see the cone.
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
     if (barrage.IsActive())
         return false;
@@ -233,8 +201,6 @@ bool MimironProximityMineTrigger::IsActive()
 
 bool MimironBombBotTrigger::IsActive()
 {
-    // The ranged DPS a Bomb Bot is chasing can't outrun it (8.0 yd/s against 7.0), so it stays and shoots.
-    // Everyone else steps out of the 5 yd blast.
     if (PlayerbotAI::IsRangedDps(bot) && GetMimironBombBotChasing(botAI, bot))
         return false;
 
@@ -247,18 +213,14 @@ bool MimironApproachTargetTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI) || !IsMimironEngaged(botAI))
         return false;
 
-    // The barrage dodge owns positioning for the window, and this node's spots never screen the cone.
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
     if (barrage.IsActive())
         return false;
 
-    // No live target, nothing to close on. Cheap test first, ahead of the hazard scan below.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (!target || !target->IsAlive())
         return false;
 
-    // The formation places ranged and healers, in range of the boss it is built around. Closing on
-    // some other target from there only has the formation walk the bot straight back.
     Position slot;
     if (GetMimironSpreadSlot(botAI, bot, slot))
         return false;
@@ -273,8 +235,6 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI))
         return false;
 
-    // Stand down for anything that kills outright. All issue at MOVEMENT_FORCED and equal priority blocks,
-    // so the fire dodge, which runs far more often, would hold the lock over the escapes.
     MimironShockBlastTrigger shockBlast(botAI);
     if (shockBlast.IsActive())
         return false;
@@ -287,8 +247,6 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (frostBomb.IsActive())
         return false;
 
-    // Only for bots inside the swept band: the barrage dodge takes those and screens every hop. Everyone
-    // else keeps dodging fire through the window.
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))
     {
         MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
@@ -296,14 +254,11 @@ bool MimironDodgeFlamesTrigger::IsActive()
             return false;
     }
 
-    // Off the pass's shared hazard read, which the fire bot, formation and approach triggers ask for too.
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
 
-    // Water Spray one-shots, and a fire leg would hold the lock over its escape, so the line comes first.
     if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return false;
 
-    // Burns, not the 5 yd stand radius: between two nodes 3-5 yd off, a bot takes nothing.
     uint32 nodes = 0;
     for (Position const& node : hazards.flames)
         if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_BURN_RADIUS)
@@ -314,21 +269,15 @@ bool MimironDodgeFlamesTrigger::IsActive()
 
     bool const lowHealth = bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT;
 
-    // The core carrier walks through fire to a corpse unless low on health: the corpse lasts only 25 s, and
-    // each dodge would undo the walk.
     if (IsMimironCoreFetchDue(botAI, bot))
         return lowHealth;
 
-    // Two nodes are about four seconds from full, too short to notice and walk out, so any health. In one, a
-    // walking bot is on its way out and only a low one dodges; a standing one leaves after a couple of ticks.
     if (nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE || lowHealth)
         return true;
 
     if (bot->isMoving())
         return false;
 
-    // Handovers: any health. Nothing to hit, so leaving costs nothing, and idle healers keep a parked bot
-    // above any health line.
     return bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT || !GetMimironRingFocus(botAI);
 }
 
@@ -337,7 +286,6 @@ bool MimironFireBotTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI))
         return false;
 
-    // A fire bot that outlived phase 3 can meet the barrage, and that cone kills outright.
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
     if (barrage.IsActive())
         return false;
@@ -350,8 +298,6 @@ bool MimironFireBotTrigger::IsActive()
     if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return true;
 
-    // Only the siren left. A bot already walking somewhere clear of it is leaving anyway, and a sidestep
-    // would cancel that walk. Walking through a silence costs nothing.
     float x = 0.0f;
     float y = 0.0f;
     float z = 0.0f;
@@ -377,14 +323,11 @@ bool MimironPlasmaBlastDefensiveTrigger::IsActive()
     if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Phase 1 only. Nothing later casts it: the cannon is part of the MK II.
     Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     if (!leviathanMkII || GetUldUnitByEntry(botAI, NPC_VX001) ||
         GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // While the cast is up, not between casts: the victim was resolved when it began, and the whole
-    // point is having the button down before the first of the six ticks lands.
     Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
     if (!cannon)
         return false;
@@ -402,7 +345,6 @@ bool MimironRedirectThreatTrigger::IsActive()
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return false;
 
-    // Phase 1 only, and only while somebody else is the main tank.
     if (!GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
         GetUldUnitByEntry(botAI, NPC_VX001) ||
         GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
@@ -414,20 +356,15 @@ bool MimironRedirectThreatTrigger::IsActive()
 
 bool MimironMagneticCoreTrigger::IsActive()
 {
-    // One bot per instance owns this, so two carriers cannot burn two cores on the same landing.
     if (GetMimironCoreCarrier(botAI) != bot)
         return false;
 
     if (!GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // Holding one, the action decides whether to bank a second, hold, walk or spend it, and says so
-    // in the trace.
     if (bot->HasItemCount(ITEM_MIMIRON_MAGNETIC_CORE, 1, false))
         return true;
 
-    // Fetched whatever the unit is doing, since a corpse lasts only 25 s. Corpses lie anywhere, so the
-    // search covers the room and the action does the walk.
     return GetMimironCoreCorpse(bot) != nullptr;
 }
 
@@ -439,13 +376,11 @@ bool MimironPetControlTrigger::IsActive()
     if (IsMimironPhase4(bot))
         return true;
 
-    // Not by MOVEMENTFLAG_HOVER: it survives the phase 3 defeat and the vehicle boarding.
     return IsMimironPhase3(botAI);
 }
 
 bool MimironFrostResistanceTrigger::IsActive()
 {
-    // Class first: the pick walks the group, and this runs for every bot in the instance.
     if (bot->getClass() != CLASS_PALADIN || botAI->HasAura("frost resistance aura", bot))
         return false;
 
@@ -458,13 +393,10 @@ bool MimironSlowBombBotTrigger::IsActive()
     if (spell.empty())
         return false;
 
-    // Reads the Bomb Bot "mimiron set dps priority" already handed out instead of picking one, so the two
-    // never fight. Healers never get one, so they never snare.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (!target || !target->IsAlive() || target->GetEntry() != NPC_BOMB_BOT)
         return false;
 
-    // Below this it is already on top of somebody and the global is better spent on damage.
     if (GetMimironBombBotApproach(bot, target) < ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH)
         return false;
 
@@ -473,17 +405,12 @@ bool MimironSlowBombBotTrigger::IsActive()
 
 bool MimironSetDpsPriorityTrigger::IsActive()
 {
-    // Tanks hold what the tank nodes give them; this one owns "current target" for everybody else.
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    // Engaged, not present: the action calls Attack() directly, and MK II sits in the room from the
-    // moment the raid walks in.
     if (IsMimironEngaged(botAI))
         return true;
 
-    // Phase 4 handover: nothing is engaged, and leftover fire bots walk in spraying. A reset despawns them,
-    // so a live one means this handover. Hard mode holds all over Ulduar, hence the room check first.
     if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
         return false;
 

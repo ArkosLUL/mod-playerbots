@@ -47,8 +47,6 @@ RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFl
     if (!boss)
         return _scan;
 
-    // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
-    // patches; on the ground he only has to clear his own footprint.
     bool const airborne = boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
     float const multiplier =
         (PlayerbotAI::IsMainTank(bot) && airborne) ? RazorscaleBossHelper::DEVOURING_FLAME_AIRBORNE_TANK_SCALE : 1.0f;
@@ -62,12 +60,9 @@ RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFl
 
 bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float clearRadius)
 {
-    // Measured from where the bot is standing, not from the patch: MoveAway and MoveTo both step by a
-    // distance rather than to one, so a bot on the centre needs the whole radius.
     float const step = std::max(clearRadius - bot->GetDistance2d(flame) + 1.0f, 1.0f);
     float const initAngle = flame->GetAngle(bot);
 
-    // Every candidate below sits within `step` of the bot, so one collect around him covers the whole sweep.
     std::vector<Position> flames;
     RazorscaleBossHelper::CollectDevouringFlames(bot, step + RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS,
                                                  flames);
@@ -93,8 +88,6 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
                                                                 bot->GetPositionZ(), x, y, z))
                 continue;
 
-            // A destination inside another patch turns one dodge into a chain. She drops one every 6-12s
-            // and they stack up.
             if (RazorscaleBossHelper::DevouringFlameBlocks(flames, x, y))
                 continue;
 
@@ -103,7 +96,6 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
         }
     }
 
-    // Nothing validated clear. Any step out beats standing in it.
     return MoveAway(flame, step);
 }
 
@@ -120,15 +112,11 @@ bool RazorscaleAvoidDevouringFlameAction::Execute(Event /*event*/)
 
 bool RazorscaleAvoidDevouringFlameAction::isUseful()
 {
-    // Standing clear is not this action's problem: the razorscale rule in her definition keeps the
-    // reach and formation nodes from walking the bot back onto a patch, and it costs no tick to do it.
     return !Scan().flame.IsEmpty();
 }
 
 bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
 {
-    // No marking here: "razorscale kill target action" owns the skull all fight, so it can hand it to
-    // the boss the moment she lands.
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
@@ -508,7 +496,6 @@ bool RazorscaleHarpoonAction::isUseful()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Before the harpoon search: anyone else gets false whatever it finds.
     if (!IsRazorscaleHarpoonCrew(bot))
         return false;
 
@@ -586,7 +573,6 @@ bool RazorscalePetControlAction::Execute(Event /*event*/)
 
     if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
     {
-        // She takes no damage up there, so the pet's whole contribution is the adds.
         if (Unit* add = GetRazorscaleAddKillTarget(botAI))
             CommandPetAttack(botAI, add);
         else
@@ -597,8 +583,6 @@ bool RazorscalePetControlAction::Execute(Event /*event*/)
         CommandPetAttack(botAI, boss);
     }
 
-    // Deliberately reports failure: the order is a side effect, and the tick still belongs to the
-    // dodge and positioning nodes below.
     return false;
 }
 
@@ -614,7 +598,6 @@ bool RazorscaleFlameBreathAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Sidestep the shortest way out of the frontal cone while keeping current range
     Position const dest = GetPositionOutsideFrontalCone(bot, boss, RazorscaleBossHelper::FLAME_BREATH_CONE);
     return MoveTo(boss->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_COMBAT);

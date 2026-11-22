@@ -39,7 +39,6 @@ bool RidingRaidVehicle(Player* bot)
     }
 }
 
-// FlameLeviathanEngaged walks the target list, so it goes last.
 bool FlameLeviathanRiding(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -50,22 +49,18 @@ void DefineFlameLeviathan(EncounterBuilder& e)
 {
     e.Node<FlameLeviathanFlameVentsTrigger, FlameLeviathanInterruptVentsAction>(ACTION_RAID + 4);
 
-    // Same action as the routine row: actions are cached by name, so both rows share one instance and one
-    // latched destination, just promoted while chased or in a hazard.
     e.Node<FlameLeviathanDriveUrgentTrigger, FlameLeviathanDriveAction>(ACTION_RAID + 3);
 
     e.Node<FlameLeviathanVehicleNearTrigger, FlameLeviathanEnterVehicleAction>(ACTION_RAID + 2);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanVehicleAction>(ACTION_RAID + 1);
     e.Node<FlameLeviathanOnVehicleTrigger, FlameLeviathanDriveAction>(ACTION_RAID + 0.5f);
 
-    // Only the drive moves a vehicle, two movers on one MotionMaster bounce. Boarding and leaving stay, or a
-    // bot that lost its hull never boards again and nobody gets out after the kill.
     e.Exclusive("flame leviathan vehicle movement", Role::Any, FlameLeviathanRiding, 0,
                 {FlameLeviathanDriveAction::Name, FlameLeviathanEnterVehicleAction::Name, "leave vehicle"});
 
     e.Tick(FlameLeviathanTick);
 }
-}  // namespace
+}
 
 EncounterDefinition const& UldFlameLeviathanDefinition()
 {

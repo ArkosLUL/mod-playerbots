@@ -19,8 +19,6 @@
 namespace
 {
 
-// A bot part way through a cast can't move, so without this it finishes the cast standing in the
-// impact. Runs once, at the instant the missile goes out.
 void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float radius,
                                bool (*needsToLeave)(Player*))
 {
@@ -38,8 +36,6 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float ra
         if (!botAI || !botAI->HasStrategy("ulduar", BOT_STATE_COMBAT))
             continue;
 
-        // Only break the cast of a bot that is about to be told to move. Everyone else either wants
-        // to be standing there or is unaffected, and a wasted interrupt is a wasted global.
         if (!needsToLeave(player))
             continue;
 
@@ -50,7 +46,7 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float ra
     }
 }
 
-}  // namespace
+}
 
 class VezaxHazardListenerScript : public AllSpellScript
 {
@@ -73,8 +69,6 @@ public:
             return;
 
         {
-            // Both effects are TRIGGER_MISSILE at TARGET_DEST_TARGET_ENEMY, so no unit target. The dest
-            // is frozen at cast, so this is where it lands however far the target walks
             Position impact;
             if (WorldLocation const* dst = spell->m_targets.GetDstPos())
                 impact.Relocate(dst->GetPositionX(), dst->GetPositionY(), dst->GetPositionZ());
@@ -83,8 +77,6 @@ public:
             else
                 return;
 
-            // Straight from distance over Speed rather than Spell::GetDelayMoment, which the core
-            // fills in during the same cast this hook runs inside. Both are milliseconds.
             float const speed = spellInfo->Speed;
             uint32 const flightMs =
                 speed > 0.0f ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * IN_MILLISECONDS) : 0;
@@ -93,8 +85,6 @@ public:
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
                                       &VezaxDodgesShadowCrash);
 
-            // The field's DynamicObject only exists once the missile lands, so the flight is traced
-            // here. This hook fires once per cast, a per-bot helper would write it once per bot
             if (RaidObs::Active())
                 RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SHADOW_CRASH_DMG, impact,
                                           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS, flightMs);
@@ -102,8 +92,6 @@ public:
     }
 };
 
-// The boss script keeps its hard mode flag private, so vapor deaths and the Animus summon are read off
-// the vapor's self-casts, the first from JustDied. Prepare rather than cast, like the Guardian listener
 class VezaxVaporListenerScript : public AllSpellScript
 {
 public:
@@ -124,8 +112,6 @@ public:
     }
 };
 
-// Brain Link's partner is private to the aura script and 63803/63804 leave no aura, but one of the two
-// is cast at the partner every second, so the cast names the pair
 class YoggSaronBrainLinkListenerScript : public AllSpellScript
 {
 public:
@@ -142,14 +128,10 @@ public:
         if (spellInfo->Id != SPELL_BRAIN_LINK_DAMAGE && spellInfo->Id != SPELL_BRAIN_LINK_OK)
             return;
 
-        // 63803 goes out twice a tick, once at the partner and once back at the owner. The self-cast
-        // is the one that carries no information.
         YoggSaronNoteBrainLinkPair(caster, spell->m_targets.GetUnitTarget());
     }
 };
 
-// A Guardian's death reaches no bot on its own: a corpse looks the same a tick or a minute later. Its
-// JustDied casts 65719 once, so the cast is the moment the nova went off.
 class YoggSaronGuardianDeathListenerScript : public AllSpellScript
 {
 public:

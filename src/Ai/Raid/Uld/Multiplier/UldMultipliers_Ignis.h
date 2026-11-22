@@ -10,8 +10,6 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Ignis: Flame Jets knocks the raid back and locks casting for six seconds, so a cast that cannot
-// land inside the 2.7 s warning is thrown away. Instants and anything short enough keep going.
 class IgnisFlameJetsHoldCastMultiplier : public Multiplier
 {
 public:
@@ -19,7 +17,6 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    // Runs against every candidate action, so the boss lookup is memoised for the rest of the tick.
     int32 EvaluateWindow();
 
     uint32 cachedAtMs = 0;

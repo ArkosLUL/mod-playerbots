@@ -5,7 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-// Flame Leviathan
 class FlameLeviathanOnVehicleTrigger : public Trigger
 {
 public:
@@ -24,8 +23,6 @@ public:
     bool IsActive() override;
 };
 
-// Flame Vents is a 10 s channel and Electroshock cancels it, so the channel is the whole reaction window:
-// this stays unthrottled.
 class FlameLeviathanFlameVentsTrigger : public Trigger
 {
 public:
@@ -35,8 +32,6 @@ public:
     bool IsActive() override;
 };
 
-// Raises the drive action above the rotation for the two cases where steering cannot wait a tick:
-// being chased, and sitting in a hard-mode ground hazard.
 class FlameLeviathanDriveUrgentTrigger : public Trigger
 {
 public:

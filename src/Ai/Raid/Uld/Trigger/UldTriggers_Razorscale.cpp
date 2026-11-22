@@ -156,7 +156,6 @@ bool RazorscaleFuseArmorTrigger::IsActive()
 
 bool RazorscaleKillTargetTrigger::IsActive()
 {
-    // One bot drives the marking to avoid the whole raid fighting over the icon
     if (!IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
         return false;
 
@@ -186,11 +185,9 @@ bool RazorscaleFlameBreathTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Flame Breath is a grounded-phase frontal cone; while flying she is not breathing
     if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
         return false;
 
-    // The tank holds the boss and eats the breath; only reposition non-tanks caught in the cone
     if (PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 

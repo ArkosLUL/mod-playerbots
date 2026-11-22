@@ -53,14 +53,9 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
         return 1.0f;
 
     static uint32 const noRedirectBosses[] = {
-        // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
         NPC_FREYA,
-        // Each phase is a new creature with a fresh threat table, and P3 splits VX-001 and the ACU over
-        // two tanks. "mimiron redirect threat action" covers P1, the one phase a redirect helps
         NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT,
-        // Arena and gauntlet squads each bring their own tank, then Unbalancing Strike swaps
         NPC_THORIM,
-        // Phase Punch swaps main and assist tank on a stack timer
         PB_NPC_ALGALON};
 
     for (uint32 entry : noRedirectBosses)
@@ -69,16 +64,12 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
             return 0.0f;
     }
 
-    // The MT holds nothing until the permanent ground phase: the Dark Rune adds go to the assist tanks,
-    // and a harpoon knockdown above 50% puts her on the floor with nobody tanking her
     if (Unit* razorscale = GetUldUnitByEntry(botAI, NPC_RAZORSCALE))
         return RazorscaleBossHelper::IsFlyingPhaseFor(razorscale) ? 0.0f : 1.0f;
 
     return 1.0f;
 }
 
-// Several Ulduar bosses put their real DPS check minutes after the pull, where the generic
-// hold-until-the-tank-engages window spends everything on a phase that does not matter.
 float UlduarBurstWindowMultiplier::GetValue(Action* action)
 {
     if (!action)
@@ -137,8 +128,6 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         }
     }
 
-    // The sweep lags the pull and skips unselectable units, which every mech is through a handover.
-    // Missing all three falls through to the open default below and lusts, hence the grid search
     if (!leviathanMkII)
         leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.SightDistance, true);
     if (!vx001)
@@ -147,18 +136,12 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         aerialCommandUnit =
             bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, sPlayerbotAIConfig.SightDistance, true);
 
-    // The sweep stops at SightDistance, and her second flight point is past that for most of the raid.
-    // DoZoneInCombat puts the whole raid on her threat list, and "find target" never calls UpdateBossAI
     if (!razorscale)
         razorscale = AI_VALUE2(Unit*, "find target", "razorscale");
 
-    // His gauntlet runs about 190 yd up the corridor, well past SightDistance, and no gated boss
-    // here falls through to a window that allows everything.
     if (!thorim && NearThorimEncounter(bot))
         thorim = GetThorim(botAI);
 
-    // No damage taken while airborne, so every landing is a burn window, knockdowns included. Lust
-    // waits for the permanent ground phase, a knockdown is too short for a 10 min cooldown
     if (razorscale)
     {
         bool const grounded = razorscale->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
@@ -166,8 +149,6 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
     }
 
-    // Only lust waits, for P4 plus a delay: the raid spends the P4 opening running from the Frost Bomb.
-    // A beaten or self-repairing mech stays alive but unselectable. P4 is all three selectable, VX riding
     auto const fighting = [](Unit const* mech) { return mech && !mech->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); };
     if (leviathanMkII || vx001 || aerialCommandUnit)
     {
@@ -181,8 +162,6 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {true, phase4 && GetMSTimeDiffToNow(mimironPhase4LiveMs) >= ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS};
     }
 
-    // The council members resurrect each other until one is left, so only the survivor is a real
-    // kill. Covers the hard mode too, where that survivor is the empowered phase-3 Steelbreaker.
     if (steelbreaker || molgeim || brundir)
     {
         uint32 const aliveCount = (steelbreaker ? 1u : 0u) + (molgeim ? 1u : 0u) + (brundir ? 1u : 0u);
@@ -190,8 +169,6 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {true, aliveCount == 1};
     }
 
-    // Attuned to Nature makes damage on Freya pointless until the final phase removes it. Personal
-    // cooldowns wait too, the wave adds aren't boss-flagged so burst on them is zeroed anyway
     if (freya)
     {
         bool const finalPhase =
@@ -202,19 +179,15 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 
     if (thorim)
     {
-        // He is immune on his balcony for the whole gauntlet.
         bool const onArenaFloor = thorim->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 
         return {onArenaFloor, onArenaFloor};
     }
 
-    // P1 damage lands on Sara and is wasted, P3 is the body burn. Keyed on the boss state: Sara is
-    // findable from instance creation, and the brain room is past SightDistance from Yogg
     if (bot->GetMapId() == ULDUAR_MAP_ID && BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
     {
         uint32 const phase = YoggSaronPhase(botAI);
 
-        // P2 only on the Brain: tentacles die anyway, and a cooldown spent on one is down for the next portal
         bool onBrain = false;
         if (phase == 2)
         {
@@ -222,7 +195,6 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
             onBrain = target && target->GetEntry() == NPC_BRAIN;
         }
 
-        // Lust belongs to the phase 3 node, which waits for the raid to reach its spots
         return {onBrain || phase == 3, false};
     }
 

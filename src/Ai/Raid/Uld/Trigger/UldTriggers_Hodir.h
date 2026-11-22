@@ -5,8 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-// Carrying Biting Cold with no Toasty Fire to shed it for free. Holds no state: the action owns the arm
-// threshold and the shed-to-floor latch.
 class HodirBitingColdTrigger : public Trigger
 {
 public:
@@ -16,8 +14,6 @@ public:
     bool IsActive() override;
 };
 
-// A Snowpacked Icicle Target is up, and this bot is not inside the Safe Area it radiates. That NPC
-// is the only Flash Freeze exemption in the fight, a Toasty Fire doesn't grant one.
 class HodirNearSnowpackedIcicleTrigger : public Trigger
 {
 public:
@@ -27,8 +23,6 @@ public:
     bool IsActive() override;
 };
 
-// Not the shared BossFrostResistanceTrigger: it takes the first paladin whatever its spec, so a tank can
-// lose Devotion or a healer Concentration, and it raises the aura through a ChangeStrategy nothing removes.
 class HodirFrostResistanceTrigger : public Trigger
 {
 public:
@@ -38,8 +32,6 @@ public:
     bool IsActive() override;
 };
 
-// An icicle is about to land on or beside this bot. Small icicles always count; a drift icicle only
-// counts while it is still falling, because once it lands it becomes the shelter everyone needs.
 class HodirIcicleDodgeTrigger : public Trigger
 {
 public:
@@ -49,7 +41,6 @@ public:
     bool IsActive() override;
 };
 
-// The bot is off its anchor and nothing more urgent wants the tick.
 class HodirRaidPositionTrigger : public Trigger
 {
 public:
@@ -59,7 +50,6 @@ public:
     bool IsActive() override;
 };
 
-// Everyone but healers: trapped raiders first, then helper blocks, then the boss. Tanks only get the boss.
 class HodirSetDpsPriorityTrigger : public Trigger
 {
 public:
@@ -69,7 +59,6 @@ public:
     bool IsActive() override;
 };
 
-// Frozen Blows is up and the wrong tank is holding him.
 class HodirFrozenBlowsSwapTrigger : public Trigger
 {
 public:
@@ -79,7 +68,6 @@ public:
     bool IsActive() override;
 };
 
-// A tank Hodir is hitting in a Frozen Blows window, with no button spent in it yet.
 class HodirTankDefensiveTrigger : public Trigger
 {
 public:
@@ -89,7 +77,6 @@ public:
     bool IsActive() override;
 };
 
-// The bot carries Storm Cloud, so it holds its rally point until the charges are spent.
 class HodirSpreadStormCloudTrigger : public Trigger
 {
 public:
@@ -99,7 +86,6 @@ public:
     bool IsActive() override;
 };
 
-// Somebody nearby is carrying, this bot deals damage, and it has not been handed Storm Power yet.
 class HodirCollectStormPowerTrigger : public Trigger
 {
 public:
@@ -109,8 +95,6 @@ public:
     bool IsActive() override;
 };
 
-// A hunter or rogue that could hand its threat to a tank. Screened here as well as in the action's
-// isUseful so the other twenty bots never reach the node.
 class HodirRedirectThreatTrigger : public Trigger
 {
 public:

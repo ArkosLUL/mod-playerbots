@@ -16,8 +16,6 @@
 
 #include <cmath>
 
-// Every boss lookup here sweeps every unit in sight, so the cheap tests in each trigger go first.
-
 bool AuriayaFallFromFloorTrigger::IsActive()
 {
     return bot->GetPositionZ() < ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT && AuriayaEncounterActive(botAI);
@@ -25,27 +23,21 @@ bool AuriayaFallFromFloorTrigger::IsActive()
 
 bool AuriayaSeepingEssenceTrigger::IsActive()
 {
-    // 7 yd is a cell or two, so the pool search goes ahead of the boss.
     return IsInAuriayaPool(bot) && AuriayaEncounterActive(botAI);
 }
 
 bool AuriayaRaidPositionTrigger::IsActive()
 {
-    // Only the main tank and the ranged half get an anchor.
     if (!PlayerbotAI::IsMainTank(bot) && !PlayerbotAI::IsRanged(bot))
         return false;
 
-    // Combat-gated, or the raid walks to its spots before anyone pulls.
     Unit* boss = GetAuriaya(botAI);
     if (!boss || !boss->IsInCombat())
         return false;
 
-    // A bot in a pool is the dodge's. No stand-down for Sonic Screech, the cast is when the raid most
-    // needs its spots. CanFreeMove already covers fear and stuns.
     if (IsInAuriayaPool(bot))
         return false;
 
-    // Off the boss, not the bot: the bot is off its anchor here, so the pool fouling it can be out of reach.
     std::vector<Unit*> const roomPools = GetAuriayaRoomPools(botAI);
 
     Position anchor;
@@ -53,8 +45,6 @@ bool AuriayaRaidPositionTrigger::IsActive()
     if (!GetAuriayaAnchor(botAI, bot, boss, roomPools, anchor, tolerance))
         return false;
 
-    // A spot lands in a pool only once every station, or the whole soak band, is fouled. Stand down
-    // there, or this and the dodge take turns walking the bot in and out.
     if (GetAuriayaPoolClearance(roomPools, anchor.GetPositionX(), anchor.GetPositionY()) <
         ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
         return false;
@@ -67,35 +57,27 @@ bool AuriayaSetDpsPriorityTrigger::IsActive()
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    // The action calls Attack() directly, so without this the first bot to see her pulls the room.
-    // Whoever pulls flips it for everyone, so the raid engages together.
     if (!IsAuriayaEngaged(botAI))
         return false;
 
-    // Sentries still out of combat are the off-tank's to open on: the first bot to hit one gets the whole pack.
-    // No living off-tank means nobody opens on them, so don't hold the raid forever.
     return !AuriayaSentriesUnengaged(botAI) || !EncounterHelpers::GetGroupAssistTank(bot, 0);
 }
 
 bool AuriayaSentryTauntTrigger::IsActive()
 {
-    // IsAssistTankOfIndex repeats this, but it walks the group, so it stays last and this goes first.
     if (!PlayerbotAI::IsTank(bot))
         return false;
 
-    // A taunt is a pull, so the off-tank waits for the encounter to be live like everyone else.
     if (!IsAuriayaEngaged(botAI))
         return false;
 
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return false;
 
-    // A sentry already on the off-tank stays in melee, where its Savage Pounce (8-25 yd) cannot fire
     Unit* sentry = GetAuriayaLooseSentry(botAI, bot);
     if (!sentry)
         return false;
 
-    // Out of reach it walks over. In reach it waits for the taunt and leaves the tick to the tank rotation.
     return !InAuriayaSentryTauntReach(bot, sentry) || EncounterHelpers::ClassTauntReady(botAI);
 }
 
@@ -104,7 +86,6 @@ bool AuriayaOffTankTargetTrigger::IsActive()
     if (!AuriayaOffTankHoldsSentries(botAI))
         return false;
 
-    // Keeps its Sentry until it dies, only a taunt moves it on early.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (target && target->IsAlive() && target->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY)
         return false;
