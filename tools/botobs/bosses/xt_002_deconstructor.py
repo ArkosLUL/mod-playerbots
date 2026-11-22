@@ -16,6 +16,9 @@ What the generic views miss here:
   piles up to 105 yd off stayed quiet and 108 yd or more summoned, hence the distances per window.
 - **The west piles sit inside the Scrapyard trash.** A Pummeller engaging there calls assistance
   (10 yd, centre to centre, 2 s delay) and its pack follows it onto the Pummeller's target.
+- **A Life Spark that can't path to its victim is immune and never resets** in a raid map, while its
+  Static Charged keeps hitting the whole raid. Sparks the raid can reach die in 5-17 s, so the sparks
+  view lists the ones that lived longer, with the carrier they spawned on and the `xt002.evading` notes.
 """
 from __future__ import annotations
 
@@ -30,7 +33,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import dist2, frames, nearest  # noqa: E402
-from raidobs.trace import Trace, clock, combat_deaths  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "xt-002"
 
@@ -48,7 +51,15 @@ TRASH = {34267, 34269, 34271, 34273, 34288}
 SPELL_HEART_PHASE = 37751
 SPELL_STAND = 37752
 HEARTBREAK = (64193, 65737)
+SEARING_LIGHT = (63018, 65121)
 CLASS_HUNTER = 3
+
+# 25-man hard mode traces: sparks the raid could hit died in 5-17 s, ones it couldn't lived 39-90 s
+SPARK_LONG_MS = 20000
+# a Searing Light removal this close to a spark's first sample is the one that dropped it
+SPARK_CARRIER_MS = 2000
+# bots still on an evading spark this long after the first note never let go of it
+SPARK_DROP_MS = 2000
 
 # core data/sql/updates/db_world/2026_07_04_03.sql
 PILES = {
@@ -249,6 +260,90 @@ def show_trash(trace: Trace) -> None:
     print(f"  deaths to trash: {killed}")
 
 
+def sparks(trace: Trace) -> list[dict]:
+    """Per Life Spark: first and last sample, spawn spot, the carrier it dropped from, and the most roster
+    members targeting it in one snapshot. A spark leaves the snapshots when it dies."""
+    roster = {member["g"] for member in trace.header.get("roster", [])}
+    out = {}
+    for snap in frames(trace):
+        on = collections.Counter()
+        for row in snap.get("u", []):
+            if entry(trace, row[0]) == NPC_LIFE_SPARK and row[5] > 0:
+                spark = out.setdefault(row[0], {"g": row[0], "first": snap["t"], "spot": (row[1], row[2]),
+                                                "most": 0})
+                spark["last"] = snap["t"]
+            elif row[0] in roster and len(row) > 7 and entry(trace, row[7]) == NPC_LIFE_SPARK:
+                on[row[7]] += 1
+        for guid, count in on.items():
+            if guid in out:
+                out[guid]["most"] = max(out[guid]["most"], count)
+    removals = [rec for rec in trace.of("aura") if rec.get("sp") in SEARING_LIGHT and rec.get("r")]
+    for spark in out.values():
+        near = [rec for rec in removals if abs(rec["t"] - spark["first"]) <= SPARK_CARRIER_MS]
+        spark["carrier"] = min(near, key=lambda rec: abs(rec["t"] - spark["first"]))["d"] if near else None
+    return sorted(out.values(), key=lambda spark: spark["first"])
+
+
+def evading_from(trace: Trace) -> dict:
+    """Spark guid -> (first `xt002.evading` note naming it, first later note from a bot that named it
+    and no longer does or None, how many bots named it). The notes only change, so the first bot to
+    drop the spark marks it hittable again."""
+    first, until, bots = {}, {}, collections.defaultdict(set)
+    named = collections.defaultdict(set)
+    for rec in notes(trace, "xt002.evading"):
+        now = {int(token) for token in rec.get("txt", "").split() if token.isdigit()}
+        for guid in named[rec.get("g")] - now:
+            until.setdefault(guid, rec["t"])
+        for guid in now:
+            first.setdefault(guid, rec["t"])
+            bots[guid].add(rec.get("g"))
+        named[rec.get("g")] = now
+    return {guid: (t, until.get(guid), len(bots[guid])) for guid, t in first.items()}
+
+
+def held_between(trace: Trace, guid, since: int, until) -> int:
+    """Most roster members targeting this unit in one snapshot from `since` until `until` (None: the end).
+    Bounded, because bots rightly go back to a spark once it can be hit."""
+    roster = {member["g"] for member in trace.header.get("roster", [])}
+    most = 0
+    for snap in frames(trace):
+        if snap["t"] >= since and (until is None or snap["t"] < until):
+            most = max(most, sum(1 for row in snap.get("u", []) if row[0] in roster and len(row) > 7
+                                 and row[7] == guid))
+    return most
+
+
+def show_sparks(trace: Trace) -> None:
+    print("LIFE SPARKS")
+    if not mine(trace):
+        return
+    rows = sparks(trace)
+    if not rows:
+        print("  none")
+        return
+    ends = trace.of("end")
+    end = ends[-1]["t"] if ends else None
+    peak = max(sum(1 for other in rows if other["first"] <= spark["first"] <= other["last"]) for spark in rows)
+    lives = sorted(spark["last"] - spark["first"] for spark in rows)
+    print(f"  {len(rows)} sparks, at most {peak} up at once, median life {statistics.median(lives) / 1000:.0f} s")
+    evading = evading_from(trace)
+    for spark in rows:
+        life = spark["last"] - spark["first"]
+        if life < SPARK_LONG_MS and spark["g"] not in evading:
+            continue
+        carrier = spark["carrier"]
+        source = f"on {trace.name(carrier)} ({trace.role(carrier)})" if carrier else "on an unknown carrier"
+        up = ", still up at the end" if end is not None and end - spark["last"] <= SPARK_CARRIER_MS else ""
+        print(f"  {clock(spark['first'])} {source} at ({spark['spot'][0]:.0f}, {spark['spot'][1]:.0f}):"
+              f" lived {life / 1000:.0f} s{up}, most bots on it at once {spark['most']}")
+        if spark["g"] in evading:
+            t, until, bots = evading[spark["g"]]
+            held = held_between(trace, spark["g"], t + SPARK_DROP_MS, until)
+            span = f"{clock(t)} to {clock(until)}" if until is not None else f"{clock(t)} on"
+            print(f"    evading {span} (bots noting it {bots}),"
+                  f" most bots still on it {SPARK_DROP_MS // 1000} s in {held}")
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     killer = entry(trace, death.get("killer"))
     rewind = death.get("rewind") or []
@@ -284,6 +379,7 @@ SECTIONS = (
     ("heart", "each Heart window and whether Heartbreak landed", show_heart),
     ("adds", "adds per toy pile", show_adds),
     ("trash", "Scrapyard trash pulls and what called them", show_trash),
+    ("sparks", "Life Sparks that lived long, their carrier and evade notes", show_sparks),
     ("deaths", "deaths by mechanic", show_deaths),
 )
 

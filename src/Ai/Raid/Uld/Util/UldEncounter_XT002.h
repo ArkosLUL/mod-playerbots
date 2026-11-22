@@ -183,6 +183,10 @@ bool IsXT002AddEngageable(Unit* xt002, Unit* unit);
 // at its pile would mask the one hitting the raid.
 Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float botReach);
 
+// Add that takes no damage: evading, or chasing a victim it can't path to. In a raid map the core never resets
+// the second kind and a taunt misses it, so it stays immune until it has a victim it can reach.
+bool IsXT002AddEvading(Unit* unit);
+
 // This bot's formation slot. Every bot sorts the same roster, so none needs telling; healers take the centre
 // and inner ring to keep the tank in range, hunters the arc. False for melee and tanks, or without a group.
 bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out);
