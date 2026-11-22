@@ -171,9 +171,20 @@ uint32 GetXT002SearingLightSpellId(Player* bot);
 uint32 GetXT002GravityBombSpellId(Player* bot);
 uint32 GetXT002HeartbreakSpellId(Player* bot);
 
-// This bot owns the Pummeller: the first assist tank, else the main tank once no second tank is left. Taunt
-// and target priority both read it, so they agree on who holds the add.
-bool IsXT002PummellerTank(Player* bot);
+// Tank duties follow whoever XT is on, not the group's main tank flag: he's taunt-immune, so the tank he
+// turns to keeps him. Both are living tanks, null only when the group has none.
+struct XT002TankRoles
+{
+    Player* holder = nullptr;     // keeps XT at the tank spot
+    Player* pummeller = nullptr;  // takes the Pummellers, the holder itself once it's the last tank
+};
+
+// The holder is XT's victim, or in the Heart window the one his threat list will turn him back to. With XT on
+// a non-tank it's the tank with most threat on him, and before the pull the flagged main tank.
+XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002);
+
+// Taunt, target priority and the redirect all read GetXT002TankRoles, so they agree on who holds the add.
+bool IsXT002PummellerTank(Player* bot, Unit* xt002);
 
 // Close enough to XT to engage; anything further is still at its toy pile. True without an XT, so the gate
 // never strands a bot with nothing to hit.

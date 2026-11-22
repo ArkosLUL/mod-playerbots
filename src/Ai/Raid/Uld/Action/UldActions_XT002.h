@@ -136,8 +136,8 @@ private:
     Player* GetRedirectTank(Unit* xt002);
 };
 
-// Main tank gets a point, ranged and healers a formation slot each. Melee are left alone: pinning them costs
-// uptime on a boss that moves.
+// The tank XT is on gets the tank spot, ranged and healers a formation slot each. Melee are left alone:
+// pinning them costs uptime on a boss that moves.
 class XT002RaidPositionAction : public MovementAction
 {
 public:

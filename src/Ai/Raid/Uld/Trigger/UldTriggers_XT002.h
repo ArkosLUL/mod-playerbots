@@ -28,8 +28,8 @@ public:
     bool IsActive() override;
 };
 
-// Anchors the main tank, ranged and healers once XT is in combat, or bots walk there before the pull. Stands
-// down for any dodge, a tank without aggro, and healers with someone out of range.
+// Anchors the tank XT is on, ranged and healers once XT is in combat, or bots walk there before the pull.
+// Stands down for any dodge, a tank without aggro, and healers with someone out of range.
 class XT002RaidPositionTrigger : public Trigger
 {
 public:

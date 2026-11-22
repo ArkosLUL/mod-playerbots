@@ -64,10 +64,9 @@ bool XT002AvoidHazardTrigger::IsActive()
 
 bool XT002RaidPositionTrigger::IsActive()
 {
-    // Melee dps and off-tanks never get a spot, so this is always false for them. Same role calls
-    // BuildXT002RingMembers makes, answered before XT's lookup.
-    if (!PlayerbotAI::IsMainTank(bot) &&
-        (PlayerbotAI::IsTank(bot) || (!PlayerbotAI::IsRangedDps(bot) && !PlayerbotAI::IsHeal(bot))))
+    // Melee dps never get a spot. Same role calls BuildXT002FormationMembers makes, answered before XT's lookup.
+    bool const tank = PlayerbotAI::IsTank(bot);
+    if (!tank && !PlayerbotAI::IsRangedDps(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
     Unit* xt002 = GetXT002(botAI);
@@ -88,12 +87,12 @@ bool XT002RaidPositionTrigger::IsActive()
     if (avoidHazard.IsActive() && InsideXT002Hazard(botAI, bot))
         return false;
 
-    if (PlayerbotAI::IsMainTank(bot))
+    if (tank)
     {
-        // Only while holding XT: the anchor outranks "reach melee", and XT is a vehicle, taunt-immune through
-        // Vehicle::ApplyAllImmunities. No victim means the Heart window, where the spot is right.
+        // Only the tank XT is on, whichever it is: the anchor outranks "reach melee", and XT is a vehicle,
+        // taunt-immune through Vehicle::ApplyAllImmunities. In the Heart window his threat list decides.
         Unit* victim = xt002->GetVictim();
-        if (victim && victim != bot)
+        if (victim ? victim != bot : GetXT002TankRoles(bot, xt002).holder != bot)
             return false;
 
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
@@ -131,10 +130,11 @@ bool XT002PummellerTauntTrigger::IsActive()
     if (!PlayerbotAI::IsTank(bot))
         return false;
 
-    if (!GetXT002(botAI))
+    Unit* xt002 = GetXT002(botAI);
+    if (!xt002)
         return false;
 
-    if (!IsXT002PummellerTank(bot))
+    if (!IsXT002PummellerTank(bot, xt002))
         return false;
 
     // Taunt range, not the leash: this node sits at ACTION_RAID + 4, so firing it against an add the

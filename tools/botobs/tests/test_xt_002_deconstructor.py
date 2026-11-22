@@ -182,6 +182,48 @@ class Sparks(unittest.TestCase):
                       printed(xt.show_sparks, load(self.spark_pull(evading=True, released=True))))
 
 
+class Tanks(unittest.TestCase):
+    OFFTANK = 7705
+
+    def steal_pull(self) -> list[dict]:
+        records = pull()
+        end = records.pop()
+        records = [rec for rec in records if rec.get("e") != "snap"]
+        records[0]["roster"].append({"g": self.OFFTANK, "n": "Stonewall", "r": "tank", "c": 11, "h": 0})
+
+        def at(t: int, victim: int, offtank: tuple[float, float]) -> dict:
+            return {"t": t, "e": "snap", "u": [
+                [TANK, 870.0, -20.0, 409.7, 0, 100, 100, XT],
+                [self.OFFTANK, offtank[0], offtank[1], 409.7, 0, 100, 100, XT],
+                [XT, 860.0, -25.0, 409.6, 0, 80, 0, victim]]}
+
+        records += [
+            at(1000, TANK, (850.0, -30.0)),
+            at(3000, self.OFFTANK, (850.0, -30.0)),
+            at(20000, self.OFFTANK, (895.8, -12.5)),
+            at(25000, self.OFFTANK, (896.0, -12.0)),
+            at(40000, 0, (896.0, -12.0)),
+            at(45000, 0, (896.0, -12.0)),
+            {"t": 3100, "e": "note", "g": self.OFFTANK, "k": "xt002.tank", "txt": "holds XT"},
+            {"t": 3100, "e": "note", "g": TANK, "k": "xt002.tank", "txt": "pummellers"},
+            {"t": 5000, "e": "cast", "s": TANK, "sp": 31789, "tgt": self.OFFTANK},
+            {"t": 6000, "e": "cast", "s": self.OFFTANK, "sp": 6795, "tgt": PUMMELLER},
+            {"t": 7000, "e": "cast", "s": TANK, "sp": 62124, "tgt": XT},
+            {**end, "t": 50000},
+        ]
+        return records
+
+    def test_holders_duties_and_taunts_at_xt(self):
+        self.assertEqual(printed(xt.show_tanks, load(self.steal_pull())), (
+            "TANKS\n"
+            "  0:01.000  Bulwark (tank) for 2.0 s\n"
+            "  0:03.000  Stonewall (tank) for 37.0 s, 0 yd off the tank spot from 15 s in\n"
+            "  0:40.000  nobody for 5.0 s\n"
+            "  Stonewall: holds XT 0:03.100\n"
+            "  Bulwark: pummellers 0:03.100\n"
+            "  taunts at XT: 2 (Bulwark spell 31789 1, Bulwark spell 62124 1)\n"))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL_V14)
