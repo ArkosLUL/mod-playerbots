@@ -237,7 +237,8 @@ or it counted one meteor six times (three impacts, two marker creatures each) an
   landing on another explosion or Big Bang, meteors in that span don't count. Without the carry a kill under
   5 %/s never dropped: two landed 1.8 and 3.0 s from another star's drain death at Big Bang's cast, 10-11 dead
   each. Its log is kept: a flat 5 %/s made a star never hit look due, and the team was sent back to it 4 times
-  in 2 s;
+  in 2 s. A kill `urgent` took before a Big Bang hit drops if it would land in the **Aftermath** (below; one at
+  6.6 s killed 6);
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
 - a **due** star is opened whatever the raid's health, bar Big Bang's aftermath, soonest death first: its own death isn't clear and is

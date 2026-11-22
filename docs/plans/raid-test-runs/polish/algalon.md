@@ -185,3 +185,94 @@ pull opened a kill in the 16 s after Big Bang 1.
 after a Big Bang hit (window 9: uld3 3:43.7 at +9.2 s, 12 dead; uld2 3:39.9 at +5.3 s); `recovery` in
 the `algalon.starwindow` timeline after hits. Watch that the held kills don't bunch up: no two explosions
 within 8 s, and no due star drained onto a meteor (`drained`, window `smash`), in the 16-45 s after a hit.
+
+## Round 3 (2026-11-22, build 697052475 with round 2, DK rosters re-specced)
+
+**Data.** Window 10, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head
+697052475 --pulls 10`). All 13 Algalon traces on disk reread for the star explosions (scratch `explo.py`,
+`carried.py`).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261122-174354-31` | `603_33_…_1795369536` | wipe 4:07, Ascend 3:59.9, boss 55% | 32: loose 10, star explosion 9, Constellation Barrage 7, on tank 5, Cosmic Smash 1 |
+| uld2 | `tr-20261122-180659-34` | `603_36_…_1795370922` | wipe 5:43, Ascend 5:36.8, boss 44% | 31: loose 10, star explosion 9, Barrage 5, on tank 4, Cosmic Smash 2, Black Hole DoT 1 |
+| uld3 | `tr-20261122-175236-32` | `603_34_…_1795370059` | wipe 7:27, phase 2 at 6:18.6 (20.1%), Berserk 6:25.8, boss 13% | 33: phase 1 4 (star explosion 3, Barrage 1); after Berserk 29 (loose 21, on tank 6, Big Bang 1, Unleashed Dark Matter 1) |
+
+What started each wipe:
+
+- uld1: a stray hole ate the only hole, so `urgent` killed 1584 with a meteor live (1:47.2, 2 dead); Barrage
+  killed 2 ranged and a healer by 2:14; the holder died at 2:21.7 (81 k in 6 s, 52 k in 2 s), a healer to a
+  deadline kill with 5 under the line (2:57.5); four tank deaths 3:18.7-3:40.3, then loose. A constellation
+  ate the raid's only hole 0.9 s before Big Bang 2's hit (3:33.7), `urgent` put the ranged on 1641 at 23%,
+  and the kill went off at 3:41.2, 6.6 s after the hit, on 14 under the line: 6 dead.
+- uld2: 3 deaths before 4:09. A `deadline` kill opened at 4:13.5 on 1636 at 8.4% to beat a meteor; the team
+  took it +0.2 %/s beyond the drain in 4.1 s and it went off with the marker live and 12 under (4:17.7, 4
+  dead); tank deaths 4:24.5-5:12.3, then loose.
+- uld3: 4 deaths in phase 1, three to `deadline` kills landing 5.5-7.8 s after a meteor impact with 9-12
+  under. The raid reached phase 2 7.2 s before Berserk: 0.227 %/s on him over phase 1.
+
+**Stop rules.** Not polished (three wipes; the stop rule is waived on 226 rosters). Rounds 2 and 3 both
+target the aftermath, two rounds so far.
+
+**Verdict on round 2: held.** No due kill went off inside the 16 s after a hit but uld2's 2:19.8 at +15.9
+s, whose band started just past the span (1582 at 4%, 0.8 s from its drain death, 0 dead). `recovery`
+shows in uld2 at 2:11.6, 3:40.1 and 5:05.3-5:07.9. Watch items: no two explosions within 8 s outside the
+casts' under-stars; no due star drained onto a meteor in the 16-45 s after a hit. The aftermath still cost
+6 (window 9: 13), through a path round 2 left open: uld1's 3:41.2 kill was taken by `urgent` in the cast
+and kept after it as `open`.
+
+**Picked: a kill carried from the Big Bang cast into its aftermath** (6 of window 10's 21 explosion
+deaths, the largest single explosion). Bug: round 2's rule is that no kill lands in the void's aftermath
+while anyone is under the line, but only the due branch checked it.
+
+- uld1: `algalon.holes` 0 and `algalon.urgent` 1 at 3:33.690, focus 1641 (23%) from then to its death at
+  3:41.241; `urgent` 0 at 3:34.734 and the window `open`. The hit was at 3:34.630; 16-19 under the line
+  and 10-15 under 14 k at +0..+6 s (`raidhp.py`).
+- Cause, `StarWindow` (`UldEncounter_Algalon.cpp`): during the cast it returns `bigbang` and clears the
+  focus, so only `urgent` (no hole, cast due or running, which overrides everything) can hold a kill
+  across the hit. At the cast's end the keep test (the `focus && !focus->under` block) kept it on a clear
+  finish; the recovery check sat in the due branch only, and the open branch's raid-health gate never
+  ran. In 13 traces this is the only focus held across a hit (`carried.py`).
+
+**Fix** (Algalon files only): `recovery` and `drained` move to the top of `StarWindow`; the keep test
+drops a kill picked before the last cast ended (`focusSinceMs` before `lastBigBangEndMs`) while the raid
+is drained and its finish starts inside the span. The due branch then holds it as `recovery` and opens it
+once its finish lands past the span; kills opened after the hit keep the old keep test, so a reopened star
+isn't dropped again. 10 and 25-man alike. Replay on uld1: dropped at 3:34.7 (forecast 3:39-3:41); the
+drain alone ends it at 3:56.7, 1 s after a meteor, so it's due, and from about 3:47.6 (walk left out) its band fits
+between the span's end (3:50.6) and that meteor's blackout (3:51.7): 4 under the line at +16 s against 16
+at +6 s. Nothing else in the 13 traces changes.
+
+**Not picked.**
+
+- Tank deaths (9) and the loose deaths after them (20): uld1's five took a median 81 k in 6 s, 48 k in
+  2 s. The user's answer stands (no 5th healer).
+- Paced kills landing soon after a meteor: across the 13 traces, `deadline`/`open` kills within 9 s after
+  an impact were 18, 29 dead (11 with deaths, median 8 under the line), against 17 elsewhere outside the
+  aftermath, 24 dead (8 with deaths, 11 of them round 1's collision, median 3 under). The blackout ends
+  5 s after the impact. Lengthening it moves every due and serial deadline; next candidate.
+- uld2's 1636: a `deadline` kill the team barely touched (one member walking in from 57 yd, the others on
+  Mind Flay and Drain Soul). Same family as the slow paced kills (2.2-5 %/s against 5.5-9 planned).
+- Barrage 13: 5 before the first tank death, 8 in the collapse.
+
+**Probe keys never emitted in window 10.** None is dead code:
+
+- `algalon.call`: raid warnings to humans; `SendAlgalonCall` returns before the note with no real player
+  in the group. Never in 13 traces.
+- `algalon.handover`: the holder handing him over for want of a defensive applies only to a tank soak
+  (`DefensiveHandoverDue` needs no disperser latched); every Big Bang here was a shadow priest's Dispersion
+  soak. Never in 13 traces.
+- `algalon.nitro`: needs a bot with Nitro Boosts on its boots at the cast start; no 54861 aura in any of
+  the 13 traces, so no roster bot wears them.
+- `algalon.speed`: Aspect of the Cheetah or Sprint on a hide run already late; fired in 3 older traces
+  (`603_2`, `603_37`, `603_39_…_1795351067`); no hunter or rogue in window 10 ran late with it ready.
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --stars`, `--verdict`): no `killed` explosion within 16 s after a
+Big Bang hit (window 10: uld1 3:41.2 at +6.6 s, 6 dead). A kill `urgent` takes in a cast and still alive
+at its end is dropped right after the hit while the raid is under the line (`algalon.focusstar` 0, window
+`recovery`, or `raidhp` while the star isn't due), then killed once its finish clears the span or nobody is
+under the line. Only 1 of 13 pulls had such a carry, so the window may
+not exercise it; then judge by the aftermath alone. Watch that the dropped star doesn't drain onto a
+meteor (`drained`, window `smash`).
