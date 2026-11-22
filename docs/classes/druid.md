@@ -1,6 +1,6 @@
 # Druid
 
-Feral cat and Balance. Engine semantics are in
+Feral cat, Balance and forms. Engine semantics are in
 [../engine/action-selection.md](../engine/action-selection.md).
 
 ## Balance: Moonfire and eclipse order
@@ -43,3 +43,13 @@ registers it at 17.0 / 25.5, Balance's Faerie Fire at 29.5.
   (`DebuffTrigger::IsActive()`, default `needLifeTime = 8.0f`) keeps the armor debuff up without spam.
 - `CastFaerieFireFeralAction` stays a bare `CastSpellAction`. Its `isPossible()` already runs the
   cooldown check, and **all don't-reapply logic lives in the trigger by design**.
+
+## Forms
+
+- **Cat Form casts only from caster form**: it carries `SPELL_ATTR0_NOT_SHAPESHIFTED` and excludes
+  Moonkin and Tree of Life, yet `CanCastSpell` passes it
+  ([`NOT_SHAPESHIFT` is whitelisted](../engine/action-selection.md#casting)). Drop the old form
+  first: `RemoveAurasByType(SPELL_AURA_MOD_SHAPESHIFT)` clears Tree of Life too, which
+  [`RemoveShapeshift` misses](../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds).
+- **Dash works only in Cat Form**: `spell_dru_dash` refuses the cast outside it, and its aura gives
+  no speed there.

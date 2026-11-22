@@ -68,6 +68,10 @@ therefore indistinguishable from one whose spell is unknown, out of range or on 
 different relevances is **one basket**, not four independent entries — which means retargeting or
 fixing that action once repairs every band it appears in.
 
+**A basket outlives its tick.** What the loop leaves queued pops on a later tick, up to
+`Playerbots.ExpireActionTime` (5000 ms) after it was pushed, when its condition may be over: a duty
+action re-checks it in `isUseful` (Faction Champions).
+
 Relevance constants (`src/Bot/Engine/Strategy/Strategy.h`):
 
 `ACTION_DEFAULT 5` · `ACTION_NORMAL` / `ACTION_LIGHT_HEAL 10` · `ACTION_HIGH` / `ACTION_MEDIUM_HEAL 20`
@@ -179,6 +183,11 @@ reports another name: a rule listing `concussive shot` matches nothing. A name s
 (`cleanse disease`, `cleanse poison` and `cleanse magic` all report `cleanse`) vetoes them all: for
 one, a narrow `dynamic_cast` multiplier on the concrete class (Rotface's `icc rotface self cure`).
 
+**A multiplier sees the action's declared target, not its pick.** `Action::GetTarget()` reads the
+value `GetTargetName()` names, by default `"self target"` (`CastSpellAction` overrides it to
+`"current target"`). An action that picks its target in `Execute` therefore shows the bot itself and
+passes any guard keyed on the target, which is how Anub'arak's guards let their own picks through.
+
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation
 spell that falls through — one Ulduar chain pass reached roughly 150 line-of-sight raycasts before
@@ -224,7 +233,8 @@ off the pick.
   `SpellInfo::CheckShapeshift(bot->GetShapeshiftForm())`, or a bear-only Growl, a stance-locked
   Taunt or Hamstring, or a cat or Tree of Life druid's Cyclone wins the pick and fails every tick. A
   known pet spell (Spell Lock) answers true before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
-  cooldown and range.
+  cooldown and range. `CanCastSpell` does refuse during the GCD (`Spell::CheckCast`, strict), so a
+  pick made on it flips every GCD: test `HasSpellCooldown` instead.
 - `CastSpell(spell, unit)` on a `TARGET_FLAG_DEST_LOCATION` spell sets the destination to the unit's
   position, so a bot casts a ground-target spell (Mass Dispel) by picking a player.
 - `CastSpell` selects and faces the target before it fails, and restores the old selection only on

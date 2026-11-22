@@ -281,6 +281,9 @@ portal this way.
   Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were silently undodgeable until they
   moved onto it.
 
+- **`MoveAway(target, distance)` steps `distance` from the bot**, not out to `distance` from the
+  target: a bot on a hazard's centre needs the whole radius (Razorscale's Devouring Flame).
+
 - **A movement lock refuses anything not *strictly* above it.** `MovementAction::IsWaitingForLastMove`
   compares priorities with `>`, so a move in flight refuses the next move of the *same* priority until
   its lock expires — `distance / speed`, capped at `Playerbots.MaxWaitForMove` (5000 ms). `ACTION_*`
@@ -368,6 +371,8 @@ portal this way.
   gets a ~2 yd step: the next spawn puts it back inside the trigger, and the node re-fires forever at
   `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards past the trigger
   radius, and fall back to the tight value only where overlap leaves nothing wider.
+  Within a ring it takes the first clear bearing from angle 0 unless `preferNear` ranks them: a
+  fixed heading blind to the bot's goal, which hopped Hodir's melee out of reach a yard at a time.
 
 - **A dodge's straight walk can cross another hazard.** The clearance check tests the destination
   only. Pass `FindNearestPositionClearOfHazards` an accept callback that tests the segment
@@ -381,9 +386,10 @@ portal this way.
   dodge, whose own spot is inside what it flees. A bot that only has to keep moving already stands
   clear, so at a wall the pulled-back probe *is* its own spot, it wins the ring, and `MoveTo` refuses
   it as `there`/`dup`: Hodir's Biting Cold shed stood two casters still for ~12 s until their stacks
-  killed them. Pass an `accept` that rejects spots under the travel the mechanic needs. With an
-  **empty hazard list** it returns `Position()`, so a caller that must always move passes at least
-  one circle (its own feet).
+  killed them. Pass an `accept` that rejects spots under the travel the mechanic needs. It returns
+  `Position()`, (0, 0), when nothing inside `maxRadius` is clear, and with an **empty hazard list**:
+  test for it before moving, and a caller that must always move passes at least one circle (its own
+  feet).
 
 - **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's
   reach buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at
@@ -569,6 +575,8 @@ Related traps:
   state read — `boss->ToCreature()->GetReactState() == REACT_PASSIVE` is exact and has no lag. Unit
   flags work the same way (`UNIT_FLAG_NOT_SELECTABLE` for Noth's balcony, `UNIT_FLAG_DISABLE_MOVE` for
   Gothik's).
+- **`isMoving()` is a sample.** A short step that starts and ends between two reads never shows, so
+  "he stood still" needs a position drift test as well (Anub'arak's, 0.3 yd).
 - **Gravity and fly flags are a phase signal only under `CREATURE_FLAG_EXTRA_NO_MOVE_FLAGS_UPDATE`
   (0x200).** Then only the script moves them, so `IsLevitating()` is exact and lag-free (the
   Blood-Queen's air phase); without it, `Creature::UpdateMovementFlags` rewrites them from the
@@ -676,9 +684,10 @@ Related traps:
 
 ## Before the pull, and out of combat
 
-- **`AttackStop()` drops the victim and nothing else.** The `"current target"` AI value survives it —
-  and that value is what the class rotation casts at and what `ReachTargetAction` walks to. Clear it
-  explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedents
+- **`AttackStop()` drops the victim and the swing, nothing else.** Auto Shot or a wand keeps firing
+  from `CURRENT_AUTOREPEAT_SPELL`: interrupt that slot too. The `"current target"` AI value survives
+  it — and that value is what the class rotation casts at and what `ReachTargetAction` walks to.
+  Clear it explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedents
   `IccLichKingWinterAction::ClearInvalidTarget`, `FelmystMeleeClearTargetAction`). Blocking
   re-acquisition in a multiplier cannot undo a target the bot has already picked up.
 - **Eating and drinking blind the bot.** `DrinkAction`/`EatAction::Execute` set the action duration
@@ -730,13 +739,15 @@ Related traps:
   the instance entrance in Obsidian Sanctum. So any per-instance state stamped on first sight starts
   its clock at zone-in, and a `lastSeenMs` staleness guard can never fire. Re-anchor on the boss's
   **combat edge** instead.
-- **A druid tank loses bear form out of combat.** Every druid non-combat node carries
-  `/*P*/ { NextAction("caster form") }`, and `CastCasterFormAction::Execute` is a bare
-  `RemoveShapeshift()`. `CheckMountStateAction` also reaches `Mount()` with no current target, and
-  `Mount()` calls `RemoveShapeshift()` **before** the cast — so the form dies even where the mount
-  cannot succeed. `bear form` lives in the combat-only `BearDruidStrategy`, so nothing shifts him
-  back. This bites any strategy whose holds run out of combat. Suppress `CastCasterFormAction` for
-  **tanks only** — a cat-spec druid still needs caster form for Rebirth.
+- **A druid tank loses bear form out of combat**, or in combat with no target, which runs the
+  non-combat engine too ([action-selection.md](action-selection.md#multiplier-semantics)): a braked
+  or yielding tank. Every druid non-combat node carries `/*P*/ { NextAction("caster form") }`, and
+  `CastCasterFormAction::Execute` is a bare `RemoveShapeshift()`. `CheckMountStateAction` also
+  reaches `Mount()` with no current target, and `Mount()` calls `RemoveShapeshift()` **before** the
+  cast — so the form dies even where the mount cannot succeed. `bear form` lives in the
+  combat-only `BearDruidStrategy`, so nothing shifts him back. This bites any strategy whose holds
+  run out of combat. Suppress `CastCasterFormAction` for **tanks only** — a cat-spec druid still
+  needs caster form for Rebirth.
 
 ## Upstream merges
 
@@ -814,7 +825,8 @@ None of these fail to compile when reverted, so a merge that takes upstream's si
 Every bot has its own `AiObjectContext`, and within it the trigger, the action and the multiplier each
 hold **their own helper instance**. Anything they must agree on has to be shared explicitly — a
 file-static `std::unordered_map<ObjectGuid, State>` defined in exactly one `.cpp`, declared in the
-header.
+header. A trigger built on the stack to reuse its test (inside another trigger or an `isUseful`) is
+a fresh instance every call, so any state it keeps in members reads empty there.
 
 For a per-instance clock (shared across bots), use the `PhaseStateFor` pattern: static mutex plus
 `unordered_map<instanceId, State>` with a staleness re-anchor. A timestamp each bot back-dates off a
@@ -872,8 +884,8 @@ defaults to `"skull"`.
 
 This is a base-engine trap. **Any encounter with an untargetable phase hits it**: the bot is held on
 a dead or wrong target for the rest of the fight. An encounter that retargets mid-pull must clear the
-mark itself — Thorim sets both the group icon and its own `prioritized targets` back to empty once per
-pull (`ThorimClearStaleMarks`).
+mark itself, as [Thorim](../raids/ulduar/thorim.md#the-arena-adds-and-what-to-kill-first) does
+(`ThorimClearStaleMarks`).
 
 **A skull is not proof of a player, and alone it does nothing.** `mark rti` (`MarkRtiStrategy`, off by
 default) makes a bot put its own `rti` icon on the lowest-health unmarked attacker. `attack rti
@@ -913,11 +925,13 @@ block in `PlayerbotAI::DoNextAction` clears it.
 - **A dispel takes a random aura.** `Spell::EffectDispel` draws weighted by stacks, so a dispel aimed
   at CC may take a DoT. Class dispel nodes ignore dispel backlash (Unstable Affliction's silence and
   damage).
-- **A school lockout locks that school's dispels.** `Player::ProhibitSpellSchool` (Counterspell,
-  Spell Lock, Earth Shock) covers them, so a dispel or purge election must test the chosen rank's
-  cooldown, or a kicked bot holds the duty through the lockout.
+- **A school lockout is a cooldown.** `Player::ProhibitSpellSchool` (Counterspell, Spell Lock, Earth
+  Shock) puts one on every known silence-type spell of that school, so a kicked mage's Counterspell
+  reads as on cooldown, and a dispel or purge election must test the chosen rank's cooldown, or a
+  kicked bot holds the duty through the lockout.
 - **Hex-style auras set `UNIT_FLAG_SILENCED` without `UNIT_STATE_LOST_CONTROL`**: a "can act"
-  readiness test needs both.
+  readiness test needs both. A spell's `PreventionType` picks the flag that stops it: Counterspell
+  is silence-type, so a pacify alone never does (Hex sets both).
 - Class dispel nodes sit **below** `ACTION_RAID`: mage `remove curse on party` at 40, druid at 57
   against `ACTION_RAID` 60. Any raid positioning node outranks them.
 - **A raid positioning node outranks `reach melee` too** (`ACTION_HIGH + 1`, ~21), and `Engine` stops
@@ -935,7 +949,8 @@ block in `PlayerbotAI::DoNextAction` clears it.
   anchor points while holding the boss**. A ring point is 8 yd off the boss, so a tank standing on one
   never pulls him anywhere. Belt and braces is
   `PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, /*bySpec*/ true)` in **both** the role
-  resolver and whatever assigns slots.
+  resolver and whatever assigns slots. The `bySpec` read takes a feral druid in bear form, or with
+  Thick Hide 16931 in any form, a cat DPS included: a duty no cat may take tests the strategy alone.
 - **Boarding changes what a rider is, in two ways that break tests written for a bot on foot.**
   `Vehicle::AddPassenger` roots every passenger, driver included — `SetControlled(true,
   UNIT_STATE_ROOT)`, cleared only on exit — so `UNIT_STATE_NOT_MOVE` on a rider means "seated", not
@@ -1021,6 +1036,10 @@ aimed at a fixed compass direction. The trace showed ten distinct orientations i
 victim within 0.7° of the recorded facing and every survivor inside the radius at 5.1° or more.
 Orientation is `snap.u` column 4 ([../systems/observability.md](../systems/observability.md)); measure
 it there.
+
+**A walking unit faces its path.** While a spline runs, `MoveSpline::ComputePosition` turns the unit
+along its tangent unless the spline fixes the facing, so `GetOrientation()` is the heading: lead a
+walking creature along it at its speed, with no need to know its route (Yogg-Saron's clouds).
 
 Distance helpers and reach — what each one adds, and how to read a range literal in a boss script —
 are in [raid-mechanics-lessons.md](raid-mechanics-lessons.md#range-and-reach).

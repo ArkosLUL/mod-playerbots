@@ -169,6 +169,10 @@ leash), not threat. The same test bounds a taunt: allowlist the adds the encount
 the whole target ladder — taunting a rung borrowed for damage off another tank means owning its
 positioning too.
 
+**A taunt swap skips a mob carrying a taunt aura** (`SPELL_AURA_MOD_TAUNT`): one just landed, and
+`GetVictim()` catches up only on the mob's next update, so an election reading the victim then
+spends a second tank's taunt.
+
 ## Encounter rules
 
 Eight encounters independently arrived at **movement suppression** (zero the generic movers while a

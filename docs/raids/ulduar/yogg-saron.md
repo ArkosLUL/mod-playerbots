@@ -360,8 +360,8 @@ alone overrides `RouteAcceptable` to reject a straight walk passing inside it �
 leave one beats standing in it, crossing a cloud costs a Guardian. Each cloud enters the set twice, where
 it is and `ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` (6 s) ahead along its orbit; without the lead, destinations
 were no further from clouds than standing still. The lead has to outlast a crossing, ~5.7 s of a cloud
-over a standing bot, and is projected along the cloud's own orientation at its run speed, since an
-escort-AI creature faces the leg it is walking.
+over a standing bot, and is projected along the cloud's own orientation at its run speed, since
+[a walking unit faces its path](../../engine/pitfalls.md#arc-and-geometry-defaults).
 
 **Nothing may jump in this room.** Blink, Disengage and the gap-closers land a bot somewhere nobody
 picked, here a ring: 13 of 20 phase 1 casts in one pull left the bot with more orbits in reach than
@@ -1052,9 +1052,10 @@ every melee on the brain team the stun is left to ranged, pets and the tank.
 itself, and drops the link if either dies or they end up more than 10 yd apart vertically. Neither 63803
 (apart: DBC damage plus −2 Sanity on **both** ends past **20 yd**) nor 63804 (together) leaves an aura, so
 no aura test can name the partner, and `TooFarFromPlayerWithAura` cannot help — it measures the gap to
-*other holders of the same aura*. But the aura casts one of the two at the partner **every second**, so an
-`AllSpellScript` on `ALLSPELLHOOK_ON_PREPARE` in `UldBotScripts.cpp` latches the pair per instance,
-expiring after three missed ticks. Both ends walk, unless one is under z 300.
+*other holders of the same aura*. But the aura casts one of the two at the partner **every second**
+(63803 also back at its owner, a self-cast that names nobody), so an `AllSpellScript` on
+`ALLSPELLHOOK_ON_PREPARE` in `UldBotScripts.cpp` latches the pair per instance, skipping the
+self-cast, and expires it after three missed ticks. Both ends walk, unless one is under z 300.
 
 They walk to their **midpoint**: one bot chasing another moving away at the same speed never arrives, and
 links left open cost a pull ~480k damage and ~680 Sanity. A midpoint inside the ring, which two bots on
@@ -1496,8 +1497,9 @@ stopping in reach would spread the ranged round Yogg.
 The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive is +10% damage done, plus
 Freya +20% healing, Mimiron +20% speed, Thorim +20% health and Titanic Storm; Freya-only rooms ran 4-9 s
 slower than a three-Keeper kill. Handled cases: **Thorim only** and **Freya only**, a **raid choice** with
-no config option. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK`, preferred over Sara's
-`GetData(DATA_GET_KEEPERS_COUNT)`, a count only, because it names **which** Keeper.
+no config option. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK`, bits 0-3, the bits Sara's
+`GetData(DATA_GET_KEEPERS_COUNT)` counts; it is preferred over that count because it names **which**
+Keeper.
 
 What Thorim-only removes: no Freya means **no Sanity Wells, so Sanity (63050, 100 stacks) is a one-way
 drain**; no Hodir means no Protective Gaze absorb; no Mimiron means no haste clouds and therefore a slower

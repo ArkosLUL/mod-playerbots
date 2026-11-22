@@ -125,7 +125,8 @@ hall with Rebirth ready and affordable is latched (`rezdruid`, `reztank`): the d
 yd, else walks straight at the body to 26, and the tank stands up where the druid is. A walk stopped
 short is re-issued at once, since `MoveTo` refuses the same goal for `MaxWaitForMove`; the cast
 waits out a `MOVEMENT_FORCED` dodge leg and stops any other walk. "Ready" is cooldown and cost, not
-`CanCastSpell`, which refuses in cat, bear or moonkin form; a released ghost is no body. Cat or
+`CanCastSpell`, which checks neither cost nor form ([casting](../../engine/action-selection.md#casting));
+a released ghost is no body. Cat or
 moonkin form drops only for the cast: a `caster form` prerequisite skips a druid under 65% mana
 (`MediumHealth`) and trades shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`,
 above every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead,
