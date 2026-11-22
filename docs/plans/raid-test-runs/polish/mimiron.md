@@ -141,14 +141,16 @@ window 7). Trace scripts in the lane scratchpad.
 
 - **Human leaders** stood 43-47 yd west (bearing 165-200° off the room centre) through the handover,
   after a detour to 55-63 yd at +10 s in two of three; set off 35-40 s in; stood 23-36 yd out (median)
-  at phase 2 and 8 yd five seconds later. Healers drank at +2 to +12 s (2-7 drinks a handover).
+  at phase 2 and 8 yd five seconds later. Healers drank at +2 to +12 s (1-7 drinks a handover).
 - **Bot-only fire at the end of phase 1:** 3-25 live nodes, all at 147-217° and 18-79 yd from the
   centre. Scoring 24 bands (below) on those fields picks 120-150° or 225-255°, with 1-6 of 25 slots
-  inside the drink guard's 15 yd at the pick, still 0-6 when re-scored at +17 s and +34 s.
+  inside the drink guard's 15 yd at the pick, still 0-6 when re-scored at +17 s and +34 s. Those fields
+  never grew toward a band: the raid stood in them, and a chain stops while a player is within 4 yd of
+  its head.
 - **Script clock** (`boss_mimiron.cpp`): MK II beaten at 0 (NOT_SELECTABLE, damage zeroed under 15000),
   VX-001 summoned at the room centre at 17 s, Mimiron into VX-001 seat 0 at 35 s and seat 1 at 44 s,
   `SetData(1, 2)` at 47.75 s. The pull opens with a NOT_SELECTABLE full-health MK II for ~13 s; the 2→3
-  handover summons the Aerial Command Unit 2.5 s after VX-001 is beaten.
+  handover summons the Aerial Command Unit 5 s after VX-001 is beaten.
 
 **Built** (Mimiron files and reader only; any size, Firefighter only):
 
@@ -165,11 +167,13 @@ window 7). Trace scripts in the lane scratchpad.
   (25-man: 9/9/7, about ±21° at the outer row; 10-man 4/4/2).
 - **Walk in:** `DeriveMimironSpreadSlot` hands out the usual phase 2 slots on the staging VX-001
   (`hmwedge` east for ranged, `p2melee` west of VX-001 for melee and tanks), 12.75 s before phase 2.
-- **`mimiron walk-in drink hold`** vetoes `drink`/`eat` in Late and WalkIn: a food-cheat drink stops the
-  bot thinking for up to 20 s, and the walk in starts 18 s after VX-001's summon.
+- **`mimiron handover drink hold`** vetoes `drink`/`eat` in Hold off the bot's slot, and in Late and
+  WalkIn: a food-cheat drink stops the bot thinking for up to 20 s, and the walk in starts 18 s after
+  VX-001's summon. Off the slot (review): the leg under way fails the formation action every tick, and
+  the engine hands that tick to `drink`.
 - Reader `mimiron.py --handover` (with tests): step times, the band, raid distance from the centre at
   phase 1 end, +10 s, walk in and phase 2, bots on a phase 2 slot at phase 2, healer mana, drinks,
-  Flames and deaths.
+  Flames and deaths. A phase latch blip splitting phase 1 (P1, Z, P1b) still finds the handover (review).
 
 Player-led raids keep `follow` (every step None; their traces gain one `mimiron.handover 0` row).
 Normal mode is unchanged.
@@ -195,6 +199,9 @@ failing arc means a lower `ULDUAR_MIMIRON_HOLD_OUTER_RADIUS` or skipping those b
 
 Watch: the first Frost Bomb's cleared count (`--bomb`); a band north or south of the field may split
 the fire in two, and one bomb clears only 30 yd. Drinks started just before VX-001's summon may walk
-in up to ~2 s late.
+in up to ~2 s late. Phase 1 chains keep spreading until VX-001 dies, 1.22 yd/s toward the nearest
+player: on window 8's fields the nearest slot sits 13-15 yd from a node, so the band's near edge can
+burn within ~10 s. If `--fire` shows hold-slot dodges dominating Z and H, drop the tie-break toward the
+phase 1 tank spot for the band farthest from the fire.
 
 **Questions for the user:** none new. Q2 (DK talents) is DC lane S, merged.

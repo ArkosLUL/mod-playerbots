@@ -1165,7 +1165,7 @@ MimironHandoverStep ReadMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bo
     if (!vx001)
         return MimironHandoverStep::Hold;
 
-    // Riding is phase 4. Spent is the 2.5 s before the 2 to 3 handover summons the Aerial Command Unit.
+    // Riding is phase 4. Spent is the 5 s before the 2 to 3 handover summons the Aerial Command Unit.
     if (!vx001->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || vx001->GetVehicleBase() ||
         vx001->GetHealthPct() < ULDUAR_MIMIRON_SPENT_HEALTH_PCT)
         return MimironHandoverStep::None;
@@ -2502,7 +2502,7 @@ Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
     return best;
 }
 
-// Every living member in the room gets one, tanks and melee too: outer row first, each row centred
+// Every living member on the map gets one, tanks and melee too: outer row first, each row centred
 // on the band's bearing.
 bool GetMimironHoldSlot(Player* bot, Group* group, Position& out, uint32& index, uint32& count)
 {

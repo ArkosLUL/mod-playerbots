@@ -1229,7 +1229,7 @@ the encounter tick (`MimironHandoverStep`):
   23-36 yd out at phase 2.
 
 A spent mech parks under 15000 health, a fresh one is full (`ULDUAR_MIMIRON_SPENT_HEALTH_PCT`), which
-tells this handover from the 13 s before the MK II wakes and from the 2→3 handover's first 2.5 s. The band
+tells this handover from the 13 s before the MK II wakes and from the 2→3 handover's first 5 s. The band
 sits inside navprobe's clean 45 yd ring; points between its 16 headings were not probed one by one.
 
 **One exception.** `ULDUAR_MIMIRON_PHASE4_TANK_SPOT` is handed out while staging: it holds VX-001's chassis
@@ -1250,8 +1250,9 @@ is `NOT_SELECTABLE` until pulled, and evade despawns VX-001 and the ACU.
 from 35-65% to 71-100% mana across one handover. But `DrinkAction`/`EatAction` push the next AI check
 back 12-18 s, so a sitting bot dodges nothing and, standing still, is the nearest player to a chain head:
 two burned to death drinking. `mimiron drink guard` vetoes `drink`/`eat` within 15 yd of a flame node, and
-`mimiron walk-in drink hold` in a bot-led raid once VX-001 is summoned: a drink runs up to 20 s and the
-walk in starts 18 s later.
+`mimiron handover drink hold` in a bot-led raid off its hold slot, and everywhere once VX-001 is summoned:
+a drink runs up to 20 s, and the walk in starts 18 s later. Off the slot, a formation leg under way fails
+its action every tick and hands the tick to `drink`, which sits the bot down short of the band.
 
 ## The ring slot is what kills the Rocket Strike dodge
 

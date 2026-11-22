@@ -88,12 +88,19 @@ bool MimironNearFire(PlayerbotAI* botAI)
     return false;
 }
 
-// A drink stops the bot thinking for up to 20 s, and Mimiron boards VX-001 18 s after it is summoned, so
-// a drink started from the summon on keeps the bot on the hold band through the walk in.
-bool MimironWalkInDrinkHold(PlayerbotAI* botAI)
+// A drink stops the bot thinking for up to 20 s. One started on the way out sits it short of the band, in
+// the fire's path, and one started after VX-001's summon runs into the walk in 18 s later.
+bool MimironHandoverDrinkHold(PlayerbotAI* botAI)
 {
-    MimironHandoverStep const step = GetMimironBotLedHandoverStep(botAI, botAI->GetBot());
-    return step == MimironHandoverStep::Late || step == MimironHandoverStep::WalkIn;
+    Player* bot = botAI->GetBot();
+    MimironHandoverStep const step = GetMimironBotLedHandoverStep(botAI, bot);
+    if (step == MimironHandoverStep::Late || step == MimironHandoverStep::WalkIn)
+        return true;
+
+    // The formation move fails every tick its leg is already walking, and a failed action hands the tick on.
+    Position slot;
+    return step == MimironHandoverStep::Hold && GetMimironSpreadSlot(botAI, bot, slot) &&
+           bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ULDUAR_MIMIRON_SPREAD_TOLERANCE;
 }
 
 // Room test before the grid scan: the hard mode switch holds all over Ulduar.
@@ -229,7 +236,7 @@ void DefineMimiron(EncounterBuilder& e)
     // Eating or drinking stops the bot thinking for up to 18 s, so one that sits down near the fire
     // doesn't dodge it. Near fire only: a handover drink on clean ground is worth the mana.
     e.Block("mimiron drink guard", Role::Any, MimironNearFire, 0, {"drink", "eat"});
-    e.Block("mimiron walk-in drink hold", Role::Any, MimironWalkInDrinkHold, 0, {"drink", "eat"});
+    e.Block("mimiron handover drink hold", Role::Any, MimironHandoverDrinkHold, 0, {"drink", "eat"});
 
     // Every mover that aims at a unit rather than the floor. The bomb flee lets go just inside its clearance, so
     // any of these walks the bot back into the blast for the rest of the fuse.

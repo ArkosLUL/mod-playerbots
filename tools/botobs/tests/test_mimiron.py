@@ -390,6 +390,16 @@ class HandoverPull(unittest.TestCase):
         self.assertEqual(row["drinks"], [("Tree", 4.0)])
         self.assertEqual((row["fire"], row["dead"]), (3000, []))
 
+    def test_a_phase_1_blip_still_finds_the_handover(self):
+        records = handover_pull()
+        at = next(index for index, rec in enumerate(records)
+                  if rec.get("k") == "mimiron.phase" and rec.get("txt") == "1") + 1
+        records[at:at] = [{"t": 5000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "0"},
+                          {"t": 5300, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "1"}]
+        path = pathlib.Path(self.folder.name) / "603_6_mimiron_1789700005.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+        self.assertEqual([row["span"] for row in mm.handover_rows(Trace(path))], [(11000, 59000)])
+
 
 MINE_A, MINE_B, MINE_C, MINE_D = 4294970201, 4294970202, 4294970203, 4294970204
 MINES = {MINE_A: (30.0, 0.0), MINE_B: (35.0, 0.5), MINE_C: (10.0, 0.0), MINE_D: (-3.0, 1.0)}

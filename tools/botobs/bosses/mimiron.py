@@ -1007,7 +1007,8 @@ def handover_rows(trace: Trace) -> list[dict]:
     slot_notes = notes(trace, "mimiron.slot")
     rows = []
     for index, (_, p1_end, label) in enumerate(spans):
-        if label != "P1":
+        # A blip of the phase latch splits phase 1 into P1, Z, P1b: the handover follows the last part.
+        if not label.startswith("P1"):
             continue
         after = next(((start, name) for start, _, name in spans[index + 1:] if name.startswith("P")), None)
         if not after or after[1] != "P2":
