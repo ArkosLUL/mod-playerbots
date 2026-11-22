@@ -134,9 +134,9 @@ static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
               "a bot at the edge of its tolerance has to still be inside Starlight");
 
-// How long a latched Starlight stand may sit outside the band before it's dropped. Covers a yard of
-// wobble at the edge, not Hodir moving between the centre and a fire.
-inline constexpr uint32 ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS = 3000;
+// How long a latched Starlight or fire stand may sit outside the band before it's dropped. Covers a
+// yard of wobble at the edge, not Hodir moving between the centre and a fire, or dragged onto the fire.
+inline constexpr uint32 ULDUAR_HODIR_STAND_REJECT_DROP_MS = 3000;
 
 // Shed shuttle ends in Starlight, a yard inside the edge so the shuttle keeps the buff. One 4 yd leg
 // can't span two ticks, but the legs chain until the aura's gone.

@@ -1078,6 +1078,26 @@ class HodirReader(unittest.TestCase):
     def test_union_merges_overlaps(self):
         self.assertEqual(hodir.union_ms([(0, 10), (5, 20), (30, 40)], 0, 35), 25)
 
+    def test_a_legal_fire_is_inside_both_the_fire_and_the_band(self):
+        boss = (0.0, 0.0)
+        self.assertTrue(hodir.in_legal_fire((20.0, 0.0), boss, [(25.0, 0.0)]))
+        # The fire he is held on: in it, but too close to him.
+        self.assertFalse(hodir.in_legal_fire((8.0, 0.0), boss, [(2.0, 0.0)]))
+        self.assertFalse(hodir.in_legal_fire((20.0, 0.0), boss, [(40.0, 0.0)]))
+
+    def test_both_runs_keeps_only_the_overlap_and_merges_it(self):
+        fire = [(0, "stand"), (1000, "held noreach"), (5000, "stand")]
+        stand = [(0, "fire"), (2000, "none"), (3000, "none"), (6000, "fire")]
+        self.assertEqual(hodir.both_runs(fire, stand, 0, 8000, "held noreach", "none"), [(2000, 5000)])
+
+    def test_a_storm_cloud_ends_spent_or_expired(self):
+        rows = [(0, 7, 6, False, 30000), (1000, 7, 4, False, 29000), (4000, 7, 1, True, 26000),
+                (10000, 8, 6, False, 30000), (40000, 8, 2, True, 0),
+                (50000, 9, 6, False, 30000), (52000, 9, 3, False, 28000), (55000, 9, 6, False, 30000)]
+        carries = hodir.storm_carries(rows)
+        self.assertEqual([(carry["carrier"], carry["start"], carry["spent"]) for carry in carries],
+                         [(7, 0, True), (8, 10000, False), (9, 50000, False), (9, 55000, None)])
+
 
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):

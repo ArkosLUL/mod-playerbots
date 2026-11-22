@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, churn, ice blocks, deaths, tanks."""
+"""Score a Hodir pull from a RaidObs trace: pace, where he was held, Singed, buffs, Storm Cloud, churn, ice blocks,
+deaths, tanks."""
 from __future__ import annotations
 
 import bisect
@@ -27,6 +28,14 @@ SPELL_STARLIGHT = 62807
 SPELL_TOASTY_FIRE = 62821
 SPELL_SINGED = 65280
 SPELL_STORM_POWER = (63711, 65134)
+# The cloud a carrier holds, 10 and 25; each Storm Power it hands out spends one of its charges.
+SPELL_STORM_CLOUD = (65123, 65133)
+# Storm Power pulses this far round the carrier's own feet.
+STORM_PULSE_YD = 3.0
+# Inside this of the rally a receiver stops walking (ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE).
+STORM_COLLECT_RELEASE_YD = 4.0
+# A cloud removed with less than this left ran its time out rather than its charges.
+STORM_CLOUD_EXPIRY_MS = 500
 SPELL_BITING_COLD = 62039
 SPELL_BITING_COLD_DAMAGE = 62188
 SPELL_ICE_SHARDS = 62457
@@ -257,6 +266,58 @@ def usable_within(bot: tuple[float, float], boss: tuple[float, float],
             continue
         best = gap if best is None else min(best, gap)
     return best
+
+
+def in_legal_fire(spot: tuple[float, float], boss: tuple[float, float], fires: list[tuple[float, float]]) -> bool:
+    """In a fire and inside the caster band from him: what a ranged fire stand is for. The fire he is
+    held on fails the band, so it never counts."""
+    return in_band(spot, boss) and any(inside_circle(spot, fire, FIRE_RADIUS) for fire in fires)
+
+
+def both_runs(first: list[tuple[int, str]], second: list[tuple[int, str]], low: int, high: int,
+              want_first: str, want_second: str) -> list[tuple[int, int]]:
+    """Merged `(start, stop)` spans in `[low, high)` where one bot's `first` latch reads `want_first`
+    while its `second` reads `want_second`."""
+    spans = []
+    for a_low, a_high, a_value in latch_windows(first, low, high):
+        if a_value != want_first:
+            continue
+        for b_low, b_high, b_value in latch_windows(second, low, high):
+            start, stop = max(a_low, b_low), min(a_high, b_high)
+            if b_value == want_second and stop > start:
+                spans.append((start, stop))
+    merged: list[tuple[int, int]] = []
+    for start, stop in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], stop))
+        else:
+            merged.append((start, stop))
+    return merged
+
+
+def storm_carries(rows: list[tuple[int, int, int, bool, int]]) -> list[dict]:
+    """One carry per Storm Cloud from `(t, carrier, charges, removed, ms left)` aura rows in time order:
+    `start`, `end`, `carrier` and `spent`, True when the charges ran out with time left on the cloud,
+    False when it ran out of time with charges left, None when the trace ended first. A fresh cloud is
+    an apply on a carrier with none open, or charges rising on an open one."""
+    carries: list[dict] = []
+    open_on: dict[int, dict] = {}
+    for when, carrier, charges, removed, left in rows:
+        carry = open_on.get(carrier)
+        if removed:
+            if carry:
+                carry["end"], carry["spent"] = when, left > STORM_CLOUD_EXPIRY_MS
+                del open_on[carrier]
+            continue
+        if carry and charges <= carry["charges"]:
+            carry["charges"] = charges
+            continue
+        if carry:
+            carry["end"], carry["spent"] = when, False
+        carry = {"start": when, "end": None, "carrier": carrier, "charges": charges, "spent": None}
+        carries.append(carry)
+        open_on[carrier] = carry
+    return carries
 
 
 def starlight_rule(value: str) -> str:
@@ -983,6 +1044,47 @@ def show_buffs(trace: Trace) -> None:
     if stands:
         print("  hodir.stand " + ", ".join(f"{kind} {count}" for kind, count in stands.most_common()))
 
+    # The fire probe goes stale while a bot holds Starlight, so a held fire only counts with no stand.
+    fire_marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "hodir.firestand"):
+        fire_marks[rec["g"]].append((rec["t"], starlight_rule(str(rec.get("txt", "")))))
+    stand_marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "hodir.stand"):
+        stand_marks[rec["g"]].append((rec["t"], str(rec.get("txt", ""))))
+    if fire_marks:
+        runs = [high - low for guid in casters
+                for low, high in both_runs(sorted(fire_marks.get(guid, [])), sorted(stand_marks.get(guid, [])), 0,
+                                           min(end, dead.get(guid, end)), "held noreach", "none")]
+        print(f"  fire latch held out of the band with no stand: {len(runs)} runs, {sum(runs) / 1000:.0f} bot-seconds,"
+              f" longest {max(runs, default=0) / 1000:.1f}s")
+
+    boss = boss_guid(trace)
+    starts = fire_starts(trace)
+    landings = [cast + FREEZE_LANDS_MS for cast in freeze_casts(trace, boss)] if boss is not None else []
+    if boss is not None and starts:
+        first_window = (starts[0], landings[0] if landings else end)
+        ranged_bots = {guid for guid in bots(trace) if trace.role(guid) == "ranged"}
+        shares = []
+        for low, high in (first_window, (0, min(end, DEADLINE_MS))):
+            hits = samples = 0
+            for snap in frames(trace):
+                if not low <= snap["t"] < high:
+                    continue
+                rows = {row[0]: row for row in snap.get("u", [])}
+                him = rows.get(boss)
+                fires = [(row[1], row[2]) for row in snap.get("hz", []) if row[0] == SPELL_TOASTY_FIRE]
+                if not him:
+                    continue
+                for guid, row in rows.items():
+                    if guid not in ranged_bots or len(row) < 6 or row[5] <= 0:
+                        continue
+                    samples += 1
+                    hits += in_legal_fire((row[1], row[2]), (him[1], him[2]), fires)
+            shares.append(hits / max(1, samples) * 100)
+        print(f"  ranged in a fire 15-35 yd from him: first fire to the first landing"
+              f" ({clock(first_window[0])[:4]}-{clock(first_window[1])[:4]}) {shares[0]:.0f}%,"
+              f" 0-{clock(min(end, DEADLINE_MS))[:4]} {shares[1]:.0f}%")
+
     cold = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_BITING_COLD_DAMAGE and 0 <= rec["t"] < end]
     taken = sum(rec.get("a", 0) for rec in trace.of("dmg") if 0 <= rec["t"] < end)
     peak = max((rec.get("st", 0) for rec in trace.of("aura") if rec.get("sp") == SPELL_BITING_COLD and rec["t"] < end),
@@ -1031,6 +1133,64 @@ def show_buffs(trace: Trace) -> None:
         gains.append(f"{clock(cast)[:4]} +{worst}")
     if gains:
         print("  most stacks a bot gained over a freeze cast: " + ", ".join(gains))
+
+
+def show_storm(trace: Trace) -> None:
+    print("STORM")
+    end = fight_end(trace)
+    roster = roster_guids(trace)
+    rows = [(rec["t"], rec.get("d", 0), rec.get("st", 1), bool(rec.get("r")), rec.get("dur", 0))
+            for rec in trace.of("aura") if rec.get("sp") in SPELL_STORM_CLOUD and rec.get("d") in roster]
+    carries = [carry for carry in storm_carries(rows) if 0 <= carry["start"] < end]
+    if not carries:
+        print("  no Storm Cloud carried")
+        return
+
+    powered = [rec for rec in trace.of("aura")
+               if rec.get("sp") in SPELL_STORM_POWER and not rec.get("r") and 0 <= rec["t"] < end]
+    roles = collections.Counter(trace.role(rec.get("d")) for rec in powered)
+    carriers = collections.Counter(trace.role(carry["carrier"]) for carry in carries)
+    print(f"  {len(carries)} clouds, carried by {role_split(carriers)}; {len(powered)} Storm Power,"
+          f" {len(powered) / len(carries):.1f} a cloud: {role_split(roles)}")
+
+    spent = [(carry["end"] - carry["start"]) / 1000 for carry in carries if carry["spent"]]
+    expired = sum(1 for carry in carries if carry["spent"] is False)
+    print(f"  charges spent out on {len(spent)} (median {statistics.median(spent) if spent else 0:.1f}s),"
+          f" ran out of time with charges left on {expired}")
+
+    # A receiver inside the collect release is done walking, so it gets the buff only if the carrier
+    # stands within the pulse of it. The carrier's rally comes from its own hodir.stormcloud note.
+    rallies: dict[int, list[tuple[int, tuple[float, float]]]] = collections.defaultdict(list)
+    for rec in notes(trace, "hodir.stormcloud"):
+        parts = str(rec.get("txt", "")).split(" ")[-1].split(",")
+        try:
+            rallies[rec["g"]].append((rec["t"], (float(parts[0]), float(parts[1]))))
+        except (ValueError, IndexError):
+            continue
+    holding = aura_spans(trace, SPELL_STORM_POWER)
+    dealers = {guid for guid in bots(trace) if trace.role(guid) in ("melee", "ranged")}
+    parked = inside = 0
+    for snap in frames(trace):
+        when = snap["t"]
+        live = [carry for carry in carries if carry["start"] <= when <= (carry["end"] or end)]
+        if not live or not 0 <= when < end:
+            continue
+        carrier = min(carry["carrier"] for carry in live)
+        marks = [point for mark, point in rallies.get(carrier, []) if mark <= when]
+        rows = {row[0]: row for row in snap.get("u", [])}
+        him = rows.get(carrier)
+        if not marks or not him:
+            continue
+        for guid in dealers - {carrier}:
+            row = rows.get(guid)
+            if not row or row[5] <= 0 or covered(holding.get(guid, []), when, when + 1):
+                continue
+            if inside_circle((row[1], row[2]), marks[-1], STORM_COLLECT_RELEASE_YD):
+                parked += 1
+                inside += inside_circle((row[1], row[2]), (him[1], him[2]), STORM_PULSE_YD)
+    if parked:
+        print(f"  damage dealers parked at the rally without Storm Power: inside the carrier's"
+              f" {STORM_PULSE_YD:.0f} yd {inside / parked * 100:.0f}% of {parked} samples")
 
 
 def show_churn(trace: Trace) -> None:
@@ -1252,14 +1412,15 @@ def show_tanks(trace: Trace) -> None:
     blows = [(start, min(stop, end)) for start, stop in frozen_blows_windows(trace, boss) if start < end]
     targets = [(row[0], row[4]) for row in boss_rows(trace, boss)]
     swings = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_FROZEN_BLOWS_SWING and rec.get("d") in tanks]
-    # A cast row and the verdict of the action that cast it share the millisecond.
+    # The verdict of the action that cast it lands on the cast's millisecond or the next one.
     acted = {(rec["g"], rec["t"]): rec["a"] for rec in trace.of("act") if rec.get("vd") == "OK"}
     casts = [rec for rec in trace.of("cast")
              if rec.get("sp") in TANK_DEFENSIVES and rec.get("s") in tanks and rec["t"] < end]
     probes = [rec for rec in notes(trace, "hodir.defensive") if rec.get("g") in tanks]
 
     def button(rec: dict) -> str:
-        by = "node" if acted.get((rec["s"], rec["t"])) == TANK_DEFENSIVE_NODE else "class"
+        by = "node" if TANK_DEFENSIVE_NODE in (acted.get((rec["s"], rec["t"])), acted.get((rec["s"], rec["t"] + 1))) \
+            else "class"
         return f"{TANK_DEFENSIVES[rec['sp']]} {clock(rec['t'])[:7]} {by}"
 
     for start, stop in blows:
@@ -1292,6 +1453,7 @@ SECTIONS = (
     ("hold", "hodir.tankhold windows and the fire gaps after each freeze", show_hold),
     ("singed", "Singed on the boss by caster kind, modelled stacks", show_singed),
     ("buffs", "Starlight, fire, Storm Power, Biting Cold by role", show_buffs),
+    ("storm", "Storm Cloud carries, Storm Power per cloud, collect walks against the carrier", show_storm),
     ("churn", "walking undone, A-B-A flips, moves by action, dodge walk-backs", show_churn),
     ("blocks", "helper ice blocks per freeze and the next fire", show_blocks),
     ("deaths", "each death's killing spell, Biting Cold stacks and Frozen Blows window", show_deaths),
