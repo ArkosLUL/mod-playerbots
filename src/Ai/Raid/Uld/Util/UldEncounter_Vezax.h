@@ -70,8 +70,8 @@ inline constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
 // Vezax and the Animus swap victim at 110% threat in melee range, 130% outside. 90% of the main tank
 // leaves room for a cast in flight and lets him take the boss back at 110%.
 inline constexpr float ULDUAR_VEZAX_THREAT_SHARE = 0.9f;
-// Area damage holds while a live vapor is this close to the bot or its target: 10 yd around the caster
-// or the target for most of it, Seed of Corruption's 15 yd burst the widest.
+// Area damage holds while a live vapor is this close to the bot or its target. Most of it reaches 10 yd
+// around one of them, Seed of Corruption's burst 15.
 inline constexpr float ULDUAR_VEZAX_VAPOR_AREA_CLEARANCE = 15.0f;
 // Hard mode only: a strong raid kills him before the sixth vapor merges into the Animus. Tanks get the
 // lower line so they keep threat while everyone else waits.

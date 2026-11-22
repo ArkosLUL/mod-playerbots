@@ -88,8 +88,12 @@ mode was already lost and its hold lifted.)
   down while the main tank isn't on his list. Auto-attack already swinging continues.
 - `vezax tricks on tank multiplier`: the generic Tricks of the Trade fires only when its target is a tank,
   for the whole encounter.
-- Rule `vezax vapor area hold`: while hard mode is pending, 41 area spells by name hold for a bot with a
-  live vapor within 15 yd of it or of its current target.
+- Rule `vezax vapor area hold`: while hard mode is pending, 47 area spells by name hold for a bot with a
+  live vapor within 15 yd of it or of its current target (review added Corpse Explosion, Fire Elemental
+  Totem, Frost Nova, Shadowflame, Thunderstorm).
+
+Docs: `docs/raids/ulduar/vezax.md`, plus a Vezax data point on the shared Tricks pitfall in
+`docs/engine/pitfalls.md` (doc only, no shared code).
 
 10/25 and normal/hard: the threat and Tricks guards key on the main tank and the encounter only; the
 vapor hold needs hard mode pending, so normal mode never sees it.

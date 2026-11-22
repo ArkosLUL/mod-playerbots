@@ -77,12 +77,14 @@ void DefineVezax(EncounterBuilder& e)
     // A vapor that lands in the melee dies to whatever hits around it, and one dead vapor ends hard mode.
     e.Block("vezax vapor area hold", Role::Any, VezaxVaporInAreaReach, 0,
             {"avenger's shield", "blade flurry", "bladestorm", "blast wave", "blizzard", "blood boil",
-             "chain lightning", "cleave", "cone of cold", "consecration", "death and decay", "divine storm",
-             "dragon's breath", "explosive trap", "fan of knives", "fire nova", "flamestrike",
-             "hammer of the righteous", "holy nova", "holy wrath", "howling blast", "hurricane", "immolation aura",
-             "killing spree", "living bomb", "magma totem", "mind sear", "multi-shot", "pestilence", "rain of fire",
-             "seed of corruption", "shadowfury", "shockwave", "sweeping strikes", "swipe (bear)", "swipe (cat)",
-             "thunder clap", "trap launcher: explosive trap", "typhoon", "volley", "whirlwind"});
+             "chain lightning", "cleave", "cone of cold", "consecration", "corpse explosion", "death and decay",
+             "divine storm", "dragon's breath", "explosive trap", "fan of knives", "fire elemental totem",
+             "fire elemental totem melee", "fire nova", "flamestrike", "frost nova", "hammer of the righteous",
+             "holy nova", "holy wrath", "howling blast", "hurricane", "immolation aura", "killing spree",
+             "living bomb", "magma totem", "mind sear", "multi-shot", "pestilence", "rain of fire",
+             "seed of corruption", "shadowflame", "shadowfury", "shockwave", "sweeping strikes", "swipe (bear)",
+             "swipe (cat)", "thunder clap", "thunderstorm", "trap launcher: explosive trap", "typhoon", "volley",
+             "whirlwind"});
 
     // Past the stop line nothing hits him until the Animus is up. Spells are the multiplier below, which
     // sees the summons as buffs, so they go by name here.
