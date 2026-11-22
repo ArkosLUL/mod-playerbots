@@ -314,6 +314,8 @@ inline constexpr uint32 ULDUAR_ALGALON_STAR_KEEP_GAP_MS = 6000;
 // No explosion from just before the cast until the raid is back out of the void.
 inline constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_LEAD_MS = 1000;
 inline constexpr uint32 ULDUAR_ALGALON_STAR_BIG_BANG_TAIL_MS = 3000;
+// Back out, the void's DoT leaves most of the raid under the explosion line for about this long after the hit.
+inline constexpr uint32 ULDUAR_ALGALON_STAR_VOID_RECOVERY_MS = 16000;
 // Nor around a meteor's impact: it takes 6-11k off everyone, and the healers need seconds to undo it.
 inline constexpr uint32 ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS = 4800;
 inline constexpr uint32 ULDUAR_ALGALON_STAR_IMPACT_LEAD_MS = 4000;
