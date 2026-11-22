@@ -247,7 +247,7 @@ void DefineMimiron(EncounterBuilder& e)
     // doesn't dodge it. Near fire only: a handover drink on clean ground is worth the mana.
     e.Block("mimiron drink guard", Role::Any, MimironNearFire, 0, {"drink", "eat"});
     e.Block("mimiron handover drink hold", Role::Any, MimironHandoverDrinkHold, 0, {"drink", "eat"});
-    // Follow only, and only until phase 2: the slot is all a leading player's orders give up.
+    // Only follow, only until phase 2: a leading player's other orders still go through.
     e.Block("mimiron handover follow hold", Role::Any, MimironHandoverFollowHold, 0, {"follow"});
 
     // Every mover that aims at a unit rather than the floor. The bomb flee lets go just inside its clearance, so

@@ -228,9 +228,9 @@ real player only changes who does a job he is doing himself.
 - Real players: nothing in the handover moves another unit, and a player keeps his `hmhold` index, which
   just stays empty wherever he stands, so the band's layout is the same code with or without him.
 - Reader `mimiron.py --handover`: positions, slot counts and healer mana count bots only (a human is never
-  moved by the handover); steps print as `steps:`, and a pull without them as "not Firefighter, or a pull
-  with a player in it from a build before the hold ran in every raid". Test with a human healer standing
-  on the room centre.
+  moved by the handover); steps print as `steps:`, and a pull without them as "not Firefighter, or a build
+  without the handover hold" (review: window 7 and 8's bot-only traces predate round 2 too). Test with a
+  human healer standing on the room centre.
 - navprobe (orchestrator, 2026-11-22): `navprobe --map 603 --nav 0x09 ring 2744.65 2569.46 364.32 <r> 72`
   gave 72/72 on mesh at r = 36, 40 and 44, so the band's floor is checked every 5°; header and findings
   doc say so.

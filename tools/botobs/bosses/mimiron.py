@@ -1079,8 +1079,7 @@ def show_handover(trace: Trace) -> None:
                   + (f"  (walk in {(high - row['steps']['3']) / 1000:.1f} s before P2)" if "3" in row["steps"] else ""))
             print(f"    hold band: {row['hold'] or 'not noted'}")
         else:
-            print("    no steps: not Firefighter, or a pull with a player in it from a build before"
-                  " the hold ran in every raid")
+            print("    no steps: not Firefighter, or a build without the handover hold")
         print("    bots from the room centre, median/max yd: " + ", ".join(
             f"{name} {cell[0]:.0f}/{cell[1]:.0f}" for name, cell in row["spread"].items() if cell))
         print(f"    on a phase 2 slot at P2: {row['on_slot']} of {row['living']} living bots"
