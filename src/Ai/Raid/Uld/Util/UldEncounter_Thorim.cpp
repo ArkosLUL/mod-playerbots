@@ -601,25 +601,53 @@ bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position>
     return true;
 }
 
+bool RingBodyBridgesChain(Player* bot, Position const& spot)
+{
+    Group* group = bot->GetGroup();
+    uint8 ownSlot = 0;
+    if (!group || !MeleeSlotOf(bot, ownSlot))
+        return false;
+
+    float const jump = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + ULDUAR_THORIM_RING_CHAIN_MARGIN;
+    bool bridged = false;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !MemberCounts(member, bot->GetInstanceId()) || !member->IsInWorld() ||
+            member->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            continue;
+
+        uint8 slot = 0;
+        if (MeleeSlotOf(member, slot) && slot == ownSlot)
+            continue;
+
+        if (member->GetExactDist(spot) <= jump + bot->GetCombatReach() + member->GetCombatReach())
+            return false;
+
+        if (bot->IsWithinDist(member, jump))
+            bridged = true;
+    }
+
+    return bridged;
+}
+
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
+    bool spotInCone = false;
     if (Unit* boss = GetThorim(botAI))
     {
         if (Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL))
         {
             float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
-            if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()), coneBearing) &&
-                !InLightningChargeCone(BearingFromBoss(boss, spot.GetPositionX(), spot.GetPositionY()), coneBearing))
+            spotInCone = InLightningChargeCone(BearingFromBoss(boss, spot.GetPositionX(), spot.GetPositionY()), coneBearing);
+            if (!spotInCone &&
+                InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()), coneBearing))
                 return true;
         }
     }
 
-    std::vector<Position> const& zones = ThorimBlizzardSpots(bot);
-    if (zones.empty())
-        return false;
-
     bool standingInOne = false;
-    for (Position const& zone : zones)
+    for (Position const& zone : ThorimBlizzardSpots(bot))
     {
         if (zone.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
             return false;
@@ -628,7 +656,7 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
             standingInOne = true;
     }
 
-    return standingInOne;
+    return standingInOne || (!spotInCone && RingBodyBridgesChain(bot, spot));
 }
 
 bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)

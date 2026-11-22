@@ -313,6 +313,14 @@ and never writing it ([why](../../engine/raid-mechanics-lessons.md#movement-that
 **40-60%** of move orders come back refused, and a nested escape re-latched inside 3 yd and was never
 retried.
 
+**It breaks for a Chain Lightning bridge too.** The solver keeps slot points 8.8-12.4 yd apart, but the
+deadband lets a body rest up to ~6.5 yd off its point, so two slots' bodies stood inside the jump in
+**60-78%** of hard-mode phase 2 snapshots while their points did under 10% of the time, and two casts
+crossed slots to kill five melee. So `RingBodyBridgesChain` breaks it for a ring bot within the jump
+(`ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` 5 + `ULDUAR_THORIM_RING_CHAIN_MARGIN` 0.5, the core's
+`IsWithinDist`) of a living floor body outside its slot, when its own point clears every such body; if
+not, moving would still bridge, and the other bot moves instead.
+
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
 holds the generic movers, scoped to a **settled** ring holder and exempting `AttackAction`,
@@ -370,7 +378,11 @@ polys.
 **Zones outrank separation when the arc will not hold everything**, the cone never (~20k in one
 instant). A bot holds its bearing while a zone sits on it, so giving zones up cost 6-14 consecutive ticks
 at 4.3-4.9k, against 40-90k once for a hop. **The anchor term is still angle-only** — the tank sits at
-r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed.
+r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed. Nor does it
+count the off-tank: his spot sits **7.1 yd** from slot 2's default point (anchor +270°), so a chain
+reaching either tank runs on into slot 2, three lethal casts in three hard-mode pulls, two of them tank
+deaths. The bridge escape can't clear it (slot 2's point isn't clear); it takes a navprobed move of a
+tank spot or the slot.
 
 **A rotation does not always exist.** With a median **4 zones up at once (max 6)**, the 11 yd
 clearance leaves under 105° of ring free — too little for three slots plus the anchor — in
@@ -891,6 +903,12 @@ undodgeable**; the Volley also carries a **-51% slow**, which doubles every repo
 wall, and not for want of cooldowns: healers run **29-30% overheal** with Innervate, Mana Tide, Hymn of
 Hope, Shadowfiend, gems and potions all already spent. This is the encounter's actual remaining problem.
 
+On the ilvl 226 test rosters (four healers, bot-led gauntlet) hard-mode phase 2 intake was **3.8-6.2 M**,
+Sif **52-55%** of it (Volley alone 1.3-1.9 M) and the tanks taking **160-289k** of Blizzard on the tank
+spot. Healers entered at 43-100% mana; in two pulls they ran dry by +100-120 s and the tanks fell there,
+and the third reached the ceiling at +190 s with Thorim at 15%. The traces read his `mhp` as **27.19 M**,
+not 25.101 M.
+
 **A human tank holding him in phase 2 is called**
 ([calls to human tanks](../README.md#calls-to-human-tanks)): once per hold turn from 6 Lightning Charge
 stacks (62279 on Thorim, ~95 s in, swings about doubled), and under 50% at any stack count, never while
@@ -966,7 +984,9 @@ player was on the instance left the corridor standing while he stayed in the are
   ([pitfalls](../../engine/pitfalls.md#detection-that-never-fires)): gated on it, all three 25-man
   leaders walked past an untouched Colossus, shut doors and all, into the Iron Honor Guards and the Giant
   (24 deaths in the two pulls that wiped). The cached Colossus lookup can't gate it either: arena melee
-  scan it from out of range, so it can read empty while he lives. Also gated on the leader past the
+  scan it from out of range, so it can read empty while he lives. That miss is shared for 500 ms: the
+  walk to the Colossus skips a tick (orders stayed at most 2.6 s apart), and `TickRunicSmash`, which
+  arena bots run too, drops the Runic Smash latch on it. Also gated on the leader past the
   portcullis and within 150 yd of the Giant's spawn, since a scan from farther out (the arena, the left
   lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
   own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
@@ -978,9 +998,9 @@ player was on the instance left the corridor standing while he stayed in the are
   roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
   across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
-  one, about 100-125 s from the lever. Measured on 25-man: lever pulled 32-37 s into the pull, last
-  waypoint passed at 65-93 s; the one pull to reach phase 2 did so 194 s after the lever, 31 s past Sif's
-  62565, with Colossus, Honor Guards and Giant all pulled at once.
+  one, about 100-125 s from the lever. Measured on 25-man (three pulls): lever pulled 33-36 s into the
+  pull, Colossus engaged 1:24-1:37 and dead 1:53-2:02, the walk to the Giant within 0.5 s of that, Giant
+  dead 2:52-3:01, phase 2 at 3:09-3:19: hard mode in all three, 0-8 s inside Sif's 62507 + 150 s.
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
