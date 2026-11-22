@@ -2,10 +2,11 @@
 """Read a Freya pull from a RaidObs trace: hard mode, add waves, who held Freya and the Snaplasher, deaths.
 
     freya.py <file>          every section
-    freya.py <file> --tanks  who Freya and each Snaplasher were on, and every area taunt or Righteous
-                             Defense a tank cast
+    freya.py <file> --tanks  who Freya and each Snaplasher were on, every area taunt or Righteous
+                             Defense a tank cast, and the Snaplasher hold
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
+    freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
 
 What the generic views miss here:
 
@@ -19,6 +20,11 @@ What the generic views miss here:
   add tank, so `--tanks` names the holder.
 - **A dodge is a move, not a hit.** `--moves` lists every re-issued order of a walk; `--beams` counts the
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
+- **The Snaplasher hold is a note.** `freya.snaphold` goes to 1 when the Snaplasher is loose with no add tank
+  alive, 2 once its bark has run out (a tank may take it), and back to 0 once a tank holds it; `--tanks` lists
+  each change.
+- **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
+  while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
 """
 from __future__ import annotations
 
@@ -64,6 +70,12 @@ DODGE_EPISODE_MS = 1500
 HEAL_RANGE_YD = 38.5
 # Fewer healers than this on the add tank and one capped Snaplasher swing outruns the heals.
 HEALERS_WANTED = 2
+HOLD_NOTE = "freya.snaphold"
+HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
+NPC_ARMY_GHOUL = 24207
+REACH_ACTION = "freya reach held pack"
+# Playerbots.SpellDistance: past this from every lasher a ranged bot has none to shoot.
+SPELL_RANGE_YD = 28.5
 
 
 def mine(trace: Trace) -> bool:
@@ -180,6 +192,11 @@ def show_tanks(trace: Trace) -> None:
         if rec.get("sp") in AREA_TAUNTS and trace.role(rec.get("s")) == "tank" and not rec.get("tr"):
             target = f" on {holder_label(trace, rec['tgt'])}" if rec.get("tgt") else ""
             print(f"  {clock(rec['t'])} {trace.name(rec['s'])} {AREA_TAUNTS[rec['sp']]}{target}")
+    state = "0"
+    for rec in trace.of("note"):
+        if rec.get("k") == HOLD_NOTE and rec.get("txt") != state:
+            state = rec.get("txt")
+            print(f"  {clock(rec['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}")
 
 
 def dodge_trigger_yd() -> float | None:
@@ -264,6 +281,58 @@ def show_beams(trace: Trace) -> None:
               f"for {100.0 * short / len(counts):.0f}% of it")
 
 
+def held_pack_samples(trace: Trace) -> list[dict]:
+    """Per snapshot where ghouls hold the lasher pack's focus, per living ranged DPS: its distance to the nearest
+    lasher and whether it was on Freya."""
+    pack = radius("ULDUAR_FREYA_LASHER_PACK_RADIUS")
+    ghouls = {guid for guid, entry in trace.entries.items() if entry == NPC_ARMY_GHOUL}
+    out: list[dict] = []
+    for snap in frames(trace):
+        rows = [row for row in snap.get("u", []) if row[5] > 0]
+        lashers = [row for row in rows if trace.entries.get(row[0]) == NPC_DETONATING_LASHER]
+        if not lashers:
+            continue
+        focus = max(lashers, key=lambda row: (sum(1 for other in lashers if dist2(row[1:3], other[1:3]) <= pack),
+                                              -row[0]))
+        held = focus[7] in ghouls or any(row[0] in ghouls and row[7] == focus[0] for row in rows)
+        if not held:
+            continue
+        for row in rows:
+            if trace.role(row[0]) != "ranged":
+                continue
+            out.append({"t": snap["t"], "g": row[0], "near": min(dist2(row[1:3], l[1:3]) for l in lashers),
+                        "freya": trace.entries.get(row[7]) == NPC_FREYA})
+    return out
+
+
+def show_ghouls(trace: Trace) -> None:
+    print("GHOULS")
+    if not mine(trace):
+        return
+    samples = held_pack_samples(trace)
+    if not samples:
+        print("  ghouls never held the pack focus")
+        return
+    clear = radius("ULDUAR_FREYA_LASHER_CAMP_STANDOFF")
+    walks = [rec for rec in trace.of("move") if rec.get("by") == REACH_ACTION and rec.get("ok")]
+    for wave in waves(trace):
+        if wave["kind"] != "lashers":
+            continue
+        mine_ = [sample for sample in samples if wave["t"] <= sample["t"] <= wave["end"]]
+        if not mine_:
+            print(f"  {clock(wave['t'])} lashers: ghouls never held the focus")
+            continue
+        total = len(mine_)
+        far = sum(1 for sample in mine_ if sample["near"] > SPELL_RANGE_YD)
+        freya = sum(1 for sample in mine_ if sample["freya"])
+        close = sum(1 for sample in mine_ if sample["near"] < clear)
+        walked = sum(1 for rec in walks if wave["t"] <= rec["t"] <= wave["end"])
+        print(f"  {clock(wave['t'])} lashers, held {clock(mine_[0]['t'])} .. {clock(mine_[-1]['t'])}: of {total} "
+              f"ranged DPS samples, no lasher within {SPELL_RANGE_YD:g} yd {100.0 * far / total:.0f}%, on Freya "
+              f"{100.0 * freya / total:.0f}%, inside {clear:g} yd of one {100.0 * close / total:.0f}%; "
+              f"{walked} '{REACH_ACTION}' order(s)")
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     own = own_blow_spell(death)
     if own:
@@ -287,8 +356,10 @@ def show_deaths(trace: Trace) -> None:
 
 SECTIONS = (
     ("waves", "each add wave and Eonar's Gift: when it came, when it ended, raid deaths meanwhile", show_waves),
-    ("tanks", "who held Freya and each Snaplasher, and every area taunt or Righteous Defense", show_tanks),
+    ("tanks", "who held Freya and each Snaplasher, every area taunt or Righteous Defense, the Snaplasher hold",
+     show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
+    ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
     ("deaths", "deaths by killer and spell", show_deaths),
 )
 

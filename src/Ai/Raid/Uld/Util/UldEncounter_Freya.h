@@ -64,6 +64,11 @@ enum UlduarFreyaIds
 
     // 10 min cooldown, 6 with Night of the Dead: either way longer than the gap between the two lasher waves.
     SPELL_ARMY_OF_THE_DEAD = 42650,
+
+    // Hardened Bark stacks. Passives 62664 / 64191 add one on every direct hit the Snaplasher takes (melee,
+    // ranged, spells, not DoT ticks), and the lot drops 4s after the last one.
+    SPELL_HARDENED_BARK_STACK_10 = 62663,
+    SPELL_HARDENED_BARK_STACK_25 = 64190,
 };
 
 // Hard mode: inside this a bot leaves an Unstable Sun Beam. The pool (62865) is 5 yd in the DBC, and the
@@ -234,6 +239,21 @@ inline constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT = 60.0f;
 // thousand threat and one global of raid damage is several times that.
 inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
 
+// How close to a held Snaplasher an area spell may land, around the caster or its target. Seed of Corruption's
+// 15 yd burst is the widest the damage dealers carry, most are 8-10.
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH = 15.0f;
+
+// Ranged walking to a ghoul-held pack stop this far inside Playerbots.SpellDistance of its focus, so a lasher
+// shuffling on its ghoul doesn't put them back out of reach.
+inline constexpr float ULDUAR_FREYA_HELD_PACK_REACH_MARGIN = 3.0f;
+
+// Ceiling on that walk's latch, about 20 yd at 7 yd/s.
+inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_LATCH_MS = 3000;
+
+// Wait after a sweep found no spot. Each is a ring of collision checks, and the trigger stays on for every ranged
+// bot out of reach.
+inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_RETRY_MS = 1000;
+
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
 struct FreyaWaveState
@@ -307,13 +327,26 @@ Unit* GetFreyaBossByEntry(PlayerbotAI* botAI);
 bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target);
 
 // Greedy split over remaining health, recomputed each tick: every bot reaches the same split, no shared state.
-// Suppressed members drop out, so the floor moves bots to a sibling instead of idling them.
+// Suppressed members and a held Snaplasher drop out, so the floor moves bots to a sibling instead of idling them.
 Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state);
 
-// Main tank: the Storm Lasher while it's in reach and above the sync floor, else Freya, who stays on standing threat.
-// Add tank: Snaplasher, Conservator, highest-health trio member, a lasher on top of it, Freya. Highest health since
-// tank damage is invisible to GetFreyaTrioAssignment, so it helps the three converge.
+// Main tank: a Snaplasher he holds, the Storm Lasher while it's in reach and above the sync floor, else Freya, who
+// stays on standing threat. Add tank: Snaplasher (held: only once its bark is gone), Conservator, highest-health
+// trio member, a lasher on top of it, Freya. Highest health since tank damage is invisible to
+// GetFreyaTrioAssignment, so it helps the three converge.
 Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget);
+
+// Once per engine tick, for the instance: the Snaplasher hold goes on when the Snaplasher is off every tank with no
+// add tank alive, and off once a tank holds it again. Staying on through the add tank's rise is the point.
+void TickFreya(PlayerbotAI* botAI);
+
+// The Snaplasher while the hold is on, else null. Nothing hits it meanwhile, since every hit renews Hardened Bark
+// and a tank that takes it stacked dies to one swing.
+Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI);
+
+// The held Snaplasher has had no Hardened Bark stack since some point in this hold, so a tank can take it. Latched:
+// the stacks a tank adds picking it up would otherwise turn him away again.
+bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI);
 
 // Nearest living lasher in range, sticky on currentTarget with a switch margin. Range is also the leash, so a
 // lasher that retargets can't tow the bot across the room.
@@ -426,6 +459,14 @@ bool IsFreyaLasherPackFinishing(FreyaWaveState const& state, Position const& cen
 // The finishing pack within radius of this bot, or nullptr. Measured from the pack's own centre rather
 // than from the bot, so a bot standing at the edge of the pile still sees the finish it is feeding.
 Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state, float radius);
+
+// The lasher the ranged aim at: the pack focus, or at the finish the lowest one. Targeting and the walk to a held
+// pack both read this, so they agree on the lasher.
+Unit* GetFreyaRangedLasherAim(FreyaWaveState const& state);
+
+// An Army of the Dead ghoul holds this lasher. Also true while a ghoul is still on it after the 10s threat wipe,
+// the second or so before the ghouls' taunt pulse takes it back.
+bool IsFreyaLasherHeldByGhoul(PlayerbotAI* botAI, Unit* lasher);
 
 // Takes a point rather than a bot: the same count is wanted around a candidate pack focus, and around
 // the bot itself for the nova and the trap.

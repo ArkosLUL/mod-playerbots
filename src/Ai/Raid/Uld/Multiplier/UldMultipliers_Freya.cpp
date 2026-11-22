@@ -20,6 +20,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidCombatHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -70,6 +71,48 @@ float FreyaTrioSyncMultiplier::GetValue(Action* action)
     GatherFreyaWaveState(botAI, state);
 
     return FreyaTrioSyncSuppress(state, target) ? 0.0f : 1.0f;
+}
+
+float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    uint32 const now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        Unit* held = GetFreyaHeldSnaplasher(botAI);
+        cachedHeld = held ? held->GetGUID() : ObjectGuid::Empty;
+        cachedFree = held && IsFreyaHeldSnaplasherFree(botAI);
+    }
+
+    if (cachedHeld.IsEmpty())
+        return 1.0f;
+
+    // Both pickers handle a held Snaplasher themselves and aim at the current target: zeroed, a bot on it when the
+    // hold began could never be moved off it, and its auto attack would keep the bark up for good.
+    if (dynamic_cast<FreyaSetDpsPriorityAction*>(action) || dynamic_cast<FreyaTankAddsAction*>(action))
+        return 1.0f;
+
+    Unit* snaplasher = botAI->GetUnit(cachedHeld);
+    if (!snaplasher)
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    Unit* current = AI_VALUE(Unit*, "current target");
+    if (target == snaplasher || (!target && current == snaplasher))
+        return cachedFree && PlayerbotAI::IsTank(bot) ? 1.0f : 0.0f;
+
+    if (!IsRaidAreaDamage(botAI, action, splash))
+        return 1.0f;
+
+    // Ground spells land on the target, the rest around the caster.
+    Unit* aim = target ? target : current;
+    bool const reaches = bot->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH ||
+                         (aim && aim->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH);
+
+    return reaches ? 0.0f : 1.0f;
 }
 
 float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)

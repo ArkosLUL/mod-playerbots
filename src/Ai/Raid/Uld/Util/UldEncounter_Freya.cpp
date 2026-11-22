@@ -21,6 +21,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
+#include "RaidObs.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "ThreatManager.h"
@@ -195,16 +196,19 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
     if (!group)
         return nullptr;
 
+    Unit* held = GetFreyaHeldSnaplasher(botAI);
+
     std::vector<Unit*> candidates;
     for (Unit* member : state.LivingTrio())
     {
-        if (!FreyaTrioSyncSuppress(state, member))
+        if (member != held && !FreyaTrioSyncSuppress(state, member))
             candidates.push_back(member);
     }
 
     // Shouldn't happen, the release check clears the floor once the last member joins the band. Without this a bot
-    // with nothing to hit would fall through to the boss.
-    if (candidates.empty())
+    // with nothing to hit would fall through to the boss. Not during a hold: the siblings wait at the floor for the
+    // held Snaplasher, and the rest of the ladder beats idling on them.
+    if (candidates.empty() && !held)
         candidates = state.LivingTrio();
 
     if (candidates.empty())
@@ -437,14 +441,14 @@ Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI)
     return best;
 }
 
-// Highest health percent first, never a suppressed member. Percent since the thresholds are percent and max health
-// differs nearly 2x, so absolute health calls the Snaplasher furthest from dying even when it's closest.
-static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget)
+// Highest health percent first, never a suppressed member or `skip`. Percent since the thresholds are percent and
+// max health differs nearly 2x, so absolute health calls the Snaplasher furthest from dying even when it's closest.
+static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget, Unit* skip)
 {
     Unit* best = nullptr;
     for (Unit* member : state.LivingTrio())
     {
-        if (FreyaTrioSyncSuppress(state, member))
+        if (member == skip || FreyaTrioSyncSuppress(state, member))
             continue;
 
         if (!best || member->GetHealthPct() > best->GetHealthPct())
@@ -458,7 +462,7 @@ static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTa
     // damage closing the gap makes it swap every few ticks.
     for (Unit* member : state.LivingTrio())
     {
-        if (member != currentTarget || FreyaTrioSyncSuppress(state, member))
+        if (member != currentTarget || member == skip || FreyaTrioSyncSuppress(state, member))
             continue;
 
         if (best->GetHealthPct() - member->GetHealthPct() < ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT)
@@ -477,6 +481,12 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
 
     if (PlayerbotAI::IsMainTank(bot))
     {
+        // Once it's on him: his own threat is what keeps it off the damage dealers.
+        Unit* snap = state.snaplasher;
+        if (snap && snap->IsAlive() && snap->GetVictim() == bot && !FreyaTrioSyncSuppress(state, snap) &&
+            bot->IsWithinMeleeRange(snap))
+            return snap;
+
         // Only once it's in reach: walking to it would drag Freya along. The taunt brings it over.
         Unit* storm = state.stormLasher;
         if (storm && storm->IsAlive() && !FreyaTrioSyncSuppress(state, storm) && bot->IsWithinMeleeRange(storm))
@@ -488,13 +498,17 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return nullptr;
 
-    if (state.snaplasher && state.snaplasher->IsAlive())
+    // A risen add tank leaves a held Snaplasher alone until its bark is gone: hitting it renews the stacks, and one
+    // capped swing kills a tank who takes it stacked.
+    Unit* held = GetFreyaHeldSnaplasher(botAI);
+    if (state.snaplasher && state.snaplasher->IsAlive() &&
+        (state.snaplasher != held || IsFreyaHeldSnaplasherFree(botAI)))
         return state.snaplasher;
 
     if (state.conservator && state.conservator->IsAlive())
         return state.conservator;
 
-    if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget))
+    if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget, held))
         return member;
 
     // Same local rule and leash as melee DPS: hit the one next to it, never tow one into the raid.
@@ -731,6 +745,95 @@ bool HasUncoveredFreyaLasher(PlayerbotAI* botAI, FreyaWaveState const& state)
     return false;
 }
 
+namespace
+{
+enum FreyaSnaplasherHold : uint8
+{
+    FREYA_SNAPLASHER_HOLD_OFF = 0,
+    FREYA_SNAPLASHER_HOLD_STACKED = 1,
+    FREYA_SNAPLASHER_HOLD_FREE = 2,
+};
+
+struct FreyaSnaplasherHoldState
+{
+    ObjectGuid snaplasher;
+    uint32 updatedMs = 0;
+    RaidObs::ObsValue<uint8> held{"freya.snaphold", FREYA_SNAPLASHER_HOLD_OFF};
+};
+
+RaidInstanceState<FreyaSnaplasherHoldState> freyaSnaplasherHolds;
+
+bool IsFreyaSnaplasherBarkReset(Unit* snaplasher)
+{
+    return !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_10) && !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_25);
+}
+}  // namespace
+
+void TickFreya(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    uint32 const instanceId = bot->GetInstanceId();
+    if (!instanceId || botAI->GetState() != BOT_STATE_COMBAT)
+        return;
+
+    Unit* freya = GetFreyaScan(botAI).Boss();
+    if (!freya || !freya->IsAlive())
+        return;
+
+    // Every bot ticks this and all of them reach the same answer, so once per millisecond is plenty.
+    FreyaSnaplasherHoldState& hold = freyaSnaplasherHolds.For(instanceId);
+    uint32 const now = getMSTime();
+    if (hold.updatedMs == now)
+        return;
+
+    hold.updatedMs = now;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    Unit* snap = state.snaplasher;
+    if (!snap)
+    {
+        hold.snaplasher.Clear();
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
+        return;
+    }
+
+    if (hold.snaplasher != snap->GetGUID())
+    {
+        hold.snaplasher = snap->GetGUID();
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
+    }
+
+    Unit* victim = snap->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (holder && PlayerbotAI::IsTank(holder))
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
+    else if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_OFF && !GetGroupAssistTank(bot, 0))
+        hold.held = FREYA_SNAPLASHER_HOLD_STACKED;
+
+    if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_STACKED && IsFreyaSnaplasherBarkReset(snap))
+        hold.held = FREYA_SNAPLASHER_HOLD_FREE;
+}
+
+Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI)
+{
+    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
+    FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
+    if (!hold || hold->held.Get() == FREYA_SNAPLASHER_HOLD_OFF)
+        return nullptr;
+
+    Unit* snap = botAI->GetUnit(hold->snaplasher);
+    return snap && snap->IsAlive() ? snap : nullptr;
+}
+
+bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI)
+{
+    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
+    FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
+    return hold && hold->held.Get() == FREYA_SNAPLASHER_HOLD_FREE;
+}
+
 Player* GetFreyaLooseLasherVictim(Unit* lasher)
 {
     if (!lasher || !lasher->IsAlive() || lasher->GetEntry() != NPC_DETONATING_LASHER)
@@ -933,6 +1036,46 @@ Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state,
         return nullptr;
 
     return IsFreyaLasherPackFinishing(state, focus->GetPosition()) ? focus : nullptr;
+}
+
+Unit* GetFreyaRangedLasherAim(FreyaWaveState const& state)
+{
+    Unit* focus = GetFreyaLasherPackFocus(state);
+    if (focus && IsFreyaLasherPackFinishing(state, focus->GetPosition()))
+        return GetFreyaRangedLasherFocus(state);
+
+    return focus;
+}
+
+bool IsFreyaLasherHeldByGhoul(PlayerbotAI* botAI, Unit* lasher)
+{
+    if (!lasher || !lasher->IsAlive())
+        return false;
+
+    Unit* victim = lasher->GetVictim();
+    if (victim && victim->GetEntry() == NPC_ARMY_OF_THE_DEAD)
+        return true;
+
+    Group* group = botAI->GetBot()->GetGroup();
+    if (!group)
+        return false;
+
+    // Any DK's ghouls, a human's too: the taunt pulse doesn't care who cast them.
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->getClass() != CLASS_DEATH_KNIGHT || member->GetMapId() != lasher->GetMapId())
+            continue;
+
+        for (Unit* minion : member->m_Controlled)
+        {
+            if (minion && minion->IsAlive() && minion->GetEntry() == NPC_ARMY_OF_THE_DEAD &&
+                minion->GetVictim() == lasher)
+                return true;
+        }
+    }
+
+    return false;
 }
 
 Unit* FreyaScan::Boss()

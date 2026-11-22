@@ -3,6 +3,7 @@
 #include "GameObject.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "UldEncounter_Freya.h"
 #include "UldScripts.h"
@@ -198,6 +199,11 @@ bool FreyaRangedCampTrigger::IsActive()
         return false;
     }
 
+    // A pack the ghouls hold chases nobody, so there's nothing to gather for, and the gather would pull the ranged
+    // back out of reach of it. Healers keep gathering on the anchor.
+    if (PlayerbotAI::IsRangedDps(bot) && IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state)))
+        return false;
+
     Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
         return false;
@@ -208,6 +214,28 @@ bool FreyaRangedCampTrigger::IsActive()
         PlayerbotAI::IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
     return bot->GetExactDist2d(camp.GetPositionX(), camp.GetPositionY()) > tolerance;
+}
+
+bool FreyaReachHeldPackTrigger::IsActive()
+{
+    if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsRangedDps(bot))
+        return false;
+
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Only a bot the priority ladder left on Freya: the Gift, the Conservator and the trio all come first.
+    if (AI_VALUE(Unit*, "current target") != boss)
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    if (state.detonatingLashers.empty() ||
+        CountFreyaLashersNear(bot->GetPosition(), state, sPlayerbotAIConfig.SpellDistance))
+        return false;
+
+    return IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state));
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()

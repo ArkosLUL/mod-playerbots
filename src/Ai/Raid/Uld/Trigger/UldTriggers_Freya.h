@@ -106,6 +106,16 @@ public:
     bool IsActive() override;
 };
 
+// A ranged damage dealer left on Freya while ghouls hold the lasher pack out of its reach.
+class FreyaReachHeldPackTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya reach held pack";
+
+    FreyaReachHeldPackTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 // Frost Nova holds the full 8s: no AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so damage doesn't break it, and no
 // CREATURE_FLAG_EXTRA_ALL_DIMINISH on the lasher, so no DR either.
 class FreyaFrostNovaLashersTrigger : public Trigger
