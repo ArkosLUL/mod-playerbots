@@ -343,3 +343,103 @@ whose victim is no tank? Iced Narrhok caught 12 of 18 kites (67%, one pull, kill
 either one stops Mortal Strike, Overpower and Bladestorm; on Broln only Dismantle (both hands) stops Stormstrike and
 Lava Lash. Neither stops Charge or Earth Shock. Recommended: yes, Disarm and Dismantle only, expecting a small gain:
 the iced Tauren killed 5 of 62.
+
+## Round 5 (2026-11-22, window 12 on build ebe746ad1)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head ebe746ad1 --pulls 10`, rounds 1-4 in it:
+toc1 `tr-20261122-194109-1` kill 7:22, 5 deaths (`649_1_thrakgar_1795376590`), toc2 `tr-20261122-194109-2` wipe 5:30,
+29 (`649_2_caiphus-the-stern_1795376597`), toc3 `tr-20261122-194109-3` wipe 5:57, 30 (`649_3_erin-misthoof_1795376599`).
+Scripts in the round's scratchpad `fc5/` (gone with it); the reader's new `--ice` cells cover the key one.
+
+**Stop rules.** Two wipes: not polished. Round 5 picks a different failure.
+
+**Lineups.** toc1: Liandra, Caiphus, Thrakgar; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog, Ginselle, Birana; three bot
+DKs (one the tank) ice Gorgrim, Narrhok and Maz'dinah all fight. toc2 and toc3 drew the same lineup, Erin for Thrakgar
+and Broln for Birana: four melee champions against rosters B and C, two DPS DKs and no DK tank, so the ice order gives
+Broln and Maz'dinah a DK and leaves Gorgrim and Narrhok free. toc3 has no Cyclone druid again (CC landed 2.05 per 10 s
+against 2.93 and 3.07).
+
+**Deaths by killing blow.** Iced: the duty's DK's Chains of Ice on it in the 10 s before; lapsed: a duty whose Chains
+are older.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 5 | iced Maz'dinah, Narrhok, Gorgrim 1 each; Harkzog, Ruj'kah 1 each |
+| toc2 wipe | 29 | free Gorgrim 11, free Narrhok 3, Maz'dinah 3 after her DK died (3:36, Hellfire); iced Broln 2; Ginselle 4, Ruj'kah 3, Harkzog, Cat, Zhaagrym 1 each |
+| toc3 wipe | 30 | free Narrhok 8 (3 healers), free Gorgrim 4, Maz'dinah 5 after her DK died (1:31, to lapsed Broln), Broln 1 after his DK died; Broln iced 5, lapsed 2; Harkzog 2, Cat 2, Ruj'kah 1 |
+
+**Verdict on round 4 (ice guard): held.** `--vetoes`: `faction champions ice guard multiplier` 91, 53, 49 rows on
+`hammer of justice on snare target`. `--trinket`: no Hammer of Justice among the triggers on iced champions (window 11:
+2, 0, 1). `--peel` lists 2 paladin Hammers on iced champions on toc1 (window 11: 10, 2, 5), both at 0:01.8-1.9 before
+either DK's first Chains landed (Gorgrim's came at 0:11.8), so the code's iced test was rightly false. Paladin Hammers on
+free melee champions: not measured.
+
+**Failure ranking (64 deaths).**
+
+1. Free melee champions, 35: never iced 26 (Gorgrim 15, Narrhok 11, all on toc2 and toc3), freed by their DK's death 9.
+   Melee champions did half the damage or more on 23 of 29 toc2 deaths and 29 of 30 toc3 deaths.
+2. Casters and pets, 17 (window 11: 31): not first this time, so not root-caused; toc3's no-Cyclone lineup lost 5 to
+   them.
+3. Iced melee champions, 10 (Broln 7, the rest 1 each), plus 2 lapsed.
+
+Never iced is the roster against the ice order (a plan matter, Q2 below). Inside the rest sits a bug: duties that hold a
+DK lose their Chains.
+
+**Picked: an ice DK's own wall grip and stale walk keep it off its Chains (bug).**
+
+- Chains gaps over 10 s with the duty's DK alive: 17 on toc1, 8 on toc2, 2 on toc3. Tocyam left Maz'dinah unchained
+  1:31-2:15 (44 s; Chains at 1:21 and 2:15) at 27-48 yd while she chased a melee bot at ~2.5 yd/s; she held the
+  danger latch (1:46, 2:02), so the danger peel went off Gorgrim, who killed Tocyah at 2:02. Toczai's gap
+  1:20.8-1:33.2 let Broln walk 44 yd onto Toczam, the other ice DK, and kill him at 1:31.5, which freed Maz'dinah for
+  5 kills; his 2:08.7-2:26.7 gap gave Broln Toczac at 2:20.
+- In those gaps every refresh released and re-took the DK's `fc.wall` duty on its own champion (157 notes in Tocyam's
+  54 s): the stand sits 27 yd off the champion on the side away from its victim and is kept within 29 yd
+  (`ToCHelpers_FactionChampionsDefence.cpp:91`, `:81`, keep `:1486-1489` before the fix), so a champion running at its
+  victim leaves it inside one refresh, and `WallVictim` (`:1403`) let an ice DK take its own champion whatever its
+  Chains. Each re-take walked `MOVEMENT_FORCED` (`ToCActions_FactionChampionsDefence.cpp:237`) to a stand past the
+  20 yd Chains range, and `IsWaitingForLastMove` (core-side `MovementActions.cpp:1059-1071`, equal or lower priority
+  waits) refused the ice reach's `MOVEMENT_COMBAT` walk: toc1 518 `faction champions ice reach` moves refused `wait`
+  against 45 issued.
+- By state, all three pulls: 442 wall holds taken on the DK's own champion, 276 with its Chains 6+ s old (due), 157 of
+  them with the Chains gone, which gave 2 grips; in the Chains' first 6 s 166 holds gave 34 grips.
+- With no wall duty the ice reach still waited out its own stale leg: it re-aims on every 0.5 yd drift of a spot 15 yd
+  off a moving champion, each re-aim refused until the leg's lock expired (`ToCActions_FactionChampionsBall.cpp:54-67`
+  before the fix; `WalkTo` stores the new spot before the refused `MoveTo`). Toczai's 1:20-1:33 gap: 30 `wait`s, 2
+  legs issued, the DK 26-31 yd off.
+
+**Fix** (`ToCHelpers_FactionChampionsDefence.cpp`, `ToCActions_FactionChampionsBall.cpp`). `OwnChainsHold`: the DK's own
+Chains on the champion with over 4 s left (`ICE_RECAST_LEFT_MS`, the recast point); `WallVictim` takes and keeps an ice
+DK's own-champion wall duty only while it holds, and `IceDue` reads the same test. The ice reach keeps a leg in flight
+that ends within 3 yd of its spot; otherwise it lowers the booking to `MOVEMENT_NORMAL` and re-issues, restoring it when
+nothing issued (pitfalls: a single mover is refused its own re-target). Reader `--ice`: per duty its wall holds, those
+with its Chains due, and its grips.
+
+**Next window should show.** `--ice`: `Chains due` near 0 (this window 18, 64, 29 on toc1; 22, 118 on toc2; 22, 3 on
+toc3, of 29, 97, 61; 60, 135; 50, 10 holds); grips no lower (9, 7, 7; 6, 4; 6, 3); uptime up and the longest gap down
+(93/84/93%, 11.8/19.1/12.5 s; 96/68%, 6.2/44.0 s; 96/97%, 8.0/3.1 s). Move rows: far fewer `faction champions ice
+reach` `wait`s. No death to a champion whose DK lives but whose Chains lapsed (this window 2), and no ice DK killed by
+its own or another lapsed champion.
+
+**Seen, not picked.**
+
+- Externals again piled on one Enhancement bot (Tocyak, toc2): Guardian Spirit, two Hands of Sacrifice, Hand of
+  Protection and Lay on Hands in the first 51 s, two more Hands at 2:16-2:17.
+- Harkzog's Hellfire killed Maz'dinah's ice DK on toc2 (3:36); two of his nine channels went unkicked (0:28, 1:13).
+- Dazed pinned 23 of 59 deaths on toc2 and toc3, Narrhok's Charge Stun 9: kiters hit from behind.
+- Full-speed chases snared in the 4 s before: 22%, 18%, 24% (window 11: 31%, 28%, 40%).
+
+**Questions for the user.**
+
+- Q1, this window's numbers: iced Broln killed 7 (toc2 2, toc3 5) and 2 more with his Chains lapsed; iced Narrhok 1 (toc1).
+  Recommendation unchanged: yes, Disarm and Dismantle only.
+- Q2 (plan): rosters B and C bring two DPS DKs and no DK tank, so four melee champions leave two never iced; Gorgrim and
+  Narrhok killed 26 of 59 on toc2 and toc3 this window, 10 in window 11. Over windows 11-12 the free ones killed: Gorgrim
+  19, Narrhok 17, Maz'dinah 12, Broln 6. Should the ice order (Ret, Enh, Rogue, DK, Warrior) change when DKs run short?
+  Recommended: not yet. Judge this round's fix first, which keeps the iced pair iced (lapses cost toc3 7 deaths through
+  Toczam's); if the never-iced DK and Warrior still top the deaths, try the DK ahead of the Rogue for one window.
+
+**Review.** The cause holds in the trace: in Tocyam's 1:21-2:15 the wall duty was re-taken 81 times and the ice reach
+issued 18 legs against 200 refused `wait`. Two side effects to watch: a champion whose ice DK's Chains are off gets no
+wall grip from anyone, also while Hand of Freedom makes Chains useless (such holds gave 2-3 grips this window); and the
+ice reach now replaces a generic `avoid aoe` flee in flight (`MOVEMENT_COMBAT`, retried after 1 s), none seen for an
+ice DK in window 12.

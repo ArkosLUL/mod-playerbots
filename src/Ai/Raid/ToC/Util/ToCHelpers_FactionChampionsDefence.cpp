@@ -1385,6 +1385,12 @@ Member const* VictimMember(std::vector<Member> const& members, Unit* champion)
     return member != members.end() ? &*member : nullptr;
 }
 
+bool OwnChainsHold(Player* dk, Unit* champion)
+{
+    Aura const* chains = champion->GetAura(SPELL_CHAINS_OF_ICE, dk->GetGUID());
+    return chains && (chains->GetDuration() < 0 || chains->GetDuration() > ICE_RECAST_LEFT_MS);
+}
+
 bool WallDk(FactionChampionsDefenceState const& state, Player* player)
 {
     PlayerbotAI* playerAI = GET_PLAYERBOT_AI(player);
@@ -1400,7 +1406,7 @@ bool WallVictim(std::vector<Member> const& members, Player* dk, Unit* champion, 
 
     ObjectGuid const own = FactionChampionsIceDutyOf(dk);
     if (!own.IsEmpty())
-        return own == champion->GetGUID();
+        return own == champion->GetGUID() && OwnChainsHold(dk, champion);
 
     return !IsTankMember(victim->player) &&
            std::none_of(members.begin(), members.end(), [champion](Member const& member)
@@ -3170,8 +3176,7 @@ Unit* IceDue(PlayerbotAI* botAI)
     if (!champion)
         return nullptr;
 
-    Aura const* chains = champion->GetAura(SPELL_CHAINS_OF_ICE, bot->GetGUID());
-    if (chains && (chains->GetDuration() < 0 || chains->GetDuration() > ICE_RECAST_LEFT_MS))
+    if (OwnChainsHold(bot, champion))
         return nullptr;
 
     SpellInfo const* info = sSpellMgr->GetSpellInfo(SPELL_CHAINS_OF_ICE);

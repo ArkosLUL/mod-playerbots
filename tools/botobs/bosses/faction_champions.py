@@ -35,7 +35,8 @@
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
                                            far the champion moved, the share on the DK, its other victims and the
-                                           deaths it caused; melee champions never iced
+                                           deaths it caused, its wall holds (those with its Chains due) and
+                                           grips; melee champions never iced
     faction_champions.py <file> --stands   stand moves, jumps and path against net, who moved healers and
                                            ranged and how much, each role's spacing from the melee champions and
                                            their damage moving or standing, healing against damage taken, the
@@ -386,9 +387,10 @@ GRIP_WATCH_MS = 1200
 # release's reason
 ICE = "fc.ice"
 ICE_OFF = "fc.iceoff"
-# a Chains of Ice slows for 10 s, 45% or more for its first 5
+# a Chains of Ice slows for 10 s, 45% or more for its first 5; its DK recasts it from 6 s on
 CHAINS_MS = 10000
 CHAINS_STRONG_MS = 5000
+CHAINS_DUE_MS = 6000
 # a champion's travel is read over this long
 ICE_MOVE_MS = 10000
 # a death is a champion's when it did this share of the damage in the DEATH_DAMAGE_MS before
@@ -2726,7 +2728,8 @@ def ice_rows(trace: Trace) -> list[dict]:
     apart), `on`, the share with the DK as target (None without samples), and `others`, its other targets ->
     seconds, a sample counting until the next one; `kills`, the deaths it caused in the span (`champion_kills`);
     `dk_died`, a death of the DK inside the span, and `died`, the champion leaving the snapshots mid-fight by its
-    end or the span open at a kill."""
+    end or the span open at a kill; `walls`, the DK's `fc.wall` holds taken on the champion, `walls_due` those
+    with no Chains of Ice of its own on it in the CHAINS_DUE_MS before, and `grips`, its Death Grips on it."""
     duties = ice_duties(trace)
     if not duties:
         return []
@@ -2739,12 +2742,14 @@ def ice_rows(trace: Trace) -> list[dict]:
     killed = bool(trace.of("end")) and trace.of("end")[-1].get("out") == "kill"
     deaths = [(rec["t"], rec["g"]) for rec in combat_deaths(trace)]
     offs = [(rec["t"], rec["g"], str(rec.get("txt", ""))) for rec in notes(trace, ICE_OFF)]
+    walls = [(rec["t"], rec["g"], as_guid(rec.get("txt"))) for rec in notes(trace, WALL)]
     out = []
     for dk, champion, start, stop, casts in duties:
         spans = covered_spans(casts, CHAINS_MS, start, stop)
         strong = covered_spans(casts, CHAINS_STRONG_MS, start, stop)
         length = stop - start
         spent: collections.Counter = collections.Counter()
+        grips = 0
         for rec in trace.of("cast"):
             if rec.get("s") != dk or rec.get("tr") or not start <= rec["t"] <= stop:
                 continue
@@ -2752,6 +2757,10 @@ def ice_rows(trace: Trace) -> list[dict]:
                 spent[FROST_SPENDERS[rec["sp"]]] += 1
             elif rec.get("sp") == SPELL_CHAINS_OF_ICE and rec.get("tgt") != champion:
                 spent["Chains of Ice"] += 1
+            elif rec.get("sp") == SPELL_DEATH_GRIP and rec.get("tgt") == champion:
+                grips += 1
+        held = [when for when, guid, target in walls if guid == dk and target == champion and start <= when <= stop]
+        due = [when for when in held if not any(cast_at <= when < cast_at + CHAINS_DUE_MS for cast_at in casts)]
         on = total = 0
         others: collections.Counter = collections.Counter()
         track: list[tuple[int, float, float]] = []
@@ -2793,6 +2802,9 @@ def ice_rows(trace: Trace) -> list[dict]:
             "dk_died": any(guid == dk and start <= when <= stop for when, guid in deaths),
             "died": (killed and stop >= end)
                     or (gone is not None and gone + GONE_SLACK_MS < last and start <= gone <= stop + GONE_SLACK_MS),
+            "walls": len(held),
+            "walls_due": len(due),
+            "grips": grips,
         })
     return out
 
@@ -2819,7 +2831,8 @@ def show_ice(trace: Trace) -> None:
         spent = ", ".join(f"{name} {count}" for name, count in row["spent"].most_common())
         others = ", ".join(f"{trace.name(guid)} {seconds:.1f}s" for guid, seconds in row["others"].most_common())
         kills = ", ".join(trace.name(guid) for guid in row["kills"])
-        print(f"      spent {spent or 'none'}; other victims {others or 'none'}; killed {kills or 'none'}")
+        print(f"      spent {spent or 'none'}; other victims {others or 'none'}; killed {kills or 'none'};"
+              f" wall holds {row['walls']}, Chains due {row['walls_due']}, grips {row['grips']}")
     iced = {row["champion"] for row in rows}
     never = [guid for guid, name, _ in lineup(trace) if name in MELEE_SPECS and guid not in iced]
     print("\n  melee champions never iced: " + (", ".join(trace.name(guid) for guid in never) if never else "none"))
@@ -2830,7 +2843,9 @@ def show_ice(trace: Trace) -> None:
           f" spent counts the DK's Frost spenders in the duty, Chains of Ice on another target included, and wants"
           f" none; moved is the champion's median travel over {ICE_MOVE_MS // 1000} s in yd; on DK the share of its"
           f" live samples with the DK as target; killed the deaths it did {KILL_SHARE:.0%} or more of the damage in"
-          f" the {DEATH_DAMAGE_MS // 1000} s before; end is the {ICE_OFF} reason the duty ended on")
+          f" the {DEATH_DAMAGE_MS // 1000} s before; wall holds are the DK's {WALL} holds taken on its champion,"
+          f" Chains due those with none of its Chains of Ice on it in the {CHAINS_DUE_MS // 1000} s before, which"
+          f" want none, grips its Death Grips on it; end is the {ICE_OFF} reason the duty ended on")
 
 
 def stand_rows(trace: Trace) -> list[dict]:
@@ -3793,7 +3808,8 @@ SECTIONS = (
              " battle res, taunts",
      show_peel),
     ("ice", "each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how far the champion moved, the"
-     " share on the DK, its other victims and the deaths it caused; melee champions never iced", show_ice),
+     " share on the DK, its other victims and the deaths it caused, its wall holds (those with its Chains due)"
+     " and grips; melee champions never iced", show_ice),
     ("stands", "stand moves, jumps and path against net, healers moving and casting, movers, healing, the Cyclone"
               " stand, Nitro Boosts"
      " uses by reason", show_stands),

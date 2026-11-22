@@ -17,6 +17,7 @@ namespace
 {
 constexpr float STAND_ARRIVE = 1.5f;
 constexpr float SAME_SPOT = 0.5f;
+constexpr float ICE_REPLAN = 3.0f;
 
 bool WalkingTo(Position const* walking, Position const& spot)
 {
@@ -63,7 +64,19 @@ bool FactionChampionsIceReachAction::Execute(Event /*event*/)
     if (WalkingTo(WalkInFlight(), stand))
         return true;
 
-    return WalkTo(stand);
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (bot->isMoving() && stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) < ICE_REPLAN)
+        return true;
+
+    MovementPriority const held = last.priority;
+    if (held > MovementPriority::MOVEMENT_NORMAL)
+        last.priority = MovementPriority::MOVEMENT_NORMAL;
+
+    if (WalkTo(stand))
+        return true;
+
+    last.priority = held;
+    return false;
 }
 
 bool FactionChampionsCycloneStandAction::Execute(Event /*event*/)
