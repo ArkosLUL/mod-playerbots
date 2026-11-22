@@ -166,3 +166,101 @@ the spread fix; all three started by the step, so refreshed):
   with him barely moving, so the node spends there. In window 5 uld1's paladin would have spent
   Divine Protection at ~1:06 with no swing, leaving none for window 3, where he took two (51k).
   Main-tank deaths after such a spend mean the hold should wait for the first swing.
+
+## Round 3 (2026-11-22, on Custom 1b45df985)
+
+**Data.** Window 8 (round 2 code, all three started by the step), `raidtest.py report --boss hodir
+--raid uld --head 02925e260`; window 7 and window 5 re-read beside it (`--head 61011f323`, round 1's
+table) with `hodir.py` and replays in the session scratchpad (`hodir-r3/`).
+
+| Pool | Run | Trace | Out | Cache | Deaths | Pace 0-3:00 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261122-112132-4` | `603_4_hodir_1795346605` | kill 4:00 | shattered | 1: healer Freeze 3:49.6 (4 Biting Cold stacks, outside a window) | 169k |
+| uld2 | `tr-20261122-112133-5` | `603_6_hodir_1795346628` | kill 3:48 | shattered | 0 | 178k |
+| uld3 | `tr-20261122-112133-6` | `603_3_hodir_1795346638` | kill 3:41 | shattered | 1: off-tank Frozen Blows swing 2:55.7 (Barkskin up) | 188k |
+
+**Stop rules.** Not polished: no pool kept the cache (234.6k wanted). Third round, third failure.
+
+**Round 2 verdict: held.** Off-tank Frozen Blows deaths 3 in 11 windows (w5), 4 in 12 (w7, all with no
+button up), 1 in 12 (w8): uld3's bear, Barkskin up, after 6 swings (157k) in window 2 and 4 (90k) in
+window 3. Every tank held 1 s+ in a window cast its `node` button when one was ready; the only `class`
+buttons came under 25% (Icebound Fortitude at 4%, Frenzied Regeneration at 24%). `--tanks` had read
+two `node` casts as `class` (Anti-Magic Shell at 99%, Divine Protection at 62%): the node's OK row
+lands a millisecond after its cast, fixed. No main tank died, so option (b) stays unbuilt.
+
+**Picked: pace.** Every window 7 and 8 kill missed the cache. By window (boss dps, w5 → w7/8): 0:00-0:20
+73-76k → 60-71k, 0:20-0:57 337-345k → 213-263k, 0:57-1:45 239-265k → 168-233k, later about even.
+By role (snapshot `dealt`), against w5 over 0-3:00 ranged lost ~29k dps-equivalent, 18k of it in
+0:20-0:57 (ranged 178-219k → 81-132k there), melee ~14k, mostly 0:57-2:34.
+
+Cause 1, bug: **a ranged or healer bot latched onto the fire Hodir is then held on gets no stand until
+Flash Freeze.** `FindHodirFireStand` (`UldEncounter_Hodir.cpp`) returned false on a rejected latched
+stand but kept the latch until the fire died. From the south drop Hodir is 13-16 yd south of the centre
+at 5 s in four pulls (w5: 1 yd), so the first fires land south among the ranged, who latch a stand on
+one; the hold then picks that fire (nearest the centre within 25) and the tank drags him onto it.
+w8 uld1: Uldxaq `hodir.stand fire` 21.606 (anchor 2004,-259), `hodir.tankhold` 4294968875 21.792,
+`none` 25.220 until 58.260 after the freeze; Uldxak 21.804 → 24.643 → 54.342; healer Uldxae 21.784
+→ 24.748; a legal fire at (2015, -242), 16 yd from him, came up at 36.1 s. A replay of the latch from
+the snapshots (it agrees with `hodir.stand` on ~90% of samples) puts ranged and healers stuck 32-56% of
+0:00-0:57 in four of six pulls (w7 all three, w8 uld1) against 0-4% in w5; ranged stood in a fire
+15-35 yd from him 15-22% of the first fire window there, 45-53% in w8 uld2/uld3, 71-72% in w5. With a
+3 s drop the replay offers a fire stand 42-71% of 0:20-0:57 instead of 9-25% in those four.
+
+Cause 2, bug from the shared spread (`61011f323`): **Storm Cloud carrier and receivers parked on
+different points.** Both actions used `MoveInside(rally, 2)` (`UldActions_Hodir.cpp` spread and
+collect), which `MoveNear` offsets by `GetFollowAngle`: angle 0 put everyone on one point, the spread
+puts each bot on its own point of a 2 yd ring, up to 4 yd from the carrier, outside the 3 yd pulse.
+Parked receivers lacking Storm Power stood inside the pulse 48/70/43% (w5) against 45/20/37/36/24/44%;
+Storm Power 6.4-7.1 a cloud against 5.4-6.6; 7 clouds timed out with charges left in six pulls, none
+in three; median time to spend 4-6 s against 5.5-15 s.
+
+Third, harness, not a bug: from (1998, -288) the raid walks 26 yd further, the first mage blocks break
+2-4 s later (9.6-14.1 s against 7.7-9.9), the first fire lands at 19.2-22.0 s against 18.0-18.6.
+
+**Fix** (`UldEncounter_Hodir.h/.cpp`, `UldActions_Hodir.cpp`; reader `hodir.py`, tests):
+- The fire latch drops after 3 s of continuous band reject, like Starlight's (constant renamed
+  `ULDUAR_HODIR_STAND_REJECT_DROP_MS`). New probe `hodir.firestand`: `stand <fire>`, `held noreach`,
+  `none`.
+- Carrier and receivers walk to the rally point itself (`MoveTo`, park check unchanged at 2).
+- Reader: `--storm` (clouds, Storm Power a cloud by role, spent or timed out, parked receivers inside
+  the pulse); `--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the
+  fire latch's held-out-of-band runs.
+- 10/25 and hard mode alike: neither depends on size or the timer.
+
+**Next window should show:** `--buffs` "fire latch held out of the band" runs no longer than ~3.5 s,
+and ranged in a legal fire over the first fire window at 45%+ on every pool; `--storm` parked
+receivers inside the pulse at 50%+ and no cloud timing out with charges left; 0:20-0:57 boss dps up
+from 213-263k. The replay suggests roughly +10-15k over 0-3:00, short of 234.6k: the opening (drop)
+and the melee loss stay.
+
+**Also seen, not picked.** Melee `hodir biting cold shed` moves rose to 32-105 a pull from 7-29 in w5:
+round 1 arms the shed one stack sooner under Frozen Blows for every role, though its deaths were
+ranged and healers. If melee pace stays down, try the drop for ranged and healers only.
+
+**Questions (orchestrator / user).**
+
+1. *Harness or plan:* the south drop costs ~3 s on the first fire and pulls Hodir off the centre at the
+   start. (a) keep it, a real raid enters from the south door too; (b) DC walks the raid to about
+   (1998, -262) as part of the start step, where a Starfall on a block no longer pulls him early;
+   (c) the ranged wait at the drop until the tank holds him at the centre. *Recommended: (a)*, and
+   re-judge after this round, since the latch was the part that cost most.
+2. *Shared code (no change made):* the spread in `GetFollowAngle` turns every `MoveInside` /
+   `MoveNear` meant to stack bots on one point into a ring of that radius; 40 calls outside Hodir
+   (Yogg-Saron, Razorscale, Naxx, Sunwell, Tempest Keep, Black Temple). *Recommended:* check each stack
+   point when its raid is next pulled.
+
+**Review (round 3).** Cause 1 holds: w8 uld1 Uldxaq latched the fire at (2001, -251), the tank held
+Hodir at (2000, -248), its stand sat 11.9 yd from him until 58 s. Cause 2 only in part: of the w7/w8
+parked receivers outside the pulse, the 2 yd ring is a minority. The carrier stood within 2 yd of its
+rally 18-27% of carry samples (w5 14/19/59%), ranged carriers over 4 yd off it 43-66%, and
+`hodir raid position action` was the commonest next mover of a parked ranged receiver and moved ranged
+and healer carriers off the rally: once the spread (2 yd) or collect (4 yd) stands down, the anchor or
+declump walks the bot to its stand, and that walk's `MOVEMENT_COMBAT` lock refuses the walk back until
+it lands. Melee receivers leave by `reach melee` / `set behind` (generic, untouched).
+- Fix: `HodirRaidPositionTrigger` stands down for a carrier (`HodirSpreadStormCloudTrigger`) and for
+  a receiver within park 2 of the rally without Storm Power (`GetHodirStormPowerRally`, now shared
+  with the collect trigger).
+- Reader: `--storm` adds the carrier's share within 2 yd of its rally; a fire latch run stops at a
+  shed, shelter, collect or spread act or a carry, where the position node stands down and both probes
+  go stale; the first fire window ends at the first landing after the first fire.
+- Next window adds: `--storm` carrier within 2 yd of its rally well above 18-27%.

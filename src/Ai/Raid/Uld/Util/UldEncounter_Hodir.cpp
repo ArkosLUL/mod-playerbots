@@ -126,6 +126,7 @@ struct HodirFireLatch
 {
     ObjectGuid fire;
     Position stand;
+    uint32 rejectedSince = 0;
 };
 
 // One per carry, keyed on the carrier, not the reader: carrier and receivers must gather on one point.
@@ -531,7 +532,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
                 if (!held->second.rejectedSince)
                     held->second.rejectedSince = now;
 
-                if (getMSTimeDiff(held->second.rejectedSince, now) < ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS)
+                if (getMSTimeDiff(held->second.rejectedSince, now) < ULDUAR_HODIR_STAND_REJECT_DROP_MS)
                 {
                     // "held" so a bot waiting for the boss to drift back reads apart from one with no zone.
                     if (RaidObs::Active())
@@ -650,17 +651,37 @@ static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
     auto held = latched.find(bot->GetGUID());
     if (held != latched.end())
     {
-        for (Creature* fire : found)
-            if (fire && fire->IsAlive() && fire->GetGUID() == held->second.fire)
+        bool const burning = std::any_of(found.begin(), found.end(), [&](Creature* fire)
+                                         { return fire && fire->IsAlive() && fire->GetGUID() == held->second.fire; });
+        if (burning && !standRejects(held->second.stand))
+        {
+            held->second.rejectedSince = 0;
+            out = held->second.stand;
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "hodir.firestand", "stand " + RaidObs::DescribeAssignment(held->second.fire));
+
+            return true;
+        }
+
+        // Held through a short reject, dropped after a long one. A long one is usually him dragged onto
+        // this very fire, which then offers no stand till Flash Freeze puts it out.
+        if (burning)
+        {
+            uint32 const now = getMSTime();
+            if (!held->second.rejectedSince)
+                held->second.rejectedSince = now;
+
+            if (getMSTimeDiff(held->second.rejectedSince, now) < ULDUAR_HODIR_STAND_REJECT_DROP_MS)
             {
-                if (standRejects(held->second.stand))
-                    return false;
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "hodir.firestand", "held noreach");
 
-                out = held->second.stand;
-                return true;
+                return false;
             }
+        }
 
-        // The fire burned out or was put out by a Flash Freeze, so the sweep below is what counts.
+        // Fire gone, put out by Flash Freeze, or rejected too long: the sweep below decides
         latched.erase(held);
     }
 
@@ -692,6 +713,10 @@ static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
 
     if (picked)
         latched[bot->GetGUID()] = HodirFireLatch{bestFire, out};
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.firestand",
+                             picked ? "stand " + RaidObs::DescribeAssignment(bestFire) : std::string("none"));
 
     return picked;
 }

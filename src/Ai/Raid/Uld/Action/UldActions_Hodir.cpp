@@ -413,8 +413,12 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
 
     // Holding still is the job: Storm Power pulses 3 yd round the carrier, so a walking carrier spends its
     // charges on whoever it passes. The rally is where it stood, so this only walks once pushed off it.
-    return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
-                      ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
+    if (bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
+        return false;
+
+    // The rally itself, same as the receivers, not MoveInside's spot on a ring round it
+    return MoveTo(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool HodirCollectStormPowerAction::Execute(Event /*event*/)
@@ -427,8 +431,13 @@ bool HodirCollectStormPowerAction::Execute(Event /*event*/)
     if (!GetHodirStormCloudRally(bot, carrier, rally))
         return false;
 
+    if (bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
+        return false;
+
     // No cast break here, unlike the dodge and the shelter run: dropping a cast to walk 3 yd for a buff
     // costs more than the pulse is worth.
-    return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
-                      ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
+    // The rally itself, not MoveInside: that parks each bot at its own follow angle on a ring round the
+    // rally, so a carrier and a receiver on opposite sides end up 4 yd apart, outside the 3 yd pulse.
+    return MoveTo(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT);
 }

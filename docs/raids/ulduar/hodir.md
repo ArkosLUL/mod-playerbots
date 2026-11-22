@@ -398,6 +398,15 @@ for **22%**.
   tell them apart — and held **per instance**, not per bot, because a carrier and a receiver that
   disagree walk past each other. Damage dealers inside `_STORM_CLOUD_COLLECT_LEASH` 15 that lack the
   buff step in to park 2.0 / release 4.0; healers and tanks are excluded, and tanks still never carry.
+  **Carrier and receivers walk to the rally point itself.** `MoveInside` parks each bot at its own
+  follow angle on a 2 yd ring, so once `GetFollowAngle` spread the raid (`61011f323`) a carrier and a
+  receiver could stand 4 yd apart, outside the pulse: parked receivers lacking the buff stood in it
+  20-45% of the time against 43-70%, Storm Power a cloud fell by a tenth, and 7 clouds in six pulls ran
+  out of time with charges left against none in three. **The position node stands down** for a
+  carrier, and for a receiver inside park of the rally still lacking the buff, which waits there for
+  the 1 s pulse. Its anchor or declump walked both off: carriers stood within 2 yd of their rally
+  18-27% of carry samples (windows 7-8), it was a parked ranged receiver's commonest next mover, and
+  its `MOVEMENT_COMBAT` lock refused the walk back until it landed.
   Seeding from the carrier is what keeps a melee carrier gathering melee and a ranged one gathering
   the casters, instead of walking half the raid across the room for six seconds of buff. No cast is
   broken for it — that is for the 14,000 hits, not a buff.
@@ -408,7 +417,7 @@ for **22%**.
 - **Storm Power is at its cap — not a lever, do not re-open it.** 10-12 Storm Cloud windows a pull
   delivered 43-55 Storm Power, **5.4-5.5 per cloud against a hard 6**, because every application
   spends a charge (`spell_hodir_storm_power_aura::OnApply`). Only the split is arguably wrong: melee
-  took 31 of 55.
+  took 31 of 55. The exception is a cloud that runs out of time first (the rally above).
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -502,9 +511,13 @@ was a mover overshooting. Each cause below is separate, and all of them are stil
   deliberately *not* re-checked: it decides which zone is worth starting for, and a bot already on its
   way is past that question. **Never dropping fails too**: casters sat `held noreach` on a zone left
   too close to him for **33%** of their time, in runs of 20-43 s, with another usable zone within 30 yd
-  on half of it. A Starlight latch drops after **3 s** of continuous reject
-  (`_STARLIGHT_REJECT_DROP_MS`): 84-96% of held time over three pulls came in runs of 10 s+ and 0-1%
-  under 3 s, so a band-edge wobble still holds. The fire latch still holds until the fire dies.
+  on half of it. Either latch drops after **3 s** of continuous reject
+  (`_STAND_REJECT_DROP_MS`): 84-96% of Starlight held time over three pulls came in runs of 10 s+ and
+  0-1% under 3 s, so a band-edge wobble still holds. The fire latch once held until the fire died, and
+  a bot latched onto the fire the tank then dragged him onto had no stand till Flash Freeze: from the
+  south drop that was 32-56% of ranged and healer time over 0:00-0:57 in four of six pulls, and ranged
+  stood in a legal fire 15-22% of the first fire window against 71-72%. `hodir.firestand` reads
+  `stand <fire>`, `held noreach` or `none`.
 - **Put the zone in the note, not just the rule.** `NoteDerived` emits on change, so a re-latch onto a
   *different* zone under a bare `stand` wrote nothing and the flap above hid behind notes that looked
   exactly like a latch holding. `hodir.starlight` reads `stand <zone>`, and a held stand standing down
@@ -538,7 +551,11 @@ the bot's own spot are refused, so the stall count cannot see them; the reader c
 death's killing spell, stacks and Frozen Blows window. `--tanks` gives per window his time on each tank
 (his snapshot target), the swings each took, every tank button as `node` or `class` (the OK `act` row
 sharing the cast's ms), the `hodir.defensive` values (`idle`, `wait`, `spent`, the button, `covered`,
-`none`), and the button up at each tank death.
+`none`), and the button up at each tank death. `--storm` gives clouds, Storm Power a cloud by role, clouds
+spent out or timed out, the carrier's share within 2 yd of its rally, and how often a receiver parked
+at the rally stood inside the carrier's pulse;
+`--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the fire latch's runs
+held out of the band.
 
 ## Pace
 
@@ -547,6 +564,13 @@ with the roster), and kills at **2:57 and 2:54 with no deaths** have made it (21
 dps runs ~250k with a Toasty Fire burning against 145-174k with none, and over 21 buckets casting%
 correlates with boss dps at **r = +0.75**, moving% at −0.63 and fire coverage at +0.78: cast uptime is
 the metric to move, and the fire is how.
+
+**The first fire window carries the pace.** Since the drop moved south to (1998, -288), 0-3:00 fell
+from 216-234k to 169-193k, and 0:20-0:57 alone from 337-345k to 213-263k, ranged the bulk of it. The
+raid walks in 26 yd further, so he is dragged 13-16 yd south of the centre by 5 s, the first mage
+blocks break 2-4 s later, the first fire lands at 19-22 s against 18, and fires land south among the
+ranged, one of which he is then held on (the fire latch above). Melee lost less, mostly 0:57-2:34, not
+traced beyond the Storm Cloud rally above.
 
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at
