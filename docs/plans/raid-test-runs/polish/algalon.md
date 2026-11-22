@@ -377,3 +377,6 @@ his reach in all three pulls), and a pair tank had him within 0.3 s.
 12 s with the handler standing still (window 11: uld1 4 × 12.6 s); a hole the floor check refuses reads
 `stuck`, then the handler kites another hole or taunts. Constellations between 5 and 7.5 yd up count as
 low: taunted and kited like the rest. Big Bang 2's hole losses won't change until Q4 is answered.
+
+**User answer (2026-11-22) to Q4:** (a): keep two holes out of the constellation kite from 60 s before
+each Big Bang.

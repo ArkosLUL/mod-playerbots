@@ -688,3 +688,12 @@ the pile's AoE. A bot inside its blast still bails first, then shoots from 18 yd
    trio comes, not higher ones after. Options: (a) keep the trio first; (b) ranged finish lashers left
    from an earlier wave before the trio slot while their summed health is under one lasher's (100%, ~235k);
    (c) the main tank taunts them. Recommendation: (b).
+
+**User answers (2026-11-22):** Q2 (c): the add tank keeps its class defensives for the trio waves and
+chains them once the Snaplasher on it is stacked, and healers put tank externals (Pain Suppression,
+Guardian Spirit, Hand of Sacrifice) on it then. Q4: drop the Snaplasher hold; the user would kite it at
+high stacks because the stacks slow it. Orchestrator check: only the 10-man stack 62663 slows (aura 33,
+-5% a stack); the 25-man 64190 has no speed aura (DBC; the core casts 62664 at both sizes and the 25-man
+proc is 64191 -> 64190), so the 25-man replacement went back to the user. Q5 (b): ranged finish lashers
+left from an earlier wave before the trio while their summed health is under one lasher's; the user's aim
+is that a wave is cleared before the next arrives, so find why it is not.
