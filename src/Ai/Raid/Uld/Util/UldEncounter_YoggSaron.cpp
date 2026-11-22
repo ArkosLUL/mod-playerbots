@@ -708,7 +708,7 @@ bool YoggSaronLeavingBrainLevel(Player* bot)
     YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
     auto const latch = state.leavingUntilMs.find(bot->GetGUID());
 
-    // Signed: an end still in the future must not read as a timer wrap.
+    // Signed on purpose: getMSTimeDiff would read an end still ahead as a timer wrap.
     return latch != state.leavingUntilMs.end() && static_cast<int32>(latch->second - getMSTime()) > 0;
 }
 
@@ -1003,8 +1003,7 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
         ++state.waveOrdinal;
         state.wave = state.waveOrdinal;
     }
-    // An unconfirmed prediction rolls on a whole period, else it reads 'any moment now' forever and parks the team.
-    // Signed, not getMSTimeDiff: that reads a future time as a timer wrap, ~4.29e9 ms late.
+    // Signed on purpose: getMSTimeDiff reads a wave still ahead as a timer wrap, ~4.29e9 ms late.
     else if (!portalsUp && state.nextWaveMs &&
              static_cast<int32>(now - state.nextWaveMs) > static_cast<int32>(ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS))
     {
@@ -4605,8 +4604,7 @@ void YoggSaronTickRoar(PlayerbotAI* botAI)
 
     uint32 const elapsed = static_cast<uint32>(std::max(0, cast->GetCastTime() - cast->GetCastTimeRemaining()));
     uint32 const start = now - elapsed;
-    // Forward only. Paladins read the cast bar a few ms apart, and a start just before the stored one
-    // would wrap getMSTimeDiff, re-key the roar and let a second paladin press.
+    // Signed on purpose: a start a few ms early wraps getMSTimeDiff and lets a second paladin press.
     int32 const sinceLast = static_cast<int32>(start - state.lastRoarMs);
     if (!state.lastRoarMs || sinceLast > static_cast<int32>(ULDUAR_YOGG_SARON_ROAR_PERIOD_MS / 2))
         state.lastRoarMs = start;
