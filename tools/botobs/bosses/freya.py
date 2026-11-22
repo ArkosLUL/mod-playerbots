@@ -90,6 +90,9 @@ HEAL_RANGE_YD = 38.5
 HEALERS_WANTED = 2
 HOLD_NOTE = "freya.snaphold"
 HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
+COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
+# not casts, the probes write these so the same button cast again next wave still gets its own row
+COOLDOWN_NO_PICK = {"covered", "none"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
 BARK_STACKS = (62663, 64190)
 NPC_ARMY_GHOUL = 24207
@@ -232,6 +235,9 @@ def show_tanks(trace: Trace) -> None:
         if rec.get("sp") in AREA_TAUNTS and trace.role(rec.get("s")) == "tank" and not rec.get("tr"):
             target = f" on {holder_label(trace, rec['tgt'])}" if rec.get("tgt") else ""
             print(f"  {clock(rec['t'])} {trace.name(rec['s'])} {AREA_TAUNTS[rec['sp']]}{target}")
+    for rec in trace.of("note"):
+        if rec.get("k") in COOLDOWN_NOTES and rec.get("txt") not in COOLDOWN_NO_PICK:
+            print(f"  {clock(rec['t'])} {trace.name(rec.get('g'))} {COOLDOWN_NOTES[rec['k']]}: {rec.get('txt')}")
     for change in hold_changes(trace):
         state = change["state"]
         line = f"  {clock(change['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}"

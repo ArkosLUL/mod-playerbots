@@ -270,6 +270,70 @@ Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float 
     return best;
 }
 
+bool IsFreyaLasherTail(FreyaWaveState const& state)
+{
+    uint64 summed = 0;
+    uint32 oneLasher = 0;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive())
+            continue;
+
+        summed += lasher->GetHealth();
+        oneLasher = std::max(oneLasher, lasher->GetMaxHealth());
+    }
+
+    return oneLasher && summed < oneLasher;
+}
+
+Player* GetFreyaStackedSnaplasherTank(FreyaWaveState const& state)
+{
+    Unit* snaplasher = state.snaplasher;
+    Unit* victim = snaplasher ? snaplasher->GetVictim() : nullptr;
+    Player* tank = victim ? victim->ToPlayer() : nullptr;
+    if (!tank || !tank->IsAlive() || !PlayerbotAI::IsTank(tank))
+        return nullptr;
+
+    uint32 stacks = 0;
+    for (uint32 spellId : {SPELL_HARDENED_BARK_STACK_10, SPELL_HARDENED_BARK_STACK_25})
+        if (Aura const* bark = snaplasher->GetAura(spellId))
+            stacks = std::max<uint32>(stacks, bark->GetStackAmount());
+
+    return stacks >= ULDUAR_FREYA_ADD_TANK_DEFENSIVE_STACKS ? tank : nullptr;
+}
+
+bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) ||
+        bot->GetHealthPct() < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT)
+        return false;
+
+    Unit* freya = GetFreyaScan(botAI).Boss();
+    return freya && freya->IsAlive() && freya->GetVictim() != bot;
+}
+
+char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)
+{
+    Player* bot = botAI->GetBot();
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    tank = GetFreyaStackedSnaplasherTank(state);
+    if (!tank || tank == bot)
+        return nullptr;
+
+    for (uint32 spellId : {SPELL_FREYA_PAIN_SUPPRESSION, SPELL_FREYA_GUARDIAN_SPIRIT, SPELL_FREYA_HAND_OF_SACRIFICE})
+        if (tank->HasAura(spellId))
+            return nullptr;
+
+    for (char const* external : {"pain suppression", "guardian spirit", "hand of sacrifice"})
+        if (botAI->CanCastSpell(external, tank))
+            return external;
+
+    return nullptr;
+}
+
 Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range)
 {
     Player* bot = botAI->GetBot();

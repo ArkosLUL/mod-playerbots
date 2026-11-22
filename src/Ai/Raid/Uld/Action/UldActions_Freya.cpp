@@ -19,6 +19,8 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "Spell.h"
 #include "UldData.h"
 #include "UldEncounter_Freya.h"
@@ -538,25 +540,10 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     bool const trioLocked = state.TrioLocked();
 
-    std::vector<Unit*> priority;
+    bool const isRanged = PlayerbotAI::IsRangedDps(bot);
 
-    if (takesGift && !state.TrioReleased())
-        priority.push_back(state.eonarsGift);
-
-    if (!trioLocked)
-        priority.push_back(state.conservator);
-
-    Unit* const trioMember = ShedSnaplasherThreat(state, GetFreyaTrioAssignment(botAI, state));
-    priority.push_back(trioMember);
-
-    if (trioLocked)
+    auto const pickLasher = [&]() -> Unit*
     {
-        priority.push_back(state.conservator);
-    }
-    else
-    {
-        bool const isRanged = PlayerbotAI::IsRangedDps(bot);
-
         float const reach = isRanged ? sPlayerbotAIConfig.SpellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
 
         Unit* lasher = isRanged ? GetFreyaLowLasherOnPlayer(bot, state, reach) : nullptr;
@@ -569,8 +556,27 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
         if (!lasher)
             lasher = GetFreyaLocalLasherTarget(botAI, state, currentTarget, reach);
 
-        priority.push_back(lasher);
-    }
+        return lasher;
+    };
+
+    std::vector<Unit*> priority;
+
+    if (takesGift && !state.TrioReleased())
+        priority.push_back(state.eonarsGift);
+
+    if (!trioLocked)
+        priority.push_back(state.conservator);
+
+    if (isRanged && !trioLocked && !state.LivingTrio().empty() && IsFreyaLasherTail(state))
+        priority.push_back(pickLasher());
+
+    Unit* const trioMember = ShedSnaplasherThreat(state, GetFreyaTrioAssignment(botAI, state));
+    priority.push_back(trioMember);
+
+    if (trioLocked)
+        priority.push_back(state.conservator);
+    else
+        priority.push_back(pickLasher());
 
     priority.push_back(AI_VALUE2(Unit*, "find target", "freya"));
 
@@ -705,6 +711,25 @@ bool FreyaReleaseHeldSnaplasherAction::Execute(Event /*event*/)
 
     releasedMs = getMSTime();
     return true;
+}
+
+bool FreyaAddTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = NextTankDefensive(botAI, bot, "freya.adddef", true);
+    return spellId && botAI->CastSpell(spellId, bot);
+}
+
+bool FreyaAddTankExternalAction::Execute(Event /*event*/)
+{
+    Player* tank = nullptr;
+    char const* external = GetFreyaTankExternal(botAI, tank);
+    if (!external)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "freya.addext", external);
+
+    return botAI->CastSpell(external, tank);
 }
 
 bool FreyaRedirectThreatAction::isUseful()

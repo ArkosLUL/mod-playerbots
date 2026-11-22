@@ -698,6 +698,85 @@ proc is 64191 -> 64190), so the 25-man replacement went back to the user. Q5 (b)
 left from an earlier wave before the trio while their summed health is under one lasher's; the user's aim
 is that a wave is cleared before the next arrives, so find why it is not.
 
+## Round 7 (on Custom b21cda8ee, no new pulls)
+
+**Data:** none new. Rounds 5 and 6 are merged but not built, so no verdict, stop rule or ranking. Built the
+user's Q2 (c) and Q5 (b), and read windows 10-12 (`report --head ebe746ad1`, the traces of rounds 4-6) for
+why a lasher wave outlives the next spawn. Ad hoc scripts: `scratchpad/freya-r7/` (`wave_timeline.py`,
+`gift_reach.py`, `gift_camp.py`).
+
+**Why a lasher wave is not cleared before the next.** The core spawns the next wave 60s after the last, or
+5s after the current set dies (`boss_freya.cpp` `EVENT_FREYA_ADDS_SPAM`, `ACTION_ADD_DIED`). With the raid
+intact, windows 10-11's lasher waves died in 31-49s; window 12's ran 85s (uld1 1:56), and past the pull's end
+(uld2 3:32, uld3 2:36). In all three an Eonar's Gift lived its full cast mid-wave and healed the lashers
+about 60% each:
+
+- uld1: the 2:01 Gift (14.6s) took the pack from 693% to 869% summed; the 2:46 one (14.5s) took the last two
+  from 8% and 12% to 66% and 67%, and the next lasher wave spawned on them at 2:56.
+- uld2: the trio came on the 60s timer at 4:32.5 with four lashers at 76% summed; ranged went to the trio
+  (it outranks lashers), and the 5:03 Gift took the last three from 50% to 228%.
+- uld3: the 2:47 Gift took the pack from 560% to 746%; the 3:32 one took three at 15% to two at 130%, and
+  the trio spawned at 3:36.5.
+
+The Gifts that lived spawned a median 38-79 yd from the ranged; 0-2 ranged were within 28.5 yd for most of
+each life. Ranged move orders during them: `reach spell` against `freya ranged camp`, 47/46, 8/27, 35/12,
+23/48. Of those camp orders, 100 were bails from a low lasher on the back line (round 6's target, though a
+Gift outranks that pick) and 25 the camp's gather pulling a ranged bot whose target was the Gift back to
+the anchor (15, 2, 2, 6). So: (1) a Gift living, because the back line can't reach it (bails, gather,
+distance), and (2) the trio taking the ranged off an unfinished tail.
+
+**Built** (Freya files only, any size or difficulty, no player branch):
+
+- Q5 (b): `IsFreyaLasherTail` (living lashers summing under one lasher's max health); while a trio member
+  lives, a ranged DPS bot's lasher pick (low one on a player, else the ranged aim, else the nearest in
+  reach) goes ahead of the trio slot in `ResolveFreyaDpsTarget`. Out of reach it falls through to the trio.
+- Bug, cause (1): `freya ranged camp`'s gather stands down for a ranged DPS bot whose target is a Gift, as it
+  does for a ghoul-held pack; the bail still runs. The strategy makes the Gift a ranged job, and the gather
+  undid their walk to it.
+- Q2 (c): `freya add tank defensive hold` blocks `HeldTankDefensiveNames` for assist tank 0 while Freya lives
+  and is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank defensive`
+  (`ACTION_RAID + 4`): a tank with a Snaplasher of 25+ bark stacks on him (`GetFreyaStackedSnaplasherTank`,
+  about 4s into its wave) casts `NextTankDefensive` (physical), which waits while one runs, so they chain.
+  `freya add tank external` (`ACTION_RAID + 4`): a healer casts Pain Suppression, Guardian Spirit or Hand of
+  Sacrifice on that tank whenever none of the three is up. Notes `freya.adddef`, `freya.addext`; `--tanks`
+  lists them, tested.
+- Not touched: the Snaplasher hold (Q4, with the user).
+
+**Next window should show** (`freya.py --tanks`, `--waves`, `--lows`; `gift_reach.py`, `gift_camp.py`):
+
+- Q2: no add-tank cooldown in a lasher or Conservator wave above 25% health; in each trio wave a
+  `freya.adddef` row about 4s in, then the next as each runs out, and `freya.addext` rows on the add tank;
+  add-tank deaths to the Snaplasher under rounds 4-6's 1-2 a pull.
+- Q5: no trio spawning onto lashers summing under 100% that are then healed back by a Gift; ranged on the
+  tail while it is in reach.
+- Gift: no gather order from a ranged bot targeting a Gift; fewer Gifts living 12s+ in lasher waves (window
+  12: 5 in its three long waves), and lasher waves done before the next spawn.
+- Rounds 5 and 6 checks as written there; rounds 1-4 still holding.
+
+**Questions:**
+
+6. A Gift outranks a low lasher hitting a back-line bot, so the ranged keep bailing from it instead of
+   walking to the Gift: 100 of the bails above. Options: (a) keep the Gift first; (b) a ranged DPS bot with
+   a low lasher on a player inside `SpellDistance` shoots it before the Gift (12-35k left, one or two casts),
+   then the Gift. Recommendation: (b), read after round 6's low-lasher pick is built.
+
+**Review:** the cause holds. Reproduced on window 12 (`wave_timeline.py`, `gift_camp.py`): uld1 693% to
+869% at 2:11-2:16 and the 8/12% tail to 66/67% by 3:02; uld2's four lashers at 76% when the trio came at
+4:33, then 50% to 228% at 5:14-5:19; uld3's 15% to 130% at 3:39-3:44; 100 bails and 25 gathers (15, 2, 2,
+6) during the four Gifts. Windows 10-11's intact lasher waves ran 31-49s. Fixed:
+
+- The tail pick also ran with the trio locked, against "once any trio member is below 30% the trio
+  outranks the other adds" (findings doc), so ranged could leave a sync kill for a lasher. It now waits
+  for `!trioLocked`, as the Conservator does. uld3's tail (2 lashers at 99%, 4:05) still had ~17s before
+  the lock (Water Spirit under 30% at 4:22).
+- `freya.adddef` and `freya.addext` were written only on a cast, and `NoteDerived` drops a value equal
+  to the bot's last one for that key, so the same button cast in a later trio wave left no row. The
+  defensive trigger now notes too (`covered` while one runs, `none` with nothing left), and a healer
+  with nothing to cast under a stacked Snaplasher notes `none`; `--tanks` hides both, tested.
+
+Next window, read the Q5 check as "ranged on the tail while it is in reach and no trio member is under
+30%".
+
 **User answer (2026-11-22) to Q4, after the 25-man check:** drop the Snaplasher hold (rounds 3 and 5).
 Kite a loose Snaplasher only while its live speed is below the kiter's (its stacks slow it at 10-man only);
 otherwise, with no add tank alive, the raid kills it.

@@ -50,6 +50,24 @@ public:
     bool IsActive() override;
 };
 
+class FreyaAddTankDefensiveTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya add tank defensive";
+
+    FreyaAddTankDefensiveTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class FreyaAddTankExternalTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya add tank external";
+
+    FreyaAddTankExternalTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class FreyaRedirectThreatTrigger : public Trigger
 {
 public:

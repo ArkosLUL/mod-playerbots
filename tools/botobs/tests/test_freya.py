@@ -306,6 +306,17 @@ class Tanks(unittest.TestCase):
         self.assertIn("0:22.100 Snaplasher hold on for 1.0s: 2 hit(s) on its bark, 1 death(s) to it\n",
                       printed(fr.show_tanks, load(pull() + [death])))
 
+    def test_add_tank_cooldowns_under_the_snaplasher(self):
+        notes = [{"t": 12000, "e": "note", "g": ADD, "k": "freya.adddef", "txt": "barkskin"},
+                 {"t": 12100, "e": "note", "g": HEALER, "k": "freya.addext", "txt": "pain suppression"},
+                 {"t": 12200, "e": "note", "g": ADD, "k": "freya.adddef", "txt": "covered"},
+                 {"t": 12300, "e": "note", "g": HEALER, "k": "freya.addext", "txt": "none"}]
+        text = printed(fr.show_tanks, load(pull() + notes))
+        self.assertIn("  0:12.000 Bruin defensive under the Snaplasher: barkskin\n", text)
+        self.assertIn("  0:12.100 Mender external on the Snaplasher's tank: pain suppression\n", text)
+        self.assertNotIn("covered", text)
+        self.assertNotIn(": none", text)
+
 
 class Beams(unittest.TestCase):
     def test_dodges_per_role_and_healers_on_the_holder(self):
