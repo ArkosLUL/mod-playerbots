@@ -34,7 +34,9 @@ SPELL_STORM_CLOUD = (65123, 65133)
 # Storm Power pulses this far round the carrier's own feet.
 STORM_PULSE_YD = 3.0
 # Inside this of the rally a receiver stops walking (ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE).
-STORM_COLLECT_RELEASE_YD = 4.0
+STORM_COLLECT_RELEASE_YD = 2.5
+STORM_COLLECT_LEASH_YD = 15.0
+STORM_GATHER_TICK = 4
 # Inside this a carrier stops walking back to its rally (ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK).
 STORM_PARK_YD = 2.0
 # A cloud removed with less than this left ran its time out rather than its charges.
@@ -336,6 +338,11 @@ def storm_carries(rows: list[tuple[int, int, int, bool, int]]) -> list[dict]:
         carries.append(carry)
         open_on[carrier] = carry
     return carries
+
+
+def pulse_counts(start: int, times: list[int]) -> list[tuple[int, int]]:
+    """One cloud's Storm Power applications by pulse, as `(seconds after it landed, receivers)`."""
+    return sorted(collections.Counter(round((when - start) / 1000) for when in times).items())
 
 
 def run_until_paused(low: int, high: int, pauses: list[int], spans: list[tuple[int, int]]) -> int:
@@ -1291,6 +1298,34 @@ def show_storm(trace: Trace) -> None:
     if parked:
         print(f"  damage dealers parked at the rally without Storm Power: inside the carrier's"
               f" {STORM_PULSE_YD:.0f} yd {inside / parked * 100:.0f}% of {parked} samples")
+
+    dead = first_death(trace)
+    print(f"  per cloud: landed, carrier, damage dealers lacking it within {STORM_COLLECT_LEASH_YD:.0f} yd of the"
+          f" carrier then, how many of them its cloud buffed, its pulses as s:receivers")
+    leash_total = leash_buffed = on_gather = 0
+    for carry in carries:
+        start, carrier = carry["start"], carry["carrier"]
+        stop = (carry["end"] or end) + 100
+        mine = [rec for rec in powered if rec.get("s") == carrier and start <= rec["t"] <= stop]
+        spot = at(trace, carrier, start)
+        leash = set()
+        for guid in dealers - {carrier}:
+            if dead.get(guid, end + 1) <= start or covered(holding.get(guid, []), start, start + 1):
+                continue
+            where = at(trace, guid, start)
+            if spot and where and inside_circle((where[0], where[1]), (spot[0], spot[1]), STORM_COLLECT_LEASH_YD):
+                leash.add(guid)
+        buffed = {rec.get("d") for rec in mine} & leash
+        pulses = pulse_counts(start, [rec["t"] for rec in mine])
+        leash_total += len(leash)
+        leash_buffed += len(buffed)
+        on_gather += sum(count for second, count in pulses if second == STORM_GATHER_TICK)
+        print(f"    {clock(start)} {trace.role(carrier)[:1]}  leash {len(leash):2d}  buffed {len(buffed):2d}  "
+              + " ".join(f"{second}:{count}" for second, count in pulses))
+    if leash_total:
+        print(f"  damage dealers in the leash at landing buffed by that cloud: {leash_buffed} of {leash_total}"
+              f" ({leash_buffed / leash_total * 100:.0f}%); Storm Power on pulse {STORM_GATHER_TICK}, the shared one:"
+              f" {on_gather} of {len(powered)}")
 
 
 def show_shed(trace: Trace) -> None:

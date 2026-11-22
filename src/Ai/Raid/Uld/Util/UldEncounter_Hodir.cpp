@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -425,6 +426,60 @@ bool GetHodirStormCloudRally(Player* bot, Player* carrier, Position& out)
 
     out = entry.rally;
     return true;
+}
+
+bool GetHodirStormGather(PlayerbotAI* botAI, Player* bot, HodirStormGather& out)
+{
+    if (!bot || !GetHodir(botAI))
+        return false;
+
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
+        return false;
+
+    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
+        return false;
+
+    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
+    if (!carrier || carrier == bot || !GetHodirStormCloudRally(bot, carrier, out.rally))
+        return false;
+
+    out.dist = bot->GetExactDist2d(&out.rally);
+    if (out.dist > ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH)
+        return false;
+
+    Aura const* cloud = carrier->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, carrier));
+    AuraEffect const* pulse = cloud ? cloud->GetEffect(EFFECT_0) : nullptr;
+    if (!pulse || pulse->GetAmplitude() <= 0)
+        return false;
+
+    int32 const period = pulse->GetAmplitude();
+    out.msToPulse = (static_cast<int32>(ULDUAR_HODIR_STORM_GATHER_TICK) - static_cast<int32>(pulse->GetTickNumber()) - 1) *
+                        period +
+                    std::clamp(pulse->GetPeriodicTimer(), 0, period);
+
+    float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
+    float const walk = std::max(0.0f, out.dist - ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK);
+    out.msToWalk = out.msToPulse - static_cast<int32>(walk / speed * IN_MILLISECONDS) - ULDUAR_HODIR_STORM_GATHER_LEAD_MS;
+    return true;
+}
+
+bool IsHodirStormGatherHeld(PlayerbotAI* botAI)
+{
+    HodirStormGather gather;
+    return IsHodirEngaged(botAI) && GetHodirStormGather(botAI, botAI->GetBot(), gather) && gather.msToWalk <= 0 &&
+           gather.msToPulse > -ULDUAR_HODIR_STORM_GATHER_HOLD_MS &&
+           gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
+}
+
+int32 GetHodirStormGatherCastSlackMs(PlayerbotAI* botAI, Player* bot)
+{
+    HodirStormGather gather;
+    if (!GetHodirStormGather(botAI, bot, gather) || gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE ||
+        gather.msToPulse <= -ULDUAR_HODIR_STORM_GATHER_HOLD_MS || bot->HasUnitState(UNIT_STATE_ROOT) ||
+        IsHodirFlashFreezeIncoming(botAI))
+        return std::numeric_limits<int32>::max();
+
+    return std::max(gather.msToWalk, 0);
 }
 
 static float HodirBuffWalk(Player* bot)

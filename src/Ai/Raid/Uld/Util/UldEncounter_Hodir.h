@@ -66,11 +66,27 @@ static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
 
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK = 2.0f;
-inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 4.0f;
+inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 2.5f;
 static_assert(ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK < ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS,
               "a parked receiver has to be inside the pulse, not on its edge");
+static_assert(ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK < ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE &&
+                  ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE < ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS,
+              "a receiver that stops walking has to still be inside the pulse");
 
 inline constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH = 15.0f;
+
+inline constexpr uint32 ULDUAR_HODIR_STORM_GATHER_TICK = 4;
+inline constexpr int32 ULDUAR_HODIR_STORM_GATHER_LEAD_MS = 600;
+inline constexpr int32 ULDUAR_HODIR_STORM_GATHER_HOLD_MS = 1500;
+inline constexpr int32 ULDUAR_HODIR_STORM_GATHER_CAST_SLACK_MS = 250;
+
+struct HodirStormGather
+{
+    Position rally;
+    float dist = 0.0f;
+    int32 msToPulse = 0;
+    int32 msToWalk = 0;
+};
 
 inline constexpr float ULDUAR_HODIR_ICE_SHARDS_RADIUS = 4.0f;
 inline constexpr float ULDUAR_HODIR_ICE_SHARDS_CLEAR = 6.0f;
@@ -226,6 +242,12 @@ bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot);
 Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot);
 
 bool GetHodirStormCloudRally(Player* bot, Player* carrier, Position& out);
+
+bool GetHodirStormGather(PlayerbotAI* botAI, Player* bot, HodirStormGather& out);
+
+bool IsHodirStormGatherHeld(PlayerbotAI* botAI);
+
+int32 GetHodirStormGatherCastSlackMs(PlayerbotAI* botAI, Player* bot);
 
 bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 

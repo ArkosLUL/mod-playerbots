@@ -9,12 +9,28 @@
 
 #include "Multiplier.h"
 
+#include <limits>
+#include <unordered_map>
+
 class HodirBreakerAoeHoldMultiplier : public Multiplier
 {
 public:
     HodirBreakerAoeHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "hodir breaker aoe hold multiplier") {}
 
     float GetValue(Action* action) override;
+};
+
+class HodirStormGatherCastHoldMultiplier : public Multiplier
+{
+public:
+    HodirStormGatherCastHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "hodir storm gather cast hold") {}
+
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, uint32> spellIds;
+    uint32 cachedAtMs = 0;
+    int32 cachedSlackMs = std::numeric_limits<int32>::max();
 };
 
 #endif
