@@ -70,14 +70,17 @@ tank holding him, the other assigned bot tank taunts (`ironassembly.meltdown` `t
 the carrier, the carrier walks to the **Meltdown point**, anchor + 30 yd @ 315° = (1608.39, 99.81):
 46 yd from his spot, 24 off the spread ring, empty in phase 3, navprobe on the floor with a straight
 path (`run` → `parked`). A swapped carrier drops out of the tank ranking, so the next bot tank becomes
-the partner, and counts as a hazard mover, so the movement guard keeps attack and reach from pulling it
-back. The run claims every tick at `MOVEMENT_FORCED`: after a taunt both threats match, and a carrier
-that swings takes him back. Fallbacks hold where the tank stands: a swap landing with less than walk
-time + 1 s left (`late`; dying halfway puts the blast on the ranged ring instead of the melee, and a
-started walk is latched in `ironassembly.meltdownrun` so a detour can't stop it), and no second bot tank
-(`nopartner`; a human partner never taunts). Running **without** a swap is the trap: it towed
-Steelbreaker 180 yd, cut melee uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar
-in a 30s phase**.
+the partner. The run claims every tick at `MOVEMENT_FORCED`: after a taunt both threats match, and a
+carrier that swings takes him back. That outranks reach only while walking, and the movement guard
+keeps reach for a hazard mover like the carrier, so **`iron assembly meltdown carrier hold` zeroes
+Reach, ReachHeal and the gap-closers for a `run` or `parked` carrier**. Without it a parked carrier's
+`reach melee` tugged it toward him every other tick, a bear's Feral Charge landed one 22 yd back 3 s
+before its blast (5 melee dead, him 24% → 83%), and a warrior's Charge cost a walking one 8 yd.
+Fallbacks hold where the tank stands: a swap landing with less than walk time + 1 s left (`late`;
+dying halfway puts the blast on the ranged ring instead of the melee, and a started walk is latched in
+`ironassembly.meltdownrun` so a detour can't stop it), and no second bot tank (`nopartner`; a human
+partner never taunts). Running **without** a swap is the trap: it towed Steelbreaker 180 yd, cut melee
+uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**.
 
 **Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a cast
 is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk out to
@@ -252,7 +255,8 @@ Deliberate non-behaviours: **tanks hold through Overload** (20,000 nature is sur
 lethal in cloth, and under the normal order Brundir dies last, so his channel invincibility never
 applies); **ranged spread only in hard mode**, since Static Disruption needs Steelbreaker's phase 2;
 **bots never set the skull**, so a human's mark wins; **melee never dodge Meltdown**, which a swap
-takes off the boss and a failed one leaves on them (every traced blast but one left them alive); and
+takes off the boss and a failed one leaves on them (every blast traced before 22 Nov but one left them
+alive; a `nopartner` one late in a 25-man phase killed 5); and
 **the melee tank spots stay 11 yd off the
 stack**, which keeps healers covering the tanks and the stack at once.
 
@@ -292,7 +296,8 @@ least two healers were under 10% mana within 25 s of it, priests first (2:49–3
 Voltage and the first non-tank death set off the cascade. Uld1 still took him to 7%.
 A healer's Shadowfiend waits for ≤ 50% mana ([priest](../../classes/priest.md#cross-spec)): ungated,
 it fired 8–23 s in at 80–95% mana here, the full bar capping the return at 5–19%, and the second came
-back at 5:08, after the cascade.
+back at 5:08, after the cascade. With the gate and 5 healers (22 Nov) priests ran dry at 3:42–4:49
+and his lowest was 0.4%, 23% and 24%.
 
 **One round goes at the pull**, by the user's call, to speed the fight up: while all three are up and
 within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health), trinkets,
