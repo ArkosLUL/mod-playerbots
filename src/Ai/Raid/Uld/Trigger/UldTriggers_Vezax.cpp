@@ -125,7 +125,7 @@ bool VezaxSaroniteAnimusTrigger::IsActive()
         return false;
     }
 
-    // Ahead of the target test: the dwell only counts if it's asked every tick.
+    // Keep this above the target check: the dwell only counts if it's asked every tick.
     bool const tankHeld = TankHasHeldBoss(bot, animus, tankHold, ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS);
 
     // Vezax is invulnerable behind the Saronite Barrier until the Animus dies, so everyone

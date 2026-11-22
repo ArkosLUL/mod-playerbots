@@ -64,9 +64,12 @@ and `Unit::IsWithinCombatRange` both fold in ([reach](../../engine/raid-mechanic
   against this formation at `ACTION_RAID` and the two deadlock.
 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
-itself: a tank on the spawn point is what keeps Vezax there for every other radius here. 20 slots
+itself: a tank on the spawn point is what keeps Vezax there for every other radius here. The arrival
+deadband is twice the tolerance, so a tolerance of 1.5 or more is wider than the 3 yd gap between
+neighbours and lets a bot settle on someone else's slot. 20 slots
 against a 25-man's 18 healers and ranged, so it does not overflow; a bot that finds none holds no
-position, which `vezax.block = unslotted` catches. Slots persist per instance and fill in an
+position, which `vezax.block = unslotted` catches. Slots persist per instance, until the holder leaves
+the instance or changes role, and fill in an
 alternating order (`L row 0`, `R row 0`, …) so neither group fills first and healers spread across
 both; Ulduar's other bosses re-derive from a GUID rank every tick, which reshuffles the whole formation
 on a death.
@@ -149,7 +152,9 @@ their radius, so each group keeps its shape and the field lands on the vacated f
 walk back into. The distance is set by the inner-file bot of the group that was hit, which has to cross
 the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against a 10 yd blast**, so
 widening the files widens the strafe. Flight time is not tight: the front rank's 27 yd is 2.7s against
-a 1.9s walk. `FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot.
+a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against the impact;
+`FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe still in the
+blast.
 Position and soak both decline while an impact covers their destination, as on Algalon; without that the
 bot clears, walks straight back with the missile still inbound, and never casts.
 
@@ -164,7 +169,12 @@ lands. Searing Flames, Mark and Summon Vapors all do it: **7 of 17 crashes in on
 and hit 30 bots, the other 10 none**: Searing Flames 0.1s after a crash left most of the camp never
 dodging, and a later cast blinded the slot and soak guards too, which walked dodgers back under it.
 `VezaxHazardListenerScript` stores the impact for distance over
-`Speed` plus 500 ms, since landings trail that figure by 92-203 ms.
+`Speed` plus 500 ms, since landings trail that figure by 92-203 ms; not `Spell::GetDelayMoment`, which the
+core fills in during the same cast the hook runs inside.
+
+**At the launch the listener also breaks the cast of every bot that dodges and stands within the 10 yd
+impact**: a bot part way through a cast can't move and would finish it standing in the blast. Nobody else is
+interrupted, since a wasted interrupt is a wasted global.
 
 **The dodge is what costs the field, not the camp's shape.** A field is alive for 93% of a pull and the
 median out-of-field cast is made 4-7 yd from one's edge, so availability is never the problem; but of
@@ -175,7 +185,10 @@ it is the one that scattered the camp before, and the group vector keeps the for
 
 **So the fix is the walk back.** Soak travel is **20 yd**: a clear field sits within 15 for 33% of
 out-of-field time, within 20 for 49% and within 25 for 57% (`--field`). Past 25 it outgrows the local
-hazard sweep, and a wider cap lets one group cross to the other's field. The move runs at
+hazard sweep, and a wider cap lets one group cross to the other's field. The walk stops a yard inside the
+8 yd edge, not at the centre: anywhere inside counts, and walking further costs cast time. The soak trigger
+runs every 2s, the one Vezax trigger that sweeps the grid: a field lands every 10s and lasts 20s, so a late
+reaction costs almost nothing. The move runs at
 `MOVEMENT_FORCED`: at `MOVEMENT_COMBAT` a quarter of soak moves were swallowed by the dodge's own
 destination, still latched in `IsWaitingForLastMove` long after the dodge stopped wanting it.
 
@@ -195,7 +208,8 @@ half is magic-only.
 **Ranged dps do not cast at all outside a field**, by multiplier: a cast at full price buys mana that
 cannot be made back. Damage, DoTs and the wand are held; buffs, defensives, heals and every movement
 action are not, or a held bot would stop dodging. Healers are exempt: a held heal lands inside the leech
-spikes that kill people. Gated on 63277, not the linked 65269, so the link's own shortfall cannot silence
+spikes that kill people. The Searing Flames kick goes through `botAI->CastSpell`, not a `CastSpellAction`,
+so no multiplier here ever sees it. Gated on 63277, not the linked 65269, so the link's own shortfall cannot silence
 a bot for something it cannot fix.
 
 **Except on the Animus** (user's call): Profound Darkness makes time the limit there, not mana, and held
@@ -212,7 +226,11 @@ the avoid list is empty and the hazard sweep returns fields only.
 hazard here with a deadline. The interrupt is `+8`: losing a kick costs the raid 13,875-16,125 fire at
 once. Then the two halves of Mark of the Faceless, **break at `+7`, carry at `+6`**, in that order,
 because the bot holding the mark is never the one taking damage. Surge of Darkness closes the EMERGENCY
-band at `+5`. The RAID band is the reward half and numbers separately: animus redirect `+7`, animus `+6`,
+band at `+5`: only the bot he is hitting answers it, with a tank cooldown (Shield Wall, Icebound Fortitude,
+Survival Instincts, Divine Protection, Last Stand, Barkskin, Shield Block), never Divine Shield and the like,
+which would shed him; the raid needs him held still more than the tank untouchable. The RAID band is the
+reward half and numbers separately: damage hold `+8` (it never claims the tick, it only has to run before
+hold-target), animus redirect `+7` (the bot is already on the Animus, so it never competes with the switch), animus `+6`,
 hold-target `+5`, animus bring-back `+4`, animus melee spot `+3`, field soak `+2`, resistance `+1`,
 position last. Hold-target sits under the animus on purpose: in hard mode both fire on a bot off the
 animus, and the animus is the correct answer. Bring-back sits above the soak, or the Animus's victim
@@ -221,7 +239,9 @@ leads it into the camp, and above the melee spot, since it already ends inside h
 **Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40), below
 `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every interrupt
 that tick, and Searing Flames is the one cast in Ulduar that genuinely rewards interrupting. Duty is
-GUID-ranked among bots that are both *capable and ready*, recomputed per cast so cooldowns rotate it.
+GUID-ranked among bots that are both *capable and ready*, recomputed per cast so cooldowns rotate it: one
+kick per cast, or three bots spend theirs on one and miss the next. The trigger keys on Searing Flames' own
+id, since Shadow Crash and Surge of Darkness aren't worth a kick, and stuns are left out: he is immune.
 
 **Life Tap is suppressed outright**, by a Vezax-local multiplier rather than the warlock rotation, and not
 above a mana threshold: its mana half is 31818, a bare `SPELL_EFFECT_ENERGIZE`, so no amount of missing
@@ -241,8 +261,10 @@ waited for a vapor already held it never fired, and two pulls ended at 99% boss 
 from non-tank, non-healer bots holds once their threat reaches 90% of the main tank's on that boss's
 threat list. No bot runs the `threat` strategy, and a field outruns any tank: an affliction warlock in one
 passed 130% of a DK and of a warrior main tank, and Vezax walked into the camp and killed four. On Vezax
-it stands down while the main tank isn't on his list, so a tank that never engages can't park the raid.
-Auto-attack already swinging goes on.
+it stands down while the main tank isn't on his list, so a tank that never engages can't park the raid;
+the Animus spawns with an empty list, and there the switch already waits for the tanks. Threat comes off
+the threat list, never the `"threat"` value ([a `uint8` percentage that
+overflows](../../engine/pitfalls.md#detection-that-never-fires)). Auto-attack already swinging goes on.
 
 **Tricks of the Trade goes only to a tank** (`vezax tricks on tank multiplier`). At the pull the generic
 pick decides the tank needs no redirect ([pitfalls](../../engine/pitfalls.md)) and takes the
@@ -275,11 +297,15 @@ that walks the bot's own threat list, so a bot switched to the Animus or a vapor
 
 ## The trace
 
-`vezax.slot` is the stored assignment; `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
-(`strafe`/`search`/`none`), `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target`
-(`vapor`/`none`/`other`), `vezax.meleespot` (`spot`/`none`), `vezax.hold` (`off`/`on`/`tank`) and
+`vezax.slot` is the stored assignment, a bare number: 0-9 group L, 10-19 group R, row-major inside each so
+the low bit is the file. `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
+(`strafe`/`search`/`none`: which rule produced the destination, which the move record can't tell apart),
+`vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target`
+(`vapor`/`none`/`other`: a vapor is hard mode about to end, `none` the target guard with no source behind
+it), `vezax.meleespot` (`spot`/`none`), `vezax.hold` (`off`/`on`/`tank`) and
 `vezax.interrupter` are derived, each probed inside the helper that derives it so two call sites cannot
-disagree. `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
+disagree. `vezax.block` is written at each return rather than once mid-helper: change-only, a probe in the
+middle and another at the return would read as a flap every tick. `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
 (`off`/`pending`/`lost`/`animus`) are the exception: the encounter's tick writes them, since the
 formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
 come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
@@ -295,7 +321,9 @@ pull, and took the mid-cast interrupt down with it unnoticed.
 
 **The reset fires on a wipe, not only a kill.** Waiting for him to be gone carried slots across wipes (he
 is alive at full after one) and left `vezax.slot` silent on every following pull. Slots are only handed
-out in combat, so nothing live is cleared.
+out in combat, so nothing live is cleared. Only the mechanic tracker bot drops the whole instance entry;
+every other bot lets go of its own slot alone, so one that wandered out of the room can't wipe a formation
+still fighting.
 
 **`tools/botobs/bosses/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
 heal-back aside (it shows only as boss health rate); `--help` lists its views. Its banner names declared
@@ -332,24 +360,30 @@ it:
 
 - **Tanks, hunters and rogues switch at once; the rest wait** until a tank has been its victim 2s
   (`TankHasHeldBoss`), capped at 6s after the summon so a dead tank never parks the raid on the Barrier.
+  With no summon seen by the hook, nobody is held on a guess.
   The redirecting classes can't wait on Vezax: their hits there would spend the redirect.
 - **Redirects are saved, then aimed.** `vezax save redirects for the animus` blocks Misdirection and
   Tricks from the fifth summon, 38s+ before the spawn against a 30s cooldown, and `vezax animus redirect`
-  casts both on the main tank in its first 6s, once the caster is on the Animus, because the window
-  opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s there. The generic ones follow the
+  casts both on the main tank in its first 6s, once the caster is on the Animus (a rogue only within
+  Tricks' 20 yd: [`CanCastSpell` passes an out of range cast](../../engine/action-selection.md#casting)),
+  because the window opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s there. The generic ones follow the
   caster's current target: Tricks went to a dps 0.6s before the spawn, and that dps had it 1s in.
 - **Dps hold at 90% of the main tank's threat** (`vezax threat multiplier`, as on Vezax). It leaves room
   for a cast in flight and lets him retake it at 110%.
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
-  chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the position node stands
-  down for that bot; it had walked him back 5 times from the chase.
+  chasing drags Vezax off it, so whoever the Animus is hitting walks to within 3 yd of him, which leaves the
+  Animus following it in his melee range, and the position node stands down for that bot; it had walked him
+  back 5 times from the chase. This walk and the melee spot run at `MOVEMENT_FORCED`: a finished dodge's
+  destination stays latched for seconds and swallows a combat move.
 - **Melee stay inside his crash limit** (`vezax animus melee spot`), the 12.5 yd skip, measured 3D
   (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
   tank, 6 of 16 after. The Animus (reach 8) takes his spot by the tank, he steps 8-9 yd round it, and `set
   behind` walked melee to the Animus's far side, 13-20 yd from him. At 24 Profound Darkness stacks a crash
   did 26-40k, at ~40 57-60k: one pull lost 7 melee to two crashes; in another a crash on the off-tank,
   7.6 yd from the main tank, threw her 36 yd, both bosses followed, and she died. Melee bots take a lane
-  on the Animus-Vezax line within that limit minus 2, by guid rank, and the movement rule blocks `set
+  on the Animus-Vezax line within that limit minus 2, by guid rank: five lanes 2 yd apart (0, +1, −1, +2, −2
+  off the midpoint), a wide one coming in towards the middle until it fits both reaches. More bots than
+  lanes double up, which costs nothing inside the limit. The movement rule blocks `set
   behind` for melee while the Barrier is up.
 
 **Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first vapor
@@ -372,7 +406,8 @@ keep him), until the summon, the Barrier or a vapor death:
   sees them as buffs);
 - `VezaxDamageHoldMultiplier` zeroes spells on him and every area spell;
 - the node stops what already runs: `AttackStop` (the current target stays, so the hold-target node
-  doesn't swing again), harmful casts on him interrupted, pets set passive. Their stances sit in a
+  doesn't swing again), harmful casts on him interrupted, pets set passive and told to stop, since a pet
+  sent in by command keeps attacking on passive alone. Their stances sit in a
   per-instance store apart from the encounter state, so any engine gives them back after the Animus, a
   wipe or a resummon.
 
@@ -380,7 +415,8 @@ Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at
 Animus spawn.
 
 Before the stop line, area damage holds only near a vapor (`vezax vapor area hold`): while hard mode is
-pending, the area spells by name, for a bot with a live vapor within 15 yd of it or its target. Whirlwind,
+pending, the area spells by name, for a bot with a live vapor within 15 yd of it or its target (most area
+damage reaches 10 yd round one of them, Seed of Corruption's burst 15). Whirlwind,
 Divine Storm, Death and Decay and Pestilence killed one that landed in the melee in 16 s. Pets stay
 uncontrolled, so **a felguard's Cleave or an off-passive pet can still kill one**, and that silently ends
 hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor, and when
