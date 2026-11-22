@@ -329,9 +329,11 @@ on the raid. They are killable (260 k / 521 k) but 11 of them cost 16-34 % of Al
 the enrage, and guides agree nobody damages them. The **handler**, a third tank or else the swap tank
 not holding Algalon, and always a bot, taunts every loose one onto itself. One counts only while its script
 has it active: one spawned 53 yd out and 26 yd up never came below 16 yd, evaded home ~8.5 s after each wave
-woke it, still selectable, and held the handler on `taunt` 80 s with the rest held and holes spare. More than 5 yd
-above the floor, where no hole takes one (2-23 s of descent after waking), it isn't kited, nor taunted outside
-the gather. At Big Bang it **hides last**,
+woke it, still selectable, and held the handler on `taunt` 80 s with the rest held and holes spare. More than
+7.5 yd above the floor, where no hole takes one (2-23 s of descent after waking), it isn't kited, nor taunted
+outside the gather. The field picks constellations in 2D and `SpellHit` ignores one over 5 yd up only after
+both combat reaches (1.5 default, the hole's 1.0): at the old 5 yd, ones diving 6-7.7 yd up closed holes
+unwatched. At Big Bang it **hides last**,
 since they follow it in and close the hole (65509, 6 yd) while those already inside stay phased: 62168 is
 owned by each target, and a despawning caster strips only area and single-target auras. It takes its kite
 hole, nobody else's, else its shelter, and waits there (`hold`; with a star under only a tank above the explosion's
@@ -358,7 +360,9 @@ So, per handler (`algalon.kite`), with the walk going round any hole it would cl
   A walk still under way after 12 s starts over.
 
 A spot clamped into the room (44 yd) must stay 7.8 yd from the hole, on its side, and 8 yd off every other
-hole, else ±30°; a hole needs both spots. A loose one is taunted from the far spot of the hole nearest it
+hole, else ±30°; a hole needs both spots. A stage or cross spot the floor check moves over 2 yd refuses its
+hole to the kite for good: an off-floor cross spot came back on the handler, which stood still 4 × 12.6 s
+on that hole, taunting nothing. A loose one is taunted from the far spot of the hole nearest it
 (`behind`) when that is within 28 yd of it, the handler holding there while the taunt cools, so it comes straight
 across; not while gathering or with no hole spare. Out of that reach no kite hole is held for it, or everyone
 else's shelter pick would skip the hole. A held one goes to a spare hole that fits before any loose one

@@ -2656,7 +2656,7 @@ def kb_snap(when: int) -> dict:
     units = [row(AEGIS, (3, 0), 100.0, ALGALON), row(BULWARK, (0, 0), 100.0, ALGALON),
              row(MERCY, (0, 14), 100.0, 0), row(ALGALON, (0, 4), 90.0, BULWARK),
              row(KB_HELD, (6, 6), 100.0, AEGIS)]
-    # Woken on Mercy, then home and evaded: never within 5 yd of the floor.
+    # Woken on Mercy, then home and evaded: never low enough for a hole to take it.
     stuck = row(KB_STUCK, (40, 0), 100.0, MERCY if 1000 <= when < 1500 else 0)
     stuck[3] = 433.0
     units.append(stuck)
