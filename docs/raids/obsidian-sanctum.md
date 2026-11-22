@@ -98,7 +98,11 @@ The raid holds **two** corridors (see below). The tank pair carries its own X as
 The whole arrival disc must clear 8.5 yd, not just the hold, so neither tank hold is its in-game
 reading. The right one read 490.581, 0.92 yd of headroom in a 5 yd band (floor 486.5, threshold
 491.5); 490.0 buys the yard back. The left one read 511.089 and moved north into heal range between
-waves, capped at 513.5 by melee sharing it on the raid's 2.0 yd tolerance. `TANK_ARRIVAL_TOLERANCE`
+waves, capped at 513.5 by melee sharing it on the raid's 2.0 yd tolerance (514.5 is all his own would ask
+for). Clearance to the nearest line, hold / worst case over the arrival disc: tank left 513.0 is 11.00
+/ 10.00 off 524, tank right 490.0 is 10.00 / 9.00 off 500, raid home 535.5 is 12.50 / 10.50 off 548,
+raid left 551.0 is 11.00 / 9.00 off 540. The raid's right hold can't move south, because every yard
+south costs a yard of the 1.2 yd it clears Tail Lash by; the left one is capped by the wave. `TANK_ARRIVAL_TOLERANCE`
 is **1.0** against 2.0 for the raid line — anything looser lets a bot "arrive" inside a band.
 
 Corridors are **home-and-away, not sticky**: each group idles on the hold that is safe under one
@@ -132,7 +136,9 @@ rows**, so it lands on anything in range — Lava Blaze, a drake, or Sartharion 
 
 Tranquilizing Shot 19801: two `SPELL_EFFECT_DISPEL` effects (MiscValue 9 enrage, 1 magic), 8 s
 cooldown, 35 yd. Targets are assigned by hunter index modulo the enraged list so several hunters
-spread instead of stacking dispels.
+spread instead of stacking dispels (the list is sorted so every hunter builds the same one). The
+trigger is encounter-gated ahead of its 35 yd sweep: ungated, every hunter swept every tick anywhere
+on map 615, trash and pre-pull included.
 
 ## Drakes
 
@@ -146,7 +152,10 @@ spread instead of stacking dispels.
 the drakes **newest first**, because reverse call order is landing recency and the drake that just
 touched down is the one with nobody on it. Vesperon is held **north of his landing**, so his breath
 stops pointing down the raid line: level with his touchdown is only west of it, straight down the
-line, whose east end is 9.5 yd away. From the north he settles around (3267, 549) facing up the empty
+line, whose east end is 9.5 yd away. Each spot's Y against the lines (8.5 yd kill half-width plus the
+2 yd off-tank tolerance), to the left line / the right one: Tenebron 563.380 is 8.62 / 0.62 off 572 /
+564, Shadron 534.660 is 2.66 / 13.34 off 532 / 548, Vesperon 556.000 is 16.00 / 8.00 off 572 / 564, so
+each is inside one pattern or the other. From the north he settles around (3267, 549) facing up the empty
 rim, 17 yd from the raid's home hold (outside the 15 yd breath), its left-wave hold 71° off his
 facing. No spot is safe under **both** wave patterns, so a live wave takes the raid corridor Y and
 keeps X; the east anchor is only for blazes and whelps. Shadron's spot clears every right line and
@@ -182,7 +191,8 @@ waypoint passes near a landing spot.
 zone-in ([../engine/pitfalls.md](../engine/pitfalls.md#before-the-pull-and-out-of-combat)). Stamped
 on first sight, every clock started then: the staleness branch could not fire, the drag always timed
 out, the redirect pull window was already expired, and the portal squad was picked over whoever was
-on the map. `StateFor` rebuilds on the **out-of-combat edge** instead.
+on the map. `StateFor` rebuilds on the **out-of-combat edge** instead, and also once nothing has asked
+for it in 15 s (`STALE_STATE_MS`), which is how the corridor and portal squad get re-derived.
 
 ## The raid splits across two corridors
 
@@ -299,7 +309,9 @@ The drag destination **deliberately bypasses `ClampDestination`**: it is a hand-
 of the platform minimum and already inside a Range Marker, so both clamps could only damage it. The
 corner is `NAV_MAGMA`, which bots path onto
 ([../engine/pitfalls.md](../engine/pitfalls.md#movement-that-silently-no-ops)). If the tank takes
-damage there or never arrives, `Y 487.0` is the fallback; it costs under 1.5 yd of boss placement.
+damage there or never arrives, `Y 487.0` is the fallback; it costs under 1.5 yd of boss placement. The corner is 35.8 yd from the southern Safe Area
+trigger, inside its 40 yd Range Marker, and 1.3 yd off the left-wave line at 484, which never matters:
+the first wave is summoned at 20 s and the whole drag is done inside 10.
 
 The drag ends when the tank arrives with the boss in melee range, or the boss is south of Y 522 by any
 route, or `MAIN_TANK_DRAG_TIMEOUT_MS` 45000 elapses — **measured from the drag, not from the pull**.
@@ -541,7 +553,7 @@ drags it back — the tank oscillation. So the `sartharion` rules also zero:
   corridor-aware destinations; the collision step takes a random bearing whenever a parked bot is
   stacked, which here is the whole raid by design, and walked the off-tank off his anchor between
   drakes.
-- `CastCasterFormAction` **for tanks only** and `CheckMountStateAction` for everyone
+- `CastCasterFormAction` **for tanks only** (a cat-spec druid needs caster form for Rebirth) and `CheckMountStateAction` for everyone
   ([../engine/pitfalls.md](../engine/pitfalls.md#before-the-pull-and-out-of-combat)).
 - In the Twilight Realm, where the boss cannot be resolved and every other rule is off, a bot waiting
   out a wave keeps the generic, wander, collision and enemy-contact movers off, or they walk it back
@@ -628,5 +640,9 @@ Twilight Eggs before it reaches one.
   table, so it follows him onto the newer drake's spot. Not unsafe — both stay off the raid line with
   their cones pointed away — but the measured spots only ever described a drake held alone. The fix,
   if it bites: a second assist tank.
+- **Who Molten Fury can land on is unsettled.** The Molten Fury section says no `conditions` rows, so
+  it reaches drakes and Sartharion too. The hunter code instead assumes `TARGET_UNIT_SRC_AREA_ENTRY`
+  with a `conditions` row pinning it to Lava Blaze 30643, so only blazes carry it. Check the
+  `conditions` table for 60430 before trusting either.
 - Whether phase-16 bots are truly immune to tsunamis is **assumed, not confirmed** — the tsunami
   creatures are phase 1, so they should not interact, but verify before relying on it.

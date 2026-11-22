@@ -14,7 +14,8 @@ register only definitions, and `UldStrategy.cpp` adds each boss's nodes and mult
 per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids; it and
 `Util/UldScripts.h` copy the boss ids, `GetCreature` data types, NPC entries and the Keeper bits of
 `PERSISTENT_DATA_WATCHERS_MASK` from the core's `ulduar.h`, which sits under `scripts/` and can't be
-included. `Util/UldData.h` holds only values no single encounter owns; a boss's ids, tuning and
+included. The `UlduarBossData` values are indices into that file's `BossIds` enum, which
+`InstanceScript::GetCreature` takes, not NPC entries. `Util/UldData.h` holds only values no single encounter owns; a boss's ids, tuning and
 positions go in its `Util/UldEncounter_<Boss>.h`.
 
 Each boss doc records the upstream script and DBC facts its strategy keys off. Every one of them once

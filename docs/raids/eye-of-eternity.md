@@ -221,11 +221,14 @@ damage taken**; the protected radius shrinks ~2% per tick over its 45 s life, so
 within 4 yd and ignore a bubble below `BUBBLE_MIN_USABLE_FACTOR` (35%) of its original radius. **The
 model does not shrink** (the core declares 56435 and never casts it), so the only honest size source
 is the tick count of the `creature_template_addon` aura applied at spawn (no aura means brand new).
+`SPELL_ARCANE_OVERLOAD_AURA` (56432) is that periodic aura, re-granting 56438 each tick; its other
+effects sit at 0 ticks and don't count.
 The NPC is non-attackable, never in `"possible targets"`: read it from the EoE creature cache.
 
 `malygos seek bubble` sits at `ACTION_EMERGENCY + 2`, above `avoid surge of power`, which is only the
 fallback for a bot that cannot reach one: it steps off the line from Malygos through the surge focus
-(`SURGE_BEAM_CLEAR_DISTANCE` to clear it, `SURGE_BEAM_SIDESTEP` across) and never fires for a disk
+(found within `EOE_SURGE_SEARCH_RADIUS`, 100 yd; `SURGE_BEAM_CLEAR_DISTANCE` to clear it,
+`SURGE_BEAM_SIDESTEP` across) and never fires for a disk
 rider or a sheltered bot, who are covered already and would be walked out for the beam's whole 10 s.
 The bubble is **latched by GUID** (the `SapphironFlightPositionAction` idiom) and spread by group
 slot index, or bots hop between bubbles as they shrink — unless that slot's bubble is more than half
@@ -261,7 +264,7 @@ needs a Scion alive, so a rider never climbs back onto a disk once the Scions ar
 `MalygosRideDiskAction` steers the vehicle's own `MotionMaster` with a `POINT_MOTION_TYPE`
 anti-stutter guard and `generatePath = false`. The core floors a Scion disk's descent at
 `CenterPos.z + 20` (`MI_POINT_SCION`), so a fixed target Z is safe. A rider dismounts only once the
-disk is back at `MALYGOS_PLATFORM_Z`; stepping off at Scion altitude is a 20–30 yd drop. Ending the
+disk is back at `MALYGOS_PLATFORM_Z` (`DISK_DISMOUNT_MAX_HEIGHT`, 5 yd, is the most it may hover); stepping off at Scion altitude is a 20–30 yd drop. Ending the
 ride is manual — Scions can die before the Nexus Lords and the core keeps the disks until both are
 gone — and the descent is stamped straight over the approach rather than waiting for
 `POINT_MOTION_TYPE` to clear, because the disk is still flying at the dead Scion.
@@ -441,6 +444,8 @@ kept spiking reached the beam without the shield's 25. Both rotations branch on 
 into one script: spend the bank on Engulf or Life Burst *only* while `DrakeCanAffordWithShield`
 covers the finisher and the shield, rebuild to `DRAKE_SHIELD_RESERVE_COMBO`, then stop and let the
 bar climb. A drake at zero combo always spikes: that one point is worth going under the reserve.
+Revivify is held back the same way (`DrakeCanAffordWithShield`): it is break-even against the regen,
+so a shielded drake that kept casting it would never climb back to the 25 its second shield costs.
 The script runs only while the pick is younger than `SURGE_BEAM_END_MS` (`GetDrakeSurgeElapsedMs`):
 the slots stay set for a whole `SURGE_CYCLE_MS`, so the raw flag would keep a drake quiet for more
 than twice the window it protects.
@@ -497,7 +502,10 @@ twenty-five bots on one small platform asking the same questions every tick is i
   the one per-bot part, runs first and uncached (a pointer read). Half a second of lag at a
   transition only affects which overrides are on.
 - `GetMalygos` asks the instance script (`GetCreature(DATA_MALYGOS)`, mirrored as `EOE_DATA_MALYGOS`)
-  before any search and caches the guid per instance. **Nothing uses `"find target" malygos`**: it
+  before any search and caches the guid per instance; a dead boss ends the lookup there, and only an
+  instance script that can't hand over the guid falls back to a 250 yd sweep
+  (`EOE_BOSS_FALLBACK_SWEEP`). His landing bearing is noise within `MALYGOS_BEARING_DEADZONE` (1 yd)
+  of centre. **Nothing uses `"find target" malygos`**: it
   costs a name conversion per threat entry, per bot, per tick
   ([cost](../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)), and answers only for
   units the bot already threatens ([things the bot cannot see](../engine/pitfalls.md#things-the-bot-cannot-see)).
