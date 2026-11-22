@@ -234,8 +234,8 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
   its death: killing another instead put two explosions 0.2 and 1.3 s apart and killed 30. With no due star
   clear, the one landing furthest from the rest is still taken if that beats their own deaths. **Aftermath**:
   no due kill, fallback included, lands within 16 s of a Big Bang hit while anyone is under the explosion's
-  line (the void's DoT leaves most of the raid there that long; one at 9.2 s killed 12); a star draining into
-  it isn't made due for that;
+  line (the void's DoT leaves most of the raid there that long; one at 9.2 s killed 12), nor is a kill
+  `urgent` took before the hit kept into it (one at 6.6 s killed 6); a star draining into it isn't made due for that;
 - not while any living raid member, phased ones too (back long before a kill lands; left out, the gate opened
   1.6 s after a hit with the raid drained, 7 dead), is below the explosion's top roll (16.9 k / 21.5 k), or
   below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is

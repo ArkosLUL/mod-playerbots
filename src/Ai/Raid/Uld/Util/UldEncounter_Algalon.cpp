@@ -1639,6 +1639,13 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
 
     StarPlan const plan = PlanStars(state, now);
     int32 const gap = static_cast<int32>(ULDUAR_ALGALON_STAR_PACING_GAP_MS);
+    // No kill lands in the void's aftermath while anyone is still under the line. Kills only: a star draining
+    // into it isn't made due for it.
+    int32 const recovery =
+        state.lastBigBangEndMs
+            ? MsUntil(state.lastBigBangEndMs, now) + static_cast<int32>(ULDUAR_ALGALON_STAR_VOID_RECOVERY_MS)
+            : 0;
+    bool const drained = recovery > 0 && !RaidAffordsExplosion(bot, group);
 
     // Ahead of the gap, or any other death drops a kill half done. Dropped, a star keeps its slope for the carry,
     // then drains (one dropped at 9% lost 1.4 %/s and went off under three meteors), so a drop only goes when that
@@ -1661,8 +1668,11 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
                 std::max(fast, focus->tickHp ? DrainDeathMs(*focus)
                                              : StarDeathAt(*focus, ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC));
             bool const meteors = !StarCollision(plan, finish, focus, keep, false);
-            if (!StarCollision(plan, finish, focus, keep) ||
-                (StarCollision(plan, {fast, slow}, focus, keep, meteors) && finish.to <= slow))
+            // taken before the hit (`urgent` in the cast), so never checked against the aftermath
+            bool const carried =
+                drained && MsUntil(state.focusSinceMs, state.lastBigBangEndMs) < 0 && finish.from < recovery;
+            if (!carried && (!StarCollision(plan, finish, focus, keep) ||
+                             (StarCollision(plan, {fast, slow}, focus, keep, meteors) && finish.to <= slow)))
             {
                 star = focus;
                 return state.focusByDeadline ? "deadline" : "open";
@@ -1694,12 +1704,6 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
 
     if (!due.empty())
     {
-        // No due kill lands in the void's aftermath while anyone is still under the line. Kills only: a star
-        // draining into it isn't made due for it.
-        int32 const recovery = state.lastBigBangEndMs ? MsUntil(state.lastBigBangEndMs, now) +
-                                                            static_cast<int32>(ULDUAR_ALGALON_STAR_VOID_RECOVERY_MS)
-                                                      : 0;
-        bool const drained = recovery > 0 && !RaidAffordsExplosion(bot, group);
         char const* blocked = "near";
         AlgalonScanUnit const* fallback = nullptr;
         int32 fallbackSeparation = -1;
