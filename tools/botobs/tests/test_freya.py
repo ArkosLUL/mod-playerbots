@@ -8,8 +8,8 @@ while two hits keep its bark up, plus three beam dodges (one off a beam the next
 and one healer in range. A second one pins a lasher wave a ghoul holds for two snapshots, with one
 ranged bot out of reach on Freya. A third pins a melee bot walking back into a low lasher's blast and
 dying to its Detonate. A fourth pins a low lasher chasing a ranged bot for 9 s while another ranged bot
-in reach shoots a ghoul-held lasher and bails from it once. The shared v14 fixture shows every section
-reads empty elsewhere.
+in reach shoots a ghoul-held lasher and bails from it once, and a fifth two low lashers, each shot by
+the other one's victim. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -229,6 +229,29 @@ def low_pull() -> list[dict]:
     ]
 
 
+def two_low_snap(t: int) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, 10, 0, FAR],
+        [LASHERS[2], 2348.0, -50.0, 425.3, 0, 12, 0, NEAR],
+        [FAR, 2343.0, -50.0, 425.3, 0, 100, 100, LASHERS[2]],
+        [NEAR, 2352.0, -50.0, 425.3, 0, 100, 100, LASHERS[0]],
+    ]}
+
+
+def two_low_pull() -> list[dict]:
+    header, freya = low_pull()[:2]
+    return [
+        header,
+        freya,
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in (LASHERS[0], LASHERS[2])),
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        two_low_snap(60000),
+        two_low_snap(61000),
+        {"t": 62000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -323,7 +346,14 @@ class Lows(unittest.TestCase):
         self.assertEqual(printed(fr.show_lows, load(low_pull())), (
             "LOWS\n"
             "  1:00.000 lashers: 1 under the bail line, 1 of them 8s+ there (1 hitting a player); ranged DPS in reach "
-            "of a low lasher hitting a player: 6 sample(s), 67% on it, 33% on another lasher; 1 back-line bail "
+            "of a low lasher hitting a player: 6 sample(s), 67% on one, 33% on another lasher; 1 back-line bail "
+            "order(s) from one hitting the back line\n"))
+
+    def test_shooting_the_other_of_two_low_lashers_counts_as_on_one(self):
+        self.assertEqual(printed(fr.show_lows, load(two_low_pull())), (
+            "LOWS\n"
+            "  1:00.000 lashers: 2 under the bail line, 0 of them 8s+ there (0 hitting a player); ranged DPS in reach "
+            "of a low lasher hitting a player: 4 sample(s), 100% on one, 0% on another lasher; 0 back-line bail "
             "order(s) from one hitting the back line\n"))
 
     def test_trio_pull_has_no_lasher_wave(self):

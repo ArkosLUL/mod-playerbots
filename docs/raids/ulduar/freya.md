@@ -88,8 +88,8 @@ earlier (Icebound Fortitude in a Conservator or lasher wave; a bear's Barkskin a
 a lasher wave, all three once on a lasher pile 4s before the trio; Survival Instincts before or in the first
 trio) or unpressed (Vampiric Blood), and once with Survival Instincts up, to two swings 2.4s apart. Pain
 Suppression, Guardian Spirit, Lay on Hands and Hand of Sacrifice mostly went to DPS, healers and pets; the
-add tank got Lay on Hands outside the trio and, once each, Pain Suppression and Hand of Sacrifice after a
-soulstone rise in one, dying under both.
+add tank got Lay on Hands outside the trio or right after a soulstone rise, and once each Pain Suppression
+and Hand of Sacrifice after a soulstone rise, dying under both.
 
 **A damage dealer near the tank's threat on the Snaplasher moves to a sibling** (`ShedSnaplasherThreat`,
 not yet verified in a pull). The generic `threat` strategy is never added (`AiFactory`), so nothing
@@ -570,7 +570,7 @@ pulls**: lashers scatter and die one at a time.
 a ranged DPS bot's lasher pick is the lowest lasher under `_LASHER_BAIL_PCT` whose victim is a player and
 that sits inside `SpellDistance`, ahead of the pack focus. The bails and the melee guards hold everyone
 outside such a lasher on the premise that it blows in seconds, but off the pile nothing aimed at it: with
-one in reach, 10-55% of the ranged in reach shot another lasher and 0-35% shot it, and 12 of them stayed
+one in reach, 11-52% of the ranged in reach shot another lasher and 0-40% shot one, and 12 of them stayed
 under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed four of them back to
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
 Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in.

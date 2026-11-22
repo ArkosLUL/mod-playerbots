@@ -100,7 +100,7 @@ SPELL_RANGE_YD = 28.5
 DETONATE_REACH_YD = 15.5
 # The last lashers blow as they die, after their last sample alive.
 BLAST_TAIL_MS = 1000
-# Lashers under the bail line blew a median 3.5-4.0 s later in windows 10 and 11; one still up after this is left alone.
+# A lasher under the bail line usually blows within about 4 s; one still up after this is being left alone.
 LINGER_MS = 8000
 CAMP_ACTION = "freya ranged camp"
 
@@ -457,8 +457,9 @@ def show_blasts(trace: Trace) -> None:
 
 def low_lasher_counts(trace: Trace, wave: dict) -> dict:
     """One lasher wave: its lashers that went under the bail line and how many stayed there LINGER_MS or more, the
-    ranged DPS in reach of a low lasher hitting a player and what they shot, and the back line's bail orders away from
-    a low lasher hitting one of them."""
+    ranged DPS in reach of a low lasher hitting a player and whether they shot one, and the back line's bail orders
+    away from a low lasher hitting one of them. A ranged bot counts once a snapshot, however many such lashers it
+    reaches, so shooting the lowest of two is on one, not on another lasher."""
     low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
     snaps = frames(trace)
     stamps = [snap["t"] for snap in snaps]
@@ -483,17 +484,21 @@ def low_lasher_counts(trace: Trace, wave: dict) -> dict:
             span = open_spans[-1]
             span["last"] = snap["t"]
             span["samples"] += 1
-            if trace.role(row[7]) == "?":
+            if trace.role(row[7]) != "?":
+                span["player"] += 1
+        hitting = [row for row in rows if trace.entries.get(row[0]) == NPC_DETONATING_LASHER and row[5] < low_pct
+                   and trace.role(row[7]) != "?"]
+        for other in rows:
+            if trace.role(other[0]) != "ranged":
                 continue
-            span["player"] += 1
-            for other in rows:
-                if trace.role(other[0]) != "ranged" or dist2(other[1:3], row[1:3]) > SPELL_RANGE_YD:
-                    continue
-                in_reach += 1
-                if other[7] == row[0]:
-                    on_it += 1
-                elif trace.entries.get(other[7]) == NPC_DETONATING_LASHER:
-                    on_other += 1
+            near = {row[0] for row in hitting if dist2(other[1:3], row[1:3]) <= SPELL_RANGE_YD}
+            if not near & members:
+                continue
+            in_reach += 1
+            if other[7] in near:
+                on_it += 1
+            elif trace.entries.get(other[7]) == NPC_DETONATING_LASHER:
+                on_other += 1
     found = [span for lasher in spans.values() for span in lasher]
     lingered = [span for span in found if span["last"] - span["first"] >= LINGER_MS]
     bails = 0
@@ -525,7 +530,7 @@ def show_lows(trace: Trace) -> None:
         reach = c["in_reach"] or 1
         print(f"  {clock(wave['t'])} lashers: {c['low']} under the bail line, {c['lingered']} of them "
               f"{LINGER_MS // 1000}s+ there ({c['on_player']} hitting a player); ranged DPS in reach of a low lasher "
-              f"hitting a player: {c['in_reach']} sample(s), {100.0 * c['on_it'] / reach:.0f}% on it, "
+              f"hitting a player: {c['in_reach']} sample(s), {100.0 * c['on_it'] / reach:.0f}% on one, "
               f"{100.0 * c['on_other'] / reach:.0f}% on another lasher; {c['bails']} back-line bail order(s) from "
               f"one hitting the back line")
     if not found:

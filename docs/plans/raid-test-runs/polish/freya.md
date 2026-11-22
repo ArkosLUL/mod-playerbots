@@ -587,10 +587,11 @@ Vampiric Blood 11s into trio 2 (off at 4:57.4), and died at 5:21.3 to 31.3k and 
 uld2's bear pressed Survival Instincts, Frenzied Regeneration and Barkskin at 4:24.8-4:28.8 with four
 lashers on him, 4s before trio 2 spawned; all were gone by 4:44.8 and he died at 5:08.1 to 25.9k, 33.0k and
 34.8k in 4.9s under Divine Guardian. uld3's bear spent Frenzied Regeneration and Barkskin on lashers at
-3:19.6 and 3:26.8, died to lasher melee (11 hits) at 3:36.8 as trio 2 spawned, rose, got Pain Suppression
-at 3:46.8 (the first external on an add tank in four windows) and died under it at 3:53.5 to 22.6k and
-21.0k. Lay on Hands reached uld1's DK twice, both outside trio 2; Hand of Sacrifice reached uld2's risen
-bear at 5:26.5, who died to a Lightning Lash.
+3:19.6 and 3:26.8, died to lasher melee (11 hits) at 3:36.8 as trio 2 spawned, rose on his soulstone at
+3:37.1, got Lay on Hands at 3:37.4 and Pain Suppression at 3:46.8 (the first external other than Lay on
+Hands on an add tank in four windows) and died under it at 3:53.5 to 22.6k and 21.0k. Lay on Hands reached
+uld1's DK twice, both outside trio 2; Hand of Sacrifice reached uld2's bear at 5:26.5, risen on his
+soulstone, who died under it at 5:32.5 to a Lightning Lash.
 
 **Rounds 1-3 still hold.** No tank Roar, Shout or Righteous Defense across the split; Righteous Defense
 only on melee (uld1 10:04.8, 10:12.9 after the main tank died; uld3 3:41.5). One Challenging Roar: uld2's bear
@@ -616,8 +617,9 @@ Picked (2), the largest cause nothing pending targets.
   tank median 8.0s (6 of 15 past 8s) and those on the back line 9.7s (4 of 7); windows 10-11: on a tank
   3.6-6.4s (3 of 11 past 8s), on the back line 4 in all, none past 8s. Ghoul-held ones blow a median 3.2s
   (3.4-4.2 before).
-- Nothing aims at them: with a low lasher hitting a player in reach, the ranged DPS in reach shot it 18, 16,
-  35, 3, 0, 24% of samples and another lasher 54, 37, 19, 10, 55, 52% (the rest the Gift, the trio, Freya).
+- Nothing aims at them: of the ranged DPS samples in reach of a low lasher hitting a player, 31, 29, 40, 5,
+  0, 34% shot one and 39, 26, 11, 12, 52, 37% another lasher (the rest the Gift, the trio, Freya). uld3
+  3:21.5-3:23.8: 68928 at 13-14% on Uldzah, 7-8 ranged DPS 15.5-28.5 yd off it, every one on another lasher.
   Their pick is `GetFreyaRangedLasherAim`, the pack focus (most lashers within 8 yd, lowest GUID), else the
   nearest lasher in reach (`UldActions_Freya.cpp:558-568` at `a55056c40`); the lowest-health pick
   (`GetFreyaRangedLasherFocus`) only runs for a finishing pack of 3+ (`UldEncounter_Freya.cpp:1098-1134`).
@@ -646,9 +648,10 @@ the pile's AoE. A bot inside its blast still bails first, then shoots from 18 yd
 
 **Next window should show** (`freya.py --lows`, `--waves`):
 
-- Lashers 8s+ under the bail line while hitting a player near windows 10-11's 1 a pull (here 4, 3, 5 in the
-  three second waves); ranged in reach of one shooting another lasher near 0% (10-55%), on it well up
-  (0-35%); back-line bail orders from one hitting the back line well under 249 for three pulls.
+- Lashers 8s+ under the bail line while hitting a player near windows 10-11's 1 a pull (here 4, 3, 5: uld1's
+  first lasher wave, uld2's and uld3's second); ranged in reach of one shooting another lasher near 0%
+  (11-52%), on one well up (0-40%); back-line bail orders from one hitting the back line well under 249 for
+  three pulls.
 - No lasher healed back from under 15% by a Gift; no healer or ranged death to such a lasher in a trio
   wave (10 here).
 - Ghoul-held waves no slower: those lashers blow a median 3.2-4.2s after going low.
