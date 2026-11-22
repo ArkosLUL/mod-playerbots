@@ -1620,16 +1620,18 @@ class ControlAndDefence(unittest.TestCase):
         self.assertRegex(text, r"Irieth +Rogue +3000 +75% +2")
 
     def test_damage_renders_a_champion_whose_only_hit_dealt_nothing(self):
-        # a fully absorbed Mana Burn leaves the healer a row worth 0
-        with tempfile.TemporaryDirectory() as folder:
-            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
-            nothing = {**dmg(3000, DISC, TANK, 0), "a": 0}
-            path.write_text("\n".join(json.dumps(rec) for rec in control_pull() + [nothing]) + "\n",
-                            encoding="utf-8")
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                fc.show_damage(Trace(path))
-        self.assertRegex(out.getvalue(), r"Caiphus +Disc Priest +0 +0% +0 .*\| tank 0%")
+        # a fully absorbed Mana Burn leaves the healer a row worth 0, alone in the pull too
+        nothing = {**dmg(3000, DISC, TANK, 0), "a": 0}
+        alone = [rec for rec in control_pull() if rec.get("e") != "dmg"]
+        for records in (control_pull() + [nothing], alone + [nothing]):
+            with self.subTest(hits=sum(rec.get("e") == "dmg" for rec in records)):
+                with tempfile.TemporaryDirectory() as folder:
+                    path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+                    path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out):
+                        fc.show_damage(Trace(path))
+                self.assertRegex(out.getvalue(), r"Caiphus +Disc Priest +0 +0% +0 .*\| tank 0%")
 
     def test_divine_sacrifice_reads_who_divine_guardian_reached_and_raid_wide_casts_list(self):
         rows = [row for row in fc.external_casts(self.trace) if row["spell"] == "Divine Sacrifice"]

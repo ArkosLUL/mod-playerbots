@@ -3073,7 +3073,7 @@ def show_damage(trace: Trace) -> None:
     if not rows:
         print("  no champion damage on the raid")
         return
-    total = sum(row["damage"] for row in rows)
+    total = max(sum(row["damage"] for row in rows), 1)
     print(f"  {'champion':20} {'spec':20} {'damage':>8} {'share':>6} {'kills':>5}  top spells | on roles")
     for row in rows:
         top = ", ".join(f"{name} {amount // 1000}k" for name, amount in row["spells"].most_common(3))
