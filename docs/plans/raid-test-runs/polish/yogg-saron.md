@@ -300,7 +300,8 @@ against a spawn every 10 s, and uld1 swapped 12 times (the taker's taunt plus th
 (`TankPaladinStrategy.cpp:125` hand of reckoning → righteous defense → avenger's shield, `BearDruidStrategy.cpp:139`
 growl, `BloodDKStrategy.cpp:134` dark command, `TankWarriorStrategy.cpp:219` taunt) ran on the tank's current target
 whenever `yogg-saron guardian control` had nothing to do. Over this window's and round 3's phase 3s, before the first tank
-death, they cast 26 taunts (4 / 7 / 8 / 7), none taking a Guardian off a non-tank: 9 on rooted tentacles (uld3 9:52-10:01:
+death, they cast 26 taunts (4 / 7 / 8 / 7; plus two Death Grips in uld1, dark command's fallback, that moved no Guardian:
+grip-immune), none taking a Guardian off a non-tank: 9 on rooted tentacles (uld3 9:52-10:01:
 Hand of Reckoning twice on a Corruptor, Growl twice on a Crusher, Righteous Defense on Uldzab taunting two Corruptors and
 a Crusher), 14 on Guardians the other tank held (uld1 11:07.7: Righteous Defense on the DK took three, 9 s after the
 10:58.5 swap had given them to him), 3 on the caster's own. Round 3's uld1 paladin met the 11:38.2 and 12:10.2 spawns
@@ -309,8 +310,9 @@ with Hand of Reckoning spent by the class node 2.7 / 2.3 s earlier; both swung a
 Bug, not a plan change: the strategy gives phase 3 taunting to the control (loose Guardians first, one pile moved only by
 the swap rule, never a dragged mark). Fix (`UldDefinition_YoggSaron.cpp`): `yogg-saron phase 3 taunt hold`, a `Block` on
 `Family::Taunt` for bot tanks while `YoggSaronInPhase3`. The control, swap and drag cast through `PlayerbotAI::CastSpell`
-and are untouched; fallbacks run past the veto (Heroic Throw, Avenger's Shield). Same at 10 and 25, normal and hard mode,
-with or without a player. Reader: `--phase3` prints `tank taunts by aim` and `class taunts held`.
+and are untouched; a held node's fallbacks (Heroic Throw, Avenger's Shield) are pushed at relevance 0.003, so they
+almost never win a tick. Same at 10 and 25, normal and hard mode, with or without a player. Reader: `--phase3` prints
+`tank taunts by aim` and `class taunts held`.
 
 **Next window should show:** `class taunts held` rows (hand of reckoning, righteous defense, growl, dark command, taunt);
 `tank taunts by aim` with no `tentacle` or `own` (here uld1 {loose 27, another tank 23}, uld3 {tentacle 10, loose 7,
