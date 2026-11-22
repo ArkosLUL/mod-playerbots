@@ -21,19 +21,18 @@ second either way, so Rune of Summoning is unreachable — deliberately, because
 Lightning Elementals have no threat table, so taunting and kiting both do nothing and only killing
 them works. Guides calling them tauntable are wrong for this core.
 
-Members resolve by entry, never `"find target"`
-([threat list](../../engine/pitfalls.md#things-the-bot-cannot-see)): Brundir wipes his threat table on
-every Tendrils landing, so a name lookup goes quietly inert. Targeting is owned for every role,
-healers included (`IsRanged()` is true for them, so no role filter), which is safe because the focus
-is never null while a member lives. A skull counts only on a living member, or a stale mark would
-strand the raid.
+Members resolve by entry, never `"find target"` ([threat
+list](../../engine/pitfalls.md#things-the-bot-cannot-see)): Brundir wipes his threat table on every
+Tendrils landing, so a name lookup goes quietly inert. Targeting is owned for every role, with no
+role filter since `IsRanged()` is true for healers; that is safe because the focus is never null
+while a member lives. A skull counts only on a living member, or a stale mark would strand the raid.
 
 **Shield of Runes is dispelled** (spellsteal, purge or dispel magic, `ACTION_RAID + 4`): it absorbs
 20,000 and pays Molgeim +50% damage for 15 s when drained rather than removed.
 
-**Misdirection and Tricks go to the tank holding the focus**, not the group main tank, who is wrong
-for two of the three members. Misdirection moves only the next three shots, so they go on the focus;
-Tricks covers 6 s and needs no dump shot.
+**Misdirection and Tricks go to the tank holding the focus**, not the group main tank, wrong for two
+of the three members. Misdirection moves only the next three shots, which go on the focus; Tricks
+covers 6 s and needs no dump shot.
 
 `_phase` is private and Steelbreaker has no `GetData` override, so empowerment is inferred:
 *Steelbreaker alive AND Molgeim dead AND Brundir dead*. It is **not** gated on the config flag — it
@@ -42,8 +41,9 @@ tank on the empowered boss.
 
 His empowered kit is Fusion Punch (61903/63493, a dispellable Magic DoT on the tank; traced dispels
 strip it inside 0.6s), Static Disruption (61911/63495, a random target beyond 10 yd, triggering
-61912/63494: a 6 yd blast of 5,000 / 7,000 nature plus a 5 yd +75% nature vulnerability), Overwhelming Power, and **Electrical Charge (61902), which is
-+25% damage *and* a heal** — `Effect_2 = 136`, measured at 9.7% of his 12.05M bar on every phase-3
+61912/63494: a 6 yd blast of 5,000 / 7,000 nature plus a 5 yd +75% nature vulnerability),
+Overwhelming Power, and **Electrical Charge (61902), which is +25% damage *and* a heal** —
+`Effect_2 = 136`, measured at 9.7% of his 12.05M bar on every phase-3
 death without exception. A corpse is worth ~1.17M to him, so the phase is decided by how few the
 raid feeds him: traced, the raid takes him to **3.08% with all 25 alive** — only the tank dies, and
 only to the guaranteed instakill — then loses 22 people in 20s as the corpses heal him back to full.
@@ -69,24 +69,24 @@ it, and on 22 Nov rises spent Last Stand, Survival Instincts and a Divine Shield
 without Divine Protection.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
-Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
-`RaidResistAura` (`ironassembly.aura`; an aspect hold keeps its own nodes off, every aspect, since the hunter buff chain
-runs dragonhawk, hawk, monkey and a veto keeps a node's fallbacks
-([veto](../../engine/action-selection.md#the-selection-loop))); traced, High Voltage
-resists rose from 13–16% to 24%. It reads the boss state, so one read stands for the instance and a
-bot running back from the graveyard cannot take the hunter off it. Nature Resistance Totem is the same exclusive aura (+130, 30 yd raid
-aura), so it only covers what the hunter misses — in phase 3 the far side of the ring, five players for
-~95% of it. A **spare** shaman bot drops it (no air totem, or one another shaman bot also drops; latched
-in `ironassembly.totem`), cast directly by id with a hold on its own air nodes and bar button, re-dropped
-once 10 yd off, where it stops rather than on the way. Directly, because nothing removes an added
-`nature resistance` strategy; by id, because the class action skips a cast while the bot stands in an
-older totem's aura, the very totem this one replaces. In the spread phase the hunter takes slot 0 and the shaman slot 8, so every slot is
-within 31 yd of one of them; the two slots stay free only while those two are there. No spare, no totem.
+Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS` (the boss state,
+so a bot running back from the graveyard cannot take the hunter off it), through the shared
+`RaidResistAura` (`ironassembly.aura`), with a hold on every one of its own aspect nodes, since the
+buff chain runs dragonhawk, hawk, monkey and a veto keeps a node's fallbacks
+([veto](../../engine/action-selection.md#the-selection-loop)); traced, High Voltage resists rose
+from 13–16% to 24%. Nature Resistance Totem is the same exclusive aura (+130, 30 yd raid aura), so
+it only covers what the hunter misses — in phase 3 the far side of the ring, five players for ~95%
+of it. A **spare** shaman bot drops it (no air totem, or one another shaman bot also drops; latched
+in `ironassembly.totem`), with a hold on its own air nodes and bar button, re-dropped where it stops
+once 10 yd off. Cast directly, since nothing removes an added `nature resistance` strategy, and by
+id, since the class action skips a cast while the bot stands in an older totem's aura, the very
+totem this one replaces. In the spread phase the hunter takes slot 0 and the shaman slot 8 (free
+only while they are there), so every slot is within 31 yd of one of them. No spare, no totem.
 
 **Every ability is difficulty-mapped through `Unit::CastSpell`**, so each id is a 10/25 pair and
-callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning Tendrils is
-**18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power (64637/61888) is
-`DispelType 0`**, not dispellable.
+callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning
+Tendrils is **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power
+(64637/61888) is `DispelType 0`**, not dispellable.
 
 **Overwhelming Power goes to `GetVictim()`**, never a random player, and only raises the carrier's
 own damage done (+200%), not damage taken: 8s into phase 3 and every 36s
@@ -117,33 +117,35 @@ uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s p
 partner dies turns `nopartner` and walks back; traced once, 2.7 s left, blast 22 yd off the point.
 
 **A dead bot tank gets walked to and Rebirthed** (`ironassembly.rez`), since a swap needs two. While
-Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (a pending res, Soulstone
-or Reincarnation counts), the closest pair of bot tank body and non-tank druid bot in the hall with
-Rebirth ready and affordable is latched (`rezdruid`, `reztank`): the druid casts inside 28 yd, else
-walks straight at the body to 26, and the tank stands up where the druid is. A walk stopped short is
-re-issued at once, since `MoveTo` refuses the same goal for `MaxWaitForMove`; the cast waits out a
-`MOVEMENT_FORCED` dodge leg and stops any other walk. Readiness is cooldown and cost, not
-`CanCastSpell`, which refuses in cat, bear or moonkin form, and a released ghost is no body. Cat or moonkin form drops
-only for the cast: a `caster form` prerequisite skips a druid under 65% mana (`MediumHealth`) and trades
-shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`, above every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead, or the
-cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` never walks, casting only
-on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown point with the
-druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast killed 5 melee.
-The budget is the non-tank druids' Rebirths, one each a pull, and a class `rebirth` on a tank killed
-before phase 3 spends one.
+Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (a pending res,
+Soulstone or Reincarnation counts), the closest pair of bot tank body and non-tank druid bot in the
+hall with Rebirth ready and affordable is latched (`rezdruid`, `reztank`): the druid casts inside 28
+yd, else walks straight at the body to 26, and the tank stands up where the druid is. A walk stopped
+short is re-issued at once, since `MoveTo` refuses the same goal for `MaxWaitForMove`; the cast
+waits out a `MOVEMENT_FORCED` dodge leg and stops any other walk. "Ready" is cooldown and cost, not
+`CanCastSpell`, which refuses in cat, bear or moonkin form; a released ghost is no body. Cat or
+moonkin form drops only for the cast: a `caster form` prerequisite skips a druid under 65% mana
+(`MediumHealth`) and trades shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`,
+above every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead,
+or the cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` never walks,
+casting only on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown
+point with the druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast
+killed 5 melee. The budget is the non-tank druids' Rebirths, one each a pull, and a class `rebirth`
+on a tank killed before phase 3 spends one.
 
 **A risen tank gets its raid buffs back in combat** (`ironassembly.rebuff`). It stands up with none
 (Rebirth: 16–19% health), and the class buff nodes are non-combat only: traced 41.8k max health
-against 48.5k. For 30 s after any tank rises, bots already within 30 yd and sight put back Mark of the
-Wild, Power Word: Fortitude and, on a paladin tank, Arcane Intellect, one bot each, and each blessing its
-role gets from a different paladin (one blessing per paladin per target). A paladin tank is told by
-class, not power type, since a druid tank rises in caster form on mana. Dps cast first, since a
-tank's GCDs are its threat and a healer's mana is the raid's, then healers,
-paladin tanks last, never a bear, which loses the boss by shifting out; a cat shifts out for Mark of the Wild, while moonkin and Tree of Life
-are stance forms to the core and cast it as they are. The blessings follow the class planner's per-member wants (role
-priorities, no Sanctuary under Renewed Hope bar a paladin tank's, one per bot paladin), not the planner
-itself: it picks one cast for the whole raid, so a pet raised in the same window could block a tank's
-blessing. `ACTION_RAID + 2`, above heals, one GCD a buff.
+against 48.5k. For 30 s after any tank rises, bots already within 30 yd and sight put back Mark of
+the Wild, Power Word: Fortitude and, on a paladin tank, Arcane Intellect, one bot each, and each
+blessing its role gets from a different paladin (one blessing per paladin per target); a paladin
+tank is told by class, not power type, since a druid tank rises in caster form on mana. Dps cast
+first (a tank's GCDs are its threat, a healer's mana is the raid's), then healers, paladin tanks
+last, never a bear, which would lose the boss shifting out; a cat shifts out for Mark of the Wild,
+while moonkin and Tree of Life are stance forms to the core and cast it as they are. The blessings
+follow the class planner's per-member wants (role priorities, no Sanctuary under Renewed Hope bar a
+paladin tank's, one per bot paladin), not the planner itself: it picks one cast for the whole raid,
+so a pet raised in the same window could block a tank's blessing. `ACTION_RAID + 2`, above heals,
+one GCD a buff.
 
 **Melee step out of a blast next to him.** A carrier that stays on him (`nopartner`, `late`, a swap
 that never came) stands ~7.6 yd in front of his centre; the melee hug him at 2.6–5 yd, 10–11.5 yd off
@@ -156,11 +158,11 @@ round his centre that Static Disruption skips (`SelectTarget` at −10 adds both
 reach and `set behind` walk them back in, and `... melee charge guard` zeroes Charge. The spot stays
 within 22 yd of his designed spot, the navprobed ring.
 
-**Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a cast
-is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk out to
-the spread ring. Tanks never use them on the walk to Steelbreaker's spot: the Meltdown run is their one
-long walk, 46 yd in ~2.6 s boosted against 6.6 s, and the `late` test times it boosted (2.5× for the
-first 5 s) when the boots are ready.
+**Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a
+cast is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk
+out to the spread ring. Tanks never use them on the walk to Steelbreaker's spot: the Meltdown run is
+their one long walk, 46 yd in ~2.6 s boosted against 6.6 s, and the `late` test times it boosted
+(2.5× for the first 5 s) when the boots are ready.
 
 Outside the swap the tank node **taunts only when the current victim is not a group tank**: the tick
 after a carrier dies, and the path that recovers him when a dps rips threat at the transition. The
@@ -173,52 +175,53 @@ him off a human carrier, died 9s later and left nobody to inherit.
 SILENCE** — kicks and stuns land, `silencing shot` and `spell lock` never do. Steelbreaker and
 Molgeim (`0x26CB3F7F`) add STUN and INTERRUPT, so **Brundir is the only member worth an interrupt
 node**. Lightning Whirl reaches 100 yd with no positional answer, so it takes the lowest-ranked
-interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns are
-thin. The interrupt node sits above every class interrupt (`ACTION_INTERRUPT`, 40).
+interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns
+are thin. The interrupt node sits above every class interrupt (`ACTION_INTERRUPT`, 40).
 
 **One encounter state per instance, in a `RaidInstanceState` — never `thread_local`**
-([../README.md](../README.md#per-instance-state); the signature is in
-[coordinating a raid](../../engine/raid-mechanics-lessons.md#coordinating-a-raid-with-no-shared-state)). Spread slots, the
-shift heading and the alive mask must agree across the raid, and per-thread copies handed one pull
-six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10
-of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a 50s
-Steelbreaker phase. It resets once all three are back at full health, never on leaving combat:
+([../README.md](../README.md#per-instance-state); the signature is in [coordinating a
+raid](../../engine/raid-mechanics-lessons.md#coordinating-a-raid-with-no-shared-state)). Spread
+slots, the shift heading and the alive mask must agree across the raid, and per-thread copies handed
+one pull six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in
+4.5s, 10 of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a
+50s Steelbreaker phase. It resets once all three are back at full health, never on leaving combat:
 Brundir spends 16 s of every Tendrils with no victim by design.
 
 Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50
 — so **nothing anchor-centred sits outside 30 yd**, where every heading is clean; a ring on another
 centre earns its own probe. `ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS` 78 stops short of both hall doors,
-(1671.31, 120.70) and (1501.49, 119.70), 84 and 86 yd out: sight is 100 yd with no LOS check, and
-without it the council drives bots from the corridor. Positioning and targeting also wait on
-`IronAssemblyFormationActive`, since the strategy runs out of combat and a presence gate walks bots
-through the doors and opens the pull early. Brundir parks at 28 yd, 38 from the ranged stack: more than his Overload
-needs, so the stack never reacts to it and someone is always parked and free to kick. Once Brundir is
-the last one up his isolation protects nothing, and the raid closes to a second stack point 3 yd past
-the anchor toward him, 25 from his spot: outside Overload, inside caster range. **Tanks stand
-rather than drag**, so a boss follows its tank to the spot instead of being towed through the raid —
-and **`tank face` is vetoed for a tank holding an assignment**, being a second mover at the same
-`MOVEMENT_COMBAT` priority as the spot: the two alternated every second between the designed spot and
-a point 6.8 yd nearer the raid, 45–57 destination flips and 385–515 yd of wandering destination in
-one phase, which also dragged the Meltdown centre in over the ranged. `set facing` is a separate
-node, so facing is untouched.
+(1671.31, 120.70) and (1501.49, 119.70), 84 and 86 yd out: sight is 100 yd with no LOS check, so
+without it the council drives bots from the corridor. Positioning and targeting wait on
+`IronAssemblyFormationActive`: the strategy runs out of combat, and a presence gate walks bots
+through the doors and opens the pull early. Brundir parks at 28 yd, 38 from the ranged stack: more
+than his Overload needs, so the stack never reacts to it and someone is always parked and free to
+kick. Once he is the last one up his isolation protects nothing, so the raid closes to a second
+stack point 3 yd past the anchor toward him, 25 from his spot: outside Overload, inside caster
+range. **Tanks stand rather than drag**, so a boss follows its tank to the spot instead of being
+towed through the raid — and **`tank face` is vetoed for a tank holding an assignment**, being a
+second mover at the same `MOVEMENT_COMBAT` priority as the spot: the two alternated every second
+between the designed spot and a point 6.8 yd nearer the raid, 45–57 destination flips and 385–515 yd
+of wandering destination in one phase, which also dragged the Meltdown centre in over the ranged.
+`set facing` is a separate node, so facing is untouched.
 
 **Tanks rank among bots only**, by guid, and claim from the front of **Brundir → Steelbreaker →
 Molgeim**. Group role flags count humans, and a human holding a slot left its boss untowed: bots
-cannot know a human is tanking, and a slot they cannot fill is worse than none. A lone bot tank still
-takes one, and it is **Brundir** — it cannot split three bosses but need not, since the unheld two
-drift onto the only real threat on the floor anyway. So the assignment really decides **where the
-council parks**: Brundir's spot is 38 yd off the stack, the melee spots 11. Two traced pulls differed
-in nothing else — with the lone tank on Steelbreaker, 5 of 5 Overloads covered the stack and ranged
-stood within 10 yd of a boss 77% of the time; on Brundir, 0 of 4 and 11%. Guid ranking renumbers on a
-tank death, which is wanted: that is when someone must pick up Brundir. With two bot tanks on three
-members, rank 0 takes Brundir and rank 1 the focus (unless that is Brundir), and the third
-member rides the threat table; when it lands on a non-tank, pets included (a dps held Molgeim 13–42 s in one pull,
-killed a paladin and stood in Brundir's rune), Brundir's tank taunts it back (`ironassembly.unheld`).
+cannot know a human is tanking, and a slot they cannot fill is worse than none. A lone bot tank
+still takes one, and it is **Brundir** — it cannot split three bosses but need not, since the unheld
+two drift onto the only real threat on the floor anyway. So the assignment really decides **where
+the council parks**: Brundir's spot is 38 yd off the stack, the melee spots 11. Two traced pulls
+differed in nothing else — with the lone tank on Steelbreaker, 5 of 5 Overloads covered the stack
+and ranged stood within 10 yd of a boss 77% of the time; on Brundir, 0 of 4 and 11%. Guid ranking
+renumbers on a tank death, which is wanted: that is when someone must pick up Brundir. With two bot
+tanks on three members, rank 0 takes Brundir and rank 1 the focus (unless that is Brundir), and the
+third rides the threat table; when it lands on a non-tank, pets included (a dps held Molgeim 13–42 s
+in one pull, killed a paladin and stood in Brundir's rune), Brundir's tank taunts it back
+(`ironassembly.unheld`).
 
-Tank spot and raid spot are reach-then-hold: re-walked only past twice the tolerance (tank 4, raid
-spot 3, a rune 2), since a move per yard of drift restarts the spline and a moving bot never casts or
-kicks Lightning Whirl.
+Tank and raid spots are reach-then-hold, re-walked only past twice the tolerance (tank 4, raid spot
+3, a rune 2): a move per yard of drift restarts the spline, and a moving bot never casts or kicks
+Lightning Whirl.
 
 **Hazards land on the stack point.** `DoCastRandomTarget` puts Rune of Death on a random member, so
 on a stacked raid it covers the stack — four of four in one traced pull, one exactly on it — and it
@@ -226,9 +229,9 @@ repeats every 30–40s for ~30s from Molgeim's phase 2. Overload rides Brundir, 
 the stack too: five of five in another pull, 22–24 of 25 members inside the circle at cast. So the
 **raid spot answers both**: a covered stack shifts to the nearest clear of the eight anchor headings
 at 25 yd (navprobe 8/8 on mesh), each hazard tested at its own clearance — 21 for a rune, 25 for
-Overload. Derived from the stack and the hazards alone, never the caller — every bot computes it, and
-reading the caller's position would scatter the raid instead of moving it; each bot still sweeps runes
-from where it stands, fine while the raid is stacked round the point. **The heading latches**
+Overload. Derived from the stack and the hazards alone, never the caller — every bot computes it,
+and reading the caller's position would scatter the raid instead of moving it (each bot still sweeps
+runes from where it stands, fine while the raid is stacked round the point). **The heading latches**
 until it stops clearing: a rune holds still, but Overload walks with Brundir, and re-picking every
 tick would flip the winner mid-cast. With no heading clear the raid holds formation and each bot
 escapes alone. **Known-open:** on the exact stack point a rune lands 0 yd from every caster, and one
@@ -247,11 +250,11 @@ the anchor. It alone does not ride the stack displacement, Brundir and Molgeim b
 ring: 4 of 4 traced phase-3 pulls, alive 2.9–20.6s into it. Left to the per-bot escape, escape and
 raid spot traded the ranged every 1.5s (89 flips against 13 in the kill) and Steelbreaker stood at
 79–84% at +20s against the kill's 77%. So **the slots squeeze evenly into the arc the rune leaves
-clear at 21** (`spread-rune`; it covers ~140° of the ring, found over 64 sampled bearings): rotating only the covered ones to the nearest clear bearing lands a
-side's worth on one point, which is what Static Disruption's 6 yd blast wants. A second rune
-covering a slot inside the clear arc leaves that bot holding. Melee still have
-only the escape. navprobe: 64/64 headings at 22 round the designed spot settle on the floor. Ranged
-beyond the ring's slots keep the stack point.
+clear at 21** (`spread-rune`; the rune covers ~140°, found over 64 sampled bearings): rotating only
+the covered ones to the nearest clear bearing lands a side's worth on one point, which is what
+Static Disruption's 6 yd blast wants. A slot a second rune covers inside the arc holds its bot.
+Melee still have only the escape. navprobe: 64/64 headings at 22 round the designed spot settle on
+the floor. Ranged beyond the ring's slots keep the stack point.
 
 **Two radii, not one.** DBC says 13, but the searcher applying the aura adds object size at both
 ends and traces measured applications to **15.4 yd**: bots run inside **16**, stand at **21**. One
@@ -266,15 +269,15 @@ killing blows.
 radius, and the escape turns the bot back at its edge — 10–12 of 14 ranged paths did at the phase-3
 transition. So both formation movers, raid spot and tank spot, step through
 `TryGetIronAssemblyRouteStep`: a line or goal inside **18.5** of a rune goes round it via points on
-its 21 yd circle at fixed 45° bearings, the short way, each chord staying 19.4 out. 18.5 sits halfway
-because a line that only clears 16 grazes it and walks are not straight; goals share it, or one
-between the radii never clears and the detour circles forever. A walk whose nearest point is the bot
-itself only moves away and never counts as blocked — counting it spirals a bot inside 18.5 inward.
-Detour points go through the static floor check, which pulls an off-floor point back along the bot's
-line, still outside 16. A covered goal, or a detour point inside a second rune, holds. **The tank holds at his escape spot**
-while a rune covers his: the ring stays on his spot, leaving its near arc ~12 yd from him inside
-Meltdown, safe only because a rune lasts 30s and the first Meltdown lands 43s into the phase.
-navprobe: 8/8 on the 21 yd circle round the stack point.
+its 21 yd circle at fixed 45° bearings, the short way, each chord staying 19.4 out. 18.5 sits
+halfway because a line that only clears 16 grazes it and walks are not straight; goals share it, or
+one between the radii never clears and the detour circles forever. A walk whose nearest point is the
+bot itself only moves away and never counts as blocked — counting it spirals a bot inside 18.5
+inward. The static floor check pulls an off-floor detour point back along the bot's line, still
+outside 16. A covered goal, or a detour point inside a second rune, holds. **The tank holds at his
+escape spot** while a rune covers his: the ring stays on his spot, leaving its near arc ~12 yd from
+him inside Meltdown, safe only because a rune lasts 30s and the first Meltdown lands 43s into the
+phase. navprobe: 8/8 on the 21 yd circle round the stack point.
 
 **Escapes carry a clearance per hazard and break ties toward the bot's station** — its raid spot,
 its tank spot, or whatever the raid is killing. The sweep rings outward from the bot and takes the
@@ -283,11 +286,11 @@ it walks: 21–26% of consecutive escape destinations jumped over 5 yd, one bot 
 holds still while the bot moves, which is what lets one answer keep winning. The per-hazard
 clearance matters in the same call: an Overload escape folds in the runes, and one clearance for the
 whole vector cleared them at 25 instead of 21 — four wasted yards each, walked inside a 5.5s cast.
-Escapes walk at `MOVEMENT_FORCED` and never through `FleePosition`, which caps travel short of a 20 yd
+Escapes walk at `MOVEMENT_FORCED`, never through `FleePosition`, which caps travel short of a 20 yd
 blast and reads one hazard ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)).
-Overload (20 yd) clears at 25; Tendrils (18 yd) at 28, measured 2D, since Brundir hovers while it
-ticks and the damage lands on the floor under him. The Rune of Death trigger checks every 200 ms: a
-rune lives 30 s, so a fraction of a second late costs one tick, and the sweep is a grid search.
+Overload (20 yd) clears at 25, Tendrils (18 yd) at 28, measured 2D: Brundir hovers while it ticks
+and the damage lands on the floor under him. The Rune of Death trigger checks every 200 ms: a rune
+lives 30 s, so a fraction of a second late costs one tick, and the sweep is a grid search.
 `iron assembly movement guard` holds only while the bot is committed to a hazard: the position row
 yields once parked, so a permanent guard would strand the raid wherever its last dodge ended.
 
@@ -334,15 +337,15 @@ tank leaves that range, then stops at both reaches + 0.5.
   1) + 0.5, 3, 4)` deep for a boss `d` off it: behind him so nothing parries, 1 yd inside the edge, in
   reach of a boss that overshot. Only while that spot is in melee range − 1, ≥ 21 from every Rune of
   Death, and Brundir isn't in Overload or Tendrils; held while within 4.5 of the rune and in melee range.
-- **Ranged dps but hunters**: the rune *is* the raid spot (`rune-power`), one mover rather than a soak
-  node, when within 25 yd of the **opening** stack point (every rune on Steelbreaker or Molgeim, none
-  on Brundir, 38 yd off in Overload range), ≥ 21 from every Rune of Death and outside a live Overload.
-  Deadband 2 / 4, both inside the rune. Hunters can't shoot inside 5 yd of the hitbox and healers gain
-  nothing (64320 is damage only), so they keep the stack. The rune is inside `enemy too close for spell`
-  of Molgeim, so `iron assembly rune of power hold` blocks Flee, Run Away, Blink and Disengage there
-  (safe, since he faces his tank with the rune behind him):
-  unheld, 12 of 14 traded flee and raid spot every 1.7 s and ranged dps halved (72k → 36k), while the one
-  with no flee node gained 39%. Never in the spread phase: one Static Disruption on a stack is +75%
+- **Ranged dps but hunters**: the rune *is* the raid spot (`rune-power`), one mover rather than a
+  soak node, when within 25 yd of the **opening** stack point (every rune on Steelbreaker or
+  Molgeim, none on Brundir, 38 yd off in Overload range), ≥ 21 from every Rune of Death and outside
+  a live Overload. Deadband 2 / 4, both inside the rune. Hunters can't shoot inside 5 yd of the
+  hitbox and healers gain nothing (64320 is damage only), so they keep the stack. The rune is inside
+  `enemy too close for spell` of Molgeim, so `iron assembly rune of power hold` blocks Flee, Run
+  Away, Blink and Disengage there (safe: he faces his tank with the rune behind him). Unheld, 12 of
+  14 traded flee and raid spot every 1.7 s and ranged dps halved (72k → 36k), while the one with no
+  flee node gained 39%. Never in the spread phase: one Static Disruption on a stack is +75%
   nature taken for 20s, and High Voltage is nature.
 
 **Known-open:** Static Disruption starts at Steelbreaker's phase 2, which in hard mode is Molgeim's
@@ -393,14 +396,14 @@ it fired 8–23 s in at 80–95% mana here, the full bar capping the return at 5
 back at 5:08, after the cascade. With the gate and 5 healers (22 Nov) priests ran dry at 3:42–4:49
 and his lowest was 0.4%, 23% and 24%.
 
-**One round goes at the pull**, by the user's call, to speed the fight up: while all three are up and
-within 20 s of the engage stamp (`engagedAtMs`, kept by every bot's tick rather than the reset node,
-which fires only for a bot holding a spread slot, so a wipe before Steelbreaker's phase would leave
-a stale stamp and shut the next window; cleared once the council is back at full health), trinkets,
-tinkers and any burst spell whose talented cooldown (`SpellCooldownMs`) is **≤ 3 min**. Every allowed
-cooldown is ≥ 60 s, so the window makes it once; a 3 min one spent at ~8 s is back ~18 s after
-Steelbreaker is alone (~170 s in). Potions, Heroism/Bloodlust (Sated) and longer cooldowns (Army of the
-Dead, Fire Elemental, 5 min ones) stay held.
+**One round goes at the pull**, by the user's call, to speed the fight up: while all three are up
+and within 20 s of the engage stamp (`engagedAtMs`, cleared once the council is back at full health;
+kept by every bot's tick, not the reset node, which fires only for a bot holding a spread slot, so a
+wipe before Steelbreaker's phase would leave a stale stamp and shut the next window), trinkets,
+tinkers and any burst spell whose talented cooldown (`SpellCooldownMs`) is **≤ 3 min**. Every
+allowed cooldown is ≥ 60 s, so the window makes it once; a 3 min one spent at ~8 s is back ~18 s
+after Steelbreaker is alone (~170 s in). Potions, Heroism/Bloodlust (Sated) and longer cooldowns
+(Army of the Dead, Fire Elemental, 5 min ones) stay held.
 
 **A guaranteed tank death re-vetoes the release, which is a known and accepted interaction.**
 `TankHasHeldBoss` needs `boss->GetVictim()` to be a grouped tank *continuously* for 5 s — 3 s for lust
