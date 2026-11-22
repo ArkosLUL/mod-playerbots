@@ -1560,9 +1560,10 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
                       true, MovementPriority::MOVEMENT_COMBAT, true);
     };
 
-    // Collect up to the bank first. Not while the held core is expiring or the phase is ending, or the
-    // chase loses the core in hand; nor while a chain has one to spend now.
-    if (held < ULDUAR_MIMIRON_CORE_BANK && !expiring && !acuLow && !(chaining && core && ready))
+    // Fetch up to the bank, unless the core in hand is due now (expiring, unit low, chain ready).
+    // Empty bags always fetch: the airborne unit takes so little damage it can sit under 25% for minutes.
+    bool const spendHeldNow = core && (expiring || acuLow || (chaining && ready));
+    if (held < ULDUAR_MIMIRON_CORE_BANK && !spendHeldNow)
     {
         Creature* corpse = GetMimironCoreCorpse(bot);
         if (!corpse && !core)

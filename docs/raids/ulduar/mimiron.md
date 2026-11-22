@@ -10,6 +10,10 @@ all over Ulduar, not only in this room
 `SPELL_EMERGENCY_MODE (64582)` is the empower aura on whichever mech is active, if a live signal is
 ever wanted; the mechs *are* valid attack targets, unlike Mimiron himself.
 
+**A pull engaged before the button is normal mode** (no Flames; the MK II wakes ~7.7 s in, not ~13).
+The one such trace also hit Mimiron himself (1,742,400 hp) at the opening and through phase 2, and his
+death at 2:42 set the boss `DONE`, so trace and DC read a kill.
+
 **The fire is the boss.** Flames 64566 was the largest single damage source on the first pulls, 26-45%
 of everything the raid took and roughly half of all effective healing. With the dodges below it fell to
 about 20%, behind Heat Wave, though a long phase 3 still puts it back on top (27.7% of one pull).
@@ -879,9 +883,13 @@ unit down 40 s in one piece, the second going down the moment the first's aura e
 The carrier loots up to `ULDUAR_MIMIRON_CORE_BANK` (2) and holds the first until one of four escapes:
 the second is in the bags; the held one has under `ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS` (10 s) of life
 left (`item_template` 46029 has **`duration` 60**, against observed waits of 32-52 s); the unit is at or
-below `_CORE_HOLD_RELEASE_PCT` (25%), where the phase ends before another core matters; or the next
-Assault Bot is up (`hold-bot-up`), since a landing only delays one still to spawn and holding past one
-made first landings 33-45 s late.
+below `_CORE_HOLD_RELEASE_PCT` (25%), about what one landing takes; or the next Assault Bot is up
+(`hold-bot-up`), since a landing only delays one still to spawn and holding past one made first landings
+33-45 s late.
+
+**Escapes end the hold, never the fetch.** Empty bags fetch at any unit health: airborne, a bot raid
+takes it 0.04-0.18%/s, and a fetch also gated at 25% left one at 18-23% for 211 s, four corpses
+unlooted, until Berserk.
 
 **The chain needs a latch, because the count cannot tell**: one core left after spending the first of a
 pair reads as a bank of one, and went back to `hold` until its own expiry. Every spend sets `chaining` on
