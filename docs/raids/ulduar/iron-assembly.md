@@ -106,10 +106,10 @@ druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its 
 The budget is the non-tank druids' Rebirths, one each a pull, and a class `rebirth` on a tank killed
 before phase 3 spends one.
 
-**A risen tank gets its raid buffs back in combat** (`ironassembly.rebuff`). Rebirth or a Soulstone stands
-it up at 16–19% health with none, and the class buff nodes are non-combat only: traced 41.8k max health
+**A risen tank gets its raid buffs back in combat** (`ironassembly.rebuff`). It stands up with none
+(Rebirth: 16–19% health), and the class buff nodes are non-combat only: traced 41.8k max health
 against 48.5k. For 30 s after any tank rises, bots already within 30 yd and sight put back Mark of the
-Wild, Power Word: Fortitude and, on a mana tank, Arcane Intellect, one bot each, and each blessing its
+Wild, Power Word: Fortitude and, on a paladin tank, Arcane Intellect, one bot each, and each blessing its
 role gets from a different paladin (one blessing per paladin per target). Dps cast first, then healers,
 paladin tanks last, never a bear; a cat shifts out for Mark of the Wild, while moonkin and Tree of Life
 are stance forms to the core and cast it as they are. The blessings follow the class planner's per-member wants (role

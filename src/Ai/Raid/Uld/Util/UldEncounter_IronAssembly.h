@@ -428,7 +428,7 @@ struct IronAssemblyTankRebuff
 };
 
 // What this bot puts back on a tank that rose inside REBUFF_WINDOW_MS: Mark of the Wild, Fortitude, Arcane
-// Intellect on a mana tank, one bot each, plus each blessing its role gets from a separate paladin.
+// Intellect on a paladin tank, one bot each, plus each blessing its role gets from a separate paladin.
 bool IronAssemblyTankRebuffDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyTankRebuff& duty);
 
 // Uses the bot's Nitro Boosts for a walk of this length, if it's long enough and they're ready. why

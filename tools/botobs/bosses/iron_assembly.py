@@ -395,7 +395,7 @@ def show_revived(trace: Trace) -> None:
     for guid, rows in deaths.items():
         before = held_raid_buffs(trace, rows[0])
         if classes.get(guid) != CLASS_PALADIN:
-            # the strategy only puts it back on a mana tank
+            # the strategy only puts it back on a paladin tank
             before.discard("Arcane Intellect")
         for index, death in enumerate(rows):
             later = rows[index + 1] if index + 1 < len(rows) else None

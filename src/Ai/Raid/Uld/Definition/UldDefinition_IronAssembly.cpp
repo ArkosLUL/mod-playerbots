@@ -121,8 +121,8 @@ void DefineIronAssembly(EncounterBuilder& e)
     e.Block("iron assembly meltdown melee charge guard", Role::Melee, IronAssemblyMeltdownMeleeWindow,
             Family::Charge);
 
-    // The class nodes spend these on health alone, so phase 3's punches found none left. Under the floor
-    // they go through as a last resort.
+    // The class nodes spend these on health alone and would leave the Fusion Punch node nothing. Under the
+    // floor they go through as a last resort.
     e.Block("iron assembly tank defensive hold", Role::Tank, IronAssemblyTankDefensiveHeld, 0,
             HeldTankDefensiveNames());
 

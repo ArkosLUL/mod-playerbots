@@ -1976,7 +1976,8 @@ struct IronAssemblyRaidBuff
     uint32 firstRank;
     char const* single;
     char const* group;
-    bool manaTanksOnly;
+    // By class, not power type: a druid tank stands up from a rez in caster form, on mana.
+    bool paladinTanksOnly;
 };
 
 std::array<IronAssemblyRaidBuff, 3> const IRON_ASSEMBLY_RAID_BUFFS = {{
@@ -2090,7 +2091,6 @@ bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> 
 
     for (Player* tank : revived)
     {
-        about = tank;
         std::array<bool, BLESSING_CATEGORY_SLOTS> present{};
         std::vector<Player*> free = paladins;
         for (auto const& applied : tank->GetAppliedAuras())
@@ -2109,6 +2109,8 @@ bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> 
 
         RoleProfile const role = ResolveRoleProfile(tank);
         std::size_t wanted = 0;
+        bool lacking = false;
+        bool nobody = false;
         for (BaseBlessingCategory const category : BASE_BLESSING_PRIORITIES[role].priorities)
         {
             if (category == BASE_NONE || wanted == paladins.size())
@@ -2125,7 +2127,8 @@ bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> 
             if (present[category])
                 continue;
 
-            how = "none:nobody";
+            lacking = true;
+            bool assigned = false;
             for (auto paladin = free.begin(); paladin != free.end(); ++paladin)
             {
                 std::optional<uint32> const spell = HighestKnownBlessingRank(*paladin, category, false);
@@ -2137,14 +2140,23 @@ bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> 
                 {
                     duty.tank = tank;
                     duty.spellId = *spell;
+                    about = tank;
                     how = "cast";
                     return true;
                 }
 
-                how = "none:other";
+                assigned = true;
                 free.erase(paladin);
                 break;
             }
+
+            nobody = nobody || !assigned;
+        }
+
+        if (lacking)
+        {
+            about = tank;
+            how = nobody ? "none:nobody" : "none:other";
         }
     }
 
@@ -2173,7 +2185,7 @@ static bool DeriveIronAssemblyTankRebuff(PlayerbotAI* botAI, Player* bot, IronAs
     IronAssemblyRaidBuff const* buff = IronAssemblyRaidBuffOf(bot->getClass());
     for (Player* tank : revived)
     {
-        if ((buff->manaTanksOnly && tank->getPowerType() != POWER_MANA) || botAI->HasAura(buff->single, tank) ||
+        if ((buff->paladinTanksOnly && tank->getClass() != CLASS_PALADIN) || botAI->HasAura(buff->single, tank) ||
             botAI->HasAura(buff->group, tank))
             continue;
 
