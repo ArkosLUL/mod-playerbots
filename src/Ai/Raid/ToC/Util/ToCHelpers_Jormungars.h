@@ -154,12 +154,20 @@ inline constexpr uint32 WORM_WALK_LATCH_MS = 5000;
 // A pool at the worm's feet takes ~20 s to reach the melee stands, so the drag can wait this long
 inline constexpr uint32 WORM_DRAG_CURE_WAIT_MS = 6000;
 
+// DPS threat brake on a worm, as shares of its duty holder's threat. Area damage this close to a braked
+// worm counts as hitting it.
+inline constexpr float WORM_THREAT_CAP = 0.9f;
+inline constexpr float WORM_THREAT_RELEASE = 0.8f;
+inline constexpr float WORM_AREA_THREAT_REACH = 30.0f;
+
 static_assert(WORM_SWEEP_RADIUS < WORM_SWEEP_TRIGGER && WORM_SWEEP_TRIGGER < WORM_SWEEP_CLEARANCE, "sweep band");
 static_assert(WORM_SPLASH_RADIUS < WORM_BILE_TRIGGER && WORM_BILE_TRIGGER < WORM_BILE_CLEARANCE, "bile band");
 static_assert(WORM_SPREAD_TRIGGER < WORM_SPREAD_CLEARANCE, "spread band");
 static_assert(WORM_SPRAY_TRIGGER < WORM_SPRAY_CLEARANCE, "spray band");
 static_assert(WORM_SPEW_LEAD_MS < WORM_SPEW_FIRST_MS, "spew lead");
 static_assert(WORM_EDGE_MIN < WORM_EDGE_MAX, "edge band");
+static_assert(WORM_THREAT_RELEASE < WORM_THREAT_CAP && WORM_THREAT_CAP < 1.1f,
+              "the brake holds short of the 110% that takes a worm off a tank in melee range");
 static_assert(WORM_MELEE_STACK_TRIGGER < WORM_MELEE_STACK_CLEARANCE, "melee stack band");
 static_assert(WORM_POOL_TRIGGER_PAD < WORM_POOL_CLEARANCE_PAD, "pool band");
 static_assert(WORM_SPEW_TRIGGER_PAD < WORM_SPEW_CLEAR_PAD, "spew band");
@@ -201,6 +209,14 @@ bool MobileWormDragWaits(PlayerbotAI* botAI);
 
 // The worm this hunter or rogue redirects onto its duty holder right now, else nullptr
 Unit* GetWormRedirectTarget(PlayerbotAI* botAI, Player*& holder);
+
+// Braked once this DPS bot's threat on the up worm reaches WORM_THREAT_CAP of the duty holder's, until it
+// drops under WORM_THREAT_RELEASE. Blind while the holder has no threat on it, e.g. right after the
+// emerge's threat wipe. A worm off its tank one-shots a melee.
+bool IsWormThreatBraked(PlayerbotAI* botAI, Unit* unit);
+bool IsWormThreatBraking(PlayerbotAI* botAI);  // braked on either worm
+// Braked on a worm within range of this point
+bool IsWormThreatBrakedNear(PlayerbotAI* botAI, Position const& at, float range);
 
 // A bot Burning Bile carrier with no Beasts tank duty, runners too: reach melee would walk it back onto
 // the stack, and a runner whose search finds nothing stands still instead

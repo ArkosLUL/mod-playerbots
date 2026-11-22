@@ -286,8 +286,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   health % is 5 points under it and back once it's 5 over: melee on one and ranged on the other keep
   the two within ~1.5, and a bare `≤` flipped every melee bot 20-34 times in the first 41 s on 25H
   (2026-10-29), starting on Acidmaw at 100/100. A melee on a
-  stationary worm dodges only the Sweep cast. The stationary holder now keeps the worm under all
-  ranged DPS: unchecked by a cap. The 10 s only times the achievement.
+  stationary worm dodges only the Sweep cast. The stationary holder keeps the worm under all ranged
+  DPS, the threat brake capping them. The 10 s only times the achievement.
 - **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
   tank duty` → `… tank hold stationary worm`, `ACTION_RAID + 1`) take the worm from `GetBeastOfDuty`.
   - Under ground, the holder closes to 20 yd of a worm coming up mobile and into melee of one coming
@@ -335,6 +335,11 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   is engaged. The threat wipe is the moment and the holders the targets
   ([README.md](../README.md#threat-redirect--the-rubric): multi-tank assignment at a phase
   transition).
+- **Threat brake** (`northrend worms threat brake`, Spell and Melee families): a DPS bot stops
+  damaging a worm at 90% of its duty holder's threat, area damage within 30 yd included, and resumes
+  under 80% (Jaraxxus' latch); white swings, DoTs and pets run on. Blind while the holder has no
+  threat, as after the threat wipe. On 25H (2026-11-21) every worm swing at a non-tank killed it, 24
+  in 15 pulls: melee past 110% while the holder dragged or lay paralysed, ranged past 130%. `nb.brake`.
 - **Reposition** (`northrend worms misplaced` → `northrend worms reposition`,
   `ACTION_EMERGENCY + 6`): one mover per bot for every worm hazard and the cure walk, since two
   movers clear each other's MotionMaster ([xt002.md](../ulduar/xt002.md),
@@ -722,7 +727,6 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - On heroic with Dreadscale stationary, a caster with no `full` or `pair` spot stays where it stands.
 - Ranged reach binds to their target, Acidmaw in either form, so with it at the arena edge the floor
   in reach stays small.
-- No threat cap for the ranged on a stationary Acidmaw: its holder has to out-threat them all.
 - While the mobile worm walks, melee follow it by generic reach and take their stand once it stops.
 - DoTs aren't refreshed on both worms before a submerge (guide), and nothing chases the achievement
   (both worms within 10 s).
@@ -800,6 +804,7 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `worm` | 0 no worm engaged, 1 Dreadscale mobile, 2 Acidmaw mobile, 3 a worm under ground, 4 lone Dreadscale, 5 lone Acidmaw. Per instance |
 | `cure` | A bot's pairing: `seek <Bile carrier>`, `run <Toxin carrier>` as its runner, `wait <runner>` or `wait` stuck with no runner, `none` |
 | `toxinheal` | A healer bot's carrier of Toxin no Bile can cure, `0` when the duty ends |
+| `brake` | The worms a DPS bot's threat brake holds it off, a bit each: 1 Acidmaw, 2 Dreadscale; `0` none |
 | `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `spray`, `bile`, `sweep`, `spew`, `spread`, `melee`, `reach`) and the search tier that found the spot (`stand`, `full`, `pair`, `nospread`, `partner`, `direct`, `detour`, `partial`, `escape`, `loose`, `cross`): `move <yd> <reason> <tier>`, `hold <reason>` its walk to the held spot in flight, `clear` already there, `none <reason>` (not urgent: a 1 s backoff), `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
 | `wormhold` | A bot's held spot: `set <reason> <tier>` latched by a walk or an arrival (a walk back to it writes none), `park` within 1 yd, `unpark` pushed off it, walking back, `release <cause>`. Cause: a rule (`pool`, `spray`, `bile`, `sweep`, `spew`, `spread`), `melee` the rear arc, `reach` the role reach at a parked spot, `path` off the floor or across a pool or Sweep, `target` the target or a cure or run partner changed, left or drifted out of 8 yd, `cure` a cure walk owed, `phase` `worm` changed, 0 included, `drift` the anchor worm moved or turned, `heal` the heal target out of reach, `arrived` an escape, loose, detour, partial, cross or Spray walk ended, `gone` the bot died or left |
 | `spread` | A non-tank bot's bearing `k` from straight behind Icehowl (`0`, `1`, `-1`, …), kept while the layout holds through his walk, or `none` while it is off (the daze included) or the bot holds none. Written when a trigger asks |
@@ -846,7 +851,9 @@ Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank 
 targeted first, per wedge the non-tanks inside at the nearest snapshot, the Spew tick victims by
 role over 3.5 s, how far the worm's facing swung and each victim in turn with the yards it walked, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole seconds from its
 first snapshot, 20 at most) and its hits, Sweep victims by role, the mobile worm's gap to its target
-column per victim (count, median, max) over snapshots where neither moved, per Spray (the eight ids, from a
+column per victim (count, median, max) over snapshots where neither moved, every worm melee `dmg` row
+on a non-tank (its swing can fall between snapshots) with the hit, a death within 50 ms and the
+victim's `brake` then, seconds braked per worm and bot up to its death, per Spray (the eight ids, from a
 worm) its
 target, who stood within 10 yd of it in the snapshot nearest its row plus `ct` (the cast's end),
 who took its debuff from that worm (the first 400 ms of applies 0.8-4 s after the row) and `spray`

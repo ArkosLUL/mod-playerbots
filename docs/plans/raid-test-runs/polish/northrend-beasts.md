@@ -204,3 +204,68 @@ with the lane's: no direct spot, a detour every 2 s sample (24-46 yd, 649_8 62-8
 were, each followed by a `direct`/`partner` walk and a cure; Toxin on the mobile holder ending `cured`
 with `runner` no-spot under ~2 s; no Acidmaw kill on a non-tank while its holder carries Toxin; after
 `nb.cure run`/`seek`, a `release cure` instead of a Spray dodge's `release arrived`.
+
+## Round 4 (2026-11-22, build 96e2d86c2, window 6)
+
+**Data.** 6 valid 25H pulls, no freeze, no DC veto: toc1 `649_8_…_1795299735` (run
+`tr-20261121-222034-8`, kill 7:24, 1 death; the report's toc1 table misses it), `649_14_…_1795300344`
+(kill 7:56, 5); toc2 `649_11_…_1795299785` (kill 7:30, 0), `649_15_…_1795300416` (kill 7:30, 0); toc3
+`649_9_…_1795299804` (run `tr-20261121-222056-11` pull 1, wipe at Berserk, 32), `649_9_…_1795300421`
+(pull 2, kill 8:08, 6). Report regenerated `raidtest.py report --boss northrend-beasts --raid toc --head
+96e2d86c2 --pulls 10`.
+
+**Stop rules.** Not polished: the toc3 wipe, 5 and 6 deaths. Spew r1-r2, Toxin runner r3: no failure
+picked three rounds running.
+
+**Deaths by mechanic.**
+
+| Pull | Deaths |
+|---|---|
+| toc1 649_8 | 1 Impale (Gormok tank, 4 stacks, 1:54) |
+| toc1 649_14 | 1 Fire Bomb (healer, 0:31); 2 Acidmaw melee on its holder Tocxam (3:38, then 3:58 after a soulstone); 1 Acidmaw melee on a ranged (4:00, holder dead); 1 enraged lone Dreadscale melee on a melee (4:25, holder alive, 118.9k) |
+| toc2 649_11, 649_15 | 0 |
+| toc3 649_9_…804 | 1 Impale (bear, 1:09); 1 Dreadscale melee on its mobile holder Toczaz (2:40, Bile 16 s); 1 Slime Pool on a paralysed ranged (3:25, Toxin 34.8 s, no spot: walk 8.1 s, runner 0.8 s); 1 Acidmaw melee on a melee (3:51); 2 lone Dreadscale melee on a melee and a ranged (4:40, 4:45); Icehowl: 1 Ferocious Butt, 1 Slime Pool, 1 Massive Crash; Berserk 8:29 with Icehowl at 16.9%: 23 more |
+| toc3 649_9_…421 | 2 Dreadscale melee on melee (2:45, 2:48, 15 s after the engage); 1 Acidic Spew on a ranged (3:34, emerge); 1 Acidmaw melee on its holder Toczaa (3:57, 10 Spew ticks); 1 lone Dreadscale on its holder Toczab (4:35, melee, Bite, Spew); 1 Icehowl melee on Toczab (5:34) |
+
+**Verdict on round 3.** Held. All 8 Toxin spans on a holder ended `cured` (10-19 s); runner no-spot 0.4
+and 1.6 s against 40.6 in 649_20; 22 `detour` walks (cure 17, run 5) and 27 `release cure`; no Acidmaw
+swing on a non-tank while its holder carried Toxin (its two came with the holder dead or clean).
+
+**Picked: a worm takes a non-tank by threat, 7 deaths (bug).** Every worm melee swing on a non-tank
+killed it: 7 of 7 here, 7 of 7 in window 4, 10 of 10 in window 5 (new `--worms` line). The core
+(`ThreatManager::ReselectVictim`, `ThreatManager.cpp` 665-720) hands the worm to a challenger in melee
+range at 110% of its victim's threat, out of range at 130%. Nothing kept DPS bots under that: no bot
+runs the generic `threat` strategy, and the Beasts code had no brake, unlike Jaraxxus and Anub'arak.
+649_421: holder Toczaa (prot paladin) dragged Dreadscale at 2:30.97, 2:36.2, 2:46.9, 2:48.3 (`drag
+edge`); the target column went to Toczaj 2:35.9 (taunted back), Toczat 2:45.35 (8.3 yd, holder 8.1,
+both in melee: 110%), one 36.5k swing, dead; Hand of Reckoning 2:45.47 came after it; Toczaj 2:47.85,
+dead. 649_804: Acidmaw holder Toczab (bear) dragged 26 yd at a Toxin crawl 3:35.7-3:43.3 and Acidmaw
+swung at Toczas (melee) at 3:51.67 between snapshots; lone Dreadscale holder Toczaa walked ~14 of 30 s
+(drags 4:22.5, 4:25.4, 4:33.3, 4:48.4), Toczax (melee, 10.3 yd) took it at 4:38.9 and Toczal
+(affliction warlock) at 4:41.4 from 31.5 yd (130%). 649_14: enraged lone Dreadscale on Tocxaf 4:25.2.
+
+Fix: `northrend worms threat brake` (Spell and Melee families, `ToCMultipliers_Jormungars.cpp`, helper
+`WormBrakeBits` in `ToCHelpers_Jormungars.cpp`): a DPS bot stops damaging a worm at 90% of its duty
+holder's threat, area damage within 30 yd too, and resumes under 80%; read off the threat list, blind
+while the holder has no threat (the emerge's wipe). Not a plan change: duties, drags and taunts stay
+as they were, and the brake is the raids README's standard tool. `nb.brake` per bot, a bit per worm.
+
+**Not fixed, for later rounds.** Holders die (5 here): Acidmaw's holder under Toxin, Bite and Spew
+(649_14 twice, 649_421), the enraged lone worm's (649_421), Dreadscale's mobile holder with Bile
+(649_804 2:40); needs a healing and defensive read. A Spray-Toxined ranged with no runner for 34.8 s
+(649_804). Impale on a Gormok tank twice (4 stacks at 1:54; 1 stack after a 21.5k swing at 1:09).
+
+**Next window should show.** `--worms` `worm melee on non-tanks`: no `not braked` row while the worm's
+holder lives; `nb.brake` seconds per worm a few per bot, mostly melee on the mobile worm during drags.
+Worm stage no longer than window 6's 154-164 s: the kills ended 32-65 s before Berserk, so a stage
+grown 20 s means the brake costs too much damage.
+
+**Review.** Root cause holds: the swing counts reproduce (7/7, 10/10, 7/7), the worm's victim
+column goes to a DPS with no taunt between, the core's 110%/130% rule is as cited, and Paralysis
+(66830, a stun no damage breaks) leaves the holder's threat online, so only threat moves the worm.
+Fixed: `--worms` braked seconds end at the bot's death (a dead bot asks for no action, so its last
+`nb.brake` stood until the worms were gone); the findings doc's "unchecked by a cap" line. Reading
+the next window: a `not braked` row on a healer (no brake) or in the seconds after an emerge, before
+the holder has threat (blind by design), is no brake miss. A `braked` row means running swings, Auto
+Shot, DoTs or a pet carried the bot past the holder while it stood still (drag, Paralysis); the
+answer then is dropping the swing too, as ICC's `IccBpcBrakeStopAction` does.
