@@ -64,6 +64,8 @@ class FakeDc:
         self.corpus = corpus
         self.kill_on = kill_on
         self.bad = dict(bad or {})
+        # pool: how many of its next pulls the boss engages before the start step
+        self.engaged: dict[str, int] = {}
         self.records: list[dict] = []
         self.commands: list[str] = []
         self.now = T0
@@ -80,7 +82,10 @@ class FakeDc:
             self.bad[pool] = self.bad.get(pool, 0) - 1
             self.corpus.add(self.instance, begin, built, valid)
             outcome = "kill" if self.kill_on and index == count - 1 else "wipe"
-            pulls.append({"n": index + 1, "startMs": begin, "endMs": begin + 60_000, "outcome": outcome})
+            kind = "engaged" if self.engaged.get(pool, 0) > 0 else "step"
+            self.engaged[pool] = self.engaged.get(pool, 0) - 1
+            pulls.append({"n": index + 1, "startMs": begin, "endMs": begin + 60_000, "outcome": outcome,
+                          "start": kind})
         self.serial += 1
         record = {"runId": f"tr-20261121-1300{self.serial:02d}-{self.serial}", "pool": pool,
                   "mapId": 603, "instanceId": self.instance, "difficulty": "25n", "result": "success",
@@ -196,6 +201,15 @@ class CycleTest(unittest.TestCase):
         self.dc.bad = {"uld2": 1}
         self.assertEqual(self.cycle(), 0)
         self.assertEqual(self.started(), [("uld1", "1"), ("uld2", "1"), ("uld3", "1"), ("uld2", "1")])
+
+    def test_a_pull_whose_boss_engaged_first_is_pulled_again(self):
+        self.baseline_for(*POOLS)
+        self.dc.engaged = {"uld2": 1}
+        self.assertEqual(self.cycle(), 0)
+        self.assertEqual(self.started(), [("uld1", "1"), ("uld2", "1"), ("uld3", "1"), ("uld2", "1")])
+        uld2 = [row for row in self.state.rows if row.pool == "uld2"]
+        self.assertEqual([row.engaged_first for row in uld2], [True, False])
+        self.assertEqual(self.state.counted["uld2"], [uld2[1].trace])
 
     def test_cap_is_per_pool(self):
         self.baseline_for(*POOLS)

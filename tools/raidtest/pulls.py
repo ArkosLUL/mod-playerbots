@@ -2,7 +2,8 @@
 
 A pull counts when the trace has no warning at all (batch.py --strict), its build is newer than the
 reference commit and its header's difficulty is the one under test. Baseline pulls are the newest such
-traces built before the reference instead. Which pool a trace belongs to is pools.py's business.
+traces built before the reference instead. Which pool a trace belongs to is pools.py's business, and
+so is a pull DC started without its pre-pull refresh, since only DC's record says so.
 """
 from __future__ import annotations
 

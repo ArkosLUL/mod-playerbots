@@ -79,6 +79,7 @@ class FakeServer:
         self.going: dict[str, dict] = {}
         self.length: dict[str, int] = {}
         self.bad: dict[tuple[str, str], int] = {}
+        self.engaged: dict[tuple[str, str], int] = {}
         self.refuse: dict[tuple[str, str], str] = {}
         self.setup_fail: set[tuple[str, str]] = set()
         self.lose: set[tuple[str, str]] = set()
@@ -143,7 +144,10 @@ class FakeServer:
                 built=self.built, diff=DIFF_IDS[run["diff"]], warnings=[] if valid else [("raid-dead", "dead")],
                 hardmode=True, start_ms=begin, end_ms=begin + 60_000, outcome="wipe", closed=True, map_id=map_id,
                 instance=self.instance, snap_gaps=list(self.gaps)))
-            entries.append({"n": index + 1, "startMs": begin, "endMs": begin + 60_000, "outcome": "wipe"})
+            kind = "engaged" if self.engaged.get(key, 0) > 0 else "step"
+            self.engaged[key] = self.engaged.get(key, 0) - 1
+            entries.append({"n": index + 1, "startMs": begin, "endMs": begin + 60_000, "outcome": "wipe",
+                            "start": kind})
         result = "stopped" if stopped else ("setup_failed:login" if key in self.setup_fail else "success")
         self.records.append({
             "runId": run_id, "pool": run["pool"], "mapId": map_id,
@@ -245,6 +249,16 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(self.window([job(XT, pools=["uld1"]), job(IGNIS)]), 0)
         self.assertEqual(self.started(), [(XT, "uld1"), (IGNIS, "uld2"), (IGNIS, "uld3"),
                                           (XT, "uld1"), (IGNIS, "uld1")])
+
+    def test_a_pull_whose_boss_engaged_first_is_pulled_again(self):
+        self.server.engaged = {(XT, "uld1"): 1}
+        self.assertEqual(self.window([job(XT, pools=["uld1"])]), 0)
+        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld1")])
+        rows = self.state(1).rows
+        self.assertEqual([row.engaged_first for row in rows], [True, False])
+        self.assertEqual(self.state(1).counted["uld1"], [rows[1].trace])
+        self.assertEqual(report.verdict(rows[0], "25n", HEAD), "no: the boss engaged before the start step, no refresh")
+        self.assertIn("| uld1 1/2 |", self.header_row(1))
 
     def test_a_pool_runs_one_run_at_a_time(self):
         self.server.length = {XT: 4}

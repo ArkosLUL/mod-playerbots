@@ -4,6 +4,10 @@ of HEAD.
 A trace belongs to a run when it was recorded in the run's instance while the run was going. The pools'
 runs of one boss overlap in time but never share an instance, so the instance id keeps them apart; the
 time window keeps apart two runs that got the same instance id at different times.
+
+A pull whose boss engaged before DC's start step never counts, whatever its trace says: DC drops the
+pre-pull refresh then, so the raid goes in on the last pull's mana, cooldowns and Exhaustion. Records
+from before DC's schema 18 don't say how a pull started, so those count as before.
 """
 from __future__ import annotations
 
@@ -32,6 +36,10 @@ class PullRow:
     window: tuple[int, int] | None
     dc_outcome: str
     trace: TraceFacts | None
+    engaged_first: bool = False
+
+    def valid(self, diff_id: int) -> bool:
+        return self.trace is not None and self.trace.valid(diff_id) and not self.engaged_first
 
 
 def rows_for_run(phase: str, run: dc.Run, corpus: Corpus) -> list[PullRow]:
@@ -45,7 +53,7 @@ def rows_for_run(phase: str, run: dc.Run, corpus: Corpus) -> list[PullRow]:
         # DC writes endMs 0 for a pull it never closed
         windows = [(pull.start_ms, pull.end_ms or run.ended_ms or pull.start_ms) for pull in run.pulls]
         matched = match_traces(windows, traces, SLACK_MS)
-        return [PullRow(phase, run.pool, run.run_id, index, window, pull.outcome, trace)
+        return [PullRow(phase, run.pool, run.run_id, index, window, pull.outcome, trace, pull.engaged_first)
                 for index, (pull, window, trace) in enumerate(zip(run.pulls, windows, matched), 1)]
     return [PullRow(phase, run.pool, run.run_id, index, None, "", trace) for index, trace in enumerate(traces, 1)]
 
@@ -75,7 +83,7 @@ class Ledger:
             if row.pool != pool or facts is None or facts.path in seen:
                 continue
             seen.add(facts.path)
-            if facts.valid(self.diff_id):
+            if row.valid(self.diff_id):
                 out.append(facts)
         return _newest_first(out)
 

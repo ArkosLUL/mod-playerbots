@@ -80,6 +80,8 @@ def verdict(row: PullRow, diff: str, head_time: datetime.datetime) -> str:
         return "no trace"
     if facts.diff != DIFF_IDS[diff]:
         return f"no: difficulty {facts.diff}"
+    if row.engaged_first:
+        return "no: the boss engaged before the start step, no refresh"
     if facts.warnings:
         return "no: " + ", ".join(kind for kind, _ in facts.warnings)
     if facts.built is None:

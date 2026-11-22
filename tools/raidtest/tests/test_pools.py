@@ -25,13 +25,15 @@ def at(minutes: float) -> datetime.datetime:
 
 
 def record(run_id: str, pool: str, instance: int, start: float, end: float, pulls=None, map_id: int = 603) -> dict:
-    """A DC run record; start, end and the pull windows in minutes after HEAD."""
+    """A DC run record; start, end and the pull windows in minutes after HEAD. A pull's optional fourth
+    field is DC's `start`, which records before schema 18 leave out."""
     out = {"runId": run_id, "pool": pool, "mapId": map_id, "instanceId": instance, "difficulty": "25n",
            "result": "success", "failReason": "", "startedAtMs": ms(at(start)), "endedAtMs": ms(at(end)),
            "bossPulls": []}
     if pulls is not None:
-        out["bossPulls"] = [{"n": n, "startMs": ms(at(a)), "endMs": ms(at(b)) if b else 0, "outcome": outcome}
-                            for n, (a, b, outcome) in enumerate(pulls, 1)]
+        out["bossPulls"] = [{"n": n, "startMs": ms(at(a)), "endMs": ms(at(b)) if b else 0, "outcome": outcome,
+                             **({"start": kind[0]} if kind else {})}
+                            for n, (a, b, outcome, *kind) in enumerate(pulls, 1)]
     return out
 
 
@@ -92,6 +94,12 @@ class PairingTest(TraceDir):
         rows = rows_for_run("", dc.run_of(record("tr-1", "uld1", 7, 30, 40)), self.corpus)
         self.assertEqual([row.trace.path for row in rows], [first, second])
 
+    def test_each_row_says_whether_its_own_pull_engaged_first(self):
+        first, second = self.trace(31, 7), self.trace(36, 7)
+        run = dc.run_of(record("tr-1", "uld1", 7, 30, 40, [(31, 32, "wipe", "step"), (36, 37, "kill", "engaged")]))
+        rows = rows_for_run("", run, self.corpus)
+        self.assertEqual([(row.trace.path, row.engaged_first) for row in rows], [(first, False), (second, True)])
+
     def test_setup_failure_has_no_rows(self):
         self.trace(31, 7)
         self.assertEqual(rows_for_run("", dc.run_of(record("tr-1", "uld1", 0, 30, 40)), self.corpus), [])
@@ -130,6 +138,18 @@ class LedgerTest(TraceDir):
         self.assertEqual(ledger.counted("uld2", HEAD), [])
         self.assertEqual(ledger.counted("uld3", HEAD), [])
         self.assertNotIn(other, [row.trace.path for row in ledger.rows if row.trace])
+
+    def test_a_pull_whose_boss_engaged_first_counts_nowhere(self):
+        refreshed, unrefreshed, unsaid = self.trace(31, 7), self.trace(36, 7), self.trace(41, 7)
+        base = self.trace(-100, 8, built=-400)
+        records = [record("tr-1", "uld1", 7, 30, 45, [(31, 32, "wipe", "step"), (36, 37, "wipe", "engaged"),
+                                                      (41, 42, "kill")]),
+                   record("tr-0", "uld1", 8, -101, -90, [(-100, -99, "kill", "engaged")])]
+        ledger = self.ledger(records)
+        self.assertEqual([f.path for f in ledger.counted("uld1", HEAD)], [unsaid, refreshed])
+        self.assertEqual(ledger.baseline("uld1", HEAD, 3), [])
+        self.assertEqual({row.trace.path for row in ledger.rows if row.trace},
+                         {refreshed, unrefreshed, unsaid, base})
 
     def test_a_trace_outside_every_pool_run_counts_for_none(self):
         self.trace(31, 7)
