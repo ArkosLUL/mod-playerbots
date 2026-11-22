@@ -4,7 +4,7 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 
 ## Resume here
 
-The polish loop runs on the user's standing go ("Polish loop" below). Resumed 2026-11-22 11:00 after a PC shutdown. Window 7 (build `61011f323` + DC `5443dbc`) is done; its results are in the rows below. Window 8 builds `c8b94dbce` + DC `5443dbc` (job file `scratchpad/window8-jobs.json`: Beasts 10h check and 25h confirm, FC data; Hodir r2, Iron Assembly r2, Auriaya r2, XT-002 r3+r4 at 25n; Razorscale 10n check; Vezax, Mimiron, Freya, Yogg-Saron, Algalon data; no Thorim until its early start is fixed). Iron Assembly r3 merged after the build started, so a quick rebuild adds it before the restart. Lanes in flight: round 1 for Freya, Yogg-Saron, Algalon and Thorim (`rt/polish-<slug>-r1`; Thorim's round is the early start). Per boss, at the last update:
+The polish loop runs on the user's standing go ("Polish loop" below). Resumed 2026-11-22 11:00 after a PC shutdown. Windows 7 and 8 are done; their results are in the rows below. Window 9 runs on build `1b45df985` + DC `2ce3824` (job file `scratchpad/window9-jobs.json`: FC data; XT-002 and Auriaya 10n checks; Thorim, Yogg-Saron, Freya, Algalon round 1 at 25n; XT-002 25n confirm on round 5; Iron Assembly and Hodir data). Lanes in flight: Hodir r3 (pace), Iron Assembly r4, round 1 for Vezax, Mimiron and Faction Champions (`rt/polish-<slug>-r<n>`). Open user questions: XT-002 Q7 (healer buffs on the XT holder), the roster death knights' talents. Per boss, at the last update:
 
 | Boss | State | Next |
 |---|---|---|
