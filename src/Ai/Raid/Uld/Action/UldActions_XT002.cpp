@@ -695,7 +695,7 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
         return false;
 
     // How far this bot will travel for an add. Tanks are exempt because this runs over their list too,
-    // and the off-tank is supposed to walk to the Pummeller.
+    // and the tank XT isn't on is supposed to walk to the Pummeller.
     float const reach = PlayerbotAI::IsMelee(bot) ? ULDUAR_XT002_MELEE_ENGAGE_RANGE
                                             : ULDUAR_XT002_RANGED_ENGAGE_RANGE;
     bool const inReach = PlayerbotAI::IsTank(bot) || unit->GetExactDist2d(bot) <= reach;

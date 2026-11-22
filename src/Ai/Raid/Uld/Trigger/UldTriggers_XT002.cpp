@@ -76,6 +76,16 @@ bool XT002RaidPositionTrigger::IsActive()
     if (!xt002 || !xt002->IsInCombat())
         return false;
 
+    // Only the tank XT is on, whichever it is: the anchor outranks "reach melee", and XT is a vehicle,
+    // taunt-immune through Vehicle::ApplyAllImmunities. In the Heart window his threat list decides. Before the
+    // hazard scan, so the other tank skips it every tick.
+    if (tank)
+    {
+        Unit* victim = xt002->GetVictim();
+        if (victim ? victim != bot : GetXT002TankRoles(bot, xt002).holder != bot)
+            return false;
+    }
+
     // Anything the bot has to dodge outranks standing on a spot, and the carriers have destinations of
     // their own, so the anchor stands down rather than fighting them for the tick.
     if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
@@ -88,15 +98,7 @@ bool XT002RaidPositionTrigger::IsActive()
         return false;
 
     if (tank)
-    {
-        // Only the tank XT is on, whichever it is: the anchor outranks "reach melee", and XT is a vehicle,
-        // taunt-immune through Vehicle::ApplyAllImmunities. In the Heart window his threat list decides.
-        Unit* victim = xt002->GetVictim();
-        if (victim ? victim != bot : GetXT002TankRoles(bot, xt002).holder != bot)
-            return false;
-
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
-    }
 
     if (PlayerbotAI::IsHeal(bot))
     {

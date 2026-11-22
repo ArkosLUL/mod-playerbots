@@ -105,11 +105,13 @@ static std::string DescribeXT002TankDuty(XT002TankRoles const& roles, Player* bo
 
 XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002)
 {
-    // Living tanks, the flagged main tank first, so every fallback below prefers it.
+    // Living tanks ranked like GetGroupAssistTank: flagged main tank, then raid assistants, then the rest.
+    // Every fallback below takes the first, and the Pummellers go to the first that isn't the holder.
     std::vector<Player*> tanks;
     if (Group* group = bot->GetGroup())
     {
         ObjectGuid const flagged = PlayerbotAI::GetMainTankGuid(group);
+        std::vector<Player*> rest;
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
@@ -119,9 +121,13 @@ XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002)
 
             if (member->GetGUID() == flagged)
                 tanks.insert(tanks.begin(), member);
-            else
+            else if (group->IsAssistant(member->GetGUID()))
                 tanks.push_back(member);
+            else
+                rest.push_back(member);
         }
+
+        tanks.insert(tanks.end(), rest.begin(), rest.end());
     }
     else if (bot->IsAlive() && PlayerbotAI::IsTank(bot))
         tanks.push_back(bot);
@@ -142,7 +148,7 @@ XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002)
             roles.holder = *held;
         else
         {
-            // On a non-tank, after his holder died say: the tank with most threat gets him back first.
+            // XT on a non-tank, e.g. right after his holder died: the tank with most threat gets him back first.
             float most = 0.0f;
             for (Player* tank : tanks)
             {
