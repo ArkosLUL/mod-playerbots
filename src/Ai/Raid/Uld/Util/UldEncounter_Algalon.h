@@ -80,7 +80,7 @@ inline constexpr uint32 ULDUAR_ALGALON_KITE_RETRY_MS = 3000;
 inline constexpr uint32 ULDUAR_ALGALON_KITE_STALL_MS = 12000;
 inline constexpr float ULDUAR_ALGALON_KITE_BESIDE = 5.0f;
 inline constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
-inline constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 5.0f;
+inline constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 7.5f;
 inline constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
 inline constexpr float ULDUAR_ALGALON_TAUNT_REACH = 28.0f;
 inline constexpr float ULDUAR_ALGALON_TANK_SHELTER_REACH = 35.0f;
@@ -373,6 +373,7 @@ struct AlgalonEncounterState
     std::string lastStarWindow;
     bool focusByDeadline = false;
     std::unordered_map<ObjectGuid, AlgalonKite> kites;
+    std::unordered_set<ObjectGuid> kiteRefusedHoles;
     bool wormHolesSeen = false;
 
     uint32 lastStarDeathMs = 0;

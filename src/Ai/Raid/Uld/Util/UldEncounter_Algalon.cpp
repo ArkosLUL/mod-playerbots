@@ -4500,7 +4500,7 @@ bool KiteSpotNear(AlgalonEncounterState const& state, AlgalonScanUnit const& hol
 
 bool KiteableHole(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, uint32 now)
 {
-    if (&hole == RaidShelterHole(state, now))
+    if (state.kiteRefusedHoles.count(hole.guid) || &hole == RaidShelterHole(state, now))
         return false;
 
     if (hole.position.GetExactDist2d(ULDUAR_ALGALON_HOLD_SPOT) > ULDUAR_ALGALON_TANK_SHELTER_REACH)
@@ -4724,6 +4724,17 @@ bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char c
     }
 
     spot = ValidateFloorPoint(bot, kite.spot);
+    if (!loose && (kite.stage == AlgalonKiteStage::Stage || kite.stage == AlgalonKiteStage::Cross) &&
+        spot.GetExactDist2d(kite.spot) > ULDUAR_ALGALON_SLOT_TOLERANCE)
+    {
+        state->kiteRefusedHoles.insert(hole->guid);
+        DropKite(*state, guid);
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "algalon.kite", "stuck");
+
+        return false;
+    }
+
     return true;
 }
 
