@@ -19,6 +19,8 @@ What the generic views miss here:
 - **A Life Spark that can't path to its victim is immune and never resets** in a raid map, while its
   Static Charged keeps hitting the whole raid. Sparks the raid can reach die in 5-17 s, so the sparks
   view lists the ones that lived longer, with the carrier they spawned on and the `xt002.evading` notes.
+- **A tank carrier only walks out after Heartbreak, and only holding neither XT nor a Pummeller.** The
+  sparks view lists each spark a tank dropped with its distance from the Searing Light spot.
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import dist2, frames, nearest  # noqa: E402
+from raidobs.geometry import anchor, dist2, frames, nearest  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "xt-002"
@@ -52,6 +54,7 @@ SPELL_HEART_PHASE = 37751
 SPELL_STAND = 37752
 HEARTBREAK = (64193, 65737)
 SEARING_LIGHT = (63018, 65121)
+SEARING_LIGHT_SPOT = "ULDUAR_XT002_SEARING_LIGHT_SPOT"
 CLASS_HUNTER = 3
 
 # 25-man hard mode traces: sparks the raid could hit died in 5-17 s, ones it couldn't lived 39-90 s
@@ -342,6 +345,13 @@ def show_sparks(trace: Trace) -> None:
             span = f"{clock(t)} to {clock(until)}" if until is not None else f"{clock(t)} on"
             print(f"    evading {span} (bots noting it {bots}),"
                   f" most bots still on it {SPARK_DROP_MS // 1000} s in {held}")
+    spot = anchor(SEARING_LIGHT_SPOT)
+    for spark in rows:
+        carrier = spark["carrier"]
+        if carrier and trace.role(carrier) == "tank":
+            print(f"  tank carrier {trace.name(carrier)} at {clock(spark['first'])}: spark"
+                  f" {dist2(spark['spot'], spot):.0f} yd off the Searing Light spot,"
+                  f" lived {(spark['last'] - spark['first']) / 1000:.0f} s")
 
 
 def mechanic(trace: Trace, death: dict) -> str:

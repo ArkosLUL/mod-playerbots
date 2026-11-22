@@ -170,7 +170,8 @@ class Sparks(unittest.TestCase):
         self.assertEqual(printed(xt.show_sparks, load(self.spark_pull(evading=False))), (
             "LIFE SPARKS\n"
             "  2 sparks, at most 2 up at once, median life 30 s\n"
-            "  1:50.000 on Bulwark (tank) at (896, -5): lived 50 s, still up at the end, most bots on it at once 1\n"))
+            "  1:50.000 on Bulwark (tank) at (896, -5): lived 50 s, still up at the end, most bots on it at once 1\n"
+            "  tank carrier Bulwark at 1:50.000: spark 53 yd off the Searing Light spot, lived 50 s\n"))
 
     def test_evade_note_shows_who_kept_hitting_it(self):
         self.assertIn("    evading 1:52.000 on (bots noting it 1), most bots still on it 2 s in 1\n",

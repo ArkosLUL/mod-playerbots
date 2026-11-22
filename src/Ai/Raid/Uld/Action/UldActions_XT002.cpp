@@ -246,6 +246,22 @@ float XT002DebuffCarrierAction::RaidClearance(float x, float y) const
     return nearest;
 }
 
+bool XT002DebuffCarrierAction::HoldsXT002OrPummeller(Unit* xt002) const
+{
+    if (xt002 && xt002->GetVictim() == bot)
+        return true;
+
+    GuidVector const& npcs = AI_VALUE(GuidVector, "nearest npcs");
+    for (ObjectGuid const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == PB_NPC_XT002_PUMMELLER && unit->GetVictim() == bot)
+            return true;
+    }
+
+    return false;
+}
+
 bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
 {
     // Nothing drops a puddle before XT carries Heartbreak, so normal mode skips the grid scan entirely.
@@ -524,8 +540,9 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
 
     if (!hasBomb)
     {
-        // Tanks stay put for Searing Light: dragging XT or dropping the Pummeller costs more than the splash.
-        if (PlayerbotAI::IsTank(bot))
+        // Tanks stay put: dragging XT or a Pummeller costs more than the splash. No adds come after Heartbreak, so
+        // from then on a tank holding neither takes its spark to the spot like anyone.
+        if (PlayerbotAI::IsTank(bot) && (!heartbreak || HoldsXT002OrPummeller(xt002)))
             return false;
 
         return MoveToSearingLightSpot(heartbreak);

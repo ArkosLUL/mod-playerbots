@@ -72,6 +72,9 @@ private:
     // point is in a Void Zone, inside the expiry pull or refused, which hands the tick to the ring search.
     bool StopShortOf(float cellX, float cellY, float reach, std::list<Creature*> const& voidZones);
 
+    // XT or a live Pummeller has this bot as its victim, so walking off would drag it along.
+    bool HoldsXT002OrPummeller(Unit* xt002) const;
+
     // The Searing Light spot, or the roomiest alternate clear of Void Zones that the pathfinder takes.
     // `heartbreak` is Execute's answer, since Void Zones only exist once XT carries it.
     bool MoveToSearingLightSpot(bool heartbreak);
