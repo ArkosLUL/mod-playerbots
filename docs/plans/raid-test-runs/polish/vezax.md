@@ -404,7 +404,8 @@ moves each living camp bot by its new slot minus its old one, keeping how far it
 Today 2 of 24 window 11 marks and 15 of 29 window 12 marks went to melee or a tank. Healer reach replay
 (`vezax-r4/heal_reach_replay.py`, 0:15-3:00, within 41.5 yd 2D of the main tank): w11 uld1 and uld2 100%
 → 100%, w11 uld3 19-54% per healer (any healer 66%) → 74-100% (any 100%), 10n 80-100% → 77-100% (any
-84-100%), Vezax settling 9.5-9.9 yd north.
+84-100%), Vezax settling 9.5-9.9 yd north, except 9.9 yd south in w11 uld1 and uld2 (the tank between him
+and the camp).
 
 **Change 2, user answer Q2 (bug): dodge and camp points off the walkable floor.** In window 10 uld2
 (`603_19_general-vezax_1795366925`) Uldyaf, Uldyaj and Uldyaq stood at (1881-1885, 181-184, 342.2) when
@@ -440,6 +441,11 @@ slots by spec as before, so the same with or without one in the raid.
 - `vezax.slot`: healers on 0, 1, 10, 11 (25n) or 0, 10 (10n).
 - No main tank death before the Animus and `--animus` near window 11 (healers still reach him); the
   heal replay predicts a drop only where Vezax settles past ~10.5 yd north.
+- Ranged casts/min on the Animus near window 11's (review replay, scratchpad `vezax-r4-review/`): the
+  camp still follows Vezax while the Animus lives, and the new rows put ranged dps past 38.5 yd of the
+  Animus (a 30 yd spell's reach, combat reach 7) in 4-40% of samples against 0-9% today, past 44.5 (36
+  yd talented) in 0-6%. The formation vetoes reach spell, so a caster short of its range talent stands
+  out of range there.
 - `postmortem.py --probes vezax.floor`: only `on` while he stands near his spawn. An `edge` there is a
   navmesh hole a straight check clips at, stranding the bot short of its slot: report it. No bot ever
   below z 330.

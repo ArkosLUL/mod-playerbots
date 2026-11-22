@@ -71,7 +71,8 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
 and Vezax settles 7-12 yd north of it, between tank and camp, having met the tank on its way in from the
-north. `PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30
+north, or 9.9 yd south with the tank between him and the camp, nearer the healers.
+`PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30
 points healthier, so a healer there picks the tank only when he is ~30 points lower than everyone else,
 and past 43 yd 3D (heal range 40 plus both reaches) no heal lands from the slot. Replayed on where both
 stood, row 0 at 30.5 keeps a healer within 41.5 of the tank 74-100% of the time while Vezax settles up to
@@ -98,8 +99,8 @@ a human melee, two thirds of their `set behind` moves following a nudge. What re
 turn to each crash target.
 
 Navprobe-verified on the bot filter (`--nav 0x09`): the tank spot and the southern spots at `distance to
-poly` ≤ 0.39, and at both spots he settles on, row 4, the outermost strafed slots and both arc spots at
-settled Z 341.6-342.4. The WMO floor is flat at Z 342.378 out to ~24 yd north, then settles up to a yard
+poly` ≤ 0.39, and at his north- and west-most settles, row 4, the outermost strafed slots and both arc
+spots at settled Z 341.6-342.4. The WMO floor is flat at Z 342.378 out to ~24 yd north, then settles up to a yard
 lower on rubble, which `UpdateAllowedPositionZ` absorbs. Raw terrain reads −27.707 in this room, so
 terrain height is meaningless here.
 
@@ -113,7 +114,7 @@ it. A failed call, or an answer more than 5 yd above or below the bot, is refuse
 and still passes. A refused slot or mark spot holds the bot where it stands; a refused strafe, or one
 pulled back into the blast, falls to the hazard sweep, which here and in the melee mark break accepts
 only ground within 5 yd of the bot's height. The slot is checked only when the bot has to walk, since the
-position node runs every tick for every camp bot. The check is a straight line, so a navmesh hole between
+position node runs every 2 s for every camp bot. The check is a straight line, so a navmesh hole between
 bot and slot strands the bot at its edge where a pathed walk goes round: `vezax.floor = edge` while he
 stands near his spawn means that.
 
