@@ -72,15 +72,15 @@ the carrier, the carrier walks to the **Meltdown point**, anchor + 30 yd @ 315°
 path (`run` → `parked`). A swapped carrier drops out of the tank ranking, so the next bot tank becomes
 the partner. The run claims every tick at `MOVEMENT_FORCED`: after a taunt both threats match, and a
 carrier that swings takes him back. That outranks reach only while walking, and the movement guard
-(the carrier counts as a hazard mover) keeps reach, so **`iron assembly meltdown carrier hold` zeroes Reach, ReachHeal and the gap-closers
-for a `run` or `parked` carrier**. Without it a parked carrier's `reach melee` tugged it toward him
-every other tick, a bear's Feral Charge landed one 22 yd back 3 s before its blast (5 melee dead, him
-24% → 83%), and a warrior's Charge cost a walking one 8 yd. Fallbacks hold where the tank stands: a swap landing with less than walk
-time + 1 s left (`late`; dying halfway puts the blast on the ranged ring instead of the melee, and a
-started walk is latched in `ironassembly.meltdownrun` so a detour can't stop it), and no second bot tank
-(`nopartner`; a human partner never taunts). Running **without** a swap is the trap: it towed
-Steelbreaker 180 yd, cut melee uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar
-in a 30s phase**.
+keeps reach for a hazard mover like the carrier, so **`iron assembly meltdown carrier hold` zeroes
+Reach, ReachHeal and the gap-closers for a `run` or `parked` carrier**. Without it a parked carrier's
+`reach melee` tugged it toward him every other tick, a bear's Feral Charge landed one 22 yd back 3 s
+before its blast (5 melee dead, him 24% → 83%), and a warrior's Charge cost a walking one 8 yd.
+Fallbacks hold where the tank stands: a swap landing with less than walk time + 1 s left (`late`;
+dying halfway puts the blast on the ranged ring instead of the melee, and a started walk is latched in
+`ironassembly.meltdownrun` so a detour can't stop it), and no second bot tank (`nopartner`; a human
+partner never taunts). Running **without** a swap is the trap: it towed Steelbreaker 180 yd, cut melee
+uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**.
 
 **Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a cast
 is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk out to
