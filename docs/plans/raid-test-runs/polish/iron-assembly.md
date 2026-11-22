@@ -144,3 +144,8 @@ ironassembly.meltdown` shows `parked` without `run`/`parked` flipping; no `reach
 `charge`/`feral charge` cast by a carrier in `run`/`parked` (`--bot <carrier>`, or
 `VETO iron assembly meltdown carrier hold` rows instead). Melee Meltdown deaths, if any, only from a
 `nopartner` or `late` carrier.
+
+**User answers (2026-11-22) to round 2's questions:** yes to both. (1) While Steelbreaker is the
+last one up, a druid with Rebirth ready walks into range of a dead tank's body (tanks only) and
+rezzes it, so the next swap has a partner. (2) When a carrier has no partner (`nopartner` or `late`),
+the melee step away from it for its last 3 s, staying in reach behind Steelbreaker where they can.
