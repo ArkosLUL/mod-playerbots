@@ -97,8 +97,9 @@ definition alone:
   rules (`OwnMovement`, `OwnTargeting`, `Block`, `Exclusive`) and `Tick` likewise, rules after the
   stem's multipliers.
 - direct targeting: a resolver `Unit* (PlayerbotAI*)` in the stem's helpers, `GetRaidHumanSkull` its
-  first branch, every branch an in-combat unit (`Attack()` has no pre-pull guard), its pick probed there. A trigger class on
-  `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their `Name` and the resolver;
+  first branch, every branch an in-combat unit (`Attack()` has no pre-pull guard), its pick probed
+  there. A trigger class on `IccDirectTargetTrigger` and an action on `IccDirectAttackAction` pass their
+  `Name` and the resolver;
   one row joins them, and `e.OwnTargeting(name, roles, &IccResolverPicks<&Resolver>, pickers)`
   follows the stem's multipliers. The action sends the pet first, the trigger also fires while the
   pet is off the pick. Marrowgar, Deathwhisper, the Gunship (`GsbTarget`), Saurfang (`GetDbsTarget`),
@@ -120,9 +121,10 @@ definition alone:
   `resistSchools` and `fireWantsMastery` feed the aura election (`RaidResistAura.h`, `icc.aura`): one
   bot paladin per wanted fire, frost or shadow school, the nature hunter's Aspect of the Wild, and the
   hold rules keep each holder's own auras or aspects off. The aura slot is exclusive, so a paladin's own
-  buff strategy would trade it back on the next GCD; the hold lists the resistance auras too, since the
-  raise action casts outside the queue. The hunter's hold covers every aspect, since a vetoed node still
-  pushes its alternatives (dragonhawk, hawk, monkey). With no hook the opener and aura triggers neither fire nor note.
+  buff strategy would take it back on the next GCD; the hold also lists the resistance auras, which the
+  raise action casts outside the queue, and for the hunter every aspect, since a vetoed node still pushes
+  its alternatives (dragonhawk, hawk, monkey). With no hook the opener and aura triggers neither fire
+  nor note.
   Rows: Marrowgar's opener (boss 36612), Deathwhisper's burst window (lust waits for phase 2),
   Saurfang's opener (boss 37813) and burst window (lust waits for Frenzy), Festergut's resist
   schools (shadow: Gaseous Blight, Blighted Spores, Pungent Blight), Putricide's opener (boss 36678),
@@ -241,11 +243,11 @@ pull. Nothing renames a slug-named trace afterwards.
 `icc.` is raid-wide, matches every ICC slug and belongs to none: a slug owning it would have its keys
 read silent on every other ICC pull. An encounter with a phase publishes it as `<prefix>.phase`;
 `tools/botobs/bosses/icecrown_citadel.py --phases` reads it as one raid-wide timeline, each step from
-the first bot to note it. Festergut and Rotface engage before their state moves, so their traces open
-on the engage, named by the DBC encounter credit, which matches the slug. The last three rows open
-through `IccMarkPull` from their definitions' ticks while the gate is live, the Blood Prince trash
-through a hook in `Util/ICCScripts.cpp` ([its section](blood-prince-council.md#blood-prince-trash)).
-Rimefang and Spinestalker's tick opens a `sindragosa` trace the same way.
+the first bot to note it. Festergut's and Rotface's traces open on the engage, before their state
+moves, named by the DBC encounter credit, which matches the slug. The last three rows, and Rimefang and
+Spinestalker as `sindragosa`, open through `IccMarkPull` ([Gates](#code-layout-and-registration)); the
+Blood Prince trash through a hook in `Util/ICCScripts.cpp`
+([its section](blood-prince-council.md#blood-prince-trash)).
 The dungeon bosses are the kill-credit creatures: Marrowgar, Deathwhisper, Saurfang, Festergut,
 Rotface, Putricide, Valanar, the Blood-Queen, Sindragosa, the Lich King. Gunship and Valithria credit
 by spell (72959, 72706), Svalna not at all.
@@ -283,9 +285,9 @@ replaced it.
 Threat), recorded when it adds any, on members in the bot's own instance only. Experienced 71188 and
 1% Threat 70115 never expire, so `IccHeroicBuffsDefinition`'s tick takes both off whenever none of the
 fights handing them out (Deathwhisper, Putricide, Sindragosa, the Lich King) is `IN_PROGRESS`: each bot
-off itself, and the first bot past a 1 s per-instance throttle off every human on the map. Every
-raid-gated site keeps the cheat's exact behaviour while the raid cheat is
-on; off, the site skips the cheat. The cleanup halves (Cyclone, 1% Threat removal) stay ungated.
+off itself, and the first bot past a 1 s per-instance throttle off every human on the map. A
+raid-gated site runs its cheat unchanged with the raid cheat on, and skips it off. The cleanup halves
+(Cyclone, 1% Threat removal) stay ungated.
 
 **The class taunt** (`IccCastClassTaunt`, every encounter but Marrowgar and the giant) casts the real taunt, at most once per 500 ms
 per bot, else a ranged pull when the bot has no taunt or it failed off cooldown; a taunt on cooldown fails

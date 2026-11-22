@@ -35,10 +35,10 @@ Bots hold one latched stand each (park 1 yd, back past 2.5): `lm.stand`.
   Slice. A line starts 10.1 yd out with 4.5 yd reach, so nothing reaches 5.6 yd from him (Wowhead puts
   non-baits in melee for the spikes).
 - **Baits**: 3 (10) or 8 (25), every hunter first (he is inside their dead zone otherwise), then the
-  casters least hurt by moving: warlock, priest, druid, shaman, mage; a healer only with no ranged dps. 31 yd from him, 20° apart
-  from the bearing away from the tank spot, at most 10 slots: the next heading either side falls
-  behind a wall with him 6 yd west of his spot. One bait outside is all the core needs; the count
-  follows the guides.
+  casters least hurt by moving: warlock, priest, druid, shaman, mage; a healer only with no ranged dps.
+  31 yd from him, 20° apart from the bearing away from the tank spot, at most 10 slots: the next heading
+  either side falls behind a wall with him 6 yd west of his spot. One bait outside is all the core
+  needs; the count follows the guides.
 - **Bone Storm**, from the cast: three anchors at `ICC_LM_STORM_ANCHOR_180/60/300`, 34 yd round
   `ICC_LM_STORM_STACK`, and everyone else on a 1.5 yd ring there. Every tank takes 180, 2.6 yd from
   the tank spot; 60 and 300 (and 180 without a bot tank) the bait with the nearest ring slot, 14 yd
@@ -62,8 +62,8 @@ latch.
 for tank spot to him, every inner slot (1 to 20 bots) to him and the tank spot, every bait slot to him,
 the tank spot and the inner arc, the stack ring and stack centre to each anchor, and each anchor to the
 tank spot and the other anchors. All ten bait slots are also on the floor (settled Z 41-43) with him
-anywhere on a 2 yd grid out to 10.5 yd; only the headings past them (−100° and +120° from the bearing
-away from the tank spot) drop behind a wall, with him 6 yd west. Gameobject collision isn't modelled.
+anywhere on a 2 yd grid out to 10.5 yd; the walled headings past them sit −100° and +120° from the
+bearing away from the tank spot. Gameobject collision isn't modelled.
 
 ## Targeting
 
@@ -91,7 +91,7 @@ exists, over standing in a line). A stand never walks into or across one. The an
 
 His only predictable tank spike is Bone Slice resuming: plain swings for 10 s after the engage and after
 each storm (`EVENT_ENABLE_BONE_SLICE`), then 200% (300% on 25) split over at most 2 (3) players round the
-victim on every swing. Arrival after a storm is plain swings, not the spike.
+victim on every swing.
 
 - **Tanks**: the model is the core's timers, so no cast is read. A window opens 10 s into every
   `normal` phase. The main tank and each off-tank spend `NextTankDefensive` (physical only, so no
@@ -99,14 +99,13 @@ victim on every swing. Arrival after a storm is plain swings, not the spike.
   Each takes the weakest ready button, so the cooldowns rotate over the storms. The class buttons
   (`HeldTankDefensiveNames()`) stay held over these casts until the tank is under 25%, when they stack on
   the first. A human tank in the victim's place gets `CallHumanTankDefensive` at the window and under 40%.
-- **Raid**: Bone Storm is physical and unreduced by armor, 6k / 6k / 12k / 14k a tick (10N / 25N / 10H /
-  25H) divided by √(d − 9) past 10 yd. `GetRaidCover` gets each 6 s of ticks (three) as a hit: the tick
-  at 28 yd, the raid's mean distance as he ping-pongs between anchors, from the aura's remaining time (the
-  core shortens the aura to the storm's 20 or 30 s just after it lands, so a longer reading means none has
-  passed).
-  It deals a cooldown once three members would end under 25% health, one holder per cooldown: Divine
-  Sacrifice (Divine Guardian), Divine Hymn, Tranquility. Aura Mastery needs a resistance aura of the hit's
-  school, so physical never gets it. The hit is offered 3 s before its first tick and the class cover
+- **Raid**: Bone Storm (ticks in [Mechanics](#mechanics)) is physical and unreduced by armor.
+  `GetRaidCover` gets each 6 s of ticks (three) as a hit: the tick at 28 yd, the raid's mean distance as
+  he ping-pongs between anchors, timed from the aura's remaining time (the core shortens the aura to the
+  storm's 20 or 30 s just after it lands, so a longer reading means none has passed). It deals a
+  cooldown once three members would end under 25% health, one holder per cooldown: Divine Sacrifice
+  (Divine Guardian), Divine Hymn, Tranquility. Aura Mastery needs a resistance aura of the hit's school,
+  so physical never gets it. The hit is offered 3 s before its first tick and the class cover
   nodes wait over that lead; anchors don't channel. Anti-Magic Zone is dealt out of the deal: it absorbs
   spells only, and sits in the shared list. Personal buttons aren't wired: the class nodes act on low
   health, and a button timed to one tick of a 30 s storm buys little.

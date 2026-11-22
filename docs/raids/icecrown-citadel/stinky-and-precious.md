@@ -62,7 +62,7 @@ No stands: Decimate and Plague Stench reach 100 yd, so positioning buys nothing.
 
 ## Cheats
 
-None before, none now.
+None ever.
 
 ## Known gaps
 

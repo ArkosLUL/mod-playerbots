@@ -35,15 +35,16 @@ on him being in combat, the splash multiplier waits for live.
 - **Kiter** (`rf.kiter`): one bot tank, not the one holding him, an assist tank first, kept while it can;
   with none, a Death Knight, then a paladin damage dealer, kept until a tank other than the main tank is
   free (the main tank is free whenever he drops his victim for a moment, and would take the duty for one
-  refresh). Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it taunts a
-  Big Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt diminishing
-  returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd of it, else
-  kites it: once the ooze is within 15 yd, a leg of 20, 30, 10 or 40 degrees in that order (20 degrees is
-  12.5 yd) along the kite ring (36 yd), counter-clockwise first, to a point 16 yd from the ooze, dry by 28 yd, clear of puddles, its walk not
-  through the ooze's aura or a flood. With no dry leg either way it wades (`wade`), the longest leg first;
-  floods leave its dodge, and one under it moves it on whatever the ooze does. It drops a cast that pins it
-  once the ooze is within 10 yd or it stands wet. It holds while it carries an ooze itself. Towing its ooze
-  or off its bursting one, it never dodges within 32.5 yd of his spawn. Generic taunts are blocked for it.
+  refresh). Its duty (`rf.bigooze`): with carriers out and no Big Ooze it waits at the ooze spot; it
+  taunts a Big Ooze not on it from 30 yd (`icc rotface ooze taunt`, never at the immune level of taunt
+  diminishing returns) and walks to it; it holds one under 3 stacks at the ooze spot while within 15 yd
+  of it, else kites it: once the ooze is within 15 yd, a leg of 20, 30, 10 or 40 degrees in that order
+  (20 degrees is 12.5 yd) along the kite ring (36 yd), counter-clockwise first, to a point 16 yd from the
+  ooze, dry by 28 yd, clear of puddles, its walk not through the ooze's aura or a flood. With no dry leg
+  either way it wades (`wade`), the longest leg first; floods leave its dodge, and one under it moves it
+  on whatever the ooze does. It drops a cast that pins it once the ooze is within 10 yd or it stands wet.
+  It holds while it carries an ooze itself. Towing its ooze or off its bursting one, it never dodges
+  within 32.5 yd of his spawn. Generic taunts are blocked for it.
 - **Damage dealer kiter**: never stands for a Big Ooze (no `tank`, no `hold`). It waits 30 degrees
   counter-clockwise of the ooze spot, walks to 20 yd of an ooze it has to taunt from past 25 yd, is cured at
   once while it tows, and with a Little Ooze on it lets the Big Ooze to 9 yd so the two merge behind it.
@@ -70,10 +71,9 @@ on him being in combat, the splash multiplier waits for live.
   each on the other ring when theirs is full, hunters outer only, the rest the stack 8 yd behind him. A
   healer's first slot leaves the widest gap to the other healers, so with two or more one always reaches
   the kiter (inner slots 90 degrees off it are 38 yd away). A lone bot healer takes the inner slot nearest
-  the kiter, again once its own is 30 yd from it.
-  Every slot is 9.5 yd or more from every other. A slot within 1.75 yd of a flood or puddle or 11.75 of a
-  Big Ooze changes for the nearest usable one. Reach, heal reach and spell movers are held while a stand
-  holds.
+  the kiter, again once its own is 30 yd from it. Every slot is 9.5 yd or more from every other. A slot
+  within 1.75 yd of a flood or puddle or 11.75 of a Big Ooze changes for the nearest usable one. Reach,
+  heal reach and spell movers are held while a stand holds.
 - **Dodge** (`rf.dodge`, emergency, forced): within half a yard of a hazard (Slime Spray cone, a mark not
   yet landed, a puddle, a flood or its warning but for a towing kiter, a Vile Gas carrier for others, a Big
   Ooze casting its explosion for all by 12.5 yd, any other Big or Little Ooze for all but the kiter and
@@ -131,7 +131,7 @@ outside the north-west flood.
 
 ## Cheats
 
-None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. The skull icon write is gone.
+None: `rf.nitro`, `rf.spitefulfury` and the skull icon write are gone.
 
 ## Known gaps
 
@@ -142,8 +142,8 @@ None before, none now: `rf.nitro` and `rf.spitefulfury` were removed earlier. Th
   paladin beyond 30 yd never walks to free one. The shell a wading Death Knight spends isn't there for a
   4-stack ooze. A wade can find no leg at all (every point a puddle or past the ooze); the kiter then stands
   in the flood, which its dodge no longer sees. A damage dealer kiter's pick-up walk ignores floods its
-  dodge still sees, so the two can trade steps at a flood's edge until the ooze is within 25 yd
-  (reviewer): `rf.dodge` `flood` rows between `rf.bigooze` `pickup` rows show it.
+  dodge still sees, so the two can trade steps at a flood's edge until the ooze is within 25 yd:
+  `rf.dodge` `flood` rows between `rf.bigooze` `pickup` rows show it.
 - A carrier's walk still crosses the raid; those within 10 yd step off its Little Ooze after the first tick.
 - Call of the Elements can drop a Cleansing Totem again; it pulses until the next tick replaces it (only
   with the opt-in `cleansing` water totem strategy).

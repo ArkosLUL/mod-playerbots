@@ -82,10 +82,9 @@ still without one holds no stand, since the stand would pull it back from Zafod.
   2.5) nearest its stand, so the walk home is short, or just past the reach when overlapping blasts leave
   nothing that clear; `MOVEMENT_FORCED`, interrupting a cast only on heroic, whose explosion knocks back,
   off the deck at its edge. Generic movers are held inside that clearance, or they'd walk the bot back
-  in. The sweep stays inside a box per
-  hull from the core's crew slots (Skybreaker x -31..10, y -21..15; Orgrim's Hammer x -13..30, y -21..27,
-  transport-local) and on the bot's deck: `FindNearestPositionClearOfHazards`' navmesh check refuses
-  every point on a transport deck.
+  in. The sweep stays inside a box per hull from the core's crew slots (Skybreaker x -31..10, y -21..15;
+  Orgrim's Hammer x -13..30, y -21..27, transport-local) and on the bot's deck:
+  `FindNearestPositionClearOfHazards`' navmesh check refuses every point on a transport deck.
 
 ## Defensives
 
@@ -101,9 +100,9 @@ Every bot tank (board and home) spends `NextTankDefensive`, physical only, one b
   nodes (`HeldTankDefensiveNames()`) stay held above 25%, so only this node casts them.
 - A human holding the captain gets `CallHumanTankDefensive` at the windows and under 40% (`gsb.humancall`).
 
-The thresholds are unmeasured. He swings every 1.5 s, so the windows open about 8 s and 15 s into a hold
-on normal and the retreat at 30 s (25 s on heroic); a button's 12 to 20 s covers each leg. A Veteran needs
-170 s alive, so the wave of 3 is the usual trigger.
+He swings every 1.5 s, so the windows open about 8 s and 15 s into a hold on normal and the retreat at
+30 s (25 s on heroic); a button's 12 to 20 s covers each leg. A Veteran needs 170 s alive, so the wave
+of 3 is the usual trigger.
 
 **Burst.** Lust waits for the base gate, which resolves the boss from the main tank's victim: it goes
 once any tank has held the captain 3 s, which is the boarding. Personal cooldowns stay held for the whole

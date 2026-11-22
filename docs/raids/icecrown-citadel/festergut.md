@@ -48,9 +48,9 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   druid stays in bear form, which its non-combat nodes would drop with no target. A human partner is
   called to taunt when no bot can.
 - **Nobody to take him** at 9 (one tank, or none able): a bot paladin holder free of Forbearance and
-  61987 (either refuses the bubble, `spell_pal_immunities`) casts Divine Shield and
-  cancels it as it lands (`fg.bloatclear`), at once when no other tank lives, else 6 s after the 9th stack;
-  a human paladin holder is called to. No other class can: his stacks need 100 s to drop, and no damage
+  61987 (either refuses the bubble, `spell_pal_immunities`) casts Divine Shield and cancels it as it
+  lands (`fg.bloatclear`), at once when no other tank lives, else 6 s after the 9th stack; a human
+  paladin holder is called to. No other class can: his stacks need 100 s to drop, and no damage
   dealer outlives his swing that long.
 - **Drag**: once he stands 3.5 yd off his spawn outside a spore wave, a bot holder walks past his spawn,
   on the far side from him, by the distance his chase stops at: both combat reaches plus 0.5, 10 yd and
@@ -120,7 +120,7 @@ stacks kept within 40 yd, need no probe of their own. Gameobject collision isn't
 
 ## Cheats
 
-None before, none now.
+None ever.
 
 ## Known gaps
 
