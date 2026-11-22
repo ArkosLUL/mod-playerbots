@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RaidTankDefensive.h"
 #include "UldEncounter_Freya.h"
 #include "UldScripts.h"
@@ -80,7 +81,7 @@ bool FreyaAddTankDefensiveTrigger::IsActive()
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
-    return GetFreyaStackedSnaplasherTank(state) == bot && NextTankDefensive(botAI, bot, nullptr, true) != 0;
+    return GetFreyaStackedSnaplasherTank(state) == bot && NextTankDefensive(botAI, bot, "freya.adddef", true) != 0;
 }
 
 bool FreyaAddTankExternalTrigger::IsActive()
@@ -89,7 +90,11 @@ bool FreyaAddTankExternalTrigger::IsActive()
         return false;
 
     Player* tank = nullptr;
-    return GetFreyaTankExternal(botAI, tank) != nullptr;
+    char const* external = GetFreyaTankExternal(botAI, tank);
+    if (!external && tank && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "freya.addext", "none");
+
+    return external != nullptr;
 }
 
 bool FreyaRedirectThreatTrigger::IsActive()

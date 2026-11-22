@@ -44,7 +44,7 @@ at most 7 of them reached it; in five, during lasher and Conservator waves, at m
 spell` step undone by the spore node or the back-line bail from a low lasher chasing them
 ([below](#detonating-lasher-waves)). `freya ranged camp`'s gather also pulled them back, so it stands down
 for a ranged DPS bot whose target is a Gift; the bail still runs. **A Gift that lives is why a lasher wave
-outlives its 60s:** waves clear in 31-50s otherwise, and each that ran past the next spawn had a Gift heal
+outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%).
 
 ## The trio wave
@@ -302,7 +302,8 @@ assist tank 0 while Freya lives and is not on him, above `ULDUAR_FREYA_ADD_TANK_
 (25%). Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, `freya add
 tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one, so they chain
 through the wave; `freya add tank external` has a healer cast Pain Suppression, Guardian Spirit or Hand of
-Sacrifice on him whenever none of the three is up. Notes `freya.adddef`, `freya.addext`.
+Sacrifice on him whenever none of the three is up. Notes `freya.adddef`, `freya.addext`: the button cast,
+else `covered` or `none`, so the trace's repeat filter keeps a later cast of the same button.
 
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
@@ -590,7 +591,8 @@ Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in.
 
 **A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
 trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a
-ranged DPS bot's lasher pick above goes ahead of the trio slot; out of reach it falls through to the trio.
+ranged DPS bot's lasher pick above goes ahead of the trio slot until a trio member drops under
+`ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT`; out of reach it falls through to the trio.
 The 60s timer brings a trio onto an unfinished lasher wave, and the next Gift heals what is left: four
 lashers at 76% summed went to 228%, three at 15% to 130%.
 

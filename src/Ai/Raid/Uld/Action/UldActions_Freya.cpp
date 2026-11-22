@@ -567,7 +567,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     if (!trioLocked)
         priority.push_back(state.conservator);
 
-    if (isRanged && !state.LivingTrio().empty() && IsFreyaLasherTail(state))
+    if (isRanged && !trioLocked && !state.LivingTrio().empty() && IsFreyaLasherTail(state))
         priority.push_back(pickLasher());
 
     Unit* const trioMember = ShedSnaplasherThreat(state, GetFreyaTrioAssignment(botAI, state));

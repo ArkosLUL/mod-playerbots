@@ -759,3 +759,20 @@ distance), and (2) the trio taking the ranged off an unfinished tail.
    walking to the Gift: 100 of the bails above. Options: (a) keep the Gift first; (b) a ranged DPS bot with
    a low lasher on a player inside `SpellDistance` shoots it before the Gift (12-35k left, one or two casts),
    then the Gift. Recommendation: (b), read after round 6's low-lasher pick is built.
+
+**Review:** the cause holds. Reproduced on window 12 (`wave_timeline.py`, `gift_camp.py`): uld1 693% to
+869% at 2:11-2:16 and the 8/12% tail to 66/67% by 3:02; uld2's four lashers at 76% when the trio came at
+4:33, then 50% to 228% at 5:14-5:19; uld3's 15% to 130% at 3:39-3:44; 100 bails and 25 gathers (15, 2, 2,
+6) during the four Gifts. Windows 10-11's intact lasher waves ran 31-49s. Fixed:
+
+- The tail pick also ran with the trio locked, against "once any trio member is below 30% the trio
+  outranks the other adds" (findings doc), so ranged could leave a sync kill for a lasher. It now waits
+  for `!trioLocked`, as the Conservator does. uld3's tail (2 lashers at 99%, 4:05) still had ~17s before
+  the lock (Water Spirit under 30% at 4:22).
+- `freya.adddef` and `freya.addext` were written only on a cast, and `NoteDerived` drops a value equal
+  to the bot's last one for that key, so the same button cast in a later trio wave left no row. The
+  defensive trigger now notes too (`covered` while one runs, `none` with nothing left), and a healer
+  with nothing to cast under a stacked Snaplasher notes `none`; `--tanks` hides both, tested.
+
+Next window, read the Q5 check as "ranged on the tail while it is in reach and no trio member is under
+30%".
