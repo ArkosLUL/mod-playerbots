@@ -37,6 +37,14 @@ bool FreyaTankOnLasher(PlayerbotAI* botAI)
     return target && target->GetEntry() == NPC_DETONATING_LASHER;
 }
 
+bool FreyaTargetOnOtherTank(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    Unit* victim = target ? target->GetVictim() : nullptr;
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    return holder && holder != botAI->GetBot() && PlayerbotAI::IsTank(holder);
+}
+
 bool FreyaMeleeNearBomb(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -118,8 +126,14 @@ void DefineFreya(EncounterBuilder& e)
     // Ghouls hold lashers better than any tank, and the class chain taunts one off a ghoul, or Righteous Defenses
     // the ghoul itself, on every cooldown. The add tank's pickup casts its own, only for lashers on players.
     e.Block("freya lasher taunt reserve", Role::Tank, FreyaTankOnLasher, 0,
-            {"hand of reckoning", "righteous defense", "taunt", "growl", "dark command", "death grip", "mocking blow",
-             "challenging shout", "challenging roar"});
+            {"hand of reckoning", "righteous defense", "taunt", "growl", "dark command", "death grip", "mocking blow"});
+
+    // Trio and Conservator waves stand next to Freya, so a generic area taunt pulls her off the main tank.
+    // The lasher pickup casts its own shouts, only with Freya out of reach.
+    e.Block("freya area taunt hold", Role::Tank, FreyaAlive, 0, {"challenging shout", "challenging roar"});
+
+    // Righteous Defense taunts everything hitting its target, so aimed at the other tank it pulls the Snaplasher too.
+    e.Block("freya righteous defense hold", Role::Tank, FreyaTargetOnOtherTank, 0, {"righteous defense"});
 
     // Freya faces her tank, away from the bombs, so "behind" walks a melee bot from a clear spot in her reach toward
     // them. Reach melee stays open: a walk into a blast re-fires the escape, which aims back into reach.
