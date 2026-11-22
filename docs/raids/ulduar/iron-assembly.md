@@ -47,8 +47,12 @@ phase 3 the bar sits at 74–91% health on 43–50k tanks, so a dip healed back 
 spend a later punch's button. The class nodes spend the same buttons on health alone (IBF, Survival
 Instincts or Frenzied Regeneration at 33–57% before phase 3, a warrior's Shield Wall at ~60% 3 s after a
 Rebirth), so the swap partner often had none left: **`iron assembly tank defensive hold`** blocks their
-`HeldTankDefensiveNames()` for every tank at 25%+ health all fight, as on Hodir. The punch node casts by
-id, so it alone spends them; under 25% the class nodes are the last resort.
+`HeldTankDefensiveNames()`, plus Divine Shield and a self Lay on Hands (their Forbearance locks Divine
+Protection, a paladin tank's one button, for 2 min), while Steelbreaker lives, as on Hodir. The punch
+node casts by id, so it alone spends them. Under 25% the class nodes are the last resort, but only while
+a council member has the tank as victim: a risen tank (13–19%) or a swapped-out carrier has nothing on
+it, and on 22 Nov rises spent Last Stand, Survival Instincts and a Divine Shield that left three punches
+without Divine Protection.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
@@ -375,7 +379,8 @@ takes either, with `IsDps` on the name branch since a healer's Shadowfiend is ma
 mana and mana returns; `--empowered`: Overwhelming Power carriers with whoever else each blast killed,
 Fusion Punches and Rebirths; `--punches`: every phase's Fusion Punches with verdict and button;
 `--revived`: every tank that rose mid pull, the raid buffs put back inside the window, and what it still
-lacked at its next death or the end; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
+lacked at its next death or the end; `--defensives`: every tank defensive with the tank's health, the
+member on it and the node that cast it; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
 verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
 `hdr.cfg.hardmode` toggle alone proves nothing.
 `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
