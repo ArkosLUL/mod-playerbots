@@ -6,6 +6,7 @@
 #include "GenericSpellActions.h"
 #include "MageActions.h"
 #include "MovementActions.h"
+#include "PaladinActions.h"
 #include "PetsAction.h"
 #include "Playerbots.h"
 #include "ReachTargetActions.h"
@@ -105,4 +106,16 @@ float FactionChampionsGripGuardMultiplier::GetValue(Action* action)
         return 0.0f;
 
     return FactionChampionsGripGuarded(botAI, action->GetTarget()) ? 0.0f : 1.0f;
+}
+
+float FactionChampionsIceGuardMultiplier::GetValue(Action* action)
+{
+    auto const classify = [action] { return dynamic_cast<CastHammerOfJusticeSnareAction*>(action) != nullptr; };
+    if (!_classHammer.Get(action, classify))
+        return 1.0f;
+
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return 1.0f;
+
+    return FactionChampionsIced(botAI, action->GetTarget()) ? 0.0f : 1.0f;
 }

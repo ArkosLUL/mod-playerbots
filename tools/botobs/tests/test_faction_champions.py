@@ -427,7 +427,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 20)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 21)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -1334,6 +1334,10 @@ def ice_pull() -> list[dict]:
         # Felesta keeps the rogue in Chains of Ice until it turns kill target
         note(0, ICE_DK, fc.ICE, ROGUE_C),
         cast(1000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        # Bulwark's Hammer of Justice on the iced rogue pops its trinket, the one on the warrior counts nowhere
+        cast(2000, TANK, 10308, ROGUE_C),
+        cast(2100, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
+        cast(2500, TANK, 10308, WARRIOR_C),
         cast(3000, ROGUE, 1715, ROGUE_C),
         # off her champion: a Chains of Ice and an Icy Touch spent, an off-hand Obliterate that's no cast of hers
         cast(5000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, DK_C),
@@ -1394,6 +1398,20 @@ class IceDuty(unittest.TestCase):
         with contextlib.redirect_stdout(out):
             fc.show_peel(self.trace)
         self.assertRegex(out.getvalue(), r"Hamstring +rogue +2  1 / 1 / 0; iced 1")
+
+    def test_a_stun_on_an_iced_champion_reads_the_trinket_and_the_chains_back(self):
+        self.assertEqual(fc.iced_holds(self.trace), [
+            {"t": 2000, "by": TANK, "spell": "Hammer of Justice", "target": ROGUE_C, "trinket": True}])
+        self.assertEqual([(row["t"], row["champion"], row["spell"], row["back"])
+                          for row in fc.iced_trinkets(self.trace)], [(2100, ROGUE_C, 10308, 11900)])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_peel(self.trace)
+            fc.show_trinket(self.trace)
+        text = out.getvalue()
+        self.assertIn("in Chains of Ice, by spell and class (its trinket after): Hammer of Justice paladin 1 (1)", text)
+        self.assertIn("on a champion an ice duty held in Chains of Ice: 1, Hammer of Justice 1; its DK's Chains back"
+                      " a median 11.9 s after, never 0", text)
 
     def test_an_iced_champion_is_no_escapee_while_its_chains_last(self):
         # the rogue is loose on the priest at 11-13 s, between its Chains, and on the tank after the duty

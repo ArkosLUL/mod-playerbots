@@ -37,6 +37,7 @@ void DefineFactionChampionsDefence(EncounterBuilder& e)
     e.LiveMultiplier<FactionChampionsPhysicalSwitchGuardMultiplier>(Family::AnyMovement);
     e.LiveMultiplier<FactionChampionsDispelGuardMultiplier>(Family::Spell);
     e.LiveMultiplier<FactionChampionsPurgeGuardMultiplier>(Family::Spell);
+    e.LiveMultiplier<FactionChampionsIceGuardMultiplier>(Family::Spell);
 }
 }
 

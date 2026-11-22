@@ -63,4 +63,15 @@ private:
     RaidActionCache<Facts> _facts;
 };
 
+class FactionChampionsIceGuardMultiplier : public Multiplier
+{
+public:
+    FactionChampionsIceGuardMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions ice guard multiplier") {}
+    float GetValue(Action* action) override;
+
+private:
+    RaidActionCache<bool> _classHammer;
+};
+
 #endif
