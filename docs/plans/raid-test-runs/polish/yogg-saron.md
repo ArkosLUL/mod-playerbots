@@ -200,27 +200,31 @@ defensives that exist now.
 
 **Picked second, independent and small: melee area damage makes the bot a Crusher's victim** (6 deaths, and the start
 of uld2's collapse: four of its platform raid dead 30 s into phase 2). uld2 3:01-3:12: both tanks and three melee on a
-Corruptor 5.2-5.3 yd from a live Crusher. The bear's Swipe (Bear) and glyphed Maul hit the Crusher (Infected Wounds
-on it at 3:02.66, 3:04.48, 3:06.30), `DamageTaken` made the bear its victim at 3:03.6 (facing 354°, the bear on its
-axis), and every re-hit kept it there. The bear took 16 Crushes (221k) and lived; the melee `set behind` the
+Corruptor 5.2-5.3 yd from a live Crusher. The Crusher was channelling Diminish Power (64145 in its snapshot cast
+slot to 3:03.44), its victim flipping between ranged and a pet 14-45 yd out on threat, since the cast zeroes its threat list. The
+bear's Swipe (Bear) and glyphed Maul hit it (Infected Wounds on it at 3:02.66, 3:04.48, 3:06.30): their threat made
+the bear its victim at 3:03.44 (facing 354°, the bear on its axis) and, melee-class, broke the channel (cast slot 0 by
+3:03.95), so it swung at once; his re-hits kept the threat. Not `DamageTaken`: spell damage is
+`SPELL_DIRECT_DAMAGE` and its grab fires on white swings only. The bear took 16 Crushes (221k) and lived; the melee `set behind` the
 Corruptor onto the bear's spot (off-axis 0-1° at 5.2 yd) and the warrior tank's `tank face` did the same, so the cone
 killed Uldyak, Uldyam, Uldyaw (3:08.1-3:09.0) and Uldyaa twice (3:11.0, 3:12.2). The spacing node fired `wedge` at
-3:07.7-3:08.3, too late. uld3 9:00: Uldzay's Whirlwind put Deep Wounds on a Crusher 3.3 yd away, it turned to him
-at 9:00.67 and Crushed him three times where he stood (9:04.1). Melee get no reach circle on a swinging Crusher
+3:07.7-3:08.3, too late. uld3 9:00: Uldzay's Whirlwind put Deep Wounds on a channelling Crusher 3.3 yd away, it turned
+to him at 9:00.46-9:00.67, the channel broken, and Crushed him three times where he stood (9:04.1). Melee get no reach circle on a swinging Crusher
 (`GetYoggSaronCrusherReaches`, `UldEncounter_YoggSaron.cpp:4054`) and its victim is exempt from the wedge, so nothing
 moved either. Area casts by a bot within a live Crusher's reach + 2 yd in phases 2-3: 28 / 89 / 138 of 477 / 164 /
 386, mostly tanks (Maul, Swipe, Hammer of the Righteous, Consecration).
 
 Bug: the strategy already keeps melee off Crushers (`IsAllowedTarget`), area damage goes round it. Fix
 (`UldMultipliers_YoggSaron.h/.cpp`, `UldEncounter_YoggSaron.h/.cpp`, `UldDefinition_YoggSaron.cpp`):
-`yogg-saron crusher area hold multiplier` (`Family::Spell`) zeroes a non-heal `IsRaidAreaDamage` action, plus `maul`
-and `hammer of the righteous` (second target), in phases 2 and 3 on the platform while
+`yogg-saron crusher area hold multiplier` (`Family::Spell`) zeroes a harmful `IsRaidAreaDamage` action (not a heal,
+not a positive spell such as Heroism or a shout), plus `maul`, `hammer of the righteous`, `heart strike` and `avenger's
+shield` (they also hit enemies next to their target), in phases 2 and 3 on the platform while
 `YoggSaronInSwingingCrusherReach`: a live Crusher within its live `GetMeleeRange` (4.5 + 1.5 + 4/3 = 7.33) +
 `ULDUAR_YOGG_SARON_CRUSHER_AREA_HOLD_SLACK` (2 yd) whose stun does not hold. Same room and reach at 10 and 25, normal
 and hard mode, with or without a player. Reader: `--crush` prints the multiplier's vetoes by action.
 
 **Next window should show:** `--crush` `area held in a swinging Crusher's reach` with Swipe (Bear), Maul, Cleave,
-Hammer of the Righteous, Consecration; Crush hits with a tank or melee victim near 0 (uld2 21 on the tanks, uld3 3 on
+Hammer of the Righteous, Consecration, Heart Strike; Crush hits with a tank or melee victim near 0 (uld2 21 on the tanks, uld3 3 on
 a melee) and no Crush deaths (were 5 / 1); platform tentacle damage (`--tentacles` live / stunned) no lower than this
 window's 43.1 / 67.9k, 20.9 / 11.0k, 40.9 / 56.1k a second.
 

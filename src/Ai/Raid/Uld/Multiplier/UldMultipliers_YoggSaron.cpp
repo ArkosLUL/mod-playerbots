@@ -355,14 +355,23 @@ float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
 
 float YoggSaronCrusherAreaHoldMultiplier::GetValue(Action* action)
 {
-    // Glyph of Maul and Hammer of the Righteous hit a second target, which the area test misses.
-    static std::set<std::string> const secondTarget = {"maul", "hammer of the righteous"};
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action) ||
-        (!secondTarget.count(action->getName()) && !IsRaidAreaDamage(botAI, action, _splash)))
+    // these also hit enemies next to their target (Maul only glyphed), which the area test misses
+    static std::set<std::string> const neighbourHit = {"maul", "hammer of the righteous", "heart strike",
+                                                       "avenger's shield"};
+    if (!action)
+        return 1.0f;
+
+    RaidSplashCache::Facts& facts = _splash.Of(action);
+    if (facts.heal || (!neighbourHit.count(action->getName()) && !IsRaidAreaDamage(botAI, action, _splash)))
         return 1.0f;
 
     if (bot->GetMapId() != ULDUAR_MAP_ID ||
         bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    SpellInfo const* spellInfo =
+        facts.cast ? sSpellMgr->GetSpellInfo(facts.spellId.Get(botAI, facts.cast)) : nullptr;
+    if (spellInfo && spellInfo->IsPositive())
         return 1.0f;
 
     uint32 const phase = YoggSaronPhase(botAI);
