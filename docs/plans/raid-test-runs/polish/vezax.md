@@ -191,3 +191,149 @@ dead at +94.5 s with 9 of 25 alive, then a wipe on Vezax at 5:32.
 Despair. Unchecked; the doc's "immune to every mana return" may have an exception.
 
 **Questions.** None new.
+
+## Round 3 (2026-11-22, build 697052475)
+
+**Data.** Window 10, one valid pull per pool (`raidtest.py report --boss vezax --raid uld --head
+697052475 --pulls 10`), all hard mode on, all wipes:
+
+| Pool | Run | Trace | Main tank | Result |
+|---|---|---|---|---|
+| uld1 | `tr-20261122-165438-14` | `603_16_general-vezax_1795366526` | DK Uldxam | wipe 1:28, 30 deaths, no Animus (Berserk 0:29.6) |
+| uld2 | `tr-20261122-170121-17` | `603_19_general-vezax_1795366925` | warrior Uldyaa | Animus killed at 4:25.5, wipe on Vezax at 26%, DC `no_progress` 16:36, 23 deaths |
+| uld3 | `tr-20261122-165659-15` | `603_17_general-vezax_1795366664` | bear Uldzaz | wipe 5:30, 31 deaths, Animus at 3.6% at the collapse |
+
+Analysis scripts: session scratchpad `vezax-r3/py/`.
+
+**Deaths by mechanic.**
+
+| Pull | Deaths |
+|---|---|
+| uld1 | all 30 after Berserk 26662 at 0:29.6: 28 Vezax melee (hits of 66-274k), 2 Shadow Crash |
+| uld2 | after the Animus kill: 18 Vezax melee (main tank 4:30.9 under Surge of Darkness with healers at 0-26% mana, then ranged as he roamed, the off-tank, the melee), 2 Shadow Crash, 2 Mark, 1 own Shadow Word: Death backlash (4:26) |
+| uld3 | collapse 4:28-4:40: 14 Profound Darkness, 5 Animus melee; then 8 Vezax melee, 2 Mark, 2 Searing Flames (re-raised bots among them) |
+
+**The 1:28 wipe (uld1).** The first Mark (0:19.97) went to the DK main tank: 6 of 25 stood past the Mark
+floor, short of the 9 the core wants (`boss_general_vezax.cpp:248-258`). His mark node sent him to the
+nearest southern spot, 26 yd south of Vezax (`TryGetVezaxMarkSpot`, `UldEncounter_Vezax.cpp:428-454`),
+which is measured from Vezax and moves with him: the tank's moves ran from (1852.8, 63.1) at 0:20.3 to
+(1852.8, -8.8) at 0:30.0 and Vezax followed from y 89.1 to y 17.2. `UpdateAI` casts Berserk the moment
+he leaves x 1720-1940, y 20-210 (`boss_general_vezax.cpp:188-189`): Berserk 64112/26662 at 0:29.636,
+first death 0:30.8, all 30 dead by 1:24.
+
+**The 16:36 stall (uld2).** The Animus died at 4:25.5 (the first Animus kill since window 7). The raid then
+collapsed under its Profound Darkness stacks with dry healers; with the main tank dead at 4:30.9 Vezax
+roamed after ranged to (1880.7, 179.1), ~100 yd north of his anchor and still inside the berserk box.
+The camp is boss-relative, so slots and strafes followed him past the hall's north edge: at 6:22-6:24
+four bots (Uldyaj, Uldyaf, Uldyae, Uldyaq) took Shadow Crash dodge moves to (1898.3, 210.5), the move
+z dropping 342.2 → 339.0 → 334.1, and fell to (1861.1, 170.7, -27.7) under the map. Vezax followed to z
+226.6, could not reach them, and regenerated from 25.2% to 100% between 6:42 and 6:55; the 10-minute
+Berserk at 10:12 changed nothing, and DC's `no_progress` ended the pull. Two re-raised bots (Uldyab,
+Uldyak) stood on the floor, out of his reach as well. No death came from it; it cost ~10 minutes of
+pool time.
+
+**Verdict on round 2 (ranged cast hold lifted on the Animus): it worked, beyond the estimate.**
+`--animus`, spawn to kill or collapse:
+
+| Pull | Animus | Raid / ranged | Ranged casts/min | Outside-field casts | Held | Ranged mana at the stop |
+|---|---|---|---|---|---|---|
+| uld2 | 3:08.5-4:25.5, killed in 77 s, 1.30 %/s | 160k / 89k/s | 20-43 | 7-14 per bot | 0/0 | 7-54, median 15 |
+| uld3 | 3:08.5-4:30.6 collapse, 3.6% left, 1.17 %/s (kill ~85 s) | 145k / 69k/s | 23-34 | 10-19 | 0/0 | 0-82, median 22 |
+| round 2 baseline | 0.96-1.01 %/s, kill ~99-104 s | 118-124k / 56-67k/s | 14-29 | 0-5 | 16-44 | median 42-47 |
+
+Pace +16-29% against the ~10% estimated; uld3 was ~3 s short. One ranged (Uldzaq) hit 0 mana at 3:56,
+34 s before the collapse; the rest ran out within ~8 s of it. Animus victim a tank 98.7% (uld2) and 88.3%
+(uld3, the rest after the tank died at 4:29.5). Round 1 checks hold: Vezax's victim a tank 98.9-100%
+before the Animus (a warlock pet held him 2 s at the uld2 opener), every Tricks and Misdirection on a
+tank, `vezax threat multiplier` vetoes 3-111 a pull, no vapor hit, hard mode held in both pulls that got
+there, Vezax at 20.3% and 14.7% at the spawn.
+
+**Failure ranking.**
+
+1. *Profound Darkness race and the collapse after it: 54 deaths (uld3 31, uld2 23).* Gear, as in round 1;
+   the user waived the stop rule. uld2 killed the Animus and still lost: Vezax went 20.3% → 26.9% on Mark
+   heal-back during the Barrier, and the raid could not finish 26% under ~40 stacks with dry healers.
+   Not changed.
+2. *Berserk from a marked main tank: 30 deaths (uld1).* Bug, fixed below.
+3. Shadow Word: Death backlash under the stacks: 1 (class code, not chased).
+
+**Picked: the marked main tank drags Vezax out of his room (bug).** The doc already has the tank hold the
+boss "whatever happens", and the dodge leaves him out for the same reason (`VezaxDodgesShadowCrash`), but
+`VezaxMarkOfTheFacelessTrigger` had no such test. Same hazard for anyone else he is hitting: uld2's
+re-raised tank was marked as his victim at 6:33.
+
+**Fix** (`UldTriggers_Vezax.cpp` only): `VezaxMarkOfTheFacelessTrigger` stands down for the bot Vezax is
+hitting (`GetVictim() == bot`), so it holds where it stands; melee and the off-tank still break off it.
+10/25 and normal/hard: the Mark and the chase exist in all four. Bots only, so the same with a real
+player in the raid.
+
+**Reach audit row (taken as a bug): confirmed, not moved.**
+
+- *Core.* `2026_11_06_01.sql:2515` sets display 28548 to CombatReach 12.6 (base 8), template scale 1
+  (`creature_template_model` 33271), `Creature.cpp:3609` writes reach × scale, and `GetDistance`
+  subtracts both sizes (`Object.cpp:1304-1308`): his "15 yd" is 29.1 yd of real 3D distance.
+- *Traces.* 37 marks with 23+ alive in windows 7, 8 and 10 (7 pulls): 7 went to melee or the main tank,
+  with 6, 7, 2, 7, 9, 9 living players past 29.1 at the snapshot before (and 0 once Vezax was pulled into
+  the camp), against 12-14 past the old 24.5 in all six. Every mark with 10+ past 29.1 went to someone
+  past it but one, at 28.7 yd in a snapshot 0.3 s old. The 0:20 mark had 2-7 past in 4 of 7 pulls. A 13-14 bot camp fills rows 0-3; rows 2-3 (5-6 bots)
+  are past, row 1 is 0.3-0.7 yd past when exactly on its slot, row 0 inside. At 10-man the camp fills rows
+  0-1, so nearly every mark falls inside.
+- *Why not moved.* Vezax settles 7.1-11.5 yd north of his anchor, between the main tank on it and the camp
+  (he meets the tank on its way in). Past 41.5 yd 2D `PartyMemberToHeal` scores a member as 30 points
+  healthier (`PartyMemberToHeal.cpp:88-95`, `GetDistance2d` > 38.5), so the tank is picked there only
+  when ~30 points lower than everyone else, and past 43 yd 3D (heal range 40 plus both reaches,
+  `Spell::CheckRange`) no heal lands. Replayed on where both really stood 0:15-3:00 in six pulls: a
+  slot at 27-29.25 is within 41.5 of the main tank 86-100% of samples, 31.5 0-100%, 33.75 0-72%, 36+
+  0-18%; every camp bot as it stood plus 4.5 yd cuts the share of time *any* healer is within 41.5 of
+  him from 43-93% to 10-42%. So no radius clears 29.1 with the 2.4 yd deadband and keeps the healers on
+  the tank: where the camp goes is a positions call (Q1). The victim guard above removes the outcome that
+  made the floor lethal.
+
+**Reader.** `general_vezax.py`: band floor and ceiling on reach 12.6 (29.1 / 42.6); `--mark` gains a
+`far` column, the living past the floor at each mark against the 9 or 4 the core wants (test added).
+Docs: `docs/raids/ulduar/vezax.md` (band, crash skip 17.1, the victim guard, the off-floor gap); the
+camp constant's comment in `UldEncounter_Vezax.h`.
+
+**Next window should show.**
+
+- No mark node move by Vezax's victim: `--mark` branch for a marked main tank reads `unchanged`, no
+  `vezax mark of the faceless action` move from him, Vezax within ~12 yd of his anchor through every
+  mark window, no Berserk before 10:00.
+- Marked main tank windows: melee break moves, and a leech no worse than a marked melee's (6-16 ticks).
+- `far` under 9 still common (the rows did not move): marks on melee or tanks at roughly 1 in 5.
+- Round 2's Animus figures hold (1.17-1.30 %/s, ranged outside casts 7-19, held 0).
+
+**Questions (user).**
+
+- *Q1. The camp's front rows sit inside the Mark floor since the reach update; moving them out loses the
+  healers' reach to the main tank. Which layout?* (a) Healers fill first, front row at 30.5 (1.4 yd past
+  the floor), ranged dps behind to 39.5: replayed reach to the tank 78-100% in 5 of 6 pulls, 0% where
+  Vezax settled 11.5 yd north; every camp bot past the floor, so 13-14 (25-man) and 5-6 (10-man) far.
+  (b) The main tank stands on the camp side, ~10 yd north of the anchor, so Vezax never leaves his spawn
+  and every row reaches the tank: the camp can move out freely, but the melee end up south behind him,
+  where the southern mark spots are, and those and the Animus melee lanes need rework. (c) Shift every
+  row 4.5 yd as the audit says: healers lose the tank most of the time. (d) Keep the rows: with this
+  round's guard a near-pool mark costs a leech, not a wipe. *Recommended: (a)*, the smallest change that
+  clears the floor and keeps the tank healed in the common settle; (b) if the north-most settle keeps
+  starving him.
+- *Q2. Guard the camp against the off-floor walk?* Check each strafe and slot against the navmesh
+  (`CheckCollisionAndGetValidCoords`, as the hazard search already does) and fall back to the search.
+  Only reachable after a collapse, so it saves pool time, not kills. *Recommended: yes, small, in a later
+  round.*
+
+**Candidate points for Q1 (a)**, for navprobe before any such change: rows 30.5 / 32.75 / 35 / 37.25 /
+39.5, files and strafe as today, mark arcs at 35 yd ±65.5°, z 342.4. The widest strafed slot is 44.5 yd
+from him, inside the 45 yd gate. For Vezax at his north-most settle (1851.4, 92.9):
+
+```
+row 0: (1853.9,123.4) (1856.9,123.4) (1848.9,123.4) (1845.9,123.4) | strafed (1868.9,123.4) (1871.9,123.4) (1833.9,123.4) (1830.9,123.4)
+row 1: (1853.9,125.7) (1856.9,125.7) (1848.9,125.6) (1845.9,125.6) | strafed (1868.9,125.7) (1871.9,125.7) (1833.9,125.6) (1830.9,125.6)
+row 2: (1853.9,127.9) (1856.9,127.9) (1848.9,127.9) (1845.9,127.9) | strafed (1868.9,127.9) (1871.9,127.9) (1833.9,127.9) (1830.9,127.9)
+row 3: (1853.9,130.2) (1856.9,130.2) (1848.9,130.1) (1845.9,130.1) | strafed (1868.9,130.2) (1871.9,130.2) (1833.9,130.1) (1830.9,130.1)
+row 4: (1853.9,132.4) (1856.9,132.4) (1848.9,132.4) (1845.9,132.4) | strafed (1868.9,132.4) (1871.9,132.4) (1833.9,132.4) (1830.9,132.4)
+mark arcs: (1883.2,107.4) (1819.6,107.4)
+```
+
+For Vezax at his west-most settle (1847.8, 90.0) the same points shifted by (-3.6, -2.9): row 0 strafed
+out to (1827.3,120.5) and (1868.3,120.5), row 4 to (1827.3,129.5) and (1868.3,129.5), mark arcs
+(1879.6,104.5) (1816.0,104.5).

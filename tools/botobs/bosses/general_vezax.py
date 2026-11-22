@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import bisect
 import collections
+import math
 import pathlib
 import statistics
 import sys
@@ -56,9 +57,11 @@ LEECH_RADIUS = radius("ULDUAR_VEZAX_MARK_LEECH_RADIUS")
 ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 
 # Engine figures, not source constants: the mark's 15 yd of GetDistance and reach spell's 28.5, each
-# plus his 8.0 combat reach and the player's 1.5.
-BAND_FLOOR = 15.0 + 8.0 + 1.5
-BAND_CEILING = 28.5 + 8.0 + 1.5
+# plus his combat reach and the player's 1.5. Traces from before core update 2026_11_06_01 ran on a
+# reach of 8.0.
+COMBAT_REACH = 12.6
+BAND_FLOOR = 15.0 + COMBAT_REACH + 1.5
+BAND_CEILING = 28.5 + COMBAT_REACH + 1.5
 
 # ULDUAR_VEZAX_GROUP_SLOTS, a product of two uint8 constants the float parser cannot read: slots
 # [0,10) are group L and [10,20) group R.
@@ -301,6 +304,21 @@ def boss_health_rate(samples: Samples, boss: int, low: int, high: int) -> float 
     return (last[5] - first[5]) / ((high - low) / 1000.0)
 
 
+def far_pool_minimum(trace: Trace) -> int:
+    """How many living players past BAND_FLOOR the core wants before it marks one of them; short of that
+    it marks anyone nearer, tanks and melee included. Difficulty 1 and 3 are the 25-man ones."""
+    return 9 if trace.header.get("diff") in (1, 3) else 4
+
+
+def far_at(samples: Samples, roster, boss: int, when: int) -> int | None:
+    """Living roster members past BAND_FLOOR from him, measured 3D like his GetDistance."""
+    centre = samples.row(boss, when)
+    if not centre:
+        return None
+    rows = (samples.row(guid, when) for guid in roster)
+    return sum(1 for row in rows if row and row[5] > 0 and math.dist(row[1:4], centre[1:4]) > BAND_FLOOR)
+
+
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
@@ -334,6 +352,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                 "guid": guid,
                 "block": block.get(guid, "-"),
                 "branch": branch[-1] if branch else None,
+                # The aura lands ~0.2 s after his pick, so this can be one off at the edge.
+                "far": far_at(samples, roster, boss, start) if boss else None,
                 "ticks": len(ticks),
                 "damage": sum(rec.get("a", 0) for rec in ticks),
                 "early": sum(1 for rec in ticks if rec["t"] - start < EARLY_MS),
@@ -354,15 +374,17 @@ def show_mark(trace: Trace) -> None:
         print("  nobody was marked")
         return
 
-    print(f"  {'at':>9} {'marked':14} {'role':6} {'blk':4} {'branch':9} {'ticks':>5} {'damage':>9}"
+    need = far_pool_minimum(trace)
+    print(f"  {'at':>9} {'marked':14} {'role':6} {'blk':4} {'branch':9} {'far':>5} {'ticks':>5} {'damage':>9}"
           f" {'0-4s':>5} {'near min/med':>13} {'dodgers':>7} {'boss %/s':>8}")
     for window in windows:
         near = ("-" if window["nearest_min"] is None
                 else f"{window['nearest_min']:.1f}/{window['nearest_median']:.1f}")
         rate = "-" if window["rate"] is None else f"{window['rate']:+.3f}"
+        far = "-" if window["far"] is None else f"{window['far']}/{need}"
         print(f"  {clock(window['start']):>9} {trace.name(window['guid'])[:14]:14}"
               f" {trace.role(window['guid']):6} {window['block']:4} {window['branch'] or 'unchanged':9}"
-              f" {window['ticks']:5} {window['damage']:9,} {window['early']:5} {near:>13}"
+              f" {far:>5} {window['ticks']:5} {window['damage']:9,} {window['early']:5} {near:>13}"
               f" {window['dodgers']:7} {rate:>8}")
 
     ticks = sum(window["ticks"] for window in windows)
@@ -995,7 +1017,7 @@ def show_band(trace: Trace) -> None:
         return
 
     print(f"\n  {'bot':14} {'role':6} {'blk':4} {'on':>5} {'median':>7} {'<' + format(BAND_FLOOR, '.1f'):>7}"
-          f" {'>' + format(BAND_CEILING, '.0f'):>7}")
+          f" {'>' + format(BAND_CEILING, '.1f'):>7}")
     for row in rows:
         figures = (f"{'-':>7} {'-':>7} {'-':>7}" if row["median"] is None else
                    f"{row['median']:7.1f} {row['inside'] * 100:6.1f}% {row['past'] * 100:6.1f}%")

@@ -146,6 +146,11 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(windows[0]["damage"], 9000)
         self.assertEqual(windows[0]["early"], 1)
 
+    def test_far_counts_the_living_past_the_mark_floor_from_him(self):
+        # Agony and Tree stand 30 yd out, past 29.1; Bulwark is on him and Fel never sampled.
+        self.assertEqual(gv.mark_windows(self.trace)[0]["far"], 2)
+        self.assertEqual(gv.far_pool_minimum(self.trace), 9)
+
     def test_a_crash_names_its_target_and_both_blocks_that_moved(self):
         rows = gv.crashes(self.trace)
         self.assertEqual(len(rows), 1)
