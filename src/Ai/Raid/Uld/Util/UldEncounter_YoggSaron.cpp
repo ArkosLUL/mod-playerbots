@@ -1921,6 +1921,70 @@ char const* YoggSaronWarlockSummon(PlayerbotAI* botAI)
     return nullptr;
 }
 
+namespace
+{
+std::vector<char const*> YoggSaronDotSpells(PlayerbotAI* botAI)
+{
+    switch (botAI->GetBot()->getClass())
+    {
+        case CLASS_WARLOCK:
+            if (botAI->HasSpell("unstable affliction"))
+                return {"corruption", "unstable affliction"};
+            return {"corruption", "immolate"};
+        case CLASS_PRIEST:
+            return {"vampiric touch", "shadow word: pain", "devouring plague"};
+        case CLASS_DRUID:
+            return {"insect swarm", "moonfire"};
+        case CLASS_HUNTER:
+            return {"serpent sting"};
+        case CLASS_MAGE:
+            return {"living bomb"};
+        default:
+            return {};
+    }
+}
+}
+
+char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg)
+{
+    yogg = nullptr;
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot) || PlayerbotAI::IsTank(bot) ||
+        YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase3(botAI))
+        return nullptr;
+
+    std::vector<char const*> const spells = YoggSaronDotSpells(botAI);
+    if (spells.empty())
+        return nullptr;
+
+    Creature* boss = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!boss || !boss->IsAlive() || boss->HasAura(SPELL_LUNATIC_GAZE_YS))
+        return nullptr;
+
+    for (char const* spell : spells)
+    {
+        uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || !bot->IsWithinCombatRange(boss, info->GetMaxRange(false, bot)))
+            continue;
+
+        if (Aura const* aura = boss->GetAura(spellId, bot->GetGUID()))
+            if (aura->GetDuration() > static_cast<int32>(info->CalcCastTime(bot)) + ULDUAR_YOGG_SARON_PHASE_3_DOT_REFRESH_MS)
+                continue;
+
+        if (!bot->IsWithinLOSInMap(boss))
+            return nullptr;
+
+        if (!botAI->CanCastSpell(spell, boss))
+            continue;
+
+        yogg = boss;
+        return spell;
+    }
+
+    return nullptr;
+}
+
 Player* YoggSaronBeaconExternalVictim(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

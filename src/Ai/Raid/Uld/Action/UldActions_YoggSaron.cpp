@@ -1769,6 +1769,19 @@ bool YoggSaronPhase3LustAction::Execute(Event /*event*/)
     return false;
 }
 
+bool YoggSaronPhase3YoggDotAction::Execute(Event /*event*/)
+{
+    Unit* yogg = nullptr;
+    char const* spell = YoggSaronPhase3YoggDot(botAI, yogg);
+    if (!spell || !botAI->CastSpell(spell, yogg))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.p3dot", spell);
+
+    return true;
+}
+
 bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
 {
     if (!PlayerbotAI::IsTank(bot))

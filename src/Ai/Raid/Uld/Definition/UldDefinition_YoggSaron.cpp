@@ -96,6 +96,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronBeaconStageTrigger, YoggSaronBeaconStageAction>(ACTION_RAID + 3.5f);
     e.Node<YoggSaronBeaconBearFormTrigger, YoggSaronBeaconBearFormAction>(ACTION_RAID + 4.5f);
     e.Node<YoggSaronPhase3LustTrigger, YoggSaronPhase3LustAction>(ACTION_RAID + 2);
+    e.Node<YoggSaronPhase3YoggDotTrigger, YoggSaronPhase3YoggDotAction>(ACTION_HIGH + 5);
     e.Node<YoggSaronSanityConservationTrigger, YoggSaronSanityConservationAction>(ACTION_RAID + 5);
     e.Node<YoggSaronSqueezeEscapeTrigger, YoggSaronSqueezeEscapeAction>(ACTION_RAID + 1);
     e.Node<YoggSaronSqueezeRescueTrigger, YoggSaronSqueezeRescueAction>(ACTION_RAID + 6);

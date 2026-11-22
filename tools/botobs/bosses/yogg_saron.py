@@ -448,6 +448,12 @@ FLIP_AREA = PHASE_3_AREA_SPELLS | {"Divine Storm", "Consecration", "Whirlwind", 
                                    "Howling Blast", "Pestilence", "Explosive Trap", "Bladestorm", "Holy Wrath",
                                    "Shockwave", "Hellfire", "Arcane Explosion"}
 
+# Base durations in ms of the DoTs `yogg-saron phase 3 yogg dot` keeps on Yogg, plus the ones class rotations put
+# there; talents and glyphs only lengthen them, so uptime read from these is a floor.
+YOGG_DOTS = {"Corruption": 18000, "Unstable Affliction": 15000, "Immolate": 15000, "Curse of Agony": 24000,
+             "Vampiric Touch": 15000, "Shadow Word: Pain": 18000, "Devouring Plague": 24000, "Insect Swarm": 12000,
+             "Moonfire": 12000, "Serpent Sting": 15000, "Living Bomb": 12000, "Flame Shock": 18000}
+
 # Phase 2's platform tentacles, and both Crush cones (64147 in 10-man, 65201 in 25-man).
 TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Constrictor",
                   NPC_CORRUPTOR_TENTACLE: "Corruptor"}
@@ -4207,6 +4213,46 @@ def show_phase3_area(trace: Trace, start: int, stop: int, rows: dict[int, list[l
         print(f"    yogg.p3area      : {dict(picks)}")
 
 
+def dot_uptime(casts: list[tuple[int, int]], start: int, stop: int) -> int:
+    """Milliseconds inside [start, stop] covered by (cast time, duration) DoTs, overlaps counted once."""
+    spans = [(max(when, start), min(when + duration, stop)) for when, duration in casts
+             if when + duration > start and when < stop]
+    return sum(end - begin for begin, end in merge_spans(spans))
+
+
+def show_phase3_yogg_dots(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set,
+                          yogg: int | None) -> None:
+    """Each bot ranged dps's DoTs on Yogg, from its casts at him and the base durations in YOGG_DOTS (no creature
+    aura rows exist), over the time it was alive; then `yogg.p3dot` casts by spell."""
+    if not yogg:
+        return
+    casts: dict[int, dict[str, list[tuple[int, int]]]] = collections.defaultdict(lambda: collections.defaultdict(list))
+    for rec in trace.of("cast"):
+        name = trace.spells.get(rec.get("sp"), "")
+        if (rec.get("tgt") == yogg and name in YOGG_DOTS and not rec.get("tr") and rec.get("s") in roster
+                and start <= rec["t"] <= stop):
+            casts[rec["s"]][name].append((rec["t"], YOGG_DOTS[name]))
+    lines = []
+    for guid in sorted(roster, key=trace.name):
+        if trace.role(guid) != "ranged" or guid in trace.humans:
+            continue
+        own = [row for row in rows.get(guid, []) if start <= row[0] <= stop]
+        alive = sum(after[0] - before[0] for before, after in zip(own, own[1:]) if before[6] > 0)
+        if alive < 1000:
+            continue
+        shares = {name: min(100, dot_uptime(spans, start, stop) * 100 // alive)
+                  for name, spans in sorted(casts[guid].items())}
+        lines.append(f"    {trace.name(guid):14} alive {alive / 1000:4.0f} s  "
+                     + ("  ".join(f"{name} {share}%" for name, share in shares.items()) or "none"))
+    if lines:
+        print("\n  ranged DoTs on Yogg (uptime over each bot's living time, base durations):")
+        print("\n".join(lines))
+    picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p3dot")
+                                if start <= rec["t"] <= stop)
+    if picks:
+        print(f"    yogg.p3dot       : {dict(picks)}")
+
+
 def show_beacon_tanks(trace: Trace, heal_at: int, healed: set, rows: dict[int, list[list]], roster: set,
                       tanks: set, flows: list[tuple[int, int, int]], covers: dict[int, list[tuple[int, str]]],
                       died_at: dict[int, list[int]]) -> None:
@@ -4814,6 +4860,7 @@ def show_phase3(trace: Trace) -> None:
             if sum(bands[role].values()) >= 1000 * seconds:
                 print(f"    {role:6}           : {sum(bands[role].values()) / seconds / 1000:.1f}k/s  {split(bands[role])}")
     show_phase3_area(trace, start, alive_end, rows, roster, tanks, guardians, yogg)
+    show_phase3_yogg_dots(trace, start, alive_end, rows, roster, yogg)
 
     healers = [guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans]
     if healers and yogg_spot:
