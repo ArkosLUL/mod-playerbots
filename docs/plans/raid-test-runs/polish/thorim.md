@@ -135,3 +135,85 @@ at 35-90% health, so it is no wipe at full health; count bots hit by 62415 in th
 **Next window should show:** every Thorim DC record `start: step` and counted; no 62415 hit and no
 bot target before the open; the open's first damage on the pack from the DC tank; then, with valid
 pulls, the in-fight read starts: so far every pull dies to the Lightning Orb without phase 2.
+
+## Round 3 (build b40af8aab with round 2 and lane T, DC 4d3978b)
+
+**Data:** window 10, one pull per pool, all valid (`start: step`): `tr-20261122-152622-4` (uld1),
+`-5` (uld2), `-6` (uld3); traces `env/dist/logs/botobs/603_{4,5,6}_thorim_{1795361316,1795361326,1795361326}.ndjson`.
+First pulls with full DK talents and soulstoned tanks. Window 9's six bot-led pulls
+(`603_{9,11,12,13,14,15}_thorim_*`, void at the time) read for the gauntlet too. Throwaway scripts read
+`snap`, `act`/`move` (lever and lead actions), `dmg` (62415) and `death` rows. No DC veto row inside a pull.
+`thorim.squad` notes are missing from uld2/uld3; the corridor squad was read off positions there.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795361316 | wipe 6:10 | Lightning Orb 22 (5:47-6:05); arena Champion 4 (5:47-6:00); gauntlet Runic Smash 4, Iron Ring Guard 3 (3:43-4:06) |
+| uld2 | 1795361326 | wipe 6:10 | Lightning Orb 19 (5:47-6:05); Champion 6, Warbringer 3, Evoker 2 (4:26, then 5:51-6:05); Runic Smash 1 (2:38) |
+| uld3 | 1795361326 | wipe 6:11 | Lightning Orb 19 (5:48-6:06); Champion 10 (5:52-6:05); Impale 1 (3:01), Runic Smash 1 (3:25), Colossus Smash 1 (4:04) |
+
+**Round 2 verdict: held.** All three DC records `start: step`. No 62415 hit before the open; the only
+pre-roll targets are in the last snapshot (−0.10 to −0.51 s), all on the Behemoth: DC's own aggro start.
+The breath now lands on the raid gathered at the drop: 4 / 10 / 14 bots at +5.0 / +7.9 / +7.4 s
+(uld1/2/3), 6-12 again at +17-20 s, no death (first death 2:38). Not picked: health, no lives.
+
+**Failure picked: the bot-led gauntlet stops at the dead Runic Colossus.** Phase 2 never starts because
+nobody reaches the Rune Giant, let alone Thorim:
+
+| Pull | lever action / at its stop / lever pulled | Colossus dead | after it |
+|---|---|---|---|
+| uld1 | 26.8 / 33.0 / 189.6 s | ~290 s | squad idle at y −355..−410 until the orb |
+| uld2 | 27.2 / 34.5 / 117.8 s | ~208 s | idle 2.5 min |
+| uld3 | 28.1 / 33.5 / 159.2 s | ~254 s | idle |
+| window 9 (6) | at its stop 39-50 s, pulled 73.9-240.2 s | 166-343 s | idle; nobody past y −410, Giant never engaged |
+
+- Walk: `ThorimGauntletLeadTrigger` (`UldTriggers_Thorim.cpp:115`) is the waypoint step or
+  `ThorimGauntletLeadColossus` (`UldEncounter_Thorim.cpp:1580`), which returns nullptr once the Colossus is
+  dead. Nothing else moves the squad: the Giant (spawn (2134.57, −440.32, 438.33), `boss_thorim.cpp:386`)
+  is ~100 yd on up a ramp and `GatherThorimEncounterTargets` drops anything past 50 yd
+  (`UldEncounter_Thorim.cpp:1104`); the Iron Honor Guards at (2220.3, −436.2) and (2198.1, −428.8) are
+  56-80 yd from where the squad stood. A real player leading walks on himself, so this only bites bot-led.
+- Lever (the small second, same lane-N code): the action walked to `MoveTo(lever, GetInteractionDistance()
+  − 1)`. `MoveTo(WorldObject*)` measures `GetDistance`, net of the bot's 1.5 reach and the lever's 1.17
+  size (scale 3), so every leader stopped 6.6-6.7 yd from the centre, approaching from the west (all nine
+  pulls). `IsAtInteractDistance` (`GameObject.cpp:3067`) is the lock spell's range (lock 1845 → Opening
+  68398, range 5) around display 295's box ×3: local x −5.75..6.75, y −5.43..5.48. At local x −6.5..−6.7
+  the bot was outside, so the action re-issued the same move ("there") until a fight swung the leader in
+  diagonally (inside at local (−5.19, −4.15) in uld1 at 189.6 s). Waits of 25-198 s at the stop (nine pulls), out of the 5 min clock.
+
+**Classification: bug.** The user-approved lane N (2026-11-21) has a bot lead the gauntlet with no player
+in it; its walk ends at the Colossus and its lever walk stops short of use range.
+
+**Fix** (Thorim files only, no size or mode branch, same code with or without a real player):
+- `ThorimGauntletLeadRuneGiant` (`UldEncounter_Thorim.cpp:1594`, header `:555`): past the last waypoint
+  and the portcullis, the bot leader walks to the Giant while he is alive, attackable and out of combat.
+  "Colossus dead" is the Giant losing `UNIT_FLAG_IMMUNE_TO_PC` (`boss_thorim.cpp:1376`, with the first
+  doors at `:1367`), not the cached Colossus lookup, which arena melee also fill from 162 yd and which can
+  read empty while he lives. The portcullis gate keeps the 150 yd Giant scan off the arena, where a miss
+  would read as "Giant dead" to `ThorimBalconyOpen`. The action (`UldActions_Thorim.cpp:312`) paths to the
+  Giant's own position at combat priority, not `MoveTo(unit, d)`, whose straight-line point can land off
+  the mesh up the ramp; and walks all the way in, since once an Iron Honor Guard engages the Giant spawns
+  guards every 10-20 s until he is pulled (`boss_thorim.cpp:1285`, `:1510-1516`) and the squad's picker takes
+  guards first. Followers tether as before (25 yd, healers 20).
+- Lever action (`UldActions_Thorim.cpp:285`): `MoveTo(lever, 0)`, touching distance (~2.7 yd from the
+  centre). Bots have stood 0.3-4 yd from it on most bearings in these traces, the west side included.
+- Probe `thorim.leverpulled` (`ObsValue` on the latch, header `:435`).
+- Review: the Giant walk also needs the leader within 150 yd of the Giant's spawn. The scan reaches
+  ~159 yd with both sizes (Giant combat reach 7.5), a leader done with the left lane can stand ~165 yd
+  out, and that miss is cached for every bot as "Giant dead" to the balcony walk.
+
+**Not fixed, predicted next blocker: no bot may hit Thorim from the balcony in phase 1.** Phase 2 starts
+only on damage from a player above z 430. `GetThorimDpsTarget` picks him for a corridor bot up there
+(`UldEncounter_Thorim.cpp:1259`, meant for exactly this), but `ThorimDpsTargetAllowed` (`:1148`) forbids
+him to every bot while he is on the balcony, so `ThorimDpsPriorityAction` refuses the pick and drops him as
+a target, and `ThorimBalconyGuardMultiplier` (`UldMultipliers_Thorim.cpp:90`) zeroes Attack/Reach on him
+for corridor bots above the floor during the split; the generic pickers are off for non-tanks then. Every
+earlier phase 2 had a human hit him. If window 11 shows the squad at the edge with Thorim untouched, that is
+round 4: allow him for a corridor bot past `ULDUAR_THORIM_BALCONY_5` (clear of both trap fields).
+
+**Next window should show** (lead `move` rows, `thorim.leverpulled`, Giant `snap` rows): the lever pulled
+~6 s after the lever action starts (~30-45 s, was 74-240 s); the Colossus dead ~100 s later; then
+`thorim gauntlet lead action` moves aimed at (2134.6, −440.3, 438.3) with the leader's distance to the Giant
+closing (a `nopath` row or a flat distance means the route needs navprobe); Iron Honor Guards and the Giant
+engaged and the Giant dead; corridor bots above z 430 on the balcony chain. Sif's clock (~170 s from the
+pull) is likely still missed, so a phase 2 here would be normal mode. Gauntlet deaths may rise (Honor
+Guards, Rune Detonation, Stomp); the orb still wipes if the predicted blocker holds.

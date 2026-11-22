@@ -1419,6 +1419,9 @@ namespace
 constexpr uint32 THORIM_ARENA_LEVER_ENTRY = 194264;
 constexpr float THORIM_LEVER_SEARCH_RANGE = 150.0f;
 
+// boss_thorim summons him here, and he doesn't move until pulled.
+Position const THORIM_RUNE_GIANT_SPAWN(2134.57f, -440.318f, 438.331f);
+
 bool OnThisInstance(Player const* member, Player const* bot)
 {
     return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
@@ -1589,6 +1592,25 @@ Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
         return nullptr;
 
     return colossus;
+}
+
+Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
+{
+    // Only within scan range of his spot: a miss is cached for every bot and reads as a dead Giant to the balcony
+    // walk, and a leader done with the left lane can stand ~165 yd out.
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS || !PastThorimPortcullis(bot) ||
+        bot->GetExactDist(THORIM_RUNE_GIANT_SPAWN) > ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE ||
+        ThorimPhase2Active(botAI))
+        return nullptr;
+
+    // His player immunity goes when the Colossus dies, along with the first doors. Not the Colossus lookup: arena
+    // melee scan that cache too, from out of range, so it can read empty while he's still alive.
+    Unit* giant = GetThorimAncientRuneGiant(botAI);
+    if (!giant || giant->HasUnitFlag(UNIT_FLAG_IMMUNE_TO_PC) || giant->IsInCombat())
+        return nullptr;
+
+    return giant;
 }
 
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane)

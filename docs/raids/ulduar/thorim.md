@@ -806,7 +806,12 @@ player was on the instance left the corridor standing while he stayed in the are
   too) keys on the leader. The `ThorimFallFromFloor` teleport still targets the group leader.
 - **Lever:** `ThorimGauntletLeverTrigger` is true for a bot leader once the lever (GO 194264,
   (2173.3, −252.9)) has lost `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`;
-  the action walks into interact range and sends `CMSG_GAMEOBJ_USE`. A real player leading pulls it himself.
+  the action walks up to it and sends `CMSG_GAMEOBJ_USE`. A real player leading pulls it himself.
+  **Walk to touching distance:** `IsAtInteractDistance` is the Opening spell's (68398) 5 yd around the
+  model box (display 295, scale 3), only 5.4-5.8 yd from its centre west and sideways, while `MoveTo`'s
+  distance nets out both sizes (2.7 yd). Stopping at the interaction distance less a yard left all nine bot
+  leaders of 2026-11-22 6.6 yd out on the arena side, pulling 25-200 s late. `thorim.leverpulled` notes the
+  latch.
   The lever resets after 6 s and the portcullis shuts 8 s after opening (template autoclose 6000 / 8000 ms),
   so `leverPulled` latches on the pull and on a lever seen already used (the far corridor is out of the
   150 yd search range). A bot leader past the portcullis latches it too unless the lever reads locked: taking
@@ -817,7 +822,16 @@ player was on the instance left the corridor standing while he stayed in the are
   it skips any waypoint north of him, since the lanes run south: a bot taking over mid-corridor from a human
   walks on rather than back to the first. He holds while a squad non-healer is more than 30 yd behind, but
   at most 15 s per step, so a stuck bot cannot eat the 150 s clock. Past the last waypoint he walks on to
-  30 yd from the Colossus, which the squad's own targeting then engages. Followers take his waypoint;
+  30 yd from the Colossus, which the squad's own targeting then engages. Once the Colossus is dead he walks
+  on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick range: in
+  all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the orb. Gated
+  on the Giant losing `UNIT_FLAG_IMMUNE_TO_PC`, which the Colossus' death clears, since arena melee scan the
+  cached Colossus lookup from out of range and it can read empty while he lives; and on the leader past the
+  portcullis and within 150 yd of the Giant's spawn, since a scan from farther out (the arena, the left
+  lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
+  own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
+  once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until he is pulled, and the squad
+  picks guards first. Followers take his waypoint;
   between waypoints they walk to him once more than 25 yd (healers 20 yd) behind. Behind a real player only
   healers tether, and the gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
@@ -825,6 +839,10 @@ player was on the instance left the corridor standing while he stayed in the are
   led squad accepts. The clock is set by the corridor fights (Colossus and Rune Giant time was identical
   across traced pulls; corridor trash spread 49-93 s), so a bot-led run should sit at or below the human
   one, about 100-125 s from the lever. Unmeasured: needs a live pull.
+- **Open: no bot may hit him from the balcony in phase 1**, so only a player starts phase 2.
+  `GetThorimDpsTarget` hands him to a corridor bot above the floor line, but `ThorimDpsTargetAllowed`
+  forbids him to every bot while he is up there, and `ThorimBalconyGuardMultiplier` zeroes Attack/Reach on
+  him for corridor bots above it during the split.
 
 **The last 67 yd of the lower corridor are unwaypointed** — waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
