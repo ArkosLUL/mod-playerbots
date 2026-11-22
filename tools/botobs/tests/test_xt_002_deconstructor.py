@@ -223,6 +223,26 @@ class Tanks(unittest.TestCase):
             "  Bulwark: pummellers 0:03.100\n"
             "  taunts at XT: 2 (Bulwark spell 31789 1, Bulwark spell 62124 1)\n"))
 
+    def test_healer_buffs_are_measured_on_the_holder(self):
+        records = self.steal_pull()
+        end = records.pop()
+        records += [
+            {"t": 2000, "e": "note", "k": "xt002.buffs", "txt": str(TANK)},
+            {"t": 8000, "e": "note", "k": "xt002.buffs", "txt": str(self.OFFTANK)},
+            {"t": 500, "e": "aura", "d": TANK, "s": HEALER, "sp": 53563, "r": 0},
+            {"t": 10000, "e": "aura", "d": TANK, "s": HEALER, "sp": 53563, "r": 1},
+            {"t": 10000, "e": "aura", "d": self.OFFTANK, "s": HEALER, "sp": 53563, "r": 0},
+            {"t": 8000, "e": "aura", "d": self.OFFTANK, "s": HEALER, "sp": 49284, "r": 0},
+            # the Sacred Shield absorb proc and a tank's own shield are not healer tank buffs
+            {"t": 12000, "e": "aura", "d": self.OFFTANK, "s": HEALER, "sp": 58597, "r": 0},
+            {"t": 12000, "e": "aura", "d": TANK, "s": TANK, "sp": 53601, "r": 0},
+            end,
+        ]
+        text = printed(xt.show_tanks, load(records))
+        self.assertIn("  healer buff tank: Bulwark 0:02.000, Stonewall 0:08.000\n", text)
+        self.assertIn("  tank buffs over 37 s of holds of 15 s or more, % on the holder/the other tank:"
+                      " Beacon of Light 81/19%, Earth Shield 86/0%\n", text)
+
 
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):

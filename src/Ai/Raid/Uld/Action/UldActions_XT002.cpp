@@ -661,6 +661,12 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
     return false;
 }
 
+bool XT002HolderBuffAction::Execute(Event /*event*/)
+{
+    Player* tank = GetXT002BuffTarget(botAI, spell);
+    return tank && botAI->CastSpell(spell, tank);
+}
+
 bool XT002RaidPositionAction::Execute(Event /*event*/)
 {
     // The trigger only fires for the tank XT is on.

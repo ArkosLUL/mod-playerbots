@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERXT002_H
 #define PLAYERBOTS_ULDENCOUNTERXT002_H
 
+#include <string>
 #include <vector>
 
 #include "Position.h"
@@ -137,6 +138,14 @@ inline constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
 // the Heart outlived every window and no Heartbreak is coming.
 inline constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
 
+// XT-002: how long a new holder keeps XT before the healers' tank buffs follow him. At the pull XT's victim
+// flips every 1-3 s, and each Beacon, Sacred Shield or Earth Shield moved costs a global and a chunk of mana.
+inline constexpr uint32 ULDUAR_XT002_BUFF_TANK_SETTLE_MS = 5000;
+
+// XT-002: nobody has asked for the buff tank this long, so the pull it belongs to is over. Healers ask every
+// tick in combat, and a wipe's reset takes far longer.
+inline constexpr uint32 ULDUAR_XT002_BUFF_TANK_STALE_MS = 10000;
+
 extern const Position ULDUAR_XT002_SPAWN;
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
@@ -185,6 +194,15 @@ XT002TankRoles GetXT002TankRoles(Player* bot, Unit* xt002);
 
 // Taunt, target priority and the redirect all read GetXT002TankRoles, so they agree on who holds the add.
 bool IsXT002PummellerTank(Player* bot, Unit* xt002);
+
+// The tank the healers' tank buffs go on while XT is in combat: his holder, once that tank has kept him for the
+// settle time, or at once when the tank before is dead. Latched per instance, so every healer agrees. Null out
+// of combat or with no living tank.
+Player* GetXT002BuffTank(Player* bot, Unit* xt002);
+
+// The buff tank if this healer's `spell` is missing on him and castable now, else null. Trigger and action both
+// ask, so they can't disagree.
+Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell);
 
 // Close enough to XT to engage; anything further is still at its toy pile. True without an XT, so the gate
 // never strands a bot with nothing to hit.

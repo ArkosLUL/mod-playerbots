@@ -136,6 +136,22 @@ private:
     Player* GetRedirectTank(Unit* xt002);
 };
 
+// Casts one healer tank buff on the tank XT is on, in place of the class node, which aims at the group's main
+// tank or, for a paladin, whichever tank dropped lowest.
+class XT002HolderBuffAction : public Action
+{
+public:
+    XT002HolderBuffAction(PlayerbotAI* botAI, std::string const name, std::string const spell)
+        : Action(botAI, name), spell(spell)
+    {
+    }
+
+    bool Execute(Event event) override;
+
+private:
+    std::string spell;
+};
+
 // The tank XT is on gets the tank spot, ranged and healers a formation slot each. Melee are left alone:
 // pinning them costs uptime on a boss that moves.
 class XT002RaidPositionAction : public MovementAction

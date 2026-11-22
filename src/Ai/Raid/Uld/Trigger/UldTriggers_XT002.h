@@ -1,6 +1,8 @@
 #ifndef PLAYERBOTS_ULDTRIGGERS_XT002_H
 #define PLAYERBOTS_ULDTRIGGERS_XT002_H
 
+#include <string>
+
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
@@ -66,6 +68,23 @@ public:
 
     XT002RedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
+};
+
+// One healer tank buff, for the tank XT is on. One row per buff, each at the relevance of the class node it
+// stands in for, so the healer's rotation keeps its order and only the target changes.
+class XT002HolderBuffTrigger : public Trigger
+{
+public:
+    XT002HolderBuffTrigger(PlayerbotAI* botAI, std::string const name, uint8 classId, std::string const spell)
+        : Trigger(botAI, name), classId(classId), spell(spell)
+    {
+    }
+
+    bool IsActive() override;
+
+private:
+    uint8 classId;
+    std::string spell;
 };
 
 #endif
