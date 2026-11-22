@@ -722,7 +722,7 @@ phase 4 to Hand Pulse plus Plasma Ball, the ACU on healers 10% of the phase.
 and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**, so the first cast lands at
 P2 −0.2 s and the first two to four cones hit everybody: 365-568k in the first 10 s against a phase rate
 of 13k/s. The shape forms only once `IsMimironPhase2` turns true, which needs VX-001 off the chassis, the
-instant Rapid Burst starts.
+instant Rapid Burst starts. A bot-led raid walks to its slots 12.75 s early (handovers, below).
 
 ## Phase 3 wants a wedge, not a ring
 
@@ -1200,7 +1200,7 @@ every Mimiron node stands down, and the engine falls through to `follow` at rele
 
 **That fallthrough is the answer.** Two handover formations were built and removed: an 8 yd melee ring
 plus 22 yd caster ring on the room centre, then a 44 yd rim lap. `GetMimironSpreadSlot` returns false for
-everyone while staging. Human masters stood 43-54 yd from the centre on their own, against the lap's
+a player-led raid while staging. Human masters stood 43-54 yd from the centre on their own, against the lap's
 49-52: a raid leader already puts the raid where the fire wants taking, and chains grow 1.22 yd/s and
 cannot catch a walking pack. Parking *on the centre* is what to avoid: the rings there put 86% of 37
 nodes inside 25 yd of the centre and took 203k, all fire, with nothing attackable.
@@ -1212,9 +1212,25 @@ stood 49-54 yd out and walked in over the last ~10 s opened with 324-399k of Rap
 staying ~40 yd west stacked the raid on one line, 653-679k, 10-24 victims a tick. Following stays, by
 choice: stand still in the west, then walk to the centre over the last ~10 s.
 
-**With no player in the raid nothing is followed**, so the raid stands where phase 1 ended, melee on the
-MK II's last spot in the alcove, in the field phase 1 laid: 10 fire deaths in three of four test-harness
-pulls, and 10 of 16 healers losing 5-22 points of mana across it where a human-led raid's drank theirs up.
+**With no player in the raid nothing is followed**, so the raid stood where phase 1 ended, melee in the
+alcove, in the field phase 1 laid: 10 fire deaths in three of four test-harness pulls, and 10 of 16
+healers losing 5-22 points of mana where a human-led raid's drank theirs up. **A bot-led Firefighter raid
+therefore holds clean ground and walks in**, in steps read off the script's clock and kept raid-wide by
+the encounter tick (`MimironHandoverStep`):
+
+- **Hold**, from the MK II's defeat: everyone alive takes an `hmhold` slot on three rows 44, 40 and 36 yd
+  from the room centre, 4 yd apart, outer row first. The band's bearing (24 candidates, 15° apart) is
+  picked once: fewest burning nodes within 20 yd of its middle, ties nearest the phase 1 tank spot, so
+  the handover's seeds land beside the phase 1 field, one fire for the first Frost Bomb. On window 8's
+  fields that is 120-150° or 225-255°, with 1-6 of 25 slots inside the drink guard's 15 yd.
+- **Late**, from VX-001's summon at 17 s: still holding, no new drinks (below).
+- **Walk in**, from Mimiron boarding VX-001 at 35 s, 12.75 s before phase 2: every bot takes its phase 2
+  slot (`hmwedge`, `p2melee`) on the still unselectable VX-001. Human leaders set off about then and stood
+  23-36 yd out at phase 2.
+
+A spent mech parks under 15000 health, a fresh one is full (`ULDUAR_MIMIRON_SPENT_HEALTH_PCT`), which
+tells this handover from the 13 s before the MK II wakes and from the 2→3 handover's first 5 s. The band
+sits inside navprobe's clean 45 yd ring; points between its 16 headings were not probed one by one.
 
 **One exception.** `ULDUAR_MIMIRON_PHASE4_TANK_SPOT` is handed out while staging: it holds VX-001's chassis
 still, and every phase-4 bearing, radius and offset is computed against a stationary apex (under
@@ -1233,7 +1249,10 @@ is `NOT_SELECTABLE` until pulled, and evade despawns VX-001 and the ACU.
 `BOT_STATE_COMBAT` and `BOT_STATE_NON_COMBAT` (`PlayerbotAI::ApplyInstanceStrategies`), and healers went
 from 35-65% to 71-100% mana across one handover. But `DrinkAction`/`EatAction` push the next AI check
 back 12-18 s, so a sitting bot dodges nothing and, standing still, is the nearest player to a chain head:
-two burned to death drinking. `mimiron drink guard` vetoes `drink`/`eat` within 15 yd of a flame node.
+two burned to death drinking. `mimiron drink guard` vetoes `drink`/`eat` within 15 yd of a flame node, and
+`mimiron handover drink hold` in a bot-led raid off its hold slot, and everywhere once VX-001 is summoned:
+a drink runs up to 20 s, and the walk in starts 18 s later. Off the slot, a formation leg under way fails
+its action every tick and hands the tick to `drink`, which sits the bot down short of the band.
 
 ## The ring slot is what kills the Rocket Strike dodge
 
@@ -1277,7 +1296,9 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
-| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point |
+| `handover` | A bot-led Firefighter 1→2 handover's step: 0 none, 1 hold, 2 late (VX-001 summoned), 3 walk in. Per instance |
+| `hold` | The hold band's bearing off the room centre and the burning nodes within 20 yd of its middle, once per handover |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
@@ -1294,7 +1315,7 @@ leaves a dodge that refuses every bearing completely silent.
 
 `tools/botobs/bosses/mimiron.py --help` lists its reports. Beyond it: `--walk` charges a moving sample to
 the bot's last accepted `move` within 6 s (`ATTRIBUTE_MS`), `?` being a walk with none, a human or a
-chase; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a
+chase; `--handover` counts a bot on its phase 2 slot only by a slot handed out inside the handover; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a
 dodge burned only with a Flames tick on the bot in the 2 s before it; `--mines` charges a mine hit to
 the bot's last leg under 4 s old while it moves, else `standing`, and judges legs on their straight
 line, not the navmesh walk; and a phase that

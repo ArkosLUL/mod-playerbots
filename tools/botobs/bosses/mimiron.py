@@ -15,7 +15,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import dist2, frames, guids_of_entry, radius  # noqa: E402
+from raidobs.geometry import anchor, dist2, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, roster_guids  # noqa: E402
 
@@ -99,6 +99,13 @@ DODGE_GAP_MS = 1500
 BURNED_LOOKBACK_MS = 2000
 # How near a detour note and its formation leg sit: both are written by the same action pass.
 NOTE_MOVE_MS = 300
+
+ROOM_CENTRE = anchor("ULDUAR_MIMIRON_ROOM_CENTER")[:2]
+SPREAD_TOLERANCE = radius("ULDUAR_MIMIRON_SPREAD_TOLERANCE")
+# MimironHandoverStep, as the `mimiron.handover` latch writes it.
+HANDOVER_STEPS = {"1": "hold", "2": "late", "3": "walk in"}
+# Mimiron boards VX-001 this long before phase 2: where the walk in starts when no step was written.
+WALK_IN_LEAD_MS = 12750
 
 NPC_PROXIMITY_MINE = 34362
 MINE_LEG_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_LEG_CLEARANCE")
@@ -988,6 +995,101 @@ def show_fire(trace: Trace) -> None:
           " legs within 1 yd of where they started count neither way")
 
 
+# -------------------------------------------------------------------------------------------- handover
+
+def handover_rows(trace: Trace) -> list[dict]:
+    """One row per phase 1 to 2 handover: when each bot-led step started, the hold band picked, how far
+    the raid stood from the room centre, who was on a phase 2 slot when phase 2 began, healer mana
+    across it, the drinks that went out, Flames damage and deaths."""
+    spans = phases(trace)
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    slot_notes = notes(trace, "mimiron.slot")
+    rows = []
+    for index, (_, p1_end, label) in enumerate(spans):
+        # A blip of the phase latch splits phase 1 into P1, Z, P1b: the handover follows the last part.
+        if not label.startswith("P1"):
+            continue
+        after = next(((start, name) for start, _, name in spans[index + 1:] if name.startswith("P")), None)
+        if not after or after[1] != "P2":
+            continue
+        low, high = p1_end, after[0]
+
+        steps: dict[str, int] = {}
+        for rec in notes(trace, "mimiron.handover"):
+            value = str(rec.get("txt", ""))
+            if low <= rec["t"] <= high and value in HANDOVER_STEPS:
+                steps.setdefault(value, rec["t"])
+        hold = next((str(rec.get("txt", "")) for rec in notes(trace, "mimiron.hold") if low <= rec["t"] <= high),
+                    None)
+
+        def spread(when: int) -> tuple[float, float] | None:
+            units = samples.before(when)
+            far = sorted(dist2((row[1], row[2]), ROOM_CENTRE) for guid, row in units.items()
+                         if guid in roster and living(row))
+            return (statistics.median(far), far[-1]) if far else None
+
+        walk_in = steps.get("3", high - WALK_IN_LEAD_MS)
+        at_p2 = samples.before(high)
+        living_at_p2 = [guid for guid, row in at_p2.items() if guid in roster and living(row)]
+        # Only slots handed out in the handover: a phase 1 one left standing is no phase 2 slot.
+        handed = [rec for rec in slot_notes if low <= rec["t"] <= high]
+        slotted = on_slot = 0
+        for guid in living_at_p2:
+            last = next((str(rec.get("txt", "")) for rec in reversed(handed) if rec.get("g") == guid), "")
+            point = slot_point(handed, guid, high)
+            if point is None or last.startswith("hmhold"):
+                continue
+            slotted += 1
+            on_slot += int(dist2((at_p2[guid][1], at_p2[guid][2]), point) <= SPREAD_TOLERANCE)
+
+        start_units = samples.before(low)
+        mana = [(start_units[guid][6], at_p2[guid][6]) for guid in sorted(roster)
+                if trace.role(guid) == "heal" and guid in start_units and guid in at_p2]
+        drinks = [(trace.name(rec["g"]), (rec["t"] - low) / 1000.0) for rec in trace.of("act")
+                  if rec.get("a") in ("drink", "eat") and rec.get("vd") == "OK" and low <= rec["t"] < high]
+        fire = sum(rec.get("a", 0) for rec in trace.of("dmg")
+                   if rec.get("sp") == SPELL_FLAMES and rec.get("d") in roster and low <= rec["t"] < high)
+        dead = [rec for rec in combat_deaths(trace) if low <= rec["t"] < high]
+
+        rows.append({"span": (low, high), "steps": steps, "hold": hold,
+                     "spread": {"P1 end": spread(low), "+10 s": spread(low + 10000),
+                                "walk in": spread(walk_in), "P2": spread(high)},
+                     "living": len(living_at_p2), "slotted": slotted, "on_slot": on_slot,
+                     "mana": mana, "drinks": drinks, "fire": fire, "dead": dead})
+    return rows
+
+
+def show_handover(trace: Trace) -> None:
+    print("HANDOVER")
+    rows = handover_rows(trace)
+    if not rows:
+        print("  no phase 1 to 2 handover in this pull")
+        return
+
+    for row in rows:
+        low, high = row["span"]
+        print(f"  {clock(low)} .. {clock(high)}  {(high - low) / 1000:.1f} s")
+        if row["steps"]:
+            print("    bot-led steps: " + ", ".join(
+                f"{HANDOVER_STEPS[value]} +{(when - low) / 1000:.1f} s" for value, when in sorted(
+                    row["steps"].items(), key=lambda item: item[1]))
+                  + (f"  (walk in {(high - row['steps']['3']) / 1000:.1f} s before P2)" if "3" in row["steps"] else ""))
+            print(f"    hold band: {row['hold'] or 'not noted'}")
+        else:
+            print("    no bot-led steps: a player in the raid, or not Firefighter")
+        print("    from the room centre, median/max yd: " + ", ".join(
+            f"{name} {cell[0]:.0f}/{cell[1]:.0f}" for name, cell in row["spread"].items() if cell))
+        print(f"    on a phase 2 slot at P2: {row['on_slot']} of {row['living']} living"
+              f" ({row['slotted']} with a slot)")
+        if row["mana"]:
+            print("    healer mana: " + "/".join(f"{before:.0f}" for before, _ in row["mana"]) + " -> "
+                  + "/".join(f"{after:.0f}" for _, after in row["mana"]))
+        print(f"    drinks {len(row['drinks'])}: "
+              + (", ".join(f"{name} +{when:.1f}" for name, when in row["drinks"]) or "none"))
+        print(f"    Flames {row['fire'] // 1000}k, {len(row['dead'])} dead")
+
+
 # ------------------------------------------------------------------------------------------------ mines
 
 def off_segment(start, end, point) -> float:
@@ -1362,6 +1464,8 @@ SECTIONS = (
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
     ("fire", "fire dodges against the ticks behind them, where they went, and the formation's detours",
      show_fire),
+    ("handover", "the phase 1 to 2 handover: bot-led hold and walk in, where the raid stood, mana and drinks",
+     show_handover),
     ("mines", "Proximity Mine hits and kills by what was moving the bot, and legs that passed a live mine",
      show_mines),
     ("p3", "phase 3 fire bots, Water Spray, the Junk Bot pile and what each core landing was worth",
