@@ -293,10 +293,10 @@ The tracker marks the focus star with the **star** icon for humans; skull would 
 Holes exist only where a star died (it wanders 25 yd from its spawn first, so anywhere in the room), and
 every constellation eats one. From 60 s before a Big Bang through its cast the kite keeps off the two holes
 nearest the hold spot (the raid's; a latched kite hole there is dropped): wave 3's constellations dive on
-healers from 20 s before Big Bang 2 and close holes, and with the kite's one left the raid had none (19
-dead). `urgent` (no hole, a cast ≤ 30 s away or running) puts every ranged DPS on the star team. A slot
-buried under a hole is stepped aside from the slot itself, nearest ring first, up to 12 yd; a bot standing
-in one outside a cast leaves it.
+healers from 20 s before Big Bang 2 and close holes; with one kept from the kite they left the raid none
+at the cast (19 dead). `urgent` (no hole, a cast ≤ 30 s away or running) puts every ranged DPS on the
+star team. A slot buried under a hole is stepped aside from the slot itself, nearest ring first, up to
+12 yd; a bot standing in one outside a cast leaves it.
 
 A bot phased outside a cast is alone in the void with the phase-16 Dark Matter, which kills a healer in
 about 3 s. So no walk may clip a field: dodges and exits reject ground whose straight path passes within
