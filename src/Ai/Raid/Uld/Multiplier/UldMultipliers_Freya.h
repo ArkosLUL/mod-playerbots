@@ -9,6 +9,23 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "ObjectGuid.h"
+#include "RaidSplash.h"
+
+// Nothing lands on a held Snaplasher: single target at it, or area damage near the caster or its target. Every
+// direct hit renews Hardened Bark, so one stray Blizzard keeps the stacks a tank would die to.
+class FreyaSnaplasherHoldMultiplier : public Multiplier
+{
+public:
+    FreyaSnaplasherHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya snaplasher hold") {}
+    float GetValue(Action* action) override;
+
+private:
+    // Asked for every candidate action, so the hold is read once a tick.
+    uint32 cachedAtMs = 0;
+    ObjectGuid cachedHeld;
+    RaidSplashCache splash;
+};
 
 // Backstop for the trio sync: the target split already steers bots off a member that's too far ahead,
 // so this only catches what targeting can't, like a swing mid-animation or a DoT already ticking.

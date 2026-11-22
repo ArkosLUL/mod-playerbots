@@ -55,12 +55,15 @@ blocks damage on a member below `ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT` (10%) while a
 out of the assignment, so its bots move to a sibling instead of idling. The band is the last tenth of
 the wave, about 6s of raid damage out of the 60s budget.
 
-**Hardened Bark (62663) does not make the Snaplasher tankier.** It stacks to 99 by proc 62664 when the
-Snaplasher is struck (25-man: **64191** passive, **64190** stack) and resets after 4s without a hit. Each
-stack is **+10% `MOD_DAMAGE_PERCENT_DONE` (aura 79) and −5% movement speed (`MOD_DECREASE_SPEED`, aura
-33)**: the DBC row is `EffectBasePoints` 9 and −6 with `DieSides` 1, so both need the `+1`. It is a
-threat to whoever tanks it, never a reason to stop damaging it: a strategy that withheld raid damage
-from the Snaplasher is why the trio could never die together. It sits at the cap for most of every
+**Hardened Bark (62663) does not make the Snaplasher tankier.** Passive 62664 adds a stack (cap 99) on
+every **direct hit it takes**, melee, ranged or spell, never a DoT tick (`ProcTypeMask` 139944, no
+`TAKEN_PERIODIC`); damage shields (Retribution Aura, Thorns) never proc it (`DealDamageShieldDamage`
+skips procs). 25-man: **64191** passive, **64190** stack. All stacks drop 4s after the last. Each is
+**+10% `MOD_DAMAGE_PERCENT_DONE` (aura 79)**, plus −5% movement speed in 10-man only
+(`MOD_DECREASE_SPEED`, aura 33; 25-man's 64190 has a scale aura instead): the DBC row is `EffectBasePoints` 9
+and −6 with `DieSides` 1, so both need the `+1`. It is a threat to whoever tanks it, never a reason to
+stop damaging it while a tank has it (the [hold](#tanks) is the one exception): a strategy that withheld
+raid damage from the Snaplasher is why the trio could never die together. It sits at the cap for most of every
 trio wave, split or not: **7/25/43/61/78/99** stacks at +2/+4/+6/+8/+10/+15s (combat log). It swings
 every 2.45s for **57-120k** on a non-tank and 22-50k raw on a DK tank who avoided 76% of them, so
 whoever takes it off the tank dies (six deaths in two resets).
@@ -237,7 +240,7 @@ and a 12 yd ring around it 8/8 on mesh.
 
 ## Tanks
 
-The main tank gets Freya, plus the Storm Lasher (below); assist tank 0 works down a ladder: Snaplasher (the Hardened Bark sink) >
+The main tank gets Freya, plus the Storm Lasher and a held Snaplasher (below); assist tank 0 works down a ladder: Snaplasher (the Hardened Bark sink) >
 Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it > Freya.
 Generic `TankAssistAction` is zeroed for **every** tank all encounter: gated on "the ladder has
 something", it let generic assist through on a pure lasher wave, and the off-tank walked the wave into
@@ -276,10 +279,30 @@ only if `--threat 32919` shows DPS keep pulling it. Mocking Blow counts as a tau
 `piercing howl` once fell back to it, so the `hamstring` snare trigger made a warrior taunt a
 Snaplasher at 64 stacks and die 270 ms later; it falls back to `hamstring` now.
 
+**No add tank alive: the Snaplasher hold** (user's choice 2026-11-22; not yet verified in a pull). Loose
+after its tank died, a capped Snaplasher killed 8 in 32s, and the main tank plus 12 in another pull; a
+DK add tank that rose and taunted it capped died 4s later. `TickFreya` latches a per-instance hold
+(note `freya.snaphold`) once the Snaplasher is off every tank with no living add tank
+(`GetGroupAssistTank(bot, 0)` null), and clears it only once a tank holds it again, so it survives the
+add tank's rise. While it is on, nothing hits the Snaplasher (`GetFreyaHeldSnaplasher`):
+
+- `GetFreyaTrioAssignment` drops it, with no fallback onto the siblings waiting at the floor, so their
+  bots take the rest of the ladder;
+- `freya snaplasher hold` zeroes every non-heal action aimed at it and area damage
+  (`IsRaidAreaDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd) of the caster or
+  its target;
+- the redirect dumps no shot into it, and the add tank's ladder skips it while stacked.
+
+Once no stack is left (`IsFreyaSnaplasherBarkReset`), a living add tank's ladder taunts it; with none,
+the main tank taunts it and, while it is on him in melee range, attacks it ahead of the Storm Lasher,
+keeping Freya on standing threat. **Known-open:** a third tank shifting into the add tank slot counts as
+an add tank, so no hold starts and it taunts the capped Snaplasher at once; a Snaplasher past the main
+tank's 30 yd taunt waits there, unhit.
+
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever holds Freya, falling back to the group main tank.
-The hunter's three redirected Steady Shots go into what that tank holds (Snaplasher, else Conservator,
-else Freya) and skip a trio member under the sync floor: shot into Freya they put the add tank on her
+The hunter's three redirected Steady Shots go into what that tank holds (Snaplasher unless held, else
+Conservator, else Freya) and skip a trio member under the sync floor: shot into Freya they put the add tank on her
 table and nothing on the Snaplasher's. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list,
 so the class-generic main-tank node stands down. Nothing helps against lashers, whose table is wiped
 every 10s.
@@ -387,6 +410,20 @@ arrival bearing, so the back line lands as a ring (aimed at the point itself the
 0.6 yd apart). That cannot beat an 8 yd splash: twelve bots would need a 15.5 yd ring, a 31 yd ball, past
 `Playerbots.SpellDistance` and wide enough to spread the pack the camp gathers. It stops the pile; the
 sunbeam step-out answers the beam.
+
+**A pack the ghouls hold gets walked to** (user's choice 2026-11-22; not yet verified in a pull). With
+the camp drifting 30-43 yd off a pack held on Freya, 55% of ranged DPS samples had no lasher inside
+`SpellDistance` and 54% sat on Freya; the pack was at 350% summed when the ghouls went, Eonar's Gift
+took it to 521%, and 31 died. A held pack chases nobody, so the reach cap's blast worry does not apply.
+While the ranged aim (`GetFreyaRangedLasherAim`, which targeting reads too) is ghoul-held
+(`IsFreyaLasherHeldByGhoul`: its target is an Army ghoul, or a ghoul's target is it, covering the second
+after each 10s wipe), a ranged DPS bot the ladder left on Freya with no lasher inside `SpellDistance`
+runs `freya reach held pack` (`ACTION_RAID + 1`): a ring sweep to the nearest spot inside `SpellDistance`
+minus `ULDUAR_FREYA_HELD_PACK_REACH_MARGIN` (3 yd) of the focus, at least `_LASHER_CAMP_STANDOFF` (18 yd)
+from every living lasher and clear of bombs and beams; latched (`_HELD_PACK_LATCH_MS`),
+`MOVEMENT_COMBAT`, never cutting a cast. No such spot leaves it on Freya. The gather stands down for
+ranged DPS meanwhile, or it would pull them back out of reach; healers keep gathering, and the bail
+still runs.
 
 **Crowd control.** Node order is melee bail (`+ 3`) → nova · trap · army (`+ 2`) → camp (`ACTION_RAID`),
 since a dead bot does no crowd control. The gather is the lowest-value thing a bot does here: it sits
@@ -552,9 +589,12 @@ because the Ground Tremor nodes run wherever the gate is open, trash included.
 
 ## What a trace answers
 
-`tools/botobs/bosses/freya.py <trace>`, no probes. The banner reads hard mode off the Elders' empowers
-(Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since `cfg.hardmode` has no Freya key;
-`--waves` each add wave and Eonar's Gift, with raid deaths meanwhile; `--tanks` who held Freya and each
-Snaplasher, and every tank's Challenging Roar, Challenging Shout or Righteous Defense; `--beams` Unstable
-Sun Beam dodges per role (fired from past the trigger, walk, ended farther from Freya) and healers within
-38.5 yd of each Snaplasher's holder; `--deaths` by killer and spell.
+`tools/botobs/bosses/freya.py <trace>`; one probe, the `freya.snaphold` note. The banner reads hard mode
+off the Elders' empowers (Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since
+`cfg.hardmode` has no Freya key; `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
+`--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
+Righteous Defense, and each hold change; `--beams` Unstable Sun Beam dodges per role (fired from past the
+trigger, walk, ended farther from Freya) and healers within 38.5 yd of each Snaplasher's holder;
+`--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
+28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--deaths` by killer
+and spell.

@@ -3,9 +3,10 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
-tank's Righteous Defense takes the Snaplasher, and the add tank dies, plus three beam dodges (one off a
-beam the next snapshot first shows) and one healer in range; the shared v14 fixture shows every section
-reads empty elsewhere.
+tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold,
+plus three beam dodges (one off a beam the next snapshot first shows) and one healer in range. A second
+one pins a lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. The
+shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -103,7 +104,52 @@ def pull() -> list[dict]:
         snap(30000, MAIN, 0, gift=False, trio=False),
         {"t": 31000, "e": "end", "out": "wipe"},
     ]
+    records += [
+        {"t": 22100, "e": "note", "g": CASTER, "k": fr.HOLD_NOTE, "txt": "1"},
+        {"t": 22300, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "1"},
+        {"t": 23500, "e": "note", "g": MAIN, "k": fr.HOLD_NOTE, "txt": "0"},
+    ]
     return records
+
+
+LASHERS = [(1 << 32) | 20, (1 << 32) | 21, (1 << 32) | 22]
+GHOUL = (1 << 32) | 30
+FAR = 7705
+NEAR = 7706
+
+
+def lasher_snap(t: int, held: bool) -> dict:
+    focus_on = GHOUL if held else FAR
+    units = [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, 90, 0, focus_on],
+        [LASHERS[1], 2344.0, -50.0, 425.3, 0, 90, 0, GHOUL],
+        [LASHERS[2], 2342.0, -46.0, 425.3, 0, 90, 0, GHOUL],
+        [GHOUL, 2341.0, -49.0, 425.3, 0, 100, 0, LASHERS[0] if held else LASHERS[1]],
+        [FAR, 2380.0, -50.0, 425.3, 0, 100, 100, FREYA],
+        [NEAR, 2360.0, -50.0, 425.3, 0, 100, 100, LASHERS[1]],
+    ]
+    return {"t": t, "e": "snap", "u": units}
+
+
+def lasher_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": FAR, "n": "Faraway", "r": "ranged", "c": 8, "h": 0},
+                    {"g": NEAR, "n": "Nearby", "r": "ranged", "c": 3, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS),
+        {"t": 0, "e": "unit", "g": GHOUL, "en": 24207, "n": "Army of the Dead Ghoul"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        lasher_snap(60000, True),
+        lasher_snap(60500, True),
+        lasher_snap(61000, False),
+        {"t": 60600, "e": "move", "g": FAR, "k": "point", "x": 2368.0, "y": -50.0, "z": 425.3, "ok": 1,
+         "by": fr.REACH_ACTION},
+        {"t": 62000, "e": "end", "out": "wipe"},
+    ]
 
 
 def load(records: list[dict]) -> Trace:
@@ -141,7 +187,9 @@ class Tanks(unittest.TestCase):
             "    0:14.000 .. 0:16.500 on Bruin/tank\n"
             "  Snaplasher 0:10.000 .. 0:24.000: Bruin/tank 87%, Bulwark/tank 13%\n"
             "  0:13.500 Bruin Challenging Roar\n"
-            "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"))
+            "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"
+            "  0:22.100 Snaplasher hold on\n"
+            "  0:23.500 Snaplasher hold off\n"))
 
 
 class Beams(unittest.TestCase):
@@ -154,6 +202,17 @@ class Beams(unittest.TestCase):
             f"  ranged    1 dodge(s), 0 from past {trigger:g} yd, median walk 10.0 yd, 1 ended farther from Freya\n"
             f"  tank      1 dodge(s), 1 from past {trigger:g} yd, median walk 4.0 yd, 0 ended farther from Freya\n"
             "  Snaplasher 0:10.000 .. 0:24.000: healers within 38.5 yd of its holder median 1, under 2 for 100% of it\n"))
+
+
+class Ghouls(unittest.TestCase):
+    def test_ranged_out_of_reach_while_a_ghoul_holds_the_focus(self):
+        self.assertEqual(printed(fr.show_ghouls, load(lasher_pull())), (
+            "GHOULS\n"
+            "  1:00.000 lashers, held 1:00.000 .. 1:00.500: of 4 ranged DPS samples, no lasher within 28.5 yd 50%, "
+            "on Freya 50%, inside 18 yd of one 50%; 1 'freya reach held pack' order(s)\n"))
+
+    def test_trio_pull_has_no_lasher_wave(self):
+        self.assertEqual(printed(fr.show_ghouls, load(pull())), "GHOULS\n  ghouls never held the pack focus\n")
 
 
 class Deaths(unittest.TestCase):

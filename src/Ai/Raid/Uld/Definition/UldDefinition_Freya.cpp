@@ -75,6 +75,9 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaSummonArmyTrigger, FreyaSummonArmyAction>(ACTION_RAID + 2);
     e.Node<FreyaRangedCampTrigger, FreyaRangedCampAction>(ACTION_RAID);
 
+    // Over the priority node, which would otherwise keep a bot it left on Freya shooting her.
+    e.Node<FreyaReachHeldPackTrigger, FreyaReachHeldPackAction>(ACTION_RAID + 1);
+
     // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
     // pacified bot cannot swing at anything anyway.
     e.Node<FreyaMoveToHealingSporeTrigger, FreyaMoveToHealingSporeAction>(ACTION_RAID + 2);
@@ -112,6 +115,7 @@ void DefineFreya(EncounterBuilder& e)
     e.OwnTargeting("freya disable automatic targeting", Role::Tank, FreyaOwnsTargets, Family::TankAssist);
 
     e.Multiplier<FreyaTrioSyncMultiplier>(Family::Melee | Family::Spell);
+    e.Multiplier<FreyaSnaplasherHoldMultiplier>(Family::AnyAction);
 
     // Whether an action is AoE is its threat type, which any action can override.
     e.Multiplier<FreyaLasherFinishAoeMultiplier>(Family::AnyAction);
@@ -141,6 +145,8 @@ void DefineFreya(EncounterBuilder& e)
 
     e.Multiplier<FreyaGroundTremorCastGateMultiplier>(Family::Spell);
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "freya");
+
+    e.Tick(TickFreya);
 }
 }  // namespace
 

@@ -615,13 +615,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
         // Healthy pack: aim at its middle, since AoeTrigger counts 8 yd around the current target. At
         // the finish the lowest-health focus takes over, so the detonations stagger instead of chaining.
-        Unit* lasher = nullptr;
-        if (isRanged)
-        {
-            lasher = GetFreyaLasherPackFocus(state);
-            if (lasher && IsFreyaLasherPackFinishing(state, lasher->GetPosition()))
-                lasher = GetFreyaRangedLasherFocus(state);
-        }
+        Unit* lasher = isRanged ? GetFreyaRangedLasherAim(state) : nullptr;
 
         // A focus out of reach would walk the bot into the 15 yd blast, so shoot what's already in reach.
         // The two converge as lashers close on players.
@@ -686,6 +680,12 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     Unit* target = GetFreyaTankTarget(botAI, state, currentTarget);
     if (!target)
         return false;
+
+    // No add tank alive: the main tank takes a held Snaplasher once its bark has run out.
+    Unit* held = GetFreyaHeldSnaplasher(botAI);
+    if (PlayerbotAI::IsMainTank(bot) && held && IsFreyaSnaplasherBarkReset(held) && !GetGroupAssistTank(bot, 0) &&
+        CastClassTaunt(botAI, held))
+        return true;
 
     // The main tank holds the Storm Lasher, even at the sync floor, where holding it costs no damage. Not the Water
     // Spirit: its Tidal Wave cone would go through the melee stack at Freya and knock her tank back.
@@ -797,6 +797,10 @@ Player* FreyaRedirectThreatAction::GetRedirectTank(Unit*& dumpTarget)
                 break;
         }
     }
+
+    // Redirected shots into a held Snaplasher would renew its bark.
+    if (snaplasher && snaplasher == GetFreyaHeldSnaplasher(botAI))
+        snaplasher = nullptr;
 
     if (snaplasher || conservator)
     {
@@ -1301,6 +1305,80 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     // when the anchor moves. MOVEMENT_COMBAT, so the bomb and beam escapes still outrank it.
     return MoveTo(bot->GetMapId(), x, y, camp.GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool FreyaReachHeldPackAction::isUseful()
+{
+    FreyaReachHeldPackTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaReachHeldPackAction::Execute(Event /*event*/)
+{
+    // Never cuts a cast: this node outranks the rotation, so the walk starts as soon as the cast lands.
+    if (FreyaBotCannotWalk(bot) || bot->IsMovementPreventedByCasting())
+    {
+        walkSpotMs = 0;
+        return false;
+    }
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    Unit* focus = GetFreyaRangedLasherAim(state);
+    if (!focus)
+    {
+        walkSpotMs = 0;
+        return false;
+    }
+
+    float const reach = sPlayerbotAIConfig.SpellDistance - ULDUAR_FREYA_HELD_PACK_REACH_MARGIN;
+
+    // Every lasher, not just the low ones: any of them blows where it dies.
+    std::vector<HazardCircle> hazards =
+        BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
+                                GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
+    for (Unit* lasher : state.detonatingLashers)
+        if (lasher && lasher->IsAlive())
+            hazards.emplace_back(lasher->GetPosition(), ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
+
+    auto const usable = [&hazards, focus, reach](Position const& spot)
+    {
+        if (focus->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > reach)
+            return false;
+
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < hazard.second)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+    if (walkSpotMs && getMSTimeDiff(walkSpotMs, now) < ULDUAR_FREYA_HELD_PACK_LATCH_MS && usable(walkSpot) &&
+        bot->GetExactDist2d(walkSpot.GetPositionX(), walkSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    walkSpotMs = 0;
+
+    HazardSweepCache sweep;
+    Position const focusAt = focus->GetPosition();
+    Position const spot = FindNearestPositionClearOfHazards(
+        bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
+        &focusAt, [&focusAt, reach](float x, float y) { return focusAt.GetExactDist2d(x, y) <= reach; }, &sweep);
+
+    // Nowhere in reach clears the pack: shoot Freya from here, as before.
+    if (spot == Position())
+        return false;
+
+    if (!MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_COMBAT))
+        return false;
+
+    walkSpot = spot;
+    walkSpotMs = now;
+
+    return true;
 }
 
 bool FreyaFrostNovaLashersAction::isUseful()

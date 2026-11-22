@@ -81,8 +81,9 @@ private:
     bool snaplasherShed = false;
 };
 
-// Main tank holds Freya and the Storm Lasher; assist tank 0 works down the add ladder and, on the Conservator,
-// walks it onto a Healthy Spore so the melee sheltering there can still reach it.
+// Main tank holds Freya and the Storm Lasher, and a held Snaplasher with no add tank alive; assist tank 0 works down
+// the add ladder and, on the Conservator, walks it onto a Healthy Spore so the melee sheltering there can still
+// reach it.
 class FreyaTankAddsAction : public AttackAction
 {
 public:
@@ -165,6 +166,23 @@ public:
     FreyaRangedCampAction(PlayerbotAI* botAI) : FreyaLasherBailAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+// Walks a ranged damage dealer with no lasher in reach to a ghoul-held pack instead of leaving it on Freya: into
+// Playerbots.SpellDistance of the focus, never inside the back line's standoff from any lasher.
+class FreyaReachHeldPackAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "freya reach held pack";
+
+    FreyaReachHeldPackAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    // Each pick is a ring sweep. Hold it until it stops clearing the pack or reaching the focus.
+    Position walkSpot;
+    uint32 walkSpotMs = 0;
 };
 
 // Root whatever has closed on the mage. Above the trap so a hunter standing next to it drops the patch
