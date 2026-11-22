@@ -380,7 +380,7 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
     // moves him, not the bot's own target: a former handler would keep chasing its constellation.
     if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
     {
-        // Before the clear: Attack stops a walk booked below combat, and a dodge under way is forced.
+        // Attack before clearing the booking: it stops a walk booked below combat, and a dodge under way is forced.
         Attack(boss);
         last.clear();
         return true;

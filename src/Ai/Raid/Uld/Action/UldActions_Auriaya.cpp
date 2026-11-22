@@ -236,7 +236,7 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     if (!InAuriayaSentryTauntReach(bot, sentry))
         return MoveTo(sentry, ULDUAR_AURIAYA_SENTRY_TAUNT_WALK, MovementPriority::MOVEMENT_COMBAT);
 
-    // Read before the taunt lands and moves it.
+    // Read the victim before taunting, the taunt moves it.
     Unit* victim = sentry->GetVictim();
     Player* victimPlayer = victim && sentry->IsInCombat() ? victim->ToPlayer() : nullptr;
     bool const fromTank = victimPlayer && PlayerbotAI::IsTank(victimPlayer);

@@ -584,7 +584,7 @@ bool VezaxVaporInAreaReach(PlayerbotAI* botAI)
 
 void VezaxHushPet(Creature* pet)
 {
-    // First stance only, or a second hush would save passive as the one to give back.
+    // emplace, not assign: a second hush would save passive as the stance to give back.
     vezaxHushedPets.For(pet->GetInstanceId()).stances.emplace(pet->GetGUID(), pet->GetReactState());
     pet->SetReactState(REACT_PASSIVE);
 }

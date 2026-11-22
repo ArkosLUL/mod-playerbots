@@ -5,7 +5,7 @@ No hard mode. Entries are shared; Sonic Screech is the only difficulty pair the 
 | Mechanic | Ids | Handling |
 |---|---|---|
 | Sonic Screech | 64422 / 64688 | **Soaked, never dodged** — see below |
-| Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
+| Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window; the shaman's own earth totem nodes are held for it (the slot holds one totem, or Tremor is replaced on the next GCD) |
 | Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
 | Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one, the DPS kill its target (see below); Strength of the Pack (64369) buffs the boss and each other while they live |
 | Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
@@ -66,9 +66,9 @@ drift back into a dodge.
 
 **The escape** goes to the bot's own spot when that is 8 yd clear: the tank's station, a ranged bot's
 soak spot. Otherwise, and for melee leashed to her, it takes the nearest ground on the floor within
-12 yd: fewest pools, then shortest walk. Furthest-from-pools dragged the tank up to 12 yd and swung
-her cone over the raid. It interrupts a cast first and moves at `MOVEMENT_FORCED`, the encounter's
-only forced mover: a cast pins the feet ([pitfalls](../../engine/pitfalls.md#a-bot-mid-cast-cannot-be-moved-at-all)),
+12 yd: fewest pools, then shortest walk. Furthest-from-pools (`MoveAwayFromCreatureAction`) dragged the
+tank up to 12 yd and swung her cone over the raid, and walks bots out of the room once the pools pile up.
+It interrupts a cast first and moves at `MOVEMENT_FORCED`, the encounter's only forced mover: a cast pins the feet ([pitfalls](../../engine/pitfalls.md#a-bot-mid-cast-cannot-be-moved-at-all)),
 and a 25N warlock once stood 37 s in a pool chain-casting. `AuriayaRaidPositionTrigger` stands down while
 the bot is in a pool, and while its own spot is fouled (every station, or the whole band), or the
 escape and the hold take turns walking it back in.
@@ -90,15 +90,18 @@ counter.
 10 yd), so a stacked pack one-shots a non-tank (38–44k, 25N). Assist tank 0 takes the nearest loose
 one: on a non-tank first, then one out of combat, then one on another tank (`GetAuriayaLooseSentry`,
 probe `auriaya.sentry`: `dps`, `free`, `tank`, `none`). Out of taunt reach (25 yd, in sight) it walks
-to 20 yd; in reach it fires only with the class taunt ready, and then targets the Sentry, since a
-taunt doesn't move the tank's own target — except off another tank, where it is safe and a retarget
+to 20 yd: class taunts reach 30, so a Sentry still closing in can't leave it a yard short; in reach it
+fires only with the class taunt ready, and then targets the Sentry, since a taunt doesn't move the tank's
+own target — except off another tank, where it is safe and a retarget
 drags every DPS along. Picking in grid order, it re-taunted one off the main tank while another
 killed a warrior.
 
 **The DPS kill the off-tank's target** (its `GetVictim()`, so a human counts), where its threat is
 highest, or between Sentries a bot off-tank's next pick, which it takes a few ticks later; the nearest
-Sentry only while it is dead or has none (probe `auriaya.focus`: `offtank`, `nearest`, `none`). On nearest they spread over the pack and pulled Sentries off it. Generic tank
-assist tabs to the lowest-threat mob about once a second, so the off-tank's `TankAssist` is zeroed
+Sentry only while it is dead or has none (probe `auriaya.focus`: `offtank`, `nearest`, `none`). On
+nearest they spread over the pack and pulled Sentries off it. Targeting never drops to a lower priority,
+and within one entry switches only for a candidate 10 yd closer, or two Sentries ping-pong the raid; the
+off-tank's Sentry skips that rule, since its threat is there. Generic tank assist tabs to the lowest-threat mob about once a second, so the off-tank's `TankAssist` is zeroed
 while a Sentry is in sight and it keeps one until it dies; next, the nearest on itself, else the
 nearest in combat.
 
@@ -113,8 +116,15 @@ takes the nearest Sentry it lacks aggro on, and reach drags her cone along (22 s
 Defender silently lost its dodges and its anti-fear. `GetAuriaya` and `GetAuriayaRoomPools`
 share one scan per bot per tick (`RefreshedAuriayaRoomScan`, `thread_local`, keyed on `botAI` and
 `getMSTime()`), since each node otherwise ran both grid sweeps twice on the tick it fired, trigger then
-action. It is a cache, not a latch, so `thread_local` is safe. It holds guids, pools included, so a
-despawn between reads drops out instead of dangling.
+action; the soak spot, which both ask for and which costs raycasts, is cached there too. It is a cache, not
+a latch, so `thread_local` is safe: a bot never ticks twice in one ms and runs a whole tick on one thread.
+It holds guids, pools included, so a despawn between reads drops out instead of dangling.
+
+Pools and Sentries are searched off her, not the bot: a bot off its anchor can be out of reach of the pool
+fouling it, and the pack walks in behind her out of the bot's sight. The targeting action collects its three
+entries with the check behind `"nearest npcs"`, the boss and Sentry lookups theirs with the one behind
+`"possible targets no los"`, entry tested first: the same units in the same order, without a sight raycast
+for every pet and totem or a rebuilt copy of the whole list per call.
 
 **Nothing pulls before a player does.** Every node that pulls waits for `IsAuriayaEngaged` (her
 `IsInCombat()`): targeting, the sentry taunt, the anchor and both rules. Ungated, the targeting
@@ -123,8 +133,9 @@ to its spots early. A Sentry's `JustEngagedWith` puts her in combat, but not the
 row (groupAI 2) never makes the Sentries assist her, while theirs (519) pulls the whole pack onto
 whoever engages one. So when she alone is pulled (a ranged pull, the test harness's aggro start) the
 pack trails her in out of combat, and while an off-tank lives, targeting also waits while one within
-30 yd of her is (`AuriayaSentriesUnengaged`), leaving the off-tank's taunt to open on it. Ungated, a
-cat's Faerie Fire or a shaman's wolves put all four on one DPS. The pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
+30 yd of her is (her formation keeps them 7-12 yd behind her; `AuriayaSentriesUnengaged`), leaving the
+off-tank's taunt to open on it. Ungated, a cat's Faerie Fire or a shaman's wolves put all four on one DPS.
+The pool dodge, anti-fear and fall from floor run on presence. Relevance ranks urgency: fall from floor
 `ACTION_RAID + 4`, sentry taunt +3 (a loose Sentry buffs her and pounces anything 8-25 yd off), pool
 dodge and anti-fear +2, targeting +1, position last. The fall-from-floor teleport goes to the tank's
 station or a soak spot raycast from her (the bot is under the floor), and to the master only without

@@ -406,7 +406,7 @@ extern const Position ULDUAR_ALGALON_OFFTANK_SLOT;
 extern const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS;
 extern const std::array<Position, ULDUAR_ALGALON_MELEE_STAGE_SPOTS> ULDUAR_ALGALON_MELEE_STAGE_SLOTS;
 
-// Written as its number into algalon.phase.
+// algalon.phase writes these numbers and algalon.py's PHASE_NAMES maps them back, renumber both together.
 enum class AlgalonPhase : uint32
 {
     Idle = 0,
