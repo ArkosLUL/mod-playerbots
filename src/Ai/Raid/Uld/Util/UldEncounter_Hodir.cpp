@@ -475,7 +475,8 @@ int32 GetHodirStormGatherCastSlackMs(PlayerbotAI* botAI, Player* bot)
 {
     HodirStormGather gather;
     if (!GetHodirStormGather(botAI, bot, gather) || gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE ||
-        gather.msToPulse <= -ULDUAR_HODIR_STORM_GATHER_HOLD_MS || bot->HasUnitState(UNIT_STATE_ROOT))
+        gather.msToPulse <= -ULDUAR_HODIR_STORM_GATHER_HOLD_MS || bot->HasUnitState(UNIT_STATE_ROOT) ||
+        IsHodirFlashFreezeIncoming(botAI))
         return std::numeric_limits<int32>::max();
 
     return std::max(gather.msToWalk, 0);

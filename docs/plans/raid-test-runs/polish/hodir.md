@@ -691,3 +691,20 @@ trigger skips tanks), so receivers gather on where it stood; the gather worked w
 uld3 1:15.6, seven on two pulses) and gave 2 in 30 s when a Flash Freeze began 1.3 s after it landed
 (uld2 1:35.7, 9 in the leash, none buffed). uld3's off-tank death came after 5 swings (136.6k) in
 window 2 and 4 in window 3, Barkskin up: one off-tank death in 10 windows here.
+
+**Review (round 7).** The cause holds: of the Storm Power landing on pulses 1-3, 10/22/22 of 31/33/29
+went to bots over 3 yd from the carrier at landing, so walked in (scratchpad `hodir-r7-review/early.py`;
+uld2 2:52.5's eight stood 3.0-6.9 yd out). Clouds a clump empties on pulse 1 stay out of reach (uld1
+2:13.3: nine within 1 yd), but had uld1's other eight survived to pulse 4 they would have buffed ~44
+of its 45 leash dealers, so 85%+ is reachable. No player branch, 10 and 25 alike, only Hodir's files. Fixed:
+- The cast hold stayed on while he cast Flash Freeze, whose run's `OwnMovement` blocks the walk, so a
+  receiver sheltering inside the leash was held off cast-time spells up to ~5.5 s for nothing. 5 of 25
+  clouds landed in a freeze cast (uld1 0:54.0, 0:55.1, 1:38.2; uld2 0:51.3; uld3 0:56.8). No hold
+  during the cast now.
+- The multiplier resolved and timed every spell before reading the slack; it now reads the slack
+  (cached per ms) first, so a bot not waiting on a gather skips `CalcCastTime` per action.
+Left, for the next window's `--storm` rows: during the wait the position node and shed now run for a
+receiver outside release (collect pre-empted them from landing), and one walked past 15 yd drops out;
+a cloud drifters (healers, tanks) empty before pulse 4 buffs no waiting receiver. The due walk also
+clears a shed hop's jump lock, so `DoMovePoint` ends the hop mid-air as a dodge does, without the
+`hodir.shuttle cut` note.

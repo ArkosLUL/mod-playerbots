@@ -516,8 +516,9 @@ for **22%**.
   and past pulse 4 a receiver walks at once. Three guards keep the timing:
   - A bot mid-cast runs no action until the cast ends, so `HodirStormGatherCastHoldMultiplier` holds
     a cast that would end past the walk's due time (+250 ms); a channel may start, and the due walk
-    breaks it. No hold while rooted (Freeze) or 1.5 s (`_GATHER_HOLD_MS`) past the pulse. Casts in
-    flight at landing would have made 1 of 170 receivers late.
+    breaks it. No hold while rooted (Freeze), while he casts Flash Freeze (the run blocks the walk;
+    5 of 25 clouds landed in one), or 1.5 s (`_GATHER_HOLD_MS`) past the pulse. Casts in flight at
+    landing would have made 1 of 170 receivers late.
   - The due walk clears a pending `MOVEMENT_COMBAT` walk elsewhere (position node, shed), whose lock
     refused it; a `MOVEMENT_FORCED` dodge keeps its lock, and the freeze run's `OwnMovement` blocks
     the walk outright.

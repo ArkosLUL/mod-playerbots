@@ -34,6 +34,16 @@ float HodirStormGatherCastHoldMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
+    uint32 const now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedSlackMs = GetHodirStormGatherCastSlackMs(botAI, bot);
+    }
+
+    if (cachedSlackMs == std::numeric_limits<int32>::max())
+        return 1.0f;
+
     auto cached = spellIds.find(action);
     if (cached == spellIds.end())
     {
@@ -48,15 +58,5 @@ float HodirStormGatherCastHoldMultiplier::GetValue(Action* action)
         return 1.0f;
 
     int32 const castMs = static_cast<int32>(info->CalcCastTime(bot));
-    if (castMs <= 0)
-        return 1.0f;
-
-    uint32 const now = getMSTime();
-    if (now != cachedAtMs || !cachedAtMs)
-    {
-        cachedAtMs = now;
-        cachedSlackMs = GetHodirStormGatherCastSlackMs(botAI, bot);
-    }
-
-    return castMs + ULDUAR_HODIR_STORM_GATHER_CAST_SLACK_MS > cachedSlackMs ? 0.0f : 1.0f;
+    return castMs > 0 && castMs + ULDUAR_HODIR_STORM_GATHER_CAST_SLACK_MS > cachedSlackMs ? 0.0f : 1.0f;
 }
