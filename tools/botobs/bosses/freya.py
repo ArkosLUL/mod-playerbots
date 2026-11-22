@@ -7,13 +7,18 @@
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
+    freya.py <file> --blasts per lasher wave, Detonate on the melee and their walks into a low lasher's blast
 
 What the generic views miss here:
 
-- **Hard mode is the Elders, not the toggle.** `cfg.hardmode` has no Freya key. Each Elder alive at the
-  pull leaves its empower in the trace: Ground Tremor casts (Stonebark), Strengthened Iron Roots
-  (Ironbranch), Sun Beam stalkers (Brightleaf). Elders never die once the pull starts, so all three
-  seen means a kill counts as hard mode.
+- **Hard mode is the Elders, not the toggle.** `cfg.hardmode` has no Freya key, so the report's column reads
+  `-`. Freya counts the Elders alive at her engage, and each one found casts its essence channel into her
+  at once (62483 Stonebark, 62484 Ironbranch, 62485 Brightleaf). A kill also casts the chest the core picks
+  by that count (25-man 62952 for three). A trace without the channels falls back to the empowers: Ground
+  Tremor casts, Strengthened Iron Roots, Sun Beam stalkers.
+- **The trace files under `elder-stonebark`.** Freya's engage pulls each living Elder into combat first, in
+  the order Stonebark, Ironbranch, Brightleaf, and the recorder names the pull after the first boss-flagged
+  creature to engage; a later name never replaces it. Only a pull with no Elder alive files as `freya`.
 - **A wave is the adds first seen together.** It ends when its last member is last sampled alive, and a
   member still alive at the last snapshot never died.
 - **`--threat` folds both tanks into "tank".** Freya belongs on the main tank and the Snaplasher on the
@@ -25,6 +30,9 @@ What the generic views miss here:
   each change.
 - **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
   while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
+- **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
+  order whose point lies inside the blast edge of a lasher under the bail line in the snapshot before it. Tanks
+  are left out: they never bail.
 """
 from __future__ import annotations
 
@@ -54,6 +62,11 @@ NPC_BRIGHTLEAF_SUN_BEAM = 33050
 TRIO = (NPC_SNAPLASHER, 32919, 33202)
 WAVE_KINDS = {NPC_DETONATING_LASHER: "lashers", NPC_CONSERVATOR: "conservator", **{e: "trio" for e in TRIO}}
 GROUND_TREMOR = (62437, 62859)
+ESSENCE_CHANNELS = {62483: "Stonebark", 62484: "Ironbranch", 62485: "Brightleaf"}
+# boss_freya.cpp summonChestSpell: 10-man and 25-man chest per Elder count.
+KILL_CHESTS = {62957: 0, 62958: 0, 62955: 1, 62956: 1, 62953: 2, 62954: 2, 62950: 3, 62952: 3}
+DETONATE = (62598, 62937)
+APPROACH_ACTIONS = ("reach melee", "set behind")
 # Spells that take every unit near the caster or hitting the target, rather than the caster's own target.
 AREA_TAUNTS = {5209: "Challenging Roar", 1161: "Challenging Shout", 31789: "Righteous Defense"}
 
@@ -76,6 +89,10 @@ NPC_ARMY_GHOUL = 24207
 REACH_ACTION = "freya reach held pack"
 # Playerbots.SpellDistance: past this from every lasher a ranged bot has none to shoot.
 SPELL_RANGE_YD = 28.5
+# Detonate's searcher adds object size at both ends, so its 15 yd lands out to here.
+DETONATE_REACH_YD = 15.5
+# The last lashers blow as they die, after their last sample alive.
+BLAST_TAIL_MS = 1000
 
 
 def mine(trace: Trace) -> bool:
@@ -104,11 +121,21 @@ def last_snapshot(trace: Trace) -> int:
     return snaps[-1]["t"] if snaps else 0
 
 
-def elders(trace: Trace) -> list[str]:
+def elders(trace: Trace) -> tuple[list[str], str]:
+    """The Elders alive at Freya's engage, and what the answer was read from."""
+    casts = trace.of("cast")
+    channels = {ESSENCE_CHANNELS[rec["sp"]] for rec in casts if rec.get("sp") in ESSENCE_CHANNELS}
+    if channels:
+        return [name for name in ESSENCE_CHANNELS.values() if name in channels], "essence channels"
     seen = set(trace.entries.values())
-    tremor = any(rec.get("sp") in GROUND_TREMOR for rec in trace.of("cast"))
+    tremor = any(rec.get("sp") in GROUND_TREMOR for rec in casts)
     return [name for name, found in (("Stonebark", tremor), ("Ironbranch", NPC_STRENGTHENED_IRON_ROOTS in seen),
-                                     ("Brightleaf", NPC_SUN_BEAM in seen)) if found]
+                                     ("Brightleaf", NPC_SUN_BEAM in seen)) if found], "empowers"
+
+
+def kill_chest(trace: Trace) -> tuple[int, int] | None:
+    """(spell, Elder count) of the chest a kill summoned, or None."""
+    return next(((rec["sp"], KILL_CHESTS[rec["sp"]]) for rec in trace.of("cast") if rec.get("sp") in KILL_CHESTS), None)
 
 
 def show_banner(trace: Trace) -> None:
@@ -119,9 +146,12 @@ def show_banner(trace: Trace) -> None:
     ends = trace.of("end")
     out = ends[-1].get("out", "?") if ends else "?"
     when = f" at {clock(ends[-1]['t'])}" if ends else ""
-    found = elders(trace)
+    found, source = elders(trace)
+    chest = kill_chest(trace)
     print(f"  outcome {out}{when}, {len(combat_deaths(trace))} death(s)")
-    print(f"  hard mode: {len(found)} of 3 Elders ({', '.join(found) or 'none'})")
+    print(f"  hard mode: {len(found)} of 3 Elders ({', '.join(found) or 'none'}), from their {source}")
+    if chest:
+        print(f"  kill chest {chest[0]}: {chest[1]} Elder(s)")
 
 
 def waves(trace: Trace) -> list[dict]:
@@ -333,6 +363,66 @@ def show_ghouls(trace: Trace) -> None:
               f"{walked} '{REACH_ACTION}' order(s)")
 
 
+def low_lashers(snap: dict, trace: Trace, low_pct: float) -> list:
+    return [row[1:3] for row in snap.get("u", [])
+            if trace.entries.get(row[0]) == NPC_DETONATING_LASHER and 0 < row[5] < low_pct]
+
+
+def blast_counts(trace: Trace, wave: dict) -> dict:
+    """One lasher wave: Detonate hits and deaths on the melee, their approach orders aimed into a low lasher's
+    blast, and how much of the wave they stood in one."""
+    low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
+    edge = radius("ULDUAR_FREYA_DETONATE_RADIUS") + 1.0
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    end = wave["end"] + BLAST_TAIL_MS
+    melee = {guid for guid, role in trace.roles.items() if role == "melee"}
+    hits = [rec for rec in trace.of("dmg")
+            if rec.get("sp") in DETONATE and rec.get("d") in melee and wave["t"] <= rec["t"] <= end]
+    deaths = sum(1 for death in combat_deaths(trace)
+                 if death["g"] in melee and wave["t"] <= death["t"] <= end
+                 and (sorted(death.get("rewind") or [], key=lambda row: row[0]) or [[0, 0, 0]])[-1][2] in DETONATE)
+    orders = into = 0
+    for rec in trace.of("move"):
+        if (not rec.get("ok") or rec.get("by") not in APPROACH_ACTIONS or rec.get("g") not in melee
+                or not wave["t"] <= rec["t"] <= end):
+            continue
+        orders += 1
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        dest = (rec.get("x", 0.0), rec.get("y", 0.0))
+        if index >= 0 and any(dist2(dest, low) < edge for low in low_lashers(snaps[index], trace, low_pct)):
+            into += 1
+    samples = inside = 0
+    for snap in snaps:
+        if not wave["t"] <= snap["t"] <= end:
+            continue
+        lows = low_lashers(snap, trace, low_pct)
+        for row in snap.get("u", []):
+            if row[0] in melee and row[5] > 0:
+                samples += 1
+                inside += any(dist2(row[1:3], low) <= DETONATE_REACH_YD for low in lows)
+    return {"hits": len(hits), "deaths": deaths, "orders": orders, "into": into, "samples": samples,
+            "inside": inside}
+
+
+def show_blasts(trace: Trace) -> None:
+    print("BLASTS")
+    if not mine(trace):
+        return
+    found = False
+    for wave in waves(trace):
+        if wave["kind"] != "lashers":
+            continue
+        found = True
+        c = blast_counts(trace, wave)
+        share = 100.0 * c["inside"] / c["samples"] if c["samples"] else 0.0
+        print(f"  {clock(wave['t'])} lashers: melee took {c['hits']} Detonate hit(s), {c['deaths']} death(s); "
+              f"{c['into']} of {c['orders']} approach order(s) into a low lasher's blast; melee inside one "
+              f"{share:.0f}% of samples")
+    if not found:
+        print("  no lasher wave")
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     own = own_blow_spell(death)
     if own:
@@ -360,6 +450,8 @@ SECTIONS = (
      show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
+    ("blasts", "per lasher wave, Detonate on the melee and their approach orders into a low lasher's blast",
+     show_blasts),
     ("deaths", "deaths by killer and spell", show_deaths),
 )
 

@@ -5,8 +5,9 @@
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
 tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold,
 plus three beam dodges (one off a beam the next snapshot first shows) and one healer in range. A second
-one pins a lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. The
-shared v14 fixture shows every section reads empty elsewhere.
+one pins a lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. A third
+pins a melee bot walking back into a low lasher's blast and dying to its Detonate. The shared v14 fixture
+shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -153,6 +154,45 @@ def lasher_pull() -> list[dict]:
     ]
 
 
+MELEE = 7707
+
+
+def blast_snap(t: int, low_hp: float, melee_x: float) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, low_hp, 0, MELEE],
+        [LASHERS[1], 2344.0, -50.0, 425.3, 0, 90, 0, MAIN],
+        [MELEE, melee_x, -50.0, 425.3, 0, 100, 100, FREYA],
+    ]}
+
+
+def melee_move(t: int, x: float, by: str = "reach melee") -> dict:
+    return {"t": t, "e": "move", "g": MELEE, "k": "point", "x": x, "y": -50.0, "z": 425.3, "ok": 1, "by": by}
+
+
+def blast_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": MELEE, "n": "Blade", "r": "melee", "c": 4, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS[:2]),
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        blast_snap(60000, 90, 2350.0),
+        blast_snap(60500, 10, 2350.0),
+        blast_snap(61000, 10, 2360.0),
+        melee_move(60600, 2352.0),
+        melee_move(60700, 2358.0, "freya lasher about to blow"),
+        melee_move(60800, 2370.0),
+        {"t": 61200, "e": "dmg", "s": LASHERS[0], "d": MELEE, "sp": 62937, "a": 9000, "ok": 0, "sc": 8, "ab": 0,
+         "rs": 0, "hp": 30.0},
+        {"t": 61300, "e": "death", "g": MELEE, "killer": LASHERS[0], "x": 2352.0, "y": -50.0, "z": 425.3,
+         "rewind": [[61200, LASHERS[0], 62937, 9000]]},
+        {"t": 62000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -169,7 +209,15 @@ def printed(show, *args) -> str:
 
 class Banner(unittest.TestCase):
     def test_elders_from_their_empowers(self):
-        self.assertIn("hard mode: 2 of 3 Elders (Stonebark, Brightleaf)", printed(fr.show_banner, load(pull())))
+        self.assertIn("hard mode: 2 of 3 Elders (Stonebark, Brightleaf), from their empowers",
+                      printed(fr.show_banner, load(pull())))
+
+    def test_elders_from_their_channels_and_the_kill_chest(self):
+        records = pull() + [cast(2, (1 << 32) | 40 + i, spell) | {"tr": 1}
+                            for i, spell in enumerate((62483, 62484, 62485))] + [cast(30500, FREYA, 62952) | {"tr": 1}]
+        text = printed(fr.show_banner, load(records))
+        self.assertIn("3 of 3 Elders (Stonebark, Ironbranch, Brightleaf), from their essence channels", text)
+        self.assertIn("kill chest 62952: 3 Elder(s)", text)
 
 
 class Waves(unittest.TestCase):
@@ -215,6 +263,17 @@ class Ghouls(unittest.TestCase):
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_ghouls, load(pull())), "GHOULS\n  ghouls never held the pack focus\n")
+
+
+class Blasts(unittest.TestCase):
+    def test_a_walk_back_into_a_low_lashers_blast(self):
+        self.assertEqual(printed(fr.show_blasts, load(blast_pull())), (
+            "BLASTS\n"
+            "  1:00.000 lashers: melee took 1 Detonate hit(s), 1 death(s); 1 of 2 approach order(s) into a low "
+            "lasher's blast; melee inside one 33% of samples\n"))
+
+    def test_trio_pull_has_no_lasher_wave(self):
+        self.assertEqual(printed(fr.show_blasts, load(pull())), "BLASTS\n  no lasher wave\n")
 
 
 class Deaths(unittest.TestCase):

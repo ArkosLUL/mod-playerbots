@@ -2,8 +2,8 @@
 
 Reader: `tools/botobs/bosses/freya.py <trace>` (`--waves`, `--tanks`, `--deaths`), written in round 1.
 Pulls file under `elder-stonebark` (aliased to `freya`). Hard mode is the banner's Elders line, read off
-their empowers; a kill counts only at 3 of 3. The report's "hard mode" column stays `-` (no Freya key in
-`cfg.hardmode`).
+their essence channels at the engage (from round 4; empowers before), plus the kill chest on a kill; a kill
+counts only at 3 of 3. The report's "hard mode" column stays `-` (no Freya key in `cfg.hardmode`).
 
 ## Round 1 (build 61011f323, DC 5443dbc)
 
@@ -305,3 +305,100 @@ second read 19%). Fixed:
   `Attack`). The reset now latches (note `2`, `IsFreyaHeldSnaplasherFree`) and tanks may act on it from then.
 - `freya reach held pack` re-ran its collision sweep every tick when no spot cleared the pack; it now waits
   `ULDUAR_FREYA_HELD_PACK_RETRY_MS` (1 s).
+
+## Round 4 (build 697052475: round 2 built, round 3 merged but not built)
+
+**Data:** `report --boss freya --raid uld --head 697052475 --pulls 10`, one valid pull per pool, no DC veto
+inside a pull: `tr-20261122-173632-28` (uld1, DK add tank), `-175417-33` (uld2, bear), `-174354-30` (uld3,
+bear); traces `env/dist/logs/botobs/603_{30,35,32}_elder-stonebark_{1795369035,1795370104,
+1795369499}.ndjson`. Window 9 is the baseline. Ad hoc scripts: `scratchpad/freya-r4/`.
+
+**Hard mode.** All three pulls 3 of 3 Elders: each Elder cast its essence channel into Freya within 5 ms of
+the engage (62483-62485), then Drained of Power at 0:04.9. The uld3 kill cast chest 62952, the core's 25-man
+three-Elder chest (`boss_freya.cpp` `summonChestSpell[1][3]`, picked from the Elders Freya found alive at
+her engage): a hard-mode kill. The file name: Freya's `JustEngagedWith` calls `SetInCombatWithZone` on each
+living Elder, Stonebark first, before her own `OnUnitEnterCombat` hook runs (core `Creature.cpp:2939-2945`),
+so Stonebark's engage opens the trace, and `ObsSession::UpgradeBossName` (`RaidObsLifecycle.cpp:594-601`)
+never renames a named one. The reader now reads the channels and the chest.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795369035 | wipe 5:28, 31 | Snaplasher 13 (the DK add tank at 1:52.7 by one swing from full, again 5 s after rising, a ranged; the add tank again at 3:56.2, then 9 DPS while loose, both DPS DKs among them), Detonating Lasher 17 (melee 11, Flame Lash 6: second wave at 4:38 with no DK left for Army), Freya melee 1 |
+| uld2 | 1795370104 | wipe 10:30 at Berserk, 31 | Berserk 20 (Freya melee 12, Ground Tremor 6, Sunbeam 2), Detonate 6 (melee, 5:04.0-5:06.9), Snaplasher 2 (the bear add tank at 3:19.3, again on rising), Nature Bomb 2, Unstable Energy 1 |
+| uld3 | 1795369499 | **kill 6:27, 2** | Snaplasher 1 (a melee 3.5 s into trio 2, before the bear took it at 4:31.9), Nature Bomb 1 |
+
+**Stop rules:** one hard-mode kill in three pools, not polished; no failure picked three rounds running.
+
+**Round 2 verdict: held.** `--beams` against window 9, pooled by role: dodges from past 8 yd heal 12% (49%),
+melee 9% (53%), ranged 11% (47%), tank 6% (48%); median walk 6-10 yd; ended farther from Freya heal 33%
+(81%), ranged 39% (77%), melee 63% (92%), tank 65% (89%). Healers within 38.5 yd of the Snaplasher's
+holder: median 4 in all six trio waves, fewer than 2 for 0/7/0/0/0/1% (window 9 uld2: 26%). Unstable
+Energy: 1 death (1); damage rows per beam per 25 alive 7.2 pooled (5.4), victims per beam about flat (4.0
+against 3.7), so each hit bot takes 1.8 ticks, not 1.4: a cost to watch, no death. Round 1 still held: no
+tank Roar or Shout; one Righteous Defense, on a melee in uld1's collapse.
+
+**Round 3 not built** (`freya.snaphold` declared, never emitted). Its targets here: the loose Snaplasher
+after uld1's add tank died (10 deaths, then 17 in a lasher wave with both DKs dead), add tanks killed
+within 5 s of rising (uld1 1:57.6, uld2 3:21.8), and uld2's ghoul-held second wave: no lasher in reach 58%,
+on Freya 56% (window 9 uld3: 55 / 54; uld3 here 28 / 25).
+
+**Ranking.** (1) The Snaplasher kills its holder, then the raid: 16 deaths plus uld1's 17 lasher deaths
+behind them. Round 3 targets the loose half; the add tank's own deaths are question 2. (2) uld2's Berserk,
+20: Freya stood at 17% at 10:00 because the Eonar's Gift at 7:17.5 lived 14.2 s and healed her 35% to 82%
+(the ranged were 30-60 yd from where it landed), after seven DPS had died, six of them melee to Detonate.
+(3) Melee walking back into low lashers' blasts: uld2's 6 deaths and most melee Detonate damage in every
+pull. Picked (3): (1) is round 3 plus a plan question, (2) is partly (3) and one late Gift.
+
+**Failure picked: melee walk back into a low lasher's blast right after the bail.**
+
+- uld2 4:57-5:07, the pack on Freya, then loose: 4 lashers under 15% sat 9-14 yd from the melee on Freya.
+  Uldyar's orders alternate `freya lasher about to blow` (4:57.1, 5:00.1, 5:01.3, east to x 2367-2369) and
+  `reach melee` back to (2360-2361, -42) (4:59.1, 5:01.1, 5:02.0); six Detonates (5:00.4-5:05.0) hit 3-9
+  melee each, 6 died.
+- All 16 Freya traces: 559 of 862 melee Detonate hits came after the bot bailed within 6 s and was then
+  sent back by `reach melee` (11 by `set behind`), 251 while still on the bail's walk. Tanks, who never
+  bail, took 299. `--blasts`: 33-57% of melee reach and set-behind orders per lasher wave ended within
+  16 yd of a lasher under 15%, three in four of them for Freya; melee inside a low blast 13-57% of
+  samples (here 40 / 13, 42 / 37, 48 / 46).
+- Code: the bail fires only inside `ULDUAR_FREYA_DETONATE_RADIUS` (`UldTriggers_Freya.cpp:155-170`);
+  `StepOutOfBlasts` walks to 16 yd and drops its latch on arrival (`UldActions_Freya.cpp:1218-1247`); then
+  `reach melee` (`MeleeCombatStrategy.cpp:15`, `ReachCombatTo`, no hazard check) aims the bot at its
+  target inside the blast. The doc's intent is that melee wait outside low lashers ("which is the price").
+
+**Classification: bug.**
+
+**Fix** (`UldDefinition_Freya.cpp` only, any size or difficulty, no player branch): `freya lasher blast
+reach guard` zeroes `Family::Reach | Family::Charge` and `freya lasher blast behind guard`
+`Family::SetBehind` for a non-tank melee bot whose walk would end within `DETONATE_RADIUS` + 1 (the bail's
+own edge) of a lasher under `LASHER_BAIL_PCT`. Reach stops `MeleeDistance` plus both combat
+reaches short of the target on the bot's side, set behind that far behind it. The bot idles outside until
+the lasher blows (median 2.6 s). Reader: `--blasts`, and the banner's hard mode from channels and chest.
+
+**Cost to check:** melee damage per lasher wave (snapshot `dealt`), intact raid: uld1 77.7, uld2 99.2 and
+76.1, uld3 64.3 and 62.9k/s; window 9 51.7 and 55.8. The re-entries mostly got hit before swinging (the
+bail re-fires at 15 yd, short of Freya's melee ring), so the loss should be small.
+
+**Next window should show** (`--blasts`, `--tanks`, `--beams`):
+
+- Melee approach orders into a low lasher's blast near 0 (here 52-94 a wave, 37-57%); melee inside a low
+  blast well under this window's 37-48% on an intact raid.
+- Melee Detonate hits per wave under half of this window's 40-60; no melee Detonate death.
+- Melee damage per lasher wave no more than ~20% under 63-99k/s.
+- Round 3's checks as written there; rounds 1 and 2 still holding.
+
+**Not picked:** uld2's late Gift (one in 14 that pull; the camp's distance from where it lands is a round 5
+candidate if it repeats); uld3's opener swing on a melee before the bear's taunt (1 death).
+
+**Questions:**
+
+2. (pending since round 2, now with data) The add tank dies to capped Snaplasher swings with healers in
+   range: capped swings land 18-52k raw on it (DK ~40k health, bear ~55k in form). uld1's DK died from full
+   to one 50.9k swing (1:52.7) and to a 44.1k one (3:56.2); uld2's bear to two in a row, 34.3k and 35.5k
+   (3:19.3); median 4 healers in range each time. Defensives decided it: the three trio waves the add tank
+   held to the end had Survival Instincts, Frenzied Regeneration or Vampiric Blood up; at each death they
+   were spent elsewhere or unpressed (DK: Icebound Fortitude, 2 min, at 0:40.8 in a Conservator wave, and
+   Vampiric Blood ready but unused both times; bear: Survival Instincts at 0:38 and Frenzied Regeneration
+   at 0:25.7 in trio 1, both 3 min, trio 2 at 2:39). Options: (a) the add tank keeps its class defensives
+   for the trio waves and spends one once the Snaplasher on it is stacked, as Hodir and Iron Assembly do
+   (class defensive nodes held above 25% health all fight, one cooldown per trio wave); (b) the roster's
+   highest-health tank as add tank (a DK at 40k still dies to one swing). Recommendation: (a).
