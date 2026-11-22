@@ -1,0 +1,6 @@
+src/Ai/Raid/Uld/Trigger/UldTriggers_Freya.cpp	Keep the order: IsFreyaArmyTurn writes the ghoul mark HasUncoveredFreyaLasher reads.
+src/Ai/Raid/Uld/Multiplier/UldMultipliers_Freya.cpp	Keep the order: IsFreyaArmyTurn writes the ghoul mark HasUncoveredFreyaLasher reads.
+src/Ai/Raid/Uld/Util/UldEncounter_Freya.cpp	No early return: every DK's ghouls go into the mark, this bot's own included.
+src/Ai/Raid/Uld/Action/UldActions_Thorim.cpp	Has to stay ahead of the jump test: hold 2 sits inside the edge tolerance.
+src/Ai/Raid/Uld/Util/UldEncounter_Thorim.cpp	A start already past wraps getMSTimeDiff to a huge value, so a stale latch fails closed here.
+src/Ai/Raid/Uld/Util/UldEncounter_Thorim.cpp	Has to cover everything the reset below drops, or a bot holding only the missing latch keeps it next pull.

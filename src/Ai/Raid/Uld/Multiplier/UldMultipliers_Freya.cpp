@@ -193,7 +193,7 @@ bool FreyaArmyRuneReserveMultiplier::ReserveThisTick()
     if (state.detonatingLashers.empty())
         return false;
 
-    // Same order as the Army trigger: the turn records the ghoul the coverage check reads.
+    // Keep the order: IsFreyaArmyTurn writes the ghoul mark HasUncoveredFreyaLasher reads.
     cachedReserve = IsFreyaArmyTurn(botAI) && HasUncoveredFreyaLasher(botAI, state);
     return cachedReserve;
 }

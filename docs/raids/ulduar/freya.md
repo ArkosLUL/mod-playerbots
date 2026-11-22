@@ -1,27 +1,34 @@
 # Freya
 
-**The clock and the doses.** `Attuned to Nature` starts at 150 and comes off in fixed doses: a lasher
+**The clock and the doses.** `Attuned to Nature` starts at 150 stacks of +8% healing received, so
+damage on Freya is wasted until the adds strip it, and comes off in fixed doses: a lasher
 removes **2**, a trio member **10**, the Ancient Conservator **25**. `EVENT_FREYA_ADDS_SPAM` fires at
-10s and repeats every **60s** regardless of progress, capped at 6 waves, so an uncleared wave gets a second one stacked
-on it; clearing one early pulls the next in after **5s**, and after the sixth the aura drops regardless.
+10s and repeats every **60s** regardless of progress, capped at 6 waves, so an uncleared wave gets a
+second one stacked on it; clearing one early pulls the next in after **5s**, and after the sixth the
+aura drops regardless.
 `SpawnWave` rolls trio / Conservator / lashers per block of three, so a pull has exactly two of each.
 In 25-man the trio is 2.28M health inside 60s, a ~38k raid DPS floor. Lifebinder's Gift repeats every
 45s, so Eonar's Gift always overlaps a trio kill.
 
 Freya spawns at **(2338.46, −52.33, 425.55)**, and the room floor is solid over x 2300-2400 /
-y −30..−80 at z 423-426: there is no hole to path around. **It is not the water — do not re-litigate
+y −30..−80 at z 423-426: there is no hole to path around. **It is not the water; do not re-litigate
 the stream.** `navprobe` across the worst measured detour returns **14.92 yd, `PATHFIND_NORMAL`, 3
 polys**, identical under `--nav 0x09`; all 133 detour segments were churn between the spore node and a
 dodge (117 from the spore node, worst 14.8 yd straight against 62.9 walked).
 
-**Targeting is direct — Freya writes no raid icons.** `FreyaSetDpsPriorityAction` sets each DPS bot's
+**Targeting is direct: Freya writes no raid icons.** `FreyaSetDpsPriorityAction` sets each DPS bot's
 target itself, in the SWP `MuruSetDpsPriorityAction` shape, and the `freya disable automatic targeting`
 rules stand the generic pickers down. The trio target changes several times per wave as health
 converges, which a group icon cannot carry without one bot spamming `SetTargetIcon` for the rest to
-read back a tick later. A human's own marks are not honoured here. Priority is
-Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya; once any trio member is
-below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once every member
-is in the release band nothing pulls a bot away.
+read back a tick later. A human's own marks are not honoured here.
+
+Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya; once any trio
+member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once
+every member is in the release band nothing pulls a bot away. A bot keeps its current target unless
+something strictly higher on that list is up, so add churn cannot reset swing timers; the trio slot is
+exempt, since the split is already stable and stickiness would freeze each bot's first pick. The pet
+goes at the pick every tick, not only on a switch: on the right target the node returns false, the
+common case, and a pet left on a dead or floored add would never catch up.
 
 **Eonar's Gift is a ranged job** (12s to a 30-60% Freya heal), so melee never eat the travel both ways;
 melee take it only when no ranged DPS is alive. While a lasher pack is up only the first
@@ -53,18 +60,21 @@ tick. `FreyaTrioSyncSuppress` (via `FreyaTrioSyncMultiplier`) is a backstop, not
 blocks damage on a member below `ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT` (10%) while a sibling is above
 `_TRIO_FLOOR_RELEASE_PCT` (15%), and releases once all three are in the band. A suppressed member drops
 out of the assignment, so its bots move to a sibling instead of idling. The band is the last tenth of
-the wave, about 6s of raid damage out of the 60s budget.
+the wave, about 6s of raid damage out of the 60s budget. Nothing is held once a member is down: its
+11s timer is already running, and holding back only lets the dead ones revive. With two waves of one
+add up at once the state keeps the more damaged, which finishes the older wave first and, since scan
+order is not stable, stops the split flipping between identical adds.
 
 **Hardened Bark (62663) does not make the Snaplasher tankier.** Passive 62664 adds a stack (cap 99) on
 every **direct hit it takes**, melee, ranged or spell, never a DoT tick (`ProcTypeMask` 139944, no
 `TAKEN_PERIODIC`); damage shields (Retribution Aura, Thorns) never proc it (`DealDamageShieldDamage`
 skips procs). 25-man: **64191** passive, **64190** stack. All stacks drop 4s after the last. Each is
 **+10% `MOD_DAMAGE_PERCENT_DONE` (aura 79)**, plus −5% movement speed in 10-man only
-(`MOD_DECREASE_SPEED`, aura 33; 25-man's 64190 has a scale aura instead): the DBC row is `EffectBasePoints` 9
-and −6 with `DieSides` 1, so both need the `+1`. It is a threat to whoever tanks it, never a reason to
-stop damaging it while a tank has it (the [hold](#tanks) is the one exception): a strategy that withheld
-raid damage from the Snaplasher is why the trio could never die together. It sits at the cap for most of every
-trio wave, split or not: **7/25/43/61/78/99** stacks at +2/+4/+6/+8/+10/+15s (combat log). It swings
+(`MOD_DECREASE_SPEED`, aura 33; 25-man's 64190 has a scale aura instead): the DBC row is
+`EffectBasePoints` 9 and −6 with `DieSides` 1, so both need the `+1`. It is a threat to whoever tanks
+it, never a reason to stop damaging it while a tank has it (the [hold](#tanks) is the one exception): a
+strategy that withheld raid damage from the Snaplasher is why the trio could never die together. It
+sits at the cap for most of every trio wave, split or not: **7/25/43/61/78/99** stacks at +2/+4/+6/+8/+10/+15s (combat log). It swings
 every 2.45s for **57-120k** on a non-tank and 22-50k raw on a DK tank who avoided 76% of them, so
 whoever takes it off the tank dies (six deaths in two resets).
 
@@ -92,9 +102,10 @@ at radius index 28 = 50000 yd, cast once 6s after engage with no repeat, so it c
 lasts the whole wave. Pacify blocks melee swings as well as casts: tanks lose their damage and their
 taunt exactly like casters.
 
-The only counter is Potent Pheromones (64321), a **6 yd** ally aura on a Healthy Spore. Measured raid
-uptime is **30.7%** for the pheromones against **8.2%** for the Grip, which is why the spore node sits at
-`ACTION_RAID + 2` rather than over the hazard dodges: the shelter is worth holding, not worth dying for.
+The only counter is Potent Pheromones (64321, the id that lands on players; 62541 is the spore's own
+aura), a **6 yd** ally aura on a Healthy Spore. Measured raid uptime is **30.7%** for the pheromones
+against **8.2%** for the Grip, which is why the spore node sits at `ACTION_RAID + 2` rather than over
+the hazard dodges: the shelter is worth holding, not worth dying for.
 The Conservator summons the spores itself (62566, an 8s periodic triggering directional summons
 62582 / 62591 / 62592 / 62593 at radius index 9 = **20 yd**), and they despawn after 22s, so they
 always sit 20 yd from the boss: **melee can never be sheltered and in melee range at once unless the
@@ -110,7 +121,8 @@ by `ObjectGuid` for its life, because fresh ones keep appearing 20 yd from where
 re-deriving can flip the destination mid-walk. Melee target **that** spore: `GetFreyaConservatorSpore`
 keys off the Conservator, never the calling bot, so tank and melee resolve the same spore without
 communicating. Their own nearest spore would oscillate: they gain the aura, the DPS node drags them
-back to the boss, and they lose it.
+back to the boss, and they lose it. Spores are searched within `ULDUAR_FREYA_SPORE_SEARCH_RADIUS`
+(40 yd): their 20 yd plus room for the boss dragged part way to one.
 
 Ranged and healers take the nearest spore **with room**, fewer than `ULDUAR_FREYA_SPORE_CROWD` (6)
 inside its 6 yd: nearest outright is the same spore for all of them, the parked one, and put 18 of 25
@@ -119,8 +131,9 @@ an Unstable Sun Beam inside those 6 yd is skipped too: the pool is 5 of the 6, a
 parks in it for its ten seconds. Order is roomy and clean, then clean, then nearest; sheltered and
 burning still beats pacified. No latch is needed, since the trigger stands down once the bot holds
 the aura. Tanks are excluded: the add tank arrives by dragging the boss there, and the main tank holds
-Freya on her anchor. `GetFreyaTargetSpore` is that whole rule, and **the trigger and the action must
-both use it**: deriving it twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while
+Freya on her anchor. The trigger finds the Conservator by entry, not through `find target` (this bot's own threat list):
+a pacified bot that has not hit it yet is exactly the one that needs a spore. `GetFreyaTargetSpore` is
+that whole rule, and **the trigger and the action must both use it**: deriving it twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while
 the unfiltered grid search walked it at another.
 
 **Never aim a bot at a creature's centre.** It is inside the model's collision, so the bot never
@@ -147,7 +160,11 @@ carrier (victims a median 2.3 yd out, none past 9.1). `freya nature fury bail` (
 the spore node that would walk the carrier straight back) runs it to the nearest spore with nobody else
 inside the splash; shelter groups sit 15-45 yd apart, so arriving clears it and keeps the pheromones.
 No free spore means open floor and the Grip: ten pacified seconds beats five volleys into the raid.
-Tanks never bail: whatever they hold walks after them.
+Tanks never bail: whatever they hold walks after them. The carrier aims
+`ULDUAR_FREYA_NATURES_FURY_CLEAR` (11 yd) clear of the raid, past the splash, since landing on its edge
+gets a 2 yd step that combat movement undoes. The spot is latched (`bailSpot`, 3 s ceiling, about the
+walk to the next spore): allies drift, so re-derived each tick it lands a yard along, and the re-issued
+`MoveTo` kills the spline carrying the mark out.
 
 **Sunbeam** (62623 / 62872) is a **1.5s** cast on a random threat-list target every 15-20s, 8 yd at
 that target's feet when the cast **ends** (`Spell::SelectSpellTargets` runs from `Spell::cast`), so the
@@ -175,7 +192,7 @@ afterwards on the parked spore. In the reference kill, 54 bombs in 7 volleys lan
 a median escape latency of **0.65s**.
 
 - **Latched** (`bombSpot`, ceiling `ULDUAR_FREYA_NATURE_BOMB_LATCH_MS`, 7000), since it triggers at
-  AVOID (11 yd) and aims at CLEAR (13)
+  AVOID (11 yd: the blast plus the bot's own reach) and aims at CLEAR (13)
   ([oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates)): re-derived each tick it
   answered a bot on the rim with a 1.9 yd hop that `reach melee` undid, 1231 escape/closer flips in a
   109s bomb phase, melee walking 400-530 yd of path to finish 25 yd away.
@@ -184,7 +201,7 @@ a median escape latency of **0.65s**.
   itself (40), `reach melee` (32) and `reach spell` (20). The trigger now reaches
   `_HAZARD_SEARCH_RADIUS` with `isUseful` narrowing it to the blast plus the latch window.
 - **Melee aim for Freya's reach.** The first sweep for melee accepts only spots within
-  `GetMeleeRange(freya) − 1` of her. Arrived, while a bomb still covers `bombOrigin`, a melee bot in
+  `GetMeleeRange(freya) − 1` of her, a yard inside since she may still be walking after the tank. Arrived, while a bomb still covers `bombOrigin`, a melee bot in
   reach returns false and swings; out of reach, once Freya stops moving, it re-sweeps for an in-reach
   spot (every `ULDUAR_FREYA_MELEE_REACH_RETRY_MS`, 500); otherwise it holds, since `reach melee` would
   walk it back through the blast. A held bot casts nothing (`Engine::DoNextAction` stops at the first
@@ -219,7 +236,9 @@ damage halved, 136k/s before the first volley against 68k after. A tank that ate
 Conservator off its spore. The spot uses `FindNearestPositionClearOfHazards`'s `preferNear`, aimed at
 the far side of Freya from `GetFreyaRangedCampAnchor`: it only reorders spots the same walk away, so the
 tank never takes a longer trip or drags her toward the back line. Melee re-close on the generic `reach
-melee`; nothing zeroes it.
+melee`; nothing zeroes it. The reposition latches for at most `ULDUAR_FREYA_TANK_BOMB_LATCH_MS` (3 s):
+enough to walk the clearance at 7 yd/s, short enough that a tank stopped on the way doesn't hold Freya
+still for a whole volley.
 
 **The drag clears Freya, not only the tank** (not yet verified in a pull). She stops in reach 6-7 yd
 in front of him, so clearing him alone left her **5.9-8.2 yd from a bomb** in 3 of 4 volleys, her
@@ -227,21 +246,25 @@ melee ring in the blast, 1-2 of 9 melee in reach for 7-8s, and once (bombs 13.3 
 her) he never moved. The trigger also fires on a bomb within `_AVOID_RADIUS` of Freya while she is on
 him, and the first sweep accepts a spot only if her predicted stand, `F' = S + (F − S)·min(1, gap/|F −
 S|)`, clears every bomb by `_CLEAR_RADIUS`. Failing that he clears himself as before, or, with only her
-ring covered, stays put rather than hop for nothing.
+ring covered, stays put rather than hop for nothing. Her end spot can sit past the tank's own search radius, so
+bombs are searched out to `_HAZARD_SEARCH_RADIUS` plus her gap plus `_CLEAR_RADIUS`.
 
 **That preference needs a leash.** A volley every 18s with Freya walking after her holder random-walks
 her in one direction all pull: she once finished **100 yd** east, at Z 419.9 down the slope toward the
 water, the melee ring and half the raid strung out behind her. Past `ULDUAR_FREYA_TANK_LEASH` (20 yd)
 from `ULDUAR_FREYA_TANK_ANCHOR` the `preferNear` flips to the anchor, and `freya tank hold freya`
 (`ACTION_RAID + 1`, under the escape, which must still be able to leave the leash) walks her home when
-no bomb is pressing, only for the bot she is hitting. The anchor **(2360.0847, -43.1235, 425.333)** is
-navprobe-verified on `--nav 0x09`: 0.52 yd from the nearest poly, `UpdateAllowedPositionZ` 425.333,
-and a 12 yd ring around it 8/8 on mesh.
+no bomb is pressing, only for the bot she is hitting. It walks onto the anchor itself, since she stops
+a boss length short in his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched
+for at most `_TANK_HOLD_LATCH_MS` (3 s) because a re-issued `MoveTo` clears the walk it repeats. The
+anchor **(2360.0847, -43.1235, 425.333)** is navprobe-verified on `--nav 0x09`: 0.52 yd from the
+nearest poly, `UpdateAllowedPositionZ` 425.333, and a 12 yd ring around it 8/8 on mesh.
 
 ## Tanks
 
-The main tank gets Freya, plus the Storm Lasher and a held Snaplasher (below); assist tank 0 works down a ladder: Snaplasher (the Hardened Bark sink) >
-Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it > Freya.
+The main tank gets Freya, plus the Storm Lasher and a held Snaplasher (below); assist tank 0 works down
+a ladder: Snaplasher (the Hardened Bark sink) > Ancient Conservator > highest-health non-suppressed trio
+member > a lasher standing next to it > Freya.
 Generic `TankAssistAction` is zeroed for **every** tank all encounter: gated on "the ladder has
 something", it let generic assist through on a pure lasher wave, and the off-tank walked the wave into
 the raid stack.
@@ -289,24 +312,26 @@ add tank's rise. While it is on, nothing hits the Snaplasher (`GetFreyaHeldSnapl
 - `GetFreyaTrioAssignment` drops it, with no fallback onto the siblings waiting at the floor, so their
   bots take the rest of the ladder;
 - `freya snaplasher hold` zeroes every non-heal action aimed at it and area damage
-  (`IsRaidAreaDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd) of the caster or
-  its target. The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they aim at the
-  current target, so zeroed they could never move a bot off it, and its auto attack would keep the bark up;
+  (`IsRaidAreaDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd, Seed of
+  Corruption's burst, the widest a damage dealer carries; most are 8-10) of the caster or its target.
+  The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they aim at the current
+  target, so zeroed they could never move a bot off it, and its auto attack would keep the bark up;
 - the redirect dumps no shot into it, and the add tank's ladder skips it while stacked.
 
 The first time no stack is left the hold latches free (note `2`, `IsFreyaHeldSnaplasherFree`), so the
 stacks a tank's own pickup hits add don't turn him away. From then tanks may act on it: a living add
 tank's ladder taunts it; with none, the main tank taunts it and, while it is on him in melee range,
-attacks it ahead of the Storm Lasher, keeping Freya on standing threat. **Known-open:** a third tank shifting into the add tank slot counts as
-an add tank, so no hold starts and it taunts the capped Snaplasher at once; a Snaplasher past the main
-tank's 30 yd taunt waits there, unhit.
+attacks it ahead of the Storm Lasher, keeping Freya on standing threat. **Known-open:** a third tank
+shifting into the add tank slot counts as an add tank, so no hold starts and it taunts the capped
+Snaplasher at once; a Snaplasher past the main tank's 30 yd taunt waits there, unhit.
 
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever holds Freya, falling back to the group main tank.
 The hunter's three redirected Steady Shots go into what that tank holds (Snaplasher unless held, else
-Conservator, else Freya) and skip a trio member under the sync floor: shot into Freya they put the add tank on her
-table and nothing on the Snaplasher's. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list,
-so the class-generic main-tank node stands down. Nothing helps against lashers, whose table is wiped
+Conservator, else Freya) and skip a trio member under the sync floor: shot into Freya they put the add
+tank on her table and nothing on the Snaplasher's. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list,
+so the class-generic main-tank node stands down. Tricks of the Trade redirects everything the rogue does
+for 6s, so it gets no dump shot. Nothing helps against lashers, whose table is wiped
 every 10s.
 
 ## Detonating Lasher waves
@@ -318,9 +343,8 @@ uniformly random player within 80 yd; they spawn the same way after a 5s submerg
 nobody inside 80 yd despawns and still counts as cleared. They run at **8.0 yd/s** (`speed_run`
 1.14286) against a player's 7.0.
 
-**The off-tank takes back loose lashers** (`TryFreyaLasherPickup`): assist
-tank 0, once its ladder is past the Snaplasher, Conservator and trio, picks up lashers hitting a
-non-tank player. First Righteous Defense (40 yd) on the member most of them hit, unless Freya is on
+**The off-tank takes back loose lashers** (`TryFreyaLasherPickup`): assist tank 0, once its ladder is
+past the Snaplasher, Conservator and trio, picks up lashers hitting a non-tank player. First Righteous Defense (40 yd) on the member most of them hit, unless Freya is on
 that member; then Challenging Shout or Roar with 2+ loose inside 10 yd, only while Freya is farther than
 10 yd plus her reach, or it pulls her off the main tank; then the class taunt (30 yd) on the nearest.
 Taunts are 8s, inside the 10s reset; the class rotation's AoE threat holds them between. No new
@@ -333,8 +357,8 @@ tank's current target, so it fired Hand of Reckoning every 8s at ghoul-held lash
 Defense on the ghoul itself five times, dragging them into the melee stack and leaving both on
 cooldown when two lashers killed a ret paladin at 1:45. `freya lasher taunt reserve` blocks the class
 taunts (incl. Death Grip, Mocking Blow) for any tank whose current target is a lasher, the shouts all
-fight ([tanks](#tanks)). The
-pickup casts directly and only for lashers on a non-tank player, so the block skips it.
+fight ([tanks](#tanks)). The pickup casts directly and only for lashers on a non-tank player, so the
+block skips it.
 
 A `GROUP_LASHERS` wave is **10** of them, 717k in 10-man and **2.35M in 25-man**, for **2** stacks each:
 150.6k HP per stack, the **worst rate in the fight** (Water Spirit 66.9k · Storm Lasher 100.4k ·
@@ -373,8 +397,9 @@ through `reach melee` and mid-cast 19% of frames) while the pack crosses at 8.0.
 the pack is an effect, not a cause:** the one clean wave (median **18.2 yd** to the nearest lasher, 18.5%
 of the wave inside Detonate, 0 deaths, against 5.5-15.5 yd, 45-85% and 5-9 deaths) was clean because the
 pack spawned 3.7-5.2 yd from the melee and seven of eight were in contact in **2.5s**. A pack spreads
-over a 16.8-21.4 yd radius, so a spot 20 yd from its centroid sits on whatever walked out in front. Asking the camp
-to walk out to 18 yd against every living lasher is a retreat from something faster than a player:
+over a 16.8-21.4 yd radius, so a spot 20 yd from its centroid sits on whatever walked out in front.
+Asking the camp to walk out to 18 yd against every living lasher is a retreat from something faster
+than a player:
 one wave that never died had the back line walk **256 yd to net 19** while losing ground (20.0 → 17.3 →
 14.3 yd), the camp destination wander **195 yd for 27 net** and fight `reach spell` all the way (**521**
 camp move orders against 270), and ranged damage halve, **109.5k/s → 51.2k/s**, a ranged bot casting on
@@ -393,7 +418,8 @@ step out` asked for 3+ under 20% inside one 8 yd pack and fired once in six pull
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
 DPS or healer to its own nearest spot `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (18 yd) from every low one,
-through the melee bail's walk (`StepOutOfBlasts`: latch, `MOVEMENT_FORCED`, cast interrupt, 16 yd when
+through the melee bail's walk (`StepOutOfBlasts`: a latch of at most 3 s, since lashers die one by one
+and a re-derived exit shifts a yard and restarts the walk; `MOVEMENT_FORCED`, cast interrupt, 16 yd when
 nothing clears 18), never off the healthy pack. It stays on the camp node, under nova and trap, so a mage
 roots what is chasing it before walking. Not yet verified in a pull. One shared computed spot, with each
 bot stopping 6 yd short on its own side, sent bots between pile and spot to 12 yd: 80-100% of camp orders
@@ -403,15 +429,17 @@ ghoul-held pile took 0 of 70.
 **Otherwise the back line gathers**, except while any lasher within `_HAZARD_SEARCH_RADIUS` is low: then
 a bot outside the blasts stays put, since the walk to the ball crosses one. The camp is
 `GetFreyaRangedCampAnchor`, the lowest-GUID living ranged DPS, so every bot picks the same one with no
-shared state and a live bot is always on the mesh; anchored on each bot itself, the camp sat 23.8-35.7 yd
-from Freya and moved 27.5 yd between waves. It re-picks from the living, so it jumps as bots die. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside
-one AoE; `_HEALER_CAMP_TOLERANCE` (15 yd) lets healers also cover the melee and the tanks. Tanks and
+shared state and a live bot is always on the mesh; anchored on each bot itself, the camp sat
+23.8-35.7 yd from Freya and moved 27.5 yd between waves. It re-picks from the living, so it jumps as
+bots die. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE;
+`_HEALER_CAMP_TOLERANCE` (15 yd) lets healers also cover the melee and the tanks. Tanks and
 melee are excluded: they are stacked on what they hit, and a tank that left would take Freya or the
 Conservator with it. Bots stop `ULDUAR_FREYA_RANGED_CAMP_SPACING` (6 yd) short of the spot on their
 arrival bearing, so the back line lands as a ring (aimed at the point itself they stood a median
 0.6 yd apart). That cannot beat an 8 yd splash: twelve bots would need a 15.5 yd ring, a 31 yd ball, past
 `Playerbots.SpellDistance` and wide enough to spread the pack the camp gathers. It stops the pile; the
-sunbeam step-out answers the beam.
+sunbeam step-out answers the beam. The gather has no arrival latch: the trigger's tolerance stops the
+churn, and a latch would swallow the re-aim when the anchor moves.
 
 **A pack the ghouls hold gets walked to** (user's choice 2026-11-22; not yet verified in a pull). With
 the camp drifting 30-43 yd off a pack held on Freya, 55% of ranged DPS samples had no lasher inside
@@ -421,11 +449,12 @@ While the ranged aim (`GetFreyaRangedLasherAim`, which targeting reads too) is g
 (`IsFreyaLasherHeldByGhoul`: its target is an Army ghoul, or a ghoul's target is it, covering the second
 after each 10s wipe), a ranged DPS bot the ladder left on Freya with no lasher inside `SpellDistance`
 runs `freya reach held pack` (`ACTION_RAID + 1`): a ring sweep to the nearest spot inside `SpellDistance`
-minus `ULDUAR_FREYA_HELD_PACK_REACH_MARGIN` (3 yd) of the focus, at least `_LASHER_CAMP_STANDOFF` (18 yd)
-from every living lasher and clear of bombs and beams; latched (`_HELD_PACK_LATCH_MS`),
-`MOVEMENT_COMBAT`, never cutting a cast. No such spot leaves it on Freya. The gather stands down for
-ranged DPS meanwhile, or it would pull them back out of reach; healers keep gathering, and the bail
-still runs.
+minus `ULDUAR_FREYA_HELD_PACK_REACH_MARGIN` (3 yd, so a lasher shuffling on its ghoul doesn't put it
+back out of reach) of the focus, at least `_LASHER_CAMP_STANDOFF` (18 yd) from every living lasher and
+clear of bombs and beams; latched (`_HELD_PACK_LATCH_MS`, 3 s, about 20 yd of walk), a failed sweep
+retried after `_HELD_PACK_RETRY_MS` (1 s), `MOVEMENT_COMBAT`, never cutting a cast. No such spot leaves
+it on Freya. The gather stands down for ranged DPS meanwhile, or it would pull them back out of reach;
+healers keep gathering, and the bail still runs.
 
 **Crowd control.** Node order is melee bail (`+ 3`) → nova · trap · army (`+ 2`) → camp (`ACTION_RAID`),
 since a dead bot does no crowd control. The gather is the lowest-value thing a bot does here: it sits
@@ -434,8 +463,10 @@ stay above it.
 
 - The mage novas on **self**, not through the class `frost nova` node, which gates on the *current
   target* within 10 yd and so never fires for a ranged mage: it wants `ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS`
-  (2) inside `_RADIUS` (10 yd), and holds the full **8s**: no DR on the add, no damage break
-  ([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
+  (2, so a lone lasher the mage is already killing doesn't spend the cooldown) inside `_RADIUS` (10 yd),
+  and holds the full **8s**: no DR on the add, no damage break
+  ([crowd control](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)). Listed
+  ahead of the trap, so a hunter next to the mage drops its patch under an already-rooted pair.
 - **Every** hunter traps with a lasher inside `ULDUAR_FREYA_FROST_TRAP_ARM_RANGE` (20 yd), at its own feet,
   where the lasher that picked it is heading anyway, so the patch arms first. Frost Trap 13809 lays 13810:
   10 yd, 30s, **-50%**, taking a lasher to 4.0 yd/s, the only thing that makes one slower than the raid.
@@ -447,8 +478,7 @@ stay above it.
   15.7k** of lasher melee and Flame Lash; cast 6.1s late, 102k and a death; not cast (spent on Auriaya),
   **416k in 20s** and five dead. Deliberately **not** named `army of the dead`: `IsBurstCooldownAction`
   matches on the name, and the Ulduar burst gate holds that list until Attuned to Nature drops, the whole
-  add phase.
-  Without it a wave runs the raid: ghouls on **4%** of lasher time against 50-61% with a working Army,
+  add phase. Without it a wave runs the raid: ghouls on **4%** of lasher time against 50-61% with a working Army,
   **920k** and 7 deaths, and Eonar's Gift healed the unfinished pack from ~18% to ~66% each.
 - **One Army per lasher wave** (`IsFreyaArmyTurn`, `HasUncoveredFreyaLasher`). There are two lasher waves,
   one per random set of three, 1-5 min apart, and 42650's 10 min cooldown (6 with Night of the Dead)
@@ -460,6 +490,8 @@ stay above it.
   2338-2347), so a per-instance `RaidInstanceState` mark of the highest ghoul counter seen tells a covered
   lasher from a new wave. Without it the second DK spent Army at 0:59.9 on one lasher at 4%, leaving the
   second wave none. An Army cut before its first ghoul moves no mark, so the next DK still casts.
+  `IsFreyaArmyTurn` writes the mark from every DK's ghouls, its own included, so its loop never returns
+  early, and `HasUncoveredFreyaLasher` reads it, so the turn is always asked first.
 - **Nothing of ours cuts or starves the channel.** Army costs a rune of each kind and `CanCastSpell`
   ignores runes, so the rotation spent each one as it returned and Army landed 10-11s late:
   `FreyaArmyRuneReserveMultiplier` zeroes rune spenders for the DK whose turn it is (runic power still
@@ -468,17 +500,21 @@ stay above it.
   so all six escapes stand down for the 4s, where the melee bail had cut one after a single ghoul.
 
 **Ranged focus** is `GetFreyaLasherPackFocus`, the lasher with the most lashers within
-`ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd): `AoeTrigger` counts attackers within 8 yd of the ***current
+`ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd), lowest GUID on ties, or evenly spread lashers split the raid's
+AoE across two piles and fire neither: `AoeTrigger` counts attackers within 8 yd of the ***current
 target***, not the bot, so pointing at the middle of a pile is what makes class AoE fire at all, and
-`_MIN_COUNT` (3) is `MediumAoeTrigger`'s threshold. Below `_FINISH_PCT` (20%) with 3 up,
-`FreyaLasherFinishAoeMultiplier` shuts non-healing AoE off inside `_PACK_CLEAR` (16 yd, one past
-Detonate) and `GetFreyaRangedLasherFocus` (lowest health, GUID ties, self-stabilising) picks them off one
-at a time so the blasts stagger. Both read `GetFreyaFinishingPackNear`, measured from the **pack's** centre.
-That conjunction held **once in six pulls**: lashers scatter and die one at a time.
+`_MIN_COUNT` (3) is `MediumAoeTrigger`'s threshold. A focus past `SpellDistance` gives way to the nearest
+lasher in reach, since walking to it walks into its 15 yd blast; the two converge as lashers close.
+Below `_FINISH_PCT` (20%) with 3 up, `FreyaLasherFinishAoeMultiplier` shuts non-healing AoE off inside
+`_PACK_CLEAR` (16 yd, one past Detonate) and `GetFreyaRangedLasherFocus` (lowest health, GUID ties,
+self-stabilising) picks them off one at a time so the blasts stagger. Both read
+`GetFreyaFinishingPackNear`, measured from the **pack's** centre. That conjunction held **once in six
+pulls**: lashers scatter and die one at a time.
 
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment
-it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. The add tank
-works its normal ladder through a lasher wave.
+it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. They switch
+only to a lasher 10 yd closer than the one held, so two at similar range don't trade the bot every tick.
+The add tank works its normal ladder through a lasher wave.
 
 ## Movement guards
 
@@ -520,14 +556,16 @@ It is fully telegraphed: a **2000 ms** cast repeating `25s..35s`, a range no tim
 handling is Ignis's Flame Jets trio: `FreyaGroundTremorCastGateMultiplier` caches the remaining window
 per millisecond and blocks any candidate whose cast time, plus the duration for a channel, would not end
 first (**328** vetoes in the reference kill; counting cast time alone let 7 and 14 channels a pull start
-in the window only to be stopped next tick), and `freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in
-flight, reading `CURRENT_GENERIC_SPELL` **and** `CURRENT_CHANNELED_SPELL`: with the gate stopping ordinary
-casts, a channel already running is all that is left, and reading one slot meant it never fired in 164
-pushes (since: 31 times). Army of the Dead is exempt ([crowd control](#detonating-lasher-waves)). `m_timer` carries what is left in either slot, so one compare serves both.
+in the window only to be stopped next tick), and `freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`)
+stops a cast already in flight, reading `CURRENT_GENERIC_SPELL` **and** `CURRENT_CHANNELED_SPELL`: with
+the gate stopping ordinary casts, a channel already running is all that is left, and reading one slot
+meant it never fired in 164 pushes (since: 31 times). `m_timer` carries what is left in either slot, so
+one compare serves both. A cast that still lands before the Tremor is finished, only the ones it
+would cut are dropped. Army of the Dead is exempt ([crowd control](#detonating-lasher-waves)).
 Unlike Ignis, **heals are gated too**: holding a Chain Heal under 2s beats losing Nature for 10, and
 blocked bots fall through to their instants. Stopping first dodges the lockout outright:
-`Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it finds a cast to cut**. Outside hard
-mode the window is 0 and the gate inert.
+`Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it finds a cast to cut**. Outside
+hard mode the window is 0 and the gate inert.
 
 **Iron Roots.** Root creatures 33088 / 33168 are selectable, so a trapped bot kills its own root, and the
 beam stalkers 33170 / 33050 are not, so they come from `"nearest npcs"`
@@ -536,12 +574,11 @@ above the Sun Beam dodge at `+ 4`, because **a rooted bot cannot move**. **Its t
 difficulty ids of both roots, or it never fires**
 ([difficulty ids](../../engine/pitfalls.md#detection-that-never-fires)): `spelldifficulty_dbc` maps
 62283 → 62930 and 62861 → **62438**, `HasAura` takes the exact spell, and a 25-man raid only applies
-the 25-man half, so a check on
-62283/62861 alone never ran once over 60 applications of 62438. The root lasts until its creature dies;
-most break inside a second on incidental AoE, but 7 of one pull's held 2s or longer, two with the bot
-inside a hazard. In the reference kill, **27** traps in 9 volleys of 3, most released under 1s, worst
-**25.3s**; in a later kill nobody died under a latch while rooted. Every other Freya id
-here already carries its pair.
+the 25-man half, so a check on 62283/62861 alone never ran once over 60 applications of 62438. Every
+other Freya id here already carries its pair. The root lasts until its creature dies; most break inside
+a second on incidental AoE, but 7 of one pull's held 2s or longer, two with the bot inside a hazard. In
+the reference kill, **27** traps in 9 volleys of 3, most released under 1s, worst **25.3s**; in a later
+kill nobody died under a latch while rooted.
 
 **Freeing beats breaking** (`freya free rooted ally`, `ACTION_RAID + 5` ahead of the break; not yet
 verified in a pull). A mage rooted 0.3s into a beam dodge, 3.3-4.0 yd from two Unstable Sun Beams,
@@ -562,13 +599,14 @@ root, which died 1 ms after it. Roots of 9.2s and 20.6s recur, at 4.6k per 2s on
 **Unstable Sun Beam.** Three stationary stalkers (33170) a cast in 25-man, one in 10, at players' feet
 for ~10s. Unstable Energy **62865** is `EffectRadiusIndex 8` = **5 yd** (effect 27, persistent area
 aura; 10-man 62451 is 4 yd); with the searcher's object sizes it lands out to **7.3 yd** (1159
-applications, p99 6.5). Brightleaf's own beam (33050, Unstable Energy 62217) is 4 yd. The dodge fires inside
-`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` (**8 yd**) and rings outward to a spot clear of every beam in
-range by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (**11 yd**), not the radius
+applications, p99 6.5). Brightleaf's own beam (33050, Unstable Energy 62217) is 4 yd. The dodge fires
+inside `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` (**8 yd**) and rings outward to a spot clear of every
+beam in range by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (**11 yd**), not the radius
 ([dodge clearance](../../engine/pitfalls.md#movement-that-silently-no-ops)): radius plus a yard gave a
 median **1.9 yd** step over 694 orders, back inside the trigger. Where overlapping beams leave nothing
-that clear it takes radius + 1. It is latched (`dodgeSpot`, ceiling `ULDUAR_FREYA_SUN_BEAM_LATCH_MS`),
-returning true without calling `MoveTo` while the walk is in flight
+that clear it takes radius + 1. It is latched (`dodgeSpot`, ceiling `ULDUAR_FREYA_SUN_BEAM_LATCH_MS`,
+3 s: the clearance at 7 yd/s, short enough that a bot rooted mid-dodge hands the tick back), returning
+true without calling `MoveTo` while the walk is in flight
 ([oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates)).
 
 **A beam escape must not cost the tanks their healers** (not yet verified in a pull). At 12 / 15 yd,
@@ -583,11 +621,14 @@ first: 177 of 338 escapes from on top of a beam went that way, 74% ending farthe
 
 The per-tick lookups go through `FreyaScan`, a per-bot `ManualSetValue<FreyaScan*>` (`"freya scan"` in
 `RaidUlduarValueContext`), as for Razorscale. Behind it: `Boss()` is `"find target" freya`, a threat-list
-walk with a wide-string name per unit; `PossibleTargets()` a 100 yd grid sweep; `Stalkers()` that sweep
-plus a LOS ray, tested on the entry first so only Healthy Spores and the two Sun Beam stalkers pay it;
-`LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action can be
+walk with a wide-string name per unit; `PossibleTargets()` a 100 yd grid sweep without LOS, since with
+it adds behind Freya's tree trunks drop out and the trio split disagrees between bots on opposite
+sides; `Stalkers()` that sweep plus a LOS ray, tested on the entry first so only Healthy Spores and the
+two Sun Beam stalkers pay it; `LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action can be
 `Playerbots.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the target list,
-because the Ground Tremor nodes run wherever the gate is open, trash included.
+because the Ground Tremor nodes run wherever the gate is open, trash included. `FreyaWaveState` is one
+grid pass that the priority action, the tank action and both multipliers read, so they never disagree
+about what is up.
 
 ## What a trace answers
 
@@ -595,8 +636,9 @@ because the Ground Tremor nodes run wherever the gate is open, trash included.
 off the Elders' empowers (Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since
 `cfg.hardmode` has no Freya key; `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
-Righteous Defense, and each hold change (on, bark gone, off); `--beams` Unstable Sun Beam dodges per role (fired from past the
-trigger, walk, ended farther from Freya) and healers within 38.5 yd of each Snaplasher's holder;
+Righteous Defense, and each hold change (on, bark gone, off); `--beams` Unstable Sun Beam dodges per role
+(fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
+Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
 28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--deaths` by killer
 and spell.
