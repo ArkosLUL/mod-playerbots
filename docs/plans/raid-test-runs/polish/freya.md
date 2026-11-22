@@ -402,3 +402,16 @@ candidate if it repeats); uld3's opener swing on a melee before the bear's taunt
    for the trio waves and spends one once the Snaplasher on it is stacked, as Hodir and Iron Assembly do
    (class defensive nodes held above 25% health all fight, one cooldown per trio wave); (b) the roster's
    highest-health tank as add tank (a DK at 40k still dies to one swing). Recommendation: (a).
+
+**Review:** the cause holds and the guard addresses it, on one code path (no size, mode or player branch).
+Reproduced: 559 of 862 melee Detonate hits after a bail then `reach melee`, the `--blasts` rows above, and
+77% of blast-bound melee orders over the 16 pulls aimed at Freya. Replaying the guard's endpoint over window
+10's lasher-wave orders, it blocks 371 of the 372 `reach melee` orders that ended in a blast and 3 of the 349
+that did not. Script: `scratchpad/freya-r4-review/guard_model.py`. Fixed:
+
+- The reach guard zeroed all of `Family::Reach`, which also holds `reach party member to resurrect` (a cat
+  druid's Rebirth walks to the corpse) and `reach spell`, neither ending at the melee spot it models. It now
+  names `reach melee`, plus `Family::Charge` as before.
+- The behind guard tested the point straight behind the target, but `SetBehindTargetAction` walks to the
+  nearer of two flank points 3/5 π off the target's facing. It checks both now: 20 of window 10's 20
+  set-behind orders into a blast caught (19 before), none of its 126 clear ones.

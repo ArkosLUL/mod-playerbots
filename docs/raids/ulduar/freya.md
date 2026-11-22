@@ -398,9 +398,11 @@ step out` asked for 3+ under 20% inside one 8 yd pack and fired once in six pull
 edge, and `reach melee` re-aimed the bot at its target inside it: 559 of 862 melee Detonate hits over 16
 pulls came after a bail and a reach back, and 33-57% of melee reach and set-behind orders in a lasher wave
 ended inside a low lasher's blast, three in four of them for Freya. `freya lasher blast reach guard` zeroes
-reach (feral charge too) and `freya lasher blast behind guard` set behind for a non-tank melee bot whose walk
-would end within `ULDUAR_FREYA_DETONATE_RADIUS` + 1 of a lasher under the bail line: reach melee's stop on
-the bot's side of its target, set behind's behind it. The bot waits outside until that lasher blows.
+`reach melee` (by name: `Family::Reach` also holds a battle res's walk to its corpse) and charges, `freya
+lasher blast behind guard` set behind, for a non-tank melee bot whose walk would end within
+`ULDUAR_FREYA_DETONATE_RADIUS` + 1 of a lasher under the bail line: reach melee's stop on the bot's side of
+its target, or either of set behind's flank points (3/5 π off its facing). The bot waits outside until that
+lasher blows.
 
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
