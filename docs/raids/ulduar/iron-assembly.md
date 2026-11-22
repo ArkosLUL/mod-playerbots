@@ -34,12 +34,16 @@ death without exception. A corpse is worth ~1.17M to him, so the phase is decide
 raid feeds him: traced, the raid takes him to **3.08% with all 25 alive** — only the tank dies, and
 only to the guaranteed instakill — then loses 22 people in 20s as the corpses heal him back to full.
 
-**Fusion Punch is a 3 s cast on his victim every 15–20 s** (35,000 nature + a DoT in 25-man, +25% per
-charge): at two charges it hit a full-health DK tank for 67k raw and the wipe followed. So in phase 3 a
-tank it is aimed at casts `NextMagicDefensive` for the remaining cast time (`ironassembly.punchdef`).
-One charge is enough to kill: 54–56k raw, 44–50k landed, on 41–48k tanks. The swap partner
+**Fusion Punch is a 3 s cast on his victim every 15–20 s, all fight** (35,000 nature + a DoT in
+25-man, +25% per Supercharge and per charge): at two charges it hit a full-health DK tank for 67k raw
+and the wipe followed, and one charge is enough to kill: 54–56k raw, 44–50k landed, on 41–48k tanks.
+Before phase 3 it kills a tank under half health: on 22 Nov two died so in Molgeim's phase, at 42–45%
+with Divine Protection or Last Stand ready, each costing a Rebirth phase 3 then lacked. So in any phase
+a tank it is aimed at casts `NextMagicDefensive` for the remaining cast time when the punch would leave
+it under `RAID_DEFENSIVE_FLOOR_PCT` (25%), reckoned as the top of the roll × his damage-done auras ×
+average nature resist × the tank's damage-taken mods, absorbs ignored (`ironassembly.punch`). The swap partner
 often has no button left, the class nodes having spent IBF, Survival Instincts or Frenzied
-Regeneration at 33–57% health before phase 3.
+Regeneration at 33–57% health before phase 3, or a warrior's Shield Wall 3 s after a Rebirth.
 
 **Everything here is nature**, both modes: High Voltage, Fusion Punch, Static Disruption, Meltdown,
 Brundir. One hunter holds Aspect of the Wild while the encounter is `IN_PROGRESS`, through the shared
@@ -81,6 +85,8 @@ dying halfway puts the blast on the ranged ring instead of the melee, and a star
 `ironassembly.meltdownrun` so a detour can't stop it), and no second bot tank (`nopartner`; a human
 partner never taunts). Running **without** a swap is the trap: it towed Steelbreaker 180 yd, cut melee
 uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**.
+**Known-open:** the `meltdownrun` latch is only read while a tank holds him, so a parked carrier whose
+partner dies turns `nopartner` and walks back; traced once, 2.7 s left, blast 22 yd off the point.
 
 **A dead bot tank gets walked to and Rebirthed** (`ironassembly.rez`), since a swap needs two. While
 Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (a pending res, Soulstone
@@ -92,6 +98,9 @@ shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`, above eve
 cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` never walks, casting only
 on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown point with the
 druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast killed 5 melee.
+The budget is the non-tank druids' Rebirths, one each a pull, and a class `rebirth` on a tank killed
+before phase 3 spends one. A rezzed tank stands up without raid buffs, the class buff nodes being
+non-combat only: traced 41.8k max health against 48.5k before.
 
 **Melee step out of a blast next to him.** A carrier that stays on him (`nopartner`, `late`, a swap
 that never came) stands ~7.6 yd in front of his centre; the melee hug him at 2.6–5 yd, 10–11.5 yd off
@@ -349,7 +358,8 @@ takes either, with `IsDps` on the name branch since a healer's Shadowfiend is ma
 
 **Reading a pull:** `bosses/iron_assembly.py <file>` (`--phases`: each member's death with healer
 mana and mana returns; `--empowered`: Overwhelming Power carriers with whoever else each blast killed,
-Fusion Punches and Rebirths; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
+Fusion Punches and Rebirths; `--punches`: every phase's Fusion Punches with verdict and button;
+`--deaths`: by mechanic per phase). Its banner gives the **hard mode
 verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
 `hdr.cfg.hardmode` toggle alone proves nothing.
 `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
@@ -365,8 +375,8 @@ stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `r
 `late`), `meltdownrun` (the latched walkers), `meltstep` (a melee bot's step out: `behind` / `out`,
 `clear` outside the blast, `none`), `rez` (a druid's battle rez: `walk` / `cast` / `hold:meltdown` and
 the tank, or `none:` why not), `rezdruid` / `reztank` (the latched pair), `nitro` (an event per boots
-use: `spread` / `meltdown`), `aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punchdef` (the defensive
-cast on Fusion Punch), `unheld` (a taunt-back, naming the member).
+use: `spread` / `meltdown`), `aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punch` (a punch's verdict:
+`under` / `safe` and the expected landing in k, `idle` between), `punchdef` (the defensive cast on it), `unheld` (a taunt-back, naming the member).
 Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep, 17 for Meltdown where melee step out to. Rune of Death

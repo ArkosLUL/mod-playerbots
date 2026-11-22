@@ -3,7 +3,8 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic hard mode pull pins the kill order verdict, healer mana at each member's death, an
-Overwhelming Power carrier's Meltdown, a Fusion Punch kill and the deaths per phase. The shared v14
+Overwhelming Power carrier's Meltdown, a Fusion Punch kill with the strategy's verdict on it, a punch
+before Steelbreaker is alone and the deaths per phase. The shared v14
 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
@@ -128,8 +129,33 @@ class Empowered(unittest.TestCase):
         self.assertIn("4:20.000  Fusion Punch Rampart 43.6k at 91%, 1 charge(s), 10.9k resisted, no defensive  KILLED",
                       text)
 
+    def test_the_verdict_and_button_on_a_punch(self):
+        records = pull()
+        records[-1:-1] = [
+            {"t": 257200, "e": "note", "g": PARTNER, "k": "ironassembly.punch", "txt": "under 41k"},
+            {"t": 257300, "e": "note", "g": PARTNER, "k": "ironassembly.punchdef", "txt": "icebound fortitude"},
+        ]
+        text = printed(ia.show_empowered, load(records))
+        self.assertIn("4:20.000  Fusion Punch Rampart 43.6k at 91%, 1 charge(s), 10.9k resisted, expected 41k (under "
+                      "the floor), defensive icebound fortitude  KILLED", text)
+
     def test_never_reached(self):
         self.assertIn("never reached", printed(ia.show_empowered, load(pull(last_mask=3))))
+
+
+class Punches(unittest.TestCase):
+    def test_every_phase_with_an_idle_row_between(self):
+        records = pull()
+        records[-1:-1] = [
+            {"t": 147000, "e": "note", "g": TANK, "k": "ironassembly.punch", "txt": "safe 26k"},
+            {"t": 150000, "e": "dmg", "s": STEEL, "d": TANK, "sp": 63493, "a": 27000, "hp": 100.0, "rs": 0},
+            {"t": 150100, "e": "note", "g": TANK, "k": "ironassembly.punch", "txt": "idle"},
+        ]
+        text = printed(ia.show_punches, load(records))
+        self.assertIn("2:30.000  Steelbreaker + Molgeim: Fusion Punch Bulwark 27.0k at 100%, 0 charge(s), "
+                      "expected 26k (safe), no defensive", text)
+        self.assertIn("4:20.000  Steelbreaker: Fusion Punch Rampart 43.6k at 91%, 1 charge(s), 10.9k resisted, "
+                      "no defensive  KILLED", text)
 
     def test_who_else_the_blast_killed_and_the_rebirth_after(self):
         records = pull()
@@ -166,7 +192,7 @@ class OtherFights(unittest.TestCase):
     def test_every_section_reads_empty(self):
         trace = Trace(FULL_V14)
         self.assertIn("not an Assembly of Iron pull", printed(ia.show_banner, trace))
-        for show in (ia.show_phases, ia.show_empowered, ia.show_deaths):
+        for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_deaths):
             self.assertEqual(len(printed(show, trace).splitlines()), 1)
 
 

@@ -335,8 +335,9 @@ bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss);
 // gets it back from anyone who isn't a tank: this returns it while that is due, else nullptr.
 Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot);
 
-// How long until an empowered Steelbreaker's Fusion Punch lands on this tank, 0 when none is coming. A 3s
-// cast, 35,000 nature plus a DoT in 25-man, and each Electrical Charge adds 25%: 67k raw traced at two.
+// How long until Steelbreaker's Fusion Punch lands on this tank, any phase, 0 when none is coming or the
+// tank stays over RAID_DEFENSIVE_FLOOR_PCT after it. A 3s cast, 35,000 nature in 25-man, +25% per
+// Supercharge and per Electrical Charge. One before phase 3 still kills a tank at half health.
 uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot);
 
 // Nature resistance: everything this fight hits with is nature. One hunter holds Aspect of the Wild while

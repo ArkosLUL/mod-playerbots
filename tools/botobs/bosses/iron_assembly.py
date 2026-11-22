@@ -4,6 +4,7 @@ Steelbreaker's empowered phase, deaths by mechanic.
 
     iron_assembly.py <file>            every section
     iron_assembly.py <file> --phases   each member's death, with every healer's mana at that moment
+    iron_assembly.py <file> --punches  every Fusion Punch, every phase, with the verdict and the button
 
 What the generic views miss here:
 
@@ -46,6 +47,9 @@ SPELL_REBIRTH = (48477, 26994, 20748, 20747, 20742, 20739, 20484)
 # Each death is stamped on its own bot's tick, so a blast's victims land up to ~0.3 s either side of the
 # carrier's aura ending.
 BLAST_WINDOW_MS = 500
+
+# Fusion Punch's 3 s cast plus a tick's slack: a verdict or a button noted this close before the hit was for it.
+PUNCH_CAST_WINDOW_MS = 3500
 
 # Anchor + 30 yd at 315 degrees, ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT in the strategy.
 MELTDOWN_POINT = (1608.39, 99.81)
@@ -236,6 +240,56 @@ def show_phases(trace: Trace) -> None:
         print(f"  {clock(rec['t'])}  {name} from {trace.name(rec.get('s'))}{on}{mana}")
 
 
+def punch_lines(trace: Trace, start: int, deaths: dict, phase: bool = False) -> list[tuple[int, str]]:
+    """(t, line) per Fusion Punch from `start`: the strategy's verdict on it (`ironassembly.punch`, what it
+    expected to land and whether that left the tank under the floor) and the button it spent."""
+    verdict = collections.defaultdict(list)
+    for rec in notes(trace, "ironassembly.punch"):
+        verdict[rec["g"]].append(rec)
+    defensive = collections.defaultdict(list)
+    for rec in notes(trace, "ironassembly.punchdef"):
+        defensive[rec["g"]].append(rec)
+    lines = []
+    for rec in trace.of("dmg"):
+        if rec.get("sp") not in SPELL_FUSION_PUNCH or rec["t"] < start:
+            continue
+        target = rec["d"]
+        seen = [note for note in verdict[target]
+                if 0 <= rec["t"] - note["t"] <= PUNCH_CAST_WINDOW_MS and note.get("txt") != "idle"]
+        pick = [note for note in defensive[target] if 0 <= rec["t"] - note["t"] <= PUNCH_CAST_WINDOW_MS]
+        killed = any(0 <= d["t"] - rec["t"] <= 200 for d in deaths.get(target, []))
+        where = f"{phase_label(mask_at(trace, rec['t']))}: " if phase else ""
+        line = (f"  {clock(rec['t'])}  {where}Fusion Punch {trace.name(target)} {rec.get('a', 0) / 1000:.1f}k"
+                f" at {rec.get('hp', 0):.0f}%, {charges_before(trace, rec['t'])} charge(s)")
+        if rec.get("rs"):
+            line += f", {rec['rs'] / 1000:.1f}k resisted"
+        if rec.get("ab"):
+            line += f", {rec['ab'] / 1000:.1f}k absorbed"
+        if seen:
+            call, _, expected = str(seen[-1].get("txt", "")).partition(" ")
+            line += f", expected {expected} ({'under the floor' if call == 'under' else call})"
+        line += f", defensive {pick[-1].get('txt')}" if pick else ", no defensive"
+        if killed:
+            line += "  KILLED"
+        lines.append((rec["t"], line))
+    return lines
+
+
+def show_punches(trace: Trace) -> None:
+    """Every Fusion Punch, every phase: before Steelbreaker is alone one can still kill a tank that is low."""
+    print("FUSION PUNCHES")
+    if not mine(trace):
+        return
+    deaths = {}
+    for death in combat_deaths(trace):
+        deaths.setdefault(death["g"], []).append(death)
+    lines = punch_lines(trace, 0, deaths, phase=True)
+    if not lines:
+        print("  none")
+    for _, line in sorted(lines, key=lambda item: item[0]):
+        print(line)
+
+
 def show_empowered(trace: Trace) -> None:
     """Overwhelming Power carriers with whoever their blast killed, every Fusion Punch and every Rebirth once
     Steelbreaker is alone."""
@@ -273,25 +327,7 @@ def show_empowered(trace: Trace) -> None:
                 fate = (f"carrier died at {clock(ended)} to {mechanic(trace, died)}, "
                         f"{(ended - rec['t']) / 1000:.0f}s in")
         lines.append((rec["t"], f"  {clock(rec['t'])}  Overwhelming Power on {trace.name(carrier)}: {fate}"))
-    defensive = {}
-    for rec in notes(trace, "ironassembly.punchdef"):
-        defensive.setdefault(rec["g"], []).append(rec)
-    for rec in trace.of("dmg"):
-        if rec.get("sp") not in SPELL_FUSION_PUNCH or rec["t"] < start:
-            continue
-        target = rec["d"]
-        pick = [note for note in defensive.get(target, []) if 0 <= rec["t"] - note["t"] <= 3500]
-        killed = any(0 <= d["t"] - rec["t"] <= 200 for d in deaths.get(target, []))
-        line = (f"  {clock(rec['t'])}  Fusion Punch {trace.name(target)} {rec.get('a', 0) / 1000:.1f}k"
-                f" at {rec.get('hp', 0):.0f}%, {charges_before(trace, rec['t'])} charge(s)")
-        if rec.get("rs"):
-            line += f", {rec['rs'] / 1000:.1f}k resisted"
-        if rec.get("ab"):
-            line += f", {rec['ab'] / 1000:.1f}k absorbed"
-        line += f", defensive {pick[-1].get('txt')}" if pick else ", no defensive"
-        if killed:
-            line += "  KILLED"
-        lines.append((rec["t"], line))
+    lines.extend(punch_lines(trace, start, deaths))
     for rec in trace.of("cast"):
         if rec.get("sp") in SPELL_REBIRTH and rec["t"] >= start:
             target = rec.get("tgt")
@@ -346,6 +382,7 @@ SECTIONS = (
     ("phases", "each member's death, with every healer's mana at that moment", show_phases),
     ("empowered", "Overwhelming Power carriers, Fusion Punches and Rebirths once Steelbreaker is alone",
      show_empowered),
+    ("punches", "every Fusion Punch in every phase, with the strategy's verdict and the button spent", show_punches),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
 
