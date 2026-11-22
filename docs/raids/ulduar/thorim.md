@@ -28,7 +28,11 @@ a role predicate flipping mid-fight walked the arena squad into the corridor. Qu
 `dpsQuota = twentyFive ? 9 : 4`, so 1 tank + 1 healer + 4 DPS (10 man) and 1 tank + 2 healers + 9 DPS
 (25 man) — **a twelve-bot gauntlet on 25 man**, raised deliberately to make the 170 s window. A
 roster that cannot fill them shrinks the gauntlet rather than emptying the arena, and assignment
-stops entirely once the arena would drop below 3. The main tank never leaves the arena.
+stops entirely once the arena would drop below 3. The main tank never leaves the arena. Assignment
+waits while `GetMainTankGuid` reads empty: its fallback only sees tanks already alive in the
+instance, and a split latched then sends the only tank down the corridor. A member with no entry, a
+late arrival, counts as arena, the side that cannot wipe the raid by being short. The split is struck
+before the pull, when RaidObs has no session, so it is noted again once one opens (`squadsNoted`).
 
 **The quota is a measurement, not a guess.** About 3.87 M of gated corridor health stands between the
 pull and phase 2, and ten gauntlet bots measured **23,430 dps** — 7 DPS-role bots at ~3,075 each,
@@ -53,7 +57,13 @@ guards back it. The `thorim arena leash` rule holds the generic movers while a b
 — and, alone among the Ulduar guards, does **not** exempt `AttackAction` or `ReachTargetAction`,
 because corridor mobs sit ~92 yd out, inside the 100 yd sight cap, and the chase is exactly what walks
 a bot out of the box. `ThorimArenaTargetGuardMultiplier` drops a target outside the box, or the leash
-and the chase would take turns at the gate forever. **`ThorimArenaLeashBreached` returns early unless
+and the chase would take turns at the gate forever. The radius is the working leash and the box the
+backstop, since the box is what the boss script scans. `ThorimArenaLeashAction` walks a bot to its own
+anchor spot, or every fence trip collapses the formation, with the centre as fallback and never the
+nearest box edge, where a rounding error is a wipe. It also strips the bot's non-combat `follow master`
+(`thorim.followstripped`), since a master walking off down the corridor is the usual cause; the reset
+hands it back, reading that record before it clears the state, or an arena bot never follows anyone
+after the kill. **`ThorimArenaLeashBreached` returns early unless
 `ThorimSplitActive`**, so the 30 yd leash never sees the phase 2 ring — recorded so nobody "fixes" it
 for phase 2.
 
@@ -71,7 +81,8 @@ enough that anything in it is in range, and as wide as the room allows: adds lan
 gives out past ~26 on the south side), and melee get the centre only **out of combat** — in the fight
 they run free on the 24 yd leash. Slots come from the latched squad in **roster order**, not from the
 survivors: bots die in here, and ranking by who is still standing renumbers everyone behind the corpse
-and shuffles the formation mid-fight. Ring points are validated with `GetMapWaterOrGroundLevel` and
+and shuffles the formation mid-fight. `ThorimArenaRingOrder` serves the ring and the Charge Orb dodge
+alike, so the two agree on slots. Ring points are validated with `GetMapWaterOrGroundLevel` and
 `CheckCollisionAndGetValidCoords`, since raw ring geometry lands off the navmesh
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)). **`ThorimSettleArenaPoint`
 returning false means "use the centre", and that fallback is load-bearing**:
@@ -107,7 +118,11 @@ z < 450) where Hodir is at x 1980.
 ([pitfalls](../../engine/pitfalls.md#state-does-not-cross-objects)): carried-over `ringArrived`,
 `balconyStep` and melee slots started **ten of thirteen** corridor bots on a hallway step from two
 attempts earlier, walking up the middle at x 2141 instead of the east wall at x 2151 — which is also
-why `ThorimAdvanceBalconyStep` steps down before it steps up.
+why `ThorimAdvanceBalconyStep` steps down before it steps up. Stale means idle at full health after a
+pull: full health alone is a trap, since he watches the gauntlet untouched, so combat state separates
+the two, and before the first pull (`engagedSeen`) idle is no reset, or it clears the split the corridor
+just formed. The instance-wide half (lane, split, scan caches) runs once per cycle, from whichever bot
+resets first; per bot it would clear the split 25 times.
 
 ## The corridor traps nothing can see
 
@@ -125,6 +140,13 @@ centreline and two necks (south y ≈ −418, north y ≈ −316) forcing x 2126
 centre → east wall → centre. The chain's worst leg clears a bunny by **15.8 yd**, but only while
 `ThorimBalconyAdvanceAction` issues the walk:
 
+- **It walks at combat priority.** At normal, every step loses to `reach melee` on a boss nothing up
+  there can reach, which holds the mover up to 5 s and aims straight up the middle over both bunnies.
+- **Waypoint and hold Z is the navmesh's settled height**: the walk moves on exact points and never
+  corrects it, and a hold counts as reached in 2D, since a Z mismatch reissues the same move every few
+  seconds. Passing a waypoint's y counts as reaching it, as the hallway runs one way, and arrival at the
+  last one is a latch: on the platform the squad drifts while fighting, and re-anchoring it every tick
+  would fight `reach melee`.
 - **The drop to the arena still walks the chain once Thorim is down.** The jump edge sits on the
   centreline with both bunnies, and taken straight, ten bots stood 5-12 yd off a bunny, stunned up to 15 s.
 - **The jump fires on distance to `ULDUAR_THORIM_JUMP_START_POINT`, never on the step latch alone**: a
@@ -132,7 +154,14 @@ centre → east wall → centre. The chain's worst leg clears a bunny by **15.8 
   `_BALCONY_ARRIVE_TOLERANCE` covers the drop point too; an exact-waypoint `MoveTo` does not reliably hit
   0.5 yd, and a bot asked for that circled the edge for the rest of the fight.
 - **Corridor ranged take their balcony hold only past `ULDUAR_THORIM_BALCONY_5`**: from any earlier
-  waypoint the straight line runs 7-9 yd from a bunny.
+  waypoint the straight line runs 7-9 yd from a bunny. Hold 2 sits inside the jump-edge tolerance, so
+  the hold is tested ahead of the jump.
+- **`thorim balcony guard` holds the generic movers** for a corridor bot above the floor line while the
+  walk has somewhere to go: `follow` would take the only walkable way down to the master, 300 yd back
+  through the corridor. `AvoidAoe` stays, since Rune Detonation lands up there. In phase 2
+  `ThorimBalconyGuardMultiplier` also zeroes `ReachTargetAction` up there: a reach walks the bot back
+  through the hallway, and pulls a ranged bot off its wait spot. The walk has no master check and sits
+  at `ACTION_RAID + 2`, over the corridor walk, which has no waypoint to offer up there.
 - **A pet chasing down the corridor pulls packs the gauntlet squad has not reached**, which is what
   `ThorimStrayPets` / `ThorimRecallPet` stop.
 
@@ -144,7 +173,8 @@ throughout — so a raid that never hits him from up there leaves him at 100% fo
 **The corridor squad starts it.** `ThorimBalconyHitAllowed` gives him to a corridor bot still above the
 floor line that both stands and has latched at or past `ULDUAR_THORIM_BALCONY_5` (until the walk runs
 again, a latch left from an earlier pull reads as past it from the Giant's ramp); from any earlier waypoint
-a chase to him crosses a Paralytic Field. The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's
+a chase to him crosses a Paralytic Field, and from the corridor it pulls a bot 150 yd out of its lane.
+The jump edge is 8.9 yd from him, inside his 9.08 yd melee reach, so the walk's
 end is the firing spot. Every other bot stays off him and Sif while he is up there
 (`ThorimDpsTargetAllowed`, `ThorimBalconyGuardMultiplier`, the arena target guard). A real player changes
 nothing: the first corridor bot there starts phase 2 if he has not. Unmeasured: needs a bot-led squad on
@@ -212,7 +242,12 @@ master's own lane, or it would walk everyone straight back into the blast. **Swi
 next cast shows is safe, do not delay it**: the last hit landed 3s earlier, and the 5s cast is all the
 time there is to cross the centre line, which both rows reach. The Colossus is 131 yd from the
 top pair of waypoints, past the 100 yd `Playerbots.SightDistance` cap, so the telegraph is read through a
-targeted 150 yd creature lookup rather than the usual target values.
+targeted 150 yd creature lookup rather than the usual target values. The dodge stays armed
+`ULDUAR_THORIM_RUNIC_SMASH_LATCH_MS` (10 s) from the last scan that saw a cast, outlasting the hit and the
+3s gap before the next cast, so bots keep off the centre line the whole approach. Only the corridor squad
+answers it: `ThorimResolveGauntletIndex` falls back to the leader's waypoint, so an arena bot would walk
+110 yd down the corridor and never come back. The second waypoint is walked at combat priority without
+the shortened delay in both lanes, as it's where the squad rounds into the Colossus's line of sight.
 
 **Runic Barrier goes up once per pull.** The Colossus died 27-31s after the engage in all three
 2026-10-11 pulls, so the 45s recast never comes and a barrier usually lasts until he dies; "stop
@@ -253,13 +288,18 @@ Positioning has to clear 5 yd between stacks. The main tank drags Thorim to
 `ULDUAR_THORIM_PHASE2_TANK_SPOT` **(2110.7483, −252.65265, 419.440)**. Ranged and healers take one of
 `ULDUAR_THORIM_RANGED_SLOTS` = **6** spots, **latched per bot** (`EnsureRangedSlot`,
 `thorim.rangedslot`), because the shelter table is keyed by slot and a live re-derivation moves the
-key. Melee take a **dynamic ring of radius 8.8 around Thorim's live position**, three slots at the ring
+key. Six is the most the room fits 11 yd apart, 22 off the tank spot and 12 off Sif's loop.
+Melee take a **dynamic ring of radius 8.8 around Thorim's live position**, three slots at the ring
 anchor bearing +90 / +180 / +270 degrees, which leaves the whole tank side clear and puts the stacks
 12.4 yd apart. The off-tank sits at +20 degrees, inside taunt range for the Unbalancing Strike swap.
-Slots are sticky per guid, and **`RingAnchorBearing` reads only the tank spot** — the live tank is
-deliberately not an input, so the ring cannot rotate as the boss shuffles. That is the rule, not a
+Slots are sticky per guid, handed out least-loaded so the melee spread evenly, and kept while a bot is
+dead, or a rezzed bot's slot comes back a quarter turn off. **`RingAnchorBearing` reads only the tank
+spot** — the live tank is deliberately not an input, so the ring cannot rotate as the boss shuffles. That is the rule, not a
 fallback. Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring recomputed from a
-moving boss leaves the bot sliding in place — and a moving bot casts nothing.
+moving boss leaves the bot sliding in place — and a moving bot casts nothing. The trigger sets the
+arrival latch on a "stay" answer and the action clears it right before it moves, since the action only
+runs when there is a move; set in a trigger it only widens the tolerance, so a second ask that tick
+still says stay.
 
 **The deadband breaks for a hazard.** At ring radius a whole cone dodge is a chord of about 5 yd, so a
 settled bot in the cone never moved: **nine cone hits over two pulls** had a safe spot under 5 yd away.
@@ -287,7 +327,9 @@ its own latched one, and **the Lightning Charge hits on melee landed while they 
 
 What replaced it is a closed-form per-slot step-out to the nearer cone edge at
 `CONE/2 + MARGIN + RING_CONE_CLEARANCE` (37.5 + 15 + 5°), **solved from the latched bearing rather than
-from wherever the last cone left the bot**: over 20,000 simulated random cones, chaining offsets drifts
+from wherever the last cone left the bot** (the margin covers Thorim turning onto the orb while the bot
+walks; the clearance keeps a bot that just stepped out from reading as still inside): over 20,000
+simulated random cones, chaining offsets drifts
 the three slots out of their 90° spacing until two share a point, which is what the rigid turn was
 really buying. Result: **1.49 slot-moves per cone against 3.00**, median 4.3 yd and p90 7.3 against
 11.31 yd every time, and nobody ever left inside the cone.
@@ -298,6 +340,8 @@ anchor and then dodged the cone and the Blizzard alone, blind to the other slots
 bearings spanned **166°** and reached its neighbour's median. `SolveRingBearings` answers all three at
 once for the instance — everyone in a slot reads the same point, and no candidate is taken within
 `ULDUAR_THORIM_RING_SLOT_SEPARATION` (60°, **8.8 yd at r 8.8**) of another slot or of the tank anchor.
+Nor can it be wider: a lit cone forbids 105°, and three slots plus the anchor need 240 of the 255 left.
+A slot tries the side it answered on last time first, so one new zone cannot flip it across the ring.
 The note reads `slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain
 Lightning reads; one latched bearing per slot replaced the 3-33° smear.
 
@@ -313,7 +357,12 @@ melee, and fixing the facing swing below moves the boundary slots without touchi
 floors still bridged, so the radius carries the margin instead: a 60° gap is 8.8 yd, and one Blizzard
 forbids **77° of ring rather than 87**. The ceiling is real melee range **9.083 yd** — his `CombatReach`
 6.25 (`creature_model_info`, display 28977) plus a player's 1.5 plus 4/3. **`RingPoint`'s range check is
-not a melee-range guard**: `GetDistance` subtracts his 6.25, so it only rejects past **15.3 yd**.
+not a melee-range guard**: `GetDistance` subtracts his 6.25, so it only rejects past **15.3 yd**, which
+catches the floor hole south of y −288. With no ring point, a melee bot takes a static spot
+(`ULDUAR_THORIM_PHASE2_MELEE*_SPOT`, round the tank spot) only within
+`ULDUAR_THORIM_MELEE_RING_RADIUS + ULDUAR_THORIM_RING_ARRIVE_TOLERANCE` of him: parked 25 yd off at zero
+DPS is worse than unspread. An r 8 ring round the tank spot is walkable all the way, its west arc on rim
+polys.
 
 **Zones outrank separation when the arc will not hold everything**, the cone never (~20k in one
 instant). A bot holds its bearing while a zone sits on it, so giving zones up cost 6-14 consecutive ticks
@@ -339,6 +388,12 @@ spot, and always by 25 s — **which is Sif's clock**: she teleports at +8.3 s, 
 +10.8 s, the first Blizzard bunny appears at **+27.7 s**, its zones reach x > 2140 at +39.7 s and the
 north rim at about +33 s. No trace yet shows whether Lightning Charge reaches players above z 430.
 Sif's bunny path runs 2.6-7.7 yd from the four arena wait spots, so they serve the opening only.
+`ULDUAR_THORIM_OPENING_SETTLED_RADIUS` is the 8 yd: he settles 4.1-6.1 yd off the tank spot and is
+12-23 yd off it while being dragged. Wait spots go least-loaded, ties to the one nearest the bot: the
+arena squad starts ringed round the landing point, and an index pick walks some through it. The phase 2
+clock (`ThorimPhase2ElapsedMs`) runs only while he is in combat, since his walk home after a wipe also
+crosses below the floor line. The shelter latch does not run during the wait; it picks the lit orb up
+on its first call after.
 
 Effective `Playerbots.SpellDistance` **28.5** and `HealDistance` **38.5** mean `"reach spell"` fires
 past about **36.75 yd** from Thorim, which is why the balcony hold needs a `ReachTargetAction` guard.
@@ -362,12 +417,23 @@ instant against a Blizzard tick's 4-5k, so a camp bot in the lit cone leaves the
 shelter walk. That is what `ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS` (15) and
 `ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE` (32) are for: the escape is short because the generic flee's 30 yd
 runs carried healers along the bunny's path into the cone, and past 32 the shorter caster nukes stop
-reaching him.
+reaching him. With nothing clear and cone-safe in reach the bot stands and takes the tick rather than
+run the trail. The step is `MOVEMENT_FORCED`, or a walk home already under way at combat priority turns
+it away with `wait` until it finishes. The positioning row waits out a zone on the spot or on the
+straight walk there (`ThorimWalkUnderBlizzard`) rather than walk in and get flung off, except under the
+lit cone. The camp's zone test is flat, hence a floor check, or a bot still on the balcony dodges zones
+on the floor below.
 
 **Spread alone cannot keep the camp out of the cone, hence the shelters.** Packed into one 70° wedge all
 six `…_PHASE2_RANGE*_SPOT`s sat in one Lightning Charge, a 13-target burst for 202k and ten dead inside
 2 s. Spread over 88° the worst cone still catches four, and the seven cones leave only a 16-28° wedge
 clear at any anchor, nowhere near six spots 11 yd apart.
+
+Shelter rows were solved offline and navmesh-checked: 42.5° off the cone, 22+ yd off the tank spot,
+within 32 of the boss, 9+ from every other body. `ThorimThunderOrbIndex` refuses a lit orb more than
+`ULDUAR_THORIM_THUNDER_ORB_MATCH_RADIUS` (4 yd) from a known spawn: a wrong index walks the bot into the
+cone, staying home doesn't. While the orb is lit and the bot still home, the cover test reruns every
+tick, so a boss drifting onto the slot mid-warning still sends it; it only ever flips to sheltered.
 
 `ULDUAR_THORIM_SHELTER_SPOTS` has no rows for orb indices 4 and 5 ((2092.95, −263.00) and
 (2104.94, −233.44)), whose cones point away from the camp. Its longest run, 25.6 yd, is ~3.7 s against
@@ -388,7 +454,9 @@ the cone centre, 34.5 yd off the tank spot, 29.6-32.0 from the boss, 9+ from eve
 the Blizzard track against the shipped table's worst of 7.15. Its **29.35 yd** walk is the table's
 longest, ~4.3 s against the 4.6-4.9 s warning.
 `ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
-home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. No
+home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. It is far
+tighter than the ring's because a yard of boss drift is 7° at 8 yd but 2-4° at 15-32 yd, and any wider
+leaves no shelter set that fits the room. No
 replacement home clears all seven cones — the best is covered by one and sits 42 yd away — so moving the
 camp spot was rejected too.
 
@@ -402,7 +470,9 @@ Vampiric Blood 4 s before, and it died anyway.
 
 `thorim personal defensive` answers the tell for **non-tanks**, the first Ulduar user of the shared
 `RaidDefensive` row (`ULDUAR_THORIM_DEFENSIVE_SCOPE`, personal picks only, so its cover key is never
-written). It predicts the cone as **27,000 pre-resistance nature** and lets `GetRaidPersonalDefensive`
+written), at `ACTION_RAID + 4`, over the dodges it cannot replace. It tests the cone on the camp's
+margin, not the ring's, as the closest read of who it covers, so a bot well outside spends nothing.
+It predicts the cone as **27,000 pre-resistance nature** and lets `GetRaidPersonalDefensive`
 pick the bot's own button, which goes up only where the hit would leave it under
 `RAID_DEFENSIVE_FLOOR_PCT` (25%). That figure is the measured pre-mitigation median: one cast spans
 **13,017-41,492** before mitigation (p50 26,899, 19.8% resisted and 7.4% absorbed) and
@@ -413,7 +483,9 @@ bots it would drop and not for the rest.
 dark-to-lit rescan and cleared when the orb goes dark, so it is never early and can be a whole
 `ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS` late; the row opens the pick only `RAID_PERSONAL_LEAD_MS`
 (1 s) before the start it is handed. Without the shift the window could open 0.5 s before the damage,
-which is too late for the cast to land.
+which is too late for the cast to land. The start is the lit time plus
+`ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS` (4800) less that interval, and one already past fails closed
+through `getMSTimeDiff`'s wrap.
 
 Pushing camp spots outward from the **live** boss was modelled and rejected — it brings camp pairs to
 6.4-7.1 yd under orbs 1 and 3, inside the 8 yd jump. The melee ring's cone offset is likewise left
@@ -441,7 +513,9 @@ on the human.
 
 **`thorim.anchortank` latches one bot tank for the phase instead.** Elected bots-only — a human cannot
 be steered onto a spot — preferring whoever already holds him, then lowest guid; held while it is still
-alive, still a tank and still on the floor, so a trade moves nobody. Never the ring for either of them:
+alive, still a tank and still on the floor, so a trade moves nobody. It is cleared whenever phase 2 is
+not active, not on reset, so it cannot ride into the next pull. The main tank backs into his spot, so
+he keeps facing the boss he drags. Never the ring for either of them:
 a ring point is measured off the boss, so a tank on one orbits him at 8 yd instead of walking him, which
 once left Thorim **26 yd** off the anchor for a whole pull. An off-tank does not run the ring's
 arrive/reposition path in the positioning trigger and action either. `ThorimTankPicked` takes
@@ -453,7 +527,7 @@ onto the ranged pick.
 the design axis — **0°** off the boss→tank-spot bearing over 406 snapshots — while an off-tank holding
 him from the off-tank spot turns him **39°** off it over 399, half the phase each. The ring is solved
 against that axis, so the swing is what drags the outer slots into his front arc. **Whichever tank holds
-him now takes the anchor**, the other takes the off-tank spot, and both are fixed points: at 3.5 yd apart
+him now takes the anchor**, the other (a third tank too) takes the off-tank spot, and both are fixed points: at 3.5 yd apart
 a trade steps him inside `ULDUAR_THORIM_RING_REPOSITION_TOLERANCE` (5), so it no longer unlatches the
 ring the way the old 7.07 yd off-tank spot did.
 
@@ -516,6 +590,15 @@ floor as a **32.3 yd circle** (`sqrt(35² − 13.5²)`) centred under the orb �
 distance puts the boundary 2.7 yd too far out. The trace shows the knife edge: a bot 34.9 yd from the
 orb took every tick, while one 3 yd further east at 37.6 yd took none.
 
+In the arena the anchor itself is pushed out of the field, not just the bot: the field burns 15 s, and
+an anchor left inside walks the bot back in once the dodge lets go. The push runs straight out from the
+orb, the shortest way out, keeping each bot's bearing so the ring stays spread; every orb is 42 yd out,
+so the centre clears the field by 5.7 yd and is the fallback for a spot the leash rejects or the
+collision walk drags back in. The escape has no arrival latch, since the point stops being offered once
+the bot is out, and the arena anchor stands down while the orb trigger fires, or it walks a dodging bot
+back in. The node sits at `ACTION_RAID + 4`, over the arena ring and the add chase. Lightning Charge has
+no dodge node: the phase 2 spot answers the cone, and a second mover would only fight it.
+
 The seven Thunder Orb spawns are fixed (`creature` rows), all at **z 433.3** and all **42.0 yd** from
 the arena centre: (2105.04, −292.56), (2092.95, −263.00), (2104.94, −233.44), (2124.30, −222.60),
 (2145.50, −222.62), (2164.20, −233.47), (2164.55, −293.00).
@@ -525,6 +608,9 @@ times in 15 s**, because the helper cleared the guid before every rescan *and* p
 and phase 2's Lightning Orb shared one slot and evicted each other, forcing a 150 yd grid sweep several
 times a second. Assign only on change: the melee ring re-solves on any change of the lit orb's guid
 (`ringOrb`), so the flapping cache also flipped six melee onto a 90° bearing several times a second.
+Raid-wide sweeps (lane, orbs, Blizzard) run once per instance per
+`ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS` (500 ms), so no two bots disagree on the hot lane or the lit
+orb.
 
 ## One Stormhammer debuffs the whole arena
 
@@ -573,7 +659,10 @@ both rows, but she casts it straight out of a teleport and it is 5-6%. Chain Lig
 (2108.7, -280.04) and walks a fixed eight-waypoint loop for 30s. Its aura (62577/62603) drops a 10s, 8 yd
 zone (62576 10-man, 62602 25-man) every 2s: up to six live, a median 26 yd behind it. **Test the zones
 (`GetDynamicObjectPositions`), not the bunny** — the bunny alone missed 16 of 20 melee hits in one pull.
-Every camp home spot clears the loop by 12.9 yd or more.
+Every camp home spot clears the loop by 12.9 yd or more. `ThorimBlizzardSpots` is the live zones plus the
+bunny, which marks where the next zone drops within 2 s. Its sweep reaches
+`ULDUAR_THORIM_BLIZZARD_SCAN_RANGE` (70 yd), since every bot reads whichever bot's sweep filled the cache
+and the bunny's path spans 61 by 48 yd.
 
 **The two Blizzard radii mean different things.** `ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0` is the
 generic dodge's **trigger** radius, not a damage radius; at 12 the flee stopped while the bot still stood
@@ -614,7 +703,8 @@ compass rays out to 30 yd and takes the **furthest**, so every accepted melee fl
 circuit is a ring, so running outward lands on another arc — and blocked every other move for the walk
 (31.7 s and 15.0 s stalls). **34 / 56 / 58% of melee Blizzard damage was taken away from the ring.** Of
 199 and 246 attempts, 161 and 204 were refused by the movement gate anyway. Melee slide around the
-trail instead, and tanks are exempt **by role**.
+trail instead, and tanks are exempt **by role**, since a holder check alone drops out for the half
+second after a human tank's taunt.
 
 **Detector: Sif (33196) alive AND `GetPositionZ() < 429.6`** — she spawns at the throne and only
 `NearTeleportTo`s onto the arena floor when she joins. This reuses the same floor threshold the
@@ -632,6 +722,20 @@ yardsticks were both normal mode: Sif vanished and dealt zero, against 520k-1.04
 champions, warbringers, commoners, and the corridor's Iron Ring and Iron Honor Guard — and hands each
 bot a pick. It is deliberately **not** a raid icon, which cannot be corrected once wrong
 ([pitfalls](../../engine/pitfalls.md#a-targeting-mark-never-clears-inside-a-pull)).
+`ThorimDpsPriorityAction` runs `ThorimClearStaleMarks` before reading anything: each bot's `prioritized
+targets` is emptied on every call, since `IsHighPriority` lets one stale entry outrank the whole list,
+while the skull, cross and moon are cleared once per pull (`marksCleared`), so a human may re-mark
+mid-fight. The sweep reads `possible targets no los`: the pile routinely hides one add behind another,
+and a bot that cannot see the Evoker still has to count it.
+
+After the Acolytes, which everyone takes first since they heal the wave, melee go Champion > Warbringer >
+Evoker and ranged Evoker > Champion > Warbringer, then Commoners and the walk-in trash. Melee pick nearest
+themselves, first within `ULDUAR_THORIM_MELEE_TARGET_REACH` (15 yd; past it a higher-tier add has moved
+twice by the time they arrive), then anywhere, so a bot with nothing near still commits; ranged pick
+nearest the arena centre, which puts them all on one unit. Within a tier the current target holds unless
+another is `ULDUAR_THORIM_TARGET_SWITCH_MARGIN` (8 yd) closer, or the pick flips between equidistant adds
+mid-cast. The corridor squad takes Acolytes, Iron Ring and Iron Honor Guards, walk-in trash, then the
+Colossus, then the Rune Giant.
 
 Measured share of arena damage taken: Dark Rune Champion **41%**, Warbringer 21.2% (melee 14.0%, Runic
 Strike **62322** 7.2%), Evoker 16.5% (Runic Lightning **62445**). Champions are melee, top of the list and
@@ -641,7 +745,9 @@ ranged take Evokers first.
 **`thorim disable automatic targeting` holds the generic pickers for every non-tank in phase 1**, or
 they alternate with `ThorimDpsPriorityAction` instead of losing to it: the row goes quiet once the bot
 holds its pick, the engine falls through to `dps assist` at 50, and that retargets. A traced arena squad
-switched target twice a second all fight.
+switched target twice a second all fight. Healers keep the generic pickers, since a healer's target
+drives its wand and offensive dispels; the row only pulls a healer, or a phase 1 tank steered by `tank
+assist`, off a forbidden target.
 
 **`ThorimDpsPriorityTrigger` waits for Thorim's combat.** The `ulduar` strategy runs out of combat too
 and the gate is open between pulls, while the start pack (Behemoth, Captain, three Soldiers, Acolyte
@@ -674,7 +780,10 @@ forbidden target, **42 times** in a pull.
 **Gauntlet pets are leashed to 50 yd of their owner.** `ULDUAR_THORIM_PET_OWNER_LEASH_RADIUS` is
 `ULDUAR_THORIM_DPS_TARGET_RANGE`, chosen because that is how far the encounter picker looks for a
 target, so a pet beyond it is further out than its owner can see anything worth killing. Legitimate
-excursions peaked at 42-54 yd; runaways hit 90-164.
+excursions peaked at 42-54 yd; runaways hit 90-164. Arena pets are held to the box and the 30 yd arena
+leash, which still covers an add 24 yd out. A recall repeats at most every
+`ULDUAR_THORIM_PET_RECALL_INTERVAL_MS` (2 s) per pet: `MoveFollow` restarts the walk, so a command every
+tick leaves the pet running on the spot, and a one-shot latch would miss a pet that strays twice.
 
 The runaways came from the **phase 1 boss latch**. The opening trash dies ~0:25 and the first Dark Rune
 wave lands ~0:50; in that gap the encounter picker has nothing, the `thorim disable automatic
@@ -686,7 +795,10 @@ So the opening trash is whitelisted as the **last** DPS tier and the suppression
 
 `ThorimRecallPet`'s `SetIsFollowing` / `SetIsReturning` pairing is inverted relative to Naxx's
 `RecallControlledPetsToBot` and is **deliberately left as written** — the arena pets stayed in the box
-100% of the pull.
+100% of the pull. `PetAI::CanAttack` lets a `COMMAND_FOLLOW` pet fight again once `IsReturning` clears,
+so the recall holds it only for the walk home; with no `CharmInfo` the stop and the follow are the whole
+recall. `ThorimPetLeashAction` is no `MovementAction`, since it moves the pet: the movement guards and
+leash exemption lists have no business with it.
 
 **Pets are fine here, do not re-audit.** 87-93% in range of their own target, 2-6% orphan targets, no
 deaths, no geometry clipping ("through textures" does not reproduce — the largest steps are 8-13 yd of
@@ -708,6 +820,14 @@ zero.
 the action names `IsBurstCooldownAction` matches, while Berserk and Killing Machine are passive procs
 sharing a DBC name with a burst action, so an aura-name filter reports hundreds of casts that never
 happened.
+
+Notes that carry what a snapshot cannot: `thorim.smashside` (the hot lane; the blast wave has no world
+object), `thorim.orbescape` (where a bot was sent out of the Charge Orb field), `thorim.shelter` (whether
+a cone moved a camp bot, and off which orb; a camp bot also walks with nothing lit), `thorim.dpstarget`
+(the add a bot was told to burn, where `GetVictim()` is only where it ended up) and `thorim.petrecall`
+(the last pet each owner sent home). The gauntlet opens its own trace on its first in-combat tick
+(`gauntletTraced`), ahead of the first lane note, since its mobs are trash to the instance script and
+nothing else opens one.
 
 ## Aspect of the Wild has exactly one holder
 
@@ -772,7 +892,8 @@ This is the encounter's actual remaining problem.
 **A human tank holding him in phase 2 is called** ([calls to human tanks](../README.md#calls-to-human-tanks)):
 once per hold turn from 6 Lightning Charge stacks (62279 on Thorim, ~95 s in, swings about doubled), and
 under 50% at any stack count, never while he carries Unbalancing Strike (a bot takes him next). Bot tanks have
-no timed rule here, only their class triggers, by the user's choice.
+no timed rule here, only their class triggers, by the user's choice. A bot's hold counts as a turn too, so
+a human taking him back after a bot starts a new one.
 
 **Chain Lightning is a hop-count problem.** 64390 carries `EffectChainAmplitude` **1.5**, so the
 multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a 4625-5375 base: hops 1-4 are noise, hop 5
@@ -792,7 +913,12 @@ nothing else** under `TARGET_CHECK_ENEMY`, so pets and guardians take hops and c
 pet bodies** sit inside 10 yd of him at once, **100% of them within 8 yd of a melee body**, and PetAI
 parks a pet anywhere in a 90° arc behind him — straight into the gaps the slot separation opens. They
 are chased onto a slot bearing instead (`ThorimPetsOffRingSlot`, on the pet leash node), which costs no
-uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. Army and Feral
+uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. Only pets already on
+him are steered: one on an add is doing its job, and one out of the room is the leash's, which runs first
+and shares the throttle, so a pet just sent home isn't redirected. The chase is range 0 like PetAI's, with
+no command or stop, within `ULDUAR_THORIM_PET_SLOT_TOLERANCE` (22.5°, about 3 yd of arc), and its bearing
+is converted from his live facing every time, since a chase angle is relative to it and he turns with his
+tank. Army and Feral
 Spirits steer here too, though a player cannot command them
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)).
 

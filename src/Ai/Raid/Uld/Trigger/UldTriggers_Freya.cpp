@@ -298,7 +298,7 @@ bool FreyaSummonArmyTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    // Order matters: IsFreyaArmyTurn records the newest ghoul that HasUncoveredFreyaLasher reads.
+    // Keep the order: IsFreyaArmyTurn writes the ghoul mark HasUncoveredFreyaLasher reads.
     if (!IsFreyaArmyTurn(botAI) || !HasUncoveredFreyaLasher(botAI, state))
         return false;
 

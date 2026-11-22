@@ -2949,8 +2949,7 @@ bool GetThorimLightningChargeHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     uint32 const startMs = state->lightningOrbLitMs + ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS -
                            ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS;
 
-    // Before anything that reads the world: the row offers nothing outside that last second, and a start
-    // already past takes getMSTimeDiff's overflow branch, so a stale latch fails closed here too.
+    // A start already past wraps getMSTimeDiff to a huge value, so a stale latch fails closed here.
     if (getMSTimeDiff(getMSTime(), startMs) > RAID_PERSONAL_LEAD_MS)
         return false;
 
@@ -3090,8 +3089,7 @@ bool ThorimBotHasEncounterState(Player* bot)
     if (!state)
         return false;
 
-    // Everything the reset below drops. Leave one out and a bot holding only that never trips the
-    // trigger, so the latch rides into the next pull.
+    // Has to cover everything the reset below drops, or a bot holding only the missing latch keeps it next pull.
     return state->meleeSlots.count(bot->GetGUID()) || state->ringArrived.count(bot->GetGUID()) ||
            state->barrierBailing.count(bot->GetGUID()) || state->squads.count(bot->GetGUID()) ||
            state->followMasterStripped.count(bot->GetGUID()) ||

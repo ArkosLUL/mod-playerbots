@@ -335,8 +335,7 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
     uint8 const step = ThorimAdvanceBalconyStep(bot);
 
-    // Ranged wait out the first Chain Lightning up here, spread. Ahead of the jump since hold 2 is inside the
-    // edge test, and only past BALCONY_5: a line to a hold from any earlier waypoint crosses a bunny's field.
+    // Has to stay ahead of the jump test: hold 2 sits inside the edge tolerance.
     Position hold;
     if (bossDown && step >= ULDUAR_THORIM_BALCONY_WAYPOINTS - 1 && ThorimBalconyHoldSpot(botAI, bot, hold))
     {
