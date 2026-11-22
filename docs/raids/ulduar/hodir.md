@@ -32,9 +32,9 @@ position trigger down, so trimming it just moves churn from the dodge to the anc
 stack on `isMoving() || HasAura(62821)`, so a bot standing in one sheds on every tick without walking a
 step, and magic damage cast from inside one procs Singed on its target. `62821` measures true to its
 11 yd (with-aura p90 11.9). Its own aura is +4 Spirit and nothing else (aura 29, misc 4), so
-everything a fire is worth comes from the shed and Singed. With Singed at 25 that leaves little for a
-bot standing in one: ×1.08 for ranged, nothing for melee (paired within a bot, standing on him, no
-Storm Power), where Starlight gives ×1.30 / ×1.38.
+everything a fire is worth comes from the shed and Singed. With Singed up that leaves little for a
+bot standing in one: ×1.08 for ranged, nothing for melee (paired within a bot, standing on him,
+Singed 20+, no Storm Power), where Starlight gives ×1.30 / ×1.38.
 
 **The caster band is 15-35** (`_RANGED_MIN_BOSS_GAP` / `_CASTER_MAX_BOSS_GAP`). Spell range is
 measured to the target's bounding radius and Hodir is a giant, so the book 30 understates him: ranged
@@ -185,7 +185,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing (the damage itself is `63511`) plus a 3,999 raid tick every 2s (`64545`). All four rows are named "Frozen Blows"; the aura ids apply, the damage ids hit |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
-| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s — and the pulse spending the last buffs everyone in it. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
+| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s — and the pulse spending the last buffs everyone in it but the carrier and bots already holding it. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
 | Toasty Fire | 62821 → 65280 | 11 yd, 60s, at the mage's feet every 10s, the first 6s after the mage is freed. Sheds Biting Cold every tick exactly as movement does. Procs **Singed** at 33% on ranged/magic damage *done*. **Flash Freeze wipes every fire** (62148) |
 | Berserk | 26662 | 8 min, unhandled — no enrage awareness exists anywhere in the module |
 
@@ -502,10 +502,12 @@ for **22%**.
 - **A cloud has no cap: its last pulse buffs everyone inside.** `spell_hodir_storm_power_aura::OnApply`
   spends a charge per receiver and the cloud goes at zero, but the pulse that empties it has already
   picked its targets, and all of them keep Storm Power: single clouds gave 10-13 from 6 charges, single
-  pulses 9-11. The carrier takes the first pulse itself; a bot already holding it is refreshed and
-  spends nothing (a carrier stood 30 s in its own pulse and the cloud kept 3). What holds a cloud to
-  ~6 is receivers arriving one pulse at a time: every damage dealer lacking it within the 15 yd leash
-  sharing one pulse would add 125-520 Storm Power bot-seconds a pull (windows 10-11).
+  pulses 9-11. It never lands on the carrier (`SPELL_ATTR1_EXCLUDE_CASTER`) or on a bot already
+  holding it (a `conditions` row negating aura 63711 / 65134), so neither spends a charge: none of 495
+  applications in windows 5-11 did, though holders stood within 3 yd of a later carrier on 52-604
+  samples a pull. What holds a cloud to ~6 is receivers arriving one pulse at a time: every damage
+  dealer but the carrier lacking it within the 15 yd leash sharing one pulse would add 90-460 Storm
+  Power bot-seconds a pull (windows 10-11).
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -680,12 +682,13 @@ traced beyond the Storm Cloud rally above.
 **At ilvl 226 the levers the strategy holds fall short of the cache.** Windows 10-11 paced 198-215k,
 a 20-37k gap. A ranged bot's per-state rates (~20k a second in a fire with Storm Power, ~10k in one,
 4-6k with neither) measure Storm Power and lust, not the fire, which is worth little once Singed is
-capped (above). Sized over 0-3:00 on window 11: one shared Storm Power pulse within the 15 yd leash
-+8-14k (+12-20k if every bot made it), within 20 yd +13-19k; Singed never lapsing 0-7k; skipping the
-fourth helper wave −4 to +5k; Storm Power to ranged rather than melee in the first fire window ≤3k;
-ranged fire placement ≤1k; two clouds timing out on a carrier far from the raid ~4k (one pull); the
-south drop ~3.5k (harness). Together ~18-22k against 20-27k: the cache needs every lever at its
-ceiling at once.
+capped (above). Sized over 0-3:00 on window 11: one shared Storm Power pulse buffing every damage
+dealer within the 15 yd leash but the carrier +8-13k (+11-18k at the paired ~7k a bot-second), within
+20 yd +13-17k; Singed never lapsing 0-7k; skipping the fourth helper wave −4 to +5k; Storm Power to
+ranged rather than melee in the first fire window ≤3k; ranged fire placement ≤1k; two clouds timing
+out on a carrier far from the raid ~4k (one pull); the south drop ~3.5k (harness). Together ~18-21k
+against 20-27k: the cache needs every lever at its ceiling at once, and on one pool in three the
+20 yd leash too.
 
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at

@@ -520,8 +520,9 @@ the mage, dead to one swing (35,968 + 8,361 melee) at 1:10.7. Bots on Hodir run 
 pull, not picked.
 
 **Stop rules.** Not polished: the cache shattered on all three. Without the cache, window 11 would
-qualify (kills on all three, 0/0/1 deaths). Pace was picked in rounds 3 and 5; a round 7 pick would be
-the third.
+qualify (kills on all three, 0/0/1 deaths). Pace, picked in rounds 3 and 5, is picked a third time
+below (round 4 had no pulls to pick from) and the gap is still there, so the stop rule holds this
+round to no change; option (c) below lifts it for one more round.
 
 **Round 5 verdict: held for the breakers, in part for the hold.**
 - `--blocks` ranged on ice (w10 → w11): walked by the position node 19-23% → 8/5/6%; moving 44-46% →
@@ -543,30 +544,34 @@ what the levers are worth (all now in the findings doc):
   lust, not the fire.
 - **Storm Power has no cap of 6 a cloud.** `spell_hodir_storm_power_aura::OnApply` spends a charge per
   receiver, but the pulse that empties the cloud already picked its targets and all keep the buff:
-  single clouds 12 and 13 (uld2 56.8 s, 103.1 s), single pulses 9-11, all 198 applications fresh. A
-  healer carrier stood 30 s in its own pulse and its cloud kept 3, so refreshes spend nothing. Clouds
-  stay near 6 (6.3-6.5) because receivers walk in one pulse at a time.
+  single clouds 12 and 13 (uld2 56.8 s, 103.1 s), single pulses 9-11, all 198 applications fresh.
+  Storm Power never lands on its carrier (`SPELL_ATTR1_EXCLUDE_CASTER`, AttributesEx 0x80000) or on a
+  bot already holding it (`conditions` source 13 on 63711 / 65134: aura 63711 / 65134, negated), so
+  neither spends a charge: 0 of 495 applications in windows 5-11 hit one, though holders stood within
+  3 yd of a later carrier on 52-604 samples a pull. Clouds stay near 6 (6.3-6.5) because receivers
+  walk in one pulse at a time.
 
 | Lever, dps over 0-3:00 (k) | uld1 | uld2 | uld3 |
 |---|---|---|---|
-| One shared Storm Power pulse for every dps lacking it within the 15 yd leash, 4 s after landing (replay, union of 30 s spans; realistic = ×0.7, all made it in brackets) | +14.1 (+20.2) | +8.3 (+11.8) | +13.4 (+19.1) |
-| the same within 20 yd (a positions change) | +19.3 (+27.5) | +12.8 (+18.3) | +15.3 (+21.8) |
+| One shared Storm Power pulse for every dps but the carrier lacking it within the 15 yd leash, 4 s after landing (replay, union of 30 s spans, every one of them buffed; at the all-states ~4.9k a bot-second, the paired ~7k in brackets) | +11.8 (+16.8) | +7.9 (+11.3) | +12.5 (+17.9) |
+| the same within 20 yd (a positions change) | +16.8 (+24.0) | +12.6 (+18.0) | +14.4 (+20.6) |
 | Singed never lapsing (deficit after the ramp × ~1.5k a stack) | 0.0 | 0.1 | 7.2 |
 | fourth helper wave skipped (its ice against the Storm Power and Starlight it paid back before 3:00) | +4.9 | +2.5 | −4.4 |
 | first-fire-window Storm Power to ranged instead of melee | ≤2.0 | ≤2.6 | ≤0.9 |
 | fire placement (ranged in a fire in the first window 58/58/78% against w5's 89-91%) | ≤0.5 | ≤0.5 | ≤0.5 |
 | clouds timing out with charges left | 0 | ~4 (2 clouds, 5 charges, 2 dps within 15 yd of the carrier) | 0 |
-| **sum, 15 yd leash** | **~21.5** | **~18.0** | **~22.0** |
+| **sum, 15 yd leash** | **~19.2** | **~17.6** | **~21.1** |
 | not the strategy: south drop (first fire 20.9-21.8 s against 18.0-18.2) | ~3.5 | ~3.5 | ~3.5 |
 | not the strategy: the threat death | | | ~5 |
 
 The w5 pulls that reached 216-236k had the north drop and early ranged carriers (w5 uld1 ranged held
-Storm Power 46% of their time, 52% of the first fire window); w10's Singed lapsed in two pulls
-(5.1-5.6k).
+Storm Power 46% of their time, 52% of the first fire window); w10's Singed lapsed in all three pulls
+(2.4-5.6k).
 
-**Verdict: the levers the strategy holds do not reliably close the gap at ilvl 226.** Realistic sums
-are ~18-22k against 20-27k; only every lever at its ceiling at once, with the leash at 20 yd, reaches
-it. No build this round: question 1 below.
+**Verdict: the levers the strategy holds do not reliably close the gap at ilvl 226.** Sums at ~4.9k a
+bot-second, already with every dps in the leash buffed, are ~18-21k against 20-27k; every lever at
+its ~7k ceiling at once reaches it on uld2 and uld3 with the 15 yd leash (21.0k, 26.5k), on uld1 only
+at 20 yd (24.2k at 15 against 26.6k). No build this round: question 1 below.
 
 **If (c) is chosen, the build and what window 12 should show.** Hodir only: a receiver inside the
 leash starts its walk at cloud age `GATHER_MS` minus its walk time (age off `GetMaxDuration() -
@@ -582,10 +587,25 @@ at 35.7 / 39.9 / 37.3 s anyway. uld3's Singed lapse: the held fire died at the 1
 17.5 yd from him burned 2:01.5-2:13 with nobody in it (ranged on wave 3 ice or in Starlight).
 
 **Questions (user).**
-1. *Hard mode at ilvl 226.* (a) Accept Hodir without the Rare Cache on the 226 rosters, as Algalon and
-   Vezax: window 11 then counts as polished and the 10-man check follows; (b) keep chasing the cache on
-   226; (c) one more round for the shared Storm Power pulse (the biggest lever; every kill gets faster
-   either way), judged by Storm Power a cloud and kill time, then (a) if window 12 still shatters; (d)
-   raise the Hodir roster gear. *Recommended: (c).*
-2. *Only with (c): widen `_STORM_CLOUD_COLLECT_LEASH` 15 → 20?* A positions change, ~+4-5k more.
+1. *Hard mode at ilvl 226.* (a) Accept Hodir without the Rare Cache on the 226 rosters (the user
+   already expects no Algalon or Vezax kill there) and judge it on kills and deaths: window 11 then
+   counts as polished and the 10-man check follows; (b) keep chasing the cache on 226; (c) lift the
+   stop rule for one more round for the shared Storm Power pulse (the biggest lever; every kill gets
+   faster either way), judged by Storm Power a cloud and kill time, then (a) if window 12 still
+   shatters; (d) raise the Hodir roster gear. *Recommended: (c).*
+2. *Only with (c): widen `_STORM_CLOUD_COLLECT_LEASH` 15 → 20?* A positions change, ~+2-5k more.
    *Recommended: not in the same round*; judge the shared pulse at 15 first.
+
+**Review (round 6).** The no-cap reading holds (`spell_hodir_storm_power_aura::OnApply` spends per
+receiver; `pulses.py` reproduces the single clouds and pulses). Fixed:
+- The carrier never gets its own Storm Power (0 of 495 applications), but the one-pulse replay
+  (`cloudsim.py`) counted it as a receiver: the 15 yd lever fell from 8.3-14.1k to 7.9-12.5k, the
+  sums from ~18-22k to ~18-21k. The verdict and question 1 stand. Its "realistic ×0.7" was the
+  all-states ~4.9k a bot-second with every dps in the leash buffed, now labelled so; w10's Singed
+  lapsed in all three pulls (2.4-5.6k), not two.
+- The "refreshes spend nothing" evidence was the carrier, which its pulse skips; a holder is skipped
+  too, by a `conditions` row, not refreshed. Findings doc corrected.
+- Pace is the third pick, so the stop rule applies; (c) now says it lifts it. (a) no longer reads as
+  what the user chose for Algalon and Vezax, which keep polishing.
+- Left, pre-existing: `GetHodirStormPowerRally`'s comment says a holder's pulse "would be spent", but
+  the pulse skips holders; the guard itself is right. Fold into the next code round.
