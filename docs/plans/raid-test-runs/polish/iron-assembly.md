@@ -727,3 +727,9 @@ the stack; a ring wholly on the floor keeps the squeeze. Not checked offline (na
 container): that the runtime query reads the designed ring 64/64 on the floor, as the doc's navprobe
 does; the next window's `spot` rows show it. Left: Steelbreaker's shifted tank spot itself has no
 floor check (up to 36 yd off the stack, the 135° hole 34); no tank fell in the 21 traces.
+
+**User answers (2026-11-22):** Innervate from balance and restoration druids to priests: no, those druids
+need their own mana. Rune heading toward Steelbreaker's tank: not built; the user asked whether it is
+critical and it is not (no tank death in Molgeim's phase in windows 12-13, 25n polished in window 13).
+Shared `PickDefensive` (`src/Ai/Raid/RaidTankDefensive.cpp`): yes, fix both bugs (skip a button whose
+runes or runic power are not there; a running defensive covers only if it lasts past the hit).

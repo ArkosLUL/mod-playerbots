@@ -545,3 +545,6 @@ Gorgrim 10/26, Narrhok 4/21, Broln 6/19; toc2 Narrhok 13/47, Gorgrim 25/37, Maz'
 **Questions for the user.** Q1, this window's numbers: iced Broln killed 5 on toc1 (one more lapsed) and dealt 240k in
 its first 60 s; he caught 6 of 19 kites (32%), and iced Gorgrim 7 of 19, 25 of 37, 16 of 44, mostly Death Coil and Icy
 Touch. Recommendation unchanged: yes, Disarm and Dismantle only. Q2: not due (above); recommendation unchanged.
+
+**User answer (2026-11-22) to Q1:** yes: a disarm peel (warrior Disarm, rogue Dismantle) may go on an iced
+Tauren champion whose victim is not a tank.

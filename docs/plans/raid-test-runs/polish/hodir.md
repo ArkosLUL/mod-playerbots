@@ -609,3 +609,8 @@ receiver; `pulses.py` reproduces the single clouds and pulses). Fixed:
   what the user chose for Algalon and Vezax, which keep polishing.
 - Left, pre-existing: `GetHodirStormPowerRally`'s comment says a holder's pulse "would be spent", but
   the pulse skips holders; the guard itself is right. Fold into the next code round.
+
+**User answers (2026-11-22):** Q1 (c), Hodir only: one more round building the shared Storm Power pulse
+(every damage dealer within the collect leash arrives together and shares one pulse), the stop rule lifted
+once; if the cache still shatters after it, accept Hodir without the cache on 226. Q2: keep the 15 yd leash.
+Extra pulls on round 5 (window 12b): one kept the cache (kill at 2:46.9), the others 232.2k and 180.6k.

@@ -557,9 +557,12 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     {
         bool const isRanged = PlayerbotAI::IsRangedDps(bot);
 
-        Unit* lasher = isRanged ? GetFreyaRangedLasherAim(state) : nullptr;
-
         float const reach = isRanged ? sPlayerbotAIConfig.SpellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
+
+        Unit* lasher = isRanged ? GetFreyaLowLasherOnPlayer(bot, state, reach) : nullptr;
+        if (!lasher && isRanged)
+            lasher = GetFreyaRangedLasherAim(state);
+
         if (lasher && bot->GetExactDist2d(lasher) > reach)
             lasher = nullptr;
 

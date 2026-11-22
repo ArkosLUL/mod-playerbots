@@ -337,3 +337,8 @@ mark arcs: (1883.2,107.4) (1819.6,107.4)
 For Vezax at his west-most settle (1847.8, 90.0) the same points shifted by (-3.6, -2.9): row 0 strafed
 out to (1827.3,120.5) and (1868.3,120.5), row 4 to (1827.3,129.5) and (1868.3,129.5), mark arcs
 (1879.6,104.5) (1816.0,104.5).
+
+**User answers (2026-11-22):** Q1: the Mark should only reach ranged, so move the camp: option (a),
+healers in front at 30.5 yd, ranged behind out to 39.5 yd. The candidate points above navprobe on the floor
+(orchestrator: both settles' outer strafed slots, row 4 and the mark arcs read z 341.6-342.4, dz under 0.9).
+Q2 (dodge and camp points off the walkable floor) is a bug: fix it in the same round.

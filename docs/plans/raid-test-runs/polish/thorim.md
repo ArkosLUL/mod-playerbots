@@ -486,3 +486,9 @@ two ring slots within 8 yd in well under 60-78% of phase 2 snapshots (target und
 ring slot straight to another; melee Chain Lightning deaths in the ring from 5 toward 0 (tank-to-slot-2 bridges remain);
 melee still on Thorim in 98%+ of snapshots and raid damage on him no lower than 0.41-0.47%/s. Gauntlet unchanged: phase
 2 in hard mode (`thorim.sifjoined`) in all three, no phase 1 deaths. The pulls still wipe at the mana wall or the ceiling.
+
+**User answers (2026-11-22):** Q1: keep polishing on the 226 rosters with the stop rule waived. Q2: move
+the off-tank spot to (2107.25, -252.65), navprobed on the floor at z 419.371 with a straight path from the
+tank spot, then compare before and after, since boss positioning affects other things. Only the waiting
+tank stands there (the holder takes the anchor), 3.5 yd from it like today, so a trade stays inside the
+ring's 5 yd reposition tolerance.
