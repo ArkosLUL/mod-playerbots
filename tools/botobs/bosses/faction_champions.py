@@ -21,8 +21,8 @@
                                            skipped links, their gaps and carry, the order, what cut each; bot grips
                                            outside a pull: the landing off ARENA_CENTER, Chains of Ice after,
                                            regrips; fc.wall holds
-    faction_champions.py <file> --peel     snares and peels on melee champions, the full-speed chases a snare
-                                           reached, Disarm against Bladestorm,
+    faction_champions.py <file> --peel     snares and peels on melee champions, trinket poppers on iced ones, the
+                                           full-speed chases a snare reached, Disarm against Bladestorm,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
@@ -44,7 +44,7 @@
                                            who they chase, how far the kill target and the raid stand off the
                                            pack, escapees
     faction_champions.py <file> --trinket  fc.opener holds, what set off each champion PvP trinket, the share
-                                           the opener AoE burned
+                                           the opener AoE burned, those on iced champions and the Chains after
     faction_champions.py <file> --vetoes   the Faction Champions multipliers and rules, by action
 
 What the generic views get wrong here, and what this reads instead:
@@ -3764,8 +3764,8 @@ def show_trinket(trace: Trace) -> None:
         tally = collections.Counter(trigger_name(trace, row["spell"]) for row in iced)
         print(f"  on a champion an ice duty held in Chains of Ice: {len(iced)}, "
               + ", ".join(f"{name} {count}" for name, count in sorted(tally.items(), key=lambda kv: (-kv[1], kv[0])))
-              + (f"; its DK's Chains back a median {statistics.median(backs) / 1000:.1f} s after" if backs else "")
-              + f", never {len(iced) - len(backs)}")
+              + (f"; its DK's Chains back a median {statistics.median(backs) / 1000:.1f} s after, never"
+                 f" {len(iced) - len(backs)}" if backs else "; its DK's Chains never back"))
     else:
         print("  on a champion an ice duty held in Chains of Ice: none")
     print(f"  a trigger is the latest opener AoE (a fear or Frost Nova) in the {TRINKET_CAUSE_MS / 1000:.1f} s"
