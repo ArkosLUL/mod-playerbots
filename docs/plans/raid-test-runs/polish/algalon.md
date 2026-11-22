@@ -271,7 +271,8 @@ at +6 s. Nothing else in the 13 traces changes.
 
 **Next window should show** (`algalon.py --stars`, `--verdict`): no `killed` explosion within 16 s after a
 Big Bang hit (window 10: uld1 3:41.2 at +6.6 s, 6 dead). A kill `urgent` takes in a cast and still alive
-at its end turns into `recovery` (`algalon.focusstar` 0) right after the hit while the raid is under the
-line, then is killed as `deadline` past the span. Only 1 of 13 pulls had such a carry, so the window may
+at its end is dropped right after the hit while the raid is under the line (`algalon.focusstar` 0, window
+`recovery`, or `raidhp` while the star isn't due), then killed once its finish clears the span or nobody is
+under the line. Only 1 of 13 pulls had such a carry, so the window may
 not exercise it; then judge by the aftermath alone. Watch that the dropped star doesn't drain onto a
 meteor (`drained`, window `smash`).

@@ -223,7 +223,8 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
   landing on another explosion or Big Bang, meteors in that span don't count. Without the carry a kill under
   5 %/s never dropped: two landed 1.8 and 3.0 s from another star's drain death at Big Bang's cast, 10-11 dead
   each. Its log is kept: a flat 5 %/s made a star never hit look due, and the team was sent back to it 4 times
-  in 2 s;
+  in 2 s. A kill `urgent` took before a Big Bang hit drops if it would land in the **Aftermath** (below; one at
+  6.6 s killed 6);
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
 - a **due** star is opened whatever the raid's health, bar Big Bang's aftermath, soonest death first: its own death isn't clear and is
@@ -234,8 +235,8 @@ two marker creatures each) and turned far stars due. In order, `urgent` overridi
   its death: killing another instead put two explosions 0.2 and 1.3 s apart and killed 30. With no due star
   clear, the one landing furthest from the rest is still taken if that beats their own deaths. **Aftermath**:
   no due kill, fallback included, lands within 16 s of a Big Bang hit while anyone is under the explosion's
-  line (the void's DoT leaves most of the raid there that long; one at 9.2 s killed 12), nor is a kill
-  `urgent` took before the hit kept into it (one at 6.6 s killed 6); a star draining into it isn't made due for that;
+  line (the void's DoT leaves most of the raid there that long; one at 9.2 s killed 12); a star draining into
+  it isn't made due for that;
 - not while any living raid member, phased ones too (back long before a kill lands; left out, the gate opened
   1.6 s after a hit with the raid drained, 7 dead), is below the explosion's top roll (16.9 k / 21.5 k), or
   below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is
