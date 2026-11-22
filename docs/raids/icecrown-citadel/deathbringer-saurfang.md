@@ -43,7 +43,8 @@ returns (`flags_extra` 0x80000) and is immune to nearly all control and knockbac
   reach; a druid stays in bear form, which its non-combat nodes would drop with no target. The tank not
   holding him taunts the loose beast nearest its victim, only while its own rune has the taunt cooldown
   plus 0.5 s left or another bot tank free of the rune has its taunt ready, so the next swap is covered;
-  Scent of Blood lifts that.
+  Scent of Blood lifts that: a scented beast one-shots whoever it reaches, which costs more than a late
+  swap.
 - **Tank defensives** (`dbs.defensive`, physical only): the holder, or a tank carrying a Mark, spends
   one button from Blood Power 70 (40 with a Mark, whose splash hits it every swing, held or not) once per
   cycle, a cycle ending at each Mark, and whatever is ready all through Frenzy; any tank under 40% spends

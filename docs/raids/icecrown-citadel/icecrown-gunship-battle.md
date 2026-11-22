@@ -42,7 +42,8 @@ Bots only; humans hold no duty and a player's skull wins. Rebuilt once a second 
 
 Below Zero ejects the cannoneers: melee ones board, ranged ones take an edge slot.
 
-Every bot takes its rocket pack from Zafod before the battle, a cannoneer before its seat. A bot
+Every bot takes its rocket pack from Zafod before the battle, a cannoneer before its seat; a mounted
+bot can board a cannon, and the seating action cancels its mount once seated. A bot
 still without one holds no stand, since the stand would pull it back from Zafod.
 
 ## Boarding
@@ -56,7 +57,8 @@ still without one holds no stand, since the stand would pull it back from Zafod.
 - On the enemy deck the board tank taunts him off any non-tank and holds him 6 yd in from the landing
   point toward the mage (30 / 35 yd from the home edge), the board healers stand on the landing point and
   the melee kill the mage.
-- When the mage dies everyone goes home, the tank once nobody else is on the enemy deck or 10 s on.
+- When the mage dies everyone goes home, the tank once nobody else is on the enemy deck or 10 s on: the
+  captain turns on whoever is left once his tank goes.
 - **Retreat**: once his stacks reach +200% (20 on normal, 17 on heroic) the party goes home, tank last,
   and boards again once his stacks are gone. Nobody hits him meanwhile, so they fall off 16 s after.
 

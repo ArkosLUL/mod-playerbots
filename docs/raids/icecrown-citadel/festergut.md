@@ -62,7 +62,8 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
 - **Melee**: both stand on one leg, 7 yd out south-east or north-east, behind him whichever tank he faces;
   `fg.leg` flips to the other once goo lands within 8.25 yd of the one in use and the other is clear. The
   legs release once he stands 3.5 yd off his spawn, until the drag brings him back.
-- **Ranged and healers**: one latched slot each (`fg.slot`), released once he is 10 yd off his spawn.
+- **Ranged and healers**: one latched slot each (`fg.slot`), released once he is 10 yd off his spawn
+  (reach stays blocked on a slot, so a holder would watch him walk out of range).
   Healers take 1, 2, 3, 8, 9, 10 first; from there both tank spots and all but two or three slots are in
   40 yd. While fewer than 3 (10) or 8 (25) stand out, bots on slots plus players in ranged or healer specs,
   melee fill the free ones, nearest the legs first. Reach and spell movers are held on a stand, heal reach
@@ -83,7 +84,7 @@ diminishing returns (`flags_extra` 0x80000 on all four entries). His boundary is
   one by one.
 - **Malleable Goo**: a bot other than the holder within 6.5 yd of a live impact interrupts its cast and
   walks, forced, to its own stand if that is 7.5 yd clear, else to the nearest clear spot, a ranged one
-  8.5 yd from everyone outside a spore window. A stand under goo waits until the impact ages out.
+  8.5 yd from everyone (so one Vile Gas still takes one player) outside a spore window. A stand under goo waits until the impact ages out.
 - **Pungent Blight**: during the cast the raid cover is dealt on the lowest Inoculated stack on the map,
   its class nodes held over the lead-in; each bot asks for its own button on its own stacks, so a bot
   short of Inoculated takes an immunity or a healthstone.
