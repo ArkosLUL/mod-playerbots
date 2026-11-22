@@ -73,6 +73,12 @@ Same entries and room at 10 and 25 (2 Sentries at 10); no hard mode or heroic sp
   real body pull. *Recommended:* keep her as is while this fix is judged, since it covers the
   ranged-pull case the strategy must survive anyway.
 
+**User answers (2026-11-22), for round 2 after window 7 judges round 1.**
+- If the off-tank dies, the main tank takes up to two loose Sentries (taunting only those on
+  non-tanks) and keeps Auriaya. No third tank.
+- DPS attack the Sentry the off-tank is attacking, not the nearest.
+- Harness: the start keeps engaging her (orchestrator's call).
+
 **Next window should show.** No DPS attack on a Sentry before one is in combat; the first Sentry
 engage on the off-tank (`auriaya.sentry` going `free` → `none`/`dps`), not on a cat or pet; no
 Sentry-melee death on a non-tank in the first 0:30; `--threat 34014` "on a tank" well above 59%.
