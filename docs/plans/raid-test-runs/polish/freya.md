@@ -697,3 +697,7 @@ high stacks because the stacks slow it. Orchestrator check: only the 10-man stac
 proc is 64191 -> 64190), so the 25-man replacement went back to the user. Q5 (b): ranged finish lashers
 left from an earlier wave before the trio while their summed health is under one lasher's; the user's aim
 is that a wave is cleared before the next arrives, so find why it is not.
+
+**User answer (2026-11-22) to Q4, after the 25-man check:** drop the Snaplasher hold (rounds 3 and 5).
+Kite a loose Snaplasher only while its live speed is below the kiter's (its stacks slow it at 10-man only);
+otherwise, with no add tank alive, the raid kills it.

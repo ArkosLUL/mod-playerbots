@@ -443,3 +443,6 @@ issued 18 legs against 200 refused `wait`. Two side effects to watch: a champion
 wall grip from anyone, also while Hand of Freedom makes Chains useless (such holds gave 2-3 grips this window); and the
 ice reach now replaces a generic `avoid aoe` flee in flight (`MOVEMENT_COMBAT`, retried after 1 s), none seen for an
 ice DK in window 12.
+
+**User answer (2026-11-22) to Q1:** yes: a disarm peel (warrior Disarm, rogue Dismantle) may go on an iced
+Tauren champion whose victim is not a tank.
