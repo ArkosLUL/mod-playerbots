@@ -276,3 +276,104 @@ at its end is dropped right after the hit while the raid is under the line (`alg
 under the line. Only 1 of 13 pulls had such a carry, so the window may
 not exercise it; then judge by the aftermath alone. Watch that the dropped star doesn't drain onto a
 meteor (`drained`, window `smash`).
+
+## Round 4 (2026-11-22, build ebe746ad1 with round 3)
+
+**Data.** Window 11, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head
+ebe746ad1 --pulls 10`). All 16 Algalon traces on disk reread for hole losses and kite crosses (scratch
+`stray.py`, `eatz.py`, `cross.py`, `taunthold.py`).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261122-203346-21` | `603_21_…_1795379730` | wipe 5:09, Ascend 5:06.6, boss 43% | 34: star explosion 12, loose 8, Constellation Barrage 7, on tank 5, Big Bang 1, Cosmic Smash 1 |
+| uld2 | `tr-20261122-202222-19` | `603_19_…_1795379045` | wipe 5:25, Ascend 5:22.3, boss 44% | 31: loose 12, star explosion 10, on tank 6, Barrage 2, Cosmic Smash 1 |
+| uld3 | `tr-20261122-202824-20` | `603_20_…_1795379407` | wipe 4:34, Ascend 4:31.7, boss 55% | 32: star explosion 13, Big Bang 8, Barrage 4, on tank 4, loose 3 |
+
+What started each wipe:
+
+- uld1: a constellation diving on the healer Uldxad took the hole 11 yd from the tank slot at 3:16.5, 10 s
+  before Big Bang 2's cast; both swap tanks were then 57-62 yd from any hole (`noshelter`), with no button
+  left: Uldxaa died to the hit, Uldxaz 0.1 s later to the under-star going off at the strip. Tank deaths
+  4:29-4:48, then loose.
+- uld2: the holder died at 3:03.1 (146 k in 6 s, 63 k healed, both tank healers alive), the bear at 3:12.3; a
+  `deadline` kill on 1633 at 11% (its drain death sat on a meteor) went off at 4:14.6, 10.9 s after the
+  previous explosion with 13 under the line: 9 dead. Tank deaths 4:48-4:55, then loose.
+- uld3: no hole at Big Bang 2. The kite took the stock from 3 to 1 at 2:45-2:55 (31-41 s before the cast,
+  outside the reserve), then two constellations on the healer Uldzad closed the last two holes at 3:21.5 and
+  3:25.4. `urgent` killed a star at 3:31.2 in the cast (2 dead); Uldzad's constellation followed it into the
+  new hole at 3:32.2, `urgent` killed another 1.5 s after the first (9 dead), and the hit took 8.
+
+**Stop rules.** Not polished (three wipes; waived on 226 rosters). The failure picked below is new.
+
+**Verdict on round 3: held**, by the aftermath; the carried kill itself wasn't exercised. No `killed` star
+went off within 16 s after a hit (window 10: uld1 +6.6 s, 6 dead). The only `urgent` spans (uld3
+3:25.7-3:32.9) went off inside the cast, so no kill was carried across a hit. One explosion in an aftermath:
+uld1 3:39.8 (+5.2 s, 1 dead, 18 under), under-star 1635 at 14.1% at the cast against its 4.0-9.6% band,
+draining into it; round 2 and 3 leave drains alone.
+
+**Failures by deaths** (97): tank burst 15 and loose 23 (the user's answer stands); star explosion 35 =
+outside the casts on a drained raid 21 (uld2 4:14.6 9, uld1 4:20.7 4 and 4:50.8 3, five singles), Big Bang
+2 without a usable hole 12, other casts 2; Big Bang 9 (all Big Bang 2 without a hole); Barrage 13 (mostly
+in the collapse); Cosmic Smash 2.
+
+**Picked: Big Bang 2 without a usable hole** (21: uld3 19, uld1 2; it started two of the three wipes).
+Wave 3 wakes 20 s before Big Bang 2's cast; its constellations go to healers on healing threat and dive
+across the room, and in every pull one took the hole Big Bang 2 needed: uld2 3:14.3 (1594, 7 yd from the
+tank slot, on Uldyae), uld1 3:16.5 (1612, 11 yd from it, on Uldxad), uld3 3:21.5 and 3:25.4 (on Uldzad).
+In the 13 older traces, constellations on someone other than the handler closed holes too, but at Big Bang
+2 only inside the cast (a chased bot leading one into its hole). Three parts:
+
+- Bug: the handler leaves a constellation over 5 yd up alone ("no hole takes one"), but the core takes one
+  up to 7.5 yd up: `npc_living_constellation::SpellHit` ignores 65509 when `GetDistanceZ > 5`, which
+  subtracts both combat reaches (model 28741 has none, so 1.5; the Black Hole's 28460 is 1.0 since
+  `2026_11_06_01`), and 65509 (target 7, entries) picks non-players in 2D (`Spell.cpp`
+  `WorldObjectSpellAreaTargetCheck`). Holes closed at +6.4 (uld3 2:30.9), +7.2 (uld1 3:16.5), +7.7 (uld3
+  3:21.5).
+- Bug (the kite flag): uld1's handler stood still in `cross` 4 × 12.6 s (2:11.5, 2:26.2, 2:41.6, 2:57.0) on
+  hole 1617. The cross spot (1660.3, -273.9), 40 yd out at bearing 46°, came back from the floor check
+  within 2 yd of the handler (no `move` row, no `stuck` note: the only path through the action that fits);
+  uld2's cross to (1657.5, -275.2), 37 yd out at 48°, walked. No roster bot stood past 37.1 yd at bearings
+  40-50° in 16 traces. After the stall timeout the same hole was picked again, and kite-first kept the
+  handler off loose ones meanwhile: C1537 sat low on the healer Uldxad from 3:10.3, taunted at 3:18.8.
+- Plan: one class taunt every 8 s can't take three diving at once, and a taunted one goes back to its
+  healer: 15 of 27 taunts on constellations in window 11 held under 15 s. Question Q4.
+
+**Fix** (Algalon files only): `ULDUAR_ALGALON_CONSTELLATION_LOW_Z` 5 → 7.5; a stage or cross spot that
+`ValidateFloorPoint` moves over 2 yd refuses its hole to the kite for the rest of the pull
+(`kiteRefusedHoles`, read by `KiteableHole`), so the kite takes another hole or the handler taunts loose
+ones (`algalon.kite` `stuck`, then `nohole` or `taunt`). No extra floor checks: the moved spot is the one
+already validated. 10 and 25-man alike. Replay on window 11: no death changes. uld1's 3:16.5 constellation
+was over 7.5 yd a second before it closed the hole; with 1617 refused at 2:11.5 the kite moves to 1615
+(56 yd from the hold spot) and the handler takes C1537 at 3:10, but Big Bang 2 still finds the tanks
+57-62 yd from a hole.
+
+**Not picked.**
+
+- Explosions outside the casts on a drained raid (21): uld2's 4:14.6 was a `deadline` opened 8.3 s after an
+  explosion, its own death 1 s after a meteor; due kills skip the raid-health gate by design. Twin stars
+  (1632 and 1633, 48% each at 3:34.7) left two explosions 11 s apart. Next candidate, with round 3's meteor
+  blackout.
+- uld1's under-star 1635 above its band at Big Bang 2 (1 dead after the hit).
+- Tank deaths and loose: as before.
+
+**Window flags.** Kite runs "3 of 11 ended with a constellation eaten": mostly the reader's count, since a
+run is any unbroken `taunt`/`stage`/… stretch (3 s taunt-only stints, hand-offs while tanks died), and it
+credits a run with holes closed by constellations on others; uld3's handler kited 3 into holes and uld2's 5.
+The real bug was uld1's stalled crosses (fixed).
+Melee on `algalon.spot=stage` for 97-100% of the intro: not a bug, the design: he is unselectable for the
+26 s intro, the stage spots keep melee out of his reach when he picks a random victim at its end (0 inside
+his reach in all three pulls), and a pair tank had him within 0.3 s.
+
+**Questions for the user.**
+
+- Q4: wave 3's constellations dive on healers 20 s before Big Bang 2 and take its holes. (a) Keep two holes
+  out of the kite from 60 s before each Big Bang (now one from 30 s); (b) a second taunter: the swap tank
+  not holding him taunts constellations off healers in the 30 s before a Big Bang; (c) both.
+  Recommendation: (a) now: one constant, and uld3 would have kept a hole (the kite's eats at 2:45 and 2:55
+  left 1); the cost is one more constellation's Barrage until the cast. (b) only if the hole by the tank
+  slot keeps going (uld1, uld2).
+
+**Next window should show** (`algalon.py --constellations`, `--holes`): no `cross` or `stage` stretch of
+12 s with the handler standing still (window 11: uld1 4 × 12.6 s); a hole the floor check refuses reads
+`stuck`, then the handler kites another hole or taunts. Constellations between 5 and 7.5 yd up count as
+low: taunted and kited like the rest. Big Bang 2's hole losses won't change until Q4 is answered.
