@@ -24,25 +24,40 @@ holds the flag and again once the main tank reaches the threshold. A pick is thr
 `_roleSwapCooldown` (10 s) per bot, held in `RazorscaleInstanceState`, so a re-derivation cannot flip
 it mid-phase. Harpoons need no such throttle: the spent flag lands in the same call that fires.
 
+`UpdateBossAI()` runs that assignment as a side effect, which is why the harpoon trigger calls it for
+every bot before the crew check, and why `IsGroundPhaseFor` reads the phase off a boss the caller
+already holds, for code that must not run it. The harpoon pick replays `FindNearestGameObject`'s range
+check per entry over one grid visit in its own searcher's order (same phase filter, same cells), so it
+picks the object that call would.
+
 ## Devouring Flame is 5 yd, and the skull has one owner
 
 The patch is NPC 34188 carrying 64709, a 2 s periodic trigger of 64704 (64733 in 25-man), **whose
 damage radius index is 8 = 5.0 yd**. Bots clear `DEVOURING_FLAME_CLEAR_RADIUS` (7 yd) so a step
 actually leaves the patch instead of stopping on its edge, and `DevouringFlameBlocks()` rejects any
-destination covered by another one — she drops these every 6–12 s and they stack up.
+destination covered by another one — she drops these every 6–12 s and they stack up. It searches the
+grid round the bot, wide enough to reach the destination plus a patch's reach, not `"nearest hostile
+npcs"`, which ranks by distance to the bot. While she is airborne the main tank's clear is scaled by
+`DEVOURING_FLAME_AIRBORNE_TANK_SCALE` (2.3) so he can hold the Dark Rune adds away from the patches;
+grounded he only clears his own footprint. The dodge sits at `ACTION_RAID + 4`, above the Sentinel and
+whirlwind spacing moves, which step 8 yd on a bearing blind to the fire.
 
 Clearing is only half of it. **The hold lives in a rule, not the action** —
 `razorscale avoid devouring flames` is useful only while a patch is live
 (`return !Scan().flame.IsEmpty();`), and standing clear is the `razorscale` `Block` rule's job: it
 zeroes the generic movers and `avoid aoe` while the spot a melee bot would walk back to is on fire
 (`avoid aoe` sits at `ACTION_EMERGENCY`, over every row, and picks its bearing blind to the other
-patches). `StepClearOfFlames` tries 9 bearings, straight away then ±π/8 out to ±π/2, against patches
-collected once round the bot (`CollectDevouringFlames`), not a sweep per candidate.
+patches). Ranged are exempt from that second half: they never have to close, and holding them would
+fight the grounded stack-up. The answer is kept for the rest of the bot's tick, since every generic
+mover in the queue asks. `StepClearOfFlames` tries 9 bearings, straight away then ±π/8 out to ±π/2,
+against patches collected once round the bot (`CollectDevouringFlames`), not a sweep per candidate.
+With none clear it steps straight away anyway: any step out beats standing in it.
 Both release the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
 is the freeze bug.
 
 **The ranged stack walks to a slot, never onto a patch.** A ranged bot outside the stack circle
-(12 yd round the arena centre, 18 yd round the first-landing offset) walks to its own slot on it,
+(12 yd round the arena centre, 18 yd round the first-landing offset, 20 yd off centre on Y so everyone
+stands behind her) walks to its own slot on it,
 bearing from its place in the group (`GetRazorscaleRangedStackSpot`). Window 5 put all 14 ranged
 and healers on one spot, and a patch there killed 9 of them 14 times. The slot turns along the circle, up to a quarter turn each way, off any patch the
 dodge would move the bot out of, at the spot or on the walk; if none is clear the bot stays put. The
@@ -57,17 +72,30 @@ held as a `ManualSetValue<RazorscaleScan*>` in `RaidUlduarValueContext` (`UldVal
 registered in `AiObjectContext::BuildSharedValueContexts`: a value because that is the one per-bot store
 triggers, actions and multipliers can all reach. Without it the harpoons alone cost **12 GameObject
 sweeps of 200 yd (37 cells) per bot per tick**, and `"nearest hostile npcs"` is a 100 yd sweep plus a LOS
-ray per NPC on every read.
+ray per NPC on every read. Its `Boss()` is `"find target"`, null until she has the bot on her threat
+list.
 
 **The patch is safe to gate on the encounter.** 63236 is a trigger-missile (effect 32) into 63308,
 which summons NPC 34188 for **22 s**; she is the summoner, so every patch sits in `BossAI::summons`
 and both `_JustDied` and `EnterEvadeMode` `DespawnAll()` in the same call that sets the state. No
 patch can outlive the encounter flag.
 
-`razorscale kill target action` is the **only** thing that sets the skull: the boss whenever she is
-on the floor, otherwise Sentinel → Watcher → Guardian. `DpsTargetValue` prefers the RTI target, so a
+`razorscale kill target action` is the **only** thing that sets the skull, driven by one bot
+(`IsMechanicTrackerBot`) so the raid does not fight over the icon: the boss whenever she is
+on the floor, otherwise Sentinel (whirlwinds the raid) → Watcher (ranged caster) → Guardian. Of two
+Sentinels it marks the lower-health one, so the skull does not flip between them as the marking bot
+moves (list order is per bot and unstable); the other tiers take the first found. `DpsTargetValue`
+prefers the RTI target, so a
 skull left on an add is the whole raid left on an add. Moon stays on the boss while she is airborne —
-it is excluded from every DPS target scan — and is cleared on landing.
+it is excluded from every DPS target scan — and is cleared on landing. The main tank bot sets it, or,
+when the main tank is a human, a bot assist tank of index 0-2 (`RAZORSCALE_ASSIST_TANK_SLOTS`).
+
+While she flies, a bot more than `RAZORSCALE_ARENA_LEASH_MARGIN` (25 yd) past the arena edge (30 yd
+round (587.54, -175.04)) walks back to 10 yd inside it before anything else.
+
+**Flame Breath** is a grounded-only frontal cone (`FLAME_BREATH_CONE` π/2, out to 40 yd). The main
+tank and assist tank 0 hold the boss and eat it; anyone else caught in it sidesteps the shortest way
+out of the cone at its current range.
 
 No generic strategy commands pets ([action-selection](../../engine/action-selection.md#multiplier-semantics)),
 so they keep whatever they last hit: `razorscale pet control action` puts them on the adds

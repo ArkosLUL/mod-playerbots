@@ -505,7 +505,7 @@ MimironLegBurn MeasureMimironLegBurn(Position const& from, MimironFirefighterHaz
         ends.emplace_back(leave, -1);
     }
 
-    // Leaves sort before enters at the same distance, so two burns that only touch don't count as stacked.
+    // On a tie leaves sort before enters, so two burns that only touch don't count as stacked.
     std::sort(ends.begin(), ends.end(), [](auto const& a, auto const& b)
               { return a.first != b.first ? a.first < b.first : a.second < b.second; });
 
