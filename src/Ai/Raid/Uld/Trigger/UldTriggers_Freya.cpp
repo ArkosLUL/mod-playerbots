@@ -63,6 +63,15 @@ bool FreyaTankAddsTrigger::IsActive()
     return PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
 }
 
+bool FreyaReleaseHeldSnaplasherTrigger::IsActive()
+{
+    Unit* held = GetFreyaHeldSnaplasher(botAI);
+    if (!held || (PlayerbotAI::IsTank(bot) && IsFreyaHeldSnaplasherFree(botAI)))
+        return false;
+
+    return FreyaStopHittingHeldSnaplasher(botAI, held, false);
+}
+
 bool FreyaRedirectThreatTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)

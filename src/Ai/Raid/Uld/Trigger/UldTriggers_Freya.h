@@ -41,6 +41,15 @@ public:
     bool IsActive() override;
 };
 
+class FreyaReleaseHeldSnaplasherTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya release held snaplasher";
+
+    FreyaReleaseHeldSnaplasherTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class FreyaRedirectThreatTrigger : public Trigger
 {
 public:

@@ -107,6 +107,7 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaFrostNovaLashersTrigger, FreyaFrostNovaLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaTrapLashersTrigger, FreyaTrapLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaSummonArmyTrigger, FreyaSummonArmyAction>(ACTION_RAID + 2);
+    e.Node<FreyaReleaseHeldSnaplasherTrigger, FreyaReleaseHeldSnaplasherAction>(ACTION_RAID + 2);
     e.Node<FreyaRangedCampTrigger, FreyaRangedCampAction>(ACTION_RAID);
 
     e.Node<FreyaReachHeldPackTrigger, FreyaReachHeldPackAction>(ACTION_RAID + 1);

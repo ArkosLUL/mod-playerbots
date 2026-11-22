@@ -93,6 +93,19 @@ public:
     bool isUseful() override;
 };
 
+class FreyaReleaseHeldSnaplasherAction : public Action
+{
+public:
+    static constexpr char const* Name = "freya release held snaplasher";
+
+    FreyaReleaseHeldSnaplasherAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    uint32 releasedMs = 0;
+};
+
 class FreyaRedirectThreatAction : public Action
 {
 public:

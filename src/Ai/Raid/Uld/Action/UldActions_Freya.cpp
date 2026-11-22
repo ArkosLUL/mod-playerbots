@@ -686,6 +686,24 @@ bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
                   MovementPriority::MOVEMENT_COMBAT);
 }
 
+bool FreyaReleaseHeldSnaplasherAction::isUseful()
+{
+    if (releasedMs && getMSTimeDiff(releasedMs, getMSTime()) < ULDUAR_FREYA_SNAPLASHER_RELEASE_RETRY_MS)
+        return false;
+
+    FreyaReleaseHeldSnaplasherTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaReleaseHeldSnaplasherAction::Execute(Event /*event*/)
+{
+    if (!FreyaStopHittingHeldSnaplasher(botAI, GetFreyaHeldSnaplasher(botAI), true))
+        return false;
+
+    releasedMs = getMSTime();
+    return true;
+}
+
 bool FreyaRedirectThreatAction::isUseful()
 {
     return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;

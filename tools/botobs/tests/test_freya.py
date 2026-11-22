@@ -3,11 +3,11 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
-tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold,
-plus three beam dodges (one off a beam the next snapshot first shows) and one healer in range. A second
-one pins a lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. A third
-pins a melee bot walking back into a low lasher's blast and dying to its Detonate. The shared v14 fixture
-shows every section reads empty elsewhere.
+tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold
+while two hits keep its bark up, plus three beam dodges (one off a beam the next snapshot first shows)
+and one healer in range. A second one pins a lasher wave a ghoul holds for two snapshots, with one
+ranged bot out of reach on Freya. A third pins a melee bot walking back into a low lasher's blast and
+dying to its Detonate. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -106,6 +106,9 @@ def pull() -> list[dict]:
         {"t": 31000, "e": "end", "out": "wipe"},
     ]
     records += [
+        cast(21000, SNAPLASHER, 64190) | {"tr": 1},
+        cast(22500, SNAPLASHER, 64190) | {"tr": 1},
+        cast(22900, SNAPLASHER, 64190) | {"tr": 1},
         {"t": 22100, "e": "note", "g": CASTER, "k": fr.HOLD_NOTE, "txt": "1"},
         {"t": 22300, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "1"},
         {"t": 23100, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "2"},
@@ -237,9 +240,15 @@ class Tanks(unittest.TestCase):
             "  Snaplasher 0:10.000 .. 0:24.000: Bruin/tank 87%, Bulwark/tank 13%\n"
             "  0:13.500 Bruin Challenging Roar\n"
             "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"
-            "  0:22.100 Snaplasher hold on\n"
+            "  0:22.100 Snaplasher hold on for 1.0s: 2 hit(s) on its bark, 0 death(s) to it\n"
             "  0:23.100 Snaplasher hold on, bark gone\n"
             "  0:23.500 Snaplasher hold off\n"))
+
+    def test_hold_counts_deaths_to_the_loose_snaplasher(self):
+        death = {"t": 22800, "e": "death", "g": HEALER, "killer": SNAPLASHER, "x": 2392.0, "y": -40.0, "z": 425.3,
+                 "rewind": [[22700, SNAPLASHER, 0, 61000]]}
+        self.assertIn("0:22.100 Snaplasher hold on for 1.0s: 2 hit(s) on its bark, 1 death(s) to it\n",
+                      printed(fr.show_tanks, load(pull() + [death])))
 
 
 class Beams(unittest.TestCase):

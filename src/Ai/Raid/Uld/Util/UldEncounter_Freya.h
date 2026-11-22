@@ -17,6 +17,7 @@
 class GameObject;
 class Player;
 class PlayerbotAI;
+class SpellInfo;
 class Unit;
 
 enum UlduarFreyaIds
@@ -157,6 +158,10 @@ inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
 
 inline constexpr float ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH = 15.0f;
 
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH = 30.0f;
+
+inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_RELEASE_RETRY_MS = 1000;
+
 inline constexpr float ULDUAR_FREYA_HELD_PACK_REACH_MARGIN = 3.0f;
 
 inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_LATCH_MS = 3000;
@@ -224,6 +229,12 @@ void TickFreya(PlayerbotAI* botAI);
 Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI);
 
 bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI);
+
+bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo);
+
+bool IsFreyaChainDamage(SpellInfo const* spellInfo);
+
+bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop);
 
 Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range);
 
