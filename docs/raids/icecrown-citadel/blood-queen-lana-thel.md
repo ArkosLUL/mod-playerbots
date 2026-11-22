@@ -37,7 +37,8 @@ test plus three latches that saw the walk late and misread her tanked off-spot n
 
 ## Layout
 
-Every point is navprobed with `--nav 0x09` and settles within 0.1 yd of its Z; every node's 3x3 grid at
+A stand parks within 0.75 yd and walks back past 2.5. Every point is navprobed with `--nav 0x09` and
+settles within 0.1 yd of its Z; every node's 3x3 grid at
 1 yd sees her ramp spot and her air spot 22 yd above the centre, and those in 38 yd of the tank spot see
 it and the group spots. The bowl is flat at 400.14 out to 37.5-39 yd from the centre (4595.71, 2769.42)
 on the sides and past 41 yd at the south end; the dais north of it is flat at 401.75 from 27 to 37.5 yd
@@ -66,7 +67,8 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
 - **Tanks** (`bql.tank`): bot tanks ranked main tank, assist tanks in order, guid: main, mirror, then
   spares. With a human main tank in the group, the first bot tank is the mirror. With one tank player in
   the raid, human or bot, the mirror is the sturdiest damage dealer: plate melee (DK, warrior, paladin),
-  then other melee, then ranged, most health, latched; it skips groups, nodes, CC and kills. The main
+  then other melee, then ranged, most health, latched so the link doesn't hop as buffs move health; it
+  skips groups, nodes, CC and kills. The main
   tank holds the tank spot all fight, air phase included, leaving it only to fetch her while she is on
   someone else more than 15 yd off it; the mirror stands on it (1.5 yd beside a bot parked on the
   spot, else on the main tank) and takes an air node until the Whirl ends; spares join the melee groups.
@@ -76,11 +78,12 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
   frenzied bot, nor for a braked one but a vampire. Non-holders other than healers and vampires are
   braked past 90% of her holder's threat until under 80%, the main tank's while she has none (her walk
   to the centre until she lands on her top threat); tanks but the main one, and a damage-dealer mirror,
-  are braked until a vampire exists or 20 s in.
+  are braked until a vampire exists or 20 s in. A braked bot's attacks on her and its area damage
+  within 17 yd of her are held.
 - **Bites** (`bql.bite`): each frenzied bot is handed the nearest damage dealer, then a tank she isn't
-  on or a damage-dealer mirror, then a healer, never her victim or the main tank, nobody another biter
-  holds, no vampire, mind control or shadows carrier; anyone under 15k health after those. It cancels
-  Ice Block, walks within 3 yd and bites by id.
+  on or a damage-dealer mirror, then a healer, who gains nothing from it, never her victim or the main
+  tank, nobody another biter holds, no vampire, mind control or shadows carrier; anyone under 15k
+  health (a bite hits up to 11.8k) after those. It cancels Ice Block, walks within 3 yd and bites by id.
 - **Mind control** (`bql.cc`, `bql.kill`): each Uncontrollable Frenzy victim gets the nearest bot that
   can land a CC now (Polymorph, Cyclone, Hex, Repentance or Hammer of Justice, Blind, Death Coil, Scatter
   Shot: known, off cooldown, in its form, short of DR immunity, not immune, in range); it recasts
@@ -95,26 +98,31 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
 - **Detours** (`bql.detour`): a bite or Pact walk whose straight line crosses a shadow's 4.5 yd goes
   through the nearest point within 16 yd clear of shadows by 5.75 yd whose two legs miss them, at most
   8 yd longer, kept while its legs stay clear; with none it walks straight. Shadows the bot or its goal
-  stands in don't count.
+  stands in don't count. A walk to a player re-aims once the player moves 1.5 yd.
 - **Swarming Shadows** (`bql.curve`): the carrier takes the lane and direction with the shortest walk to
-  a point clear of shadows by 5.5 yd and the longest clear run (45 yd wanted), the outer lane first,
-  walks it point to point at forced priority, and re-plans at a lane end or a foreign shadow ahead.
-  Everyone else within 4.5 yd of a shadow steps 5.75 yd clear (`bql.dodge`); melee keep their target
-  in reach.
-- **Precedence**: the bite, then a shadows trail, then the Pact, when the script stacks them on one bot.
+  a point clear of shadows by 5.5 yd and the longest clear run (45 yd wanted, the 6 s trail at a run),
+  the outer lane first, walks it point to point at forced priority, cutting a cast since a shadow drops
+  at its feet every 0.5 s, and re-plans at a lane end or a foreign shadow ahead (its own newest lie a
+  step behind it, close enough to read the next point as fouled). Everyone else within 4.5 yd of a
+  shadow steps 5.75 yd clear, cutting a cast (`bql.dodge`); melee keep their target within 3 yd of its
+  edge.
+- **Precedence**: the bite, then a shadows trail, then the Pact, when the script stacks them on one bot:
+  an Uncontrollable Frenzy waits behind a missed bite, and a trail dropped on the way to the Pact spot
+  would land there.
 - **Spread** (`bql.slot`, `bql.airslot`, `bql.group`): healers keep a ground node in 36 yd (held to
   38) of the main tank and her; ranged one in 35.5 yd of her (hunters 40, held to 37.5 and 42), a 30 yd
   spell reaching 38.7 yd past her 7.2 combat reach. While she
   walks or flies held nodes stay put. From her walk to the centre until the Whirl ends, every bot but the
   main tank without a ground node takes the nearest free node. Melee and spares split into up to three
   balanced groups by guid. Nodes and spots within 5.75 yd of a shadow are given up.
-- **Defensives**: raid cover and personal buttons over the Whirl (a third of a bolt per tick left plus
-  Shroud's ticks, heroic Presence counted; frenzied bots skip it), class cover nodes held over its
+- **Defensives**: raid cover and personal buttons over the Whirl (a third of a bolt per tick left, each
+  landing 850 ms after its tick, plus Shroud's ticks, heroic Presence counted; frenzied bots skip it),
+  class cover nodes held over its
   lead-in; any tank or damage-dealer mirror under 40%, and her holder and the mirror in the last minute
   before Berserk, spend `NextTankDefensive` (a damage dealer `NextPhysicalDefensive`, `bql.defensive`),
   tank class buttons held to 25% until that minute; a human tank is called for both (`bql.humancall`).
 - **Fear**: `RaidAntiFear` from 8 s before her predicted walk (124/127 s in, then 120/100 s after she
-  reaches the centre) until takeoff: Tremor Totem, earth totems held, Fear Ward on each priest knowing
+  reaches the centre, taken as 3 s after the walk starts until a bot sees her arrive) until takeoff: Tremor Totem, earth totems held, Fear Ward on each priest knowing
   Mass Dispel, else the shared main tank or healer. Under Incite Terror each unfeared priest takes the
   feared player with the most feared within 15 yd (at most 10, at least 3, fear outlasting the 1.5 s
   cast), in 30 yd and sight, leaving out those within 15 yd of another free priest's pick
@@ -126,7 +134,8 @@ north, 12-14 yd either side of the tank spot, over a ramp, and drops to the coun
 Rules: targeting owned for the whole fight; a braked bot's pickers held; a frenzied bot runs only the
 bite and a shadows carrier only its lane; Pact members and stand holders keep attacks and resurrect
 reach only, the main tank and mirror on their stands, any role, attacks only; spell movers, avoid aoe
-(it flees a shadow 5 yd), generic taunts, Death Grip and tank caster form blocked.
+(it flees a shadow 5 yd), generic taunts (a mirror tank's would move Blood Mirror), Death Grip (it
+shares her taunt DR and drags her off the tank spot) and tank caster form blocked.
 
 ## Decisions
 

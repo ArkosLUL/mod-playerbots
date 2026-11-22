@@ -124,7 +124,7 @@ bool IccValithriaKiteAction::Execute(Event /*event*/)
         if (inFlight->GetExactDist2d(leg) <= REAIM)
             return true;
 
-    // The boots refuse a casting bot, so the cast goes first
+    // drop the cast before the boots, they refuse a casting bot
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(true);
     EncounterHelpers::UseNitroBoosts(bot);

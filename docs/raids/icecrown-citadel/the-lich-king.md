@@ -30,12 +30,12 @@ Val'kyr drop triggers (22515, Z 845.9) stand 64-68 yd out.
 | Necrotic Plague 70337/73912/73913/73914, jump 70338/73785/73786/73787 | phase one, 30-31 s then 30-31 s (5 s retry); a random player but his victim. Disease, 15 s, 50k/100k/75k/150k shadow every 5 s. Dispel, expiry or death jumps it to the nearest unit within 10 yd, adds included, not him; expiry or death adds a stack, a dispel's stack is lost. Each jump gives him Plague Siphon 74074, +2% physical damage | the carrier runs to the add pile and is dispelled there before the first tick; in a winter the carrier stands 10 yd off everyone, then is dispelled | carrier walks to the pile's raid side; an elected curer dispels once its nearest unit is an add, or with under 1 s to the tick or under 35% health; class cures held off carriers, a Cleansing Totem replaced; with no add alive, and after phase one, it isolates first |
 | Shambling Horror 37698 (70372) | phase one, 1 s cast, 15 s then 60 s; spawns by him, passive 5 s, then attacks threat or a random non-tank. Shockwave 72149/73794/73795/73796: 1.25 s cast, 20-25 s, 20 yd cone at its victim, 90° on 10N. Enrage 72143/72146/72147/72148: 1 s cast, 11-14 s then 20-25 s, +200% damage for 6 s, enrage dispel. Heroic Frenzy 28747 at 20%: +100% damage, +50% haste. Stun and grip land; snare, root and interrupt don't | off-tank faces Shockwave away; Tranquilizing Shot or Anesthetic Poison on Enrage; stunned through Frenzy; the plague kills it, DPS ignore it | add tank holds the pile with its cones off the raid; hunters Tranquilize; the add tank's button on an Enrage no hunter answers; heroic Frenzy: stun rotation, melee finish it |
 | Drudge Ghoul 37695 (70358) | phase one, 0.5 s cast, 10 s then 30 s; three over 3 s by him, passive 5 s, negligible damage | off-tank; keep them alive as plague fodder, no cleave | add tank picks them up, else a DK or paladin damage dealer stands in; area damage held near adds in phase one |
-| Shadow Trap, heroic, 73539 → 39137 | phase one, 15.5 s then 15.5 s; 0.5 s cast at a random player within 100 yd in sight. Arms after 5 s (73530); then any unit within 3 yd, a pet or totem too, fires 73529 at everyone within 10 yd: 23.6-26.4k and a 30/40 knockback off the platform. Lives 60 s; the first winter's opening hit despawns them | run out, never step on one; drag him off one | anyone within 10.5 yd of a trap walks 12 yd off every trap, a bot with no stand to the spot nearest him; a stand within 11 yd of one re-latches, so the holder drags him off; walks keep 3.5 yd off; melee reach round a trap |
+| Shadow Trap, heroic, 73539 → 39137 | phase one, 15.5 s then 15.5 s; 0.5 s cast at a random player within 100 yd in sight. Arms after 5 s (73530); then any unit within 3 yd, a pet or totem too, fires 73529 at everyone within 10 yd: 23.6-26.4k and a 30/40 knockback off the platform. Lives 60 s; the first winter's opening hit despawns them | run out, never step on one; drag him off one | anyone within 10.5 yd of a trap walks, forced, interrupting, 12 yd off every trap, a bot with no stand to the spot nearest him; a stand within 11 yd of one re-latches, so the holder drags him off; walks keep 3.5 yd off; melee reach round a trap |
 | Remorseless Winter 68981/74270/74271/74272, second 72259/74273/74274/74275 | at 70% and 40%, on the first hit at or under while he isn't casting: passive, walks to C, 2.5 s cast, 60 s aura; 68983/73791/73792/73793 deal 7.1-7.9k/9.4-10.6k/9.4-10.6k/14.1-15.9k frost per s within 45 yd | everyone on the ice past 45 yd | two clusters on the ring past 49 yd; ring stands only while the platform isn't `DAMAGED` |
 | Pain and Suffering 72133/73788/73789/73790 | 0.5 s cast from 3.5 s into each winter, every 1.75-2.25 s (heroic 1.25-1.75 s), at a random target: a 100 yd cone from him, 25° on 10N; 2.8-3.2k/4.7-5.3k/4.7-5.3k/7.5-8.5k shadow, then 0.5k/0.8k/0.8k/1.2k per s for 3 s | spread; WH: ranged and healers apart from tanks and melee | the clusters sit the cone's half-width plus 8° apart |
 | Ice Sphere 36633 (69104) | 8 s into each winter, then every 7.5 s; spawns within 10 yd of him and follows a random player at about 3 yd/s. Ice Pulse 69099/73776/73777/73778 every 3 s: 2.8-3.2k/4.7-5.3k/4.7-5.3k/7.5-8.5k frost within 5 yd of its target. A player within 4 yd sets off Ice Burst 69108/73773/73774/73775: 10 yd, 20/35 knockback. Immune to stun, snare and taunt; drops a target beyond 75 yd of C or outside Z 830-855 | ranged kill them at once, hunters first | ranged DPS kill the sphere within 30 yd closest to its target first; 25N/10H/25H: sphere guards in the tank cluster; winter slots 6 yd apart |
 | Raging Spirit 36701 (69200) | 4 s into each winter, then every 20 s (15 s at 40% and under): three in the first winter, four in the second. Copies a random player within 100 yd, rooted 3 s, then attacks its source or threat. Stun, snare and interrupt don't land; taunt does. Soul Shriek 69242/73800/73801/73802: 0.5 s cast, 12-15 s, 15 yd cone at its victim, 60° on 10N; 18.8-21.2k/28.3-31.7k/28.3-31.7k/42.4-47.6k shadow and a 5 s magic silence | a tank takes each at once and faces it away; burn it before the phase ends; dispel the silence. Leftovers: tanked on him and cleaved in phase two, first priority in phase three | tanks taunt each as it unroots, never off a human tank, and hold it on the ring's rim facing out; DPS burn it; priests and paladins dispel silenced healers first, paladins never a plague carrier |
-| Quake 72262 | 62.5 s after he reaches C: 1.5 s cast; the ring shatters 5 s after it lands, and he turns aggressive 5.25 s after | back onto the platform before the shatter | from the cast, everyone past 40 yd walks to 38 yd on its bearing, Nitro Boosts, and holds until he turns aggressive |
+| Quake 72262 | 62.5 s after he reaches C: 1.5 s cast; the ring shatters 5 s after it lands, and he turns aggressive 5.25 s after | back onto the platform before the shatter | from the cast, everyone past 40 yd walks, forced, interrupting, to 38 yd on its bearing, Nitro Boosts, and holds until he turns aggressive |
 | Soul Reaper 69409/73797/73798/73799 | after each Quake 40 s, then 30.5 s (1 s retry out of melee); instant on his victim: 50% weapon damage, 50k/60k/60k/70k shadow 5 s later, then +100% haste on him for 5 s (69410) | tank cooldowns on each; a swap once the tank has none | the victim's button; with none ready, the free tank taunts at once |
 | Defile 72762, puddle 38757 | after each Quake 38 s, then 32.5 s (1 s retry), kept 4 s (10-man) or 5 s (25-man) off a Val'kyr summon; heroic: at once on the return from Frostmourne. 2 s cast at a random player within 100 yd in sight whom no Val'kyr has searched or carries. The puddle lands where the target stands at cast end and ticks every 1 s for 45 s on everyone within 10 × its scale (2D, not vehicle riders or Harvest Soul victims): 72754/73708/73709/73710 deal 3k/5k/6.5k/10k shadow × scale, and each hit adds 72756/74162/74163/74164, +10%/+5%/+10%/+5% scale | spread before it; the target runs out of the raid with Nitro Boosts; never stand in one | the target runs off the stack with Nitro Boosts; others within 13 yd step away; everyone keeps 10 × scale + 2 yd off a puddle; walks never cross one |
 | Summon Val'kyr 69037 (25-man 74361) | after the first Quake 20 s, then 45 s; one (10-man) or three (25-man) 15 yd up by him. Each charges a random player 2.5 s later, not a tank, a searched or carried player or the Defile target, and carries it to the drop trigger nearest the grab at about 4.9 yd/s; Wings of the Damned 74352 floors slows at 50%. Stun lands, root doesn't, taunt not while carrying. Normal: drops it there and despawns. Heroic: at 50% drops it where it is, flies 5-15 yd off C at Z 855-859, turns tauntable and casts Life Siphon 73488/73782/73783/73784 (2 s, every 2.5 s) on its last taunter, else a random non-tank, healing 10× | him in the centre, the raid stacked tight behind him; kill it (heroic: to 50%) before the edge, stuns and slows; heroic: kill siphoners before the next grab | stack behind him at C; per Val'kyr DPS buckets, a stun rotation over the raid's kits, one slow; melee walk round a puddle; heroic: the free tank taunts siphoners, ranged kill them |
@@ -58,10 +58,13 @@ Val'kyr drop triggers (22515, Z 845.9) stand 64-68 yd out.
 | `outro` | combat disallowed at 10% |
 
 He comes from guid slot 12; every predicate is false unless he is alive and the bot within 120 yd of
-C or 50 yd of F. A unit other than entry 36597 reads `one`. The winters seen are latched per pull, since
-his transition waits for a hit he takes while not casting; bots that arrive mid-pull take them from his
-health, and the lust window reads the same phase. A wipe, a kill or an intro that evades resets both
-stems' state; opening stands run only while he walks the intro.
+C or 50 yd of F. A unit other than entry 36597 reads `one`: the Lich King voice in Valithria's room
+shares his name. The winters seen are latched per pull, since his transition waits for a hit he takes
+while not casting, so a cast in flight keeps the phase before it for up to 2 s; bots that arrive
+mid-pull take them from his health, and the lust window reads the same phase. A wipe, a kill or an
+intro that evades resets both stems' state; opening stands run only while he walks the intro: out of
+combat, immune, and no longer under the sit aura 73220, which he carries until Tirion stands him up
+and again after a wipe.
 
 ## Layout
 
@@ -69,7 +72,9 @@ Polar from C (θ from +x, north, toward +y, west; r in yd). Navprobe reads neith
 probed: spots stay within 44 yd of C, ring slots (49-62) only while the platform isn't `DAMAGED`,
 Frostmourne spots within 20 yd of F. Every sweep refuses a point off those floors or, once the bot's
 own spot reads the gameobject floor, more than 2 yd off its Z. Walks are straight lines at the floor's
-Z (`exact_waypoint`), since the path search refuses off-mesh spots.
+Z (`exact_waypoint`), arrival judged in 2D, since the path search refuses off-mesh spots. A blocked
+sweep (trap dodge, trap reach, plague walk) waits 1 s before the next. Frostmourne is judged in 2D:
+its creatures hang up to 20 yd above the floor.
 
 | Stand | θ, r | Who |
 |---|---|---|
@@ -86,7 +91,8 @@ Z (`exact_waypoint`), since the path search refuses off-mesh spots.
 | phase three | east (270, 20), west (90, 20) | the phase two set rotated so 0° points out along the side |
 | soak spot | 10 yd from the stack toward the old side | the Vile Spirit soaker; Frost Trap at the midpoint |
 
-Ground stands latch (park 1 yd, walk back past 2.5); one unparked for 15 s lets go for 3 s. A puddle
+Ground stands latch (park 1 yd, walk back past 2.5), latching again once what they hang off moves 2
+yd; one unparked for 15 s lets go for 3 s. A puddle
 fouling him, the holder spot or K2 slides the phase two or three set up to 20 yd, within 40 yd of C,
 and back once the spot clears.
 
@@ -111,7 +117,8 @@ trap reach goes on the stand row, since it dodges nothing.
   nearest first. Heroic Frenzy: one stun in flight per Shambling (`lk.stun`), the next by guid at
   0.5 s left; a stunner that hasn't landed in 1.5 s sits out 2 s. Melee DPS kill a Frenzied Shambling.
 - **Control**: stuns (only below the immune DR) Hammer of Justice, Concussion Blow, Bash, Kidney Shot,
-  Shockwave, Holy Wrath, Shadowfury, War Stomp, Intimidation and Gnaw with the pet in melee; slows
+  Shockwave, Holy Wrath, Shadowfury, War Stomp, Intimidation and Gnaw with the pet in melee
+  (Intimidation's DR read off its pet's stun 24394); slows
   Chains of Ice, Slow, Concussive Shot, Frost Shock, Curse of Exhaustion, Hamstring, Wing Clip,
   Frostbolt, Piercing Howl.
 - **Necrotic Plague** (`lk.plague`, `lk.cure`): a non-tank carrier walks, forced, interrupting, Nitro
@@ -127,7 +134,9 @@ trap reach goes on the stand row, since it dodges nothing.
   pick passes within 10.5 yd of a trap walks to the clear spot in its melee reach nearest it
   (`reach`), else holds (`hold`).
 - **Splash**: in phase one, non-tank area damage within 12 yd of a ghoul or Shambling is held.
-- **Winters**: slots laid out at his turn to passive, walked forced with Nitro Boosts past 15 yd. Each
+- **Winters**: slots laid out at his turn to passive. Winter slots and spirit spots are walked forced
+  with Nitro Boosts past 15 yd, racing Remorseless Winter's first ticks; phase one stands walk at combat
+  priority. Each
   Raging Spirit goes to the spirit tank holding fewer, taunted once unrooted and off its tank; a spirit
   tank more than 28 yd off its spirit walks to 22 yd of it. Later phases leave every spirit to the
   free tank. Off 10N, a third of the ranged DPS bots rounded up, hunters first, are sphere guards in
@@ -147,7 +156,7 @@ trap reach goes on the stand row, since it dodges nothing.
   13 yd off both. Anyone within 10 × scale + 2 yd of a puddle steps out; spots keep 10 × scale + 3,
   walks 10 × scale + 1.5.
 - **Val'kyrs** (`lk.valkyr`): while one carries (heroic: above 50%), DPS bots and a free tank no
-  Raging Spirit holds are bucketed, balanced, melee to the nearest, dealt again only when the carriers
+  Raging Spirit holds (it would drag the spirit into the raid) are bucketed, balanced, melee to the nearest, dealt again only when the carriers
   change. One stun in flight and one slow kept up per Val'kyr, the next caster at 0.5 s left, a 1 s
   grace for a cast in flight, one duty per bot, never the holder. Melee chase while the line clears
   every puddle, ranged past 30 yd too; healers stay. A melee chaser with a puddle in the line walks a
@@ -160,7 +169,8 @@ trap reach goes on the stand row, since it dodges nothing.
   Shadows or Ice Block ready, non-healers first, else the free tank, walks into woken spirits within
   8 yd and 5 yd of the floor after its immunity or button; a non-tank with nothing left ready waits on
   its spot. The lowest-guid hunter with Frost Trap ready
-  drops it once they wake. Ranged DPS shoot woken spirits within 20 yd of the stack.
+  drops it once they wake. Ranged DPS shoot woken spirits within 20 yd of the stack, skipping a burst
+  one, unselectable for its last 3 s.
 - **Harvest Soul**, normal (`lk.harvest`): inside, non-healers attack the warden and kick Soul Rip
   from the second scan that sees it (Kick, Pummel, Shield Bash, Mind Freeze, Counterspell, Wind
   Shear); priest and paladin healers dispel it off Terenas or themselves, and every healer heals
@@ -180,16 +190,19 @@ warden, Wicked Spirit), and inside Frostmourne nothing else; nothing on a vehicl
 Soul's stun. Winters: spirit tanks their spirit, the free tank then a leftover; ranged DPS the sphere
 within 30 yd nearest its target, else a spirit or leftover in that reach; melee DPS the held spirit or
 leftover, then any. Phase one: the holder him, the free tank a loose add, else its own; the stand-in a
-loose ghoul, else its healthiest; heroic melee DPS a Frenzied Shambling; else him. Phases two and
-three: the free tank a loose or its own spirit, ranged a leftover sphere, DPS the lowest spirit, else
+loose ghoul, else its healthiest, which keeps threat and the plague's fodder alive longest; heroic melee
+DPS a Frenzied Shambling; else him. Phases two and three: the free tank a loose or its own spirit,
+ranged a leftover sphere (it still knocks its target off the platform), DPS the lowest spirit, else
 him; a melee bot on a spirit within 12 yd of him leaves its stack node (`lk.stack` `p2 spirit`). A
 braked bot gets nothing for him.
 
 Rules: `OwnTargeting`; a `Block` of the pickers, follow, random moves and the pet picker while the
 resolver holds a tank or DPS bot; `OwnMovement` over every Mover row, Attack kept under a `LichKing`
-walk or stand, Attack and Reach under a `LichKingLate` one, Attack alone in heroic Frostmourne and on a
-walk round a puddle; spell movers blocked; `AvoidAoe`, tanks' taunts and caster form blocked while
-live; the tank defensive hold. Multipliers: brake, splash, cure hold.
+walk or stand, Attack and Reach under a `LichKingLate` one (a Harvest Soul victim walks to the Spirit
+Warden, far stack nodes step into melee), Attack alone in heroic Frostmourne and on a walk round a
+puddle; spell movers blocked; `AvoidAoe` (it flees a few yards at most, against the forced runs),
+tanks' taunts and caster form blocked while live; the tank defensive hold. Multipliers: brake, splash,
+cure hold.
 
 ## Decisions
 

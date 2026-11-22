@@ -1,0 +1,4 @@
+src/Ai/Raid/ICC/Action/ICCActions_BloodQueen.cpp	boots after the walk, they refuse a bot mid-cast and the walk is what drops the cast
+src/Ai/Raid/ICC/Action/ICCActions_LichKing.cpp	boots after the walk, they refuse a bot mid-cast and the walk is what drops the cast
+src/Ai/Raid/ICC/Action/ICCActions_Sindragosa.cpp	boots after the walk, they refuse a bot mid-cast and the walk is what drops the cast
+src/Ai/Raid/ICC/Action/ICCActions_Valithria.cpp	drop the cast before the boots, they refuse a casting bot
