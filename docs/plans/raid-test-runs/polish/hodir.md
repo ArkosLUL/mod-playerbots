@@ -614,3 +614,80 @@ receiver; `pulses.py` reproduces the single clouds and pulses). Fixed:
 (every damage dealer within the collect leash arrives together and shares one pulse), the stop rule lifted
 once; if the cache still shatters after it, accept Hodir without the cache on 226. Q2: keep the 15 yd leash.
 Extra pulls on round 5 (window 12b): one kept the cache (kill at 2:46.9), the others 232.2k and 180.6k.
+
+## Round 7 (2026-11-23, on Custom b21cda8ee)
+
+**Data.** Window 12b, extra pulls on round 5 code (no Hodir change since), `raidtest.py report --boss
+hodir --raid uld --head ebe746ad1 --pulls 10 --runs
+tr-20261122-204654-22,tr-20261122-204654-23,tr-20261122-204654-24`. Scratch scripts in the session
+scratchpad `hodir-r7/` (role split, per-cloud leash and pulses, casts in flight at landing).
+
+| Pool | Run | Trace | Out | Cache | Deaths | Pace 0-3:00 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261122-204654-22` | `603_22_hodir_1795380476` | kill 2:46.9 | **kept** | 0 | 251.8k |
+| uld2 | `tr-20261122-204654-23` | `603_24_hodir_1795380478` | kill 3:44.5 | shattered 3:00.1 | 1: ranged Ice Shards 3:03.0 (2 Biting Cold stacks, after the timer) | 180.6k |
+| uld3 | `tr-20261122-204654-24` | `603_23_hodir_1795380477` | kill 3:01.7 | shattered 3:00.0 | 1: off-tank (bear) Frozen Blows swing 2:51.7, in window 3, Barkskin up | 232.2k |
+
+**Stop rules.** Not polished: one pool kept the cache. Pace is picked a fourth time; the user lifted
+the stop rule for this one round (option (c), Hodir only), so the shared Storm Power pulse is built.
+
+**Round 5 verdict, more pulls.** Breakers held: ranged on ice walked by the position node 9/6/5%,
+moving 28/29/31%, over 35 yd from the block 15/14/19% (w11 17-21%), 310/500/378 bot-seconds. The hold
+did not move: Hodir over 5 yd off the point for 35/47/65 s of the fire windows (w11 29-37). No main-tank
+death.
+
+**What the cache pull did that the 180.6k one did not** (snapshot `dealt` on him by role, uld1 → uld2):
+ranged 113.1k → 67.3k, melee 104.6k → 95.2k, so 46k of the 71k gap is the ranged. Ranged held Storm
+Power 47% → 22% of their time, stood in a fire 37% → 19%, and had both at once 49% → 4% of the first
+fire window (fire 85% → 44% there); ice 310 → 500 bot-seconds; Ice Shards 3 → 21 hits. Clouds: 66
+Storm Power (7.3 a cloud, ranged 26) against 45 (5.6, ranged 14). uld2's first cloud sat 30 s on the
+off-tank bear (3 Storm Power) and its second on a melee among melee; 2 of its 8 went to a tank. uld1's
+second landed on a healer among ranged in the first fire and buffed six within 2 s. He picks the
+carrier, so the pull swings on luck the shared pulse should flatten.
+
+**The gather's room.** Per cloud (`--storm`, new): damage dealers lacking Storm Power within 15 yd of
+the carrier at landing 45/56/71, of whom that cloud buffed 27/33/42 (60/59/59%). Collect walked them
+in the moment it landed, so the first pulse or two took 4-9 and emptied it (uld2 2:52.5: 16 in the
+leash, 8 at 1.0 s, cloud gone; uld3 2:04.1: 17, 6 by 2.0 s). Storm Power on pulse 4: 3/0/6 of
+66/45/52. Of the 170 leash dealers, 27 ranged had a cast in flight at landing; it would have made one
+late for pulse 4.
+
+**Built** (`UldEncounter_Hodir.h/.cpp`, `UldTriggers_Hodir.cpp`, `UldActions_Hodir.cpp`,
+`UldMultipliers_Hodir.h/.cpp`, `UldDefinition_Hodir.cpp`; reader `hodir.py --storm`, test):
+- `GetHodirStormGather` (replaces the triggers' `GetHodirStormPowerRally`): a receiver (damage dealer,
+  no Storm Power, not the carrier, within the 15 yd leash of the lowest-guid carrier's rally) gets
+  `msToPulse`, the time to pulse 4 (`ULDUAR_HODIR_STORM_GATHER_TICK`) off the cloud's `EFFECT_0` tick
+  number and periodic timer, and `msToWalk`, that less its walk to park 2.0 at run speed less
+  `_GATHER_LEAD_MS` 600. The collect trigger fires only once `msToWalk` ≤ 0, so all arrive in the
+  second before pulse 4; past it they walk at once. Probe `hodir.gather`: `none`, `wait`, `walk`, `in`.
+- `_COLLECT_RELEASE` 4.0 → 2.5, `static_assert`ed between park and the 3 yd pulse: at 4.0 a receiver
+  3-4 yd out never walked in. The position node stands down inside release (was park).
+- `HodirStormGatherCastHoldMultiplier`: a receiver still to walk starts no cast-time spell that would
+  end past its due time + 250 ms, since a bot mid-cast runs no action until it ends. Channels go out
+  and the due walk breaks them (`BreakCastPinningTheFeet`). No hold while rooted or 1.5 s past the pulse.
+- The due walk clears a pending `MOVEMENT_COMBAT` walk to elsewhere (position node, shed) whose lock
+  refused it; a `MOVEMENT_FORCED` dodge keeps its lock; the freeze run's `OwnMovement` blocks collect.
+- `hodir storm gather hold`: from due to 1.5 s past pulse 4, a receiver inside release is blocked from
+  `Reach` and `SetBehind`, which pulled melee parked out of his reach back to him before the pulse.
+- Leash, rally, carrier pick and the carrier holding still unchanged. 10 and 25 alike (4 / 6 charges,
+  same 1 s pulse), hard mode is only the timer; a player carrier standing still is gathered on the same
+  way, and no branch reads a player.
+- Reader: `STORM_COLLECT_RELEASE_YD` 2.5, so "parked at the rally" re-scores window 12b at 86/68/47%
+  inside the pulse (60/71/35% at 4.0).
+
+**Next window should show** (`--storm`):
+- damage dealers in the leash at landing buffed by their cloud 85%+ (59-60%); Storm Power a cloud 9+
+  (5.6-7.3); most Storm Power on pulse 4 (0-6); a cloud's first pulse holding only bots that were
+  inside at landing;
+- ranged Storm Power share 50%+ on every pool (47/22/37%), pace 0-3:00 above 234.6k on two pools;
+- `hodir.gather` turning `walk` 1.5-3.4 s after a landing, and the receivers reaching park before 4.0 s;
+- watch: Ice Shards hits and dodges among the gathered clump (10+ bots in 3 yd for about a second),
+  melee time out of reach, `hodir storm gather cast hold` vetoes on ranged.
+If the cache still shatters on 226, the user's answer stands: accept Hodir without it and judge it on
+kills and deaths (window 11 and 12b qualify on those).
+
+**Also seen.** Tank carriers: the bear carried two of uld2's clouds and holds no rally (the spread
+trigger skips tanks), so receivers gather on where it stood; the gather worked when it stayed (w12b
+uld3 1:15.6, seven on two pulses) and gave 2 in 30 s when a Flash Freeze began 1.3 s after it landed
+(uld2 1:35.7, 9 in the leash, none buffed). uld3's off-tank death came after 5 swings (136.6k) in
+window 2 and 4 in window 3, Barkskin up: one off-tank death in 10 windows here.
