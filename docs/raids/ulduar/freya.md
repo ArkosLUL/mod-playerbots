@@ -520,16 +520,25 @@ root, which died 1 ms after it. Roots of 9.2s and 20.6s recur, at 4.6k per 2s on
 - **The break** interrupts a DPS bot's cast at anything but the root while it stands in a hazard. Not
   healers, who keep it alive in there, nor an Army channel.
 
-**Unstable Sun Beam.** The dodge rings outward to a spot clear of every beam in range.
-**`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is 2.4× too wide**: Unstable Energy **62865** is
-`EffectRadiusIndex 8` = **5 yd** (effect 27, persistent area aura), which matches the traces. The DBC check
-was done and the constant never brought down, so this is an open gap, not an unknown. The dodge clears by
-`ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (15 yd), not the radius
+**Unstable Sun Beam.** Three stationary stalkers (33170) a cast in 25-man, one in 10, at players' feet
+for ~10s. Unstable Energy **62865** is `EffectRadiusIndex 8` = **5 yd** (effect 27, persistent area
+aura; 10-man 62451 is 4 yd); with the searcher's object sizes it lands out to **7.3 yd** (1159
+applications, p99 6.5). Brightleaf's own beam (33050, Unstable Energy 62217) is 4 yd. The dodge fires inside
+`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS` (**8 yd**) and rings outward to a spot clear of every beam in
+range by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (**11 yd**), not the radius
 ([dodge clearance](../../engine/pitfalls.md#movement-that-silently-no-ops)): radius plus a yard gave a
-median **1.9 yd** step over 694 orders, 95% under 12 yd, so none left the beam. Where overlapping beams
-leave nothing that clear it takes radius + 1. It is latched (`dodgeSpot`, ceiling
-`ULDUAR_FREYA_SUN_BEAM_LATCH_MS`), returning true without calling `MoveTo` while the walk is in flight
+median **1.9 yd** step over 694 orders, back inside the trigger. Where overlapping beams leave nothing
+that clear it takes radius + 1. It is latched (`dodgeSpot`, ceiling `ULDUAR_FREYA_SUN_BEAM_LATCH_MS`),
+returning true without calling `MoveTo` while the walk is in flight
 ([oscillation](../../engine/raid-mechanics-lessons.md#movement-that-oscillates)).
+
+**A beam escape must not cost the tanks their healers** (not yet verified in a pull). At 12 / 15 yd,
+32-67% of each role's dodges fired from past 8 yd, where no pool reaches, re-dodges from 11.5-12.7 yd
+undoing healers' `reach spell` back to their tank: two of a bear add tank's three living healers sat
+52-56 yd off for his last 10s, and the loose Snaplasher led a 27-death collapse. **Both beam escapes
+take the side toward Freya** (`GetFreyaBeamEscapeBias` as `preferNear`), since the sweep tries +x
+first: 177 of 338 escapes from on top of a beam went that way, 74% ending farther from her.
+`preferNear` only breaks ties inside one ring, so no walk gets longer.
 
 ## Per-tick scan
 
@@ -546,5 +555,6 @@ because the Ground Tremor nodes run wherever the gate is open, trash included.
 `tools/botobs/bosses/freya.py <trace>`, no probes. The banner reads hard mode off the Elders' empowers
 (Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since `cfg.hardmode` has no Freya key;
 `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile; `--tanks` who held Freya and each
-Snaplasher, and every tank's Challenging Roar, Challenging Shout or Righteous Defense; `--deaths` by
-killer and spell.
+Snaplasher, and every tank's Challenging Roar, Challenging Shout or Righteous Defense; `--beams` Unstable
+Sun Beam dodges per role (fired from past the trigger, walk, ended farther from Freya) and healers within
+38.5 yd of each Snaplasher's holder; `--deaths` by killer and spell.

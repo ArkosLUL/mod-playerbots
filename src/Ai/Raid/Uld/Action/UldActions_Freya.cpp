@@ -50,6 +50,14 @@ bool FreyaBotCannotWalk(Player* bot)
     return bot->HasUnitState(UNIT_STATE_NOT_MOVE) || IsFreyaArmyChanneling(bot);
 }
 
+// Tiebreak for the beam escapes. Left alone the sweep takes the first clear bearing counting from +x, a fixed
+// compass direction that can walk healers out of the add tank's range. Toward Freya keeps both tanks in range.
+Position const* GetFreyaBeamEscapeBias(PlayerbotAI* botAI)
+{
+    Unit* freya = GetFreyaScan(botAI).Boss();
+    return freya && freya->IsAlive() ? freya : nullptr;
+}
+
 // Off-tank on a lasher wave. The whole wave wipes its threat and charges random players on one 10s timer, so
 // this takes back whatever went loose since. Righteous Defense first (up to three off one member), then a
 // shout, then the class taunt. All on 8s or longer cooldowns, so at most one of each per reset.
@@ -963,6 +971,17 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     dodgeSpotMs = 0;
 
     HazardSweepCache sweep;
+    Position const* preferNear = GetFreyaBeamEscapeBias(botAI);
+
+    auto const beamsAt = [&beams](float clearance)
+    {
+        std::vector<EncounterHelpers::HazardCircle> circles;
+        circles.reserve(beams.size());
+        for (Position const& beam : beams)
+            circles.emplace_back(beam, clearance);
+
+        return circles;
+    };
 
     // Bombs and low lashers too: both escapes share a relevance, so a bot reading only its own hazard
     // flips between them forever.
@@ -970,17 +989,20 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
         bot,
         BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), beams,
                                 GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS)),
-        ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+        ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear, {},
+        &sweep);
 
     if (safe == Position())
-        safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_SUN_BEAM_CLEARANCE,
-                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+        safe = FindNearestPositionClearOfHazards(bot, beamsAt(ULDUAR_FREYA_SUN_BEAM_CLEARANCE),
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP,
+                                                 ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear, {}, &sweep);
 
     // Overlapping beams can leave nowhere that clears all of them by the full margin. Barely outside
     // beats standing in one, so fall back to the radius itself before giving up.
     if (safe == Position())
-        safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS + 1.0f,
-                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+        safe = FindNearestPositionClearOfHazards(bot, beamsAt(ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS + 1.0f),
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP,
+                                                 ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear, {}, &sweep);
 
     if (safe == Position())
         return false;
@@ -1104,8 +1126,11 @@ bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
     hazards.emplace_back(beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS);
 
     HazardSweepCache sweep;
+    Position const* preferNear = GetFreyaBeamEscapeBias(botAI);
 
-    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                      ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
+                                                      preferNear, {}, &sweep);
 
     // Drop the bombs before the blast when nothing clears both. A bomb is a six second fuse on a spot
     // the bot can still walk off, where a lasher under 15% goes off on its own schedule.
@@ -1115,13 +1140,17 @@ bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
             {}, {}, GetFreyaEscapeLasherPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS));
         blastAndBeam.emplace_back(beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS);
 
-        safe = FindNearestPositionClearOfHazards(bot, blastAndBeam, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+        safe = FindNearestPositionClearOfHazards(bot, blastAndBeam, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear,
+                                                 {}, &sweep);
     }
 
     // Barely outside the beam beats standing in it.
     if (safe == Position())
-        safe = FindNearestPositionClearOfHazards(bot, std::vector<Position>{beam}, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS,
-                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
+        safe = FindNearestPositionClearOfHazards(
+            bot, std::vector<EncounterHelpers::HazardCircle>{{beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS}},
+            ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, preferNear, {},
+            &sweep);
 
     if (safe == Position())
         return false;
