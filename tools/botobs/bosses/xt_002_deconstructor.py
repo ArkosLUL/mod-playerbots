@@ -31,9 +31,10 @@ What the generic views miss here:
 - **A dps bot that pulls XT keeps him** until a tank's threat passes its own, so dps hold their damage on him
   near the holder's threat. The tanks view sums the time XT spent on non-tanks and the `xt002.brake` holds.
 - **A Gravity Bomb carrier walks out past every healer's reach**, and the bomb's 14.5k (25-man) with the tantrum
-  after it killed carriers at 36-85%. The nearest bot healer gets sent (`xt002.bombheal`); the bombs view lists
-  each carrier that went out of range, who was sent, how close it got, its heals on the carrier and when it was
-  back on its slot.
+  after it killed carriers at 36-85%. The nearest bot healer gets sent (`xt002.bombheal`) and heals that carrier
+  first until it's above 90%; the bombs view lists each carrier that went out of range, who was sent, how close
+  it got, when it was in range, its heals and shields on the carrier, the carrier's hp when the bomb hit (off
+  the hit itself) and when the healer was back on its slot.
 """
 from __future__ import annotations
 
@@ -75,6 +76,8 @@ HEAL_RANGE = 38.5
 # a carrier dead this soon after its bomb came off, with the bomb's hit in its rewind, died to it; the tantrum
 # often lands the last tick a couple of seconds later
 BOMB_DEATH_MS = 5000
+# the bomb's own hit on its carrier shares a tick with the aura's removal (0-1 ms apart in the 25-man traces)
+BOMB_HIT_MS = 1000
 # the point at the end of an `xt002.slot` note, "<slot>/<of> x,y,z"
 SLOT_POINT = re.compile(r"(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),-?\d+(?:\.\d+)?$")
 SEARING_LIGHT_SPOT = "ULDUAR_XT002_SEARING_LIGHT_SPOT"
@@ -596,14 +599,23 @@ def last_slot(trace: Trace, guid, before: int):
     return spot
 
 
+def bomb_hit(trace: Trace, carrier, until: int) -> dict | None:
+    """The bomb's own `dmg` record on its carrier; its `hp` is the carrier's just before the hit."""
+    hits = [rec for rec in trace.of("dmg") if rec.get("d") == carrier and rec.get("sp") in GRAVITY_BOMB
+            and abs(rec["t"] - until) <= BOMB_HIT_MS]
+    return min(hits, key=lambda rec: abs(rec["t"] - until)) if hits else None
+
+
 def bomb_row(trace: Trace, bomb: dict, healers: set, sent: dict, deaths: list[dict]) -> dict:
-    """What one bomb did: when the carrier left every healer's reach, who was sent, how close that healer got,
-    the heals it landed, the carrier's hp at expiry and whether the expiry killed it."""
+    """What one bomb did: when the carrier left every healer's reach, who was sent, how close that healer got and
+    when it was in range, the heals and absorbs it landed, the carrier's hp when the bomb hit and whether that
+    killed it."""
     carrier, start, stop = bomb["g"], bomb["t"], bomb["until"]
     picks = [(t, healer) for t, healer in sent.get(carrier, []) if start <= t <= stop and healer]
     healer = picks[0][1] if picks else None
     row = {**bomb, "out": None, "healer": healer, "sent": picks[0][0] if picks else None, "closest": None,
-           "at_expiry": None, "hp": None, "nearest": None, "heals": 0}
+           "at_expiry": None, "in_range": None, "hp_in_range": None, "hp": None, "nearest": None, "heals": 0,
+           "healed": 0, "overheal": 0, "first_heal": None, "absorbed": 0, "hit": bomb_hit(trace, carrier, stop)}
     for snap in frames(trace):
         if snap["t"] < start:
             continue
@@ -620,11 +632,19 @@ def bomb_row(trace: Trace, bomb: dict, healers: set, sent: dict, deaths: list[di
         if healer in gaps and snap["t"] >= row["sent"]:
             row["closest"] = gaps[healer] if row["closest"] is None else min(row["closest"], gaps[healer])
             row["at_expiry"] = gaps[healer]
+            if gaps[healer] <= HEAL_RANGE and row["in_range"] is None:
+                row["in_range"], row["hp_in_range"] = snap["t"], spot[5]
         row["hp"] = spot[5]
         row["nearest"] = min(gaps.values()) if gaps else None
     if healer:
-        row["heals"] = sum(1 for rec in trace.of("heal")
-                           if rec.get("s") == healer and rec.get("d") == carrier and start <= rec["t"] <= stop)
+        heals = [rec for rec in trace.of("heal")
+                 if rec.get("s") == healer and rec.get("d") == carrier and start <= rec["t"] <= stop]
+        row["heals"] = len(heals)
+        row["healed"] = sum(rec.get("a", 0) - rec.get("oh", 0) for rec in heals)
+        row["overheal"] = sum(rec.get("oh", 0) for rec in heals)
+        row["first_heal"] = min((rec["t"] for rec in heals), default=None)
+        row["absorbed"] = sum(rec.get("a", 0) for rec in trace.of("abs")
+                              if rec.get("s") == healer and rec.get("d") == carrier and start <= rec["t"] <= stop)
     # a carrier walking back through its own fresh puddle dies to Consumption, not to the bomb
     row["killed"] = any(death["g"] == carrier and stop - 500 <= death["t"] <= stop + BOMB_DEATH_MS
                         and entry(trace, death.get("killer")) != NPC_VOID_ZONE
@@ -675,18 +695,58 @@ def show_bombs(trace: Trace) -> None:
             if row["closest"] is not None:
                 line += (f", closest {row['closest']:.0f} yd{' (inside the pull)' if row['closest'] < pull else ''},"
                          f" {row['at_expiry']:.0f} yd at expiry")
-            line += f", {row['heals']} heals from it"
             back = back_on_slot(trace, row["healer"], row["until"])
             line += f", back on its slot {back / 1000:.0f} s after" if back is not None else ", never back on its slot"
         elif row["out"] is not None:
             line += ", nobody sent"
         if row["nearest"] is not None:
             line += f", nearest healer {row['nearest']:.0f} yd at expiry"
-        if row["hp"] is not None:
-            line += f", carrier {row['hp']:.0f}% at expiry"
+        line += carrier_hp(row)
         if row["killed"]:
             line += ", killed"
         print(line)
+        if row["healer"]:
+            print(f"    {sent_heals_line(trace, row)}")
+    sent_rows = [row for row in rows if row["healer"]]
+    if sent_rows:
+        print(f"  {sent_summary(sent_rows)}")
+
+
+def carrier_hp(row: dict) -> str:
+    """The carrier's hp just before the bomb hit, read off the hit itself, else its last snapshot."""
+    hit = row["hit"]
+    if hit:
+        text = f", carrier {hit['hp']:.0f}% when the bomb hit ({hit.get('a', 0) / 1000:.1f}k"
+        absorbed = hit.get("ab", 0)
+        return text + (f", {absorbed / 1000:.1f}k absorbed)" if absorbed else ")")
+    return f", carrier {row['hp']:.0f}% at expiry" if row["hp"] is not None else ""
+
+
+def sent_heals_line(trace: Trace, row: dict) -> str:
+    """The sent healer's work on its carrier over the bomb: when it got in range and what it landed."""
+    name = trace.name(row["healer"])
+    if row["in_range"] is None:
+        line = f"{name} never in range"
+    else:
+        line = f"{name} in range {clock(row['in_range'])} with the carrier at {row['hp_in_range']:.0f}%"
+    line += f", {row['heals']} heals on it for {row['healed'] / 1000:.1f}k ({row['overheal'] / 1000:.1f}k over)"
+    if row["first_heal"] is not None:
+        line += f", first {clock(row['first_heal'])}"
+    if row["absorbed"]:
+        line += f", its shields absorbed {row['absorbed'] / 1000:.1f}k"
+    return line
+
+
+def sent_summary(rows: list[dict]) -> str:
+    """Carriers a healer was sent to, by their hp when the bomb hit, against the heal-first ceiling."""
+    top = radius("ULDUAR_XT002_BOMB_HEAL_TOP_PCT")
+    at_hit = sorted(row["hit"]["hp"] for row in rows if row["hit"])
+    line = f"sent healers: {len(rows)} carriers"
+    if not at_hit:
+        return line + ", no bomb hit read"
+    above = sum(1 for hp in at_hit if hp > top)
+    return (line + f", at the hit median {statistics.median(at_hit):.0f}%, lowest {at_hit[0]:.0f}%,"
+            f" {above} of {len(at_hit)} above {top:g}%")
 
 
 def mechanic(trace: Trace, death: dict) -> str:
@@ -726,7 +786,7 @@ SECTIONS = (
     ("trash", "Scrapyard trash pulls and what called them", show_trash),
     ("sparks", "Life Sparks that lived long, their carrier and evade notes", show_sparks),
     ("tanks", "who XT was on and how far off the tank spot, tank duty notes, taunts at him", show_tanks),
-    ("bombs", "Gravity Bomb carriers out of heal range and the healer sent to them", show_bombs),
+    ("bombs", "Gravity Bomb carriers out of heal range, the healer sent to them and its heals", show_bombs),
     ("deaths", "deaths by mechanic", show_deaths),
 )
 

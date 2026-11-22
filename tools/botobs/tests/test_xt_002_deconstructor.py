@@ -291,7 +291,13 @@ class Bombs(unittest.TestCase):
             records += [
                 {"t": 203100, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": str(HEALER)},
                 {"t": 206000, "e": "heal", "s": HEALER, "d": self.CARRIER, "sp": 48071, "a": 9000, "oh": 0},
-                {"t": 207500, "e": "heal", "s": HEALER, "d": self.CARRIER, "sp": 48071, "a": 9000, "oh": 0},
+                {"t": 207500, "e": "heal", "s": HEALER, "d": self.CARRIER, "sp": 48071, "a": 9000, "oh": 2500},
+                # the carrier's own heal and the sent healer's heal on someone else don't count
+                {"t": 207000, "e": "heal", "s": self.CARRIER, "d": self.CARRIER, "sp": 48071, "a": 900, "oh": 0},
+                {"t": 207200, "e": "heal", "s": HEALER, "d": TANK, "sp": 48071, "a": 9000, "oh": 0},
+                {"t": 209000, "e": "abs", "d": self.CARRIER, "s": HEALER, "sp": 48066, "a": 4200},
+                {"t": 209000, "e": "dmg", "s": XT, "d": self.CARRIER, "sp": 64234, "a": 10300, "ab": 4200,
+                 "hp": 93.5},
                 {"t": 209050, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": "0"},
             ]
         else:
@@ -305,8 +311,11 @@ class Bombs(unittest.TestCase):
             "GRAVITY BOMBS\n"
             "  1 bombs, 1 carriers out of every healer's 38.5 yd, 0 killed by their own\n"
             "  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:23.100, closest 34 yd,"
-            " 34 yd at expiry, 2 heals from it, back on its slot 4 s after, nearest healer 34 yd at expiry,"
-            " carrier 50% at expiry\n"))
+            " 34 yd at expiry, back on its slot 4 s after, nearest healer 34 yd at expiry,"
+            " carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n"
+            "    Mender in range 3:25.000 with the carrier at 50%, 2 heals on it for 15.5k (2.5k over),"
+            " first 3:26.000, its shields absorbed 4.2k\n"
+            "  sent healers: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%\n"))
 
     def test_carrier_nobody_reached_is_killed_by_its_bomb(self):
         self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, nobody sent, nearest healer 50 yd"
@@ -316,9 +325,19 @@ class Bombs(unittest.TestCase):
     def test_healer_sent_after_the_last_snapshot_gets_no_distance(self):
         records = self.bomb_pull(sent=True)
         next(rec for rec in records if rec.get("k") == "xt002.bombheal")["t"] = 208500
-        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:28.500, 2 heals from it,"
-                      " back on its slot 4 s after, nearest healer 34 yd at expiry, carrier 50% at expiry\n",
-                      printed(xt.show_bombs, load(records)))
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:28.500,"
+                      " back on its slot 4 s after, nearest healer 34 yd at expiry,"
+                      " carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n", text)
+        self.assertIn("    Mender never in range, 2 heals on it for 15.5k (2.5k over), first 3:26.000,"
+                      " its shields absorbed 4.2k\n", text)
+
+    def test_a_bomb_hit_far_from_the_expiry_is_not_read(self):
+        records = self.bomb_pull(sent=True)
+        next(rec for rec in records if rec.get("e") == "dmg")["t"] = 204000
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("nearest healer 34 yd at expiry, carrier 50% at expiry\n", text)
+        self.assertIn("  sent healers: 1 carriers, no bomb hit read\n", text)
 
 
 class EveryView(unittest.TestCase):
