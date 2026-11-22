@@ -217,3 +217,61 @@ closing (a `nopath` row or a flat distance means the route needs navprobe); Iron
 engaged and the Giant dead; corridor bots above z 430 on the balcony chain. Sif's clock (~170 s from the
 pull) is likely still missed, so a phase 2 here would be normal mode. Gauntlet deaths may rise (Honor
 Guards, Rune Detonation, Stomp); the orb still wipes if the predicted blocker holds.
+
+## Round 4 (data from build 697052475: round 2 code, round 3 merged but not built)
+
+**Data:** window 10's rerun, one pull per pool, all valid (`start: step`): `tr-20261122-162559-4` (uld1),
+`-5` (uld2), `-6` (uld3); traces `env/dist/logs/botobs/603_{6,7,8}_thorim_{1795364897,1795364926,1795364898}.ndjson`,
+read through `raidtest.py report --boss thorim --raid uld --head 697052475 --pulls 10` and throwaway scripts over
+`snap` rows (bot height and progress; Thorim, Colossus, Giant). No DC veto row inside a pull. Stop rules, verdict
+and ranking skipped: round 3 has no pulls yet. Phase 2 never started.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795364897 | wipe 6:07 | Lightning Orb 27 (5:44-6:03); arena Champion 2, Warbringer 1 (5:44-5:49) |
+| uld2 | 1795364926 | wipe 6:09 | Lightning Orb 20 (5:46-6:05); Champion 6, Warbringer 2, Evoker 2 (5:46-6:04) |
+| uld3 | 1795364898 | wipe 6:10 | Lightning Orb 11 (5:46-6:05); Champion 9, Warbringer 3 (5:47-6:04); gauntlet Runic Colossus 7 (5:50-5:57), Runic Smash 2 (5:17, 5:33) |
+
+Gauntlet, round 2 code: the Colossus died at ~2:21 (uld1) and ~2:32 (uld2), then the squad stood at y −351..−411
+until the orb; uld3 only reached him at ~5:17 and died there. Nobody went up the ramp.
+
+**Failure picked: the blocker round 3 predicted, no bot may hit Thorim from the balcony in phase 1.**
+
+- Code: `ThorimDpsTargetAllowed` (`UldEncounter_Thorim.cpp:1148`) refused Thorim to every bot while he is above
+  the floor line, so for a corridor DPS on the platform `ThorimDpsPriorityTrigger` fired every tick on the pick
+  `GetThorimDpsTarget` offered (`:1258`, any corridor bot above the floor line) and the action dropped it.
+  `ThorimBalconyGuardMultiplier` (`UldMultipliers_Thorim.cpp:90`) zeroed Attack/Reach on him for corridor bots
+  above the floor during the split, and `thorim disable automatic targeting` (`UldDefinition_Thorim.cpp:156`)
+  holds the generic DPS pickers then. Healers keep theirs, but the trigger pulled him off them too.
+- Core: `boss_thorim::DamageTaken` (`boss_thorim.cpp:515-547`) starts phase 2 only for `who->IsPlayer()` above
+  z 430 once `_isHitAllowed` (the Rune Giant's `JustDied`, `:1474-1483`), so pets cannot either.
+- Traces: none reached the balcony. No bot in these three pulls stood above z 427.3; across all 16 Thorim
+  traces on disk, all bot-only, only one bot is ever above z 430 in phase 1, briefly at 0:53 (`603_3`).
+
+**Classification: bug.** The strategy means the corridor squad to hit him from the platform: `GetThorimDpsTarget`
+offers him for that, and the balcony walk leaves the edge tick "to whatever shoots him"
+(`UldActions_Thorim.cpp:360`). Without a human nothing ever starts phase 2.
+
+**Fix** (Thorim files only, no size, mode or player branch):
+- `ThorimBalconyHitAllowed` (`UldEncounter_Thorim.cpp:1165`, header `:501`): a bot above the floor line, in the
+  corridor squad, during the split (Thorim in combat on his balcony), whose `thorim.balcony` latch has passed
+  `ULDUAR_THORIM_BALCONY_5` (read, never advanced: the walk owns it). The ranged hold spots use the same step gate;
+  the latch only advances along the chain, so both Paralytic Fields are behind the bot.
+- `ThorimDpsTargetAllowed` allows Thorim for that bot (Sif stays forbidden); `GetThorimDpsTarget` offers him only
+  to that bot (`:1279`); `ThorimBalconyGuardMultiplier` passes Attack/Reach on him for it (`:120`).
+- Geometry: the jump edge (2137.1, −291.2) is 8.9 yd from Thorim (2131.0, −297.6), inside his 9.08 yd melee
+  reach, so the walk's end is the firing spot for melee and ranged; `BALCONY_5` is 21.4 yd from him, and the
+  north trap (2134.9, −339.7) is south of both.
+- Arena bots never pass the gate (squad, height), and the arena target guard still drops him for them, so the
+  arena hold is unchanged. A corridor healer or tank past `BALCONY_5` may now keep him if a generic picker hands
+  him over; a wand or swing from up there starts phase 2 as well.
+- With a real player in the raid the code is the same: the first corridor bot past `BALCONY_5` starts phase 2
+  unless the player hit him first.
+
+**Next window should show** (rounds 3 and 4 together; round 3's lever and Giant checks come first): after the
+Giant dies, corridor bots' `thorim.balcony` reaching 5-6; their `thorim.dpstarget` naming Thorim only from then;
+the first player `dmg` row on Thorim from a corridor bot at z ~438, seconds after the first one reaches the edge;
+Thorim under z 429.6 within ~2 s and `thorim.p2start` set; no arena bot and no corridor bot short of
+`BALCONY_5` ever targeting him before that. A squad at the edge with Thorim untouched means the gate stays shut
+(read the step latch, LOS, and which multiplier zeroed `attack`). Then the Lightning Orb deaths stop and phase 2
+deaths become the read; Sif's clock (~170 s from the pull) is likely missed, so normal mode.
