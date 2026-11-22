@@ -9,6 +9,7 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "RaidSplash.h"
 
 // XT-002: holds burst cooldowns for the real window, the first exposed Heart in hard mode and the sub-25%
 // push in normal. Bloodlust is separate: its one use has to land on the longest phase.
@@ -39,6 +40,18 @@ class XT002TargetGuardMultiplier : public Multiplier
 public:
     XT002TargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "xt002 target guard") {}
     float GetValue(Action* action) override;
+};
+
+// XT-002: a braked dps bot casts nothing at XT, area spells near him included. Its swing, Auto Shot and channels
+// carry no action, so the priority action stops those.
+class XT002ThreatBrakeMultiplier : public Multiplier
+{
+public:
+    XT002ThreatBrakeMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "xt002 threat brake") {}
+    float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 #endif

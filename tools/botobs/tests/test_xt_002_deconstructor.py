@@ -219,9 +219,32 @@ class Tanks(unittest.TestCase):
             "  0:01.000  Bulwark (tank) for 2.0 s\n"
             "  0:03.000  Stonewall (tank) for 37.0 s, 0 yd off the tank spot from 15 s in\n"
             "  0:40.000  nobody for 5.0 s\n"
+            "  XT on a non-tank: never\n"
             "  Stonewall: holds XT 0:03.100\n"
             "  Bulwark: pummellers 0:03.100\n"
             "  taunts at XT: 2 (Bulwark spell 31789 1, Bulwark spell 62124 1)\n"))
+
+    def test_steals_and_threat_brake_are_summed(self):
+        rogue, mage = 7706, 7707
+        records = self.steal_pull()
+        end = records.pop()
+        records[0]["roster"] += [{"g": rogue, "n": "Shiv", "r": "melee", "c": 4, "h": 0},
+                                 {"g": mage, "n": "Sparks", "r": "ranged", "c": 8, "h": 0}]
+        records += [
+            {"t": 2000, "e": "snap", "u": [[XT, 860.0, -25.0, 409.6, 0, 80, 0, rogue]]},
+            {"t": 2500, "e": "note", "g": rogue, "k": "xt002.brake", "txt": "1"},
+            {"t": 2600, "e": "note", "g": mage, "k": "xt002.brake", "txt": "1"},
+            # a container restating its value when the trace opens is no new hold
+            {"t": 2700, "e": "note", "g": mage, "k": "xt002.brake", "txt": "1"},
+            {"t": 9500, "e": "note", "g": rogue, "k": "xt002.brake", "txt": "0"},
+            {"t": 4600, "e": "note", "g": mage, "k": "xt002.brake", "txt": "0"},
+            {"t": 30000, "e": "note", "g": mage, "k": "xt002.brake", "txt": "1"},
+            end,
+        ]
+        text = printed(xt.show_tanks, load(records))
+        self.assertIn("  0:02.000  Shiv (melee) for 1.0 s\n", text)
+        self.assertIn("  XT on a non-tank: 1.0 s over 1 runs\n", text)
+        self.assertIn("  threat brake: 2 dps bots held, 29 s in all, longest 20.0 s (Sparks from 0:30.000)\n", text)
 
     def test_healer_buffs_are_measured_on_the_holder(self):
         records = self.steal_pull()

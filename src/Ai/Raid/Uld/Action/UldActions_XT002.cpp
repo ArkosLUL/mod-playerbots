@@ -930,6 +930,15 @@ bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    // A braked bot keeps XT selected but stops what XT002ThreatBrakeMultiplier can't veto: the swing, Auto Shot,
+    // a wand and a channel on him.
+    if (target->GetEntry() == NPC_XT002 && IsXT002ThreatBraked(bot, target))
+    {
+        bool const selected = SelectTarget(botAI, target);
+        StopAttackingTarget(bot, target);
+        return selected;
+    }
+
     // Returning false once the bot is already on the right target is what lets the lower-priority
     // nodes run at all: the engine ends the tick at the first action that succeeds.
     bool needsAttack = currentTarget != target;

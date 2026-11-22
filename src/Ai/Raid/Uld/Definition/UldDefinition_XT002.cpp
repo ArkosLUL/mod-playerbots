@@ -99,6 +99,7 @@ void DefineXT002(EncounterBuilder& e)
     // floor stops anything that would land a hit.
     e.Multiplier<XT002BurstWindowMultiplier>(Family::AnyAction);
     e.Multiplier<XT002TargetGuardMultiplier>(Family::AnyAction);
+    e.LiveMultiplier<XT002ThreatBrakeMultiplier>(Family::Melee | Family::Spell);
 
     // The class "lose aggro" nodes taunt XT whenever another tank holds him, and he's taunt-immune, so a
     // paladin burns a global on Righteous Defense every 8 s. Taunts at a Pummeller still go out.

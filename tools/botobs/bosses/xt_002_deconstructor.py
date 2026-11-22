@@ -28,6 +28,8 @@ What the generic views miss here:
   shield and Renew on the group's main tank or, for a paladin, whichever tank dropped lowest. The tanks view
   prints the `xt002.buffs` tank they followed and, over the long holds, how much of the time each buff sat
   on the holder against the other tank.
+- **A dps bot that pulls XT keeps him** until a tank's threat passes its own, so dps hold their damage on him
+  near the holder's threat. The tanks view sums the time XT spent on non-tanks and the `xt002.brake` holds.
 """
 from __future__ import annotations
 
@@ -479,6 +481,33 @@ def buffs_line(trace: Trace, runs: list[dict]) -> str | None:
             f"the other tank: {', '.join(shares)}")
 
 
+def brake_spans(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Per dps bot, the (start, stop) spans its `xt002.brake` note held its damage off XT. One still on at the
+    end runs to it."""
+    ends = trace.of("end")
+    since, spans = {}, collections.defaultdict(list)
+    for rec in notes(trace, "xt002.brake"):
+        guid = rec.get("g")
+        if rec.get("txt") == "1":
+            since.setdefault(guid, rec["t"])
+        elif guid in since:
+            spans[guid].append((since.pop(guid), rec["t"]))
+    for guid, start in since.items():
+        spans[guid].append((start, ends[-1]["t"] if ends else start))
+    return spans
+
+
+def brake_line(trace: Trace) -> str | None:
+    spans = brake_spans(trace)
+    if not spans:
+        return None
+    total = sum(stop - start for pieces in spans.values() for start, stop in pieces)
+    guid, (start, stop) = max(((guid, piece) for guid, pieces in spans.items() for piece in pieces),
+                              key=lambda item: item[1][1] - item[1][0])
+    return (f"  threat brake: {len(spans)} dps bots held, {total / 1000:.0f} s in all, longest"
+            f" {(stop - start) / 1000:.1f} s ({trace.name(guid)} from {clock(start)})")
+
+
 def show_tanks(trace: Trace) -> None:
     print("TANKS")
     if not mine(trace):
@@ -494,6 +523,11 @@ def show_tanks(trace: Trace) -> None:
         if run["g"] and trace.role(run["g"]) == "tank" and settled:
             line += f", {statistics.median(settled):.0f} yd off the tank spot from {SETTLE_MS // 1000} s in"
         print(line)
+    stolen = [run for run in runs if run["g"] and trace.role(run["g"]) != "tank"]
+    if runs:
+        held = sum(run["until"] - run["t"] for run in stolen)
+        print(f"  XT on a non-tank: {held / 1000:.1f} s over {len(stolen)} runs" if stolen
+              else "  XT on a non-tank: never")
     duties = collections.defaultdict(list)
     for rec in notes(trace, "xt002.tank"):
         duties[rec.get("g")].append(f"{rec.get('txt')} {clock(rec['t'])}")
@@ -502,6 +536,9 @@ def show_tanks(trace: Trace) -> None:
     taunts = taunts_at_xt(trace, runs)
     shown = ", ".join(f"{trace.name(g)} {name} {n}" for (g, name), n in taunts.most_common())
     print(f"  taunts at XT: {sum(taunts.values())}" + (f" ({shown})" if shown else ""))
+    brake = brake_line(trace)
+    if brake:
+        print(brake)
     moved = [f"{resolve_guids(trace, value)} {clock(start)}" for value, start, _ in latch_spans(trace, "xt002.buffs")]
     if moved:
         print(f"  healer buff tank: {', '.join(moved)}")

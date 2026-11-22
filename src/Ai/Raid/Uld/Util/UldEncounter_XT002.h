@@ -146,6 +146,15 @@ inline constexpr uint32 ULDUAR_XT002_BUFF_TANK_SETTLE_MS = 5000;
 // tick in combat, and a wipe's reset takes far longer.
 inline constexpr uint32 ULDUAR_XT002_BUFF_TANK_STALE_MS = 10000;
 
+// XT-002: DPS threat brake, as shares of his holder's threat. He's taunt-immune, so a dps bot that pulls him
+// keeps him until a tank's threat passes its own. Area damage this close (his 15 yd reach plus a splash) hits him.
+inline constexpr float ULDUAR_XT002_THREAT_CAP = 0.9f;
+inline constexpr float ULDUAR_XT002_THREAT_RELEASE = 0.8f;
+inline constexpr float ULDUAR_XT002_AREA_THREAT_REACH = 25.0f;
+
+static_assert(ULDUAR_XT002_THREAT_RELEASE < ULDUAR_XT002_THREAT_CAP && ULDUAR_XT002_THREAT_CAP < 1.1f,
+              "the brake holds short of the 110% that takes XT off his holder");
+
 extern const Position ULDUAR_XT002_SPAWN;
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
@@ -203,6 +212,12 @@ Player* GetXT002BuffTank(Player* bot, Unit* xt002);
 // The buff tank if this healer's `spell` is missing on him and castable now, else null. Trigger and action both
 // ask, so they can't disagree.
 Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell);
+
+// True while this dps bot holds its damage on XT: its threat on him reached ULDUAR_XT002_THREAT_CAP of the
+// holder's, and stays held until under ULDUAR_XT002_THREAT_RELEASE. A holder still at 0 threat holds every dps
+// bot: an engage adds none, and neither does walking XT to the spot. Latched per instance, so the multiplier and
+// the priority action agree. False for tanks and healers, out of XT's combat, or with no living tank.
+bool IsXT002ThreatBraked(Player* bot, Unit* xt002);
 
 // Close enough to XT to engage; anything further is still at its toy pile. True without an XT, so the gate
 // never strands a bot with nothing to hit.
