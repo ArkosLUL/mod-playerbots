@@ -11,7 +11,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// Fallbacks for a raid that never lands a clean charge. The daze is the real window.
 constexpr float ICEHOWL_LUST_HEALTH_PCT = 50.0f;
 constexpr float ICEHOWL_BURST_HEALTH_PCT = 30.0f;
 }
@@ -30,7 +29,6 @@ float NorthrendBeastsControlTankMovementMultiplier::GetValue(Action* action)
     return GetDutyOfBeast(botAI, bot->GetVictim()) != BeastsTankDuty::None ? 0.0f : 1.0f;
 }
 
-// The encounter's own taunts cast inside Execute, so this never sees them.
 float NorthrendBeastsTauntGuardMultiplier::GetValue(Action* action)
 {
     if (!action || !EncounterHelpers::IsTauntAction(bot, action))
@@ -47,12 +45,9 @@ float NorthrendBeastsTauntGuardMultiplier::GetValue(Action* action)
     if (GetBeastsDutyHolder(botAI, duty) != bot)
         return 0.0f;
 
-    // a flagged main tank's "lose aggro" taunt fires whenever another tank has its worm
     return IsWormSpewingAtOtherTank(botAI, target) ? 0.0f : 1.0f;
 }
 
-// Lust is one 10 min cooldown, so it waits for Icehowl's daze (+100% damage taken for 15 s). The rest come
-// back mid fight, so they stay free on Gormok and the worms.
 RaidBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI)
 {
     RaidBurstWindow window;

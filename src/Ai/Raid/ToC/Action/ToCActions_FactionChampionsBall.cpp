@@ -16,14 +16,13 @@ using namespace TrialOfTheCrusaderHelpers;
 namespace
 {
 constexpr float STAND_ARRIVE = 1.5f;
-// a walk already headed here, so a reissue would only restart its spline
 constexpr float SAME_SPOT = 0.5f;
 
 bool WalkingTo(Position const* walking, Position const& spot)
 {
     return walking && walking->GetExactDist2d(&spot) < SAME_SPOT;
 }
-}  // namespace
+}
 
 bool FactionChampionsIceTargetAction::Execute(Event /*event*/)
 {
@@ -31,7 +30,6 @@ bool FactionChampionsIceTargetAction::Execute(Event /*event*/)
     if (!champion)
         return false;
 
-    // our breakable CC is on it or on its way, so no swings, the pet's included, till it ends
     if (FactionChampionsCcProtected(botAI, champion))
     {
         bot->AttackStop();
@@ -110,7 +108,6 @@ bool FactionChampionsChasedAction::Execute(Event /*event*/)
     if (WalkingTo(WalkInFlight(), spot))
         return true;
 
-    // a cast in progress pins the feet
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 

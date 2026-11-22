@@ -9,8 +9,6 @@
 #include "ToCActions_NorthrendBeasts.h"
 #include "ToCHelpers_NorthrendBeasts.h"
 
-// Holds the worm of one duty through its submerges. Its walks are latched: every MoveTo clears the
-// MotionMaster, so a spot re-derived each tick from a bot that's still walking never lands.
 class NorthrendWormsTankHoldAction : public AttackAction
 {
 public:
@@ -31,15 +29,13 @@ private:
 
     bool ApproachSubmerged(Unit* worm);
     bool DragOffHazards(Unit* worm);
-    // The latched spot while the bot is still walking a walk of this kind, else nullptr
     Position const* WalkInFlight(WalkKind kind);
-    // False without booking anything while a cast pins the bot's feet
     bool WalkTo(WalkKind kind, Position const& spot);
     bool BookedOnWalkSpot();
 
     TrialOfTheCrusaderHelpers::BeastsTankDuty const _duty;
     Position _walkSpot;
-    Position _approachFrom;  // where the worm stood when the approach was issued
+    Position _approachFrom;
     uint32 _walkIssuedMs = 0;
     WalkKind _walking = WalkKind::None;
 };
@@ -74,8 +70,6 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-// Every worm hazard through one mover. The spot it walks to is held: a bot pushed off walks back to it
-// rather than searching again from wherever it landed.
 class NorthrendWormsRepositionAction : public MovementAction
 {
 public:
@@ -85,12 +79,10 @@ public:
     bool Execute(Event event) override;
 
 private:
-    // Tells our own booking from another mover's once the hold it was for is gone
     Position _issuedSpot;
     bool _hasIssuedSpot = false;
 };
 
-// Out of a pool a worm left behind. The walk is latched, so the next tick doesn't re-aim it.
 class NorthrendWormsLeavePoolAction : public MovementAction
 {
 public:
@@ -105,7 +97,6 @@ private:
     bool _hasExit = false;
 };
 
-// Heals the healer's Toxin carrier, one no Bile can cure
 class NorthrendWormsHealToxinCarrierAction : public Action
 {
 public:
@@ -115,7 +106,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Divine Shield or Ice Block off the bot's own uncurable Toxin
 class NorthrendWormsPurgeToxinAction : public Action
 {
 public:

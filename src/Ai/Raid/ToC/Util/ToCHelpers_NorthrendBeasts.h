@@ -9,8 +9,6 @@ class Player;
 class PlayerbotAI;
 class Unit;
 
-// Which beasts are up and which tank holds each, read once per instance per ms on map 649 so every bot
-// agrees. Heroic brings the next beast in on a timer, so a slow stage overlaps the next one.
 namespace TrialOfTheCrusaderHelpers
 {
 
@@ -22,8 +20,6 @@ enum class NorthrendBeast : uint8
     Icehowl
 };
 
-// Deal order after None is the priority order: a duty with no tank left takes the one holding the
-// lowest-priority duty below it.
 enum class BeastsTankDuty : uint8
 {
     None,
@@ -34,7 +30,6 @@ enum class BeastsTankDuty : uint8
     WormStationary
 };
 
-// GetBeastsDpsTarget's branches, in the order it tries them
 enum class BeastsDpsBranch : uint8
 {
     None,
@@ -52,40 +47,26 @@ struct BeastsDpsPick
     BeastsDpsBranch branch = BeastsDpsBranch::None;
 };
 
-// GetBeastsStageMask bits, also the nb.stage value
 inline constexpr uint32 BEASTS_STAGE_GORMOK = 1;
 inline constexpr uint32 BEASTS_STAGE_WORMS = 2;
 inline constexpr uint32 BEASTS_STAGE_ICEHOWL = 4;
 
-// Alive and in combat, else nullptr. A beast still walking in isn't engaged.
 Unit* GetEngagedBeast(PlayerbotAI* botAI, NorthrendBeast beast);
 
 uint32 GetBeastsStageMask(PlayerbotAI* botAI);
 
-// Bot or human, by strategy or by spec
 bool IsBeastsTank(Player* player);
 
-// The bot tanks the duty deal hands out from, flagged main tank first, then by guid. With nothing engaged
-// roster[0] takes every main duty and roster[1] the swap and the stationary worm.
 std::vector<Player*> GetBeastsTankRoster(Player* bot);
 
-// None for a tank the deal left out and for every non-tank
 BeastsTankDuty GetBeastsTankDuty(PlayerbotAI* botAI);
 
-// Null while the duty's beast isn't engaged or no tank was left for it. Can be a human, but only for
-// a beast he's already tanking.
 Player* GetBeastsDutyHolder(PlayerbotAI* botAI, BeastsTankDuty duty);
 
-// GormokSwap answers Gormok. The worm duties follow the form, so their beast changes when the worms
-// swap.
 Unit* GetBeastOfDuty(PlayerbotAI* botAI, BeastsTankDuty duty);
 
-// The main duty on that beast, so Gormok never answers GormokSwap. None for anything that isn't an
-// engaged beast, null included.
 BeastsTankDuty GetDutyOfBeast(PlayerbotAI* botAI, Unit* beast);
 
-// A DPS bot's target, in combat: a player's skull on the encounter, its snobold, Gormok, the mobile worm
-// (by form, never by holder), Icehowl. Empty off map 649 or for a bot that isn't IsRaidDpsBot.
 BeastsDpsPick GetBeastsDpsTarget(PlayerbotAI* botAI);
 
 }

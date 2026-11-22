@@ -29,8 +29,6 @@ bool IcehowlBreathSpreadTrigger::IsActive()
                                stand.trigger))
         return false;
 
-    // A healer yields to its heal target or the two walks fight. "party member to heal out of spell range"
-    // measured from the stand, since from the bot the reach walk's arrival would end the yield.
     if (PlayerbotAI::IsHeal(bot))
     {
         if (Unit* target = AI_VALUE(Unit*, "party member to heal"))

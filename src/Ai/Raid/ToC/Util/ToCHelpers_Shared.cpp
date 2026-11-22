@@ -33,7 +33,7 @@ private:
     ToCEntrySet const& _entries;
     float _range;
 };
-}  // namespace
+}
 
 ToCEntrySet::ToCEntrySet(std::vector<uint32> const& entries)
 {

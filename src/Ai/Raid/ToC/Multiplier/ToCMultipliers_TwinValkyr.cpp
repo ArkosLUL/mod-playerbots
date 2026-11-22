@@ -18,13 +18,10 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// The shield's absorb carries interrupt immunity, so these only work once it breaks
 constexpr char const* SHIELD_BLOCKED_INTERRUPTS[] = {"kick",       "pummel",      "shield bash", "counterspell",
                                                       "wind shear", "mind freeze", "spell lock"};
-// Silence and stun, both in the twins' immunity set
 constexpr char const* REFUSED_INTERRUPTS[] = {"silencing shot", "strangulate", "silence", "hammer of justice", "bash"};
 
-// "kick on enemy healer" and "hammer of justice on snare target" cast the same spell
 bool NamesSpell(std::string const& action, char const* spell)
 {
     size_t const length = std::strlen(spell);
@@ -45,8 +42,6 @@ TwinInterruptKind InterruptKindOf(std::string const& action)
     return TwinInterruptKind::None;
 }
 
-// Self-cast ones like challenging shout, and righteous defense on an ally, hit whatever the bot is
-// fighting
 Unit* ActionTwinTarget(Action* action, AiObjectContext* context)
 {
     Unit* target = action->GetTarget();
@@ -56,7 +51,7 @@ Unit* ActionTwinTarget(Action* action, AiObjectContext* context)
     Unit* current = context->GetValue<Unit*>("current target")->Get();
     return TwinColourOf(current) != TwinColour::None ? current : nullptr;
 }
-}  // namespace
+}
 
 float TwinValkyrControlTankMovementMultiplier::GetValue(Action* action)
 {
@@ -123,8 +118,6 @@ float TwinValkyrRedirectGuardMultiplier::GetValue(Action* action)
     return ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr) ? 0.0f : 1.0f;
 }
 
-// A DPS bot's cooldowns stack with lust. Healers hold only Power Infusion, a rule of the encounter's,
-// and tanks nothing.
 RaidBurstWindow ToCTwinValkyrBurstWindow(PlayerbotAI* botAI)
 {
     RaidBurstWindow window;

@@ -30,7 +30,7 @@ private:
     Position _dodgeSpot;
     uint32 _dodgeSpotMs = 0;
     bool _hasDodgeSpot = false;
-    bool _dodgeParked = false;  // stood still because it already cleared the tight line
+    bool _dodgeParked = false;
 };
 
 class IcehowlTankDefensiveAction : public Action

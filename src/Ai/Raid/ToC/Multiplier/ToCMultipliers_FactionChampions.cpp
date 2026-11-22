@@ -18,18 +18,15 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// Bounces and tank splash the generic area test misses
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
                                           "avenger's shield", "blood boil", "consecration", "swipe (bear)"};
-}  // namespace
+}
 
-// Harmful splash only: area buffs like Battle Shout land on the raid
 bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
 {
     RaidSplashCache::Facts& facts = _splash.Of(action);
     bool const ownSplash = _ownSplash.Get(action, [action] { return OWN_SPLASH.count(action->getName()) != 0; });
 
-    // the summon spell reads as positive, but what it drops burns every champion round it
     if (ownSplash || facts.summon)
         return true;
 
@@ -44,11 +41,8 @@ bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
     return !info || !info->IsPositive();
 }
 
-// Also every own splash: a Death and Decay or Consecration on the pack breaks every Polymorph and Fear in
-// it, and Pestilence puts a DoT on each champion, which rules them out for both
 float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
 {
-    // AoE heals land on the raid, not the champions, so they stay
     if (!action || _splash.Of(action).heal)
         return 1.0f;
 
@@ -79,7 +73,6 @@ float FactionChampionsThreatRedirectVetoMultiplier::GetValue(Action* action)
     if (facts.mainTankRedirect)
         return 0.0f;
 
-    // Tricks on a melee dps still gives its 15% damage, so only veto it when it picks the tank
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
     return mainTank && AI_VALUE(Unit*, "tricks of the trade target") == mainTank ? 0.0f : 1.0f;
 }
@@ -107,8 +100,6 @@ float FactionChampionsCcGuardMultiplier::GetValue(Action* action)
     if (facts.classCc)
         return 0.0f;
 
-    // a spread DoT on a champion off the kill target blocks Polymorph, Fear and Hex on it for its whole run.
-    // GetTarget last, it scans every attacker.
     Unit* target = action->GetTarget();
     return target && target->IsCreature() && IsFactionChampion(target->GetEntry()) &&
                    target != FactionChampionsKillTarget(botAI)
@@ -127,7 +118,7 @@ bool EndsWith(std::string const& text, std::string const& tail)
 {
     return text.size() >= tail.size() && text.compare(text.size() - tail.size(), tail.size(), tail) == 0;
 }
-}  // namespace
+}
 
 float FactionChampionsLateInterruptMultiplier::GetValue(Action* action)
 {
@@ -151,7 +142,6 @@ float FactionChampionsLateInterruptMultiplier::GetValue(Action* action)
     if (!Interrupts(info) && !facts.healerKick)
         return FactionChampionsCounterspellHold(botAI) && info->CalcCastTime(bot) > 0 ? 0.0f : 1.0f;
 
-    // GetTarget last, it scans every attacker
     Unit* target = action->GetTarget();
     if (!target || !target->IsCreature() || !IsFactionChampion(target->GetEntry()))
         return 1.0f;
@@ -160,7 +150,6 @@ float FactionChampionsLateInterruptMultiplier::GetValue(Action* action)
     return spell && spell->GetCastTimeRemaining() > LATE_INTERRUPT_MS ? 0.0f : 1.0f;
 }
 
-// Lust and every cooldown go at the pull, each early kill makes the rest easier
 RaidBurstWindow ToCFactionChampionsBurstWindow(PlayerbotAI* /*botAI*/)
 {
     return {true, true};

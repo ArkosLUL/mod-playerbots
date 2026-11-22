@@ -8,7 +8,6 @@
 #include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
 
-// Walks out of a Bladestorm or Hellfire, the two champion AoEs a bot can see coming
 class FactionChampionsAvoidAoeAction : public MovementAction
 {
 public:
@@ -74,7 +73,6 @@ public:
     bool isUseful() override;
 };
 
-// Walks the DK to its latched stand, then grips the kill target to it
 class FactionChampionsDeathGripAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -85,11 +83,9 @@ public:
     bool Execute(Event event) override;
 
 protected:
-    // false once at the stand, with the walk dropped
     bool StillWalking(Position const& stand, bool& walked);
 };
 
-// A grip chain link's walk to its post, then its grip on the champion the player called
 class FactionChampionsChainGripAction : public FactionChampionsDeathGripAction
 {
 public:
@@ -99,7 +95,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// A bot DK opens the grip chain on the player's target when the player types pull
 class FactionChampionsChainRequestAction : public Action
 {
 public:
@@ -109,7 +104,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Walks the DK to its wall stand, grips the melee champion there, then slows it with Chains of Ice
 class FactionChampionsWallGripAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -149,7 +143,6 @@ public:
     bool isUseful() override;
 };
 
-// Walks into spell range first when the duty was dealt from out of it
 class FactionChampionsCrowdControlAction : public NorthrendBeastsWalkAction
 {
 public:

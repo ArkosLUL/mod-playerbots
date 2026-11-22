@@ -20,17 +20,11 @@ namespace
 {
 constexpr float AOE_ARRIVE = 1.5f;
 constexpr float GRIP_ARRIVE = 2.0f;
-// a walk already headed here, so a reissue would only restart its spline
 constexpr float GRIP_SAME_STAND = 0.5f;
-// how long a latched spot is trusted while the walk to it is in flight
 constexpr uint32 AOE_LATCH_MS = 3000;
-// standing still this long past the issue means something stopped the walk short
 constexpr uint32 AOE_STALL_MS = 500;
-// the wall grip hands back the DK's own spot once it's at its stand
 constexpr float WALL_AT_STAND = 0.5f;
-// a CC walk stops this far inside the spell's range, the champion keeps moving
 constexpr float CC_WALK_INSIDE = 3.0f;
-// the champion moved less than this since the walk went out, so it still heads the right way
 constexpr float CC_SAME_SPOT = 3.0f;
 
 bool IsClearOf(Position const& spot, std::vector<HazardCircle> const& hazards)
@@ -42,16 +36,13 @@ bool IsClearOf(Position const& spot, std::vector<HazardCircle> const& hazards)
     return true;
 }
 
-// FindNearestPositionClearOfHazards answers Position() when nothing is clear
 bool IsNoSpot(Position const& spot) { return !spot.GetPositionX() && !spot.GetPositionY(); }
 
-// a FORCED leg keeps its lock for its walk time, the same window MoveTo's gate waits out
 bool ForcedLegHolds(LastMovement const& last)
 {
     return last.priority == MovementPriority::MOVEMENT_FORCED && last.lastdelayTime + last.msTime > getMSTime();
 }
 
-// CastSpell refuses any cast-time spell while the bot walks. A FORCED leg is a dodge, let it finish.
 bool StandForCast(Player* bot, LastMovement& last, uint32 spellId)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
@@ -65,12 +56,10 @@ bool StandForCast(Player* bot, LastMovement& last, uint32 spellId)
     last.clear();
     return true;
 }
-}  // namespace
+}
 
 bool FactionChampionsAvoidAoeAction::IssueLeg(Position const& spot, uint32 now)
 {
-    // our last leg still holds the FORCED lock and a lock only yields to a higher priority, so step
-    // it down for the replacement and put it back if nothing went out
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const replacing =
         last.priority == MovementPriority::MOVEMENT_FORCED &&
@@ -94,7 +83,6 @@ bool FactionChampionsAvoidAoeAction::IssueLeg(Position const& spot, uint32 now)
     if (replacing)
         last.priority = MovementPriority::MOVEMENT_FORCED;
 
-    // already walking there
     if (outcome == MoveOutcome::Duplicate)
     {
         _spot = spot;
@@ -115,15 +103,12 @@ bool FactionChampionsAvoidAoeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // a running cast pins the feet, the spline never launches while it lasts
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
     std::vector<HazardCircle> const clearances = FactionChampionsAoeClearances(botAI);
     uint32 const now = getMSTime();
 
-    // every MoveTo clears the motion master, so re-deriving under a walk in flight would restart it
-    // each tick. Still re-check the spot, a bladestorming warrior keeps walking
     if (_hasSpot)
     {
         uint32 const age = getMSTimeDiff(_issuedMs, now);
@@ -135,7 +120,6 @@ bool FactionChampionsAvoidAoeAction::Execute(Event /*event*/)
 
         _hasSpot = false;
 
-        // MoveTo refuses the same point for 5 s, moving or not
         if (stalled)
             AI_VALUE(LastMovement&, "last movement").clear();
     }
@@ -162,7 +146,6 @@ bool FactionChampionsDeathGripAction::StillWalking(Position const& stand, bool& 
         return true;
     }
 
-    // a booking left by a walk elsewhere refuses this one at the same priority for its whole walk time
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     if (last.priority != MovementPriority::MOVEMENT_FORCED &&
         stand.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) >= GRIP_SAME_STAND)
@@ -241,7 +224,6 @@ bool FactionChampionsWallGripAction::Execute(Event /*event*/)
         return true;
     }
 
-    // waiting on the cooldown or the landing, the DK fights from where it stands meanwhile
     if (bot->GetExactDist2d(&stand) <= WALL_AT_STAND)
     {
         DropWalk();
@@ -262,7 +244,6 @@ bool FactionChampionsFreedomAction::Execute(Event /*event*/)
     return member && botAI->CastSpell(spellId, member);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the root wore off or another paladin took it
 bool FactionChampionsFreedomAction::isUseful()
 {
     uint32 spellId = 0;
@@ -276,7 +257,6 @@ bool FactionChampionsChannelInterruptAction::Execute(Event /*event*/)
     return warlock && spell && botAI->CastSpell(spell, warlock);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the channel ended
 bool FactionChampionsChannelInterruptAction::isUseful()
 {
     char const* spell = nullptr;
@@ -290,7 +270,6 @@ bool FactionChampionsSnareAction::Execute(Event /*event*/)
     return champion && botAI->CastSpell(spellId, champion);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the champion is slowed or off its victim
 bool FactionChampionsSnareAction::isUseful()
 {
     uint32 spellId = 0;
@@ -311,7 +290,6 @@ bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
     float const range = info->GetMaxRange(false, bot);
     if (!bot->IsWithinCombatRange(champion, range) || !bot->IsWithinLOSInMap(champion))
     {
-        // straight in, stopping a little inside the range
         float const away = bot->GetExactDist2d(champion);
         float const keep = std::max(0.0f, range - CC_WALK_INSIDE);
         float const share = away > 0.0f ? keep / away : 0.0f;
@@ -332,7 +310,6 @@ bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
     return botAI->CastSpell(spellId, champion);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the cast landed or another bot took it
 bool FactionChampionsCrowdControlAction::isUseful()
 {
     uint32 spellId = 0;
@@ -349,7 +326,6 @@ bool FactionChampionsPeelAction::Execute(Event /*event*/)
     return botAI->CastSpell(spellId, champion);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the champion left its victim or is held
 bool FactionChampionsPeelAction::isUseful()
 {
     uint32 spellId = 0;
@@ -367,7 +343,6 @@ bool FactionChampionsProtectAction::Execute(Event /*event*/)
     if (spellId != SPELL_DIVINE_SACRIFICE)
         return botAI->CastSpell(spellId, member);
 
-    // self cast; only Divine Guardian's raid wide cut is wanted, the redirect would drain the paladin
     if (!botAI->CastSpell(spellId, bot))
         return false;
 
@@ -375,7 +350,6 @@ bool FactionChampionsProtectAction::Execute(Event /*event*/)
     return true;
 }
 
-// A queued basket can pop ticks after its trigger fired, once the champions moved on or someone covered it
 bool FactionChampionsProtectAction::isUseful()
 {
     uint32 spellId = 0;
@@ -410,14 +384,12 @@ bool FactionChampionsBattleResAction::Execute(Event /*event*/)
     return botAI->CastSpell(spellId, corpse);
 }
 
-// A queued basket can pop ticks after its trigger fired, once someone else raised the corpse
 bool FactionChampionsBattleResAction::isUseful()
 {
     uint32 spellId = 0;
     return FactionChampionsBattleResTarget(botAI, spellId) != nullptr;
 }
 
-// Rebirth won't go out in cat or bear form
 std::vector<NextAction> FactionChampionsBattleResAction::getPrerequisites() { return {NextAction("caster form")}; }
 
 bool FactionChampionsMassDispelAction::Execute(Event /*event*/)
@@ -426,7 +398,6 @@ bool FactionChampionsMassDispelAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // CastSpell refuses any cast-time spell while the bot walks. A FORCED leg is a dodge, let it finish
     if (bot->isMoving())
     {
         LastMovement& last = AI_VALUE(LastMovement&, "last movement");
@@ -440,7 +411,6 @@ bool FactionChampionsMassDispelAction::Execute(Event /*event*/)
     return botAI->CastSpell("mass dispel", target);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the shield is gone
 bool FactionChampionsMassDispelAction::isUseful() { return FactionChampionsMassDispelTarget(botAI) != nullptr; }
 
 bool FactionChampionsDispelCcAction::Execute(Event /*event*/)
@@ -450,7 +420,6 @@ bool FactionChampionsDispelCcAction::Execute(Event /*event*/)
     return member && spell && botAI->CastSpell(spell, member);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the CC is off or another bot took it
 bool FactionChampionsDispelCcAction::isUseful()
 {
     char const* spell = nullptr;
@@ -478,7 +447,6 @@ bool FactionChampionsPurgeKillTargetAction::Execute(Event /*event*/)
     return killTarget && spell && botAI->CastSpell(spell, killTarget);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the buff is gone
 bool FactionChampionsPurgeKillTargetAction::isUseful()
 {
     char const* spell = nullptr;

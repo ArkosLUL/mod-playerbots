@@ -14,7 +14,6 @@ namespace
 {
 void DefineResistAura(EncounterBuilder& e)
 {
-    // Above the staging walk: the aura is instant, and the walk holds the tick while in flight
     e.Node(
         "toc resistance aura",
         [](PlayerbotAI* botAI) -> Trigger*
@@ -24,19 +23,15 @@ void DefineResistAura(EncounterBuilder& e)
         { return new RaidRaiseResistAuraAction(botAI, "toc raise resistance aura", TOC_RESIST_AURA); },
         ACTION_RAID + 1);
 
-    // The aura slot is exclusive, so the paladin's own buff strategy trades it back on the next GCD. The
-    // resistance auras are on the list too: the raise action casts outside the queue.
     e.Block("toc resistance aura hold", Role::Any, IsToCResistPaladinHolding, 0,
             {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
              "fire resistance aura", "frost resistance aura", "shadow resistance aura"});
 
-    // Every aspect, not just Dragonhawk: a vetoed node still pushes its alternatives, and the hunter
-    // buff chain runs dragonhawk, hawk, monkey.
     e.Block("toc nature aspect hold", Role::Any, IsToCResistHunterHolding, 0,
             {"aspect of the viper", "aspect of the dragonhawk", "aspect of the hawk", "aspect of the monkey",
              "aspect of the cheetah", "aspect of the pack"});
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCResistAuraDefinition()
 {

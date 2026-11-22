@@ -17,7 +17,6 @@ class WorldObject;
 namespace TrialOfTheCrusaderHelpers
 {
 
-// Fixed entry list with an O(1) membership test
 class ToCEntrySet
 {
 public:
@@ -25,7 +24,7 @@ public:
 
     bool Contains(uint32 entry) const
     {
-        uint32 const offset = entry - _base;  // wraps past _bits.size() below _base
+        uint32 const offset = entry - _base;
         return offset < _bits.size() && _bits[offset];
     }
 
@@ -34,26 +33,19 @@ private:
     std::vector<bool> _bits;
 };
 
-// GetCreatureListWithEntryInGrid over an entry list, into a vector: same check, cells, phase test and
-// order, without copying the list per call or testing every entry per creature
 void GetCreatureListWithEntriesInGrid(WorldObject const* origin, std::vector<Creature*>& creatures,
                                       ToCEntrySet const& entries, float radius);
 
-// The ToC spellings the Anub'arak helpers and triggers call
 inline constexpr auto& IsToCDpsBot = IsRaidDpsBot;
 inline constexpr auto& GetToCHumanSkull = GetRaidHumanSkull;
 inline constexpr auto& ToCPetOffPick = RaidPetOffPick;
 
-// Empty when the bot has no group
 ObjectGuid ToCGroupGuid(Player* bot);
 
-// One group walk per group per ms, shared by every bot ticking in that ms. A groupless bot's answer
-// is its own and serves nobody else.
 template <typename T>
 class ToCGroupMemo
 {
 public:
-    // fill(T&) rebuilds the answer in place: copy it before calling anything that reads this memo again
     template <typename Fill>
     T const& Get(Player* bot, Fill&& fill, ObjectGuid const& key = ObjectGuid::Empty) const
     {
@@ -73,7 +65,7 @@ public:
     }
 
 private:
-    mutable bool _valid = false;  // 0 is a real getMSTime value
+    mutable bool _valid = false;
     mutable uint32 _ms = 0;
     mutable ObjectGuid _group;
     mutable ObjectGuid _key;

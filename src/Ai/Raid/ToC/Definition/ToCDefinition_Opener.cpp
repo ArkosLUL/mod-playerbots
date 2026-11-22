@@ -15,7 +15,6 @@ namespace
 {
 void DefineOpener(EncounterBuilder& e)
 {
-    // Above the resistance aura: the swing lands on the next attack timer, not the next GCD
     e.Node(
         "toc opener swing",
         [](PlayerbotAI* botAI) -> Trigger* { return new RaidOpenerSwingTrigger(botAI, "toc opener swing", TOC_OPENER); },
@@ -34,7 +33,7 @@ void DefineOpener(EncounterBuilder& e)
     e.Multiplier<RaidOpenerHoldMultiplier>(Family::Spell | Family::Attack, "toc opener hold",
                                            std::cref(TrialOfTheCrusaderHelpers::TOC_OPENER));
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCOpenerDefinition()
 {

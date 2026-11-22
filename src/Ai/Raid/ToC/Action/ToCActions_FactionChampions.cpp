@@ -20,11 +20,8 @@ bool FactionChampionsCounterspellKillTargetAction::Execute(Event /*event*/)
     return killTarget && botAI->CastSpell("counterspell", killTarget);
 }
 
-// A queued basket can pop ticks after its trigger fired, once the heal is over
 bool FactionChampionsCounterspellKillTargetAction::isUseful() { return FactionChampionsCounterspellDuty(botAI); }
 
-// The non-combat toggle pet spell turns a taunt back on after the fight. False, so the bot still gets its
-// own action this tick.
 bool FactionChampionsPetAutocastAction::Execute(Event /*event*/)
 {
     bool enable = false;

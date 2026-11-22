@@ -11,9 +11,8 @@ using namespace TrialOfTheCrusaderHelpers;
 namespace
 {
 constexpr float STAND_TRIGGER = 3.0f;
-}  // namespace
+}
 
-// While our breakable CC holds its champion, until the DK has stopped swinging at it
 bool FactionChampionsIceTargetTrigger::IsActive()
 {
     Unit* champion = FactionChampionsIceTarget(botAI);
@@ -42,7 +41,6 @@ bool FactionChampionsIceReachTrigger::IsActive()
     return botAI->CanMove() && FactionChampionsIceReach(botAI, stand);
 }
 
-// Not inside a Bladestorm or Hellfire, the dodge walks out first
 bool FactionChampionsCycloneStandTrigger::IsActive()
 {
     Position spot;

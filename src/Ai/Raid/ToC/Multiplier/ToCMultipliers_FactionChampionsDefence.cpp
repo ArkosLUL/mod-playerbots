@@ -43,8 +43,6 @@ float FactionChampionsPhysicalSwitchGuardMultiplier::GetValue(Action* action)
 
 float FactionChampionsDispelGuardMultiplier::GetValue(Action* action)
 {
-    // Cleanse removes magic too, whichever aura type its node aimed at. Neither cure class ever changes
-    // its spell.
     auto const classify = [action]
     {
         CastSpellAction* cure = dynamic_cast<CastCureSpellAction*>(action);
@@ -107,7 +105,6 @@ float FactionChampionsGripGuardMultiplier::GetValue(Action* action)
     if (info->IsAffectingArea() || info->IsTargetingArea() || info->IsPositive())
         return 0.0f;
 
-    // GetTarget last, it scans every attacker
     return FactionChampionsGripGuarded(botAI, action->GetTarget()) ? 0.0f : 1.0f;
 }
 

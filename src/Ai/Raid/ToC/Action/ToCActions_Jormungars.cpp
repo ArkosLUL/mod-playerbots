@@ -25,24 +25,18 @@ using namespace EncounterHelpers;
 namespace
 {
 constexpr float APPROACH_ARRIVE = 1.0f;
-// The worm walks to its new spot 2.5 s into the submerge. Re-aiming on every step of that walk would
-// churn the MotionMaster.
 constexpr float APPROACH_REAIM_DISTANCE = 3.0f;
 constexpr float SWEEP_RADIUS = 30.0f;
 constexpr float SWEEP_DISTANCE_STEP = 2.0f;
 constexpr float SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// The partner keeps moving, so a straight cure walk stops short of the full reach
 constexpr float CURE_DIRECT_INSET = 1.0f;
 constexpr float CURE_PARTIAL_TURN = static_cast<float>(M_PI) / 8.0f;
 constexpr float FEET_CLEARANCE = 1.0f;
 
 char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command", "growl"};
 
-// CastSpell faces the target before the cast can fail, so a taunt on cooldown or out of range would
-// turn the bot every tick
 bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* worm)
 {
     for (char const* taunt : CLASS_TAUNTS)
@@ -103,15 +97,12 @@ bool OnWormEdge(float x, float y)
     return dist >= WORM_EDGE_MIN && dist <= WORM_EDGE_MAX;
 }
 
-// A walk waits behind a booking of equal or higher priority until it runs out
 void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
 {
     if (last.msTime && last.priority <= upTo && !BookedOn(last, own))
         last.clear();
 }
 
-// The sweep's rays fan 22.5 degrees apart, so past ~30 yd they can straddle the partner's reach and
-// find nothing
 bool DirectCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
 {
     Position const& partner = plan.partnerPos;
@@ -136,9 +127,6 @@ bool DirectCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
     return found;
 }
 
-// Every straight walk into the partner's reach crosses a pool or Sweep. On heroic a paralysed mobile
-// holder stands at the wall in front of its worm, with the worm's newest pool between it and the raid.
-// Takes the first leg of the shortest two-leg walk that ends on a direct spot.
 bool DetourCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
 {
     if (!plan.acceptVia || !plan.escapeAccept)
@@ -184,8 +172,6 @@ bool DetourCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
     return found;
 }
 
-// Partner out of search range and nothing clear round it: walk part of the way, bending off the
-// straight line when that's blocked
 bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
 {
     if (bot->GetExactDist2d(plan.partnerPos) <= WORM_SEARCH_RADIUS)
@@ -208,8 +194,6 @@ bool PartialCureSpot(Player* bot, WormMovePlan const& plan, Position& spot)
     return false;
 }
 
-// First tier with a spot: stand, escape when starting in a pool, full, pair, nospread, partner, escape,
-// loose, direct, detour, partial, cross
 bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpotTier& tier)
 {
     auto const fits = [&plan](float x, float y)
@@ -224,8 +208,6 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
     }
 
     HazardSweepCache sweep;
-    // The sweep returns nothing for an empty list, and urgency from a Spew cone alone leaves the escape
-    // no circle
     std::vector<HazardCircle> const ownSpot = {{bot->GetPosition(), 0.0f}};
     auto const search = [&](std::vector<HazardCircle> const& hazards, std::function<bool(float, float)> const& accept,
                             WormSpotTier found)
@@ -269,7 +251,6 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
         if (!plan.escapeFirst && search(plan.escapeCircles, plan.escapeAccept, WormSpotTier::Escape))
             return true;
 
-        // Same list as the escape's unless a held out Bile carrier keeps off clean bots
         if (plan.looseCircles.size() != plan.escapeCircles.size() &&
             search(plan.looseCircles, plan.escapeAccept, WormSpotTier::Loose))
             return true;
@@ -296,13 +277,11 @@ bool FindWormSpot(Player* bot, WormMovePlan const& plan, Position& spot, WormSpo
         }
     }
 
-    // Standing still in the damage is worse than walking through it. Near the floor edge, beside the
-    // up stationary worm or between two pools, every walk out can fail the path test.
     return plan.urgent && (search(plan.escapeCircles, plan.crossAccept, WormSpotTier::Cross) ||
                            (plan.looseCircles.size() != plan.escapeCircles.size() &&
                             search(plan.looseCircles, plan.crossAccept, WormSpotTier::Cross)));
 }
-}  // namespace
+}
 
 bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
 {
@@ -321,7 +300,6 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
     if (_walking == WalkKind::Approach)
         _walking = WalkKind::None;
 
-    // The submerge wipes its threat list, so it comes up on whoever threatens it first
     if (worm->GetVictim() != bot && !(mobile && IsWormSpewingAtOtherTank(botAI, worm)) &&
         TryClassTaunt(botAI, bot, worm))
         return true;
@@ -332,8 +310,6 @@ bool NorthrendWormsTankHoldAction::Execute(Event /*event*/)
     return mobile && DragOffHazards(worm);
 }
 
-// By the form it surfaces in: mobile needs taunt range, a rooted stationary one melee of where it comes
-// up. A lone survivor's holder keeps the mobile duty through its stationary emerges.
 bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 {
     float const stand = IsWormMobile(worm) ? WORM_TAUNT_STAND : WORM_STATIONARY_MELEE_RANGE - 2.0f;
@@ -363,7 +339,6 @@ bool NorthrendWormsTankHoldAction::ApproachSubmerged(Unit* worm)
 
 bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
 {
-    // Walking its victim turns the Spew cone with it
     if (IsWormSpewing(botAI, worm))
     {
         if (WalkInFlight(WalkKind::Drag))
@@ -389,7 +364,6 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
     if (inFlight && ClearOfCircles(plan.poolsOnly, *inFlight))
         return true;
 
-    // Toxin carriers walking over for this tank's Bile need it to stay put a bit
     if (!inFlight && MobileWormDragWaits(botAI))
     {
         NoteWormMove(bot, "drag wait");
@@ -404,15 +378,12 @@ bool NorthrendWormsTankHoldAction::DragOffHazards(Unit* worm)
         if (spot != Position() || (onEdge && !plan.edge))
             return;
 
-        // The sweep finds nothing for an empty list, as on a heroic walk out before the first pool
         hazards.emplace_back(bot->GetPosition(), FEET_CLEARANCE);
         spot = FindNearestPositionClearOfHazards(bot, hazards, SWEEP_RADIUS, SWEEP_DISTANCE_STEP, SWEEP_ANGLE_STEP,
                                                  &plan.preferNear, onEdge ? OnWormEdge : OnWormFloor, &sweep);
         edge = onEdge && spot != Position();
     };
 
-    // Heroic tries the edge first. Beside the stationary worm its melee would stand in Sweep, so keeping
-    // off that one beats the edge.
     search(plan.hazards, true);
     search(plan.hazards, false);
     search(plan.poolsOnly, true);
@@ -435,7 +406,6 @@ bool NorthrendWormsTankHoldAction::BookedOnWalkSpot()
 
 Position const* NorthrendWormsTankHoldAction::WalkInFlight(WalkKind kind)
 {
-    // Moving on some other node's walk doesn't count
     if (_walking != kind || !BookedOnWalkSpot())
         return nullptr;
 
@@ -447,12 +417,9 @@ Position const* NorthrendWormsTankHoldAction::WalkInFlight(WalkKind kind)
 
 bool NorthrendWormsTankHoldAction::WalkTo(WalkKind kind, Position const& spot)
 {
-    // A walk issued mid cast never starts but still books its travel time, and the same spot is
-    // refused until that runs out. Wait for the cast to end instead.
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // Our own earlier walk holds the booking at this priority and would refuse its replacement
     if (BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
 
@@ -469,7 +436,6 @@ Player* NorthrendWormsRedirectThreatAction::GetRedirectTank()
     return GetWormRedirectTarget(botAI, holder) ? holder : nullptr;
 }
 
-// Misdirection and Tricks go out under ground, but the shots wait for the worm to come up
 Unit* NorthrendWormsRedirectThreatAction::GetThreatDumpTarget()
 {
     Player* holder = nullptr;
@@ -495,7 +461,6 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
     WormSpotTier tier = WormSpotTier::Full;
     if (plan.held)
     {
-        // Every MoveTo clears the MotionMaster, so the walk still carrying the bot to its spot is left alone
         uint32 const age = getMSTimeDiff(plan.hold.issuedMs, getMSTime());
         if (BookedOn(last, plan.hold.spot) && age < WORM_WALK_LATCH_MS && (bot->isMoving() || age < WALK_STALL_MS))
         {
@@ -508,8 +473,6 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
         tier = plan.hold.tier;
     }
 
-    // PointMovementGenerator never starts a spline under a cast that pins the feet, and only damage
-    // landing on the spot is worth losing the cast for
     bool const pinned = bot->IsMovementPreventedByCasting();
     if (pinned && !plan.urgent)
     {
@@ -530,7 +493,6 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
     if (pinned)
         bot->InterruptNonMeleeSpells(true);
 
-    // Our own stale walk holds the booking and would refuse its replacement
     if ((_hasIssuedSpot && BookedOn(last, _issuedSpot)) || (plan.held && BookedOn(last, plan.hold.spot)))
         last.clear();
 
@@ -548,7 +510,6 @@ bool NorthrendWormsRepositionAction::Execute(Event /*event*/)
             _hasIssuedSpot = true;
             NoteWormMove(bot, "move " + Yards(travel) + " " + WormMoveReasonName(reason) + " " +
                                   WormSpotTierName(tier));
-            // after the walk is issued: the boots refuse a bot mid cast
             if (IsWormCureReason(reason) && travel > WORM_CURE_NITRO_FROM && UseNitroBoosts(bot))
                 NoteNitro(bot, "cure " + Yards(travel));
 
@@ -583,7 +544,6 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
     uint32 const now = getMSTime();
     if (_hasExit)
     {
-        // Every MoveTo clears the MotionMaster, so a walk still carrying the bot out is left alone
         uint32 const age = getMSTimeDiff(_exitMs, now);
         bool const exitClear = ClearOfCircles(GetSlimePoolCircles(botAI, 0, WORM_POOL_TRIGGER_PAD), _exitSpot);
         if (exitClear && BookedOn(last, _exitSpot) && age < WORM_WALK_LATCH_MS &&
@@ -593,7 +553,6 @@ bool NorthrendWormsLeavePoolAction::Execute(Event /*event*/)
             return true;
         }
 
-        // Our own stale walk holds the booking and would refuse its replacement
         if (BookedOn(last, _exitSpot))
             last.clear();
 

@@ -40,7 +40,6 @@ public:
     bool IsActive() override;
 };
 
-// This paladin bot is dealt a Hand of Protection to clear a tank's Impale
 class GormokImpaleResetTrigger : public Trigger
 {
 public:

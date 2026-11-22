@@ -35,14 +35,10 @@ namespace TrialOfTheCrusaderHelpers
 namespace
 {
 
-// The arena floor reaches ~80 yd from ARENA_CENTER. A bot further out than scan radius minus that
-// would miss part of the floor, so it reads the last scan instead of refreshing it.
 constexpr float JARAXXUS_ARENA_REACH = 80.0f;
 constexpr float JARAXXUS_FLAME_CARRIER_RAID_SCAN = 40.0f;
 constexpr float JARAXXUS_MELEE_INTERRUPT_RANGE = 5.0f;
-// spell damage per Nether Power stack
 constexpr float JARAXXUS_NETHER_POWER_PER_STACK = 0.2f;
-// FindNearestPositionClearOfHazards's own step defaults, spelled out where a later argument is passed
 constexpr float SWEEP_RING_STEP = 2.0f;
 constexpr float SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
@@ -52,11 +48,10 @@ std::vector<uint32> const JARAXXUS_SCAN_ENTRIES = {
     static_cast<uint32>(ToCNpcs::NPC_FEL_INFERNAL),     static_cast<uint32>(ToCNpcs::NPC_LEGION_FLAME),
 };
 
-// Guids, never pointers: a unit can despawn between two refreshes.
 struct JaraxxusScan
 {
     uint32 stampMs = 0;
-    bool valid = false;  // 0 is a real getMSTime value
+    bool valid = false;
     std::vector<ObjectGuid> bosses;
     std::vector<ObjectGuid> portals;
     std::vector<ObjectGuid> volcanoes;
@@ -80,7 +75,6 @@ enum class InfernoPhase : uint8
     Running
 };
 
-// One read per instance per ms: every bot's cover and personal nodes ask each tick
 struct InfernoMemo
 {
     bool valid = false;
@@ -93,7 +87,6 @@ struct JaraxxusState
 {
     JaraxxusScan scan;
     InfernoMemo inferno;
-    // Group walks behind triggers every bot asks each tick
     ToCGroupMemo<std::vector<ObjectGuid>> pinnedCasters;
     ToCGroupMemo<ObjectGuid> incinerateTarget;
     ToCGroupMemo<bool> nonHealingRemover;
@@ -197,7 +190,6 @@ Creature* FirstAlive(Player* bot, std::vector<ObjectGuid> const& guids)
     return nullptr;
 }
 
-// Normal portals and volcanoes are NOT_SELECTABLE and gone after 15 s, heroic ones have to be killed.
 Creature* FirstSelectable(Player* bot, std::vector<ObjectGuid> const& guids)
 {
     for (ObjectGuid guid : guids)
@@ -266,7 +258,6 @@ std::vector<Player*> AliveMembersOnMap(Player* bot)
     return members;
 }
 
-// Effect 0 of Incinerate Flesh is the heal absorb, worn down by every heal it eats
 uint32 IncinerateAbsorbLeft(Unit* unit)
 {
     Aura* aura = unit ? unit->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_INCINERATE_FLESH, unit)) : nullptr;
@@ -295,7 +286,6 @@ Unit* IncinerateFleshTargetFor(Player* bot)
     return target;
 }
 
-// What its periodic damage effect still has to tick, at the amount it landed with
 uint32 PeriodicDamageLeft(Aura const* aura)
 {
     for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
@@ -311,7 +301,6 @@ uint32 PeriodicDamageLeft(Aura const* aura)
     return 0;
 }
 
-// The DBC's average roll for one tick of a periodic damage effect
 uint32 PeriodicTickOf(uint32 spellId)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
@@ -328,7 +317,6 @@ uint32 PeriodicTickOf(uint32 spellId)
     return 0;
 }
 
-// the kiss punishes a channel, and a bot walking off a flame breaks one
 bool CannotChannel(Player* player)
 {
     return HasMistressKiss(player) || GetJaraxxusFlameRole(player) != JaraxxusFlameRole::None;
@@ -377,7 +365,6 @@ InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, RaidPredictedHit& hit
         !IncinerateAbsorbLeft(target))
         return memo.phase;
 
-    // his Nether Power counts: Burning Inferno is cast on his behalf
     float const power =
         1.0f + JARAXXUS_NETHER_POWER_PER_STACK * static_cast<float>(JaraxxusNetherPowerStacks(GET_PLAYERBOT_AI(bot)));
     next.startMs = now + static_cast<uint32>(std::max(incinerate->GetDuration(), 0)) + JARAXXUS_INFERNO_FIRST_TICK_MS;
@@ -388,7 +375,6 @@ InfernoPhase InfernoFor(Player* bot, JaraxxusState& state, RaidPredictedHit& hit
     return memo.phase;
 }
 
-// Melee DPS only. The trigger reads the distance, the hold also covers one walking in to hit it.
 bool ClearsPortal(PlayerbotAI* botAI, Creature* portal, JaraxxusScan const& scan)
 {
     Player* bot = botAI->GetBot();
@@ -401,8 +387,6 @@ bool ClearsPortal(PlayerbotAI* botAI, Creature* portal, JaraxxusScan const& scan
     if (spawn && spawn->GetPeriodicTimer() <= static_cast<int32>(JARAXXUS_PORTAL_SPAWN_LEAD_MS))
         return true;
 
-    // she opens on whoever stands nearest as she spawns, then goes by threat, so standing off her
-    // portal only matters until she has picked
     for (ObjectGuid guid : scan.mistresses)
     {
         Creature* mistress = ResolveAlive(bot, guid);
@@ -428,8 +412,6 @@ bool IsNonHealingRemover(Player* player)
     }
 }
 
-// One on another player first, tanks included: Fel Streak can land on any of them and its 50,000
-// threat keeps it there. Then the one already on this bot, so a tank doesn't drop its own for another.
 Unit* PickInfernal(Player* bot, JaraxxusScan const& scan)
 {
     Unit* lowest = nullptr;
@@ -473,8 +455,6 @@ bool InInterruptRange(Player* bot, Unit* boss, SpellInfo const* spellInfo)
     return bot->IsWithinCombatRange(boss, maxRange);
 }
 
-// CanCastSpell probes with TRIGGERED_IGNORE_POWER_AND_REAGENT_COST, so energy, rage and runic power
-// get checked here. POWER_HEALTH is -2 and Powers is signed, hence the cast.
 bool CanPayFor(Player* bot, SpellInfo const* spellInfo)
 {
     if (spellInfo->PowerType >= static_cast<uint32>(MAX_POWERS))
@@ -484,7 +464,6 @@ bool CanPayFor(Player* bot, SpellInfo const* spellInfo)
            spellInfo->CalcPowerCost(bot, spellInfo->GetSchoolMask());
 }
 
-// the sweep's answer when nothing inside its radius is clear
 bool IsEmptyPosition(Position const& position) { return !position.GetPositionX() && !position.GetPositionY(); }
 
 float DistanceToSegment2d(Position const& point, Position const& from, Position const& to)
@@ -504,7 +483,6 @@ float DistanceToSegment2d(Position const& point, Position const& from, Position 
     return point.GetExactDist2d(from.GetPositionX() + t * dx, from.GetPositionY() + t * dy);
 }
 
-// Only flames that can reach a spot inside the sweep radius
 void AddFlameHazards(Player* bot, JaraxxusScan const& scan, std::vector<HazardCircle>& hazards)
 {
     for (Position const& flame : scan.flames)
@@ -512,7 +490,6 @@ void AddFlameHazards(Player* bot, JaraxxusScan const& scan, std::vector<HazardCi
             hazards.emplace_back(flame, JARAXXUS_LEGION_FLAME_CLEAR);
 }
 
-// A bot already inside radius of a centre may walk on as long as it gets no nearer to it
 bool CirclesCrossPath(std::vector<Position> const& centres, float radius, Position const& from, Position const& to)
 {
     for (Position const& centre : centres)
@@ -530,7 +507,6 @@ bool FlameCrossesPath(JaraxxusScan const& scan, Position const& from, Position c
     return CirclesCrossPath(scan.flames, JARAXXUS_LEGION_FLAME_CLEAR, from, to);
 }
 
-// A heroic portal drops a Mistress every 6 s, inside any 8 s carry
 std::vector<Position> SelectablePortals(Player* bot, JaraxxusScan const& scan)
 {
     std::vector<Position> portals;
@@ -548,8 +524,6 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
 {
     std::vector<HazardCircle> flames;
     AddFlameHazards(bot, scan, flames);
-    // next flame lands where the carrier stands. Also keeps the list non-empty before the first
-    // flame, since the sweep answers nothing for an empty one
     flames.emplace_back(bot->GetPosition(), JARAXXUS_LEGION_FLAME_CLEAR);
 
     Position const from = bot->GetPosition();
@@ -568,7 +542,6 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
         if (member != bot && PlayerbotAI::IsHeal(member))
             healers.push_back(member->GetPosition());
 
-    // the ring's first clear spot nearest the heading, so a leg bends round a healer's reach
     auto const healable = [&healers](float x, float y)
     {
         return healers.empty() || std::any_of(healers.begin(), healers.end(), [x, y](Position const& healer)
@@ -593,7 +566,6 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
     Unit* boss = FindJaraxxus(bot);
     char const* branch = "carrier";
 
-    // a tank carrier drags him along, so it can't keep clear of him or of the melee on him
     if (boss && boss->GetVictim() == bot)
     {
         spot = sweep(offPortals, true, true);
@@ -624,7 +596,6 @@ bool DeriveCarrierSpot(Player* bot, JaraxxusScan const& scan, float heading, Pos
             branch = "far";
     }
 
-    // walking past a portal still beats standing in the trail
     if (IsEmptyPosition(spot) && !portals.empty())
     {
         spot = sweep(flames, false, false);
@@ -647,7 +618,6 @@ bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
     if (target && !target->IsAlive())
         target = nullptr;
 
-    // a dodge inside the melee hold's circle only sends the bot back out through the flames
     Unit* held = botAI ? GetJaraxxusPortalToClear(botAI) : nullptr;
     std::vector<HazardCircle> hazards = flames;
     std::vector<Position> heldPortal;
@@ -669,7 +639,6 @@ bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
         }
     }
 
-    // the same range reach spell and reach melee walk to, so neither fires from the spot
     float reach = 0.0f;
     if (target && target != held)
     {
@@ -715,7 +684,7 @@ bool DeriveDodgeSpot(Player* bot, JaraxxusScan const& scan, Position& spot)
     return !IsEmptyPosition(spot);
 }
 
-}  // namespace
+}
 
 Unit* GetJaraxxus(PlayerbotAI* botAI) { return botAI ? FindJaraxxus(botAI->GetBot()) : nullptr; }
 
@@ -768,8 +737,6 @@ bool JaraxxusIsNetherPowerRemover(Player* bot)
     if (botClass != CLASS_PRIEST && botClass != CLASS_SHAMAN)
         return false;
 
-    // a healer only fills in when nobody else can, and never while Incinerate Flesh needs its heals.
-    // a healing priest or shaman isn't one itself, so the group's answer only counts the others
     bool const covered = state->nonHealingRemover.Get(bot, [bot](bool& any)
     {
         std::vector<Player*> const members = AliveMembersOnMap(bot);
@@ -850,7 +817,6 @@ Unit* GetJaraxxusAssistTankAdd(PlayerbotAI* botAI, uint8 index)
 
     JaraxxusScan const& scan = ScanOf(bot, *state);
 
-    // a tank that died or left stops calling this, so its entry would outlive it in the trace
     if (RaidObs::Active())
     {
         std::vector<Player*> const members = AliveMembersOnMap(bot);
@@ -894,7 +860,6 @@ bool JaraxxusMainTankHolds(PlayerbotAI* botAI)
     if (!botAI || !PlayerbotAI::IsMainTank(botAI->GetBot()))
         return false;
 
-    // Barrett's gossip frees him straight into combat, so out of combat there's nothing to hold yet
     Unit* jaraxxus = GetJaraxxus(botAI);
     return jaraxxus && jaraxxus->IsInCombat();
 }
@@ -922,7 +887,6 @@ Unit* GetJaraxxusDpsTarget(PlayerbotAI* botAI)
         if (target)
         {
             branch = "skull";
-            // keeps jaraxxus.focus following the adds under a skull
             if (RaidObs::Active())
                 GetJaraxxusFocusAdd(botAI);
         }
@@ -958,8 +922,6 @@ char const* JaraxxusReadyInterrupt(Player* bot, Unit* boss)
     if (!botAI || bot->HasUnitState(UNIT_STATE_CASTING))
         return nullptr;
 
-    // He is immune to silence, so Silencing Shot and Silence never land. Spell Lock is left out
-    // because CanCastSpell answers any pet spell true without looking at its cooldown.
     static char const* const interrupts[] = {"kick",         "pummel",       "shield bash",
                                              "mind freeze",  "counterspell", "wind shear"};
 
@@ -986,7 +948,6 @@ bool JaraxxusIsFelFireballInterrupter(Player* bot, Unit* boss)
     bool interrupter = JaraxxusIsFelFireballCasting(boss) && JaraxxusReadyInterrupt(bot, boss);
     if (interrupter)
     {
-        // the lowest guid with an interrupt ready takes the cast
         ObjectGuid const first = state->fireballInterrupter.Get(
             bot,
             [bot, boss](ObjectGuid& lowest)
@@ -1173,7 +1134,6 @@ bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
         return true;
     }
 
-    // one running on the others and not on this bot passes it by
     if (InfernoFor(bot, *state, hit) == InfernoPhase::Coming)
         return true;
 
@@ -1191,7 +1151,6 @@ bool GetJaraxxusPersonalHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
         return true;
     }
 
-    // the 2 s warning ahead of a 6 s trail ticking once a second
     Aura const* warning = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_LEGION_FLAME, bot));
     if (!warning)
         return false;
@@ -1257,7 +1216,6 @@ bool DeriveJaraxxusPortalExit(Player* bot, Unit* portal, Position& spot)
     AddFlameHazards(bot, *scan, hazards);
     hazards.emplace_back(portal->GetPosition(), JARAXXUS_PORTAL_CLEAR);
 
-    // back toward him, where the melee go once she has picked
     Unit* boss = FindJaraxxus(bot);
     Position const toward = boss ? boss->GetPosition() : bot->GetPosition();
     spot = FindNearestPositionClearOfHazards(bot, hazards, JARAXXUS_PORTAL_CLEAR + JARAXXUS_LEGION_FLAME_SEARCH,
@@ -1286,7 +1244,6 @@ bool JaraxxusThreatCapped(Player* bot)
     if (!tank || tank == bot || (!PlayerbotAI::IsTank(tank) && !PlayerbotAI::IsTank(tank, true)))
         return false;
 
-    // the "threat" AI value is a share in a uint8 and wraps past 255%
     float const own = boss->GetThreatMgr().GetThreat(bot);
     float const held = boss->GetThreatMgr().GetThreat(tank);
     if (!cap.capped && own > 0.0f && own >= JARAXXUS_THREAT_CAP * held)

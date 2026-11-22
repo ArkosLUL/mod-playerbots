@@ -32,7 +32,6 @@ constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
 constexpr float ANUBARAK_BOOKED_TOLERANCE = 0.5f;
 constexpr float ANUBARAK_ESCORT_REAIM = 3.0f;
 constexpr float ANUBARAK_SIDE_SHOUT_REACH = 10.0f;
-// A bubble older than this since the cold save cast it isn't the save's to cancel
 constexpr uint32 ANUBARAK_COLD_BUBBLE_CANCEL_MS = 3000;
 
 constexpr uint32 SPELL_DEMONIC_CIRCLE_SUMMON = 48018;
@@ -48,8 +47,6 @@ char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command"
 char const* const BURROWER_SHOUTS[] = {"challenging roar", "challenging shout"};
 char const* const BURROWER_CLOSERS[] = {"feral charge - bear", "intercept", "avenger's shield", "death grip"};
 
-// MoveTo refuses a repeat of its last point for up to 5 s even once the bot has stopped (a potion's
-// StopMoving, a knockback), so drop the booking when the bot stands still past the issue.
 void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
 {
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
@@ -63,28 +60,23 @@ bool BookedOn(LastMovement const& last, Position const& spot)
            std::fabs(last.lastMoveToY - spot.GetPositionY()) <= ANUBARAK_BOOKED_TOLERANCE;
 }
 
-// A walk waits behind any booking of equal or higher priority until it runs out
 void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
 {
     if (last.msTime && last.priority <= upTo && !BookedOn(last, own))
         last.clear();
 }
 
-// A point move issued mid channel never starts its spline, though MoveTo still reports it issued
 void BreakChannelPinningTheFeet(Player* bot)
 {
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 }
 
-// True when the bot can cast spell on target from where it stands. Otherwise stop is how close to
-// walk first, edge to edge as MoveTo(target, distance) measures it.
 bool InSpellReach(PlayerbotAI* botAI, Player* bot, Unit* target, char const* spell, float& stop)
 {
     uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
 
-    // Self range covers War Stomp and Shockwave, which only reach what stands next to the bot
     if (!info || !info->RangeEntry || info->RangeEntry->ID == 1 || (info->RangeEntry->Flags & SPELL_RANGE_MELEE))
     {
         stop = CONTACT_DISTANCE;
@@ -96,8 +88,6 @@ bool InSpellReach(PlayerbotAI* botAI, Player* bot, Unit* target, char const* spe
     return bot->IsWithinCombatRange(target, range) && bot->IsWithinLOSInMap(target);
 }
 
-// CastSpell selects the target, and faces it for a spell that needs facing, before the cast can fail.
-// Gated so a taunt on cooldown doesn't do that every tick to a tank holding something else.
 bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
 {
     for (char const* taunt : CLASS_TAUNTS)
@@ -110,21 +100,17 @@ bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
     return false;
 }
 
-// The swarm keeps everyone under the rescue pct, so in phase 3 that would let every taunt go from any range
 bool TauntLands(Unit* victim, float dist, bool swarm)
 {
     return dist <= ANUBARAK_TAUNT_ARRIVE ||
            (!swarm && victim && victim->GetHealthPct() < ANUBARAK_TAUNT_RESCUE_PCT);
 }
 
-// Loose burrowers are mostly on healers or ranged, so first Righteous Defense off whoever most of them hit, then
-// a shout, the class taunt, a charge or pull. tooFar: a taunt waited for the burrowers to come closer.
 bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick const& pick, bool& tooFar)
 {
     tooFar = false;
     float stop = 0.0f;
     bool const swarm = GetAnubarakPhase(botAI) == AnubarakPhase::Swarm;
-    // Righteous Defense taunts everything hitting the member, him included
     Creature* boss = GetAnubarak(bot);
     bool const bossOnRescue = boss && pick.rescue && boss->GetVictim() == pick.rescue;
     if (pick.rescue && pick.rescue != bot && !bossOnRescue && botAI->CanCastSpell("righteous defense", pick.rescue) &&
@@ -136,7 +122,6 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
         tooFar = true;
     }
 
-    // A shout takes in whatever stands within 10 yd plus its reach, his 10 among them
     bool const bossClear =
         !boss || bot->GetExactDist2d(boss) > ANUBARAK_SIDE_SHOUT_REACH + boss->GetCombatReach();
     if (pick.looseNear >= 2 && !pick.otherNear && bossClear)
@@ -152,7 +137,6 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
         if (!lands && botAI->CanCastSpell(taunt, pick.loose))
             tooFar = true;
 
-    // A DK owed a grip keeps Death Grip for the side's tank patch
     AnubarakGripDuty grip;
     bool const gripOwed = GetAnubarakGripDuty(bot, grip);
     for (char const* closer : BURROWER_CLOSERS)
@@ -167,7 +151,6 @@ bool TryBurrowerPickup(PlayerbotAI* botAI, Player* bot, AnubarakBurrowerPick con
     return false;
 }
 
-// Already walking there: every MoveTo clears the spline, so a walk in flight is left alone
 bool WalkInFlight(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     ReleaseStalledWalk(botAI, bot);
@@ -177,7 +160,6 @@ bool WalkInFlight(PlayerbotAI* botAI, Player* bot, Position const& spot)
 
 }
 
-// Hand of Protection keeps the spike on the paladin; the rest hand it on at its current speed
 bool AnubarakKiterImmunityAction::Execute(Event /*event*/)
 {
     std::vector<char const*> immunities;
@@ -207,7 +189,6 @@ bool AnubarakKiterImmunityAction::Execute(Event /*event*/)
         if (!botAI->CanCastSpell(immunity, bot))
             continue;
 
-        // Feign Death drops the moment the hunter moves, the same ms it lands when cast mid run
         if (bot->getClass() == CLASS_HUNTER && bot->isMoving())
             bot->StopMoving();
 
@@ -235,9 +216,7 @@ bool AnubarakHopEscortAction::Execute(Event /*event*/)
     if (!GetAnubarakEscortSpot(bot, spot))
         return false;
 
-    // A straight walk to the spot can cross a patch, and the 80% slow leaves the kiter out of Hand reach
     Position const walk = GetAnubarakPatchSafeLeg(bot, spot);
-    // The spot moves with the kiter, so a walk already headed close enough is left running
     ReleaseStalledWalk(botAI, bot);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     if (bot->isMoving() && last.msTime &&
@@ -263,8 +242,6 @@ Unit* AnubarakRedirectThreatAction::GetThreatDumpTarget()
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 {
-    // Heroic chains its speed boosts once the spike gains on it, the walk to a patch included; each is
-    // instant and leaves the run going
     AnubarakKiteBoost boost;
     GetAnubarakKiteStage(bot, &boost);
     if (boost.nitro)
@@ -277,7 +254,6 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
         if (boost.face)
             bot->SetOrientation(boost.facing);
 
-        // Cat Form won't cast from another form. RemoveShapeshift leaves Tree of Life on, so drop the aura.
         bool shifted = false;
         if (boost.catForm && botAI->CanCastSpell(SPELL_CAT_FORM, bot))
         {
@@ -289,7 +265,6 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
         if ((!boost.catForm || shifted) && target && botAI->CastSpell(boost.spellId, target))
             return true;
 
-        // Dash goes next tick from Cat Form
         if (shifted)
             return true;
     }
@@ -298,15 +273,12 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
     if (!GetAnubarakKiteStand(bot, next))
         return false;
 
-    // Yields the tick on the stand: generic movers are vetoed for the marked bot, so it can cast here
     if (next.branch == AnubarakKiteBranch::Hold)
         return false;
 
     BreakChannelPinningTheFeet(bot);
     ReleaseStalledWalk(botAI, bot);
 
-    // MoveTo refuses a point no higher than a FORCED leg still in flight, so a re-aimed stand, or the
-    // first leg after this bot's own dodge, would wait out the stale one. Nothing outranks the kite.
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     MovementPriority const held = last.priority;
     bool const lowered = held == MovementPriority::MOVEMENT_FORCED &&
@@ -333,7 +305,6 @@ bool AnubarakAvoidSpikeAction::Execute(Event /*event*/)
         if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_DODGE_ARRIVE)
             return false;
 
-        // Every MoveTo clears the spline, so a walk still carrying the bot there is left alone
         if (bot->isMoving() && BookedOn(AI_VALUE(LastMovement&, "last movement"), spot))
             return true;
 
@@ -352,7 +323,6 @@ bool AnubarakAvoidSpikeAction::WalkToDodge(Position const& spot)
     BreakChannelPinningTheFeet(bot);
     ReleaseStalledWalk(botAI, bot);
 
-    // A FORCED leg still in flight to some other spot refuses this one at the same priority
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     MovementPriority const held = last.priority;
     bool const lowered = held == MovementPriority::MOVEMENT_FORCED && !BookedOn(last, spot);
@@ -393,7 +363,6 @@ bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 
 bool AnubarakColdSelfSaveAction::Execute(Event /*event*/)
 {
-    // The purge is done once it's up. Kept up, the mage can't cast and the paladin hits for half.
     if (_bubbleSpell && bot->HasAura(_bubbleSpell) &&
         getMSTimeDiff(_bubbleMs, getMSTime()) < ANUBARAK_COLD_BUBBLE_CANCEL_MS)
     {
@@ -420,12 +389,9 @@ bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
     if (Attack(sphere))
         return true;
 
-    // On it already, and the rotation shoots it from here
     if (AnubarakSphereInReach(bot, sphere))
         return false;
 
-    // Also covers Attack() refusing a sphere out of sight. A walk issued under a cast never starts
-    // but still books its travel time. A bot parked on its dodge spot shoots only from there.
     Position stand;
     if (bot->IsMovementPreventedByCasting() || IsAnubarakDodgeHeld(botAI) ||
         !GetAnubarakSphereStand(bot, sphere, stand))
@@ -445,7 +411,6 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // Picks up even with one already held: a wave brings more burrowers than there are side tanks
     bool tooFar = false;
     if (pick.loose && TryBurrowerPickup(botAI, bot, pick, tooFar))
     {
@@ -457,16 +422,12 @@ bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
     if (Attack(target))
         return true;
 
-    // Walking off with one that isn't on this bot yet only leaves it on whoever it's hitting
     if (target != pick.held)
         return false;
 
-    // A taunt holds it only 3 s, and walking off to the hold keeps it out of reach that long. Stands so it
-    // comes in and the rotation lands threat first.
     if (pick.heldTaunted && !bot->IsWithinMeleeRange(pick.held))
         return false;
 
-    // The spike dodge would walk the tank straight back out
     Position const& hold = pick.hold;
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
         AnubarakSpikeReachesFirst(bot, hold))
@@ -507,7 +468,6 @@ bool AnubarakSideTankReadyAction::Execute(Event /*event*/)
 
     RaidObs::NoteDerived(bot, "anub.sidetank", "ready");
 
-    // Scarabs that come to it get Permafrost's slow on the patch
     for (Unit* attacker : bot->getAttackers())
         if (attacker->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_SWARM_SCARAB) && Attack(attacker))
             return true;
@@ -547,8 +507,6 @@ bool AnubarakGripFrostSphereAction::Execute(Event /*event*/)
                 !botAI->CanCastSpell("death grip", sphere))
                 return false;
 
-            // The sphere comes down where the DK stands as the grip goes out, so a walk still running
-            // would leave the patch behind it
             if (bot->isMoving())
                 bot->StopMoving();
 
@@ -592,8 +550,6 @@ bool AnubarakGatherAction::Execute(Event /*event*/)
     }
 
     Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, spot));
-    // The spike's path still crosses the way back: wait where it stands, out of danger or the dodge would
-    // have moved it
     if (!AnubarakWalkClearOfSpike(bot, spot))
     {
         RaidObs::NoteDerived(bot, "anub.gather", "wait");
@@ -622,8 +578,6 @@ bool AnubarakHealerStandAction::Execute(Event /*event*/)
         return false;
 
     Position const walk = GetAnubarakPatchSafeLeg(bot, ValidateFloorPoint(bot, slot));
-    // heals don't cast on the move: stop and let the ones below run. Booking cleared or the walk back
-    // is refused as a repeat
     if (AnubarakHealerStandWaits(bot))
     {
         if (WalkInFlight(botAI, bot, walk) || WalkInFlight(botAI, bot, slot))
@@ -704,7 +658,6 @@ bool AnubarakBurrowerLeadAction::Execute(Event /*event*/)
     if (!AnubarakWalkClearOfSpike(bot, to))
         return false;
 
-    // The point moves with the side tank, so a walk headed close enough is left running
     Position const walk = GetAnubarakPatchSafeLeg(bot, to);
     ReleaseStalledWalk(botAI, bot);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
@@ -723,7 +676,6 @@ bool AnubarakKiteScarabAction::Execute(Event /*event*/)
     if (!GetAnubarakScarabKite(botAI, step))
         return false;
 
-    // Re-picked every tick 10 yd on from where the bot is, so a walk headed close enough is left running
     ReleaseStalledWalk(botAI, bot);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     if (bot->isMoving() && last.msTime &&
@@ -747,7 +699,6 @@ bool AnubarakJudgeLightAction::Execute(Event /*event*/)
     return boss && botAI->CastSpell("judgement of light", boss);
 }
 
-// What caster form does, past its mana gate
 bool AnubarakKiteCatDropAction::Execute(Event /*event*/)
 {
     if (!AnubarakKiteCatDropDue(botAI))
@@ -774,7 +725,6 @@ bool AnubarakDemonicCircleAction::Execute(Event /*event*/)
     if (!AnubarakDemonicCircleDue(botAI))
         return false;
 
-    // the circle lands at the caster's feet
     Position spot;
     if (GetAnubarakCircleSpot(botAI, spot) &&
         bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ANUBARAK_CIRCLE_CENTRE_SLACK / 2.0f)
@@ -803,7 +753,6 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
     if (!boss || boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
 
-    // He never drops threat, so a taunt is only owed when a non-tank ended up with him
     Unit* victim = boss->GetVictim();
     Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
     bool const onNonTank = victim && victim != bot && !IsAnubarakTankPlayer(victimPlayer);
@@ -819,7 +768,6 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
         return true;
     }
 
-    // Slowed 80% in a patch the tank would crawl through every leg
     Position stepOut;
     if (GetAnubarakTankStepOut(bot, boss, stepOut))
     {
@@ -844,7 +792,6 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A latched leg comes back whatever the point; otherwise the first point with a clean leg wins
     AnubarakDragLeg leg;
     for (Position const& candidate : points)
     {
@@ -863,14 +810,12 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
     if (leg.step != AnubarakDragStep::Walk)
         return false;
 
-    // True only on the issuing tick, so the tank's threat abilities get the ticks while he follows
     ReleaseStalledWalk(botAI, bot);
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     Position const& spot = leg.tankSpot;
     if (BookedOn(last, spot))
         return false;
 
-    // Backwards keeps the tank's front to him, so his first swings on arrival can be parried and blocked
     DropForeignBooking(last, spot, MovementPriority::MOVEMENT_COMBAT);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                   false, MovementPriority::MOVEMENT_COMBAT, true, true);
@@ -909,7 +854,6 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
     if (pick.rescue && CastAnubarakColdRescue(botAI, pick.target))
         return true;
 
-    // the HoT or nothing: a bigger heal on a non-carrier goes straight back to him
     if (pick.hot)
         return CastAnubarakSwarmHot(botAI, pick.target);
 
@@ -919,7 +863,6 @@ bool AnubarakSwarmHealAction::Execute(Event /*event*/)
     if (CastAnubarakColdCarrierCover(botAI, pick.target))
         return true;
 
-    // Wild Growth heals five around the target, and the swarm hands the four others back to him
     return CastRaidThroughputHeal(botAI, pick.target,
                                   [](std::string const& heal) { return heal == "wild growth"; });
 }

@@ -16,7 +16,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// The pool walks mind a latched lane themselves, and the crash stuns a bot wherever it stands, pool or not
 bool CompetesWithChargeDodge(Action* action)
 {
     if (dynamic_cast<MovementAction*>(action))
@@ -30,11 +29,10 @@ bool CompetesWithChargeDodge(Action* action)
     if (dynamic_cast<CastReachTargetSpellAction*>(action))
         return true;
 
-    // Both throw the bot a fixed distance that can land it in the line. By name, so no class headers.
     std::string const name = action->getName();
     return name == "blink" || name == "disengage";
 }
-}  // namespace
+}
 
 float IcehowlChargeGuardMultiplier::GetValue(Action* action)
 {
@@ -47,7 +45,6 @@ float IcehowlChargeGuardMultiplier::GetValue(Action* action)
     return IcehowlChargeCycleActive(botAI) ? 0.0f : 1.0f;
 }
 
-// SetBehindTargetAction is a CombatFormationMoveAction too
 float IcehowlBreathSpreadGuardMultiplier::GetValue(Action* action)
 {
     if (!dynamic_cast<CombatFormationMoveAction*>(action))

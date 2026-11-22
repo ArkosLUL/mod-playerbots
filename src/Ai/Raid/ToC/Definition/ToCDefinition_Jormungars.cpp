@@ -29,8 +29,6 @@ void DefineJormungars(EncounterBuilder& e)
     e.Node<NorthrendWormsPoolAfterWormsTrigger, NorthrendWormsLeavePoolAction>(ACTION_EMERGENCY + 6);
     e.Node<NorthrendWormsToxinStuckTrigger, NorthrendWormsPurgeToxinAction>(ACTION_EMERGENCY + 5);
 
-    // Above the staging and breath stand walks, which hold the tick while in flight: on the move only the
-    // instants go out
     e.Node<NorthrendWormsToxinCarrierHurtTrigger, NorthrendWormsHealToxinCarrierAction>(ACTION_RAID + 3);
 
     e.LiveMultiplier<NorthrendWormsMoveGuardMultiplier>(Family::AnyMovement | Family::Spell);
@@ -38,7 +36,7 @@ void DefineJormungars(EncounterBuilder& e)
     e.LiveMultiplier<NorthrendWormsRedirectGuardMultiplier>(Family::Spell);
     e.LiveMultiplier<NorthrendWormsThreatBrakeMultiplier>(Family::Spell | Family::Melee);
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCJormungarsDefinition()
 {
