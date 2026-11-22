@@ -11,6 +11,10 @@ Every boss is an [encounter definition](../README.md#file-layout-and-wiring) in
 `Definition/UldDefinition_<Boss>.cpp`, listed in `Definition/UldDefinitions.h`; the two contexts
 register only definitions, and `UldStrategy.cpp` adds each boss's nodes and multipliers in a fixed
 per-boss order, which sets node and veto order. `UldEncounterGate.h` holds the boss ids.
+`UldEncounterGate.h` and `Util/UldScripts.h` copy what they need from the core's `ulduar.h`, which sits
+under `scripts/` and can't be included: boss ids, `GetCreature` data types, NPC entries, and the
+Keeper bits of `PERSISTENT_DATA_WATCHERS_MASK`. `Util/UldData.h` holds only values no single
+encounter owns; a boss's ids, tuning and positions go in its `Util/UldEncounter_<Boss>.h`.
 
 Each boss doc records the upstream script and DBC facts its strategy keys off. Every one of them once
 silently disabled something, so re-check them after any parent-repo sync.
@@ -56,7 +60,8 @@ Still dynamic, because they are *phase* or target selection rather than hard-mod
 `IsSteelbreakerEmpowered` (must not arm before phase 3), `GetIronAssemblyNextKillTarget`,
 `GetFlameLeviathanNearestTowerHazard`. `YoggActiveKeeperMask` and the file-static
 `GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
-`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone.
+`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone: the
+Keepers are freed in-instance, so config can't say which are up.
 
 Flame Leviathan's hazard callers pass `FL_TOWER_ALL`, and hazards are found by NPC entry, so destroyed
 towers contribute nothing. Thorim's Frost Resistance paladin waits for `sifJoined`, latched on Sif's
@@ -81,7 +86,8 @@ exists: Flame Leviathan's tower auras tell you *which* towers are up, where
 ## Burst and Bloodlust windows
 
 `UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other
-raid. Two tiers are gated separately: `allowAll` covers every burst cooldown, `allowLust` covers
+raid. One multiplier serves every gated boss, so the `IsBurstCooldownAction` early-out runs once per
+action. Two tiers are gated separately: `allowAll` covers every burst cooldown, `allowLust` covers
 `bloodlust`/`heroism` only, because a 10-minute raid cooldown wants a later window than personal
 cooldowns that come back within a phase.
 
@@ -95,7 +101,7 @@ shaman-only.
 |---|---|---|---|
 | Razorscale | grounded (`Z <= 440`) | permanent ground phase (`IsGroundPhaseFor`) | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window, but a ~30 s knockdown is too short for a 10-minute cooldown |
 | Mimiron | always | P4: all three parts selectable, VX-001 riding, after `ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS` (15 s) | P1-P3 damage counts. A beaten or self-repairing mech stays alive but unselectable, so selectable is what counts as fighting; the raid spends the P4 opening running from the Frost Bomb |
-| Yogg-Saron | P2 or P3 | never | `yogg-saron phase 3 lust` owns lust, waiting for the raid to reach its spots. P1 damage lands on Sara and is wasted. Opens only on the Brain (P2) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
+| Yogg-Saron | P2 or P3 | never | `yogg-saron phase 3 lust` owns lust, waiting for the raid to reach its spots. P1 damage lands on Sara and is wasted. Opens only on the Brain (P2; tentacles die anyway, and a cooldown spent on one is down for the next portal) and Yogg (P3), both in `BossTakesNoVictim`: before that the base gate held every bot cooldown for a whole 663 s pull. Read from the boss state, not sight: the brain level is 88-150 yd from Yogg, past `SightDistance`, and the fall-through lusted in P2 |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
 | Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
@@ -123,6 +129,11 @@ first flight point puts the whole raid on her threat list, so that read works at
 the function reaches its `return {}`, and `BurstWindow`'s member initialisers are both `true`, so the
 gate opens instead of closing. That fallback is ungated, so it runs in every other Ulduar fight too
 ([cost, open](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)).
+
+Two more fall back to a grid search, so no gated boss reaches that open default. **Mimiron's mechs**:
+the sweep lags the pull and skips unselectable units, which every mech is through a handover, and
+missing all three would fall through and lust. **Thorim**, near his encounter (`NearThorimEncounter`): his gauntlet runs
+about 190 yd up the corridor, past `SightDistance`.
 
 Open question that cannot be answered from source: whether the Mimiron mechs and the Assembly council
 members are `IsDungeonBoss()`-flagged. If they are not, lust never fires on them and those two gates

@@ -11,7 +11,9 @@ off-tank is parked before the pull.
 
 Everything sits in `Definition/OSDefinition_Sartharion.cpp`, behind his encounter gate, except the
 realm kill order (`sartharion dps`) and `twilight portal exit`: a drake pulled alone starts its own
-encounter, which closes his gate, and still opens a Twilight portal.
+encounter, which closes his gate, and still opens a Twilight portal. `OS_BOSS_SARTHARION` copies
+`DATA_SARTHARION` from the core's `obsidian_sanctum.h`, which sits under `scripts/` and can't be
+included.
 
 ## Geometry
 
@@ -44,8 +46,9 @@ gives away the east end; each band was swept at 0.5 yd and is 100% ground:
 | 504–520, 566–569 | 3227–3266 |
 | 520–566 | 3227–**3268**: corridors, drake spots, off-tank |
 
-It doubles as the freeze guard: with movement suppression live, an off-navmesh `MoveTo` strands a
-bot for the fight. **Targets** use the looser `InsideRoom` box `X 3208–3286, Y 474–591, Z ≤ 65`, so a
+The west edge runs out to 3219.75 from Y 490 north, so the southern bands start at 3220: the tank's
+right hold needs that yard. It doubles as the freeze guard: with movement suppression live, an
+off-navmesh `MoveTo` strands a bot for the fight. **Targets** use the looser `InsideRoom` box `X 3208–3286, Y 474–591, Z ≤ 65`, so a
 Lava Blaze on the rim still counts while the drake perches do not.
 
 **The two boxes leave an 18 yd band of lava that reads as "inside the room"** (`ROOM_MAX_X` 3286
@@ -65,9 +68,10 @@ The 15-minute despawn that would remove the triggers is scheduled into `extraEve
 the `events` switch, so it is silently swallowed and the circles persist. The same swallow kills the
 15-minute berserk — **there is no hard enrage to race**, which is what makes holding cooldowns safe.
 
-`ClampToRangeMarker` pulls along **X only**, onto the chord the circle cuts at the current Y. Y is the
-axis a tsunami kills on and must survive the clamp. Radial fallback only when no X on that line is
-covered.
+`ClampToRangeMarker` pulls along **X only**, onto the chord the circle cuts at the current Y, to
+`RANGE_MARKER_SAFE_RADIUS` (36 yd) of the marker whose chord is wider there (on the corridor holds
+always the northern one). Y is the axis a tsunami kills on and must survive the clamp. Radial
+fallback only when no X on that line is covered.
 
 ## Flame Tsunami — the two patterns are anti-phased
 
@@ -98,7 +102,10 @@ waves, capped at 513.5 by melee sharing it on the raid's 2.0 yd tolerance. `TANK
 is **1.0** against 2.0 for the raid line — anything looser lets a bot "arrive" inside a band.
 
 Corridors are **home-and-away, not sticky**: each group idles on the hold that is safe under one
-pattern and moves only for the other. Waves cover ~11 s of every 25.
+pattern and moves only for the other. Waves cover ~11 s of every 25. A bot already clear of the live
+pattern stays put, so the holds are the fallback, not the only safe ground: the off-tank's drake
+spots and melee behind a drake clear some lines outright, and a 28 yd walk to a lane no safer costs
+the trip twice.
 
 Timing: first summon at +20 s, then every 25 s. Damage aura up at +3.6 s, down at +11 s, despawn
 +13.5 s. Reaction window is 3.6 s plus travel — worst case 4.69 s at the east end of the line.
@@ -114,6 +121,8 @@ Timing: first summon at +20 s, then every 25 s. Damage aura up at +3.6 s, down a
   `GetObjectScale() < 0.5` is the second release test. It is needed because a right wave stops at
   X 3211 while the tank stands at 3220.07, clearing "swept past" by only 0.57 yd. Releasing on either
   test rather than on the 13.5 s despawn saves 2.85 s per wave for the tank and 5.5 s for the raid.
+  Across the 16 yd raid band bots release up to ~1.5 s apart, which is safe: the release means the
+  wave has passed that bot, and the walk home only changes Y.
 
 ## Molten Fury — why hunters matter here
 
@@ -136,8 +145,13 @@ spread instead of stacking dispels.
 **Each drake is held where it lands**, on its own measured spot — no shared pile. Assignment walks
 the drakes **newest first**, because reverse call order is landing recency and the drake that just
 touched down is the one with nobody on it. Vesperon is held **north of his landing**, so his breath
-stops pointing down the raid line. No spot is safe under **both** wave patterns, so a live wave takes
-the raid corridor Y and keeps X; the east anchor is only for blazes and whelps.
+stops pointing down the raid line: the only spot level with his touchdown is west of it, straight
+down the line, whose east end is 9.5 yd away. From the north he settles around (3267, 549) facing up
+the empty rim, 17 yd from the raid's home hold (outside the 15 yd breath), with its left-wave hold
+71° off his facing. No spot is safe under **both** wave patterns, so a live wave takes
+the raid corridor Y and keeps X; the east anchor is only for blazes and whelps. Shadron's spot clears
+every right line and Vesperon's every left one. Under a right wave Tenebron's is the long walk, 27.9 yd
+to the raid corridor, and the wave needs 6.2 s from its summon to reach that X.
 
 The drakes are **boss-flagged**: `instance_encounters` credit rows for 30452/30451/30449 make
 `ObjectMgr` OR in `CREATURE_FLAG_EXTRA_DUNGEON_BOSS`, and the heroic entries carry `type_flags 108`
@@ -179,7 +193,9 @@ override).
 
 - healers and ranged → `Raid`, always. Walking to Sartharion is a 41 yd trip that ends in his Flame
   Breath, cast every 6 s — so they never do it, and `SartharionBossReachMultiplier` zeroes every
-  generic mover whose target is the boss for them and the off-tank.
+  generic mover whose target is the boss for them and the off-tank (the pull leaves the boss as his
+  current target before the strategy is live).
+- everyone shifted → `Raid`: the other splits are about his cones, and none exist in phase 16.
 - main tank → `Tank`, all fight.
 - melee whose victim is Sartharion → `Melee`, their own profile.
 - everyone else, the off-tank included → `Raid`. He is locked off the boss all fight, so he never
@@ -220,7 +236,9 @@ Accepted degradation: a Lava Blaze spawning on a player in the far corridor is o
 A corridor is 15 yd wide with 4 yd margins, so each group is effectively collinear along X and
 ordering is the only tool. **West to east, offsets from `RAID_ENTRY_ANCHOR_X` 3228.58: Sartharion +
 main tank (+0, the boss +7) → ranged/healers (+20) → off-tank (+33).** The boss faces the main tank,
-so his cones point west into the empty strip. Two rules enforce "only the off-tank eats it":
+so his cones point west into the empty strip. Ranged and healers hold an 8 yd band along X
+(`RAID_LINE_TOLERANCE_X`) rather than a point, so a dozen bots don't pile onto one coordinate and
+fight the collision mover; Y keeps the tight corridor tolerance. Two rules enforce "only the off-tank eats it":
 
 1. **Nobody crosses west of a drake.** Everyone meets a landing 4 yd **east** of its coord, so the
    drake faces east into empty platform on touchdown, and the ranged line clears Shadron's
@@ -229,7 +247,9 @@ so his cones point west into the empty strip. Two rules enforce "only the off-ta
    nothing — the ranged line is 21 yd from that touchdown, outside the cone for the whole transient.
 2. **Melee take a flank, and which flank depends on the target.**
 
-**Against Sartharion, melee take his north side**, southern only as a fallback. The trigger fires on
+**Against Sartharion, melee take his north side**, southern only as a fallback. Both flanks are
+equally safe from the cones; picking the one that survived the platform clamp followed his facing and
+handed melee the south flank whenever a right wave swapped the tank over. The trigger fires on
 standing in a cone **or** on being south of him: a dodge can leave melee south, safe from both
 cones, and without the second test nothing would bring them back north. He is parked, so his own Y
 holds and there is 14 yd between it and the northern flank — no room for the test to chatter. The
@@ -241,7 +261,13 @@ corridor swap turns him ~99°, and tracking that every tick would walk melee a l
 and nothing off its tail, so the shared `RearFlankAction` 90°–120° *side* wedge is the wrong tool:
 right for a mob with a tail attack, wrong for one without. `RearFlankAction` is therefore zeroed for
 the boss **and** the drakes (`SartharionRearFlankMultiplier`) rather than out-prioritised, because
-the actions replacing it release the tick once the bot is in position.
+the actions replacing it release the tick once the bot is in position. The draw's mirror is the
+fallback: Vesperon is held 2 yd from the east rim, so one side of his tail can clamp back out of the
+arc.
+
+Under a live wave the flank and drake-rear points keep X and take the wave-clear Y. His northern flank
+lands around Y 518.7, 5.3 yd off the left line at 524; without this the corridor dodge and these
+actions alternated for the whole ~11 s a wave was up.
 
 The east anchor is clamped as the **east end of the line**, with the off-tank derived from it.
 
@@ -260,7 +286,8 @@ anchor never gets him there.
 Arcs come from `spell_cone` and are **full** angles, matching `HasInArc`. 56910 is rear-facing
 because its `SpellVisual` is 3879, which `SpellMgr` turns into `SPELL_ATTR0_CU_CONE_BACK`. That
 leaves two 98° side wedges; `InSartharionCone` tests a point against both through the engine's own
-`HasInArc` / `isInBack`, so it cannot drift from the mechanic.
+`HasInArc` / `isInBack`, so it cannot drift from the mechanic, with each cone widened by 8° a side
+(`SARTHARION_CONE_MARGIN_DEGREES` 16) before anyone is called unsafe.
 
 **One-time south drag.** At the pull the tank walks to `(3220.9905, 485.262)`, waits **5 s**, then
 resumes his normal flow; Sartharion follows and settles at ≈`(3228.5, 504.7)`, inside his reach of
@@ -275,20 +302,30 @@ damage there or never arrives, `Y 487.0` is the fallback; it costs under 1.5 yd 
 
 The drag ends when the tank arrives with the boss in melee range, or the boss is south of Y 522 by any
 route, or `MAIN_TANK_DRAG_TIMEOUT_MS` 45000 elapses — **measured from the drag, not from the pull**.
+The tank reaches the corner in ~3 s and the boss needs 7-9 s to cross the room, so arrival alone
+proves nothing; the dwell lets him settle facing the tank rather than mid-turn. Arrival is cleared if
+the tank is pushed off, so a tsunami mid-wait restarts the dwell. The drag takes ~10 s and a wave can
+add ~11, so past the timeout the boss isn't following (a player holds threat), and the corner is
+lethal under a left wave.
 The give-up path logs one `LOG_WARN` per pull with the tank's position, the only way to tell "the boss
 never followed" from "`MoveTo` silently refused the off-mesh corner".
 
-**`os main tank cooldown` owns the main tank's defensives.** The class nodes' bare health trigger
-spends a 5-minute Shield Wall on the first Flame Breath, so a rule blocks them for him and the node
-casts `NextTankDefensive` once a landed Shadron is at 50% (`MAIN_TANK_COOLDOWN_SHADRON_PCT`), Shadron
-is gone, or the tank is below 25% (`MAIN_TANK_COOLDOWN_PANIC_PCT`).
+**`os main tank cooldown` owns the main tank's defensives.** Each drake's aura covers the raid from
+the pull until that drake dies: Power of Shadron 58105 +100% fire taken, Vesperon's 61251 −25% health,
+Tenebron's 61248 double shadow. The first two are what kill the main tank. The class nodes' bare
+health trigger spends a 5-minute Shield Wall on the first Flame Breath, so a rule blocks them for him
+and the node casts `NextTankDefensive` once a landed Shadron is at 50%
+(`MAIN_TANK_COOLDOWN_SHADRON_PCT`), Shadron is gone, or the tank is below 25%
+(`MAIN_TANK_COOLDOWN_PANIC_PCT`). The 25% release isn't latched: one dip buys one cooldown. The node
+tops the RAID band, so a hold that keeps returning true can't starve it, and sits under every dodge.
 
 Two tanks trading aggro spin the boss through the raid, so the off-tank is locked off him for the
 **whole** encounter, not merely off the taunts: `SartharionOffTankBossMultiplier` zeroes the
 TankAssist, AggressiveTarget, AttackAnything and Taunt families whenever an assist tank's target is
 the boss. Never the `Attack` family — the shared `AttackAction` base also catches
 `OsOffTankHoldAction`, whose `GetTarget()` reports the bot's *current* target, and would strand the
-off-tank on the boss with nothing left able to switch it away.
+off-tank on the boss with nothing left able to switch it away. `SartharionMainTankTargetMultiplier`
+keeps the main tank's taunts and tank assist on Sartharion alone.
 
 Blocking re-acquisition cannot drop a target already picked up, so `os offtank hold` clears the target
 outright when it has nothing to hold and is still swinging at the boss (`AttackStop()` alone is not
@@ -298,6 +335,10 @@ trigger is active for the **whole encounter**, not only while adds are up.
 **The off-tank idles on Tenebron's tank spot**, 60 yd from Sartharion. Tenebron touches down 3.6 yd
 north of him, so he needs no repositioning to pick it up.
 
+**`OffTankTauntTarget` runs first in his hold**: a landed drake not on him, inside taunt range. He
+attacks only the newest drake, so the tick one is in range is the tick he sets off: a handover walks
+him 35.5 yd, and by the time the old drake peels it is outside the 30 yd taunt.
+
 **No raid icons.** Bots resolve `PriorityTarget` per bot and attack it directly — no skull, no cross,
 no marker bot. Accepted consequence: two bots can pick different units inside one priority tier,
 since `FindUnitByEntries` is nearest-first per bot.
@@ -306,12 +347,19 @@ since `FindUnitByEntries` is nearest-first per bot.
 hold a friendly — `AttackAction::Attack` bails on `IsFriendlyTo` long before it writes it — but every
 friendly-target cast overwrites the client-side *selection*, and a tank buffing raid members does that
 constantly. Gating on the AI value means the boss is never re-selected afterwards, so the hold actions
-also restore `SetSelection` when the victim is right but the selection has drifted.
+also restore `SetSelection` when the victim is right but the selection has drifted. Acquiring a
+target never costs the tick, the hold falls through to its move: when the off-tank's hold returned
+there, he chased a drake to wherever it stood, its perch included, instead of taunting it from his
+spot.
 
 `os redirect threat` owns Tricks and Misdirection end to end: main tank inside the 10 s pull window,
 off-tank while any drake, Lava Blaze or whelp lives, main tank again after. The generic class nodes
 only ever know the main tank, so `tricks of the trade on main tank` and `misdirection on main tank`
-are zeroed all fight, by name.
+are zeroed all fight, by name. A rogue redirects off his own target instead: Tricks moves everything
+for 6 s, so it goes to the tank of what he hits (the off-tank on a drake, the main tank on the boss,
+nobody otherwise), never on a Lava Blaze, which dies to one Fan of Knives and takes the 30 s cooldown
+with it. Hunters keep the raid-wide target: Misdirection is three shots, and the off-tank pulling a
+whelp off a healer is worth one.
 
 ## Twilight Realm
 
@@ -320,6 +368,13 @@ shared portal** at `(3247.29, 529.80)` — `instance->DoAction(ACTION_ADD_PORTAL
 `instance_obsidian_sanctum.cpp`. Acolytes, disciples and eggs are `SetPhaseMask(16)`, so only shifted
 bots see them and unshifted bots never accidentally target them. Symmetrically, a **shifted bot cannot
 resolve Sartharion or the drakes** — in-realm logic must not depend on the boss.
+
+The walk to the portal is not clamped: it sits 17 yd from the southern Safe Area trigger, well inside
+its Range Marker. It also sits 2.2 yd off the left wave line at 532, so entering and leaving both wait
+while a wave can still reach its Y. A shifted bot can't see the tsunamis (phase 1), so
+`ClassifyTsunamiWave` reads them through `PlatformEyes`: the main tank or the first off-tank, the two
+bots never in the realm, else anyone still outside. The reach test still runs against the shifted
+bot's own X, since coordinates are shared across phases.
 
 Twilight Shift has **two ids, 57620 and 57874**, and the instance script removes only 57620. Both
 count as shifted.
@@ -350,7 +405,9 @@ the entire raid**. Consequences:
 **The squad skips Tenebron's realm** — it holds nothing worth the trip.
 
 Squad is fixed at the pull by stable GUID sort and never reshuffled: **every DPS, melee included, plus
-the first two healers and the second off-tank**. The main tank and the first off-tank always stay out.
+the first two healers and the second off-tank**: the acolyte dies to whatever the raid brings, and
+damage left on the platform only lengthens the immunity. The main tank and the first off-tank always
+stay out.
 `OnThePlatform` is false for a shifted bot, so realm melee are not dragged back at a landing drake.
 
 ### In-realm kill order is flat
@@ -391,9 +448,20 @@ Acolyte of *Shadron* never went in.
 - **The main tank dodges a fissure differently from everyone else**: along **Y** between waves, and
   **not at all** while a wave is up. A 10 yd step on X swings his 60 yd frontal cone from 138° to 66° —
   straight down the raid line at 57° — and his safe band (15 yd left, 5 yd right) has no room for it.
-  One Void Blast on the tank beats a frontal breath on the whole ranged line.
+  One Void Blast on the tank beats a frontal breath on the whole ranged line. South comes first: it
+  keeps both cones off the line and puts him back on his hold X. North is no better than east, since
+  the floor's west edge steps from 3220 to 3227 at Y 520 and turns a north step into a 5.6 yd move
+  east. X steps stay as the tail, for a fissure pinning him against the southern rim.
+- **The off-tank steps along Y first too**: he sets the drake's facing. Held from the west on
+  Shadron's spot, a 10 yd step east turns its breath onto the raid line, whose west end is 10.2 yd off
+  on the same Y. X steps are his tail.
+- **Everyone else steps along X first**, keeping the Y it stands on rather than the corridor's (melee
+  on a drake stand up to 28 yd off it). The corridor is 15 yd wide against a 5.5 yd blast, and a bare
+  `MoveAway` picks Y and fights the corridor action. Y steps are the rim fallback, and a live wave
+  still sets Y.
 - **Hold actions refuse a fissure-covered destination** (`FissureBlocks`): the dodge steps
-  `FISSURE_CLEAR_RADIUS` 8 + `FISSURE_STEP_MARGIN` 2 = 10 yd, past `RAID_LINE_TOLERANCE_X` 8
+  `FISSURE_CLEAR_RADIUS` 8 + `FISSURE_STEP_MARGIN` 2 = 10 yd (the margin keeps it off the trigger
+  boundary, where the dodge would fire again), past `RAID_LINE_TOLERANCE_X` 8
   ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md#movement-that-oscillates)).
   Deliberately **unguarded**: the tsunami dodge (a wave beats a fissure), the fissure dodge itself,
   and the drake landing.
@@ -434,12 +502,15 @@ once", which never opened first on a good run (Tenebron lands at 30 s, the secon
 | `sartharion melee positioning` | `rear flank` | `ACTION_MOVE + 4` |
 
 `os off platform` outranks both dodges: off the arena nothing can hit the bot and the bot can do
-nothing, so no mechanic is left worth reacting to. It moves to this bot's own hold at zero tolerance.
+nothing, so no mechanic is left worth reacting to. It moves to this bot's own hold at zero tolerance;
+the off-tank takes both of his anchor's axes, since his hold is a drake spot and the corridor Y only
+bought a second walk.
 Bounded by the 200 yd Sartharion search: enough, because it catches the first step off, not a bot
 already halfway across the zone.
 
 `os tank shapeshift` puts a druid tank back in bear form: the class strategy does that only from the
-combat engine, and the off-tank is out of combat between drakes.
+combat engine, and the off-tank is out of combat between drakes. Only a druid who knows a bear form
+counts: one with neither spell is a healer or moonkin standing in.
 
 The corridor dodge outranks every hold, so the off-tank and melee **abandon their spots and dodge**;
 it is Y-only and keeps X, so the west-to-east order re-forms on the new corridor. `"rear flank"` sits
@@ -503,7 +574,9 @@ lock silently refused the tsunami dodge here, is in
 - The three `FORCED` dodges cannot preempt each other, so the `os mechanic priority` rules rank them
   **off-platform > tsunami > fissure** — off the platform is unrecoverable, a tsunami is lethal, a
   Void Blast is survivable. Each is an `Exclusive` passing its own action while its mechanic is live
-  and nothing above it is.
+  and nothing above it is. The rules read the same three predicates as the triggers (`LiveMechanic`,
+  kept for the bot's tick): a rule claiming a mechanic its trigger won't fire on leaves the bot with
+  every mover off and nothing to replace them.
 
 **Destination Z is derived at runtime, never surveyed.** `IssueMove` resolves the destination's own
 ground level with an `INVALID_HEIGHT` fallback to the bot's Z, then validates with
@@ -533,7 +606,8 @@ Each pull writes `<LogsDir>/botobs/615_<inst>_sartharion_<epoch>.ndjson`; `postm
 two of one group on different holds at the same `t` is the half-and-half split that wipes the raid.
 
 **Waves reach the trace only as `haz` rows**, written once each by `NoteTsunamiHazards` from the
-definition's tick. Nothing else records them: a wave never enters combat so the watch list skips it,
+definition's tick, on one mechanic-tracker bot per instance, since `ClassifyTsunamiWave` already
+costs ten grid searches per bot per tick. Nothing else records them: a wave never enters combat so the watch list skips it,
 its damage is an aura on the creature rather than a dynamic object so there is no swept-hazard row,
 and the 40-slot snapshot sweep is spent on Onyx Sanctum trash and 52 cosmetic Twilight Eggs before it
 reaches one.

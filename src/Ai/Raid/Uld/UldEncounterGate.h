@@ -9,8 +9,7 @@
 
 #include "RaidEncounter.h"
 
-// Boss ids from AC's ulduar.h (under scripts/, so not includable), as InstanceScript::GetBossState keys them.
-// AC #28079 renumbered them to DungeonEncounter.dbc order: a stale copy keeps that boss's gate shut all fight.
+// must match the boss ids in core ulduar.h (AC #28079 renumbered them), a stale one keeps that boss's gate shut
 enum UlduarEncounterId
 {
     ULD_BOSS_LEVIATHAN = 0,

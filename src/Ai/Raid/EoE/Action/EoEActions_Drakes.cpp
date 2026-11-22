@@ -294,8 +294,7 @@ bool DrakeSurgeShieldAction::Execute(Event /*event*/)
     if (!drake)
         return false;
 
-    // Ahead of the aura check, so the clock keeps running while a shield is up. Otherwise it goes
-    // stale for the shield's whole duration and misreads the next pick as a continuation of this one.
+    // keep above the shield check, it restamps the fixate clock or the next pick reads as this one
     uint32 elapsed = 0;
     if (!GetDrakeSurgeElapsedMs(botAI, elapsed))
         return false;
