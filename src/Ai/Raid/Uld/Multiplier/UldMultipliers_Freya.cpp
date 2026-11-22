@@ -84,9 +84,15 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
         cachedAtMs = now;
         Unit* held = GetFreyaHeldSnaplasher(botAI);
         cachedHeld = held ? held->GetGUID() : ObjectGuid::Empty;
+        cachedFree = held && IsFreyaHeldSnaplasherFree(botAI);
     }
 
     if (cachedHeld.IsEmpty())
+        return 1.0f;
+
+    // Both pickers handle a held Snaplasher themselves and aim at the current target: zeroed, a bot on it when the
+    // hold began could never be moved off it, and its auto attack would keep the bark up for good.
+    if (dynamic_cast<FreyaSetDpsPriorityAction*>(action) || dynamic_cast<FreyaTankAddsAction*>(action))
         return 1.0f;
 
     Unit* snaplasher = botAI->GetUnit(cachedHeld);
@@ -96,7 +102,7 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
     Unit* target = action->GetTarget();
     Unit* current = AI_VALUE(Unit*, "current target");
     if (target == snaplasher || (!target && current == snaplasher))
-        return 0.0f;
+        return cachedFree && PlayerbotAI::IsTank(bot) ? 1.0f : 0.0f;
 
     if (!IsRaidAreaDamage(botAI, action, splash))
         return 1.0f;

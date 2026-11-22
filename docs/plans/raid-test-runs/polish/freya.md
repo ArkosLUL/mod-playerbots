@@ -241,7 +241,7 @@ pack's focus lasher instead of shooting Freya. Question 2 (bear add tank health)
 rule or ranking this round. Built the user's answers 1 and 3 against window 9's pulls (`report --head
 1b45df985`, same traces as round 2). Baselines from the new `freya.py --ghouls`, ranged DPS samples while
 ghouls held the pack focus: uld3 wave 2 (4:31-4:57) 55% with no lasher inside 28.5 yd, 54% on Freya, 4%
-inside 18 yd of one; every other held wave in windows 7 and 9 read 0-12% out of reach, 0-7% on Freya.
+inside 18 yd of one; every other held wave in windows 7 and 9 read 0-19% out of reach, 0-7% on Freya.
 
 **Facts checked for the hold** (DBC CSV, core): Hardened Bark passive 62664 / 64191 has `ProcTypeMask`
 139944 = taken melee, ranged and spell hits (magic and none class), no `TAKEN_PERIODIC`; the stack aura
@@ -278,8 +278,10 @@ inside 18 yd of one; every other held wave in windows 7 and 9 read 0-12% out of 
 
 **Next window should show:**
 
-- (1) After an add-tank death with the Snaplasher alive: `Snaplasher hold on`, then the Snaplasher on the
-  main tank (or a risen add tank) within about 6 s and `hold off`; deaths to the Snaplasher after its tank
+- (1) After an add-tank death with the Snaplasher alive: `Snaplasher hold on`, `on, bark gone` about 4 s
+  later, then the Snaplasher on the main tank (or a risen add tank) and `hold off`; no DPS bot left on the
+  Snaplasher through the hold (`postmortem.py --vetoes`: `freya snaplasher hold` never vetoes `freya set dps
+  priority`); deaths to the Snaplasher after its tank
   died well under window 9's 8 (uld1) and 13 (uld2); a risen add tank does not die to it within seconds of
   rising.
 - (3) `--ghouls`: ranged with no lasher in reach and on Freya well under 55% / 54% in a wave like uld3's
@@ -289,3 +291,17 @@ inside 18 yd of one; every other held wave in windows 7 and 9 read 0-12% out of 
 **Known open, not built:** a third tank shifting into the add tank slot counts as an add tank (no hold,
 immediate capped taunt; no Freya comp has one); a Snaplasher past the main tank's 30 yd taunt waits unhit.
 Question 2 waits for window 10.
+
+**Review:** both answers are built as asked, on one code path (no size, mode or player branch); the
+`--ghouls` baselines reproduce (the other held waves' out-of-reach range corrected above: window 7 uld3's
+second read 19%). Fixed:
+
+- `freya snaplasher hold` zeroed `freya set dps priority` and `freya tank adds` too: both are `AttackAction`s
+  aimed at the current target, so a DPS bot on the Snaplasher when the hold began could never be moved off
+  it, and its auto attack kept the bark up, so the hold never ended. Both pickers are exempt now; neither
+  picks a held Snaplasher.
+- A tank going to a freed Snaplasher was zeroed as well, and its first hit brought a stack back, which sent
+  the add tank's ladder away again (a risen druid's Growl fails in caster form, so the action falls to
+  `Attack`). The reset now latches (note `2`, `IsFreyaHeldSnaplasherFree`) and tanks may act on it from then.
+- `freya reach held pack` re-ran its collision sweep every tick when no spot cleared the pack; it now waits
+  `ULDUAR_FREYA_HELD_PACK_RETRY_MS` (1 s).

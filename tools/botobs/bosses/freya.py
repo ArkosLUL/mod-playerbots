@@ -21,7 +21,8 @@ What the generic views miss here:
 - **A dodge is a move, not a hit.** `--moves` lists every re-issued order of a walk; `--beams` counts the
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
 - **The Snaplasher hold is a note.** `freya.snaphold` goes to 1 when the Snaplasher is loose with no add tank
-  alive and back to 0 once a tank holds it; `--tanks` lists each change.
+  alive, 2 once its bark has run out (a tank may take it), and back to 0 once a tank holds it; `--tanks` lists
+  each change.
 - **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
   while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
 """
@@ -70,6 +71,7 @@ HEAL_RANGE_YD = 38.5
 # Fewer healers than this on the add tank and one capped Snaplasher swing outruns the heals.
 HEALERS_WANTED = 2
 HOLD_NOTE = "freya.snaphold"
+HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
 NPC_ARMY_GHOUL = 24207
 REACH_ACTION = "freya reach held pack"
 # Playerbots.SpellDistance: past this from every lasher a ranged bot has none to shoot.
@@ -194,7 +196,7 @@ def show_tanks(trace: Trace) -> None:
     for rec in trace.of("note"):
         if rec.get("k") == HOLD_NOTE and rec.get("txt") != state:
             state = rec.get("txt")
-            print(f"  {clock(rec['t'])} Snaplasher hold {'on' if state == '1' else 'off'}")
+            print(f"  {clock(rec['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}")
 
 
 def dodge_trigger_yd() -> float | None:

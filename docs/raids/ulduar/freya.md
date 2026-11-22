@@ -290,12 +290,14 @@ add tank's rise. While it is on, nothing hits the Snaplasher (`GetFreyaHeldSnapl
   bots take the rest of the ladder;
 - `freya snaplasher hold` zeroes every non-heal action aimed at it and area damage
   (`IsRaidAreaDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd) of the caster or
-  its target;
+  its target. The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they aim at the
+  current target, so zeroed they could never move a bot off it, and its auto attack would keep the bark up;
 - the redirect dumps no shot into it, and the add tank's ladder skips it while stacked.
 
-Once no stack is left (`IsFreyaSnaplasherBarkReset`), a living add tank's ladder taunts it; with none,
-the main tank taunts it and, while it is on him in melee range, attacks it ahead of the Storm Lasher,
-keeping Freya on standing threat. **Known-open:** a third tank shifting into the add tank slot counts as
+The first time no stack is left the hold latches free (note `2`, `IsFreyaHeldSnaplasherFree`), so the
+stacks a tank's own pickup hits add don't turn him away. From then tanks may act on it: a living add
+tank's ladder taunts it; with none, the main tank taunts it and, while it is on him in melee range,
+attacks it ahead of the Storm Lasher, keeping Freya on standing threat. **Known-open:** a third tank shifting into the add tank slot counts as
 an add tank, so no hold starts and it taunts the capped Snaplasher at once; a Snaplasher past the main
 tank's 30 yd taunt waits there, unhit.
 
@@ -593,7 +595,7 @@ because the Ground Tremor nodes run wherever the gate is open, trash included.
 off the Elders' empowers (Ground Tremor casts, Strengthened Iron Roots, Sun Beam stalkers), since
 `cfg.hardmode` has no Freya key; `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
-Righteous Defense, and each hold change; `--beams` Unstable Sun Beam dodges per role (fired from past the
+Righteous Defense, and each hold change (on, bark gone, off); `--beams` Unstable Sun Beam dodges per role (fired from past the
 trigger, walk, ended farther from Freya) and healers within 38.5 yd of each Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
 28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--deaths` by killer

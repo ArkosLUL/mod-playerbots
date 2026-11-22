@@ -683,7 +683,7 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
 
     // No add tank alive: the main tank takes a held Snaplasher once its bark has run out.
     Unit* held = GetFreyaHeldSnaplasher(botAI);
-    if (PlayerbotAI::IsMainTank(bot) && held && IsFreyaSnaplasherBarkReset(held) && !GetGroupAssistTank(bot, 0) &&
+    if (PlayerbotAI::IsMainTank(bot) && held && IsFreyaHeldSnaplasherFree(botAI) && !GetGroupAssistTank(bot, 0) &&
         CastClassTaunt(botAI, held))
         return true;
 
@@ -1361,15 +1361,21 @@ bool FreyaReachHeldPackAction::Execute(Event /*event*/)
 
     walkSpotMs = 0;
 
+    if (retryMs && getMSTimeDiff(retryMs, now) < ULDUAR_FREYA_HELD_PACK_RETRY_MS)
+        return false;
+
     HazardSweepCache sweep;
     Position const focusAt = focus->GetPosition();
     Position const spot = FindNearestPositionClearOfHazards(
         bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
         &focusAt, [&focusAt, reach](float x, float y) { return focusAt.GetExactDist2d(x, y) <= reach; }, &sweep);
 
-    // Nowhere in reach clears the pack: shoot Freya from here, as before.
+    // Nowhere in reach clears the pack: stay on Freya.
     if (spot == Position())
+    {
+        retryMs = now;
         return false;
+    }
 
     if (!MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                 true, MovementPriority::MOVEMENT_COMBAT))

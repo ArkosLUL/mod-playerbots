@@ -502,7 +502,7 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     // capped swing kills a tank who takes it stacked.
     Unit* held = GetFreyaHeldSnaplasher(botAI);
     if (state.snaplasher && state.snaplasher->IsAlive() &&
-        (state.snaplasher != held || IsFreyaSnaplasherBarkReset(held)))
+        (state.snaplasher != held || IsFreyaHeldSnaplasherFree(botAI)))
         return state.snaplasher;
 
     if (state.conservator && state.conservator->IsAlive())
@@ -747,14 +747,26 @@ bool HasUncoveredFreyaLasher(PlayerbotAI* botAI, FreyaWaveState const& state)
 
 namespace
 {
+enum FreyaSnaplasherHold : uint8
+{
+    FREYA_SNAPLASHER_HOLD_OFF = 0,
+    FREYA_SNAPLASHER_HOLD_STACKED = 1,
+    FREYA_SNAPLASHER_HOLD_FREE = 2,
+};
+
 struct FreyaSnaplasherHoldState
 {
     ObjectGuid snaplasher;
     uint32 updatedMs = 0;
-    RaidObs::ObsValue<uint8> held{"freya.snaphold", 0};
+    RaidObs::ObsValue<uint8> held{"freya.snaphold", FREYA_SNAPLASHER_HOLD_OFF};
 };
 
 RaidInstanceState<FreyaSnaplasherHoldState> freyaSnaplasherHolds;
+
+bool IsFreyaSnaplasherBarkReset(Unit* snaplasher)
+{
+    return !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_10) && !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_25);
+}
 }  // namespace
 
 void TickFreya(PlayerbotAI* botAI)
@@ -783,38 +795,43 @@ void TickFreya(PlayerbotAI* botAI)
     if (!snap)
     {
         hold.snaplasher.Clear();
-        hold.held = 0;
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
         return;
     }
 
     if (hold.snaplasher != snap->GetGUID())
     {
         hold.snaplasher = snap->GetGUID();
-        hold.held = 0;
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
     }
 
     Unit* victim = snap->GetVictim();
     Player* holder = victim ? victim->ToPlayer() : nullptr;
     if (holder && PlayerbotAI::IsTank(holder))
-        hold.held = 0;
-    else if (!hold.held && !GetGroupAssistTank(bot, 0))
-        hold.held = 1;
+        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
+    else if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_OFF && !GetGroupAssistTank(bot, 0))
+        hold.held = FREYA_SNAPLASHER_HOLD_STACKED;
+
+    if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_STACKED && IsFreyaSnaplasherBarkReset(snap))
+        hold.held = FREYA_SNAPLASHER_HOLD_FREE;
 }
 
 Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI)
 {
     uint32 const instanceId = botAI->GetBot()->GetInstanceId();
     FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
-    if (!hold || !hold->held.Get())
+    if (!hold || hold->held.Get() == FREYA_SNAPLASHER_HOLD_OFF)
         return nullptr;
 
     Unit* snap = botAI->GetUnit(hold->snaplasher);
     return snap && snap->IsAlive() ? snap : nullptr;
 }
 
-bool IsFreyaSnaplasherBarkReset(Unit* snaplasher)
+bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI)
 {
-    return !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_10) && !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_25);
+    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
+    FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
+    return hold && hold->held.Get() == FREYA_SNAPLASHER_HOLD_FREE;
 }
 
 Player* GetFreyaLooseLasherVictim(Unit* lasher)

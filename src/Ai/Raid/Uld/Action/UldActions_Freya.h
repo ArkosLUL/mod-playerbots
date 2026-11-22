@@ -183,6 +183,8 @@ private:
     // Each pick is a ring sweep. Hold it until it stops clearing the pack or reaching the focus.
     Position walkSpot;
     uint32 walkSpotMs = 0;
+    // When the last sweep found nothing.
+    uint32 retryMs = 0;
 };
 
 // Root whatever has closed on the mage. Above the trap so a hunter standing next to it drops the patch

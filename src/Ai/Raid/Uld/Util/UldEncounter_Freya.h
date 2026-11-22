@@ -250,6 +250,10 @@ inline constexpr float ULDUAR_FREYA_HELD_PACK_REACH_MARGIN = 3.0f;
 // Ceiling on that walk's latch, about 20 yd at 7 yd/s.
 inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_LATCH_MS = 3000;
 
+// Wait after a sweep found no spot. Each is a ring of collision checks, and the trigger stays on for every ranged
+// bot out of reach.
+inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_RETRY_MS = 1000;
+
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
 struct FreyaWaveState
@@ -340,8 +344,9 @@ void TickFreya(PlayerbotAI* botAI);
 // and a tank that takes it stacked dies to one swing.
 Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI);
 
-// No Hardened Bark stack left, so a tank can take it.
-bool IsFreyaSnaplasherBarkReset(Unit* snaplasher);
+// The held Snaplasher has had no Hardened Bark stack since some point in this hold, so a tank can take it. Latched:
+// the stacks a tank adds picking it up would otherwise turn him away again.
+bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI);
 
 // Nearest living lasher in range, sticky on currentTarget with a switch margin. Range is also the leash, so a
 // lasher that retargets can't tow the bot across the room.

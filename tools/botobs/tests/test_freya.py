@@ -107,6 +107,7 @@ def pull() -> list[dict]:
     records += [
         {"t": 22100, "e": "note", "g": CASTER, "k": fr.HOLD_NOTE, "txt": "1"},
         {"t": 22300, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "1"},
+        {"t": 23100, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "2"},
         {"t": 23500, "e": "note", "g": MAIN, "k": fr.HOLD_NOTE, "txt": "0"},
     ]
     return records
@@ -189,6 +190,7 @@ class Tanks(unittest.TestCase):
             "  0:13.500 Bruin Challenging Roar\n"
             "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"
             "  0:22.100 Snaplasher hold on\n"
+            "  0:23.100 Snaplasher hold on, bark gone\n"
             "  0:23.500 Snaplasher hold off\n"))
 
 

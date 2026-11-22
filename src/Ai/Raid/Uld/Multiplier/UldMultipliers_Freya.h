@@ -13,7 +13,8 @@
 #include "RaidSplash.h"
 
 // Nothing lands on a held Snaplasher: single target at it, or area damage near the caster or its target. Every
-// direct hit renews Hardened Bark, so one stray Blizzard keeps the stacks a tank would die to.
+// direct hit renews Hardened Bark, so one stray Blizzard keeps the stacks a tank would die to. Once the bark is gone a
+// tank may go at it, since only a tank taking it ends the hold.
 class FreyaSnaplasherHoldMultiplier : public Multiplier
 {
 public:
@@ -24,6 +25,7 @@ private:
     // Asked for every candidate action, so the hold is read once a tick.
     uint32 cachedAtMs = 0;
     ObjectGuid cachedHeld;
+    bool cachedFree = false;
     RaidSplashCache splash;
 };
 
