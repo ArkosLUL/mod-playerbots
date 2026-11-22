@@ -539,7 +539,7 @@ def show_tanks(trace: Trace) -> None:
     brake = brake_line(trace)
     if brake:
         print(brake)
-    moved =[f"{resolve_guids(trace, value)} {clock(start)}" for value, start, _ in latch_spans(trace, "xt002.buffs")]
+    moved = [f"{resolve_guids(trace, value)} {clock(start)}" for value, start, _ in latch_spans(trace, "xt002.buffs")]
     if moved:
         print(f"  healer buff tank: {', '.join(moved)}")
     line = buffs_line(trace, runs)

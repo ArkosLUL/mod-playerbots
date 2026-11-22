@@ -32,6 +32,7 @@
 #include "UldScripts.h"
 #include "UldTriggers.h"
 #include "VehicleActions.h"
+#include "WarlockActions.h"
 
 #include <set>
 #include <string>
@@ -192,9 +193,9 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
 
 float XT002ThreatBrakeMultiplier::GetValue(Action* action)
 {
-    // Buffs, cures and heals go on: only damage puts threat on XT.
+    // Holds damage only. Soulshatter goes on too, it halves the bot's threat.
     if (!action || !IsRaidDpsBot(bot) || GetDpsHoldValue(bot, action) > 0.0f ||
-        dynamic_cast<CastHealingSpellAction*>(action))
+        dynamic_cast<CastHealingSpellAction*>(action) || dynamic_cast<CastSoulshatterAction*>(action))
         return 1.0f;
 
     Unit* target = action->GetTarget();
