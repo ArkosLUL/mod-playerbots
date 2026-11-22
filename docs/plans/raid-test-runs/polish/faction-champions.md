@@ -388,9 +388,10 @@ DK lose their Chains.
 **Picked: an ice DK's own wall grip and stale walk keep it off its Chains (bug).**
 
 - Chains gaps over 10 s with the duty's DK alive: 17 on toc1, 8 on toc2, 2 on toc3. Tocyam left Maz'dinah unchained
-  1:21-2:15 (54 s) at 27-48 yd while she chased a melee bot at ~2.5 yd/s; she held the danger latch (1:46, 2:02), so the
-  danger peel went off Gorgrim, who killed Tocyah at 2:02. Toczai's gap 1:20.8-1:33.2 let Broln walk 44 yd onto Toczam, the other ice DK,
-  and kill him at 1:31.5, which freed Maz'dinah for 5 kills; his 2:08.7-2:26.7 gap gave Broln Toczac at 2:20.
+  1:31-2:15 (44 s; Chains at 1:21 and 2:15) at 27-48 yd while she chased a melee bot at ~2.5 yd/s; she held the
+  danger latch (1:46, 2:02), so the danger peel went off Gorgrim, who killed Tocyah at 2:02. Toczai's gap
+  1:20.8-1:33.2 let Broln walk 44 yd onto Toczam, the other ice DK, and kill him at 1:31.5, which freed Maz'dinah for
+  5 kills; his 2:08.7-2:26.7 gap gave Broln Toczac at 2:20.
 - In those gaps every refresh released and re-took the DK's `fc.wall` duty on its own champion (157 notes in Tocyam's
   54 s): the stand sits 27 yd off the champion on the side away from its victim and is kept within 29 yd
   (`ToCHelpers_FactionChampionsDefence.cpp:91`, `:81`, keep `:1486-1489` before the fix), so a champion running at its
@@ -436,3 +437,9 @@ its own or another lapsed champion.
   19, Narrhok 17, Maz'dinah 12, Broln 6. Should the ice order (Ret, Enh, Rogue, DK, Warrior) change when DKs run short?
   Recommended: not yet. Judge this round's fix first, which keeps the iced pair iced (lapses cost toc3 7 deaths through
   Toczam's); if the never-iced DK and Warrior still top the deaths, try the DK ahead of the Rogue for one window.
+
+**Review.** The cause holds in the trace: in Tocyam's 1:21-2:15 the wall duty was re-taken 81 times and the ice reach
+issued 18 legs against 200 refused `wait`. Two side effects to watch: a champion whose ice DK's Chains are off gets no
+wall grip from anyone, also while Hand of Freedom makes Chains useless (such holds gave 2-3 grips this window); and the
+ice reach now replaces a generic `avoid aoe` flee in flight (`MOVEMENT_COMBAT`, retried after 1 s), none seen for an
+ice DK in window 12.
