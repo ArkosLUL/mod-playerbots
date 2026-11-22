@@ -19,8 +19,15 @@ Mimiron seeds it for the whole encounter, handovers included: `EVENT_SPAWN_FLAME
 adds one `NPC_FLAMES_SPREAD` (34121) every **5.75 s**, **7 yd toward the player nearest that chain's
 newest node**, and **stops growing while any player is inside 4 yd of that node**. Nodes carry aura
 64561, which ticks 64566 for ~3.1k a second inside **3 yd**, and they never expire. Both entries are
-non-selectable triggers, found by scanning `"nearest npcs"`
+non-selectable triggers, so no target list holds them
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)).
+
+**Every floor read is a grid search** (`FindMimironFloorUnits`: fire, Frost Bomb, fire bots, mines,
+rockets), never `"nearest npcs"`, which drops whatever fails line of sight. The closed west door
+(194776, display 8684) has a model box over x 2672-2692, y 2552-2588, the alcove holding the phase 1
+tank spot, and bots inside it did not see the node under them: ten melee stood 35 s on one point and
+died there under 35% health with two or three nodes ticking and no dodge, while a bot 1 yd off dodged
+the same nodes. The door as the blocker is by elimination, not navprobed.
 
 **Only a node carrying 64561 is fire.** The seed is a NullCreatureAI that parks its first spread node
 on its own spot, never burns, and outlives its fire: `EVENT_FLAMES_SPREAD` breaks without
@@ -259,6 +266,11 @@ in 38 s for one, 93-108 of a phase 1's 103-111 ticks taken standing, transition 
 two ticks; a walking one keeps 60, being on its way out, so a `cross` at 75 isn't thrown back by its
 tick. Replayed, that cut 60% of phase 1's ticks for 4-9 more dodges; leaving unfreezes the chain (no
 growth while a player is within 4 yd of its newest node), so the real saving is smaller.
+
+**With nothing attackable it leaves at any health.** In a handover idle healers top a parked bot up
+within a second, so the 80% line never trips: bot-only pulls sat 20-90 ticks in one node while the
+healers spent their mana on it. With no mech attackable (`GetMimironRingFocus` null) leaving costs no
+uptime, so one node is enough.
 
 **Burning is 3.5 yd, standing is 5.** 95% of 427 Flames hits landed within 3.0 yd of their node, a tick
 every ~1.03 s. Counted at the 5 yd `ULDUAR_MIMIRON_FLAMES_RADIUS`, only 23-39% of a phase's fire dodges
@@ -694,9 +706,10 @@ it again, so the handovers stay shut.
 53-85% of phase-2 flame damage came from seeds landed in phase 2 itself. The west camp buys a raid
 arriving on empty ground with somewhere to dodge to.
 
-**Mana is a tail problem, not the wipe**, and not worth re-investigating: healers died at 40-60% mana,
-entering phase 2 at 45-65% because the drink guard vetoed handover drinks. The guard stays (handovers,
-below).
+**Mana is a tail problem only while phase 2 is short.** Human-led pulls ran it in 80-89 s and healers
+died at 40-60% mana, entering at 45-65% because the drink guard vetoed handover drinks. Bot-only pulls
+at ilvl 226 ran it 136-258 s, and three of four healers under 10% about 100 s in started both phase 2
+wipes. The guard stays (handovers, below).
 
 **Open: healers don't reach phase 4.** One wipe entered it with two of four, both dead 28-32 s in, the
 raid 75 s later. Two fell to Heat Wave plus Rapid Burst in phase 2, one battle-rezzed beside VX-001 burned
@@ -1197,6 +1210,10 @@ one walking ~45 yd north split it, the bomb cleared 9, and phase 2 burned at the
 stood 49-54 yd out and walked in over the last ~10 s opened with 324-399k of Rapid Burst in 30 s;
 staying ~40 yd west stacked the raid on one line, 653-679k, 10-24 victims a tick. Following stays, by
 choice: stand still in the west, then walk to the centre over the last ~10 s.
+
+**With no player in the raid nothing is followed**, so the raid stands where phase 1 ended, melee on the
+MK II's last spot in the alcove, in the field phase 1 laid: 10 fire deaths in three of four test-harness
+pulls, and 10 of 16 healers losing 5-22 points of mana across it where a human-led raid's drank theirs up.
 
 **One exception.** `ULDUAR_MIMIRON_PHASE4_TANK_SPOT` is handed out while staging: it holds VX-001's chassis
 still, and every phase-4 bearing, radius and offset is computed against a stationary apex (under

@@ -324,7 +324,12 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE || lowHealth)
         return true;
 
-    return !bot->isMoving() && bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT;
+    if (!bot->isMoving() && bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT)
+        return true;
+
+    // Handovers: nothing to hit, so leaving costs nothing, and idle healers keep a bot in one node above any
+    // health line.
+    return !GetMimironRingFocus(botAI);
 }
 
 bool MimironFireBotTrigger::IsActive()
