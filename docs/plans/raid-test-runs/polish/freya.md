@@ -73,8 +73,9 @@ the collapse in uld2 and uld3.
 - uld3 0:02: an Arms warrior Charged Freya at 0:00.3, before the main tank's Hand of Reckoning at
   0:03.1, and took a 28.6k swing.
 - Pull opener (uld1, window 6): the DK add tank's generic Dark Command on Freya at 0:01.2 (its ladder
-  ends on her with no add up) and the paladin's Righteous Defense on it at 0:01.3 put her on the DK for
-  2 s, no death. The new Righteous Defense hold covers the second half.
+  ends on her with no add up) put her on the DK 0:03.2-0:05.2, no death. The paladin's Righteous
+  Defense on the DK at 0:01.3 (Hand of Reckoning spent at 0:01.1) was its rescue, which took her back
+  at 0:01.5; the new hold blocks that rescue too.
 
 **Next window should show** (`freya.py --tanks`, `postmortem.py --vetoes`), on uld2 and uld3 (bear add
 tanks); uld1 (DK) is the control:
@@ -83,7 +84,7 @@ tanks); uld1 (DK) is the control:
   under `freya area taunt hold` and `freya righteous defense hold`.
 - Freya on the main tank throughout, no span on the add tank while both live.
 - Each Snaplasher at 90%+ on the add tank in every trio wave (window 7's second waves: 30% and 56%).
-- No add-tank or melee death to the Snaplasher.
+- Add-tank deaths to the Snaplasher are not this fix's test (review below).
 
 **Questions:**
 
@@ -91,3 +92,17 @@ tanks); uld1 (DK) is the control:
    does the Swarmers and the Guardian Lasher patrol? Recommendation: yes. A raid clears them on the way
    in, the Elders stay up so hard mode is unchanged, and the bots' hazard dodges otherwise reach the
    wandering Guardian of Life (uld2's 11 deaths started there).
+
+**Review:** the taunts crossing the split are real and the fix stands, but they did not kill the add
+tanks, so the collapse they open has a different cause.
+
+- uld2: the Roar's Freya damage (18k) was healed back (Uldyab 100% at 3:03.8). He died 8.4 s after she
+  left, to Snaplasher swings of 31.5k, 24.5k and 38.9k plus a 10.9k Tidal Wave: 13.6k/s on him over his last
+  10.6 s against 9.2k/s in trio 1, effective heals level (8.1k/s against 9.0k/s), after two `freya dodge unstable sun
+  beam` moves (3:03.6, 3:06.8) took him to (2347, -22), 40-48 yd from all four healers (11-36 yd in
+  trio 1).
+- uld3: Uldzab died to one 43,481 swing from 94.8% (42.4k of 44.7k, no absorb). Trio 1's Snaplasher hit
+  him for 29.7-39.1k at full health, and both Snaplashers proc'd Hardened Bark at the same rate, so the
+  Righteous Defense swap did not raise the swing.
+- Round 2 candidates: the add tank's Sun Beam dodges carrying the Snaplasher out of heal range (bug); a
+  ~45k bear add tank against 29-43k capped Snaplasher swings (plan question: tank choice or cooldowns).

@@ -132,7 +132,7 @@ void DefineFreya(EncounterBuilder& e)
     // The lasher pickup casts its own shouts, only with Freya out of reach.
     e.Block("freya area taunt hold", Role::Tank, FreyaAlive, 0, {"challenging shout", "challenging roar"});
 
-    // On the other tank it also takes the Snaplasher at full Hardened Bark, and the add tank dies taunting it back.
+    // Righteous Defense taunts everything hitting its target, so aimed at the other tank it pulls the Snaplasher too.
     e.Block("freya righteous defense hold", Role::Tank, FreyaTargetOnOtherTank, 0, {"righteous defense"});
 
     // Freya faces her tank, away from the bombs, so "behind" walks a melee bot from a clear spot in her reach toward
