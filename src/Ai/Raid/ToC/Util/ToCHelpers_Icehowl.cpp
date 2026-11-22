@@ -216,7 +216,7 @@ constexpr float BREATH_POOL_STEP = 1.0f;
 // Bearing counts land on whole multiples of the step, this only absorbs float noise
 constexpr float BEARING_EPSILON_DEG = 0.001f;
 
-// Also the deal order: melee before ranged, or the few bearings near his back fill with ranged first
+// order is the deal order: melee before ranged, or ranged take the few bearings near his back
 enum class BreathRole : uint8
 {
     Healer,

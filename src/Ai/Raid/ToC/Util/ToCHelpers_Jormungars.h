@@ -222,7 +222,7 @@ bool IsWormThreatBrakedNear(PlayerbotAI* botAI, Position const& at, float range)
 // the stack, and a runner whose search finds nothing stands still instead
 bool IsWormBileCarrierHeldOut(PlayerbotAI* botAI);
 
-// In priority order: the first rule whose trigger the bot's spot fails names the move
+// order is the rule priority: FirstFailedRule compares these, the first rule a spot fails wins
 enum class WormMoveReason : uint8
 {
     None,
