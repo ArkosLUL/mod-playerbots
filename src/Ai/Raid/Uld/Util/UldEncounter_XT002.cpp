@@ -155,6 +155,12 @@ Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float
     return nearest;
 }
 
+bool IsXT002AddEvading(Unit* unit)
+{
+    Creature const* creature = unit ? unit->ToCreature() : nullptr;
+    return creature && creature->IsEvadingAttacks();
+}
+
 // Formation roster, in the order every bot derives, with hunters split off for the arc. The dead keep their
 // slots: indexing by the living re-seats everyone behind a corpse mid-fight.
 static bool BuildXT002FormationMembers(Player* bot, std::vector<Player*>& ring, std::vector<Player*>& hunters)

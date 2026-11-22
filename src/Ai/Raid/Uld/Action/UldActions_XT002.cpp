@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string>
 
 #include "Group.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidObs.h"
 #include "UldData.h"
 #include "UldEncounter_XT002.h"
 #include "UldHardMode.h"
@@ -707,17 +709,17 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
         case PB_NPC_XT002_LIFE_SPARK:
             // No leash: it spawns on the Searing Light carrier and chases players. Static Charged reaches 500 yd,
             // so there's nothing to dodge; it just has to die.
-            return inReach;
+            return inReach && !IsXT002AddEvading(unit);
 
         case NPC_XS013_SCRAPBOT:
         case PB_NPC_XT002_PUMMELLER:
-            return inReach && IsXT002AddEngageable(xt002, unit);
+            return inReach && IsXT002AddEngageable(xt002, unit) && !IsXT002AddEvading(unit);
 
         case PB_NPC_XT002_BOOMBOT:
             // Melee must never pick one up, and ranged only from outside the blast: closer than that
             // the avoid action should be moving the bot, not this one holding it in place.
             return !PlayerbotAI::IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS &&
-                   inReach && IsXT002AddEngageable(xt002, unit);
+                   inReach && IsXT002AddEngageable(xt002, unit) && !IsXT002AddEvading(unit);
 
         case NPC_HEART_OF_DECONSTRUCTOR:
             // Damage only reaches XT while the Heart channels Exposed Heart.
@@ -746,8 +748,11 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 Unit* XT002SetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 entry,
                                                std::vector<Unit*> const& candidates) const
 {
+    // Never hold or pick an evading one: the gate drops it, and this entry's slot would then hide a hittable
+    // add of the same kind standing next to it.
     Unit* selected = nullptr;
-    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == entry)
+    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == entry &&
+        !IsXT002AddEvading(currentTarget))
         selected = currentTarget;
 
     // Adds come from toy piles on both flanks, so nearest-to-the-bot beats measuring from a raid
@@ -755,7 +760,7 @@ Unit* XT002SetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 entry
     float const switchMargin = 10.0f;
     for (Unit* candidate : candidates)
     {
-        if (!candidate || candidate == selected)
+        if (!candidate || candidate == selected || IsXT002AddEvading(candidate))
             continue;
 
         if (!selected)
@@ -780,6 +785,8 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
     std::vector<Unit*> boombots;
     std::vector<Unit*> pummellers;
     xt002 = nullptr;
+    bool const probing = RaidObs::Active();
+    std::string evadingSparks;
 
     // One scan for the whole action: the same pass hands back XT for the gates, so they need none.
     GuidVector const& npcs = AI_VALUE(GuidVector, "nearest npcs");
@@ -802,6 +809,8 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
                 break;
             case PB_NPC_XT002_LIFE_SPARK:
                 lifeSparks.push_back(unit);
+                if (probing && IsXT002AddEvading(unit))
+                    evadingSparks += (evadingSparks.empty() ? "" : " ") + RaidObs::DescribeAssignment(unit->GetGUID());
                 break;
             case NPC_XS013_SCRAPBOT:
                 scrapbots.push_back(unit);
@@ -816,6 +825,10 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
                 break;
         }
     }
+
+    // Tells a stuck spark apart from one nobody shot at, which hp and position alone can't.
+    if (probing)
+        RaidObs::NoteDerived(bot, "xt002.evading", evadingSparks.empty() ? "none" : evadingSparks);
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 

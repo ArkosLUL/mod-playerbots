@@ -138,6 +138,42 @@ class Trash(unittest.TestCase):
         self.assertIn("1  spell 62776", printed(xt.show_deaths, load(records)))
 
 
+class Sparks(unittest.TestCase):
+    STUCK = (1 << 32) | 5
+    QUICK = (1 << 32) | 6
+
+    def spark_pull(self, evading: bool) -> list[dict]:
+        records = pull(heartbreak=True)
+        end = records.pop()
+        records += [
+            {"t": 110000, "e": "unit", "g": self.STUCK, "en": 34004, "n": "Life Spark"},
+            {"t": 110000, "e": "unit", "g": self.QUICK, "en": 34004, "n": "Life Spark"},
+            {"t": 109990, "e": "aura", "d": TANK, "sp": 65121, "r": 1},
+            {"t": 119990, "e": "aura", "d": HEALER, "sp": 65121, "r": 1},
+        ]
+        for t in range(110000, 160001, 5000):
+            rows = [[TANK, 898.0, -4.0, 410.1, 0, 100, 100, XT],
+                    [HEALER, 866.0, -6.0, 409.8, 0, 100, 100, self.STUCK if t < 140000 else XT],
+                    [self.STUCK, 896.0, -5.0, 409.6, 0, 100, 0, HEALER]]
+            if 120000 <= t <= 130000:
+                rows.append([self.QUICK, 846.0, -22.0, 409.6, 0, 50, 0, HEALER])
+            records.append({"t": t, "e": "snap", "u": rows})
+        if evading:
+            records.append({"t": 112000, "e": "note", "g": HEALER, "k": "xt002.evading", "txt": str(self.STUCK)})
+        records.append({**end, "t": 160000})
+        return records
+
+    def test_long_spark_names_its_carrier(self):
+        self.assertEqual(printed(xt.show_sparks, load(self.spark_pull(evading=False))), (
+            "LIFE SPARKS\n"
+            "  2 sparks, at most 2 up at once, median life 30 s\n"
+            "  1:50.000 on Bulwark (tank) at (896, -5): lived 50 s, still up at the end, most bots on it at once 1\n"))
+
+    def test_evade_note_shows_who_kept_hitting_it(self):
+        self.assertIn("    evading from 1:52.000 (bots noting it 1), most bots still on it 2 s later 1\n",
+                      printed(xt.show_sparks, load(self.spark_pull(evading=True))))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL_V14)
