@@ -277,6 +277,18 @@ Static Disruption's 6 yd blast wants. A slot a second rune covers inside the arc
 Melee still have only the escape. navprobe: 64/64 headings at 22 round the designed spot settle on
 the floor. Ranged beyond the ring's slots keep the stack point.
 
+**A shifted ring can leave the floor.** A Rune of Power near Steelbreaker's spot moves it 10–30 yd in
+phase 3, and the ring with it, out to ~50 yd from the anchor, over holes in the floor geometry.
+`UpdateAllowedPositionZ` gives a path's end point over a hole that hole's ground, hundreds of yards
+down, and the bot walks the spline through the floor out of every heal's reach: two healers in one
+pull (22 Nov), two healers and a ranged in another, both pulls' first deaths bar a Meltdown. So the
+ring samples its 64 bearings with the same call (`GetMapWaterOrGroundLevel` within 2 yd of the
+spot's Z, cached per ring centre). With any bearing off the floor, the slots spread evenly over the
+bearings on the floor and clear of runes (`spread-floor`), over the floor alone when runes cover it
+all, else take the stack point (`spread-nofloor`). Not the squeeze: it cuts only the widest gap, and
+a rune and a hole cut two, so the other gap's slots stacked at its edge or stayed in the rune. A ring
+wholly on the floor keeps the squeeze.
+
 **Two radii, not one.** Rune of Death (62269/63490) ticks 2,750 shadow every half second for 30 s.
 DBC says 13 yd, but the searcher applying the aura adds object size at both
 ends and traces measured applications to **15.4 yd**: bots run inside **16**, stand at **21**. One
@@ -457,7 +469,8 @@ Fusion Punches and Rebirths; `--punches`: every phase's Fusion Punches with verd
 `--revived`: every tank that rose mid pull, when a healer first stood within 40 yd and its longest stand
 before that, the raid buffs put back inside the window, and what it still lacked at its next death or
 the end; `--defensives`: every tank defensive with the tank's health, the
-member on it and the node that cast it; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
+member on it and the node that cast it; `--floor`: every member that sank under the floor, with the
+spot it was walking to; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
 verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
 `hdr.cfg.hardmode` toggle alone proves nothing.
 `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
@@ -467,7 +480,8 @@ the raid is killing, and whether a human's skull beat the order), `tank` (the bo
 or the branch that left it none — bot tanks only, so no row for a human one), `interrupt` (the duty
 a bot holds for Brundir's current cast), `spot` (the formation branch — a `-rune` or `-overload`
 suffix names the hazard that shifted the stack, a bare `spread` is the boss-centred ring and
-`spread-rune` that ring squeezed off a rune, `rune-power` standing in a Rune of Power), `slot` (its
+`spread-rune` that ring squeezed off a rune, `spread-floor` off a hole in the floor, `spread-nofloor`
+no ring bearing on the floor, `rune-power` standing in a Rune of Power), `slot` (its
 index on the spread ring, assigned **once** per bot), `meleerune` (`in` / `walk`, or `none:` what
 stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `run` / `parked` /
 `late`), `meltdownrun` (the latched walkers), `meltstep` (a melee bot's step out: `behind` / `out`,

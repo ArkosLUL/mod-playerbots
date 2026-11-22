@@ -4,7 +4,8 @@
 
 A synthetic hard mode pull pins the kill order verdict, healer mana at each member's death, an
 Overwhelming Power carrier's Meltdown, a Fusion Punch kill with the strategy's verdict on it, a punch
-before Steelbreaker is alone, the tank defensives by node and the deaths per phase. The shared v14
+before Steelbreaker is alone, the tank defensives by node, a member sinking under the floor and the
+deaths per phase. The shared v14
 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
@@ -247,6 +248,27 @@ class Defensives(unittest.TestCase):
         self.assertIn("class casts with nothing on the tank: 2", text)
 
 
+class Floor(unittest.TestCase):
+    def test_a_member_walking_into_a_hole_in_the_floor(self):
+        records = pull()
+
+        def at(t: int, z: float) -> dict:
+            return {"t": t, "e": "snap", "u": [[PRIEST, 1548.6, 147.9, z, 0, 90, 50, 0]]}
+
+        records[-1:-1] = [
+            {"t": 216000, "e": "note", "g": PRIEST, "k": "ironassembly.spot", "txt": "spread"},
+            {"t": 216100, "e": "move", "g": PRIEST, "k": "point", "x": 1547.95, "y": 150.38, "z": 427.27, "tgt": 0,
+             "ok": 1, "r": "", "by": "iron assembly raid position action", "pr": "combat"},
+            at(217000, 425.5), at(217500, 421.0), at(218000, 400.0),
+        ]
+        text = printed(ia.show_floor, load(records))
+        self.assertIn("3:37.500  Mender (heal) sank at (1548.6, 147.9), walking to (1548.0, 150.4) by iron assembly "
+                      "raid position action, spot spread, down to Z 400, died at 4:30.000", text)
+
+    def test_none_on_the_floor(self):
+        self.assertIn("none", printed(ia.show_floor, load(pull())))
+
+
 class Deaths(unittest.TestCase):
     def test_by_mechanic_and_the_first_one_that_was_not_a_meltdown(self):
         text = printed(ia.show_deaths, load(pull()))
@@ -270,7 +292,7 @@ class OtherFights(unittest.TestCase):
         trace = Trace(FULL_V14)
         self.assertIn("not an Assembly of Iron pull", printed(ia.show_banner, trace))
         for show in (ia.show_phases, ia.show_empowered, ia.show_punches, ia.show_revived, ia.show_defensives,
-                     ia.show_deaths):
+                     ia.show_floor, ia.show_deaths):
             self.assertEqual(len(printed(show, trace).splitlines()), 1)
 
 

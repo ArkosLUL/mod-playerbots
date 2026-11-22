@@ -76,6 +76,10 @@ struct IronAssemblyEncounterState
 
     RaidObs::ObsValue<ObjectGuid> natureTotemShaman{"ironassembly.totem"};
     uint32 natureTotemElectMs = 0;
+
+    Position ringFloorCentre;
+    float ringFloorRadius = 0.0f;
+    std::array<bool, ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES> ringOnFloor{};
 };
 
 RaidInstanceState<IronAssemblyEncounterState> ironAssemblyStates;
@@ -100,6 +104,36 @@ Position IronAssemblyPositionAt(float bearing, float radius)
     return Position(ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionX() + std::cos(bearing) * radius,
                     ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionY() + std::sin(bearing) * radius,
                     ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionZ());
+}
+
+bool IronAssemblyOnFloor(Player* bot, float x, float y, float floorZ)
+{
+    float const ground = bot->GetMapWaterOrGroundLevel(x, y, floorZ);
+    return ground > INVALID_HEIGHT && std::fabs(ground - floorZ) <= ULDUAR_IRON_ASSEMBLY_FLOOR_TOLERANCE;
+}
+
+std::array<bool, ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES> const& IronAssemblyRingOnFloor(Player* bot,
+                                                                                         Position const& centre,
+                                                                                         float radius)
+{
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
+    if (state.ringFloorRadius == radius &&
+        state.ringFloorCentre.GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) < 0.1f)
+        return state.ringOnFloor;
+
+    state.ringFloorCentre = centre;
+    state.ringFloorRadius = radius;
+    float const sampleStep =
+        2.0f * static_cast<float>(M_PI) / static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES);
+    for (uint8 i = 0; i < ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES; ++i)
+    {
+        float const bearing = sampleStep * static_cast<float>(i);
+        state.ringOnFloor[i] = IronAssemblyOnFloor(bot, centre.GetPositionX() + std::cos(bearing) * radius,
+                                                   centre.GetPositionY() + std::sin(bearing) * radius,
+                                                   centre.GetPositionZ());
+    }
+
+    return state.ringOnFloor;
 }
 
 bool IronAssemblyHasEitherAura(Unit const* unit, uint32 first, uint32 second)
@@ -1065,43 +1099,34 @@ static char const* IronAssemblySpotLabel(IronAssemblyStackShift shift, char cons
     }
 }
 
-static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius,
-                                            std::vector<Position> const& runes, float& bearing)
+using IronAssemblyRingMask = std::array<bool, ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES>;
+
+static Position IronAssemblyRingPoint(Position const& centre, float radius, float bearing)
 {
-    if (runes.empty())
-        return false;
+    return Position(centre.GetPositionX() + std::cos(bearing) * radius,
+                    centre.GetPositionY() + std::sin(bearing) * radius, centre.GetPositionZ());
+}
 
+static bool LongestIronAssemblyRingGap(IronAssemblyRingMask const& open, uint8& gapStart, uint8& gapLength)
+{
     constexpr uint8 samples = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES;
-    float const sampleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(samples);
 
-    std::array<bool, samples> clear{};
-    uint8 clearCount = 0;
-    for (uint8 i = 0; i < samples; ++i)
-    {
-        float const sampleBearing = sampleStep * static_cast<float>(i);
-        Position const point(centre.GetPositionX() + std::cos(sampleBearing) * radius,
-                             centre.GetPositionY() + std::sin(sampleBearing) * radius, centre.GetPositionZ());
-
-        clear[i] = IsIronAssemblyPositionClearOfRunes(point, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE);
-        if (clear[i])
-            ++clearCount;
-    }
-
-    if (clearCount == 0 || clearCount == samples)
+    uint8 const openCount = static_cast<uint8>(std::count(open.begin(), open.end(), true));
+    if (openCount == 0 || openCount == samples)
         return false;
 
     uint8 origin = 0;
-    while (!clear[origin])
+    while (!open[origin])
         ++origin;
 
-    uint8 coveredStart = 0;
-    uint8 coveredLength = 0;
+    gapStart = 0;
+    gapLength = 0;
     uint8 runStart = 0;
     uint8 runLength = 0;
     for (uint8 k = 1; k <= samples; ++k)
     {
         uint8 const i = static_cast<uint8>((origin + k) % samples);
-        if (clear[i])
+        if (open[i])
         {
             runLength = 0;
             continue;
@@ -1110,12 +1135,52 @@ static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius
         if (runLength == 0)
             runStart = i;
 
-        if (++runLength > coveredLength)
+        if (++runLength > gapLength)
         {
-            coveredStart = runStart;
-            coveredLength = runLength;
+            gapStart = runStart;
+            gapLength = runLength;
         }
     }
+
+    return true;
+}
+
+static bool SpreadIronAssemblyRingOver(IronAssemblyRingMask const& open, float& bearing)
+{
+    uint8 gapStart = 0;
+    uint8 gapLength = 0;
+    if (!LongestIronAssemblyRingGap(open, gapStart, gapLength))
+        return false;
+
+    constexpr uint8 samples = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES;
+    float const sampleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(samples);
+
+    std::array<uint8, samples> order{};
+    uint8 openCount = 0;
+    for (uint8 k = 0; k < samples; ++k)
+    {
+        uint8 const i = static_cast<uint8>((gapStart + gapLength + k) % samples);
+        if (open[i])
+            order[openCount++] = i;
+    }
+
+    float const cut = sampleStep * (static_cast<float>(gapStart) + (gapLength - 1) * 0.5f);
+    float const fromCut = Position::NormalizeOrientation(bearing - cut) / (2.0f * static_cast<float>(M_PI));
+    uint8 const rank =
+        std::min<uint8>(openCount - 1, static_cast<uint8>(fromCut * static_cast<float>(openCount)));
+    bearing = sampleStep * static_cast<float>(order[rank]);
+    return true;
+}
+
+static bool SqueezeIronAssemblyRing(IronAssemblyRingMask const& clear, float& bearing)
+{
+    uint8 coveredStart = 0;
+    uint8 coveredLength = 0;
+    if (!LongestIronAssemblyRingGap(clear, coveredStart, coveredLength))
+        return false;
+
+    constexpr uint8 samples = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES;
+    float const sampleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(samples);
 
     float const cut = sampleStep * (static_cast<float>(coveredStart) + (coveredLength - 1) * 0.5f);
     float const arcStart = sampleStep * static_cast<float>(coveredStart + coveredLength);
@@ -1223,24 +1288,42 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     float bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
                     static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
 
-    Position centre = stack;
-    float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
     Position steelbreakerSpot;
-    bool const onBoss = TryGetIronAssemblyBossTankSpot(botAI, targets.steelbreaker, steelbreakerSpot);
-    bool squeezed = false;
-    if (onBoss)
+    if (!TryGetIronAssemblyBossTankSpot(botAI, targets.steelbreaker, steelbreakerSpot))
     {
-        centre = steelbreakerSpot;
-        ringRadius = ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS;
-        squeezed = SqueezeIronAssemblyRingOffRunes(centre, ringRadius, GetIronAssemblyScan(botAI).RunesOfDeath(),
-                                                   bearing);
+        how = IronAssemblySpotLabel(shift, "spread", "spread-rune", "spread-overload");
+        position = IronAssemblyRingPoint(stack, ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS, bearing);
+        return true;
     }
 
-    how = onBoss ? (squeezed ? "spread-rune" : "spread")
-                 : IronAssemblySpotLabel(shift, "spread", "spread-rune", "spread-overload");
-    position = Position(centre.GetPositionX() + std::cos(bearing) * ringRadius,
-                        centre.GetPositionY() + std::sin(bearing) * ringRadius,
-                        centre.GetPositionZ());
+    float const ringRadius = ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS;
+    IronAssemblyRingMask const onFloor = IronAssemblyRingOnFloor(bot, steelbreakerSpot, ringRadius);
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
+
+    float const sampleStep =
+        2.0f * static_cast<float>(M_PI) / static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES);
+    IronAssemblyRingMask clear{};
+    bool floorCut = false;
+    for (uint8 i = 0; i < ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES; ++i)
+    {
+        Position const point = IronAssemblyRingPoint(steelbreakerSpot, ringRadius, sampleStep * static_cast<float>(i));
+        clear[i] = onFloor[i] &&
+                   IsIronAssemblyPositionClearOfRunes(point, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE);
+        floorCut = floorCut || !onFloor[i];
+    }
+
+    if (!floorCut)
+        how = SqueezeIronAssemblyRing(clear, bearing) ? "spread-rune" : "spread";
+    else if (SpreadIronAssemblyRingOver(clear, bearing) || SpreadIronAssemblyRingOver(onFloor, bearing))
+        how = "spread-floor";
+    else
+    {
+        how = "spread-nofloor";
+        position = stack;
+        return true;
+    }
+
+    position = IronAssemblyRingPoint(steelbreakerSpot, ringRadius, bearing);
     return true;
 }
 
