@@ -309,14 +309,90 @@ class Bombs(unittest.TestCase):
     def test_sent_healer_is_measured_on_its_carrier(self):
         self.assertEqual(printed(xt.show_bombs, load(self.bomb_pull(sent=True))), (
             "GRAVITY BOMBS\n"
-            "  1 bombs, 1 carriers out of every healer's 38.5 yd, 0 killed by their own\n"
+            "  1 bombs, 1 carriers out of every healer's 38.5 yd, 1 at or under 90% before the hit,"
+            " 0 killed by their own\n"
             "  3:20.000 Cleaver (melee) out of range from 3:23.000, Mender sent 3:23.100, closest 34 yd,"
             " 34 yd at expiry, back on its slot 4 s after, nearest healer 34 yd at expiry,"
             " carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n"
             "    Mender in range 3:25.000 with the carrier at 50%, 2 heals on it for 15.5k (2.5k over),"
             " first 3:26.000, its shields absorbed 4.2k\n"
-            "  sent healers: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%\n"
+            "  sent healers: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%, 0 killed\n"
             "  after Heartbreak 1 bombs hit 0 other raiders, 0 dead within 5 s; melee carriers' 1 hit 0\n"))
+
+    def in_reach_pull(self, upgrade: bool) -> list[dict]:
+        """The carrier stays beside the healer at 70%, so the latch is an in-reach one; with `upgrade` it then walks
+        out of every healer's reach and the same healer goes after it."""
+        records = [rec for rec in self.bomb_pull(sent=True)
+                   if rec.get("e") != "snap" and rec.get("k") != "xt002.bombheal"]
+        end = records.pop()
+        far = (893.0, -48.0) if upgrade else (870.0, -10.0)
+        for t, carrier in ((200000, (868.0, -8.0)), (203000, (870.0, -10.0)), (205000, far), (208000, far)):
+            records.append({"t": t, "e": "snap", "u": [
+                [HEALER, 866.0, -6.0, 409.8, 0, 100, 100, 0],
+                [self.CARRIER, carrier[0], carrier[1], 409.8, 0, 70, 0, XT]]})
+        records += [
+            {"t": 201000, "e": "note", "g": self.CARRIER, "k": "xt002.bombnear", "txt": "1"},
+            {"t": 201000, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": str(HEALER)},
+        ]
+        if upgrade:
+            records.append({"t": 205100, "e": "note", "g": self.CARRIER, "k": "xt002.bombnear", "txt": "0"})
+        records += [
+            {"t": 209050, "e": "note", "g": self.CARRIER, "k": "xt002.bombheal", "txt": "0"},
+            {"t": 209050, "e": "note", "g": self.CARRIER, "k": "xt002.bombnear", "txt": "0"},
+            end,
+        ]
+        return records
+
+    def test_in_reach_healer_heals_from_where_it_stands(self):
+        text = printed(xt.show_bombs, load(self.in_reach_pull(upgrade=False)))
+        self.assertIn("  1 bombs, 0 carriers out of every healer's 38.5 yd, 1 at or under 90% before the hit", text)
+        self.assertIn("  3:20.000 Cleaver (melee), Mender in reach 3:21.000, closest 6 yd, 6 yd at expiry,"
+                      " nearest healer 6 yd at expiry, carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n", text)
+        self.assertIn("    Mender in range 3:23.000 with the carrier at 70%, 2 heals on it for 15.5k", text)
+        self.assertIn("  healers in reach: 1 carriers, at the hit median 94%, lowest 94%, 1 of 1 above 90%, 0 killed\n",
+                      text)
+        self.assertNotIn("sent", text)
+
+    def test_in_reach_latch_turns_into_a_send(self):
+        text = printed(xt.show_bombs, load(self.in_reach_pull(upgrade=True)))
+        self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:25.000, Mender in reach 3:21.000, sent 3:25.100,"
+                      " closest 50 yd, 50 yd at expiry, never back on its slot", text)
+        self.assertIn("  sent healers: 1 carriers", text)
+        self.assertNotIn("healers in reach:", text)
+
+    def test_healer_carrier_heals_itself(self):
+        records = self.bomb_pull(sent=False)
+        records[0]["roster"][-1]["r"] = "heal"
+        for rec in records:
+            if rec.get("e") == "death":
+                rec["t"] = 260000
+        records.insert(-1, {"t": 207000, "e": "heal", "s": self.CARRIER, "d": self.CARRIER, "sp": 48071, "a": 9000,
+                            "oh": 1000})
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("  3:20.000 Cleaver (heal), a healer, nearest healer 0 yd at expiry, carrier 50% at expiry\n"
+                      "    lowest 50% before the hit, 1 heals on it for 8.0k (1.0k over), first 3:27.000\n", text)
+        self.assertIn("  healer carriers: 1, no bomb hit read\n", text)
+
+    def test_a_real_healer_carrier_reads_its_bot_healer(self):
+        records = self.in_reach_pull(upgrade=False)
+        records[0]["roster"][-1].update(r="heal", h=1)
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("  3:20.000 Cleaver (heal), Mender in reach 3:21.000, closest 6 yd, 6 yd at expiry,"
+                      " nearest healer 0 yd at expiry, carrier 94% when the bomb hit (10.3k, 4.2k absorbed)\n", text)
+        self.assertIn("    Mender in range 3:23.000 with the carrier at 70%, 2 heals on it for 15.5k", text)
+        self.assertIn("  healers in reach: 1 carriers", text)
+        self.assertNotIn("healer carriers:", text)
+
+    def test_a_healer_carrier_never_under_the_ceiling_is_left_out(self):
+        records = self.bomb_pull(sent=False)
+        records[0]["roster"][-1]["r"] = "heal"
+        records = [rec for rec in records if rec.get("e") != "death"]
+        for rec in records:
+            if rec.get("e") == "snap":
+                rec["u"][1][5] = 100
+        text = printed(xt.show_bombs, load(records))
+        self.assertIn("0 at or under 90% before the hit", text)
+        self.assertNotIn("Cleaver", text)
 
     def test_carrier_nobody_reached_is_killed_by_its_bomb(self):
         self.assertIn("  3:20.000 Cleaver (melee) out of range from 3:23.000, nobody sent, nearest healer 50 yd"

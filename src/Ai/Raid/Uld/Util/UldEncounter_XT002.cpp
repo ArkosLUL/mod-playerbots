@@ -24,6 +24,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <limits>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -315,6 +316,7 @@ namespace
 struct XT002BombHealState
 {
     RaidObs::ObsGuidMap<ObjectGuid> healers{"xt002.bombheal"};
+    RaidObs::ObsGuidSet inReach{"xt002.bombnear"};
 };
 
 RaidInstanceState<XT002BombHealState> xt002BombHealStates;
@@ -330,6 +332,38 @@ bool CanGoToXT002BombCarrier(Player* healer)
 {
     return GET_PLAYERBOT_AI(healer) && !healer->HasAura(GetXT002GravityBombSpellId(healer)) &&
            !healer->HasAura(GetXT002SearingLightSpellId(healer));
+}
+
+bool HealsItselfUnderXT002Bomb(Player* carrier) { return GET_PLAYERBOT_AI(carrier) && PlayerbotAI::IsHeal(carrier); }
+
+Player* NearestFreeXT002BombHealer(XT002BombHealState const& state, std::vector<Player*> const& healers,
+                                   Player* carrier, float maxDistance)
+{
+    Player* nearest = nullptr;
+    float nearestDistance = 0.0f;
+    for (Player* healer : healers)
+    {
+        if (!CanGoToXT002BombCarrier(healer))
+            continue;
+
+        bool const latchedElsewhere =
+            std::any_of(state.healers.begin(), state.healers.end(),
+                        [healer](auto const& latch) { return latch.second == healer->GetGUID(); });
+        if (latchedElsewhere)
+            continue;
+
+        float const distance = healer->GetExactDist2d(carrier);
+        if (distance > maxDistance)
+            continue;
+
+        if (!nearest || distance < nearestDistance)
+        {
+            nearest = healer;
+            nearestDistance = distance;
+        }
+    }
+
+    return nearest;
 }
 }
 
@@ -351,16 +385,16 @@ std::vector<Player*> GetXT002BombCarriers(Player* bot)
     return carriers;
 }
 
-Player* GetXT002BombHealCarrier(Player* bot)
+XT002BombHealLatch GetXT002BombHealLatch(Player* bot)
 {
     Group* group = bot->GetGroup();
     if (!group || !bot->GetInstanceId() || !PlayerbotAI::IsHeal(bot))
-        return nullptr;
+        return {};
 
     std::vector<Player*> const carriers = GetXT002BombCarriers(bot);
     XT002BombHealState* state = xt002BombHealStates.Find(bot->GetInstanceId());
     if (carriers.empty() && (!state || state->healers.empty()))
-        return nullptr;
+        return {};
 
     if (!state)
         state = &xt002BombHealStates.For(bot->GetInstanceId());
@@ -373,63 +407,69 @@ Player* GetXT002BombHealCarrier(Player* bot)
             healers.push_back(member);
     }
 
-    std::vector<ObjectGuid> released;
-    for (auto const& [carrier, healer] : state->healers)
+    float const healRange = sPlayerbotAIConfig.HealDistance;
+    auto const covered = [&healers, healRange](Player* carrier)
     {
-        Player* sent = FindByGuid(healers, healer);
-        if (!FindByGuid(carriers, carrier) || !sent || !CanGoToXT002BombCarrier(sent))
-            released.push_back(carrier);
+        return std::any_of(healers.begin(), healers.end(), [carrier, healRange](Player* healer)
+                           { return healer->GetExactDist2d(carrier) <= healRange; });
+    };
+
+    std::vector<ObjectGuid> released;
+    std::vector<ObjectGuid> outOfReach;
+    for (auto const& [carrierGuid, healerGuid] : state->healers)
+    {
+        Player* carrier = FindByGuid(carriers, carrierGuid);
+        Player* healer = FindByGuid(healers, healerGuid);
+        if (!carrier || !healer || !CanGoToXT002BombCarrier(healer))
+            released.push_back(carrierGuid);
+        else if (state->inReach.count(carrierGuid) && healer->GetExactDist2d(carrier) > healRange)
+            (covered(carrier) ? released : outOfReach).push_back(carrierGuid);
     }
 
     for (ObjectGuid const& carrier : released)
+    {
         state->healers.erase(carrier);
+        state->inReach.erase(carrier);
+    }
 
-    float const healRange = sPlayerbotAIConfig.HealDistance;
+    for (ObjectGuid const& carrier : outOfReach)
+        state->inReach.erase(carrier);
+
     for (Player* carrier : carriers)
     {
-        if (state->healers.count(carrier->GetGUID()))
+        ObjectGuid const carrierGuid = carrier->GetGUID();
+        if (state->healers.count(carrierGuid) || HealsItselfUnderXT002Bomb(carrier))
             continue;
 
-        bool const covered = std::any_of(healers.begin(), healers.end(), [carrier, healRange](Player* healer)
-                                         { return healer->GetExactDist2d(carrier) <= healRange; });
-        if (covered)
-            continue;
-
-        Player* nearest = nullptr;
-        float nearestDistance = 0.0f;
-        for (Player* healer : healers)
+        if (!covered(carrier))
         {
-            if (!CanGoToXT002BombCarrier(healer))
-                continue;
-
-            bool const sentElsewhere =
-                std::any_of(state->healers.begin(), state->healers.end(),
-                            [healer](auto const& latch) { return latch.second == healer->GetGUID(); });
-            if (sentElsewhere)
-                continue;
-
-            float const distance = healer->GetExactDist2d(carrier);
-            if (!nearest || distance < nearestDistance)
+            if (Player* nearest =
+                    NearestFreeXT002BombHealer(*state, healers, carrier, std::numeric_limits<float>::max()))
+                state->healers[carrierGuid] = nearest->GetGUID();
+        }
+        else if (carrier->GetHealthPct() <= ULDUAR_XT002_BOMB_HEAL_TOP_PCT)
+        {
+            if (Player* nearest = NearestFreeXT002BombHealer(*state, healers, carrier, healRange))
             {
-                nearest = healer;
-                nearestDistance = distance;
+                state->inReach.insert(carrierGuid);
+                state->healers[carrierGuid] = nearest->GetGUID();
             }
         }
-
-        if (nearest)
-            state->healers[carrier->GetGUID()] = nearest->GetGUID();
     }
 
     for (auto const& [carrier, healer] : state->healers)
         if (healer == bot->GetGUID())
-            return FindByGuid(carriers, carrier);
+            return {FindByGuid(carriers, carrier), state->inReach.count(carrier) == 0};
 
-    return nullptr;
+    return {};
 }
 
 Player* GetXT002BombHealTarget(Player* bot)
 {
-    Player* carrier = GetXT002BombHealCarrier(bot);
+    if (bot->HasAura(GetXT002GravityBombSpellId(bot)))
+        return PlayerbotAI::IsHeal(bot) && bot->GetHealthPct() <= ULDUAR_XT002_BOMB_HEAL_TOP_PCT ? bot : nullptr;
+
+    Player* carrier = GetXT002BombHealLatch(bot).carrier;
     if (!carrier || carrier->GetHealthPct() > ULDUAR_XT002_BOMB_HEAL_TOP_PCT)
         return nullptr;
 

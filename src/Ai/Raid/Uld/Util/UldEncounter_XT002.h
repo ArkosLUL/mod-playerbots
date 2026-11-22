@@ -150,7 +150,13 @@ Player* GetXT002BuffTarget(PlayerbotAI* botAI, std::string const& spell);
 
 bool IsXT002ThreatBraked(Player* bot, Unit* xt002);
 
-Player* GetXT002BombHealCarrier(Player* bot);
+struct XT002BombHealLatch
+{
+    Player* carrier = nullptr;
+    bool sent = false;
+};
+
+XT002BombHealLatch GetXT002BombHealLatch(Player* bot);
 
 Player* GetXT002BombHealTarget(Player* bot);
 
