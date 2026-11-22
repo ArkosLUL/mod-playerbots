@@ -78,8 +78,6 @@ float SartharionBurstWindowMultiplier::EvaluateWindow()
     if (!boss || !boss->IsInCombat())
         return 1.0f;
 
-    // Hard interlock, not a tiebreaker: Gift of Twilight is a full-school damage immunity, so a
-    // Bloodlust fired under it is thrown away entirely.
     if (SartharionDamageImmune(bot))
         return 0.0f;
 

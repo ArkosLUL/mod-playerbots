@@ -14,7 +14,6 @@
 #include "RaidResistAura.h"
 #include "Trigger.h"
 
-// Base for an encounter's direct-targeting trigger: its resolver picks a unit the bot, or its pet, isn't on.
 class IccDirectTargetTrigger : public Trigger
 {
 public:
@@ -26,7 +25,6 @@ private:
     IccResolver _resolve;
 };
 
-// Asks nothing, so notes nothing, while the live encounter lists no opener boss.
 class IccOpenerSwingTrigger : public RaidOpenerSwingTrigger
 {
 public:
@@ -44,7 +42,6 @@ public:
     IccOpenerRedirectTrigger(PlayerbotAI* botAI) : RaidOpenerRedirectTrigger(botAI, Name, ICC_OPENER) {}
 };
 
-// Asks nothing, so notes nothing, while the live encounter has no resistance aura hook.
 class IccResistAuraTrigger : public RaidResistAuraTrigger
 {
 public:

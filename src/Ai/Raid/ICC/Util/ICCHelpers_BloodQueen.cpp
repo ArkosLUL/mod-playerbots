@@ -56,15 +56,11 @@ constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 
 constexpr uint32 BERSERK_MS = 330000;
 constexpr uint32 END_WINDOW_MS = 60000;
-// Her own bite lands 15 s in. A tank that isn't the main tank holds off her until a vampire exists, or
-// until this long into the pull.
 constexpr uint32 FIRST_BITE_MS = 20000;
-// She starts her first walk to the centre this far into the pull, the next this long after she reaches it
 constexpr uint32 FIRST_AIR_MS_10 = 124000;
 constexpr uint32 FIRST_AIR_MS_25 = 127000;
 constexpr uint32 NEXT_AIR_MS_10 = 120000;
 constexpr uint32 NEXT_AIR_MS_25 = 100000;
-// Her walk to the centre at run speed, should her arrival go unseen
 constexpr uint32 CENTER_WALK_MS = 3000;
 constexpr float CENTER_ARRIVED = 1.5f;
 constexpr uint32 FEAR_LEAD_MS = 8000;
@@ -72,7 +68,6 @@ constexpr uint32 FEAR_LEAD_MS = 8000;
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
 
-// Each shadow hits 4 yd round itself, exact 2D distance, every second for 90 s
 constexpr float SHADOW_RADIUS = 4.0f;
 constexpr float SHADOW_TRIGGER = SHADOW_RADIUS + 0.5f;
 constexpr float SHADOW_CLEAR = SHADOW_RADIUS + BQL_STAND_PARK + 1.0f;
@@ -80,64 +75,46 @@ constexpr float LANE_CLEAR = SHADOW_RADIUS + 1.5f;
 constexpr float LANE_STEP = 5.0f;
 constexpr float LANE_REACHED = 3.0f;
 constexpr float LANE_INNER_PENALTY = 6.0f;
-// The trail runs 6 s from 2 s after the warning, about 45 yd at a run
 constexpr float LANE_RUN_WANTED = 45.0f;
 constexpr float DODGE_SWEEP = 15.0f;
-// A melee bot's dodge spot stays this close to its target's edge
 constexpr float MELEE_KEEP = 3.0f;
 
-// A walk crossing a shadow takes about one of its ticks, so a detour may cost about one second of running
 constexpr float DETOUR_SWEEP = 16.0f;
 constexpr float DETOUR_MAX_EXTRA = 8.0f;
 constexpr float DETOUR_REACHED = 2.0f;
 
-// Every member within 5 yd of every other ends the Pact
 constexpr float PACT_PARK = 1.0f;
 constexpr float PACT_SPOT_CLEAR = SHADOW_RADIUS + 2.0f;
-// A human member this far off the spot this long after the Pact landed isn't coming, so the bots go to
-// him, each stopping close enough to stand within 5 yd of the others
 constexpr uint32 PACT_HUMAN_WAIT_MS = 3000;
 constexpr float PACT_HUMAN_AWAY = 4.0f;
 constexpr float PACT_HUMAN_PARK = 2.0f;
 
-// Heals pick targets out to 38.5 yd
 constexpr float HEAL_TAKE = 36.0f;
 constexpr float HEAL_KEEP = 38.0f;
-// 30 yd spells (hunters 35) reach 38.7 yd (43.7) with her 7.2 combat reach and the bot's 1.5, less what
-// she drifts off her spot
 constexpr float RANGED_TAKE = 35.5f;
 constexpr float RANGED_KEEP = 37.5f;
 constexpr float HUNTER_TAKE = 40.0f;
 constexpr float HUNTER_KEEP = 42.0f;
 
-// Melee reach her up to 10 yd from her centre: 7.5 out, plus the drift before a re-latch and the park,
-// stays inside it. Three groups 60 degrees apart are 7.5 yd apart.
 constexpr float GROUP_RADIUS = 7.5f;
 constexpr float GROUP_DRIFT = 1.5f;
 constexpr uint32 STILL_MS = 500;
 constexpr uint8 GROUP_MAX = 3;
-constexpr float GROUP_MAX_OFFSET = 2.1f;  // 120 degrees
+constexpr float GROUP_MAX_OFFSET = 2.1f;
 constexpr float ROOM_RADIUS = 36.0f;
 
-// Her bite on the target does up to 11.8k
 constexpr uint32 BITE_SAFE_HEALTH = 15000;
 constexpr float CC_RANGE_CAP = 30.0f;
-// A mind-controlled vampire no bot could hold under control this long is killed
 constexpr uint32 KILL_GRACE_MS = 2000;
 
-// Mass Dispel: 1.5 s cast, 30 yd range, 15 yd radius, up to 10 players
 constexpr float MASS_DISPEL_RANGE = 30.0f;
 constexpr float MASS_DISPEL_RADIUS = 15.0f;
 constexpr uint32 MASS_DISPEL_MAX = 10;
 constexpr uint32 MASS_DISPEL_MIN = 3;
 constexpr int32 MASS_DISPEL_CAST_MS = 1500;
 constexpr float TAUNT_RANGE = 30.0f;
-// Once she chases someone else this far off the tank spot the main tank fetches her: its taunt reaches 30 yd
-// and the stand would hold it back
 constexpr float MAIN_LEASH = 15.0f;
 
-// Two missiles from 22 yd up, 71899 at 30 yd/s and then 71446 at 40 yd/s, each over the distance less her
-// 7.2 combat reach
 constexpr uint32 WHIRL_FLIGHT_MS = 850;
 constexpr float WHIRL_TICKS = 3.0f;
 constexpr float PRESENCE_PER_STACK = 0.05f;
@@ -171,7 +148,6 @@ struct Stand
     bool parked = false;
 };
 
-// One Swarming Shadows trail: lane 0 outer, 1 inner, walked toward rising or falling indices
 struct LanePlan
 {
     uint8 lane = 0;
@@ -179,8 +155,6 @@ struct LanePlan
     int16 next = 0;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -197,36 +171,23 @@ struct BqlState
     uint32 scanMs = 0;
     bool scanned = false;
     std::vector<Position> shadows;
-    // The carrier that dropped each, in step with shadows
     std::vector<ObjectGuid> shadowOwners;
 
     uint32 dutyMs = 0;
     bool dutiesRan = false;
-    // The bot holding her on the tank spot, or the group's human main tank
     ObjectGuid mainTank;
-    // TankRole per tank bot
     RaidObs::ObsGuidMap<uint8> tank{"bql.tank"};
-    // A ground node 1-BQL_GROUND_NODES per healer and ranged bot
     RaidObs::ObsGuidMap<uint8> slot{"bql.slot"};
-    // A node 1-BQL_NODE_COUNT per bot spreading for Bloodbolt Whirl
     RaidObs::ObsGuidMap<uint8> airslot{"bql.airslot"};
-    // A melee group 1-GROUP_MAX
     RaidObs::ObsGuidMap<uint8> group{"bql.group"};
-    // Frenzied biter -> the player it bites
     RaidObs::ObsGuidMap<ObjectGuid> bite{"bql.bite"};
-    // CC bot -> the mind-controlled vampire it holds
     RaidObs::ObsGuidMap<ObjectGuid> cc{"bql.cc"};
-    // Mind-controlled vampire -> since when no bot could hold it
     std::unordered_map<ObjectGuid, uint32> looseSince;
-    // Mind-controlled vampires the damage dealers kill
     RaidObs::ObsGuidSet kill{"bql.kill"};
-    // Priest -> the feared player its Mass Dispel centres on
     RaidObs::ObsGuidMap<ObjectGuid> massDispel{"bql.massdispel"};
-    // Shadows carrier -> lane 1 outer rising, 2 outer falling, 3 inner rising, 4 inner falling
     RaidObs::ObsGuidMap<uint8> curve{"bql.curve"};
     RaidObs::ObsGuidSet brake{"bql.brake"};
 
-    // Her stand, latched once she has stood still STILL_MS, which the melee groups hang off
     Position herLatch;
     bool herLatched = false;
     Position herLast;
@@ -242,10 +203,8 @@ struct BqlState
     bool whirlSeen = false;
     bool whirlDone = false;
 
-    // 1-BQL_PACT_SPOT_COUNT while a Pact is up, else 0
     uint8 pactSpot = 0;
     uint32 pactSinceMs = 0;
-    // A human member who didn't come to the spot, whom the bot members walk to instead
     ObjectGuid pactHuman;
 
     uint32 humanCallMs = 0;
@@ -260,7 +219,6 @@ RaidInstanceState<BqlState> bqlStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool Is25(Player* bot) { return IsRaid25Man(bot); }
@@ -271,7 +229,6 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -280,7 +237,6 @@ void NoteDerived(Player* bot, char const* key, char const* value)
 
 bool IsMindControlled(Unit* member) { return member && member->HasAura(SPELL_BQL_UNCONTROLLABLE_FRENZY); }
 
-// Her, or a mind-controlled vampire a player wants dead
 bool IsSkullUnit(Unit* unit) { return unit && (unit->GetEntry() == NPC_BQL_BLOOD_QUEEN || IsMindControlled(unit)); }
 
 Creature* QueenUnit(Player* bot)
@@ -315,9 +271,6 @@ bool IsCarrier(Player* member)
     return member->HasAura(SPELL_BQL_SHADOWS_WARNING) || member->HasAura(SPELL_BQL_SHADOWS_TRAIL);
 }
 
-// The script can stack these on one player, and each walk's hold blocks the others. The bite goes first, a
-// Mind Control waiting behind it; then a shadows trail, which dropped on the way to the Pact spot would land
-// there; then the Pact.
 bool IsShadowWalker(Player* member) { return IsCarrier(member) && !IsFrenzied(member); }
 
 bool IsPactWalker(Player* member)
@@ -386,7 +339,6 @@ uint8 Held(RaidObs::ObsGuidMap<uint8> const& map, Player* bot)
     return itr != map.end() ? itr->second : 0;
 }
 
-// Her Bloodbolt Whirl spread: from her walk to the centre until the Whirl has gone out
 bool AirSpread(BqlState const& st) { return st.phase != IccBqlPhase::Ground && !st.whirlDone; }
 
 bool EndWindow(BqlState const& st, uint32 now)
@@ -425,9 +377,6 @@ void Scan(BqlState& st, Player* bot, uint32 now)
     }
 }
 
-// The mirror takes every hit on the main tank again, unmitigated by armour, plus Delirious Slash, so with no
-// second tank it goes to the most health: plate melee, which carry a class taunt too, then other melee,
-// then ranged. Never a healer.
 int8 MirrorTier(Player* member)
 {
     if (!IsDutyBot(member) || IsTankPlayer(member) || !IsRaidDpsBot(member) || IsMindControlled(member))
@@ -447,7 +396,6 @@ int8 MirrorTier(Player* member)
     }
 }
 
-// Latched, so the link doesn't hop between damage dealers as buffs move their health
 Player* PickMirror(BqlState const& st, std::vector<Player*> const& members)
 {
     Player* best = nullptr;
@@ -476,8 +424,6 @@ Player* PickMirror(BqlState const& st, std::vector<Player*> const& members)
     return best;
 }
 
-// Main tank, then the assist tanks in their order, then guid. A human main tank keeps the spot, and the
-// first bot tank stands on him. With one tank in the raid, human or bot, a damage dealer is the mirror.
 void AssignTanks(BqlState& st, Player* bot, std::vector<Player*> const& members)
 {
     size_t const tankPlayers = std::count_if(members.begin(), members.end(), &IsTankPlayer);
@@ -584,7 +530,6 @@ void UpdateHer(BqlState& st, Creature* queen, uint32 now)
     }
 }
 
-// Behind her, then 60 degrees either side; two groups 45 degrees either side of her back
 float DefaultGroupOffset(uint8 index, uint8 count)
 {
     float const step = static_cast<float>(M_PI) / (count == 2 ? 4.0f : 3.0f);
@@ -659,8 +604,6 @@ Position TankAnchor(BqlState const& st, Player* bot)
     return main ? main->GetPosition() : ICC_BQL_TANK_SPOT;
 }
 
-// Healers keep a node in heal reach of the main tank and of her; the ranged one in reach of her. While she
-// walks or flies, held nodes stay put whatever their reach.
 void AssignSlots(BqlState& st, Player* bot, std::vector<Player*> const& members, Creature* queen)
 {
     std::vector<Player*> healers;
@@ -739,7 +682,6 @@ void AssignSlots(BqlState& st, Player* bot, std::vector<Player*> const& members,
             [&](Position const& node) { return node.GetExactDist2d(queen) <= RangedReach(member, false); });
 }
 
-// Up to GROUP_MAX groups of melee damage dealers and spare tanks, balanced, in guid order
 uint8 AssignGroups(BqlState& st, std::vector<Player*> const& members)
 {
     std::vector<Player*> melee;
@@ -771,8 +713,6 @@ uint8 AssignGroups(BqlState& st, std::vector<Player*> const& members)
     return count;
 }
 
-// Through the walk to the centre and the Whirl, every bot but the main tank without a ground node takes the
-// nearest free node; given back once the Whirl has gone out
 void AssignAirSlots(BqlState& st, std::vector<Player*> const& members)
 {
     if (!AirSpread(st))
@@ -839,8 +779,6 @@ void AssignAirSlots(BqlState& st, std::vector<Player*> const& members)
     }
 }
 
-// Damage dealers first, then tanks she isn't on and a damage-dealer mirror, whose Frenzy would walk it off
-// the main tank, then healers, who gain nothing from it; anyone the bite could kill after those
 uint8 BiteTier(BqlState const& st, Player* candidate)
 {
     bool const tank = IsTankPlayer(candidate) || RoleOf(st, candidate) == TankRole::Mirror;
@@ -851,7 +789,6 @@ uint8 BiteTier(BqlState const& st, Player* candidate)
     return tier;
 }
 
-// Never her victim or the main tank, who has none while she flies: a vampire makes no threat
 bool BiteCandidate(BqlState const& st, Player* member, Unit* victim)
 {
     return member->IsAlive() && member != victim && member->GetGUID() != st.mainTank && !IsVampire(member) &&
@@ -923,8 +860,6 @@ bool IsControlled(Unit* victim)
            victim->HasAuraType(SPELL_AURA_MOD_FEAR) || victim->HasAuraType(SPELL_AURA_MOD_PACIFY_SILENCE);
 }
 
-// The bot's first CC that can land on the victim now: known, off cooldown, castable in its form, the victim
-// short of its diminishing returns immunity, in range
 uint32 CcSpellFor(PlayerbotAI* ai, Unit* victim)
 {
     Player* caster = ai->GetBot();
@@ -947,7 +882,6 @@ uint32 CcSpellFor(PlayerbotAI* ai, Unit* victim)
             names = {"blind"};
             break;
         case CLASS_WARLOCK:
-            // Uncontrollable Frenzy's 70924 makes the vampire immune to fear, not to horror
             names = {"death coil"};
             break;
         case CLASS_HUNTER:
@@ -978,9 +912,6 @@ uint32 CcSpellFor(PlayerbotAI* ai, Unit* victim)
     return 0;
 }
 
-// One CC bot per mind-controlled vampire, the nearest that can land one. A holder left with nothing it can
-// land, by cooldown, range or diminishing returns, hands the vampire on once its last CC wears off. One no
-// bot could hold for KILL_GRACE_MS is killed, and stays marked until it dies or the charm ends.
 void AssignCc(BqlState& st, Player* bot, std::vector<Player*> const& members, uint32 now)
 {
     std::vector<Player*> victims;
@@ -1003,7 +934,6 @@ void AssignCc(BqlState& st, Player* bot, std::vector<Player*> const& members, ui
     for (auto itr = st.looseSince.begin(); itr != st.looseSince.end();)
         itr = victimGuids.count(itr->first) && !st.kill.count(itr->first) ? std::next(itr) : st.looseSince.erase(itr);
 
-    // The mirror's place is beside the main tank
     auto const eligible = [&st](Player* member)
     {
         return IsDutyBot(member) && member->IsAlive() && !IsTankPlayer(member) && !IsVampire(member) &&
@@ -1057,7 +987,6 @@ void AssignCc(BqlState& st, Player* bot, std::vector<Player*> const& members, ui
         }
     }
 
-    // A player's own CC counts as held too
     for (Player* victim : victims)
     {
         ObjectGuid const guid = victim->GetGUID();
@@ -1079,8 +1008,6 @@ void AssignCc(BqlState& st, Player* bot, std::vector<Player*> const& members, ui
     }
 }
 
-// The nearest vampire marked for the kill, for a damage dealer that is no vampire and holds no CC or the
-// mirror: a vampire's doubled damage is worth more on her
 Player* KillTarget(BqlState const& st, Player* bot)
 {
     if (st.kill.empty() || !IsRaidDpsBot(bot) || IsVampire(bot) || st.cc.count(bot->GetGUID()) ||
@@ -1177,12 +1104,9 @@ void RefreshDuties(BqlState& st, Player* bot, Creature* queen, uint32 now)
     AssignCc(st, bot, members, now);
 }
 
-// Past BRAKE_CAP of the holder's threat until under BRAKE_RELEASE, read from the threat list: the "threat"
-// value is a uint8 percentage and wraps past 255%. A vampire makes none.
 void UpdateBrake(BqlState& st, Player* bot, Creature* queen)
 {
     bool hold = false;
-    // From her walk to the centre until she lands she has no victim, and lands on the top of her threat list
     Unit* holder = queen->GetVictim();
     if (!holder)
         holder = MainTank(st, bot);
@@ -1190,8 +1114,6 @@ void UpdateBrake(BqlState& st, Player* bot, Creature* queen)
     if (IsDutyBot(bot) && !PlayerbotAI::IsHeal(bot) && RoleOf(st, bot) != TankRole::Main && holder &&
         holder != bot && !IsVampire(bot))
     {
-        // Her bite takes the highest threat she isn't on, the linked player too, so a tank or a damage-dealer
-        // mirror that would be second stays out of it
         if ((IsTankPlayer(bot) || RoleOf(st, bot) == TankRole::Mirror) && !st.vampireSeen)
             hold = true;
         else
@@ -1209,8 +1131,6 @@ void UpdateBrake(BqlState& st, Player* bot, Creature* queen)
         st.brake.erase(bot->GetGUID());
 }
 
-// `ignore` leaves out the shadows one carrier dropped: its newest lie a step behind it, close enough to the
-// next lane point to read it as fouled
 bool LanePointClear(BqlState const& st, Position const& point, ObjectGuid ignore = ObjectGuid::Empty)
 {
     for (size_t i = 0; i < st.shadows.size(); ++i)
@@ -1220,8 +1140,6 @@ bool LanePointClear(BqlState const& st, Position const& point, ObjectGuid ignore
     return true;
 }
 
-// The lane and direction with the shortest walk to a clear point and the longest clear run from it, the
-// outer lane first
 bool PlanLane(BqlState const& st, Player* bot, LanePlan& plan)
 {
     bool found = false;
@@ -1317,7 +1235,6 @@ void UpdateStand(BqlState& st, Player* bot, Creature* queen)
     StandKind kind = StandKind::None;
     Position spot;
     float respot = 0.5f;
-    // A killer walks to its vampire by the generic reach
     if (!OnSideDuty(bot) && !KillTarget(st, bot))
     {
         TankRole const role = RoleOf(st, bot);
@@ -1327,7 +1244,6 @@ void UpdateStand(BqlState& st, Player* bot, Creature* queen)
         Unit* victim = queen->GetVictim();
         if (role == TankRole::Main)
         {
-            // She comes back to it after the air phase
             if (st.phase != IccBqlPhase::Ground || !victim || victim == bot ||
                 queen->GetExactDist2d(ICC_BQL_TANK_SPOT) <= MAIN_LEASH)
             {
@@ -1345,7 +1261,6 @@ void UpdateStand(BqlState& st, Player* bot, Creature* queen)
             Player* main = MainTank(st, bot);
             if (main && main != bot)
             {
-                // Blood Mirror links her victim to the nearest other player
                 kind = StandKind::Mirror;
                 spot = StandParkedOnTankSpot(st, main->GetGUID())
                            ? Position(ICC_BQL_TANK_SPOT.GetPositionX(),
@@ -1447,8 +1362,6 @@ void NotePact(BqlState const& st, Player* bot)
 
 bool IsFeared(Player* member) { return member->HasAuraType(SPELL_AURA_MOD_FEAR); }
 
-// The feared player with the most feared within Mass Dispel's radius of it, in range and sight, clusters
-// another free priest centred on left out
 void UpdateMassDispel(BqlState& st, PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1505,7 +1418,6 @@ void UpdateMassDispel(BqlState& st, PlayerbotAI* botAI)
         st.massDispel.erase(guid);
 }
 
-// A human tank has no trigger, so it gets told: a button when low, and through the last minute
 void CallHumanTank(BqlState& st, Player* sender, Creature* queen, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -1531,7 +1443,7 @@ void CallHumanTank(BqlState& st, Player* sender, Creature* queen, uint32 now)
                                    "bql.humancall");
     }
 }
-}  // namespace
+}
 
 IccBqlPhase IccBqlPhaseOf(Player* bot, Unit* boss)
 {
@@ -1589,7 +1501,6 @@ Unit* GetBqlTauntTarget(PlayerbotAI* botAI)
     if (!victim || victim == bot || !ClassTauntReady(botAI))
         return nullptr;
 
-    // She obeys taunt diminishing returns: past two taunts in a row threat has to bring her back
     if (queen->GetDiminishing(DIMINISHING_TAUNT) >= DIMINISHING_LEVEL_3)
         return nullptr;
 
@@ -1727,7 +1638,6 @@ bool FindBqlDodgeSpot(PlayerbotAI* botAI, Position& spot)
     for (Position const& shadow : st->shadows)
         hazards.emplace_back(shadow, SHADOW_CLEAR);
 
-    // Melee keep their target in reach, so the fight goes on from the other side of the shadow
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     bool const melee = target && !PlayerbotAI::IsRanged(bot);
     Position found;
@@ -1761,7 +1671,6 @@ Position GetBqlWalkVia(PlayerbotAI* botAI, Position const& goal, Position const*
     if (!st)
         return goal;
 
-    // A shadow the bot or the goal already stands in has to be crossed anyway
     std::vector<HazardCircle> crossings;
     std::vector<HazardCircle> spots;
     Position const from = bot->GetPosition();
@@ -1907,7 +1816,6 @@ bool GetBqlWhirlHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
         return static_cast<float>(std::max(damage.BasePoints + (damage.DieSides + 1) / 2, 0));
     };
 
-    // Every tick bolts a third of those not yet hit, so what is left of a bolt per player shrinks with the ticks
     float const left = static_cast<float>(ticksLeft);
     float const presence = 1.0f + PRESENCE_PER_STACK * static_cast<float>(queen->GetAuraCount(SPELL_BQL_PRESENCE));
     hit = RaidPredictedHit();
@@ -1920,7 +1828,6 @@ bool GetBqlWhirlHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
 
 RaidCover GetBqlWhirlCover(PlayerbotAI* botAI)
 {
-    // With no hit it still writes the scope's note, which would reach other fights' traces
     if (!IsBqlLive(botAI))
         return RaidCover::None;
 
@@ -1949,14 +1856,12 @@ uint32 GetBqlTankDefensive(PlayerbotAI* botAI, char const* noteKind)
     bool const end = EndWindow(*st, getMSTime()) && (held || linked);
     if (!low && !end)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             NoteDerived(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // Her swings are physical, and the mirror takes them again in the same school
     if (!tank)
         return NextPhysicalDefensive(botAI, bot, noteKind, 0);
 
@@ -1975,7 +1880,6 @@ void TickBqlEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every duty
     Creature* unit = QueenUnit(bot);
     if (!unit || !unit->IsAlive() || !unit->IsInCombat())
     {

@@ -14,7 +14,6 @@
 #include "PlayerbotAI.h"
 #include "VehicleActions.h"
 
-// P2: strip the Nexus Lords' self-cast Haste (57060), without touching the mage's own target.
 class MalygosSpellstealAction : public Action
 {
 public:
@@ -42,7 +41,6 @@ public:
     bool isUseful() override;
 
 private:
-    // Latched, or a bot walks in circles between two shrinking bubbles.
     ObjectGuid _assignedBubbleGuid;
 };
 
@@ -56,7 +54,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// P2: fly a boarded Hover Disk to the Scions, steering the vehicle rather than moving the bot.
 class MalygosRideDiskAction : public AttackAction
 {
 public:

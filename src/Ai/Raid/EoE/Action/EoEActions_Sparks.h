@@ -12,7 +12,6 @@
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 
-// P1: the DK half of the Power Spark answer, Death Grip and then Chains of Ice on what it pulled.
 class PullPowerSparkAction : public Action
 {
 public:

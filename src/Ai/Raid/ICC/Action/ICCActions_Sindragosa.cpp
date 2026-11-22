@@ -19,11 +19,9 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// Nitro Boosts for a walk this long
 constexpr float NITRO_FROM = 12.0f;
-}  // namespace
+}
 
 bool IccSindragosaBossWalkAction::WalkFor(bool (*getter)(PlayerbotAI*, Position&), MovementPriority priority,
                                           bool interrupt, bool nitro)
@@ -49,7 +47,6 @@ bool IccSindragosaBossWalkAction::WalkFor(bool (*getter)(PlayerbotAI*, Position&
 
 Position const* IccSindragosaBossWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -58,8 +55,6 @@ Position const* IccSindragosaBossWalkAction::WalkInFlight()
 
 bool IccSindragosaBossWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -68,14 +63,12 @@ bool IccSindragosaBossWalkAction::WalkTo(Position const& spot, MovementPriority 
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const ours = walking && BookedOnWalkSpot();
     if (ours && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS)
         last.clear();
 
-    // A booking only yields to a higher priority, so our own forced walk would refuse its next leg
     bool const lowered = ours && bot->isMoving() && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
@@ -102,7 +95,6 @@ bool IccSindragosaBossWalkAction::BookedOnWalkSpot()
 
 bool IccSindragosaColdAction::Execute(Event /*event*/)
 {
-    // 30-60k frost, which costs more than any cast
     return WalkFor(&GetSgColdWalk, MovementPriority::MOVEMENT_FORCED, true, true);
 }
 
@@ -118,7 +110,6 @@ bool IccSindragosaBombHideAction::Execute(Event /*event*/)
 
 bool IccSindragosaBeaconAction::Execute(Event /*event*/)
 {
-    // The tomb forms 7 s after the beacon, wherever the bot stands by then
     return WalkFor(&GetSgBeaconWalk, MovementPriority::MOVEMENT_FORCED, true, true);
 }
 
@@ -138,7 +129,6 @@ bool IccSindragosaTauntAction::Execute(Event /*event*/)
     if (swap)
         NoteSgSwapTaunt(botAI);
 
-    // A taunt moves her, not the bot's own target
     AttackDirect(boss);
     return true;
 }
@@ -150,7 +140,6 @@ bool IccSindragosaBuffetHideAction::Execute(Event /*event*/)
 
 bool IccSindragosaUnchainedAction::Execute(Event /*event*/)
 {
-    // A cast finished on the way out stacks Instability
     return WalkFor(&GetSgUnchainedWalk, MovementPriority::MOVEMENT_COMBAT, true, false);
 }
 
@@ -214,7 +203,6 @@ bool IccSindragosaHoldAction::Execute(Event /*event*/)
         acted = true;
     }
 
-    // Every spell finished stacks Instability again
     if (due & SG_HOLD_CAST)
     {
         bot->InterruptNonMeleeSpells(false);
@@ -231,7 +219,6 @@ bool IccSindragosaStandAction::Execute(Event /*event*/)
         if (!bot->isMoving())
             return false;
 
-        // A stopped walk keeps its booking, which would refuse the next one
         bot->StopMoving();
         AI_VALUE(LastMovement&, "last movement").clear();
         return true;

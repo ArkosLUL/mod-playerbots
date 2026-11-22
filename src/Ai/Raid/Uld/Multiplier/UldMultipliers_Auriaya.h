@@ -9,8 +9,6 @@
 
 #include "RaidAntiFear.h"
 
-// The earth totem slot holds one totem, so the shaman's own Stoneskin / Strength of Earth nodes have
-// to be held for as long as the boss can fear, or Tremor is replaced on the next GCD.
 class AuriayaAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:

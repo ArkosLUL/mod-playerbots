@@ -26,8 +26,6 @@ bool LdwDodging(PlayerbotAI* botAI) { return LdwDodgeKind(botAI) != LdwHazardKin
 
 void DefineDeathwhisper(EncounterBuilder& e)
 {
-    // A shade's blast kills outright; the other hazards hurt. One dodge clears them all, so no two forced
-    // walks fight. Dark Reckoning is trash, never up while she is.
     e.Node<IccLadyDeathwhisperDodgeTrigger, IccLadyDeathwhisperDodgeAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<IccDarkReckoningTrigger, IccDarkReckoningAction>(ACTION_EMERGENCY + 5, EncounterRow::Mover);
     e.Node<IccLadyDeathwhisperDefensiveTrigger, IccLadyDeathwhisperDefensiveAction>(ACTION_RAID + 7);
@@ -43,22 +41,16 @@ void DefineDeathwhisper(EncounterBuilder& e)
     e.Exclusive("lady deathwhisper dodge", Role::Any, &LdwDodging, 0, {IccLadyDeathwhisperDodgeAction::Name});
     e.Exclusive("lady deathwhisper dark reckoning", Role::Any, &LdwDarkReckoningDodging, 0,
                 {IccDarkReckoningAction::Name});
-    // Just past a hazard the generic movers would walk the bot back in.
     e.Block("lady deathwhisper hazard band", Role::Any, &LdwNearHazard,
             Family::Reach | Family::ReachHeal | Family::Follow | Family::CombatFormationMove | Family::Charge);
-    // The generic dodge steps 5 yd at most and its flees lock out the encounter's own.
     e.Block("lady deathwhisper avoid aoe", Role::Any, &LdwFightLive, Family::AvoidAoe);
-    // She carries taunt diminishing returns, so only the swap rule taunts her, and the tanks' own taunt
-    // takes the adds.
     e.Block("lady deathwhisper taunts", Role::Tank, &LdwFightLive, Family::Taunt);
-    // The class nodes press these on a bare health trigger; the defensive node spends them on the hits
-    // that are coming.
     e.Block("lady deathwhisper tank defensives", Role::Tank, &LdwFightLive, 0, HeldTankDefensiveNames());
     e.OwnTargeting("lady deathwhisper targeting", Role::Any, &IccResolverPicks<&LdwTarget>);
 
     e.Tick(&LdwTick);
 }
-}  // namespace
+}
 
 EncounterDefinition const& IccDeathwhisperDefinition()
 {

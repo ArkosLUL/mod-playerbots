@@ -21,21 +21,15 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// how long a latched flame spot is trusted while the walk to it is in flight
 constexpr uint32 FLAME_LATCH_MS = 3000;
-// standing still this long past the issue means something stopped the walk short
 constexpr uint32 FLAME_STALL_MS = 500;
-// a gap this long between ticks is a new flame, nothing latched carries over
 constexpr uint32 FLAME_WINDOW_GAP_MS = 2000;
 constexpr uint32 PORTAL_LATCH_MS = 3000;
 constexpr uint32 PORTAL_STALL_MS = 500;
 constexpr float PORTAL_ARRIVE = 1.5f;
-// a latched exit this little inside the portal's clearance still counts as clear
 constexpr float PORTAL_EXIT_SLACK = 0.5f;
-// a booking this close to a spot is the walk to it
 constexpr float SAME_DESTINATION = 1.0f;
 
-// A walk waits behind any booking of equal or higher priority until it runs out
 void DropForeignBooking(LastMovement& last, Position const& own, MovementPriority upTo)
 {
     if (last.msTime && last.priority <= upTo &&
@@ -43,7 +37,7 @@ void DropForeignBooking(LastMovement& last, Position const& own, MovementPriorit
         last.clear();
 }
 
-}  // namespace
+}
 
 bool JaraxxusInterruptFelFireballAction::Execute(Event /*event*/)
 {
@@ -63,8 +57,6 @@ void JaraxxusAvoidLegionFlameAction::ClearLatches()
 
 bool JaraxxusAvoidLegionFlameAction::IssueLeg(Position const& spot, uint32 now)
 {
-    // our last leg still holds the FORCED lock and a lock only yields to a higher priority, so step
-    // it down for the replacement and put it back if nothing went out
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const replacing =
         last.priority == MovementPriority::MOVEMENT_FORCED &&
@@ -89,7 +81,6 @@ bool JaraxxusAvoidLegionFlameAction::IssueLeg(Position const& spot, uint32 now)
     if (replacing)
         last.priority = MovementPriority::MOVEMENT_FORCED;
 
-    // already walking there
     if (outcome == MoveOutcome::Duplicate)
     {
         _spot = spot;
@@ -116,7 +107,6 @@ bool JaraxxusAvoidLegionFlameAction::Execute(Event /*event*/)
         return false;
     }
 
-    // a running cast pins the feet, the spline never launches while it lasts
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
@@ -124,14 +114,11 @@ bool JaraxxusAvoidLegionFlameAction::Execute(Event /*event*/)
         _hasHeading = false;
     else if (!_hasHeading)
     {
-        // a dodge picked before the flame landed on us isn't a leg away from the raid
         _hasSpot = false;
         _heading = GetLegionFlameCarrierHeading(bot);
         _hasHeading = true;
     }
 
-    // every MoveTo clears the motion master, so re-deriving under a walk in flight would restart it
-    // each tick
     if (_hasSpot)
     {
         uint32 const age = getMSTimeDiff(_issuedMs, now);
@@ -146,11 +133,9 @@ bool JaraxxusAvoidLegionFlameAction::Execute(Event /*event*/)
         if (arrived && role == JaraxxusFlameRole::Dodge)
             return false;
 
-        // the next leg carries straight on, never back over the trail
         if (role == JaraxxusFlameRole::Carrier)
             _heading = _legStart.GetAngle(&_spot);
 
-        // MoveTo refuses the same point for 5 s, moving or not
         if (stalled)
             AI_VALUE(LastMovement&, "last movement").clear();
     }
@@ -180,7 +165,6 @@ bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
         return false;
     }
 
-    // every MoveTo restarts the walk, so one in flight to a spot still clear is left alone
     uint32 const now = getMSTime();
     if (_hasSpot)
     {
@@ -193,7 +177,6 @@ bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
             return true;
 
         _hasSpot = false;
-        // MoveTo refuses the same point for 5 s, moving or not
         if (stalled)
             AI_VALUE(LastMovement&, "last movement").clear();
     }
@@ -205,7 +188,6 @@ bool JaraxxusLeavePortalAction::Execute(Event /*event*/)
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
-    // the hold blocks every other mover of this priority, a reach melee walk already booked included
     DropForeignBooking(AI_VALUE(LastMovement&, "last movement"), spot, MovementPriority::MOVEMENT_COMBAT);
     MoveOutcome const outcome = TryMoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(),
                                           spot.GetPositionZ(), false, false, false, false,
@@ -228,7 +210,6 @@ bool JaraxxusCastRaidCoverAction::Execute(Event /*event*/)
     if (!spellId)
         return false;
 
-    // a channel fails any other cast's check, and a moving bot breaks its own channel
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
@@ -270,7 +251,6 @@ bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
     if (jaraxxus->GetVictim() != bot || toCenter <= TOC_DRAG_DONE)
         return false;
 
-    // only the step about to be walked: a tank-carried trail runs along the whole way back for 60 s
     float const scale = std::min(TOC_DRAG_STEP, toCenter) / toCenter;
     Position const step(bot->GetPositionX() + (ARENA_CENTER.GetPositionX() - bot->GetPositionX()) * scale,
                         bot->GetPositionY() + (ARENA_CENTER.GetPositionY() - bot->GetPositionY()) * scale,
@@ -296,8 +276,6 @@ bool JaraxxusAssistTankHoldAction::HoldAdd(uint8 index)
     if (AI_VALUE(Unit*, "current target") != add)
         attacked = Attack(add);
 
-    // the add is this tank's alone, so it comes back off anyone else, tanks too: Fel Streak resets the
-    // Infernal's threat onto whoever it charged, and a taunt copies the top threat back
     Unit* victim = add->GetVictim();
     if (victim && victim != bot && victim->ToPlayer() && CastClassTaunt(botAI, add))
         return true;
@@ -333,7 +311,6 @@ bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    // the kiss punishes anything still casting on its 0.5 s check
     bool const kissed = HasMistressKiss(bot);
     return CastRaidThroughputHeal(botAI, target, [this, kissed](std::string const& heal)
                                  { return kissed && JaraxxusSpellHasCastTime(botAI, heal); });

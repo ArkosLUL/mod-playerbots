@@ -5,7 +5,6 @@
 
 using namespace TrialOfTheCrusaderHelpers;
 
-// Not IsMainTank: on heroic the main tank can be holding Gormok or Icehowl while the worms are up.
 bool NorthrendWormsMobileTankDutyTrigger::IsActive()
 {
     return GetBeastsTankDuty(botAI) == BeastsTankDuty::WormMobile;

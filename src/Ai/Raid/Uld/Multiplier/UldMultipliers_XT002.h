@@ -11,8 +11,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// XT-002: holds burst cooldowns for the real window, the first exposed Heart in hard mode and the sub-25%
-// push in normal. Bloodlust is separate: its one use has to land on the longest phase.
 class XT002BurstWindowMultiplier : public Multiplier
 {
 public:
@@ -26,15 +24,12 @@ private:
         bool allowLust;
     };
 
-    // Runs against every candidate action, so the encounter sweep is memoised for the rest of the tick.
     Window EvaluateWindow();
 
     uint32 cachedAtMs = 0;
     Window cachedValue = {true, true};
 };
 
-// XT-002: normal mode Heart floor, so bots don't kill the Heart and flip the raid into hard mode. Also stands
-// down generic targeting, movers for pinned bots, carriers' gap closers and generic threat redirects.
 class XT002TargetGuardMultiplier : public Multiplier
 {
 public:
@@ -42,8 +37,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// XT-002: a braked dps bot casts nothing at XT, area spells near him included. Its swing, Auto Shot and channels
-// carry no action, so the priority action stops those.
 class XT002ThreatBrakeMultiplier : public Multiplier
 {
 public:

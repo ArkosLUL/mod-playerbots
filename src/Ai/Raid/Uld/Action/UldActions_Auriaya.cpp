@@ -37,7 +37,6 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// The check behind "nearest npcs", with the entry tested first.
 struct AnyUnitOfEntriesInRangeCheck
 {
     Acore::AnyUnitInObjectRangeCheck inRange;
@@ -50,8 +49,6 @@ struct AnyUnitOfEntriesInRangeCheck
     }
 };
 
-// Nearest ground within the leash of center, fewest pools first. Spots past the floor's edge come back
-// clipped from the raycast and are dropped, since the room has a drop past it.
 bool FindAuriayaPoolEscape(Player* bot, Position const& center, std::vector<Unit*> const& pools, Position& out)
 {
     struct Candidate
@@ -96,7 +93,6 @@ bool FindAuriayaPoolEscape(Player* bot, Position const& center, std::vector<Unit
             add(bot->GetPositionX() + distance * std::cos(angle), bot->GetPositionY() + distance * std::sin(angle));
     }
 
-    // Shortest walk, not furthest from the pools: a tank dragged 12 yd swings her cone over the raid.
     std::sort(candidates.begin(), candidates.end(),
               [](Candidate const& a, Candidate const& b)
               {
@@ -133,12 +129,10 @@ bool FindAuriayaPoolEscape(Player* bot, Position const& center, std::vector<Unit
 
     return false;
 }
-}  // namespace
+}
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {
-    // A spot in the room first, the leader may be out in the corridor. The bot is under the floor, so
-    // a soak spot is checked from her instead.
     if (Unit* boss = GetAuriaya(botAI))
     {
         std::vector<Unit*> const pools = GetAuriayaRoomPools(botAI);
@@ -187,13 +181,10 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Room-wide off the boss, so every pool near a candidate counts however far the bot has drifted.
     std::vector<Unit*> const pools = GetAuriayaRoomPools(botAI);
     if (pools.empty())
         return false;
 
-    // A clean spot of its own is the escape: the tank's next station, or a ranged bot's soak spot.
-    // Melee ride the boss and have no spot, so they're leashed to her instead.
     Position anchor;
     float tolerance = 0.0f;
     bool const anchored = GetAuriayaAnchor(botAI, bot, boss, pools, anchor, tolerance);
@@ -207,12 +198,9 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     else if (!FindAuriayaPoolEscape(bot, anchor, pools, destination))
         return false;
 
-    // Already on the best ground it can reach, so hand the tick back to the rotation.
     if (bot->GetExactDist2d(&destination) < 1.0f)
         return false;
 
-    // A cast pins the feet: MoveTo would book the walk and the bot would keep casting in the pool.
-    // Forced, so it cuts into a spot walk already under way.
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
@@ -232,7 +220,6 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     if (!sentry)
         return false;
 
-    // Walk over first, the pack can still be trailing her across the room.
     if (!InAuriayaSentryTauntReach(bot, sentry))
         return MoveTo(sentry, ULDUAR_AURIAYA_SENTRY_TAUNT_WALK, MovementPriority::MOVEMENT_COMBAT);
 
@@ -244,8 +231,6 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     if (!CastClassTaunt(botAI, sentry))
         return false;
 
-    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one. Off another
-    // tank the Sentry is safe either way, and switching would pull every DPS off the one they're on.
     if (!fromTank)
         AttackDirect(sentry);
 
@@ -272,7 +257,6 @@ bool AuriayaMainTankSentryAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Taunt only. Its own target stays on her, or reach would walk it off the station to the Sentry.
     bool taunted = false;
     if (ClassTauntReady(botAI))
         if (Unit* sentry = GetAuriayaMainTankSentry(bot))
@@ -298,7 +282,6 @@ bool AuriayaRaidPositionAction::Execute(Event /*event*/)
     if (!GetAuriayaAnchor(botAI, bot, boss, GetAuriayaRoomPools(botAI), anchor, tolerance))
         return false;
 
-    // Parked. Returning false hands the tick back so the rotation still runs.
     if (bot->GetExactDist2d(&anchor) <= tolerance)
         return false;
 
@@ -319,11 +302,9 @@ bool AuriayaSetDpsPriorityAction::IsAllowedPriorityTarget(Unit* boss, Unit* cand
 
     if (candidate->GetEntry() == NPC_AURIAYA_FERAL_DEFENDER)
     {
-        // Between lives it lies feigned at 1 HP and unselectable, so it is "alive" but unhittable.
         if (IsDownOrFeigning(candidate))
             return false;
 
-        // It re-rolls aggro and roams, so melee only take it near the boss or they chase it all fight.
         if (PlayerbotAI::IsMelee(bot) &&
             candidate->GetExactDist2d(boss) > ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE)
             return false;
@@ -338,18 +319,14 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Sentries first: they stay dead and their Strength of the Pack buffs the boss while they live.
     static uint32 const priorityOrder[] = {NPC_AURIAYA_SANCTUM_SENTRY, NPC_AURIAYA_FERAL_DEFENDER, NPC_AURIAYA};
     constexpr size_t priorityCount = sizeof(priorityOrder) / sizeof(priorityOrder[0]);
     constexpr float targetSwitchDistance = 10.0f;
 
     Unit* currentTarget = context->GetValue<Unit*>("current target")->Get();
 
-    // Nearest live candidate of each entry.
     Unit* perEntry[priorityCount] = {nullptr};
 
-    // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
-    // same order, without a raycast for every pet and totem in the raid.
     float const range = sPlayerbotAIConfig.SightDistance;
     std::vector<Unit*> candidates;
     AnyUnitOfEntriesInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range), priorityOrder, priorityCount};
@@ -386,8 +363,6 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
         }
     }
 
-    // The off-tank's Sentry, no 10 yd rule: that's where its threat is. Nearest only while the off-tank
-    // is dead or has no Sentry to take.
     bool const sentryWanted = desiredPriority == 0;
     Unit* offTankSentry = sentryWanted ? GetAuriayaOffTankSentry(bot) : nullptr;
     if (offTankSentry && (!IsAllowedPriorityTarget(boss, offTankSentry) || !bot->IsWithinLOSInMap(offTankSentry)))
@@ -414,8 +389,6 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
 
     if (!offTankSentry && currentPriority < priorityCount)
     {
-        // Never drop to a lower priority, and within one entry switch only for something 10 yd
-        // closer, or two sentries ping-pong the raid.
         if (currentPriority < desiredPriority)
             target = currentTarget;
         else if (currentPriority == desiredPriority && target &&
@@ -433,7 +406,6 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
     if (PlayerbotAI::IsMelee(bot))
         needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
-    // Already on the right target, so yield the tick to the lower nodes.
     if (!needsAttack)
         return false;
 

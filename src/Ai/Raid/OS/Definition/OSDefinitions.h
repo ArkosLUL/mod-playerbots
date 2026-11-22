@@ -9,7 +9,6 @@
 
 #include "RaidEncounter.h"
 
-// Sartharion's whole fight, the drakes he calls in included: they never start an encounter of their own.
 EncounterDefinition const& OsSartharionDefinition();
 
 #endif

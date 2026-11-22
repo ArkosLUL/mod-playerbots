@@ -29,13 +29,12 @@ void DefineGormok(EncounterBuilder& e)
     e.Node<GormokTankDefensiveTrigger, GormokTankDefensiveAction>(ACTION_RAID + 6);
     e.Node<GormokImpaleResetTrigger, GormokHandOfProtectionAction>(ACTION_RAID + 5);
 
-    // Off the global cooldown, and the hand pacifies the tank till it goes
     e.Node<GormokCancelHandOfProtectionTrigger, GormokCancelHandOfProtectionAction>(ACTION_EMERGENCY + 1);
     e.Node<GormokFireBombIncomingTrigger, GormokDodgeFireBombAction>(ACTION_EMERGENCY + 2);
 
     e.LiveMultiplier<GormokSnoboldCarrierMultiplier>(Family::AnyMovement | Family::Spell);
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCGormokDefinition()
 {

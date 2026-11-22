@@ -52,50 +52,32 @@ const Position ULDUAR_IRON_ASSEMBLY_ANCHOR = Position(1587.18f, 121.02f, 427.27f
 namespace
 {
 
-// Spread slots are held, not re-derived: ranking by guid every tick lets one death renumber everyone
-// behind the corpse and shuffle the ring mid-fight.
 struct IronAssemblyEncounterState
 {
     RaidObs::ObsGuidMap<uint8> spreadSlots{"ironassembly.slot"};
 
-    // Bit 0 Steelbreaker, 1 Molgeim, 2 Brundir. A death is the only phase boundary this fight has.
     RaidObs::ObsValue<uint8> membersAlive{"ironassembly.alive"};
 
-    // Bare rather than an ObsValue: a scan timestamp is bookkeeping, not an assignment.
     uint32 hazardNoteMs = 0;
 
-    // Shift-ring heading the raid stepped onto, or -1 on the stack. Latched: Overload walks with Brundir,
-    // and re-picking every tick flips the winner mid-cast.
     int8 stackShiftHeading = -1;
 
-    // When the council was first seen engaged with all three up, 0 between pulls. Opens the burst window.
     uint32 engagedAtMs = 0;
 
-    // Carriers that started the walk to the Meltdown point. Latched so one slowed or detoured mid-walk
-    // doesn't turn "late" and stop halfway, which is the worst place to blow up.
     RaidObs::ObsGuidSet meltdownRunners{"ironassembly.meltdownrun"};
 
-    // The carrier due to blow inside STEP_OUT_MS, nearest Steelbreaker, kept for the tick: every melee bot's
-    // movement rule asks for it once per action it weighs.
     uint32 blowingCarrierAtMs = 0;
     ObjectGuid blowingCarrier;
 
-    // The druid sent to Rebirth a dead bot tank, and that tank. Latched so two druids about as far off never
-    // trade the walk.
     RaidObs::ObsValue<ObjectGuid> rezDruid{"ironassembly.rezdruid"};
     RaidObs::ObsValue<ObjectGuid> rezTank{"ironassembly.reztank"};
 
-    // Tanks seen dead this pull, with when each was first seen up again, 0 while still down.
     std::unordered_map<ObjectGuid, uint32> tankUpAtMs;
 
-    // The shaman dropping Nature Resistance Totem. Latched until it dies or leaves, so the duty never
-    // trades back and forth between two spares.
     RaidObs::ObsValue<ObjectGuid> natureTotemShaman{"ironassembly.totem"};
     uint32 natureTotemElectMs = 0;
 };
 
-// Keyed by instance, because trigger, action and multiplier each hold their own helper instance and
-// the state they must agree on has to live in one place.
 RaidInstanceState<IronAssemblyEncounterState> ironAssemblyStates;
 
 IronAssemblyEncounterState& IronAssemblyStateFor(Player* bot)
@@ -103,7 +85,6 @@ IronAssemblyEncounterState& IronAssemblyStateFor(Player* bot)
     return ironAssemblyStates.For(bot->GetInstanceId());
 }
 
-// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
 bool FreshThisTick(uint32& atMs)
 {
     uint32 const now = getMSTime();
@@ -126,8 +107,6 @@ bool IronAssemblyHasEitherAura(Unit const* unit, uint32 first, uint32 second)
     return unit && (unit->HasAura(first) || unit->HasAura(second));
 }
 
-// Ranged and healers take spread slots and stack points; tanks hold their own boss and melee ride
-// whatever the raid is killing.
 bool IronAssemblyTakesRaidSpot(PlayerbotAI* botAI, Player* member)
 {
     return member && botAI && PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsTank(member);
@@ -151,7 +130,6 @@ uint32 IronAssemblyOverwhelmingPowerLeftMs(Unit const* unit)
     return 0;
 }
 
-// The carrier is still up but another grouped tank has Steelbreaker. Facts every bot reads the same way.
 bool IronAssemblySwappedOut(Player* member, Unit* steelbreaker)
 {
     if (!member || !steelbreaker || !IronAssemblyOverwhelmingPowerLeftMs(member))
@@ -162,8 +140,6 @@ bool IronAssemblySwappedOut(Player* member, Unit* steelbreaker)
     return holder && holder != member && holder->GetGroup() == member->GetGroup() && PlayerbotAI::IsTank(holder);
 }
 
-// Two radii, because they answer different questions: rad is the spell's own, clear is the line the
-// strategy draws. A bot that died at 22 yd from a 20 yd blast is a different bug from one at 18.
 void NoteIronAssemblyCircle(Map* map, uint32 spellId, Position const& origin, float radius, float clearance)
 {
     char params[48];
@@ -173,8 +149,6 @@ void NoteIronAssemblyCircle(Map* map, uint32 spellId, Position const& origin, fl
                         ULDUAR_IRON_ASSEMBLY_HAZARD_NOTE_INTERVAL_MS);
 }
 
-// The alive mask, and circles for the three hazards nothing can sweep for. Paced per instance:
-// NoteHazard has no change latch, so 25 bots would write 25 rows a tick.
 void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
 {
     if (!RaidObs::Active())
@@ -207,8 +181,6 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
                                    ULDUAR_IRON_ASSEMBLY_OVERLOAD_RADIUS,
                                    ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE);
 
-        // Read the damage id off whichever aura is actually up. Both Overload auras trigger one
-        // damage spell but the two Tendrils auras do not, and a timeline row has to name one.
         uint32 tendrils = 0;
         if (targets.brundir->HasAura(SPELL_LIGHTNING_TENDRILS_25_MAN))
             tendrils = SPELL_LIGHTNING_TENDRILS_DAMAGE_25_MAN;
@@ -221,8 +193,6 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
                                    ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE);
     }
 
-    // One circle per carrier, usually none. Clearance is where melee step out to in a blast's last 3 s
-    // next to Steelbreaker.
     Group* group = bot->GetGroup();
     if (!group)
         return;
@@ -238,8 +208,6 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
     }
 }
 
-// Brundir first, then the other two. His is the only spot that prevents damage, so he keeps a tank
-// at every roster size; the rest are filled in whatever order is left.
 void GatherIronAssemblyTankOrder(IronAssemblyTargets const& targets, std::vector<Unit*>& bosses)
 {
     if (targets.brundir)
@@ -250,9 +218,6 @@ void GatherIronAssemblyTankOrder(IronAssemblyTargets const& targets, std::vector
         bosses.push_back(targets.molgeim);
 }
 
-// Bot tanks only, never GetGroupMainTank/GetGroupAssistTank: role flags count humans, and a slot bots
-// can't fill leaves its boss loose. Guid rank renumbers on a tank death, exactly when it's wanted, and
-// on a Meltdown swap: the carrier leaves, so the next bot tank becomes the new partner.
 void GatherIronAssemblyTanks(PlayerbotAI* botAI, Player* bot, std::vector<Player*>& tanks)
 {
     Group* group = bot->GetGroup();
@@ -274,11 +239,8 @@ void GatherIronAssemblyTanks(PlayerbotAI* botAI, Player* bot, std::vector<Player
               [](Player* lhs, Player* rhs) { return lhs->GetGUID() < rhs->GetGUID(); });
 }
 
-// Also reports which point it picked, sparing the caller a second IronAssemblyBrundirIsLast sweep.
 Position IronAssemblyStackPoint(PlayerbotAI* botAI, bool& brundirLast)
 {
-    // Brundir alone: the opening point would leave casters 38 yd off him. 3 yd past the anchor is 25 from
-    // his spot, clear of Overload and in caster range.
     brundirLast = IronAssemblyBrundirIsLast(botAI);
     if (brundirLast)
         return IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING,
@@ -325,8 +287,6 @@ void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
     for (auto const& assignment : state.spreadSlots)
         taken.insert(assignment.second);
 
-    // The two nature resistance sources sit across the ring. Their slots stay free while they're here,
-    // anyone takes them otherwise.
     Player* totemShaman = IronAssemblyNatureTotemShaman(botAI);
     ObjectGuid const natureTotem =
         totemShaman && present.count(totemShaman->GetGUID()) ? totemShaman->GetGUID() : ObjectGuid::Empty;
@@ -358,13 +318,9 @@ void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
         }
     }
 
-    // More ranged than the ring holds. Overflow keeps the stack point, which is no worse than where
-    // they would stand with no spread at all.
     state.spreadSlots[bot->GetGUID()] = ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS;
 }
 
-// Inside the hall: two float compares against a fixed point, which is what keeps every bot elsewhere
-// in Ulduar off the sweeps behind the formation test.
 bool IronAssemblyBotInHall(Player* bot)
 {
     if (!bot)
@@ -396,8 +352,6 @@ bool IronAssemblyCouncilAtFullHealth(IronAssemblyTargets const& targets)
     return true;
 }
 
-// Stamped here rather than by the reset node, which only fires for a bot holding a spread slot, so a wipe
-// before Steelbreaker's phase would leave the last pull's stamp and shut the next pull's window.
 void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
 {
     IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
@@ -420,8 +374,6 @@ void UpdateIronAssemblyEngage(Player* bot, IronAssemblyTargets const& targets)
         state.engagedAtMs = std::max<uint32>(getMSTime(), 1);
 }
 
-// The group member whose Overwhelming Power ends inside STEP_OUT_MS, nearest Steelbreaker, or nullptr. Its
-// Meltdown goes off wherever it stands by then.
 Player* IronAssemblyBlowingCarrier(Player* bot, Unit* steelbreaker)
 {
     IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
@@ -453,7 +405,6 @@ Player* IronAssemblyBlowingCarrier(Player* bot, Unit* steelbreaker)
     return state.blowingCarrier.IsEmpty() ? nullptr : ObjectAccessor::GetPlayer(*bot, state.blowingCarrier);
 }
 
-// Someone else's Meltdown is due within withinMs, and spot is inside radius of it.
 bool IronAssemblyMeltdownDueNear(Player* bot, Position const& spot, uint32 withinMs, float radius)
 {
     Group* group = bot->GetGroup();
@@ -477,8 +428,6 @@ bool IronAssemblyMeltdownDueNear(Player* bot, Position const& spot, uint32 withi
 
 constexpr uint32 IRON_ASSEMBLY_REBIRTH_RANKS[] = {48477, 26994, 20748, 20747, 20742, 20739, 20484};
 
-// The druid's highest Rebirth while it is off cooldown and affordable, else 0. Not CanCastSpell: that says
-// no in cat, bear or moonkin form, and the action shifts out first.
 uint32 IronAssemblyRebirthReady(Player* druid)
 {
     if (druid->getClass() != CLASS_DRUID)
@@ -522,9 +471,9 @@ bool IronAssemblyBeingRaised(Group* group, Player* body)
 
 enum class IronAssemblyTankLife : uint8
 {
-    Ready,   // up and not swapped out, so it can hold him or take the next swap
-    Rising,  // a res accepted, being cast, or its own Soulstone or Reincarnation still to use
-    Body,    // dead in the hall with nothing pending: Rebirth's job
+    Ready,
+    Rising,
+    Body,
     Out,
 };
 
@@ -533,7 +482,6 @@ IronAssemblyTankLife IronAssemblyTankLifeOf(Group* group, Player* tank, Unit* st
     if (tank->IsAlive())
         return IronAssemblySwappedOut(tank, steelbreaker) ? IronAssemblyTankLife::Out : IronAssemblyTankLife::Ready;
 
-    // A released ghost stands at the graveyard, not by its body.
     if (tank->getDeathState() != DeathState::Corpse || tank->HasPlayerFlag(PLAYER_FLAGS_GHOST))
         return IronAssemblyTankLife::Out;
 
@@ -551,7 +499,7 @@ bool IronAssemblyRezDruid(Player* member, uint32 instanceId)
            !IronAssemblyOverwhelmingPowerLeftMs(member) && IronAssemblyRebirthReady(member);
 }
 
-}  // namespace
+}
 
 uint8 IronAssemblyTargets::AliveCount() const
 {
@@ -564,7 +512,6 @@ void IronAssemblyScan::RefreshMembers()
     molgeim.Clear();
     brundir.Clear();
 
-    // One pass for all three: each read of the list is a fresh grid sweep.
     GuidVector const units =
         botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
 
@@ -574,7 +521,6 @@ void IronAssemblyScan::RefreshMembers()
         if (!unit || !unit->IsAlive())
             continue;
 
-        // First match per entry, which is the one a lookup for that entry would have stopped on.
         switch (unit->GetEntry())
         {
             case NPC_STEELBREAKER:
@@ -614,8 +560,6 @@ void IronAssemblyScan::Members(IronAssemblyTargets& targets)
     targets.molgeim = Resolve(molgeim);
     targets.brundir = Resolve(brundir);
 
-    // Off the scan's once-a-tick refresh, not a node's predicate, so it doesn't matter which node asks
-    // first or what its gates let through. Every lookup in the hall lands here.
     if (refreshed && IronAssemblyBotInHall(botAI->GetBot()))
     {
         UpdateIronAssemblyEngage(botAI->GetBot(), targets);
@@ -698,8 +642,6 @@ bool IronAssemblyFormationActive(PlayerbotAI* botAI)
     if (!botAI)
         return false;
 
-    // Room test first: it is two float compares against a fixed point, and it keeps every bot outside
-    // the hall off the grid sweep the target gather costs.
     if (!IronAssemblyBotInHall(botAI->GetBot()))
         return false;
 
@@ -718,8 +660,6 @@ bool IronAssemblyBrundirIsLast(PlayerbotAI* botAI)
 
 static Unit* DeriveIronAssemblyFocusTarget(PlayerbotAI* botAI, Player* bot, char const*& how)
 {
-    // A skull outranks the built-in order: bots never set it here, so it came from a person. Only a
-    // living council member counts, or a stale mark would strand the raid.
     if (Group* group = bot->GetGroup())
     {
         ObjectGuid const skull = group->GetTargetIcon(RtiTargetValue::skullIndex);
@@ -749,8 +689,6 @@ Unit* IronAssemblyFocusTarget(PlayerbotAI* botAI)
     char const* how = "order";
     Unit* focus = DeriveIronAssemblyFocusTarget(botAI, bot, how);
 
-    // Which member and on whose authority. The act stream says the dps-priority node ran; only this
-    // says what it picked, and whether a person overrode the configured order to get it.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "ironassembly.focus",
                              focus ? RaidObs::DescribeAssignment(focus->GetGUID()) + " " + how : "none");
@@ -758,8 +696,6 @@ Unit* IronAssemblyFocusTarget(PlayerbotAI* botAI)
     return focus;
 }
 
-// A lone tank still takes Brundir: the unheld two drift onto him anyway, so the assignment decides
-// where the council parks, and Brundir's spot keeps his Overload 38 yd off the stack.
 static Unit* DeriveIronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot, char const*& how)
 {
     std::vector<Player*> tanks;
@@ -779,8 +715,6 @@ static Unit* DeriveIronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot, cha
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
-    // Empowered Steelbreaker is the one member two tanks share, for the Overwhelming Power hand-off.
-    // Ranked, not IsMainTank: group flags count humans, so the two would disagree on the partners.
     if (IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir) &&
         targets.steelbreaker)
     {
@@ -802,8 +736,6 @@ static Unit* DeriveIronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot, cha
         return nullptr;
     }
 
-    // Two tanks, three members: rank 0 isolates Brundir, rank 1 holds the focus. The third stays on the
-    // generic threat table, towing it anywhere would only put it back in the stack.
     if (tanks.size() == 2 && bosses.size() > 2 && rank == 1)
     {
         Unit* focus = IronAssemblyFocusTarget(botAI);
@@ -848,8 +780,6 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
     char const* how = "none:nobosses";
     Unit* boss = DeriveIronAssemblyAssignedBoss(botAI, bot, how);
 
-    // Probed here, not at the trigger: an unassigned tank just drops out of the act stream, and only
-    // this row tells the four nullptr branches apart.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "ironassembly.tank",
                              boss ? RaidObs::DescribeAssignment(boss->GetGUID()) + " " + how : how);
@@ -881,7 +811,6 @@ Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot)
         if (member == own || member == partner)
             continue;
 
-        // Off anyone in the group but a tank, pets included: a tank's pet holding it is still a loose boss.
         Unit* const victim = member->GetVictim();
         Player* const holder = victim ? victim->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr;
         if (!holder || holder == bot || holder->GetGroup() != bot->GetGroup())
@@ -893,7 +822,6 @@ Unit* IronAssemblyUnheldMemberToTaunt(PlayerbotAI* botAI, Player* bot)
     return nullptr;
 }
 
-// The designed spot and the bearing it sits on. False for anything but a council member.
 static bool IronAssemblyDesignedTankSpot(Unit* boss, Position& spot, float& bearing)
 {
     if (!boss)
@@ -951,23 +879,16 @@ bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& po
     if (!IronAssemblyDesignedTankSpot(boss, position, bearing))
         return false;
 
-    // Only his own rune moves him. One anywhere else is the soakers' business.
     Position rune;
     if (!TryGetIronAssemblyBossRuneOfPower(botAI, boss, rune))
         return true;
 
-    // Back away from the rune. He re-chases once the tank leaves his melee range and stops at both reaches
-    // plus contact, so he ends OFFSET off the rune with it behind him, where melee can stand. Off the
-    // rune, the designed spot and the stack point, all fixed, so the spot holds still while he walks.
     float const dx = position.GetPositionX() - rune.GetPositionX();
     float const dy = position.GetPositionY() - rune.GetPositionY();
     float const away = dx * dx + dy * dy < 0.25f ? bearing : std::atan2(dy, dx);
     float const reach = ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_BOSS_OFFSET + boss->GetCombatReach() +
                         DEFAULT_COMBAT_REACH + CONTACT_DISTANCE;
 
-    // Straight away can leave the casters behind: a rune on Brundir's own spot backed him out to 45 yd
-    // from the stack. So turn, + first, to the first heading where both ends of where he can stop sit in
-    // his window. A rune too far out or too near the stack for any: the heading that misses it least.
     bool brundirLast = false;
     Position const stack = IronAssemblyStackPoint(botAI, brundirLast);
     float const minStack = boss->GetEntry() == NPC_BRUNDIR ? ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_BRUNDIR_MIN_STACK
@@ -1005,8 +926,6 @@ bool TryGetIronAssemblyBossTankSpot(PlayerbotAI* botAI, Unit* boss, Position& po
         }
     }
 
-    // navprobe: every tank spot and stop this yields, runes out to 14.5 yd round each designed spot on 8
-    // bearings, is on the floor.
     position = Position(rune.GetPositionX() + std::cos(heading) * reach,
                         rune.GetPositionY() + std::sin(heading) * reach, position.GetPositionZ());
     return true;
@@ -1017,7 +936,6 @@ bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& posit
     return TryGetIronAssemblyBossTankSpot(botAI, IronAssemblyAssignedBoss(botAI, bot), position);
 }
 
-// What pushed the raid off its stack point, for the ironassembly.spot label.
 enum class IronAssemblyStackShift : uint8
 {
     None,
@@ -1025,8 +943,6 @@ enum class IronAssemblyStackShift : uint8
     Overload,
 };
 
-// Somewhere the stack point may not sit, and how far away "clear" is. Overload and Rune of Death do
-// not share a clearance, so each carries its own.
 struct IronAssemblyStackHazard
 {
     Position centre;
@@ -1039,8 +955,6 @@ static void GatherIronAssemblyStackHazards(PlayerbotAI* botAI, Position const& s
 {
     std::vector<Position> const swept = GetIronAssemblyScan(botAI).RunesOfDeath();
 
-    // Filtered against the stack, not the caller, so bots standing apart weigh the same runes. Each bot
-    // still sweeps from where it stands, fine while the raid is stacked round this point.
     for (Position const& rune : swept)
         if (rune.GetExactDist2d(stack.GetPositionX(), stack.GetPositionY()) <
             ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS)
@@ -1049,7 +963,6 @@ static void GatherIronAssemblyStackHazards(PlayerbotAI* botAI, Position const& s
                                IronAssemblyStackShift::Rune});
         }
 
-    // Overload rides Brundir, so an untanked or badly parked Brundir puts it on the stack.
     Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
     if (brundir && IronAssemblyOverloadActive(brundir))
     {
@@ -1068,8 +981,6 @@ static bool IsIronAssemblyStackSpotClear(Position const& spot,
     return true;
 }
 
-// Without this, raid position and escape cancel every tick on a covered stack. Reads only the stack
-// and hazards, never the caller: every bot derives it, and a caller-dependent answer scatters the raid.
 static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, Position const& stack,
                                                IronAssemblyStackShift& shift)
 {
@@ -1086,7 +997,6 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
         return stack;
     }
 
-    // Which hazard to blame in the label: the one the stack point is deepest inside.
     float worst = 0.0f;
     for (IronAssemblyStackHazard const& hazard : hazards)
     {
@@ -1099,7 +1009,6 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
         }
     }
 
-    // Keep the latched heading while it clears, or a walking Overload flips the winner mid-cast.
     if (state.stackShiftHeading >= 0 && state.stackShiftHeading < ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS)
     {
         float const bearing = 2.0f * static_cast<float>(M_PI) *
@@ -1110,7 +1019,6 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
             return held;
     }
 
-    // Nearest clear heading, so the raid gives up as little range on the bosses as it can.
     Position best;
     float bestTravel = 0.0f;
     int8 bestHeading = -1;
@@ -1132,8 +1040,6 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
         }
     }
 
-    // Every heading covered: hold formation and let the escape action walk each bot out on its own.
-    // Scattering the raid to chase a spot that does not exist costs more than the ticks do.
     if (bestHeading < 0)
     {
         state.stackShiftHeading = -1;
@@ -1145,8 +1051,6 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
     return best;
 }
 
-// Spelled out per branch rather than concatenated, because `how` is a borrowed pointer that has to
-// outlive the call.
 static char const* IronAssemblySpotLabel(IronAssemblyStackShift shift, char const* plain,
                                          char const* rune, char const* overload)
 {
@@ -1161,8 +1065,6 @@ static char const* IronAssemblySpotLabel(IronAssemblyStackShift shift, char cons
     }
 }
 
-// Squeezes every slot bearing into the arc the runes leave clear, keeping spacing even. Rotating only
-// the covered ones piles a side onto one point, just what Static Disruption wants. False if all clear or covered.
 static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius,
                                             std::vector<Position> const& runes, float& bearing)
 {
@@ -1188,7 +1090,6 @@ static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius
     if (clearCount == 0 || clearCount == samples)
         return false;
 
-    // Longest covered run. Walked from just past a clear sample, so a run wrapping through 0 counts whole.
     uint8 origin = 0;
     while (!clear[origin])
         ++origin;
@@ -1216,8 +1117,6 @@ static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius
         }
     }
 
-    // Cut mid covered run and stretch the rest over the clear arc, so the opposite slot barely moves. A
-    // second rune can still cover a slot inside the arc, raid position holds that bot.
     float const cut = sampleStep * (static_cast<float>(coveredStart) + (coveredLength - 1) * 0.5f);
     float const arcStart = sampleStep * static_cast<float>(coveredStart + coveredLength);
     float const arcSpan = sampleStep * static_cast<float>(samples - coveredLength - 1);
@@ -1227,9 +1126,6 @@ static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius
     return true;
 }
 
-// A Rune of Power the ranged can stand in: within the travel cap of the opening stack point (so never
-// Brundir's), clear of every Rune of Death at the stand radius, and outside a live Overload. Nearest to
-// the stack wins. Reads no caller position, so every bot picks the same rune.
 static bool TryGetIronAssemblySoakRune(PlayerbotAI* botAI, Position& rune)
 {
     std::vector<Position> const runesOfPower = GetIronAssemblyScan(botAI).RunesOfPower();
@@ -1294,13 +1190,8 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
-    // Spread only for Static Disruption, which needs Steelbreaker's phase 2. Otherwise stack, which keeps
-    // healers in range and makes Rune of Power worth soaking.
     if (!IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
     {
-        // The rune is the stack while it lasts, so no second mover has to trade the move with this one.
-        // Not in the spread phase: one Static Disruption on a stack is +75% nature taken for 20s, and
-        // High Voltage is nature.
         Position rune;
         if (IronAssemblyTakesRuneOfPower(bot) && TryGetIronAssemblySoakRune(botAI, rune))
         {
@@ -1332,8 +1223,6 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     float bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
                     static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
 
-    // On Steelbreaker's spot, since Meltdown goes off on his tank. Doesn't ride the stack displacement,
-    // both bosses it dodges are dead by now. A rune outliving Molgeim squeezes the slots instead.
     Position centre = stack;
     float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
     Position steelbreakerSpot;
@@ -1366,8 +1255,6 @@ bool TryGetIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& posit
     if (tolerance)
         *tolerance = spotTolerance;
 
-    // The branch, not the coordinate: the move record already has where the bot was sent, and
-    // ironassembly.slot the ring index.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "ironassembly.spot", how);
 
@@ -1404,8 +1291,6 @@ void GatherIronAssemblyRunesOfDeath(Player* bot, std::vector<Position>& runes)
     if (!bot)
         return;
 
-    // One visit for both ids rather than one each. The two are interleaved in the result instead of
-    // grouped, and nothing reads the order: every caller asks whether a spot clears all of them.
     std::vector<Position> const found = GetDynamicObjectPositions(
         bot, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS,
         {SPELL_RUNE_OF_DEATH_10_MAN, SPELL_RUNE_OF_DEATH_25_MAN});
@@ -1423,8 +1308,6 @@ bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Positi
     return true;
 }
 
-// The next detour point round the first rune on the straight line from the bot to goal, the short
-// way. False when the line stays out of ROUTE.
 static bool TryGetIronAssemblyRuneDetour(Player* bot, Position const& goal, std::vector<Position> const& runes,
                                          Position& waypoint)
 {
@@ -1443,8 +1326,6 @@ static bool TryGetIronAssemblyRuneDetour(Player* bot, Position const& goal, std:
             along = std::clamp(
                 ((rune.GetPositionX() - fromX) * dx + (rune.GetPositionY() - fromY) * dy) / lengthSq, 0.0f, 1.0f);
 
-        // Nearest point is the bot itself, so the walk only moves away. Counting it as blocked spirals a bot
-        // already inside ROUTE inward.
         if (along <= 0.0f)
             continue;
 
@@ -1467,18 +1348,14 @@ static bool TryGetIronAssemblyRuneDetour(Player* bot, Position const& goal, std:
     float const botBearing = std::atan2(fromY - runeY, fromX - runeX);
     float const goalBearing = std::atan2(goal.GetPositionY() - runeY, goal.GetPositionX() - runeX);
 
-    // Short way round. Walking it moves the bot's bearing toward the goal's, so it never flips mid detour.
     float const step = ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP;
     float const turn = Position::NormalizeOrientation(goalBearing - botBearing);
     float const direction = turn <= static_cast<float>(M_PI) ? 1.0f : -1.0f;
 
-    // At least a quarter step ahead, or a bot that just reached a point picks the one it's standing on.
     float const ahead = botBearing + direction * step * 0.25f;
     float const next = direction > 0.0f ? (std::floor(ahead / step) + 1.0f) * step
                                         : (std::ceil(ahead / step) - 1.0f) * step;
 
-    // An off-centre rune puts part of this circle off the floor. The check pulls the point back along the
-    // bot's line, still outside DANGER. Static, since nothing collides a walking bot with a gameobject.
     waypoint = ValidateStaticFloorPoint(
         bot, Position(runeX + std::cos(next) * ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE,
                       runeY + std::sin(next) * ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, bot->GetPositionZ()));
@@ -1498,8 +1375,6 @@ bool TryGetIronAssemblyRouteStep(PlayerbotAI* botAI, Player* bot, Position const
         return true;
     }
 
-    // Only the first rune on the line is steered round, so with two down the point round one can sit
-    // in the other. Holding outside both beats walking into it.
     if (!IsIronAssemblyPositionClearOfRunes(waypoint, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS))
         return false;
 
@@ -1517,7 +1392,6 @@ static bool DeriveIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Pos
         return false;
     }
 
-    // Still on the rune's centre: his tank hasn't backed him off yet, so there's no side to stand on.
     float const dx = focus->GetPositionX() - rune.GetPositionX();
     float const dy = focus->GetPositionY() - rune.GetPositionY();
     float const offset = std::sqrt(dx * dx + dy * dy);
@@ -1527,8 +1401,6 @@ static bool DeriveIronAssemblyMeleeRuneSpot(PlayerbotAI* botAI, Player* bot, Pos
         return false;
     }
 
-    // Deeper when he stopped further off, so a boss that overshot his tank stays in reach. Half a yard
-    // inside the reach test below, or rounding fails a spot sitting right on it.
     float const reach = bot->GetMeleeRange(focus) - 1.0f;
     float const depth = std::clamp(offset - reach + 0.5f, ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH,
                                    ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_MELEE_DEPTH_MAX);
@@ -1597,7 +1469,6 @@ bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why)
     if (!bot || !IronAssemblyWillBoost(bot, walk))
         return false;
 
-    // UseNitroBoosts refuses a bot mid-cast, and the walk breaks the cast anyway.
     bot->CastStop();
     if (!UseNitroBoosts(bot))
         return false;
@@ -1608,7 +1479,6 @@ bool IronAssemblyUseNitroBoosts(Player* bot, float walk, char const* why)
     return true;
 }
 
-// Boots still to use run the first 5s at 2.5x. Once used, the bot's speed already carries them.
 static uint32 IronAssemblyWalkMs(Player* bot, float walk)
 {
     float const speed = std::max(bot->GetSpeed(MOVE_RUN), 1.0f);
@@ -1623,7 +1493,6 @@ static uint32 IronAssemblyWalkMs(Player* bot, float walk)
     return NITRO_BOOSTS_DURATION_MS + static_cast<uint32>((walk - boosted) / speed * IN_MILLISECONDS);
 }
 
-// A runner keeps walking until the buff is gone, whatever the clock says by then.
 static bool IronAssemblyMeltdownRunner(Player* member, Unit* steelbreaker)
 {
     if (!member || !IronAssemblySwappedOut(member, steelbreaker))
@@ -1738,7 +1607,6 @@ bool IronAssemblyMeltdownMeleeWindow(PlayerbotAI* botAI)
         !IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
         return false;
 
-    // A carrier at the Meltdown point is 46 yd off and reaches nobody in his melee.
     Player* carrier = IronAssemblyBlowingCarrier(bot, targets.steelbreaker);
     return carrier && carrier != bot &&
            carrier->GetExactDist2d(targets.steelbreaker) <
@@ -1762,8 +1630,6 @@ static bool DeriveIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, P
         return false;
     }
 
-    // Straight behind him from the carrier: the one side out of the blast his melee range still covers,
-    // and he can't parry it.
     float const dx = steelbreaker->GetPositionX() - carrier->GetPositionX();
     float const dy = steelbreaker->GetPositionY() - carrier->GetPositionY();
     float const apart = std::sqrt(dx * dx + dy * dy);
@@ -1775,7 +1641,6 @@ static bool DeriveIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, P
     spot = Position(steelbreaker->GetPositionX() + std::cos(bearing) * radius,
                     steelbreaker->GetPositionY() + std::sin(bearing) * radius, steelbreaker->GetPositionZ());
 
-    // Inside the ring navprobe walked round his designed spot, which settles on the floor at every heading.
     Position designed;
     float designedBearing = 0.0f;
     if (IronAssemblyDesignedTankSpot(steelbreaker, designed, designedBearing))
@@ -1825,7 +1690,6 @@ static bool DeriveIronAssemblyBattleRez(PlayerbotAI* botAI, Player* bot, IronAss
     IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
     uint32 const instanceId = bot->GetInstanceId();
 
-    // Two tanks make a swap, so only a missing one is worth a Rebirth.
     uint32 ready = 0;
     std::vector<Player*> bodies;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -1910,7 +1774,6 @@ static bool DeriveIronAssemblyBattleRez(PlayerbotAI* botAI, Player* bot, IronAss
     float const distance = bot->GetExactDist2d(tank);
     if (distance <= ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH && bot->IsWithinLOSInMap(tank))
     {
-        // A casting bot can't step out, so the cast has to end before a blast it stands in.
         SpellInfo const* info = sSpellMgr->GetSpellInfo(duty.spellId);
         uint32 const castMs = info ? info->CalcCastTime(bot) : 0;
         if (IronAssemblyMeltdownDueNear(bot, bot->GetPosition(), ULDUAR_IRON_ASSEMBLY_MELTDOWN_STEP_OUT_MS + castMs,
@@ -1925,7 +1788,6 @@ static bool DeriveIronAssemblyBattleRez(PlayerbotAI* botAI, Player* bot, IronAss
         return true;
     }
 
-    // Straight at the body until it's in reach. The raised tank stands up where the druid is, not at the body.
     Position goal = tank->GetPosition();
     if (distance > ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH)
     {
@@ -1935,7 +1797,6 @@ static bool DeriveIronAssemblyBattleRez(PlayerbotAI* botAI, Player* bot, IronAss
                         tank->GetPositionZ());
     }
 
-    // A carrier inside its swap lead blows before a walk and a cast are done.
     if (IronAssemblyMeltdownDueNear(bot, goal, ULDUAR_IRON_ASSEMBLY_MELTDOWN_SWAP_LEAD_MS,
                                     ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE))
     {
@@ -1969,14 +1830,12 @@ bool IronAssemblyBattleRezDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyBatt
 
 namespace
 {
-// Either name on the tank means it has the buff, the same pair the class trigger tests.
 struct IronAssemblyRaidBuff
 {
     uint8 playerClass;
     uint32 firstRank;
     char const* single;
     char const* group;
-    // By class, not power type: a druid tank stands up from a rez in caster form, on mana.
     bool paladinTanksOnly;
 };
 
@@ -1997,7 +1856,6 @@ IronAssemblyRaidBuff const* IronAssemblyRaidBuffOf(uint8 playerClass)
     return nullptr;
 }
 
-// dps first: a tank's GCDs are its threat, a healer's mana is the raid's.
 bool IronAssemblyRebuffsFirst(Player* lhs, Player* rhs)
 {
     auto const order = [](Player* member)
@@ -2025,7 +1883,6 @@ bool IronAssemblyRebuffCaster(Player* member, uint32 instanceId)
     return IronAssemblyMemberCounts(member, instanceId) && GET_PLAYERBOT_AI(member) && IronAssemblyBotInHall(member);
 }
 
-// Answerable for any member, unlike CanCastSpell. Ignores a druid's form, the action shifts out first.
 bool IronAssemblyCanRebuff(Player* member, Player* tank, uint32 spellId)
 {
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
@@ -2034,7 +1891,6 @@ bool IronAssemblyCanRebuff(Player* member, Player* tank, uint32 spellId)
            member->IsWithinDistInMap(tank, ULDUAR_IRON_ASSEMBLY_REBUFF_REACH) && member->IsWithinLOSInMap(tank);
 }
 
-// Tanks that rose under REBUFF_WINDOW_MS ago. One only counts once some buffer's call saw it dead.
 void GatherIronAssemblyRevivedTanks(Player* bot, Group* group, std::vector<Player*>& revived)
 {
     IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
@@ -2045,7 +1901,6 @@ void GatherIronAssemblyRevivedTanks(Player* bot, Group* group, std::vector<Playe
         if (!member || member->GetMapId() != ULDUAR_MAP_ID || member->GetInstanceId() != bot->GetInstanceId())
             continue;
 
-        // IsTank last: every buffer asks every tick, and most members are up and never died
         auto const up = state.tankUpAtMs.find(member->GetGUID());
         if ((member->IsAlive() && up == state.tankUpAtMs.end()) || !PlayerbotAI::IsTank(member))
             continue;
@@ -2064,8 +1919,6 @@ void GatherIronAssemblyRevivedTanks(Player* bot, Group* group, std::vector<Playe
     }
 }
 
-// The class planner's wants per member, not the planner: it picks one cast for the whole raid, so a pet
-// raised in the same window could block a tank's blessing for good. One blessing per paladin per target.
 bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> const& revived,
                                 IronAssemblyTankRebuff& duty, char const*& how, Player*& about)
 {
@@ -2162,7 +2015,7 @@ bool DeriveIronAssemblyBlessing(Player* bot, Group* group, std::vector<Player*> 
 
     return false;
 }
-}  // namespace
+}
 
 static bool DeriveIronAssemblyTankRebuff(PlayerbotAI* botAI, Player* bot, IronAssemblyTankRebuff& duty,
                                          char const*& how, Player*& about)
@@ -2195,7 +2048,6 @@ static bool DeriveIronAssemblyTankRebuff(PlayerbotAI* botAI, Player* bot, IronAs
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            // never a bear, shifting out loses it the boss
             if (!member || member->getClass() != buff->playerClass || PlayerbotAI::IsTank(member) ||
                 !IronAssemblyRebuffCaster(member, bot->GetInstanceId()) ||
                 (caster && !IronAssemblyRebuffsFirst(member, caster)))
@@ -2234,7 +2086,6 @@ bool IronAssemblyTankRebuffDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyTan
     Player* about = nullptr;
     bool due = DeriveIronAssemblyTankRebuff(botAI, bot, duty, how, about);
 
-    // Only for the bot that's due: catches a silence, or a stronger aura the buff would bounce off.
     if (due && !botAI->CanCastSpell(duty.spellId, duty.tank))
     {
         how = "hold:cast";
@@ -2276,14 +2127,11 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
         if (IronAssemblyTendrilsActive(brundir) && distance < ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE)
             return true;
 
-        // Tanks hold through Overload on purpose, so they never count as committed to a walk.
         if (IronAssemblyOverloadActive(brundir) && !PlayerbotAI::IsTank(member) &&
             distance < ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE)
             return true;
     }
 
-    // The cache belongs to the bot whose tick this is; anyone else is swept fresh, because their scan
-    // was filled on their own tick and they have moved since.
     std::vector<Position> runes;
     if (member == botAI->GetBot())
         runes = GetIronAssemblyScan(botAI).RunesOfDeath();
@@ -2303,8 +2151,6 @@ char const* IronAssemblyReadyInterrupt(Player* bot, Unit* target)
     if (!botAI)
         return nullptr;
 
-    // No silences, Brundir is immune to MECHANIC_SILENCE. Stuns land, he's immune to neither STUN nor
-    // INTERRUPT (the encounter's own achievement is built on stunning him).
     static char const* const interrupts[] = {"kick",         "pummel",
                                              "shield bash",  "counterspell",
                                              "wind shear",   "mind freeze",
@@ -2318,8 +2164,6 @@ char const* IronAssemblyReadyInterrupt(Player* bot, Unit* target)
     return nullptr;
 }
 
-// Nothing stored: every bot reaches the same ranking from the same facts, so no two both stand down.
-// `how` only means something once the bot has an interrupt to offer.
 static char const* DeriveIronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* bot, Unit* brundir,
                                                    char const*& how)
 {
@@ -2337,15 +2181,12 @@ static char const* DeriveIronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* b
         return nullptr;
     }
 
-    // A bot already walking out of a hazard cannot cast, so it must not hold a duty either.
     if (IronAssemblyMemberMustMove(botAI, bot))
     {
         how = "none:moving";
         return nullptr;
     }
 
-    // Past the rank that could hold this cast the answer is standby, so stop counting: each member costs
-    // ten spell checks and, if one is ready, a rune sweep.
     uint8 const decided = whirl ? 1 : 2;
 
     uint8 rank = 0;
@@ -2368,7 +2209,6 @@ static char const* DeriveIronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* b
         }
     }
 
-    // Whirl is 100 yd with no positional answer, so rank 0 saves its interrupt for it.
     if (whirl && rank == 0)
     {
         how = "whirl";
@@ -2393,8 +2233,6 @@ char const* IronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* bot, Unit* bru
     char const* how = nullptr;
     char const* duty = DeriveIronAssemblyInterruptDuty(botAI, bot, brundir, how);
 
-    // A role, not an event: the act stream has every kick. A null `how` (no cast, no interrupt) stays
-    // unprobed, or the raid flapping to idle between casts buries the rows that matter.
     if (how && RaidObs::Active())
         RaidObs::NoteDerived(bot, "ironassembly.interrupt", how);
 
@@ -2424,8 +2262,6 @@ bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss)
     return holder && holder != bot && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
 }
 
-// Top of the roll times Supercharge and Electrical Charge, less the bot's average nature resist and damage
-// taken mods. Absorbs not counted.
 static float IronAssemblyFusionPunchLanding(Unit* steelbreaker, Player* bot, SpellInfo const* punch)
 {
     SpellEffectInfo const& hit = punch->Effects[EFFECT_0];
@@ -2449,7 +2285,6 @@ uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
     if (!info || punch->m_targets.GetUnitTarget() != bot ||
         (info->Id != SPELL_FUSION_PUNCH_10_MAN && info->Id != SPELL_FUSION_PUNCH_25_MAN))
     {
-        // reset between punches, so two in a row with the same verdict still get a row each
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "ironassembly.punch", "idle");
 
@@ -2476,8 +2311,6 @@ uint32 IronAssemblyFusionPunchIncomingMs(PlayerbotAI* botAI, Player* bot)
 
 uint8 IronAssemblyResistWantedSchools(PlayerbotAI* botAI, uint8 /*previous*/)
 {
-    // The boss state, not this bot's view of the hall: one read stands for the whole instance, and a bot
-    // running back from the graveyard must not take the hunter off it for everyone.
     return BossStateGateLive(botAI, ULD_BOSS_ASSEMBLY) ? RAID_RESIST_NATURE : 0;
 }
 
@@ -2498,7 +2331,6 @@ uint32 IronAssemblyNatureTotemSpell(Player* bot)
     return 0;
 }
 
-// The air totem strategy a shaman bot runs, empty for none. Siblings, so a bot runs one at most.
 static std::string IronAssemblyAirTotemStrategy(PlayerbotAI* memberAI)
 {
     static char const* const strategies[] = {"nature resistance", "wrath of air", "windfury", "grounding"};
@@ -2509,7 +2341,6 @@ static std::string IronAssemblyAirTotemStrategy(PlayerbotAI* memberAI)
     return "";
 }
 
-// Bots only: a human shaman's totems are its own business, so one never counts as the spare's twin.
 static Player* ElectIronAssemblyNatureTotemShaman(Player* bot)
 {
     Group* group = bot->GetGroup();
@@ -2533,7 +2364,6 @@ static Player* ElectIronAssemblyNatureTotemShaman(Player* bot)
             shamans.push_back({member, IronAssemblyAirTotemStrategy(memberAI)});
     }
 
-    // Already on it, then a ring slot holder, then guid.
     auto const rank = [](Shaman const& shaman)
     {
         return std::make_tuple(shaman.air == "nature resistance" ? 0 : 1,
@@ -2567,7 +2397,6 @@ Player* IronAssemblyNatureTotemShaman(PlayerbotAI* botAI)
     if (holder && holder->GetGroup() == bot->GetGroup() && IronAssemblyMemberCounts(holder, bot->GetInstanceId()))
         return holder;
 
-    // One election per instance per ms: every shaman asks each tick, and the hold rule per action.
     if (FreshThisTick(state.natureTotemElectMs))
         return nullptr;
 
@@ -2578,7 +2407,6 @@ Player* IronAssemblyNatureTotemShaman(PlayerbotAI* botAI)
 
 bool IsIronAssemblyNatureTotemShaman(PlayerbotAI* botAI)
 {
-    // Class first: the hold rule asks this of every bot.
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     return bot && bot->getClass() == CLASS_SHAMAN && IronAssemblyFormationActive(botAI) &&
            IronAssemblyNatureTotemShaman(botAI) == bot;
@@ -2598,7 +2426,6 @@ IronAssemblyNatureTotemStep IronAssemblyNatureTotemNext(PlayerbotAI* botAI)
     if (!button || button->GetType() != ACTION_BUTTON_SPELL || button->GetAction() != spellId)
         return IronAssemblyNatureTotemStep::SetButton;
 
-    // Dropped where it stops, not on the way there.
     if (bot->isMoving())
         return IronAssemblyNatureTotemStep::None;
 
@@ -2613,8 +2440,6 @@ bool IronAssemblyEncounterStateIsStale(PlayerbotAI* botAI)
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
-    // All three up and untouched is the pull. Testing combat would wipe the state every Lightning
-    // Tendrils, when Brundir spends 16s with no victim by design.
     return IronAssemblyCouncilAtFullHealth(targets);
 }
 

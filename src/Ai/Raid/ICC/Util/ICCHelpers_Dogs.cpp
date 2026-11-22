@@ -39,7 +39,6 @@ constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr uint32 GUARD_REFRESH_MS = 1000;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float ZOMBIE_RANGE = 30.0f;
-// Below two tanks nobody is free to take the zombies
 constexpr size_t GUARD_BELOW_TANKS = 2;
 
 struct TargetMemo
@@ -56,7 +55,6 @@ struct DogsState
     uint32 guardMs = 0;
     bool guardRan = false;
     RaidObs::ObsGuidSet brake{"dogs.brake"};
-    // At most one member
     RaidObs::ObsGuidSet guard{"dogs.guard"};
     std::unordered_map<ObjectGuid, TargetMemo> targets;
 };
@@ -65,7 +63,6 @@ RaidInstanceState<DogsState> dogsStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// A bot of its own, not a player, selfbot included: players hold no duty.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsDog(Unit* unit) { return unit && (unit->GetEntry() == NPC_STINKY || unit->GetEntry() == NPC_PRECIOUS); }
@@ -140,7 +137,6 @@ uint32 TauntSpellId(Player* player)
     }
 }
 
-// Off cooldown and castable in its current form: Growl needs bear form and Taunt Defensive Stance
 bool TauntUsable(Player* member)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -159,8 +155,6 @@ bool Yields(DogsState const* state, Player* bot, Creature* dog)
 
 bool IsGuard(DogsState const* state, Player* bot) { return state && state->guard.count(bot->GetGUID()); }
 
-// A tank not holding the dog past DOGS_BRAKE_CAP of the holder's threat, until it falls under
-// DOGS_BRAKE_RELEASE. Read from the threat list: the "threat" value is a uint8 percentage and wraps past 255%.
 void UpdateBrake(DogsState& state, Player* bot, Creature* dog)
 {
     bool hold = false;
@@ -179,7 +173,6 @@ void UpdateBrake(DogsState& state, Player* bot, Creature* dog)
         state.brake.erase(bot->GetGUID());
 }
 
-// Plate and a taunt that needs no stance or form: a death knight first, then a paladin
 bool GuardClass(Player* member)
 {
     return member->getClass() == CLASS_DEATH_KNIGHT || member->getClass() == CLASS_PALADIN;
@@ -220,8 +213,6 @@ void UpdateGuard(DogsState& state, Player* bot, Creature* dog, uint32 now)
         state.guard.insert(pick->GetGUID());
 }
 
-// The tank to take the dog now. A taunt aura on it means one just landed and its victim catches up next
-// update, so nobody else spends one.
 Player* SwapTaunter(Player* bot, Creature* dog)
 {
     Unit* victim = dog->GetVictim();
@@ -256,7 +247,6 @@ Player* SwapTaunter(Player* bot, Creature* dog)
     return pick;
 }
 
-// A zombie on a player who is no tank, nearest the bot
 Unit* LooseZombie(Player* bot)
 {
     Unit* pick = nullptr;
@@ -317,8 +307,6 @@ bool CastingDecimate(Creature* dog)
     return spell && spell->GetSpellInfo() && spell->GetSpellInfo()->Id == SPELL_DOGS_DECIMATE;
 }
 
-// A human tank has no trigger, so it gets told: its taunt when the bot holding the dog is due a swap with no
-// bot to take it, a defensive through Decimate or when low
 void CallHumanTank(DogsState& state, Player* sender, Creature* dog, uint32 now)
 {
     if (state.humanCallRan && getMSTimeDiff(state.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -363,7 +351,7 @@ void CallHumanTank(DogsState& state, Player* sender, Creature* dog, uint32 now)
     CallHumanTankDefensive(sender, holder, ReadyTankDefensiveSpell(holder, true, 0, 0), hitIn,
                            decimate ? "Decimate" : "you are low", "dogs.humancall");
 }
-}  // namespace
+}
 
 Creature* GetDogsBoss(PlayerbotAI* botAI)
 {
@@ -385,7 +373,6 @@ Unit* GetDogsTarget(PlayerbotAI* botAI)
     if (!state)
         return nullptr;
 
-    // Asked by the trigger, the action and the targeting rule for every action a bot weighs
     TargetMemo& memo = state->targets[bot->GetGUID()];
     uint32 const now = getMSTime();
     if (!memo.set || memo.ms != now)
@@ -406,7 +393,6 @@ Unit* GetDogsZombieTaunt(PlayerbotAI* botAI)
     if (!state || !IsGuard(state, bot) || !TauntUsable(bot))
         return nullptr;
 
-    // Everyone sits at 15% after each Decimate, and a healer under a zombie loses the raid's heals
     Unit* pick = nullptr;
     float pickDistance = 0.0f;
     for (Creature* zombie : IccGetCreaturesByEntries(bot, {NPC_DOGS_PLAGUED_ZOMBIE}, TAUNT_RANGE))
@@ -463,7 +449,6 @@ uint32 GetDogsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         bot->GetHealthPct() < DOGS_TANK_DEFENSIVE_PCT || (dog->GetVictim() == bot && CastingDecimate(dog));
     if (!window)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             Note(bot, noteKind, "idle");
 
@@ -485,7 +470,6 @@ bool GetDogsDecimateHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     if (!stun)
         return false;
 
-    // Stamped on the landing, so every read of one Decimate is the same hit
     uint32 const now = getMSTime();
     int32 const since = std::max(stun->GetMaxDuration() - stun->GetDuration(), 0);
     hit = RaidPredictedHit();
@@ -493,7 +477,6 @@ bool GetDogsDecimateHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     hit.durationMs = DOGS_DECIMATE_HIT_MS;
     hit.school = SPELL_SCHOOL_MASK_NORMAL;
 
-    // Everyone sits at 15%, under the cover floor whatever the damage: Precious's zombies count as nothing
     if (dog->GetEntry() == NPC_STINKY)
     {
         SpellInfo const* tick =
@@ -517,7 +500,6 @@ RaidCover GetDogsDecimateCover(PlayerbotAI* botAI)
     RaidPredictedHit hit;
     bool const hits = GetDogsDecimateHit(botAI, hit);
     RaidCover const cover = GetRaidCover(botAI, ICC_DEFENSIVE_SCOPE, hits ? &hit : nullptr);
-    // Precious's zombies hit physical, where Anti-Magic Zone takes nothing off
     return cover == RaidCover::AntiMagicZone && hit.school == SPELL_SCHOOL_MASK_NORMAL ? RaidCover::None : cover;
 }
 

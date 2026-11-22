@@ -26,7 +26,6 @@ std::vector<Creature*> IccGetCreaturesByEntries(WorldObject* searcher, std::init
     else
         searcher->GetCreatureListWithEntryInGrid(raw, std::vector<uint32>(entries), range);
 
-    // Grouped by entry in list order, grid order inside each, as one search per entry would list them
     out.reserve(raw.size());
     for (uint32 entry : entries)
         for (Creature* c : raw)
@@ -93,8 +92,6 @@ bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target)
 
     if (taunt)
     {
-        // No ranged pull while the taunt cools down: it faces its target and would turn a tank holding
-        // the boss toward the add on every retry.
         if (bot->HasSpellCooldown(tauntId))
             return false;
 

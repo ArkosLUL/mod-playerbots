@@ -13,7 +13,6 @@ public:
         for (EncounterDefinition const* encounter : ToCEncounterDefinitions())
             encounter->RegisterActions(creators);
 
-        // its node rides the chat command's "pull" trigger, which no row can register
         creators["faction champions chain request"] = &RaidTrialOfTheCrusaderActionContext::chain_request;
     }
 

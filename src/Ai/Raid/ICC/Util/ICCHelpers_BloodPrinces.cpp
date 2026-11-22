@@ -52,83 +52,53 @@ constexpr uint32 SCAN_MS = 200;
 constexpr uint32 DUTY_MS = 250;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 
-// A healer node reaches every tank spot in use within HEAL_TAKE when taken and HEAL_KEEP while held: heals
-// pick targets out to 38.5 yd
 constexpr float HEAL_TAKE = 36.0f;
 constexpr float HEAL_KEEP = 38.0f;
-// A ranged node is taken within the first figure of the empowered prince and held to the second: 30 yd spells
-// (hunters 35) plus both combat reaches, 1.5 and the princes' 1.75, less what a prince drifts off his spot
 constexpr float RANGED_TAKE = 28.0f;
 constexpr float RANGED_KEEP = 31.0f;
 constexpr float HUNTER_TAKE = 32.0f;
 constexpr float HUNTER_KEEP = 35.0f;
-// Nodes this close to Valanar's spot are where his ranged stand, so a healer leaves them while it can
-// still reach a tank spot from outside. Only 15 nodes are in reach of him, 14 once Taldaram has his own spot.
 constexpr float VALANAR_RANGED_ZONE = 28.0f;
 constexpr float HEALER_ZONE_COST = 1500.0f;
 constexpr float HEALER_SHORT_COST = 1000.0f;
-// The dais rises east of here. Its nodes in reach of Valanar's spot stay free of ranged in his phase, for
-// the melee to scatter onto.
 constexpr float DAIS_X = 4662.0f;
 
-// Empowered Shock Vortex is a 4.5 s cast, 4 s on heroic: a bot takes a node no farther than it runs in
-// what is left of the cast less SCATTER_LAG_MS, and never past SCATTER_REACH
 constexpr float SCATTER_REACH = 28.0f;
 constexpr uint32 SCATTER_LAG_MS = 250;
 constexpr uint32 SCATTER_TAIL_MS = 500;
 
-// Shock Vortex hits 12 yd round itself, centre to centre, every 1.5 s from 4.5 s after it appears
 constexpr float VORTEX_RADIUS = 12.0f;
 constexpr float VORTEX_TRIGGER = VORTEX_RADIUS + 0.5f;
 constexpr float VORTEX_CLEAR = VORTEX_RADIUS + BPC_STAND_PARK + 1.5f;
-// Empowered Shock Vortex puts a vortex on every player within 30 yd of Valanar, and each one hits everyone
-// within 12 yd of that player. Lattice neighbours sit 13.499 yd apart.
 constexpr float VORTEX_TARGETS = 30.0f + 1.5f;
 constexpr float VORTEX_SHARED = VORTEX_RADIUS + BPC_STAND_PARK;
 constexpr float DODGE_SWEEP = 20.0f;
-// A melee bot's dodge spot stays this close to its target's edge
 constexpr float MELEE_KEEP = 4.0f;
 
-// Flames hits 15 yd round the ball where it catches its victim
 constexpr float BALL_CLEAR = 15.0f + 1.5f;
 constexpr float BALL_STEP = 15.0f;
-// Empowered Flare hits 10 yd round a Ball of Inferno Flame hovering 5 yd up, so 8.6 yd on the floor. Each
-// player it hits takes a stack off the ball, and each stack adds 3520 fire to the explosion.
 constexpr float FLARE_REACH = 8.0f;
 constexpr uint8 SOAKERS = 3;
-// The balls run 11 yd/s, a player 7
 constexpr float BALL_SPEED = 11.0f;
 constexpr float BOT_SPEED = 7.0f;
 constexpr float SOAK_MAX_WALK = 20.0f;
-// A victim with no clear spot walks this far at most to a less crowded node
 constexpr float BALL_CROWD_WALK = 20.0f;
-// The Inferno victim's button goes up this long before the ball reaches it, if the explosion would leave
-// it under FLAME_FLOOR of its health
 constexpr float FLAME_LEAD_S = 1.5f;
 constexpr float FLAME_FLOOR = 0.25f;
-// The button still runs this long past the catch, the ball's approach being an estimate
 constexpr uint32 FLAME_TAIL_MS = 500;
 constexpr uint32 SPELL_DISPERSION = 47585;
 constexpr uint32 SPELL_CLOAK_OF_SHADOWS = 31224;
-// A Shadow Lance lands once its bolt has flown
 constexpr uint32 LANCE_FLIGHT_MS = 1000;
 constexpr float BOMB_DUTY_RANGE = 60.0f;
-// A bomb is in a node's reach while this close, its height included
 constexpr float NODE_SHOT_REACH = 30.0f;
 constexpr float HUNTER_SHOT_REACH = 35.0f;
 constexpr float DISPEL_RANGE = 30.0f;
-// The threat brake holds a bot off the empowered prince past BRAKE_CAP of his owner's threat, until it
-// falls under BRAKE_RELEASE
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
-// A bomb falls at its walk speed, 2 yd/s or 3 on heroic, from 20 yd up and explodes within 2 yd of its
-// landing; a hit lifts it 2 yd/s for 3 s. It is shot once it is this close to landing.
 constexpr float BOMB_SHOOT_LEAD_S = 5.0f;
 
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float NUCLEUS_TAUNT_FROM = 28.0f;
-// Keleseth casts from 10 yd: once he stands this close to his spot his tank fights him where he is, and
-// drags him back once he drifts past KELESETH_DRIFTED
 constexpr float KELESETH_PARKED = 12.0f;
 constexpr float KELESETH_DRIFTED = 16.0f;
 constexpr float SPLASH_GUARD = 12.0f;
@@ -147,8 +117,6 @@ struct Stand
     bool parked = false;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -167,23 +135,16 @@ struct BpcState
 
     uint32 dutyMs = 0;
     bool dutiesRan = false;
-    // Prince bits per tank
     RaidObs::ObsGuidMap<uint8> tank{"bpc.tank"};
-    // A node 1-BPC_NODE_COUNT per healer, ranged bot and, during the cast, scattering bot
     RaidObs::ObsGuidMap<uint8> slot{"bpc.slot"};
-    // Duty bot -> the Kinetic Bomb it juggles
     RaidObs::ObsGuidMap<ObjectGuid> bomb{"bpc.bomb"};
-    // Pet owner -> the Kinetic Bomb its pet juggles
     RaidObs::ObsGuidMap<ObjectGuid> petBomb{"bpc.petbomb"};
     RaidObs::ObsGuidSet soak{"bpc.soak"};
     ObjectGuid soakBall;
-    // Glittering Sparks carrier -> the bot that dispels it
     RaidObs::ObsGuidMap<ObjectGuid> dispel{"bpc.dispel"};
     RaidObs::ObsGuidSet brake{"bpc.brake"};
     std::unordered_set<ObjectGuid> scatter;
-    // Scattering bots on a node somebody else holds, which leaves that holder its node
     std::unordered_set<ObjectGuid> scatterShared;
-    // Vortex hits each scattering bot takes where it runs, its own included
     std::unordered_map<ObjectGuid, uint8> scatterHits;
     uint32 scatterUntilMs = 0;
     bool kelesethParked = false;
@@ -199,7 +160,6 @@ RaidInstanceState<BpcState> bpcStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsHeroic(Player* bot)
@@ -214,7 +174,6 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -267,7 +226,6 @@ Creature* LivePrince(Player* bot, uint8 bit)
     return prince && prince->IsAlive() && prince->IsInCombat() ? prince : nullptr;
 }
 
-// Pure read: the publishing wrapper is GetBpcEmpoweredPrince
 Creature* EmpoweredPrince(Player* bot)
 {
     for (uint8 bit : {BPC_PRINCE_VALANAR, BPC_PRINCE_KELESETH, BPC_PRINCE_TALDARAM})
@@ -370,7 +328,6 @@ bool TaldaramOwnSpot(BpcState const& st)
                        [](auto const& entry) { return entry.second == BPC_PRINCE_TALDARAM; });
 }
 
-// The living owner of a prince, a bot on the map
 Player* OwnerOf(BpcState const& st, Player* bot, uint8 bit)
 {
     for (auto const& [guid, mask] : st.tank)
@@ -382,16 +339,11 @@ Player* OwnerOf(BpcState const& st, Player* bot, uint8 bit)
     return nullptr;
 }
 
-// Tanks and a DK or paladin stand-in take nuclei and Keleseth back with the class taunt. Any other
-// stand-in has to hit a nucleus to take it.
 bool GrabsByTaunt(Player* bot)
 {
     return IsTankPlayer(bot) || bot->getClass() == CLASS_DEATH_KNIGHT || bot->getClass() == CLASS_PALADIN;
 }
 
-// Keleseth casts from 10 yd and turns every hit into threat outside his phase. Guides tank him with a
-// warlock, a DK or a paladin can taunt, any other ranged dealer holds him on threat alone. Melee can't
-// reach him from his spot.
 int8 StandInTier(Player* member)
 {
     if (!IsDutyBot(member) || IsTankPlayer(member) || !IsRaidDpsBot(member))
@@ -432,9 +384,6 @@ Player* PickStandIn(BpcState const& st, std::vector<Player*> const& members)
     return best;
 }
 
-// Main tank, then the assist tanks in their order, then guid: Valanar to the first, Keleseth to the second,
-// Taldaram to the third or else to the first with Valanar. With one tank in the raid, human or bot,
-// Keleseth goes to a stand-in.
 void AssignTanks(BpcState& st, std::vector<Player*> const& members)
 {
     size_t const tankPlayers = std::count_if(members.begin(), members.end(), &IsTankPlayer);
@@ -528,9 +477,6 @@ float RangedReach(Player* member, bool keep)
     return keep ? (hunter ? HUNTER_KEEP : RANGED_KEEP) : (hunter ? HUNTER_TAKE : RANGED_TAKE);
 }
 
-// Every tank spot in use is reached by half the healers, rounded up, and every healer node by one spot at
-// least, from outside Valanar's zone while that holds. With no bot tank any node will do. A healer is
-// placed before the ranged and keeps its node, so a phase change never moves one.
 void AssignHealers(BpcState& st, std::vector<Player*> const& healers, bool (&used)[BPC_NODE_COUNT + 1])
 {
     std::vector<Position> const spots = TankSpotsInUse(st);
@@ -593,7 +539,6 @@ void AssignHealers(BpcState& st, std::vector<Player*> const& healers, bool (&use
     }
 }
 
-// The ranged follow the empowered prince's side, off the dais nodes in Valanar's phase
 void AssignSlots(BpcState& st, std::vector<Player*> const& members, Unit* anchor)
 {
     std::vector<Player*> healers;
@@ -630,7 +575,6 @@ void AssignSlots(BpcState& st, std::vector<Player*> const& members, Unit* anchor
         return itr != st.slot.end() ? itr->second : 0;
     };
 
-    // Scattering bots keep their node until the cast lands
     for (ObjectGuid const& guid : st.scatter)
     {
         auto const itr = st.slot.find(guid);
@@ -680,7 +624,6 @@ void AssignSlots(BpcState& st, std::vector<Player*> const& members, Unit* anchor
     }
 }
 
-// Everyone without a node runs to the nearest free one while the cast is on, and gives it back after
 void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* valanar, uint32 now)
 {
     uint32 const vortexId = sSpellMgr->GetSpellIdForDifficulty(SPELL_BPC_EMPOWERED_SHOCK_VORTEX, valanar);
@@ -705,8 +648,6 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
         if (entry.second >= 1 && entry.second <= BPC_NODE_COUNT)
             used[entry.second] = true;
 
-    // Where each player will stand when the vortices land, if Valanar's cast reaches it: a node holder on its
-    // node, everyone else where it stands now
     std::vector<Position> carriers;
     std::vector<Player*> runners;
     auto const carry = [&](Position const& pos)
@@ -725,7 +666,6 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
             carry(member->GetPosition());
     }
 
-    // The bot's own vortex and its neighbours', plus the ones it adds to them, with `extra` carriers on top
     auto const hits = [&](Position const& pos, std::vector<Position> const& extra)
     {
         bool const own = valanar->GetExactDist2d(pos) <= VORTEX_TARGETS;
@@ -761,8 +701,6 @@ void UpdateScatter(BpcState& st, std::vector<Player*> const& members, Creature* 
             }
         }
 
-        // No free node in reach: the reachable one that costs the raid the fewest hits, shared if it must be,
-        // and only if that beats staying put among the bots still to be placed
         bool shared = false;
         if (!best)
         {
@@ -815,9 +753,6 @@ float BombHeight(Creature* bomb)
     return ground > INVALID_HEIGHT ? bomb->GetPositionZ() - ground : 0.0f;
 }
 
-// Only a damaging hit procs the bomb's Unstable, never periodic damage: hunters fire instants and Auto Shot,
-// mages open on direct spells, a warlock or a shadow priest often on a DoT. A melee dealer hits it only once
-// it falls within 5 yd, so it goes last.
 uint8 BombTier(Player* member)
 {
     if (!PlayerbotAI::IsRanged(member))
@@ -839,7 +774,6 @@ bool IsBombShooter(BpcState const& st, Player* member)
     return IsDutyBot(member) && !IsTankPlayer(member) && !OwnedBy(st, member) && IsRaidDpsBot(member);
 }
 
-// Kept while both live, so a pet stays under its bomb
 void AssignPetBombs(BpcState& st, Player* bot, std::vector<Player*> const& members)
 {
     std::vector<Creature*> const bombs = Resolve(bot, st.bombs);
@@ -934,7 +868,6 @@ void AssignBombs(BpcState& st, Player* bot, std::vector<Player*> const& members)
             roster.insert(member->GetGUID());
         }
 
-    // Erased by guid, so the trace sees the duty end
     std::unordered_set<ObjectGuid> covered;
     std::vector<ObjectGuid> ended;
     for (auto const& [shooter, bomb] : st.bomb)
@@ -1033,7 +966,6 @@ void AssignSoak(BpcState& st, Player* bot, std::vector<Player*> const& members)
 
     ReleaseSoakers(st);
     st.soakBall = ball->GetGUID();
-    // The melee nearest its path first, then the rest by the same distance
     std::vector<std::pair<float, Player*>> ranked;
     for (Player* member : members)
     {
@@ -1054,7 +986,6 @@ void AssignSoak(BpcState& st, Player* bot, std::vector<Player*> const& members)
 
 bool CanPayFor(Player* member, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -1062,7 +993,6 @@ bool CanPayFor(Player* member, SpellInfo const* info)
            info->CalcPowerCost(member, info->GetSchoolMask());
 }
 
-// The magic dispel the member can land on the carrier from where it stands. Shamans cleanse no magic.
 char const* ReadyDispel(Player* member, Player* carrier)
 {
     char const* name = member->getClass() == CLASS_PRIEST    ? "dispel magic"
@@ -1082,7 +1012,6 @@ char const* ReadyDispel(Player* member, Player* carrier)
                : nullptr;
 }
 
-// One bot per Glittering Sparks carrier, the nearest that can land it now
 void UpdateDispel(BpcState& st, Player* bot, std::vector<Player*> const& members)
 {
     uint32 const sparks = sSpellMgr->GetSpellIdForDifficulty(SPELL_BPC_GLITTERING_SPARKS, bot);
@@ -1167,7 +1096,6 @@ void UpdateStand(BpcState& st, Player* bot)
         spot = (owned & BPC_PRINCE_VALANAR)    ? ICC_BPC_VALANAR_SPOT
                : (owned & BPC_PRINCE_KELESETH) ? ICC_BPC_KELESETH_SPOT
                                                : ICC_BPC_TALDARAM_SPOT;
-        // Melee owners fight a parked Keleseth where he stands, a ranged one keeps the spot: he casts from 10 yd
         bool const letGo = owned == BPC_PRINCE_KELESETH && st.kelesethParked && !PlayerbotAI::IsRanged(bot);
         if (holdingAll && !letGo && !InVortex(st, spot, VORTEX_CLEAR))
             kind = StandKind::Tank;
@@ -1225,7 +1153,6 @@ Creature* ShotFor(BpcState const& st, Player* bot)
     if (!bomb || !bomb->IsAlive() || bomb->HasAura(SPELL_BPC_KINETIC_BOMB_KNOCKBACK))
         return nullptr;
 
-    // A melee dealer walks under it first
     float lead = BOMB_SHOOT_LEAD_S;
     if (!PlayerbotAI::IsRanged(bot))
         lead += bot->GetExactDist2d(bomb) / BOT_SPEED;
@@ -1242,7 +1169,6 @@ Creature* DutyBomb(BpcState const& st, Player* bot, uint8& node)
     return bomb && bomb->IsAlive() ? bomb : nullptr;
 }
 
-// A duty bomb out of range of the bot's node keeps it off that node until the bomb goes
 bool BombAway(BpcState const& st, Player* bot)
 {
     uint8 node = 0;
@@ -1250,8 +1176,6 @@ bool BombAway(BpcState const& st, Player* bot)
     return bomb && node && NodeSpot(node).GetExactDist2d(bomb) > RangedReach(bot, true);
 }
 
-// The shot reaches the bomb from the bot's node, its height included, so the bot holds its node through a
-// cast window
 bool NodeReachesBomb(BpcState const& st, Player* bot)
 {
     uint8 node = 0;
@@ -1260,15 +1184,12 @@ bool NodeReachesBomb(BpcState const& st, Player* bot)
     return bomb && node && PlayerbotAI::IsRanged(bot) && NodeSpot(node).GetExactDist(bomb) <= reach;
 }
 
-// A bomb shot it can't take from its node, a ball on the bot or a soak takes it off its node for the while
 bool OnSideDuty(BpcState const& st, Player* bot)
 {
     return (ShotFor(st, bot) && !NodeReachesBomb(st, bot)) || BombAway(st, bot) || BallChasing(st, bot) ||
            st.soak.count(bot->GetGUID());
 }
 
-// The prince of its own that somebody else holds first, so threat brings it back, then the empowered one,
-// then the one it is on
 Creature* OwnedPick(PlayerbotAI* botAI, uint8 owned)
 {
     Player* bot = botAI->GetBot();
@@ -1311,7 +1232,6 @@ Creature* NearestLooseNucleus(BpcState const& st, Player* bot)
     return nearest;
 }
 
-// A stand-in with no taunt takes a nucleus by hitting it: any direct damage moves it on, periodic doesn't
 Creature* NucleusGrab(BpcState const& st, Player* bot)
 {
     if (!IsNucleusOwner(st, bot) || GrabsByTaunt(bot) ||
@@ -1370,9 +1290,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, BpcState& st)
     return empowered;
 }
 
-// Keleseth's owner walks toward a nucleus out of reach while short of stacks, outside his own phase: that
-// is the phase the stacks are for, and he stays put on his owner through it. A taunter goes only with its
-// taunt ready, or it arrives, can't taunt and its stand walks it straight back.
 Creature* NucleusToWalkTo(BpcState const& st, PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1388,7 +1305,6 @@ Creature* NucleusToWalkTo(BpcState const& st, PlayerbotAI* botAI)
     return nucleus && bot->GetExactDist2d(nucleus) > NUCLEUS_TAUNT_FROM ? nucleus : nullptr;
 }
 
-// Holders of a node get a fresh one from the tick instead
 bool InVortexWithoutNode(BpcState const& st, Player* bot)
 {
     auto const stand = st.stands.find(bot->GetGUID());
@@ -1405,8 +1321,6 @@ enum class SoakPlace : uint8
     Walk
 };
 
-// A soaker of the live Ball of Inferno Flame: already on its path and clear of the explosion round the
-// victim, a point of the path to walk to, or neither once the ball has outrun it
 SoakPlace FindSoakPlace(BpcState const& st, Player* bot, Position& spot)
 {
     if (!st.soak.count(bot->GetGUID()))
@@ -1423,7 +1337,6 @@ SoakPlace FindSoakPlace(BpcState const& st, Player* bot, Position& spot)
         bot->GetExactDist2d(victim) >= BALL_CLEAR)
         return SoakPlace::OnPath;
 
-    // The first point of its path the bot reaches before the ball does, short of the explosion round the victim
     float const length = from.GetExactDist2d(to);
     float const dx = (to.GetPositionX() - from.GetPositionX()) / std::max(length, 0.001f);
     float const dy = (to.GetPositionY() - from.GetPositionY()) / std::max(length, 0.001f);
@@ -1440,7 +1353,7 @@ SoakPlace FindSoakPlace(BpcState const& st, Player* bot, Position& spot)
 
     return SoakPlace::None;
 }
-}  // namespace
+}
 
 bool IsBpcLive(PlayerbotAI* botAI) { return GetBpcValanar(botAI) != nullptr; }
 
@@ -1512,7 +1425,6 @@ Unit* GetBpcPrinceToTaunt(PlayerbotAI* botAI)
         if (!prince || !prince->GetVictim() || prince->GetVictim() == bot)
             continue;
 
-        // The princes obey taunt diminishing returns: past two taunts in a row threat has to bring one back
         if (prince->GetDiminishing(DIMINISHING_TAUNT) >= DIMINISHING_LEVEL_3)
             continue;
 
@@ -1544,7 +1456,6 @@ Unit* GetBpcNucleusToTaunt(PlayerbotAI* botAI)
         return nullptr;
     }
 
-    // Taunts on a nucleus never diminish. A stand-in with no taunt hits it through its resolver.
     if (bot->GetExactDist(nucleus) > TAUNT_RANGE || !bot->IsWithinLOSInMap(nucleus) || !GrabsByTaunt(bot))
         return nullptr;
 
@@ -1616,7 +1527,6 @@ bool GetBpcBallWalk(PlayerbotAI* botAI, Position& spot)
         return true;
     }
 
-    // No spot clear of everyone: the nearby node with the fewest players in the explosion, if it beats here
     auto const crowd = [&](Position const& pos)
     {
         return std::count_if(others.begin(), others.end(),
@@ -1693,7 +1603,6 @@ bool FindBpcDodgeSpot(PlayerbotAI* botAI, Position& spot)
     for (Position const& vortex : st->vortices)
         hazards.emplace_back(vortex, VORTEX_CLEAR);
 
-    // Melee and tanks keep their target in reach, so the fight goes on from the far side
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     bool const melee = target && !PlayerbotAI::IsRanged(bot);
     Position found;
@@ -1773,14 +1682,12 @@ uint32 GetBpcTankDefensive(PlayerbotAI* botAI, char const* noteKind)
     bool const lance = keleseth && keleseth->GetVictim() == bot && keleseth->HasAura(SPELL_BPC_INVOCATION_KELESETH);
     if (!lance && bot->GetHealthPct() >= BPC_TANK_DEFENSIVE_PCT)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             NoteDerived(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // Empowered Shadow Lance is shadow; the princes swinging at a low tank are physical
     return NextTankDefensive(botAI, bot, noteKind, !lance);
 }
 
@@ -1827,7 +1734,6 @@ Unit* GetBpcPetTarget(PlayerbotAI* botAI)
 
 Unit* GetBpcDirectHitTarget(PlayerbotAI* botAI)
 {
-    // The resolver hands out a bomb only as a shot and a nucleus only as a grab
     Unit* pick = GetBpcTarget(botAI);
     uint32 const entry = pick ? pick->GetEntry() : 0;
     return entry == NPC_BPC_KINETIC_BOMB || entry == NPC_BPC_DARK_NUCLEUS ? pick : nullptr;
@@ -1873,7 +1779,6 @@ bool GetBpcLanceHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     hit.durationMs = LANCE_FLIGHT_MS;
     hit.damage = static_cast<uint32>(std::max(effect.BasePoints + (effect.DieSides + 1) / 2, 0));
     hit.school = SPELL_SCHOOL_MASK_SHADOW;
-    // An immunity drops it off Keleseth, so only a lethal lance gets one
     hit.keepVictim = true;
     return true;
 }
@@ -1892,7 +1797,6 @@ uint32 GetBpcFlameDefensive(PlayerbotAI* botAI)
         return 0;
     }
 
-    // Flames plus what the ball's stacks still add to it
     SpellInfo const* flames = sSpellMgr->GetSpellInfo(sSpellMgr->GetSpellIdForDifficulty(SPELL_BPC_FLAMES, ball));
     float damage = flames ? static_cast<float>(std::max(flames->Effects[EFFECT_0].BasePoints +
                                                             (flames->Effects[EFFECT_0].DieSides + 1) / 2,
@@ -1910,7 +1814,6 @@ uint32 GetBpcFlameDefensive(PlayerbotAI* botAI)
 
     uint32 const needMs = static_cast<uint32>(ball->GetExactDist2d(bot) / BALL_SPEED * 1000.0f) + FLAME_TAIL_MS;
     uint32 spellId = NextMagicDefensive(botAI, bot, nullptr, needMs);
-    // Flames always hits, so Cloak's resist chance does nothing against it
     if (spellId == SPELL_CLOAK_OF_SHADOWS)
         spellId = 0;
 
@@ -1930,7 +1833,6 @@ Player* GetBpcDispelTarget(PlayerbotAI* botAI, char const*& spell)
         return nullptr;
 
     Player* bot = botAI->GetBot();
-    // The deal is only redone every DUTY_MS, so a carrier dispelled since still holds its dispeller
     uint32 const sparks = sSpellMgr->GetSpellIdForDifficulty(SPELL_BPC_GLITTERING_SPARKS, bot);
     for (auto const& [carrierGuid, dispeller] : st->dispel)
     {
@@ -1951,9 +1853,6 @@ Player* GetBpcDispelTarget(PlayerbotAI* botAI, char const*& spell)
 
 namespace
 {
-// Past BRAKE_CAP of the threat of the empowered prince's owner, or of his victim when no owner is on his
-// threat list, until under BRAKE_RELEASE. A bot holding him away from his owner is braked too. Read from
-// the threat list: the "threat" value is a uint8 percentage and wraps past 255%.
 void UpdateBrake(BpcState& st, Player* bot)
 {
     bool hold = false;
@@ -1980,7 +1879,6 @@ void UpdateBrake(BpcState& st, Player* bot)
         st.brake.erase(bot->GetGUID());
 }
 
-// A human tank has no trigger, so it gets told: a button through Keleseth's empowered Shadow Lance, or when low
 void CallHumanTank(BpcState& st, Player* sender, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -2024,7 +1922,7 @@ void NoteDuties(BpcState const& st, Player* bot)
     auto const hits = st.scatterHits.find(bot->GetGUID());
     NoteDerived(bot, "bpc.hits", hits != st.scatterHits.end() ? std::to_string(hits->second) : "none");
 }
-}  // namespace
+}
 
 void TickBpcEncounter(PlayerbotAI* botAI)
 {
@@ -2032,7 +1930,6 @@ void TickBpcEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every duty
     Creature* valanar = PrinceUnit(bot, BPC_PRINCE_VALANAR);
     if (!valanar || !valanar->IsAlive() || !valanar->IsInCombat())
     {

@@ -40,20 +40,14 @@ namespace TrialOfTheCrusaderHelpers
 {
 namespace
 {
-// one Barrett per stage: Beasts, Beasts heroic, Jaraxxus, champions, twins, Anub'arak
 std::vector<uint32> const BARRETT_ENTRIES = {34816, 35909, 35035, 35766, 35770, 35771};
-// He stands about 50 yd from ARENA_CENTER, so this reaches him from anywhere in the arena
 constexpr float BARRETT_SEARCH_RADIUS = 250.0f;
-// Each stage summons a new Barrett whose gossip can be picked as soon as he spawns, and the window only
-// opens once a read saw him with it
 constexpr uint32 BARRETT_SEARCH_MS = 500;
 
-// the trace still takes a stand noted up to 2 s past the release
 constexpr uint32 STAGING_NOTE_TAIL_MS = 2000;
 
 constexpr float ARENA_ROOM_RADIUS = 80.0f;
 constexpr float ARENA_ROOM_MIN_Z = 380.0f;
-// Past the Web Door, on the floor below the arena
 constexpr float ANUBARAK_ROOM_MIN_X = 661.6f;
 constexpr float ANUBARAK_ROOM_MAX_Z = 200.0f;
 
@@ -72,23 +66,19 @@ struct Vec2
     float y;
 };
 
-// trial_of_the_crusader.h Locs[], under its LocNames names. The script header isn't on our include path.
-constexpr Point2 LOC_GATE_FRONT{563.93f, 178.37f};          // 1, Gormok and Icehowl
-constexpr Point2 LOC_DREADSCALE{575.74f, 171.5f};           // 2
-constexpr Point2 LOC_ACIDMAW{549.93f, 171.5f};              // 3
-constexpr Point2 LOC_CENTER{563.672974f, 139.571f};         // 4
-// The intro walks him from LOC_CENTER to 10 yd south of it
+constexpr Point2 LOC_GATE_FRONT{563.93f, 178.37f};
+constexpr Point2 LOC_DREADSCALE{575.74f, 171.5f};
+constexpr Point2 LOC_ACIDMAW{549.93f, 171.5f};
+constexpr Point2 LOC_CENTER{563.672974f, 139.571f};
 constexpr Point2 JARAXXUS_INTRO_SPOT{563.672974f, 129.571f};
-constexpr Point2 LOC_ANUBARAK{785.90f, 133.42f};            // 17, where he waits
+constexpr Point2 LOC_ANUBARAK{785.90f, 133.42f};
 
-// FactionChampionLoc[10..19]: an Alliance raid's landing slots, mirrored about LOC_CENTER's x for Horde
 constexpr Point2 FACTION_CHAMPION_LANDING[] = {
     {535.469f, 113.012f}, {526.417f, 137.465f}, {528.108f, 111.057f}, {519.92f, 134.285f},  {533.648f, 119.148f},
     {531.399f, 125.63f},  {528.958f, 131.47f},  {526.309f, 116.667f}, {524.238f, 122.411f}, {521.901f, 128.488f},
 };
 
 constexpr float GORMOK_CLEARANCE = ReleaseClearance(GORMOK_COMBAT_REACH);
-// Dreadscale is released mobile and Acidmaw stationary
 constexpr float DREADSCALE_CLEARANCE = ReleaseClearance(WORM_MOBILE_COMBAT_REACH);
 constexpr float ACIDMAW_CLEARANCE = ReleaseClearance(WORM_STATIONARY_COMBAT_REACH);
 constexpr float ICEHOWL_CLEARANCE = ReleaseClearance(ICEHOWL_COMBAT_REACH);
@@ -100,8 +90,6 @@ struct RingSlot
     float degrees;
 };
 
-// Gormok: arcs to his sides 25+ yd out (Stomp reaches 20, clearance 24), off his drag line to the centre.
-// Melee past his release clearance, 80° off that line: at 90° they'd sit on the floor's edge.
 constexpr float GORMOK_SWAP_STAND = 9.0f;
 constexpr float GORMOK_MELEE_STAND = GORMOK_CLEARANCE;
 constexpr float GORMOK_MELEE_DEG = 80.0f;
@@ -112,29 +100,21 @@ constexpr RingSlot GORMOK_CASTER_SLOTS[] = {
     {40.0f, 25.0f},               {40.0f, 37.0f},
 };
 
-// Worms: casters off Sweep round Acidmaw, past the melee circle on Dreadscale and inside spell reach
-// of him, out of his Spew, which faces his tank
 constexpr Point2 WORM_LATTICE_ORIGIN{566.27f, 157.5f};
 constexpr float WORM_LATTICE_STEP = 10.5f;
 constexpr float WORM_CASTER_ACIDMAW_MIN = WORM_SWEEP_CLEARANCE + 1.0f;
 constexpr float WORM_CASTER_DREADSCALE_MIN = WORM_MELEE_STACK_CLEARANCE;
 constexpr float WORM_CASTER_DREADSCALE_MAX = 36.0f;
-// Melee wait south of the worms' line, clear of both releases, then walk to their dealt stands. North of
-// it they'd land past the floor.
 constexpr float WORM_STAGING_MELEE_STAND = DREADSCALE_CLEARANCE;
-constexpr float WORM_STAGING_MELEE_DEG[] = {54.0f, 90.0f};  // off Dreadscale's line to Acidmaw
-constexpr float WORM_STAGING_MELEE_NEAR_COS = 0.5878f;      // cos 54°, the group nearer Acidmaw
+constexpr float WORM_STAGING_MELEE_DEG[] = {54.0f, 90.0f};
+constexpr float WORM_STAGING_MELEE_NEAR_COS = 0.5878f;
 
-// Icehowl: one radius per role past his release clearance, ranged already in their spread band. The
-// others walk into theirs once he's out: 8.5 s before Ferocious Butt, 16 s before Whirl.
 constexpr float ICEHOWL_MELEE_STAND = ICEHOWL_CLEARANCE;
 constexpr float ICEHOWL_RANGED_STAND = ICEHOWL_SPREAD_RANGED_MAX;
 constexpr float ICEHOWL_HEALER_STAND = ICEHOWL_RANGED_STAND + 2.5f;
 constexpr float ICEHOWL_RANGED_ARC_DEG = 72.0f;
 constexpr float ICEHOWL_BEARING_EPSILON_DEG = 0.01f;
 
-// Jaraxxus: no spread, so the casters stack in front of him and melee wait behind, both past his release
-// clearance
 constexpr float JARAXXUS_ADD_TANK_STAND = 8.0f;
 constexpr float JARAXXUS_MELEE_STAND = JARAXXUS_CLEARANCE;
 constexpr float JARAXXUS_MELEE_DEGREES[] = {0.0f, 25.0f, -25.0f, 50.0f, -50.0f};
@@ -142,31 +122,22 @@ constexpr float JARAXXUS_STACK_AHEAD = 21.0f;
 constexpr float JARAXXUS_STACK_RADIUS = 6.0f;
 constexpr float JARAXXUS_STACK_STEP = 3.0f;
 
-// Proximity pulls: detection_range 20 plus the level gap, centre to centre with no combat reach
 constexpr float PROXIMITY_AGGRO = 23.0f;
-// a parked tank drifts up to STAGING_UNPARK before it walks back
 constexpr float PROXIMITY_TANK_CLEARANCE = PROXIMITY_AGGRO + STAGING_UNPARK;
 constexpr float TANK_CLEARANCE_STEP = 0.5f;
 
 constexpr float CHAMPION_CLEARANCE = PROXIMITY_AGGRO + STAGING_RELEASE_MARGIN;
 constexpr float CHAMPION_TANK_SEARCH_MAX = 60.0f;
 constexpr float CHAMPION_SIDE_STEP = 3.0f;
-// the first engage sends every idle champion at its nearest player, so everyone else stands this much
-// farther from each slot than a tank
 constexpr float CHAMPION_TANK_LEAD = 3.0f;
-// The chain's second post sits where the first grip drops a healer, so its DK grips without a walk. The
-// last post, a third bot DK's or else the player's, is one more grip out.
 constexpr float CHAMPION_GRIP_POST = 54.0f;
 constexpr float CHAMPION_GRIP_CARRY = 24.0f;
 constexpr float CHAMPION_LAST_POST = CHAMPION_GRIP_POST + CHAMPION_GRIP_CARRY;
-// the gripped healer is carried down this lane to the player, so healers and ranged wait off it
 constexpr float CHAMPION_GRIP_LANE = 10.0f;
-// healers wait just behind the melee, so the tanks and melee are in heal range from the first second
 constexpr float CHAMPION_HEAL_BEHIND = 12.0f;
 constexpr uint32 SPELL_DEATH_GRIP = 49576;
 constexpr float CHAMPION_LATTICE_STEP = 10.0f;
 
-// Anub'arak normal: the raid west of the room centre, 40+ yd from Locs[17], so his run ends on the anchor
 constexpr float ANUBARAK_MELEE_STAND = 8.0f;
 constexpr float ANUBARAK_MELEE_DEGREES[] = {0.0f, 40.0f, -40.0f};
 constexpr RingSlot ANUBARAK_CASTER_SLOTS[] = {
@@ -174,8 +145,6 @@ constexpr RingSlot ANUBARAK_CASTER_SLOTS[] = {
     {22.0f, 240.0f}, {30.0f, 170.0f}, {30.0f, 190.0f}, {30.0f, 150.0f}, {30.0f, 210.0f}, {30.0f, 130.0f},
     {30.0f, 230.0f},
 };
-// Heroic tanks him on the east anchor next to Locs[17], so the raid waits on the line from there to the
-// room centre: melee past the tanks' wait and the release margin, casters on rings behind
 constexpr float ANUBARAK_HEROIC_MELEE_STAND = 31.0f;
 constexpr float ANUBARAK_HEROIC_MELEE_DEGREES[] = {0.0f, 25.0f, -25.0f};
 constexpr RingSlot ANUBARAK_HEROIC_CASTER_SLOTS[] = {
@@ -184,7 +153,6 @@ constexpr RingSlot ANUBARAK_HEROIC_CASTER_SLOTS[] = {
     {40.0f, -30.0f}, {40.0f, 50.0f}, {40.0f, -50.0f},
 };
 
-// Lattice points sit exactly on the radius
 constexpr float LATTICE_EPSILON = 0.01f;
 
 static_assert(GORMOK_SWAP_STAND > STAGING_DUTY_STAND, "his tank stands nearest");
@@ -222,10 +190,8 @@ struct DealtStand
 {
     Position stand;
     char const* role = "none";
-    // A forced attack's tank stand: the boss walks onto it from release
     bool duty = false;
     Position release;
-    // Around release, 0 for an arrival with none
     float clearance = 0.0f;
 };
 
@@ -246,11 +212,9 @@ struct StageNote
 struct StagingState
 {
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
     ToCStagingBoss arrival = ToCStagingBoss::None;
 
-    // A ToC trace opens at the engage, which is also when the arrival closes, so every bot's last label
-    // is noted again for a while after it: a note written before the open never reaches a file.
     std::unordered_map<ObjectGuid, StageNote> stageNotes;
     ToCStagingBoss closedArrival = ToCStagingBoss::None;
     uint32 closedMs = 0;
@@ -258,7 +222,6 @@ struct StagingState
     ObjectGuid barrett;
     uint32 barrettSearchMs = 0;
     bool barrettSearched = false;
-    // The encounter of the stage Barrett last showed his gossip at
     ToCEncounter gossipSeenFor = ToCEncounter::None;
 
     ToCStagingBoss dealArrival = ToCStagingBoss::None;
@@ -281,7 +244,6 @@ struct DutyStand
     float clearance;
 };
 
-// Slots shared by the roles: each role's order lists the slot indices it takes, in turn
 struct Layout
 {
     std::vector<Position> slots;
@@ -303,7 +265,6 @@ Vec2 Direction(Point2 from, Point2 to)
 
 Vec2 Negate(Vec2 v) { return {-v.x, -v.y}; }
 
-// Counter-clockwise
 Vec2 Rotate(Vec2 v, float degrees)
 {
     float const c = std::cos(DegToRad(degrees));
@@ -317,7 +278,6 @@ Point2 PointOf(Position const& position) { return {position.GetPositionX(), posi
 
 Position At(Point2 point, float z) { return Position(point.x, point.y, z); }
 
-// Rows run along x
 std::vector<Point2> HexLattice(Point2 origin, float step, Point2 centre, float radius)
 {
     std::vector<Point2> points;
@@ -339,7 +299,6 @@ std::vector<Point2> HexLattice(Point2 origin, float step, Point2 centre, float r
 
 bool OnArenaFloor(Point2 point) { return Dist(point, PointOf(ARENA_CENTER)) <= WORM_SPOT_FLOOR_RADIUS; }
 
-// Arena slots past the floor radius are dropped
 void AddArenaSlot(Layout& layout, Point2 point, std::initializer_list<StandRole> roles)
 {
     if (!OnArenaFloor(point))
@@ -437,7 +396,6 @@ void LayoutIcehowl(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
     AddForcedDuty(duties, roster.size() > 0 ? roster[0] : nullptr, "tank", Along(release, n, STAGING_DUTY_STAND),
                   release, ICEHOWL_CLEARANCE);
 
-    // k = 0, 1, -1, 2, -2, ...
     std::vector<float> bearings;
     if (step > 0.0f)
     {
@@ -454,7 +412,6 @@ void LayoutIcehowl(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
         if (std::fabs(bearing) <= ICEHOWL_SPREAD_MELEE_ARC_DEG + ICEHOWL_BEARING_EPSILON_DEG)
             AddArenaSlot(layout, Along(release, Rotate(back, bearing), ICEHOWL_MELEE_STAND), {StandRole::Melee});
 
-    // Healers nearest the 60° bearings first
     std::vector<float> healerBearings = bearings;
     std::stable_sort(healerBearings.begin(), healerBearings.end(),
                      [](float lhs, float rhs)
@@ -534,14 +491,12 @@ Point2 ChampionLandingCentroid(std::vector<Point2> const& landing)
     return centroid;
 }
 
-// 0, +3, -3, +6, -6 yd across the ray
 float ChampionSideOffset(size_t index)
 {
     float const steps = static_cast<float>((index + 1) / 2);
     return (index % 2 ? steps : -steps) * CHAMPION_SIDE_STEP;
 }
 
-// First step out along the ray that clears every slot past the tank clearance
 Point2 ChampionTankStand(std::vector<Point2> const& landing, Point2 centroid, Vec2 inward, float side)
 {
     Point2 const base = Along(centroid, Rotate(inward, 90.0f), side);
@@ -557,8 +512,6 @@ Point2 ChampionTankStand(std::vector<Point2> const& landing, Point2 centroid, Ve
     return Along(base, inward, CHAMPION_TANK_SEARCH_MAX);
 }
 
-// Post 0 is the tank line, a non-tank 3 yd behind it so a bot tank still takes the engage rush. Posts 1
-// and 2 sit down the lane.
 Point2 ChampionChainPost(std::vector<Point2> const& landing, Point2 centroid, Vec2 inward, uint32 post, bool tank)
 {
     if (post == 0)
@@ -570,8 +523,6 @@ Point2 ChampionChainPost(std::vector<Point2> const& landing, Point2 centroid, Ve
     return Along(centroid, inward, post == 1 ? CHAMPION_GRIP_POST : CHAMPION_LAST_POST);
 }
 
-// Nobody in aggro range, so a player starts it. Bot tanks wait nearest the pack toward the centre, the
-// chain's DKs on their posts down the lane, a 4th or later DK beside the second post.
 void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<DutyStand>& duties, Layout& layout)
 {
     std::vector<Point2> const landing = ChampionLanding(bot);
@@ -643,7 +594,6 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
         return std::fabs((slot.x - centroid.x) * inward.y - (slot.y - centroid.y) * inward.x) < CHAMPION_GRIP_LANE;
     };
 
-    // lane slots last
     constexpr float LANE_PENALTY = 1000.0f;
     SortOrder(layout, StandRole::Healer,
               [&](Point2 slot) { return Dist(slot, healAnchor) + (inLane(slot) ? LANE_PENALTY : 0.0f); });
@@ -652,8 +602,6 @@ void LayoutChampions(Player* bot, std::vector<Player*> const& bots, std::vector<
     SortOrder(layout, StandRole::Melee, [&](Point2 slot) { return Dist(slot, centroid); });
 }
 
-// The fight's own door stands in the tunnel, past AddArenaSlot's floor radius, so nobody walks at the
-// pull. None till the twins and their portals show up: bots follow the player meanwhile.
 void LayoutTwins(PlayerbotAI* botAI, std::vector<Player*> const& bots, std::vector<DutyStand>& duties)
 {
     if (!TwinValkyrArrived(botAI))
@@ -671,8 +619,6 @@ void LayoutAnubarak(Player* bot, std::vector<DutyStand>& duties, Layout& layout)
 {
     Point2 const centre = PointOf(ANUBARAK_ROOM_CENTER);
 
-    // heroic's tank points by the east pair sit 8-16 yd from where he waits, inside his aggro, so each
-    // steps toward the centre until clear. normal's already are
     auto const clearOfHim = [&](Point2 point)
     {
         Vec2 const in = Direction(point, centre);
@@ -772,8 +718,6 @@ StandRole RoleOf(Player* member)
     return PlayerbotAI::IsRangedDps(member) ? StandRole::Ranged : StandRole::Melee;
 }
 
-// Not IsInCombat: a Slime Pool's combat ref outlives the fight and heals spread it. Only a live unit the
-// bot could attack counts, which a snobold or Jaraxxus's adds still are.
 bool FightingSomething(Player* bot)
 {
     CombatManager const& combat = bot->GetCombatManager();
@@ -801,7 +745,6 @@ bool IsStagingBot(Player* member, uint32 instanceId)
            member->GetInstanceId() == instanceId && GET_PLAYERBOT_AI(member);
 }
 
-// Humans can't be moved, so they get no stand. By guid, so every bot deals the same.
 std::vector<Player*> StagingBots(Player* bot)
 {
     std::vector<Player*> bots;
@@ -819,7 +762,6 @@ std::vector<Player*> StagingBots(Player* bot)
     return bots;
 }
 
-// First in the order among the least taken, so past the end the list starts over
 size_t const* PickSlot(std::vector<size_t> const& order, std::vector<uint32> const& taken)
 {
     size_t const* best = nullptr;
@@ -947,8 +889,6 @@ Creature* FindBarrett(Player* bot, StagingState& state, uint32 now)
     return nullptr;
 }
 
-// A beast's guid empties once its corpse despawns, so check newest first. Each next beast shows up
-// before the last corpse goes (Gormok's lasts 30 s, the worms' 10 s), and a wipe despawns them all.
 ToCStagingBoss NextBeast(Map* map, InstanceScript* instance)
 {
     auto const beast = [&](uint32 type) -> Creature*
@@ -981,7 +921,6 @@ ToCStagingBoss ReadArrival(PlayerbotAI* botAI, Player* bot, StagingState& state,
 
     uint32 const stage = instance->GetData(TOC_DATA_INSTANCE_PROGRESS);
     bool const nothingLive = ToCLiveEncounter(botAI) == ToCEncounter::None;
-    // no Barrett from here on
     if (stage == TOC_PROGRESS_ANUB_ARAK)
         return nothingLive ? ToCStagingBoss::Anubarak : ToCStagingBoss::None;
 
@@ -994,11 +933,7 @@ ToCStagingBoss ReadArrival(PlayerbotAI* botAI, Player* bot, StagingState& state,
     if (encounter == ToCEncounter::None || !nothingLive)
         return ToCStagingBoss::None;
 
-    // stage 3 with nothing live is a Jaraxxus retry: he waits chained for Barrett's gossip, which frees
-    // him at once, so stand during it
     bool const retry = stage == TOC_PROGRESS_JARAXXUS_INTRO_DONE;
-    // the gossip walks Barrett out and despawns him. After a kill the latch still holds the last
-    // encounter till the next stage's Barrett shows up
     if (!retry && (gossip || state.gossipSeenFor != encounter))
         return ToCStagingBoss::None;
 
@@ -1035,7 +970,6 @@ DealtStand const* DealtFor(PlayerbotAI* botAI, StagingState& state, ToCStagingBo
     return itr == state.stands.end() ? nullptr : &itr->second;
 }
 
-// The essence walk goes first while its portal is up
 bool TwinsEssenceFirst(PlayerbotAI* botAI, ToCStagingBoss arrival)
 {
     if (arrival != ToCStagingBoss::Twins || !TwinValkyrMustSwapEssence(botAI, false))
@@ -1044,8 +978,6 @@ bool TwinsEssenceFirst(PlayerbotAI* botAI, ToCStagingBoss arrival)
     return GetEssencePortal(botAI->GetBot(), GetWantedEssence(botAI).colour) != nullptr;
 }
 
-// A human inside the release clearance can take the forced attack; with no clearance (the champions),
-// one nearer the release than the stand
 bool HumanInsideRelease(Player* bot, DealtStand const& dealt, Position const& spot)
 {
     Group* group = bot->GetGroup();
@@ -1083,7 +1015,6 @@ void NoteStage(Player* bot, StagingState& state, ToCStagingBoss arrival, DealtSt
         RaidObs::NoteDerived(bot, "toc.stage", label);
 }
 
-// Any bot's tick writes them all: a bot mid-cast or drinking at the engage runs no triggers
 void NoteClosedArrival(Player* bot, StagingState& state)
 {
     if (state.closedArrival == ToCStagingBoss::None)
@@ -1126,7 +1057,6 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     }
 
     DealtStand const* dealt = DealtFor(botAI, *state, arrival);
-    // a grip chain link walks into Death Grip reach of the champion the player called once its turn comes
     bool const chainGrip = arrival == ToCStagingBoss::Champions && FactionChampionsChainGripDue(botAI);
     if (!dealt || TwinsEssenceFirst(botAI, arrival) || chainGrip)
     {
@@ -1138,7 +1068,6 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
     }
 
     StagingHold& hold = state->holds[bot->GetGUID()];
-    // The worms' pools outlive them into Icehowl's walk-in
     Position const stand = PushOutOfSlimePools(botAI, dealt->stand);
     if (!hold.hasSpot || hold.raw.GetExactDist2d(stand) > STAGING_STAND_MOVED)
     {
@@ -1162,7 +1091,7 @@ ToCStagingRead ReadStand(PlayerbotAI* botAI, bool note)
 
     return read;
 }
-}  // namespace
+}
 
 Position GetFactionChampionsLandingCentre(Player* bot)
 {
@@ -1212,7 +1141,6 @@ ToCStagingBoss GetToCStagingBoss(PlayerbotAI* botAI)
     if (!bot->IsAlive() || FightingSomething(bot) || !InArrivalRoom(bot, arrival))
         return ToCStagingBoss::None;
 
-    // A leader who walks out releases the hold
     Player* leader = GetRaidLeaderOnInstance(botAI);
     return leader && InArrivalRoom(leader, arrival) ? arrival : ToCStagingBoss::None;
 }
@@ -1226,7 +1154,6 @@ void UpdateToCStagingPark(PlayerbotAI* botAI)
     if (!state)
         return;
 
-    // moves only where the read flips anyway, so the trigger reads the same walk this tick
     auto const itr = state->holds.find(botAI->GetBot()->GetGUID());
     if (itr != state->holds.end())
         itr->second.parked = !read.walk;

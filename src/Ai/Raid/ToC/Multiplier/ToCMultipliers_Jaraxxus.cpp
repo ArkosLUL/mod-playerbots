@@ -15,9 +15,8 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// Area damage from this close counts as hitting him
 constexpr float JARAXXUS_AREA_THREAT_REACH = 30.0f;
-}  // namespace
+}
 
 float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
 {
@@ -27,7 +26,6 @@ float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
     if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsTank(bot, true))
         return 1.0f;
 
-    // open, not live: his adds outlive the kill and still need holding
     if (!ToCEncounterGateOpen(botAI, ToCEncounter::Jaraxxus))
         return 1.0f;
 
@@ -68,7 +66,6 @@ float JaraxxusKissCastHoldMultiplier::GetValue(Action* action)
     if (!HasMistressKiss(bot))
         return 1.0f;
 
-    // open, not live: heroic Mistresses outlive the kill and keep kissing
     if (!ToCEncounterGateOpen(botAI, ToCEncounter::Jaraxxus))
         return 1.0f;
 
@@ -105,7 +102,6 @@ float JaraxxusThreatCapMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
-// Lust at the pull: he never enrages, and the heroic portal at 20 s still falls inside it.
 RaidBurstWindow ToCJaraxxusBurstWindow(PlayerbotAI* /*botAI*/)
 {
     return {};

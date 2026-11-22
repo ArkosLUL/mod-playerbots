@@ -25,7 +25,6 @@ bool IsSteelbreakerEmpowered(PlayerbotAI* /*botAI*/, Unit* steelbreaker, Unit* m
 
 bool IsSteelbreakerEmpowered(PlayerbotAI* botAI)
 {
-    // No hard-mode gate: phase 3 is a fact about the fight, not a raid setting
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
@@ -41,8 +40,6 @@ Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
     Unit* molgeim = targets.molgeim;
     Unit* brundir = targets.brundir;
 
-    // Hard mode keeps Steelbreaker for phase 3, else he dies first and his phase 3 kit never shows up.
-    // Molgeim is second either way, so his Rune of Summoning never comes
     if (IsIronAssemblyHardModeActive(botAI))
     {
         if (brundir)
@@ -84,8 +81,6 @@ bool YoggThorimKeeperActive(PlayerbotAI* botAI)
     if (!instance)
         return false;
 
-    // Same source the boss script reads: the freed-Keeper bitmask the raid set from the pre-pull
-    // gossips. Which Keepers are up is a raid choice made in-instance, so it cannot come from config.
     return (instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK) & (1u << KEEPER_THORIM)) != 0;
 }
 
@@ -103,7 +98,6 @@ uint32 YoggKeepersFreedCount(PlayerbotAI* botAI)
     if (!instance)
         return 0;
 
-    // Bits 0-3, as Sara's DATA_GET_KEEPERS_COUNT counts them.
     uint32 const mask = instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
     uint32 count = 0;
     for (uint32 keeper = KEEPER_FREYA; keeper <= KEEPER_THORIM; ++keeper)

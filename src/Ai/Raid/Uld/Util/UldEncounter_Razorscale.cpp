@@ -39,13 +39,12 @@ namespace
 
 struct RazorscaleInstanceState
 {
-    // Prevent role assignment spam, per bot
     std::unordered_map<ObjectGuid, std::time_t> lastRoleSwapTime;
 };
 
 RaidInstanceState<RazorscaleInstanceState> razorscaleStates;
 
-}  // namespace
+}
 
 bool RazorscaleBossHelper::UpdateBossAI()
 {
@@ -121,8 +120,6 @@ void RazorscaleBossHelper::CollectDevouringFlames(Player* bot, float radius, std
     if (!bot)
         return;
 
-    // Grid search rather than "nearest hostile npcs": that value ranks by distance to the bot, and the
-    // question here is about points he is not standing on yet.
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, UNIT_DEVOURING_FLAME, radius);
 
@@ -163,7 +160,6 @@ bool RazorscaleBossHelper::IsHarpoonReady(GameObject* harpoonGO)
     if (!harpoonGO)
         return false;
 
-    // Flagged in the same call that fires it, and it stays there spent until her next take-off breaks it.
     if (harpoonGO->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
         return false;
 
@@ -197,7 +193,6 @@ GameObject* RazorscaleBossHelper::FindNearestHarpoon(float x, float y, float z) 
 
 std::vector<RazorscaleBossHelper::HarpoonData> const& RazorscaleBossHelper::GetHarpoonData()
 {
-    // Only two of these exist in 10-man; the missing entries simply never resolve to a GameObject.
     static const std::vector<HarpoonData> harpoonData =
     {
         { GO_RAZORSCALE_HARPOON_1 },
@@ -253,7 +248,6 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     if (!group)
         return;
 
-    // Gather all tank-capable players (bots + real players), excluding those with too many Fuse Armor stacks
     std::vector<Player*> tankCandidates;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -305,7 +299,6 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
 namespace
 {
 
-// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
 bool FreshThisTick(uint32& atMs)
 {
     uint32 const now = getMSTime();
@@ -368,8 +361,6 @@ std::array<ObjectGuid, RazorscaleBossHelper::HARPOON_ENTRY_COUNT> const& Razorsc
     if (!bot)
         return harpoons;
 
-    // One visit, in the order FindNearestGameObject's own searcher walks them (same phase filter, same
-    // cells), so replaying its range check per entry over the list picks the same object it would.
     AnyRazorscaleHarpoonCheck anyHarpoon;
     std::vector<GameObject*> found;
     Acore::GameObjectListSearcher<AnyRazorscaleHarpoonCheck> searcher(bot, found, anyHarpoon);
@@ -431,8 +422,6 @@ GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI)
 
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
 {
-    // All three tiers off one pass. Lowest health Sentinel so the skull doesn't flip between two as the
-    // marking bot moves (list order is per bot and not stable); first found for the other two.
     Unit* sentinel = nullptr;
     Unit* watcher = nullptr;
     Unit* guardian = nullptr;
@@ -481,7 +470,6 @@ bool IsRazorscaleAtFirstLanding(Unit* boss)
 namespace
 {
 
-// One slot per group member, so no two ranged bots share a spot on the stack circle.
 float RazorscaleStackSlotAngle(Player* bot)
 {
     Group* group = bot->GetGroup();
@@ -503,14 +491,11 @@ bool GetRazorscaleRangedStackSpot(Player* bot, float x, float y, float radius, P
 {
     using Helper = RazorscaleBossHelper;
 
-    // The grid search adds both combat reaches on its own, so this covers every slot and every walk.
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, Helper::UNIT_DEVOURING_FLAME,
                                         bot->GetExactDist2d(x, y) + radius + Helper::DEVOURING_FLAME_CLEAR_RADIUS +
                                             Helper::DEVOURING_FLAME_STAND_MARGIN);
 
-    // The dodge fires on GetDistance2d, which takes both combat reaches off the centre distance: ~10 yd
-    // from the patch's centre, not 7.
     std::vector<HazardCircle> flames;
     for (Creature* flame : found)
     {

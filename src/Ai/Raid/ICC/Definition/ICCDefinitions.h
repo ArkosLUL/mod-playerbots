@@ -29,9 +29,7 @@ EncounterDefinition const& IccSindragosaDrakesDefinition();
 EncounterDefinition const& IccSindragosaGauntletDefinition();
 EncounterDefinition const& IccSindragosaDefinition();
 EncounterDefinition const& IccLichKingDefinition();
-// Raid-wide: the opener and resistance aura rows, fed by the live encounter's hooks (Util/ICCSeams.h).
 EncounterDefinition const& IccRaidWideDefinition();
-// Raid-wide: strips the heroic buffs that never expire while no fight that hands them out is in progress.
 EncounterDefinition const& IccHeroicBuffsDefinition();
 
 // don't reorder: equal relevances pop in insertion order, and the contexts and the strategy tick walk it too

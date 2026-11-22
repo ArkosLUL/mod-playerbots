@@ -17,8 +17,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Never taunts, that would pull him off the holder between swaps. The swap itself is
-// "gormok tank swap taunt".
 class GormokSwapTankHoldAction : public RaidDirectAttackAction
 {
 public:
@@ -46,7 +44,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Hand of Protection on the tank dealt to this paladin bot: the immunity purges Impale
 class GormokHandOfProtectionAction : public Action
 {
 public:
@@ -83,7 +80,6 @@ public:
     bool Execute(Event event) override;
 
 private:
-    // False when no spot cleared the young bombs and the walk took one clear of the stomp alone
     bool _spotClearsBombs = false;
 };
 

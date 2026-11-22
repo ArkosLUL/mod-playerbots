@@ -22,7 +22,6 @@ using namespace EncounterHelpers;
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
 constexpr float DODGE_SWEEP_RADIUS = 16.0f;
 
@@ -32,7 +31,6 @@ void NoteDodge(Player* bot, std::string const& branch)
         RaidObs::NoteDerived(bot, "lm.dodge", branch);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDodge(Player* bot, char const* branch)
 {
     if (RaidObs::Active())
@@ -44,11 +42,10 @@ bool ClearOf(Position const& spot, std::vector<Position> const& circles, float r
     return std::none_of(circles.begin(), circles.end(),
                         [&spot, radius](Position const& circle) { return circle.GetExactDist2d(spot) < radius; });
 }
-}  // namespace
+}
 
 Position const* IccLmWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -57,12 +54,9 @@ Position const* IccLmWalkAction::WalkInFlight()
 
 bool IccLmWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // A stun or a channel stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -121,14 +115,12 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
         return true;
     }
 
-    // A patch ticks every second for 6-11k: the cast is worth less than the step out
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
     Position stand;
     Position const* preferNear = GetLmStandSpot(botAI, stand) ? &stand : nullptr;
 
-    // The walk may start inside the patch it leaves but must not cross another line
     Position const from = bot->GetPosition();
     std::vector<HazardCircle> others;
     for (Position const& circle : circles)
@@ -155,8 +147,6 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
                                                  static_cast<float>(M_PI) / 8.0f, preferNear, accept, &sweep);
     };
 
-    // Wide clearance first, then tight, each on a walk that crosses nothing. The last two cross a line
-    // rather than stand in one.
     struct Attempt
     {
         float clearance;
@@ -185,7 +175,6 @@ bool IccLmDodgeColdflameAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Our own walk still holds the FORCED booking, and a booking only yields to a higher priority
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const lowered = inFlight && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
@@ -230,7 +219,6 @@ bool IccLmCastStormCoverAction::Execute(Event /*event*/)
     if (!spellId)
         return false;
 
-    // A cast in progress fails this one's check, and a moving bot breaks its own channel
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 

@@ -23,7 +23,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the attack on him while another tank holds him and this one carries Rune of Blood
 class IccDbsRuneYieldAction : public Action
 {
 public:
@@ -95,8 +94,6 @@ public:
     IccDbsTargetAction(PlayerbotAI* botAI) : IccDirectAttackAction(botAI, Name, &GetDbsTarget) {}
 };
 
-// Holds its spot while the walk there is in flight: every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccDbsStandAction : public MovementAction
 {
 public:

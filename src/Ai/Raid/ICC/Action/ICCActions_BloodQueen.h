@@ -17,25 +17,19 @@
 #include "RaidAntiFear.h"
 #include "RaidDirectTargeting.h"
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccBqlWalkAction : public MovementAction
 {
 public:
     IccBqlWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast.
-    // A walk of its own still in flight at MOVEMENT_FORCED gives way to the new one.
     bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
     void DropWalk()
     {
         walking = false;
         detouring = false;
     }
-    // The next point on the way to `goal`, round any shadow in the way
     Position NextLeg(Position const& goal);
 
 private:
@@ -111,7 +105,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Priests ward themselves first, so they can Mass Dispel the rest
 class IccBqlAntiFearAction : public RaidAntiFearAction
 {
 public:

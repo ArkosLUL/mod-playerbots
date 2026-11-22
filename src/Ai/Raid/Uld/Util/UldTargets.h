@@ -12,8 +12,6 @@
 class PlayerbotAI;
 class Unit;
 
-// First living unit with this entry in "possible targets no los". By entry, not "find target": that only
-// walks the bot's own threat list.
 Unit* GetUldUnitByEntry(PlayerbotAI* botAI, uint32 entry);
 
 #endif

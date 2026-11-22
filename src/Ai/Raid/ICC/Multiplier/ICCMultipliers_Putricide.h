@@ -10,7 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// A braked bot's attacks on him and its area damage next to him: its threat would take him off his holder
 class IccPutricideBrakeMultiplier : public Multiplier
 {
 public:

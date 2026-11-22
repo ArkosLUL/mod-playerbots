@@ -19,7 +19,6 @@ using namespace EncounterHelpers;
 
 bool MalygosPositionAction::isUseful()
 {
-    // Disk riders steer their vehicle instead; never drag them off it.
     if (bot->GetVehicle())
         return false;
 
@@ -32,18 +31,13 @@ bool MalygosPositionAction::Execute(Event /*event*/)
     MalygosPhase const phase = GetMalygosPhase(bot);
     Unit* boss = GetMalygos(bot);
 
-    // The pull intro reports as Transition too. He is untouchable throughout it, so full health is
-    // what tells it apart.
     bool const intro = phase == MalygosPhase::Transition && boss && boss->IsFullHealth();
 
     if (phase == MalygosPhase::P1 || intro)
     {
-        // Whoever Malygos is chewing on behaves as the tank, assigned or not. Not in the intro though,
-        // where he is pacified and his victim is only whoever pulled.
         MalygosAggro const& aggro = GetMalygosAggro(botAI);
         bool const isBossTank = aggro.mainTank || (!intro && aggro.victim);
 
-        // This action owns the walking in both directions; PullPowerSparkAction only casts.
         bool const gripDuty = !isBossTank && IsOnPowerSparkGripDuty(botAI);
         MalygosP1Layout const& layout = GetMalygosP1Layout(bot);
         bool const hunter = PlayerbotAI::IsRangedDps(bot) && bot->IsClass(CLASS_HUNTER);
@@ -57,7 +51,6 @@ bool MalygosPositionAction::Execute(Event /*event*/)
         float spotX = spot.first;
         float spotY = spot.second;
 
-        // Slides continuously; a spot that snaps between two positions is what sets a raid bouncing.
         if (onStack && !intro && boss)
         {
             float const bossDist = boss->GetExactDist2d(spotX, spotY);
@@ -76,7 +69,6 @@ bool MalygosPositionAction::Execute(Event /*event*/)
                 false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
         }
 
-        // Hand the tick back either way, or this outranks the rotation and the bot stops attacking.
         if (isBossTank && boss)
             ServerFacade::instance().SetFacingTo(bot, boss);
         return false;
@@ -115,7 +107,6 @@ bool MalygosTargetAction::Execute(Event /*event*/)
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        // The tank never peels: dropping Malygos swings his Arcane Breath cone through the raid.
         Unit* newTarget = boss;
         MalygosAggro const& aggro = GetMalygosAggro(botAI);
         bool const isBossTank = aggro.mainTank || aggro.victim;
@@ -130,7 +121,6 @@ bool MalygosTargetAction::Execute(Event /*event*/)
     }
     else if (phase == MalygosPhase::P2)
     {
-        // Runs before the early returns below so a disk rider's ghoul is covered too.
         if (bot->GetGuardianPet())
         {
             if (Unit* petTarget = GetNearestEoECreature(bot, NPC_NEXUS_LORD))
@@ -150,7 +140,6 @@ bool MalygosTargetAction::Execute(Event /*event*/)
         Unit* anyLord = nullptr;
         Unit* anyScion = nullptr;
 
-        // IsWithinCombatRange, not a flat 2d distance: the Scions sit 20-30y up. Melee get no gate.
         bool const gateByReach = PlayerbotAI::IsRanged(bot);
         float const reach = sPlayerbotAIConfig.SpellDistance;
         float closestLord = std::numeric_limits<float>::max();
@@ -210,7 +199,6 @@ bool MalygosTargetAction::Execute(Event /*event*/)
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        // Stays on any reachable add of the right kind; one out of reach is swapped for the picked one.
         if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == newTarget->GetEntry() &&
             (!gateByReach || bot->IsWithinCombatRange(currentTarget, reach)))
             return false;

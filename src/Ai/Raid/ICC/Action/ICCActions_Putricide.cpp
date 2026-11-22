@@ -25,16 +25,11 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// The kite plans its next leg this far before the end of the last, so it never stops
 constexpr float KITE_REPLAN = 3.0f;
-// A walk onto a bot re-aims once that bot has moved this far
 constexpr float FOLLOW_REAIM = 1.0f;
 constexpr float DRIVE_REAIM = 2.0f;
 constexpr uint32 DRINK_RETRY_MS = 2000;
-// The vehicle spells' RecoveryTime. A creature caster gets no cooldown of its own, so it is stamped on a
-// cast whose receipt shows.
 constexpr uint32 VEHICLE_SPELL_RECOVERY_MS = 1000;
 
 void NoteDerived(Player* bot, char const* key, std::string const& value)
@@ -43,7 +38,6 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -55,11 +49,10 @@ MovementPriority Below(MovementPriority priority)
     return priority == MovementPriority::MOVEMENT_IDLE ? priority
                                                       : static_cast<MovementPriority>(static_cast<int>(priority) - 1);
 }
-}  // namespace
+}
 
 Position const* IccPutricideWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -68,13 +61,10 @@ Position const* IccPutricideWalkAction::WalkInFlight()
 
 bool IccPutricideWalkAction::WalkTo(Position const& spot, MovementPriority priority)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
         return false;
 
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         last.clear();
@@ -136,7 +126,6 @@ bool IccPutricideDodgeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A puddle tick, gas, a blast or goo about to land: each costs more than the cast
     if (interrupt && bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
@@ -166,14 +155,12 @@ bool IccPutricideSwapAction::Execute(Event /*event*/)
     if (!boss || !IsPpSwapTaunter(botAI, defensive, taunt))
         return false;
 
-    // A sharer takes his swings for one application, so its button goes up first
     if (defensive && botAI->CastSpell(defensive, bot))
         return true;
 
     if (!taunt || !IccCastClassTaunt(bot, botAI, boss))
         return false;
 
-    // A taunt moves him, not the bot's own target
     AttackDirect(boss);
     return true;
 }
@@ -204,7 +191,6 @@ bool IccPutricideKiteAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A bot standing to finish a cast lets the cloud close 8 yd a second
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
@@ -303,7 +289,6 @@ bool IccPutricideAbominationAction::Execute(Event /*event*/)
         if (!botAI->CastVehicleSpell(spitId, plan.target))
             return false;
 
-        // CastVehicleSpell answers true on a refused cast too: the energy is the receipt
         if (abo->GetPower(POWER_ENERGY) < before)
             abo->AddSpellCooldown(spitId, 0, VEHICLE_SPELL_RECOVERY_MS);
 

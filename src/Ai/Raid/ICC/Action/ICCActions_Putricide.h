@@ -16,18 +16,13 @@
 #include "Position.h"
 #include "RaidDirectTargeting.h"
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccPutricideWalkAction : public MovementAction
 {
 public:
     IccPutricideWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet. A walk of our own still in flight at
-    // the same priority would refuse the new one, so its booking is lowered first.
     bool WalkTo(Position const& spot, MovementPriority priority);
     void DropWalk() { walking = false; }
 
@@ -103,7 +98,6 @@ public:
 
 private:
     uint32 lastDrinkMs = 0;
-    // The abomination's own walk: the bot rides it, so the bot itself never shows as moving
     Position driveSpot;
     bool driving = false;
 };

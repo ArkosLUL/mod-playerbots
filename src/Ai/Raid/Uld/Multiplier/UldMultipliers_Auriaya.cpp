@@ -8,5 +8,4 @@
 
 #include "UldEncounter_Auriaya.h"
 
-// Base class checks shaman and totem action first, so this only runs for actions that could take the earth slot.
 bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }

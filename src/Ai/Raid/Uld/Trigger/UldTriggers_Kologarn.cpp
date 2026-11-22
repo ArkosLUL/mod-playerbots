@@ -35,7 +35,6 @@ bool KologarnOffTankTrigger::IsActive()
     if (!KologarnEncounterActive(botAI) || !IsKologarnOffTank(botAI, bot))
         return false;
 
-    // Rubble duty owns the off-tank whenever any are up; this is only the idle case.
     if (KologarnHasRubble(botAI))
         return false;
 
@@ -72,12 +71,10 @@ bool KologarnSmashSwapTrigger::IsActive()
     if (!kologarn)
         return false;
 
-    // Only the main tank and first assist tank trade the body.
     bool const isMainTank = PlayerbotAI::IsMainTank(bot);
     if (!isMainTank && !PlayerbotAI::IsAssistTankOfIndex(bot, 0))
         return false;
 
-    // bot must be the one not currently holding it.
     Unit* activeTank = kologarn->GetVictim();
     if (!activeTank || activeTank == bot)
         return false;
@@ -94,8 +91,6 @@ bool KologarnSmashSwapTrigger::IsActive()
     if (GetKologarnCrunchArmorStacks(activeTank) < ULDUAR_KOLOGARN_CRUNCH_ARMOR_SWAP_STACKS)
         return false;
 
-    // Strictly fewer, not an absolute cap: Crunch Armor lasts 45s against a 14s Smash timer, so
-    // stacks never fully clear and a cap would deadlock both tanks at 2 and stop swapping for good.
     return GetKologarnCrunchArmorStacks(bot) < GetKologarnCrunchArmorStacks(activeTank);
 }
 
@@ -115,13 +110,9 @@ bool KologarnBodyUncoveredTrigger::IsActive()
     if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
-    // Breath needs the victim out of melee *and* SelectNearbyTarget finding nobody else close, so any
-    // body in melee stops it. This bot standing there is already the fix.
     if (bot->IsWithinMeleeRange(kologarn))
         return false;
 
-    // Nearest tank covers it, and only if no tank is left does the nearest melee step in. Without
-    // this every melee in the raid would pile onto the body at once.
     bool const botIsTank = PlayerbotAI::IsTank(bot);
     Group* group = bot->GetGroup();
     if (!group)
@@ -138,7 +129,6 @@ bool KologarnBodyUncoveredTrigger::IsActive()
         if (!memberIsTank && !PlayerbotAI::IsMelee(member))
             continue;
 
-        // A living tank always outranks melee, whatever the distance.
         if (memberIsTank && !botIsTank)
             return false;
 
@@ -176,7 +166,6 @@ bool KologarnEyebeamTrigger::IsActive()
     if (!KologarnEncounterActive(botAI) || !bot->IsAlive())
         return false;
 
-    // The chased bot has to run whatever the range: the eye follows and will close on its own.
     if (GetKologarnEyebeamChasing(bot))
         return true;
 

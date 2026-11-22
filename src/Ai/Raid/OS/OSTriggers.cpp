@@ -18,7 +18,6 @@ bool SartharionDpsTrigger::IsActive()
     if (!PlayerbotAI::IsDps(bot))
         return false;
 
-    // Shifted bots keep their own kill order inside the realm, where Sartharion is not resolvable.
     return SartharionEncounterActive(bot) || HasTwilightShift(bot);
 }
 
@@ -65,8 +64,6 @@ bool OsOffTankHoldTrigger::IsActive()
     if (!RequireOffTank(botAI, bot))
         return false;
 
-    // Active for the whole encounter, not only while something needs holding. With nothing up the
-    // action parks the off-tank on its anchor, and that is what keeps it away from Sartharion.
     return true;
 }
 
@@ -78,10 +75,6 @@ bool OsRedirectThreatTrigger::IsActive()
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
-    // Live from the pull. For a hunter RedirectTankFor hands back the main tank for the first 10s,
-    // which is what gets Misdirection onto him before anything else can take Sartharion off him. For a
-    // rogue it returns nothing at all unless he is on a drake or the boss, which is what keeps a 30s
-    // Tricks off Lava Blazes and whelps.
     Player* tank = RedirectTankFor(botAI, bot);
     return tank && tank != bot;
 }
@@ -96,8 +89,6 @@ bool OsMainTankCooldownTrigger::IsActive()
 
 bool OsTranquilizeTrigger::IsActive()
 {
-    // Encounter-gated ahead of the sweep: without it every hunter ran a 35yd search every tick
-    // anywhere on map 615, trash and pre-pull included.
     if (bot->getClass() != CLASS_HUNTER || !OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
@@ -130,14 +121,6 @@ bool OsSartharionFlankTrigger::IsActive()
     if (!boss || bot->GetVictim() != boss)
         return false;
 
-    // Gated on standing in a cone rather than on being off the flank. He sits 10-12yd from the tank, so
-    // a 17yd corridor swap turns him ~99 degrees; tracking that every tick would walk melee a 32yd arc
-    // around him on every wave, for nothing.
-    //
-    // Being south of him is the other way to be wrong, and the facing has nothing to do with it: the
-    // right-wave corridor dodge takes melee down to Y 490, and standing there is perfectly safe from the
-    // cones, so without this nothing ever brings them back north. He is parked, so his own Y does not
-    // move and there is 14yd between it and the northern flank - no room for this to chatter.
     return InSartharionCone(boss, *bot) || bot->GetPositionY() < boss->GetPositionY();
 }
 
@@ -153,8 +136,6 @@ bool OsDrakeRearTrigger::IsActive()
     if (!drake || !IsDrakeEntry(drake->GetEntry()))
         return false;
 
-    // The gate, not the destination: the action draws inside 150 degrees and this releases at 140, so
-    // arriving ends it. Without that gap the redraw every tick would walk melee around the tail.
     return !BehindDrake(drake, *bot);
 }
 
@@ -166,8 +147,6 @@ bool OsTankShapeshiftTrigger::IsActive()
     if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
-    // Only a druid who actually tanks in a form. One with neither spell is a healer or a moonkin
-    // standing in for a tank, and shifting him would cost more than it buys.
     if (!botAI->CanCastSpell("dire bear form", bot) && !botAI->CanCastSpell("bear form", bot))
         return false;
 
@@ -184,8 +163,6 @@ bool TwilightPortalEnterTrigger::IsActive()
     if (!SartharionEncounterActive(bot) || HasTwilightShift(bot) || !PortalSquadMember(bot))
         return false;
 
-    // Both acolytes are worth the trip and Tenebron's eggs are not, and the portal itself cannot say
-    // which of them is on the other side.
     if (!TwilightRealmWorthEntering(bot))
     {
         if (RaidObs::Active())
@@ -196,9 +173,6 @@ bool TwilightPortalEnterTrigger::IsActive()
 
     bool const portal = bot->FindNearestGameObject(GoId::TwilightPortal, 100.0f) != nullptr;
 
-    // Squad membership is a note of its own and both auras behind "worth entering" are in the aura
-    // stream, but whether a portal was in reach is in no stream at all - and a trigger that says no
-    // writes nothing, so a squad standing on the platform leaves no record of why.
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "sartharion.realm", portal ? "enter" : "noportal");
 
@@ -207,8 +181,5 @@ bool TwilightPortalEnterTrigger::IsActive()
 
 bool TwilightPortalExitTrigger::IsActive()
 {
-    // Advisory only. The instance refcounts one shared portal across all three drakes and force
-    // removes Twilight Shift raid-wide when the count hits zero, so bots get yanked out on a schedule
-    // no bot chooses; this just covers the case where the adds die and the count has not zeroed yet.
     return HasTwilightShift(bot) && !TwilightAddsAlive(bot);
 }

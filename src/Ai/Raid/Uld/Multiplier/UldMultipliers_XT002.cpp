@@ -39,8 +39,6 @@
 
 using namespace EncounterHelpers;
 
-// XT-002: the exposed Heart is the only real burst window, but bursting it kills the Heart and starts hard
-// mode, so the config decides.
 float XT002BurstWindowMultiplier::GetValue(Action* action)
 {
     if (!action)
@@ -67,7 +65,6 @@ XT002BurstWindowMultiplier::Window XT002BurstWindowMultiplier::EvaluateWindow()
     if (!xt002)
         return {true, true};
 
-    // Heartbreak is up: there will be no further Heart phase, so there is nothing left to save for.
     if (IsXT002HeartbreakActive(bot, xt002))
         return {true, true};
 
@@ -75,13 +72,9 @@ XT002BurstWindowMultiplier::Window XT002BurstWindowMultiplier::EvaluateWindow()
 
     if (GetXT002ExposedHeart(botAI))
     {
-        // Hard mode burns the Heart with everything, lust too: without it the raid kills the Heart in its
-        // first window only about half the time, and Heartbreak then runs without lust
         return {hardMode, hardMode};
     }
 
-    // Below this the last Heart phase is over. In hard mode the Heart outlived every window, so the lust held
-    // for Heartbreak goes too.
     if (xt002->GetHealthPct() < ULDUAR_XT002_FINAL_PUSH_HP_PCT)
         return {true, true};
 
@@ -93,12 +86,8 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    // This runs on every action every bot pops anywhere in Ulduar, and finding XT is a scan. So sort
-    // the action first, and only look XT up for the kinds that can come out as anything but 1.0.
     bool const movement = dynamic_cast<MovementAction*>(action) != nullptr;
 
-    // Two aura-map walks only the immunity and mover branches read, so they sit behind those dynamic_casts and
-    // a cast, buff or heal never pays for them.
     bool carryingKnown = false;
     bool carrying = false;
     auto const carryingDebuff = [&]() -> bool
@@ -113,33 +102,21 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         return carrying;
     };
 
-    // The class-generic redirects buff whoever the group flags as main tank, which is the wrong
-    // sink while a Pummeller is out; xt002 redirect threat action picks the tank that needs it.
     bool const genericRedirect = dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
                                  dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action);
 
-    // "xt002 avoid hazard action" is the only mover for this fight's hazards. Generic avoid aoe sits at the
-    // same relevance and flees a flat FleeDistance its own way, so the bot slides between the two.
     bool const genericAvoidAoe = dynamic_cast<AvoidAoeAction*>(action) != nullptr;
 
-    // Gap closers move the bot without being MovementActions, so the mover pin below misses them and a parked
-    // carrier charges back out.
     bool const gapCloser = dynamic_cast<CastReachTargetSpellAction*>(action) && carryingDebuff();
 
-    // Both bubbles cover all magic with SPELL_ATTR1_IMMUNITY_PURGES_EFFECT, so they strip the debuff and the
-    // AfterEffectRemove hook drops the Void Zone or Life Spark on the spot, mid-raid. Eat the hit instead.
     bool const purgingImmunity = (dynamic_cast<CastDivineShieldAction*>(action) ||
                                   dynamic_cast<CastIceBlockAction*>(action)) &&
                                  carryingDebuff();
 
-    // The encounter's priority action owns every target, so the generic pickers stand down. "attack rti target"
-    // stays so a player's mark still wins; healers keep dps assist or they could be left targetless.
     bool const genericPicker =
         (dynamic_cast<DpsAssistAction*>(action) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot)) ||
         (dynamic_cast<TankAssistAction*>(action) && PlayerbotAI::IsTank(bot));
 
-    // Ranged, healers and carriers each own a destination, so generic movers stand down for them; melee keep
-    // theirs unless carrying. AttackAction is a MovementAction that never moves, so it stays exempt.
     bool pinnedMover = false;
     if (movement && !dynamic_cast<AttackAction*>(action) &&
         (PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot) || carryingDebuff()))
@@ -151,8 +128,6 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         pinnedMover = !encounterMovers.count(action->getName());
     }
 
-    // Normal mode Heart floor: the priority action only stops new picks, this stops bots already on it. Only
-    // hits on the Heart are blocked, or a bot would be left with no heals and no way to retarget.
     Unit* currentTarget = nullptr;
     bool heartHit = false;
     if (!IsXT002HardModeActive(botAI) && !movement && !dynamic_cast<CastHealingSpellAction*>(action) &&
@@ -178,8 +153,6 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     if (!xt002)
         return 1.0f;
 
-    // Encounter nodes don't run before the pull, so the stand-downs wait for XT's combat. The Heart floor
-    // doesn't: it has to hold whenever an exposed Heart is up.
     if (standDown && xt002->IsInCombat())
         return 0.0f;
 
@@ -195,7 +168,6 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
 
 float XT002ThreatBrakeMultiplier::GetValue(Action* action)
 {
-    // Holds damage only. Soulshatter goes on too, it halves the bot's threat.
     if (!action || !IsRaidDpsBot(bot) || GetDpsHoldValue(bot, action) > 0.0f ||
         dynamic_cast<CastHealingSpellAction*>(action) || dynamic_cast<CastSoulshatterAction*>(action))
         return 1.0f;
@@ -208,7 +180,6 @@ float XT002ThreatBrakeMultiplier::GetValue(Action* action)
     if (!IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
-    // Submerged he's unselectable and out of every splash, so the adds walking in to him get the raid's AoE.
     Unit* xt002 = GetXT002(botAI);
     if (!xt002 || IsXT002Submerged(xt002) || !IsXT002ThreatBraked(bot, xt002))
         return 1.0f;

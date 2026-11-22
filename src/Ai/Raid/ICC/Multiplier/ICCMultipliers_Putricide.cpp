@@ -15,9 +15,8 @@
 
 namespace
 {
-// His combat reach is 9 once he transforms: an area spell from this close reaches him
 constexpr float BRAKE_AREA_REACH = 18.0f;
-}  // namespace
+}
 
 float IccPutricideBrakeMultiplier::GetValue(Action* action)
 {

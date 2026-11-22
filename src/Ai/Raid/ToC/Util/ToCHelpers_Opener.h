@@ -12,7 +12,6 @@ class PlayerbotAI;
 namespace TrialOfTheCrusaderHelpers
 {
 
-// The live encounter's bosses. Every encounter but the champions has an opener.
 std::vector<uint32> const& ToCOpenerBosses(PlayerbotAI* botAI);
 
 inline constexpr RaidOpenerConfig TOC_OPENER{TRIAL_OF_THE_CRUSADER_MAP_ID, "toc.opener", &ToCOpenerBosses};

@@ -17,8 +17,6 @@
 
 using namespace OsHelpers;
 
-// The one destination gate every positioning action in this strategy goes through.
-
 bool OsPositioningAction::MoveToClamped(float x, float y, float tolerance, MovementPriority priority)
 {
     ClampDestination(x, y);
@@ -35,8 +33,6 @@ bool OsPositioningAction::IssueMove(float x, float y, MovementPriority priority,
     if (!ResolveMoveDestination(bot, x, y, z, rejectOnCollision))
         return false;
 
-    // lessDelay shortens the lock this move stamps by one react delay, so the next tick is not spent
-    // waiting on a lock that was already paid for.
     return MoveTo(OS_MAP_ID, x, y, z, false, false, false, false, priority, true);
 }
 

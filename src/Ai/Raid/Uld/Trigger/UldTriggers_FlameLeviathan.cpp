@@ -14,10 +14,9 @@
 
 namespace
 {
-// Every vehicle a bot can usefully occupy on this fight, driver seats and gunner seats alike.
 constexpr uint32 RIDEABLE_VEHICLES[] = {NPC_VEHICLE_CHOPPER, NPC_SALVAGED_DEMOLISHER, NPC_SALVAGED_DEMOLISHER_TURRET,
                                         NPC_SALVAGED_SIEGE_ENGINE, NPC_SALVAGED_SIEGE_ENGINE_TURRET};
-}  // namespace
+}
 
 bool FlameLeviathanOnVehicleTrigger::IsActive()
 {
@@ -58,8 +57,6 @@ bool FlameLeviathanFlameVentsTrigger::IsActive()
     if (!FlameLeviathanIsVentChanneling(FlameLeviathanBoss(botAI)))
         return false;
 
-    // One siege engine per channel. The action and this share the helper, or the two would disagree
-    // about whose job it is and either double up or leave the channel running.
     return FlameLeviathanIsVentInterrupter(botAI, bot);
 }
 
@@ -71,8 +68,6 @@ bool FlameLeviathanDriveUrgentTrigger::IsActive()
     if (FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot))
         return true;
 
-    // Getting out of Battering Ram outranks holding station, same as a tower hazard does: both are
-    // "you are standing somewhere that is about to hurt" rather than positioning preferences.
     if (FlameLeviathanShouldClearBatteringRam(botAI, bot))
         return true;
 

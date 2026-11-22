@@ -24,17 +24,12 @@ using namespace TrialOfTheCrusaderHelpers;
 namespace
 {
 
-// Area damage from this close counts as hitting him
 constexpr float ANUBARAK_AREA_THREAT_REACH = 30.0f;
-// Swipe, Cleave, Thunder Clap and the like reach about this far round the caster or its target
 constexpr float ANUBARAK_BURROWER_AREA_REACH = 10.0f;
-// Bladestorm spins 6 s at run speed, so a burrower this far off is within its reach before it ends
 constexpr float ANUBARAK_BLADESTORM_BURROWER_REACH = 25.0f;
-// One still walking in from its exit runs at about 8 yd/s and can cross the whole spin from 55 yd
 constexpr float ANUBARAK_BLADESTORM_RADIUS = 8.0f;
 constexpr float ANUBARAK_BLADESTORM_S = 6.0f;
 
-// Matched as a leading word too, so "cyclone on cc" or "repentance on enemy healer" count
 char const* const SPHERE_CROWD_CONTROL[] = {
     "polymorph", "hex", "repentance", "freezing trap", "shackle undead", "fear", "banish",
     "hibernate", "entangling roots", "cyclone", "sap", "blind", "seduction",
@@ -52,8 +47,6 @@ bool IsSphereCrowdControl(std::string const& name)
     return false;
 }
 
-// Damage that lands late (any DoT, a hit of its own or not, a channel) or on everything round the sphere:
-// a sphere that dies late lands wherever it drifted, and a splash can down a second one
 bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action, RaidSplashCache& splash)
 {
     if (IsRaidAreaDamage(botAI, action, splash))
@@ -80,7 +73,6 @@ bool SlowOrSpreadOnSphere(PlayerbotAI* botAI, Action* action, RaidSplashCache& s
     return false;
 }
 
-// Each one moves a burrower off its side tank's patch, where it submerges back to full
 char const* const BURROWER_MOVERS[] = {"death grip", "dark command", "taunt", "growl", "hand of reckoning"};
 
 bool MovesBurrower(std::string const& name)
@@ -92,7 +84,6 @@ bool MovesBurrower(std::string const& name)
     return false;
 }
 
-// Interrupts and stuns, for a burrower's Shadow Strike
 bool StopsCast(PlayerbotAI* botAI, Action* action, RaidSplashCache& splash)
 {
     RaidSplashCache::Facts& facts = splash.Of(action);
@@ -139,12 +130,9 @@ float AnubarakControlTankMovementMultiplier::GetValue(Action* action)
 
 bool AnubarakProtectSpikeKiteMultiplier::HeldWhileMarked(Action* action)
 {
-    // Feign Death hands the spike on at its current speed; the kiter immunity casts it only as a last resort
     if (action->getName() == "feign death")
         return true;
 
-    // Spell movers: Blink and Disengage off a scarab would throw the kiter 15-20 yd the kite never chose.
-    // The kite casts its own Blink directly, so this never holds that one.
     bool const spellMover = dynamic_cast<CastReachTargetSpellAction*>(action) ||
                             dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action);
     if (spellMover)
@@ -153,7 +141,6 @@ bool AnubarakProtectSpikeKiteMultiplier::HeldWhileMarked(Action* action)
     if (!dynamic_cast<MovementAction*>(action) || dynamic_cast<AnubarakKiteSpikeToPermafrostAction*>(action))
         return false;
 
-    // Attack actions, but these holds walk the tank or the DK to its spot
     bool const walkingHold = dynamic_cast<AnubarakMainTankHoldBossAction*>(action) ||
                              dynamic_cast<AnubarakAssistTankHoldBurrowerAction*>(action) ||
                              dynamic_cast<AnubarakSideTankReadyAction*>(action) ||
@@ -199,12 +186,10 @@ float AnubarakSphereGuardMultiplier::GetValue(Action* action)
                                         std::string const name = action->getName();
                                         return Names{name == "starfall", IsSphereCrowdControl(name)};
                                     });
-    // Starfall's stars find the spheres overhead, and heroic has six for the pull
     Map* map = bot->GetMap();
     if (map && map->IsHeroic() && named.starfall)
         return 0.0f;
 
-    // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
     Creature* sphere = target ? target->ToCreature() : nullptr;
     if (!sphere || sphere->GetEntry() != static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE))
@@ -248,24 +233,18 @@ float AnubarakBurrowerGuardMultiplier::GetValue(Action* action)
                                         std::string const name = action->getName();
                                         return Names{name == "bladestorm", MovesBurrower(name)};
                                     });
-    // Its pick can move to a burrower mid-spin, and the stand walks it into that side's pack
     if (named.bladestorm &&
         (AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_BURROWER_REACH, false) ||
          AnubarakLooseBurrowerReaches(bot, bot->GetPosition(), ANUBARAK_BLADESTORM_RADIUS, ANUBARAK_BLADESTORM_S)))
         return 0.0f;
 
-    // The main tank's Swipe or Thunder Clap pulls a burrower walking past onto him, and its Expose
-    // Weakness stacks come with it
     if (IsAnubarakTankPlayer(bot))
         return GetAnubarakBurrowerTankSide(bot) < 0 && IsRaidAreaDamage(botAI, action, _splash) &&
                        AnubarakBurrowerNear(bot, bot->GetPosition(), ANUBARAK_BURROWER_AREA_REACH, false)
                    ? 0.0f
                    : 1.0f;
 
-    // actions that pick their target in Execute read "self target" here, so the stem's own picks pass
     Unit* target = action->GetTarget();
-    // Before its side tank has held it a while, a burrower takes the threat of whatever hits it. Melee
-    // stand next to the held ones, so theirs also waits near one they have 60% of its tank's threat on.
     if (IsRaidAreaDamage(botAI, action, _splash))
     {
         Unit* aimed = target ? target : AI_VALUE(Unit*, "current target");
@@ -331,8 +310,6 @@ float AnubarakSwarmHealMultiplier::GetValue(Action* action)
     return AnubarakSwarmHealWasted(target->ToPlayer()) ? 0.0f : 1.0f;
 }
 
-// Lust waits for phase 3, where Leeching Swarm turns the fight into a race; heroic holds the rest of the
-// burst for it too
 RaidBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI)
 {
     return {!AnubarakBurstHeld(botAI), AnubarakLustOpen(botAI)};

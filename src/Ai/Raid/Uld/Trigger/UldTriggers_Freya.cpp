@@ -23,13 +23,9 @@ bool FreyaNearNatureBombTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Assist tank 0 eats the bomb: stepping out would lift the Conservator off the spore the melee are
-    // sheltering on. The main tank has its own node, which moves Freya rather than just the bot.
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    // Wider than the blast so the node still runs after the bot steps clear and can hold its spot.
-    // isUseful narrows it again, so a bot with no blast and no escape held costs nothing.
     return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
 }
 
@@ -45,7 +41,6 @@ bool FreyaTankNatureBombTrigger::IsActive()
     if (bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS))
         return true;
 
-    // A bomb by Freya empties her melee ring even with the tank clear of it. Only hers to fix while she's on him.
     return boss->GetVictim() == bot &&
            boss->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
 }
@@ -65,7 +60,6 @@ bool FreyaTankAddsTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // The ladder ends at Freya, so these two always have something, no need to gather the wave here.
     return PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
 }
 
@@ -85,18 +79,12 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // The Grip pacifies melee as much as ranged. Tanks are out: the add tank reaches the aura by parking
-    // the Conservator, and the main tank would drag Freya off her anchor.
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    // The aura is what counts, and it's exact. Checked first: it's cheaper than the sweep, and most of
-    // the raid is already sheltered by mid-wave.
     if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
-    // By entry, not "find target": that value walks only this bot's threat list, and a pacified bot that
-    // has not hit the Conservator yet is exactly the bot that needs a spore.
     if (!GetFreyaScanUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
         return false;
 
@@ -104,14 +92,11 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (!spore)
         return false;
 
-    // Distance stands the node down too: the aura lands a moment late, and every move ordered onto the
-    // spore meanwhile clears the motion master under whatever else was walking.
     return bot->GetExactDist2d(spore) > ULDUAR_FREYA_SPORE_RADIUS - 1.0f;
 }
 
 bool FreyaBreakIronRootsTrigger::IsActive()
 {
-    // Both ids of both roots: HasAura takes the exact spell, and a 25-man raid only ever applies the 25-man half.
     return IsFreyaRooted(bot);
 }
 
@@ -134,8 +119,6 @@ bool FreyaFreeRootedAllyTrigger::IsActive()
 
 bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
 {
-    // Beam stalkers are non-selectable, so walk the stalker scan: nearby npcs, entry tested before the LOS
-    // ray. This runs every tick for every bot in Ulduar until Freya dies.
     for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -158,8 +141,6 @@ bool FreyaLasherAboutToBlowTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Tanks stay: one that walked would take Freya or the Conservator with it, and it survives the
-    // blasts anyway. Ranged and healers leave through the camp node, under the nova and the trap.
     if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsMelee(bot))
         return false;
 
@@ -176,8 +157,6 @@ bool FreyaRangedCampTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Melee and tanks are already stacked on whatever they are hitting, and a tank that left the camp
-    // would take the boss or the Conservator with it.
     if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return false;
 
@@ -186,8 +165,6 @@ bool FreyaRangedCampTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    // A low lasher in reach ends the gather: inside its blast the bot leaves, outside it stays put, since the
-    // walk to the ball would cross a blast. Only low ones count, the healthy pack is faster than the bot.
     std::vector<Position> const blasts =
         GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
     if (!blasts.empty())
@@ -199,8 +176,6 @@ bool FreyaRangedCampTrigger::IsActive()
         return false;
     }
 
-    // A pack the ghouls hold chases nobody, so there's nothing to gather for, and the gather would pull the ranged
-    // back out of reach of it. Healers keep gathering on the anchor.
     if (PlayerbotAI::IsRangedDps(bot) && IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state)))
         return false;
 
@@ -208,8 +183,6 @@ bool FreyaRangedCampTrigger::IsActive()
     if (camp == Position())
         return false;
 
-    // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
-    // and pulling them all the way into the ball would leave the far half of the raid unhealed.
     float const tolerance =
         PlayerbotAI::IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
@@ -225,7 +198,6 @@ bool FreyaReachHeldPackTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Only a bot the priority ladder left on Freya: the Gift, the Conservator and the trio all come first.
     if (AI_VALUE(Unit*, "current target") != boss)
         return false;
 
@@ -240,8 +212,6 @@ bool FreyaReachHeldPackTrigger::IsActive()
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
 {
-    // Class first: it rules out most of the raid for free, where the boss lookup and CanCastSpell both
-    // cost real work. Nothing here has a side effect, so the order is free to be the cheap one.
     if (bot->getClass() != CLASS_MAGE)
         return false;
 
@@ -252,14 +222,10 @@ bool FreyaFrostNovaLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // The nova is a sphere on the caster, so count lashers on the mage. Two, so one lasher the mage is
-    // already killing doesn't spend the cooldown.
     if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) <
         ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS)
         return false;
 
-    // Last, because it builds a Spell on the heap and runs the whole cast check, and Frost Nova is off
-    // cooldown for most of a fight that only wants it during a lasher wave.
     return botAI->CanCastSpell("frost nova", bot);
 }
 
@@ -275,8 +241,6 @@ bool FreyaTrapLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // Wider than the trap's own 10 yd field, deliberately: the patch needs to be down and armed before
-    // the lasher arrives, and one that has picked this bot is coming here at 8 yd/s whatever it does.
     if (!CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_TRAP_ARM_RANGE))
         return false;
 
@@ -302,7 +266,6 @@ bool FreyaSummonArmyTrigger::IsActive()
     if (!IsFreyaArmyTurn(botAI) || !HasUncoveredFreyaLasher(botAI, state))
         return false;
 
-    // A Tremor landing mid-channel cuts it after a ghoul or two. Waiting it out costs 2s at most, then all eight.
     if (IsFreyaGroundTremorCasting(GetFreyaBossByEntry(botAI)))
         return false;
 
@@ -311,12 +274,9 @@ bool FreyaSummonArmyTrigger::IsActive()
 
 bool FreyaGroundTremorHoldCastTrigger::IsActive()
 {
-    // By entry rather than off the target list: this runs for every bot wherever the gate is open, and
-    // on trash and in other fights nothing else needs that list built.
     if (!IsFreyaGroundTremorCasting(GetFreyaBossByEntry(botAI)))
         return false;
 
-    // Not Army: the ghouls already out outlive the Tremor's cut, stopping early only loses the rest.
     return bot->HasUnitState(UNIT_STATE_CASTING) && !IsFreyaArmyChanneling(bot);
 }
 
@@ -326,8 +286,6 @@ bool FreyaNaturesFuryBailTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Tanks stay. Whatever they are holding walks after them, so a tank carrying the mark out of the
-    // raid takes Freya or the Conservator into it instead.
     if (PlayerbotAI::IsTank(bot))
         return false;
 
@@ -343,8 +301,6 @@ bool FreyaStepOutOfSunbeamTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Melee and tanks can't give up a second and a half of damage, and lose little by staying: beams
-    // mostly go for ranged bots and their pets, away from the melee ball.
     if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return false;
 
@@ -361,8 +317,6 @@ bool FreyaTankHoldFreyaTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Only whoever actually has her: walking anyone else moves no boss, and a tank that has lost her
-    // would drag the melee ring off to where she is not.
     if (!PlayerbotAI::IsMainTank(bot) || boss->GetVictim() != bot)
         return false;
 

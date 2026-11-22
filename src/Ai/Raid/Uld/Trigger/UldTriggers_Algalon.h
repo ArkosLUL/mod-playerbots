@@ -5,9 +5,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-// Algalon the Observer. Every trigger reads the per-instance room scan; the Big Bang and Cosmic Smash
-// reactions have hard deadlines and run every tick, the rest are paced.
-
 class AlgalonBigBangSoakTrigger : public Trigger
 {
 public:

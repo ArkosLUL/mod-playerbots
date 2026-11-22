@@ -17,12 +17,10 @@ float IccGunshipDeckGuardMultiplier::GetValue(Action* action)
     if (!target || target == bot)
         return 1.0f;
 
-    // A bot in the air goes where its jump or its fall takes it
     GsbDeck const deck = GsbDeckOf(*side, bot);
     if (deck != GsbDeck::Home && deck != GsbDeck::Enemy)
         return 1.0f;
 
-    // A gunner in its cannon stands on the raid's deck
     GsbDeck theirs = GsbDeckOf(*side, target);
     if (theirs == GsbDeck::Cannon)
         theirs = GsbDeck::Home;

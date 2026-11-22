@@ -112,7 +112,6 @@ public:
     bool Execute(Event event) override;
 
 private:
-    // The bubble this cast and when, so one the class node put up at low health stays
     uint32 _bubbleSpell = 0;
     uint32 _bubbleMs = 0;
 };
@@ -187,7 +186,6 @@ public:
 
     AnubarakBattleResSideTankAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {};
     bool Execute(Event event) override;
-    // Rebirth won't go out in cat or bear form
     std::vector<NextAction> getPrerequisites() override { return {NextAction("caster form")}; }
 };
 
@@ -327,7 +325,6 @@ public:
     bool isUseful() override;
 };
 
-// The class's "innervate on healer" runs under the name "innervate" too, which the self Innervate guard blocks
 class AnubarakInnervateHealerAction : public Action
 {
 public:
@@ -357,7 +354,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// The class Judgement of Light goes on the current target, which under the swarm is often a burrower
 class AnubarakJudgeLightAction : public Action
 {
 public:

@@ -30,7 +30,6 @@ bool IccBqlPactTrigger::IsActive()
 
 bool IccBqlWhirlDefensiveTrigger::IsActive()
 {
-    // A frenzied bot is silenced, and an immunity would keep its bite from landing
     RaidPredictedHit hit;
     return !IsBqlBiting(botAI) && GetBqlWhirlHit(botAI, hit) &&
            static_cast<bool>(GetRaidPersonalDefensive(botAI, ICC_DEFENSIVE_SCOPE, &hit));

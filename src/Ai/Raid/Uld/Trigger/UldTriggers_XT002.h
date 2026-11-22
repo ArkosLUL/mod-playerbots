@@ -6,10 +6,6 @@
 #include "GenericTriggers.h"
 #include "Trigger.h"
 
-// XT-002 Deconstructor. Every trigger is false without XT, so the shared Ulduar strategy idles elsewhere.
-
-// Carries Searing Light, Gravity Bomb or both. One trigger since one action has to own the bot: two nodes at
-// one relevance pull it between destinations.
 class XT002DebuffCarrierTrigger : public Trigger
 {
 public:
@@ -19,8 +15,6 @@ public:
     bool IsActive() override;
 };
 
-// Melee never stand next to a Boombot; ranged kill it from outside the blast. Void Zones only count for a
-// bot not carrying a debuff, since the carrier action owns those.
 class XT002AvoidHazardTrigger : public Trigger
 {
 public:
@@ -30,7 +24,6 @@ public:
     bool IsActive() override;
 };
 
-// The healer sent to a Gravity Bomb carrier, while that carrier is out of its heal range.
 class XT002BombHealTrigger : public Trigger
 {
 public:
@@ -40,7 +33,6 @@ public:
     bool IsActive() override;
 };
 
-// The healer sent to a Gravity Bomb carrier, once in heal range of it, while the carrier isn't above 90%.
 class XT002BombCarrierHealTrigger : public Trigger
 {
 public:
@@ -50,8 +42,6 @@ public:
     bool IsActive() override;
 };
 
-// Anchors the tank XT is on, ranged and healers once XT is in combat, or bots walk there before the pull.
-// Stands down for any dodge, a tank without aggro, and the healer sent to a bomb carrier.
 class XT002RaidPositionTrigger : public Trigger
 {
 public:
@@ -61,8 +51,6 @@ public:
     bool IsActive() override;
 };
 
-// Every role's target comes from the encounter's priority order, tanks included: generic tank targeting
-// drags XT into the add pile. No raid icons: they're group-global.
 class XT002SetDpsPriorityTrigger : public Trigger
 {
 public:
@@ -90,8 +78,6 @@ public:
     bool IsActive() override;
 };
 
-// One healer tank buff for the XT-002 buff tank. strategy: only healers running that combat strategy, for a
-// buff the class node casts in one spec only.
 class XT002HolderBuffTrigger : public Trigger
 {
 public:

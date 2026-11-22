@@ -48,30 +48,23 @@ constexpr uint32 DUTY_REFRESH_MS = 200;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float ROOM_RADIUS = 80.0f;
-// Where reach spell walks a caster in: 28.5 + 0.5 plus both 1.5 yd reaches
 constexpr float RANGED_REACH = 32.0f;
-// 10 s after each wave every live beast gets Scent of Blood for 10 s. His casts can hold the event back
 constexpr uint32 SCENT_FROM_MS = 9000;
 constexpr uint32 SCENT_UNTIL_MS = 21500;
 constexpr int32 TAUNT_SPARE_SLACK_MS = 500;
 constexpr uint32 CONTROL_TIMEOUT_MS = 4000;
-// A beast held this much longer needs no caster yet
 constexpr int32 CONTROL_HELD_MS = 1000;
 constexpr float MELEE_SPELL_RANGE = 5.0f;
 constexpr float MARK_HEAL_BELOW = 75.0f;
 constexpr float TANK_EMERGENCY_BELOW = 35.0f;
 constexpr int32 BEACON_REFRESH_MS = 5000;
 
-// The central slots first: from 1 a healer reaches every slot and tank spot
 constexpr uint8 HEALER_SLOTS[] = {1, 3, 2, 10, 11};
 constexpr uint8 RANGED_SLOTS[] = {7, 6, 5, 4, 9, 8, 1, 3, 2, 10, 11};
-// Melee fill these when too few ranged and healers are out, inner slots first
 constexpr uint8 FILL_SLOTS[] = {1, 3, 2, 4, 5, 7, 6, 9, 8, 10, 11};
-// Blood Nova draws from the farthest this many players when fewer stand 12 yd off his edge
 constexpr size_t NOVA_MIN_TARGETS_10 = 4;
 constexpr size_t NOVA_MIN_TARGETS_25 = 10;
 
-// How much splash a marked bot's own button is judged against, and his swing rate
 constexpr uint32 MARK_HIT_WINDOW_MS = 4000;
 constexpr float SWINGS_PER_SECOND = 1.0f;
 constexpr float FRENZY_SWING_FACTOR = 1.3f;
@@ -82,7 +75,6 @@ struct ControlSpell
     char const* name;
 };
 
-// Best first: the stuns, then the snares. No root: under the kill duty's fire one breaks at its damage cap.
 constexpr ControlSpell CONTROL_SPELLS[] = {
     {CLASS_PALADIN, "hammer of justice"}, {CLASS_WARRIOR, "concussion blow"},
     {CLASS_DRUID, "bash"},                {CLASS_DEATH_KNIGHT, "chains of ice"},
@@ -102,8 +94,6 @@ struct Stand
     bool parked = false;
 };
 
-// The resolver is asked by its trigger, its action and the targeting rule for every action a bot
-// weighs, and a bot never ticks twice in one ms.
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -130,16 +120,12 @@ struct DbsState
     RaidObs::ObsGuidMap<ObjectGuid> kill{"dbs.kill"};
     RaidObs::ObsGuidMap<ObjectGuid> control{"dbs.cc"};
     std::unordered_map<ObjectGuid, uint32> controlSince;
-    // Keyed on the marked player, so one healer can carry two marks
     RaidObs::ObsGuidMap<ObjectGuid> markHealer{"dbs.markheal"};
-    // Paladin -> the marked player it casts Hand of Protection on
     RaidObs::ObsGuidMap<ObjectGuid> protect{"dbs.protect"};
 
-    // Marks so far, read off Blood Power falling back from 100. A tank spends once per cycle.
     uint32 powerLast = 0;
     uint32 powerCycle = 0;
     std::unordered_map<ObjectGuid, uint32> defensiveCycle;
-    // Human tank calls: humanPeakCall is the cycle of the last peak call plus one, 0 for none
     bool humanFrenzyCalled = false;
     uint32 humanPeakCall = 0;
     uint32 humanCallMs = 0;
@@ -153,7 +139,6 @@ RaidInstanceState<DbsState> dbsStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// A bot of its own, not a player, selfbot included: players hold no duty.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsDbsBeast(Unit* unit) { return unit && unit->GetEntry() == NPC_DBS_BLOOD_BEAST; }
@@ -251,7 +236,6 @@ std::vector<Creature*> LiveBeasts(Player* bot, DbsState const& state)
     return beasts;
 }
 
-// The scent lands on every live beast, older waves too, so the latest wave's clock decides for all
 bool Scented(Player* bot, DbsState const& state, uint32 now)
 {
     if (!state.waveSeen || !IsHeroic(bot))
@@ -261,7 +245,6 @@ bool Scented(Player* bot, DbsState const& state, uint32 now)
     return age >= SCENT_FROM_MS && age <= SCENT_UNTIL_MS;
 }
 
-// On a player who is no tank. A pet it chews on is no one-shot.
 Player* LooseVictim(Unit* beast)
 {
     Unit* victim = beast->GetVictim();
@@ -284,7 +267,6 @@ int32 HeldForMs(Unit* beast)
 
 bool CanPayFor(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -292,7 +274,6 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// The member's best control spell it can land on the beast from where it stands, with its rank
 char const* ReadyControlSpell(Player* member, Unit* beast, size_t& rank)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -307,7 +288,6 @@ char const* ReadyControlSpell(Player* member, Unit* beast, size_t& rank)
         uint32 const spellId =
             memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", CONTROL_SPELLS[i].name)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-        // CanCastSpell lets a wrong form or stance through, so Hamstring would stick to a Defensive Stance warrior
         if (!info || !CanPayFor(member, info) || info->CheckShapeshift(member->GetShapeshiftForm()) != SPELL_CAST_OK)
             continue;
 
@@ -343,8 +323,6 @@ char const* TauntName(Player* bot)
     }
 }
 
-// Off cooldown and castable in its current form. Growl needs bear form and Taunt Defensive Stance, and a
-// tank elected without them would hold the swap without ever landing it.
 bool TauntUsable(Player* member)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -355,7 +333,6 @@ bool TauntUsable(Player* member)
            info->CheckShapeshift(member->GetShapeshiftForm()) == SPELL_CAST_OK;
 }
 
-// Paladins first, a mark on Beacon of Light, then the healers least needed on the tanks
 uint8 MarkHealerRank(Player* member)
 {
     switch (member->getClass())
@@ -383,8 +360,6 @@ bool RuneYields(Player* bot, Creature* boss)
     return holder && holder != bot && IsTankPlayer(holder);
 }
 
-// The tank to take him now. A taunt aura on him means one just landed and his victim catches up next
-// update, so nobody else spends one.
 Player* SwapTaunter(Player* bot, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -415,9 +390,6 @@ Player* SwapTaunter(Player* bot, Creature* boss)
     return tankHolds ? nullptr : runed;
 }
 
-// Spending the taunt on a beast still leaves the next swap covered: the bot's own rune outlasts the
-// taunt's cooldown, the rune he puts on the holder next coming no earlier than that, or another tank
-// free of it stands ready.
 bool TauntSpareForBeast(PlayerbotAI* botAI, Creature* boss)
 {
     Player* bot = botAI->GetBot();
@@ -481,7 +453,6 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
                   bool const mainB = PlayerbotAI::IsMainTank(b);
                   return mainA != mainB ? mainA : a->GetGUID() < b->GetGUID();
               });
-    // A hunter can't shoot from the stack, inside its minimum range
     std::stable_sort(ranged.begin(), ranged.end(),
                      [](Player* a, Player* b)
                      { return (a->getClass() == CLASS_HUNTER) > (b->getClass() == CLASS_HUNTER); });
@@ -540,8 +511,6 @@ void RefreshRoster(DbsState& state, Player* bot, uint32 now)
         if (!take(RANGED_SLOTS, std::size(RANGED_SLOTS), member))
             wanted[member->GetGUID()] = DBS_STAND_STACK;
 
-    // Too few out and Blood Nova picks among the farthest, melee included, and the stack shares it.
-    // Melee fill the gap, the ones already out first.
     size_t slotted = 0;
     for (uint8 id = 1; id <= DBS_SLOT_COUNT; ++id)
         slotted += taken[id] ? 1 : 0;
@@ -604,8 +573,6 @@ void UpdateKill(DbsState& state, Player* bot, std::vector<Creature*> const& beas
                 open.push_back(member);
         }
 
-        // The beast a bot hits is the one that comes for it, so it takes the furthest it reaches: that one
-        // has the longest way to go through the slows.
         for (Player* member : open)
         {
             int32 pick = -1;
@@ -675,7 +642,6 @@ void UpdateControl(DbsState& state, Creature* boss, std::vector<Player*> const& 
         state.controlSince.erase(caster);
     }
 
-    // The one nearest the player it runs at first
     struct Want
     {
         Creature* beast;
@@ -703,7 +669,6 @@ void UpdateControl(DbsState& state, Creature* boss, std::vector<Player*> const& 
         Player* best = nullptr;
         size_t bestRank = 0;
         float bestDistance = 0.0f;
-        // Every bot but the tank holding him
         for (Player* member : members)
         {
             if (!IsDutyBot(member) || member == boss->GetVictim() || state.control.count(member->GetGUID()))
@@ -771,7 +736,6 @@ void UpdateMarks(DbsState& state, std::vector<Player*> const& members)
         if (state.markHealer.count(mark->GetGUID()))
             continue;
 
-        // In reach of the mark before least loaded, then the rank order the list is sorted in
         Player* best = nullptr;
         bool bestNear = false;
         size_t bestLoad = 0;
@@ -908,7 +872,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, DbsState& state, Creature* boss)
     return pick;
 }
 
-// Energy only falls when a Mark resets it from 100
 void UpdatePower(DbsState& state, Creature* boss)
 {
     uint32 const power = boss->GetPower(POWER_ENERGY);
@@ -923,7 +886,6 @@ uint32 BloodPowerPeakFor(Player* tank)
     return tank->HasAura(SPELL_DBS_MARK) ? DBS_BLOOD_POWER_PEAK_MARKED : DBS_BLOOD_POWER_PEAK;
 }
 
-// The hand also pacifies for 10 s, so only a bot that fights with spells takes it
 bool CanBeProtected(Player* member)
 {
     return IsDutyBot(member) && !IsTankPlayer(member) && !PlayerbotAI::IsMelee(member) &&
@@ -940,8 +902,6 @@ bool CanCastProtection(Player* paladin, Player* target)
            paladinAI->CanCastSpell(spellId, target);
 }
 
-// One paladin per marked bot with Boiling Blood: ticks and splash are physical, so the hand takes both
-// and the Blood Power they would feed
 void UpdateProtect(DbsState& state, Creature* boss, std::vector<Player*> const& members)
 {
     uint32 const boiling = sSpellMgr->GetSpellIdForDifficulty(SPELL_DBS_BOILING_BLOOD, boss);
@@ -964,7 +924,6 @@ void UpdateProtect(DbsState& state, Creature* boss, std::vector<Player*> const& 
         return found == list.end() ? nullptr : *found;
     };
 
-    // A duty ends once its target is covered, out of reach or no longer in need
     std::vector<ObjectGuid> released;
     for (auto const& [paladinGuid, targetGuid] : state.protect.Raw())
     {
@@ -1022,8 +981,6 @@ uint32 TauntSpellId(Player* player)
     }
 }
 
-// A human tank has no trigger, so it gets told: its taunt when the rune sits on a bot holding him with no
-// bot tank free, a defensive at the holder's windows
 void CallHumanTank(DbsState& state, Player* sender, Creature* boss, uint32 now)
 {
     if (state.humanCallRan && getMSTimeDiff(state.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -1079,7 +1036,7 @@ void CallHumanTank(DbsState& state, Player* sender, Creature* boss, uint32 now)
     if (unspentFrenzy)
         state.humanFrenzyCalled = true;
 }
-}  // namespace
+}
 
 bool IsDbsLive(PlayerbotAI* botAI)
 {
@@ -1177,7 +1134,6 @@ Unit* GetDbsBeastToTaunt(PlayerbotAI* botAI)
         }
     }
 
-    // A scented beast one-shots whoever it reaches, which costs more than a late swap
     if (best && !Scented(bot, *state, getMSTime()) && !TauntSpareForBeast(botAI, boss))
         return nullptr;
 
@@ -1236,7 +1192,6 @@ Player* GetDbsMarkWork(PlayerbotAI* botAI, bool& beacon)
         }
     }
 
-    // A tank this low is the generic heals' to save first
     float const healDistance = sPlayerbotAIConfig.HealDistance;
     for (Player* member : MembersOnMap(bot))
         if (IsTankPlayer(member) && member->GetHealthPct() < TANK_EMERGENCY_BELOW &&
@@ -1295,7 +1250,6 @@ uint32 GetDbsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
 
     bool window = bot->GetHealthPct() < DBS_TANK_DEFENSIVE_PCT;
-    // The splash lands on a Mark carrier every swing, tank or not, holding him or not
     if (boss->GetVictim() == bot || bot->HasAura(SPELL_DBS_MARK))
     {
         auto const spent = state->defensiveCycle.find(bot->GetGUID());
@@ -1306,7 +1260,6 @@ uint32 GetDbsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
 
     if (!window)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             Note(bot, noteKind, "idle");
 
@@ -1344,7 +1297,6 @@ bool GetDbsMarkHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
     if (!splash)
         return false;
 
-    // One splash per swing, scaled by Blood Power, armor ignored
     SpellEffectInfo const& effect = splash->Effects[EFFECT_0];
     float const perSwing = static_cast<float>(std::max(effect.BasePoints + (effect.DieSides + 1) / 2, 0)) *
                            static_cast<float>(100 + power) / 100.0f;
@@ -1389,7 +1341,6 @@ void TickDbsEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every slot and duty
     Creature* boss = GetDbsBoss(botAI);
     if (!boss)
     {

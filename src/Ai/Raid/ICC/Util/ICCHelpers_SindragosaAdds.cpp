@@ -50,42 +50,32 @@ constexpr uint32 DUTY_MS = 250;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float SCAN_RANGE = 100.0f;
 
-// The Icy Blast impact and the puddle it leaves both reach 7 yd
 constexpr float ICY_RADIUS = 7.0f;
 constexpr float ICY_TRIGGER = ICY_RADIUS + 0.5f;
 constexpr float ICY_CLEAR = 9.5f;
 static_assert(ICY_CLEAR >= ICY_RADIUS + SG_DRAKE_STAND_PARK + 1.0f, "a parked bot must stay out of the impact");
-// The missile takes its target's spot as the cast ends and flies 15 yd/s from 25 yd up. Its puddle spawns
-// where it lands.
 constexpr uint32 BLAST_FLIGHT_MS = 4000;
 constexpr float BLAST_LANDED = 3.0f;
 constexpr float DODGE_SWEEP = 20.0f;
-// A melee bot's dodge spot stays this close to its target's edge
 constexpr float MELEE_KEEP = 3.0f;
 
 constexpr float BRAKE_CAP = 0.9f;
 constexpr float BRAKE_RELEASE = 0.8f;
 
-// The melee and ranged stands sit round the landing spot, so they hold only while the drake is near it
 constexpr float DRAKE_ANCHOR = 8.0f;
-// A ranged stand under a puddle moves this far off, keeping out of Bellowing Roar's 35 yd and in sight of the
-// drake's tank
 constexpr float ALT_STEPS[] = {5.0f, 10.0f};
 constexpr uint8 ALT_HEADINGS = 8;
 constexpr float ROAR_KEEP = 37.0f;
-// The stand hold blocks reach: a 30 yd spell gets to a drake from here, both combat reaches counted
 constexpr float ALT_CAST_REACH = 40.0f;
 constexpr float ALT_HEAL_REACH = 38.0f;
 constexpr float FLOOR_TOLERANCE = 1.5f;
 constexpr float SIGHT_EYE = 2.0f;
 constexpr uint32 ALT_RETRY_MS = 1000;
 
-// Bellowing Roar comes 20-25 s into the pull, then 25-30 s after each one
 constexpr uint32 ROAR_FIRST_MS = 20000;
 constexpr uint32 ROAR_NEXT_MS = 25000;
 constexpr uint32 FEAR_LEAD_MS = 8000;
 
-// The controller evades once no player is within 100 yd of it
 constexpr float GAUNTLET_RANGE = 100.0f;
 constexpr float BLADE_RADIUS = 12.0f;
 constexpr float BLADE_TRIGGER = BLADE_RADIUS + 0.5f;
@@ -93,27 +83,22 @@ constexpr float BLADE_CLEAR = 14.5f;
 static_assert(BLADE_CLEAR >= BLADE_RADIUS + 2.0f, "a dodge must clear the whirl with room to park");
 constexpr float BLADE_SWEEP = 25.0f;
 constexpr float TAUNT_RANGE = 30.0f;
-// Interrupts that reach only this far need melee range
 constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
 constexpr float FREE_RANGE = 30.0f;
 constexpr uint32 SPELL_SG_HAND_OF_FREEDOM = 1044;
 
 constexpr uint8 DRAKE_COUNT = 2;
-// Kill order. sg.drake.tank holds the index plus one.
 constexpr uint32 DRAKE_SLOTS[DRAKE_COUNT] = {SG_DRAKE_DATA_RIMEFANG, SG_DRAKE_DATA_SPINESTALKER};
 constexpr char const* DRAKE_NAMES[DRAKE_COUNT] = {"rimefang", "spinestalker"};
 constexpr uint8 RIMEFANG = 0;
 constexpr uint8 SPINESTALKER = 1;
 
 constexpr uint8 GAUNTLET_TIERS = 5;
-// Kill order
 constexpr uint32 GAUNTLET_ORDER[GAUNTLET_TIERS] = {NPC_SG_GAUNTLET_SORCERESS, NPC_SG_GAUNTLET_WEBWEAVER,
                                                    NPC_SG_GAUNTLET_CHAMPION, NPC_SG_GAUNTLET_WARRIOR,
                                                    NPC_SG_GAUNTLET_BROODLING};
 constexpr char const* GAUNTLET_NAMES[GAUNTLET_TIERS] = {"sorceress", "webweaver", "champion", "warrior",
                                                         "broodling"};
-// The Champion and the Warrior, by their place in GAUNTLET_ORDER: the adds a tank takes off a player who is
-// no tank
 constexpr uint8 GAUNTLET_RESCUE_TIERS[] = {2, 3};
 constexpr uint8 SORCERESS_TIER = 0;
 
@@ -127,11 +112,10 @@ enum class StandRole : uint8
 
 struct Stand
 {
-    uint8 drake = 0;  // index plus one
+    uint8 drake = 0;
     StandRole role = StandRole::None;
     Position spot;
     bool parked = false;
-    // A spot off a puddle on its own stand
     bool alt = false;
     uint32 altTriedMs = 0;
 };
@@ -143,15 +127,12 @@ enum class IcyKind : uint8
     Blast
 };
 
-// A missile in flight, aimed where its target stood as the cast ended
 struct Impact
 {
     Position spot;
     uint32 untilMs = 0;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -164,7 +145,6 @@ struct DrakeState
     uint32 scanMs = 0;
     bool scanned = false;
     std::vector<Position> puddles;
-    // While Rimefang casts Icy Blast: its target, and the spot the missile will take
     bool blastCasting = false;
     ObjectGuid blastTarget;
     Position blastSpot;
@@ -172,12 +152,9 @@ struct DrakeState
 
     uint32 dutyMs = 0;
     bool dutiesRan = false;
-    // Bot tank -> the drake it holds, index plus one
     RaidObs::ObsGuidMap<uint8> tank{"sg.drake.tank"};
-    // Both drakes up: healer -> the drake whose ranged stand it takes
     std::unordered_map<ObjectGuid, uint8> healerDrake;
     RaidObs::ObsGuidSet brake{"sg.drake.brake"};
-    // 1 while Rimefang flies for his Icy Blasts
     RaidObs::ObsValue<uint8> air{"sg.drake.air"};
 
     bool roarClock = false;
@@ -206,7 +183,6 @@ RaidInstanceState<GauntletState> gauntletStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 void Note(Player* bot, char const* key, std::string const& value)
@@ -215,7 +191,6 @@ void Note(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void Note(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -253,7 +228,6 @@ Creature* SlotCreature(Player* bot, uint32 data)
     return instance ? ObjectAccessor::GetCreature(*bot, instance->GetGuidData(data)) : nullptr;
 }
 
-// A pet or totem counts as its owner
 bool InGroup(Player* bot, Unit* victim)
 {
     Player* player = victim ? victim->GetCharmerOrOwnerPlayerOrPlayerItself() : nullptr;
@@ -311,7 +285,6 @@ int DrakeIndex(Unit* unit)
 
 bool IsDrake(Unit* unit) { return DrakeIndex(unit) >= 0; }
 
-// Its victim is one of the group, or, while it flies with no victim, the bot is on its threat list
 bool Fights(Player* bot, Creature* drake)
 {
     if (!drake || !drake->IsAlive() || !drake->IsInCombat())
@@ -335,7 +308,6 @@ Creature* FirstFighting(Player* bot)
     return nullptr;
 }
 
-// Passive with gravity off from his takeoff until he lands
 bool RimefangUp(Creature* rimefang)
 {
     return rimefang && rimefang->IsInCombat() && (rimefang->HasReactState(REACT_PASSIVE) || rimefang->IsLevitating());
@@ -372,7 +344,6 @@ char const* RoleName(StandRole role)
     }
 }
 
-// Frost Breath goes at his victim
 bool BreathOn(Player* player, Creature* rimefang)
 {
     Spell* spell = nullptr;
@@ -394,7 +365,6 @@ Creature* OwnedDrake(DrakeState const& st, Player* bot)
     return owned ? FightingDrake(bot, owned - 1) : nullptr;
 }
 
-// A drake on this tank, held by roster or by its victim
 bool HoldsDrake(DrakeState const& st, Player* tank)
 {
     if (OwnedIndex(st, tank))
@@ -408,8 +378,6 @@ bool HoldsDrake(DrakeState const& st, Player* tank)
     return false;
 }
 
-// The drake a bot holding none fights: a player's skull on one, else the first in the kill order. Melee can't
-// reach Rimefang while he flies, so they take Spinestalker meanwhile.
 Creature* FocusDrake(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -445,7 +413,6 @@ void ScanDrakes(DrakeState& st, Player* bot, uint32 now)
         if (puddle->IsAlive())
             st.puddles.push_back(puddle->GetPosition());
 
-    // A missile is down once its puddle shows or its flight time is up
     auto const down = [&](Impact const& impact)
     {
         if (static_cast<int32>(impact.untilMs - now) <= 0)
@@ -479,7 +446,6 @@ void ScanDrakes(DrakeState& st, Player* bot, uint32 now)
     st.blastCasting = casting;
 }
 
-// Main tank, then the assist tanks in their order, then guid
 std::vector<Player*> RankedBotTanks(std::vector<Player*> const& members)
 {
     std::vector<std::pair<uint8, Player*>> ranked;
@@ -507,8 +473,6 @@ std::vector<Player*> RankedBotTanks(std::vector<Player*> const& members)
     return tanks;
 }
 
-// A holder keeps its drake for the fight. A drake nobody holds goes to the best ranked free bot tank, so
-// the main tank takes the first; one a human tank holds stays his.
 void AssignTanks(DrakeState& st, Player* bot, std::vector<Player*> const& members)
 {
     std::vector<ObjectGuid> lapsed;
@@ -571,8 +535,6 @@ void UpdateRoarClock(DrakeState& st, Player* bot, uint32 now)
     st.roarCasting = casting;
 }
 
-// With both drakes pulled, their tanks stand about 78 yd apart: healers split between the two ranged stands by
-// guid, Rimefang's first, so each tank keeps one in reach
 void AssignHealers(DrakeState& st, Player* bot, std::vector<Player*> const& members)
 {
     st.healerDrake.clear();
@@ -603,8 +565,6 @@ void RefreshDrakeDuties(DrakeState& st, Player* bot, uint32 now)
     UpdateRoarClock(st, bot, now);
 }
 
-// The threat a non-holder stays under: the bot tank holding this drake, else its victim when a tank, else
-// the top tank on its threat list
 float HolderThreat(DrakeState const& st, Player* bot, Creature* drake, uint8 index)
 {
     ThreatManager& threat = drake->GetThreatMgr();
@@ -626,8 +586,6 @@ float HolderThreat(DrakeState const& st, Player* bot, Creature* drake, uint8 ind
     return top;
 }
 
-// Past BRAKE_CAP of the holder's threat until under BRAKE_RELEASE: a tank holding no drake all fight, since
-// its own taunt is held, and everyone else while Rimefang flies, as he lands on the top of his threat list
 void UpdateBrake(DrakeState& st, PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -656,8 +614,6 @@ bool Fouled(DrakeState const& st, Position const& spot)
                        [&](Impact const& impact) { return fouls(impact.spot); });
 }
 
-// The target of the Icy Blast being cast ignores that one: the missile takes whatever spot it stands on as
-// the cast ends, so stepping away only drags the impact along
 IcyKind StandingIn(DrakeState const& st, Player* bot)
 {
     Position const pos = bot->GetPosition();
@@ -683,8 +639,6 @@ bool StaticSight(Player* bot, Position const& from, Position const& to)
                                           VMAP::ModelIgnoreFlags::Nothing);
 }
 
-// The nearest spot round a fouled ranged stand that is clear of every puddle and impact, on the floor, out of
-// Bellowing Roar, in spell reach of the drake (a healer's in heal reach of its tank stand) and in sight of that
 bool AltStand(DrakeState const& st, Player* bot, uint8 index, Position const& stand, Position& out)
 {
     Position const& tank = StandSpot(index, StandRole::Tank);
@@ -751,14 +705,12 @@ void UpdateStand(DrakeState& st, PlayerbotAI* botAI, uint32 now)
             drake = nullptr;
         else if (Fouled(st, spot))
         {
-            // Melee and the tank stay on their drake wherever it is; a ranged stand moves off the puddle
             bool const same = stand.role == role && stand.drake == slot;
             if (same && stand.alt && !Fouled(st, stand.spot))
             {
                 spot = stand.spot;
                 alt = true;
             }
-            // Each try asks the navmesh up to 16 times, so a failed one waits before the next
             else if (role == StandRole::Ranged &&
                      (!stand.altTriedMs || getMSTimeDiff(stand.altTriedMs, now) >= ALT_RETRY_MS))
             {
@@ -846,7 +798,6 @@ Unit* ResolveDrakeTarget(PlayerbotAI* botAI, DrakeState const& st)
     return nullptr;
 }
 
-// A human tank has no trigger, so it gets told: a button when low, and on each Frost Breath at it
 void CallDrakeHumanTank(DrakeState& st, Player* sender, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -936,15 +887,12 @@ void ScanGauntlet(GauntletState& st, Creature* controller, uint32 now)
     }
 }
 
-// Spiders still on their web are neither selectable nor attackable
 bool Engaged(Player* bot, Creature* add)
 {
     return add && add->IsAlive() && add->IsInCombat() && InGroup(bot, add->GetVictim()) &&
            bot->IsValidAttackTarget(add);
 }
 
-// A Champion or Warrior hitting a player who is no tank, which the duty tank nearest it takes. For a taunt,
-// the nearest with its taunt ready, skipping one a taunt just landed on: it still shows its old victim.
 Creature* RescueFor(GauntletState const& st, Player* bot, bool forTaunt)
 {
     std::vector<Player*> members;
@@ -1048,7 +996,6 @@ bool NearBlade(GauntletState const& st, Position const& pos, float reach)
 
 bool CanPayFor(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -1056,8 +1003,6 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// An interrupt this member can cast on the caster now, or null. A false ready would hold the real kicker back
-// from the election.
 char const* ReadyInterrupt(Player* member, Unit* caster)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -1083,7 +1028,6 @@ char const* ReadyInterrupt(Player* member, Unit* caster)
     return nullptr;
 }
 
-// Hand of Freedom breaks either root, a priest's Dispel Magic only Frost Nova's
 char const* FreeSpell(Player* member, Unit* rooted, bool nova)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -1098,7 +1042,7 @@ char const* FreeSpell(Player* member, Unit* rooted, bool nova)
 
     return nullptr;
 }
-}  // namespace
+}
 
 Creature* GetSgDrake(PlayerbotAI* botAI)
 {
@@ -1233,14 +1177,12 @@ uint32 GetSgDrakeTankDefensive(PlayerbotAI* botAI, char const* noteKind)
     bool const low = holds && bot->GetHealthPct() < SG_DRAKE_TANK_DEFENSIVE_PCT;
     if (!breath && !low)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             Note(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // Frost Breath is frost, the swings physical
     return NextTankDefensive(botAI, bot, noteKind, !breath);
 }
 
@@ -1255,7 +1197,6 @@ void TickSgDrakesEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every duty
     bool fighting = false;
     for (uint8 index = 0; index < DRAKE_COUNT; ++index)
         if (Creature* drake = DrakeUnit(bot, index))
@@ -1387,7 +1328,6 @@ Unit* GetSgGauntletKickTarget(PlayerbotAI* botAI, std::string& spell)
     if (!st || !IsDutyBot(bot))
         return nullptr;
 
-    // One kick per cast: the lowest guid with an interrupt that reaches her
     for (ObjectGuid const& guid : st->adds[SORCERESS_TIER])
     {
         Creature* sorceress = bot->GetMap()->GetCreature(guid);
@@ -1472,7 +1412,6 @@ void TickSgGauntletEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // The controller's reset and death move the state off IN_PROGRESS: the next run rebuilds the scan
     if (!GauntletInProgress(bot))
     {
         if (gauntletStates.Find(bot->GetInstanceId()))

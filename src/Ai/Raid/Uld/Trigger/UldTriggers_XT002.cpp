@@ -9,12 +9,8 @@
 #include "UldScripts.h"
 #include "Unit.h"
 
-// XT-002 Deconstructor
-
 namespace
 {
-// Centre to centre against the raw radii, which is how the hazard dodge scores its candidates.
-// XT002AvoidHazardTrigger asks FindNearestCreature instead, and that subtracts both object sizes.
 bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
 {
     GuidVector const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
@@ -35,11 +31,10 @@ bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
 
     return false;
 }
-}  // namespace
+}
 
 bool XT002DebuffCarrierTrigger::IsActive()
 {
-    // No proximity check: nobody steps aside, so the carrier leaves anyway. Auras first, XT's lookup is a scan.
     if (!bot->HasAura(GetXT002GravityBombSpellId(bot)) && !bot->HasAura(GetXT002SearingLightSpellId(bot)))
         return false;
 
@@ -48,13 +43,10 @@ bool XT002DebuffCarrierTrigger::IsActive()
 
 bool XT002AvoidHazardTrigger::IsActive()
 {
-    // Two small-radius searches before XT's lookup, which is the expensive one.
     bool hazardNear = false;
 
-    // Ranged already stand outside the blast; pulling them out too would only break their casts.
     if (PlayerbotAI::IsMelee(bot) && bot->FindNearestCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
         hazardNear = true;
-    // Must match the action's gate or the tick is wasted: a carrier's puddles belong to the carrier action.
     else if (!bot->HasAura(GetXT002SearingLightSpellId(bot)) && !bot->HasAura(GetXT002GravityBombSpellId(bot)) &&
              bot->FindNearestCreature(PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_RADIUS))
         hazardNear = true;
@@ -64,21 +56,15 @@ bool XT002AvoidHazardTrigger::IsActive()
 
 bool XT002RaidPositionTrigger::IsActive()
 {
-    // Melee dps never get a spot. Same role calls BuildXT002FormationMembers makes, answered before XT's lookup.
     bool const tank = PlayerbotAI::IsTank(bot);
     if (!tank && !PlayerbotAI::IsRangedDps(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
     Unit* xt002 = GetXT002(botAI);
 
-    // Combat-gated, unlike the rest of the encounter's triggers: an anchor that fires on sight has
-    // the raid pre-positioning before anyone pulls.
     if (!xt002 || !xt002->IsInCombat())
         return false;
 
-    // Only the tank XT is on, whichever it is: the anchor outranks "reach melee", and XT is a vehicle,
-    // taunt-immune through Vehicle::ApplyAllImmunities. In the Heart window his threat list decides. Before the
-    // hazard scan, so the other tank skips it every tick.
     if (tank)
     {
         Unit* victim = xt002->GetVictim();
@@ -86,13 +72,9 @@ bool XT002RaidPositionTrigger::IsActive()
             return false;
     }
 
-    // Anything the bot has to dodge outranks standing on a spot, and the carriers have destinations of
-    // their own, so the anchor stands down rather than fighting them for the tick.
     if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
         return false;
 
-    // Stand down for the dodge only while really in a puddle by its centre to centre measure, or the dodge fails
-    // every tick in the FindNearestCreature size gap while this keeps yielding.
     XT002AvoidHazardTrigger avoidHazard(botAI);
     if (avoidHazard.IsActive() && InsideXT002Hazard(botAI, bot))
         return false;
@@ -100,12 +82,9 @@ bool XT002RaidPositionTrigger::IsActive()
     if (tank)
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
 
-    // The healer sent to a bomb carrier holds where it got in range until the bomb is off. Only that one: with
-    // "reach party member to heal" pinned, standing another healer down for a far heal target strands it.
     if (PlayerbotAI::IsHeal(bot) && GetXT002BombHealCarrier(bot))
         return false;
 
-    // Same call the action makes, so the two cannot disagree about which slot is this bot's.
     Position slot;
     if (!GetXT002RangedSlot(bot, xt002, slot))
         return false;
@@ -115,7 +94,6 @@ bool XT002RaidPositionTrigger::IsActive()
 
 bool XT002BombHealTrigger::IsActive()
 {
-    // Role first: every bot runs this row, and the latch walks the group.
     if (!PlayerbotAI::IsHeal(bot))
         return false;
 
@@ -132,14 +110,11 @@ bool XT002SetDpsPriorityTrigger::IsActive()
 {
     Unit* xt002 = GetXT002(botAI);
 
-    // The action calls Attack() directly, so without the combat gate the first bot to see XT pulls
-    // him. Whoever pulls flips this for everyone, which is what makes the raid engage together.
     return xt002 && xt002->IsInCombat();
 }
 
 bool XT002PummellerTauntTrigger::IsActive()
 {
-    // Only a tank can own the Pummeller. Own role first, it is a flag test and XT's lookup is a scan.
     if (!PlayerbotAI::IsTank(bot))
         return false;
 
@@ -150,8 +125,6 @@ bool XT002PummellerTauntTrigger::IsActive()
     if (!IsXT002PummellerTank(bot, xt002))
         return false;
 
-    // Taunt range, not the leash: this node sits at ACTION_RAID + 4, so firing it against an add the
-    // cast cannot reach would burn the tick while a nearer one goes untaunted.
     Unit* pummeller = GetXT002EngageableAdd(botAI, bot, PB_NPC_XT002_PUMMELLER, ULDUAR_XT002_TAUNT_RANGE);
     if (!pummeller)
         return false;
@@ -168,14 +141,11 @@ bool XT002RedirectThreatTrigger::IsActive()
     if (!xt002 || !xt002->IsAlive())
         return false;
 
-    // Submerged XT is REACT_PASSIVE and off everyone's threat list, so a redirect fired there would
-    // burn its charges on nothing.
     return !IsXT002Submerged(xt002);
 }
 
 bool XT002HolderBuffTrigger::IsActive()
 {
-    // Class and role first: every bot runs all five rows, and the buff check scans for XT.
     if (bot->getClass() != classId || !PlayerbotAI::IsHeal(bot))
         return false;
 

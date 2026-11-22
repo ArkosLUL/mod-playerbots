@@ -34,7 +34,6 @@ bool KologarnBodyTankAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != kologarn)
         return Attack(kologarn);
 
-    // Petrifying Breath goes out the moment the body's victim is out of melee range.
     if (!bot->IsWithinMeleeRange(kologarn))
         return MoveTo(kologarn, 0.0f, MovementPriority::MOVEMENT_COMBAT);
 
@@ -74,7 +73,6 @@ bool KologarnRubbleTankAction::Execute(Event event)
     if (rubble->GetVictim() != bot && botAI->DoSpecificAction("taunt spell", event, true))
         return true;
 
-    // Held, not kited: rubble run 8.0 yd/s against a player's 7.0.
     Position const hold = GetKologarnRubbleHoldSpot(botAI, rubble);
     if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) < sPlayerbotAIConfig.FollowDistance)
         return false;
@@ -143,8 +141,6 @@ bool KologarnFallFromFloorAction::isUseful()
     return trigger.IsActive();
 }
 
-// Pathing workaround, not a mechanic: a bot under the walkway is inside the pit bunny's kill box and
-// dies within a second, so there is no walk-back to attempt.
 bool KologarnFallFromFloorAction::Execute(Event /*event*/)
 {
     bot->NearTeleportTo(ULDUAR_KOLOGARN_RESTORE_POSITION.GetPositionX(),
@@ -171,8 +167,6 @@ bool KologarnEyebeamAction::isUseful()
 
 bool KologarnEyebeamAction::Execute(Event /*event*/)
 {
-    // The chased bot outruns the eye (5.5 yd/s against 7.0) only while it keeps moving. Everyone else
-    // just clears the 3 yd beam.
     if (Unit* chasing = GetKologarnEyebeamChasing(bot))
     {
         Position const step = GetKologarnEyebeamEscapeStep(bot, chasing);

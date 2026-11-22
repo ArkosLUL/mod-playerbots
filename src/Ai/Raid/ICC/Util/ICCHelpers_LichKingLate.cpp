@@ -48,14 +48,10 @@ namespace
 {
 constexpr uint32 SCAN_MS = 200;
 constexpr uint32 DUTY_MS = 250;
-// Units further than PLATFORM_REACH from the centre are not this fight's
 constexpr float PLATFORM_SCAN = 150.0f;
 constexpr float PLATFORM_REACH = 120.0f;
-// Wide enough to cover the whole Frostmourne room from any bot inside it
 constexpr float FM_SCAN = 90.0f;
-// The script's Frostmourne room. Its creatures hang up to 20 yd above the floor, so they are judged in 2D.
 constexpr float FM_ROOM = 40.0f;
-// The heroic teleport's spread, the only floor known there
 constexpr float FM_SPOT_RANGE = 20.0f;
 constexpr float FLOOR_MAX_R = 44.0f;
 constexpr float ANCHOR_MAX_R = 40.0f;
@@ -69,7 +65,6 @@ static_assert(PARK < UNPARK, "a walk has to end inside its own trigger");
 constexpr float DEFILE_RADIUS_PER_SCALE = 10.0f;
 constexpr float PUDDLE_TRIGGER = 2.0f;
 constexpr float PUDDLE_SEGMENT = 1.5f;
-// Spots and nodes sit this far past an edge, so a bot parked on one never sets off the step out
 constexpr float PUDDLE_STAND = PUDDLE_TRIGGER + PARK;
 constexpr uint32 DEFILE_CAST_MS = 2000;
 constexpr uint32 DEFILE_CAST_GRACE_MS = 300;
@@ -82,10 +77,8 @@ constexpr float DEFILE_CLEAR_SWEEP = 20.0f;
 constexpr float PUDDLE_SWEEP = 25.0f;
 constexpr float SWEEP_STEP = 2.0f;
 constexpr uint32 SWEEP_RETRY_MS = 1000;
-// Closer than this to the stack's centre a bot has no side of it
 constexpr float SIDE_UNDEFINED = 2.0f;
 
-// Polar in the stack's frame: 0 points outward, away from the raid
 struct FrameOffset
 {
     float deg;
@@ -109,11 +102,9 @@ constexpr float SIPHON_Z = 850.0f;
 constexpr float SIPHON_RANGE = 20.0f;
 constexpr float HEROIC_DROP_PCT = 50.0f;
 constexpr uint32 CONTROL_LEAD_MS = 500;
-// A control spell cast but not on the Val'kyr yet
 constexpr uint32 CONTROL_FLIGHT_MS = 1000;
 constexpr float RANGED_REACH = 30.0f;
 constexpr float TAUNT_RANGE = 30.0f;
-// A leftover Raging Spirit this close to him is tanked on him, where melee cleave it
 constexpr float SPIRIT_NEAR_HIM = 12.0f;
 
 constexpr float SOAK_OFFSET = 10.0f;
@@ -124,14 +115,12 @@ constexpr float TRAP_DROP = 2.0f;
 constexpr uint32 VILE_WAVE_MIN_MS = 2000;
 
 constexpr float BOMB_KEEP = 13.0f;
-// Bombs fall about 3.5 yd/s, so one this high lands within 4 s
 constexpr float BOMB_SOON = 14.0f;
 constexpr float LEADER_RELATCH = 2.0f;
 
 constexpr uint8 WARDEN_KICK_SCANS = 2;
 constexpr float TERENAS_HEAL_PCT = 80.0f;
 
-// boss_the_lich_king.cpp, no spelldifficulty row
 constexpr uint32 LATE_SPELL_VILE_SPIRITS = 70498;
 constexpr uint32 LATE_SPELL_SOUL_RIP = 69397;
 
@@ -155,7 +144,6 @@ enum class WalkKind : uint8
     FrostmourneLead,
     FrostmourneFollow,
     Stack,
-    // A melee chaser's waypoint round the puddle between it and its Val'kyr
     Round,
 };
 
@@ -163,7 +151,6 @@ struct ValkyrInfo
 {
     ObjectGuid guid;
     Position pos;
-    // Carrying a player, and on heroic still above the drop
     bool carrier = false;
     bool siphoner = false;
     float healthPct = 100.0f;
@@ -197,10 +184,8 @@ struct LateBot
     Position walkSpot;
     bool walkParked = false;
     bool owned = false;
-    // Generic reach would walk it off the Frostmourne stack or through a puddle
     bool reachHeld = false;
 
-    // The Defile cast its clear spot was found for
     uint32 defileFor = 0;
     bool defileValid = false;
     Position defileSpot;
@@ -211,9 +196,7 @@ struct LateBot
     Position puddleSpot;
     uint32 puddleBlockedMs = 0;
 
-    // The carrier it chases off the stack
     ObjectGuid chase;
-    // Latched until reached or no longer clear, so the walk doesn't swap sides as the Val'kyr moves
     bool roundValid = false;
     Position roundStep;
 
@@ -229,8 +212,6 @@ struct LateBot
     std::string harvestSpell;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -253,7 +234,6 @@ struct LateState
     std::vector<SpiritInfo> wicked;
     ObjectGuid warden;
     ObjectGuid terenas;
-    // Scans in a row that saw the warden channel Soul Rip
     uint8 ripScans = 0;
 
     uint32 platformDutyMs = 0;
@@ -264,8 +244,6 @@ struct LateState
     ObjectGuid holder;
     ObjectGuid freeTank;
 
-    // The stack: him at the anchor, the holder, the free tank and the lattice round its centre in the
-    // anchor's frame. frameFor is 1 for phase two, 2 east, 3 west.
     uint8 frameFor = 0;
     float frame = 0.0f;
     Position anchor;
@@ -286,18 +264,13 @@ struct LateState
     bool defileRunValid = false;
     Position defileRunSpot;
 
-    // The carriers the buckets were dealt for, by guid
     std::vector<ObjectGuid> carriers;
-    // Bot -> its carrier
     std::unordered_map<ObjectGuid, ObjectGuid> bucket;
-    // Val'kyr -> the last stun or slow cast on it
     std::unordered_map<ObjectGuid, ControlCast> stunCast;
     std::unordered_map<ObjectGuid, ControlCast> slowCast;
-    // Bot -> the Val'kyr it stuns or slows now
     std::unordered_map<ObjectGuid, ObjectGuid> stunner;
     std::unordered_map<ObjectGuid, ObjectGuid> slower;
     std::unordered_set<ObjectGuid> hammered;
-    // Siphoner -> the free tank's last taunt on it
     std::unordered_map<ObjectGuid, uint32> siphonTaunted;
 
     bool wave = false;
@@ -383,7 +356,6 @@ Unit* Pickable(Player* bot, Creature* unit)
                : nullptr;
 }
 
-// Heroic's Harvest Souls has no duration and ends only with his channel, so the stun itself is what counts
 bool HarvestStunned(Player* player, Unit* boss)
 {
     return player->HasUnitState(UNIT_STATE_STUNNED) &&
@@ -413,7 +385,6 @@ bool PuddleTrips(LateState const& st, Position const& p)
                        { return puddle.pos.GetExactDist2d(p) < puddle.radius + PUDDLE_TRIGGER; });
 }
 
-// `inside` skips the puddles it stands in: a bot in one has to cross it to get out
 bool SegmentClear(std::vector<PuddleInfo> const& puddles, Position const& from, Position const& to,
                   Position const* inside = nullptr)
 {
@@ -438,8 +409,6 @@ bool ClearOf(std::vector<HazardCircle> const& circles, Position const& p)
     return true;
 }
 
-// Rings outward from `from`: the first ring holding a spot clear of every circle that `accept` takes wins,
-// nearest `preferNear` inside it. Geometry only, since neither floor here is on the navmesh.
 bool Sweep(Position const& from, std::vector<HazardCircle> const& circles, float maxRadius, float step,
            Accept const& accept, Position const* preferNear, float z, Position& out)
 {
@@ -477,8 +446,6 @@ bool Sweep(Position const& from, std::vector<HazardCircle> const& circles, float
     return false;
 }
 
-// The next point of a walk to `dest`: dest itself when the line clears every puddle, else a point beside
-// the first puddle in the way
 bool PlanStep(LateState const& st, Player* bot, Position const& dest, Position& out)
 {
     Position const from = bot->GetPosition();
@@ -556,7 +523,6 @@ uint32 AuraLeft(Unit* unit, AuraType type)
     return left > 0 ? static_cast<uint32>(left) : 0;
 }
 
-// The single-target taunt IccCastClassTaunt casts
 char const* ClassTauntName(Player* bot)
 {
     switch (bot->getClass())
@@ -592,7 +558,6 @@ bool HoldsRagingSpirit(Player* tank)
     return false;
 }
 
-// The immunities that still let the soaker walk come first
 uint32 ImmunityReady(Player* member)
 {
     auto const ready = [member](uint32 spellId)
@@ -639,7 +604,6 @@ bool FrostTrapReady(Player* member)
 
 bool CanPay(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -657,7 +621,6 @@ char const* ReadyKick(PlayerbotAI* botAI, Unit* target)
     {
         uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", kick)->Get();
         SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-        // CanCastSpell lets a wrong form or stance through
         if (!info || bot->HasSpellCooldown(spellId) || !CanPay(bot, info) ||
             info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
             continue;
@@ -669,7 +632,6 @@ char const* ReadyKick(PlayerbotAI* botAI, Unit* target)
     return nullptr;
 }
 
-// Soul Rip is magic: only priests and paladins remove it from a friend
 char const* DispelName(Player* bot)
 {
     switch (bot->getClass())
@@ -752,7 +714,6 @@ void ScanPlatform(LateState& st, Player* bot, uint32 now)
         info.pos = unit->GetPosition();
         info.healthPct = unit->GetHealthPct();
         info.carrier = carrying && (!heroic || unit->GetHealthPct() > HEROIC_DROP_PCT);
-        // A fresh Val'kyr hangs at the same height over him, not attackable until it grabs someone
         info.siphoner = heroic && !carrying && !unit->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE) &&
                         unit->GetPositionZ() > SIPHON_Z && unit->GetExactDist2d(LK_CENTER) <= SIPHON_RANGE;
         st.valkyrs.push_back(info);
@@ -769,7 +730,6 @@ void ScanPlatform(LateState& st, Player* bot, uint32 now)
     bot->GetCreatureListWithEntryInGrid(found, NPC_LK_VILE_SPIRIT, PLATFORM_SCAN);
     for (Creature* unit : found)
     {
-        // A burst spirit turns unselectable for its last 3 s
         if (!unit->IsAlive() || unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ||
             unit->GetExactDist2d(LK_CENTER) > PLATFORM_REACH)
             continue;
@@ -830,7 +790,6 @@ bool PointFouled(LateState const& st, Player* bot, Position const& p)
     return !PlatformAccepts(bot, p) || PuddleFouls(st, p);
 }
 
-// Him, the holder's spot and the stack's centre, which the lattice hangs off
 bool SetFouled(LateState const& st, Player* bot, Position const& anchor, float frame)
 {
     return PointFouled(st, bot, anchor) ||
@@ -884,7 +843,6 @@ void UpdateStack(LateState& st, Player* bot, std::vector<Player*> const& members
     st.stackCentre = PointAt(st.anchor, frame + STACK_OFFSET.deg, STACK_OFFSET.r);
     st.stackValid = true;
 
-    // A 2 yd triangular lattice: 19 nodes within 4 yd, nearest him first
     std::vector<std::pair<float, Position>> nodes;
     float const rowHeight = LATTICE_STEP * std::sqrt(3.0f) / 2.0f;
     for (int j = -2; j <= 2; ++j)
@@ -905,7 +863,6 @@ void UpdateStack(LateState& st, Player* bot, std::vector<Player*> const& members
     for (auto const& entry : nodes)
         st.nodes.push_back(entry.second);
 
-    // Melee take the nodes nearest him
     std::vector<Player*> melee;
     std::vector<Player*> others;
     for (Player* member : members)
@@ -977,7 +934,6 @@ void DealBuckets(LateState& st, std::vector<Player*> const& pool, std::vector<Va
     }
 }
 
-// The first bot by guid that can land its spell now, once the last one runs under CONTROL_LEAD_MS
 void Elect(LateState& st, bool stun, ObjectGuid const& guid, Creature* valkyr, std::vector<Player*> const& duty,
            std::unordered_set<ObjectGuid>& busy, uint32 now)
 {
@@ -1045,7 +1001,6 @@ void UpdateValkyrs(LateState& st, Player* bot, std::vector<Player*> const& membe
     for (ValkyrInfo const* info : carriers)
         set.push_back(info->guid);
 
-    // Dealt again only when the carriers change, so a melee bot keeps its Val'kyr as they fly apart
     if (set != st.carriers)
     {
         st.carriers = set;
@@ -1055,7 +1010,6 @@ void UpdateValkyrs(LateState& st, Player* bot, std::vector<Player*> const& membe
             if (member->GetGUID() == st.holder)
                 continue;
 
-            // A free tank holding a leftover Raging Spirit would drag it into the raid
             bool const freeTank = member->GetGUID() == st.freeTank && !HoldsRagingSpirit(member);
             if (IsRaidDpsBot(member) || freeTank)
                 pool.push_back(member);
@@ -1085,7 +1039,6 @@ void UpdateValkyrs(LateState& st, Player* bot, std::vector<Player*> const& membe
     }
 }
 
-// Immunities first, healers last among them, then the free tank
 ObjectGuid ElectSoaker(LateState const& st, std::vector<Player*> const& members)
 {
     Player* best = nullptr;
@@ -1139,7 +1092,6 @@ void UpdateVileWave(LateState& st, Player* bot, std::vector<Player*> const& memb
         return;
     }
 
-    // Between the stack and the side the spirits come from
     Position const old = SideSpot(st.oldSide);
     float const dx = old.GetPositionX() - st.stackCentre.GetPositionX();
     float const dy = old.GetPositionY() - st.stackCentre.GetPositionY();
@@ -1195,7 +1147,6 @@ bool FindRunSpot(LateState const& st, Player* finder, Player* target, Position& 
     if (Sweep(from, circles, DEFILE_RUN_SWEEP, SWEEP_STEP, accept, nullptr, FloorZ(), out))
         return true;
 
-    // Nobody 14 yd clear: straight out of the stack on its own side
     float dx = sided ? sx : from.GetPositionX() - LK_CENTER.GetPositionX();
     float dy = sided ? sy : from.GetPositionY() - LK_CENTER.GetPositionY();
     float const length = std::sqrt(dx * dx + dy * dy);
@@ -1251,7 +1202,6 @@ bool FindPuddleExit(LateState const& st, Player* bot, Position const* prefer, Po
     return Sweep(from, circles, PUDDLE_SWEEP, SWEEP_STEP, accept, prefer, FloorZ(), out);
 }
 
-// The listener notes Defile at its cast start; the target's run spot is found once, for everyone to clear
 void DetectDefileCast(LateState& st, Player* bot, uint32 now)
 {
     IcecrownHelpers::DefileCastInfo const& cast = IcecrownHelpers::IccState(bot->GetInstanceId()).defileCast;
@@ -1282,7 +1232,6 @@ void DetectVileCast(LateState& st, Creature* boss, IccLichKingPhaseId phase, uin
         st.trapper.Clear();
         st.trapDropped = false;
         st.soakValid = false;
-        // The stack moves to the new side on the next tick, not a duty pass later
         st.platformDutiesRan = false;
     }
 
@@ -1319,7 +1268,6 @@ void RefreshPlatformDuties(LateState& st, PlayerbotAI* botAI, IccLichKingPhaseId
     UpdateVileWave(st, bot, members, phase, now);
 }
 
-// Heroic: the lowest-guid bot tank inside leads, else the lowest-guid bot
 void RefreshFrostmourneDuties(LateState& st, PlayerbotAI* botAI, uint32 now)
 {
     if (st.fmDutiesRan && getMSTimeDiff(st.fmDutyMs, now) < DUTY_MS)
@@ -1381,7 +1329,6 @@ bool FindBombExit(LateState const& st, Player* leader, bool soonOnly, Position& 
     return Sweep(leader->GetPosition(), circles, 2.0f * FM_SPOT_RANGE, SWEEP_STEP, accept, nullptr, FmZ(), out);
 }
 
-// Off every bomb's ground point; with no such spot, off the ones landing soon
 void LeaderDodge(LateState& st, Player* leader, std::string& note)
 {
     if (st.dodging)
@@ -1639,8 +1586,6 @@ bool VileWalk(LateState const& st, LateBot& bs, PlayerbotAI* botAI, WalkKind& ki
         if (into && !Guarded(bot))
         {
             bs.guard = GuardSpell(botAI, bot);
-            // A soaker whose immunity ran out with nothing else ready only waits: a burst is 19-37k. The
-            // free tank soaks on its health.
             if (!bs.guard && !IsLkTankPlayer(bot))
                 into = nullptr;
         }
@@ -1674,9 +1619,6 @@ bool VileWalk(LateState const& st, LateBot& bs, PlayerbotAI* botAI, WalkKind& ki
     return true;
 }
 
-// Chases its carrier on generic reach while the line to it clears every puddle and it is out of reach of
-// it, until the Val'kyr drops. With a puddle in between, a melee chaser walks round it and a ranged one
-// shoots only from where it stands.
 void UpdateChase(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhaseId phase)
 {
     Creature* valkyr = nullptr;
@@ -1719,8 +1661,6 @@ void UpdateChase(LateState const& st, LateBot& bs, Player* bot, IccLichKingPhase
         bs.chase.Clear();
 }
 
-// A melee damage dealer whose pick is a leftover Raging Spirit tanked by him leaves its node, which would
-// otherwise walk it back out of reach
 bool OnLeftoverSpirit(PlayerbotAI* botAI, LateState const& st)
 {
     Player* bot = botAI->GetBot();
@@ -1832,7 +1772,6 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
     bool const stuck = !bot->IsAlive() || bot->GetVehicle() || HarvestStunned(bot, boss);
     if (inFm && bot->IsAlive())
     {
-        // Follow and the generic movers would walk a bot here off toward its master outside
         hold = true;
         if (IsHeroicMap(bot))
         {
@@ -1857,7 +1796,6 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
             !(phase == IccLichKingPhaseId::Three && VileWalk(st, bs, botAI, kind, spot)))
         {
             UpdateChase(st, bs, bot, phase);
-            // A plague carrier isolating from the raid keeps its walk
             if (bs.roundValid && IsLkMovementOwned(botAI))
                 bs.roundValid = false;
 
@@ -1870,7 +1808,6 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
                 stackNote = phase == IccLichKingPhaseId::Two
                                 ? std::string("p2 spirit")
                                 : std::string("p3 ") + SideName(st.side.Get()) + " spirit";
-            // A Necrotic Plague carrier isolating from the raid would be walked straight back into it
             else if (!bs.chase && assigned && !IsLkMovementOwned(botAI))
             {
                 Position step;
@@ -1885,7 +1822,6 @@ void UpdateBot(LateState& st, LateBot& bs, PlayerbotAI* botAI, Creature* boss, I
         }
         else
         {
-            // Planned again from wherever the Defile or Vile Spirits walk leaves it
             bs.roundValid = false;
         }
 
@@ -1931,7 +1867,6 @@ Unit* Resolve(PlayerbotAI* botAI, LateState const& st, Creature* boss, char cons
         if (!dps || !ranged)
             return nullptr;
 
-        // Reach is held inside, so a pick has to be in range from the stack
         Player* leader = PlayerOf(bot, st.leader);
         Position const from = leader ? leader->GetPosition() : bot->GetPosition();
         Unit* best = nullptr;
@@ -2023,7 +1958,7 @@ bool WalkOf(PlayerbotAI* botAI, std::initializer_list<WalkKind> kinds, Position&
     spot = bs->walkSpot;
     return true;
 }
-}  // namespace
+}
 
 void TickLkLate(PlayerbotAI* botAI)
 {
@@ -2037,7 +1972,6 @@ void TickLkLate(PlayerbotAI* botAI)
 
     uint32 const instanceId = bot->GetInstanceId();
     LateState* found = lateStates.Find(instanceId);
-    // A wipe ends the pull: the next one rebuilds every duty
     if (!IsLkLive(botAI))
     {
         if (found)
@@ -2199,8 +2133,6 @@ Unit* GetLkSiphonTauntTarget(PlayerbotAI* botAI)
     if (!tauntInfo)
         return nullptr;
 
-    // Life Siphon goes to its last taunter: never taunted first, then the one taunted longest ago. A Val'kyr
-    // stays taunt immune until it reaches its siphon spot.
     uint32 const now = getMSTime();
     Creature* best = nullptr;
     bool bestFresh = false;

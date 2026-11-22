@@ -29,7 +29,6 @@ struct EncounterPrefix
     ToCEncounter encounter;
 };
 
-// No prefix here is a prefix of another, so first match wins.
 constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
     {"gormok", ToCEncounter::NorthrendBeasts},
     {"northrend worms", ToCEncounter::NorthrendBeasts},
@@ -40,8 +39,6 @@ constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
     {"anubarak", ToCEncounter::Anubarak},
 };
 
-// The arena reaches about 80 yd from ARENA_CENTER (gate 77, stands 64), so from anywhere on the
-// floor this sees all of it.
 constexpr float ENTRY_SEARCH_RADIUS = 200.0f;
 
 std::vector<uint32> const CHAMPION_ENTRIES = {
@@ -76,23 +73,19 @@ std::vector<uint32> const CHAMPION_ENTRIES = {
 };
 ToCEntrySet const CHAMPION_ENTRY_SET(CHAMPION_ENTRIES);
 
-// One read per instance per ms: every gated trigger and multiplier asks, and a read can walk a
-// 200 yd grid.
 struct ToCGateState
 {
     RaidObs::ObsValue<uint32> progress{"toc.progress"};
 
     uint32 memoMs = 0;
-    bool memoValid = false;  // 0 is a real getMSTime value
+    bool memoValid = false;
     uint32 stage = 0;
     ToCEncounter live = ToCEncounter::None;
-    ObjectGuid champion;  // the FC sweep's last hit, tried before the next sweep
+    ObjectGuid champion;
 };
 
 RaidInstanceState<ToCGateState> gateStates;
 
-// The kill moves the stage on before the adds are gone: snobolds can outlive Gormok, and Jaraxxus's
-// Mistresses and Infernals outlive him
 ToCEncounter EncounterBeforeStage(uint32 stage)
 {
     switch (stage)
@@ -108,7 +101,6 @@ ToCEncounter EncounterBeforeStage(uint32 stage)
 
 bool IsEngaged(Creature const* creature) { return creature && creature->IsAlive() && creature->IsInCombat(); }
 
-// A guid resolves map-wide, hence the combat test on top.
 bool GuidEngaged(Map* map, InstanceScript* instance, uint32 type)
 {
     ObjectGuid const guid = instance->GetGuidData(type);
@@ -129,8 +121,6 @@ Creature* FirstEngaged(Player* bot, EntryTest const& isEntry)
     return found;
 }
 
-// True only where FirstEngaged would find it: passes the sweep's tests, its cell within one of the bot's,
-// and in that cell's grid container, which lags its position until the map's move list runs
 template <typename EntryTest>
 bool SweepFinds(Player* bot, Map* map, ObjectGuid const& guid, EntryTest const& isEntry)
 {
@@ -165,8 +155,6 @@ bool EntryEngaged(Player* bot, Map* map, ObjectGuid const& slot, uint32 entry)
     return SweepFinds(bot, map, slot, isEntry) || FirstEngaged(bot, isEntry) != nullptr;
 }
 
-// Icehowl, Jaraxxus and the champions count only inside the 200 yd sweep, so their guids (the
-// script's slot, the last champion found) only spare the sweep, never stand in for it.
 bool EncounterEngaged(Player* bot, Map* map, InstanceScript* instance, ToCEncounter encounter,
                       ToCGateState& state)
 {
@@ -199,7 +187,6 @@ bool EncounterEngaged(Player* bot, Map* map, InstanceScript* instance, ToCEncoun
     }
 }
 
-// Null off a ToC instance.
 ToCGateState const* ReadGate(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -228,7 +215,7 @@ ToCGateState const* ReadGate(PlayerbotAI* botAI)
 
     return &state;
 }
-}  // namespace
+}
 
 ToCEncounter ToCEncounterOfStage(uint32 stage)
 {

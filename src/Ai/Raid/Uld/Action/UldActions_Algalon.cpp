@@ -20,20 +20,14 @@
 
 using namespace EncounterHelpers;
 
-// Algalon the Observer
-
 namespace
 {
-// A walk accepted while a cast holds the feet books the movement slot and goes nowhere until the cast
-// ends. Only the runs that have to land in time call this.
 void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
 {
     if (bot->IsMovementPreventedByCasting())
         botAI->RequestSpellInterrupt();
 }
 
-// MoveTo refuses a point it already issued for MaxWaitForMove, moving or not, so a walk stopped short
-// (a mana gem's StopMoving, Disengage) is never issued again unless the booking is dropped.
 LastMovement& Booking(PlayerbotAI* botAI)
 {
     return botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
@@ -46,8 +40,6 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
         last.clear();
 }
 
-// A walk waits behind a booking of equal priority until it runs out. The walks that must land within a
-// second drop one they didn't make.
 void DropForeignBooking(PlayerbotAI* botAI, Position const& own, MovementPriority upTo)
 {
     LastMovement& last = Booking(botAI);
@@ -56,8 +48,6 @@ void DropForeignBooking(PlayerbotAI* botAI, Position const& own, MovementPriorit
         last.clear();
 }
 
-// How close a walk may pass another hole: with margin, then just outside its 6 yd field, then anywhere.
-// Callers fall back down the list: the void Dark Matter still beats a meteor or staying in the field.
 enum class AlgalonPathRule
 {
     Clear,
@@ -65,8 +55,6 @@ enum class AlgalonPathRule
     Any,
 };
 
-// Nearest ground clear of every marker, hole and dying star, near `prefer` when given. Searches chained in one
-// Execute share `sweep`: they walk the same grid, so each point's collision check is paid once.
 Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule, Position const* prefer,
                               HazardSweepCache& sweep)
 {
@@ -90,8 +78,6 @@ Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRul
                                              ULDUAR_ALGALON_SWEEP_ANGLE_STEP, prefer, reachable, &sweep);
 }
 
-// The class's second taunt, for when the first missed or is cooling down while he is off a swap tank.
-// Righteous Defense goes on the friend he is hitting; the shout and the roar taunt everything near the tank.
 bool UseExplosionCover(PlayerbotAI* botAI, Player* bot)
 {
     char const* cover = GetAlgalonExplosionCover(botAI);
@@ -135,11 +121,10 @@ bool CastBackupTaunt(PlayerbotAI* botAI, Player* bot, Unit* boss)
             return false;
     }
 }
-}  // namespace
+}
 
 bool AlgalonBigBangSoakAction::Execute(Event /*event*/)
 {
-    // Dispersion's 90% survives it outright; the tank's own armour and a physical defensive do the rest.
     if (AlgalonCanDisperse(bot))
     {
         if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
@@ -192,7 +177,6 @@ bool AlgalonTankDefensiveAction::Execute(Event /*event*/)
     if (!cut.spellId)
         return false;
 
-    // A heal half cast is worth less than the tank.
     if (bot->IsNonMeleeSpellCast(false, true))
         bot->InterruptNonMeleeSpells(false);
 
@@ -207,7 +191,6 @@ bool AlgalonExplosionCoverAction::Execute(Event /*event*/) { return UseExplosion
 
 bool AlgalonExplosionPersonalAction::Execute(Event /*event*/)
 {
-    // Before the pick: a channel fails every button's cast check and the item use alike.
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
@@ -224,12 +207,9 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
     if (!GetAlgalonShelter(bot, shelter))
         return false;
 
-    // Anywhere inside the field phases the bot on its next pulse.
     if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_IN_RADIUS)
         return false;
 
-    // Big Bang goes through all four. Magic immunity keeps the field's phase off, and Ice Block also holds the mage
-    // in place until the hit.
     for (uint32 const immunity : {SPELL_ALGALON_ICE_BLOCK, SPELL_ALGALON_DIVINE_SHIELD, SPELL_ALGALON_CLOAK_OF_SHADOWS,
                                   SPELL_ALGALON_ANTI_MAGIC_SHELL})
         if (bot->HasAura(immunity))
@@ -237,8 +217,6 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
-    // The run outranks both nodes, so a star going off before the bot is in gets its cover or button here. An
-    // instant doesn't stop the walk.
     if (!UseExplosionCover(botAI, bot))
         UseExplosionPersonal(botAI, bot);
 
@@ -246,7 +224,6 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
     bool const clear = AlgalonHideRoute(bot, shelter, next);
     AlgalonBoostHideRun(bot, bot->GetExactDist2d(next) + next.GetExactDist2d(shelter) -
                                  ULDUAR_ALGALON_SHELTER_IN_RADIUS);
-    // A dodge still under way only gives way to a run no meteor lands within 10 yd of.
     if (clear || !AlgalonCosmicSmashThreatens(bot))
         DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_FORCED);
     _walk = next;
@@ -255,17 +232,13 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
                false, MovementPriority::MOVEMENT_FORCED, true))
         return true;
 
-    // MoveTo answers Duplicate for the rest of the run. Returning false there hands the tick to a heal
-    // whose cast then pins the feet.
     return bot->isMoving();
 }
 
 bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
-    // FleePosition clamps to Playerbots.FleeDistance (5 yd), inside the doubled damage band.
     char const* branch = "clear";
     HazardSweepCache sweep;
-    // A hider whose meteors land in the cast dodges towards its hole: away from it, the run was too long.
     Position anchor;
     Position const* prefer = GetAlgalonDodgeAnchor(bot, anchor) ? &anchor : nullptr;
     Position clear =
@@ -332,7 +305,6 @@ bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
         return true;
     }
 
-    // Its own walk still running answers Waiting; giving the tick away would let a cast pin the feet.
     return bot->isMoving();
 }
 
@@ -365,8 +337,6 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Handed the soak on its way into a hole: stop, or the run carries it into the field while the walk
-    // back waits behind its booking.
     bool const soaking = AlgalonBigBangLatched(bot) && GetAlgalonBigBangSoaker(botAI) == bot;
     LastMovement& last = Booking(botAI);
     if (soaking && last.msTime && AlgalonWalkEntersField(bot, last.lastMoveToX, last.lastMoveToY,
@@ -376,8 +346,6 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
         last.clear();
     }
 
-    // After a taunt the walk to the tank slot goes out next tick, not once the last walk runs out. The taunt
-    // moves him, not the bot's own target: a former handler would keep chasing its constellation.
     if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
     {
         // Attack before clearing the booking: it stops a walk booked below combat, and a dodge under way is forced.
@@ -395,7 +363,6 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
         return true;
     }
 
-    // Taunts on cooldown or out of reach: walk in and hit him.
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 
@@ -408,7 +375,6 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     if (!constellation)
         return false;
 
-    // From the far side of a spare hole it comes straight across and is eaten on the way.
     Position behind;
     bool const fromBehind = AlgalonKiteBehind(bot, constellation, behind);
     if (fromBehind && bot->GetExactDist2d(behind) > ULDUAR_ALGALON_SLOT_TOLERANCE)
@@ -425,11 +391,9 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     if (CastClassTaunt(botAI, constellation))
         return true;
 
-    // On the spot with the taunt still cooling: hitting it would walk the handler off the line.
     if (fromBehind)
         return false;
 
-    // Hits hold it until the taunt is back.
     if (AI_VALUE(Unit*, "current target") != constellation)
         return Attack(constellation);
 
@@ -470,11 +434,9 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "algalon.kite", stage);
 
-    // Waiting for their cast or for them to come across: the tick goes back to everything else.
     if (bot->GetExactDist2d(spot) <= ULDUAR_ALGALON_SLOT_TOLERANCE)
         return false;
 
-    // The far spot is past the hole, so the straight walk there crosses it.
     Position next;
     if (!AlgalonWalkAround(bot, spot, next))
     {
@@ -484,13 +446,11 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Combat, not forced, so the exit and the meteor dodge always win over it.
     ReleaseStalledWalk(botAI, bot);
     DropForeignBooking(botAI, _walk, MovementPriority::MOVEMENT_COMBAT);
     if (!MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false, false,
                 false, MovementPriority::MOVEMENT_COMBAT, true))
     {
-        // Refused on its own walk's second tick is normal; refused standing still is not.
         if (!bot->isMoving() && RaidObs::Active())
             RaidObs::NoteDerived(bot, "algalon.kite", "stuck");
 
@@ -525,7 +485,6 @@ bool AlgalonRaidPositionAction::Execute(Event /*event*/)
 
     float const distance = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY());
 
-    // A waypoint round a hole is never somewhere to hold: the next check hands out the next leg.
     if (waypoint)
     {
         _slotReached = false;
@@ -536,8 +495,6 @@ bool AlgalonRaidPositionAction::Execute(Event /*event*/)
                       false, true, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
-    // Reach then hold, with a deadband. Re-issuing on every yard of drift restarts the spline, and a
-    // moving bot can't start a cast.
     if (_slotReached && distance > ULDUAR_ALGALON_SLOT_TOLERANCE * 2.0f)
         _slotReached = false;
 

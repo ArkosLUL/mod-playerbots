@@ -25,36 +25,29 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A kite leg or a flight re-aims once its point has moved this far
 constexpr float REAIM = 2.0f;
 constexpr float FLIGHT_ARRIVE = 1.5f;
 
 constexpr float HEAL_RANGE = 36.0f;
 constexpr float HEAL_WALK_TO = 25.0f;
-// A heal over time is renewed once this little of it is left
 constexpr int32 HOT_REFRESH_MS = 2000;
 
 struct Heal
 {
     char const* spell;
-    // A heal over time kept on her, up to this many stacks; 0 for a direct heal
     uint8 keep;
 };
 
-// Earth Shield, Beacon of Light and Sacred Shield are left out: each sits on one target at a time. The
-// generic nodes keep them on the tank, but for the paladins `icc valithria beacon` moves Beacon onto her.
 constexpr Heal DRUID_HEALS[] = {{"lifebloom", 3},   {"rejuvenation", 1}, {"regrowth", 1},
                                 {"wild growth", 0}, {"nourish", 0},      {"healing touch", 0}};
 constexpr Heal PRIEST_HEALS[] = {{"renew", 1}, {"penance", 0}, {"greater heal", 0}, {"flash heal", 0}};
 constexpr Heal SHAMAN_HEALS[] = {{"riptide", 1}, {"healing wave", 0}, {"lesser healing wave", 0}};
 constexpr Heal PALADIN_HEALS[] = {{"holy shock", 0}, {"holy light", 0}, {"flash of light", 0}};
-}  // namespace
+}
 
 Position const* IccVdWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -63,8 +56,6 @@ Position const* IccVdWalkAction::WalkInFlight()
 
 bool IccVdWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -73,7 +64,6 @@ bool IccVdWalkAction::WalkTo(Position const& spot, MovementPriority priority, bo
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOnWalkSpot())
         AI_VALUE(LastMovement&, "last movement").clear();
@@ -107,7 +97,6 @@ bool IccValithriaDodgeAction::Execute(Event /*event*/)
     if (!FindVdDodgeSpot(botAI, spot))
         return false;
 
-    // Column of Frost hits 11-20k and throws the bot up, Acid Burst 9-20k plus a 20 s DoT: worth any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -163,8 +152,6 @@ bool IccValithriaDreamAction::FlyTo(Position const& dest)
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 
-    // A bot gets no client to answer the fly aura, and the generic movers set these flags only while the
-    // master flies too
     bot->AddUnitMovementFlag(MOVEMENTFLAG_CAN_FLY | MOVEMENTFLAG_DISABLE_GRAVITY | MOVEMENTFLAG_FLYING);
 
     MotionMaster* mm = bot->GetMotionMaster();
@@ -201,7 +188,6 @@ bool IccValithriaDreamAction::Land()
     if (startZ - groundZ <= WALK_SPOT_TOLERANCE)
         return false;
 
-    // A real fall, damage included: a bot has no client to send the landing that would apply it
     bot->GetMotionMaster()->MoveFall();
     MovementInfo fallInfo = bot->m_movementInfo;
     bot->SetFallInformation(0, startZ);
@@ -226,7 +212,6 @@ bool IccValithriaPortalAction::Execute(Event /*event*/)
     {
         DropWalk();
         botAI->RemoveShapeshift();
-        // The click makes the bot cast Dream State, which a cast in progress would refuse
         if (bot->IsNonMeleeSpellCast(false))
             bot->InterruptNonMeleeSpells(false);
 
@@ -239,7 +224,6 @@ bool IccValithriaPortalAction::Execute(Event /*event*/)
         if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
             return true;
 
-    // An open portal lasts 10 s and anyone may take it: drop a cast to reach it, but wait one out before
     return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT, portal != nullptr);
 }
 
@@ -249,7 +233,6 @@ bool IccValithriaTauntAction::Execute(Event /*event*/)
     if (!add || !IccCastClassTaunt(bot, botAI, add))
         return false;
 
-    // A taunt moves the add, not the bot's own target
     AttackDirect(add);
     return true;
 }
@@ -273,7 +256,6 @@ bool IccValithriaVoidAction::Execute(Event /*event*/)
     if (WalkInFlight())
         return true;
 
-    // A void burns mana, not health: the cast in progress finishes first
     return WalkTo(spot, MovementPriority::MOVEMENT_COMBAT);
 }
 

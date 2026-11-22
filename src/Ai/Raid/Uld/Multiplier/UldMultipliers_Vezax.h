@@ -12,8 +12,6 @@
 
 #include <unordered_map>
 
-// Life Tap returns nothing here: its mana half, 31818, is a bare SPELL_EFFECT_ENERGIZE that Aura of
-// Despair is immune to, and the glyph proc (63320) rides that same energize.
 class VezaxSuppressLifeTapMultiplier : public Multiplier
 {
 public:
@@ -25,10 +23,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Ranged dps don't cast outside a Shadow Crash field: full price buys mana that can't be made back.
-// Healers are exempt, since a held heal lands inside the leech spikes that kill people. No hold on the
-// Animus either: its Profound Darkness stacks up until the raid can't be healed, so time is the limit
-// there, not mana.
 class VezaxHoldCastOutsideFieldMultiplier : public Multiplier
 {
 public:
@@ -40,9 +34,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// A dps bot on Vezax or the Animus holds its damage once its threat gets close to the main tank's, which
-// also lets him win the boss back from whoever pulled it. The Animus can't be taunted at all, and in a
-// field a caster's shadow damage outruns a tank's threat.
 class VezaxThreatMultiplier : public Multiplier
 {
 public:
@@ -51,8 +42,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Tricks of the Trade only on a tank. At the pull the generic pick decides the tank needs no redirect and
-// takes the hardest-hitting melee instead, which hands the rogue's threat to a dps.
 class VezaxTricksOnTankMultiplier : public Multiplier
 {
 public:
@@ -61,8 +50,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// The spell half of the hard mode hold: nothing aimed at him and no area damage. Melee, pets and the
-// damaging summons are a Block rule.
 class VezaxDamageHoldMultiplier : public Multiplier
 {
 public:

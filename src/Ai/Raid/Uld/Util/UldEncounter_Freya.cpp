@@ -39,7 +39,6 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
 bool FreshThisTick(uint32& atMs)
 {
     uint32 const now = getMSTime();
@@ -50,7 +49,6 @@ bool FreshThisTick(uint32& atMs)
     return false;
 }
 
-// The check behind "nearest npcs", with the entry tested first.
 struct FreyaStalkerInRangeCheck
 {
     Acore::AnyUnitInObjectRangeCheck inRange;
@@ -65,7 +63,6 @@ struct FreyaStalkerInRangeCheck
     }
 };
 
-// The check behind "possible targets no los", with the entry tested first.
 struct FreyaUnfriendlyOfEntryCheck
 {
     Acore::AnyUnfriendlyUnitInObjectRangeCheck inRange;
@@ -73,7 +70,7 @@ struct FreyaUnfriendlyOfEntryCheck
 
     bool operator()(Unit* unit) { return unit->GetEntry() == entry && inRange(unit); }
 };
-}  // namespace
+}
 
 const Position ULDUAR_FREYA_TANK_ANCHOR = Position(2360.0847f, -43.1235f, 425.333f);
 
@@ -117,16 +114,12 @@ bool FreyaWaveState::TrioReleased() const
 
 void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state)
 {
-    // Two waves of the same add can be up at once. Keeping the more damaged one finishes the older wave first and,
-    // since scan order isn't stable, stops the split flipping between identical adds.
     auto const keepMoreDamaged = [](Unit*& slot, Unit* candidate)
     {
         if (!slot || candidate->GetHealth() < slot->GetHealth())
             slot = candidate;
     };
 
-    // "possible targets" enforces line of sight, which drops adds behind Freya's tree trunks out of
-    // the scan and makes the split disagree between bots standing on opposite sides.
     for (ObjectGuid const& guid : GetFreyaScan(botAI).PossibleTargets())
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -169,8 +162,6 @@ bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target)
 
     std::vector<Unit*> const living = state.LivingTrio();
 
-    // Below three the window is already open and counting down; holding damage back now only lets the
-    // ones already dead come back.
     if (living.size() < 3)
         return false;
 
@@ -205,9 +196,6 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
             candidates.push_back(member);
     }
 
-    // Shouldn't happen, the release check clears the floor once the last member joins the band. Without this a bot
-    // with nothing to hit would fall through to the boss. Not during a hold: the siblings wait at the floor for the
-    // held Snaplasher, and the rest of the ladder beats idling on them.
     if (candidates.empty() && !held)
         candidates = state.LivingTrio();
 
@@ -221,8 +209,6 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
         if (!member || !member->IsAlive() || !PlayerbotAI::IsDps(member))
             continue;
 
-        // Join whichever member would carry the most remaining health per attacker. Over the group that splits
-        // bots in proportion to remaining health, which has to reach zero at the same time.
         size_t pick = 0;
         float best = -1.0f;
         for (size_t i = 0; i < candidates.size(); ++i)
@@ -252,7 +238,6 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state)
         if (!lasher || !lasher->IsAlive())
             continue;
 
-        // GUID breaks the tie so a wave of untouched lashers does not resolve differently per bot.
         if (!best || lasher->GetHealth() < best->GetHealth() ||
             (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))
             best = lasher;
@@ -270,7 +255,6 @@ Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state,
         bot->GetExactDist2d(currentTarget) <= range)
         selected = currentTarget;
 
-    // The margin stops two lashers at similar range from trading the bot back and forth every tick.
     constexpr float switchMargin = 10.0f;
     for (Unit* candidate : state.detonatingLashers)
     {
@@ -301,8 +285,6 @@ Unit* GetFreyaConservatorSpore(Unit* conservator)
     std::list<Creature*> found;
     conservator->GetCreatureListWithEntryInGrid(found, NPC_HEALTHY_SPORE, ULDUAR_FREYA_SPORE_SEARCH_RADIUS);
 
-    // Nearest the Conservator, not the caller, so the tank and the melee agree. Self-stabilising: the parked spore
-    // sits at ~0 yd until it despawns, and new ones spawn 20 yd out.
     Creature* best = nullptr;
     float bestDist = 0.0f;
     for (Creature* spore : found)
@@ -338,14 +320,10 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
-    // Melee take the parked spore, not their own nearest. Anywhere else the DPS node drags them back out of the
-    // aura to reach the boss, and the two nodes fight all wave.
     if (PlayerbotAI::IsMelee(bot))
         if (Unit* parked = GetFreyaConservatorSpore(GetFreyaScanUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR)))
             return parked;
 
-    // Ranged and healers: nearest spore with room, since nearest outright piles them all on the melee spore. No
-    // latch, the trigger stops on the aura. Skip spores holding a beam pool, it covers 5 yd of the spore's 6.
     std::vector<Position> const beams = GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
     auto const pooled = [&beams](Unit* spore)
     {
@@ -389,8 +367,6 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
         }
     }
 
-    // Every spore full, or every one pooled: both happen with three alive against fifteen bots that need one.
-    // Sheltered and stacked, or sheltered and burning, still beats pacified.
     if (roomy)
         return roomy;
 
@@ -426,7 +402,6 @@ Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI)
     float bestDistance = std::numeric_limits<float>::max();
     for (Unit* spore : GetFreyaSpores(botAI))
     {
-        // The carrier itself does not count against the spore it is running to.
         if (CountFreyaRaidNear(botAI, spore->GetPosition(), ULDUAR_FREYA_NATURES_FURY_RADIUS, bot))
             continue;
 
@@ -441,8 +416,6 @@ Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI)
     return best;
 }
 
-// Highest health percent first, never a suppressed member or `skip`. Percent since the thresholds are percent and
-// max health differs nearly 2x, so absolute health calls the Snaplasher furthest from dying even when it's closest.
 static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget, Unit* skip)
 {
     Unit* best = nullptr;
@@ -458,8 +431,6 @@ static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTa
     if (!best || !currentTarget || currentTarget == best)
         return best;
 
-    // Hold the member the tank is already on until another is clear of it by the margin, or its own
-    // damage closing the gap makes it swap every few ticks.
     for (Unit* member : state.LivingTrio())
     {
         if (member != currentTarget || member == skip || FreyaTrioSyncSuppress(state, member))
@@ -481,13 +452,11 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
 
     if (PlayerbotAI::IsMainTank(bot))
     {
-        // Once it's on him: his own threat is what keeps it off the damage dealers.
         Unit* snap = state.snaplasher;
         if (snap && snap->IsAlive() && snap->GetVictim() == bot && !FreyaTrioSyncSuppress(state, snap) &&
             bot->IsWithinMeleeRange(snap))
             return snap;
 
-        // Only once it's in reach: walking to it would drag Freya along. The taunt brings it over.
         Unit* storm = state.stormLasher;
         if (storm && storm->IsAlive() && !FreyaTrioSyncSuppress(state, storm) && bot->IsWithinMeleeRange(storm))
             return storm;
@@ -498,8 +467,6 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return nullptr;
 
-    // A risen add tank leaves a held Snaplasher alone until its bark is gone: hitting it renews the stacks, and one
-    // capped swing kills a tank who takes it stacked.
     Unit* held = GetFreyaHeldSnaplasher(botAI);
     if (state.snaplasher && state.snaplasher->IsAlive() &&
         (state.snaplasher != held || IsFreyaHeldSnaplasherFree(botAI)))
@@ -511,7 +478,6 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget, held))
         return member;
 
-    // Same local rule and leash as melee DPS: hit the one next to it, never tow one into the raid.
     if (Unit* lasher = GetFreyaLocalLasherTarget(botAI, state, currentTarget, ULDUAR_FREYA_MELEE_LASHER_RANGE))
         return lasher;
 
@@ -593,8 +559,6 @@ std::vector<Position> GetFreyaEscapeLasherPositions(PlayerbotAI* botAI, float se
 {
     Player* bot = botAI->GetBot();
 
-    // Melee and tanks stand on what they hit, a spot 15 yd off the pile is no firing position. Only low lashers
-    // count: Detonate lands on death, and clearing all ten is running from something faster than a bot.
     if (PlayerbotAI::IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || PlayerbotAI::IsHeal(bot)))
         return {};
 
@@ -664,16 +628,13 @@ uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI)
 
 namespace
 {
-// Highest GUID counter of any Army ghoul seen this instance. Lashers and ghouls take their counter from the same
-// map-wide sequence, which only goes up, so a lasher below the mark was already up when that Army landed. Kept past
-// the ghouls' 40s, which is what stops a second DK spending its Army on the leftovers of a covered wave.
 struct FreyaArmyState
 {
     uint32 ghoulMark = 0;
 };
 
 RaidInstanceState<FreyaArmyState> freyaArmyStates;
-}  // namespace
+}
 
 bool IsFreyaArmyChanneling(Player* player)
 {
@@ -698,8 +659,6 @@ bool IsFreyaArmyTurn(PlayerbotAI* botAI)
             member->getClass() != CLASS_DEATH_KNIGHT)
             continue;
 
-        // A human's Army counts too: the ghouls re-taunt every second (43264) for their 40s, whoever cast them,
-        // so they also hold a wave that shows up while they're still out.
         for (Unit* minion : member->m_Controlled)
         {
             if (minion && minion->IsAlive() && minion->GetEntry() == NPC_ARMY_OF_THE_DEAD)
@@ -715,7 +674,6 @@ bool IsFreyaArmyTurn(PlayerbotAI* botAI)
         if (IsFreyaArmyChanneling(member))
             turn = false;
 
-        // Bots only here, nobody can plan around a human's cooldown.
         if (GET_PLAYERBOT_AI(member) && member->IsInCombat() && member->GetGUID() < bot->GetGUID() &&
             member->HasSpell(SPELL_ARMY_OF_THE_DEAD) && !member->HasSpellCooldown(SPELL_ARMY_OF_THE_DEAD))
             turn = false;
@@ -767,7 +725,7 @@ bool IsFreyaSnaplasherBarkReset(Unit* snaplasher)
 {
     return !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_10) && !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_25);
 }
-}  // namespace
+}
 
 void TickFreya(PlayerbotAI* botAI)
 {
@@ -780,7 +738,6 @@ void TickFreya(PlayerbotAI* botAI)
     if (!freya || !freya->IsAlive())
         return;
 
-    // Every bot ticks this and all of them reach the same answer, so once per millisecond is plenty.
     FreyaSnaplasherHoldState& hold = freyaSnaplasherHolds.For(instanceId);
     uint32 const now = getMSTime();
     if (hold.updatedMs == now)
@@ -973,7 +930,6 @@ bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 see
         tankThreat = std::max(tankThreat, snaplasher->GetThreatMgr().GetThreat(member));
     }
 
-    // Nobody is tanking it, and it still has to die with the other two.
     if (tankThreat <= 0.0f)
         return false;
 
@@ -995,8 +951,6 @@ Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state)
 
         uint32 const count = CountFreyaLashersNear(lasher->GetPosition(), state, ULDUAR_FREYA_LASHER_PACK_RADIUS);
 
-        // GUID breaks the tie so a wave of evenly spread lashers does not resolve differently per bot,
-        // which would split the raid's AoE across two piles and fire neither.
         if (!best || count > bestCount || (count == bestCount && lasher->GetGUID() < best->GetGUID()))
         {
             best = lasher;
@@ -1018,8 +972,6 @@ bool IsFreyaLasherPackFinishing(FreyaWaveState const& state, Position const& cen
         if (centre.GetExactDist2d(lasher->GetPosition()) > ULDUAR_FREYA_LASHER_PACK_RADIUS)
             continue;
 
-        // One healthy lasher in the pile means the raid is still in the AoE phase: novaing and walking
-        // out now would leave it alive behind the snare with nobody near enough to finish it.
         if (lasher->GetHealthPct() > ULDUAR_FREYA_LASHER_FINISH_PCT)
             return false;
 
@@ -1060,7 +1012,6 @@ bool IsFreyaLasherHeldByGhoul(PlayerbotAI* botAI, Unit* lasher)
     if (!group)
         return false;
 
-    // Any DK's ghouls, a human's too: the taunt pulse doesn't care who cast them.
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1108,8 +1059,6 @@ GuidVector const& FreyaScan::Stalkers()
     if (!bot)
         return stalkers;
 
-    // Same visit, range check and order as "nearest npcs" for these entries, but the entry is tested first so the
-    // LOS ray only goes to spores and beams, not every pet, ghoul and bomb in sight.
     float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> matches;
@@ -1158,8 +1107,6 @@ Unit* GetFreyaBossByEntry(PlayerbotAI* botAI)
     if (!bot)
         return nullptr;
 
-    // Same order and check as "possible targets no los" without building the rest of the list. IsPossibleTarget
-    // only runs on units already known to be her.
     float const range = sPlayerbotAIConfig.SightDistance;
 
     std::vector<Unit*> matches;

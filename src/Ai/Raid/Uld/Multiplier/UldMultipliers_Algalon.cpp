@@ -31,10 +31,8 @@ namespace Family = RaidEncounterRules::Family;
 
 namespace
 {
-// SetBehindTargetAction's two spots, either side of the target's facing.
 constexpr float SET_BEHIND_SPOT_ANGLE = 3.0f * static_cast<float>(M_PI) / 5.0f;
 
-// A buff or other friendly spell, which may well be an area one but lands on no star.
 bool CastsPositiveSpell(PlayerbotAI* botAI, Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
@@ -47,7 +45,6 @@ bool CastsPositiveSpell(PlayerbotAI* botAI, Action* action)
     return spellInfo && spellInfo->IsPositive();
 }
 
-// More of its damage comes from ticks than from the hit, at base values.
 bool MostlyPeriodic(SpellInfo const* info, Player* caster)
 {
     if (!info || info->IsChanneled())
@@ -82,7 +79,7 @@ bool MostlyPeriodic(SpellInfo const* info, Player* caster)
 
     return periodic > direct;
 }
-}  // namespace
+}
 
 float AlgalonTargetGuardMultiplier::GetValue(Action* action)
 {
@@ -158,7 +155,6 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
         reserve.dispersion = name == "dispersion";
         reserve.alwaysForSwapTanks = always.count(name) > 0;
         reserve.swapTanksOnly = !anyone.count(name) && (reserve.alwaysForSwapTanks || IsHeldTankDefensive(name));
-        // Never a bubble: he leaves a paladin under one.
         reserve.holderOwn = IsHeldTankDefensive(name) || name == "lay on hands";
         reserve.holderExternal = externals.count(name) > 0;
         CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
@@ -176,7 +172,6 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
     if (reserve.swapTanksOnly && !swapTank)
         return 1.0f;
 
-    // The soak casts it with SOAK_DISPERSION_MS of the cast left.
     int32 const untilHit = AlgalonMsToBigBangHit(botAI);
     if (reserve.dispersion)
     {
@@ -184,8 +179,6 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
         return untilHit == 0 || cooldown > untilHit - ULDUAR_ALGALON_SOAK_DISPERSION_MS ? 0.0f : 1.0f;
     }
 
-    // A priest soaks and the tanks hide, so their buttons are free. The holder's own and the externals on it
-    // belong to the tank defensive node, one at a time: the class nodes would stack a second on the same dip.
     if (AlgalonDispersionSoak(bot))
     {
         if (reserve.bubble)
@@ -203,7 +196,6 @@ float AlgalonCooldownReserveMultiplier::GetValue(Action* action)
         return player && player != holder && IsAlgalonSwapTank(player) ? 1.0f : 0.0f;
     }
 
-    // With nobody to take him off it, a holder that dies first soaks nothing either.
     if ((reserve.holderOwn || reserve.holderExternal) && !AlgalonBigBangCasting(botAI))
     {
         if (Player* lone = AlgalonLoneHolder(botAI))
@@ -287,8 +279,6 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
     auto cached = splashes.find(action);
     if (cached == splashes.end())
     {
-        // The trap sits 30 s and the elemental's Fire Nova and Fire Shield go wherever it does: on one star they took
-        // 8.6% in the 20 s before Big Bang. Trap Launcher drops the same trap under its own name.
         static std::set<std::string> const always = {"starfall",
                                                      "blade flurry",
                                                      "sweeping strikes",
@@ -298,11 +288,9 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
                                                      "fire elemental totem",
                                                      "fire elemental totem melee"};
         static std::set<std::string> const groundAtBot = {"consecration", "magma totem"};
-        // Living Bomb goes off 12 s after the cast, by when a star may have wandered next to its target.
         static std::set<std::string> const groundAtTarget = {
             "death and decay", "blizzard", "flamestrike", "hurricane", "rain of fire", "volley", "living bomb",
             "living bomb on attackers"};
-        // Chains and detonations the spell test can't see, on top of the shared list.
         static std::set<std::string> const chains = {"hammer of the righteous", "avenger's shield",
                                                      "seed of corruption", "mind sear", "corpse explosion"};
         std::string const& name = action->getName();
@@ -324,14 +312,12 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
     if (cached->second == Splash::None || !AlgalonEngaged(botAI))
         return 1.0f;
 
-    // All of phase 1: one started before a wave spawns still runs when it lands.
     if (cached->second == Splash::Always)
         return AlgalonInPhaseOne(botAI) ? 0.0f : 1.0f;
 
     if (!AlgalonAliveStarCount(botAI))
         return 1.0f;
 
-    // The star being hit is the team's to kill; only another one nearby is at risk.
     Unit* target = AI_VALUE(Unit*, "current target");
     ObjectGuid const targetGuid = target ? target->GetGUID() : ObjectGuid::Empty;
     switch (cached->second)
@@ -362,12 +348,10 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
 
 float AlgalonWalkGuardMultiplier::GetValue(Action* action)
 {
-    // Holes first: most of the fight there is none, and this weighs every reach in the room.
     if (!action || !AlgalonHoleNear(bot, ULDUAR_ALGALON_SCAN_RADIUS) || !AlgalonEngaged(botAI) ||
         AlgalonShouldRunForShelter(bot))
         return 1.0f;
 
-    // A phased bot back inside a field at the strip is phased again.
     float const stand =
         IsAlgalonPhased(bot) ? ULDUAR_ALGALON_HOLE_EXIT_RADIUS : ULDUAR_ALGALON_FIELD_STAND_CLEARANCE;
 
@@ -378,8 +362,6 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
         if (!target)
             return 1.0f;
 
-        // Set behind walks to one of two spots, 108 degrees either side of his facing at the bot's own
-        // distance from him, so both have to be clear.
         float const distance =
             std::max(bot->GetExactDist(target), bot->GetMeleeRange(target) / 2.0f) - bot->GetCombatReach();
         for (float const side : {1.0f, -1.0f})
@@ -398,8 +380,6 @@ float AlgalonWalkGuardMultiplier::GetValue(Action* action)
     if (!target)
         return 1.0f;
 
-    // Where the walk stops: in melee range for melee and a charge, in heal or spell range for the rest. A charge
-    // runs the straight line whatever lies on it.
     float range = botAI->GetRange("spell");
     if (name == "reach melee" || dynamic_cast<CastReachTargetSpellAction*>(action))
         range = bot->GetMeleeRange(target);

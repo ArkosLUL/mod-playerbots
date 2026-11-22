@@ -14,7 +14,6 @@
 
 #include <vector>
 
-// P3: sole owner of the drake's position. Nothing else may steer a Skytalon.
 class EoEFlyDrakeAction : public MovementAction
 {
 public:
@@ -32,7 +31,6 @@ private:
     float _stackZ = 0.0f;
     bool _stackValid = false;
 
-    // Last destination handed to the MotionMaster, so the same one is not restamped every tick.
     float _issuedX = 0.0f;
     float _issuedY = 0.0f;
     bool _issued = false;

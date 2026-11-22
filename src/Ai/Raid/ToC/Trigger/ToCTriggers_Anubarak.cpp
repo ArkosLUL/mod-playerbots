@@ -27,7 +27,6 @@ bool AnubarakKiterNeedsImmunityTrigger::IsActive()
     return AnubarakEngaged(botAI) && AnubarakKiterNeedsImmunity(bot);
 }
 
-// A held dodge still counts as gathered for the gather's movement block, it just isn't walked back yet
 bool AnubarakRaidGathersTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && AnubarakGathers(botAI) && !IsAnubarakDodgeHeld(botAI);
@@ -45,7 +44,6 @@ bool AnubarakHealerStandTrigger::IsActive()
         return false;
     }
 
-    // a burrower on it stays by its side tank until the taunt
     AnubarakBurrowerLead lead;
     if (GetAnubarakBurrowerLead(botAI, lead))
     {
@@ -54,7 +52,6 @@ bool AnubarakHealerStandTrigger::IsActive()
     }
 
     bool const off = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > ANUBARAK_HEALER_STAND_LEAVE;
-    // on while it still moves, so the action can stop the walk
     if (off && AnubarakHealerStandWaits(bot))
     {
         RaidObs::NoteDerived(bot, "anub.hstand", "heal");
@@ -91,7 +88,6 @@ bool AnubarakRangedStandTrigger::IsActive()
 
 bool AnubarakDemonicCircleDueTrigger::IsActive() { return AnubarakDemonicCircleDue(botAI); }
 
-// A held dodge spot inside a patch, when none was clear of one, stays: the lane is worse than the slow
 bool AnubarakOnPermafrostTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && !IsAnubarakDodgeHeld(botAI) && AnubarakNonTankOnPermafrost(bot);
@@ -164,7 +160,6 @@ bool AnubarakRedirectThreatTrigger::IsActive()
            (redirect.dump && bot->HasAura(SPELL_MISDIRECTION_PROC));
 }
 
-// Stays on through the walk to the spot, so one step out of danger doesn't hand the bot to another walk
 bool AnubarakSpikeNearbyTrigger::IsActive()
 {
     return AnubarakEngaged(botAI) && (AnubarakInSpikeDanger(bot) || AnubarakDodgeWalking(bot));
@@ -235,7 +230,6 @@ bool AnubarakSideTankNeedsDefensiveTrigger::IsActive()
     return defensive && !AnubarakSideTankDefensiveKept(botAI, defensive);
 }
 
-// Also while a bubble is up, so the action can cancel the one it cast
 bool AnubarakColdSelfSaveTrigger::IsActive()
 {
     return GetAnubarakColdSelfSave(botAI) || (AnubarakLeechingSwarmActive(botAI) && AnubarakColdBubbleUp(bot));
@@ -261,15 +255,12 @@ bool AnubarakScarabOnRaidTrigger::IsActive()
     if (IsAnubarakPickupTank(bot) && phase != AnubarakPhase::Submerged)
         return false;
 
-    // Normal phase 2's scarabs are the main tank's and side tanks hold their patches. Heroic has a free
-    // side tank peel them off the healers. Either way a side tank keeps its taunts for a wave that's due.
     bool const heroic = bot->GetMap()->IsHeroic();
     if (GetAnubarakBurrowerTankSide(bot) >= 0 &&
         ((!IsAnubarakSurfaced(phase) && !heroic) || AnubarakWaveImminent(botAI) || bot->HasAura(SPELL_MARK) ||
          IsAnubarakEscort(botAI)))
         return false;
 
-    // Leaves burrower duty to the hold node, which outranks this one and would swap targets back
     if (GetAnubarakBurrowerPick(botAI))
         return false;
 

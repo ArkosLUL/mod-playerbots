@@ -15,17 +15,13 @@
 #include "Position.h"
 #include "RaidDirectTargeting.h"
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccBpcWalkAction : public MovementAction
 {
 public:
     IccBpcWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet, unless `interrupt` drops the cast
     bool WalkTo(Position const& spot, MovementPriority priority, bool interrupt = false);
     void DropWalk() { walking = false; }
 
@@ -118,7 +114,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the swing, Auto Shot or wand and the pick on the empowered prince while the threat brake holds the bot
 class IccBpcBrakeStopAction : public Action
 {
 public:
@@ -128,7 +123,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// The resolver's pick for the bot, and for its pet the bomb the pet juggles
 class IccBpcTargetAction : public RaidDirectAttackAction
 {
 public:

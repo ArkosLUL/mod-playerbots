@@ -3,7 +3,6 @@
 
 #include "ToCActions_NorthrendBeasts.h"
 
-// Out of combat: walks only, never attacks, or the raid pulls itself
 class ToCMoveToStagingStandAction : public NorthrendBeastsWalkAction
 {
 public:

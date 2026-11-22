@@ -9,8 +9,6 @@
 
 #include "Multiplier.h"
 
-// No AoE while the bot's target is an ice block: a wave puts up eight, so AoE rules fire on the count
-// and the breaker casts on everything but its own block.
 class HodirBreakerAoeHoldMultiplier : public Multiplier
 {
 public:

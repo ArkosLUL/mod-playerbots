@@ -19,9 +19,8 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-}  // namespace
+}
 
 bool IccDbsRuneSwapAction::Execute(Event /*event*/)
 {
@@ -54,7 +53,6 @@ bool IccDbsBeastTauntAction::Execute(Event /*event*/)
     if (!beast || !IccCastClassTaunt(bot, botAI, beast))
         return false;
 
-    // A taunt moves the beast, not the bot's own target
     AttackDirect(beast);
     return true;
 }
@@ -121,15 +119,12 @@ bool IccDbsStandAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Moving on some other node's walk doesn't count
     if (walking && bot->isMoving() && walkSpot.GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE && BookedOn(spot))
         return true;
 
-    // A walk issued mid-cast never starts but still books its travel time
     if (bot->IsMovementPreventedByCasting())
         return false;
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse the same spot
     uint32 const now = getMSTime();
     if (walking && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS && BookedOn(spot))
         AI_VALUE(LastMovement&, "last movement").clear();

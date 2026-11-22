@@ -7,9 +7,6 @@
 #include "Trigger.h"
 #include "UldEncounter_IronAssembly.h"
 
-// Iron Assembly
-
-// All three back at full health, which only happens on a fresh pull.
 class IronAssemblyResetEncounterStateTrigger : public Trigger
 {
 public:
@@ -40,8 +37,6 @@ public:
     bool IsActive() override;
 };
 
-// 200 ms rather than every tick: the rune lives 30s on a 30-40s cadence, so a fraction of a second
-// late costs one tick of damage and the sweep is a grid search across the whole raid.
 class IronAssemblyRuneOfDeathTrigger : public Trigger
 {
 public:
@@ -51,8 +46,6 @@ public:
     bool IsActive() override;
 };
 
-// Brundir is the only member that can be interrupted or stunned at all; Steelbreaker and Molgeim are
-// immune to both.
 class IronAssemblyInterruptTrigger : public Trigger
 {
 public:
@@ -62,7 +55,6 @@ public:
     bool IsActive() override;
 };
 
-// One tank per living member, Brundir's spot first.
 class IronAssemblyTankAssignmentTrigger : public Trigger
 {
 public:
@@ -72,8 +64,6 @@ public:
     bool IsActive() override;
 };
 
-// Shield of Runes pays Molgeim +50% damage for 15s if it is drained rather than removed, so
-// stripping it is worth more than the global costs.
 class IronAssemblyShieldOfRunesTrigger : public Trigger
 {
 public:
@@ -101,8 +91,6 @@ public:
     bool IsActive() override;
 };
 
-// Melee step into the focus's Rune of Power behind him. Ranged have no node: the rune is their raid spot,
-// and the tank's spot backs his boss off it.
 class IronAssemblyRuneOfPowerMeleeTrigger : public Trigger
 {
 public:
@@ -112,7 +100,6 @@ public:
     bool IsActive() override;
 };
 
-// The other tank has Steelbreaker off an Overwhelming Power carrier, who walks to the Meltdown point.
 class IronAssemblyMeltdownRunOutTrigger : public Trigger
 {
 public:
@@ -122,7 +109,6 @@ public:
     bool IsActive() override;
 };
 
-// A carrier is about to blow next to Steelbreaker, and this melee bot is in its blast.
 class IronAssemblyMeltdownStepOutTrigger : public Trigger
 {
 public:
@@ -132,7 +118,6 @@ public:
     bool IsActive() override;
 };
 
-// This druid is the one sent to Rebirth a dead bot tank, so the next swap has a partner.
 class IronAssemblyTankBattleRezTrigger : public Trigger
 {
 public:
@@ -142,7 +127,6 @@ public:
     bool IsActive() override;
 };
 
-// A tank rose mid fight and this bot is the one to put a raid buff back on it.
 class IronAssemblyTankRebuffTrigger : public Trigger
 {
 public:
@@ -152,8 +136,6 @@ public:
     bool IsActive() override;
 };
 
-// Steelbreaker is casting a Fusion Punch at this tank that would leave it under the floor, and it has a
-// magic defensive for it.
 class IronAssemblyFusionPunchDefensiveTrigger : public Trigger
 {
 public:
@@ -174,7 +156,6 @@ public:
     }
 };
 
-// The totem shaman's air button or totem isn't Nature Resistance, or it walked away from the totem.
 class IronAssemblyNatureTotemTrigger : public Trigger
 {
 public:

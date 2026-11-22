@@ -16,13 +16,11 @@
 
 bool IccLichKingDefileAction::Execute(Event /*event*/)
 {
-    // The puddle lands where the target stands as the 2 s cast ends
     return WalkFor(&GetLkDefileWalk, MovementPriority::MOVEMENT_FORCED, true, IsLkDefileRun(botAI));
 }
 
 bool IccLichKingVileSpiritsAction::Execute(Event /*event*/)
 {
-    // Guard first: a spirit bursts as soon as the soaker is within 5 yd
     if (uint32 const guard = GetLkSoakGuard(botAI))
         return botAI->CastSpell(guard, bot);
 
@@ -40,7 +38,6 @@ bool IccLichKingVileSpiritsAction::Execute(Event /*event*/)
 
 bool IccLichKingFrostmourneAction::Execute(Event /*event*/)
 {
-    // A bomb's explosion is lethal in here, and a death inside wipes the raid
     bool const urgent = IsLkFrostmourneUrgent(botAI);
     MovementPriority const priority = urgent ? MovementPriority::MOVEMENT_FORCED : MovementPriority::MOVEMENT_COMBAT;
     return WalkFor(&GetLkFrostmourneWalk, priority, urgent, false);

@@ -18,7 +18,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Runs only while GetWantedEssence names this action's reason, and walks to that colour's portal.
 class TwinValkyrEssenceActionBase : public MovementAction
 {
 public:
@@ -117,8 +116,6 @@ private:
     uint32 _dodgeSpotMs = 0;
 };
 
-// Waits on its door spot for its twin and taunts her in. Walks out only to fetch one that stopped
-// short of taunt range, and back by a point 5 yd out of the spot so she parks on the arena side.
 class TwinValkyrTankHoldAction : public ToCMainTankHoldAction
 {
 public:
@@ -133,7 +130,6 @@ private:
     bool WalkFacingTwin(Position const& to, Unit* twin);
 
     bool _doorWalk = false;
-    // back from a fetch, headed for the lead point first
     bool _leading = false;
     uint32 _leadReachedMs = 0;
 };

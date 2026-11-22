@@ -8,11 +8,9 @@
 
 void RaidTrialOfTheCrusaderStrategy::OnTick()
 {
-    // before triggers, so the generic pull's multiplier never sees it armed
     TrialOfTheCrusaderHelpers::FactionChampionsTakePullRequest(botAI);
     TrialOfTheCrusaderHelpers::UpdateToCStagingPark(botAI);
 
-    // once per strategy object, so a player's later rti order sticks until the strategy is rebuilt
     if (_legacyRtiChecked)
         return;
 
@@ -25,8 +23,6 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     for (EncounterDefinition const* encounter : ToCEncounterDefinitions())
         encounter->AddTriggerNodes(triggers);
 
-    // the chat command's own trigger, which no row can register: a tank bot takes the pull too, and the
-    // chain opens once either way
     triggers.push_back(new TriggerNode("pull", {
         NextAction("faction champions chain request", ACTION_RAID + 4.7f) }));
 }

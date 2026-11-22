@@ -9,8 +9,6 @@
 
 #include "Multiplier.h"
 
-// P2: Scions hover 20 yd up, where only a disk rider reaches them, so a tank that picks one ends up
-// standing under it.
 class MalygosScionTankAssistMultiplier : public Multiplier
 {
 public:

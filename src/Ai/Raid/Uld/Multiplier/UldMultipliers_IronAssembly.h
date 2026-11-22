@@ -10,8 +10,6 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Hard mode only: burst waits until Steelbreaker is last, where Supercharge and Electrical Charge compound.
-// Before that it's one shared health pool, so holding costs nothing.
 class IronAssemblyHoldDpsCooldownsMultiplier : public Multiplier
 {
 public:
@@ -20,8 +18,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Whoever carries Overwhelming Power keeps the empowered Steelbreaker until Meltdown, so this zeroes
-// any class taunt while another grouped tank holds him.
 class IronAssemblyTauntGuardMultiplier : public Multiplier
 {
 public:

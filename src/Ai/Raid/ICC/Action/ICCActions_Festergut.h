@@ -16,17 +16,13 @@
 #include "Position.h"
 #include "RaidDirectTargeting.h"
 
-// Holds its spot while the walk there is in flight: every MoveTo clears the MotionMaster, so a spot
-// re-issued each tick to a bot still walking never lands.
 class IccFestergutWalkAction : public MovementAction
 {
 public:
     IccFestergutWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {}
 
 protected:
-    // The latched spot while the bot is still walking to it, else nullptr
     Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet
     bool WalkTo(Position const& spot, MovementPriority priority);
     void DropWalk() { walking = false; }
 
@@ -83,7 +79,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Divine Shield, cancelled as it lands: the bubble purges Gastric Bloat on apply
 class IccFestergutBloatClearAction : public Action
 {
 public:
@@ -93,7 +88,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Drops the attack on him while the threat brake holds this tank
 class IccFestergutBrakeStopAction : public Action
 {
 public:

@@ -21,18 +21,14 @@
 namespace
 {
 constexpr float WALK_SPOT_TOLERANCE = 0.5f;
-// A spline issued last tick may not show in isMoving yet
 constexpr uint32 WALK_STALL_MS = 500;
-// A walk to a player re-aims once the player has moved this far
 constexpr float PLAYER_REAIM = 1.5f;
 constexpr float BITE_REACH = 3.0f;
-// Nitro Boosts for a Pact walk this long
 constexpr float PACT_NITRO_FROM = 12.0f;
-}  // namespace
+}
 
 Position const* IccBqlWalkAction::WalkInFlight()
 {
-    // Moving on some other node's walk doesn't count
     if (!walking || !bot->isMoving() || !BookedOnWalkSpot())
         return nullptr;
 
@@ -41,8 +37,6 @@ Position const* IccBqlWalkAction::WalkInFlight()
 
 bool IccBqlWalkAction::WalkTo(Position const& spot, MovementPriority priority, bool interrupt)
 {
-    // A walk issued mid-cast never starts but still books its travel time, and the same spot is refused
-    // until that runs out
     if (bot->IsMovementPreventedByCasting())
     {
         if (!interrupt)
@@ -51,14 +45,12 @@ bool IccBqlWalkAction::WalkTo(Position const& spot, MovementPriority priority, b
         bot->InterruptNonMeleeSpells(true);
     }
 
-    // A stun or an item use stopped the last walk short, and its booking would refuse this one
     uint32 const now = getMSTime();
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     bool const ours = walking && BookedOnWalkSpot();
     if (ours && !bot->isMoving() && getMSTimeDiff(walkIssuedMs, now) > WALK_STALL_MS)
         last.clear();
 
-    // A booking only yields to a higher priority, so our own forced walk would refuse its next leg
     bool const lowered = ours && bot->isMoving() && last.priority == MovementPriority::MOVEMENT_FORCED;
     if (lowered)
         last.priority = MovementPriority::MOVEMENT_COMBAT;
@@ -108,7 +100,6 @@ bool IccBqlDodgeAction::Execute(Event /*event*/)
     if (!FindBqlDodgeSpot(botAI, spot))
         return false;
 
-    // A shadow hits every second for 90 s, which costs more than any cast
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -121,7 +112,6 @@ bool IccBqlBiteAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Ice Block would keep the bite from going out; pacify and silence keep anything else from it anyway
     if (botAI->HasAura("ice block", bot))
         botAI->RemoveAura("ice block");
 
@@ -137,7 +127,6 @@ bool IccBqlBiteAction::Execute(Event /*event*/)
     }
 
     DropWalk();
-    // An override spell the spellbook never holds: by id, and past the has-spell check
     uint32 const bite = sSpellMgr->GetSpellIdForDifficulty(SPELL_BQL_VAMPIRIC_BITE, bot);
     return botAI->CanCastSpell(bite, target, false) && botAI->CastSpell(bite, target);
 }
@@ -155,7 +144,6 @@ bool IccBqlShadowsAction::Execute(Event /*event*/)
         if (inFlight->GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE)
             return true;
 
-    // Every half second it stands still drops a shadow under whoever is near
     return WalkTo(spot, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -168,7 +156,6 @@ bool IccBqlPactAction::Execute(Event /*event*/)
         return false;
     }
 
-    // The spot is a human member once he doesn't come
     Position const leg = NextLeg(spot);
     float const reaim = leg.GetExactDist2d(spot) <= WALK_SPOT_TOLERANCE ? PLAYER_REAIM : WALK_SPOT_TOLERANCE;
     if (Position const* inFlight = WalkInFlight())
@@ -207,7 +194,6 @@ bool IccBqlCastWhirlCoverAction::Execute(Event /*event*/)
     if (!spellId)
         return false;
 
-    // A cast in progress fails this one's check, and a moving bot breaks its own channel
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 
@@ -245,11 +231,9 @@ bool IccBqlMassDispelAction::Execute(Event /*event*/)
     if (!centre)
         return false;
 
-    // A moving bot can't start a cast, and the fear lasts 4 s
     if (bot->isMoving())
         bot->StopMoving();
 
-    // Aimed at the ground under the player
     return botAI->CastSpell("mass dispel", centre);
 }
 
@@ -266,7 +250,6 @@ bool IccBqlTauntAction::Execute(Event /*event*/)
     if (!queen || !IccCastClassTaunt(bot, botAI, queen))
         return false;
 
-    // A taunt moves her, not the bot's own target
     AttackDirect(queen);
     return true;
 }

@@ -8,8 +8,6 @@
 
 class PlayerbotAI;
 
-// Mirrors trial_of_the_crusader.h, out of reach in the core's scripts: INSTANCE_PROGRESS a GetData key, the
-// rest GetGuidData keys from TrialOfTheCrusaderObjectData, implicit values to recheck when the core adds one
 enum ToCInstanceData : uint32
 {
     TOC_DATA_INSTANCE_PROGRESS = 1,
@@ -18,12 +16,11 @@ enum ToCInstanceData : uint32
     TOC_DATA_ACIDMAW = 7,
     TOC_DATA_ICEHOWL = 8,
     TOC_DATA_JARAXXUS = 10,
-    TOC_DATA_FJOLA = 11,  // DATA_LIGHTBANE
-    TOC_DATA_EYDIS = 12,  // DATA_DARKBANE
+    TOC_DATA_FJOLA = 11,
+    TOC_DATA_EYDIS = 12,
     TOC_DATA_ANUBARAK = 14,
 };
 
-// GetData(TOC_DATA_INSTANCE_PROGRESS). Never moves back on a wipe.
 enum ToCInstanceProgress : uint32
 {
     TOC_PROGRESS_INITIAL = 0,
@@ -47,33 +44,22 @@ enum class ToCEncounter : uint8
     Anubarak
 };
 
-// The encounter a GetData(TOC_DATA_INSTANCE_PROGRESS) stage belongs to, None for 8, 10 and the rest.
 ToCEncounter ToCEncounterOfStage(uint32 stage);
 
-// The whole stage, pulled or not, so pre-pull prep still runs; Beasts and Jaraxxus also the stage after
-// their kill, for leftover adds, until the next is live. True off a ToC instance: ungated beats dead.
 bool ToCEncounterGateOpen(PlayerbotAI* botAI, ToCEncounter encounter);
 
-// Stage matches, IsEncounterInProgress, and one of its units alive and in combat: the script flags most
-// encounters in progress before the pull. False off a ToC instance.
 bool ToCEncounterIsLive(PlayerbotAI* botAI, ToCEncounter encounter);
 
-// None between pulls and off a ToC instance.
 ToCEncounter ToCLiveEncounter(PlayerbotAI* botAI);
 
-// EncounterGate over the two above, for a ToC EncounterDefinition. encounterId is
-// static_cast<uint32>(ToCEncounter::X).
 bool ToCGateOpen(PlayerbotAI* botAI, uint32 encounterId);
 bool ToCGateLive(PlayerbotAI* botAI, uint32 encounterId);
 inline constexpr EncounterGate ToCGate{&ToCGateOpen, &ToCGateLive};
 
-// Always open, never live: for a raid-wide stem whose triggers and rule predicates do their own gating. Its
-// definition takes static_cast<uint32>(ToCEncounter::None) and no trace name.
 bool ToCRaidWideGateOpen(PlayerbotAI* botAI, uint32 encounterId);
 bool ToCRaidWideGateLive(PlayerbotAI* botAI, uint32 encounterId);
 inline constexpr EncounterGate ToCRaidWideGate{&ToCRaidWideGateOpen, &ToCRaidWideGateLive};
 
-// The encounter whose prefix leads a trigger or action name. False for a name with none.
 bool ToCEncounterOfName(std::string const& name, ToCEncounter& encounter);
 
 #endif

@@ -15,9 +15,8 @@
 
 namespace
 {
-// The dogs' combat reach is 9: a tank's area spell from this close reaches one
 constexpr float YIELD_AREA_REACH = 15.0f;
-}  // namespace
+}
 
 float IccDogsYieldMultiplier::GetValue(Action* action)
 {

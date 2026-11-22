@@ -50,45 +50,33 @@ constexpr float LIVE_RANGE = 100.0f;
 constexpr float SCAN_RANGE = 100.0f;
 constexpr uint32 SCAN_MS = 200;
 constexpr float SHIELD_NOTE_RANGE = 30.0f;
-// Hurl Spear reaches 25 yd
 constexpr float HURL_RANGE = 24.0f;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
 
-// The hall's packs stand within 40 yd of each other, so one pull reaches this far round its first add
 constexpr float GAUNTLET_SCAN_RANGE = 60.0f;
-// Whirlwind's 41057 hits 8 yd round the Warlord as its 2 s cast ends. Frozen Orb's channel aura sits on
-// the Frostbinder's nearest player (the core retargets 71274); as it runs out, an orb flies at 5 yd/s to
-// where that player stood and 71286 bursts 6 yd round the spot.
 constexpr float WHIRLWIND_RADIUS = 8.0f;
 constexpr float ORB_RADIUS = 6.0f;
 constexpr int32 ORB_LEAD_MS = 3000;
 constexpr float ORB_SPEED = 5.0f;
-// A channel last seen this close to its end ran out and launched; one gone sooner was broken
 constexpr int32 ORB_LAUNCH_MS = 600;
 constexpr uint32 ORB_LAND_GRACE_MS = 500;
-// Difficulty row: remap at the call
 constexpr uint32 SPELL_SS_FROZEN_ORB_BLAST = 71286;
-// A dodge fires a little past a radius and clears it by the park tolerance and a margin
 constexpr float DANGER_PAD = 0.75f;
 constexpr float CLEAR_PAD = 2.5f;
 constexpr float DODGE_SWEEP = 15.0f;
-// A melee bot's dodge spot keeps its target this far past its combat reach where it can
 constexpr float MELEE_KEEP = 3.0f;
 
-// Kill order among the raised captains: Arnath heals the others and, on 25-man, casts Dominate Mind
 constexpr uint8 CAPTAIN_ORDER[SS_CAPTAINS] = {0, 3, 2, 1};
 
-// Interrupts first, then silences where the caster takes them
 constexpr char const* KICKS[] = {"kick", "pummel", "shield bash", "mind freeze", "counterspell", "wind shear"};
 constexpr char const* SILENCES[] = {"silencing shot", "silence", "strangulate"};
-// Summon Undead and Frozen Orb have no prevention type, so no kick or silence stops them. A stun does.
 constexpr char const* STUNS[] = {"hammer of justice", "concussion blow", "bash"};
 
 enum class Stop : uint8
 {
-    Kick,  // an interrupt, else a silence
+    Kick,
     Stun
 };
 
@@ -99,8 +87,6 @@ struct CastToStop
     Stop stop = Stop::Kick;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -113,11 +99,8 @@ struct SsState
     uint32 scanMs = 0;
     bool scanned = false;
     std::vector<ObjectGuid> spears;
-    // Bot -> the Impaling Spear it pulls out
     RaidObs::ObsGuidMap<ObjectGuid> spear{"ss.spear"};
-    // Bot tank -> the raised captain it holds
     RaidObs::ObsGuidMap<ObjectGuid> tank{"ss.tank"};
-    // Kicker -> the Arnath it kicks
     std::unordered_map<ObjectGuid, ObjectGuid> kicks;
     std::unordered_map<ObjectGuid, TargetMemo> targets;
     uint32 humanCallMs = 0;
@@ -142,16 +125,11 @@ struct GauntletState
 {
     uint32 scanMs = 0;
     bool scanned = false;
-    // Every live Ymirjar and summon round the pull in combat; who it fights is read at use
     std::vector<ObjectGuid> adds;
-    // Kicker or stunner -> the Deathbringer or Frostbinder it stops
     std::unordered_map<ObjectGuid, ObjectGuid> kicks;
-    // Frozen Orb holder -> where it stood at the last scan, and its channel
     std::unordered_map<ObjectGuid, OrbMark> orbs;
-    // Orbs in flight to a holder's spot
     std::vector<OrbBlast> blasts;
     std::unordered_map<ObjectGuid, TargetMemo> targets;
-    // The reach hold is asked for every action a bot weighs: per bot, the ms it was read and the answer
     std::unordered_map<ObjectGuid, std::pair<uint32, bool>> reachHeld;
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
@@ -165,10 +143,8 @@ bool IsTankPlayer(Player* player)
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
 }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return player && GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -192,8 +168,6 @@ bool InGroup(Player* bot, Unit* victim)
     return player && bot->IsInSameRaidWith(player);
 }
 
-// The Spell constructor remaps a difficulty row's id, so a caller passes the remapped one. Whirlwind 41056
-// is self-channelled and sits in the channel slot through its 2 s cast.
 bool Casting(Unit* caster, uint32 spellId)
 {
     if (!caster)
@@ -233,7 +207,6 @@ bool IsRaisedCaptain(Unit* unit)
 
 bool IsFighting(Unit* unit) { return unit && unit->IsAlive() && unit->IsInCombat(); }
 
-// Arnath, Brandon, Grondel, Rupert by slot; null where that captain is not a raised one in the fight
 Creature* FightingCaptain(Player* bot, uint8 slot)
 {
     Creature* captain = SlotCreature(bot, SS_DATA_CAPTAIN_ARNATH_GUID + slot);
@@ -292,7 +265,6 @@ bool HoldsSomething(Player* bot, Player* member)
 
 bool CanPayFor(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -300,8 +272,6 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// The first kick or stun the member can land on the caster right now. A false ready here holds every other
-// kicker back from the election, so power and form are checked too.
 char const* ReadyKick(Player* member, Unit* caster, Stop stop)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -341,7 +311,6 @@ char const* ReadyKick(Player* member, Unit* caster, Stop stop)
     return nullptr;
 }
 
-// Each caster, in the order given, to the nearest bot with the right stop ready that no earlier caster took
 void AssignKicks(std::unordered_map<ObjectGuid, ObjectGuid>& kicks,
                  std::vector<std::pair<Creature*, Stop>> const& casters, std::vector<Player*> const& members)
 {
@@ -369,7 +338,6 @@ void AssignKicks(std::unordered_map<ObjectGuid, ObjectGuid>& kicks,
     }
 }
 
-// The caster this bot is elected to kick, still casting what it was elected for
 Creature* KickFor(std::unordered_map<ObjectGuid, ObjectGuid> const& kicks, Player* bot)
 {
     auto const itr = kicks.find(bot->GetGUID());
@@ -398,8 +366,6 @@ Creature* LiveSpear(Player* bot, ObjectGuid const& guid)
     return spear && spear->IsAlive() && spear->GetVehicleBase() ? spear : nullptr;
 }
 
-// Who may pull a spear: no impaled bot (stunned), no bot under Arnath's Dominate Mind, no tank holding an
-// add, no bot locked to one ability (Bladestorm turns the click's cast into a silent no-op)
 bool CanPull(Player* bot, Player* member)
 {
     return IsDutyBot(member) && !member->HasAura(SPELL_SS_IMPALING_SPEAR) && !member->GetVehicle() &&
@@ -409,7 +375,6 @@ bool CanPull(Player* bot, Player* member)
 
 void AssignSpears(SsState& st, Player* bot, std::vector<Player*> const& members)
 {
-    // A puller that can no longer pull hands its spear on: the victim loses 10% a second meanwhile
     std::vector<ObjectGuid> lapsed;
     for (auto const& [puller, spear] : st.spear)
     {
@@ -430,7 +395,6 @@ void AssignSpears(SsState& st, Player* bot, std::vector<Player*> const& members)
         if (claimed || !spear)
             continue;
 
-        // Damage dealers first, then healers, then a tank holding nothing
         Player* best = nullptr;
         std::tuple<uint8, float, ObjectGuid> bestKey;
         for (Player* member : members)
@@ -499,7 +463,6 @@ void AssignCaptainTanks(SsState& st, Player* bot, std::vector<Player*> const& me
     }
 }
 
-// Arnath's casts worth a kick: Dominate Mind exists on 25-man only, and his Flash Heal tops the others up
 bool ArnathKickable(Creature* arnath)
 {
     return Casting(arnath, SPELL_SS_DOMINATE_MIND) || CastingFlashHeal(arnath);
@@ -512,7 +475,6 @@ void AssignArnathKicks(SsState& st, Player* bot, std::vector<Player*> const& mem
         if (ArnathKickable(arnath))
             casters.emplace_back(arnath, Stop::Kick);
 
-    // A puller spends its ticks on the spear, so it would hold the kick through the 2 s cast
     std::vector<Player*> kickers;
     for (Player* member : members)
         if (!st.spear.count(member->GetGUID()))
@@ -521,7 +483,6 @@ void AssignArnathKicks(SsState& st, Player* bot, std::vector<Player*> const& mem
     AssignKicks(st.kicks, casters, kickers);
 }
 
-// A human tank has no trigger, so it gets told when a captain has it low
 void CallHumanTank(SsState& st, Player* sender, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -575,7 +536,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SsState const& st)
         if (!captain || captain->HasAura(SPELL_SS_CAPTAIN_DIVINE_SHIELD))
             continue;
 
-        // A tank leaves another tank's captain alone
         Player* victim = captain->GetVictim() ? captain->GetVictim()->ToPlayer() : nullptr;
         if (tank && victim && victim != bot && IsTankPlayer(victim))
             continue;
@@ -595,7 +555,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, SsState const& st)
     return nullptr;
 }
 
-// The holder nearest Svalna throws; the rest keep theirs for the next shield
 Player* ElectedThrower(Player* bot, Creature* svalna)
 {
     Player* best = nullptr;
@@ -641,7 +600,6 @@ bool IsMeleeYmirjar(Unit* unit)
     }
 }
 
-// Ranged damage dealers open on the Deathbringers, melee on the Frostbinders, as the gauntlet blog has it
 int8 GauntletTier(Unit* unit, bool melee)
 {
     switch (unit ? unit->GetEntry() : 0)
@@ -704,8 +662,6 @@ std::vector<Creature*> EngagedAdds(GauntletState const& st, Player* bot)
     return adds;
 }
 
-// What the add casts that a bot stops. Summon Undead raises five Corrupted Ymirjar and a Frozen Orb bursts
-// for 15-20k, so their stuns are handed out before the kicks on the bolts.
 bool CastToStopOf(Creature* add, CastToStop& cast)
 {
     switch (add ? add->GetEntry() : 0)
@@ -730,7 +686,6 @@ bool CastToStopOf(Creature* add, CastToStop& cast)
     }
 }
 
-// An orb launches only when the channel runs out: a stun or the holder's death ends it with nothing sent
 void TrackOrbs(GauntletState& st, Player* bot, uint32 now)
 {
     std::unordered_map<ObjectGuid, OrbMark> orbs;
@@ -801,8 +756,6 @@ void ScanGauntlet(GauntletState& st, Creature* source, Player* bot, uint32 now)
     AssignKicks(st.kicks, casters, MembersOnMap(bot));
 }
 
-// A melee add hitting a player who is no tank, which the duty tank nearest it takes. For a taunt, the
-// nearest with its taunt ready, skipping one a taunt just landed on: it still shows its old victim.
 Creature* RescueFor(GauntletState const& st, Player* bot, bool forTaunt)
 {
     std::vector<Player*> tanks;
@@ -870,7 +823,6 @@ Unit* ResolveGauntletTarget(PlayerbotAI* botAI, GauntletState const& st)
                 return rescue;
             }
 
-        // The melee adds this tank holds, else the nearest no other tank holds; the casters keep their range
         Creature* pick = nullptr;
         std::tuple<bool, float, ObjectGuid> pickKey;
         for (Creature* add : adds)
@@ -904,7 +856,6 @@ Unit* ResolveGauntletTarget(PlayerbotAI* botAI, GauntletState const& st)
         }
     }
 
-    // The current pick stays while nothing of a better tier fights, or bots flip between adds walking in
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     Creature* held = current ? current->ToCreature() : nullptr;
     if (best && held && held != best && GauntletTier(held, melee) == GauntletTier(best, melee) &&
@@ -922,8 +873,6 @@ struct GauntletHazard
     char const* kind;
 };
 
-// Hazards about to land round the bot, unpadded. Tanks stay in a Whirlwind. An orb's holder can't leave a
-// circle round itself, only the spot the orb flies to.
 std::vector<GauntletHazard> GauntletHazardsAround(GauntletState const& st, Player* bot)
 {
     std::vector<GauntletHazard> hazards;
@@ -985,7 +934,7 @@ void CallGauntletHumanTank(GauntletState& st, Player* sender, uint32 now)
             CallHumanTankDefensive(sender, member, spellId, 0, "you are low", "ss.gauntlet.humancall");
     }
 }
-}  // namespace
+}
 
 Creature* GetSsSvalna(PlayerbotAI* botAI)
 {
@@ -1107,14 +1056,12 @@ uint32 GetSsTankDefensive(PlayerbotAI* botAI, char const* noteKind)
 
     if (bot->GetHealthPct() >= SS_TANK_DEFENSIVE_PCT || !CaptainHits(bot, bot))
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             NoteDerived(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // The captains' swings and strikes are physical
     return NextTankDefensive(botAI, bot, noteKind, true);
 }
 
@@ -1129,7 +1076,6 @@ void TickSsEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the fight: the next one rebuilds every duty. Her death kills the raised captains.
     Creature* slot = SlotCreature(bot, SS_DATA_SVALNA_GUID);
     if (!slot || !slot->IsAlive() || (!slot->IsInCombat() && !AnyCaptainFighting(bot)))
     {
@@ -1301,7 +1247,6 @@ uint32 GetSsGauntletTankDefensive(PlayerbotAI* botAI, char const* noteKind)
         return 0;
     }
 
-    // The melee Ymirjar and the Huntresses' shots are physical
     return NextTankDefensive(botAI, bot, noteKind, true);
 }
 
@@ -1316,7 +1261,6 @@ void TickSsGauntletEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // Between packs nothing fights the raid: the next pack rebuilds the scan and the kicks
     Creature* unit = GauntletLiveUnit(botAI);
     if (!unit)
     {

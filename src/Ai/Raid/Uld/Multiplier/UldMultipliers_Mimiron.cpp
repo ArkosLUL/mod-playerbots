@@ -45,14 +45,10 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
     if (!action || !PlayerbotAI::IsMainTank(bot))
         return 1.0f;
 
-    // "reach melee" by name: "reach spell" and "reach party member to heal" walk ranged and healers
-    // into range and must not be touched, and the gap-closers are the charge guard's business.
     bool const reachMelee = action->getName() == "reach melee";
     if (!dynamic_cast<TankFaceAction*>(action) && !reachMelee)
         return 1.0f;
 
-    // Phase 3, either mode: the unit hovers out of reach and holds 30 yd off its target, so chasing it only
-    // drags the fight and the ranged wedge off the tank's centre spot.
     if (reachMelee && IsMimironAcuAirborne(botAI, bot))
         return 0.0f;
 
@@ -68,8 +64,6 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
 
 float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
 {
-    // The spell test first: it answers off the action alone, while the kept list walks the bot's
-    // whole target list, and this runs for every action of every bot in the instance.
     if (!action || !SpellSplashes(botAI, action))
         return 1.0f;
 
@@ -97,7 +91,5 @@ float MimironPlasmaDefensiveHoldMultiplier::GetValue(Action* action)
     if (!action || !PlayerbotAI::IsMainTank(bot) || !IsHeldTankDefensive(action->getName()))
         return 1.0f;
 
-    // "mimiron plasma blast defensive action" casts through CastSpell directly, so this never holds it.
-    // Engaged too: the MK II stands unselectable in the room before the pull, and nearby trash keeps the class nodes.
     return IsMimironEngaged(botAI) && MimironPhase1Active(botAI) ? 0.0f : 1.0f;
 }

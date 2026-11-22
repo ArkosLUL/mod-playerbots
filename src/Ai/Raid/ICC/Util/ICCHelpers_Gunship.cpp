@@ -33,11 +33,8 @@ namespace
 {
 constexpr uint32 GSB_UNIT_SCAN_MS = 200;
 constexpr uint32 GSB_ROSTER_MS = 1000;
-// Boarders go without a tank on the captain this long into a freeze: a mage left alive loses the fight
 constexpr uint32 GSB_NO_TANK_GO_MS = 15000;
-// The board tank leaves after everyone else, or this long after the party was called home
 constexpr uint32 GSB_TANK_LAST_MS = 10000;
-// Cannon Blast and Incinerating Blast reach 150 yd
 constexpr float GSB_CANNON_RANGE = 150.0f;
 constexpr float GSB_HAZARD_SCAN = 80.0f;
 constexpr uint32 GSB_HUMAN_CALL_MS = 1000;
@@ -74,7 +71,6 @@ GsbSide const GSB_HORDE{true,
                         Position(-449.5343f, 2477.2024f, 471.31906f),
                         Position(7.461699f, 0.158853f, 35.72989f)};
 
-// Transport-local, 3 yd inside the core's outermost crew slots (cannons, gunners, mortars, captain)
 struct DeckBox
 {
     float minX;
@@ -85,8 +81,6 @@ struct DeckBox
 constexpr DeckBox SKYBREAKER_BOX{-31.0f, 10.0f, -21.0f, 15.0f};
 constexpr DeckBox ORGRIMS_HAMMER_BOX{-13.0f, 30.0f, -21.0f, 27.0f};
 
-// Edge slots, transport-local: two rows 4 and 8.5 yd inboard of the cannon line, 5 yd apart, past the
-// explosion's 4 yd. Orgrim's Hammer's deck rises along x, as its axethrower slots do.
 constexpr float SKYBREAKER_EDGE_ROWS[] = {-20.5f, -16.0f};
 constexpr float SKYBREAKER_EDGE_X0 = -29.0f;
 constexpr uint32 SKYBREAKER_EDGE_COUNT = 7;
@@ -105,7 +99,6 @@ struct GsbStand
     bool parked = false;
 };
 
-// The deck and window a tank's last defensive was cast for
 struct GsbSpent
 {
     GsbDeck deck = GsbDeck::None;
@@ -141,7 +134,6 @@ struct GsbState
     std::unordered_map<ObjectGuid, GsbStand> stands;
     std::unordered_map<ObjectGuid, Position> notedCasts;
 
-    // 1 or 2 while the captain's stacks put the board tank in a defensive window
     RaidObs::ObsValue<uint32> furyWindow{"gsb.furywindow", 0};
     std::unordered_map<ObjectGuid, GsbSpent> defensiveSpent;
     uint32 humanCallMs = 0;
@@ -165,7 +157,6 @@ bool IsRangedDpsPlayer(Player* player)
     return !IsTankPlayer(player) && !IsHealPlayer(player) && PlayerbotAI::IsRangedDps(player);
 }
 
-// A bot of its own, not a player, selfbot included: players hold no duty
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsSkybreaker(uint32 entry) { return entry == GO_GSB_SKYBREAKER_A || entry == GO_GSB_SKYBREAKER_H; }
@@ -215,7 +206,6 @@ void BuildEdgeSlots(GsbState& state, Transport* home, GsbSide const& side)
             slots.emplace_back(x, y, z);
         }
 
-        // Healers take the first slots, so nearest the board tank's spot comes first
         std::sort(slots.begin(), slots.end(), [&side](Position const& a, Position const& b)
                   { return a.GetExactDist2d(side.landing) < b.GetExactDist2d(side.landing); });
         state.edgeSlots.insert(state.edgeSlots.end(), slots.begin(), slots.end());
@@ -245,7 +235,6 @@ void RefreshUnits(GsbState& state, Player* bot, GsbSide const& side, uint32 now,
     if (home && live)
         BuildEdgeSlots(state, home, side);
 
-    // Both ships: the portal moves a boarder onto the raid's deck but leaves it its own ship's passenger
     ObjectGuid mageFallback;
     auto const sort = [&state, &side, &mageFallback, bot](Creature* creature)
     {
@@ -269,7 +258,6 @@ void RefreshUnits(GsbState& state, Player* bot, GsbSide const& side, uint32 now,
         {
             if (creature->FindCurrentSpellBySpellId(SPELL_BELOW_ZERO))
                 state.mage = creature->GetGUID();
-            // The two portal mages channel Shadow Channeling
             else if (!creature->FindCurrentSpellBySpellId(SPELL_GSB_SHADOW_CHANNELING))
                 mageFallback = creature->GetGUID();
         }
@@ -369,7 +357,6 @@ void RefreshRoster(GsbState& state, Player* bot, uint32 now)
         (home ? homeHeal : boardHeal).push_back(healers[i]);
     }
 
-    // Ranged cannoneers take a slot too, for when Below Zero throws them out
     uint32 slot = 0;
     for (std::vector<Player*> const* members : {&homeHeal, &boardHeal, &ranged})
         for (Player* member : *members)
@@ -460,10 +447,8 @@ char const* StandName(GsbStandKind kind)
     }
 }
 
-// Rocket Pack Useable lasts while the bot is near Zafod and the battle isn't won
 bool CanRocket(Player* bot) { return GsbHasRocketPack(bot) && bot->HasAura(SPELL_ROCKET_PACK_USEABLE); }
 
-// Ejected melee cannoneers board, ranged ones only when the raid has no melee DPS bot
 bool InBoardingParty(GsbState const& state, Player* bot, GsbDuty duty)
 {
     switch (duty)
@@ -530,7 +515,6 @@ GsbDeck WantedDeck(GsbState const& state, GsbSide const& side, Player* bot, GsbB
     if (board == GsbBoard::Go)
         return GsbDeck::Enemy;
 
-    // The captain turns on whoever is left once his tank goes
     if ((board == GsbBoard::Back || board == GsbBoard::Retreat) && DutyIn(state, bot) == GsbDuty::BoardTank &&
         GsbDeckOf(side, bot) == GsbDeck::Enemy && OthersOnEnemyDeck(bot, side) &&
         getMSTimeDiff(state.releasedMs, getMSTime()) < GSB_TANK_LAST_MS)
@@ -545,7 +529,6 @@ uint32 FuryStacks(Creature* captain)
     return aura ? aura->GetStackAmount() : 0;
 }
 
-// The percent one stack adds
 int32 FuryPerStack(Creature* captain)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(sSpellMgr->GetSpellIdForDifficulty(SPELL_BATTLE_FURY2, captain));
@@ -558,7 +541,6 @@ uint32 RetreatStacks(Creature* captain)
     return static_cast<uint32>((GSB_FURY_RETREAT_BONUS + perStack - 1) / perStack);
 }
 
-// 0 below the first defensive window, else 1 or 2
 uint8 FuryWindow(Creature* captain)
 {
     int32 const bonus = static_cast<int32>(FuryStacks(captain)) * FuryPerStack(captain);
@@ -576,7 +558,6 @@ void UpdateFreeze(PlayerbotAI* botAI, GsbState& state, uint32 now)
     if (frozen && !state.frozen)
     {
         state.frozenSinceMs = now;
-        // Cleared so the next thaw writes its count even when it repeats this one
         state.fury = 0u;
     }
 
@@ -673,7 +654,6 @@ GsbStandKind DesiredStand(PlayerbotAI* botAI, GsbState const& state, GsbSide con
     if (deck != GsbDeck::Home || board == GsbBoard::Go)
         return GsbStandKind::None;
 
-    // No stand until the pack is on, it'd pull the bot back from its walk to Zafod
     if (GsbNeedsRocketPack(bot))
         return GsbStandKind::None;
 
@@ -749,7 +729,6 @@ void NoteArtillery(GsbState& state, Player* bot, Creature* mortar, Position cons
         return;
 
     noted = dest;
-    // The 5 s cast, then a flight of up to 5 s, which the marker covers
     RaidObs::NoteHazardCircle(bot->GetMap(), SPELL_GSB_ROCKET_ARTILLERY, dest, GSB_ARTILLERY_RADIUS, 10000);
 }
 
@@ -785,7 +764,6 @@ std::vector<GsbHazard> BuildHazards(PlayerbotAI* botAI)
     return hazards;
 }
 
-// Asked by the trigger, the rules and the action for every action the bot weighs
 std::vector<GsbHazard> const& HazardsNow(PlayerbotAI* botAI)
 {
     struct Memo
@@ -817,7 +795,6 @@ GsbHazard const* HazardWithin(PlayerbotAI* botAI, float margin)
     return nullptr;
 }
 
-// Nothing walks a bot back into what it just stepped out of
 bool SpotCovered(PlayerbotAI* botAI, Position const& spot)
 {
     for (GsbHazard const& hazard : HazardsNow(botAI))
@@ -832,7 +809,6 @@ bool Airborne(Player* bot, GsbSide const& side)
     return bot->HasAura(SPELL_GSB_ROCKET_PACK_FLIGHT) || GsbDeckOf(side, bot) == GsbDeck::Gap;
 }
 
-// On deck and out of a cannon: a seated bot cannot step out
 bool CanDodge(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -879,7 +855,6 @@ bool HeldByTank(Unit* unit)
     return player && IsTankPlayer(player);
 }
 
-// The oldest first: rank, then the closest to dying
 bool KillsBefore(Unit* a, Unit* b)
 {
     uint8 const rankA = Rank(a);
@@ -915,7 +890,6 @@ Unit* PickBoarder(PlayerbotAI* botAI, GsbState const& state, GsbSide const& side
 
         if (tank)
         {
-            // Loose ones first, then the nearest
             bool const looseBest = !HeldByTank(best);
             bool const loose = !HeldByTank(boarder);
             if (loose != looseBest ? loose : bot->GetExactDist2d(boarder) < bot->GetExactDist2d(best))
@@ -1006,7 +980,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, char const*& why)
     return nullptr;
 }
 
-// 1: a wave on the tank with the party across, or a Veteran. 2: an Elite
 uint8 WaveWindow(GsbState const& state, GsbSide const& side, Player* tank)
 {
     uint32 held = 0;
@@ -1031,7 +1004,6 @@ uint8 WaveWindow(GsbState const& state, GsbSide const& side, Player* tank)
     return 0;
 }
 
-// The window a tank stands in: the captain's stacks on his deck, the boarders on its own
 uint8 DefensiveWindow(GsbState const& state, GsbSide const& side, Player* tank, GsbDeck deck)
 {
     if (deck == GsbDeck::Home)
@@ -1058,7 +1030,6 @@ uint8 SpentWindow(GsbState const& state, Player* tank, GsbDeck deck)
 
 bool IsTankDuty(GsbDuty duty) { return duty == GsbDuty::BoardTank || duty == GsbDuty::HomeTank; }
 
-// the latch ends with its window, so the next one gets a button
 void UpdateDefensive(PlayerbotAI* botAI, GsbState& state, GsbSide const& side)
 {
     Player* bot = botAI->GetBot();
@@ -1069,7 +1040,6 @@ void UpdateDefensive(PlayerbotAI* botAI, GsbState& state, GsbSide const& side)
         state.defensiveSpent.erase(bot->GetGUID());
 }
 
-// a human holding the captain gets a call at the same windows
 void CallHumanTank(PlayerbotAI* botAI, GsbState& state, uint32 now)
 {
     if (state.humanCallMs && getMSTimeDiff(state.humanCallMs, now) < GSB_HUMAN_CALL_MS)
@@ -1099,7 +1069,7 @@ void ResetLegacyRti(PlayerbotAI* botAI)
     if (rti->Get() == "star")
         rti->Set("skull");
 }
-}  // namespace
+}
 
 GsbSide const* GsbSideOf(Player* bot)
 {
@@ -1186,7 +1156,6 @@ Unit* GsbTarget(PlayerbotAI* botAI)
         uint32 ms = 0;
         Unit* pick = nullptr;
     };
-    // Asked by the trigger, the action and the targeting rule for every action the bot weighs
     thread_local Memo memo;
     Player* bot = botAI->GetBot();
     uint32 const now = getMSTime();
@@ -1255,7 +1224,6 @@ uint32 GsbTankDefensive(PlayerbotAI* botAI)
     bool const open = DefensiveWindow(*state, *side, bot, deck) > SpentWindow(*state, bot, deck);
     if (!open && bot->GetHealthPct() >= GSB_TANK_DEFENSIVE_PCT)
     {
-        // Change-latched, so the way out of a window is written too
         RaidObs::NoteDerived(bot, "gsb.defensive", "idle");
         return 0;
     }
@@ -1322,7 +1290,6 @@ GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
     Position const& from = deck == GsbDeck::Home ? side->launch : side->landing;
     if (bot->GetExactDist2d(from) > GSB_JUMP_READY)
     {
-        // Don't walk onto a covered jump point, the dodge would just walk the bot back out
         if (SpotCovered(botAI, from))
             return GsbJump::None;
 
@@ -1334,7 +1301,6 @@ GsbJump GsbJumpPlan(PlayerbotAI* botAI, Position& spot)
     return GsbJump::Fire;
 }
 
-// Asked by the rules for every move a bot weighs, so no full jump plan here
 bool GsbInFlight(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -1418,13 +1384,11 @@ bool GsbWantsCannon(PlayerbotAI* botAI)
         return false;
 
     bool const live = GsbLive(botAI);
-    // Before the battle the ship still flies, so only the transport says which deck the bot is on
     bool const onHome = live ? GsbDeckOf(*side, bot) == GsbDeck::Home
                              : bot->GetTransport() && bot->GetTransport()->GetGUID() == state->homeShip;
     if (!onHome)
         return false;
 
-    // Pack first before the battle. A melee cannoneer also needs it to board once Below Zero throws it out.
     if (!GsbHasRocketPack(bot) && (!live || !IsRangedDpsPlayer(bot)))
         return false;
 
@@ -1517,7 +1481,6 @@ void GsbTick(PlayerbotAI* botAI)
         if (state && state->wasLive)
             sGsbState.Reset(instanceId);
 
-        // Before the battle only a bot aboard has work: the rocket pack and the cannon seats
         if (!bot->GetTransport())
             return;
     }

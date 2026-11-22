@@ -18,10 +18,8 @@ void DefineIcehowl(EncounterBuilder& e)
     e.Node<IcehowlChargeIncomingTrigger, IcehowlClearChargePathAction>(ACTION_EMERGENCY + 8);
     e.Node<IcehowlFrothingRageTrigger, IcehowlTankDefensiveAction>(ACTION_RAID + 6);
 
-    // Ahead of the walk to him, which then runs inside the boost
     e.Node<IcehowlDazeNitroTrigger, IcehowlDazeNitroAction>(ACTION_RAID + 3);
 
-    // Ahead of the breath stand: its walk holds the tick until it lands, and this switch doesn't stop it
     e.Node(
         "icehowl dps target",
         [](PlayerbotAI* botAI) -> Trigger*
@@ -34,7 +32,7 @@ void DefineIcehowl(EncounterBuilder& e)
     e.LiveMultiplier<IcehowlChargeGuardMultiplier>(Family::AnyMovement | Family::Spell);
     e.LiveMultiplier<IcehowlBreathSpreadGuardMultiplier>(Family::AnyMovement);
 }
-}  // namespace
+}
 
 EncounterDefinition const& ToCIcehowlDefinition()
 {

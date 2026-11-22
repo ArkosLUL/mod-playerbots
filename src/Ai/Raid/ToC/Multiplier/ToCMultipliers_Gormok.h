@@ -4,8 +4,6 @@
 #include "Multiplier.h"
 #include "RaidCombatHelpers.h"
 
-// Holds generic movers off a ranged dps or healer carrying a snobold, so it stays in Gormok's melee
-// until the snobold dies
 class GormokSnoboldCarrierMultiplier : public Multiplier
 {
 public:

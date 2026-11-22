@@ -5,7 +5,6 @@
 #include "RaidBurstWindow.h"
 #include "RaidSplash.h"
 
-// Keep tanks anchored on Jaraxxus and his adds instead of drifting with the combat formation
 class JaraxxusControlTankMovementMultiplier : public Multiplier
 {
 public:
@@ -14,7 +13,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// No class taunt off another tank holding Jaraxxus
 class JaraxxusTauntGuardMultiplier : public Multiplier
 {
 public:
@@ -22,7 +20,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Mistress' Kiss punishes a cast still running on its 0.5 s check, so a kissed bot casts instants only
 class JaraxxusKissCastHoldMultiplier : public Multiplier
 {
 public:
@@ -30,8 +27,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// AvoidAoeAction flees a flame by FleePosition out to 5.5 yd (GetDistance takes off both combat
-// reaches), past where our own dodge starts, so the flames stay ours alone
 class JaraxxusAvoidAoeGuardMultiplier : public Multiplier
 {
 public:
@@ -39,8 +34,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// A DPS bot's damage on him, and its area damage within 30 yd of him, while its threat cap latch holds.
-// Heals and anything aimed elsewhere go through. Wired from the definition.
 class JaraxxusThreatCapMultiplier : public Multiplier
 {
 public:

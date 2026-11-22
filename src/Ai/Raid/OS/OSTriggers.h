@@ -19,9 +19,6 @@ public:
     bool IsActive() override;
 };
 
-// Only gates the arc positioning. RearFlankAction does the angle maths and stops re-issuing once the
-// bot is inside the safe band, so all this has to decide is who arcs: melee who are not holding
-// something, i.e. neither tank.
 class SartharionMeleePositioningTrigger : public Trigger
 {
 public:
@@ -31,8 +28,6 @@ public:
     bool IsActive() override;
 };
 
-// Fires on the tsunami creature existing, not on its damage aura going up at +3.6s. Waiting for the
-// aura spends the entire reaction window before anyone moves.
 class OsTsunamiCorridorTrigger : public Trigger
 {
 public:
@@ -123,8 +118,6 @@ public:
     bool IsActive() override;
 };
 
-// Melee on a drake. Its cone is frontal only, so the rear is free and the shared "rear flank" band at
-// 90-120 degrees leaves them on the side of it for nothing.
 class OsDrakeRearTrigger : public Trigger
 {
 public:
@@ -134,9 +127,6 @@ public:
     bool IsActive() override;
 };
 
-// A druid tank out of bear form is wearing cloth against a drake. He is the one bot in this fight that
-// can be out of combat while it runs - the off-tank holds nothing between drakes - and out of combat
-// every druid buff, heal and revive node pulls "caster form" as a prerequisite.
 class OsTankShapeshiftTrigger : public Trigger
 {
 public:

@@ -13,8 +13,6 @@ using namespace TrialOfTheCrusaderHelpers;
 
 namespace
 {
-// Both fire on a carrier that close to Gormok and throw it back out of his melee. By name, so no class
-// headers.
 bool IsBlinkOrDisengage(Action* action)
 {
     if (!dynamic_cast<CastSpellAction*>(action))
@@ -29,12 +27,10 @@ bool StaysFree(std::string const& name)
     if (name == "avoid aoe")
         return true;
 
-    // The beasts' own movers stay, the carrier walk included: on heroic a carrier can still have a
-    // worm or Icehowl's charge to dodge
     ToCEncounter encounter = ToCEncounter::None;
     return ToCEncounterOfName(name, encounter) && encounter == ToCEncounter::NorthrendBeasts;
 }
-}  // namespace
+}
 
 float GormokSnoboldCarrierMultiplier::GetValue(Action* action)
 {
@@ -42,7 +38,6 @@ float GormokSnoboldCarrierMultiplier::GetValue(Action* action)
     {
         Facts facts;
         facts.spellMover = IsBlinkOrDisengage(action);
-        // AttackAction is a MovementAction too, and zeroing it would strand the carrier without a target
         facts.mover = dynamic_cast<MovementAction*>(action) && !dynamic_cast<AttackAction*>(action);
         facts.staysFree = !facts.spellMover && facts.mover && StaysFree(action->getName());
         return facts;

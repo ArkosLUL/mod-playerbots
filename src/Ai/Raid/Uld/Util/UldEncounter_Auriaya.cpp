@@ -37,7 +37,6 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// The check behind "possible targets no los", with the entry tested first.
 struct UnfriendlyOfEntryInRangeCheck
 {
     Acore::AnyUnfriendlyUnitInObjectRangeCheck inRange;
@@ -46,8 +45,6 @@ struct UnfriendlyOfEntryInRangeCheck
     bool operator()(Unit* unit) { return unit->GetEntry() == entry && inRange(unit); }
 };
 
-// What "possible targets no los" holds for one entry, in the same order. Reading the value itself
-// rebuilds and copies the whole list on every call, with IsPossibleTarget on every hostile in sight.
 std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
 {
     float const range = sPlayerbotAIConfig.SightDistance;
@@ -65,8 +62,6 @@ std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
     return targets;
 }
 
-// Boss and pools once per bot per tick: a bot never ticks twice in one ms and runs a whole tick on
-// one thread. Guids, resolved on read, so a mid-tick death or despawn reads null.
 struct AuriayaRoomScan
 {
     PlayerbotAI* botAI = nullptr;
@@ -74,7 +69,6 @@ struct AuriayaRoomScan
     ObjectGuid boss;
     GuidVector pools;
 
-    // Trigger and action both ask for the soak spot in one tick, and picking one costs raycasts.
     bool soakPicked = false;
     bool soakFound = false;
     Position soak;
@@ -103,7 +97,6 @@ AuriayaRoomScan& RefreshedAuriayaRoomScan(PlayerbotAI* botAI)
     return auriayaRoomScan;
 }
 
-// Her cone faces whoever she's hitting, a human tank or a taunting player included.
 float GetSoakAxis(Unit* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -120,8 +113,6 @@ bool IsInSoakBand(Unit* boss, float axis, float x, float y, float halfAngle, flo
     return std::min(offset, 2.0f * static_cast<float>(M_PI) - offset) <= halfAngle;
 }
 
-// Clear spots first, then fewest pools, then shortest walk. Every candidate tried costs a navmesh
-// raycast, so they go in that order and the first one on the floor wins.
 bool PickSoakSpot(WorldObject* floorFrom, Unit* boss, std::vector<Unit*> const& pools, Position& out, bool& boxed)
 {
     struct Candidate
@@ -183,8 +174,6 @@ bool PickSoakSpot(WorldObject* floorFrom, Unit* boss, std::vector<Unit*> const& 
                                                                   floorFrom->GetPositionZ(), x, y, z))
             continue;
 
-        // The raycast stops at the floor's edge, so a spot past it comes back clipped. The room is
-        // round with a drop past it, and her far stations sit near that edge.
         if (std::hypot(x - candidate.x, y - candidate.y) > 1.0f)
             continue;
 
@@ -195,10 +184,8 @@ bool PickSoakSpot(WorldObject* floorFrom, Unit* boss, std::vector<Unit*> const& 
 
     return false;
 }
-}  // namespace
+}
 
-// Off her spawn (1956.2, 49.32) along her home facing (-0.955, 0.296), away from the corridor, at
-// 5/15/25 yd. All on the floor. The soak band, not a fixed point, fits the raid in past each one.
 const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[ULDUAR_AURIAYA_STATION_COUNT] = {
     Position(1951.42f, 50.79f, 411.36f), Position(1941.87f, 53.75f, 411.36f),
     Position(1932.32f, 56.71f, 411.36f)};
@@ -211,7 +198,6 @@ Unit* GetAuriaya(PlayerbotAI* botAI)
     if (!guid)
         return nullptr;
 
-    // Alive check too: she can die after the scan in the same tick, and callers never expect a corpse.
     Unit* boss = botAI->GetUnit(guid);
     return boss && boss->IsAlive() ? boss : nullptr;
 }
@@ -239,7 +225,6 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
     if (Unit* sentry = GetUldUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
         return sentry;
 
-    // Feigned at 1 HP and unselectable between lives, so IsAlive() alone isn't enough.
     Unit* defender = GetUldUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
 
     return IsDownOrFeigning(defender) ? nullptr : defender;
@@ -251,7 +236,6 @@ bool AuriayaSentriesUnengaged(PlayerbotAI* botAI)
     if (!boss || !boss->IsInCombat())
         return false;
 
-    // Searched off her, not the bot: the pack walks in behind her, so it can still be out of the bot's sight.
     std::list<Creature*> sentries;
     boss->GetCreatureListWithEntryInGrid(sentries, NPC_AURIAYA_SANCTUM_SENTRY, ULDUAR_AURIAYA_PACK_RADIUS);
 
@@ -261,7 +245,6 @@ bool AuriayaSentriesUnengaged(PlayerbotAI* botAI)
 
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
 {
-    // Lower is more urgent. rankNames are the probe's values.
     enum LooseRank
     {
         ON_NON_TANK,
@@ -312,13 +295,10 @@ Unit* GetAuriayaOffTankSentry(Player* bot)
     if (!offTank || !offTank->IsInMap(bot))
         return nullptr;
 
-    // Its victim, not a bot value, so a human off-tank works the same.
     Unit* victim = offTank->GetVictim();
     if (victim && victim->IsAlive() && victim->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY)
         return victim;
 
-    // A bot off-tank takes this one a few ticks after its Sentry dies. Going nearest in that gap spreads
-    // DPS casts over the whole pack.
     return GET_PLAYERBOT_AI(offTank) ? GetAuriayaOffTankHoldSentry(offTank) : nullptr;
 }
 
@@ -378,7 +358,6 @@ Unit* GetAuriayaMainTankSentry(Player* tank)
             if (Player* player = victim->ToPlayer(); player && PlayerbotAI::IsTank(player))
                 continue;
 
-            // Sight last, it's the raycast.
             float const distance = tank->GetExactDist2d(sentry);
             if (distance <= pickDistance && tank->IsWithinLOSInMap(sentry))
             {
@@ -460,8 +439,6 @@ bool GetAuriayaSoakSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector
         bool const clear = GetAuriayaPoolClearance(pools, bot->GetPositionX(), bot->GetPositionY()) >=
                            ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS;
 
-        // Judge drift only once she stops. The band rides on her, so a tank walking to its next
-        // station would otherwise re-aim every ranged bot at once.
         if (clear && (boss->isMoving() ||
                       IsInSoakBand(boss, GetSoakAxis(boss), bot->GetPositionX(), bot->GetPositionY(),
                                    ULDUAR_AURIAYA_SOAK_STAY_HALF_ANGLE, ULDUAR_AURIAYA_SOAK_STAY_MIN,

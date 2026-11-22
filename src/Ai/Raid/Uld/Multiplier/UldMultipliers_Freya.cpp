@@ -40,21 +40,16 @@
 
 using namespace EncounterHelpers;
 
-// Freya
 float FreyaTrioSyncMultiplier::GetValue(Action* action)
 {
     if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsDps(bot))
         return 1.0f;
 
-    // Movement and heals are never held back: a bot waiting out the floor still has to dodge a
-    // Nature Bomb and reach a Healthy Spore.
     bool const isDamage = dynamic_cast<MeleeAction*>(action) ||
                           (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action));
     if (!isDamage)
         return 1.0f;
 
-    // Only a trio member is ever held, so the target's entry settles it before the boss lookup and the
-    // wave sweep, which every Ulduar fight would otherwise pay on each damage action.
     Unit* const target = AI_VALUE(Unit*, "current target");
     if (!target)
         return 1.0f;
@@ -90,8 +85,6 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
     if (cachedHeld.IsEmpty())
         return 1.0f;
 
-    // Both pickers handle a held Snaplasher themselves and aim at the current target: zeroed, a bot on it when the
-    // hold began could never be moved off it, and its auto attack would keep the bark up for good.
     if (dynamic_cast<FreyaSetDpsPriorityAction*>(action) || dynamic_cast<FreyaTankAddsAction*>(action))
         return 1.0f;
 
@@ -107,7 +100,6 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
     if (!IsRaidAreaDamage(botAI, action, splash))
         return 1.0f;
 
-    // Ground spells land on the target, the rest around the caster.
     Unit* aim = target ? target : current;
     bool const reaches = bot->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH ||
                          (aim && aim->GetExactDist2d(snaplasher) <= ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH);
@@ -120,7 +112,6 @@ float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
     if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
         return 1.0f;
 
-    // Healing AoE is never held: the finish is exactly when the raid is topping up between blasts.
     if (dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
@@ -131,8 +122,6 @@ float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // A Detonate radius rather than the pack's own: a bot at the edge of the pile that keeps casting
-    // Blizzard onto it blows the whole pack up at once, which is the thing this exists to stop.
     return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) ? 0.0f : 1.0f;
 }
 
@@ -204,8 +193,6 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
     if (!spellAction || dynamic_cast<CastMeleeSpellAction*>(action) || bot->GetMapId() != ULDUAR_MAP_ID)
         return 1.0f;
 
-    // The encounter's own hold action is what stops a cast already in flight; this only decides what
-    // is allowed to start.
     if (action->getName() == FreyaGroundTremorHoldCastAction::Name)
         return 1.0f;
 
@@ -224,9 +211,6 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
     if (!spellInfo)
         return 1.0f;
 
-    // Anything that still lands before the tremor is worth starting, so the instants a locked-out bot
-    // would fall through to are never held, only the casts the interrupt would eat. A channel has to end
-    // first as well, or the hold node stops it on the next tick.
     int32 busyMs = static_cast<int32>(spellInfo->CalcCastTime());
     if (spellInfo->IsChanneled())
         busyMs += spellInfo->GetDuration();
@@ -236,8 +220,6 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 
 int32 FreyaGroundTremorCastGateMultiplier::EvaluateWindow()
 {
-    // By entry rather than off the target list: this gate runs for every bot on the Ulduar map, so on
-    // trash and in every other fight nothing else there wants that list built.
     Unit* boss = GetFreyaBossByEntry(botAI);
     if (!IsFreyaGroundTremorCasting(boss))
         return 0;

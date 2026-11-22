@@ -17,7 +17,6 @@
 
 namespace
 {
-// Every fight that hands out Experienced or 1% Threat, through Playerbots.EnableICCBuffs or a raid cheat.
 constexpr IccEncounterId BUFFING_ENCOUNTERS[] = {ICC_BOSS_LADY_DEATHWHISPER, ICC_BOSS_PROFESSOR_PUTRICIDE,
                                                   ICC_BOSS_SINDRAGOSA, ICC_BOSS_THE_LICH_KING};
 
@@ -26,7 +25,7 @@ constexpr uint32 HUMAN_SWEEP_MS = 1000;
 struct HumanSweep
 {
     uint32 atMs = 0;
-    bool swept = false;  // 0 is a real getMSTime value
+    bool swept = false;
 };
 
 RaidInstanceState<HumanSweep> humanSweeps;
@@ -40,7 +39,6 @@ bool BuffingEncounterInProgress(InstanceScript* instance)
     return false;
 }
 
-// Neither aura ever expires.
 bool HasPermanentBuff(Player* player)
 {
     return player->HasAura(SPELL_EXPERIENCED) || player->HasAura(SPELL_NO_THREAT);
@@ -55,7 +53,6 @@ void StripPermanentBuffs(Player* player)
         player->RemoveAura(SPELL_NO_THREAT);
 }
 
-// Each bot strips itself. Humans run no strategy, so the first bot past the throttle sweeps them.
 void TickHeroicBuffs(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -88,7 +85,7 @@ void TickHeroicBuffs(PlayerbotAI* botAI)
 }
 
 void DefineHeroicBuffs(EncounterBuilder& e) { e.Tick(&TickHeroicBuffs); }
-}  // namespace
+}
 
 EncounterDefinition const& IccHeroicBuffsDefinition()
 {

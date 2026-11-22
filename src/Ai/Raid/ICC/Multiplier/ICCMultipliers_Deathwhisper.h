@@ -10,8 +10,6 @@
 #include "Multiplier.h"
 #include "RaidSplash.h"
 
-// Holds area damage while a Dominate Mind victim not under Cyclone stands within reach of the bot or
-// of its target: the victim takes it like any enemy.
 class IccLadyDeathwhisperMultiplier : public Multiplier
 {
 public:
@@ -24,7 +22,6 @@ private:
     bool _victimNear = false;
 };
 
-// Holds a braked damage dealer's attacks on her, and area damage near her. Heals pass.
 class IccLadyDeathwhisperBrakeMultiplier : public Multiplier
 {
 public:

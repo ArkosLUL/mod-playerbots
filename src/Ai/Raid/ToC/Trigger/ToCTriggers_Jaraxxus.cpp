@@ -52,7 +52,6 @@ bool JaraxxusSecondAddNeedsAssistTankTrigger::IsActive() { return JaraxxusAssist
 
 bool JaraxxusNetherPowerActiveTrigger::IsActive()
 {
-    // the aura test first: a healing remover walks the group
     return JaraxxusNetherPowerStacks(botAI) > 0 && JaraxxusIsNetherPowerRemover(bot);
 }
 

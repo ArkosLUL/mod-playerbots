@@ -9,8 +9,6 @@
 
 #include "MovementActions.h"
 
-// A pair of non-tanks walks out to its spot and stays. Otherwise one of each pair walks to the other and
-// stays, and anyone else clean steps out of every carrier's reach.
 class IccRottingFrostGiantPlagueAction : public MovementAction
 {
 public:

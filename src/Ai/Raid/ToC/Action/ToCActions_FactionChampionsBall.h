@@ -5,7 +5,6 @@
 #include "RaidDirectTargeting.h"
 #include "ToCActions_NorthrendBeasts.h"
 
-// An ice duty DK's attack on its own champion
 class FactionChampionsIceTargetAction : public RaidDirectAttackAction
 {
 public:
@@ -24,7 +23,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// An ice duty DK's walk into Chains of Ice range of its champion
 class FactionChampionsIceReachAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -43,7 +41,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// A healer's walk off the melee champions next to it
 class FactionChampionsStepOffAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -53,7 +50,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Boosts away from the champions focusing it
 class FactionChampionsChasedAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -63,7 +59,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// A bot's hop away from the melee champions on it, till they re-pick someone else
 class FactionChampionsKiteAction : public NorthrendBeastsWalkAction
 {
 public:
@@ -73,7 +68,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// Sprint or Dash: no cast time and no GCD, so the kite's walk goes on
 class FactionChampionsSpeedBoostAction : public Action
 {
 public:
@@ -83,7 +77,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// The AoE fear or Frost Nova that makes the champions burn their trinket
 class FactionChampionsOpenerAction : public Action
 {
 public:
@@ -93,7 +86,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// A caster's Nova, Blink, circle teleport or fear off the melee champions on it
 class FactionChampionsEscapeAction : public Action
 {
 public:
@@ -103,7 +95,6 @@ public:
     bool Execute(Event event) override;
 };
 
-// The warlock's circle on its staging stand, for the teleport back once a melee champion reaches it
 class FactionChampionsDemonicCircleAction : public Action
 {
 public:

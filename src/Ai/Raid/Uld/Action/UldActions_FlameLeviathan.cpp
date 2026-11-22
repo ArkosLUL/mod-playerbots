@@ -29,11 +29,8 @@
 
 namespace
 {
-// Bearing offsets tried off a blocked direction, nearest first.
 constexpr float HAZARD_FAN[] = {0.0f, 0.6f, -0.6f, 1.2f, -1.2f, 1.8f, -1.8f, 2.4f, -2.4f, 3.0f};
 
-// Whether driving straight from `from` to `to` stays `margin` outside every hazard's reach. A leg that
-// starts inside one still counts as clear while it leads out of it. A point is a leg with no length.
 bool LegClearOfHazards(Unit* vehicle, Position const& from, Position const& to, std::vector<Unit*> const& hazards,
                        float margin)
 {
@@ -65,8 +62,6 @@ bool LegClearOfHazards(Unit* vehicle, Position const& from, Position const& to, 
     return true;
 }
 
-// Self-casts skip CanCastVehicleSpell (it rejects their BAD_TARGETS) and target the hull, as CastVehicleSpell
-// turns to face any other target. It returns true on a refusal too, so cooldown only once the energy drops.
 bool CastVehicleSelfSpell(PlayerbotAI* botAI, Unit* vehicleBase, uint32 spellId, uint32 cost, uint32 cooldownMs)
 {
     if (!vehicleBase || vehicleBase->HasSpellCooldown(spellId))
@@ -104,7 +99,7 @@ char const* HazardBranch(Unit* hazard)
             return "hazard:hammer";
     }
 }
-}  // namespace
+}
 
 bool FlameLeviathanVehicleAction::CastVehicle(uint32 spellId, Unit* target, uint32 cooldownMs)
 {
@@ -118,8 +113,6 @@ bool FlameLeviathanVehicleAction::CastVehicle(uint32 spellId, Unit* target, uint
     return true;
 }
 
-// The crate falls straight down where the lift dies, and the demolishers ride round him near the middle,
-// so only a lift over the arena, at its closest pass to the centre. Lifts fly facing along their loop.
 Unit* FlameLeviathanVehicleAction::FindMechanolift()
 {
     Position const centre = FlameLeviathanArenaCentre();
@@ -130,7 +123,6 @@ Unit* FlameLeviathanVehicleAction::FindMechanolift()
         if (!unit || unit->GetEntry() != NPC_FL_MECHANOLIFT || !FlameLeviathanInArena(unit->GetPosition()))
             continue;
 
-        // Centre still ahead: the pass gets closer yet. Every lift that crosses the arena is still shot once.
         if (unit->GetExactDist2d(&centre) > ULDUAR_FL_LIFT_DROP_RADIUS && unit->HasInArc(float(M_PI), &centre))
             continue;
 
@@ -152,7 +144,6 @@ void FlameLeviathanVehicleAction::NoteLiftShot(Unit* lift)
                       std::to_string(static_cast<int32>(lift->GetPositionY())));
 }
 
-// Only what is already fighting, so a cannon with 70 yd of reach never opens on a pack nobody pulled.
 Unit* FlameLeviathanVehicleAction::NearestFightingHostile()
 {
     Unit* nearest = nullptr;
@@ -181,7 +172,6 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
 
     Unit* boss = FlameLeviathanBoss(botAI);
 
-    // A rider's threat lands on its vehicle, so "attackers" never holds him and is only good for adds.
     Unit* add = nullptr;
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     for (auto const& guid : attackers)
@@ -198,11 +188,8 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
             add = unit;
     }
 
-    // Only once he's fighting: the instance lookup finds him anywhere in Ulduar, unattackable and 1000 yd off.
     Unit* target = boss && boss->IsInCombat() ? boss : add;
 
-    // "attackers" is built from the riders' own threat references, and the core hands a rider's threat
-    // to its vehicle, so the trash a vehicle is fighting may never appear in it.
     if (!target)
         target = NearestFightingHostile();
 
@@ -225,8 +212,6 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
     return false;
 }
 
-// Barrels fly 1-3 s, so the aura lags every cast. A landing shows as a stack gained or the duration jumping
-// back up, and the last one timed sets the refresh lead.
 Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
 {
     Aura* own = target->GetAura(SPELL_FL_BLUE_PYRITE_DOT, _vehicleBase->GetGUID());
@@ -267,15 +252,11 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
     // Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
     Aura* own = TrackBarrels(target);
 
-    // Thaw first, a frozen hull is a minute of nothing. Aimed at the ally on purpose: DEST_LOCATION lets a
-    // friendly target pass, the blast is enemy-only, and its Flames strip the stun.
     if (Unit* frozen = FlameLeviathanFrozenVehicle(bot, _vehicleBase, ULDUAR_FL_HURL_BOULDER_MIN_RANGE,
                                                    ULDUAR_FL_HURL_BOULDER_MAX_RANGE))
         if (CastVehicle(SPELL_FL_HURL_BOULDER, frozen))
             return true;
 
-    // Our own Blue Pyrite aura, not another demolisher's. Barrels go on him only, as demolisher energy never
-    // regenerates; adds and trash get boulders.
     char const* barrel = "not boss";
     bool wantBarrel = false;
     if (target->GetEntry() == NPC_FLAME_LEVIATHAN)
@@ -307,8 +288,6 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
             barrel = "hold";
     }
 
-    // Our own cooldown and the GCD a boulder shares are waits, not refusals, so only a cast the core
-    // turned down (range, facing, LOS) reads as "fail".
     SpellInfo const* barrelInfo = sSpellMgr->GetSpellInfo(SPELL_FL_HURL_PYRITE_BARREL);
     CharmInfo* charm = _vehicleBase->GetCharmInfo();
     bool const ready = barrelInfo && !_vehicleBase->HasSpellCooldown(SPELL_FL_HURL_PYRITE_BARREL) &&
@@ -324,8 +303,6 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
             barrel = "fail";
     }
 
-    // Stacks only: the duration changes every pass and would note every tick. Read off the aura, since
-    // partial resists round tick damage into the wrong stack count.
     if (RaidObs::Active())
     {
         RaidObs::NoteDerived(bot, "fl.pyrite", std::to_string(own ? own->GetStackAmount() : 0));
@@ -335,8 +312,6 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
     if (thrown)
         return true;
 
-    // Adds get what the barrel doesn't want, except Ram: free, knocks back, and covers the melee band under
-    // Hurl Boulder's 10 yd floor.
     if (Unit* add = FlameLeviathanBestAdd(botAI, _vehicleBase, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f))
         if (FlameLeviathanFaceForCone(_vehicleBase, add, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
                                       ULDUAR_FL_RAM_CONE_RADIUS))
@@ -356,17 +331,14 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
 {
     Unit* demolisher = FlameLeviathanRiddenVehicle(bot);
 
-    // He chases his threat victim exactly like a Pursued one, so that crew needs the speed as well.
     if ((FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot)) && demolisher &&
         !demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
     {
         if (CastVehicleSelfSpell(botAI, _vehicleBase, SPELL_FL_INCREASED_SPEED, ULDUAR_FL_INCREASED_SPEED_COST,
                                  ULDUAR_FL_SPEED_RECAST_MS))
         {
-            // CastVehicleSpell says yes even on a refusal, and instants resolve inline, so check the aura.
             if (demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
             {
-                // Instants leave no cast row, so this is the only record of the speed.
                 if (RaidObs::Active())
                     RaidObs::Note(bot, "fl.speed", "demolisher");
 
@@ -375,7 +347,6 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
         }
     }
 
-    // Crates are the demolisher's only refill. Above the ceiling the +25 would be partly thrown away.
     if (demolisher && demolisher->GetPower(POWER_ENERGY) <= ULDUAR_FL_CRATE_GRAB_CEILING)
     {
         GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
@@ -385,8 +356,6 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
             if (!crate || crate->GetEntry() != NPC_FL_PYRITE_CONTAINER)
                 continue;
 
-            // No claim: spell_vehicle_grab_pyrite credits every hit until the crate despawns, and the
-            // credit goes to the grabbing gunner's own demolisher, so two gunners both gain from it.
             if (crate->GetDistance(bot) >= ULDUAR_FL_CRATE_GRAB_RANGE)
                 continue;
 
@@ -395,8 +364,6 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
         }
     }
 
-    // Mortar thaws like the boulder, via Flames 65044, and has no minimum range, so the gunner covers the
-    // close-in case under the boulder's 10 yd floor.
     if (Unit* frozen = FlameLeviathanFrozenVehicle(bot, _vehicleBase, 0.0f, ULDUAR_FL_MORTAR_MAX_RANGE))
         if (CastVehicle(SPELL_FL_MORTAR, frozen, ULDUAR_FL_MORTAR_COOLDOWN_MS))
             return true;
@@ -408,8 +375,6 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
             return true;
         }
 
-    // Mortar is free and already cast every tick, so an add only costs the target swap. No minimum range
-    // either, so it covers adds inside Fire Cannon's 10 yd floor.
     if (Unit* add = FlameLeviathanBestAdd(botAI, _vehicleBase, 0.0f, ULDUAR_FL_MORTAR_MAX_RANGE,
                                           ULDUAR_FL_MORTAR_SPLASH))
         if (CastVehicle(SPELL_FL_MORTAR, add, ULDUAR_FL_MORTAR_COOLDOWN_MS))
@@ -420,11 +385,6 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
 
 bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
 {
-    // No early return on a null target: a posted engine is 90 yd from him and shoots adds, so it has
-    // work to do whether or not he is alive and reachable.
-
-    // Earmark what this vehicle still owes: the interrupt duty travels with its fuel, and a pursued
-    // driver or the vent reserve needs Steam Rush more than it needs a Ram.
     uint32 needed = ULDUAR_FL_RAM_COST;
     if (FlameLeviathanIsVentInterrupter(botAI, bot))
         needed += ULDUAR_FL_ELECTROSHOCK_COST;
@@ -434,16 +394,12 @@ bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
     if (_vehicleBase->GetPower(POWER_ENERGY) < needed)
         return false;
 
-    // An add in the cone outranks him (190k against 230M, and adds pile up). Picked once: falling back to him
-    // mid-turn swings the engine round again and it faces neither.
     Unit* add = FlameLeviathanBestAdd(botAI, _vehicleBase, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f);
     Unit* shot = add ? add : target;
 
     if (!shot)
         return false;
 
-    // Cone, not range: CastVehicleSpell only turns past 120 degrees, and a tick turning beats 40 wasted energy.
-    // The reserve keeps facing him and an idle post its corner; with an add the drive faces the same pick.
     if (FlameLeviathanIsVentReserve(bot) || (!add && FlameLeviathanCornerPost(botAI, bot) >= 0))
     {
         if (!FlameLeviathanInCone(_vehicleBase, shot, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
@@ -479,8 +435,6 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
     if (_vehicleBase->GetPower(POWER_ENERGY) < ULDUAR_FL_FIRE_CANNON_COST)
         return false;
 
-    // A posted engine's gun serves its corner first, so its hull is the first thing a fresh add has
-    // threat on and the add stays on the engine that can knock it back.
     if (Unit* hull = FlameLeviathanRiddenVehicle(bot))
     {
         int8 const post = FlameLeviathanHullCornerPost(botAI, bot, hull);
@@ -495,8 +449,6 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
         }
     }
 
-    // Heaviest and widest gun the raid has: 76k in 20 yd against a 190k lasher. Next to adds that never
-    // despawn, what this costs his 230M is noise.
     if (Unit* add = FlameLeviathanBestAdd(botAI, _vehicleBase, ULDUAR_FL_FIRE_CANNON_MIN_RANGE,
                                           ULDUAR_FL_FIRE_CANNON_MAX_RANGE, ULDUAR_FL_CANNON_SPLASH))
         if (CastVehicle(SPELL_FL_FIRE_CANNON, add))
@@ -510,8 +462,6 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
 
 bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
 {
-    // Tar's pool spawns 9 yd behind the chopper, so it only lands in his path while he's behind us: whenever
-    // this chopper is pursued or runs the lead.
     if (target && !_vehicleBase->HasInArc(M_PI / 2.0f, target))
         if (CastVehicleSelfSpell(botAI, _vehicleBase, SPELL_FL_TAR, 0, ULDUAR_FL_TAR_COOLDOWN_MS))
             return true;
@@ -519,8 +469,6 @@ bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
     if (_vehicleBase->GetPower(POWER_ENERGY) < ULDUAR_FL_SONIC_HORN_COST)
         return false;
 
-    // The tar lead never shoots adds, one turn toward an add costs a pool. The rest pick once, like the siege
-    // engine, or they alternate and face neither.
     Unit* shot = FlameLeviathanIsTarLead(botAI, bot)
                      ? nullptr
                      : FlameLeviathanBestAdd(botAI, _vehicleBase, 0.0f,
@@ -528,7 +476,6 @@ bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
     if (!shot)
         shot = target;
 
-    // The narrowest cone on the fight at 50 degrees, so it needs the facing more than the others do.
     if (!shot || !FlameLeviathanFaceForCone(_vehicleBase, shot, ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE,
                                             ULDUAR_FL_SONIC_HORN_CONE_RADIUS))
         return false;
@@ -546,14 +493,11 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
     if (!boss || !FlameLeviathanIsVentChanneling(boss))
         return false;
 
-    // Outranks the urgent drive, so never park a hull that has a blast or hazard to leave. Same test as the
-    // drive (strict Hammer circle for the reserve), so both agree on whether a dodge is coming.
     bool const dodging =
         FlameLeviathanShouldClearBatteringRam(botAI, bot) ||
         GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase, FL_TOWER_ALL, ULDUAR_FL_TOWER_HAZARD_MARGIN,
                                             FlameLeviathanIsVentReserve(bot) ? FL_TOWER_STORM : 0);
 
-    // A moving hull's spline overrides SetFacingTo, so stop before turning.
     if (!vehicleBase->HasInArc(ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE * 2.0f, boss))
     {
         if (dodging)
@@ -562,16 +506,12 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
         vehicleBase->StopMoving();
     }
 
-    // Turning owns the tick: CastVehicleSpell only turns past 120 degrees, wider than this 60 degree cone,
-    // so nothing else ever points the hull at him.
     if (!FlameLeviathanFaceForCone(vehicleBase, boss, ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE,
                                    ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS))
         return true;
 
     if (!botAI->CanCastVehicleSpell(SPELL_FL_ELECTROSHOCK, boss))
     {
-        // A Ram or Steam Rush GCD (category 133) is a wait, not a refusal. Hold the aim through it, or
-        // the drive turns the hull away again.
         SpellInfo const* shockInfo = sSpellMgr->GetSpellInfo(SPELL_FL_ELECTROSHOCK);
         CharmInfo* charm = vehicleBase->GetCharmInfo();
         if (!dodging && shockInfo && charm && charm->GetGlobalCooldownMgr().HasGlobalCooldown(shockInfo))
@@ -586,12 +526,8 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
     if (!botAI->CastVehicleSpell(SPELL_FL_ELECTROSHOCK, boss))
         return false;
 
-    // Take the channel off the queue whichever way the shot goes, so the rest of the line does not
-    // empty into it behind us.
     FlameLeviathanClaimVentChannel(bot);
 
-    // CastVehicleSpell says yes even on a refusal, and the shock resolves inline, so a channel still running
-    // is a miss: retry soon instead of charging the full cooldown.
     if (FlameLeviathanIsVentChanneling(boss))
     {
         RaidObs::Note(bot, "fl.vent", "miss");
@@ -599,7 +535,6 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
         return true;
     }
 
-    // Note, not NoteDerived: a run of hits repeats one value, and every shot has to show up.
     RaidObs::Note(bot, "fl.vent", "hit");
     vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS);
     return true;
@@ -618,15 +553,12 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // The branch that owned the tick, which is the only place it is known: fl.corner and fl.station
-    // name an assignment, not whether the vehicle is driving it.
     auto const branch = [this](char const* name)
     {
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "fl.drive", name);
     };
 
-    // He chases his threat victim exactly like a Pursued vehicle whenever nobody holds the aura.
     bool const pursued = FlameLeviathanIsPursued(bot);
     if (pursued || FlameLeviathanIsRamTarget(bot))
     {
@@ -639,8 +571,6 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
 
     ResetKite();
 
-    // Only the reserve is in Electroshock range, so a dodge out of it costs a whole channel. In the vent window
-    // Hammer marks use the strict circle (Inferno keeps the full band) and dodges pick exits it can fire from.
     bool const ventDuty = FlameLeviathanIsVentReserve(bot) && FlameLeviathanVentWindowOpen(bot, boss);
 
     Unit* hazard = GetFlameLeviathanNearestTowerHazard(botAI, _vehicleBase, FL_TOWER_ALL,
@@ -649,8 +579,6 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
     if (!hazard)
         _dodgeGoal.reset();
 
-    // A hazard already cleared reports false rather than owning the tick, so fall through to the
-    // station instead of failing the whole action and handing the tick to the on-foot rotation.
     if (hazard && ClearHazard(hazard, ventDuty ? boss : nullptr))
     {
         branch(HazardBranch(hazard));
@@ -663,8 +591,6 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
         return true;
     }
 
-    // Below the two dodges on purpose: a posted engine still has to get out of a tower blast and out
-    // of Battering Ram, and the corner will still be there afterwards.
     if (int8 const corner = FlameLeviathanCornerPost(botAI, bot); corner >= 0)
     {
         uint8 const slot = static_cast<uint8>(corner);
@@ -672,20 +598,14 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
             RaidObs::NoteDerived(bot, "fl.corner", std::to_string(static_cast<uint32>(slot)));
         branch("corner");
 
-        // Rush the 7 yd/s commute, wave 1 comes ~32 s in. Steam Rush charges along the facing, so only with the
-        // post dead ahead and over a charge away.
         Position const post = FlameLeviathanCornerPostPoint(slot);
         if (_vehicleBase->GetExactDist2d(post) > ULDUAR_FL_STEAM_RUSH_DIST + ULDUAR_FL_ARRIVE_TOLERANCE &&
             _vehicleBase->HasInArc(ULDUAR_FL_STEAM_RUSH_AIM_ARC, &post))
             CastVehicleSelfSpell(botAI, _vehicleBase, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST,
                                  ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS);
 
-        // Face the add the cast node will Ram, not the corner: it comes back from the arena side, often inside
-        // Fire Cannon's floor. Same pick as SiegeEngineAction, so the two can't aim apart.
         Unit* add = FlameLeviathanBestAdd(botAI, _vehicleBase, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f);
 
-        // COMBAT, not FORCED like the kite: a Fury dodge is FORCED, and an equal-priority move waits
-        // out this one for up to MaxWaitForMove (5 s) of a 6.5 s fuse.
         if (add)
             return DriveTo(post, add, false);
 
@@ -714,8 +634,6 @@ void FlameLeviathanDriveAction::ResetKite()
     _kiteIdx = -1;
     _kiteDir = 0;
 
-    // The last kite leg went out FORCED, and IsWaitingForLastMove holds an equal priority until that
-    // leg's travel time runs out. Pursued is over, so nothing should wait on it, a Fury dodge least of all.
     AI_VALUE(LastMovement&, "last movement").priority = MovementPriority::MOVEMENT_NORMAL;
 }
 
@@ -745,14 +663,11 @@ bool FlameLeviathanDriveAction::DetourToCrate(Unit* boss)
     if (!crate)
         return false;
 
-    // Already inside the gunner's grab.
     float const grab = ULDUAR_FL_CRATE_GRAB_RANGE - ULDUAR_FL_ARRIVE_TOLERANCE;
     float const dist = _vehicleBase->GetExactDist2d(crate);
     if (dist <= grab)
         return false;
 
-    // Stop at grab range on the hull's side, and only while the barrel stays in range: time past 70 yd costs
-    // the stacks the crate is meant to keep up.
     float const angle = crate->GetAngle(_vehicleBase);
     Position const goal(crate->GetPositionX() + std::cos(angle) * grab, crate->GetPositionY() + std::sin(angle) * grab,
                         crate->GetPositionZ());
@@ -767,15 +682,11 @@ bool FlameLeviathanDriveAction::DetourToCrate(Unit* boss)
 
 bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard, Unit* keepInReachOf)
 {
-    // Radial is the first thing tried, for all three reticles. A Hodir's Fury only gets here once it
-    // has stopped and stunned itself, so it is a static mark like the other two.
     float const angle = hazard->GetAngle(_vehicleBase);
 
     float const reach = FlameLeviathanHazardReach(hazard, _vehicleBase);
     float const step = reach + 2.0f * ULDUAR_FL_ARRIVE_TOLERANCE - _vehicleBase->GetExactDist2d(hazard);
 
-    // Guard, not a normal path: the scan margin is narrower than this clearance, so anything close
-    // enough to be handed here still has ground to make up. Never step backwards if that changes.
     if (step <= 0.0f)
     {
         _dodgeGoal.reset();
@@ -789,13 +700,9 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard, Unit* keepInReachOf)
                         _vehicleBase->GetPositionZ());
     };
 
-    // The Inferno is a trail of ~15 patches, and straight out from the nearest often lands in the next one.
-    // Fan off the radial until a point clears all of them.
     std::vector<Unit*> hazards;
     GetFlameLeviathanTowerHazards(botAI, _vehicleBase, FL_TOWER_ALL, ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN, hazards);
 
-    // Clear to stop on, with a straight leg there that enters no new reach. Past the kite ring's bounds is a
-    // wall: the spline stops short and the hull stays in the fire.
     Position const here = _vehicleBase->GetPosition();
     auto const usable = [&](Position const& goal)
     {
@@ -804,13 +711,11 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard, Unit* keepInReachOf)
                LegClearOfHazards(_vehicleBase, here, goal, hazards, 0.0f);
     };
 
-    // Latched while usable: re-planned off the nearest patch every tick, a hull inside several flips sides.
     if (_dodgeGoal && !usable(*_dodgeGoal))
         _dodgeGoal.reset();
 
     if (!_dodgeGoal)
     {
-        // Nearest clear point that is not also in range, kept only in case nothing in range clears.
         std::optional<Position> compromise;
 
         for (float travel : {step, step + reach, step + 2.0f * reach})
@@ -821,7 +726,6 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard, Unit* keepInReachOf)
                 if (!usable(goal))
                     continue;
 
-                // The reserve owes a firing position: a dodge out of cone range drops its vent duty.
                 if (keepInReachOf &&
                     goal.GetExactDist2d(keepInReachOf) - keepInReachOf->GetObjectSize() >
                         ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS)
@@ -843,8 +747,6 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard, Unit* keepInReachOf)
             _dodgeGoal = compromise;
     }
 
-    // Boxed in by the trail. Straight out from the nearest patch still beats standing in it, and is
-    // not kept: the next tick may find a way out.
     Position const goal = _dodgeGoal ? *_dodgeGoal : pointFor(angle, step);
     if (!DriveTo(goal, keepInReachOf, false, MovementPriority::MOVEMENT_FORCED))
         _dodgeGoal.reset();
@@ -857,15 +759,12 @@ bool FlameLeviathanDriveAction::ClearBatteringRam(Unit* boss)
     if (!FlameLeviathanShouldClearBatteringRam(botAI, bot))
         return false;
 
-    // Away from the rammed hull, where the blast is centred, not from him. Guns stay on him while backing out.
     Unit* centre = FlameLeviathanRamCentre(botAI, bot);
     if (!centre)
         return false;
 
     float const safeDist = ULDUAR_FL_BATTERING_RAM_RADIUS + _vehicleBase->GetObjectSize();
 
-    // Twice the arrival deadband of overshoot, because DriveTo parks anywhere within one of it and a
-    // single deadband of margin lets the vehicle stop back on the edge of the blast.
     float const angle = centre->GetAngle(_vehicleBase);
     float const step = safeDist - _vehicleBase->GetExactDist2d(centre) + 2.0f * ULDUAR_FL_ARRIVE_TOLERANCE;
     Position const goal(_vehicleBase->GetPositionX() + std::cos(angle) * step,
@@ -885,12 +784,10 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
     switch (_vehicleBase->GetEntry())
     {
         case NPC_VEHICLE_CHOPPER:
-            // The lead chopper runs ahead of him instead, back turned, so its tar pool lands in his path.
             if (FlameLeviathanIsTarLead(botAI, bot))
             {
                 float const lead = FlameLeviathanTarLeadDistance(boss, FlameLeviathanPursuedVehicle(botAI, bot),
                                                                  _vehicleBase->GetObjectSize());
-                // Zero: too tight to lead without parking in the blast, so hold the normal chopper station.
                 if (lead > 0.0f)
                 {
                     if (RaidObs::Active())
@@ -902,13 +799,8 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
             how = "chopper";
             break;
         case NPC_SALVAGED_DEMOLISHER:
-            // Clamped: stand distance counts from his 15 yd reach, so the 50 band plus the deadband would sit
-            // past the barrel's 70. Never closing also keeps them off Battering Ram.
             standDist = FlameLeviathanDemolisherStandDist(boss);
-            // Led, since the band is only worth holding if the hull gets there before he drives off.
             stationLead = FlameLeviathanStationLead(boss);
-            // Swung toward the arena centre: a hull that falls behind him catches up on the inside of
-            // the circle he runs, not round the outside of it.
             centreSide = true;
             how = "demolisher";
             break;
@@ -920,12 +812,9 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
     if (ventReserve)
     {
         how = "vent";
-        // He speeds up to 10 yd/s against a flat 7 hull, so the rear arc with no lead is a tail chase.
         stationLead = FlameLeviathanStationLead(boss);
         centreSide = true;
 
-        // A siege engine caught in Battering Ram's reach when Pursued lands can't drive clear, so wait outside
-        // it, deadband included, and close in only for the channel.
         if (FlameLeviathanMsToNextVent(bot, boss) > ULDUAR_FL_VENT_APPROACH_LEAD_MS)
             standDist = ULDUAR_FL_BATTERING_RAM_CAST_RANGE + _vehicleBase->GetCombatReach() +
                         ULDUAR_FL_ARRIVE_TOLERANCE;
@@ -944,7 +833,6 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
 
     Position const station = FlameLeviathanRearPoint(boss, standDist, offset, stationLead);
 
-    // A straight leg into the Inferno trail just gets dodged straight back, so go round it.
     Position goal = station;
     if (std::optional<Position> detour = DetourAroundFire(boss, station, true))
     {
@@ -952,8 +840,6 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
         branch = "station:detour";
     }
 
-    // Face what the cast node will shoot, or the park facing and the cone weapons undo each other. Same bands,
-    // tar lead included; the reserve stays on him, since turning back would cost a tick each channel.
     float coneRadius = 0.0f;
     if (!ventReserve)
     {
@@ -981,21 +867,15 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
 
 bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
 {
-    // Electroshock shares Steam Rush's 2 s GCD, so dash 2-5 s ahead of a channel, or at once into one
-    // already running. Never outside that: the rush is also the reserve's only escape once Pursued.
     uint32 const toVent = FlameLeviathanMsToNextVent(bot, boss);
     if (toVent && (toVent < ULDUAR_FL_STEAM_RUSH_GCD_MS || toVent > ULDUAR_FL_VENT_RUSH_LEAD_MS))
         return false;
 
-    // A FORCED dodge leg cancels the charge and wastes the 40 energy. Same test as the drive's, so it matches
-    // the dodge this reserve will actually take.
     if (FlameLeviathanShouldClearBatteringRam(botAI, bot) ||
         GetFlameLeviathanNearestTowerHazard(botAI, _vehicleBase, FL_TOWER_ALL, ULDUAR_FL_TOWER_HAZARD_MARGIN,
                                             FL_TOWER_STORM))
         return false;
 
-    // Measured from his edge, like the cone. Inside a full charge the dash would carry the hull through
-    // him, and driving closes the rest.
     if (_vehicleBase->GetExactDist2d(boss) - boss->GetObjectSize() <= ULDUAR_FL_STEAM_RUSH_DIST)
         return false;
 
@@ -1008,7 +888,6 @@ bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
     if (!rushInfo || (charm && charm->GetGlobalCooldownMgr().HasGlobalCooldown(rushInfo)))
         return false;
 
-    // The charge runs along our facing, and must not end inside the blast round whoever he is chasing.
     float const bearing = _vehicleBase->GetAngle(boss);
     Position const landing(_vehicleBase->GetPositionX() + std::cos(bearing) * ULDUAR_FL_STEAM_RUSH_DIST,
                            _vehicleBase->GetPositionY() + std::sin(bearing) * ULDUAR_FL_STEAM_RUSH_DIST,
@@ -1017,13 +896,11 @@ bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
         if (centre->GetExactDist2d(landing) <= ULDUAR_FL_BATTERING_RAM_RADIUS + _vehicleBase->GetObjectSize())
             return false;
 
-    // Nor through the Inferno trail.
     std::vector<Unit*> fires;
     GetFlameLeviathanTowerHazards(botAI, _vehicleBase, FL_TOWER_FLAMES, ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN, fires);
     if (!LegClearOfHazards(_vehicleBase, _vehicleBase->GetPosition(), landing, fires, 0.0f))
         return false;
 
-    // Stopped first: a moving hull's spline overrides the facing.
     if (!_vehicleBase->HasInArc(ULDUAR_FL_STEAM_RUSH_AIM_ARC, boss))
     {
         _vehicleBase->StopMoving();
@@ -1056,8 +933,6 @@ std::optional<Position> FlameLeviathanDriveAction::DetourAroundFire(Unit* boss, 
                         here.GetPositionZ());
     };
 
-    // Only the next stretch: the leg is re-planned every tick, and fire further along may be gone or
-    // passed by then.
     float const lookahead = std::min(_vehicleBase->GetExactDist2d(goal), ULDUAR_FL_KITE_FIRE_LOOKAHEAD);
     if (LegClearOfHazards(_vehicleBase, here, along(bearing, lookahead), fires, ULDUAR_FL_TOWER_HAZARD_MARGIN))
         return std::nullopt;
@@ -1097,7 +972,6 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
 
     if (_kiteIdx < 0)
     {
-        // Direction picked per kite, away from him, then held: turning round mid-kite runs back into him.
         int32 const here = nearestNode();
         float const ahead = ring[(here + 1) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
         float const behind =
@@ -1110,15 +984,11 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
     }
     else if (_vehicleBase->GetExactDist2d(ring[_kiteIdx]) <= ULDUAR_FL_KITE_ADVANCE_DIST)
     {
-        // Advance on approach, never on arrival: waiting until the vehicle reaches the node drives
-        // it into the node, and in a corner that is exactly where the boss cuts the diagonal.
         _kiteIdx = (_kiteIdx + _kiteDir + count) % count;
         if (blocked(ring[_kiteIdx]))
             _kiteIdx = (_kiteIdx + _kiteDir + count) % count;
     }
 
-    // The kite outranks the hazard dodge, so it steers round the Inferno itself. Not once he can Ram, though:
-    // blasts stack +50% damage taken, so a slowed leg costs far more than the fire.
     bool const ramming = _vehicleBase->HasAura(SPELL_FL_BATTERING_RAM) ||
                          boss->IsWithinCombatRange(_vehicleBase, ULDUAR_FL_BATTERING_RAM_CAST_RANGE);
 
@@ -1130,16 +1000,13 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
             branch = "kite:detour";
         }
 
-    // FORCED: IsWaitingForLastMove yields only to a strictly higher priority, and the station leg is COMBAT.
     DriveTo(goal, nullptr, false, MovementPriority::MOVEMENT_FORCED);
 
-    // Escape buttons, spent only once already running away from him.
     if (!_vehicleBase->HasInArc(M_PI / 2.0f, boss))
     {
         switch (_vehicleBase->GetEntry())
         {
             case NPC_SALVAGED_SIEGE_ENGINE:
-                // Steam Rush charges along our own facing, so with him in front it would dash into him.
                 CastVehicleSelfSpell(botAI, _vehicleBase, SPELL_FL_STEAM_RUSH, ULDUAR_FL_STEAM_RUSH_COST,
                                      ULDUAR_FL_STEAM_RUSH_COOLDOWN_MS);
                 break;
@@ -1183,11 +1050,8 @@ bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<
             _parked = true;
         }
 
-        // Park facing the target so casts go out without a turn. Only fix real drift: SetFacingTo starts a
-        // spline, and one every tick jitters the hull and reads as moving.
         if (facing)
         {
-            // NormalizeOrientation lands in [0, 2PI), so fold the far half back into [0, PI].
             float error = Position::NormalizeOrientation(*facing - _vehicleBase->GetOrientation());
             if (error > float(M_PI))
                 error = 2.0f * float(M_PI) - error;
@@ -1196,19 +1060,13 @@ bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<
                 _vehicleBase->SetFacingTo(*facing);
         }
 
-        // Yield once parked, so the rotation runs and a move that silently failed shows up as a
-        // vehicle standing still rather than as this action quietly owning every tick.
         return false;
     }
 
-    // Re-stamping the same destination restarts the spline, so the vehicle would crawl and never
-    // arrive. Only re-issue on real drift, or when the previous move has stopped.
     if (_hasIssued && !_parked && _issued.GetExactDist2d(goal) < ULDUAR_FL_REPOSITION_EPSILON &&
         _vehicleBase->isMoving())
         return true;
 
-    // This action is the vehicle's only mover, so a leg in flight at this priority is our own stale one,
-    // and IsWaitingForLastMove would hold the new goal for up to MaxWaitForMove. A higher leg still wins.
     LastMovement& lastMove = AI_VALUE(LastMovement&, "last movement");
     MovementPriority const held = lastMove.priority;
     if (held == priority && priority != MovementPriority::MOVEMENT_IDLE)
@@ -1229,7 +1087,6 @@ bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<
 
 bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
 {
-    // do not switch vehicles yet
     if (bot->GetVehicle())
         return false;
     Unit* vehicleToEnter = nullptr;
@@ -1270,13 +1127,11 @@ bool FlameLeviathanEnterVehicleAction::EnterVehicle(Unit* vehicleBase, bool move
         return MoveTo(vehicleBase);
 
     botAI->RemoveShapeshift();
-    // Use HandleSpellClick instead of Unit::EnterVehicle to handle special vehicle script (ulduar)
     vehicleBase->HandleSpellClick(bot);
 
     if (!bot->IsOnVehicle(vehicleBase))
         return false;
 
-    // dismount because bots can enter vehicle on mount
     WorldPacket emptyPacket;
     bot->GetSession()->HandleCancelMountAuraOpcode(emptyPacket);
     return true;
@@ -1294,7 +1149,6 @@ bool FlameLeviathanEnterVehicleAction::ShouldEnter(Unit* target)
     int32 entry = target->GetEntry();
     if (entry != NPC_SALVAGED_DEMOLISHER && entry != NPC_SALVAGED_SIEGE_ENGINE && entry != NPC_VEHICLE_CHOPPER)
         return false;
-    // two phase enter (make all main vehicles in use -> next player enter)
     if (!allMain)
     {
         if (inUse)
@@ -1311,7 +1165,6 @@ bool FlameLeviathanEnterVehicleAction::ShouldEnter(Unit* target)
     if (!vehicleKit->GetAvailableSeatCount())
         return false;
 
-    // do not enter useless seat
     if (entry == NPC_SALVAGED_SIEGE_ENGINE)
     {
         Unit* turret = vehicleKit->GetPassenger(7);

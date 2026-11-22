@@ -17,10 +17,8 @@
 
 namespace
 {
-// Most area spells reach about 10 yd round their caster or target, so from this close one hits him too
 constexpr float BRAKE_AREA_REACH = 15.0f;
 
-// Effects whose hit carries damage, so they proc the bomb's Unstable or move a nucleus
 bool LandsDamage(SpellInfo const* info)
 {
     if (info->IsAutoRepeatRangedSpell())
@@ -51,11 +49,10 @@ bool LandsDamage(SpellInfo const* info)
 
     return false;
 }
-}  // namespace
+}
 
 float IccBpcSplashMultiplier::GetValue(Action* action)
 {
-    // Heals carry the Aoe threat type too.
     if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 

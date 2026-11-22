@@ -13,7 +13,6 @@
 
 float IccValithriaSplashMultiplier::GetValue(Action* action)
 {
-    // Heals carry the Aoe threat type too.
     if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 

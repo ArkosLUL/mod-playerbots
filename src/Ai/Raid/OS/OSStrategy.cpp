@@ -14,8 +14,6 @@ void RaidOsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     OsSartharionDefinition().AddTriggerNodes(triggers);
 
-    // Outside Sartharion's gate: a drake pulled on its own starts an encounter of its own, which
-    // closes his, and it still opens a Twilight portal with its acolyte or eggs behind it.
     triggers.push_back(new TriggerNode("twilight portal exit",
                                        { NextAction("exit twilight portal", ACTION_RAID + 1) }));
     triggers.push_back(new TriggerNode("sartharion dps",

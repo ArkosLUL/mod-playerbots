@@ -53,27 +53,20 @@ constexpr float SCAN_RANGE = 100.0f;
 constexpr uint32 SCAN_MS = 200;
 constexpr uint32 DUTY_MS = 500;
 
-// Adds are summoned at the doors 40-75 yd out and walk in to the raid; they count once this close to her
 constexpr float ADD_RANGE = 50.0f;
 constexpr float TAUNT_RANGE = 30.0f;
 constexpr float KITE_RANGE = 45.0f;
-// Area damage this close to a zombie hits it, and its threat moves the zombie onto the dealer
 constexpr float SPLASH_GUARD = 10.0f;
 
-// Column of Frost erupts 3 yd round its marker 2 s after it appears. Acid Burst hits 15 yd round a zombie
-// at 1 health after a 0.75 s cast, too short to run out of, so the dodge starts at low health. Mana Void
-// burns mana 6 yd round itself for its 36 s.
 constexpr float COLUMN_RADIUS = 3.0f;
 constexpr uint32 COLUMN_LIVE_MS = 2500;
 constexpr float BURST_RADIUS = 15.0f;
 constexpr int32 BURST_HEALTH_PCT = 15;
 constexpr float VOID_RADIUS = 6.0f;
-// A dodge fires a little past a radius and clears it by the park tolerance and a margin
 constexpr float DANGER_PAD = 0.75f;
 constexpr float CLEAR_PAD = 2.5f;
 constexpr float DODGE_SWEEP = 20.0f;
 
-// A kite leg stays this far off its zombie
 constexpr float KITE_ZOMBIE_CLEAR = 6.0f;
 
 constexpr float PORTAL_AT = 2.0f;
@@ -81,13 +74,9 @@ constexpr float HEAL_CHECK_RANGE = 40.0f;
 constexpr float RAID_LOW_PCT = 40.0f;
 constexpr float RAID_TOPPED_PCT = 85.0f;
 
-// Dream State lasts 20 s, Emerald Vigor 40 s from its last cloud: a stack under 19 s older than the dream
-// came from inside it
 constexpr int32 DESCENT_MS = 3500;
 constexpr int32 REFRESHED_MS = 19000;
 constexpr float GATHER_RANGE = 6.0f;
-// A cloud bursts 0.5-1.25 s after a player comes within 5 yd, on everyone within 10 yd: the group moves on
-// once its leader has waited this long beside it
 constexpr float CLOUD_ARRIVE = 3.0f;
 constexpr uint32 CLOUD_POP_MS = 1300;
 constexpr uint32 CLOUD_FORGET_MS = 5000;
@@ -98,13 +87,11 @@ constexpr uint8 HEALER_PORTAL = 2;
 
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float MELEE_INTERRUPT_RANGE = 5.0f;
-// Hand of Freedom, Cleanse and Dispel Magic reach 30 yd, Guardian Spirit 40, Beacon of Light 60
 constexpr float FREEDOM_RANGE = 30.0f;
 constexpr float GUARDIAN_RANGE = 40.0f;
 constexpr float BEACON_RANGE = 60.0f;
 constexpr int32 BEACON_REFRESH_MS = 5000;
 
-// Archmages are silence immune, so only these stop a Frostbolt Volley
 constexpr char const* KICKS[] = {"kick", "pummel", "shield bash", "mind freeze", "counterspell", "wind shear"};
 
 struct Freedom
@@ -112,7 +99,6 @@ struct Freedom
     char const* spell;
     char const* label;
 };
-// What frees a kiter from Frostbolt Volley's magic snare, best first
 constexpr Freedom FREEDOMS[] = {{"hand of freedom", "hand"}, {"cleanse", "dispel"}, {"dispel magic", "dispel"}};
 
 struct Snare
@@ -120,7 +106,6 @@ struct Snare
     char const* spell;
     float range;
 };
-// Ranged snares only: a zombie one-shots whoever stands in its reach
 constexpr Snare SNARES[] = {{"chains of ice", 20.0f}, {"concussive shot", 30.0f}, {"frost shock", 20.0f}};
 constexpr float SNARE_MAX_RANGE = 30.0f;
 
@@ -140,8 +125,6 @@ struct Column
     uint32 seenMs = 0;
 };
 
-// Asked by a trigger, its action and a rule for every action a bot weighs, and a bot never ticks twice in
-// one ms
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -149,7 +132,6 @@ struct TargetMemo
     Unit* pick = nullptr;
 };
 
-// The rules ask these for every action a bot weighs
 struct OwnedMemo
 {
     uint32 ms = 0;
@@ -165,7 +147,6 @@ struct VdState
     std::vector<ObjectGuid> adds;
     std::vector<ObjectGuid> zombies;
     std::vector<ObjectGuid> abominations;
-    // Pre-effects still showing their 15 s visual, and the real portals that follow them
     std::vector<ObjectGuid> preEffects;
     std::vector<ObjectGuid> portals;
     std::vector<Position> voids;
@@ -174,21 +155,14 @@ struct VdState
 
     uint32 dutyMs = 0;
     bool dutiesRan = false;
-    // Bot healer -> HEALER_RAID or HEALER_PORTAL
     RaidObs::ObsGuidMap<uint8> healer{"vd.healer"};
-    // Portal healer -> the pre-effect it waits on, and that spot, where its real portal opens
     RaidObs::ObsGuidMap<ObjectGuid> portalClaim{"vd.portalclaim"};
     std::unordered_map<ObjectGuid, Position> claimSpot;
-    // Bot tank -> the abomination it holds
     RaidObs::ObsGuidMap<ObjectGuid> tank{"vd.tank"};
-    // Chasing zombie -> the bot that snares it
     std::unordered_map<ObjectGuid, ObjectGuid> snarer;
-    // Kiter -> +1 counter-clockwise, -1 clockwise round her
     std::unordered_map<ObjectGuid, int8> kiteDir;
     std::unordered_map<ObjectGuid, Stand> stands;
-    // Kicker -> the archmage it kicks
     std::unordered_map<ObjectGuid, ObjectGuid> kicks;
-    // Helper -> the slowed kiter it frees
     std::unordered_map<ObjectGuid, ObjectGuid> freers;
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
@@ -196,7 +170,6 @@ struct VdState
     ObjectGuid dreamLeader;
     ObjectGuid dreamCloud;
     uint32 cloudArrivedMs = 0;
-    // Clouds the group has left, and when: one lingers 1 s after it bursts
     std::unordered_map<ObjectGuid, uint32> popped;
 
     std::unordered_map<ObjectGuid, TargetMemo> targets;
@@ -204,7 +177,6 @@ struct VdState
 };
 
 RaidInstanceState<VdState> vdStates;
-// Bots whose saved rti was checked this instance, so a player's later order sticks
 RaidInstanceState<std::unordered_set<ObjectGuid>> vdRtiChecked;
 
 bool IsTankPlayer(Player* player)
@@ -212,7 +184,6 @@ bool IsTankPlayer(Player* player)
     return player && (PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true));
 }
 
-// Players hold no duty, and a selfbot counts as a player here.
 bool IsDutyBot(Player* player) { return player && GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
 bool IsHealer(Player* player) { return player && PlayerbotAI::IsHeal(player) && !IsTankPlayer(player); }
@@ -229,7 +200,6 @@ void NoteDerived(Player* bot, char const* key, std::string const& value)
         RaidObs::NoteDerived(bot, key, value);
 }
 
-// A literal builds its std::string only once a trace is open
 void NoteDerived(Player* bot, char const* key, char const* value)
 {
     if (RaidObs::Active())
@@ -348,7 +318,6 @@ void Scan(VdState& st, Creature* valithria, uint32 now)
             if (!add->IsAlive() || !add->IsInCombat())
                 continue;
 
-            // A zombie at 1 health keeps its place while it casts Acid Burst, then turns unselectable
             if (entry == NPC_BLISTERING_ZOMBIE)
                 st.zombies.push_back(add->GetGUID());
             if (add->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
@@ -400,14 +369,12 @@ void Scan(VdState& st, Creature* valithria, uint32 now)
 
             if (entry == NPC_DREAM_PORTAL || entry == NPC_NIGHTMARE_PORTAL)
                 st.portals.push_back(portal->GetGUID());
-            // A pre-effect lingers 6 s past its real portal with its visual gone
             else if (portal->HasAura(SPELL_VD_DREAM_PORTAL_VISUAL_PRE) ||
                      portal->HasAura(SPELL_VD_NIGHTMARE_PORTAL_VISUAL_PRE))
                 st.preEffects.push_back(portal->GetGUID());
         }
     }
 
-    // The clouds live in the Dream State phase, which the combat trigger shares and she does not
     st.clouds.clear();
     InstanceScript* instance = valithria->GetInstanceScript();
     Creature* trigger = instance ? ObjectAccessor::GetCreature(*valithria,
@@ -428,7 +395,6 @@ void Scan(VdState& st, Creature* valithria, uint32 now)
 
 bool ColumnLive(Column const& column, uint32 now) { return getMSTimeDiff(column.seenMs, now) < COLUMN_LIVE_MS; }
 
-// An unselectable zombie has already burst and only waits out its 2 s despawn
 bool ZombieDying(Creature* zombie)
 {
     if (zombie->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
@@ -455,13 +421,11 @@ Creature* ChasingZombie(VdState const& st, Player* bot)
     return nullptr;
 }
 
-// Pure read: the publishing wrapper is IsVdKiting
 bool Kiting(VdState const& st, Player* bot)
 {
     return !Dreaming(bot) && ChasingZombie(st, bot) && !(IsTankPlayer(bot) && HoldsAbomination(st, bot));
 }
 
-// Pure read: the publishing wrapper is IsVdInDanger
 char const* Danger(VdState const& st, Player* bot)
 {
     if (Dreaming(bot) || Kiting(st, bot))
@@ -511,7 +475,6 @@ std::vector<HazardCircle> Hazards(VdState const& st, Player* bot, bool voids)
     return hazards;
 }
 
-// A spot clear of every hazard on the probed floor round her
 bool ClearSpot(Player* bot, Creature* valithria, std::vector<HazardCircle> const& hazards, Position& spot)
 {
     Position const from = bot->GetPosition();
@@ -537,7 +500,6 @@ bool ClearSpot(Player* bot, Creature* valithria, std::vector<HazardCircle> const
 
     Position found = FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP, 2.0f,
                                                        static_cast<float>(M_PI) / 8.0f, &from, onFloorNoCrossing);
-    // Crossing a column's edge beats standing in what the bot runs from
     if (found.GetPositionX() == 0.0f && found.GetPositionY() == 0.0f)
         found = FindNearestPositionClearOfHazards(bot, hazards, DODGE_SWEEP, 2.0f, static_cast<float>(M_PI) / 8.0f,
                                                   &from, onFloor);
@@ -557,7 +519,6 @@ Position RingPoint(Creature* valithria, int32 index)
                     valithria->GetPositionY() + VD_KITE_RADIUS * std::sin(angle), valithria->GetPositionZ());
 }
 
-// Round her away from the zombie: further along the side of the ring the bot already holds against it
 int8 KiteDirection(Creature* valithria, Player* bot, Creature* zombie)
 {
     float const bot_ = valithria->GetAngle(bot);
@@ -583,7 +544,6 @@ Player* LowestGuid(std::vector<Player*> const& players)
 
 uint32 VigorId(Player* bot) { return sSpellMgr->GetSpellIdForDifficulty(SPELL_EMERALD_VIGOR, bot); }
 
-// A cloud has refreshed this dreamer's stacks since it went in
 bool Refreshed(Player* player)
 {
     Aura* dream = player->GetAura(SPELL_DREAM_STATE);
@@ -611,7 +571,6 @@ Creature* RealPortalAt(VdState const& st, Player* bot, Position const& spot)
 
 void AssignHealers(VdState& st, Player* bot, std::vector<Player*> const& members)
 {
-    // Paladins last for the raid duty: Beacon of Light and Holy Light keep them on her
     std::vector<Player*> healers;
     for (Player* member : members)
         if (IsDutyBot(member) && IsHealer(member))
@@ -653,7 +612,6 @@ void AssignPortals(VdState& st, Player* bot, std::vector<Player*> const& members
         auto const duty = st.healer.find(guid);
         bool const waiting = std::find(st.preEffects.begin(), st.preEffects.end(), portal) != st.preEffects.end();
         bool const open = spot != st.claimSpot.end() && RealPortalAt(st, bot, spot->second);
-        // A claim ends once its healer is in the dream, the duty moves, or nothing stands on the spot
         if (!healer || !healer->IsAlive() || Dreaming(healer) || duty == st.healer.end() ||
             duty->second != HEALER_PORTAL || (!waiting && !open))
             lapsed.push_back(guid);
@@ -676,7 +634,6 @@ void AssignPortals(VdState& st, Player* bot, std::vector<Player*> const& members
     }
     std::sort(healers.begin(), healers.end(), IccGuidLess());
 
-    // A real portal opens on its pre-effect's spot, so a spot claimed once is taken in either form
     std::vector<Creature*> spots = Resolve(bot, st.preEffects);
     for (Creature* portal : Resolve(bot, st.portals))
         spots.push_back(portal);
@@ -915,7 +872,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, VdState const& st, Creature* valithria)
             return false;
         if (entry == NPC_BLISTERING_ZOMBIE)
             return !melee;
-        // An abomination waits for a tank, and a tank leaves another tank's to it
         if (entry == NPC_GLUTTONOUS_ABOMINATION)
             return !tank && add->GetVictim() && IsTankPlayer(add->GetVictim()->ToPlayer());
         return true;
@@ -937,7 +893,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, VdState const& st, Creature* valithria)
         }
     }
 
-    // The current pick stays while nothing of a better tier is up, or bots flip between adds walking in
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     Creature* held = current ? current->ToCreature() : nullptr;
     if (best && held && held != best && held->IsAlive() && IsVdAdd(held) && TierOf(held->GetEntry()) == bestTier &&
@@ -950,7 +905,6 @@ Unit* ResolveTarget(PlayerbotAI* botAI, VdState const& st, Creature* valithria)
 
 bool CanPayFor(Player* bot, SpellInfo const* info)
 {
-    // POWER_HEALTH is -2 and Powers is signed, hence the cast.
     if (info->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -958,8 +912,6 @@ bool CanPayFor(Player* bot, SpellInfo const* info)
            info->CalcPowerCost(bot, info->GetSchoolMask());
 }
 
-// The first kick the member can land on the archmage right now. A false ready here holds every other
-// kicker back from the election, so power and form are checked too.
 char const* ReadyKick(Player* member, Unit* caster)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -990,7 +942,6 @@ bool CastingVolley(Creature* archmage)
            spell->GetSpellInfo()->Id == sSpellMgr->GetSpellIdForDifficulty(SPELL_VD_FROSTBOLT_VOLLEY, archmage);
 }
 
-// Each archmage casting Frostbolt Volley to the nearest bot with a kick ready that no other archmage took
 void AssignKicks(VdState& st, Player* bot, std::vector<Player*> const& members)
 {
     st.kicks.clear();
@@ -1028,7 +979,6 @@ bool Slowed(Player* kiter)
     return kiter->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_VD_FROSTBOLT_VOLLEY, kiter));
 }
 
-// The spell the member can free the kiter with right now
 Freedom const* ReadyFreedom(Player* member, Player* kiter)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -1043,8 +993,6 @@ Freedom const* ReadyFreedom(Player* member, Player* kiter)
     return nullptr;
 }
 
-// Per slowed kiter: itself where it can, else the nearest paladin bot with Hand of Freedom, else the
-// nearest bot that can dispel the snare
 void AssignFreedom(VdState& st, std::vector<Player*> const& members)
 {
     st.freers.clear();
@@ -1099,7 +1047,6 @@ bool AbominationHits(VdState const& st, Player* bot, Player* member)
     return false;
 }
 
-// A human tank has no trigger, so it gets told when an abomination has it low
 void CallHumanTank(VdState& st, Player* sender, std::vector<Player*> const& members, uint32 now)
 {
     if (st.humanCallRan && getMSTimeDiff(st.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -1118,7 +1065,6 @@ void CallHumanTank(VdState& st, Player* sender, std::vector<Player*> const& memb
     }
 }
 
-// Pure read: the publishing wrapper is IsVdPushWindow
 bool PushWindow(Creature* valithria, Player* bot)
 {
     if (valithria->GetHealthPct() < VD_PUSH_PCT)
@@ -1151,7 +1097,6 @@ bool LustRunning(Player* bot)
 char const* ReadyLust(Player* shaman)
 {
     PlayerbotAI* shamanAI = GET_PLAYERBOT_AI(shaman);
-    // The DBC lets a Sated or Exhausted shaman cast it; the script then strips every Sated target
     if (!shamanAI || shaman->getClass() != CLASS_SHAMAN || shaman->HasAura(SPELL_VD_EXHAUSTION) ||
         shaman->HasAura(SPELL_VD_SATED))
         return nullptr;
@@ -1170,7 +1115,6 @@ bool CanGuardSpirit(Player* priest, Creature* valithria)
            priestAI->CanCastSpell("guardian spirit", valithria) && priest->IsWithinLOSInMap(valithria);
 }
 
-// A bot still flagged in the air by the dream mover once Dream State is gone, within her room
 bool LandingPending(Player* bot)
 {
     if (!bot->HasUnitMovementFlag(MOVEMENTFLAG_FLYING | MOVEMENTFLAG_DISABLE_GRAVITY) || bot->HasFlyAura() ||
@@ -1179,7 +1123,7 @@ bool LandingPending(Player* bot)
 
     return bot->GetMapId() == ICC_MAP_ID && bot->GetExactDist2d(VD_HOME_X, VD_HOME_Y) <= LIVE_RANGE;
 }
-}  // namespace
+}
 
 Creature* GetVdValithria(PlayerbotAI* botAI)
 {
@@ -1369,8 +1313,6 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
     uint32 const now = getMSTime();
     Position const from = bot->GetPosition();
     HazardCircle const chaser(zombie->GetPosition(), KITE_ZOMBIE_CLEAR);
-    // A kiter gets no burst dodge, so its legs keep out of other zombies' Acid Burst. One that starts inside
-    // may still leave it.
     std::vector<HazardCircle> bursts;
     for (Creature* other : Resolve(bot, st->zombies))
         if (other != zombie && ZombieDying(other))
@@ -1393,7 +1335,6 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
         return true;
     };
 
-    // Two ring points on, else three, else one, and back the other way only when the zombie cuts across
     for (int32 hops : {2, 3, 1, -2, -3})
     {
         Position const to = RingPoint(valithria, ringSlot + hops * dir);
@@ -1405,7 +1346,6 @@ bool GetVdKiteLeg(PlayerbotAI* botAI, Position& leg)
         return true;
     }
 
-    // Boxed in: the ring point farthest from the zombie
     Position farthest;
     for (int32 index = 0; index < VD_KITE_POINTS; ++index)
     {
@@ -1436,7 +1376,6 @@ bool GetVdPortalWalk(PlayerbotAI* botAI, Position& spot, Creature*& portal)
     if (portal)
         return true;
 
-    // A Mana Void on the spot waits for the portal to open
     for (Position const& manaVoid : st->voids)
         if (manaVoid.GetExactDist2d(spot) < VOID_RADIUS + DANGER_PAD)
             return false;
@@ -1478,7 +1417,6 @@ Creature* GetVdHealTarget(PlayerbotAI* botAI)
 VdFlight GetVdFlight(PlayerbotAI* botAI, Position& dest)
 {
     Player* bot = botAI->GetBot();
-    // Her place, not her: she despawns 4 s after the win, while a dreamer may still be up
     if (LandingPending(bot))
     {
         NoteDerived(bot, "vd.dream", "land");
@@ -1595,7 +1533,6 @@ char const* GetVdLust(PlayerbotAI* botAI)
     if (!lust || !IsVdPushWindow(botAI) || LustRunning(bot))
         return nullptr;
 
-    // One lust a push: the lowest-guid shaman able to cast it
     for (Player* member : MembersOnMap(bot))
         if (member->GetGUID() < bot->GetGUID() && IsDutyBot(member) && !Dreaming(member) && !Kiting(*st, member) &&
             ReadyLust(member))
@@ -1616,7 +1553,6 @@ Creature* GetVdGuardianSpiritTarget(PlayerbotAI* botAI)
         !IsVdPushWindow(botAI))
         return nullptr;
 
-    // The priests take turns: the lowest-guid one able casts, the next once hers has run out
     for (Player* member : MembersOnMap(bot))
         if (member->GetGUID() < bot->GetGUID() && IsDutyBot(member) && IsHealer(member) && !Dreaming(member) &&
             !Kiting(*st, member) && CanGuardSpirit(member, valithria))
@@ -1702,14 +1638,12 @@ uint32 GetVdTankDefensive(PlayerbotAI* botAI, char const* noteKind)
 
     if (bot->GetHealthPct() >= TankDefensivePct(bot) || !HoldsAbomination(*st, bot))
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             NoteDerived(bot, noteKind, "idle");
 
         return 0;
     }
 
-    // Its swings are physical; Gut Spray's nature ticks are small
     return NextTankDefensive(botAI, bot, noteKind, true);
 }
 
@@ -1740,7 +1674,7 @@ OwnedMemo const* Owned(PlayerbotAI* botAI)
 
     return &memo;
 }
-}  // namespace
+}
 
 bool IsVdMovementOwned(PlayerbotAI* botAI)
 {
@@ -1780,7 +1714,6 @@ void TickVdEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A saved rti of cross keeps a bot off the skull in the icon-led fights after her
     if (vdRtiChecked.For(bot->GetInstanceId()).insert(bot->GetGUID()).second)
     {
         Value<std::string>* rti = botAI->GetAiObjectContext()->GetValue<std::string>("rti");
@@ -1788,7 +1721,6 @@ void TickVdEncounter(PlayerbotAI* botAI)
             rti->Set("skull");
     }
 
-    // A wipe or a win ends the encounter: the next pull rebuilds every duty
     if (!InProgress(bot))
     {
         if (vdStates.Find(bot->GetInstanceId()))

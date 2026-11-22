@@ -19,8 +19,6 @@ EncounterDefinition const& ToCStagingDefinition();
 EncounterDefinition const& ToCResistAuraDefinition();
 EncounterDefinition const& ToCOpenerDefinition();
 
-// Every ToC definition, in node and veto order: equal relevances pop in insertion order, and a trace credits
-// the first multiplier to zero an action. The contexts and the strategy walk this.
 inline std::vector<EncounterDefinition const*> const& ToCEncounterDefinitions()
 {
     static std::vector<EncounterDefinition const*> const definitions = {

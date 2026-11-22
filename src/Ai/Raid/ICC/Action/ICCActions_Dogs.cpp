@@ -24,7 +24,6 @@ bool IccDogsCastDecimateCoverAction::Execute(Event /*event*/)
     if (!spellId)
         return false;
 
-    // A cast in progress fails this one's check, and a moving bot breaks its own channel
     if (bot->IsNonMeleeSpellCast(false))
         bot->InterruptNonMeleeSpells(false);
 

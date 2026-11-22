@@ -83,26 +83,15 @@ struct IccGuidLess
     bool operator()(WorldObject const* a, WorldObject const* b) const { return a->GetGUID() < b->GetGUID(); }
 };
 
-// Every bot cheat in ICC goes through one of the next two, so a trace says which one ran, by whom, on
-// what. `key` is "<encounter prefix>.<kind>" and `target` the unit acted on when it is not the bot.
-// IccRaidCheat is the raid cheat's gate: true when the bot may cheat, and then the use is recorded,
-// so ask it last, once the cheat is otherwise about to run.
 bool IccRaidCheat(PlayerbotAI* botAI, char const* key, Unit* target = nullptr);
-// For the Playerbots.EnableICCBuffs buffs, which keep that gate of their own and only record.
 void IccNoteCheat(Player* bot, char const* key, Unit* target = nullptr);
 
-// Opens the trace for a pull no boss state reports, under `slug`, once the bot is fighting `source`.
 void IccMarkPull(Player* bot, Unit* source, char const* slug);
 
-// The class taunt, at most once per 500 ms per bot, else a ranged pull when the bot has no taunt or it
-// failed off cooldown. A taunt on cooldown fails, so a caller taunting several units in a row reaches
-// the next one only once the cooldown is up.
 bool IccCastClassTaunt(Player* bot, PlayerbotAI* botAI, Unit* target);
 std::optional<bool> IccTryClassCC(Player* bot, PlayerbotAI* botAI, Unit* target);
 void IccEnsureIconOn(Player* bot, PlayerbotAI* botAI, int8 icon, Unit* target);
-// In the world on the bot's own instance, so touching its auras stays on this map's thread.
 bool IccSameInstance(Player* bot, Player* member);
-// `bot` is the one whose code applies the buffs to `member`, recorded under `cheatKey`.
 void IccApplyHeroicBuffToMember(Player* bot, Player* member, bool applyPainSupp, bool applyNoThreat,
                                 char const* cheatKey);
 bool IccAnyGroupMemberHasAura(Player* bot, uint32 spellId);

@@ -22,7 +22,6 @@ namespace
 {
 constexpr uint32 EOE_HEALER_ROSTER_CACHE_MS = 2000;
 
-// Heading the flight holds on the ring, latched per instance. It only ever advances.
 struct DrakeStackAngle
 {
     uint32 at = 0;
@@ -35,15 +34,12 @@ struct HealerRosterEntry
     std::vector<ObjectGuid> guids;
 };
 
-// When the boss picked this bot's drake, and when that was last confirmed.
 struct DrakeFixate
 {
     uint32 at = 0;
     uint32 seen = 0;
 };
 
-// Fixates are keyed on the bot, not its drake: a Skytalon is summoned fresh every pull, so drake keys
-// would pile up for as long as the instance stays loaded.
 struct DrakeInstanceState
 {
     DrakeStackAngle stackAngle;
@@ -55,7 +51,6 @@ RaidInstanceState<DrakeInstanceState> drakeStates;
 
 DrakeInstanceState& DrakeStateFor(Player* bot) { return drakeStates.For(bot->GetInstanceId()); }
 
-// Both come back -1 when there is no power cost worth checking, which callers read as yes.
 bool GetDrakeSpellCost(Unit* drake, uint32 spellId, int32& cost, int32& available)
 {
     cost = -1;
@@ -65,7 +60,6 @@ bool GetDrakeSpellCost(Unit* drake, uint32 spellId, int32& cost, int32& availabl
     if (!spellInfo)
         return false;
 
-    // POWER_HEALTH is -2, which would index the power array out of bounds.
     if (spellInfo->PowerType >= static_cast<uint32>(MAX_POWERS))
         return true;
 
@@ -121,8 +115,6 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
     if (IsClearOfStaticFields(x, y, fields, STATIC_FIELD_CLEARANCE))
         return true;
 
-    // Dodge along the ring, forward only. Sweeping back or restarting from DRAKE_STACK_ANGLE flips the
-    // whole formation when a field behind the flight expires.
     float const step = EOE_TWO_PI / DRAKE_RING_HEADINGS;
 
     float bestClearance = 0.0f;
@@ -157,7 +149,6 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
         }
     }
 
-    // Boxed in: take the roomiest heading rather than sit in the field.
     held = std::remainder(bestAngle, EOE_TWO_PI);
     x = bestX;
     y = bestY;
@@ -178,8 +169,6 @@ void GetDrakeApproachPoint(Unit* drake, Unit* boss, float destX, float destY, fl
     float const to = std::atan2(destY - bossY, destX - bossX);
     float delta = std::remainder(to - from, EOE_TWO_PI);
 
-    // Forward only once on the ring, where the short way back crosses the field just left. Drakes still
-    // flying in take the short way, or the flight arrives in two waves; under a hop behind is just drift.
     bool const onRing =
         std::fabs(drake->GetExactDist2d(bossX, bossY) - DRAKE_STACK_RADIUS) <= DRAKE_STACK_TOLERANCE;
     if (onRing && delta < -DRAKE_APPROACH_ARC)
@@ -206,7 +195,6 @@ void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out)
         return;
     }
 
-    // Only group makeup and difficulty feed this, and the walk sorts two vectors, so it's cached.
     HealerRosterEntry& cached = DrakeStateFor(bot).healerRoster;
     uint32 const now = getMSTime();
     if (cached.at && getMSTimeDiff(cached.at, now) < EOE_HEALER_ROSTER_CACHE_MS)
@@ -230,7 +218,6 @@ void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out)
         (PlayerbotAI::IsHeal(member) ? healers : others).push_back(member->GetGUID());
     }
 
-    // Guid order is identical on every bot, so the flight agrees on the roster without talking.
     std::sort(healers.begin(), healers.end());
     std::sort(others.begin(), others.end());
 
@@ -331,7 +318,6 @@ uint32 DrakeAuraRemainingMs(Unit* drake, uint32 spellId)
     if (!aura)
         return 0;
 
-    // Negative is a permanent aura, which none of these are.
     int32 const remaining = aura->GetDuration();
     return remaining > 0 ? static_cast<uint32>(remaining) : 0;
 }
@@ -351,8 +337,6 @@ bool IsDrakeSurgeTarget(PlayerbotAI* botAI)
     if (!bossCreature || !bossCreature->AI())
         return false;
 
-    // Both P3 surges (57407, and 60936 in 25-man) are DoCastAOE with no unit target, so the boss
-    // publishes its victims in guid slots instead.
     for (uint8 i = 0; i < EOE_NUM_MAX_SURGE_TARGETS; ++i)
     {
         if (bossCreature->AI()->GetGUID(EOE_DATA_FIRST_SURGE_TARGET_GUID + i) == drake->GetGUID())
@@ -371,8 +355,6 @@ bool GetDrakeSurgeElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs)
     DrakeFixate& fixate = DrakeStateFor(fixateBot).fixates[fixateBot->GetGUID()];
     uint32 const now = getMSTime();
 
-    // A fresh pick shows as a gap in the flag, or, for back-to-back picks that leave no gap, as a flag
-    // older than one SURGE_CYCLE_MS.
     if (!fixate.at || getMSTimeDiff(fixate.seen, now) > DRAKE_FIXATE_GAP_MS ||
         getMSTimeDiff(fixate.at, now) >= SURGE_CYCLE_MS)
         fixate.at = now;

@@ -14,17 +14,14 @@
 
 namespace
 {
-// A Dominate Mind victim this far from the bot or its target is in reach of a cleave or an area spell.
 constexpr float LDW_SPLASH_HOLD_RANGE = 15.0f;
 }
 
 float IccLadyDeathwhisperMultiplier::GetValue(Action* action)
 {
-    // Heals carry the Aoe threat type too.
     if (dynamic_cast<CastHealingSpellAction*>(action) || !IsRaidAreaDamage(botAI, action, _splash))
         return 1.0f;
 
-    // Cached per ms: asked for every area action the bot weighs, and a bot never ticks twice in one ms.
     uint32 const now = getMSTime();
     if (now != _checkedMs)
     {

@@ -45,38 +45,27 @@
 
 namespace
 {
-// About his boss boundary, which lies 55-63 yd off his spot
 constexpr float ROOM_RADIUS = 60.0f;
 constexpr uint32 ROSTER_REFRESH_MS = 1000;
 constexpr uint32 DEAL_REFRESH_MS = 200;
 constexpr uint32 HUMAN_CALL_CHECK_MS = 500;
 constexpr float TAUNT_RANGE = 30.0f;
-// Vile Gas picks among players past his melee by 5 yd once this many stand there, else among everyone
 constexpr size_t VILE_GAS_MIN_TARGETS_10 = 3;
 constexpr size_t VILE_GAS_MIN_TARGETS_25 = 8;
 constexpr float DODGE_SWEEP_RADIUS = 16.0f;
-// Slots sit 18-28.5 yd off his spot against a 38.5 yd reach spell, so they hold until he is this far off it
 constexpr float SLOT_DRIFT = 10.0f;
-// A dodging ranged bot keeps this far from everyone else, so one Vile Gas still takes one player
 constexpr float SPREAD_KEEPOUT = FG_VILE_GAS_RADIUS + 0.5f;
-// Inoculated takes 25% a stack off his shadow area damage, three at most
 constexpr float INOCULATED_CUT = 0.25f;
 constexpr uint32 INOCULATED_MAX = 3;
-// Either one refuses Divine Shield (spell_pal_immunities)
 constexpr uint32 SPELL_FORBEARANCE = 25771;
 constexpr uint32 SPELL_AVENGING_WRATH_MARKER = 61987;
-// A shifted spore stack is searched on rings this far apart, 16 headings each; one with nobody fixed in it
-// looks this far round its stack
 constexpr float SHIFT_STEP = 0.75f;
 constexpr float SHIFT_SEARCH = 12.0f;
 
-// Middle slots first: each reaches both tank spots and all but two or three far slots in 40 yd
 constexpr uint8 HEALER_SLOTS[] = {1, 2, 3, 8, 9, 10};
 constexpr uint8 RANGED_SLOTS[] = {4, 5, 11, 12, 13, 14, 6, 7, 15, 16, 17, 18, 2, 3, 9, 10, 1, 8};
-// Melee fill these when too few ranged stand out for Vile Gas, nearest the legs first
 constexpr uint8 FILL_SLOTS[] = {2, 3, 1, 4, 5, 6, 7, 9, 10, 8, 11, 12, 13, 14, 15, 16, 17, 18};
 
-// Stored in fg.carrier: the group a spore carrier was sent to
 constexpr uint8 GROUP_CLOSE = 1;
 constexpr uint8 GROUP_FAR = 2;
 
@@ -88,8 +77,6 @@ struct Stand
     bool parked = false;
 };
 
-// The resolver is asked by its trigger, its action and the targeting rule for every action a bot
-// weighs, and a bot never ticks twice in one ms.
 struct TargetMemo
 {
     uint32 ms = 0;
@@ -97,11 +84,9 @@ struct TargetMemo
     Unit* pick = nullptr;
 };
 
-// A spore group goo fouled stands on one spot for the rest of the wave
 struct Shift
 {
     bool on = false;
-    // The player who can't walk is inside the burst from it, or there is none
     bool fixedIn = false;
     Position spot;
 };
@@ -114,32 +99,27 @@ struct FgState
 
     uint32 dealMs = 0;
     bool dealRan = false;
-    // The wave's carriers by guid, to tell a new wave from the one already dealt
     std::vector<ObjectGuid> wave;
     RaidObs::ObsGuidMap<uint8> carrier{"fg.carrier"};
     bool closeCarried = false;
     bool farCarried = false;
-    // A group with no bot carrier stands round this player instead of its anchor
     ObjectGuid closeOn;
     ObjectGuid farOn;
     RaidObs::ObsValue<uint8> leg{"fg.leg", 1};
     RaidObs::ObsValue<uint8> farAnchor{"fg.sporespot", 1};
     Shift closeShift;
     Shift farShift;
-    // 0 none, 1 shifted with its fixed player in the burst, 2 shifted without him
     RaidObs::ObsValue<uint8> closeShifted{"fg.closeshift", 0};
     RaidObs::ObsValue<uint8> farShifted{"fg.farshift", 0};
     RaidObs::ObsValue<uint8> drag{"fg.drag", 0};
     RaidObs::ObsGuidSet brake{"fg.brake"};
 
-    // Pungent Blight takes his Inhaled Blight stacks: each drop starts a cycle
     uint32 blightLast = 0;
     uint32 blightCycle = 0;
     std::unordered_map<ObjectGuid, uint32> minorSpent;
 
     uint32 humanCallMs = 0;
     bool humanCallRan = false;
-    // The cycle of the last minor call plus one, 0 for none
     uint32 humanMinorCall = 0;
 
     std::unordered_map<ObjectGuid, Stand> stands;
@@ -150,10 +130,8 @@ RaidInstanceState<FgState> fgStates;
 
 bool IsTankPlayer(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 
-// A bot of its own, not a player, selfbot included: players hold no duty.
 bool IsDutyBot(Player* player) { return GET_PLAYERBOT_AI(player) && !IsSelfBot(player); }
 
-// Tanks and melee stand with him, healers and ranged out
 bool IsCloseRole(Player* player)
 {
     return IsTankPlayer(player) || (!PlayerbotAI::IsHeal(player) && !PlayerbotAI::IsRanged(player));
@@ -193,7 +171,6 @@ std::vector<Player*> MembersOnMap(Player* bot)
     return members;
 }
 
-// In combat on the bot's map, whoever the bot is and wherever it stands
 Creature* BossInCombat(Player* bot)
 {
     InstanceScript* instance = bot->GetMapId() == ICC_MAP_ID ? bot->GetInstanceScript() : nullptr;
@@ -247,8 +224,6 @@ uint32 TauntSpellId(Player* player)
     }
 }
 
-// Off cooldown and castable in its current form: Growl needs bear form and Taunt Defensive Stance, and a
-// tank elected without them would hold the swap without ever landing it
 bool TauntUsable(Player* member)
 {
     PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
@@ -268,7 +243,6 @@ uint32 BlightStacks(Creature* boss)
 
 bool OnTankSpot(FgState const* state, Player* member)
 {
-    // no roster yet, so no tank ranks ahead
     if (!state)
         return true;
 
@@ -276,9 +250,6 @@ bool OnTankSpot(FgState const* state, Player* member)
     return held != state->slot.end() && held->second >= FG_STAND_TANK;
 }
 
-// The tank to take him now, one on a tank spot first: a third tank holds him from the legs, which turns
-// him onto the melee and leaves it out of the close spore stack. A taunt aura on him means one just landed
-// and his victim catches up next update, so nobody else spends one.
 Player* SwapTaunter(FgState const* state, Player* bot, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -313,7 +284,6 @@ Player* SwapTaunter(FgState const* state, Player* bot, Creature* boss)
     return pick;
 }
 
-// A human tank other than the holder that could take him: few enough stacks, its taunt ready
 Player* HumanTaunter(Player* sender, Unit* holder, Creature* boss)
 {
     uint32 const bloat = BloatId(boss);
@@ -328,7 +298,6 @@ Player* HumanTaunter(Player* sender, Unit* holder, Creature* boss)
     return nullptr;
 }
 
-// Nobody to take him off a holder at the swap: his stacks reach 10 unless a paladin's bubble purges them
 bool NobodyTakesHim(FgState const* state, Player* bot, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -337,8 +306,6 @@ bool NobodyTakesHim(FgState const* state, Player* bot, Creature* boss)
            !boss->HasAuraType(SPELL_AURA_MOD_TAUNT) && !SwapTaunter(state, bot, boss);
 }
 
-// A third tank holding him takes the spot of the tank-spot tank with the most Gastric Bloat, the one it
-// relieved: from the legs he would face the melee, and the holder would miss the close spore stack
 void SeatThirdTank(std::unordered_map<ObjectGuid, uint8>& wanted, std::vector<Player*> const& tanks, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -385,7 +352,6 @@ void RefreshRoster(FgState& state, Player* bot, Creature* boss, uint32 now)
     {
         if (!IsDutyBot(member))
         {
-            // Players hold no slot, so their spec says whether they usually stand out for Vile Gas
             if (!IsTankPlayer(member) && (PlayerbotAI::IsHeal(member) || PlayerbotAI::IsRanged(member)))
                 ++playersOut;
 
@@ -468,7 +434,6 @@ void RefreshRoster(FgState& state, Player* bot, Creature* boss, uint32 now)
     for (Player* member : spareHealers)
         take(RANGED_SLOTS, std::size(RANGED_SLOTS), member);
 
-    // Too few out and Vile Gas picks among everyone, so one on a leg would take every melee on it
     size_t slotted = playersOut;
     for (uint8 id = 1; id <= FG_SLOT_COUNT; ++id)
         slotted += taken[id] ? 1 : 0;
@@ -500,8 +465,6 @@ void RefreshRoster(FgState& state, Player* bot, Creature* boss, uint32 now)
 
 Position const& ActiveFarAnchor(FgState const& state) { return ICC_FG_FAR_ANCHORS[state.farAnchor.Get() == 2 ? 1 : 0]; }
 
-// The legs and the far anchors flip once goo lands on the one in use and the other is clear. Assigned every
-// pass, so each trace hears the value it opens on.
 void UpdateFlips(FgState& state, std::vector<Position> const& impacts)
 {
     float const legClear = FG_GOO_CLEARANCE + FG_STAND_PARK;
@@ -534,7 +497,6 @@ void ClearDeal(FgState& state)
     state.farShift = Shift();
 }
 
-// Picks the carrier sent across to an empty group: a bot not holding him, nearest that group's anchor
 Player* SpareCarrier(std::vector<Player*> const& carriers, Unit* holder, Position const& to, bool melee)
 {
     Player* pick = nullptr;
@@ -555,8 +517,6 @@ Player* SpareCarrier(std::vector<Player*> const& carriers, Unit* holder, Positio
     return pick;
 }
 
-// A group with a bot carrier stands on its anchor, which that bot walks to. One carried only by the
-// holder stands round him, one carried only by players round the first of them.
 ObjectGuid GroupAnchorOn(std::vector<Player*> const& carriers, Unit* holder)
 {
     Player* human = nullptr;
@@ -577,8 +537,6 @@ ObjectGuid GroupAnchorOn(std::vector<Player*> const& carriers, Unit* holder)
     return human ? human->GetGUID() : ObjectGuid::Empty;
 }
 
-// Dealt once a wave, on the first read that sees its carriers: each group keeps the spores that landed in
-// it, a group with none takes one off a group with two, and a group still without one stands with the other
 void UpdateDeal(FgState& state, Creature* boss, std::vector<Player*> const& members)
 {
     std::vector<Player*> carriers;
@@ -594,7 +552,6 @@ void UpdateDeal(FgState& state, Creature* boss, std::vector<Player*> const& memb
         return;
     }
 
-    // A swap mid-wave deals again: a holder that carried a spore can walk once relieved
     Unit* holder = boss->GetVictim();
     std::vector<ObjectGuid> wave;
     for (Player* member : carriers)
@@ -645,7 +602,6 @@ Player* AnchorPlayer(Player* bot, ObjectGuid const& on)
     return player && player->IsAlive() && IccSameInstance(bot, player) ? player : nullptr;
 }
 
-// The spot nearest `base` clear of every impact, within FG_SHIFT_REACH of `fixed` when there is one
 bool FindShiftSpot(Position const& base, Position const* fixed, std::vector<Position> const& impacts, Position& spot)
 {
     Position const& centre = fixed ? *fixed : base;
@@ -679,14 +635,11 @@ bool FindShiftSpot(Position const& base, Position const* fixed, std::vector<Posi
     return found;
 }
 
-// Kept while its spot stays clear and in reach of the fixed player; found again once goo fouls the stack
-// the group stands on. With no clear spot the group goes back to its stack and dodges one by one.
 void UpdateShift(Shift& shift, Position const& base, Unit* fixed, std::vector<Position> const& impacts)
 {
     Position const fixedAt = fixed ? fixed->GetPosition() : Position();
     if (shift.on)
     {
-        // A parked carrier is within FG_STAND_PARK of the spot, so this keeps a walking player in the burst
         bool const inReach = !fixed || !shift.fixedIn ||
                              shift.spot.GetExactDist2d(fixedAt) <= FG_SPORE_BURST - FG_STAND_PARK;
         if (inReach && ClearOf(shift.spot, impacts, FG_GOO_CLEARANCE))
@@ -706,9 +659,6 @@ void UpdateShift(Shift& shift, Position const& base, Unit* fixed, std::vector<Po
 
 uint8 ShiftValue(Shift const& shift) { return shift.on ? (shift.fixedIn ? 1 : 2) : 0; }
 
-// The close group keeps the holder in its burst, a group ringing a player that player. A far group a bot
-// carries shifts only once both far anchors are fouled, since the flips move it first. Assigned every
-// pass, so each trace hears the value it opens on.
 void UpdateShifts(FgState& state, Player* bot, Creature* boss, std::vector<Position> const& impacts)
 {
     if (!state.wave.empty() && state.closeCarried)
@@ -729,8 +679,6 @@ void UpdateShifts(FgState& state, Player* bot, Creature* boss, std::vector<Posit
     state.farShifted = ShiftValue(state.farShift);
 }
 
-// His chase stops at both combat reaches plus CONTACT_DISTANCE, and Inhaled Blight grows his reach 20% a
-// stack, so the holder stands that far past his spot and he stops on it
 bool DragSpot(Creature* boss, Player* holder, Position& spot)
 {
     float const dx = ICC_FG_BOSS_SPOT.GetPositionX() - boss->GetPositionX();
@@ -745,7 +693,6 @@ bool DragSpot(Creature* boss, Player* holder, Position& spot)
     return true;
 }
 
-// Never inside a spore wave: a holder walking off would take the tanks out of the close burst
 void UpdateDrag(FgState& state, Creature* boss)
 {
     Unit* victim = boss->GetVictim();
@@ -760,7 +707,6 @@ void UpdateDrag(FgState& state, Creature* boss)
     state.drag = dragging ? 1 : 0;
 }
 
-// A spot on the ring round an anchor, by guid so neighbours spread out
 Position RingSpot(Position const& anchor, ObjectGuid guid)
 {
     float const angle = static_cast<float>(guid.GetCounter() % 16) * static_cast<float>(M_PI) / 8.0f;
@@ -768,7 +714,6 @@ Position RingSpot(Position const& anchor, ObjectGuid guid)
                     anchor.GetPositionY() + std::sin(angle) * FG_SPORE_RING, anchor.GetPositionZ());
 }
 
-// Stand ids past every roster id, so a change of kind always resets the latch
 constexpr uint8 STAND_SPORE_CENTRE = 200;
 constexpr uint8 STAND_SPORE_RING = 201;
 constexpr uint8 STAND_SPORE_SHIFT = 202;
@@ -849,7 +794,6 @@ bool DesiredStand(FgState const& state, Player* bot, Creature* boss, uint8& id, 
         return true;
     }
 
-    // Reach stays blocked on a slot, so a slot holder would watch him walk out of range
     if (id < 1 || id > FG_SLOT_COUNT || boss->GetExactDist2d(ICC_FG_BOSS_SPOT) > SLOT_DRIFT)
         return false;
 
@@ -880,7 +824,6 @@ void UpdateStand(FgState& state, Player* bot, Creature* boss)
         stand.parked = false;
     }
 
-    // A ring round a player follows him
     stand.spot = spot;
     float const distance = bot->GetExactDist2d(stand.spot);
     stand.parked = stand.parked ? distance <= FG_STAND_UNPARK : distance <= FG_STAND_PARK;
@@ -896,8 +839,6 @@ Stand const* HeldStand(PlayerbotAI* botAI)
     return itr != state->stands.end() && itr->second.held ? &itr->second : nullptr;
 }
 
-// A tank not holding him past FG_BRAKE_CAP of the holder's threat, until it falls under FG_BRAKE_RELEASE.
-// Read from the threat list: the "threat" value is a uint8 percentage and wraps past 255%.
 void UpdateBrake(Player* bot, Creature* boss, FgState& state)
 {
     bool hold = false;
@@ -934,9 +875,6 @@ bool BlightWindow(FgState const& state, Player* tank, uint32 stacks)
     return stacks >= FG_BLIGHT_MINOR && (spent == state.minorSpent.end() || spent->second != state.blightCycle);
 }
 
-// A human tank has no trigger, so it gets told: its taunt when the bot holding him reaches the swap with no
-// bot to take him, Divine Shield when it holds him there itself as a paladin, a defensive at the holder's
-// Inhaled Blight windows
 void CallHumanTank(FgState& state, Player* sender, Creature* boss, uint32 now)
 {
     if (state.humanCallRan && getMSTimeDiff(state.humanCallMs, now) < HUMAN_CALL_CHECK_MS)
@@ -998,7 +936,7 @@ Unit* ResolveTarget(PlayerbotAI* botAI, FgState const& state, Creature* boss)
     Note(bot, "fg.target", pick ? "skull" : "boss");
     return pick ? pick : boss;
 }
-}  // namespace
+}
 
 Creature* GetFgBoss(PlayerbotAI* botAI)
 {
@@ -1064,8 +1002,6 @@ bool IsFgBloatClear(PlayerbotAI* botAI)
     Aura const* bloat = boss->GetVictim() == bot ? bot->GetAura(BloatId(boss)) : nullptr;
     if (bloat && NobodyTakesHim(LiveState(botAI), bot, boss))
     {
-        // The next stack lands 15-17.5 s after this one, so another living tank, which may get its taunt back
-        // or come into range, has a few seconds first
         std::vector<Player*> const members = MembersOnMap(bot);
         bool const partner = std::any_of(members.begin(), members.end(), [bot](Player* member)
                                          { return member != bot && IsTankPlayer(member); });
@@ -1090,7 +1026,6 @@ uint32 GetFgTankDefensive(PlayerbotAI* botAI, char const* noteKind)
                         (boss->GetVictim() == bot && BlightWindow(*state, bot, BlightStacks(boss)));
     if (!window)
     {
-        // Change-latched, so the way out of a window is written too
         if (noteKind)
             Note(bot, noteKind, "idle");
 
@@ -1196,7 +1131,6 @@ bool GetFgGooDodge(PlayerbotAI* botAI, Position& spot)
     for (Position const& impact : impacts)
         hazards.emplace_back(impact, FG_GOO_CLEARANCE);
 
-    // Out of a spore stack a ranged bot keeps its Vile Gas spacing while it dodges
     std::vector<EncounterHelpers::HazardCircle> spread = hazards;
     if (!IsCloseRole(bot) && state->wave.empty())
         for (Player* member : MembersOnMap(bot))
@@ -1229,7 +1163,6 @@ bool GetFgStandWalk(PlayerbotAI* botAI, Position& spot)
     if (!stand || stand->parked)
         return false;
 
-    // The dodge walked it off a stand the goo still covers
     std::vector<Position> impacts;
     if (GetFgGoo(botAI, impacts) && !ClearOf(stand->spot, impacts, FG_GOO_CLEARANCE))
         return false;
@@ -1244,7 +1177,6 @@ void TickFgEncounter(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ICC_MAP_ID || !bot->GetInstanceId())
         return;
 
-    // A wipe or a kill ends the pull: the next one rebuilds every slot and duty
     if (!BossInCombat(bot))
     {
         if (fgStates.Find(bot->GetInstanceId()))
@@ -1279,7 +1211,6 @@ void TickFgEncounter(PlayerbotAI* botAI)
     CallHumanTank(state, bot, boss, now);
     UpdateStand(state, bot, boss);
 
-    // fg.goo only writes a change, so it goes back to out between dodges or two alike would read as one
     std::vector<Position> impacts;
     if (GetFgGoo(botAI, impacts) && !IsFgInGoo(botAI))
         Note(bot, "fg.goo", "out");

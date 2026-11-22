@@ -28,12 +28,8 @@ namespace
 constexpr uint32 EOE_PHASE_CACHE_MS = 500;
 constexpr uint32 EOE_CREATURE_CACHE_MS = 300;
 
-// Swept from the platform centre so the shared answer doesn't depend on which bot refreshed it.
-// Covers the Power Spark spawn ring at r 107; everything else sits inside r 56.
 constexpr float EOE_CACHE_SWEEP_RADIUS = 120.0f;
-// Fallback when the instance script cannot hand over the boss guid.
 constexpr float EOE_BOSS_FALLBACK_SWEEP = 250.0f;
-// Any closer to the centre and his bearing is noise.
 constexpr float MALYGOS_BEARING_DEADZONE = 1.0f;
 
 struct PhaseCacheEntry
@@ -58,7 +54,6 @@ struct LayoutCacheEntry
 struct MalygosInstanceState
 {
     PhaseCacheEntry phase{0, MalygosPhase::None};
-    // No expiry needed: resolved on every read and cleared once it no longer resolves to a live boss.
     ObjectGuid boss;
     LayoutCacheEntry layout;
     std::unordered_map<uint32 /*entry*/, CreatureCacheEntry> creatures;
@@ -68,8 +63,6 @@ RaidInstanceState<MalygosInstanceState> malygosStates;
 
 MalygosInstanceState& MalygosStateFor(Player* bot) { return malygosStates.For(bot->GetInstanceId()); }
 
-// AllCreaturesOfEntryInRange measures from the object it was constructed with, so a sweep anchored
-// on a fixed point needs its own check.
 struct CreaturesOfEntryNearPoint
 {
     CreaturesOfEntryNearPoint(uint32 entry, float x, float y, float range)
@@ -88,7 +81,6 @@ struct CreaturesOfEntryNearPoint
     float _range;
 };
 
-// Empty and never refreshed off the Eye of Eternity map.
 std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
 {
     static std::vector<ObjectGuid> const none;
@@ -107,8 +99,6 @@ std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
 
         std::list<Creature*> found;
         CreaturesOfEntryNearPoint check(entry, centreX, centreY, EOE_CACHE_SWEEP_RADIUS);
-        // CreatureListSearcher only reads the phase mask off its first argument, so handing it the
-        // bot while visiting the cells around the centre is correct.
         Acore::CreatureListSearcher<CreaturesOfEntryNearPoint> searcher(bot, found, check);
         Cell::VisitObjects(centreX, centreY, bot->GetMap(), searcher, EOE_CACHE_SWEEP_RADIUS);
 
@@ -128,8 +118,6 @@ std::pair<float, float> MalygosP1Spot(float angle, float offset)
             MALYGOS_CENTER_POSITION.second + std::sin(angle) * offset};
 }
 
-// The P2 bubbles, the surge focus and the hover disks are all unselectable from spawn, so this
-// filter can't live in the creature cache.
 bool IsLivePowerSpark(Unit* spark)
 {
     return spark->IsAlive() && !spark->HasUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE));
@@ -192,11 +180,8 @@ Unit* GetMalygos(Player* bot)
         cached.Clear();
     }
 
-    // The instance script already holds the guid, so ask it before falling back to a grid sweep.
     if (InstanceScript* instance = bot->GetInstanceScript())
     {
-        // Guid lookup has no liveness filter of its own, unlike the search below it. A dead boss
-        // ends the lookup here rather than paying for the sweep to tell us the same thing.
         if (Creature* boss = instance->GetCreature(EOE_DATA_MALYGOS))
         {
             if (!boss->IsAlive())
@@ -218,8 +203,6 @@ MalygosPhase GetMalygosPhase(Player* bot)
     if (bot->GetMapId() != EOE_MAP_ID)
         return MalygosPhase::None;
 
-    // Riding a Skytalon is the one per-bot part of the answer, so it is asked every time and has
-    // to come before the shared cache.
     Unit* drake = bot->GetVehicleBase();
     if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON)
         return MalygosPhase::P3;
@@ -235,7 +218,6 @@ MalygosPhase GetMalygosPhase(Player* bot)
     if (!boss || !boss->IsInCombat())
         return MalygosPhase::None;
 
-    // P2: Malygos is airborne/untargetable while the disc adds are up.
     if (AnyEoECreature(bot, NPC_NEXUS_LORD) || AnyEoECreature(bot, NPC_SCION_OF_ETERNITY))
     {
         cached.phase = MalygosPhase::P2;
@@ -291,7 +273,6 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
     else if (cached.latched)
         return cached.layout;
 
-    // He is committed to his bearing the instant JustEngagedWith fires, so latch the first one.
     float angle = MALYGOS_LANDING_ANGLES[0];
     if (Unit* boss = GetMalygos(bot))
     {
@@ -303,7 +284,6 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
             float closest = std::numeric_limits<float>::max();
             for (uint8 i = 0; i < MALYGOS_LANDING_ANGLE_COUNT; ++i)
             {
-                // Wrapped into [-pi, pi] so a bearing either side of the seam picks its neighbour.
                 float diff = std::fabs(std::remainder(bearing - MALYGOS_LANDING_ANGLES[i], EOE_TWO_PI));
                 if (diff < closest)
                 {
@@ -389,7 +369,6 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
         if (!inReach)
             continue;
 
-        // Nearest to handing over its buff, not nearest to the bot.
         float const bossDist = boss ? boss->GetExactDist2d(spark) : bot->GetExactDist2d(spark);
         if (bossDist < bestBossDist)
         {
@@ -417,7 +396,6 @@ Unit* GetPowerSparkToSnare(PlayerbotAI* botAI)
     float bestDist = POWER_SPARK_SNARE_RADIUS;
     for (Unit* spark : sparks)
     {
-        // Any caster's: a second DK re-snaring costs a rune and buys nothing.
         if (spark->HasAura(chainsId))
             continue;
 
@@ -461,11 +439,9 @@ float GetBubbleShrinkFactor(Unit* bubble)
     Aura* aura = bubble->GetAura(SPELL_ARCANE_OVERLOAD_AURA);
     if (!aura)
     {
-        // Applied from creature_template_addon at spawn, so a missing aura means brand new.
         return 1.0f;
     }
 
-    // Only the periodic effect counts ticks; the others sit at 0.
     uint32 ticks = 0;
     for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
     {
