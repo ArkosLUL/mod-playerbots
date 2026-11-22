@@ -264,7 +264,7 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
     if (!target)
         return false;
 
-    // Ahead of the thaw, which returns early: a landing nobody reads is timed out as a lost barrel.
+    // Keep this above the thaw's early return, or a landing goes unread and times out as a lost barrel.
     Aura* own = TrackBarrels(target);
 
     // Thaw first, a frozen hull is a minute of nothing. Aimed at the ally on purpose: DEST_LOCATION lets a
