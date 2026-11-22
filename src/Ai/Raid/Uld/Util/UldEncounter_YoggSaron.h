@@ -402,8 +402,8 @@ inline constexpr float ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS = 5.0f;
 // reach step toward a mate across the Chamber stays inside this.
 inline constexpr float ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS = 10.0f;
 
-// Close enough to the spot the Brain is hit from to stop walking. The melee spot has 2.7 yd of melee
-// range in hand, so a bot parked this far off it still reaches.
+// Close enough to the spot the Brain is hit from to stop walking. The floor under the Brain is a bowl 29.0-29.2 yd
+// from its model out to 7.5 yd, so a melee bot parked this far off its spot is still inside reach melee's 29.25.
 inline constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 
 // Lead before Induce Madness (strips all Sanity below z 300, so a mind control is always a death), measured, not flat:
@@ -616,8 +616,9 @@ extern const Position ULDUAR_YOGG_SARON_ICECROWN_CLUSTERS[ULDUAR_YOGG_SARON_ICEC
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_STAGE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_STAGE_SPOT;
 
-// Where melee hit the Brain from: 12.3 yd west of it and behind, since it faces east all fight. 30.1 yd 3D against a
-// 32.8 yd melee range. Anywhere in front, set behind walks the bot 15 yd out of range (3D distance as floor radius).
+// Where melee hit the Brain from: 4.3 yd west of it and behind, since it faces east all fight. Display 28951's
+// CombatReach is 27, so reach melee stops at 29.25 yd 3D and the swing lands to 29.83; this spot is 29.0. In front,
+// set behind walks the bot out of range (it takes the 3D distance as a floor radius).
 extern const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT;
 
 // Ranged and healers hit the Brain from a few yards in from each room's exit portal: west Stormwind, south Icecrown,

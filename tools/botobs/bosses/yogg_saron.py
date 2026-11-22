@@ -296,7 +296,15 @@ ROOM_MIDDLES = {
 # The module's ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE and _RADIUS, its "in the brain room" test.
 BRAIN_ROOM_MIDDLE = (1980.1971, -27.854689)
 BRAIN_ROOM_RADIUS = 50.0
-BRAIN_MELEE_SPOT = (1969.0, -25.4)
+BRAIN_MELEE_SPOT = (1977.0, -25.43)
+# Where the Brain hangs, and how far a player's swing reaches it in 3D: display 28951's CombatReach (27 since core
+# 2026_11_06_01) plus the player's 1.5 plus 4/3. The floor under it is a bowl 29.0-29.2 yd from the model.
+BRAIN_POSITION = (1981.3, -25.43, 265.0)
+BRAIN_MELEE_RANGE = 27.0 + 1.5 + 4.0 / 3.0
+# A melee bot this close to the Brain's ground point, 2D, has stopped walking at it; the old spot was 12.3 out.
+BRAIN_MELEE_STAND_RADIUS = 15.0
+# A reach melee move this soon after a brain spot move by the same bot is the two trading it.
+BRAIN_MELEE_TRADE_MS = 1500
 # Inside the brain room and short of its far wall, so a bot reads as on the Brain once it stops here.
 BRAIN_ARRIVAL_RADIUS = 45.0
 # Phase 3 starts when the Brain drops under this, and the exit leaves from anywhere then.
@@ -1930,8 +1938,51 @@ def show_brain(trace: Trace) -> None:
             print(f"  {label:16} : {dict(found)}")
 
     show_phase2_burst(trace)
+    show_brain_melee(trace)
     show_brain_waves(trace)
     show_stalled_walks(trace)
+
+
+def melee_reach_share(points: list[tuple[float, float, float]]) -> tuple[int, int]:
+    """How many of these positions stand within a swing of the Brain, out of how many."""
+    inside = sum(1 for point in points if math.dist(point, BRAIN_POSITION) <= BRAIN_MELEE_RANGE)
+    return inside, len(points)
+
+
+def spot_reach_trades(moves: list[tuple[int, str]]) -> int:
+    """One bot's (t, node) moves in time order: reach melee moves that follow a brain spot move within
+    BRAIN_MELEE_TRADE_MS, the two handing the bot back and forth."""
+    trades, spot_at = 0, None
+    for when, node in moves:
+        if node == "yogg-saron brain spot action":
+            spot_at = when
+        elif node == "reach melee" and spot_at is not None and when - spot_at <= BRAIN_MELEE_TRADE_MS:
+            trades += 1
+            spot_at = None
+    return trades
+
+
+def show_brain_melee(trace: Trace) -> None:
+    """Brain team melee standing at the Brain: how much of it they spent within a swing, and how often the brain spot
+    walk and reach melee traded them, which happens when the spot is out of reach."""
+    team = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"}
+    melee = {guid for guid in team if trace.role(guid) == "melee"}
+    brain = next(iter(guids_of_entry(trace, NPC_BRAIN)), None)
+    if not melee or brain is None:
+        return
+    points = [tuple(row[2:5]) for rows in snapshot_rows(trace, melee).values() for row in rows
+              if row[4] < BRAIN_LEVEL_Z and len(row) > 8 and row[8] == brain
+              and math.dist(row[2:4], BRAIN_POSITION[:2]) <= BRAIN_MELEE_STAND_RADIUS]
+    if not points:
+        return
+    inside, total = melee_reach_share(points)
+    walks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") and rec.get("g") in melee and rec.get("z", BRAIN_LEVEL_Z) < BRAIN_LEVEL_Z:
+            walks[rec["g"]].append((rec["t"], str(rec.get("by", ""))))
+    trades = sum(spot_reach_trades(moves) for moves in walks.values())
+    print(f"  melee at the Brain: within a swing ({BRAIN_MELEE_RANGE:.2f} yd 3D) in {inside * 100 // total}% of"
+          f" {total} samples, brain spot <-> reach melee trades {trades}")
 
 
 def show_brain_walks(trace: Trace) -> None:

@@ -366,13 +366,14 @@ before. `yogg-saron displacement guard multiplier` zeroes:
   melee` survives, which walks melee in on foot. The gap-closers return in P2 and P3, where there is no
   orbit to land on —
 - — **except onto the Brain**, whenever it is the current target: it hangs 25 yd over its room's floor
-  with nothing underneath, and its 30 yd combat reach hides the gap from `GetDistance`. A feral druid
+  with nothing underneath, and its 27 yd combat reach hides the gap from `GetDistance`. A feral druid
   charged it and stood in the air 23 s until charmed; Killing Spree put a rogue on its model at z 265.
 
 **Only the cat's leap strands.** Feral Charge - Cat 49376 is `SPELL_EFFECT_JUMP_DEST` behind the target,
 air under the Brain. Warrior Charge 11578 and Intercept 20252 are `SPELL_EFFECT_CHARGE`, and
 `Spell::CheckCast` paths a target whose reach exceeds melee range to its ring facing the caster at the
-caster's ground Z: 31.5 yd from the Brain, floor on all 24 navprobe headings (settled z 239.0-241.2). So
+caster's ground Z: 28.5 yd from the Brain (the 31.5 yd ring of reach 30 was floor on all 24 navprobe
+headings, settled z 239.0-241.2). So
 `yogg-saron brain charge` (`ACTION_RAID + 0.25`, over the brain spot walk, which outranks every class
 charge node) casts Charge or Intercept itself on the way in: Brain targeted, rti `square`, not leaving or
 held, the ring at least `…_BRAIN_CHARGE_MIN_GAIN` (8 yd) nearer the brain spot than the bot. It clears
@@ -1249,19 +1250,25 @@ shows.
 ### Standing at the Brain
 
 **Walk onto a spot behind the Brain, because `set behind` cannot get there.** The Brain faces east (o = 0)
-all fight with `CombatReach` 30 (display 28951), so melee range is ~32.8 yd in 3D from a floor ~28 yd
-below it, and `set behind` uses that 3D distance as a floor radius, walking melee out of range and back. A
-one-shot walk to the brain room middle also died on the healer's first heal, leaving `reach spell` to stop
-it at the Stormwind doorway 55 yd out. `yogg-saron brain spot` (`ACTION_RAID`, walk latch) owns the walk
-while `rti` is `square`, which `GoToBrainRoom` only sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT`
-(1969.0, −25.4, 237.474), 12.3 yd west and 30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09`
-from all three entrances.
+all fight with `CombatReach` **27** (display 28951; 30 before core `2026_11_06_01`), so a swing reaches
+**29.83 yd** in 3D and `reach melee` stops at 29.25, from a floor ~29 yd below; `set behind` uses that 3D
+distance as a floor radius, walking melee out of range and back. A one-shot walk to the brain room middle
+also died on the healer's first heal, leaving `reach spell` to stop it at the Stormwind doorway 55 yd out.
+`yogg-saron brain spot` (`ACTION_RAID`, walk latch) owns the walk while `rti` is `square`, which
+`GoToBrainRoom` only sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT` (1977.0, −25.43, 236.30),
+4.3 yd west and 29.0 yd 3D.
+
+**The floor under the Brain is a bowl 29.0-29.2 yd from it out to 7.5 yd**, so the spot's whole 3 yd
+arrival circle is inside `reach melee`'s 29.25 and no floor is nearer. Its z is read off bots that crossed
+it in three traces; navprobe has not checked it. The old spot, 12.3 yd west at 30.15, sat 0.3 yd outside a
+swing once the reach dropped: `reach melee` stepped melee 4 yd in, the spot walk took them back about
+once a second, and they spent 44-46% of their time at the Brain out of reach (`--brain`, `melee at the Brain`).
 
 **Ranged and healers stand by their room's exit portal**, not the middle: west (1948.05, −23.76, 241.785)
 for Stormwind, south (1992.4, −52.8, 240.585) for Icecrown, north (1994.6, −0.1, 240.292) for the Chamber.
 Door → spot → portal is 53, 62 and 71 yd against 93-106 through the middle, and the exit lead drops to its
-floor. Settled z, `PATHFIND_NORMAL` from the door, to the portal and from the melee spot, all within
-36.3 yd of it for heals. The room is latched per bot (`lastIllusionRoom`), and a spot is used only once a
+floor. Settled z, `PATHFIND_NORMAL` from the door and to the portal, all within 31.7 yd of the melee spot
+for heals. The room is latched per bot (`lastIllusionRoom`), and a spot is used only once a
 ray from it reaches the Brain's hit sphere, cached per spot (the built navprobe predates `los`); otherwise
 the middle.
 
@@ -1860,7 +1867,8 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
-  (`MELEE_CLASS_NAMES`).
+  (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
+  against the Brain's reach of 27.
 - The exit walk uses its portal at `INTERACTION_DISTANCE`, the 5 yd that also counts as arrived, so a clean
   exit often leaves no `yogg.walk` row; `--brain`'s `caught by it` measures that walk instead, with the
   seconds under Bladestorm / Killing Spree since the decision.
