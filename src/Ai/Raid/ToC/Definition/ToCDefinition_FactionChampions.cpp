@@ -171,8 +171,10 @@ void DefineFactionChampions(EncounterBuilder& e)
     // them for a melee champion in contact
     e.Block("faction champions speed boost guard", Role::Any, FactionChampionsLive, 0, {"sprint", "dash"});
     // the class nodes spend its 12 s cooldown on the first champion moving at someone, mostly an iced one;
-    // faction champions snare keeps it for a melee champion running down its victim
-    e.Block("faction champions concussive guard", Role::Any, FactionChampionsLive, 0, {"concussive shot"});
+    // faction champions snare keeps it for a melee champion running down its victim. Listed by getName(): both
+    // nodes build CastConcussiveShotAction, which CastSnareSpellAction names "concussive shot on snare target"
+    e.Block("faction champions concussive guard", Role::Any, FactionChampionsLive, 0,
+            {"concussive shot on snare target"});
     // the Enh rotation pops it at full health for mana; faction champions personal defensive keeps it for a burst
     e.Block("faction champions personal reserve", Role::Any, FactionChampionsLive, 0, {"shamanistic rage"});
 

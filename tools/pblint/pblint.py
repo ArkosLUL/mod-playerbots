@@ -55,6 +55,9 @@ RE_ADD_STRATEGY = re.compile(r'\baddStrategies?\w*\s*\(\s*"([^"]*)"')
 RE_ADD_STRATEGY_LIST = re.compile(r'"([^"]+)"')
 # `: Action(botAI, "name")` / `: Trigger(botAI, "name", 200)` in a member-init list.
 RE_SELF_NAME = re.compile(r':\s*(?:public\s+)?(\w+)\s*\(\s*\w+\s*,\s*"([^"]*)"')
+# A base whose getName() appends to the name a subclass hands it: CastSnareSpellAction(botAI, "concussive shot")
+# is named "concussive shot on snare target".
+RE_NAME_SUFFIX = re.compile(r'\bgetName\(\)\s*override\s*\{\s*return\s+spell\s*\+\s*"([^"]*)"\s*;')
 
 # Encounter definitions (Raid/RaidEncounter.h). A class there spells its name once, as a `Name`
 # constant, and a row registers both creators and the node from it, so none of the literals above
@@ -279,15 +282,34 @@ def references(sources: list[Source]) -> tuple[list, list]:
 # --- checks -------------------------------------------------------------------
 
 
+def name_suffixes(sources: list[Source]) -> dict[str, str]:
+    """Per base class, the text its getName() appends to the name a subclass hands it."""
+    out = {}
+    for src in sources:
+        current = None
+        for line in src.lines:
+            decl = RE_CLASS_DECL.match(line)
+            if decl:
+                current = decl.group(1)
+            match = RE_NAME_SUFFIX.search(line)
+            if match and current:
+                out[current] = match.group(1)
+    return out
+
+
 def action_self_names(sources: list[Source]) -> set[str]:
-    """The names action constructors hand their base, `: CastBuffSpellAction(botAI, "tree of life")`. A rule
-    matches getName(), which can differ from the creators[] key: "tree form" builds "tree of life"."""
+    """The names action constructors hand their base, `: CastBuffSpellAction(botAI, "tree of life")`, with the
+    base's getName() suffix when it adds one. A rule matches getName(), which can differ from the creators[] key:
+    "tree form" builds "tree of life", "concussive shot" builds "concussive shot on snare target"."""
+    suffixes = name_suffixes(sources)
     names = set()
     for src in sources:
-        for line in src.lines:
-            for match in RE_SELF_NAME.finditer(line):
-                if match.group(1).endswith("Action"):
-                    names.add(match.group(2))
+        # the init list may start on the line after the colon
+        for match in RE_SELF_NAME.finditer("\n".join(src.lines)):
+            if match.group(1).endswith("Action"):
+                names.add(match.group(2))
+                if match.group(1) in suffixes:
+                    names.add(match.group(2) + suffixes[match.group(1)])
     return names
 
 
