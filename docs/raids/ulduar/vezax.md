@@ -198,6 +198,10 @@ action are not, or a held bot would stop dodging. Healers are exempt: a held hea
 spikes that kill people. Gated on 63277, not the linked 65269, so the link's own shortfall cannot silence
 a bot for something it cannot fix.
 
+**Except on the Animus** (user's call): Profound Darkness makes time the limit there, not mana, and held
+ranged died with a median 42-47% mana. The lift keys on the bot's target, not the Barrier, so a bot
+still on Vezax behind it (1% damage) stays held.
+
 **Nobody treats a field as a hazard**: the camp is where crashes land and one 8 yd circle covers most of
 it, so avoiding them would walk every healer out of the camp on a 10s cadence. With the vapor nodes gone
 the avoid list is empty and the hazard sweep returns fields only.
@@ -299,7 +303,10 @@ probes the pull never wrote. No probe was added for it: fields are `snap.hz`, cr
 aura, the leech `dmg`, vapor targeting `snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid;
 the vapors themselves are never sampled. The camp is read from `vezax.slot` as well as `vezax.block`,
 which is only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was
-open.
+open. `--animus` measures the Animus fight from its spawn to its kill, the collapse (under four fifths of
+the sampled roster alive) or the pull's end: its pace and, per ranged and healer, casts, field share,
+damage and mana. Mana comes from the bot's last living sample, since the collapse tick reads the dead
+as 0.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -386,8 +393,9 @@ hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a 
 before, so it needs ~100 s; by ~75 s Profound Darkness at 37-40 stacks outruns four healers and the raid
 collapses with it at 22-27% (both pulls that kept their main tank that long). The Barrier only cuts
 damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die under
-40+ stacks. Ranged still hold 33-91% mana at the collapse, since the field cast hold runs through the
-Animus phase.
+40+ stacks. Ranged spend 49-69% of the Animus phase in a field, and a second of casting outside one
+does about a quarter of one inside (no +100% damage or cast speed), so lifting the field cast hold there
+buys an estimated 10%, not the race.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the
