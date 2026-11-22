@@ -70,6 +70,8 @@ lets the Strength stacks climb; with one, tank 1 never finds a construct anyway,
 **A tank's construct is sticky**: kept until Brittle or dead, never handed to a closer new one, since
 Molten wiped its threat and letting go releases it into the raid. With no lit patch yet he holds it
 where it stands; within 18 yd of the pool he holds still for the poll rather than walk it back out.
+The claim is kept per instance, since the same tank GUID comes back on a re-pull and in a second raid
+running the fight.
 
 **The walk stops 12 yd short of the trigger** (`ULDUAR_IGNIS_WATER_STANDOFF`), never on it: the
 trigger sits in a channel whose surface is ~1.8 yd below the room floor of 360.802, so a tank parked
@@ -134,7 +136,8 @@ through the raid.
 
 The main-tank spot and the kite share `ACTION_RAID + 4`, above the raid's damage, since no bot is ever
 both. The placed tanks are blocked from **both** AoE dodges, this encounter's and the generic `avoid aoe`:
-the construct tank is parked in a patch on purpose and the main tank's arc already steps him clear.
+the construct tank is parked in a patch on purpose (the construct following him into melee stacks Heat)
+and the main tank's arc already steps him clear.
 The generic one is what matters — at `ACTION_EMERGENCY` it sits above the kite's `ACTION_RAID + 4`,
 so left on it outranks the walk on nearly every tick spent in the fire.
 

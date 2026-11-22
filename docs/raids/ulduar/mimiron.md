@@ -102,7 +102,8 @@ drifting camp smears the field along behind it. It gives ground only as one rigi
 farthest slot is out of casting range, because a slot past range deadlocks instead of correcting
 (`reach spell` at `ACTION_HIGH` against the formation at `ACTION_RAID`), which is also what a dead main
 tank looks like. Range is the bots' own test, `IsWithinCombatRange` with both reaches:
-`spellDistance + 8 + 1.5 - margin`, about **34 raw**; a raw `spellDistance - margin` is 24.5, Napalm's
+`spellDistance + 8 + 1.5 - margin`, about **34 raw** (the 1.5 is a default player reach, not the
+asking bot's own, so a gnome and a tauren build the same wedge); a raw `spellDistance - margin` is 24.5, Napalm's
 floor ([range and reach](../../engine/raid-mechanics-lessons.md#range-and-reach)).
 
 **The field converges on the camp, so its own anchor burns first**: one pull took 538k phase-1 flame
@@ -523,7 +524,7 @@ dead in 6 s.
 **Radius is the free parameter, so it dodges the fire, walk and endpoint.** A step takes the nearest
 radius within ±8 whose destination **and** straight leg are clear, falling back to a clean endpoint and
 then to the plain step, because the cone kills in a tick. The search stays in `[14, 24]` for ranged and
-`[5, 9]` for melee, who give ground inward only. A radius whose endpoint and leg miss every mine ranks
+`[5, 9]` for melee, who give ground inward only (inside 5 the orbit runs through VX-001's model). A radius whose endpoint and leg miss every mine ranks
 above both, for every bot, never refusing the step: a blast is about three fire ticks, and healthy bots
 took two or three in one step. Mines land within 15 yd of the MK II, so the outer radii are usually
 clean.
@@ -537,7 +538,7 @@ where the barrage dodge screens every hop.
 bots died to fire in the next 15 s, against none at 11 of 34 or fewer: `ahead` bots `hold` within a yard
 of the band edge, the fire dodge's fan refuses every bearing (band behind, fire ahead, hops capped at
 12 yd), and bots near 3-5 nodes take 12-15k/s, dead from full in under 2 s. Two rules probe the ring in
-5° steps (`_REFUGE_PROBE`) over the same radius shifts, clean meaning clear of fire, the bomb and
+5° steps (`_REFUGE_PROBE`, under 2 yd at the ranged ring against a 5 yd flame radius) over the same radius shifts, clean meaning clear of fire, the bomb and
 rockets. A walk ending on a burning edge carries on into the safe sector to the first clean bearing (the
 whole sector stays clear for the rest of the cast: the far edge is fixed and the trailing side only
 opens), and a clear bot standing in fire walks the ring to the nearest clean bearing (`refuge`), which
@@ -1033,7 +1034,7 @@ facing the way it walked. The live line, the bot's current facing, appears only 
 victims had been in it 0.5 s before). The lane toward the nearest spread flame from
 `ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH` (5) short of it, read 2 s ahead, pointed within 20° of the real spray
 in 90% of 126 and held 13 of the 14 victims. `ReadMimironFirefighterHazards` puts both in `sprayLanes`
-and every spray test walks them, cheaply: 0.76 of ~18 living raid members stood in some lane at a time.
+and every spray test walks them (a lane reaches forward only: `HasInLine` checks the front half-circle first), cheaply: 0.76 of ~18 living raid members stood in some lane at a time.
 The bot's own spot is judged at 3.5 each side, a destination at `_SPRAY_STAND_HALF_WIDTH` (4.5), and the
 sidestep lands at 5.0, since a lane jumps whenever a spray puts out its flame. `IsMimironSpotFireBotSafe`
 refuses every spray lane (16 ahead) for everyone and the siren's 13 yd (its 10 plus both object sizes,
@@ -1387,7 +1388,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
-| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point. `none` is noted too: without it a bot the formation skips by design (melee) and one its shape refused, a bug, read as the same silence |
 | `handover` | The Firefighter 1→2 handover's step: 0 none, 1 hold, 2 late (VX-001 summoned), 3 walk in. Per instance |
 | `hold` | The hold band's bearing off the room centre and the burning nodes within 20 yd of its middle, once per handover |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |

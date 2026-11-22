@@ -50,7 +50,9 @@ patches). Ranged skip that second half: they never have to close, and holding th
 grounded stack-up. The answer is memoised for the bot's tick, since every generic mover in the queue
 asks. `StepClearOfFlames` tries 9 bearings, straight away then ±π/8 out to ±π/2, against patches
 collected once round the bot (`CollectDevouringFlames`), not a sweep per candidate; with none clear it
-steps straight away anyway, since any step out beats standing in it. Both release the moment the tank
+steps straight away anyway, since any step out beats standing in it. The step is measured from where the
+bot stands, not from the patch (`MoveAway` and `MoveTo` both step by a distance), so a bot on the
+centre needs the whole radius. Both release the moment the tank
 drags her clear, so nobody stands out the patch's full life. A permanent veto here is the freeze bug.
 
 **The ranged stack walks to a slot, never onto a patch.** A ranged bot outside the stack circle
@@ -86,7 +88,7 @@ it marks the lower-health one, since list order is per bot and unstable and the 
 the marking bot moves; the other tiers take the first found. `DpsTargetValue` prefers the RTI target,
 so a skull left on an add is the whole raid left on an add. Moon stays on the boss while she is
 airborne — it is excluded from every DPS target scan — and is cleared on landing. The main tank bot
-sets it, or, under a human main tank, a bot assist tank of index 0-2 (`RAZORSCALE_ASSIST_TANK_SLOTS`).
+sets the Moon, or, under a human main tank, a bot assist tank of index 0-2 (`RAZORSCALE_ASSIST_TANK_SLOTS`).
 
 While she flies, a bot more than `RAZORSCALE_ARENA_LEASH_MARGIN` (25 yd) past the arena edge (30 yd
 round (587.54, -175.04)) walks back to 10 yd inside it before anything else.

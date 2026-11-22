@@ -38,7 +38,7 @@ body never has the arms on its threat list, so the per-role focus split collapse
 |---|---|
 | Arm respawn | **50s**, not 60 |
 | Crunch Armor | **63355** (−20%, 4 stacks, 45s). **64002 (−25%) is never applied here**, so the old cheat checking it was dead code; the swap still counts it only to survive a core change |
-| Stone Grip | 62166 / 63981, **1 target**, caster's victim stripped → **the body tank is exempt** |
+| Stone Grip | 62166 / 63981, **1 target**, caster's victim stripped → **the body tank is exempt**. Victims ride the right arm and are instakilled on expiry unless the arm releases them |
 | Focused Eyebeam | 3 most distant players via `NonTankTargetSelector`, then **exactly one** at random → one runner, never the tank. Eye lives **10s**, chases at **5.5 yd/s** against a player's 7.0; beam is a **3 yd** AoE |
 | Rubble | 8.0 yd/s — **faster than players, so held, not kited**. SmartAI: Rumble 63818 (10) / **Stone Nova 63978 (25, 10 yd, ~5550 + knockback)** |
 | Shockwave (63783) | **200 yd**, nothing narrows it |
@@ -66,7 +66,8 @@ Smash timer never lets stacks clear. Equal stacks correctly means hold.
 thresholds, so no AoE action exists.
 
 **Focused Eyebeam** is a real run, not a teleport, re-stepped each tick: -X toward the entrance, then
-along the walkway, then back toward the boss. Turning that corner matters — the eye outlives the ~5s
+along the walkway, then back toward the boss; X never reaches the broken span, so even that last resort
+stays out of the pit. Turning that corner matters — the eye outlives the ~5s
 of -X runway. Bystanders `FleePosition` off the nearest eye within `ULDUAR_KOLOGARN_EYEBEAM_REACT_RADIUS`
 (8 yd); the chased bot runs whatever the range. The eye `MoveChase`s its summoner, so its victim is the
 spell target; it can still be closing from past 8 yd, so that lookup sweeps the room. None of it needs
