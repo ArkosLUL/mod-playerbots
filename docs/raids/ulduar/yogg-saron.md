@@ -1513,7 +1513,7 @@ Guardians spawn one per 10 s with no cap and a live one never times out
 (`TEMPSUMMON_CORPSE_TIMED_DESPAWN, 5000` is a *corpse* lifetime); `SPELL_EMPOWERED` gives +180% damage per
 stack at `healthPct / 10` capped at 9, so an untouched Guardian swings at ×17.2; and anything under 85%
 starts Drain Life (64160, 5 s channel) — 16,665 damage and **166,650 self-heal, 31.6% of its own max
-health**, every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component. So the
+health** (three Empowered stacks back), every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component. So the
 phase is: **keep them piled and low, interrupt Drain Life, drag beacons clear, Heroism** — the guides'
 plan. Area spells on the pile reach Yogg, since an area check adds the target's reach (his 30) for a
 player-controlled caster only ([reach](../../engine/raid-mechanics-lessons.md#range-and-reach)).
@@ -1720,7 +1720,7 @@ first.
   raid-wide).
 - **A warlock gets its demon back in phase 3** (`yogg-saron warlock pet`, `ACTION_RAID − 0.5`): pets are
   summoned only out of combat, so a warlock back from a phase 2 death had no felhunter and no Spell Lock.
-  With no live pet it casts Fel Domination if it has it, then the summon its `nc` pet strategy names
+  With no live pet it casts Fel Domination if it has it (5.5 s off a 10 s summon), then the summon its `nc` pet strategy names
   (`YoggSaronWarlockSummon`).
 - **`yogg-saron phase 3 lust`** (`ACTION_RAID + 2`). `ShamanBoostTrigger` and the burst hold both want a
   boss target, and phase 3 shamans are on Guardians and tentacles, so lust came 40-54 s in or never. It
