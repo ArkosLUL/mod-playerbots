@@ -2169,6 +2169,11 @@ bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out)
     if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
+    // Nobody walks in before the pull: the Behemoth's Acid Breath at the Captain crosses the centre and
+    // a ring slot, and a bot it hits pulls Thorim through a Lightning Shield proc or its pet.
+    if (!boss->IsInCombat())
+        return false;
+
     if (PlayerbotAI::IsTank(bot))
     {
         out = ULDUAR_THORIM_NEAR_ARENA_CENTER;
@@ -2178,7 +2183,8 @@ bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out)
         if (!GetThorimArenaRingSlot(bot, out))
             return false;
     }
-    // Melee form up on the tank spot before the pull, then run free in combat on the 24 yd leash.
+    // Melee run free in combat on the 24 yd leash. Out of combat (the pull's first tick, a battle rez)
+    // they head for the tank spot.
     else if (botAI->GetState() == BOT_STATE_COMBAT)
     {
         return false;

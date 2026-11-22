@@ -651,7 +651,7 @@ bool ThorimPetsOffRingSlot(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& 
 void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet);
 
 // Shared by trigger and action. Tank on the centre, ranged and healers on a ring, melee on the centre only
-// out of combat. Not gated on ThorimSplitActive, which needs combat: the squad walks over before the pull.
+// out of combat. None before Thorim's combat: the squad holds where it stands and walks in at the pull.
 bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // Updates this bot's arrival latch and reports whether it still needs to walk. Idempotent, so the

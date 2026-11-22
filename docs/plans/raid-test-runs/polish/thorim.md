@@ -74,3 +74,64 @@ at the open). Only then do the in-fight deaths say anything; round 2 reads them.
 **User answer (2026-11-22):** yes. If the next window shows the pull starting early from the
 Behemoth's Acid Breath, round 2 holds the arena group at the drop until Thorim is in combat and
 walks it to its spots at the pull.
+
+## Round 2 (build 1b45df985 with round 1, DC 2ce3824)
+
+**Data:** window 9, one pull per pool, all void (`start: engaged`): `tr-20261122-132528-10` (uld1),
+`-132749-11` (uld3), `-133049-12` (uld2); traces
+`env/dist/logs/botobs/603_{9,11,12}_thorim_{1795353942,1795354089,1795354265}.ndjson`. Throwaway
+scripts read the pre-roll `snap` rows, the first in-pull `dmg`/`cast` rows and the DC records'
+`bossPulls[].startMs`. No DC veto rows inside a pull. Phase 2 never started (`thorim.p2start` 0
+throughout); every pull ended at the Lightning Orb.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795353942 | wipe 6:09 | Lightning Orb 18 (5:54); arena Champion 6, Warbringer 2, Evoker 2 (5:54-6:03); Runic Smash 1 (4:43) |
+| uld2 | 1795354265 | wipe 6:15 | Lightning Orb 18 (6:03); Warbringer 6, Champion 5, Evoker 1 (6:03-6:18) |
+| uld3 | 1795354089 | wipe 6:15 | Lightning Orb 18 (6:01); Champion 11, Evoker 1 (6:02-6:18) |
+
+**Round 1 verdict: held.** No bot holds a target in any pre-roll snapshot of the three pulls
+(window 7: 13-17 DPS on the Acolyte), and the first bot action on the pack is never a pick.
+
+**Failure picked: the pull still opens before DC's start step**, now from the Behemoth's Acid
+Breath, the risk round 1 named. In-fight deaths not picked: the pulls are still void.
+
+- Pre-roll: the arena squad reaches its anchors (tank and melee on the centre (2135.0, −263.1),
+  ranged and healers on ring slots), and 2-7 s later one snapshot drops every bot at the centre
+  plus the one on ring slot (2129.4, −251.4), 6-7 bots, by 10-64% each (the tank least): uld3 at
+  −3.8 s, uld2 at −0.25 s, uld1 in the open's own tick. Nobody at the drop or on another ring slot
+  drops. The in-pull rows name it: Acid Breath 62415 from the Behemoth, 8-11.6k direct plus ~1k
+  ticks every 2 s on the same bots, the next direct hit 12 s later.
+- What opens each pull, matched to DC's `startMs` within 0.3 s:
+  - uld1: Uldxai (enhancement shaman at the centre) Lightning Shield 49279 on the Behemoth at
+    +9 ms, same tick as the first breath; pull `src: engage`.
+  - uld3: the first breath (−3.8 s) hits no shaman, so the bots only enter combat (the trace opens
+    on `mark` at 0); the second breath at +8.23 s hits Uldzaj (enhancement, just arrived) and his
+    Lightning Shield lands at +8.230. DC `startMs` 1795354097484.
+  - uld2: the second breath at +11.663 s hits Uldyap; his imp Dagham casts Firebolt on the
+    Behemoth at +11.669. DC `startMs` 1795354276972.
+- Core: `boss_thorim_start_npcs::DamageTaken` from a player or pet zone-combats Thorim
+  (`boss_thorim.cpp:1073-1092`); `EVENT_JB_ACID_BREATH` casts at the victim every 12 s
+  (`:1238-1240`), the Captain during the mock fight. Summons (`:354`, `:362`): Behemoth
+  (2146.6, −266.7), Captain (2131.3, −259.2); the centre is 9° off that line, the drop 73°.
+- Code: `GetThorimArenaAnchor` (`UldEncounter_Thorim.cpp:2156`) answered before Thorim's combat,
+  so `ThorimArenaPositioningTrigger` walked the squad into the cone before the pull.
+
+**Classification:** the user's 2026-11-22 answer covers it.
+
+**Fix** (`UldEncounter_Thorim.cpp`/`.h`, Thorim only): `GetThorimArenaAnchor` returns false until
+Thorim is in combat. Before the pull the arena squad stays where DC dropped it (nothing else moves
+it: the gauntlet squad stood at the drop all pre-roll in every trace); at the pull the leash (drop
+35.4 yd from the centre, past 30) and the anchor walk it in. Its users: the positioning
+trigger/action, the leash action (split only, so unchanged) and `ThorimArenaAnchorSettled` (the
+anchor guard is off before the pull). No size or mode branch. A human-led raid now follows its master
+until the pull instead of forming up early.
+
+**Watch:** the Behemoth turns on the DC tank at the drop, with the raid around him. Its breath timer
+runs on from the mock fight, so a breath in the first ~5 s while the squad walks in can hit more
+bots than the 3-5 around the tank its in-fight breaths hit in window 9. One breath left its targets
+at 35-90% health, so it is no wipe at full health; count bots hit by 62415 in the first 15 s.
+
+**Next window should show:** every Thorim DC record `start: step` and counted; no 62415 hit and no
+bot target before the open; the open's first damage on the pack from the DC tank; then, with valid
+pulls, the in-fight read starts: so far every pull dies to the Lightning Orb without phase 2.

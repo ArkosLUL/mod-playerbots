@@ -82,6 +82,14 @@ the formation opens away from the corridor. The `thorim arena anchor guard` rule
 movers once a bot is settled, exempting the chase — an add at 24 yd is up to 38 yd from an outer slot,
 and a ranged bot that cannot step into range is silent.
 
+**Nothing is anchored before Thorim is in combat**: the squad holds where it stands and walks in at the
+pull. Until then the Behemoth, summoned at (2146.6, −266.7), turns Acid Breath (62315/62415: 50 yd cone,
+8-11k plus a DoT) on the Captain every 12 s, across the centre and the ring slot at (2129.4, −251.4). A
+bot it hits damages the Behemoth back through a Lightning Shield proc or its warlock imp, which starts
+the encounter like any player damage ([start pack](#the-arena-adds-and-what-to-kill-first)). Anchored
+before the pull, all three later harness pulls of 2026-11-22 opened that way, 0-12 s after the first
+breath on the formation; nobody at the harness drop (2152, −232), 73° off the cone, was ever hit.
+
 **`GetThorim` must not be sight-limited.** `GetUldUnitByEntry` walks `"possible targets no los"`,
 capped at `Playerbots.SightDistance` 100 (~110 effective with the boss's bounding radius): the balcony
 trigger was active at **102.2-106.8 yd** and useless at **110.9-113.1**, and the upper hallway is
@@ -628,7 +636,7 @@ switched target twice a second all fight.
 and the gate is open between pulls, while the start pack (Behemoth, Captain, three Soldiers, Acolyte
 32886) fights itself until a player or pet damages one; then all six turn on that player and Thorim
 zone-combats the raid. Ungated, DPS bots `Attack()`ed the Acolyte, the first tier, from 2-3 s before the
-engage, opening all three harness pulls of 2026-11-22 before DC's start step. Its spawn is 50.6 yd from
+engage, opening the first three harness pulls of 2026-11-22 before DC's start step. Its spawn is 50.6 yd from
 the drop at (2152, −232), inside the picker's 50 yd since `GetDistance` nets out both combat reaches. An
 in-combat filter on the pick would not do, since the mock fight keeps the Behemoth, Captain and Soldiers
 in combat with each other.
