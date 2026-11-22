@@ -362,6 +362,11 @@ fights" hides the fallback. The call carries any spell id, so it can ask a human
   cast's own unit target (a taunt swap mid-cast moves `GetVictim()`), plus a check that no
   interrupter is ready. Hold the class buttons with a `Block` over `HeldTankDefensiveNames` and keep
   a low-health valve in the encounter node.
+- **`NextTankDefensive` / `NextMagicDefensive` / `NextPhysicalDefensive`** skip a row the bot can't
+  pay for now (runes, runic power, rage, energy, mana: `CanCastSpell` checks none), so the next row
+  goes. A running row is cover only while it outlasts the hit (`needMs`), and a row that adds health
+  (cut 0: Last Stand, Survival Instincts, Vampiric Blood, Frenzied Regeneration) only 3 s past it:
+  Last Stand's fade takes its health back, down to 1 hp.
 - **Raid cover for a long periodic hit:** `GetRaidCover` takes consecutive windows of three ticks,
   offered at most twice the cover lead ahead; the deal clears when no hit is offered, and a window 6 s
   later is a new hit (`SAME_HIT_MS` is 2 s). It doesn't filter by school: it deals Anti-Magic Zone to

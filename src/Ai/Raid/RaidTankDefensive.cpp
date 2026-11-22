@@ -6,12 +6,16 @@
 
 #include "RaidTankDefensive.h"
 
+#include "DBCStores.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "RaidObs.h"
 #include "SharedDefines.h"
 #include "SpellAuras.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 
+#include <algorithm>
 #include <array>
 
 namespace
@@ -69,6 +73,61 @@ std::array<TankDefensive, 11> const TANK_DEFENSIVES = { {
     { CLASS_ROGUE, "cloak of shadows", 31224, true, 5000, 90, false },            //  90s
 } };
 
+constexpr uint32 HEALTH_ROW_AFTER_HIT_MS = 3000;
+
+bool RunesReady(Player* bot, SpellInfo const* info)
+{
+    SpellRuneCostEntry const* cost = info->RuneCostID ? sSpellRuneCostStore.LookupEntry(info->RuneCostID) : nullptr;
+    if (!cost || cost->NoRuneCost() || bot->getClass() != CLASS_DEATH_KNIGHT)
+        return true;
+
+    int32 need[RUNE_DEATH];
+    for (uint8 type = 0; type < RUNE_DEATH; ++type)
+        need[type] = static_cast<int32>(cost->RuneCost[type]);
+
+    int32 death = 0;
+    for (uint8 i = 0; i < MAX_RUNES; ++i)
+    {
+        if (bot->GetRuneCooldown(i))
+            continue;
+
+        RuneType const rune = bot->GetCurrentRune(i);
+        if (rune == RUNE_DEATH)
+            ++death;
+        else if (rune < RUNE_DEATH && need[rune] > 0)
+            --need[rune];
+    }
+
+    int32 shortBy = 0;
+    for (int32 const left : need)
+        shortBy += std::max(left, 0);
+
+    return shortBy <= death;
+}
+
+bool CanPayDefensive(Player* bot, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || bot->GetCommandStatus(CHEAT_POWER) || info->PowerType == POWER_HEALTH ||
+        info->PowerType >= MAX_POWERS)
+        return true;
+
+    if (info->PowerType == POWER_RUNE && !RunesReady(bot, info))
+        return false;
+
+    return info->CalcPowerCost(bot, info->GetSchoolMask()) <=
+           static_cast<int32>(bot->GetPower(Powers(info->PowerType)));
+}
+
+bool CoversHit(TankDefensive const& entry, Aura const* aura, uint32 needMs)
+{
+    if (aura->GetDuration() < 0)
+        return true;
+
+    uint32 const after = entry.cutPct ? 0 : HEALTH_ROW_AFTER_HIT_MS;
+    return static_cast<uint32>(aura->GetDuration()) > needMs + after;
+}
+
 // The row the bot would cast, or the one already running on it, or nullptr. `running` says which of the
 // two came back: a button still up means nothing else should go on top of it.
 TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physicalOnly, bool tankOnly,
@@ -87,18 +146,21 @@ TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physica
         if (tankOnly && !entry.tank)
             continue;
 
-        // One at a time: anything still running means the bot is already covered, and stacking the
-        // next one on top spends two buttons on one window.
-        if (bot->HasAura(entry.AuraSpell()))
+        if (Aura const* aura = bot->GetAura(entry.AuraSpell()))
         {
-            running = true;
-            return &entry;
+            if (CoversHit(entry, aura, needMs))
+            {
+                running = true;
+                return &entry;
+            }
+
+            continue;
         }
 
         if (entry.windowMs < needMs)
             continue;
 
-        if (!weakest && botAI->CanCastSpell(entry.spellId, bot))
+        if (!weakest && botAI->CanCastSpell(entry.spellId, bot) && CanPayDefensive(bot, entry.spellId))
             weakest = &entry;
     }
 

@@ -733,3 +733,31 @@ need their own mana. Rune heading toward Steelbreaker's tank: not built; the use
 critical and it is not (no tank death in Molgeim's phase in windows 12-13, 25n polished in window 13).
 Shared `PickDefensive` (`src/Ai/Raid/RaidTankDefensive.cpp`): yes, fix both bugs (skip a button whose
 runes or runic power are not there; a running defensive covers only if it lasts past the hit).
+
+## Round 9 (2026-11-22, shared lane `rt/shared-tank-defensive`: the user's `PickDefensive` answer)
+
+Not a boss round: no stop rules, verdict or ranking.
+
+**Data.** Window 10 uld1 (`603_10_stormcaller-brundir_1795365408`), DK tank Uldxam: 4:32.177
+`ironassembly.punchdef = vampiric blood`, the punch node FAILED, a 41.7k punch at 91.7% killed it at
+4:33.502. Its snapshots read runic power 15% from 4:30.1 (Death Coil, 40, FAILED at 4:31.5), so
+Icebound Fortitude (20 runic power, `PowerType` 6 cost 200) was not payable either: with the fix this
+tick reads `none` and frees the lower nodes; it would not have saved the tank. Fading Last Stand:
+window 12 uld1 Uldxaz's ran out 0.4 s after the 5:08.1 punch (round 8), the round 6 hypothetical 0.5 s.
+
+**Fix.** `PickDefensive`: (1) after `CanCastSpell`, `CanPayDefensive` checks the cost the probe skips:
+runes as `Spell::CheckRuneCost` counts them (death runes stand in), else `CalcPowerCost` against the
+power (Vampiric Blood 1 Blood rune, Anti-Magic Shell and Icebound Fortitude 20 runic power, Divine
+Protection 3% base mana; Shield Wall, Frenzied Regeneration and Survival Instincts cost 0). (2) A
+running row is cover only while its aura outlasts `needMs`; a cut-0 row (Last Stand, Survival
+Instincts, Vampiric Blood, Frenzied Regeneration) only 3 s past it (`HEALTH_ROW_AFTER_HIT_MS`), since
+Last Stand's fade removes its health down to 1 hp. A row that doesn't cover is skipped, so the next
+castable row goes. `FindReadyTankDefensive` (`ReadyTankDefensive`, `ReadyTankDefensiveSpell`) and
+`RunningTankDefensive` are unchanged: they read cooldowns ahead of a hit and serve human tanks. Bots
+only (`PickDefensive` needs a bot AI); no size, mode or player input. pb-check green.
+
+**Next window should show.** Iron Assembly `--punches`: no `punchdef` naming a button whose act row
+FAILED on cost (Vampiric Blood with no Blood or Death rune); a warrior's `under` punch with Last
+Stand ending under 3 s after it gets Shield Wall rather than `covered`. Re-pull every Ulduar and ToC
+boss on the picker: Iron Assembly, Yogg-Saron, Algalon, Mimiron, Hodir, Thorim; Northrend Beasts,
+Anub'arak, Jaraxxus, Faction Champions, Twin Val'kyr.
