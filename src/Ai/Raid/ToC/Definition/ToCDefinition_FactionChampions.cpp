@@ -170,6 +170,9 @@ void DefineFactionChampions(EncounterBuilder& e)
     // the class nodes spend them closing on a target, the opening run-in too; faction champions speed boost keeps
     // them for a melee champion in contact
     e.Block("faction champions speed boost guard", Role::Any, FactionChampionsLive, 0, {"sprint", "dash"});
+    // the class nodes spend its 12 s cooldown on the first champion moving at someone, mostly an iced one;
+    // faction champions snare keeps it for a melee champion running down its victim
+    e.Block("faction champions concussive guard", Role::Any, FactionChampionsLive, 0, {"concussive shot"});
     // the Enh rotation pops it at full health for mana; faction champions personal defensive keeps it for a burst
     e.Block("faction champions personal reserve", Role::Any, FactionChampionsLive, 0, {"shamanistic rage"});
 

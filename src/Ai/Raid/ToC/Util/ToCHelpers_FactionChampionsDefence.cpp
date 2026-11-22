@@ -462,6 +462,10 @@ bool InControl(Player* player)
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
 }
 
+// skips the autorepeat slot: a hunter's Auto Shot sits there all fight and a wand's Shoot while it fires, and
+// neither stops an instant
+bool MidCast(Player* player) { return player->IsNonMeleeSpellCast(false, false, true); }
+
 uint32 KnownRank(Player* player, DispelSpell const& spell)
 {
     for (uint32 rank : spell.ranks)
@@ -569,7 +573,7 @@ void UpdateCcDispels(FactionChampionsDefenceState& state, std::vector<Member> co
     // Busy casters skip, so an idle dispeller takes the member instead of waiting on the cast
     std::vector<Member> dispellers;
     for (Member const& member : members)
-        if (GET_PLAYERBOT_AI(member.player) && InControl(member.player) && !member.player->IsNonMeleeSpellCast(false))
+        if (GET_PLAYERBOT_AI(member.player) && InControl(member.player) && !MidCast(member.player))
             dispellers.push_back(member);
 
     SortByRole(dispellers, false);
@@ -869,7 +873,7 @@ char const* ReadyMeleeInterrupt(Player* player, PlayerbotAI* botAI, Unit* warloc
 // Off the GCD, but a caster mid-cast can't send one
 char const* ReadyRangedInterrupt(Player* player, PlayerbotAI* botAI, Unit* warlock)
 {
-    if (player->IsNonMeleeSpellCast(false))
+    if (MidCast(player))
         return nullptr;
 
     for (char const* name : RANGED_INTERRUPTS)
@@ -1116,7 +1120,7 @@ bool SpellReady(Player* player, uint32 spellId)
 }
 
 // Not casting, so an instant goes out this tick and a dodge isn't pinned
-bool FreeToAct(Player* player) { return InControl(player) && !player->IsNonMeleeSpellCast(false); }
+bool FreeToAct(Player* player) { return InControl(player) && !MidCast(player); }
 
 bool IsTankMember(Player* player) { return PlayerbotAI::IsTank(player) || PlayerbotAI::IsTank(player, true); }
 

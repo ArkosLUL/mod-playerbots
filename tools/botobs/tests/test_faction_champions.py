@@ -427,7 +427,7 @@ class SyntheticPull(unittest.TestCase):
             (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
 
     def test_vetoes_keep_the_faction_champions_multipliers_and_rules_only(self):
-        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 19)
+        self.assertEqual(len(set(fc.FC_MULTIPLIERS)), 20)
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
             (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
             (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1,
@@ -1386,13 +1386,80 @@ class IceDuty(unittest.TestCase):
         self.assertIn("uptime, median over the duties: 80%", text)
 
     def test_a_snare_on_a_champion_its_ice_dk_kites_from_is_needed_and_the_duty_chains_count_apart(self):
-        self.assertEqual([(row["t"], row["spell"], row["target"], row["needed"]) for row in fc.snare_casts(self.trace)],
-                         [(3000, "Hamstring", ROGUE_C, True), (5000, "Chains of Ice", DK_C, True),
-                          (8000, "Hamstring", WARRIOR_C, False)])
+        self.assertEqual([(row["t"], row["spell"], row["target"], row["needed"], row["iced"])
+                          for row in fc.snare_casts(self.trace)],
+                         [(3000, "Hamstring", ROGUE_C, True, True), (5000, "Chains of Ice", DK_C, True, False),
+                          (8000, "Hamstring", WARRIOR_C, False, False)])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_peel(self.trace)
+        self.assertRegex(out.getvalue(), r"Hamstring +rogue +2  1 / 1 / 0; iced 1")
 
     def test_an_iced_champion_is_no_escapee_while_its_chains_last(self):
         # the rogue is loose on the priest at 11-13 s, between its Chains, and on the tank after the duty
         self.assertEqual(fc.escapee_seconds(self.trace), {ROGUE_C: 3.0})
+
+
+def run_snap(when: int) -> dict:
+    # the warrior champion runs 8 yd/s 5 yd behind the mage to 3.5 s, 4 under Concussive Shot to 6 s, then flees;
+    # the iced rogue champion runs 8 yd/s at the mage too, the DK champion at the tank
+    if when <= 3500:
+        warrior = 8.0 * when / 1000
+    elif when <= 6000:
+        warrior = 28.0 + 4.0 * (when - 3500) / 1000
+    else:
+        warrior = 38.0 + 8.0 * (when - 6000) / 1000
+    fleeing = placed(WARRIOR_C, warrior, 0.0, 100.0, MAGE)
+    fleeing[fc.MOVEGEN_COLUMN] = fc.FLEEING if when > 6000 else 0
+    units = [fleeing, placed(MAGE, warrior + 5.0, 0.0, 100.0, 0),
+             placed(ROGUE_C, 8.0 * when / 1000, 2.0, 100.0, MAGE),
+             placed(DK_C, 8.0 * when / 1000, 20.0, 100.0, TANK), placed(TANK, 8.0 * when / 1000 + 3.0, 20.0, 100.0, 0),
+             placed(ICE_DK, 0.0, 10.0, 100.0, ROGUE_C), placed(HUNTER, 0.0, -20.0, 100.0, WARRIOR_C)]
+    return {"t": when, "e": "snap", "hz": [], "u": units}
+
+
+def run_pull() -> list[dict]:
+    roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
+              {"g": ICE_DK, "n": "Felesta", "r": "melee", "c": 6, "h": 0},
+              {"g": HUNTER, "n": "Arrow", "r": "ranged", "c": 3, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ROGUE_C, "en": 34472, "n": "Irieth Shadowstep", "b": 1},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
+        {"t": 1, "e": "unit", "g": DK_C, "en": 34461, "n": "Gorgrim Shadowcleave", "b": 1},
+        note(0, ICE_DK, fc.ICE, ROGUE_C),
+        cast(0, ICE_DK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        cast(3500, HUNTER, 5116, WARRIOR_C),
+        cast(6000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C),
+        {"t": 8000, "e": "end", "out": "wipe"},
+    ]
+    return records + [run_snap(when) for when in range(0, 8001, 250)]
+
+
+class FullSpeedChases(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in run_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_only_an_unslowed_run_at_a_raider_counts_and_a_snare_covers_the_steps_after_it(self):
+        # the warrior's steps to 3.5 s, the last one snared; the iced rogue, the DK on the tank and the fleeing
+        # warrior never count
+        self.assertEqual(fc.full_speed_chases(self.trace), {WARRIOR_C: [7, 1]})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_peel(self.trace)
+        self.assertIn("no tank: 3.5 s, snared in the 4 s before 0.5 s (14%); Shocuul 0.5 of 3.5 s", out.getvalue())
+        self.assertRegex(out.getvalue(), r"Concussive Shot +hunter +1  1 / 0 / 0; iced 0")
 
 
 def stands_pull() -> list[dict]:

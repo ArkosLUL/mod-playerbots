@@ -145,6 +145,10 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 `EncounterHelpers::UseNitroBoosts` refuses a bot mid-cast (`IsNonMeleeSpellCast`): a kite stops the
 cast before it uses the boots.
 
+**`IsNonMeleeSpellCast(false)` counts the autorepeat slot**, where a hunter's Auto Shot sits all fight
+(a wand's Shoot while it fires), so a "not mid-cast" gate built on it never passes a hunter: Faction
+Champions' snare duty never got one. Pass `skipAutorepeat` (`IsNonMeleeSpellCast(false, false, true)`).
+
 ## An ability lock makes a portal or spell click a silent no-op
 
 `GameObject::Use` on a goober and `Unit::HandleSpellClick` make the **user** cast the spell,
