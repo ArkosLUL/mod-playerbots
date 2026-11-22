@@ -1136,6 +1136,11 @@ class HodirReader(unittest.TestCase):
         self.assertEqual([(carry["carrier"], carry["start"], carry["spent"]) for carry in carries],
                          [(7, 0, True), (8, 10000, False), (9, 50000, False), (9, 55000, None)])
 
+    def test_storm_power_groups_by_the_pulse_that_gave_it(self):
+        self.assertEqual(hodir.pulse_counts(20000, [20998, 21007, 23991, 24002, 24009, 24010, 27005]),
+                         [(1, 2), (4, 4), (7, 1)])
+        self.assertEqual(hodir.pulse_counts(20000, []), [])
+
 
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):

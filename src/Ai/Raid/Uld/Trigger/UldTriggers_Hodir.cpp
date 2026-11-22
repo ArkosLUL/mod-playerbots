@@ -18,25 +18,6 @@ static Creature* NearestHodirIcicle(Player* bot, uint32 entry, float radius)
     return IsHodirIcicleLethal(icicle) ? icicle : nullptr;
 }
 
-static bool GetHodirStormPowerRally(PlayerbotAI* botAI, Player* bot, Position& rally)
-{
-    if (!GetHodir(botAI))
-        return false;
-
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
-        return false;
-
-    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
-        return false;
-
-    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
-    if (!carrier || carrier == bot)
-        return false;
-
-    return GetHodirStormCloudRally(bot, carrier, rally) &&
-           bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH;
-}
-
 bool HodirBitingColdTrigger::IsActive()
 {
     if (!IsHodirEngaged(botAI))
@@ -133,9 +114,8 @@ bool HodirRaidPositionTrigger::IsActive()
     if (spread.IsActive())
         return false;
 
-    Position rally;
-    if (GetHodirStormPowerRally(botAI, bot, rally) &&
-        bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
+    HodirStormGather gather;
+    if (GetHodirStormGather(botAI, bot, gather) && gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE)
         return false;
 
     Position anchor;
@@ -227,13 +207,17 @@ bool HodirSpreadStormCloudTrigger::IsActive()
 
 bool HodirCollectStormPowerTrigger::IsActive()
 {
-    Position rally;
-    if (!GetHodirStormPowerRally(botAI, bot, rally))
+    HodirStormGather gather;
+    bool const receiver = GetHodirStormGather(botAI, bot, gather);
+    bool const in = receiver && gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.gather", !receiver ? "none" : in ? "in" : gather.msToWalk > 0 ? "wait" : "walk");
+
+    if (!receiver || in || gather.msToWalk > 0)
         return false;
 
-    if (IsHodirWalkThroughLiveIcicle(bot, rally, ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
-                                     ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
-        return false;
-
-    return bot->GetExactDist2d(&rally) > ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
+    return !IsHodirWalkThroughLiveIcicle(bot, gather.rally,
+                                         ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
+                                         ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN);
 }

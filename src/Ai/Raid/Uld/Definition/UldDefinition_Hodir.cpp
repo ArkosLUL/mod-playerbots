@@ -91,6 +91,9 @@ void DefineHodir(EncounterBuilder& e)
     e.OwnTargeting("hodir guard multiplier", Role::Any, HodirOwnsTargets,
                    Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
     e.Multiplier<HodirBreakerAoeHoldMultiplier>(Family::Spell);
+    e.Multiplier<HodirStormGatherCastHoldMultiplier>(Family::Spell);
+
+    e.Block("hodir storm gather hold", Role::Any, IsHodirStormGatherHeld, Family::Reach | Family::SetBehind);
 
     e.Block("hodir guard multiplier", Role::Any, HodirFreezeRun, Family::Charge | Family::Blink | Family::Disengage);
 

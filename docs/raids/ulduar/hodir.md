@@ -185,7 +185,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Biting Cold | 62038 / 62039 | **1005 ms ticks** measured (DBC period 1000), `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing (the damage itself is `63511`) plus a 3,999 raid tick every 2s (`64545`). All four rows are named "Frozen Blows"; the aura ids apply, the damage ids hit |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
-| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s — and the pulse spending the last buffs everyone in it but the carrier and bots already holding it. Storm Power is a **3 yd** pulse at the carrier's own feet, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
+| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** *charges*, not seconds — the cloud itself lasts 30s — and the pulse spending the last buffs everyone in it but the carrier and bots already holding it. Storm Power is a **3 yd** pulse at the carrier's own feet **every 1 s** from landing, 30s, **+135% crit damage (aura 163)**; its +20% (aura 61) is `MOD_SCALE`, size only |
 | Toasty Fire | 62821 → 65280 | 11 yd, 60s, at the mage's feet every 10s, the first 6s after the mage is freed. Sheds Biting Cold every tick exactly as movement does. Procs **Singed** at 33% on ranged/magic damage *done*. **Flash Freeze wipes every fire** (62148) |
 | Berserk | 26662 | 8 min, unhandled — no enrage awareness exists anywhere in the module |
 
@@ -480,21 +480,21 @@ for **22%**.
   landed, latched on `Aura::GetApplyTime()` — stack counts repeat across carries, so a rise cannot
   tell them apart — and held **per instance**, not per bot, because a carrier and a receiver that
   disagree walk past each other. With two carries at once every bot gathers on the lowest-guid
-  carrier. Damage dealers inside `_STORM_CLOUD_COLLECT_LEASH` 15 that lack the buff step in to park
-  2.0 (a yard inside the pulse, about what a bot covers between snapshots) / release 4.0; healers
-  and tanks are excluded, and tanks still never carry. **Carrier and receivers walk to the rally
+  carrier. Damage dealers inside `_STORM_CLOUD_COLLECT_LEASH` 15 that lack the buff walk in (timed,
+  below) to park 2.0 (a yard inside the pulse, about what a bot covers between snapshots) / release
+  2.5, `static_assert`ed inside the pulse: at 4.0 a bot 3-4 yd out counted as arrived and waited
+  outside it. Healers and tanks are excluded, and tanks still never carry. **Carrier and receivers walk to the rally
   point itself.** `MoveInside` parks each bot at its own follow angle on a 2 yd ring, so once
   `GetFollowAngle` spread the raid (`61011f323`) a carrier and a receiver could stand 4 yd apart,
   outside the pulse: parked receivers lacking the buff stood in it 20-45% of the time against
   43-70%, Storm Power a cloud fell by a tenth, and 7 clouds in six pulls ran out of time with
   charges left against none in three. **The position node stands down** for a carrier, and for a
-  receiver inside park of the rally still lacking the buff, which waits there for the 1 s pulse. Its
+  receiver inside release of the rally still lacking the buff, which waits there for the pulse. Its
   anchor or declump walked both off: carriers stood within 2 yd of their rally 18-27% of carry
   samples (windows 7-8), it was a parked ranged receiver's commonest next mover, and its
   `MOVEMENT_COMBAT` lock refused the walk back until it landed. Seeding from the carrier is what
   keeps a melee carrier gathering melee and a ranged one gathering the casters, instead of walking
-  half the raid across the room for six seconds of buff. No cast is broken for it — that is for the
-  14,000 hits, not a buff.
+  half the raid across the room for six seconds of buff.
 - The old lap is still the cautionary tale: read centre, radius and bearing off the bot each tick and
   the target sits 45° ahead of a moving bot forever while `std::max` locks in every yard of outward
   drift — one carry walked **213 yd**, ended **142 yd** from the boss outside the room, and died there
@@ -508,6 +508,21 @@ for **22%**.
   samples a pull. What holds a cloud to ~6 is receivers arriving one pulse at a time: every damage
   dealer but the carrier lacking it within the 15 yd leash sharing one pulse would add 90-460 Storm
   Power bot-seconds a pull (windows 10-11).
+- **So the leash shares one pulse, the fourth** (`_STORM_GATHER_TICK`, read off the cloud's own
+  `EFFECT_0` tick count and timer). Walking in the moment it landed, 4-9 bots took the first pulse or
+  two and emptied it, so a cloud buffed 59-60% of the damage dealers in its leash at landing. Each
+  receiver's walk is due at that pulse less its walk to park at run speed less `_GATHER_LEAD_MS` 600,
+  so all arrive in the second before it; one already inside release stays and takes the next pulse,
+  and past pulse 4 a receiver walks at once. Three guards keep the timing:
+  - A bot mid-cast runs no action until the cast ends, so `HodirStormGatherCastHoldMultiplier` holds
+    a cast that would end past the walk's due time (+250 ms); a channel may start, and the due walk
+    breaks it. No hold while rooted (Freeze) or 1.5 s (`_GATHER_HOLD_MS`) past the pulse. Casts in
+    flight at landing would have made 1 of 170 receivers late.
+  - The due walk clears a pending `MOVEMENT_COMBAT` walk elsewhere (position node, shed), whose lock
+    refused it; a `MOVEMENT_FORCED` dodge keeps its lock, and the freeze run's `OwnMovement` blocks
+    the walk outright.
+  - From due to 1.5 s past the pulse, a receiver inside release is held from `Reach` and `SetBehind`
+    (`hodir storm gather hold`), which pulled melee parked out of his reach back to him first.
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -653,8 +668,10 @@ death's killing spell, stacks and Frozen Blows window. `--tanks` gives per windo
 (his snapshot target), the swings each took, every tank button as `node` or `class` (the OK `act` row
 sharing the cast's ms), the `hodir.defensive` values (`idle`, `wait`, `spent`, the button, `covered`,
 `none`), and the button up at each tank death. `--storm` gives clouds, Storm Power a cloud by role, clouds
-spent out or timed out, the carrier's share within 2 yd of its rally, and how often a receiver parked
-at the rally stood inside the carrier's pulse;
+spent out or timed out, the carrier's share within 2 yd of its rally, how often a receiver parked
+at the rally stood inside the carrier's pulse, and per cloud the damage dealers lacking it within the
+leash at landing, how many of them it buffed, and its pulses (pulse 4 is the shared one);
+`hodir.gather` reads `none`, `wait`, `walk` or `in` (inside release) per bot;
 `--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the fire latch's runs
 held out of the band. `--shed` gives per role stacks shed a second, the share of Biting Cold ticks used
 (two a stack is all of them), samples moving, how far a shed took bots off their spot, hops, walked
@@ -689,6 +706,15 @@ ranged rather than melee in the first fire window ≤3k; ranged fire placement �
 out on a carrier far from the raid ~4k (one pull); the south drop ~3.5k (harness). Together ~18-21k
 against 20-27k: the cache needs every lever at its ceiling at once, and on one pool in three the
 20 yd leash too.
+
+**Storm Power and the fire on the ranged split a good pull from a bad one.** Three pulls on one
+build paced 252k (cache kept, kill 2:46.9), 232k and 181k. The best and worst differ on the ranged:
+113k against 67k dealt on him (melee 105k / 95k), holding Storm Power 47% / 22% of their time, in a
+fire 37% / 19%, both at once 49% / 4% of the first fire window, and 310 / 500 bot-seconds on ice.
+The worst one's first cloud sat 30 s on a tank (3 Storm Power) and its second on a melee among melee,
+and 2 of its 8 clouds went to a tank; the best one's second landed on a healer among ranged in the
+first fire and buffed six of them within 2 s. He picks the carrier, so the shared pulse above is what
+lifts the floor.
 
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at

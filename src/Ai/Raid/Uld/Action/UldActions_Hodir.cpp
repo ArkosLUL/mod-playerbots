@@ -58,6 +58,15 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
         last.clear();
 }
 
+void ReleaseWalkElsewhere(PlayerbotAI* botAI, Position const& dest)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (last.msTime && last.priority <= MovementPriority::MOVEMENT_COMBAT &&
+        std::hypot(last.lastMoveToX - dest.GetPositionX(), last.lastMoveToY - dest.GetPositionY()) >
+            ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
+        last.clear();
+}
+
 void CutShedHop(PlayerbotAI* botAI, Player* bot)
 {
     if (!IsHodirShedHopInFlight(bot))
@@ -413,17 +422,17 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
 
 bool HodirCollectStormPowerAction::Execute(Event /*event*/)
 {
-    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
-    if (!carrier || carrier == bot)
+    HodirStormGather gather;
+    if (!GetHodirStormGather(botAI, bot, gather))
         return false;
 
-    Position rally;
-    if (!GetHodirStormCloudRally(bot, carrier, rally))
+    if (gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
         return false;
 
-    if (bot->GetExactDist2d(&rally) <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK)
-        return false;
+    BreakCastPinningTheFeet(botAI, bot);
+    ReleaseWalkElsewhere(botAI, gather.rally);
 
+    Position const& rally = gather.rally;
     return MoveTo(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_COMBAT);
 }
