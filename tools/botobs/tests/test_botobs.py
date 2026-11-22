@@ -1049,6 +1049,18 @@ class HodirReader(unittest.TestCase):
         self.assertEqual(hodir.death_mechanic(own), "Biting Cold")
         self.assertEqual(hodir.death_mechanic({"blow": [9, 10], "rewind": [[1, 9, 0, 10]]}), "Hodir melee")
 
+    def test_victim_stints_run_until_the_next_target(self):
+        samples = [(900, 1), (1000, 1), (1250, 2), (1500, 1), (1750, 1), (2000, 2), (3000, 2)]
+        self.assertEqual(hodir.victim_stints(samples, 1000, 2500),
+                         [(1000, 1250, 1), (1250, 1500, 2), (1500, 2000, 1), (2000, 2500, 2)])
+        self.assertEqual(hodir.victim_stints(samples, 5000, 6000), [])
+
+    def test_button_up_at_death_reads_the_buff_not_the_cast(self):
+        stand = {"t": 10000, "auras": [[12976, 1, 20000, 7, 0, -1, 0]]}
+        self.assertEqual(hodir.button_up_at_death(stand), "last stand")
+        lapsed = {"t": 10000, "auras": [[48707, 1, 5000, 7, 0, 7000, 0], [62039, 3, 12000, 7, 0, -1, 0]]}
+        self.assertIsNone(hodir.button_up_at_death(lapsed))
+
     def test_a_shed_leg_onto_a_standing_bot_goes_nowhere(self):
         standing = [(0, 10.0, 10.0, 0)]
         walking = [(0, 10.0, 10.0, 1)]

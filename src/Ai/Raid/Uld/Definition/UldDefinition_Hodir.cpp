@@ -9,6 +9,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "UldActions_Hodir.h"
 #include "UldEncounterGate.h"
@@ -81,6 +82,9 @@ void DefineHodir(EncounterBuilder& e)
     e.Node<HodirIcicleDodgeTrigger, HodirIcicleDodgeAction>(ACTION_RAID + 5, EncounterRow::Mover);
     e.Node<HodirFrozenBlowsSwapTrigger, HodirFrozenBlowsSwapAction>(ACTION_RAID + 4);
 
+    // Never contends with the swap: that one fires for a tank he isn't hitting, this for the one he is.
+    e.Node<HodirTankDefensiveTrigger, HodirTankDefensiveAction>(ACTION_RAID + 4);
+
     // Same relevance as the swap, they never contend: that fires only for tanks, this for hunters and rogues.
     // Above targeting, or the bot switches to a block before spending the charges the tank is waiting on.
     e.Node<HodirRedirectThreatTrigger, HodirRedirectThreatAction>(ACTION_RAID + 4);
@@ -98,6 +102,9 @@ void DefineHodir(EncounterBuilder& e)
     // The class "lose aggro" node taunts on the 8s cooldown for as long as somebody else holds the
     // boss, and it knows nothing about Frozen Blows.
     e.Block("hodir guard multiplier", Role::Any, HodirTauntSuicide, Family::Taunt);
+
+    // The class nodes fire on health alone, barkskin under 85%, and spend the buttons between windows.
+    e.Block("hodir tank defensive hold", Role::Tank, IsHodirTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
     // Healers keep the generic picker. "attack rti target" stays: bots mark nothing here, but a player's mark
     // should win. "X on attacker" goes, ice blocks count as attackers and those DoTs outrank the plain ones.

@@ -378,6 +378,16 @@ bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
     return CastClassTaunt(botAI, GetHodir(botAI));
 }
 
+bool HodirTankDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const spellId = GetHodirTankDefensive(botAI, bot, "hodir.defensive");
+    if (!spellId || !botAI->CastSpell(spellId, bot))
+        return false;
+
+    LatchHodirTankDefensive(botAI, bot);
+    return true;
+}
+
 Player* HodirRedirectThreatAction::GetRedirectTank()
 {
     // Follow the swap rather than mirroring its state: whoever is holding him is the one who needs

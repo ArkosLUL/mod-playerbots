@@ -16,6 +16,7 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
@@ -75,11 +76,13 @@ bool IsHodirLustHeld(PlayerbotAI* botAI)
     return !botAI->GetBot()->FindNearestCreature(NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, true);
 }
 
-bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot)
+static Aura const* HodirFrozenBlowsAura(PlayerbotAI* botAI, Player* bot)
 {
     Unit* boss = GetHodir(botAI);
-    return boss && bot && boss->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_FROZEN_BLOWS, bot));
+    return boss && bot ? boss->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_FROZEN_BLOWS, bot)) : nullptr;
 }
+
+bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot) { return HodirFrozenBlowsAura(botAI, bot) != nullptr; }
 
 bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot)
 {
@@ -144,8 +147,16 @@ struct HodirHoldLatch
     uint32 offSince = 0;  // when he parked off the point, 0 while on it
 };
 
+// A window is told apart by its Frozen Blows aura's apply time, so a wipe needs no reset.
+struct HodirTankDefensiveLatch
+{
+    uint32 victimSince = 0;  // when he last turned onto this tank inside a window, 0 while he's elsewhere
+    time_t spentWindow = 0;
+};
+
 struct HodirBotLatches
 {
+    std::unordered_map<ObjectGuid, HodirTankDefensiveLatch> tankDefensive;
     std::unordered_map<ObjectGuid, ObjectGuid> shelter;
     std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
     std::unordered_map<ObjectGuid, HodirFireLatch> fireStand;
@@ -161,6 +172,56 @@ struct HodirBotLatches
 static RaidInstanceState<HodirBotLatches> hodirLatches;
 
 static HodirBotLatches& HodirLatchesFor(Player* bot) { return hodirLatches.For(bot->GetInstanceId()); }
+
+uint32 GetHodirTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind)
+{
+    if (!bot || !bot->IsAlive() || !PlayerbotAI::IsTank(bot) || !IsHodirEngaged(botAI))
+        return 0;
+
+    Aura const* blows = HodirFrozenBlowsAura(botAI, bot);
+    HodirTankDefensiveLatch& latch = HodirLatchesFor(bot).tankDefensive[bot->GetGUID()];
+
+    char const* waiting = nullptr;
+    if (!blows || GetHodir(botAI)->GetVictim() != bot)
+    {
+        latch.victimSince = 0;
+        waiting = "idle";
+    }
+    else if (latch.spentWindow == blows->GetApplyTime())
+        waiting = "spent";
+    else
+    {
+        uint32 const now = getMSTime();
+        if (!latch.victimSince)
+            latch.victimSince = now;
+
+        if (getMSTimeDiff(latch.victimSince, now) < ULDUAR_HODIR_TANK_DEFENSIVE_HOLD_MS)
+            waiting = "wait";
+    }
+
+    if (waiting)
+    {
+        // Change-latched, so the way out of a window gets written too
+        if (noteKind && RaidObs::Active())
+            RaidObs::NoteDerived(bot, noteKind, waiting);
+
+        return 0;
+    }
+
+    // Not physical only: the swing that kills is 63511, frost, so Anti-Magic Shell counts
+    return NextTankDefensive(botAI, bot, noteKind, false);
+}
+
+void LatchHodirTankDefensive(PlayerbotAI* botAI, Player* bot)
+{
+    if (Aura const* blows = HodirFrozenBlowsAura(botAI, bot))
+        HodirLatchesFor(bot).tankDefensive[bot->GetGUID()].spentWindow = blows->GetApplyTime();
+}
+
+bool IsHodirTankDefensiveHeld(PlayerbotAI* botAI)
+{
+    return IsHodirEngaged(botAI) && botAI->GetBot()->GetHealthPct() >= ULDUAR_HODIR_TANK_DEFENSIVE_LAST_RESORT_PCT;
+}
 
 Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 {

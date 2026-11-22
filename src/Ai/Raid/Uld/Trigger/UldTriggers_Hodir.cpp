@@ -206,6 +206,8 @@ bool HodirFrozenBlowsSwapTrigger::IsActive()
     return false;
 }
 
+bool HodirTankDefensiveTrigger::IsActive() { return GetHodirTankDefensive(botAI, bot, "hodir.defensive") != 0; }
+
 bool HodirRedirectThreatTrigger::IsActive()
 {
     if (!IsHodirEngaged(botAI))
