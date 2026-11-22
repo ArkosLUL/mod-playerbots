@@ -281,11 +281,13 @@ the floor. Ranged beyond the ring's slots keep the stack point.
 phase 3, and the ring with it, out to ~50 yd from the anchor, over holes in the floor geometry.
 `UpdateAllowedPositionZ` gives a path's end point over a hole that hole's ground, hundreds of yards
 down, and the bot walks the spline through the floor out of every heal's reach: two healers in one
-pull (22 Nov), three in another, both pulls' first deaths bar a Meltdown. So the ring samples
-its 64 bearings with the same call (`GetMapWaterOrGroundLevel` within 2 yd of the spot's Z, cached
-per ring centre) and squeezes off an off-floor bearing like a covered one (`spread-floor`); a slot
-still off the floor snaps to the nearest clear bearing, or with none takes the stack point
-(`spread-nofloor`).
+pull (22 Nov), two healers and a ranged in another, both pulls' first deaths bar a Meltdown. So the
+ring samples its 64 bearings with the same call (`GetMapWaterOrGroundLevel` within 2 yd of the
+spot's Z, cached per ring centre). With any bearing off the floor, the slots spread evenly over the
+bearings on the floor and clear of runes (`spread-floor`), over the floor alone when runes cover it
+all, else take the stack point (`spread-nofloor`). Not the squeeze: it cuts only the widest gap, and
+a rune and a hole cut two, so the other gap's slots stacked at its edge or stayed in the rune. A ring
+wholly on the floor keeps the squeeze.
 
 **Two radii, not one.** Rune of Death (62269/63490) ticks 2,750 shadow every half second for 30 s.
 DBC says 13 yd, but the searcher applying the aura adds object size at both

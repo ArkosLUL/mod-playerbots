@@ -712,3 +712,18 @@ reaches it). pb-check green (compile, pblint, codestyle, botobs).
 `spread-floor` rows only in a pull whose Steelbreaker spot moved (Meltdown circle off (1575.9, 132.3)),
 and its ranged at slots 22 yd from that centre on the floor; `spread-nofloor` never. Pulls with the
 designed spot read as before (`spread` / `spread-rune`). Rises still "at once" (round 7).
+
+**Review.** Root cause holds: `--floor` over all 21 traces on disk finds only the five falls named,
+each walking to a slot 22 yd from a shifted centre (uld2: Steelbreaker at (1573.1, 136.0) from 3:35
+on, the Meltdown circles at (1568.0, 140.9)). The move targets bound the holes: round uld2's centre
+the floor holds at 113° and 180° and not at 135° or 158°; round window 9 uld3's at 217° and 270° and
+not at 225°-248°. One fix: the lane's squeeze cut only the widest covered run and snapped a slot
+still over a hole to the nearest clear bearing. A ring cut by a rune and a hole at once (window 9
+uld3, Uldzae's `spread-rune` slot at 3:45.5) has two runs: with the rune widest, the hole's ~3 slots
+snap to its two edges, two bots on a point; with the hole widest, the rune stays unsqueezed and its
+slots trade with the escape. Now, with any bearing off the floor, the slots spread by rank over every
+sample on the floor and clear of runes (`SpreadIronAssemblyRingOver`), then the floor alone, then
+the stack; a ring wholly on the floor keeps the squeeze. Not checked offline (navprobe needs its own
+container): that the runtime query reads the designed ring 64/64 on the floor, as the doc's navprobe
+does; the next window's `spot` rows show it. Left: Steelbreaker's shifted tank spot itself has no
+floor check (up to 36 yd off the stack, the 135° hole 34); no tank fell in the 21 traces.
