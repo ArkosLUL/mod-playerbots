@@ -49,7 +49,7 @@ Unit* FlameLeviathanBoss(PlayerbotAI* botAI)
     if (!instance)
         return botAI ? GetUldUnitByEntry(botAI, NPC_FLAME_LEVIATHAN) : nullptr;
 
-    // The entry as well: index 0 names some other boss in any instance that is not Ulduar.
+    // Check the entry too, index 0 is some other boss in any instance that isn't Ulduar.
     Creature* boss = instance->GetCreature(ULD_BOSS_LEVIATHAN);
     return boss && boss->GetEntry() == NPC_FLAME_LEVIATHAN && boss->IsInWorld() && boss->IsAlive() ? boss : nullptr;
 }

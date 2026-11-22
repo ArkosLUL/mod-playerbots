@@ -23,15 +23,20 @@ a chopper.
 ## Gunners can steer, which is why nothing gates on `IsInVehicle(true)`
 
 Seat 0 of **both** the turret (33067) and the mechanic seat (33167) carries `CAN_CONTROL`, so
-`MovementAction::MoveTo` passes its `seat->CanControl()` check for a *gunner* and calls `DoMovePoint`
-on the turret creature bolted into seat 7. Movement is gated on `vehicleBase->GetEntry()` instead.
-No seat a bot can occupy has `CAN_ATTACK` — that flag is on the accessory seats, which hold NPCs — so
-`CastSpellAction::isUseful` already blocks class spells and no targeting-suppression multiplier is
-needed. Siege engine seats 1 and 2 have **no flags at all**; the chopper rear seat and demolisher
-seat 3 are `CAN_ENTER_OR_EXIT` only.
+`MovementAction::MoveTo` passes its `seat->CanControl()` check for a *gunner* and calls
+`DoMovePoint` on the turret creature bolted into seat 7. Movement is gated on
+`vehicleBase->GetEntry()` instead. No seat a bot can occupy has `CAN_ATTACK` — that flag is on the
+accessory seats, which hold NPCs — so `CastSpellAction::isUseful` already blocks class spells and no
+targeting-suppression multiplier is needed. Siege engine seats 1 and 2 have **no flags at all**; the
+chopper rear seat and demolisher seat 3 are `CAN_ENTER_OR_EXIT` only. A gunner's `GetVehicleBase` is
+that turret, at the hull's position but not its size, so size tests go through
+`FlameLeviathanRiddenVehicle`.
 
-`instance_ulduar.cpp` spawns **2 of each vehicle in 10-man, 5 in 25-man** at `x = 119.8`, west of the
-arena: exactly 10 / 25 usable slots, **zero slack**.
+`instance_ulduar.cpp` spawns **2 of each vehicle in 10-man, 5 in 25-man** at `x = 119.8`, west of
+the arena: exactly 10 / 25 usable slots, **zero slack**. Boarding uses `HandleSpellClick`, not
+`Unit::EnterVehicle`, so the Ulduar vehicle scripts run, then cancels the mount a bot boarded on. It
+fills every driver seat first (melee on siege engines, the rest on demolishers), then gunner seats
+or an empty chopper, never a siege engine's flagless seats.
 
 ## The demolisher runs on pyrite, not energy
 
@@ -55,17 +60,18 @@ fly facing their course (within 1° p90), so the centre falling behind one marks
 `ULDUAR_FL_LIFT_DROP_RADIUS` (20) it fires at once. Holding costs no crates: lifts respawn in 30 s and
 all 47 spawns on loops crossing the box are still shot once a pass. Only one loop (path `13682000`,
 10 spawns) crosses the middle; the other 37 bottom out 81-88 yd from the centre, so most drops gain
-little. `fl.lift` records each shot.
+little. `fl.lift` records each shot, once per lift (the rocket repeats every 250 ms until one lands).
 
-**Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and only
-despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
+**Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and
+only despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
 13/1/62496), its own seat, which force-casts 62473: +25 to itself (`TARGET_UNIT_CASTER`) and +25 to
 its vehicle (`TARGET_UNIT_VEHICLE`). Every traced repeat grab drew its own 62496 (31/31, 33/33), so
 gunners hold no claim: another demolisher's repeat is real energy, and the same gunner's mostly
-overflows past 100. The seat pays for Increased Speed, so nothing reserves the demolisher's energy. A
-demolisher under `ULDUAR_FL_CRATE_DETOUR_ENERGY` detours only to 41 yd of a crate (the gunner grabs
-from 49), and only while that stop stays within his reach + `FlameLeviathanDemolisherStandDist` + the
-deadband of his centre: unleashed, starved demolishers sat past the barrel's 70 yd for 22–47% of a pull.
+overflows past 100. The seat pays for Increased Speed, so nothing reserves the demolisher's energy.
+A demolisher under `ULDUAR_FL_CRATE_DETOUR_ENERGY` (30) detours to a crate within
+`ULDUAR_FL_CRATE_DETOUR_RADIUS` (60), only to 41 yd of it (the gunner grabs from 49), and only while
+that stop stays within his reach + `FlameLeviathanDemolisherStandDist` + the deadband of his centre:
+unleashed, starved demolishers sat past the barrel's 70 yd for 22–47% of a pull.
 
 **Hurl Pyrite Barrel** needs no ammo (no `CasterAuraSpell`), only 5 energy, and shares Hurl Boulder's
 10–70 yd range (RangeIndex 164). It lands `62489` (54000 in 20 yd), which applies `68605 Blue
@@ -79,8 +85,12 @@ demolisher carries its **own** aura instance, read through the caster-scoped ove
 #6 45, #7 36, #10 9. `DemolisherAction` bursts to `ULDUAR_FL_PYRITE_BURST_STACKS` (6), or to 10 while
 energy covers the rest plus `ULDUAR_FL_PYRITE_REFRESH_RESERVE` (four refreshes), counting barrels in
 flight. It then throws one refresh once the duration is down to the last timed flight +
-`ULDUAR_FL_PYRITE_REFRESH_SLACK_MS`, each adding a stack on the way to 10. A landing is timed off our
-own aura: a stack gained, or the duration jumping back up. Barrels go on him only. Refreshing at a
+`ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s: ~1.1 s between decisions plus a boulder's 1 s GCD; late
+loses the whole stack, early only a second of it), each adding a stack on the way to 10. A landing
+is timed off our own aura: a stack gained, or the duration jumping back up by over 250 ms. Barrels
+lob for 1-3 s, so the first refresh leads by `ULDUAR_FL_PYRITE_FLIGHT_MS` (3 s) until a landing is
+timed (clamped to 0.5-5 s), and a barrel not seen landing within `ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS`
+(5 s) counts as lost. Barrels go on him only. Refreshing at a
 fixed time left, blind to barrels in flight, threw 2–3 per cycle at 10 stacks (~15–20 a minute
 against ~7).
 
@@ -117,7 +127,8 @@ despite the name**, and never ignites anything.
 
 - **Flame Vents 62396 is a 10s channel** — `AttributesEx = 200` carries `0x40`
   (`SPELL_ATTR1_IS_SELF_CHANNELED`) — ticking 63847 for 15000 in a 500 yd radius, so it is not
-  dodgeable. `EVENT_VENT` repeats every 20s. `boss_flame_leviathan::SpellHit` maps Electroshock to
+  dodgeable. `EVENT_VENT` repeats every 20s; the channel is the whole reaction window, so the vents
+  trigger runs unthrottled. `boss_flame_leviathan::SpellHit` maps Electroshock to
   `InterruptNonMeleeSpells`, which always cancels a channel, so **the interrupt is real**. He is
   `MECHANIC_INTERRUPT`-immune, but only Electroshock's effect 1 carries that mechanic; effect 2
   (8489 damage) lands, the spell hits, and the script hook fires.
@@ -139,23 +150,29 @@ despite the name**, and never ignites anything.
   out to 47.7.
 - **One Electroshock per channel.** `FlameLeviathanIsVentInterrupter` elects the usable, non-Pursued
   engine in cone range with the most energy, and its first shot claims the channel
-  (`FlameLeviathanClaimVentChannel`, `fl.interrupter`) until he stops; a claimant that freezes hands it
-  back. Ranking alone re-elected every tick, since each 20-energy cast promoted the next, and four
-  engines emptied 80 energy into one channel 30 ms apart. The Ram gate earmarks Electroshock's 20
-  for the current interrupter. A miss (the channel still running after the cast, `fl.vent miss`)
-  retries after `ULDUAR_FL_ELECTROSHOCK_RETRY_MS` (3 s): charging the 10 s cooldown left every engine
-  10 s out of step with the 20 s cycle.
+  (`FlameLeviathanClaimVentChannel`, `fl.interrupter`) until he stops; a claimant that freezes hands
+  it back. Ranking alone re-elected every tick, since each 20-energy cast promoted the next, and
+  four engines emptied 80 energy into one channel 30 ms apart. The Ram gate earmarks Electroshock's
+  20 for the current interrupter and Steam Rush's 40 for a Pursued engine or the vent reserve. A
+  miss (the channel still running after the cast, `fl.vent miss`) retries after
+  `ULDUAR_FL_ELECTROSHOCK_RETRY_MS` (3 s): charging the 10 s cooldown left every engine 10 s out of
+  step with the 20 s cycle. A Ram or Steam Rush GCD (category 133) is a wait, so the interrupter
+  holds its aim through it, or the drive turns the hull away. The interrupt outranks the urgent
+  drive, so it never stops a hull that has a blast or hazard to leave, by the drive's own test.
 - **Pursued 62374** picks a random crewed siege engine or demolisher, never a chopper
-  (`FlameLeviathanPursuedTargetSelector`), every 31s and lasts 35s. `EVENT_PURSUE` waits out his
+  (`FlameLeviathanPursuedTargetSelector`), every 31s and lasts 35s. The aura lands on the ridden
+  vehicle or on the parent under it, so `FlameLeviathanIsPursued` checks both links and the state keys
+  on the vehicle, which folds a crew into one entry. `EVENT_PURSUE` waits out his
   casts, so it never lands mid-channel, and re-fires at once when he kills his victim. He drives at
   it and casts `Battering Ram 62376` on `GetVictim()` inside `IsWithinCombatRange(victim, 15)`. Its
   target is `TARGET_DEST_TARGET_ENEMY` at radius index 20, so the blast is a **25 yd sphere centred
   on the pursued vehicle** and his facing is irrelevant
-  ([pitfalls](../../engine/pitfalls.md#arc-and-geometry-defaults)). Distance to the vehicle carrying the
-  aura, not `GetVictim()`, is the whole rule and needs no switch prediction: it re-aims itself the moment the aura moves, and
-  predicting the 31s cadence was where the false alarms came from. With nobody holding the aura (the
-  Pursued hull died, up to 31 s) he rams his threat victim — 16 of one pull's 46 blasts, mostly on
-  hulls holding station — so `fl.ramtarget` names that victim's hull: it kites like a Pursued one and
+  ([pitfalls](../../engine/pitfalls.md#arc-and-geometry-defaults)). Distance to the vehicle carrying
+  the aura, not `GetVictim()`, is the whole rule and needs no switch prediction: it re-aims itself
+  the moment the aura moves, and predicting the 31s cadence was where the false alarms came from.
+  With nobody holding the aura (the Pursued hull died, up to 31 s) he rams his threat victim — 16 of
+  one pull's 46 blasts, mostly on hulls holding station — so `fl.ramtarget` names that victim's hull
+  (found up the seats, since a turret or rider can hold the threat): it kites like a Pursued one and
   the rest back off it. Effect 3 is `MOD_DAMAGE_PERCENT_TAKEN` **+50% per blast, 20 stacks**, on the
   target and everything in the 20 yd splash (radius index 9), so a chain is exponential and only the
   first blast is cheap: 8 in 22 s ran 27k up to 149k and took the hull.
@@ -166,12 +183,15 @@ despite the name**, and never ignites anything.
   last-move priority when Pursued ends so the next dodge does not wait out a kite leg. A Pursued
   engine is out of the vent-interrupter election: in 4 of 12 spans it turned to face him mid-escape.
   A Pursued demolisher runs 14 yd/s on Increased Speed, cast by its gunner and noted `fl.speed`
-  because no instant leaves a `cast` row; the crew of his threat victim gets it too. Neither hull
+  because no instant leaves a `cast` row; the crew of his threat victim gets it too. The aura, not the
+  cast's answer, says it landed (a refusal reads as success), so the speed buffs retry on
+  `ULDUAR_FL_DEMOLISHER_RAM_COOLDOWN_MS` (4 s). Neither hull
   detours round the Inferno trail while he is in range to fire: in one pull 62% of all Ram hull damage
   landed on `kite:detour` legs, against 0.7% of fleet health lost to the trail.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
-  opener fires. The encounter's tick (`FlameLeviathanTick`) calls `MarkPull` to cover it, latched per
+  opener fires. The encounter's tick (`FlameLeviathanTick`, once per instance every 200 ms, often
+  enough never to miss a Pursued switch) calls `MarkPull` to cover it, latched per
   instance and released when he leaves combat so a re-pull opens a fresh one.
 - **Resolve him through the instance script** (`FlameLeviathanBoss`): posts sit 98–188 yd from him,
   past the sight-capped entry scan, and `TickFlameLeviathan` resets the shared state on "no boss"
@@ -184,10 +204,11 @@ despite the name**, and never ignites anything.
   roughly two minutes, which is why the kite path has to be efficient and why Steam Rush, Increased
   Speed and Speed Boost carry the late fight.
 - **`"attackers"` usually does not contain him, and may miss the trash.** `AttackersValue` walks the
-  *bot player's* `GetThreatenedByMeList()`, and `ThreatManager::AddThreat` sends a rider's threat to its
-  vehicle. He is resolved through the instance instead, and short of him the weapons fall back from
-  `"attackers"` to the nearest hostile already in combat in `"possible targets"`. Adds are picked by
-  `FlameLeviathanBestAdd` for the same reason (below).
+  *bot player's* `GetThreatenedByMeList()`, and `ThreatManager::AddThreat` sends a rider's threat to
+  its vehicle. He is resolved through the instance instead, and short of him the weapons fall back
+  from `"attackers"` to the nearest hostile already in combat in `"possible targets"`, so a 70 yd
+  gun never opens on a pack nobody pulled, and never on his mounted turrets (33139). Adds are picked
+  by `FlameLeviathanBestAdd` for the same reason (below).
 - **Missile Barrage 62400** (`SPELL_FL_MISSILE_BARRAGE`, every 4 s) is the hull-loss floor: nothing
   positional answers it, and it ran 18–46% of hull damage in every traced pull.
 - **Steam Rush 62346** is `CHARGE_DEST` at `TARGET_DEST_CASTER_FRONT`: a forward dash along our own
@@ -209,13 +230,24 @@ stamps on the call).
 
 ## One action owns all movement
 
-`FlameLeviathanDriveAction` is the only thing that steers a vehicle, with internal precedence:
-kite when Pursued → clear a hard-mode hazard → back out of Battering Ram → drive to a corner post →
+`FlameLeviathanDriveAction` is the only thing that steers a vehicle, with internal precedence: kite
+when Pursued → clear a hard-mode hazard → back out of Battering Ram → drive to a corner post →
 detour to a crate below `ULDUAR_FL_CRATE_DETOUR_ENERGY` → hold station, the tar lead included.
-`fl.drive` names the branch that owned each tick. Hazard clearance is folded in rather than given its
-own action, since two owners of one vehicle bounce. The action is wired to two trigger nodes,
-`drive urgent` at `ACTION_RAID + 3` and the routine one at `+0.5` — the engine caches actions by name,
-so both nodes drive one instance and one latched destination.
+`fl.drive` names the branch that owned each tick. Hazard clearance is folded in rather than given
+its own action, since two owners of one vehicle bounce. The action is wired to two trigger nodes,
+`drive urgent` at `ACTION_RAID + 3` (chased, or in a hazard) and the routine one at `+0.5` — the
+engine caches actions by name, so both nodes drive one instance and one latched destination. A
+branch with nothing left to do (a hazard already cleared) falls through to the next; failing the
+action would hand the tick to the on-foot rotation, which is also why `DriveTo` returns true only
+while travelling and false once parked and facing: a move that silently failed then shows as a
+standing vehicle, not as this action quietly owning every tick. Backing out of Battering Ram overshoots the
+sphere by twice the arrival deadband, since `DriveTo` parks anywhere inside one.
+
+`DriveTo` re-issues only once the goal drifts `ULDUAR_FL_REPOSITION_EPSILON` (6 yd) or the hull has
+stopped ([spline restart](../../engine/raid-mechanics-lessons.md#vehicles-and-flight)), and re-faces
+a parked hull only past `ULDUAR_FL_FACING_TOLERANCE` (~6°): `SetFacingTo` lays a spline, and one a
+tick jitters the hull and reads as moving. The 8 yd arrival deadband is loose on purpose: it keeps
+vehicles off one coordinate, where a tight one leaves a hull sliding in place.
 
 **The drive never waits out its own leg.** `DriveToImpl` drops the stored priority one step before
 re-issuing and restores it if nothing issued
@@ -223,31 +255,36 @@ re-issuing and restores it if nothing issued
 dodge, still blocks. Equal legs replace each other, so anything that must commit to one latches it
 itself: the kite its node, `ClearHazard` its goal (below).
 
-Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd band
-and never close, their points led along his heading by `ULDUAR_FL_STATION_LEAD_S` (1.5 s of his run
-speed, capped at `_MAX` 10 yd, none while he stands), since a point built off where he is now is short
-by the hull's drive time. The point sits behind him, so the lead moves it closer, the safe way to be
-wrong, and the cap keeps the band ~44 yd from his centre, clear of Ram's 25; a chopper at 20 yd would
-be led into the sphere, so demolishers only. One chopper (lowest guid, neither Pursued nor frozen)
-runs *ahead* of him, back turned, so its tar pool lands in his path — clamped to stop short of the
-Battering Ram sphere, and giving the slot up entirely when the chase leaves no room. Each class fans
-out by guid rank. The demolisher fan swings from his rear toward the arena centre
-(`FlameLeviathanCentreTurn`), capped so its outer slot stays in his rear half: he runs a median 55 yd
-from the centre, a demolisher out-drives him by only 0.7–1.5 yd/s, and unswung they trailed on the
-outside of his circle in 65% of their out-of-range station frames.
+Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd
+band and never close, their points led along his heading by `ULDUAR_FL_STATION_LEAD_S` (1.5 s of his
+run speed, capped at `_MAX` 10 yd, none while he stands), since a point built off where he is now is
+short by the hull's drive time. The point sits behind him, so the lead moves it closer, the safe way
+to be wrong, and the cap keeps the band ~44 yd from his centre, clear of Ram's 25; a chopper at 20
+yd would be led into the sphere, so only demolishers and the vent reserve (below) lead. Siege
+engines stand 8 and choppers 20, inside Sonic Horn's reach. One chopper (lowest guid, neither
+Pursued nor frozen) runs up to `ULDUAR_FL_TAR_LEAD_DIST` 30 yd *ahead* of him, back turned, so its
+tar pool lands in his path — clamped to stop short of the Battering Ram sphere, and giving the slot
+up entirely when the chase leaves no room. Each class fans out by guid rank. The demolisher fan
+swings from his rear toward the arena centre (`FlameLeviathanCentreTurn`, none while he is within 15
+yd of the centre, where the bearing is noise), capped so its outer slot stays in his rear half: he
+runs a median 55 yd from the centre, a demolisher out-drives him by only 0.7–1.5 yd/s, and unswung
+they trailed on the outside of his circle in 65% of their out-of-range station frames.
 
 **Every stand distance is measured outward from his combat reach**, so a 50 yd band puts a demolisher
 65 yd from his centre and the arrival deadband takes it past Hurl Pyrite Barrel's 70. `HoldStation`
 clamps the demolisher against that range: a barrel that will not cast drops the Blue Pyrite stack the
 raid does its boss damage with.
 
-The `flame leviathan vehicle movement` rule (`Exclusive`) zeroes every other `MovementAction` while a
-bot is on an FL vehicle, exempting only the drive action, boarding and `leave vehicle` — and it stays
-**inert until he is engaged**, or the raid could never drive into the arena. Once it is live, a
-silently failing drive action means vehicles stand still all fight.
+The `flame leviathan vehicle movement` rule (`Exclusive`) zeroes every other `MovementAction` while
+a bot is on an FL vehicle, exempting only the drive action, boarding and `leave vehicle` (without
+them a hull-less bot never boards again and nobody gets out after the kill) — and it stays **inert
+until he is engaged**, or the raid could never drive into the arena. Once it is live, a silently
+failing drive action means vehicles stand still all fight.
 
 **"Engaged" is his combat, not the rider's** (`FlameLeviathanEngaged`, boss first, rider as the
-fallback for the approach; [pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)).
+fallback for the approach; [pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)):
+threat sits on the vehicle, so a bot that drives far enough out drops combat mid-pull, and the drive
+and its veto would hand the wheel to `follow`.
 
 ## The kite is a wall loop, not a corner run
 
@@ -290,9 +327,12 @@ baseline** ([the rescale](../../engine/pitfalls.md#configuration)).
 standing in one loses **51-54% of its health per 5 s** (`--inferno`), and unseen it took **61%** of
 every hull point the fleet lost out of ~6% of hull-seconds. Both entries count, and `ClearHazard`
 fans off the radial to a point clear of *every* patch within 45 yd — straight out from the nearest
-lands in the next as often as it escapes. A dodge re-planned off the nearest patch flips sides of the
-trail ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)), so `ClearHazard` latches
-its goal while it stays clear, and the leg may enter no reach the hull is not already in.
+lands in the next as often as it escapes. A dodge re-planned off the nearest patch flips sides of
+the trail ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)), so `ClearHazard`
+latches its goal while it stays clear, and the leg may enter no reach the hull is not already in.
+The goal never leaves the kite ring's bounds: the wall stops the spline short and the hull stays in
+the fire. Boxed in, it drives straight out from the nearest patch, unlatched, since the next tick
+may find a way out.
 
 **It reaches further than 9 yd**, by the hull's size
 ([persistent area auras](../../engine/raid-mechanics-lessons.md#range-and-reach)): a siege engine
@@ -341,31 +381,39 @@ What each one is actually worth, which is what ranks them when several are in ba
 | Mortar 62634 → 62635 | **11,100** + Flames 20,000 | free, 1 s cd |
 | Sonic Horn 62974 | **6,300** | 20 energy |
 
-**`FlameLeviathanBestAdd` ranks by neighbour count inside the weapon's own splash**, nearest breaking
-ties — not by nearest alone. On the old two-add waves, adds clumped at a median of 2, p75 3 and max 9 inside one 20 yd splash, so
-the extra bodies are usually there to be had. It skips an add a posted engine is holding — victim a
-siege hull inside `ULDUAR_FL_CORNER_HOLD_RADIUS` (30 yd) of a post — unless the shooter rides that
-hull: a 76k Fire Cannon hit from elsewhere passes the 130% switch and drags the add out of the corner.
-**The claim lapses where the holder has no shot** — inside Fire Cannon's floor and outside Ram's cone
+**`FlameLeviathanBestAdd` ranks by neighbour count inside the weapon's own splash**, nearest
+breaking ties — not by nearest alone. On the old two-add waves, adds clumped at a median of 2, p75 3
+and max 9 inside one 20 yd splash, so the extra bodies are usually there to be had. It skips an add
+a posted engine is holding — victim a siege hull inside `ULDUAR_FL_CORNER_HOLD_RADIUS` (30 yd, Ram's
+~20 yd throw from a post 12 yd in, plus margin) of a post — unless the shooter rides that hull: a
+76k Fire Cannon hit from elsewhere passes the 130% switch and drags the add out of the corner. A
+skipped add still counts in other adds' clusters. **The claim lapses where the holder has no shot**
+— inside Fire Cannon's floor and outside Ram's cone
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)).
 
-**Corner containment: one siege engine per corner, never all of them.** Each wave spawns in front of an
-engine parked `ULDUAR_FL_CORNER_STANDOFF` (12 yd) in from its corner, which takes threat, throws the
-adds back in (Ram's knockback is away from the caster) and cannons them there: an add meleeing the hull
-is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave is 951k (5 × 190k), 1.46 M
-with a Ward of Life: 13 cannon shots one add at a time, 20 with the Ward, against ~16 a turret sustains
-per 32.4 s (+20 energy per 2 s, 20 a shot) plus its 100-energy bank. The lashers land clumped, so one 20
-yd splash taking all five clears them in 3, a Ward wave in 7. The posted turret shoots adds within 30 yd of its post
-before anything else. `DriveTo` parks anywhere inside `ULDUAR_FL_ARRIVE_TOLERANCE`, so the hull really
-sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reaches melee.
+**Corner containment: one siege engine per corner, never all of them.** Each wave spawns in front of
+an engine parked `ULDUAR_FL_CORNER_STANDOFF` (12 yd) in from its corner, which takes threat, throws
+the adds back in (Ram's knockback is away from the caster) and cannons them there: an add meleeing
+the hull is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave is 951k (5 ×
+190k), 1.46 M with a Ward of Life: 13 cannon shots one add at a time, 20 with the Ward, against ~16
+a turret sustains per 32.4 s (+20 energy per 2 s, 20 a shot) plus its 100-energy bank. The lashers
+land clumped, so one 20 yd splash taking all five clears them in 3, a Ward wave in 7. The posted
+turret shoots adds within 30 yd of its post before anything else. `DriveTo` parks anywhere inside
+`ULDUAR_FL_ARRIVE_TOLERANCE`, so the hull really sits 16-21 yd from the spawn: the gunner opens the
+wave and Ram is for what reaches melee. The siege engine's cast node runs with no boss target, since
+a posted engine has adds to shoot whether or not he is reachable. With the Life tower down nobody
+posts and no reserve is elected: every engine holds station.
 
-- **Slots.** Siege hulls are ranked by guid once per pull, and ranks 1–4 own corners 0–3. Ranking the
-  live ones renumbered everyone below a loss, so a dead hull leaves its corner unmanned instead.
+- **Slots.** Siege hulls are ranked by guid once per pull, and ranks 1–4 own corners 0–3. Ranking
+  the live ones renumbered everyone below a loss, so a dead hull leaves its corner unmanned instead.
+  A hull nobody drove when the order latched gets a slot behind the originals, so a bot in a
+  replacement engine still posts.
 - **The vent reserve never posts** (`fl.reserve`). A post is 98–188 yd from where he roams and
-  Electroshock is a 25 yd cone, so posting every engine leaves Flame Vents running. The reserve is the
-  usable, non-Pursued engine nearest him, kept until it freezes, dies or is Pursued: re-electing each
-  scan would drag a posted engine in and back out for one Hodir's Fury. When it is not rank 0, rank 0
-  takes its corner.
+  Electroshock is a 25 yd cone, so posting every engine leaves Flame Vents running. The reserve is
+  the usable, non-Pursued engine nearest him, kept until it freezes, dies or is Pursued: re-electing
+  each scan would drag a posted engine in and back out for one Hodir's Fury. When it is not rank 0,
+  rank 0 takes its corner. Its station is led and swung toward the centre like a demolisher's: he
+  speeds up to 10 yd/s against its flat 7, so an unled rear arc is a tail chase.
 
   Holding the siege station does not keep it in reach: he drives 38–93 yd per channel, and a reserve
   on station started 42–129 yd from his centre (reach 40) and never got inside in any of 10 full
@@ -407,28 +455,32 @@ Lash was 15.3% of hull damage. `--corners` scores the hold, not the first victim
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
 turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
 whatever the cast node is about to shoot, using the same bands — including the exclusion, since the
-tar lead never shoots adds and so never turns for one. Nor does the vent reserve: it Rams only what is
-already in its cone and keeps facing him, because Electroshock is a 25 yd, 60° cone and a reserve
-turned onto an add would spend a tick turning back at every channel.
+tar lead never shoots adds and so never turns for one. Nor does the vent reserve: it Rams only what
+is already in its cone and keeps facing him, because Electroshock is a 25 yd, 60° cone and a reserve
+turned onto an add would spend a tick turning back at every channel. Each cast node picks its shot
+once a tick: falling back to him mid-turn swings the hull round again and it faces neither.
 
 **Hodir's Fury commits only on a stopped target.** `npc_hodirs_fury` picks a random target within
-200 yd every 30 s and `MoveFollow`s it at **12 yd/s**, faster than any hull. `FollowMovementGenerator`
-fires `MovementInform` only once its spline has finished **and** the target is within 0.5 yd of where
-the path was issued, so it chases a moving vehicle indefinitely (69 s measured). On commit it stuns
-itself; **5.0 s** later (4.8–5.3) it summons `NPC_HODIRS_FURY` 33212 overhead casting **62533**, and
-`62297` lands **~1.1 s** after that (950–1164 ms). It stays stunned 5 s more, then retargets. So only a
-stunned reticle is dangerous: `TickFlameLeviathan` stamps each reticle's stun and arms it for
-`ULDUAR_FL_FURY_ARMED_MS` (6.5 s, `fl.fury`), re-arming one still stunned after 10 s since it
-retargeted and stopped between scans. Unarmed, 88–89% of the time hulls spent inside the Fury scan was
-against a reticle that could not strike. Once armed it is a static mark, so dodge **radially**. The
-strike carries `62297`: 10 yd, **60s stun**, `Mechanic 0` and no dispel type, so no dispel, trinket or
-mechanic-clear touches it.
+200 yd every 30 s and `MoveFollow`s it at **12 yd/s**, faster than any hull.
+`FollowMovementGenerator` fires `MovementInform` only once its spline has finished **and** the
+target is within 0.5 yd of where the path was issued, so it chases a moving vehicle indefinitely (69
+s measured). On commit it stuns itself; **5.0 s** later (4.8–5.3) it summons `NPC_HODIRS_FURY` 33212
+overhead casting **62533**, and `62297` lands **~1.1 s** after that (950–1164 ms). It stays stunned
+5 s more, then retargets. So only a stunned reticle is dangerous: `TickFlameLeviathan` stamps each
+reticle's stun and arms it for `ULDUAR_FL_FURY_ARMED_MS` (6.5 s, `fl.fury`), re-arming one still
+stunned after 10 s since it retargeted and stopped between scans. A reticle first seen already
+stunned counts as a fresh commit: dodging a spent one costs a short drive, standing under a live one
+a minute. Unarmed, 88–89% of the time hulls spent inside the Fury scan was against a reticle that
+could not strike. Once armed it is a static mark, so dodge **radially**. The strike carries `62297`:
+10 yd, **60s stun**, `Mechanic 0` and no dispel type, so no dispel, trinket or mechanic-clear
+touches it.
 
 **Each hazard has its own reach** (`FlameLeviathanHazardReach`). Hodir's Fury (10 yd) and Thorim's
 Hammer (7) are creature casts at a destination, and `WorldObjectSpellAreaTargetCheck` adds no target
-size to those, so they are flat from the hull's centre; Inferno adds both sizes, above. The scan counts
-a hazard within `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) of its reach, and `ClearHazard` steps out to
-reach + 16.
+size to those, so they are flat from the hull's centre; Inferno adds both sizes, above. The scan
+counts a hazard within `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) of its reach, and `ClearHazard` steps
+out to reach + 16. Keep the margin under that step, so a hull handed to `ClearHazard` always has
+ground to make up.
 
 **Thorim's Hammer is not the circle it looks like.** `spell_thorims_hammer` deals full damage inside
 7 yd and `base / max(dist - 6, 1)` outside, so every strike hits every hull on the map: in one pull 116
@@ -436,23 +488,26 @@ of 117 hits landed outside the circle for a median 4.1k, scaling to a direct hit
 is worth dodging and the tail is a floor, not a missed dodge. Its 8 marks also arrive together and
 live 24 s, so at the 8 yd warning band a hull near him is inside one almost continuously.
 
-**Fire frees a frozen vehicle, and the demolisher already carries it.** `Hurl Boulder 62306` triggers
-`Boulder 62307`, whose third effect triggers `Flames 65045`; the gunner's `Mortar 62634` → `62635`
-triggers `Flames 65044`. `spell_linked_spell` maps both to `-62297`, comment *"Flames remove ice"*
-([why the DBC hides it](../../engine/pitfalls.md#arc-and-geometry-defaults)). **Aim either one at the
-frozen ally.** All three vehicle spells are `TARGET_FLAG_DEST_LOCATION`, so the "target" only supplies
-a destination and a friendly one passes every check, while Boulder's own damage is
+**Fire frees a frozen vehicle, and the demolisher already carries it.** `Hurl Boulder 62306`
+triggers `Boulder 62307`, whose third effect triggers `Flames 65045`; the gunner's `Mortar 62634` →
+`62635` triggers `Flames 65044`. `spell_linked_spell` maps both to `-62297`, comment *"Flames remove
+ice"* ([why the DBC hides it](../../engine/pitfalls.md#arc-and-geometry-defaults)). **Aim either one
+at the frozen ally.** All three vehicle spells are `TARGET_FLAG_DEST_LOCATION`, so the "target" only
+supplies a destination and a friendly one passes every check, while Boulder's own damage is
 `TARGET_UNIT_DEST_AREA_ENEMY` and cannot hurt it — the blast is enemy-only and the Flames are not.
-Both are free. Hurl Boulder has a **10 yd minimum** (RangeIndex 164, 10–70); Mortar has no minimum but
-reaches only 50, so the gunner covers what the driver's floor cannot. Freeing outranks damage: the
-stun is a full minute of nothing.
+Both are free. Hurl Boulder has a **10 yd minimum** (RangeIndex 164, 10–70); Mortar has no minimum
+but reaches only 50, so the gunner covers what the driver's floor cannot, its own frozen demolisher
+included (the seat is not stunned with the hull). Freeing outranks damage: the stun is a full minute
+of nothing.
 
-**Stations fan out by guid rank across an arc at the same radius**, so Ram, Sonic Horn and the pyrite
-band keep their geometry and one strike costs one vehicle. One point per class put four or more
-vehicles in a single 10 yd circle for **50–90%** of a pull, and six bots took `62297` in the same
-millisecond. A frozen vehicle keeps its slot — renumbering would swing the whole fan for 60s — but
-hands back the tar-lead and vent-interrupt roles, which are elected on guid order and would otherwise
-go with it.
+**Stations fan out by guid rank across an arc at the same radius**, so Ram, Sonic Horn and the
+pyrite band keep their geometry and one strike costs one vehicle. Slots sit
+`ULDUAR_FL_STATION_SPACING` (12 yd, the Fury's 10 plus deadband drift) apart on the ground, the fan
+capped at 120° (`_STATION_MAX_ARC`) so its outer slots stay behind him; a tight radius gets less
+spacing instead. One point per class put four or more vehicles in a single 10 yd circle for
+**50–90%** of a pull, and six bots took `62297` in the same millisecond. A frozen vehicle keeps its
+slot — renumbering would swing the whole fan for 60s — but hands back the tar-lead and
+vent-interrupt roles, which are elected on guid order and would otherwise go with it.
 
 **Never ask a rider whether it can move**: `FlameLeviathanCrewUsable` tests `UNIT_STATE_STUNNED` on the
 rider and the full `UNIT_STATE_NOT_MOVE` only on the hull
@@ -464,6 +519,10 @@ so the next silent election failure is visible.
 - **A rider is not at its hull's coordinates**: a turret gunner sits 0.20 yd off, so
   `bosses/flame_leviathan.py` matches crews by proximity (`CREW_YD`, 8 yd).
 - **No vehicle spell shows in the snapshot cast column**, which carries only spells with a cast time.
+- **`fl.corner` and `fl.station` name an assignment**, not what the hull drove; only `fl.drive` says
+  that.
+- **`fl.vent hit` is a plain `Note`**, not a `NoteDerived`: a run of hits repeats one value and every
+  shot has to show up. `fl.pyrite` notes stacks only, since the duration changes every pass.
 - **A full Flame Vents channel is 11 `63847` ticks**, and only Electroshock ends one early, so fewer is
   an interrupt; a channel the pull ended under is not scored.
 - `--hulls` attributes hull loss by position, each `snap` health delta to the first matching cause, so

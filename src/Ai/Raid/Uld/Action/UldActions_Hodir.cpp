@@ -69,7 +69,7 @@ void CutShedHop(PlayerbotAI* botAI, Player* bot)
     if (!IsHodirShedHopInFlight(bot))
         return;
 
-    // No reset: the idle generator's reset stops the bot mid-air if nothing moves it next.
+    // Clear(false) on purpose, a reset stops the bot mid-air if nothing moves it next.
     bot->GetMotionMaster()->Clear(false);
     botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get().clear();
 
