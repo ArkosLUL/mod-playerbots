@@ -26,15 +26,23 @@ void DefineAuriaya(EncounterBuilder& e)
 
     // A loose Sentry is the worst state in the fight, so the taunt outranks the pool dodge, which can wait.
     e.Node<AuriayaSentryTauntTrigger, AuriayaSentryTauntAction>(ACTION_RAID + 3, EncounterRow::Mover);
+    e.Node<AuriayaMainTankSentryTrigger, AuriayaMainTankSentryAction>(ACTION_RAID + 3);
 
     e.Node<AuriayaSeepingEssenceTrigger, AuriayaSeepingEssenceAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node<AuriayaAntiFearTrigger, AuriayaAntiFearAction>(ACTION_RAID + 2);
     e.Node<AuriayaSetDpsPriorityTrigger, AuriayaSetDpsPriorityAction>(ACTION_RAID + 1);
+    e.Node<AuriayaOffTankTargetTrigger, AuriayaOffTankTargetAction>(ACTION_RAID + 1);
     e.Node<AuriayaRaidPositionTrigger, AuriayaRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 
     // Engaged, not just present: on sight alone bots would sit rooted with no target before the pull.
     // "attack rti target" stays live on purpose, so a mark the player sets still wins.
     e.OwnTargeting("auriaya movement guard multiplier", Role::NonTank, IsAuriayaEngaged, Family::DpsAssist);
+
+    e.OwnTargeting("auriaya off tank target guard", Role::Tank, AuriayaOffTankHoldsSentries, Family::TankAssist);
+
+    // With one tank left, tank assist sends the main tank to the nearest Sentry it lacks aggro on, and
+    // reach drags her and her cone after it.
+    e.OwnTargeting("auriaya main tank target guard", Role::MainTank, AuriayaMainTankAlone, Family::TankAssist);
 
     // Anchored roles only, or a generic mover walks the bot off its spot and the anchor oscillates.
     // Keeps Attack, Reach and ReachHeal, so targeting works and healers reach whoever the anchor can't.

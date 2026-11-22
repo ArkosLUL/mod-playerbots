@@ -34,6 +34,24 @@ public:
     bool IsActive() override;
 };
 
+class AuriayaOffTankTargetTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "auriaya off tank target trigger";
+
+    AuriayaOffTankTargetTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class AuriayaMainTankSentryTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "auriaya main tank sentry trigger";
+
+    AuriayaMainTankSentryTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class AuriayaRaidPositionTrigger : public Trigger
 {
 public:

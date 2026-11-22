@@ -23,6 +23,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaidCombatHelpers.h"
+#include "RaidObs.h"
 #include "UldEncounter_Auriaya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -235,12 +236,49 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     if (!InAuriayaSentryTauntReach(bot, sentry))
         return MoveTo(sentry, ULDUAR_AURIAYA_SENTRY_TAUNT_WALK, MovementPriority::MOVEMENT_COMBAT);
 
+    // Read before the taunt lands and moves it.
+    Unit* victim = sentry->GetVictim();
+    Player* victimPlayer = victim && sentry->IsInCombat() ? victim->ToPlayer() : nullptr;
+    bool const fromTank = victimPlayer && PlayerbotAI::IsTank(victimPlayer);
+
     if (!CastClassTaunt(botAI, sentry))
         return false;
 
-    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one.
-    AttackDirect(sentry);
+    // A taunt moves the Sentry, not the tank's own target, so it'd keep hitting its last one. Off the
+    // main tank the Sentry is safe either way, and switching would pull every DPS off the one they're on.
+    if (!fromTank)
+        AttackDirect(sentry);
+
     return true;
+}
+
+bool AuriayaOffTankTargetAction::isUseful()
+{
+    AuriayaOffTankTargetTrigger auriayaOffTankTargetTrigger(botAI);
+    return auriayaOffTankTargetTrigger.IsActive();
+}
+
+bool AuriayaOffTankTargetAction::Execute(Event /*event*/) { return AttackDirect(GetAuriayaOffTankHoldSentry(bot)); }
+
+bool AuriayaMainTankSentryAction::isUseful()
+{
+    AuriayaMainTankSentryTrigger auriayaMainTankSentryTrigger(botAI);
+    return auriayaMainTankSentryTrigger.IsActive();
+}
+
+bool AuriayaMainTankSentryAction::Execute(Event /*event*/)
+{
+    Unit* boss = GetAuriaya(botAI);
+    if (!boss)
+        return false;
+
+    // Taunt only. Its own target stays on her, or reach would walk it off the station to the Sentry.
+    bool taunted = false;
+    if (ClassTauntReady(botAI))
+        if (Unit* sentry = GetAuriayaMainTankSentry(bot))
+            taunted = CastClassTaunt(botAI, sentry);
+
+    return AttackDirect(boss) || taunted;
 }
 
 bool AuriayaRaidPositionAction::isUseful()
@@ -348,6 +386,19 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
         }
     }
 
+    // The off-tank's Sentry, no 10 yd rule: that's where its threat is. Nearest only while the off-tank
+    // is dead or hits no Sentry.
+    bool const sentryWanted = desiredPriority == 0;
+    Unit* offTankSentry = sentryWanted ? GetAuriayaOffTankSentry(bot) : nullptr;
+    if (offTankSentry && (!IsAllowedPriorityTarget(boss, offTankSentry) || !bot->IsWithinLOSInMap(offTankSentry)))
+        offTankSentry = nullptr;
+
+    if (offTankSentry)
+        target = offTankSentry;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "auriaya.focus", offTankSentry ? "offtank" : sentryWanted ? "nearest" : "none");
+
     size_t currentPriority = priorityCount;
     if (currentTarget && IsAllowedPriorityTarget(boss, currentTarget))
     {
@@ -361,7 +412,7 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
         }
     }
 
-    if (currentPriority < priorityCount)
+    if (!offTankSentry && currentPriority < priorityCount)
     {
         // Never drop to a lower priority, and within one entry switch only for something 10 yd
         // closer, or two sentries ping-pong the raid.

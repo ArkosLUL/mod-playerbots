@@ -83,3 +83,75 @@ Same entries and room at 10 and 25 (2 Sentries at 10); no hard mode or heroic sp
 engage on the off-tank (`auriaya.sentry` going `free` → `none`/`dps`), not on a cat or pet; no
 Sentry-melee death on a non-tank in the first 0:30; `--threat 34014` "on a tank" well above 59%.
 Watch the off-tank's health while it holds the pack.
+
+## Round 2 (2026-11-22, build 61011f323)
+
+**Data.** Window 7, one pull per pool, all valid kills (`raidtest.py report --boss auriaya --raid uld
+--head 61011f323 --pulls 10`): uld1 `tr-20261122-093418-14` (`603_15_auriaya_1795340123`, 4:32, 4
+deaths), uld2 `tr-20261122-093418-15` (`603_14_auriaya_1795340143`, 4:28, 1), uld3
+`tr-20261122-093337-13` (`603_13_auriaya_1795340074`, 3:49, 0).
+
+**Stop rules.** Not polished: uld1 had 4 deaths. Sentries picked again, but a different cause.
+
+**Deaths by mechanic.**
+
+| Pull | Deaths |
+|---|---|
+| uld1 kill | 3 Sentry melee: mage 0:36.4 (pulled #200 with Arcane Blast 0:35.8), rogue 0:45.7, enh shaman 0:47.1; 1 Seeping Feral Essence (rogue 2:01.7, after a Feral Rush) |
+| uld2 kill | 1 Sentry melee: warlock 0:50.7 (#200 on it 0:39.7 and 0:50.5, Chaos Bolt / Conflagrate) |
+| uld3 kill | none |
+
+**Verdict on round 1: worked.** Sentry-melee deaths 15 → 4, none before 0:36 (window 5: cat dead
+0:19-0:21 with all four on it). No DPS hit a Sentry before one was in combat (first DPS casts 0:25.3,
+0:23.0, 0:27.3 after engages at 0:25.2, 0:22.2, 0:23.5). The first engage went to the off-tank on uld1
+(Dark Command 0:24.9) and uld3 (Growl 0:23.4), to the main tank on uld2 (all four on it at 0:22.24,
+before the Growl at 0:22.65), never a DPS or pet. Sentry time on a tank 56.5 / 73.4 / 66.9% (52-59%
+before; 68 / 90 / 85% of in-combat time). No tank died.
+
+**Picked: Sentries pulled off the off-tank mid-fight (bug: threat on the pack).** 22 Sentry turns
+onto non-tanks between 0:25 and 0:51 (14 / 5 / 3), about half by a single-target hit on that Sentry
+(warriors' Heroic Strike / Bloodthirst, mage Arcane Blast, shaman Stormstrike, warlock Chaos Bolt /
+Conflagrate), the rest by AoE or splash (uld1 warlock Shadowfury 0:26.85 → #200 and #201 on it at
+0:27.18, a DPS DK's Death and Decay → 0:28.15, warrior Cleave / Whirlwind, rogue Blade Flurry).
+1. *DPS spread over the pack.* Each took the nearest Sentry (`UldActions_Auriaya.cpp:332` at HEAD),
+   kept unless another was 10 yd closer, so the off-tank's threat had to hold four targets against
+   19 DPS split over them. The pack died almost together (uld1 0:49.9 / 50.1 / 50.4 / 55.3), so
+   every Sentry lived its full ~25-30 s.
+2. *The off-tank flickers.* Generic tank assist ranks attackers by aggro, then melee, then **lowest
+   threat** (`TankTargetValue.cpp:94`), so the off-tank re-targeted about once a second: uld1 DK 19
+   times 0:25-0:50, uld3 bear 19 times 0:23-0:44, uld2 bear 17 times 0:37-0:54 (Sentry ↔ Auriaya).
+   Its single-target threat never built on one Sentry, and "DPS follow the off-tank" needs a steady
+   target to follow.
+
+The first user answer comes from round 1 uld1 (window 5): after the DK off-tank died at 0:31.5, the
+main tank's target went Sentry to Sentry from 0:31.8 to 0:53.8 and it walked 9 yd off its station
+(`TankTargetValue.cpp:74`: an explicit main tank sticks to its target only while more than one tank
+lives).
+
+**Fix** (both user answers; `UldEncounter_Auriaya.cpp`, `UldTriggers_Auriaya.cpp`,
+`UldActions_Auriaya.cpp`, `UldDefinition_Auriaya.cpp`):
+- DPS take the Sentry the living off-tank is hitting (`GetAuriayaOffTankSentry`, its `GetVictim()`),
+  with no 10 yd rule; nearest only with the off-tank dead or on no Sentry. Probe `auriaya.focus`
+  (`offtank`, `nearest`, `none`).
+- The off-tank keeps one Sentry until it dies: `TankAssist` zeroed for it while a Sentry is in sight
+  (rule `auriaya off tank target guard`), and `auriaya off tank target` (`ACTION_RAID + 1`) picks the
+  next, nearest on itself first, else nearest in combat. The taunt action still retargets after a
+  taunt off a non-tank or out of combat, no longer after one off the main tank (safe there, and the
+  switch would drag the DPS off a half-dead Sentry).
+- No off-tank alive: `auriaya main tank sentry` (`ACTION_RAID + 3`) keeps the main tank on her and
+  taunts a Sentry on a non-tank within 30 yd while it holds fewer than two, never walking;
+  `TankAssist` zeroed for it then (rule `auriaya main tank target guard`). Probe `auriaya.sentry` on
+  the main tank: `dps`, `full`, `none`. A third tank in the raid becomes the off-tank instead.
+
+Same entries at 10 (2 Sentries) and 25; no hard mode. No shared code touched.
+
+**Not picked.** The uld1 Seeping Feral Essence death (rogue at 5.6% after a Feral Rush, walking out
+of a pool): one death, no pattern yet.
+
+**Next window should show.** DPS `auriaya.focus` mostly `offtank` through the Sentry phase; the
+off-tank's target changing only on a Sentry death or a taunt off a non-tank (a handful per pull, not
+17-19); staggered Sentry deaths and the pack dead no later than ~30 s after its engage; fewer Sentry
+turns onto non-tanks and Sentry-melee deaths below 3 / 1 / 0; `--threat 34014` on a tank above 56.5 /
+73.4 / 66.9%. If an off-tank dies: the main tank's target stays Auriaya, `auriaya.station` holds, at
+most two Sentries on it. If AoE (Shadowfury, Death and Decay, Starfall) is then what still pulls
+them, that is a plan question: hold DPS AoE while the off-tank holds more than one Sentry.
