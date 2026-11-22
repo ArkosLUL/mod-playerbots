@@ -369,3 +369,120 @@ move aimed at (2134.57, −440.32, 438.33) while the Colossus is alive; the firs
 Colossus' death; Honor Guards engaged only after that; no gauntlet deaths at y < −395 before the Colossus dies;
 the Giant dead and most of the corridor squad on the balcony chain; phase 2 in all three pulls, so no Lightning
 Orb wipe. Hard mode only where phase 2 lands before Sif's 62565 cast (`thorim.sifjoined` emitted).
+
+## Round 6 (build ebe746ad1 with round 5)
+
+**Data:** window 12, one pull per pool, all valid (`start: step`, no DC veto row inside a pull):
+`tr-20261122-194109-4` (uld1), `tr-20261122-194109-5` (uld2), `tr-20261122-194110-6` (uld3); traces
+`env/dist/logs/botobs/603_{4,5,6}_thorim_{1795376561,1795376561,1795376560}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head ebe746ad1 --pulls 10`, `postmortem.py` and throwaway scripts
+(session scratchpad `thorim_r6/`) over `snap` (positions, hp, mana, Thorim's victim), `note` (`thorim.leverpulled`,
+`thorim.balcony`, `thorim.p2start`, `thorim.sifjoined`, `thorim.ringspot`), lead `move` rows, `cast` (Sif 62507/62565,
+Unbalancing Strike, cooldowns), `aura` (62130), `dmg` (Chain Lightning hops, phase 2 intake by source), `heal` and `death`.
+
+**All three pulls reached phase 2 in hard mode** (Sif joined, no 62565 cast) and wiped there; no death in phase 1.
+
+| Pull | Out | Phase 2 | Thorim at wipe | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | wipe 6:33, 33 deaths | 3:15.8 | 13.1% | Thorim loose (melee on non-tanks after the tanks fell) 14; tanks 5 (melee 3, Unbalancing Strike 2); Lightning Charge 5; Chain Lightning 3; Frostbolt Volley 3; Blizzard 2; Unbalancing Strike on a non-tank 1 |
+| uld2 | wipe 5:48, 31 deaths | 3:18.6 | 39.2% | Thorim loose 15; tanks 4 (melee 2, Unbalancing Strike 1, Sif Frostbolt 1); Chain Lightning 3; Lightning Charge 3; Frostbolt Volley 3; Sif Frostbolt 2; Unbalancing Strike on a non-tank 1 |
+| uld3 | wipe 6:55, 32 deaths | 3:09.2 | 9.4% | Thorim loose 20; tanks 4 (melee 3, Lightning Charge 1); Chain Lightning 3; Frostbolt Volley 3; Blizzard 1; Unbalancing Strike on a non-tank 1 |
+
+Tank deaths count soulstone and rez repeats. Two of uld1's five tank deaths took a Chain Lightning hop (29.4k and 11k)
+in the killing burst; the 5:43.4 one went from 93.6% to dead in one tick (hop 5 plus Unbalancing Strike).
+
+| Pull | lever pulled | Colossus engaged / last seen | lead aims at Giant | Honor Guards engaged | Giant engaged / last seen | `BALCONY_5` | phase 2 | Sif 62507 + 150 s | sifjoined |
+|---|---|---|---|---|---|---|---|---|---|
+| uld1 | 0:36.1 | 1:34.3 / 1:52.8 | 1:53.2 | 2:00.6, 2:11.8 | 2:12.2 / 2:59.5 | 3:12.6 | 3:15.8 | 3:18.4 | 3:43.9 |
+| uld2 | 0:34.2 | 1:37.2 / 2:02.4 | 2:02.9 | 2:07.7, 2:12.7 | 2:24.2 / 3:01.5 | 3:15.4 | 3:18.6 | 3:17.6 | 3:46.6 |
+| uld3 | 0:33.1 | 1:23.8 / 1:53.5 | 1:53.9 | 2:01.0, 2:05.5 | 2:14.5 / 2:52.0 | 3:05.9 | 3:09.2 | 3:16.8 | 3:37.4 |
+
+"Last seen" is the last snapshot, at 0-0.7% hp. uld2's balcony edge step was at 3:17.8 and the hit that starts phase 2
+precedes `thorim.p2start` by up to ~1 s, so it beat the deadline by under a second; uld1 by ~3 s, uld3 by ~8 s. All 12
+corridor bots stood on the balcony at phase 2 and on the floor 30 s later (round 5's walk-back did not recur).
+
+**Round 5 verdict: held, and nothing got worse.** Every check passed: the first lead move at the Giant came 0.4-0.5 s
+after the Colossus' last snapshot and none before; Honor Guards were engaged only after it; no gauntlet death at all
+(ramp pile 25 → 0, corridor trash 7 → 0); the Giant died and the corridor squad took the balcony chain in all three;
+phase 2 in all three, so no Lightning Orb. The shorter pulls are the hard-mode phase 2 race, not phase 1: uld2's 5:48
+is P2 +145 s with Thorim at 39%, where window 11's wipes were the orb at 5:46-5:47 with Thorim untouched.
+
+**Watch item (cached Colossus lookup), checked: real, harmless this window.** `GetThorimRunicColossus`
+(`UldEncounter_Thorim.cpp:1001`) caches one guid per instance for 500 ms; arena melee refresh it from ~162 yd through
+`ThorimTickBarrierBail` (`:1664`) and `TickRunicSmash` (`:928`, run by every bot from `ThorimRunicSmashTrigger`), and that
+150 yd scan misses. With the doors gate a miss now only skips a tick: from the last waypoint (1:20.1 / 1:17.8 / 1:04.0)
+to the 30 yd stop the leaders got lead orders at most 2.6 s apart and closed 68-77 → 37.5 yd in 9-12 s (two walked back
+once to pick up an add). The same miss can drop the Runic Smash latch (`TickRunicSmash` clears `runicSmashSide`): no
+Runic Smash death this window (round 5's uld2 had 3). Not fixed; if Runic Smash deaths come back, let only a scanner
+within 150 yd of the Colossus' spawn refresh the cache.
+
+**Stop rules:** not polished (no kill). Not stuck: rounds 3-6 picked four different causes, each fixed one held.
+
+**Failure ranking** (96 deaths): the tanks falling, then Thorim loose on the raid, 62 (13 + 49) in all three pulls;
+Sif 11 (Volley 9, Frostbolt 2); Chain Lightning 9, plus a hop in two tank deaths; Lightning Charge 8 (4 of them one cast
+in uld1's melt); Blizzard 3.
+
+**The top cause, the tanks falling, is the hard-mode damage race, not a bug.** Phase 2 intake was 5.33 / 3.80 / 6.16 M,
+Sif 54 / 55 / 52% of it (Volley 1.86 / 1.29 / 1.91 M, undodgeable; Blizzard 244 / 182 / 394k, tanks 206 / 160 / 289k of it
+on the tank spot), Thorim melee 26-34%, Chain Lightning 5-6%, Unbalancing Strike 5-6%, Lightning Charge 2-6%. Healer mana
+at phase 2 start [61, 54, 86, 80] / [82, 48, 43, 49] / [59, 59, 100, 57]; at the first tank death [33, 20, 5, 30] (+118.6 s)
+/ [1, 26, 1, 30] (+106.9 s) / [44, 27, 30, 15] (+190.0 s, the stack ceiling, Thorim 15%). The tank handling works: an
+Unbalancing Strike swap followed every landed strike, mostly within 0.1-3.7 s (uld2's +26.6 s strike took a second taunt,
+6.5 s; uld3's one 20 s gap was a strike that missed, no 62130 aura), burst and Heroism went out at P2 +0-35 s, and melee
+held Thorim in 98-100% of snapshots from P2 +15 s to +100 s. Thorim's `mhp` read
+27.19 M. Raid damage on him ran 0.41-0.47%/s, about 30 s short of a kill when uld3's tanks fell. Question 1 below.
+
+**Failure fixed: Chain Lightning crossing between melee ring slots** (the race's largest strategy-side leak). Seven
+casts were lethal: camp pairs 2 (uld1 +27.0 s: 2 dead; +117.4: 1), slot to slot 2 (uld2 +102.3: Uldyak, Uldyan,
+Uldyag; uld3 +132.4: Uldzay, Uldzat), a tank to slot 2 3 (uld1 +147.5 and +177.6: tank Uldxaa twice; uld3 +147.5:
+Uldzaj). 32 / 54 / 56% of all Chain Lightning damage landed on hops after the chain crossed to another group.
+
+- Trace: the solver's slot points stood 8.3-8.8 yd apart at p10 and 12.4 at the median, never inside the jump; the
+  bodies of two different slots were within 8 yd of each other in **60.7 / 59.9 / 77.9%** of phase 2 snapshots (median
+  closest pair 7.1-7.4 yd). Bodies drift up to ~6 yd off their point (p90 5.5-5.9 yd, bearing p90 36-38°) after a slot's
+  composed bearing moves, without Thorim moving (81-86% of the > 4.5 yd cases had the boss within 2 yd of where he was
+  at the bot's last ring move). uld2 +102.3: slot 0 solved at 234° stood at −90° (36° off, "arrived"), 7.1 yd from slot
+  1; uld3 +132.4: slot 0 solved 248° stood at −86..−100°, 7.3 yd from slot 1.
+- Core: `Spell::SearchChainTargets` hops to the closest unhit target with `IsWithinDist(unit, 5.0)` (3D, both combat
+  reaches; `spell_jump_distance` 5.0 for 62131/64390, `2026_03_11_00`).
+- Code: `ThorimRingWantsMove` (`UldEncounter_Thorim.cpp:2590`) keeps an arrived ring bot until it is 5 yd
+  (`GetDistance`, ~6.5 exact) off its point, unless `RingSpotBeatsTheDeadband` (`:644`) sees it in the lit cone or a
+  Blizzard zone; nothing re-checks the separation the solver (`RingBearingSeparated`, 60°) put between the points.
+
+**Classification: bug.** The solver means the slots to sit out of each other's jump; the deadband undoes it.
+
+**Fix** (`UldEncounter_Thorim.cpp`/`.h`, Thorim only): `RingBodyBridgesChain` (`:610`) is true when a ring bot stands
+within `ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` (5) + `ULDUAR_THORIM_RING_CHAIN_MARGIN` (0.5) of a living floor body outside
+its own slot (another slot, a tank, the camp; the core's `IsWithinDist`), and its own point is clear of every such body
+by the same measure. `RingSpotBeatsTheDeadband` ORs it in, after the zone check (no walk into a Blizzard) and only for a
+point outside the lit cone. A point that is not clear stays put, so the other bot, whose point is clear, is the one
+that moves. Pure read, no latch. No size, mode or player branch: a real player's body counts like a bot's; a human
+never gets a melee slot entry (`EnsureMeleeSlot` runs only for the bot itself), so a human melee is a body outside every
+slot. Replayed on these snapshots it would fire in 14-31% of ring snapshots, ~2-3 new moves per ring bot per minute; the
+tank-to-slot-2 bridge stays (slot 2's point is 7.1 yd from the off-tank spot).
+
+**Review:** counting another slot's ring body where it stands deadlocked the commonest bridge. Two adjacent slots at
+the solver's minimum (8.8 yd apart), each drifted toward the other, block each other's points, so neither moves: in the
+replay 24 / 36 / 14% of phase 2 snapshots (uld1/2/3) kept a ring-to-ring pair inside 8 yd that neither escape clears,
+the stuck pairs' points a median 8.8 yd apart. `RingBodyBridgesChain` now counts another slot's ring bot at its slot's
+point (`RingSlotPointsApart`, `:604`, the chord between the composed bearings), since it walks back too, and every
+other body where it stands; and a bot within `ULDUAR_THORIM_RING_CHAIN_MIN_STEP` (1 yd) of its point never moves for a
+bridge, so a body that won't leave can't make it reissue the move every tick. Replayed: such stuck pairs in 9 / 9 / 13%
+of snapshots; the escape fires in 24-38% of ring snapshots, 2.5-3.2 new moves per ring bot per minute. Both lethal
+slot-to-slot casts still fire through the 6 s before the cast (uld2's drifted slot 1 bots now too, blocked before by
+slot 0's bodies).
+
+**Questions for the user** (plan changes, not built):
+1. Hard mode at ilvl 226 is now a race the rosters lose at the mana wall (+100-120 s) or the stack ceiling (+190 s).
+   Keep polishing Thorim's mechanics on the 226 rosters with the stop rule waived, as for Algalon and Vezax? Or give
+   `uld-thorim` a 5th healer (one DPS fewer, ~4% damage)? Recommended: keep polishing with the stop rule waived; revisit
+   a 5th healer only if the mana wall is still the first tank death once the chain and tank-spot leaks are closed.
+2. The off-tank spot (2114.25, −252.65) sits 7.1 yd from slot 2's default point, so every chain reaching a tank runs
+   into slot 2 (3 lethal casts, 2 tank deaths). Move the off-tank spot 3.5 yd west of the tank spot instead,
+   (2107.25, −252.65), ~10 and ~14 yd from slots 0 and 2, after navprobe and a Blizzard-track check? Recommended: yes.
+
+**Next window should show** (snapshot geometry with `thorim.ringspot`, Chain Lightning `dmg` rows, `death`): bodies of
+two ring slots within 8 yd in well under 60-78% of phase 2 snapshots (target under ~15%); no Chain Lightning hop from one
+ring slot straight to another; melee Chain Lightning deaths in the ring from 5 toward 0 (tank-to-slot-2 bridges remain);
+melee still on Thorim in 98%+ of snapshots and raid damage on him no lower than 0.41-0.47%/s. Gauntlet unchanged: phase
+2 in hard mode (`thorim.sifjoined`) in all three, no phase 1 deaths. The pulls still wipe at the mana wall or the ceiling.
