@@ -741,9 +741,20 @@ whoever is swung at, so a clear bot becomes collinear without moving. `IsAllowed
   which the Judgement node replaces.
 
 **The tentacle cannot be tanked or steered**: `DamageTaken` does `DoResetThreatList(); AddThreat(who,
-100000); AttackStart(who)` on any direct damage, so it re-faces whoever hit it last. Melee exposure is the
-root cause (in reach of a live Crusher in 36% of samples against 16% for ranged), and the brain team takes
-melee out of the arena for every window.
+100000); AttackStart(who)` on any white swing (`DIRECT_DAMAGE`), so it re-faces whoever hit it last.
+Melee exposure is the root cause (in reach of a live Crusher in 36% of samples against 16% for ranged),
+and the brain team takes melee out of the arena for every window.
+
+**Area damage reaches a Crusher the resolver never hands out.** Spell damage never fires that grab, but
+each Diminish Power cast zeroes the threat list, so area threat from a bot beside it can take the victim,
+and a melee-class hit (Swipe, Maul, Whirlwind) breaks the channel, so it swings at once. A bear's Swipe on
+a Corruptor 5 yd from a channelling Crusher did both, and Crush coned the three melee and the warrior tank
+stacked on that Corruptor dead in 4 s; a fury warrior's Whirlwind did the same, and he died in place. So
+`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action,
+plus Maul (glyphed), Hammer of the Righteous, Heart Strike and Avenger's Shield, which also hit enemies
+next to their target, in phases 2 and 3 while the bot stands within a Crusher's live melee range +
+`…_CRUSHER_AREA_HOLD_SLACK` (2 yd) and its stun does not hold. Area damage from outside the reach stays:
+a victim the Crusher can't reach is never swung at. `--crush` counts its vetoes by action.
 
 **Shattered Illusion is the one exception.** `64173` stuns every platform tentacle (its `conditions`
 rows) from the moment a brain room clears until Induce Madness lands, and `UNIT_STATE_CANNOT_AUTOATTACK`

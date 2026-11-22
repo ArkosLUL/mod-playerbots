@@ -42,6 +42,8 @@ SPELL_INDUCE_MADNESS = 64059
 SPELL_LUNATIC_GAZE_SKULL = 64168
 SPELL_GRIM_REPRISAL = 64039
 SPELL_CRUSH_CONE = 64147
+# The multiplier that keeps area damage off a swinging Crusher from inside its reach; its veto rows are the record.
+CRUSHER_AREA_HOLD = "yogg-saron crusher area hold multiplier"
 SPELL_KNOCK_BACK = 64020
 SPELL_SHADOW_NOVA_SARA = 65719
 SPELL_SQUEEZE = 64126
@@ -2768,6 +2770,11 @@ def show_crush(trace: Trace) -> None:
     judged = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.judgement"))
     if judged:
         print(f"  judgement node   : {dict(judged)}")
+
+    held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
+                               if rec.get("m") == CRUSHER_AREA_HOLD)
+    if held:
+        print(f"  area held in a swinging Crusher's reach: {dict(held.most_common(8))}")
 
     show_launches(trace)
     show_crush_melee(trace)
