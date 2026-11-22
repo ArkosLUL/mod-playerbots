@@ -73,12 +73,18 @@ fire hold guard exist for the handover); they don't.
 - `FindMimironFloorUnits` (`UldEncounter_Mimiron.cpp`): a grid search by entry over `SightDistance`
   with no sight test, now used by the fire/bomb/fire-bot read, the mine and rocket marker read and
   `IsMimironSpotMineSafe`. Normal mode reads mines and rockets the same way.
-- `MimironDodgeFlamesTrigger`: after the existing gates, with no mech attackable
-  (`GetMimironRingFocus` null) any burning node is left, at any health.
+- `MimironDodgeFlamesTrigger`: after the existing gates, a standing bot with no mech attackable
+  (`GetMimironRingFocus` null) leaves any burning node, at any health. Walking bots keep the 60% gate
+  (review), so a human-led raid's followers crossing the field aren't thrown off the walk and held
+  from `follow` for 2.5 s per node.
+- `MimironProximityMineAction` (review): `FindNearestCreature`, the trigger's own lookup, instead of
+  `"nearest npcs"`. The trigger saw alcove mines the action couldn't, so melee there never dodged
+  them in a handover.
 
-Not changed: the mine action's own `"nearest npcs"` scan (`UldActions_Mimiron.cpp:859`), which has the
-same blind spot; `GetMimironBombBotChasing` (Bomb Bots are selectable and live in P3, away from the
-door).
+Not changed: `GetMimironBombBotChasing` (Bomb Bots are selectable and live in P3, away from the door).
+
+Seen in review, not picked: w7 uld2 Uldyaj stood in two nodes for 7 s casting Revive Pet (8.8 s),
+which no trigger interrupts; the handover rule should move it before the cast starts.
 
 **Not picked.**
 
@@ -105,6 +111,7 @@ door).
   `flames` flee note within ~1 s, as in the room.
 - More `flames+N` flee notes in Z/H spans, and no new A-B-A between the flames dodge and anything else
   there (nothing else moves bots in a handover).
+- No handover mine hits on melee in the door box without a `mine` flee note.
 - Healer mana at P2 start no lower than window 8's; it may not rise, since the drink guard still vetoes
   drinks within 15 yd of a node (Q1).
 

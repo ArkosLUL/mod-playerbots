@@ -25,9 +25,9 @@ non-selectable triggers, so no target list holds them
 **Every floor read is a grid search** (`FindMimironFloorUnits`: fire, Frost Bomb, fire bots, mines,
 rockets), never `"nearest npcs"`, which drops whatever fails line of sight. The closed west door
 (194776, display 8684) has a model box over x 2672-2692, y 2552-2588, the alcove holding the phase 1
-tank spot, and bots inside it did not see the node under them: ten melee stood 35 s on one point and
-died there under 35% health with two or three nodes ticking and no dodge, while a bot 1 yd off dodged
-the same nodes. The door as the blocker is by elimination, not navprobed.
+tank spot, and bots inside it did not see the node under them: ten melee stood 33-46 s on one point
+with two or three nodes ticking and no dodge, six dying there (seven deaths), while a bot 1 yd off
+dodged the same nodes. The door as the blocker is by elimination, not navprobed.
 
 **Only a node carrying 64561 is fire.** The seed is a NullCreatureAI that parks its first spread node
 on its own spot, never burns, and outlives its fire: `EVENT_FLAMES_SPREAD` breaks without
@@ -267,10 +267,11 @@ two ticks; a walking one keeps 60, being on its way out, so a `cross` at 75 isn'
 tick. Replayed, that cut 60% of phase 1's ticks for 4-9 more dodges; leaving unfreezes the chain (no
 growth while a player is within 4 yd of its newest node), so the real saving is smaller.
 
-**With nothing attackable it leaves at any health.** In a handover idle healers top a parked bot up
-within a second, so the 80% line never trips: bot-only pulls sat 20-90 ticks in one node while the
-healers spent their mana on it. With no mech attackable (`GetMimironRingFocus` null) leaving costs no
-uptime, so one node is enough.
+**With nothing attackable a standing bot leaves at any health.** In a handover idle healers top a parked
+bot up within a second, so the 80% line never trips: outside the alcove bot-only pulls sat 20-44 ticks
+in one node while the healers spent their mana on it. With no mech attackable (`GetMimironRingFocus`
+null) leaving costs no uptime, so one node is enough. A walking one keeps 60: a follower crossing the
+field behind its master is on its way out.
 
 **Burning is 3.5 yd, standing is 5.** 95% of 427 Flames hits landed within 3.0 yd of their node, a tick
 every ~1.03 s. Counted at the 5 yd `ULDUAR_MIMIRON_FLAMES_RADIUS`, only 23-39% of a phase's fire dodges

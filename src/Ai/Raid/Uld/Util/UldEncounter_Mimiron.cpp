@@ -53,7 +53,7 @@ const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COU
 namespace
 {
 // Grid search, not "nearest npcs": that list drops anything out of sight, and the closed west door's model
-// (194776) spans the alcove the MK II is held in, so bots there couldn't see the node they stood on.
+// (194776) spans the alcove the MK II is held in, so bots there lose sight of the node they stand on.
 std::list<Creature*> FindMimironFloorUnits(Player* bot, std::vector<uint32> const& entries)
 {
     std::list<Creature*> units;
