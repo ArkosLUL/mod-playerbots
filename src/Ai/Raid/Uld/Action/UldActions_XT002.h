@@ -50,7 +50,8 @@ private:
         Parked
     };
 
-    ParkResult ParkVoidZone(std::list<Creature*> const& voidZones, float reach, float& cellX, float& cellY);
+    ParkResult ParkVoidZone(std::list<Creature*> const& voidZones, float reach, bool bombLive, float& cellX,
+                            float& cellY);
 
     float TravelReach(uint32 remainingMs) const;
 
@@ -68,7 +69,10 @@ private:
 
     bool InsideParkingLot() const;
 
+    bool CarriedBombUnderSearingLight() const;
+
     bool parked = false;
+    uint32 bombSeenMs = 0;
 };
 
 class XT002AvoidHazardAction : public XT002MoveClearAction
