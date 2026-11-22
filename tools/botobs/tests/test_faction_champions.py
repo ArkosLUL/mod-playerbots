@@ -1339,6 +1339,10 @@ def ice_pull() -> list[dict]:
         cast(2100, ROGUE_C, fc.SPELL_PVP_TRINKET, ROGUE_C),
         cast(2500, TANK, 10308, WARRIOR_C),
         cast(3000, ROGUE, 1715, ROGUE_C),
+        note(3000, ICE_DK, fc.WALL, ROGUE_C),
+        note(3500, ICE_DK, fc.WALL, 0),
+        note(9000, ICE_DK, fc.WALL, ROGUE_C),
+        note(9500, ICE_DK, fc.WALL, 0),
         # off her champion: a Chains of Ice and an Icy Touch spent, an off-hand Obliterate that's no cast of hers
         cast(5000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, DK_C),
         cast(6000, ICE_DK, 49909, PALADIN),
@@ -1375,7 +1379,8 @@ class IceDuty(unittest.TestCase):
             "bot": ICE_DK, "champion": ROGUE_C, "start": 0, "stop": 20000, "reason": "kill target", "casts": 2,
             "uptime": 0.8, "strong": 0.5, "gap": 3000,
             "spent": collections.Counter({"Chains of Ice": 1, "Icy Touch": 1}), "moved": 5.0, "on": 0.75,
-            "others": collections.Counter({PRIEST: 5.0}), "kills": [PRIEST], "dk_died": False, "died": False}])
+            "others": collections.Counter({PRIEST: 5.0}), "kills": [PRIEST], "dk_died": False, "died": False,
+            "walls": 2, "walls_due": 1, "grips": 0}])
 
     def test_the_section_renders(self):
         out = io.StringIO()
@@ -1385,7 +1390,8 @@ class IceDuty(unittest.TestCase):
         self.assertIn("fc.ice: Felesta", text)
         self.assertRegex(text, r"Felesta +Irieth Shadowstep +Rogue +0:00\.000 +20\.0s +2 +80% +50% +3\.0s +5\.0 +75%"
                                r" +- +-  kill target")
-        self.assertIn("spent Chains of Ice 1, Icy Touch 1; other victims Prayer 5.0s; killed Prayer", text)
+        self.assertIn("spent Chains of Ice 1, Icy Touch 1; other victims Prayer 5.0s; killed Prayer;"
+                      " wall holds 2, Chains due 1, grips 0", text)
         self.assertIn("melee champions never iced: Shocuul, Gorgrim Shadowcleave", text)
         self.assertIn("uptime, median over the duties: 80%", text)
 
