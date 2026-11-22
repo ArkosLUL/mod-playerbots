@@ -499,7 +499,7 @@ SNARES = {1715: "Hamstring", 12323: "Piercing Howl", 45524: "Chains of Ice", 297
           5116: "Concussive Shot",
           **dict.fromkeys((8056, 8058, 10472, 10473, 25464, 49235, 49236), "Frost Shock")}
 # A free melee champion runs about 8 yd/s, one under a 50% snare 4 and an iced one less, so a step at 6+ is an
-# unslowed run; snared is a raid snare on it in the 4 s before, Concussive Shot's and Frost Shock's length
+# unslowed run. A snare that holds ends the run, so a "snared" step is mostly the one the snare landed in
 RUN_STEP_MS = 500
 RUN_FULL_SPEED = 6.0
 RUN_NEAR = 15.0

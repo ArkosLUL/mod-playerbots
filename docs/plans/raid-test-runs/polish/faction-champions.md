@@ -104,20 +104,22 @@ them after a Charge).
 - `--peel` full-speed chases (a melee champion out of its ice duty's Chains at 6+ yd/s within 15 yd of the
   raider it targets, no tank): window 9 44.0, 22.5 and 57.0 s, snared in the 4 s before 8%, 16% and 11%; window
   8 55.0, 29.5 and 90.0 s at 14%, 14% and 17%. 298 s in all, 13% snared. Narrhok alone 21.5, 21.5 and 40.0 s in
-  window 9. A champion runs ~8 yd/s against our 7, so an unsnared kite only delays.
+  window 9. A champion runs ~8 yd/s against our 7, so an unsnared kite only delays. A snare that holds ends the
+  run, so a snared step is mostly the one it landed in (window 9: 24 of 27 within 1 s of the cast).
 - toc3 0:52-1:09: Narrhok on Toczal at 6-8 yd/s, 2-3 yd off from 0:56, no snare, peel or CC on him until a
   Polymorph at 1:09.260, 86 ms before the killing Mortal Strike. Toczak's Concussive Shot came off cooldown at
   0:55.3 with him 31-38 yd from Narrhok; he spent it at 0:59.040 on Gorgrim, Chains of Ice on him from 0:58.865.
   1:16-1:22: Narrhok on Toczav after his Charge, no snare; Toczau's was ready from 1:16.5 at 13-18 yd and went on
   Gorgrim at 1:18.938.
-- Hunters never take the snare duty. `UpdateSnares` takes only `FreeToAct` snarers
-  (`ToCHelpers_FactionChampionsDefence.cpp:1740`, `FreeToAct` at `:1119` before the fix:
-  `!IsNonMeleeSpellCast(false)`), and that counts the autorepeat slot (`Unit::IsNonMeleeSpellCast`, core
-  `Unit.cpp:4094`), where Auto Shot sits all fight. Hunter snapshot rows show a current spell in 92-96% of live
-  samples (Auto Shot alone 26-42%). The peel duty's Freezing Arrow and the Hellfire kick's Silencing Shot lose
-  them the same way.
-- Their Concussive Shots come from the class nodes instead (`GenericHunterStrategy.cpp:68` `has aggro`, `:77`
-  `concussive shot on snare target`), whose `SnareTargetValue` (`SnareTargetValue.cpp:12-55`) takes the first
+- Hunters seldom take the snare duty: 25 of its 154 casts in the six pulls, each with Auto Shot off.
+  `UpdateSnares` takes only `FreeToAct` snarers (`ToCHelpers_FactionChampionsDefence.cpp:1740`, `FreeToAct` at
+  `:1119` before the fix: `!IsNonMeleeSpellCast(false)`), and that counts the autorepeat slot
+  (`Unit::IsNonMeleeSpellCast`, core `Unit.cpp:4094`), where Auto Shot sits all fight. Hunter snapshot rows show
+  a current spell in 92-96% of live samples (Auto Shot alone 26-42%). The peel duty's Freezing Arrow and the
+  Hellfire kick's Silencing Shot lose them the same way. After the fix a hunter still skips during a cast-time
+  shot (Steady Shot), 25-46% of its time.
+- Their Concussive Shots come mostly from the class nodes instead (`GenericHunterStrategy.cpp:68` `has aggro`,
+  `:77` `concussive shot on snare target`), whose `SnareTargetValue` (`SnareTargetValue.cpp:12-55`) takes the first
   attacker moving at a non-tank or fleeing. Windows 8 and 9, `--peel`: 350 hunter Concussive Shots on champions,
   228 (65%) on one in its ice duty's Chains; by the round's script, 46 on casters (13%) and 18 on feared ones
   (5%). The 12 s cooldown is usually spent when a free champion turns on a kiter.

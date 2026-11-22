@@ -146,8 +146,9 @@ caster mid-cast or mid-channel never kicks either (Yogg-Saron's Drain Life nudge
 cast before it uses the boots.
 
 **`IsNonMeleeSpellCast(false)` counts the autorepeat slot**, where a hunter's Auto Shot sits all fight
-(a wand's Shoot while it fires), so a "not mid-cast" gate built on it never passes a hunter: Faction
-Champions' snare duty never got one. Pass `skipAutorepeat` (`IsNonMeleeSpellCast(false, false, true)`).
+(a wand's Shoot while it fires), so a "not mid-cast" gate built on it skips a hunter while Auto Shot is
+on: Faction Champions' snare duty got a hunter for 25 of 154 casts. Pass `skipAutorepeat`
+(`IsNonMeleeSpellCast(false, false, true)`).
 
 ## An ability lock makes a portal or spell click a silent no-op
 
