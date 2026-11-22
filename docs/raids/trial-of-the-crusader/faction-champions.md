@@ -372,8 +372,6 @@ Hellfire kick) ignores Auto Shot and a firing wand.
 - 25H 2026-11-16 kill (7 deaths): bursts from full no reaction beats (Elemena, DoT ticks and Frostbolt in 0.3 s; Smartface, the hunter's 26k in 0.2 s). The Ret's Hammer of Justice still landed 9 times despite its 17 yd kite (4.4 s held, dispels). `AttackersValue::hasRealThreat` drops only Polymorphed units, so a Feared one still loops a healer through assist and `drop target` outside this fight.
 - 25H 2026-10-29 kill (3 deaths): burst from full during a stun (Totemist, Hammer of Justice; Agony, Warrior and hunter 28k in one tick, the hunter's Polymorph broken 0.6 s before). Peels run dry on the un-iced Warrior: roots diminish, both Hammers of Justice on cooldown, and Freezing Arrow and Blind wait for no raid member hitting or targeting it (`ClearOfOurHits`), and Auto Shot kept hunters off the peel duty until 2026-11-22, so Freezing Arrow went out 0-1 times a pull over five pulls. Three externals go out in the first 2.5 s on the predicted picks; none was ready in reach at the later deaths.
 - A Fury warrior bot never Disarms: Berserker Stance can't cast it.
-- Escapes, step-offs, Nitro `contact` and Sprint or Dash read contact at a flat 8 yd, inside the Tauren
-  Warrior's and Enhancement's 8.9 yd melee range.
 - A healer whose heal target is past its reach stalls until someone else is lower (`PartyMemberToHeal`
   adds 30 past HealDistance).
 - With no eligible champion left, physical attackers keep swinging at the Hand of Protection target.
@@ -427,7 +425,7 @@ The Faction Champions rows, under `--notes fc.`:
 | `ice` | An ice duty's melee champion, keyed on the DK, `0` on release |
 | `iceoff` | Why an ice duty ended, keyed on the DK: `dk gone`, `chain link`, `champion dead`, `out of combat` or `kill target`. An event |
 | `opener` | The opener's spell, keyed on the bot while it reaches 3+ champions with their trinket up, `0` on release |
-| `nitro` | An escape run on Nitro Boosts, on the bot: `focus N` (N champions on it), `melee N`, `contact N` (free melee champions within 8 yd) or `next` (`fc.nextfocus`). An event |
+| `nitro` | An escape run on Nitro Boosts, on the bot: `focus N` (N champions on it), `melee N`, `contact N` (of the melee champions on it, the unrooted, unslowed ones within their swing reach) or `next` (`fc.nextfocus`). An event |
 | `wall` | A wall grip's melee champion, keyed on the DK, `0` on release |
 | `kick` | A Hellfire interrupter's warlock, keyed on the bot, `0` on release |
 | `chain` | The player's pull in flight, `0` once it closes. Per instance; one made before the engage shows from the trace's opening |
