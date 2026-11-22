@@ -82,7 +82,7 @@ bool XT002RaidPositionTrigger::IsActive()
     if (tank)
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
 
-    if (PlayerbotAI::IsHeal(bot) && GetXT002BombHealCarrier(bot))
+    if (PlayerbotAI::IsHeal(bot) && GetXT002BombHealLatch(bot).sent)
         return false;
 
     Position slot;
@@ -97,8 +97,8 @@ bool XT002BombHealTrigger::IsActive()
     if (!PlayerbotAI::IsHeal(bot))
         return false;
 
-    Player* carrier = GetXT002BombHealCarrier(bot);
-    return carrier && bot->GetExactDist2d(carrier) > sPlayerbotAIConfig.HealDistance;
+    XT002BombHealLatch const latch = GetXT002BombHealLatch(bot);
+    return latch.carrier && latch.sent && bot->GetExactDist2d(latch.carrier) > sPlayerbotAIConfig.HealDistance;
 }
 
 bool XT002BombCarrierHealTrigger::IsActive()

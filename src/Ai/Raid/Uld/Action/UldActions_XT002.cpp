@@ -568,9 +568,10 @@ bool XT002AvoidHazardAction::Execute(Event /*event*/)
 
 bool XT002BombHealAction::Execute(Event /*event*/)
 {
-    Player* carrier = GetXT002BombHealCarrier(bot);
+    XT002BombHealLatch const latch = GetXT002BombHealLatch(bot);
+    Player* carrier = latch.carrier;
     float const healRange = sPlayerbotAIConfig.HealDistance;
-    if (!carrier || bot->GetExactDist2d(carrier) <= healRange)
+    if (!carrier || !latch.sent || bot->GetExactDist2d(carrier) <= healRange)
         return false;
 
     std::vector<Player*> const carriers = GetXT002BombCarriers(bot);
