@@ -1422,6 +1422,11 @@ bool IsFactionChampionMelee(uint32 entry)
     }
 }
 
+float FactionChampionsSwingReach(Unit* champion, Unit* victim)
+{
+    return champion->GetMeleeRange(victim) + LEEWAY_BONUS_RANGE;
+}
+
 bool IsFactionChampion(uint32 entry) { return KillRank(entry) != NOT_A_CHAMPION; }
 
 // These two check live first: after the kill only multipliers still ask, and a refresh from them

@@ -29,7 +29,8 @@
     faction_champions.py <file> --personal personal defensives and the health they went up at, per death (the
                                            melee champions' share, the pins, a kite before), healthstones over 70%,
                                            the escapes, Sprint and Dash casts and kites, how far the chasers were
-                                           after, whether they dropped the bot and it lived
+                                           at an escape and after, whether they dropped the bot and it lived, the
+                                           kites each melee champion caught, iced or not
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
@@ -417,6 +418,8 @@ NITRO_RUN_MS = 5000
 ESCAPE = "fc.escape"
 SPEED_SPELLS = {2983: "Sprint", 8696: "Sprint", 11305: "Sprint", 1850: "Dash", 9821: "Dash", 33357: "Dash"}
 ESCAPE_WATCH_MS = 10000
+# a 2.25-reach champion's swings reach 7.7 yd, so only the Tauren two (6.075) hit a bot from past this
+ESCAPE_FAR_YD = 8.0
 # a bot's hop off the melee champions on it, `<chasers> melee, <nearest> yd`
 KITE = "fc.kite"
 # hops this close together by one bot are one kite
@@ -3206,16 +3209,19 @@ def personal_deaths(trace: Trace, rows: list[dict] | None = None) -> list[dict]:
 
 def chase_after(trace: Trace, bot: int, when: int) -> dict:
     """The chase round one moment: `melee` and `others`, living melee and other champions with the bot as target
-    in the last sample at or before it, `hp`, then per CHASE_LOOKS_MS offset in `near` the distance from the bot
-    to the nearest of those melee champions still alive (None once the bot or all of them are dead), `dropped`,
-    none of them on the bot DROPPED_MS later (None without any or once the bot is dead), and `lived`, no death
-    of the bot in the ESCAPE_WATCH_MS after."""
+    in the last sample at or before it, `chaser` and `at`, the nearest of those melee champions (ties to the
+    lower guid) and its distance then (None without one), `hp`, then per CHASE_LOOKS_MS offset in `near` the
+    distance from the bot to the nearest of those melee champions still alive (None once the bot or all of them
+    are dead), `dropped`, none of them on the bot DROPPED_MS later (None without any or once the bot is dead),
+    and `lived`, no death of the bot in the ESCAPE_WATCH_MS after."""
     targets = champions(trace)
     snap = snap_at(trace, when)
     rows = snap.get("u", []) if snap else []
     on = [row[0] for row in rows if row[0] in targets and row[5] > 0 and len(row) > 7 and row[7] == bot]
     chasers = [guid for guid in on if spec(trace, guid) in MELEE_SPECS]
     me = next((row for row in rows if row[0] == bot), None)
+    first = min(((math.dist(row[1:3], me[1:3]), row[0]) for row in rows if me and row[0] in chasers),
+                default=None)
 
     def later(offset):
         later_snap = snap_at(trace, when + offset)
@@ -3233,8 +3239,9 @@ def chase_after(trace: Trace, bot: int, when: int) -> dict:
     dropped = None if not chasers or not mine or mine[5] <= 0 else not any(
         guid in end and len(end[guid]) > 7 and end[guid][7] == bot for guid in chasers)
     deaths = [rec["t"] for rec in combat_deaths(trace) if rec["g"] == bot]
-    return {"melee": len(chasers), "others": len(on) - len(chasers), "hp": me[5] if me else None, "near": near,
-            "dropped": dropped, "lived": not any(when < t <= when + ESCAPE_WATCH_MS for t in deaths)}
+    return {"melee": len(chasers), "others": len(on) - len(chasers), "chaser": first[1] if first else None,
+            "at": first[0] if first else None, "hp": me[5] if me else None, "near": near, "dropped": dropped,
+            "lived": not any(when < t <= when + ESCAPE_WATCH_MS for t in deaths)}
 
 
 def escape_rows(trace: Trace) -> list[dict]:
@@ -3279,11 +3286,13 @@ def kite_rows(trace: Trace) -> list[dict]:
 
 
 def kite_catches(trace: Trace, kites: list[dict] | None = None) -> dict[int, list[int]]:
-    """Per melee champion, `[starts, caught]` over the kites it was the nearest living melee champion with the
-    bot as target at the first hop of (last sample at or before it, ties to the lower guid), caught meaning it
-    dealt the bot damage within KITE_CATCH_MS of that hop."""
+    """Per melee champion, `[starts, caught, iced starts, iced caught]` over the kites it was the nearest living
+    melee champion with the bot as target at the first hop of (last sample at or before it, ties to the lower
+    guid), caught meaning it dealt the bot damage within KITE_CATCH_MS of that hop, iced an ice duty's Chains of
+    Ice on it then (`iced_at`)."""
     kites = kite_rows(trace) if kites is None else kites
     melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    duties = ice_duties(trace)
     hits: dict[tuple[int, int], list[int]] = collections.defaultdict(list)
     for rec in trace.of("dmg"):
         if rec.get("s") in melee:
@@ -3297,9 +3306,13 @@ def kite_catches(trace: Trace, kites: list[dict] | None = None) -> dict[int, lis
         if not me or not on:
             continue
         chaser = min(on, key=lambda row: (math.dist(row[1:3], me[1:3]), row[0]))[0]
-        cell = out.setdefault(chaser, [0, 0])
+        caught = any(kite["t"] <= when <= kite["t"] + KITE_CATCH_MS for when in hits[(chaser, kite["bot"])])
+        iced = iced_at(duties, chaser, kite["t"])
+        cell = out.setdefault(chaser, [0, 0, 0, 0])
         cell[0] += 1
-        cell[1] += any(kite["t"] <= when <= kite["t"] + KITE_CATCH_MS for when in hits[(chaser, kite["bot"])])
+        cell[1] += caught
+        cell[2] += iced
+        cell[3] += iced and caught
     return out
 
 
@@ -3414,11 +3427,17 @@ def show_personal(trace: Trace) -> None:
     chase_head = f"{'melee+other':>11} {'hp':>4} {looks:>9} {'dropped':>7}  lived 10 s"
     escapes = escape_rows(trace)
     if escapes:
-        print(f"\n  {'escape at':>9} {'bot':14} {'spell':24} {chase_head}")
+        print(f"\n  {'escape at':>9} {'bot':14} {'spell':24} {chase_head}  nearest")
         for row in escapes:
-            print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['spell'][:24]:24}{chase_cells(row)}")
+            nearest = "-" if row["chaser"] is None else f"{trace.name(row['chaser'])} {row['at']:.1f}"
+            print(f"  {clock(row['t']):>9} {trace.name(row['bot'])[:14]:14} {row['spell'][:24]:24}{chase_cells(row)}"
+                  f"  {nearest}")
         tally = collections.Counter(row["spell"] for row in escapes)
         print("  fc.escape: " + ", ".join(f"{name} {count}" for name, count in tally.most_common()))
+        far = collections.Counter(trace.name(row["chaser"]) for row in escapes
+                                  if row["at"] is not None and row["at"] > ESCAPE_FAR_YD)
+        print(f"  with the nearest melee champion past {ESCAPE_FAR_YD:.0f} yd: {sum(far.values())}"
+              + "".join(f", {name} {count}" for name, count in far.most_common()))
     else:
         print("\n  fc.escape: none")
     speeds = speed_rows(trace)
@@ -3444,13 +3463,15 @@ def show_personal(trace: Trace) -> None:
         catches = kite_catches(trace, kites)
         if catches:
             print(f"  hit by the nearest melee chaser within {KITE_CATCH_MS // 1000} s of the first hop: "
-                  + ", ".join(f"{trace.name(guid)} {caught} of {starts}"
-                              for guid, (starts, caught) in sorted(catches.items(), key=lambda item: -item[1][0])))
+                  + ", ".join(f"{trace.name(guid)} {caught} of {starts} (iced {iced_caught} of {iced})"
+                              for guid, (starts, caught, iced, iced_caught)
+                              in sorted(catches.items(), key=lambda item: -item[1][0])))
     else:
         print(f"  {KITE}: none")
     print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"
           " before the cast or first hop; melee and other are the"
-          f" champions with the bot as target then, {looks} the nearest of those melee champions' distance in yd"
+          f" champions with the bot as target then, nearest the nearest of those melee champions then and its"
+          f" distance, {looks} the nearest one's distance in yd"
           f" after, dropped none of them on the bot {DROPPED_MS // 1000} s after; a kite is a bot's {KITE} hops"
           f" under {KITE_GAP_MS // 1000} s apart, heal its nearest other living healer {KITE_HEAL_AFTER_MS // 1000} s"
           f" after its last hop; a death's melee is the melee champions' share of the champion"

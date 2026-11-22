@@ -80,8 +80,6 @@ constexpr float SPELL_LOCK_RANGE = 30.0f;
 
 constexpr float AOE_SEARCH_RADIUS = 30.0f;
 constexpr float HEAL_REACH = 30.0f;
-// a dodge this close to a melee champion trades the AoE for its swings
-constexpr float DODGE_MELEE_GAP = 8.0f;
 // The floor the Beasts spots are known to reach, round ARENA_CENTER
 constexpr float ARENA_FLOOR_RADIUS = 44.0f;
 
@@ -138,9 +136,9 @@ constexpr uint32 SPELL_WING_CLIP = 2974;
 constexpr uint32 SPELL_CONCUSSIVE_SHOT = 5116;
 constexpr std::array<uint32, 7> FROST_SHOCK_RANKS = {49236, 49235, 25464, 10473, 10472, 8058, 8056};
 
-// A melee champion this close to a victim off the tanks is on it. A Warrior champion gets disarmed
-// before Bladestorm once this many of ours stand in its radius.
-constexpr float PEEL_VICTIM_REACH = 10.0f;
+// A melee champion this far past its swing reach off a victim off the tanks is on it. A Warrior champion
+// gets disarmed before Bladestorm once this many of ours stand in its radius.
+constexpr float PEEL_VICTIM_MARGIN = 2.25f;
 constexpr uint32 PEEL_BLADESTORM_UNITS = 2;
 // Frost Nova's 10 yd, less a yard so the champion is surely inside
 constexpr float FROST_NOVA_REACH = 9.0f;
@@ -165,8 +163,6 @@ constexpr float PROTECT_HEALTH_PCT = 60.0f;
 // A melee bot under Hand of Protection can't swing, so it only gets one this hurt. The predicted picks put four
 // champions on one at the pull, before any hit lands.
 constexpr float MELEE_HAND_HEALTH_PCT = 50.0f;
-// a melee champion farther off its victim isn't hitting it yet
-constexpr float PROTECT_MELEE_REACH = 8.0f;
 constexpr uint32 SPELL_FORBEARANCE = 25771;
 constexpr std::array<uint32, 3> HAND_OF_PROTECTION_RANKS = {10278, 5599, 1022};
 constexpr uint32 SPELL_PAIN_SUPPRESSION = 33206;
@@ -1914,8 +1910,9 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
 
         Unit* victim = champion->GetVictim();
         auto const member = victim ? FindMember(members, victim->GetGUID()) : members.end();
-        bool const onRaid = member != members.end() && !IsTankMember(member->player) &&
-                            champion->GetExactDist2d(victim) <= PEEL_VICTIM_REACH;
+        bool const onRaid =
+            member != members.end() && !IsTankMember(member->player) &&
+            champion->GetExactDist2d(victim) <= FactionChampionsSwingReach(champion, victim) + PEEL_VICTIM_MARGIN;
         bool const warrior = IsWarrior(champion->GetEntry());
         bool const crowded = warrior && GroupUnitsWithin(members, champion, BLADESTORM_RADIUS) >= PEEL_BLADESTORM_UNITS;
         // kept stunned or disarmed wherever it is
@@ -2305,9 +2302,11 @@ void UpdateProtect(FactionChampionsDefenceState& state, std::vector<Member> cons
         if (champion->HasUnitState(UNIT_STATE_LOST_CONTROL))
             continue;
 
+        // a melee one out of swing reach isn't hitting it yet
         Unit* victim = champion->GetVictim();
         if (!victim || !victim->IsPlayer() ||
-            (IsFactionChampionMelee(champion->GetEntry()) && champion->GetExactDist2d(victim) > PROTECT_MELEE_REACH))
+            (IsFactionChampionMelee(champion->GetEntry()) &&
+             champion->GetExactDist2d(victim) > FactionChampionsSwingReach(champion, victim)))
             continue;
 
         ++attackers[victim->GetGUID()];
@@ -3451,10 +3450,11 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
         y += healer.GetPositionY();
     }
 
-    std::vector<Position> melee;
+    // a dodge into a melee champion's swing reach trades the AoE for its swings
+    std::vector<std::pair<Position, float>> melee;
     for (Unit* champion : FactionChampionsInCombat(botAI))
         if (IsFactionChampionMelee(champion->GetEntry()))
-            melee.push_back(champion->GetPosition());
+            melee.emplace_back(champion->GetPosition(), FactionChampionsSwingReach(champion, bot));
 
     float const count = static_cast<float>(healers.size());
     Position const centre(x / count, y / count, bot->GetPositionZ());
@@ -3463,8 +3463,9 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
     {
         bool const reached = std::any_of(healers.begin(), healers.end(), [spotX, spotY](Position const& healer)
                                          { return healer.GetExactDist2d(spotX, spotY) <= HEAL_REACH; });
-        bool const offMelee = std::none_of(melee.begin(), melee.end(), [spotX, spotY](Position const& champion)
-                                           { return champion.GetExactDist2d(spotX, spotY) < DODGE_MELEE_GAP; });
+        bool const offMelee =
+            std::none_of(melee.begin(), melee.end(), [spotX, spotY](std::pair<Position, float> const& champion)
+                         { return champion.first.GetExactDist2d(spotX, spotY) < champion.second; });
         Position const spot(spotX, spotY, from.GetPositionZ());
         return reached && offMelee &&
                std::none_of(others.begin(), others.end(),
