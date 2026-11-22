@@ -1505,6 +1505,39 @@ bool IsMimironFireHoldActive(Player* bot)
     return it != dodges.end() && GetMSTimeDiffToNow(it->second) < ULDUAR_MIMIRON_FLAMES_HOLD_MS;
 }
 
+bool IsMimironNearFrostBomb(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
+        return false;
+
+    float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;
+    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
+    return bomb && bot->GetExactDist2d(bomb) < hold;
+}
+
+bool IsMimironNearRocket(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsNearMimironRoom(bot))
+        return false;
+
+    float const hold = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN;
+    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
+    return rocket && bot->GetExactDist2d(rocket) < hold;
+}
+
+bool IsMimironHeldByFire(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
+        return false;
+
+    return IsMimironFireHoldActive(bot) ||
+           IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition(),
+                                       ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH);
+}
+
 bool ClaimMimironPlasmaWindow(Player* bot)
 {
     if (!bot)

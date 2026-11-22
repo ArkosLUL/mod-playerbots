@@ -530,6 +530,10 @@ walks a melee bot that cannot see its resolved target to a standable spot in mel
 over a mine-safe leg (`GetMimironSightApproach`, the bearing fan `GetMimironTargetApproach` already
 uses, without its fire-only gate), noted `mimiron.close sight`. Shock Blast (`ACTION_RAID + 5.5`) still
 holds the tick through the cast, and the spot is refused inside the circle.
+Review: the walk sat outside the guards that hold `mimiron approach target action` (uld1's alcove melee
+dodged flames at 1:17 and 1:19, so it could walk them back through the fire), so it now yields to a
+formation slot, a laser barrage and the frost bomb, rocket and fire holds; their predicates moved to
+`UldEncounter_Mimiron`.
 
 **Next window should show:**
 

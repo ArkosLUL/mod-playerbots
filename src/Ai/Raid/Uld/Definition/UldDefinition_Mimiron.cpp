@@ -100,39 +100,6 @@ bool MimironHandoverFollowHold(PlayerbotAI* botAI)
            GetMimironSpreadSlot(botAI, bot, slot);
 }
 
-bool MimironNearFrostBomb(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
-        return false;
-
-    float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;
-    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
-    return bomb && bot->GetExactDist2d(bomb) < hold;
-}
-
-bool MimironNearRocket(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    if (!IsNearMimironRoom(bot))
-        return false;
-
-    float const hold = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN;
-    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + ULDUAR_MIMIRON_HOLD_SEARCH_PAD);
-    return rocket && bot->GetExactDist2d(rocket) < hold;
-}
-
-bool MimironFireHold(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
-        return false;
-
-    return IsMimironFireHoldActive(bot) ||
-           IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition(),
-                                       ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH);
-}
-
 bool MimironResistancePaladin(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -208,13 +175,13 @@ void DefineMimiron(EncounterBuilder& e)
     e.Block("mimiron handover drink hold", Role::Any, MimironHandoverDrinkHold, 0, {"drink", "eat"});
     e.Block("mimiron handover follow hold", Role::Any, MimironHandoverFollowHold, 0, {"follow"});
 
-    e.Block("mimiron frost bomb guard", Role::Any, MimironNearFrostBomb, 0,
+    e.Block("mimiron frost bomb guard", Role::Any, IsMimironNearFrostBomb, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
-    e.Block("mimiron fire hold guard", Role::Any, MimironFireHold, 0,
+    e.Block("mimiron fire hold guard", Role::Any, IsMimironHeldByFire, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
-    e.Block("mimiron rocket guard", Role::Any, MimironNearRocket, 0,
+    e.Block("mimiron rocket guard", Role::Any, IsMimironNearRocket, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
 

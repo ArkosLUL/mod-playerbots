@@ -395,7 +395,10 @@ the raised alcove floor (Z ~365.5) behind its walls: `invalid target` drops the 
 refuses it, and `reach melee` and `mimiron approach target action` need a current target, so melee
 idled 55-75 s and phase 1 ran 29-51 s past a kill's 86. `MimironSetDpsPriorityAction` walks a melee bot
 that cannot see its resolved target to a standable melee spot on its side over a mine-safe leg
-(`GetMimironSightApproach`, `mimiron.close` `sight`).
+(`GetMimironSightApproach`, `mimiron.close` `sight`). Guards block by action name and miss a walk
+inside that action, so it yields itself where `mimiron approach target action` does (formation slot,
+laser barrage, frost bomb, rocket and fire holds), or an alcove bot that just dodged fire walks back
+through it.
 
 **The escape aims past the line.** It hops `ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN` (2) beyond the screen,
 since a hop landing exactly on 18 failed the `>= 18` test to float noise or a wall-shortened leg; if

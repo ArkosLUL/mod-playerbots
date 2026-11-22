@@ -275,6 +275,10 @@ void ResetMimironFightState(Player* bot);
 void NoteMimironFireDodge(Player* bot);
 bool IsMimironFireHoldActive(Player* bot);
 
+bool IsMimironNearFrostBomb(PlayerbotAI* botAI);
+bool IsMimironNearRocket(PlayerbotAI* botAI);
+bool IsMimironHeldByFire(PlayerbotAI* botAI);
+
 bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
                               Position& out);
 

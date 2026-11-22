@@ -1231,6 +1231,12 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
 
 bool MimironSetDpsPriorityAction::ApproachOutOfSight(Unit* target)
 {
+    Position slot;
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (GetMimironSpreadSlot(botAI, bot, slot) || barrage.IsActive() || IsMimironNearFrostBomb(botAI) ||
+        IsMimironNearRocket(botAI) || IsMimironHeldByFire(botAI))
+        return false;
+
     Position approach;
     if (!GetMimironSightApproach(botAI, bot, target, GetMimironApproachRange(botAI, bot), approach))
         return false;
