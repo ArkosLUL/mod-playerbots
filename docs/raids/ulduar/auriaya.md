@@ -7,7 +7,7 @@ No hard mode. Entries are shared; Sonic Screech is the only difficulty pair the 
 | Sonic Screech | 64422 / 64688 | **Soaked, never dodged** — see below |
 | Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
 | Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
-| Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one (see below); Strength of the Pack (64369) buffs the boss and each other while they live |
+| Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one, the DPS kill its target (see below); Strength of the Pack (64369) buffs the boss and each other while they live |
 | Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
 | Seeping Feral Essence | 34098 | Non-selectable stalker, one per Defender life. Aura 64458 (25N 64676) ticks 64459 (25N 64675) every 1s: ~4,500 damage at exactly **5 yd** from its centre, both sizes. Dodged at 7 |
 | Guardian Swarm | 64396 | Tank DoT, left to the generic dispel |
@@ -91,8 +91,22 @@ counter.
 one: on a non-tank first, then one out of combat, then one on another tank (`GetAuriayaLooseSentry`,
 probe `auriaya.sentry`: `dps`, `free`, `tank`, `none`). Out of taunt reach (25 yd, in sight) it walks
 to 20 yd; in reach it fires only with the class taunt ready, and then targets the Sentry, since a
-taunt doesn't move the tank's own target. Picking in grid order, it re-taunted one off the main tank
-while another killed a warrior.
+taunt doesn't move the tank's own target — except off another tank, where it is safe and a retarget
+drags every DPS along. Picking in grid order, it re-taunted one off the main tank while another
+killed a warrior.
+
+**The DPS kill the off-tank's target** (its `GetVictim()`, so a human counts), where its threat is
+highest, or between Sentries a bot off-tank's next pick, which it takes a few ticks later; the nearest
+Sentry only while it is dead or has none (probe `auriaya.focus`: `offtank`, `nearest`, `none`). On nearest they spread over the pack and pulled Sentries off it. Generic tank
+assist tabs to the lowest-threat mob about once a second, so the off-tank's `TankAssist` is zeroed
+while a Sentry is in sight and it keeps one until it dies; next, the nearest on itself, else the
+nearest in combat.
+
+**No off-tank alive** (no third tank, by choice): the main tank keeps her and taunts at most two
+Sentries, only ones on a non-tank within 30 yd, never walking or retargeting (probe
+`auriaya.sentry`: `dps`, `full`, `none`). Its `TankAssist` is zeroed then: with one tank left it
+takes the nearest Sentry it lacks aggro on, and reach drags her cone along (22 s off her after a
+25N off-tank death).
 
 **Every Auriaya trigger resolves her through `GetAuriaya`, by entry**: through
 [`"find target"`](../../engine/pitfalls.md#things-the-bot-cannot-see) any bot fighting a sentry or the

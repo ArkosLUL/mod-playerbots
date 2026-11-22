@@ -306,6 +306,95 @@ bool InAuriayaSentryTauntReach(Player* tank, Unit* sentry)
     return tank->GetExactDist2d(sentry) <= ULDUAR_AURIAYA_SENTRY_TAUNT_REACH && tank->IsWithinLOSInMap(sentry);
 }
 
+Unit* GetAuriayaOffTankSentry(Player* bot)
+{
+    Player* offTank = GetGroupAssistTank(bot, 0);
+    if (!offTank || !offTank->IsInMap(bot))
+        return nullptr;
+
+    // Its victim, not a bot value, so a human off-tank works the same.
+    Unit* victim = offTank->GetVictim();
+    if (victim && victim->IsAlive() && victim->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY)
+        return victim;
+
+    // A bot off-tank takes this one a few ticks after its Sentry dies. Going nearest in that gap spreads
+    // DPS casts over the whole pack.
+    return GET_PLAYERBOT_AI(offTank) ? GetAuriayaOffTankHoldSentry(offTank) : nullptr;
+}
+
+Unit* GetAuriayaOffTankHoldSentry(Player* tank)
+{
+    Unit* pick = nullptr;
+    bool pickOnTank = false;
+    float pickDistance = 0.0f;
+    for (Unit* sentry : CollectPossibleTargetsByEntry(tank, NPC_AURIAYA_SANCTUM_SENTRY))
+    {
+        Unit* victim = sentry->GetVictim();
+        if (!victim || !sentry->IsInCombat())
+            continue;
+
+        bool const onTank = victim == tank;
+        float const distance = tank->GetExactDist2d(sentry);
+        if (!pick || (onTank && !pickOnTank) || (onTank == pickOnTank && distance < pickDistance))
+        {
+            pick = sentry;
+            pickOnTank = onTank;
+            pickDistance = distance;
+        }
+    }
+
+    return pick;
+}
+
+bool AuriayaOffTankHoldsSentries(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return IsAuriayaEngaged(botAI) && PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) &&
+           !CollectPossibleTargetsByEntry(bot, NPC_AURIAYA_SANCTUM_SENTRY).empty();
+}
+
+bool AuriayaMainTankAlone(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return PlayerbotAI::IsMainTank(bot) && IsAuriayaEngaged(botAI) && !GetGroupAssistTank(bot, 0);
+}
+
+Unit* GetAuriayaMainTankSentry(Player* tank)
+{
+    std::vector<Unit*> const sentries = CollectPossibleTargetsByEntry(tank, NPC_AURIAYA_SANCTUM_SENTRY);
+    auto const held = std::count_if(sentries.begin(), sentries.end(),
+                                    [tank](Unit* sentry) { return sentry->GetVictim() == tank; });
+
+    Unit* pick = nullptr;
+    float pickDistance = ULDUAR_AURIAYA_MAINTANK_TAUNT_REACH;
+    if (held < ULDUAR_AURIAYA_MAINTANK_MAX_SENTRIES)
+    {
+        for (Unit* sentry : sentries)
+        {
+            Unit* victim = sentry->GetVictim();
+            if (!victim || victim == tank || !sentry->IsInCombat())
+                continue;
+
+            if (Player* player = victim->ToPlayer(); player && PlayerbotAI::IsTank(player))
+                continue;
+
+            // Sight last, it's the raycast.
+            float const distance = tank->GetExactDist2d(sentry);
+            if (distance <= pickDistance && tank->IsWithinLOSInMap(sentry))
+            {
+                pick = sentry;
+                pickDistance = distance;
+            }
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(tank, "auriaya.sentry",
+                             pick ? "dps" : held >= ULDUAR_AURIAYA_MAINTANK_MAX_SENTRIES ? "full" : "none");
+
+    return pick;
+}
+
 std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
 {
     std::vector<Unit*> pools;

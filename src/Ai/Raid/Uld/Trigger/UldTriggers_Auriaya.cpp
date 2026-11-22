@@ -98,3 +98,27 @@ bool AuriayaSentryTauntTrigger::IsActive()
     // Out of reach it walks over. In reach it waits for the taunt and leaves the tick to the tank rotation.
     return !InAuriayaSentryTauntReach(bot, sentry) || EncounterHelpers::ClassTauntReady(botAI);
 }
+
+bool AuriayaOffTankTargetTrigger::IsActive()
+{
+    if (!AuriayaOffTankHoldsSentries(botAI))
+        return false;
+
+    // Keeps its Sentry until it dies, only a taunt moves it on early.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive() && target->GetEntry() == NPC_AURIAYA_SANCTUM_SENTRY)
+        return false;
+
+    return GetAuriayaOffTankHoldSentry(bot) != nullptr;
+}
+
+bool AuriayaMainTankSentryTrigger::IsActive()
+{
+    if (!AuriayaMainTankAlone(botAI))
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") != GetAuriaya(botAI))
+        return true;
+
+    return EncounterHelpers::ClassTauntReady(botAI) && GetAuriayaMainTankSentry(bot);
+}

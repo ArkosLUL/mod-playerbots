@@ -46,6 +46,26 @@ public:
     bool isUseful() override;
 };
 
+class AuriayaOffTankTargetAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "auriaya off tank target action";
+
+    AuriayaOffTankTargetAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AuriayaMainTankSentryAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "auriaya main tank sentry action";
+
+    AuriayaMainTankSentryAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class AuriayaRaidPositionAction : public MovementAction
 {
 public:

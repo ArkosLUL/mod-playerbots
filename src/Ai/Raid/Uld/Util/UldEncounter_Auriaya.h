@@ -59,6 +59,9 @@ inline constexpr float ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE = 15.0f;
 // off-tank a yard short.
 inline constexpr float ULDUAR_AURIAYA_SENTRY_TAUNT_REACH = 25.0f;
 inline constexpr float ULDUAR_AURIAYA_SENTRY_TAUNT_WALK = 20.0f;
+// The main tank never leaves its station for a Sentry, so it gets the taunt's full range.
+inline constexpr float ULDUAR_AURIAYA_MAINTANK_TAUNT_REACH = 30.0f;
+inline constexpr int ULDUAR_AURIAYA_MAINTANK_MAX_SENTRIES = 2;
 // Her formation keeps the Sentries 7-12 yd behind her.
 inline constexpr float ULDUAR_AURIAYA_PACK_RADIUS = 30.0f;
 
@@ -87,6 +90,25 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI);
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 
 bool InAuriayaSentryTauntReach(Player* tank, Unit* sentry);
+
+// What the living off-tank is hitting, if it's a Sentry, else the one a bot off-tank takes next. DPS all
+// take it: the tank's own threat is highest there, and one target at a time keeps them off the rest of
+// the pack.
+Unit* GetAuriayaOffTankSentry(Player* bot);
+
+// The off-tank's next Sentry once its own target isn't one: nearest on itself, else nearest in combat.
+// Null while the pack is still out of combat, which is the taunt's to open on.
+Unit* GetAuriayaOffTankHoldSentry(Player* tank);
+
+// Off-tank with a Sentry in sight. Generic tank assist tabs to the lowest-threat mob every second,
+// which would drag every DPS around with it.
+bool AuriayaOffTankHoldsSentries(PlayerbotAI* botAI);
+
+// Main tank with no living off-tank. It stays on her and only taunts Sentries off non-tanks.
+bool AuriayaMainTankAlone(PlayerbotAI* botAI);
+
+// The nearest Sentry on a non-tank in the main tank's taunt range, while it holds fewer than two.
+Unit* GetAuriayaMainTankSentry(Player* tank);
 
 // Grid search, not "possible targets": the stalkers aren't selectable. Runs per bot per tick on the
 // dodge path, so pass the smallest radius that answers the question. The radius counts both units'
