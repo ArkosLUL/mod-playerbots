@@ -250,3 +250,96 @@ player branch.
 - Left: the opener's grip-guard check (`CollectTrinketsInReach`, radius + 1) misses a guarded champion its AoE
   reaches at radius + 1-2.25, a Tauren up to radius + 6.075; battle res and corpse crowding count champions within a
   flat 8 yd. Neither is this round's failure.
+
+## Round 4 (2026-11-22, window 11 on build d2874f536)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head d2874f536 --pulls 10`, binary 20:24
+(`hdr.bin` 1795371886), rounds 1-3 in it: toc1 `tr-20261122-182719-1` kill 7:52, 5 deaths
+(`649_1_erin-misthoof_1795372162`), toc2 `tr-20261122-182719-2` wipe 5:35, 28 (`649_2_caiphus-the-stern_1795372155`),
+toc3 `tr-20261122-182719-3` wipe 4:50, 29 (`649_3_thrakgar_1795372158`). Window 10's three traces (round 3) and
+window 9's reread for comparison. Scripts in the round's scratchpad `fc4/` (gone with it); the reader's new `--peel`
+and `--trinket` lines cover the key ones.
+
+**Stop rules.** Two wipes: not polished. Round 4 picks a different failure.
+
+**Lineups.** toc1 and toc2 drew window 10 toc2's lineup (three healers Liandra, Caiphus, Erin; Broln and Narrhok both
+in). toc3 drew window 10 toc1's: four caster DPS (Ruj'kah, Ginselle, Harkzog, Vivienne) behind Liandra, Thrakgar and
+Erin, Narrhok the only Tauren.
+
+**Deaths by killing blow.**
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 5 | Broln (iced) 2, Gorgrim (iced), Ruj'kah, Ginselle 1 each |
+| toc2 wipe | 28 | Broln 8 (iced 3, the last his own ice DK Tocyai at 3:49, then 5 free in 40 s), Narrhok (never iced) 5, Ruj'kah 4, Gorgrim (never iced) 3, Maz'dinah 3, Ginselle 2, Harkzog 2, Zhaagrym 1. 8 deaths by 3:30 (window 10's toc2, same lineup: 25) |
+| toc3 wipe | 29 | Ruj'kah 6, Ginselle 6, Gorgrim 5 (iced 4), Vivienne 4, Harkzog 4, Maz'dinah 3, Narrhok 1. Both warlocks on Fear duty dead by 0:55 (iced Gorgrim, iced Maz'dinah), every healer by 3:03, all four to casters; Ruj'kah 98→4% in 99 s as kill target |
+
+**Did round 3 make it worse? No.** Window 10: 2 kills, window 11: 1. toc1 killed both windows (6, then 5 deaths). toc2
+wiped both windows on the same lineup; this time it held 8 deaths by 3:30 against 25 and broke when Broln killed his
+ice DK. The lost kill is toc3: casters made 20 of its 29 kills, the one Tauren there 1, so round 3's Tauren gates
+had nothing to do with it; its roster has no Balance druid (no Cyclone duty, CC landed 1.9 per 10 s against 2.7-2.9),
+and damage taken ran 11.6k/s against 7.2k/s for toc1 on the same lineup in window 10. What round 3 changed did no
+measurable harm: escapes popped an iced Tauren's trinket once (toc2 0:23.9, Chains back 0.8 s later), healers'
+`faction champions step off` share went from 2-3% to 2-7%, healing held (toc2 9.7k/s against 9.8k/s).
+
+**Verdict on round 3 (reach, concussive guard): the guard held, the reach is live, the Tauren deaths didn't drop.**
+
+- `--vetoes`: `faction champions concussive guard` 79, 47, 37 rows on `concussive shot on snare target`. Hunter
+  Concussive Shot on iced champions 8 of 78 (window 10: 92 of 142); full-speed chases snared 31%, 28%, 40% (18-36%).
+- `--personal`: escapes with a Tauren nearest past 8 yd 8, 6, 2 (window 10: 0, 2, 0). Kite catches Narrhok 35 of 84
+  (42%, window 10 40%), Broln 32 of 86 (37%, 41%).
+- Tauren kills 16 of 62 (window 10: 9 of 41). 11 came with no ice on the Tauren: Narrhok never iced on toc2 and toc3
+  (no DK tank there, the two DPS DKs ice Broln or Gorgrim and Maz'dinah), Broln after his DK died.
+
+**Q1 measured (iced Tauren).** Iced Narrhok caught 12 of 18 kites (67%), all by melee, but only on toc1 from 3:52 (the
+only roster with a third DK); 9 of the 18 started inside his 11.6 yd reach, and he killed nobody iced. Iced Broln 29
+of 78 (37%), 17 (22%) by a physical hit, the rest Earth Shock. The iced Tauren killed 5 of 62, all Broln (toc1 2,
+toc2 3 with his own DK), against Ruj'kah's 11. Iced Narrhok is over ~35%, so Q1 goes back to the user (below).
+
+**Failure ranking (62 deaths).**
+
+1. Caster champions, 31 (Ruj'kah 11, Ginselle 9, Harkzog 6, Vivienne 4, Zhaagrym 1), 20 on toc3: they kill once
+   the CC holders and healers are gone. No single mechanism in the trace; not root-caused this round.
+2. Free melee champions, 19: Narrhok never iced 6, Broln after his DK's death 5, Gorgrim never iced 4, Maz'dinah 4.
+   Who gets iced is the user's order (Ret, Enh, Rogue, DK, Warrior last): a plan matter.
+3. Iced champions, 12: Gorgrim 5 (Death Coil, Death Grip then Frost Strike), Broln 5, Maz'dinah 2.
+
+**Picked: the class Hammer of Justice on iced champions (bug, the orchestrator's pick from round 3).**
+
+- `hammer of justice on snare target` (`GenericPaladinStrategy.cpp:23`, `CastHammerOfJusticeSnareAction`,
+  `PaladinActions.h:272`) stuns the `snare target` value's pick, the first attacker moving at a non-tank. Windows 10-11:
+  39 of its 79 Hammers on champions went on a champion its ice duty held in Chains (17 of 37 this window), against
+  the Ice duty rule that an iced champion gets no other CC; the peel's own Hammer skips them
+  (`ToCHelpers_FactionChampionsDefence.cpp:1905`).
+- The cost is the Hammer, not the Chains: windows 9-11, 38 trinkets went off on iced champions (Hammer of Justice 9,
+  Psychic Scream 7, the ice DK's own ghoul's Gnaw 5, Charge Stun 4); the DK's Chains came back a median 0.5 s later
+  (max 8.8 s) and none led to a death within 10 s. Round 3's "frees them" holds for under a second. Each such Hammer
+  is 40-60 s of cooldown the danger champion's peel can't use. Ranks below the three above; fixed as directed.
+
+**Fix** (`ToCMultipliers_FactionChampionsDefence.{h,cpp}`, `ToCDefinition_FactionChampionsDefence.cpp`).
+`faction champions ice guard multiplier` zeroes `CastHammerOfJusticeSnareAction` while its target is
+`FactionChampionsIced`, so the class Hammer waits for a free champion. Reader: `--peel` counts trinket poppers aimed
+at an iced champion by spell and class with the trinkets after (`iced_holds`); `--trinket` counts trinkets on iced
+champions by trigger and the median wait for the DK's next Chains (`iced_trinkets`); the guard joins
+`FC_MULTIPLIERS`.
+
+**Next window should show.** `--vetoes`: `faction champions ice guard multiplier` rows on `hammer of justice on snare
+target`. `--peel`: `Hammer of Justice paladin` near 0 in the iced line (this window 10 (2), 2 (0), 5 (1)).
+`--trinket`: no Hammer of Justice among the iced triggers (this window 2, 0, 1). Paladin Hammers on free melee
+champions up. No change in deaths expected from this alone.
+
+**Seen, not picked.**
+
+- The ice DK's own ghoul Gnaws its iced champion: 11 Gnaws on iced champions this window (`--peel`), 4 trinkets. Same
+  family; warriors' Charge Stun and Intercept (3 and 3 on toc1) and hunters' Intimidation (2) too. All cost about as
+  little as the Hammer's.
+- Broln killed his own ice DK on toc2 (3:49) and Gorgrim the other DK on toc3 (3:24); each freed a champion for the
+  rest of the pull.
+- DK champion Chains of Ice on the raid freed by Hand of Freedom within 4 s: 11 of 21, 5 of 13, 5 of 14.
+
+**Question for the user.** Q1, with this window's numbers: may a disarm peel (Disarm, Dismantle) go on an iced Tauren
+whose victim is no tank? Iced Narrhok caught 12 of 18 kites (67%, one pull, killed nobody), iced Broln 29 of 78 (37%,
+22% by melee). A disarm trips neither the trinket nor the Chains and halves the disarmed hand's damage. On Narrhok
+either one stops Mortal Strike, Overpower and Bladestorm; on Broln only Dismantle (both hands) stops Stormstrike and
+Lava Lash. Neither stops Charge or Earth Shock. Recommended: yes, Disarm and Dismantle only, expecting a small gain:
+the iced Tauren killed 5 of 62.
