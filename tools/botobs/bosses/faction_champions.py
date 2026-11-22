@@ -30,8 +30,9 @@
                                            melee champions' share, the pins, a kite before), healthstones over 70%,
                                            the escapes, Sprint and Dash casts and kites, how far the chasers were
                                            at an escape and after, whether they dropped the bot and it lived, the
-                                           kites each melee champion caught, iced or not
-    faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
+                                           kites each melee champion caught, iced or not, the re-hops a kite's own
+                                           walk refused and how long they waited
+    faction_champions.py <file> --focus   4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
                                            far the champion moved, the share on the DK, its other victims and the
@@ -433,6 +434,9 @@ KITE_HEAL_REACH = 30.0
 KITE_HEAL_AFTER_MS = 2000
 # a kite whose nearest chaser still hits the bot this soon after its first hop started inside its reach
 KITE_CATCH_MS = 2000
+# the action walking each kite hop; a re-hop it refused that issues later than this was dropped
+KITE_ACTION = "faction champions kite"
+KITE_WAIT_MAX_MS = 6000
 # the chasers' distance after an escape or kite start, and the re-pick that should have dropped the bot
 CHASE_LOOKS_MS = (2000, 6000)
 DROPPED_MS = 9000
@@ -3362,6 +3366,44 @@ def kite_catches(trace: Trace, kites: list[dict] | None = None) -> dict[int, lis
     return out
 
 
+def kite_waits(trace: Trace) -> dict:
+    """The kite's re-hops refused by its own walk still in flight. Per bot, in time order, a KITE_ACTION `wait`
+    move while its last issued move was a kite hop opens a wait, and its next issued hop closes it: `waits`, ms
+    each, for those within KITE_WAIT_MAX_MS, the rest `dropped`; `hops` counts the issued hops and `damage` the
+    melee champions' damage on the bot inside the closed waits."""
+    out = {"hops": 0, "waits": [], "dropped": 0, "damage": 0}
+    if encounter_of(trace) != ENCOUNTER:
+        return out
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    hits: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("s") in melee:
+            hits[rec.get("d")].append((rec["t"], rec.get("a", 0)))
+    moves: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        moves[rec.get("g")].append(rec)
+    for bot, rows in moves.items():
+        last = None
+        opened = None
+        for rec in sorted(rows, key=lambda rec: rec["t"]):
+            kite = rec.get("by") == KITE_ACTION
+            if rec.get("ok"):
+                if kite:
+                    out["hops"] += 1
+                    if opened is not None and rec["t"] - opened <= KITE_WAIT_MAX_MS:
+                        out["waits"].append(rec["t"] - opened)
+                        out["damage"] += sum(amount for when, amount in hits[bot] if opened <= when < rec["t"])
+                    elif opened is not None:
+                        out["dropped"] += 1
+                    opened = None
+                last = rec
+            elif kite and rec.get("r") == "wait" and opened is None and last is not None \
+                    and last.get("by") == KITE_ACTION:
+                opened = rec["t"]
+        out["dropped"] += opened is not None
+    return out
+
+
 def chase_spacing(trace: Trace) -> list[dict]:
     """Per role in CHASE_ROLES, humans apart, over the roster's live samples from the pull with a melee champion
     alive: `role`, `samples`, `median` distance to the nearest melee champion, `contact`, the share within
@@ -3512,6 +3554,12 @@ def show_personal(trace: Trace) -> None:
                   + ", ".join(f"{trace.name(guid)} {caught} of {starts} (iced {iced_caught} of {iced})"
                               for guid, (starts, caught, iced, iced_caught)
                               in sorted(catches.items(), key=lambda item: -item[1][0])))
+        waits = kite_waits(trace)
+        held = waits["waits"]
+        median = f"{statistics.median(held) / 1000:.1f} s" if held else "-"
+        print(f"  re-hops refused by the bot's own kite walk: {len(held)} of {waits['hops']} hops, "
+              f"{sum(ms > 1000 for ms in held)} over 1 s, waited median {median}, {waits['dropped']} never issued;"
+              f" melee champion damage on the bot meanwhile {waits['damage'] / 1000:.0f}k")
     else:
         print(f"  {KITE}: none")
     print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"
