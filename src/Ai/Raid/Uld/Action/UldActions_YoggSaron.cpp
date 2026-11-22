@@ -82,8 +82,7 @@ bool YoggSaronCastingAt(Player* bot, Unit* target)
     return false;
 }
 
-// Drops a forced walk still booked for somewhere else, since a forced move waits out another forced one's
-// hold, up to 5 s. 2D, as the walk stores its end at the ground height it pathed to.
+// 2D on purpose: the booked walk stores the ground height it pathed to, not the z we asked for.
 void YoggSaronTakeOverForcedWalk(LastMovement& last, Position const& destination)
 {
     if (last.lastMoveShort.GetExactDist2d(destination.GetPositionX(), destination.GetPositionY()) > 1.0f)
@@ -602,7 +601,7 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
 
 void YoggSaronPetGuardAction::Hush(Creature* pet)
 {
-    // First stance only, or a second hush would save passive as the one to give back.
+    // emplace on purpose: a second hush must not save passive as the stance to give back.
     hushed.emplace(pet->GetGUID(), pet->GetReactState());
     pet->SetReactState(REACT_PASSIVE);
 }
