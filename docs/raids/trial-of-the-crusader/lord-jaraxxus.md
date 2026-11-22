@@ -13,7 +13,8 @@ Raid-wide facts and the code layout: [README.md](README.md). Mechanics source:
 - **Wipe**: evade despawns his summons, sets `NON_ATTACKABLE` and `TYPE_FAILED`; the cleanup (Tirion)
   respawns him at the centre chained (67924), unattackable and passive, and sets `FAIL`. The stage
   stays 3, so the gate stays open; the retry gossip frees him straight into a forced attack on the
-  nearest player, so bots stage round the centre meanwhile and the main tank's hold waits for combat. `Reset` despawns every portal and volcano within 500 yd.
+  nearest player, so bots stage round the centre meanwhile and the main tank's hold waits for
+  combat. `Reset` despawns every portal and volcano within 500 yd.
 - **Kill**: `summons.DespawnAll` takes the portals and volcanoes, not the Mistresses and Infernals
   they summoned, which live on into stage 4 (heroic Mistresses keep kissing). Multipliers that
   concern the adds gate on "open", not "live".
@@ -63,8 +64,8 @@ per effect dispelled.
 
 **Incinerate Flesh.** Effect 0 is the absorb (aura 301, `AuraEffect::GetAmount` is what is left);
 effect 2 ticks once, at the aura's end, and casts Burning Inferno while the aura is up. The heal that
-eats the last of the absorb removes the aura (`Unit::CalcHealAbsorb`), so no Inferno. The target reads full
-health throughout. Burning Inferno is cast by the target on every ally (radius 50000) on Jaraxxus's
+eats the last of the absorb removes the aura (`Unit::CalcHealAbsorb`), so no Inferno. The target
+reads full health throughout. Burning Inferno is cast by the target on every ally (radius 50000) on Jaraxxus's
 behalf, so his Nether Power stacks count; it ticks once a second from 1 s after the cast.
 
 On the 2026-10-17 25H kill 6 of 7 windows ran out, absorbing 47-68k of the 85k each: cast-time heals
@@ -127,10 +128,10 @@ The Warcraft Tavern guide, reconciled with the script:
 - **Heroic Portal**: melee DPS bots targeting one or inside 12 yd of it keep 14 yd from it, from 1 s
   before its next Mistress (its aura's periodic timer) until each of its Mistresses has a victim,
   stepping out toward him, where the melee go once she has picked; ranged keep killing it. The guide
-  has no such step; it follows from her arrival hit and nearest-unit opener. A portal living past 12 s drops a second Mistress: on three 25H kills
-  (2026-10-22 to 10-25) with a human assist tank, the old hold (until she was on a tank) kept melee
-  off portal 2 for 3-7 s, it lived 12.3-13.5 s, and the extra Mistress roamed onto a mage and killed
-  it.
+  has no such step; it follows from her arrival hit and nearest-unit opener. A portal living past
+  12 s drops a second Mistress: on three 25H kills (2026-10-22 to 10-25) with a human assist tank,
+  the old hold (until she was on a tank) kept melee off portal 2 for 3-7 s, it lived 12.3-13.5 s,
+  and the extra Mistress roamed onto a mage and killed it.
 - **Cooldowns stay boss-only**, by decision: `Playerbots.BurstOnBossOnly` holds every burst cooldown
   off the portal and volcano (138 `hold burst until tank engaged` vetoes on portal 2 in one 25H pull).
   The first lever if portal 2 still outlives 12 s.
@@ -158,10 +159,10 @@ The Warcraft Tavern guide, reconciled with the script:
   only when no other remover lives and no Incinerate Flesh is up.
 - **Incinerate Flesh**: every healer in range heals the target, highest throughput first: Holy Shock,
   Riptide, Swiftmend, Penance, then Holy Light, Greater Heal, Healing Wave, Nourish, Healing Touch,
-  Flash of Light, Flash Heal, Lesser Healing Wave, Regrowth, then the HoTs, skipping one the bot already
-  has on the target. `PlayerbotAI::UpdateAI` cancels a single-target heal still casting on a
+  Flash of Light, Flash Heal, Lesser Healing Wave, Regrowth, then the HoTs, skipping one the bot
+  already has on the target. `PlayerbotAI::UpdateAI` cancels a single-target heal still casting on a
   full-health target only when it carries no `SPELL_AURA_SCHOOL_HEAL_ABSORB`, so cast-time heals land
-  under the absorb. A kissed healer casts instants only.
+  under the absorb.
 - **Burning Inferno** is covered before it lands ([Raid cover](#raid-cover)).
 - **Legion Flame**: the carrier keeps moving for its 8 s, away from the boss and the raid and within
   30 yd of a living healer other than itself; everyone else steps clear of the flames. Its first leg
@@ -179,8 +180,9 @@ The Warcraft Tavern guide, reconciled with the script:
   melee hold names. A leg or dodge in flight keeps its spot up to 3 s while it stays clear.
   `jaraxxus flame stand` blocks set behind, rear flank and formation within 10 yd of a flame: they
   pick spots blind to the flames. Before this, reach spell or reach melee walked the bot back into
-  the flame it had just left: a warlock looped 20 times over 29 s at a third of its damage. A tank carrier takes the boss with it, rare now: the marker keeps a tank off
-  Legion Flame while he swings at it.
+  the flame it had just left: a warlock looped 20 times over 29 s at a third of its damage. A tank
+  carrier takes the boss with it, rare now: the marker keeps a tank off Legion Flame while he swings
+  at it.
 - **Mistress' Kiss**: a kissed bot casts instants only; a cast already running is broken from outside.
 - **Lust** at the pull (default burst row): the heroic Portal at 20 s falls inside it, and Berserk is
   10 min out.

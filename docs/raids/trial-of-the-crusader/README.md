@@ -181,7 +181,8 @@ adapts both to an `EncounterGate` (id `static_cast<uint32>(ToCEncounter::X)`).
 - `src/Ai/Dungeon/TOC/TOC*` (Trial of the Champion) would collide case-insensitively with raid `ToC*`
   names, which breaks the Windows and macOS builds. Hence every raid root file and umbrella header is
   `ToCRaid*` (`ToCRaidStrategy.{h,cpp}`, `ToCRaid{Action,Trigger}Context.h`,
-  `ToCRaid{Actions,Triggers,Multipliers}.h`). A new file needs a name no dungeon file has, ignoring case.
+  `ToCRaid{Actions,Triggers,Multipliers}.h`). A new file needs a name no dungeon file has, ignoring
+  case.
 - `Util/ToCData.h` holds only raid-wide values: map id, `ARENA_CENTER`, the `ToCNpcs` and `SPELL_*`
   mirrors. A new boss-specific id goes in the stem's
   `Util/ToCHelpers_<Stem>.h`. Spell constants are plain `inline constexpr uint32 SPELL_*`; remap one as
@@ -217,7 +218,7 @@ adapts both to an `EncounterGate` (id `static_cast<uint32>(ToCEncounter::X)`).
 ## Targeting is direct, no raid icons
 
 Every encounter picks each bot's target in code and attacks it ([ignis.md](../ulduar/ignis.md)).
-Bots mark no kill target.
+Bots place no raid icon.
 
 - **Resolver.** One function per encounter returns the bot's pick, or null outside its window or
   role, and notes it through `RaidObs::NoteDerived` (change-only, per bot). Its trigger fires while
@@ -235,10 +236,10 @@ Bots mark no kill target.
 - **Pre-pull.** Every resolver branch needs an in-combat unit: `Attack()` has no out-of-combat guard
   and reaches 100 yd ([kologarn.md](../ulduar/kologarn.md)).
 - **Human skull.** Each resolver's first branch is `GetRaidHumanSkull`: the group skull on a unit of
-  the encounter that is alive, in combat, selectable and attackable by the bot. Bots here place no
-  skull, so it's a player's, unless a bot runs `mark rti`. `attack rti target` is wired into no
-  generic strategy, so without this read a player's mark does nothing.
-- **CC.** Bots here place no icon. `rti cc` is the generic class CC pipeline's only input
+  the encounter that is alive, in combat, selectable and attackable by the bot: a player's, unless a
+  bot runs `mark rti`. `attack rti target` is wired into no generic strategy, so without this read a
+  player's mark does nothing.
+- **CC.** `rti cc` is the generic class CC pipeline's only input
   (`RtiCcTrigger`, `RtiTriggers.cpp:25-36`; `CcTargetValue.cpp:29`) and never drives DPS target
   choice; Faction Champions zeroes that pipeline while live and casts its own CC duty.
 - **Legacy `rti`.** `rti` is saved per bot, so the strategy's first `OnTick` on map 649 resets the
@@ -295,9 +296,9 @@ Where each boss turns hostile (`trial_of_the_crusader.h` `Locs[]`, `FactionChamp
 - The next beast by guid slot: Gormok while slot 4 is empty or alive, else the worms while slot 6 or 7
   is, else Icehowl. A dead beast keeps its slot until a wipe's cleanup clears it.
 - Per bot: alive, fighting nothing it could attack (no unsuppressed PvP ref, no PvE ref to a live
-  unit neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`), and in the arrival's room (the arena: within 80 yd 2D of
-  `ARENA_CENTER`, z > 380; Anub'arak's: x > 661.6, z < 200) with its master, else the group leader,
-  so a leader who walks out releases it (Naxx Thaddius). Combat ends it, so the engage releases
+  unit neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`), and in the arrival's room (the arena: within
+  80 yd 2D of `ARENA_CENTER`, z > 380; Anub'arak's: x > 661.6, z < 200) with its master, else the
+  group leader, so a leader who walks out releases it (Naxx Thaddius). Combat ends it, so the engage releases
   everyone and a leftover snobold beats a stand. Plain `IsInCombat` lost the Icehowl stands on 25H
   (2026-10-29): a pool from the worms outlived them, its combat spread through the raid's heals, 9
   bots never got a stand and `follow` took them to the player, the tank among them, and Icehowl
@@ -339,9 +340,9 @@ within 3 yd, else the raw stand; park within 1 yd, walk back past 2.5.
   with the player.
   - Champions: bot tanks (`tank`, forced) on the line from the landing centroid to `ARENA_CENTER`,
     at the first 0.5 yd step 25.5+ yd (23 + the 2.5 yd unpark) from every slot, extras 3 yd to
-    alternate sides; non-tank DK bots knowing Death Grip (`grip`) 54 yd out on it, the grip chain's post; the rest on a
-    10 yd lattice 28+ yd from all ten slots and 3+ yd farther from each than the nearest tank stand,
-    44 slots. Healers and ranged take slots off the grip lane (10 yd either side of the line from the
+    alternate sides; non-tank DK bots knowing Death Grip (`grip`) 54 yd out on it, the grip chain's
+    post; the rest on a 10 yd lattice 28+ yd from all ten slots and 3+ yd farther from each than the
+    nearest tank stand, 44 slots. Healers and ranged take slots off the grip lane (10 yd either side of the line from the
     landing centroid out to the player's post, 78 yd) first: healers nearest a point 12 yd past the
     first tank stand (any human's absent, the stand a bot tank would take), so tanks and melee are in
     heal reach at the pull (23-28 yd); ranged farthest from the slots; melee nearest. So the first
@@ -353,8 +354,9 @@ within 3 yd, else the raw stand; park within 1 yd, walk back past 2.5.
     ([twin-valkyr.md](twin-valkyr.md#strategy)), past `AddArenaSlot`'s floor radius, 80+ yd from
     both twins. None until the twins and their portals appear (16 s after the gossip), so bots
     follow the player through the speech; a bot due an essence walk gets no stand until it has it.
-  - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he stands at): `pickup` (the main tank, else the first bot side tank)
-    on `GetAnubarakPickupStand`, `side0`/`side1` on the side points; melee 8 yd west of
+  - Anub'arak, from `GetAnubarakPrepullTanks` (bots before humans, a human on the side point he
+    stands at): `pickup` (the main tank, else the first bot side tank) on `GetAnubarakPickupStand`,
+    `side0`/`side1` on the side points; melee 8 yd west of
     `ANUBARAK_ROOM_CENTER`, casters on 22 and 30 yd rings west of it, all 40.9+ yd from him. Each tank
     stand steps toward the centre to `PROXIMITY_TANK_CLEARANCE` (23 + 2.5) off him: only heroic's move.
 
@@ -395,11 +397,11 @@ their own.
 The `ResistAura` stem picks:
 
 - **Schools**: Gormok fire; worms fire + nature; Icehowl frost; Jaraxxus fire + nature; champions
-  fire; Twins fire, then shadow (the raid starts Dark and takes Light's fire);
-  Anub'arak frost, plus nature in phases 2 and 3 (scarab Mandibles, then Leeching Swarm; a 2026-10-26
-  main tank died at 24.9k Mandible ticks). The live encounter's set (Beasts by stage mask, unioned in a heroic
-  overlap; an empty mask keeps the last set, since the mask can trail the gate's own Icehowl search
-  for a moment and an empty set would drop every holder), else the staged arrival's, else none, so
+  fire; Twins fire, then shadow (the raid starts Dark and takes Light's fire); Anub'arak frost, plus
+  nature in phases 2 and 3 (scarab Mandibles, then Leeching Swarm; a 2026-10-26 main tank died at
+  24.9k Mandible ticks). The live encounter's set (Beasts by stage mask, unioned in a heroic overlap;
+  an empty mask keeps the last set, since the mask can trail the gate's own Icehowl search for a
+  moment and an empty set would drop every holder), else the staged arrival's, else none, so
   paladins go back to their own aura between pulls.
 - **Paladins**: one bot holder per school, fire, frost, shadow in that order, re-elected every second
   and at once when the set changes. A school a human paladin holds on himself is skipped. Holders
@@ -437,8 +439,9 @@ The `ResistAura` stem picks:
   falls back to the raw stand.
 - A heroic raid out of attempts keeps the window open: no Barrett comes back.
 - Shaman resistance totems don't count toward a school; Aura Mastery is called only as a Jaraxxus
-  or normal Light Vortex cover and on heroic Anub'arak's Penetrating Cold; with no hunter at or above 30% mana the one wearing Aspect of the Wild stays pinned in it
-  and loses Viper (`GetNatureResistanceHunter`'s last fallback).
+  or normal Light Vortex cover and on heroic Anub'arak's Penetrating Cold; with no hunter at or
+  above 30% mana the one wearing Aspect of the Wild stays pinned in it and loses Viper
+  (`GetNatureResistanceHunter`'s last fallback).
 - A holder already covered by another paladin's aura of its school fires its trigger every tick
   without casting (the class action reads that aura by name) and keeps its own aura meanwhile.
 
@@ -470,6 +473,6 @@ Boss notes are in each boss doc. Raid-wide, under `postmortem.py <file> --notes 
 `tools/botobs/bosses/trial_of_the_crusader.py <file> --staging`, over a trace of any ToC encounter:
 per release (a unit's first snapshot with a target, or its first hit on the raid when sooner, since a
 first-swing kill is gone by the next snapshot; of the champions only the first), the victim, the duty
-holder, ms until it targets a tank, its hits on non-tanks in the first 5 s (`killed` on overkill), and each bot's
-stand from its latest `stage` up to 2 s past the release, with its 2D distance from it at the
-release, flagged past 3 yd. The banner says when the trace never wrote `stage`.
+holder, ms until it targets a tank, its hits on non-tanks in the first 5 s (`killed` on overkill),
+and each bot's stand from its latest `stage` up to 2 s past the release, with its 2D distance from
+it at the release, flagged past 3 yd. The banner says when the trace never wrote `stage`.
