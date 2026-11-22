@@ -12,19 +12,19 @@ measures **240,000 at 25 raiders** and **237,500 at 24**, so **ten**
 `unit` row. A pull wiped at 9 of 10 with four kills spent 18-22 yd out.
 
 Guardians have no movement script (`SetInCombatWithZone`, then a vanilla threat table), so **where melee
-stand is where a Guardian dies**: that is why melee are leashed to her.
+stand is where a Guardian dies**, hence the melee leash.
 
-**Sara, Yogg and the Brain are read off the instance script** (`YoggSaronFindNearestCreature`): no bot
-holds threat on them, so `"find target"` returns null
+**Sara, Yogg and the Brain are read off the instance script** (`YoggSaronFindNearestCreature`): no bot holds
+threat on them, so `"find target"` returns null
 ([pitfalls](../../engine/pitfalls.md#things-the-bot-cannot-see)) and once left all 21 Yogg nodes dead
 through two wipes. The core registers one of each (`BOSS_YOGGSARON`, `DATA_SARA` 760,
 `DATA_BRAIN_OF_YOGG_SARON` 761); the read answers as `FindNearestCreature(entry, 200, true)` and runs that
 sweep past `|dx| + |dy| < 200`
-([why](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)). So the phase read is
-cheap, and a phase test belongs **ahead** of any hazard sweep. The other 200 yd reads — Sanity Wells,
-illusion doors, the tentacle check, skulls in arc — are cached once per trigger pass
-(`EncounterTriggerPassId`) and read live in actions and multipliers, where an earlier action can have
-changed them. The pass cache is `thread_local`, which holds because a pass runs on one thread.
+([why](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid)). So the phase read is cheap,
+and a phase test belongs **ahead** of any hazard sweep. The other 200 yd reads — Sanity Wells, illusion
+doors, the tentacle check, skulls in arc — are cached once per trigger pass (`EncounterTriggerPassId`;
+`thread_local`, as a pass runs on one thread) and read live in actions and multipliers, where an earlier
+action can have changed them.
 
 **Neither her presence nor her combat is the pull.** `LoadAllGrids` makes her findable from instance
 creation and `Reset()` leaves her visible with the clouds orbiting, so "Sara exists" holds between pulls,
@@ -81,8 +81,7 @@ interrupter by its index so the raid does not spend every cooldown on one cast. 
 
 **The nova is a death explosion, not a cast** (`boss_yoggsaron_guardian_of_ys::JustDied` → `DoCastAOE`),
 so nothing interrupts or outranges it once the Guardian dies in the stack, and **its kill zone is Sara**:
-once every kill landed inside 15 yd, novas caught 12-23 raiders each and were 65% of damage taken. Melee
-and tanks cannot leave; ranged and healers stand off (below).
+once every kill landed inside 15 yd, novas caught 12-23 raiders each and were 65% of damage taken.
 
 ### The nova's tail, and shadow resistance
 
@@ -232,9 +231,8 @@ Three tiers, in relevance order, since one cast covering 25 raiders beats any si
   holder is always first. Guardian Spirit is the one external that answers a Fervor holder's one-shot.
   Hand of Protection is out: physical only, and it sheds threat.
 
-**Only melee and tanks are nova candidates** (`YoggSaronNovaCandidate`) for the external and the raid count:
-ranged and healers hold the 21.5 yd station outside the blast by design, so a cooldown spent on one is one
-the pile does not get.
+**The external and the raid count consider melee and tanks only** (`YoggSaronNovaCandidate`): the back
+line stands outside the blast by design, so a cooldown spent there is lost to the pile.
 
 Each claim is taken **after** the caster has something castable, or one that claimed on sight would beat
 the rest to the victim and then cast nothing.
@@ -275,8 +273,8 @@ Without the step-out the next pull had the fastest phase 1 of seven, 110.4 s.
 
 **After phase 1 every melee leaves whatever its pool, and only a tank stays in.** Leftovers took 101
 melee hits, 68 of them bare, so leaving is free, and what kills there is two novas 8-9 s apart from
-60-67%, not one from full, so `…_NOVA_STEP_OUT_POOL` and the own-button test are gone. The tank is the exception in every phase: it holds
-the thing detonating, walking out only drags it along, and its pool can eat the blast.
+60-67%, not one from full, so no pool or own-button test applies. The tank is the exception in every
+phase: it holds the thing detonating, walking out only drags it along, and its pool can eat the blast.
 
 **A battle rez waits for the handover.** A rezzed bot comes back unbuffed
 ([dead engine](../../engine/action-selection.md#strategy-assignment)) and nothing re-buffs in combat, so
@@ -349,11 +347,11 @@ orbits leave two places:
 - inside **2.89 yd** of Sara (11.39 − 8.5) nothing reaches, which is where melee stand
 - between **20.36 and 22.63 yd** (11.86 + 8.5 up to 31.13 − 8.5) only the second orbit reaches
 
-Orbits sit ~9.8 yd apart against the 17 yd a cloud sweeps (`…_CLOUD_SUMMON_REACH` 8.5 either side), so every other radius is inside some orbit's
-reach, moving a station cannot help, and a spot clear now is under a cloud seconds later. **Dodging
-anyway cost a phase**: with the trigger widened to 18 yd, nearly every phase 1 move cited a cloud, ranged
-walked for no net change in distance and smeared over a 109° arc, melee orbiting Sara lost 43% of their
-damage and the tank 91%, and raid dps fell from 97.5k to 74.0k.
+Orbits sit ~9.8 yd apart against the 17 yd a cloud sweeps (`…_CLOUD_SUMMON_REACH` 8.5 either side), so every
+other radius is inside some orbit's reach, moving a station cannot help, and a spot clear now is under a
+cloud seconds later. **Dodging anyway cost a phase**: with the trigger widened to 18 yd, nearly every phase
+1 move cited a cloud, ranged walked for no net change in distance and smeared over a 109° arc, melee
+orbiting Sara lost 43% of their damage and the tank 91%, and raid dps fell from 97.5k to 74.0k.
 
 **So the cloud circle is a filter, not a dodge.** `ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS` (9.5, the reach
 plus a yard) does three jobs: the trigger reads it as "I am standing in one", never to be dropped because
@@ -394,13 +392,11 @@ only the higher counts).
 
 ## The spacing nodes
 
-Each phase puts everything it dodges into **one** node, since two at one relevance trade ticks and walk
-the bot down the line between their destinations: phase 1 takes clouds and Shadow Nova, phase 2 Death
-Rays and Crush wedges, off a shared latch and sweep. The shared latch shapes (held destination, in-flight
-tick claimed) are in
-[raid-mechanics-lessons](../../engine/raid-mechanics-lessons.md#movement-that-oscillates). A held spot
-also lapses after `…_SPACING_HOLD_MS` (3 s), a backstop: "is the held spot still clear" normally lets go
-first. Yogg's own:
+Each phase puts everything it dodges into **one** node, since two at one relevance trade ticks and walk the
+bot down the line between their destinations: phase 1 takes clouds and Shadow Nova, phase 2 Death Rays and
+Crush wedges, off a shared latch and sweep. The shared latch shapes (held destination, in-flight tick
+claimed) are in [raid-mechanics-lessons](../../engine/raid-mechanics-lessons.md#movement-that-oscillates); a
+held spot also lapses after `…_SPACING_HOLD_MS` (3 s), a backstop behind "is it still clear". Yogg's own:
 
 - **Trigger and clear thresholds apart**: nova 17 → 20, ray 9 → 14, Crush arc ±8° → ±14°. The *clear*
   radius decides when a bot moves (the early-out is "outside every circle"); the trigger only whether
@@ -519,12 +515,11 @@ the most room from its neighbours, 1.13 yd either way, all `ULDUAR_YOGG_SARON_P1
 28.5 yd `SpellDistance`, so a bot there walks itself back in.
 
 They **stack** on it, inverting the usual raid rule, which holds only because the nova cannot reach the
-station. A cloud is in contact for `(8.5 + blob + 8.5) / 3` seconds and re-arms 10 s after each summon,
-so any blob under 13 yd across costs exactly one Guardian per pass:
-`ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS` (5) gives 9 s of contact and **one Guardian per 45 s orbit for
-the whole back line**. The parked latch widens only the stack radius (×`…_P1_PARKED_STACK_SCALE`, 1.5),
-never the band: there is no margin there to spend. The station node sits under the spacing node at
-`ACTION_RAID`, so a nova still wins the tick.
+station. A cloud is in contact for `(8.5 + blob + 8.5) / 3` seconds and re-arms 10 s after each summon, so
+any blob under 13 yd across costs exactly one Guardian per pass: `ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS`
+(5) gives 9 s of contact and **one Guardian per 45 s orbit for the whole back line**. The parked latch
+widens only the stack radius (×`…_P1_PARKED_STACK_SCALE`, 1.5), never the band: there is no margin there to
+spend. The station node sits under the spacing node at `ACTION_RAID`, so a nova still wins the tick.
 
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
 (**6.5 yd**) the bot walks back to the middle and is released only at
@@ -605,11 +600,11 @@ one only while its victim is a tank and the bot's threat is under
 worst, and the `dps target` fallback takes the same test. With no tank alive in the group it opens.
 
 Every Guardian tier is picked lowest-health first and then held outright: an order that flips mid-fight
-resets every swing and cast timer in the raid. Other tiers go nearest first, and the resolver never leaves a
-target for a lower tier; inside one it switches only to a target 10 yd nearer, or two tentacles ping-pong
-the raid. Phase 1 replaces both with a shared focus, and a much lower
-leftover takes over (below). An Immortal Guardian below 10% is Weakened and only Thorim's Titanic Storm
-can finish it, so it stops being a target.
+resets every swing and cast timer in the raid. Phase 1 replaces both with a shared focus, and a much lower
+leftover takes over (below). An Immortal Guardian below 10% is Weakened and only Thorim's Titanic Storm can
+finish it, so it stops being a target. Other tiers go nearest first; the resolver never leaves a target
+for a lower tier, and inside one switches only to a target 10 yd nearer, or two tentacles ping-pong the
+raid.
 
 ## Threat: the redirects are fine, the taunt budget does not stretch
 
@@ -633,8 +628,9 @@ of Reckoning 62124, Dark Command 56222 and Growl 6795 share range index 4, so
 `ULDUAR_YOGG_SARON_P1_TAUNT_RANGE` is **30 yd**, still the whole 21.5 yd back line.
 
 **An unreachable aim sticks, so the range has to be in the pick**
-([casting](../../engine/action-selection.md#casting)), and nothing takes it back: `YoggSaronSetDpsPriorityTrigger` stands down for a tank outside phase 2 and the
-generic picker keeps any live target. Lowest health anywhere meant whatever a hunter pet was grinding at
+([casting](../../engine/action-selection.md#casting)), and nothing takes it back:
+`YoggSaronSetDpsPriorityTrigger` stands down for a tank outside phase 2 and the generic picker keeps any
+live target. Lowest health anywhere meant whatever a hunter pet was grinding at
 the wall: one pull aimed 12 of 15 taunts at 45-57 yd, dealt nothing for 93 s and never finished phase 1,
 while a candidate inside 30 yd existed on 79% of ticks. The trigger, a pet holding a Guardian far out, is
 intermittent: judge it over pulls.
@@ -760,12 +756,11 @@ above `ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT` (35%; its fastest loss was 5.34% 
 the wedge is off. Once it stops, melee drop that Crusher and leave its reach.
 
 **The dodge needs somewhere legal to go, and the retry keeps the wedge.**
-`ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE` is 55, inside the 60.8 yd outer orbit, with the tentacle
-ring 41-48 yd out: phase 1's 35 yd cap had melee and tanks already beyond it, rejecting every outward
-candidate, so a three-yard sidestep became an inward walk along a 25 yd wedge. Phase 2 also sweeps 35 yd
-round the bot against phase 1's 25, since a wedge can only be left sideways. When nothing clears both shapes
-the retry gives up the Death Ray
-circles, not the wedge: Death Rays killed 1 over 11 hits, Crush 4 over 19.
+`ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE` is 55, inside the 60.8 yd outer orbit, with the tentacle ring
+41-48 yd out: phase 1's 35 yd cap had melee and tanks already beyond it, rejecting every outward candidate,
+so a three-yard sidestep became an inward walk along a 25 yd wedge. Phase 2 also sweeps 35 yd round the bot
+against phase 1's 25, since a wedge can only be left sideways. When nothing clears both shapes the retry
+gives up the Death Ray circles, not the wedge: Death Rays killed 1 over 11 hits, Crush 4 over 19.
 
 **An unoccupied Crusher cannot Crush at all.** `UpdateAI` swings only at a victim inside melee range and
 `DoMeleeAttackIfReady` tests it again, so with nothing in reach there is no swing, no proc and no cone —
@@ -1004,21 +999,20 @@ All navprobe-clean, settled z 324.87-325.04, **20.1-23.2 yd from the body** and 
 them in code rather than reading live creatures: the team has to be *standing* on its spot before any
 portal exists.
 
-**Spread before the wave, nearest first.** By group index the walk ran ~3× the distance to the nearest
-spot. The plan is latched once per wave so it does not churn, off a per-instance wave clock: predict the
-first wave at +60 s, re-anchor on every wave a bot sees, and roll the prediction forward a period when one
-passes unseen, or it reads "any moment now" forever. Only a sighting moves the clock: a bot underground
-sees no portal, and reading that as a wave ending would restart the count whenever the brain team went
-down. **Compare wave times signed**
-([`getMSTimeDiff` wraps](../../engine/pitfalls.md#state-does-not-cross-objects)): read as a wrap, the
-roll-forward pushed the prediction 80 s on every call and nobody ever spread. A bot walks once the next
-wave is inside `max(8 s, distance / runSpeed × 2)`, measured rather than flat since time waiting on a spot
-is time off the tentacles, and holds until the portal appears under it. The walk
-goes quiet on arrival and reach would take the bot back, so `yogg-saron portal spot hold` blocks reach,
-heal reach, set behind, rear flank, formation moves, charges, follow and random moves while
-`YoggSaronHoldingPortalSpot` holds (slot and distance read before the plan); the Yogg dodges still move
-it. The out-of-phase-2 reset clears the clock but not `waveOrdinal`, harmless while `slotWave` carries
-with it, so read `yogg.wave` as a session counter.
+**Spread before the wave, nearest first.** By group index the walk ran ~3× the distance to the nearest spot.
+The plan is latched once per wave so it does not churn, off a per-instance wave clock: predict the first
+wave at +60 s, re-anchor on every wave a bot sees, and roll the prediction forward a period when one passes
+unseen, or it reads "any moment now" forever. Only a sighting moves the clock: a bot underground sees no
+portal, and reading that as a wave ending would restart the count whenever the brain team went down.
+**Compare wave times signed** ([`getMSTimeDiff`
+wraps](../../engine/pitfalls.md#state-does-not-cross-objects)): read as a wrap, the roll-forward pushed the
+prediction 80 s on every call and nobody ever spread. A bot walks once the next wave is inside `max(8 s,
+distance / runSpeed × 2)`, measured rather than flat since time waiting on a spot is time off the tentacles,
+and holds until the portal appears under it. The walk goes quiet on arrival and reach would take the bot
+back, so `yogg-saron portal spot hold` blocks reach, heal reach, set behind, rear flank, formation moves,
+charges, follow and random moves while `YoggSaronHoldingPortalSpot` holds (slot and distance read before the
+plan); the Yogg dodges still move it. The out-of-phase-2 reset clears the clock but not `waveOrdinal`,
+harmless while `slotWave` carries with it, so read `yogg.wave` as a session counter.
 
 **Rebuild the plan when the portals spawn, and take one that is still there.** A plan keyed on the wave
 ordinal alone never rebuilt, since the ordinal is the same before and after the portals appear, and was
@@ -1055,12 +1049,11 @@ They walk to their **midpoint**: one bot chasing another moving away at the same
 links left open cost a pull ~480k damage and ~680 Sanity. A midpoint inside the ring, which two bots on
 opposite sides of Yogg produce, is pushed out to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS`.
 `yogg-saron brain link` (`ACTION_RAID + 1.5`) sits over the dps resolver and the Sanity Well walk and under
-the hazard dodges and the fear counter — a link costs 2 Sanity and a shared hit a second, a Death Ray
-costs the bot — and closes to `ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20). It stands
-down for a brain team
-bot whose portal intent is spreading, holding or late (`YoggSaronPortalWalkPending`), since the link breaks
-by itself once the bot is 10 yd below, and closing it cost one wave its healer. In phase 3 the walk stops
-at Crush range (25 yd) of a live unstunned Crusher, whose cone otherwise killed the walker.
+the hazard dodges and the fear counter — a link costs 2 Sanity and a shared hit a second, a Death Ray costs
+the bot — and closes to `ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20). It stands down for
+a brain team bot whose portal intent is spreading, holding or late (`YoggSaronPortalWalkPending`), since the
+link breaks by itself once the bot is 10 yd below, and closing it cost one wave its healer. In phase 3 the
+walk stops at Crush range (25 yd) of a live unstunned Crusher, whose cone otherwise killed the walker.
 
 **Malady of the Mind is the fight's only fear.** It is cast in phase 2 but re-cast from the feared player
 on removal, so it can outlive the phase; Deafening Roar in phase 3 is a silence. `yogg-saron malady of the
@@ -1085,8 +1078,7 @@ before the next portals, and that well is 65 yd from a portal spot. `GetYoggSaro
 rather than sending a low bot. The bench is decided when the team is back (portals down, the Brain not
 casting 64059), which adds one plan rebuild per wave so the replacement has ~20 s to walk; the rebuild at
 portal arrival reuses it, so a Psychosis tick cannot swap somebody out at the last second. A bot under 60
-with no portal walk pending walks to a well as `refill`, and
-`topping` holds it to 100.
+with no portal walk pending walks to a well as `refill`, and `topping` holds it to 100.
 
 **No res for a corpse without Sanity.** Sanity is death-persistent (AttributesEx3 0x100000), an Insane
 death has lost it, and the Voice's Insane Periodic 64554 re-applies Insane to any player without it: every
@@ -1153,16 +1145,15 @@ disguise (below), so **no tentacle is entry 33943 when the raid arrives**, and
 bots stood on the landing until Induce Madness took them. `YoggSaronLiveIllusionMob` sweeps all eight
 entries in one grid visit and owns every "is a tentacle alive" read, `yogg.tentacle` included.
 
-**Only eight entries are tentacles.** From `creature_template`: Alexstrasza, Malygos, Neltharion, Ysera,
-the Immolated Champion, Garona and King Llane are faction **35**, friendly RP actors; The Lich King (33441)
-is faction 14 and hostile but carries **11.1 M** health, never attacks and cannot be killed. The list is
-33943 plus its six disguises (33433 Suit of Armor, 33567 Deathsworn Zealot, 33716-33720 Consorts); listing
-any other mob blocks the Brain. Which
-disguise comes from where it spawned — `x ∈ (2000, 2150)` a Consort, else `y ∈ (−150, −90)` a Zealot,
-else a Suit of Armor; the wiki has Zealots and Suits the other way round and the script wins. The disguise
-is `Creature::UpdateEntry`, not an aura, and `UpdateEntry` **preserves current health**, so a Suit of
-Armor showing 6% is a full-health tentacle carrying 8,000 (10) / 40,000 (25), 49,135 in the scaled 25-man
-traces.
+**Only eight entries are tentacles.** From `creature_template`: Alexstrasza, Malygos, Neltharion, Ysera, the
+Immolated Champion, Garona and King Llane are faction **35**, friendly RP actors; The Lich King (33441) is
+faction 14 and hostile but carries **11.1 M** health, never attacks and cannot be killed. The list is 33943
+plus its six disguises (33433 Suit of Armor, 33567 Deathsworn Zealot, 33716-33720 Consorts); listing any
+other mob blocks the Brain. Which disguise comes from where it spawned — `x ∈ (2000, 2150)` a Consort, else
+`y ∈ (−150, −90)` a Zealot, else a Suit of Armor; the wiki has Zealots and Suits the other way round and the
+script wins. The disguise is `Creature::UpdateEntry`, not an aura, and `UpdateEntry` **preserves current
+health**, so a Suit of Armor showing 6% is a full-health tentacle carrying 8,000 (10) / 40,000 (25), 49,135
+in the scaled 25-man traces.
 
 **Something must walk the bot into the room, or it deadlocks.** The resolver needs `IsWithinLOSInMap`, two
 of the three rooms hide their tentacles behind a doorway, and the walk to the Brain needs them dead: out of
@@ -1188,14 +1179,13 @@ left the whole team 106-130 yd from the melee spot when the door opened. `YoggSa
 latches per bot per tick what it may take, and `YoggSaronIllusionTentacleAllowed` gates the resolver, its
 `dps target` fallback, the drop of a current target and `WalkIntoRoom`:
 
-- **Icecrown:** each bot joins the group (centroids of summon group 2, 33-58 yd apart; a tentacle belongs
-  to the nearest) with the fewest bots planned so far,
-  ties east, west, south, so 9 → 3/3/3 and a 10-man's 3 → 1/1/1, reset per `waveOrdinal`. It takes only its
-  own group, and another only once its own is clear and nobody planned for that one is alive in the room.
-- **Stormwind:** a bot whose first tentacle (held when it died) is inside `…_STORMWIND_HELPER_RADIUS`
-  (40 yd) of the stage spot — the two at 31 yd, the next being 53 out — keeps clearing. The rest keep the
-  one they are on or take
-  one no other room member targets, so a 10-man or a death never leaves one uncovered.
+- **Icecrown:** each bot joins the group (centroids of summon group 2, 33-58 yd apart; a tentacle belongs to
+  the nearest) with the fewest bots planned so far, ties east, west, south, so 9 → 3/3/3 and a 10-man's 3 →
+  1/1/1, reset per `waveOrdinal`. It takes only its own group, and another only once its own is clear and
+  nobody planned for that one is alive in the room.
+- **Stormwind:** a bot whose first tentacle (held when it died) is inside `…_STORMWIND_HELPER_RADIUS` (40
+  yd) of the stage spot — the two at 31 yd, the next being 53 out — keeps clearing. The rest keep the one
+  they are on or take one no other room member targets, so a 10-man or a death never leaves one uncovered.
 - **Both:** a player's mark (`rti target`) is always allowed; everything lifts under `…_SHARE_LIFT_MS`
   (25 s) of Induce Madness, since the slowest clear left ~29 s and an uncleared room charms everyone.
   Healers, the Chamber and bots off the brain level have no limit.
@@ -1215,9 +1205,9 @@ worst burst 35% of max health in 0.2 s. So a damage dealer in an illusion room h
 fights again at **70%**, latched in the tick as `yogg.reprisal`: only while a healer lives in its room, and
 never with Induce Madness under 15 s, since an uncleared room charms everyone. The resolver drops the
 target, cutting only a cast aimed at the tentacle so a self-heal still lands, `yogg-saron reprisal hold`
-blocks the other pickers, melee and charges, the room state reads
-`reprisal` so the walk-in leaves it alone, and `yogg-saron reprisal regroup` walks it to 15 yd of the
-healer past 25, since most of those deaths had the healer 37-50 yd away.
+blocks the other pickers, melee and charges, the room state reads `reprisal` so the walk-in leaves it alone,
+and `yogg-saron reprisal regroup` walks it to 15 yd of the healer past 25, since most of those deaths had
+the healer 37-50 yd away.
 
 **Each tentacle a hit lands on reflects separately**, so a cleave on three returns 180% and killed a
 warrior from full in 2 s, faster than any hold. `yogg-saron illusion multi target hold multiplier` zeroes,
@@ -1264,9 +1254,9 @@ a bot and never need to, Yogg's gaze being a P3 platform aura and the skulls onl
   `AttackAction` and `PlayerbotAI::CastSpell` turned the bot back each tick, and bots stood flipping until
   charmed. With a live target it turns only within 40° of it (`YoggSaronAngledSkullHeading`, 5° steps,
   strict gain, `yogg.skullturn` `angled`), inside set facing's 45° (`AttackAction` and `CastSpell` allow
-  60°), so nothing turns it back: a skull off to
-  the side clears that way, one behind the target is the facing walk's. Yielding outright left a ranged bot
-  under a skull for 15 s. It corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE` (0.1 rad).
+  60°), so nothing turns it back: a skull off to the side clears that way, one behind the target is the
+  facing walk's. Yielding outright left a ranged bot under a skull for 15 s. It corrects a heading only past
+  `ULDUAR_YOGG_SARON_FACING_TOLERANCE` (0.1 rad).
 - **The 30 yd read is measured plainly**: `GetCreatureListWithEntryInGrid` adds both sizes
   ([2D](../../engine/raid-mechanics-lessons.md#measuring-a-cost)), and most probe flips once had no
   skull inside 30 yd.
@@ -1320,17 +1310,17 @@ for heals. The room is latched per bot (`lastIllusionRoom`), and a spot is used 
 ray from it reaches the Brain's hit sphere, cached per spot (the built navprobe predates `los`); otherwise
 the middle.
 
-**The brain team holds short of 30% while the platform has a tentacle**, the guides' line ("get him to
-~32% and wait"): phase 3 lifts Shattered Illusion and leaves every tentacle alive, and pushing through cut
-the last stun 15-17 s short and carried ~3M of tentacles into phase 3. `YoggSaronTickBrainHold` latches per
-brain-room non-healer while Induce Madness is cast and a Crusher, Corruptor or Constrictor lives within
-70 yd of Yogg: new DoTs stop at 36% (DoTs keep ticking), all damage at 32%, and the finish starts at 8 s
-left or the moment the platform is clear, latched for that cast. Enforced by the resolver, its `dps target`
+**The brain team holds short of 30% while the platform has a tentacle**, the guides' line ("get him to ~32%
+and wait"): phase 3 lifts Shattered Illusion and leaves every tentacle alive, and pushing through cut the
+last stun 15-17 s short and carried ~3M of tentacles into phase 3. `YoggSaronTickBrainHold` latches per
+brain-room non-healer while Induce Madness is cast and a Crusher, Corruptor or Constrictor lives within 70
+yd of Yogg: new DoTs stop at 36% (DoTs keep ticking), all damage at 32%, and the finish starts at 8 s left
+or the moment the platform is clear, latched for that cast. Enforced by the resolver, its `dps target`
 fallback, `DropTarget` on a held Brain, the `brain hold` / `brain dot hold` blocks and `yogg-saron held
-target cast multiplier`. `YoggSaronCrusherStunHolds` drops its 35% floor while a hold is in force (a brain-room
-bot reported it in the last 2 s, `…_BRAIN_HOLD_SEEN_MS`, so a team that died below lets go) and the
-Brain is over 31% (a human or a pet can still push it), with the lead 8 + 4 s, so platform melee keep the
-stunned Crushers. If the Brain survives, the team leaves and finishes it next wave.
+target cast multiplier`. `YoggSaronCrusherStunHolds` drops its 35% floor while a hold is in force (a
+brain-room bot reported it in the last 2 s, `…_BRAIN_HOLD_SEEN_MS`, so a team that died below lets go) and
+the Brain is over 31% (a human or a pet can still push it), with the lead 8 + 4 s, so platform melee keep
+the stunned Crushers. If the Brain survives, the team leaves and finishes it next wave.
 
 ### The way out
 
@@ -1377,8 +1367,8 @@ only: rooms cycle every three 80 s waves, so boots spent on whichever room came 
 the Chamber, 155-175 yd from the Brain at door-open, while a Chamber every 240 s finds the 3 min cooldown
 ready. No bot had ever used them: `UseTinkerAction` takes stat auras only. Also on the phase 3 station walk
 over `…_NITRO_MIN_WALK` (40 yd; a shorter walk ends before 5 s of +150% pays) when ready: the brain team
-surfaces at (1924.7, −25.4, 328.5), 74 / 94 yd
-from the melee / ranged spot; a released ranged walk boosts once its leftover dies.
+surfaces at (1924.7, −25.4, 328.5), 74 / 94 yd from the melee / ranged spot; a released ranged walk
+boosts once its leftover dies.
 
 ## The encounter plays its own mechanics
 
@@ -1407,15 +1397,13 @@ behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-sa
 bot given it is teleported into Stormwind by `yogg-saron fall from floor` the moment it dips below z 300,
 and is disqualified from `move to enter portal`, which requires `"skull"`. **The tick clears it on the
 platform**: only `YoggSaronMoveToExitPortalAction` sets `"skull"`, after `portal->Use`, and `RtiValue` is
-per-bot AI state no encounter reset touches
-([it outlives the session](../../engine/pitfalls.md#state-does-not-cross-objects)), so a bot Induce Madness
-teleported out, or killed below, kept its room tag and never walked for a portal again (nine of ten on one
-brain team). The tick clears anything but `"skull"` or `"diamond"` whenever the bot reads `ARENA`; on the
-platform it cannot be in a room, whatever the tag says. `"diamond"` is the portal walk's own tag, which keeps
-the enter-portal node live before the wave exists; underground it reads `"diamond"` until the illusion room
-node renames it, so the enter-portal trigger also tests for `ARENA`. The same leak kills `WalkIntoRoom`,
-which stands
-down on `"square"`.
+per-bot AI state no encounter reset touches ([it outlives the
+session](../../engine/pitfalls.md#state-does-not-cross-objects)), so a bot Induce Madness teleported out, or
+killed below, kept its room tag and never walked for a portal again (nine of ten on one brain team). The
+tick clears anything but `"skull"` or `"diamond"` whenever the bot reads `ARENA`; on the platform it cannot
+be in a room, whatever the tag says. The same leak kills `WalkIntoRoom`, which stands down on `"square"`.
+`"diamond"` is the portal walk's own tag, keeping the enter-portal node live before the wave exists;
+underground it stays until the illusion room node renames it, so that trigger also tests for `ARENA`.
 
 ## The Death Orb is not the hazard
 
@@ -1496,10 +1484,9 @@ stopping in reach would spread the ranged round Yogg.
 
 The raid frees fewer than 4 Keepers, losing that Keeper's support: each passive is +10% damage done, plus
 Freya +20% healing, Mimiron +20% speed, Thorim +20% health and Titanic Storm; Freya-only rooms ran 4-9 s
-slower than a three-Keeper kill. Handled cases: **Thorim only**
-and **Freya only**. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK` — preferred over Sara's
-`GetData(DATA_GET_KEEPERS_COUNT)`, which gives a count only, because the mask confirms **which** Keeper. It
-is a **raid choice**, with no config option.
+slower than a three-Keeper kill. Handled cases: **Thorim only** and **Freya only**, a **raid choice** with
+no config option. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK`, preferred over Sara's
+`GetData(DATA_GET_KEEPERS_COUNT)`, a count only, because it names **which** Keeper.
 
 What Thorim-only removes: no Freya means **no Sanity Wells, so Sanity (63050, 100 stacks) is a one-way
 drain**; no Hodir means no Protective Gaze absorb; no Mimiron means no haste clouds and therefore a slower
@@ -1599,12 +1586,11 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
 - **Draggers are pre-staged, by the user's choice** (`YoggSaronTickBeacon`, `yogg-saron beacon stage`,
   `ACTION_RAID + 3.5`). 5 s before the next beacon is due (off the last first mark) the claim's rules and
   order pick `RAID_MODE(1, 3)` stagers, lanes north / south / north-east in order; the claim gives a stager
-  its lane while free. Stagers walk round the body and hold, no swing (`reach melee` would walk them back
-  to Yogg), until the first mark, or drop 8 s past due. Spots 20 yd along each lane's `PATHFIND_NORMAL`
-  straight line from the melee spot, floor by
-  navprobe with Z unchanged: north (1990.94, −4.40, 325.104), south (1996.06, −42.75, 324.889), north-east
-  (2009.52, −6.19, 326.989); hunters wait at their hunter spot. A 30 yd taunt still reaches the pile, and
-  the walk after it drops from ~39 to ~19 yd.
+  its lane while free. Stagers walk round the body and hold, no swing (`reach melee` would walk them back to
+  Yogg), until the first mark, or drop 8 s past due. Spots 20 yd along each lane's `PATHFIND_NORMAL`
+  straight line from the melee spot, floor by navprobe with Z unchanged: north (1990.94, −4.40, 325.104),
+  south (1996.06, −42.75, 324.889), north-east (2009.52, −6.19, 326.989); hunters wait at their hunter spot.
+  A 30 yd taunt still reaches the pile, and the walk after it drops from ~39 to ~19 yd.
 - **Healed Guardians get a cooldown first.** A healed Guardian climbs ~9% a second and hits a non-tank for
   25-36k a few seconds after the heal. One still marked or carrying 64486 / 64468 at 40% or more
   (`…_BEACON_DANGER_HEALTH_PCT`, ~17k a hit) on a dragger or a non-tank: the victim presses
@@ -1612,9 +1598,10 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
   Suppression, Guardian Spirit or Hand of Sacrifice to one without a button of its own, draggers first,
   humans included, one per victim per 8 s (`ACTION_EMERGENCY + 5`, `yogg.dragext`). Divine Shield and Ice
   Block are blocked on such a victim (`yogg-saron beacon immunity hold`): an immune victim sheds aggro onto
-  somebody else at full power ([RML](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)).
-  After the release the dragger walks back to the melee spot until a tank has it or 8 s pass (`return`),
-  since the tank is ~39 yd away and a taunt reaches 30, and guardian control takes it back first (below).
+  somebody else at full power
+  ([RML](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)). After the release the
+  dragger walks back to the melee spot until a tank has it or 8 s pass (`return`), since the tank is ~39 yd
+  away and a taunt reaches 30, and guardian control takes it back first (below).
   - **A tank holding the pile is covered too**: its own button the moment 2+ Guardians on it carry a 64486
     / 64468 application another Guardian cast (`YoggSaronPileHealedOn`, `…_BEACON_PILE_RESET_GUARDIANS`, at
     any health, by the user's choice, since a failed drag takes the pile from the floor to 50-77% in 6 s),
@@ -1628,18 +1615,17 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
     both (`spell_pal_immunities`). Tanks give no external here, and `hand of sacrifice on party` is blocked
     for tanks in phase 3 (`yogg-saron tank sacrifice hold`): it moved 30% of a dps's damage onto a tank
     under the pile.
-- **Hunters drag only marks nobody else can**, the Stars method, on their claim's lane: spots north
-  (1986.0, 7.63, 326.797) and south (1994.44, −55.65, 326.394), north-east its own drag spot, navprobe
+- **Hunters drag only marks nobody else can**, the Stars method, on their claim's lane: spots north (1986.0,
+  7.63, 326.797) and south (1994.44, −55.65, 326.394), north-east its own drag spot, navprobe
   `PATHFIND_NORMAL` 33.2 / 33.1 yd from the melee spot, 42 / 44 from the ranged spot, inside Distracting
   Shot's 35 yd (6 s taunt, 8 s cooldown, no Guardian immunity), or short of it toward the Guardian when the
   spot is out of the shot's range; a Guardian that walks to the hunter stops ~29 yd off the pile. Shot with
   ≤5 s of the mark left, so it covers the heal. It must be late: 20736 is effect 63, a fixed threat for 6 s,
-  where Taunt, Hand of Reckoning and
-  Dark Command are effect 114, which `Spell::EffectTaunt` matches to the top threat for good. No damage on it
-  before then (the multiplier; Feign Death, which drops the pull, and Deterrence, which pacifies the shot,
-  blocked by `yogg-saron beacon hunter hold`), and
-  Feign Death if it is still on the hunter 1 s into the heal with the taunt gone (`shot` / `feign`). A
-  human tank taunting a mark off a hunter before the heal leaves it in the pile.
+  where Taunt, Hand of Reckoning and Dark Command are effect 114, which `Spell::EffectTaunt` matches to the
+  top threat for good. No damage on it before then (the multiplier; Feign Death, which drops the pull, and
+  Deterrence, which pacifies the shot, blocked by `yogg-saron beacon hunter hold`), and Feign Death if it is
+  still on the hunter 1 s into the heal with the taunt gone (`shot` / `feign`). A human tank taunting a mark
+  off a hunter before the heal leaves it in the pile.
 - **The tank takes a healed Guardian off a paladin, DK or druid dragger first**
   (`YoggSaronLooseGuardianTier`): tier 0 one still on its dragger within 8 s of the release, 1 the rest, 2
   one under its hunter's Distracting Shot, which goes back by itself; then highest health, then nearest
@@ -1648,14 +1634,14 @@ every 5 s until it lands, and a Guardian it hits reschedules the next 45 s out
   sorted by health alone fresh spawns near the pile won: paladin and DK draggers waited ~8 s for a tank
   against ~2 s for hunters, and draggers died to their healed Guardian. Rebirth has no encounter hook in
   phase 3.
-- **A feral druid drags last, in a bear form, by the user's choice** (the shift costs a GCD and mana, and its
-  dps is gone while it drags): after the hunters, a bot druid neither
-  heal nor ranged, in a bear form or with the mana for one (`YoggSaronBearReady`: the bot's spell check
-  skips cost). Staged, dragging or returning (`YoggSaronBeaconBearHeld`), it drops its form and casts Dire
-  Bear Form, else Bear Form (`yogg-saron beacon bear form`, `ACTION_RAID + 4.5`): neither casts while
-  shapeshifted. `cat form` / `caster form` are blocked meanwhile (`yogg-saron beacon bear hold`); the cat
-  strategy shifts it back after. Growl (6795) needs the form and has no GCD; until the shift is in it fails
-  and holds the drag. `IsTank` reads the strategy, so its Guardian stays loose, tier 0.
+- **A feral druid drags last, in a bear form, by the user's choice** (the shift costs a GCD and mana, and
+  its dps is gone while it drags): after the hunters, a bot druid neither heal nor ranged, in a bear form or
+  with the mana for one (`YoggSaronBearReady`: the bot's spell check skips cost). Staged, dragging or
+  returning (`YoggSaronBeaconBearHeld`), it drops its form and casts Dire Bear Form, else Bear Form
+  (`yogg-saron beacon bear form`, `ACTION_RAID + 4.5`): neither casts while shapeshifted. `cat form` /
+  `caster form` are blocked meanwhile (`yogg-saron beacon bear hold`); the cat strategy shifts it back
+  after. Growl (6795) needs the form and has no GCD; until the shift is in it fails and holds the drag.
+  `IsTank` reads the strategy, so its Guardian stays loose, tier 0.
 
 **A leftover tentacle a mark's heal reaches dies first**, or Empowering Shadows heals it back (2M into one
 Corruptor over three beacons). `YoggSaronBeaconHealReaches`: within 20 yd + 5 yd slack + its size of a drag
@@ -1671,16 +1657,16 @@ first.
   (`spell_pal_aura_mastery_immune::CheckAreaTarget`), and each paladin's aura applies separately
   (`Aura::CanStackWith`). `YoggSaronTickRoar` latches `roarExpected` and the cast start;
   `YoggSaronRoarPaladin` picks the bot paladin with Aura Mastery ready by the roar, not dragging (a dragger
-  only if nobody else can: from a drag spot its 40 yd reach covers almost nobody), its own Concentration
-  up, then GUID, so the paladins alternate. It switches to Concentration 10 s ahead
-  (`ACTION_RAID + 1`, other auras blocked by `yogg-saron roar aura hold`) and presses during the cast
-  (`ACTION_EMERGENCY + 8`, one per roar, others after 500 ms, cast directly past `yogg-saron roar aura
-  mastery hold`, which keeps the class nodes off Aura Mastery meanwhile). Both read the paladin's own
-  Concentration by its application (`HasAura(19746, guid)`), since read by name an effectless copy is
-  invisible ([pitfalls](../../engine/pitfalls.md#detection-that-never-fires)), and the immunity checks the
-  application too, so an effectless copy still covers the raid. The roar's start is re-dated
-  only forward: each paladin back-dates it off Yogg's cast bar a few ms apart, and an earlier start wrapped
-  `getMSTimeDiff`, re-keyed the claim, and spent a second paladin on roar 1.
+  only if nobody else can: from a drag spot its 40 yd reach covers almost nobody), its own Concentration up,
+  then GUID, so the paladins alternate. It switches to Concentration 10 s ahead (`ACTION_RAID + 1`, other
+  auras blocked by `yogg-saron roar aura hold`) and presses during the cast (`ACTION_EMERGENCY + 8`, one per
+  roar, others after 500 ms, cast directly past `yogg-saron roar aura mastery hold`, which keeps the class
+  nodes off Aura Mastery meanwhile). Both read the paladin's own Concentration by its application
+  (`HasAura(19746, guid)`), since read by name an effectless copy is invisible
+  ([pitfalls](../../engine/pitfalls.md#detection-that-never-fires)), and the immunity checks the application
+  too, so an effectless copy still covers the raid. The roar's start is re-dated only forward: each paladin
+  back-dates it off Yogg's cast bar a few ms apart, and an earlier start wrapped `getMSTimeDiff`, re-keyed
+  the claim, and spent a second paladin on roar 1.
 - **No non-tank spell on a Guardian the threat gate refuses** (`YoggSaronHeldTargetCastMultiplier`, kicks
   exempt): the "on attacker" DoTs skip the resolver, and a held fresh Guardian DoTed by warlocks one-shot
   both with the tanks 56+ yd away.
@@ -1816,26 +1802,25 @@ squeezed for 11-23 s. So melee take one only within 7 yd edge to edge
 leaving its Corruptor. `--phase2` splits each grab's busy melee into hit / walked / stayed.
 
 **A paladin can do it for somebody else with Hand of Protection**, which covers the other eight classes.
-10278 grants `SPELL_AURA_SCHOOL_IMMUNITY` over school mask 1 and carries `SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`,
-so `HandleAuraModSchoolImmunity` strips every non-positive physical aura the immunity would cover; Squeeze
-is physical, not passive and lacks `SPELL_ATTR0_NO_IMMUNITIES`, so `CanDispelAura` passes and the tentacle
-dies on removal. `yogg-saron squeeze rescue` at `ACTION_RAID + 6` — above the sanity conservation retreat,
-since cutting somebody out of 7.5k a second beats walking somebody else to a well — takes the lowest-health
-victim inside the spell's own **30 yd**, never itself (a held paladin bubbles instead, and Hand of
-Protection can't be cast from inside the grip), skips one carrying Forbearance (25771, matched by id), and
-claims
-that victim for `ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS` so three paladins do not spend three cooldowns on one
-tentacle. Squeeze costs no Sanity — `spell_yogg_saron_sanity_reduce` has no case for it — so this is damage
-and healer load only (~0.5M a pull).
+10278 grants `SPELL_AURA_SCHOOL_IMMUNITY` over school mask 1 and carries
+`SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`, so `HandleAuraModSchoolImmunity` strips every non-positive physical
+aura the immunity would cover; Squeeze is physical, not passive and lacks `SPELL_ATTR0_NO_IMMUNITIES`, so
+`CanDispelAura` passes and the tentacle dies on removal. `yogg-saron squeeze rescue` at `ACTION_RAID + 6` —
+above the sanity conservation retreat, since cutting somebody out of 7.5k a second beats walking somebody
+else to a well — takes the lowest-health victim inside the spell's own **30 yd**, never itself (a held
+paladin bubbles instead, and Hand of Protection can't be cast from inside the grip), skips one carrying
+Forbearance (25771, matched by id), and claims that victim for `ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS` so three
+paladins do not spend three cooldowns on one tentacle. Squeeze costs no Sanity —
+`spell_yogg_saron_sanity_reduce` has no case for it — so this is damage and healer load only (~0.5M a pull).
 
 **The main tank is rescued like anyone else.** He rides a vehicle and holds nothing while he is held, so the
 threat wipe costs less than the grip; Forbearance locking out his own Divine Shield and Lay on Hands for two
 minutes is the accepted price.
 
 `CastBlessingOfProtectionProtectAction` never casts, its spell renamed Hand of Protection in 3.0
-([classes/paladin.md](../../classes/paladin.md)), and is left alone: reviving it changes paladin behaviour in every instance, and it could not serve this
-anyway, since `PartyMemberToProtect`
-only returns a non-tank under 30% health, and a squeezed bot is near full.
+([classes/paladin.md](../../classes/paladin.md)), and is left alone: reviving it changes paladin
+behaviour in every instance, and it could not serve this anyway, since `PartyMemberToProtect` only returns
+a non-tank under 30% health, and a squeezed bot is near full.
 
 ## What it costs
 
