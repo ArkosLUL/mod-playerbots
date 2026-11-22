@@ -262,8 +262,8 @@ inline constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
 // Tells the 1 to 2 handover from the 13 s before the MK II wakes, and from the next handover's start.
 inline constexpr float ULDUAR_MIMIRON_SPENT_HEALTH_PCT = 10.0f;
 
-// Bot-led Firefighter 1 to 2 handover: nobody to follow off the phase 1 field, so the raid holds a band
-// on clean ground and walks to its phase 2 slots once Mimiron boards VX-001, 12.75 s before phase 2.
+// Firefighter 1 to 2 handover, player in the raid or not: the raid holds a band on clean ground off the
+// phase 1 field and walks to its phase 2 slots once Mimiron boards VX-001, 12.75 s before phase 2.
 // Written to the trace as its number.
 enum class MimironHandoverStep : uint8
 {
@@ -273,8 +273,8 @@ enum class MimironHandoverStep : uint8
     WalkIn = 3,
 };
 
-// Hold band rows on the room centre at 44, 40 and 36 yd, outer row first. navprobe has the floor flat
-// to 45 yd on all 16 headings it probed. 4 yd apart so one node's 3.5 yd burn catches four bots at most.
+// Hold band rows on the room centre at 44, 40 and 36 yd, outer row first. navprobe has all three rows on
+// mesh every 5 degrees. 4 yd apart so one node's 3.5 yd burn catches four bots at most.
 inline constexpr float ULDUAR_MIMIRON_HOLD_OUTER_RADIUS = 44.0f;
 inline constexpr uint32 ULDUAR_MIMIRON_HOLD_ROWS = 3;
 inline constexpr float ULDUAR_MIMIRON_HOLD_ROW_STEP = 4.0f;
@@ -515,8 +515,8 @@ Unit* GetMimironStagingFocus(Player* bot);
 // Bounded by the staging search range, not the room, so it never cuts a bot out of the fight.
 bool IsNearMimironRoom(Player* bot);
 
-// None unless nothing is attackable and the raid has no real player in it on this instance.
-MimironHandoverStep GetMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bot);
+// None unless nothing is attackable in a Firefighter 1 to 2 handover.
+MimironHandoverStep GetMimironHandoverStep(PlayerbotAI* botAI, Player* bot);
 
 // The encounter's tick: the trace's phase, core and barrage rows, and the fight state reset after a
 // wipe. Throttled per instance, so every bot may call it every tick.
@@ -585,7 +585,7 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
                               float travelSeconds);
 
 // This bot's formation slot; false for roles it doesn't place, and for everyone in a handover bar the
-// phase 4 main tank and a bot-led 1 to 2 handover. Trigger and action must both call this or they
+// phase 4 main tank and the Firefighter 1 to 2 handover. Trigger and action must both call this or they
 // disagree where the bot belongs.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 

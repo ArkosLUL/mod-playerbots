@@ -30,7 +30,6 @@
 #include "UldTargets.h"
 #include "Unit.h"
 #include "Vehicle.h"
-#include "WorldSession.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1124,33 +1123,11 @@ MimironHandoverStep CachedMimironHandoverStep(Player* bot)
     return state.step;
 }
 
-// No real player in the raid group on this instance, so nobody leads it between phases.
-bool MimironBotLedRaid(Player* bot)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsInWorld() || member->GetMapId() != bot->GetMapId() ||
-            member->GetInstanceId() != bot->GetInstanceId())
-            continue;
-
-        WorldSession const* session = member->GetSession();
-        if (!session || !session->IsHeadless())
-            return false;
-    }
-
-    return true;
-}
-
 // Read off the boss script's own clock: the MK II beaten, VX-001 summoned 17 s in, Mimiron aboard it
 // at 35 s, phase 2 at 47.75 s. Grid scans, since every mech is NOT_SELECTABLE until its phase.
-MimironHandoverStep ReadMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bot)
+MimironHandoverStep ReadMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
 {
-    if (!IsMimironHardModeActive(botAI) || !BossStateGateLive(botAI, ULD_BOSS_MIMIRON) || !MimironBotLedRaid(bot))
+    if (!IsMimironHardModeActive(botAI) || !BossStateGateLive(botAI, ULD_BOSS_MIMIRON))
         return MimironHandoverStep::None;
 
     if (bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE))
@@ -1233,7 +1210,7 @@ void UpdateMimironHandover(PlayerbotAI* botAI, Player* bot)
     MimironHandoverState& state = MimironHandoverStateFor(bot);
     state.scanMs = getMSTime();
 
-    MimironHandoverStep const step = ReadMimironBotLedHandoverStep(botAI, bot);
+    MimironHandoverStep const step = ReadMimironHandoverStep(botAI, bot);
     state.step = step;
     if (step == MimironHandoverStep::None)
     {
@@ -1330,7 +1307,7 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 
 void MimironTick(PlayerbotAI* botAI) { TickMimironObs(botAI, botAI->GetBot()); }
 
-MimironHandoverStep GetMimironBotLedHandoverStep(PlayerbotAI* botAI, Player* bot)
+MimironHandoverStep GetMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot || !IsNearMimironRoom(bot) || GetMimironRingFocus(botAI))
         return MimironHandoverStep::None;
@@ -2562,8 +2539,8 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     bool walkIn = false;
     if (staging)
     {
-        // A bot-led raid has nobody to follow off the phase 1 field. It holds clean ground, then walks
-        // to its phase 2 slot, worked out on VX-001 as if it were up.
+        // Firefighter 1 to 2: off the phase 1 field onto clean ground, then the phase 2 slot, worked out
+        // on VX-001 as if it were up.
         MimironHandoverStep const step = CachedMimironHandoverStep(bot);
         if (step == MimironHandoverStep::Hold || step == MimironHandoverStep::Late)
         {
@@ -2602,7 +2579,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Nobody else gets a spot in a handover bar a bot-led walk in: refusing hands the tick to follow, and a
+    // Nobody else gets a spot in a handover bar the Firefighter walk in: refusing hands the tick to follow, and a
     // raid walking with its master stays ahead of the fire. After p4tank on purpose, since that spot holds the boss.
     if (staging && !walkIn)
         return false;

@@ -998,11 +998,13 @@ def show_fire(trace: Trace) -> None:
 # -------------------------------------------------------------------------------------------- handover
 
 def handover_rows(trace: Trace) -> list[dict]:
-    """One row per phase 1 to 2 handover: when each bot-led step started, the hold band picked, how far
-    the raid stood from the room centre, who was on a phase 2 slot when phase 2 began, healer mana
-    across it, the drinks that went out, Flames damage and deaths."""
+    """One row per phase 1 to 2 handover: when each step started, the hold band picked, how far the bots
+    stood from the room centre, which bots were on a phase 2 slot when phase 2 began, bot healer mana
+    across it, the drinks that went out, the raid's Flames damage and deaths. A human is left out of
+    the positions and the mana: the handover never moves him."""
     spans = phases(trace)
     roster = roster_guids(trace)
+    bots = roster - trace.humans
     samples = Samples(trace)
     slot_notes = notes(trace, "mimiron.slot")
     rows = []
@@ -1026,12 +1028,12 @@ def handover_rows(trace: Trace) -> list[dict]:
         def spread(when: int) -> tuple[float, float] | None:
             units = samples.before(when)
             far = sorted(dist2((row[1], row[2]), ROOM_CENTRE) for guid, row in units.items()
-                         if guid in roster and living(row))
+                         if guid in bots and living(row))
             return (statistics.median(far), far[-1]) if far else None
 
         walk_in = steps.get("3", high - WALK_IN_LEAD_MS)
         at_p2 = samples.before(high)
-        living_at_p2 = [guid for guid, row in at_p2.items() if guid in roster and living(row)]
+        living_at_p2 = [guid for guid, row in at_p2.items() if guid in bots and living(row)]
         # Only slots handed out in the handover: a phase 1 one left standing is no phase 2 slot.
         handed = [rec for rec in slot_notes if low <= rec["t"] <= high]
         slotted = on_slot = 0
@@ -1044,7 +1046,7 @@ def handover_rows(trace: Trace) -> list[dict]:
             on_slot += int(dist2((at_p2[guid][1], at_p2[guid][2]), point) <= SPREAD_TOLERANCE)
 
         start_units = samples.before(low)
-        mana = [(start_units[guid][6], at_p2[guid][6]) for guid in sorted(roster)
+        mana = [(start_units[guid][6], at_p2[guid][6]) for guid in sorted(bots)
                 if trace.role(guid) == "heal" and guid in start_units and guid in at_p2]
         drinks = [(trace.name(rec["g"]), (rec["t"] - low) / 1000.0) for rec in trace.of("act")
                   if rec.get("a") in ("drink", "eat") and rec.get("vd") == "OK" and low <= rec["t"] < high]
@@ -1071,16 +1073,17 @@ def show_handover(trace: Trace) -> None:
         low, high = row["span"]
         print(f"  {clock(low)} .. {clock(high)}  {(high - low) / 1000:.1f} s")
         if row["steps"]:
-            print("    bot-led steps: " + ", ".join(
+            print("    steps: " + ", ".join(
                 f"{HANDOVER_STEPS[value]} +{(when - low) / 1000:.1f} s" for value, when in sorted(
                     row["steps"].items(), key=lambda item: item[1]))
                   + (f"  (walk in {(high - row['steps']['3']) / 1000:.1f} s before P2)" if "3" in row["steps"] else ""))
             print(f"    hold band: {row['hold'] or 'not noted'}")
         else:
-            print("    no bot-led steps: a player in the raid, or not Firefighter")
-        print("    from the room centre, median/max yd: " + ", ".join(
+            print("    no steps: not Firefighter, or a pull with a player in it from a build before"
+                  " the hold ran in every raid")
+        print("    bots from the room centre, median/max yd: " + ", ".join(
             f"{name} {cell[0]:.0f}/{cell[1]:.0f}" for name, cell in row["spread"].items() if cell))
-        print(f"    on a phase 2 slot at P2: {row['on_slot']} of {row['living']} living"
+        print(f"    on a phase 2 slot at P2: {row['on_slot']} of {row['living']} living bots"
               f" ({row['slotted']} with a slot)")
         if row["mana"]:
             print("    healer mana: " + "/".join(f"{before:.0f}" for before, _ in row["mana"]) + " -> "
@@ -1464,7 +1467,7 @@ SECTIONS = (
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
     ("fire", "fire dodges against the ticks behind them, where they went, and the formation's detours",
      show_fire),
-    ("handover", "the phase 1 to 2 handover: bot-led hold and walk in, where the raid stood, mana and drinks",
+    ("handover", "the phase 1 to 2 handover: hold band and walk in, where the bots stood, mana and drinks",
      show_handover),
     ("mines", "Proximity Mine hits and kills by what was moving the bot, and legs that passed a live mine",
      show_mines),
