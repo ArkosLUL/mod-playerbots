@@ -1,0 +1,3 @@
+src/Ai/Raid/ToC/Action/ToCActions_TwinValkyr.cpp	keep it 3D like the gossip's own check, or a raised portal reads in reach and the gossip silently does nothing
+src/Ai/Raid/ToC/Util/ToCHelpers_FactionChampionsDefence.cpp	not OpenChain: its advance would read the cooldown this grip just started and skip the link
+src/Ai/Raid/ToC/Util/ToCHelpers_FactionChampionsDefence.cpp	no Refresh: on a new ms it reruns UpdateWalls, which sees Death Grip on cooldown and drops the duty first

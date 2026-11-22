@@ -82,7 +82,9 @@ spawn on a 47 yd circle round `ARENA_CENTER`, 1.5 yd up, and fly chords to rando
 7-8 yd/s (flight or run speed, unmeasured), despawning at an endpoint two times in three. Every
 85 ms (100101) an orb takes the nearest **player** within 2.75 yd 2D, never a pet, and explodes:
 Unleashed Light/Dark, 6 yd, 7,800-8,200 / 7,800-8,200 / 8,775-9,225 / 14,625-15,375, absorbed by
-the matching essence. An orb its own colour sets off still hits the other colour within 6 yd. Fjola
+the matching essence. An orb its own colour sets off still hits the other colour within 6 yd. An
+exploded orb turns to display 11686 and despawns 1.5 s later, harmless since the blast is instant;
+the bots' sweep skips it. Fjola
 schedules the waves and runs no event while casting, so one due in her Light Vortex spawns as the
 channel ends (25H 2026-11-16: due 1:31.2, spawned 1:41.2).
 
@@ -123,11 +125,11 @@ off the tank list last), so staging and the fight agree. Fjola's tank (560.5, 88
 84 and 82.5, ranged 81 and 79.8, each row at x 563.25 / 561.5 / 565; past six a role starts over,
 stacking costs nothing here. Hunters take the back row from x 565 in. The twins hover ~6 yd over
 their tank, so melee reach them from ~10 yd 2D (3D 11.8), and no shot casts inside that 11.8: the
-ranged rows sit only 12-14 yd from a twin parked on the arena side of her tank. A
-twin moves again only once her target moved past ~9.1 yd 3D (`CONTACT_DISTANCE` plus both reaches
-less her hover, ~6.9 yd 2D): she parks that short of a standing target on the side she came from,
-overtakes a tank walking her in and stops right over it, and pulled into the tunnel stays there. They face the raid and melee eat parries: turning them round would put the tanks in
-the orb field.
+ranged rows sit only 12-14 yd from a twin parked on the arena side of her tank. A twin moves again
+only once her target moved past ~9.1 yd 3D (`CONTACT_DISTANCE` plus both reaches less her hover,
+~6.9 yd 2D): she parks that short of a standing target on the side she came from, overtakes a tank
+walking her in and stops right over it, and pulled into the tunnel stays there. They face the raid
+and melee eat parries: turning them round would put the tanks in the orb field.
 
 **Colours**, `GetWantedEssence`, first match:
 
@@ -135,10 +137,11 @@ the orb field.
    off the door), and on normal so does the raid through a Light Vortex if a bot paladin running its
    own Fire Resistance Aura had Aura Mastery ready at the cast start (latched then). Otherwise the
    Vortex's colour. Outranks a Touch: the Touch's other colour would eat the whole Vortex, up to
-   80k. A non-tank holding it walks on to wait 10 yd from the portal it swaps at next, its Touch's
-   colour or else its base one, toward its stand (`twin valkyr walk to next portal`), so that swap
-   lands as the channel ends: a held Touch ticks every 2 s from then. Heroic can't hold: 25H lands ~54k through the measured 20% resist and 13% absorbs, ~35k
-   even with Aura Mastery and Divine Guardian, against 25-33k health.
+   80k. A non-tank holding it walks on to wait 10 yd (gossip reach ~14 yd 3D, less slack for the
+   floor's slope) from the portal it swaps at next, its Touch's colour or else its base one, toward
+   its stand (`twin valkyr walk to next portal`), so that swap lands as the channel ends: a held
+   Touch ticks every 2 s from then. Heroic can't hold: 25H lands ~54k through the measured 20%
+   resist and 13% absorbs, ~35k even with Aura Mastery and Divine Guardian, against 25-33k health.
 2. **Touch** on the bot: its colour, re-taken if already held (during a Vortex of that colour too).
 3. **Base**: Eydis's tank Light, everyone else Dark, even after a Touch or the Light Vortex left it
    Light. Eydis's Touch only picks a Light holder no twin has as victim, so it finds nobody; the
@@ -159,11 +162,12 @@ door stand (from Light 1 the nearest Dark portal is Dark 2, 80 yd from the door)
 the 6 s cast with little to spare), on to Dark 1 during the channel while no wave spawns, swap as it
 ends, back (from Dark 1's spot ranged reach both twins at 26-29 yd, healers the tanks). Touch and
 Vortex walks first clip a cast that pins the feet; base walks, the one to the next portal included,
-only a channel with over 1.5 s left (a warlock re-channels Drain Soul on low twins). A walk stopped 500 ms short of
-range clears `last movement`, which otherwise refuses the repeat as a duplicate for 5 s; one still
-walking holds the tick, or a lower node's charge leaps the bot back onto the twin. Touch and
-Vortex walks and the orb dodge also clear a booking headed elsewhere: forced doesn't outrank forced.
-Once the gossip lands the essence the bot stops rather than finish the walk under the lock.
+only a channel with over 1.5 s left (a warlock re-channels Drain Soul on low twins). A walk stopped
+500 ms short of range clears `last movement`, which otherwise refuses the repeat as a duplicate for
+5 s; one still walking holds the tick, or a lower node's charge leaps the bot back onto the twin.
+Touch and Vortex walks and the orb dodge also clear a booking headed elsewhere: forced doesn't
+outrank forced. Once the gossip lands the essence the bot stops rather than finish the walk under
+the lock.
 
 **Orb waits** (`TwinValkyrWalkWait`, `tv.wait`). Out in the arena bots stand a yard or two apart, so
 any blast reaches the bot. Each essence walk, the next-portal walk and the door stand predict the
@@ -172,15 +176,16 @@ bot stops when walking on passes inside 6.5 yd and closer than standing (`orb`),
 skips a swap whose new colour would bring a harmful orb closer (`swap`). A Vortex walk waits only
 while it still ends 1.5 s before the cast (Nitro's test; never once it channels); every stretch of
 waiting caps at 3 s. A waiting healer, or a bot inside the dodge's trigger, hands the tick on to its
-heals or the dodge. A healer on a base or door-stand walk also stops (`heal`) for a group member under
-35% within 40 yd while standing is orb-safe: the walks outrank every heal node.
+heals or the dodge; the wait is tested before the cast clip, so the heal goes on. A healer on a base
+or door-stand walk also stops (`heal`) for a group member, itself included, under 35% within 40 yd
+while standing is orb-safe, swapping first when in gossip reach (the gossip is instant): the walks
+outrank every heal node.
 `TwinValkyrBoostEssenceWalk` spends Nitro Boosts (3 min, so about one per pull) on a walk over 15 yd,
-mid-pull only: a Vortex walk when it would end under 1.5 s before the cast does (heroic's 40 yd in 6
-s; normal's 35-38 yd in 8 s doesn't), a Touch or base walk only once the pull's Light Vortex has
+mid-pull only: a Vortex walk when it would end under 1.5 s before the cast does (heroic's 40 yd in
+6 s; normal's 35-38 yd in 8 s doesn't), a Touch or base walk only once the pull's Light Vortex has
 started, which on normal means the trip back to Dark and the stand; never the base walk to the next
-portal, which has the channel. No
-essence-swap multiplier: a blanket `MovementAction` veto also vetoes `AttackAction`
-([pitfalls.md](../../engine/pitfalls.md)).
+portal, which has the channel. No essence-swap multiplier: a blanket `MovementAction` veto also
+vetoes `AttackAction` ([pitfalls.md](../../engine/pitfalls.md)).
 
 **Door hold.** `twin valkyr door hold` blocks reach (heal reach too), set behind, rear flank,
 formation, follow, flee, run away, move random, charge, blink and disengage for every bot with a
@@ -211,21 +216,23 @@ nearest player) and runs into the tunnel, or tells a bot tank to `attack` (or `t
 twin: that leaves her as its `pull target`, and every bot tank then fetches its own twin, so each
 sister takes her own tank. No bot pulls otherwise: without a player (the DC harness, its master off
 the map) the raid waits on its stands. The tank taunts its twin once she's in range and taunts back
-any assigned twin on someone else. Mid-pull only a twin on someone else, more than 30 yd off her door spot and no
-yard closer for 2 s sends her tank out. A fetch walks to 25 yd of her for the taunt, the door hold
-off so reach melee can finish. Then it walks her back by a lead 5 yd out of its spot toward `ARENA_CENTER`
-(0.6 yd inside the orb circle), waits up to 3 s for her to stop, and steps back to the spot
-(`DragBossToAnchor` stops 12 yd short), backing up while she's on the far side: she stays 5 yd out,
-clear of the hunters. Both tanks hold their colour through every Vortex
-(above) on the Vortex defensive, or on heals with none ready. The first 15 s cost each tank 4-5k
-damage per second, too much for the drag the kill used. `twin valkyr tank target guard` zeroes `tank assist` while its twin is attackable. Multipliers:
-`TwinValkyrTauntGuardMultiplier` zeroes a taunt on a twin another living tank owns,
+any assigned twin on someone else. Mid-pull only a twin on someone else, more than 30 yd off her
+door spot and no yard closer for 2 s sends her tank out. A fetch walks to 25 yd of her, inside the
+30 yd taunt with room for her drift, the door hold off so reach melee can finish. Then, coming in
+from farther out, it walks her back by a lead 5 yd out of its spot toward `ARENA_CENTER` (0.6 yd
+inside the orb circle), waits up to 3 s for her to stop, attacking meanwhile, and steps back to the
+spot (`DragBossToAnchor` stops 12 yd short), backing up while she's on the far side, since a tank
+takes no parry or block from behind: she stays 5 yd out, clear of the hunters. Both tanks hold
+their colour through every Vortex (above) on the Vortex defensive, or on heals with none ready. The
+first 15 s cost each tank 4-5k damage per second, too much for the drag the kill used.
+`twin valkyr tank target guard` zeroes `tank assist` while its twin is attackable. Multipliers:
+`TwinValkyrTauntGuardMultiplier` zeroes a taunt on a twin another living tank owns (a self-cast
+taunt, or Righteous Defense on an ally, counts at the bot's current target),
 `TwinValkyrControlTankMovementMultiplier` zeroes formation moves for a tank holding its twin.
 Hunters and rogues redirect to their target twin's tank, casting outside the queue, so
 `TwinValkyrRedirectGuardMultiplier` zeroes the class Misdirection and Tricks actions and the
 opener's redirect. A hunter waits for its twin in Auto Shot range: Misdirection's 4 s transfer
-starts on the next attack, Kill Command included. Twin Spike
-gets no defensive node.
+starts on the next attack, Kill Command included. Twin Spike gets no defensive node.
 
 **Vortex defensives.** `GetTwinVortexHit`, for a bot whose want is a hold: the shared
 `RaidPredictedHit` from the channel's first tick (a period in), 4 s, the remapped tick's DBC average
@@ -236,12 +243,11 @@ Divine Hymn, Tranquility) and `twin valkyr raid cover hold` blocks those class n
 lead-in. Fjola's tank on 25H faces ~64k after Fire Resistance Aura.
 
 **Twin's Pact.** Every DPS goes to the Pact twin unless a player's skull is on her sister, normal's
-Eydis aside.
-`TwinValkyrInterruptHoldMultiplier` zeroes the seven working interrupts while any twin is shielded,
-and silencing shot, strangulate, silence, hammer of justice and bash on a twin always. Arcane
-torrent stays: only the racial nodes cast it, for its resource. Once the shield breaks, the duty
-falls to the lowest GUID among bots on the map
-with a ready, in-range working interrupt that are not swapping for a Touch or Vortex, as on Vezax.
+Eydis aside. `TwinValkyrInterruptHoldMultiplier` zeroes the seven working interrupts while any twin
+is shielded, and silencing shot, strangulate, silence, hammer of justice and bash on a twin always.
+Arcane torrent stays: only the racial nodes cast it, for its resource. Once the shield breaks, the
+duty falls to the lowest GUID among bots on the map with a ready, in-range working interrupt that
+are not swapping for a Touch or Vortex, as on Vezax.
 Ready also means off cooldown and affordable: `CanCastSpell` skips power, and a pet spell's
 cooldown; the warlock casts Spell Lock itself, so its cooldown and range are the warlock's.
 
@@ -250,11 +256,11 @@ is in combat). Heroic: Eydis's shield goes up, or the 3rd special starts with no
 them (a count of specials, a Vortex, shield or Pact appearing). Normal: both twins on a listed tank
 within 12 yd of their door spots, or 20 s into the pull. A DPS bot holds every gated burst cooldown
 until lust lands on it (Bloodlust or Heroism up, or Sated or Exhaustion gained this pull); one Sated
-from before the pull, or with no living shaman left with lust off cooldown, waits only for the
-window; otherwise the window plus 10 s at most, for a lust that never comes. Healers hold only Power
-Infusion (`twin valkyr power infusion hold`, both its nodes, since the burst row's flag covers every
-role), tanks nothing, Shadowfiend stays free. Heroic cooldowns can wait to ~2:15, so 2-3 min ones
-lose a use.
+from before the pull, or with no living shaman, human or bot, left with lust off cooldown, waits
+only for the window; otherwise the window plus 10 s at most, for a lust that never comes. Healers
+hold only Power Infusion (`twin valkyr power infusion hold`, both its nodes, since the burst row's
+flag covers every role), tanks nothing, Shadowfiend stays free. Heroic cooldowns can wait to ~2:15,
+so 2-3 min ones lose a use.
 
 **Orbs.** A bot dodges orbs of another colour (every orb without an essence) and of its own colour
 while a group member without it stands within 7 yd, testing points a yard apart along each orb's
@@ -270,10 +276,11 @@ dodge yields only to a Vortex swap with no time left to wait.
 **Lookups.** One scan per instance per ms (`RaidInstanceState`) resolves the twins through
 `GetGuidData`, reads the Vortex, the Pact, the shield, the tank list and the pull's state (specials,
 lust window, each twin's approach to her door), and takes every orb and portal in one 100 yd sweep
-from a twin; `GetFirstAliveUnitByEntry` is deprecated and sight-capped, and per-bot sweeps and group
-walks multiply. The door deal refreshes once a second. Once per group per ms
-([`ToCGroupMemo`](README.md#code-layout)): the living members' positions and essences for the orb
-splash test, the Pact interrupter and whether a shaman has lust ready.
+from a twin (one from a bot at the gate would miss the circle's far side); `GetFirstAliveUnitByEntry`
+is deprecated and sight-capped, and per-bot sweeps and group walks multiply. The door deal refreshes
+once a second. Once per group per ms ([`ToCGroupMemo`](README.md#code-layout)): the living members'
+positions and essences for the orb splash test, the Pact interrupter and whether a shaman has lust
+ready.
 
 | Trigger | Action | Relevance |
 |---|---|---|
@@ -300,10 +307,11 @@ splash test, the Pact interrupter and whether a shaman has lust ready.
   the old centre stack (2026-10-25, 2:43, 56 Unleashed hits, 3 Eydis Touches per Light Vortex): 0
   Unleashed in the tunnel, one Eydis Touch, tanks alive through each Vortex, no bot Vortex tick (13
   Nitro uses), lust inside Eydis's Pact; the kill missed the 3:00-3:15 target and DPS cooldowns
-  against the lust window went unchecked. 8 died at 3:14, after the Light Vortex: that Touch's 3 ticks, then the ~55 yd walk
-  Light 1, Dark 1, stand with healers moving at the raid's low point (32% average), and one Light
-  orb going off where bots still walking out on Light crossed bots walking home on Dark, its blast
-  killing 4. The raid still takes Light 1 and Dark 1 around the channel, by the user's choice.
+  against the lust window went unchecked. 8 died at 3:14, after the Light Vortex: that Touch's 3
+  ticks, then the ~55 yd walk Light 1, Dark 1, stand with healers moving at the raid's low point
+  (32% average), and one Light orb going off where bots still walking out on Light crossed bots
+  walking home on Dark, its blast killing 4. The raid still takes Light 1 and Dark 1 around the
+  channel, by the user's choice.
 - 25H 2026-11-02 (traces `649_54_val-kyr-twins_1793657909` and `_1793658373`): a wipe with the twins
   at 3%, then a 3:21 kill with 1 death. The wipe: Eydis's Touch, picked on Assasin while Light after a
   Fjola Touch, landed after his swap back to Dark and was never re-taken (16 s, 1.09M) before the
@@ -367,9 +375,10 @@ damage meanwhile (`--touch`); each Pact's shield up and down off `tv.shield`, ca
 kicks wasted on the shield and after the break, duty and lust (`--pact`); Unleashed hits taken or
 absorbed, peak Powering Up and Empowered per bot, each blast with unabsorbed damage (hits of one
 spell within 50 ms, its bots hit and absorbed, tunnel or arena), and which bots dodged under each
-`tv.orb` rule (`--orbs`); each twin's time on her `tv.tank` tank, taunts, distance from `ARENA_CENTER` and between
-the twins, her first victim from the engage and when her own tank took her (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.target` twin while
-that reads `skull` or `door`, Fjola while a `tv.tank` reads `both`, no Eydis Pact on normal
+`tv.orb` rule (`--orbs`); each twin's time on her `tv.tank` tank, taunts, distance from
+`ARENA_CENTER` and between the twins, her first victim from the engage and when her own tank took
+her (`--tanks`); each DPS bot's time on the twin the rule names: its `tv.target` twin while that
+reads `skull` or `door`, Fjola while a `tv.tank` reads `both`, no Eydis Pact on normal
 (`--targets`); per bot, living time within 2.5 yd of its `tv.door` stand and 51+ yd out, time out
 of the tunnel by `tv.essence` reason, Unleashed hits taken in the tunnel and out, and `tv.nitro`
 uses by walk (`--door`). In a trace the summon opened, time shares count from the engage (`pull` row
