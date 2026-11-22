@@ -37,7 +37,7 @@ nodes are normal. Stands park within 0.75 yd and walk back past 2.5. The floor i
   2742.25), 13.5 yd west of Valanar's, node 1, a spread node otherwise.
 - **Nodes** (`ICC_BPC_NODES`, 41): only 15 reach Valanar's spot within 28 yd, 14 with Taldaram's own
   spot. Healers stay out of that zone while a node outside it reaches a tank spot, each tank spot in use
-  reached within 36 yd (held to 38) by half the healers rounded up, every healer node by one spot at
+  reached within 36 yd (held to 38; heals pick targets out to 38.5) by half the healers rounded up, every healer node by one spot at
   least; with no bot tank any node serves. The dais field, the five dais nodes within 28 yd of his
   spot, is never a healer's and in his phase no ranged bot's: the melee scatter there. Ranged take the
   nearest node within 28 yd (hunters 32) of the empowered prince, held to 31 (35): 30 yd spells

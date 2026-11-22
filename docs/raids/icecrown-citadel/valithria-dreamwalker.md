@@ -66,7 +66,8 @@ yd out, 1 yd above her). Her spawn settles at 364.873.
   whenever hers has run out.
 - **Dream flight**: straight 3D splines with the fly flags set by hand (no client answers the aura,
   and the generic movers fly only with a flying master). First the cloud nearest the bot until a
-  stack is newer than the dream; then the group of refreshed bot dreamers flies onto its lowest-guid
+  stack is newer than the dream (Vigor holds 19 s or more beyond what is left of Dream State: the dream
+  lasts 20 s, Vigor 40 s from its last cloud, so a smaller gap came from inside the dream); then the group of refreshed bot dreamers flies onto its lowest-guid
   leader when over 6 yd off, else to the shared cloud nearest the leader, left once the leader has
   waited 1.3 s within 3 yd. A player in Dream State leads instead. A flight re-aims once its point
   moves 2 yd. The clouds are read from the combat trigger, which shares the Dream State phase; she

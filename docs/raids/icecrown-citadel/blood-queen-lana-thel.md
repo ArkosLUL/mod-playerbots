@@ -45,7 +45,7 @@ end; the dais north of it is flat at 401.75 from 27 to 37.5 yd north, 12-14 yd e
 spot, over a ramp, and drops to the council room below at 38.5 yd.
 
 - **Tank spot** (4630.71, 2769.42, 401.75), 3.5 yd short of the dais edge (the old one was 1 yd). She
-  stops 9.2 yd short of a tank she chases, on the ramp at (4621.51, 2769.42).
+  stops 9.2 yd short of a tank she chases, on the ramp at (4621.51, 2769.42, 401.32).
 - **Nodes** (`ICC_BQL_NODES`, 45): one triangular lattice for ground and air (rings round the centre,
   the old air slots, can't hold the ground rules) with 7.5 yd sides (6 yd splash plus two 0.75 yd park tolerances) within
   25 yd of the centre, so a shadow on the inner lane misses it, plus
@@ -114,7 +114,7 @@ spot, over a ramp, and drops to the council room below at 38.5 yd.
   would land there.
 - **Spread** (`bql.slot`, `bql.airslot`, `bql.group`): healers keep a ground node in 36 yd (held to
   38) of the main tank and her; ranged one in 35.5 yd of her (hunters 40, held to 37.5 and 42), a 30 yd
-  spell reaching 38.7 yd past her 7.2 combat reach. While she walks or flies held nodes stay put. From
+  spell reaching 38.7 yd (hunters 43.7) past her 7.2 combat reach. While she walks or flies held nodes stay put. From
   her walk to the centre until the Whirl ends, every bot but the main tank without a ground node takes
   the nearest free node. Melee and spares split into up to three balanced groups by guid. Nodes and
   spots within 5.75 yd of a shadow are given up.
