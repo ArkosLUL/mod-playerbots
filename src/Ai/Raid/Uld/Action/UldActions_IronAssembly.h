@@ -132,6 +132,25 @@ public:
     bool Execute(Event event) override;
 };
 
+class IronAssemblyMeltdownStepOutAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "iron assembly meltdown step out action";
+
+    IronAssemblyMeltdownStepOutAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
+// Walk and cast in one node, so the walk and the cast can't pick different bodies.
+class IronAssemblyTankBattleRezAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "iron assembly tank battle rez action";
+
+    IronAssemblyTankBattleRezAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 // The weakest magic defensive that covers the cast's remaining time.
 class IronAssemblyFusionPunchDefensiveAction : public Action
 {

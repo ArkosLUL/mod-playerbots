@@ -69,7 +69,11 @@ void DefineIronAssembly(EncounterBuilder& e)
     e.Node<IronAssemblyInterruptTrigger, IronAssemblyInterruptAction>(ACTION_EMERGENCY + 4);
     e.Node<IronAssemblyMeltdownRunOutTrigger, IronAssemblyMeltdownRunOutAction>(ACTION_EMERGENCY + 3,
                                                                                EncounterRow::Mover);
+    e.Node<IronAssemblyMeltdownStepOutTrigger, IronAssemblyMeltdownStepOutAction>(ACTION_EMERGENCY + 3,
+                                                                                 EncounterRow::Mover);
     e.Node<IronAssemblyFusionPunchDefensiveTrigger, IronAssemblyFusionPunchDefensiveAction>(ACTION_EMERGENCY + 2);
+    // Above every heal: a healer druid that heals while a body waits never gets there.
+    e.Node<IronAssemblyTankBattleRezTrigger, IronAssemblyTankBattleRezAction>(ACTION_RAID + 7, EncounterRow::Mover);
     e.Node<IronAssemblyTankAssignmentTrigger, IronAssemblyTankAssignmentAction>(ACTION_RAID + 6);
     e.Node<IronAssemblyUnheldTauntTrigger, IronAssemblyUnheldTauntAction>(ACTION_RAID + 5);
     e.Node<IronAssemblyShieldOfRunesTrigger, IronAssemblyShieldOfRunesAction>(ACTION_RAID + 4);
@@ -99,6 +103,13 @@ void DefineIronAssembly(EncounterBuilder& e)
     // tugs the carrier back toward Steelbreaker, and a charge at any point lands it on the melee.
     e.Block("iron assembly meltdown carrier hold", Role::Tank, IronAssemblyMeltdownCarrierAway,
             Family::Reach | Family::ReachHeal | Family::Charge);
+
+    // A blast next to him in 3 s: reach, set behind or a charge would walk a melee bot back into it. A Rune
+    // of Death still gets to move it.
+    e.OwnMovement("iron assembly meltdown melee guard", Role::Melee, IronAssemblyMeltdownMeleeWindow, Family::Attack,
+                  {IronAssemblyMeltdownStepOutAction::Name, IronAssemblyRuneOfDeathAction::Name});
+    e.Block("iron assembly meltdown melee charge guard", Role::Melee, IronAssemblyMeltdownMeleeWindow,
+            Family::Charge);
 
     // Tank face is a second mover at the tank spot's priority, and the two alternate. Set facing is a
     // separate node.

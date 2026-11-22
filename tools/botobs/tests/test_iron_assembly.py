@@ -27,6 +27,7 @@ FULL_V14 = BOTOBS / "fixtures" / "full-v14.ndjson"
 TANK = 7801
 PARTNER = 7802
 PRIEST = 7803
+DRUID = 7804
 STEEL = (1 << 32) | 1
 MOLGEIM = (1 << 32) | 2
 BRUNDIR = (1 << 32) | 3
@@ -52,7 +53,8 @@ def pull(last_mask: int = 1, out: str = "wipe") -> list[dict]:
          "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {"iron-assembly": 1}, "iccbuffs": 0},
          "roster": [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
                     {"g": PARTNER, "n": "Rampart", "r": "tank", "c": 6, "h": 0},
-                    {"g": PRIEST, "n": "Mender", "r": "heal", "c": 5, "h": 0}]},
+                    {"g": PRIEST, "n": "Mender", "r": "heal", "c": 5, "h": 0},
+                    {"g": DRUID, "n": "Grove", "r": "heal", "c": 11, "h": 0}]},
         {"t": 0, "e": "unit", "g": STEEL, "en": 32867, "n": "Steelbreaker", "b": 1},
         {"t": 0, "e": "unit", "g": MOLGEIM, "en": 32927, "n": "Runemaster Molgeim", "b": 1},
         {"t": 0, "e": "unit", "g": BRUNDIR, "en": 32857, "n": "Stormcaller Brundir", "b": 1},
@@ -128,6 +130,18 @@ class Empowered(unittest.TestCase):
 
     def test_never_reached(self):
         self.assertIn("never reached", printed(ia.show_empowered, load(pull(last_mask=3))))
+
+    def test_who_else_the_blast_killed_and_the_rebirth_after(self):
+        records = pull()
+        records[1:1] = [{"t": 0, "e": "spell", "sp": 61889, "n": "Meltdown"}]
+        records[-1:-1] = [
+            {"t": 242700, "e": "death", "g": PRIEST, "killer": STEEL, "x": 1600.0, "y": 105.0, "z": 427.3,
+             "rewind": [[242700, STEEL, 61889, 29250]]},
+            {"t": 244000, "e": "cast", "s": DRUID, "sp": 48477, "tgt": TANK},
+        ]
+        text = printed(ia.show_empowered, load(records))
+        self.assertIn("Meltdown at 4:03.000, 2 yd from the Meltdown point, 1 more killed", text)
+        self.assertIn("4:04.000  Rebirth from Grove on Bulwark (tank)", text)
 
 
 class Deaths(unittest.TestCase):

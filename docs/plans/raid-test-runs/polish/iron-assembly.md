@@ -149,3 +149,48 @@ ironassembly.meltdown` shows `parked` without `run`/`parked` flipping; no `reach
 last one up, a druid with Rebirth ready walks into range of a dead tank's body (tanks only) and
 rezzes it, so the next swap has a partner. (2) When a carrier has no partner (`nopartner` or `late`),
 the melee step away from it for its last 3 s, staying in reach behind Steelbreaker where they can.
+
+## Round 3 (2026-11-22, on Custom 8e71d146b: the user's two answers)
+
+**Data.** None new: round 2 (`acba88ac1`) has not been pulled. Window 7's view (`raidtest.py report
+--head 61011f323`) still holds round 2's three pulls, read above. Stop rules, verdict and failure
+ranking skipped; this round builds the two decided plan changes. Geometry re-read from those traces
+(`603_12_…_1795339632`, uld2): at the third blast (5:34.9) Uldyaz stood on his tank spot 7.6 yd from
+Steelbreaker's centre and all 7 melee hugged him at 2.6–5.0 yd, 10.0–11.5 yd off the carrier; 5 died
+to Meltdown 0.03–0.27 s before the carrier's own death. When Uldyab died at the point (4:56.4), the
+resto druid Uldyba stood 35.2 yd from Uldyaa's body and 41.8 from Uldyab's, the balance druid 59.8 / 67.0.
+
+**Change 1, tank battle rez** (`iron assembly tank battle rez`, `ACTION_RAID + 7`, Mover row). While
+Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (pending res, Soulstone
+or Reincarnation counts as up), the closest (non-tank druid bot with Rebirth ready and affordable, bot
+tank body in the hall) pair is latched in the instance state; the druid casts Rebirth inside 28 yd,
+else walks straight at the body to 26 (out of cat or moonkin form only for the cast). Holds while the
+walk's end is within 17 yd of a carrier inside its 10 s swap lead, or a cast would still run within 16
+yd of a carrier's last 3 s.
+In uld2 it would have sent Uldyba 9.2 yd toward Uldyaa at 4:56, the tank back ~4 s later 22 yd from
+the tank spot, ~25 s before the next swap. Kept in Iron Assembly's files (`IronAssemblyBattleRezDuty`):
+`CastRebirthAction` is untouched, and the class `rebirth` still casts on any body in range.
+
+**Change 2, melee step out** (`iron assembly meltdown step out`, `ACTION_EMERGENCY + 3`, Mover row).
+Meltdown 61889 is a SRC-area search on the carrier: 15 yd 3D centre to centre, no reach added
+(`WorldObjectSpellAreaTargetCheck`). For a carrier with ≤ 3 s of Overwhelming Power standing within
+17 yd + melee range of him, each non-tank melee bot within 16 yd of it goes straight behind him from
+it, at melee range − 1 (9.8 yd: 17.4 off a 7.6 yd carrier), or out to 17 when the carrier is under
+~7.2 yd from his centre; kept within 22 yd of his designed spot. Generalised past `nopartner` / `late`
+to any carrier blowing next to him (a missed taunt or a stuck runner reads the same); a carrier at the
+Meltdown point is 46 yd off and never opens the window. Static Disruption skips anyone within 19.5 yd
+of his centre (`SelectTarget(Random, 0, -10)` → `IsWithinCombatRange` adds both reaches), so the stack
+behind him is safe from it. For the window `iron assembly meltdown melee guard` (OwnMovement, keeps
+Attack, passes only the step out and the Rune of Death escape) and `iron assembly meltdown melee charge
+guard` (Charge): reach and set behind would walk them back in. The Meltdown `haz` circle's clearance is
+17 now.
+
+Reader: `--empowered` adds "N more killed" per blast (deaths ±0.5 s of the carrier's aura ending) and
+every Rebirth with its target's role. pb-check green (compile, pblint, codestyle, botobs).
+
+**Next window should show.** `--empowered`: after a tank dies with Steelbreaker alone and fewer than
+two bot tanks left, a "Rebirth from <druid> on <tank> (tank)" within ~10 s, and no `nopartner` blast
+(`postmortem.py --notes ironassembly.rez`: `walk` → `cast`, `--notes ironassembly.meltdown`). On any
+blast next to him (`nopartner`/`late`): no "N more killed", melee `ironassembly.meltstep` `behind` rows
+in its last 3 s, and `VETO iron assembly meltdown melee guard` on reach or set behind. Melee uptime in
+those 3 s holds (cast rate on him).

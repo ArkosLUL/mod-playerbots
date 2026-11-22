@@ -42,6 +42,10 @@ MASK_BITS = ((1, "Steelbreaker"), (2, "Molgeim"), (4, "Brundir"))
 SPELL_FUSION_PUNCH = (61903, 63493)
 SPELL_OVERWHELMING_POWER = (61888, 64637)
 SPELL_ELECTRICAL_CHARGE = 61902
+SPELL_REBIRTH = (48477, 26994, 20748, 20747, 20742, 20739, 20484)
+# Each death is stamped on its own bot's tick, so a blast's victims land up to ~0.3 s either side of the
+# carrier's aura ending.
+BLAST_WINDOW_MS = 500
 
 # Anchor + 30 yd at 315 degrees, ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT in the strategy.
 MELTDOWN_POINT = (1608.39, 99.81)
@@ -233,7 +237,8 @@ def show_phases(trace: Trace) -> None:
 
 
 def show_empowered(trace: Trace) -> None:
-    """Overwhelming Power carriers and every Fusion Punch once Steelbreaker is alone."""
+    """Overwhelming Power carriers with whoever their blast killed, every Fusion Punch and every Rebirth once
+    Steelbreaker is alone."""
     print("STEELBREAKER ALONE")
     if not mine(trace):
         return
@@ -254,12 +259,16 @@ def show_empowered(trace: Trace) -> None:
                       and other["t"] > rec["t"]), None)
         fate = "still up at the end"
         if ended is not None:
-            died = next((d for d in deaths.get(carrier, []) if abs(d["t"] - ended) <= 300), None)
+            died = next((d for d in deaths.get(carrier, []) if abs(d["t"] - ended) <= BLAST_WINDOW_MS), None)
             if died is None:
                 fate = f"off at {clock(ended)}, carrier alive"
             elif mechanic(trace, died) == "Meltdown":
                 spot = dist2((died.get("x", 0), died.get("y", 0)), MELTDOWN_POINT)
                 fate = f"Meltdown at {clock(ended)}, {spot:.0f} yd from the Meltdown point"
+                caught = sum(1 for guid, rows in deaths.items() if guid != carrier for d in rows
+                             if abs(d["t"] - ended) <= BLAST_WINDOW_MS and mechanic(trace, d) == "Meltdown")
+                if caught:
+                    fate += f", {caught} more killed"
             else:
                 fate = (f"carrier died at {clock(ended)} to {mechanic(trace, died)}, "
                         f"{(ended - rec['t']) / 1000:.0f}s in")
@@ -283,6 +292,11 @@ def show_empowered(trace: Trace) -> None:
         if killed:
             line += "  KILLED"
         lines.append((rec["t"], line))
+    for rec in trace.of("cast"):
+        if rec.get("sp") in SPELL_REBIRTH and rec["t"] >= start:
+            target = rec.get("tgt")
+            lines.append((rec["t"], f"  {clock(rec['t'])}  Rebirth from {trace.name(rec.get('s'))} on "
+                                    f"{trace.name(target)} ({trace.role(target)})"))
     for _, line in sorted(lines, key=lambda item: item[0]):
         print(line)
 
@@ -330,7 +344,8 @@ def show_deaths(trace: Trace) -> None:
 
 SECTIONS = (
     ("phases", "each member's death, with every healer's mana at that moment", show_phases),
-    ("empowered", "Overwhelming Power carriers and Fusion Punches once Steelbreaker is alone", show_empowered),
+    ("empowered", "Overwhelming Power carriers, Fusion Punches and Rebirths once Steelbreaker is alone",
+     show_empowered),
     ("deaths", "deaths by mechanic per phase", show_deaths),
 )
 

@@ -101,6 +101,16 @@ inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_BEARING = 5.4978f;  /
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_RADIUS = 30.0f;
 inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_POINT_TOLERANCE = 2.0f;
 
+// Melee step away from a carrier that blows next to Steelbreaker this close to the end. A bot inside DANGER
+// of it moves and stands at CLEARANCE, so arriving never re-fires the move.
+inline constexpr uint32 ULDUAR_IRON_ASSEMBLY_MELTDOWN_STEP_OUT_MS = 3000;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_DANGER_RADIUS = 16.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 17.0f;
+
+// Rebirth reaches 30 yd. A druid casts inside CAST_REACH and walks to WALK_REACH of the body.
+inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_CAST_REACH = 28.0f;
+inline constexpr float ULDUAR_IRON_ASSEMBLY_REBIRTH_WALK_REACH = 26.0f;
+
 // Phase 3 walks over this go on Nitro Boosts. Ranged spend them on the walk to their spread slot, tanks
 // keep theirs for the Meltdown run, their one long walk in the phase.
 inline constexpr float ULDUAR_IRON_ASSEMBLY_NITRO_MIN_WALK = 10.0f;
@@ -368,6 +378,34 @@ enum class IronAssemblyMeltdownRole : uint8
 
 IronAssemblyMeltdownRole IronAssemblyMeltdownRoleFor(PlayerbotAI* botAI, Player* bot);
 Position IronAssemblyMeltdownPoint();
+
+// A non-tank melee bot while a carrier with STEP_OUT_MS left stands close enough to Steelbreaker for its
+// blast to reach his melee. Nothing moves the bot then but the step out and a Rune of Death escape.
+bool IronAssemblyMeltdownMeleeWindow(PlayerbotAI* botAI);
+
+// Where a melee bot inside that carrier's DANGER goes: straight behind Steelbreaker from it, one yard
+// inside his melee range, or further out to CLEARANCE when that's too close. False when it can stay put.
+bool TryGetIronAssemblyMeltdownStepOut(PlayerbotAI* botAI, Player* bot, Position& spot);
+
+enum class IronAssemblyBattleRezStep : uint8
+{
+    None,
+    Walk,
+    Cast,
+};
+
+struct IronAssemblyBattleRez
+{
+    Player* tank = nullptr;
+    uint32 spellId = 0;
+    IronAssemblyBattleRezStep step = IronAssemblyBattleRezStep::None;
+    Position walkTo;
+};
+
+// Once Steelbreaker is alone and fewer than two bot tanks can take the next swap, one druid bot with
+// Rebirth ready walks into range of a dead bot tank's body and raises it. Druid and body are latched, the
+// pair closest together when elected.
+bool IronAssemblyBattleRezDuty(PlayerbotAI* botAI, Player* bot, IronAssemblyBattleRez& duty);
 
 // Uses the bot's Nitro Boosts for a walk of this length, if it's long enough and they're ready. why
 // names the walk in the trace.

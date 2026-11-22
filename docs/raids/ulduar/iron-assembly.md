@@ -82,6 +82,28 @@ dying halfway puts the blast on the ranged ring instead of the melee, and a star
 partner never taunts). Running **without** a swap is the trap: it towed Steelbreaker 180 yd, cut melee
 uptime to a 16% median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**.
 
+**A dead bot tank gets walked to and Rebirthed** (`ironassembly.rez`), since a swap needs two. While
+Steelbreaker is alone and fewer than two bot tanks are up and not swapped out (a pending res, Soulstone
+or Reincarnation counts), the closest pair of bot tank body and non-tank druid bot in the hall with
+Rebirth ready and affordable is latched (`rezdruid`, `reztank`): the druid casts inside 28 yd, else
+walks straight at the body to 26, and the tank stands up where the druid is. Cat or moonkin form drops
+only for the cast: a `caster form` prerequisite skips a druid under 65% mana (`MediumHealth`) and trades
+shifts with the spec's own form on every walk tick. `ACTION_RAID + 7`, above every heal. It holds while the walk would end within 17 yd of a carrier inside its swap lead, or the
+cast would still run within 16 yd of a carrier's last 3 s. The class `rebirth` never walks, casting only
+on a body already inside `SpellDistance`: on 22 Nov two tanks died at the Meltdown point with the
+druids 43 and 68 yd off, so the third Overwhelming Power had no partner and its blast killed 5 melee.
+
+**Melee step out of a blast next to him.** A carrier that stays on him (`nopartner`, `late`, a swap
+that never came) stands ~7.6 yd in front of his centre; the melee hug him at 2.6–5 yd, 10–11.5 yd off
+it, and Meltdown is 15 yd **3D centre to centre**, no reach added. So in a carrier's last **3 s**, while
+it is within 17 yd + melee range of him, each non-tank melee bot within **16** of it steps straight
+behind him from it, a yard inside his melee range (9.8 yd: 17.4 off a 7.6 yd carrier), or out to **17**
+when that's too close (`ironassembly.meltstep` `behind` / `out`). There they're inside the 19.5 yd
+round his centre that Static Disruption skips (`SelectTarget` at −10 adds both reaches). For the window
+`iron assembly meltdown melee guard` leaves them only the step out and the Rune of Death escape, since
+reach and `set behind` walk them back in, and `... melee charge guard` zeroes Charge. The spot stays
+within 22 yd of his designed spot, the navprobed ring.
+
 **Phase 3 walks over 10 yd go on Nitro Boosts** (shared `UseNitroBoosts`, 3 min, so once a phase; a cast
 is stopped first, since the boots refuse a caster). Ranged and healers spend theirs on the walk out to
 the spread ring. Tanks never use them on the walk to Steelbreaker's spot: the Meltdown run is their one
@@ -254,10 +276,7 @@ phase, while the raid stacks: 14 and 10 hits per cast in a 17 Oct wipe, 1 once s
 Deliberate non-behaviours: **tanks hold through Overload** (20,000 nature is survivable in plate and
 lethal in cloth, and under the normal order Brundir dies last, so his channel invincibility never
 applies); **ranged spread only in hard mode**, since Static Disruption needs Steelbreaker's phase 2;
-**bots never set the skull**, so a human's mark wins; **melee never dodge Meltdown**, which a swap
-takes off the boss and a failed one leaves on them (every blast traced before 22 Nov but one left them
-alive; a `nopartner` one late in a 25-man phase killed 5); and
-**the melee tank spots stay 11 yd off the
+**bots never set the skull**, so a human's mark wins; and **the melee tank spots stay 11 yd off the
 stack**, which keeps healers covering the tanks and the stack at once.
 
 **The 11 yd is forced, and that is why `MELEE_BOSS_RADIUS = 16` and `SPREAD_RING_RADIUS = 18` must not
@@ -329,9 +348,10 @@ cooldowns, on the first two bosses.
 takes either, with `IsDps` on the name branch since a healer's Shadowfiend is mana, not burst.
 
 **Reading a pull:** `bosses/iron_assembly.py <file>` (`--phases`: each member's death with healer
-mana and mana returns; `--empowered`: Overwhelming Power carriers and Fusion Punches; `--deaths`: by
-mechanic per phase). Its banner gives the **hard mode verdict**: a kill counts only when the last
-`alive` value is `1`, Steelbreaker died last; the `hdr.cfg.hardmode` toggle alone proves nothing.
+mana and mana returns; `--empowered`: Overwhelming Power carriers with whoever else each blast killed,
+Fusion Punches and Rebirths; `--deaths`: by mechanic per phase). Its banner gives the **hard mode
+verdict**: a kill counts only when the last `alive` value is `1`, Steelbreaker died last; the
+`hdr.cfg.hardmode` toggle alone proves nothing.
 `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
 Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**; the snapshot
 stream shows a death only as a boss row that stops appearing), `focus` (what
@@ -342,12 +362,14 @@ suffix names the hazard that shifted the stack, a bare `spread` is the boss-cent
 `spread-rune` that ring squeezed off a rune, `rune-power` standing in a Rune of Power), `slot` (its
 index on the spread ring, assigned **once** per bot), `meleerune` (`in` / `walk`, or `none:` what
 stopped it), `meltdown` (a tank's swap role: `hold` / `nopartner` / `taunt` / `run` / `parked` /
-`late`), `meltdownrun` (the latched walkers), `nitro` (an event per boots use: `spread` / `meltdown`),
-`aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punchdef` (the defensive
+`late`), `meltdownrun` (the latched walkers), `meltstep` (a melee bot's step out: `behind` / `out`,
+`clear` outside the blast, `none`), `rez` (a druid's battle rez: `walk` / `cast` / `hold:meltdown` and
+the tank, or `none:` why not), `rezdruid` / `reztank` (the latched pair), `nitro` (an event per boots
+use: `spread` / `meltdown`), `aura` (a hunter's resistance duty), `totem` (the Nature Resistance shaman), `punchdef` (the defensive
 cast on Fusion Punch), `unheld` (a taunt-back, naming the member).
 Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
-spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
+spell radius and the clearance bots keep, 17 for Meltdown where melee step out to. Rune of Death
 and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
 
 `IronAssemblyScan` ([per-bot scan](../../engine/raid-mechanics-lessons.md#what-a-strategy-costs-per-raid))
