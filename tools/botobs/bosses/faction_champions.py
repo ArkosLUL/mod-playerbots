@@ -21,7 +21,8 @@
                                            skipped links, their gaps and carry, the order, what cut each; bot grips
                                            outside a pull: the landing off ARENA_CENTER, Chains of Ice after,
                                            regrips; fc.wall holds
-    faction_champions.py <file> --peel     snares and peels on melee champions, Disarm against Bladestorm,
+    faction_champions.py <file> --peel     snares and peels on melee champions, the full-speed chases a snare
+                                           reached, Disarm against Bladestorm,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
@@ -260,6 +261,7 @@ FC_MULTIPLIERS = (
     "faction champions heroic taunt guard",
     "faction champions grip guard multiplier",
     "faction champions late interrupt multiplier",
+    "faction champions concussive guard",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
@@ -496,6 +498,12 @@ SPELL_PVP_TRINKET = 65547
 SNARES = {1715: "Hamstring", 12323: "Piercing Howl", 45524: "Chains of Ice", 2974: "Wing Clip",
           5116: "Concussive Shot",
           **dict.fromkeys((8056, 8058, 10472, 10473, 25464, 49235, 49236), "Frost Shock")}
+# A free melee champion runs about 8 yd/s, one under a 50% snare 4 and an iced one less, so a step at 6+ is an
+# unslowed run. A snare that holds ends the run, so a "snared" step is mostly the one the snare landed in
+RUN_STEP_MS = 500
+RUN_FULL_SPEED = 6.0
+RUN_NEAR = 15.0
+RUN_SNARE_MS = 4000
 # the DK champion's Chains of Ice on the raid, a snare that roots its first 10 s, and the player Hand of Freedom
 # that strips it on landing
 SPELL_CHAMPION_CHAINS = 66020
@@ -2142,8 +2150,9 @@ def victim_at(trace: Trace, champion: int, when: int) -> list | None:
 
 def snare_casts(trace: Trace) -> list[dict]:
     """Every raid snare on a champion but an ice duty's own Chains of Ice on its champion, which `--ice` reads:
-    `t`, `by`, `spell`, `target`, and whether its victim then kites from it, not a tank unless that's the DK whose
-    ice duty the champion is (`needed`, None when the sample can't say)."""
+    `t`, `by`, `spell`, `target`, whether its victim then kites from it, not a tank unless that's the DK whose
+    ice duty the champion is (`needed`, None when the sample can't say), and whether an ice duty's Chains of Ice
+    was on it (`iced`)."""
     targets = champions(trace)
     roster = roster_guids(trace)
     duties = ice_duties(trace)
@@ -2160,7 +2169,44 @@ def snare_casts(trace: Trace) -> list[dict]:
         victim = victim_at(trace, rec["tgt"], rec["t"])
         needed = None if victim is None else \
             trace.role(victim[0]) != "tank" or on_duty(victim[0], rec["tgt"], rec["t"])
-        out.append({"t": rec["t"], "by": rec["s"], "spell": SNARES[rec["sp"]], "target": rec["tgt"], "needed": needed})
+        out.append({"t": rec["t"], "by": rec["s"], "spell": SNARES[rec["sp"]], "target": rec["tgt"], "needed": needed,
+                    "iced": iced_at(duties, rec["tgt"], rec["t"])})
+    return out
+
+
+def full_speed_chases(trace: Trace) -> dict[int, list[int]]:
+    """Per melee champion, `[steps, snared]` over the RUN_STEP_MS steps from the pull where it ran
+    RUN_FULL_SPEED or faster since the step before, within RUN_NEAR of the living raider it had as target, no
+    tank, not fleeing and with no ice duty's Chains of Ice on it; snared counts the steps with a raid snare cast on
+    it in the RUN_SNARE_MS before."""
+    targets = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    roster = roster_guids(trace)
+    duties = ice_duties(trace)
+    snared_at: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("sp") in SNARES and rec.get("tgt") in targets and rec.get("s") in roster:
+            snared_at[rec["tgt"]].append(rec["t"])
+    out: dict[int, list[int]] = {}
+    for when in range(pull_start(trace) + RUN_STEP_MS, pull_end(trace) + 1, RUN_STEP_MS):
+        now, before = snap_at(trace, when), snap_at(trace, when - RUN_STEP_MS)
+        if not now or not before or now["t"] <= before["t"]:
+            continue
+        rows = {row[0]: row for row in now.get("u", [])}
+        earlier = {row[0]: row for row in before.get("u", [])}
+        secs = (now["t"] - before["t"]) / 1000
+        for guid in targets:
+            row, old = rows.get(guid), earlier.get(guid)
+            if not row or not old or row[5] <= 0 or len(row) <= MOVEGEN_COLUMN or row[MOVEGEN_COLUMN] == FLEEING:
+                continue
+            victim = rows.get(row[7]) if row[7] in roster else None
+            if victim is None or victim[5] <= 0 or trace.role(row[7]) == "tank":
+                continue
+            if distance(row, victim) > RUN_NEAR or distance(row, old) / secs < RUN_FULL_SPEED or \
+                    iced_at(duties, guid, when):
+                continue
+            cell = out.setdefault(guid, [0, 0])
+            cell[0] += 1
+            cell[1] += any(when - RUN_SNARE_MS <= cast_at <= when for cast_at in snared_at[guid])
     return out
 
 
@@ -2317,15 +2363,30 @@ def show_peel(trace: Trace) -> None:
     snares = snare_casts(trace)
     if snares:
         print(f"  {len(snares)} snare(s) on champions, by spell and class (victim kites from it / on a tank /"
-              " unknown), an ice duty's own Chains of Ice under --ice:")
-        groups: dict[tuple[str, str], list[bool | None]] = collections.defaultdict(list)
+              " unknown; on a champion an ice duty holds in Chains of Ice), an ice duty's own Chains of Ice under"
+              " --ice:")
+        groups: dict[tuple[str, str], list[dict]] = collections.defaultdict(list)
         for row in snares:
-            groups[(row["spell"], klass.get(row["by"], "?"))].append(row["needed"])
-        for (spell, name), needed in sorted(groups.items()):
+            groups[(row["spell"], klass.get(row["by"], "?"))].append(row)
+        for (spell, name), rows in sorted(groups.items()):
+            needed = [row["needed"] for row in rows]
             print(f"    {spell:16} {name:12} {len(needed):3}  {needed.count(True)} / {needed.count(False)}"
-                  f" / {needed.count(None)}")
+                  f" / {needed.count(None)}; iced {sum(row['iced'] for row in rows)}")
     else:
         print("  no snare on a champion")
+    chases = full_speed_chases(trace)
+    if chases:
+        steps = sum(cell[0] for cell in chases.values())
+        snared = sum(cell[1] for cell in chases.values())
+        print(f"  full-speed chases, a melee champion out of its ice duty's Chains at {RUN_FULL_SPEED:.0f}+ yd/s"
+              f" within {RUN_NEAR:.0f} yd of the raider it targets, no tank: {steps * RUN_STEP_MS / 1000:.1f} s,"
+              f" snared in"
+              f" the {RUN_SNARE_MS // 1000} s before {snared * RUN_STEP_MS / 1000:.1f} s ({snared / steps:.0%}); "
+              + ", ".join(f"{trace.name(guid)} {cell[1] * RUN_STEP_MS / 1000:.1f} of"
+                          f" {cell[0] * RUN_STEP_MS / 1000:.1f} s"
+                          for guid, cell in sorted(chases.items(), key=lambda item: -item[1][0])))
+    else:
+        print("  full-speed chases: none")
 
     peels = peel_casts(trace)
     if peels:
@@ -3651,7 +3712,8 @@ SECTIONS = (
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
     ("chain", "each player's pull: the bot DK links by post and the player's grip, skipped links, gaps, carry,"
      " order; bot grips outside a pull", show_chain),
-    ("peel", "snares and peels on melee champions, Disarm against Bladestorm, externals, battle res, taunts",
+    ("peel", "snares and peels on melee champions, full-speed chases, Disarm against Bladestorm, externals,"
+             " battle res, taunts",
      show_peel),
     ("ice", "each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how far the champion moved, the"
      " share on the DK, its other victims and the deaths it caused; melee champions never iced", show_ice),
