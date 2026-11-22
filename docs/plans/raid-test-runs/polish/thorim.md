@@ -197,6 +197,9 @@ in it; its walk ends at the Colossus and its lever walk stops short of use range
 - Lever action (`UldActions_Thorim.cpp:285`): `MoveTo(lever, 0)`, touching distance (~2.7 yd from the
   centre). Bots have stood 0.3-4 yd from it on most bearings in these traces, the west side included.
 - Probe `thorim.leverpulled` (`ObsValue` on the latch, header `:435`).
+- Review: the Giant walk also needs the leader within 150 yd of the Giant's spawn. The scan reaches
+  ~159 yd with both sizes (Giant combat reach 7.5), a leader done with the left lane can stand ~165 yd
+  out, and that miss is cached for every bot as "Giant dead" to the balcony walk.
 
 **Not fixed, predicted next blocker: no bot may hit Thorim from the balcony in phase 1.** Phase 2 starts
 only on damage from a player above z 430. `GetThorimDpsTarget` picks him for a corridor bot up there

@@ -827,10 +827,11 @@ player was on the instance left the corridor standing while he stayed in the are
   all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the orb. Gated
   on the Giant losing `UNIT_FLAG_IMMUNE_TO_PC`, which the Colossus' death clears, since arena melee scan the
   cached Colossus lookup from out of range and it can read empty while he lives; and on the leader past the
-  portcullis, since a Giant scan from the arena misses and that cached miss reads "Giant dead" to the
-  balcony walk. Pathed to his own spot (a point on the straight line can land off the mesh) and all the way
-  in, until he is in combat: once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until
-  he is pulled, and the squad picks guards first. Followers take his waypoint;
+  portcullis and within 150 yd of the Giant's spawn, since a scan from farther out (the arena, the left
+  lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
+  own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
+  once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until he is pulled, and the squad
+  picks guards first. Followers take his waypoint;
   between waypoints they walk to him once more than 25 yd (healers 20 yd) behind. Behind a real player only
   healers tether, and the gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so

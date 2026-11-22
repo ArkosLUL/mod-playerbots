@@ -280,7 +280,7 @@ bool ThorimGauntletLeverAction::Execute(Event /*event*/)
         return false;
 
     // Walk right up: the use check is 5 yd around the model, but GetDistance nets out both sizes (scale 3 lever),
-    // so a stop past ~2.5 yd leaves the bot outside it on some sides.
+    // so a stop past ~2.7 yd leaves the bot outside it on some sides.
     if (!lever->IsAtInteractDistance(bot))
         return MoveTo(lever, 0.0f);
 
