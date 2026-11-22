@@ -49,8 +49,8 @@ private:
     RaidActionCache<bool> _classRedirect;
 };
 
-// A DPS bot braked on a worm deals it nothing, area damage near it included. Its white swings and
-// DoTs run on.
+// A braked DPS bot casts nothing at its worm, area spells near it included. Swings already running and
+// DoTs already on it keep going.
 class NorthrendWormsThreatBrakeMultiplier : public Multiplier
 {
 public:

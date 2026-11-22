@@ -1277,10 +1277,15 @@ def brake_bits(held: str | None) -> int:
 
 
 def brake_time(trace: Trace) -> dict[str, collections.Counter]:
-    """`{worm name: {bot: ms}}` each DPS bot's threat brake held it off that worm (`nb.brake`)."""
+    """`{worm name: {bot: ms}}` each DPS bot's threat brake held it off that worm (`nb.brake`), up to its
+    death: a dead bot asks for no action, so its last value stands until the worms are gone."""
+    deaths: dict[int, list[int]] = collections.defaultdict(list)
+    for death in trace.of("death"):
+        deaths[death.get("g", 0)].append(death["t"])
     out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for guid, track in holder_spans(trace, "nb.brake", pull_end(trace)).items():
         for held, start, stop in track:
+            stop = min([stop] + [when for when in deaths[guid] if when >= start])
             for name, entry in WORMS:
                 if brake_bits(held) & WORM_BRAKE_BIT[entry]:
                     out[name][guid] += stop - start

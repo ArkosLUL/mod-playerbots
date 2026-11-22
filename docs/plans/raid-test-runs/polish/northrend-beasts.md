@@ -259,3 +259,13 @@ as they were, and the brake is the raids README's standard tool. `nb.brake` per 
 holder lives; `nb.brake` seconds per worm a few per bot, mostly melee on the mobile worm during drags.
 Worm stage no longer than window 6's 154-164 s: the kills ended 32-65 s before Berserk, so a stage
 grown 20 s means the brake costs too much damage.
+
+**Review.** Root cause holds: the swing counts reproduce (7/7, 10/10, 7/7), the worm's victim
+column goes to a DPS with no taunt between, the core's 110%/130% rule is as cited, and Paralysis
+(66830, a stun no damage breaks) leaves the holder's threat online, so only threat moves the worm.
+Fixed: `--worms` braked seconds end at the bot's death (a dead bot asks for no action, so its last
+`nb.brake` stood until the worms were gone); the findings doc's "unchecked by a cap" line. Reading
+the next window: a `not braked` row on a healer (no brake) or in the seconds after an emerge, before
+the holder has threat (blind by design), is no brake miss. A `braked` row means running swings, Auto
+Shot, DoTs or a pet carried the bot past the holder while it stood still (drag, Paralysis); the
+answer then is dropping the swing too, as ICC's `IccBpcBrakeStopAction` does.

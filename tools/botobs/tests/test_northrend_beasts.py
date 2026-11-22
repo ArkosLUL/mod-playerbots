@@ -662,13 +662,15 @@ def worms_pull() -> list[dict]:
         worm_dmg(64000, ACIDMAW, EDGE, 66819),
 
         # Acidmaw swings at Shot while Shot's brake holds it off Acidmaw, then at Ward, a tank. Dreadscale's
-        # swing kills Edge, whose brake on both worms ended at 92 s.
+        # swing kills Edge, whose brake on both worms ended at 92 s; its Acidmaw brake from 103 s is never
+        # written back after the death.
         note(61500, SHOT, "nb.brake", "1"),
         worm_dmg(62000, ACIDMAW, SHOT, 0),
         note(63000, SHOT, "nb.brake", "0"),
         worm_dmg(80000, ACIDMAW, WARD, 0),
         note(90000, EDGE, "nb.brake", "3"),
         note(92000, EDGE, "nb.brake", "0"),
+        note(103000, EDGE, "nb.brake", "1"),
         worm_dmg(105000, DREADSCALE, EDGE, 0),
 
         note(71000, WARD, "nb.wormmove", "drag 14"),
@@ -764,9 +766,9 @@ class WormPull(unittest.TestCase):
         self.assertEqual([(row["t"], row["worm"], row["victim"], row["died"], row["braked"]) for row in rows],
                          [(62000, "Acidmaw", SHOT, False, True), (105000, "Dreadscale", EDGE, True, False)])
 
-    def test_brake_time_per_worm_reads_each_bit(self):
+    def test_brake_time_per_worm_reads_each_bit_up_to_the_death(self):
         self.assertEqual(nb.brake_time(self.trace), {
-            "Acidmaw": collections.Counter({SHOT: 1500, EDGE: 2000}),
+            "Acidmaw": collections.Counter({SHOT: 1500, EDGE: 4000}),
             "Dreadscale": collections.Counter({EDGE: 2000})})
 
     def test_no_spot_seconds_per_toxin_span(self):
@@ -784,7 +786,7 @@ class WormPull(unittest.TestCase):
         self.assertIn(f"mobile worm to its victim, both still (WORM_TANK_OFFSET {nb.WORM_TANK_OFFSET:g}):", text)
         self.assertIn("Acidmaw    Ward (tank)  n 68  median 8.0  max 8.0", text)
         self.assertIn("1:45.000  Dreadscale Edge (melee) 3.0k  died  not braked", text)
-        self.assertIn("Acidmaw       3.5  Edge (melee) 2.0, Shot (ranged) 1.5", text)
+        self.assertIn("Acidmaw       5.5  Edge (melee) 4.0, Shot (ranged) 1.5", text)
         self.assertIn("cured  no spot: walk 2.0 s, runner 3.0 s", text)
 
     def test_wormhold_counts_drop_the_tier(self):

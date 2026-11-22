@@ -286,8 +286,8 @@ alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`
   health % is 5 points under it and back once it's 5 over: melee on one and ranged on the other keep
   the two within ~1.5, and a bare `≤` flipped every melee bot 20-34 times in the first 41 s on 25H
   (2026-10-29), starting on Acidmaw at 100/100. A melee on a
-  stationary worm dodges only the Sweep cast. The stationary holder now keeps the worm under all
-  ranged DPS: unchecked by a cap. The 10 s only times the achievement.
+  stationary worm dodges only the Sweep cast. The stationary holder keeps the worm under all ranged
+  DPS, the threat brake capping them. The 10 s only times the achievement.
 - **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
   tank duty` → `… tank hold stationary worm`, `ACTION_RAID + 1`) take the worm from `GetBeastOfDuty`.
   - Under ground, the holder closes to 20 yd of a worm coming up mobile and into melee of one coming
@@ -853,7 +853,7 @@ role over 3.5 s, how far the worm's facing swung and each victim in turn with th
 first snapshot, 20 at most) and its hits, Sweep victims by role, the mobile worm's gap to its target
 column per victim (count, median, max) over snapshots where neither moved, every worm melee `dmg` row
 on a non-tank (its swing can fall between snapshots) with the hit, a death within 50 ms and the
-victim's `brake` then, seconds braked per worm and bot, per Spray (the eight ids, from a
+victim's `brake` then, seconds braked per worm and bot up to its death, per Spray (the eight ids, from a
 worm) its
 target, who stood within 10 yd of it in the snapshot nearest its row plus `ct` (the cast's end),
 who took its debuff from that worm (the first 400 ms of applies 0.8-4 s after the row) and `spray`
