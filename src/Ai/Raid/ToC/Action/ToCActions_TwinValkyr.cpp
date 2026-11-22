@@ -131,8 +131,7 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
     if (!portal)
         return false;
 
-    // 3D on purpose: GetNPCIfCanInteractWith gates on IsWithinDistInMap, so a 2D check can call an
-    // elevated portal in range and the gossip silently does nothing
+    // keep it 3D like the gossip's own check, or a raised portal reads in reach and the gossip silently does nothing
     if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
     {
         // ahead of the cast clip, so a healer waiting out an orb keeps its heal
