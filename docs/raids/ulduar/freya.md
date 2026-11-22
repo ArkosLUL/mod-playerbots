@@ -1,6 +1,7 @@
 # Freya
 
-**The clock and the doses.** `Attuned to Nature` starts at 150 and comes off in fixed doses: a lasher
+**The clock and the doses.** `Attuned to Nature` starts at 150 stacks of +8% healing received, so
+damage on Freya is wasted until the adds strip it, and comes off in fixed doses: a lasher
 removes **2**, a trio member **10**, the Ancient Conservator **25**. `EVENT_FREYA_ADDS_SPAM` fires at
 10s and repeats every **60s** regardless of progress, capped at 6 waves, so an uncleared wave gets a
 second one stacked on it; clearing one early pulls the next in after **5s**, and after the sixth the
@@ -130,8 +131,9 @@ an Unstable Sun Beam inside those 6 yd is skipped too: the pool is 5 of the 6, a
 parks in it for its ten seconds. Order is roomy and clean, then clean, then nearest; sheltered and
 burning still beats pacified. No latch is needed, since the trigger stands down once the bot holds
 the aura. Tanks are excluded: the add tank arrives by dragging the boss there, and the main tank holds
-Freya on her anchor. `GetFreyaTargetSpore` is that whole rule, and **the trigger and the action must
-both use it**: deriving it twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while
+Freya on her anchor. The trigger finds the Conservator by entry, not through `find target` (this bot's own threat list):
+a pacified bot that has not hit it yet is exactly the one that needs a spore. `GetFreyaTargetSpore` is
+that whole rule, and **the trigger and the action must both use it**: deriving it twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while
 the unfiltered grid search walked it at another.
 
 **Never aim a bot at a creature's centre.** It is inside the model's collision, so the bot never
@@ -199,7 +201,7 @@ a median escape latency of **0.65s**.
   itself (40), `reach melee` (32) and `reach spell` (20). The trigger now reaches
   `_HAZARD_SEARCH_RADIUS` with `isUseful` narrowing it to the blast plus the latch window.
 - **Melee aim for Freya's reach.** The first sweep for melee accepts only spots within
-  `GetMeleeRange(freya) − 1` of her. Arrived, while a bomb still covers `bombOrigin`, a melee bot in
+  `GetMeleeRange(freya) − 1` of her, a yard inside since she may still be walking after the tank. Arrived, while a bomb still covers `bombOrigin`, a melee bot in
   reach returns false and swings; out of reach, once Freya stops moving, it re-sweeps for an in-reach
   spot (every `ULDUAR_FREYA_MELEE_REACH_RETRY_MS`, 500); otherwise it holds, since `reach melee` would
   walk it back through the blast. A held bot casts nothing (`Engine::DoNextAction` stops at the first
@@ -244,7 +246,8 @@ melee ring in the blast, 1-2 of 9 melee in reach for 7-8s, and once (bombs 13.3 
 her) he never moved. The trigger also fires on a bomb within `_AVOID_RADIUS` of Freya while she is on
 him, and the first sweep accepts a spot only if her predicted stand, `F' = S + (F − S)·min(1, gap/|F −
 S|)`, clears every bomb by `_CLEAR_RADIUS`. Failing that he clears himself as before, or, with only her
-ring covered, stays put rather than hop for nothing.
+ring covered, stays put rather than hop for nothing. Her end spot can sit past the tank's own search radius, so
+bombs are searched out to `_HAZARD_SEARCH_RADIUS` plus her gap plus `_CLEAR_RADIUS`.
 
 **That preference needs a leash.** A volley every 18s with Freya walking after her holder random-walks
 her in one direction all pull: she once finished **100 yd** east, at Z 419.9 down the slope toward the
@@ -327,7 +330,8 @@ Snaplasher or Conservator is up, otherwise to whoever holds Freya, falling back 
 The hunter's three redirected Steady Shots go into what that tank holds (Snaplasher unless held, else
 Conservator, else Freya) and skip a trio member under the sync floor: shot into Freya they put the add
 tank on her table and nothing on the Snaplasher's. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list,
-so the class-generic main-tank node stands down. Nothing helps against lashers, whose table is wiped
+so the class-generic main-tank node stands down. Tricks of the Trade redirects everything the rogue does
+for 6s, so it gets no dump shot. Nothing helps against lashers, whose table is wiped
 every 10s.
 
 ## Detonating Lasher waves
@@ -556,7 +560,8 @@ in the window only to be stopped next tick), and `freya ground tremor hold cast`
 stops a cast already in flight, reading `CURRENT_GENERIC_SPELL` **and** `CURRENT_CHANNELED_SPELL`: with
 the gate stopping ordinary casts, a channel already running is all that is left, and reading one slot
 meant it never fired in 164 pushes (since: 31 times). `m_timer` carries what is left in either slot, so
-one compare serves both. Army of the Dead is exempt ([crowd control](#detonating-lasher-waves)).
+one compare serves both. A cast that still lands before the Tremor is finished, only the ones it
+would cut are dropped. Army of the Dead is exempt ([crowd control](#detonating-lasher-waves)).
 Unlike Ignis, **heals are gated too**: holding a Chain Heal under 2s beats losing Nature for 10, and
 blocked bots fall through to their instants. Stopping first dodges the lockout outright:
 `Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it finds a cast to cut**. Outside

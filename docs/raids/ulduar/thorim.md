@@ -27,7 +27,9 @@ a role predicate flipping mid-fight walked the arena squad into the corridor. Qu
 `dpsQuota = twentyFive ? 9 : 4`: 1 tank + 1 healer + 4 DPS (10 man), 1 tank + 2 healers + 9 DPS
 (25 man), **a twelve-bot gauntlet on 25 man**, raised deliberately to make the 170 s window. A roster
 that cannot fill them shrinks the gauntlet, and assignment stops once the arena would drop below 3. The
-main tank never leaves the arena. Assignment waits while `GetMainTankGuid` reads empty: its fallback
+main tank never leaves the arena, and a one-tank raid has no tank to spare, so the gauntlet takes one
+more DPS instead. An empty roster (the raid still zoning in) latches nothing. Assignment waits while
+`GetMainTankGuid` reads empty: its fallback
 only sees tanks already alive in the instance, so a split latched then sends the only tank down the
 corridor. A late arrival with no entry counts as arena, the side that cannot wipe the raid by being
 short. The split is struck before the pull, when RaidObs has no session, so it is noted again once one
@@ -77,8 +79,9 @@ tank holds `ULDUAR_THORIM_NEAR_ARENA_CENTER`; ranged and healers take a ring slo
 (`_ARENA_RING_INNER` / `_OUTER`, five inner slots: clear of the Champion's Whirlwind on the pile, close
 enough to reach anything in it, as wide as the room allows, since adds land at 19-24 and the mesh gives
 out past ~26 on the south side); melee get the centre only **out of combat** and in the fight run free
-on the 24 yd leash. Slots come from the latched squad in **roster order**, not the survivors: ranking
-by who still stands renumbers everyone behind a corpse mid-fight. `ThorimArenaRingOrder` serves the
+on the 24 yd leash. Slots come from the latched arena squad's ranged bots, **ranged DPS ahead of healers, ties on
+guid** (tanks never take one), and the dead stay in: ranking by who still stands renumbers everyone
+behind a corpse mid-fight. `ThorimArenaRingOrder` serves the
 ring and the Charge Orb dodge alike, so both agree on slots. Slot 0 sits on the bearing from the lever
 gate to the centre, so the formation opens away from the corridor.
 
@@ -101,7 +104,9 @@ warlock imp, which starts the encounter like any player damage
 harness pulls of 2026-11-22 opened that way, 0-12 s after the first breath on the formation; nobody at
 the harness drop (2152, −232), 73° off the cone, was ever hit.
 
-**`GetThorim` must not be sight-limited.** `GetUldUnitByEntry` walks `"possible targets no los"`,
+**`GetThorim` must not be sight-limited, and must not read `find target`**, which walks only the bot's
+own threat list and matches the localized name, so a bot on an add goes blind to the boss.
+`GetUldUnitByEntry` walks `"possible targets no los"`,
 capped at `Playerbots.SightDistance` 100 (~110 effective with the boss's bounding radius): the balcony
 trigger was active at **102.2-106.8 yd** and useless at **110.9-113.1**, and the upper hallway is
 100-145 yd from Thorim's platform, so all 20 Thorim entry points went blind once the squad climbed the
@@ -120,7 +125,8 @@ why `ThorimAdvanceBalconyStep` steps down before it steps up. The instance-wide 
 caches) runs once per cycle, from whichever bot resets first; per bot it would clear the split 25
 times. Stale means idle at full health after a pull: full health alone is a trap, since he watches the
 gauntlet untouched, so combat state separates the two. Before the first pull (`engagedSeen`) idle is
-no reset, or it clears the split the corridor just formed.
+no reset, or it clears the split the corridor just formed. The reset action returns false on purpose:
+it is bookkeeping, and the pull needs every node below it to run that same tick.
 
 ## The corridor traps nothing can see
 
@@ -427,7 +433,8 @@ clear at any anchor, nowhere near six spots 11 yd apart.
 Shelter rows were solved offline and navmesh-checked: 42.5° off the cone, 22+ yd off the tank spot,
 within 32 of the boss, 9+ from every other body. `ThorimThunderOrbIndex` refuses a lit orb more than
 `ULDUAR_THORIM_THUNDER_ORB_MATCH_RADIUS` (4 yd) from a known spawn: a wrong index walks the bot into the
-cone, staying home doesn't. While the orb is lit and the bot still home, the cover test reruns every
+cone, staying home doesn't. An orb that does not place is left unlatched, so the next tick tries again
+instead of holding a bad index for the 15 s. While the orb is lit and the bot still home, the cover test reruns every
 tick, so a boss drifting onto the slot mid-warning still sends it; it only ever flips to sheltered.
 
 `ULDUAR_THORIM_SHELTER_SPOTS` has no rows for orb indices 4 and 5 ((2092.95, −263.00) and
