@@ -4,10 +4,10 @@
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
 tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold
-while two hits keep its bark up, plus three beam dodges (one off a beam the next snapshot first shows) and one healer in range. A second
-one pins a lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. A third
-pins a melee bot walking back into a low lasher's blast and dying to its Detonate. The shared v14 fixture
-shows every section reads empty elsewhere.
+while two hits keep its bark up, plus three beam dodges (one off a beam the next snapshot first shows)
+and one healer in range. A second one pins a lasher wave a ghoul holds for two snapshots, with one
+ranged bot out of reach on Freya. A third pins a melee bot walking back into a low lasher's blast and
+dying to its Detonate. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 

@@ -103,26 +103,24 @@ float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
         return bot->GetExactDist2d(snaplasher) <= reach || (aim && aim->GetExactDist2d(snaplasher) <= reach);
     };
 
-    if (Lingers(action))
+    SpellInfo const* spellInfo = DamageSpell(action);
+    if (splash.Of(action).summon || IsFreyaLingeringAreaDamage(spellInfo))
         return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH) ? 0.0f : 1.0f;
 
-    if (!IsRaidAreaDamage(botAI, action, splash))
+    if (!IsRaidAreaDamage(botAI, action, splash) && !IsFreyaChainDamage(spellInfo))
         return 1.0f;
 
     return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH) ? 0.0f : 1.0f;
 }
 
-bool FreyaSnaplasherHoldMultiplier::Lingers(Action* action)
+SpellInfo const* FreyaSnaplasherHoldMultiplier::DamageSpell(Action* action)
 {
     RaidSplashCache::Facts& facts = splash.Of(action);
-    if (facts.summon)
-        return true;
-
     if (!facts.cast || facts.heal)
-        return false;
+        return nullptr;
 
     uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
-    return spellId && IsFreyaLingeringAreaDamage(sSpellMgr->GetSpellInfo(spellId));
+    return spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
 }
 
 float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)

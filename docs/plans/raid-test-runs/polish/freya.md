@@ -531,3 +531,17 @@ Guardian Spirit cast on a mage's Water Elemental (generic healer code).
    window, for the risen add tank or main tank to take; (c) as (a), plus no Icy Touch, Plague Strike or
    Pestilence on the Snaplasher in trio waves. Recommendation: (a) for one window; if holds still run past
    ~8s, (b).
+
+**Review:** the cause holds and the fix addresses it, on one code path (no size, mode or player branch).
+Reproduced: the four holds (14.6, 25.7, 8.9, 18.8s), 68 of their 102 bark procs matched to a bot's hit,
+the casts on the held Snaplasher above, and resets 5.1-11.8s in without the bots' share. Over every player
+spell in the DBC, `IsFreyaLingeringAreaDamage` matches only the findings doc's list plus Hand of Salvation
+(no bot casts it); Army of the Dead's tick is not area. Fixed:
+
+- uld3's paladin main tank's Hammer of the Righteous on the Storm Lasher (2:45.2) chained onto the held
+  Snaplasher (Seal of Vengeance on it at 2:45.5): chains other than the named cleaves were not area damage
+  to the hold. `IsFreyaChainDamage` (a negative spell hitting 2+ targets: Hammer, Avenger's Shield, Heart
+  Strike) now counts at the 15 yd area reach.
+
+Left for the next window's read: a Felguard's Cleave beside it (2 procs in uld2's second hold) and
+Soulshatter, whose 50 yd pulse hit it once from 22 yd (uld2 5:59.7), past the 15 yd area reach.

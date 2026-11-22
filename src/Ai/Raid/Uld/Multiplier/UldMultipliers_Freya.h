@@ -12,6 +12,8 @@
 #include "ObjectGuid.h"
 #include "RaidSplash.h"
 
+class SpellInfo;
+
 class FreyaSnaplasherHoldMultiplier : public Multiplier
 {
 public:
@@ -19,7 +21,7 @@ public:
     float GetValue(Action* action) override;
 
 private:
-    bool Lingers(Action* action);
+    SpellInfo const* DamageSpell(Action* action);
 
     uint32 cachedAtMs = 0;
     ObjectGuid cachedHeld;

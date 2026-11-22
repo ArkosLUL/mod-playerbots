@@ -816,6 +816,20 @@ bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo)
     return false;
 }
 
+bool IsFreyaChainDamage(SpellInfo const* spellInfo)
+{
+    if (!spellInfo || spellInfo->IsPositive())
+        return false;
+
+    for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+    {
+        if (effect.IsEffect() && effect.ChainTarget > 1)
+            return true;
+    }
+
+    return false;
+}
+
 bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop)
 {
     Player* bot = botAI->GetBot();

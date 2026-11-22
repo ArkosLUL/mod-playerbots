@@ -232,6 +232,8 @@ bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI);
 
 bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo);
 
+bool IsFreyaChainDamage(SpellInfo const* spellInfo);
+
 bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop);
 
 Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range);

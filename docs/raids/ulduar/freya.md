@@ -319,12 +319,12 @@ Snaplasher (`GetFreyaHeldSnaplasher`):
 - `GetFreyaTrioAssignment` drops it, with no fallback onto the siblings waiting at the floor, so their
   bots take the rest of the ladder;
 - `freya snaplasher hold` zeroes every non-heal action aimed at it, area damage (`IsRaidAreaDamage`)
-  with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH` (15 yd, Seed of Corruption's burst, the
-  widest a damage dealer carries; most are 8-10) of the caster or its target, and lingering area inside
-  `_HOLD_LINGER_REACH` (30 yd): that ticks for 6-10s, and in a hold the Snaplasher crosses 17-22 yd of
-  raid after its victims. The two pickers (`freya set dps priority`, `freya tank adds`) are exempt: they
-  aim at the current target, so zeroed they could never move a bot off it, and its auto attack would keep
-  the bark up;
+  or a harmful chain (`IsFreyaChainDamage`) with it inside `ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH`
+  (15 yd, Seed of Corruption's burst, the widest a damage dealer carries; most are 8-10) of the caster
+  or its target, and lingering area inside `_HOLD_LINGER_REACH` (30 yd): that ticks for 6-10s, and in
+  a hold the Snaplasher crosses 17-22 yd of raid after its victims. The two pickers (`freya set dps
+  priority`, `freya tank adds`) are exempt: they aim at the current target, so zeroed they could never
+  move a bot off it, and its auto attack would keep the bark up;
 - `freya release held snaplasher` (`ACTION_RAID + 2`, at most once a second) stops what a multiplier
   can't: the bot's swing and Auto Shot or wand on it (both keep firing at a target the bot has left), its
   `current target` (healers wand theirs), its pet (sent to the bot's target) and other minions, its
@@ -333,9 +333,11 @@ Snaplasher (`GetFreyaHeldSnaplasher`):
 
 *Lingering area* (`IsFreyaLingeringAreaDamage`) is a periodic trigger or dummy aura whose tick is negative
 and hits an area, or a persistent area aura ticking a dummy: Blizzard, Volley, Hurricane, Rain of Fire,
-Death and Decay, Mind Sear, Hellfire, Starfall, Bladestorm; totems and traps count too. `IsRaidAreaDamage`
-misses Starfall, a self aura. Consecration and Flamestrike's ground tick as periodic damage, which never
-procs the bark.
+Death and Decay, Mind Sear, Hellfire, Immolation Aura, Starfall, Bladestorm; totems and traps count
+too. `IsRaidAreaDamage` misses Starfall, a self aura. Consecration and Flamestrike's ground tick as
+periodic damage, which never procs the bark. A *harmful chain* is a negative spell hitting 2+ targets
+(Hammer of the Righteous, Avenger's Shield, Heart Strike), which `MULTI_TARGET_ACTIONS` lacks: a paladin
+main tank's Hammer on a sibling once jumped onto a held one.
 
 **The bark outlives the hold.** Before the release node, four holds ran 9-26s, or until the Snaplasher
 turned on a tank, against 4s planned, and it killed a non-tank every 2.45s meanwhile (12 and 5 in two
