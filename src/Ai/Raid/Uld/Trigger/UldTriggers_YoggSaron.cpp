@@ -142,12 +142,17 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     }
 
     // Phase before the Guardian sweep: melee sit outside this leash for most of phases 2 and 3. The Guardian
-    // test stays, it is why nothing walks back before the first spawn.
-    bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS && YoggSaronInPhase1(botAI) &&
-                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance, true);
+    // test holds a player-led raid until the first spawn. A bot-led one has nobody to follow in, so it walks
+    // at the pull.
+    bool const active = beyond && YoggSaronInPhase1Approach(bot) && YoggSaronInPhase1(botAI) &&
+                        (YoggSaronBotLedRaid(bot) ||
+                         bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.SightDistance, true));
 
     if (active != returning && RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.p1leash", active ? "returning" : "held");
+        RaidObs::NoteDerived(bot, "yogg.p1leash",
+                             !active                                       ? "held"
+                             : fromSara > ULDUAR_YOGG_SARON_P1_ROOM_RADIUS ? "door"
+                                                                           : "returning");
 
     returning = active;
 
@@ -240,11 +245,12 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Distance only, no sweep, so both reads cost nothing before the phase read.
+    // No sweep before the phase read: distances, plus a group scan only at the door.
+    if (!YoggSaronInPhase1Approach(bot))
+        return false;
+
     float const fromSara =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
-    if (fromSara > ULDUAR_YOGG_SARON_P1_ROOM_RADIUS)
-        return false;
 
     float const fromSpot = bot->GetDistance2d(ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionX(),
                                               ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY());
@@ -256,7 +262,10 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     bool const offBand = std::abs(fromSara - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) >
                          ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE;
 
-    char const* reason = offBand ? "band" : (fromSpot > stack ? "stack" : nullptr);
+    char const* reason = fromSara > ULDUAR_YOGG_SARON_P1_ROOM_RADIUS ? "door"
+                         : offBand                                   ? "band"
+                         : fromSpot > stack                          ? "stack"
+                                                                     : nullptr;
 
     parked = !reason;
 

@@ -49,6 +49,13 @@ station, spacing, leash and control triggers wait for `YoggSaronInPhase1Room` (o
 whose read writes the shared `yogg.phase` latch. `--phases` counts P1 moves begun outside it with 2.5 yd
 of slack: `GetDistance2d` takes off the bot's 1.5 yd reach and the move lands a tick after the read.
 
+**A bot-led raid walks itself in.** With no real player in the group on the instance
+(`YoggSaronBotLedRaid`; the DC test driver is master but not in the group) nobody leads it in: four test
+pulls stood at DC's start, 84 yd out, for ~2 min while 7-8 Guardians piled onto the tanks, and Dark Volley
+wiped them. So `YoggSaronInPhase1Approach` opens the station, the leash and the walk guard out to 90 yd
+(Sara's start radius) for such a raid, and the leash skips its Guardian test: everyone walks in at the
+pull, cloud-guarded. `--phases` prints when each role got inside.
+
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase 3 control node; `IsDesignatedBotTank` falls back to the first living bot tank.
 
@@ -505,8 +512,8 @@ there to spend.
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
 (**6.5 yd**) the bot walks back to the middle and is released only at
 `ULDUAR_YOGG_SARON_P1_LEASH_RELEASE`, the **2.8 yd cloud-free radius**: anything between lets go of it
-where the innermost orbit sweeps. The node also needs a live Guardian in sight, so nothing walks back
-before the first spawn. **Why 6.5, not 15**: 15 is both 65719 reaching Sara and 65209/62714 reaching the
+where the innermost orbit sweeps. Unless the raid is bot-led (above), the node also needs a live Guardian in
+sight, so nothing walks back before the first spawn. **Why 6.5, not 15**: 15 is both 65719 reaching Sara and 65209/62714 reaching the
 raid, and the back line stands at 21.5, so a Guardian dying more than **21.5 − 15 = 6.5 yd** out catches
 everyone rather than the pile (novas at 2.2-4.0 yd hit 9-10 players, at 8.5-14.8 yd 22-24). The cost is a
 narrower band against `reach melee`; `yogg.p1leash` counts the flips.
@@ -1836,7 +1843,7 @@ hand.
 | Topic | Keys (values) |
 |---|---|
 | Phase and pull | `phase`, `engaged` (`engaged` / `idle`), `handover`, `leftover` (`spaced` / `chain` / `lower`) |
-| Phase 1 | `p1dodge`, `p1station`, `p1leash` (`returning` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
+| Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `staged` / `reprisal`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `staged` / `lifted`), `reprisal`, `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
