@@ -293,8 +293,10 @@ inline constexpr uint32 ULDUAR_ALGALON_STAR_LOG_STEP_MS = 500;
 // Less log than this reads as the drain: a slope over one or two samples is noise.
 inline constexpr uint32 ULDUAR_ALGALON_STAR_LOG_MIN_MS = 2000;
 inline constexpr float ULDUAR_ALGALON_STAR_DRAIN_PCT_PER_SEC = 1.0f;
-// Keep-or-drop reads a dropped star as dying at its own slope up to this: casts in flight, channels, DoTs.
+// A dropped star keeps its own slope, up to this, only while casts in flight, channels and DoTs land (22% went
+// in 3.8 s), then drains.
 inline constexpr float ULDUAR_ALGALON_STAR_DROPPED_PCT_PER_SEC = 5.0f;
+inline constexpr uint32 ULDUAR_ALGALON_STAR_DROP_CARRY_MS = 4000;
 // On top of the walk, the first 2 s on a star only match the drain: target switch, first casts, DoTs ramping.
 inline constexpr uint32 ULDUAR_ALGALON_STAR_KILL_START_MS = 2000;
 // The team's kill speed over a whole kill, slowest and fastest.
