@@ -1381,8 +1381,10 @@ plain swings, before Berserk came. Freya is untouchable until the sixth wave die
 100% → 0 in 2:45 with 9 alive. In both wipes the
 healers ran dry first: both under 25% by 3:30-4:30 and near 0 for minutes, as in all six 10-man pulls (window 15a's
 too; 25-man's four keep 25-60%). Trio 2's bear died at its end on his last button: uld2 4:34.6 under Frenzied
-Regeneration with both healers 37-74 yd off for 27s (low lashers chasing the back line south, `freya ranged camp`
-bails), uld3 4:13.9 under Frenzied Regeneration with both healers in range at 1% and 12% mana; Pain Suppression
+Regeneration, both healers 37-74 yd off for the wave's first 27s (low lashers chasing the back line south, `freya
+ranged camp` bails), then in range from 4:24 to his death, the priest at 0-2% mana and the paladin at 12-25% holding
+Hand of Sacrifice (last cast 1:40) as `covered` under Survival Instincts, then Frenzied Regeneration, while the bear
+sat at 3-32%; uld3 4:13.9 under Frenzied Regeneration with both healers in range at 1% and 12% mana; Pain Suppression
 still held as `covered`. 3 and 5 more died by 5:18 / 5:43, the burn ran from ~6:00 with 7 and 5 alive, Freya at
 56% / 55% at 10:00; uld2's 8:04 Gift lived 14.2s and healed her 64% → 88%. Question 13.
 
@@ -1444,3 +1446,17 @@ Barkskin from 1:52.4.
    Q11: uld3 25's 2:48 Gift lived on 8.7s of bails from low lashers between it and the back line.
 
 **Shared code:** none changed; `RaidTankDefensive` is read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files
+only. Reproduced: `--tanks` cover `both` 7.7, 5.2 and 4.2s; all three own casts came from `freya add tank defensive`
+(rel 64), not a class node, so the stand-down catches each. uld1 25's Vampiric Blood had not been cast before
+2:15.68, so the healers' `none` at 2:15.40 was the blood rune. uld2 10's Pain Suppression at 4:11.98 failed (no
+aura) and Survival Instincts came off cooldown 0.17s later (cast 4:12.29): a fourth overlap had it landed. Fixed: the
+uld2 10 trio-2 death above, which read as out of heal range; both healers were in range for his last 10s.
+
+Left, a round 13 question (not built): the externals count a running health row (Frenzied Regeneration, Survival
+Instincts, Vampiric Blood, Last Stand) as cover at any health, and the external hold keeps the healers' class
+externals off the add tank at any health, so uld2 10's paladin kept Hand of Sacrifice in hand while the bear sat at
+3-32%. His own buttons have the 25% last resort; the externals have none. Options: (a) leave it, one layer at a time
+(Q2 (c)); (b) below `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` an external may go on top of a running own
+button. Recommendation: (b), alongside Q13.
