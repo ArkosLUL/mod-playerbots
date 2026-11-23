@@ -653,3 +653,11 @@ kill was held (`drained`/`chewed` with "a meteor live"), no two explosions withi
 Bang's `prebang`. With a druid tank: no `dire bear form` FAILED run while its `algalon.tankrole` is `take`, Dire Bear
 Form (9634) up from its first shift on, and its swap within 2 s of the 4th stack (window 15 uld3: missed, 5th stack
 at 3:25.9).
+
+**Review.** The hold for an impact still to land lifted at the planned impact (marker + 4.8 s), but the hit comes
+-0.06 to +0.41 s after it (median +0.16, 203 waves in 25 traces, `smash_waves`), and the 250 ms tick lands in that
+gap about half the time: with nobody under the line yet, a held kill opened then and the keep test carried it to
+impact + 5 s. Fixed: an impact counts as still to land for its marker's 5.5 s (`MARKER_LIFETIME_MS`). Left: the
+serial deadline doesn't count the 5 s hold (round 3: lengthening the blackout moves every due and serial deadline); the
+watch above covers it. No druid tank cast Rebirth or Innervate in any of the 14 pulls with one, so the form block
+costs only its party heals.

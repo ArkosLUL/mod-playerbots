@@ -1404,10 +1404,11 @@ bool InSmashRecovery(StarPlan const& plan, AlgalonEncounterState const& state, u
         return true;
 
     int32 const tail = static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS);
+    int32 const landing = static_cast<int32>(ULDUAR_ALGALON_MARKER_LIFETIME_MS - ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_MS);
     for (StarBlackout const& blackout : plan.blackouts)
     {
         int32 const impact = blackout.span.to - tail;
-        if (!std::strcmp(blackout.label, "smash") && impact > 0 && finish >= blackout.span.to &&
+        if (!std::strcmp(blackout.label, "smash") && impact > -landing && finish >= blackout.span.to &&
             finish < impact + recovery)
             return true;
     }

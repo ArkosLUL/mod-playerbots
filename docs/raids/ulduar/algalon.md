@@ -231,7 +231,9 @@ each time one landed 0.9-1.3 s after), and 8 s from the last explosion and every
 A kill opened (due or open) also must not finish 5-10 s after an impact still to land, or after a landed one
 while anyone is under the explosion's line (`smashrecovery`, never the no-clear fallback); a kill under way and a
 drain death keep the 5 s. Three meteors leave a median 15 of 25 under that line at +2 s, 9 at +6, 4 at +10 (45
-impacts, 25 traces), and kills landing 5-8 s after one killed 31 in 27, against 15 in 29 at 8-12 s.
+impacts, 25 traces), and kills landing 5-8 s after one killed 31 in 27, against 15 in 29 at 8-12 s. An impact is
+still to land for its marker's 5.5 s: the hit comes up to 0.41 s after the planned 4.8 s (203 waves), and a tick
+in between reads the raid's health from before it.
 Meteors are planned off the clock, not only their markers (4.8 s ahead): the first lands 30.9 s after the intro,
 then every 25.5 s (`Repeat(25s + 500ms)`, ±0.15 s); a sighting resets the next one and the two after are
 forecast too, and a forecast one that never shows moves on a cycle. The serial deadline sums blackouts merged,
@@ -250,7 +252,7 @@ or it counted one meteor six times (three impacts, two marker creatures each) an
   6.6 s killed 6);
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
-- a **due** star is opened whatever the raid's health, bar Big Bang's aftermath, soonest death first: its own death isn't clear and is
+- a **due** star is opened whatever the raid's health, bar Big Bang's aftermath and `smashrecovery`, soonest death first: its own death isn't clear and is
   ≤ 30 s off (a fresh wave forecasts four deaths together; the next rule paces those), or it dies no later
   than an i-th soonest within i × 16 s (a gap plus a kill each) plus the walk and any blackout before it. Never one within 9 yd
   of a swap tank or the handler (a hole under the holder sets him loose; it did twice), given a choice not
