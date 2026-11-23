@@ -1104,3 +1104,125 @@ Ball killed 9 before Berserk, 7 of them ranged.
 - Left: a `hold` bot whose last move was a barrage step is `locked` for that step's expected time
   (`IsWaitingForLastMove`, FORCED against FORCED), so its spray flee can log `spray locked` and stay. The
   reader counts that as a note, not silent; if hits stay up next window, read the notes before the hits.
+
+## Round 11 (build 99188e0f1, round 10 built)
+
+**Data:** window 19, `raidtest.py report --boss mimiron --raid uld --head 99188e0f1 --pulls 10`: one valid pull
+per pool, no DC veto inside any. Baselines: windows 16 and 18 (`603_10/11/12_…_17954419xx`,
+`603_7/8/9_…_17954489xx`). Scripts in the lane scratchpad (`mim11/`: `deathmech.py`, `p2shape.py`, `p2rate.py`,
+`healers.py`, `movers.py`, `barrage_scene.py`, `barrage_alt.py` (`--fire` for flames); round 10's `p4flips.py`,
+`parts.py`; round 8's `stuck.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-165428-9` | `603_9_…_1795452910` | **kill** 10:03.5, hard mode, parts down 9:42.5 / 9:45.6 / 9:49.5, no Berserk cast | 8: P2 Rapid Burst 1 (ranged walking in); P3 Bomb Bot 2; P4 Frost Bomb 2 (melee on frost bomb legs, 7:29, 9:13), ACU Plasma Ball 1, mine 1 (ranged on a barrage leg, 7:50), Water Spray 1 |
+| uld2 | `tr-20261123-165328-8` | `603_8_…_1795452850` | wipe 5:41.7 in P2, VX-001 at 12% | 31: P1 Flames 2 (both hunters casting Revive Pet on the drop, 0:15.9); P2 Heat Wave 11, Rapid Burst 12, Flames 6 (a holy paladin at 3:01; five bots at 2-15% on barrage legs, 4:18-4:28) |
+| uld3 | `tr-20261123-165307-7` | `603_7_…_1795452829` | wipe 10:14 in P4 at Berserk (10:00.2), parts 15/15/19% | 31: P3 Water Spray 1, Bomb Bot 1; P4 mines 6 (4 ranged and healers on barrage legs 7:52.1-7:53.3, 2 melee on frost bomb legs 9:11-9:12), Water Spray 4, Hand Pulse 3, ACU Plasma Ball 2, Laser Barrage 1; Berserk 13 (Frost Bomb 3 at 10:01.7, two on barrage legs) |
+
+70 deaths: P2 Heat Wave/Rapid Burst 24 (uld2 23), Berserk 13, Flames 8, mines 7, Water Spray 6, Bomb Bot 3, ACU
+Plasma Ball 3, Hand Pulse 3, Frost Bomb 2 (3 more under Berserk), Laser Barrage 1. Hard mode in all three:
+Summon Flames (Initial) at 7.1-7.2 s, Flames from 9.1-14.0 s, Emergency Mode at phase 2.
+
+**Stop rules:** one kill of three, 8 deaths in it: not polished. No failure picked three times (round 10's was the
+spray dodge deferring to the barrage; this one is the barrage step's own legs).
+
+**Verdict on round 10 (spray dodge during the barrage): held.** `--firebots` phase 4 `in barrage windows`, uld1 /
+uld3 (uld2 had no phase 4):
+
+- Water Spray hits 0 / 3, dead 0 / 3, `no spray note` 0 / 0 (window 18: uld1 13 + P3b 1 hits, 2 + 1 dead, 12 + 1
+  silent; uld3 4 / 4 / 4); spray or siren steps inside 0 / 9 (0 in every earlier pull).
+- uld3's three (9:56.3, melee) were pinned, not silent: `spray none` / `unsafe` with 16 mine and 4-8 cone refusals and
+  `frostbomb unsafe` (mine 6, cone 14), a fusing Frost Bomb, the cone, a fresh mine ring and a lane at once, 4 s
+  before Berserk.
+- Beam ticks 0 / 1: uld3 Uldzag (8:02.4, one tick at 94%), on an arc spread leg 0.5 s after `clear 105`, the cone's
+  last ticks. Barrage ↔ fire bot A-B-A 0 / 3 (window 18 none); arc spread ↔ barrage 25 / 17 (22/12/11), arc spread ↔
+  fire bot 97 / 113 (186/71/87).
+- Phase 4 Water Spray deaths 5 (window 18: 9).
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 89.1 | 48.1 | 89.8 | 24.2 | 139.3 | 32.0 | 7:15.9 | parts down by 9:49.5, 10 s before Berserk |
+| uld2 | 101.7 | 48.2 | **178.7**, raid dead | | | | | |
+| uld3 | 85.8 | 48.2 | 90.5 | 24.3 | 145.1 | 32.2 | 7:19.2 | 161 s, parts 15-19% at Berserk |
+
+Phases 1-3 fit where phase 2 holds (phase 4 by 7:16-7:19, window 18 7:20-7:32). uld3 lost 7 by 8:02, 5 of them in its
+first phase 4 barrage window (7:48.9), and took the parts down at 0.21%/s against uld1's 0.33%/s.
+
+**Why uld2 died at 5:46.**
+
+1. Two DPS short from 0:15.9. Both hunters (Uldyaj, Uldyau) started Revive Pet (982, 8.8 s cast) at 0:09.8 on the
+   drop, among the Summon Flames (Initial) nodes; once those lit, three overlapping nodes killed them in 2 s. A bot
+   mid-cast runs no engine pass (`PlayerbotAI.cpp:340-418`, preparing cast → yield), so no fire dodge, not a single
+   flee note. Same death in windows 7 and 16, always roster B. Uldyau was revived and died at 4:07.6, casting it again.
+2. Phase 2 opened in fire: 28 nodes within 30 yd of the centre at its first sample (uld1 8, uld3 11), P2 Flames 599k
+   (437k, 206k). One melee (Uldyak) stood 48 yd out at phase 2 on a `stranded` walk-in (12.9 yd of burn); healers went
+   after it (`reach party member to heal` 70% of healer samples at 2:50), and healing in phase 2's second 10 s ran 26k/s
+   against 39-43k/s in uld1 and uld3, under 47k/s of intake.
+3. 3:01.4, 18 s in: the holy paladin Uldyac died in fire. Its flames rungs 3, 5 and 7 found nothing (7-10 bearings
+   refused for fire), the 10 yd rung fell back unscreened onto another node (Flames 1.5 yd off at death), and the leg
+   locked its next dodges (`flames locked` for 1.4 s) down to 8%.
+4. Three healers for the rest of phase 2. The 3:13 barrage swept the healer wedge (healers moving 70-100% for 10 s,
+   the dodge working); their mana went 54% (3:25), 26% (3:45), 15% (3:55), 2% (4:26). From 3:40 Heat Wave and Rapid
+   Burst took the raid: four melee waiting out the 3:33 Frost Bomb's fuse 28-35 yd out, then two healers and two
+   ranged at 3:54-3:55. The 4:16 barrage walked five bots at 2-15% through fire (4:18-4:28). VX-001 stood at 46% 52 s
+   into phase 2 (uld1 36% at 54 s, uld3 38% at 58 s) and at 12% at the wipe.
+
+**Ranking.** uld2's 23 Heat Wave and Rapid Burst deaths follow from the healer loss, uld3's 13 Berserk deaths from its
+first phase 4 barrage. Bug-shaped, the barrage step's legs killed 10 before Berserk (mines 5: uld3 4, uld1 1; Flames
+5: uld2's, at 2-15%) and 2 under it (Frost Bomb). Mine deaths on barrage legs: 2 in window 16, 2 in window 18, 5
+now, all ranged or healers.
+
+**Failure picked: the Laser Barrage step walks ranged over phase 4 mines.**
+
+- Phase 4's Proximity Mines (65347, landing ~1.6 s later) fall on a 15.0 yd circle round the chassis: at 7:52 in uld3
+  ten at exactly 15.0 from VX-001, plus nine of the previous cast at 9.5-25.4, eight of them 19-25 yd out (the chassis
+  had moved). The phase 4 ranged ring is 13-24 yd from VX-001, so it runs through both.
+- `stepRing` in `MimironP3Wx2LaserBarrageAction::Execute` (`UldActions_Mimiron.cpp:520-571` at `99188e0f1`) scored the
+  radius shifts at one heading, the 40° arc, and with none mine-clear took the best crossing one, or with no clean
+  endpoint the plain step with no mine test at all.
+- uld3 7:50.9-7:53.6 (`barrage_scene.py`): ranged legs of 41-45° at r 15-18 passed 3-5 mines each (Uldzau 3, Uldzad 3,
+  Uldzar 4, Uldzah 5, Uldzaq 4 then 2). Uldzah walked from 80% into two blasts (10.5k + 9.3k), Uldzar from 52%, Uldzau
+  took two after Plasma Ball and Hand Pulse, Uldzad one, reincarnated at 20%.
+- Replay (`barrage_alt.py`, the seven phase 4s of windows 16-19; rockets and spray lanes not modelled, every live
+  flame counted burning): 132 of 715 phase 4 ring steps passed a live mine (2.5 yd off the leg or 3.5 off the end),
+  76 of them ranged; at the step's heading every clean radius crossed one in 105, none was clean in 22. A 30°, 20° or
+  10° arc over the same radii had a clean, mine-clear leg for 43 of the 76 ranged and 24 of the 56 melee; 5° steps
+  from 35° to 5° reach 47, ranged out to 28 yd 6 more.
+
+**Classification:** bug. The step ranks a mine-clear leg above every other (findings doc) but searched one arc, on the
+premise that mines land inside 15 yd and healthy bots take two or three blasts; in phase 4 both are wrong.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player): `stepRing` picks over the 40° arc as
+before; when no radius there gives a clean, mine-clear leg and a mine is on the floor, it tries
+`ULDUAR_MIMIRON_BARRAGE_SHORT_STEPS` (30°, 20°, 10°) and takes the first arc with one, else the full step as before.
+The next tick plans the rest. Phases 2 and 3 have no mines, so their steps are unchanged. Findings doc: "Phase 4
+mines sit on the ranged ring, so a mined step shortens its arc", replacing the wrong premise.
+
+**Next window should show** (`--mines`, `--spin`, `--firebots`; `mim11/barrage_alt.py`, `deathmech.py`):
+
+- Phase 4 barrage legs passing a mine well under 17 of 86 (uld1) and 16 of 110 (uld3) (windows 16-18: 6-18 a pull),
+  barrage-leg mine hits under 9 and 8 a pull, and no mine death on a barrage leg (5 now).
+- 10-30° barrage legs where mines lie, with no beam hit (`--spin` beam ticks 0) and no barrage death from them.
+- Phase 4 deaths in the first barrage window near uld1's 1 (uld3 5).
+- Phase 2 barrage legs as before (`--walk` P2 barrage shares, `--fire` P2).
+- Round 10's: no silent spray hit in a barrage window.
+
+**Not picked.**
+
+- uld2's holy paladin through the 10 yd flames fallback (1 death, the turn of that pull): the findings doc's open item,
+  bots pinned between fire with every bearing refused.
+- Hunters casting Revive Pet on the drop (2; windows 7, 16, 19, roster B): their pets are dead at a run's first pull,
+  which is DC's pre-pull refresh (orchestrator). Strategy side, a Mimiron hold on `revive pet` in Firefighter would end
+  the 8.8 s freeze, at the cost of the pet.
+- Frost Bomb blast 2 (uld1 melee on frost bomb legs) and mines on frost bomb legs 2 (uld3 melee).
+- uld3's beam death on an arc spread leg at the cone's tail, 1.
+- Water Spray 6, Bomb Bot 3, ACU Plasma Ball 3 (Q5), Hand Pulse 3.
+
+**Questions for the user:** none new; Q4 (cull the fire bots in the 3→4 handover) and Q5 (the off-tank tanks the ACU in
+phase 4) stand, not built. This window adds to Q4: fire bots 1.9 and 1.7 alive on average in phase 4, Water Spray 1
+and 4 hits there (5 dead), Deafening Siren 256 and 143 raid-s; to Q5: the ACU's Plasma Ball killed 3 ranged before
+Berserk.
+
+**Shared code:** none.

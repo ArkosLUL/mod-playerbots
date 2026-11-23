@@ -69,6 +69,10 @@ inline constexpr float ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS = 10.0f;
 
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_STEP = 40.0f * static_cast<float>(M_PI) / 180.0f;
 
+inline constexpr float ULDUAR_MIMIRON_BARRAGE_SHORT_STEPS[] = {30.0f * static_cast<float>(M_PI) / 180.0f,
+                                                               20.0f * static_cast<float>(M_PI) / 180.0f,
+                                                               10.0f * static_cast<float>(M_PI) / 180.0f};
+
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
 
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN = 1.0f;
