@@ -1007,9 +1007,9 @@ old camp spot, 46.9-48.7 yd from him (`lastmove.py`; Uldzar 3:17.62 to Uldzaq 3:
 from it) then stacked them on one point, (1851.54, 122.74), 37.4 yd from it and 45.6 from him, and
 nothing walked them back: 203 bot-s shut out while alive (`outside.py`), against 0-28 in every other pull
 of windows 11-21 (brief knockbacks; w14 uld1's 14 bots ~2 s each at 3:16.6, just after the spawn). The
-crash cast at 3:24.12 on Uldzad landed on that point at 3:28.68 and hit 12 with 0 of 13 dodging;
-Uldzap, the one camp bot still inside the gate, strafed at 3:25.40 and lived, then soaked out at 3:33.99
-and died at 3:38.95. The crashes at 3:38.77 and 3:48.86 landed on the same point and took the rest, and
+crash cast at 3:24.12 on Uldzad landed on that point at 3:28.68 and hit the 12 shut out, none of
+them dodging; Uldzap, the one camp bot still inside the gate, strafed at 3:25.40 and lived, then
+soaked out at 3:33.99 and died at 3:38.95. The crashes at 3:38.77 and 3:48.86 landed on the same point and took the rest, and
 with no ranged left past his 17.1 yd skip they then went to the melee with ~0.4 s of flight (dodges
 issued 4:04.67-4:04.89 for 4:05.09).
 
@@ -1060,3 +1060,19 @@ Shared code: none.
 
 **Questions.** None new. The north settle's healer reach to the main tank stays open (Q1 (b) was the
 alternative that would also fix it).
+
+**Review.** Both causes hold. uld3 (`vezax-r9-review/lockout.py`): Vezax went from (+3.4, +9.3) off the
+anchor at 3:14 to (+9.5, −3.0) at 3:20; each of the 12 shut-out bots' last move before `outside` was a
+soak walk to the field at (1850.7, 125.7), 48.7 yd from where he stopped, most then reach spell to
+(1851.5, 122.7), 45.6 from him and 37.4 from the Animus; crash-killed camp bots 5 / 6 / 3 at 3:28.9 / 3:38.9 / 3:49.1, 12 distinct.
+`--band` `out s` sums to 203 s. `replay_cross.py` re-run on w15 uld3, w17 uld3, w21 uld3: past the
+ceiling 100 / 100 / 3% → 0%, far at in-phase marks 13 → 4 in the two north settles. No size, mode or
+player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: Uldzap dodged the 3:28.68 crash (`--crash` 1 of 13), so "0 of 13 dodging" above is now the
+  12 shut out none dodging; the findings doc's "the one bot still inside dodged and lived" now says a
+  soak walk took it out too (dead at 3:38.95, one of the 12). One overlong doc line rewrapped.
+- Left: crossed slots go two slot tolerances (2.4 yd) past reach spell's own stop, the margin round 5's
+  pull keeps so a parked bot stays inside the ceiling. With the Animus loose after the main tank died a
+  crossed slot can sit at his feet (w17 uld3 replay: down to 4.2 yd at 4:21-4:25, 105 of 2740 samples
+  under 20); collapse only.

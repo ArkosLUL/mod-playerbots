@@ -62,8 +62,8 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   crossed Animus slots (below) take it under 9 or 4. With rows from 27, 7 of 37 full-raid marks in
   windows 7-10 went to melee or the main tank, and 24 of 29 10-man marks in window 12 found under 4 far
   (15 went to melee or a tank); replayed on the window 11-12 traces the far pool reads 10-14 (25-man)
-  and 3-5 (10-man) as the camp stood, 13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd, under the 2.4 yd arrival deadband, so a
-  front-row bot parked short can still be near.
+  and 3-5 (10-man) as the camp stood, 13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd,
+  under the 2.4 yd arrival deadband, so a front-row bot parked short can still be near.
 - **Ceiling 42.6 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
   against this formation at `ACTION_RAID` and the two deadlock. Only row 4's strafed slots pass it (to
@@ -353,8 +353,8 @@ band still applies). Nothing contains the camp once he moves: at the Animus spaw
 tank, once 12.3 yd away from the camp in 5 s; soak walks took the whole camp to the last crash's field
 at its old spot, 47-49 yd from him, and reach spell on the Animus, which stops 37 yd from it, stacked
 them on one point 45.6 from him, so nothing walked them back. Shut out, they got no slot and no dodge:
-the next three crashes landed on that point and killed 12 of them, two twice after a rez, the one bot
-still inside dodged and lived, and the wipe followed. Crash knockbacks
+the next three crashes landed on that point and killed 12 of the 13, two twice after a rez; the one bot
+still inside dodged the first, then a soak walk took it out too, and the wipe followed. Crash knockbacks
 shut bots out for seconds too. The latch only holds bots already on the hall floor, whose slot, strafe
 and mark spots are floor-checked from where they stand.
 
