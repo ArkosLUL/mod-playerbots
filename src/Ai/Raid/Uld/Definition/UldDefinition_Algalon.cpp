@@ -152,6 +152,7 @@ void DefineAlgalon(EncounterBuilder& e)
             Family::Charge | Family::Blink | Family::Disengage, {"killing spree"});
 
     e.Block("algalon taunt guard", Role::Any, AlgalonEngaged, Family::Taunt);
+    e.Block("algalon tank form hold", Role::Tank, AlgalonEngaged, 0, {"caster form"});
     e.Block("algalon class tricks", Role::Any, AlgalonEngaged, 0,
             {"tricks of the trade", "tricks of the trade on main tank"});
     e.Block("algalon yield skull", Role::Tank, AlgalonYielding, Family::AttackRti);

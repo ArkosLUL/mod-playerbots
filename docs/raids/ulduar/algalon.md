@@ -459,6 +459,10 @@ raid-warns them instead ("`<name>`, taunt Algalon now") every 5 s while the swap
 who is the only one able to pick him up while he is loose is told the same. With a human partner the
 bot still taunts him back at the human's 4th stack.
 
+**A tank druid never leaves bear form** while he is engaged (`caster form` blocked for tanks): as the spare it
+healed in caster form until its mana ran out, too little to shift back, and once in the pair it took him 9-15 s
+late in 3 of 14 pulls with a druid tank: once the holder ate a 5th Phase Punch, once he was loose 16.5 s.
+
 Every swap tank or handler not holding him **yields** while a swap tank does: no damage on him (target guard and
 exclusions; a node that drops auto-attack, which is no action, so the damage guard never stops it, and white
 swings alone take him back; a block on `attack rti target` for a skull on him).

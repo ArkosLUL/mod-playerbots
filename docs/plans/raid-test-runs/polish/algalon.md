@@ -533,3 +533,123 @@ rather than `run`/`wait` hiders (window 14: uld1 15 hit, 12 dead; uld3 12, 6). A
 and draining into it moves the hiders' runs 3-4 s earlier. Watch: Cosmic Smash deaths in Big Bang 2's hide
 (window 14: uld3 3) and hiders "brought back inside 15 yd by the impact", and Dark Matter deaths while phased in
 a Big Bang (window 14: 1).
+
+## Round 7 (2026-11-23, build 523b2f60f with round 6)
+
+**Data.** Window 15, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head 523b2f60f
+--pulls 10`). All 25 Algalon traces on disk reread for star kills against the last meteor impact and for druid
+tanks' forms (scratch `alg7/`: `smashhp2.py` raid under the line round each impact, `bins.py`/`opened.py` kills by
+time after the impact and when the team was put on them, `bearform.py` Dire Bear Form spans against
+`algalon.tankrole`, `power.py` mana per snapshot).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-131238-22` | `603_22_…_1795439661` | wipe 4:53, Ascend 4:46.3, boss 45% | 33: loose 13, Constellation Barrage 8, star explosion 7, on tank 5 |
+| uld2 | `tr-20261123-131258-23` | `603_23_…_1795439681` | wipe 5:09, Ascend 4:56.4, Big Bang 3 with no hole, boss 48% | 32: loose 15, star explosion 6, on tank 6, Barrage 3, Big Bang 1, Cosmic Smash 1 |
+| uld3 | `tr-20261123-131700-24` | `603_24_…_1795439922` | wipe 4:57, Ascend 4:50.6, boss 45% | 31: loose 14, star explosion 8, on tank 4, Barrage 3, Cosmic Smash 2 |
+
+What started each wipe:
+
+- uld1: nobody died before a `deadline` kill landed 5.8 s after a meteor (3:10.6, 8 under the line, 1 dead). Uldxaz
+  died at 3:55.9 (74 k in 6 s, 27 k healed, its tank healer 11 yd off); 1631's `deadline` kill landed 5.0 s after
+  the next meteor (4:01.0, 15 under, 3 dead, a healer among them); tank deaths to 4:15.4, then loose 17.5 s, 15 dead.
+- uld2: the holder died at 3:04.9 (122 k in 6 s, 67 k healed, its tank healer 4 yd off); Big Bang 2 killed Uldyaj
+  (hide `none`, 51 k). Tank deaths 4:23.9-4:40.5 with the tank healer alive 16-26 yd off, loose 14 s, and Big Bang
+  3 found no hole and no soaker.
+- uld3: the holder died at 2:15.6 (110 k in 6 s). Its replacement, the bear druid Uldzab, couldn't take him at
+  Uldzaa's 4th stack (3:09.4, see the second fix), so the 5th phased Uldzaa at 3:25.9; a released under-star went off
+  3.05 s into Big Bang 2's cast on 6 runners (3 dead, Uldzal to it and a meteor), the other under-star killed Uldzav;
+  Uldzab died at 3:37.7 (`noshelter`, 31 k from the hit), Uldzaa at 3:53.5 and to a kill landing 6.6 s after a
+  meteor (4:02.7, 2 dead); loose 15.4 s from 4:33.6, 16 dead.
+
+**Stop rules.** Not polished (three wipes; waived on 226 rosters). The failures picked below are new.
+
+**Verdict on round 6: held.** In Big Bang 2's cast no hider was still waiting at an impact (all three pulls:
+nobody). Stars going off in the cast hit nobody in uld1 (window 14: 15 hit, 12 dead), none went off in uld2's,
+and in uld3 the released 1655 hit 6 runners (3 dead, plus Uldzal to the meteor on its walk; 1654 under killed
+Uldzav): it died at cast +3.05 s (hit − 4.95) after 5.3% splash (Uldzak's Piercing Shots 2.6%, Wild Quiver 1.8%)
+released it `early` at 13% 10.8 s before the cast. The stretch fired (every hider gone by cast +1.1 s), but from
+the `nearhole` spots 22 yd out nobody is in before hit − 5. Star deaths on hiders in Big Bang 2's cast 18 → 4. Watch
+items: Cosmic Smash deaths in the hide 1 (uld3 Uldzal; window 14: 3); hiders the hide brought back inside 15 yd of
+an impact: uld3 Uldzal 10.2, Uldzab 12.2, Uldzaf 12.5, uld2 Uldyab 14.8; Dark Matter deaths while phased 0 (window
+14: 1).
+
+**Failures by deaths** (96): tank burst 15 and loose 42 (Q2 stands; uld3's late swap inside it, below); star
+explosion 21 = kills landing 5-10 s after a meteor impact 8 (uld1 3:10.6 1 and 4:01.0 3; uld3 3:12.1 1, 4:02.7 2,
+4:31.6 1), in a Big Bang cast on hiders 5 (uld3 Big Bang 2 4, uld2 Big Bang 1 1), the collapse and others 8 (uld1
+4:14.7 3, uld2 4:17.7 2 and 4:36.7 2, uld2's `urgent` shelter kill 1); Barrage 14 (13 after the first tank death);
+Cosmic Smash 3; Big Bang 1.
+
+**Picked: star kills landing in a meteor's aftermath** (8, and in every pull). Bug: the strategy holds a kill
+while anyone is under the explosion's line, but a due kill skips that gate (round 4) and the meteor blackout ends 5
+s after the impact, so it lands on a raid the meteor just drained.
+
+- The meteors' damage: 45 impacts away from Big Bang with no explosion from −12 to +20 s (25 traces) leave a
+  median 15 of 25 under the line at +2 s, 11 at +4, 9 at +6, 6 at +8, 4 at +10, 2 at +12 (3 before the impact);
+  under 14 k, a mean of 1 at most, so deaths come when an explosion lands on top of it.
+- Kills outside casts and the void's aftermath, by when they landed after the impact: +5..+8 s 27 kills, 31
+  dead (median 8 under the line); +8..+10 17, 8; +10..+12 12, 7; +12..+15 3, 1. Of those landing +4..+12 s, 32 were
+  opened after the impact (36 dead) and 26 before it (13 dead), the deadly ones within 2 s of it.
+- uld1 at 3:05.871 (`starplan`: `1603 17% 16s, … | smash -5..3 | prebang+smash 19..31`), 1.0 s after the impact:
+  1603 is serial due (`SerialDue`: 16 s plus the 3 s blackout cover its death), and the due branch of `StarWindow`
+  (`UldEncounter_Algalon.cpp`, the `if (!due.empty())` block) opens it on the first tick its `FinishBand` clears the
+  blackout's end, impact + 5 s: it landed at +5.8 with 8 under. uld1 4:01.0, uld3 3:12.1 and 4:02.7 opened the same
+  way 0.2-1.7 s after their impacts.
+
+**Fix** (Algalon files only): `InSmashRecovery`, `ULDUAR_ALGALON_STAR_SMASH_RECOVERY_MS` 10 s. A due or open kill
+whose finish band starts 5-10 s after an impact still to land, or within 10 s of the last impact while anyone is
+under the line, is held (`algalon.starwindow=smashrecovery`), and a held due kill is never the no-clear fallback.
+Unchanged: the keep test (a kill under way), due-ness and `SerialDue` (a drain death keeps the 5 s), `urgent` and
+the Big Bang `recovery`. 10 and 25-man alike (one meteor at 10: the landed-impact hold lifts once nobody is under the
+line; the upcoming one costs a kill 5 s of room). Replay by hand at the real kill speeds: uld1's 1603 opens about
+3:10.5 and lands about 3:15 (its own death 3:21.9, Big Bang 2's blackout from 3:24.9); 1631 (11.8%, own death
+4:07.9) goes off about 4:06-4:08 instead of 4:01.0, and 1630 (own death 4:19.9, inside the 4:16.9 meteor
+blackout) then has 4:14-4:16.9 after the gap, tight (its real kill took 5.3 s); uld3's 1610 lands from 3:14.9 (own
+death 3:20.9) and 1653 (27%, own death in the 4:17.3 blackout) in 4:06.1-4:17.3 instead of 4:02.7. Deaths saved
+can't be counted (no trace has these raids at +10 s without the explosion on them); the curve says 4 under the line
+at +10 against 8-15 at the real landings.
+
+**Second fix: a tank druid stays in bear form** (independent, one rule). Bug: the swap partner can't take him.
+
+- uld3: Uldzab, roster C's spare tank, went caster at 2:04.818 (`caster form` OK, ~86% mana) and healed (`rejuvenation
+  on party`, `regrowth on party`) to 0.95% mana by 2:32.3, 0.4-9% to 3:17.6. In the pair from 2:15.8 (`yield`),
+  `take` at 3:09.547 for Uldzaa's 4th stack: `dire bear form` PREREQ/FAILED every tick to 3:22.3, `algalon phase
+  punch swap action` FAILED at 3:10.3 and 3:21.3 (Growl needs bear form); it shifted at 3:23.481 (11.6% mana) and
+  Growled at 3:25.952, after the 5th stack phased Uldzaa (3:25.900), 0.6 s before Big Bang 2's cast.
+- 14 pulls had a druid tank; it was out of bear form when `take` came in 3 (all uld3): window 9 `603_26` 8.9 s
+  late, window 14 `603_30` 14.9 s late (he was loose 16.5 s, the shadow priest among the dead, so Big Bang 2 had no
+  disperser: round 6's uld3), window 15 13.9 s late. Elsewhere it was already in form or 0.5-2.5 s late.
+- Cause: the generic druid nodes (`caster form` is the prerequisite of the party heals; `CastCasterFormAction`
+  shifts out while mana is above `MediumHealth`), shared class code.
+
+Fix: `algalon tank form hold`, a `Block` on `caster form` for tanks while he is engaged (`UldDefinition_Algalon.cpp`).
+Dire Bear Form's own `caster form` prerequisite is vetoed but the re-pushed shift skips prerequisites (`Engine.cpp`
+`PushAgain`), so the shift still goes. A druid in caster form at the pull still heals until its first shift (1:27 in
+every pull). 10 and 25-man alike; a human druid is untouched.
+
+**Not picked.**
+
+- Tank deaths and loose: Q2 stands (every tank death the reader checked had a tank healer alive and unphased 4-33 yd
+  off).
+- Stars in Big Bang casts on hiders (5): uld3's 1655 was released `early` after a hunter's Piercing Shots and Wild
+  Quiver took 5.3% in 20 s, then couldn't be killed before the cast (`gap`, `prebang`, `under` flipping 3:18-3:24);
+  Piercing Shots is a talent bleed the no-DoT guard doesn't see. Next candidate.
+- Personal buttons ready and unpressed at 4 explosion deaths (Uldxaq Ice Block 4:01.0, Uldyah Ice Block 1:33.7, Uldyal
+  Shadow Ward 4:19.4, Uldzag Cloak of Shadows 4:02.7), and uld2's `urgent` shelter kill (1:33.7) went off with no
+  cover and three Aura Masteries ready: not traced.
+- uld2's Uldyaj killed by Big Bang 2 on hide `none`: not traced.
+
+**Questions for the user.**
+
+- Q5 (shared code, another lane): a spare bear druid leaves bear form to heal and can run itself out of the mana to
+  shift back; Algalon now blocks that, other bosses don't. Recommendation: a druid lane to keep tank druids in form
+  in boss fights.
+
+**Next window should show** (`algalon.py --stars`, scratch `alg3/explo.py`'s `after-smash` column): no `killed`
+star (`deadline`/`open`) going off 5-10 s after a meteor impact with anyone under the line (window 15: uld1 +5.8 s 1
+dead, +5.0 s 3; uld3 +7.2 s 1, +6.6 s 2, +9.9 s 1; uld2 +7.7 and +8.2 s, 0), and `smashrecovery` in the
+`algalon.starwindow` timeline after impacts. Watch: no due star drained into the next meteor's blackout because its
+kill was held (`drained`/`chewed` with "a meteor live"), no two explosions within 8 s, no due kill pushed into Big
+Bang's `prebang`. With a druid tank: no `dire bear form` FAILED run while its `algalon.tankrole` is `take`, Dire Bear
+Form (9634) up from its first shift on, and its swap within 2 s of the 4th stack (window 15 uld3: missed, 5th stack
+at 3:25.9).
