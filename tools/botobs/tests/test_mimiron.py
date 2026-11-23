@@ -109,7 +109,6 @@ def mimiron_pull() -> list[dict]:
         move(28500, AGONY, mm.BOMB_DODGE, 43.0, 0.0),
         move(28600, TREE, mm.BOMB_DODGE, 10.0, 45.0),
 
-        # the formation walks Shadow through the bomb and Bulwark straight out of it
         move(29000, SHADOW, mm.FORMATION, 12.0, 0.0),
         move(29000, BULWARK, mm.FORMATION, -20.0, 0.0),
 

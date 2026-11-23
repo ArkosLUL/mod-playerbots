@@ -1497,3 +1497,22 @@ stays dead under Firefighter", the `none bomb` note.
 **Questions for the user:** none.
 
 **Shared code:** none (Mimiron files and its reader).
+
+**Review.**
+
+- Checked and holding: `--bomb` reproduces the phase 4 walk-ins 40/35/90, 140 of them `mimiron arc spread action`
+  and 59 of those the main tank's (Uldxaa 23, Uldyaa 20, Uldzaa 16). uld3's 7:59 bomb: Uldzaa's arc spread leg ran from
+  34 yd to his spot 17.3 yd off the bomb and alternated with the escape every ~270 ms from 8:05.8 to 8:09.0, the leg
+  the trigger now refuses. uld1's Killing Spree (37 → 26 yd) and Intercept (34 → 24) began inside the guard's 38 yd,
+  so `Family::Charge` and `killing spree` cover both deaths. uld2's hunters cast Revive Pet 46 times, `castcut 982`
+  cut it, and no pet of theirs appears in the trace. Normal mode and 10-man run the same code (no bomb, so
+  `hazards.bombs` is empty); a real player changes nothing. The pet hold keys on the config toggle like every
+  Firefighter gate, so a normal-mode pull with the toggle on also holds Revive Pet (findings doc, "Firefighter").
+- The next window's `walks into the live bomb` cannot reach 0: the fix leaves `combat formation move` (19 in
+  window 22, 34 → 29-32 yd, the unstacker the guard leaves alone) and reach legs starting past the guard's 38 yd (6:
+  `reach spell` 40 → 24, `reach party member to heal` 43 → 28, `reach melee`, the core carrier). Judge the fix by
+  `mimiron arc spread action` walk-ins near 0 and the main tank's 1-3 escapes a bomb.
+- `none bomb` cannot be counted: `NoteDerived` writes a `mimiron.approach` value only when it differs from the bot's
+  last one, and a direct leg writes none, so most bots log it once a pull. The main tank's anchor hold writes no
+  note at all. Read the hold from the walk-ins.
+- Removed the fixture comment the round added to `test_mimiron.py` (no-comments rule).
