@@ -57,10 +57,14 @@ private:
 
     bool TakesEonarsGift(FreyaWaveState const& state);
 
+    void CutWalkAwayFromGift(Unit* gift);
+
     Unit* ShedSnaplasherThreat(FreyaWaveState const& state, Unit* assigned);
 
     ObjectGuid giftGuid;
     uint32 giftSeenMs = 0;
+    ObjectGuid filledGiftGuid;
+    ObjectGuid walkCutGiftGuid;
 
     ObjectGuid snaplasherGuid;
     uint32 snaplasherSeenMs = 0;

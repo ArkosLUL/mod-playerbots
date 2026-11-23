@@ -12,8 +12,9 @@ lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on
 melee bot walking back into a low lasher's blast and dying to its Detonate. A fourth pins a low lasher
 chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-held lasher and bails
 from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
-ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. The shared v14
-fixture shows every section reads empty elsewhere.
+ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. A seventh pins a
+melee bot joining a ranged one on a Gift after its walk away from it was cut. The shared v14 fixture shows every
+section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -287,6 +288,36 @@ def gift_low_pull() -> list[dict]:
     ]
 
 
+def gift_fill_snap(t: int, melee_on: int, gift: bool = True) -> dict:
+    units = [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [CASTER, 2340.0, -60.0, 425.3, 0, 100, 100, GIFT],
+        [MELEE, 2350.0, -50.0, 425.3, 0, 100, 100, melee_on],
+    ]
+    if gift:
+        units.append([GIFT, 2345.0, -60.0, 425.3, 0, 50, 0, 0])
+    return {"t": t, "e": "snap", "u": units}
+
+
+def gift_fill_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 0, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": CASTER, "n": "Caster", "r": "ranged", "c": 8, "h": 0},
+                    {"g": MELEE, "n": "Blade", "r": "melee", "c": 4, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        {"t": 0, "e": "unit", "g": GIFT, "en": 33228, "n": "Eonar's Gift"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        gift_fill_snap(40000, FREYA),
+        gift_fill_snap(41000, GIFT),
+        gift_fill_snap(42000, GIFT),
+        gift_fill_snap(42500, FREYA, gift=False),
+        {"t": 40500, "e": "note", "g": MELEE, "k": fr.GIFT_CUT_NOTE, "txt": "12 of 30 yd"},
+        {"t": 43000, "e": "end", "out": "kill"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -319,7 +350,13 @@ class Waves(unittest.TestCase):
         self.assertEqual(printed(fr.show_waves, load(pull())), (
             "WAVES\n"
             "  0:10.000 .. 0:24.000  trio        3 add(s), 1 raid death(s) meanwhile\n"
-            "  0:10.000 Eonar's Gift 14.0s, lived to heal, 60% left\n"))
+            "  0:10.000 Eonar's Gift 14.0s, lived to heal, 60% left; on it at most 1 ranged and 0 melee; "
+            "0 walk(s) away from it cut\n"))
+
+    def test_a_melee_filler_on_the_gift_and_a_walk_away_cut(self):
+        self.assertEqual(printed(fr.show_waves, load(gift_fill_pull())), (
+            "WAVES\n"
+            "  0:40.000 Eonar's Gift 2.0s, killed; on it at most 1 ranged and 1 melee; 1 walk(s) away from it cut\n"))
 
 
 class Tanks(unittest.TestCase):

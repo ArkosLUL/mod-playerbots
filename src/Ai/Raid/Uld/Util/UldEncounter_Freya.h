@@ -262,7 +262,7 @@ uint32 CountFreyaRaidNear(PlayerbotAI* botAI, Position const& centre, float radi
 
 Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI);
 
-bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
+bool IsFreyaGiftFiller(PlayerbotAI* botAI, Unit* gift);
 
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 

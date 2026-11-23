@@ -24,13 +24,15 @@ What the generic views miss here:
   the order Stonebark, Ironbranch, Brightleaf, and the recorder names the pull after the first boss-flagged
   creature to engage; a later name never replaces it. Only a pull with no Elder alive files as `freya`.
 - **A wave is the adds first seen together.** It ends when its last member is last sampled alive, and a
-  member still alive at the last snapshot never died.
+  member still alive at the last snapshot never died. Each Eonar's Gift line gives the most ranged and melee DPS
+  that had it as their target in one snapshot, and the `freya.giftcut` notes in its life: a bot that took it
+  stopped a walk leading away from it.
 - **`--threat` folds both tanks into "tank".** Freya belongs on the main tank and the Snaplasher on the
   add tank, so `--tanks` names the holder.
 - **A dodge is a move, not a hit.** `--moves` lists every re-issued order of a walk; `--beams` counts the
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
 - **Cover is read off auras, not the cooldown notes.** A healer notes `freya.addext` before its cast, so a cast that
-  fails (out of range) still writes the name. The cover line takes the first tank a Snaplasher went to and measures
+  fails (out of range) still writes the name. The cover line takes the tank who held the Snaplasher longest and measures
   his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap,
   time two layers spent on one stretch, `none` the time he held it bare. The trace logs the auras a death strips
   1-2 ms before the death row itself, so "died under" also counts an aura that ended up to `DEATH_AURA_SLACK_MS`
@@ -99,6 +101,7 @@ HEAL_RANGE_YD = 38.5
 HEALERS_WANTED = 2
 KITE_ACTION = "freya kite snaplasher"
 KITE_NOTE = "freya.kite"
+GIFT_CUT_NOTE = "freya.giftcut"
 COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
 # not casts, the probes write these so the same button cast again next wave still gets its own row
 COOLDOWN_NO_PICK = {"covered", "none"}
@@ -210,13 +213,28 @@ def show_waves(trace: Trace) -> None:
         print(f"  {clock(wave['t'])} .. {clock(wave['end'])}  {wave['kind']:<11} {len(wave['members'])} add(s)"
               f"{left}, {dead} raid death(s) meanwhile")
     end = last_snapshot(trace)
+    cuts = [rec for rec in trace.of("note") if rec.get("k") == GIFT_CUT_NOTE and rec.get("txt")]
     for gift in sorted(sightings(trace, (NPC_EONARS_GIFT,)).values(), key=lambda r: r["first"]):
         lived = gift["last"] - gift["first"]
         if lived >= GIFT_CAST_MS:
             verdict = f"lived to heal, {gift['hp']:.0f}% left"
         else:
             verdict = "alive at the end" if gift["last"] >= end else "killed"
-        print(f"  {clock(gift['first'])} Eonar's Gift {lived / 1000:.1f}s, {verdict}")
+        takers = gift_takers(trace, gift)
+        cut = sum(1 for rec in cuts if gift["first"] <= rec["t"] <= gift["last"])
+        print(f"  {clock(gift['first'])} Eonar's Gift {lived / 1000:.1f}s, {verdict}; on it at most "
+              f"{takers['ranged']} ranged and {takers['melee']} melee; {cut} walk(s) away from it cut")
+
+
+def gift_takers(trace: Trace, gift: dict) -> dict:
+    most = {"ranged": 0, "melee": 0}
+    for snap in frames(trace):
+        if not gift["first"] <= snap["t"] <= gift["last"]:
+            continue
+        on = collections.Counter(trace.role(row[0]) for row in snap.get("u", []) if row[7] == gift["g"] and row[5] > 0)
+        for role in most:
+            most[role] = max(most[role], on[role])
+    return most
 
 
 def holder_label(trace: Trace, guid) -> str:
@@ -301,10 +319,14 @@ def snaplasher_cover(trace: Trace) -> list[dict]:
     deaths = combat_deaths(trace)
     out: list[dict] = []
     for snap in sorted(sightings(trace, (NPC_SNAPLASHER,)).values(), key=lambda r: r["first"]):
-        first = next((span for span in snap["spans"] if trace.role(span[2]) == "tank"), None)
-        if first is None:
+        held: collections.Counter = collections.Counter()
+        for s, e, target in snap["spans"]:
+            if trace.role(target) == "tank":
+                held[target] += e - s
+        if not held:
             continue
-        tank, t0 = first[2], first[0]
+        tank = max(held, key=held.get)
+        t0 = next(span[0] for span in snap["spans"] if span[2] == tank)
         died = next((d["t"] for d in deaths if d.get("g") == tank and t0 < d["t"] <= snap["last"]), None)
         t1 = died if died is not None else snap["last"]
         own, ext = aura_spans(trace, tank, OWN_DEFENSIVES), aura_spans(trace, tank, EXTERNALS)

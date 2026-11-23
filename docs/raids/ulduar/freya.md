@@ -32,9 +32,12 @@ would freeze each bot's first pick. The pet goes at the pick every tick, not onl
 right target the node returns false, the common case, and a pet left on a dead or floored add would
 never catch up.
 
-**Eonar's Gift is a ranged job** (12s to a 30-60% Freya heal), so melee never eat the travel both ways;
-melee take it only when no ranged DPS is alive. While a lasher pack is up only the first
-`ULDUAR_FREYA_GIFT_SHARE` (5) ranged by GUID take it, the rest joining after `_GIFT_SHARE_MS` (5s): ten
+**Eonar's Gift is a ranged job** (12s to a 30-60% Freya heal), so melee never eat the travel both ways,
+unless fewer than `ULDUAR_FREYA_GIFT_SHARE` (5) ranged DPS live, players counted: then the melee DPS bots
+nearest it fill the share to 5 and stay on that Gift (`IsFreyaGiftFiller`; user's choice, not yet verified
+in a pull). 10-man rosters carry two ranged DPS, too few for a 27k Gift (25-man: 91k): 16 of 27 lived in
+three 10-man pulls with no melee on them, against 1 of 25 at 25-man. While a lasher pack is up only the
+first `ULDUAR_FREYA_GIFT_SHARE` (5) ranged by GUID take it, the rest joining after `_GIFT_SHARE_MS` (5s): ten
 bots take a Gift from full to dead in 4.2-6.3s, so five clear it inside the 12s while the pack keeps
 the other half. Sending every ranged emptied the pack for 4.7-6.5s at 84% and 86% pack health in the
 two waves that wiped, against 10% in the one that did not. **Known-open:** `TakesEonarsGift` starts the
@@ -44,12 +47,17 @@ the back line lives: the nine that healed in three pulls spawned a median 38-79 
 at most 7 of them reached it; in five, during lasher and Conservator waves, at most one did, each `reach
 spell` step undone by the spore node or the back-line bail from a low lasher chasing them
 ([below](#detonating-lasher-waves)). `freya ranged camp`'s gather also pulled them back, so it stands down
-for a ranged DPS bot whose target is a Gift; the bail still runs. **A Gift that lives is why a lasher wave
+for a ranged DPS bot whose target is a Gift; the bail still runs. A gather walk already under way kept
+going, though: one sent as a Gift spawned carried five ranged on it 5-48 yd farther (one from 10 yd to
+58), and the Gift lived. So a DPS bot that takes a Gift stops, once per Gift, a walk below
+`MOVEMENT_FORCED` that ends farther from it (note `freya.giftcut`; not yet verified in a pull). The camp
+follows its anchor, the lowest-GUID ranged bot, so the anchor's own generic flee from a lasher drags every
+later gather: one fled to the south wall, 54 yd from Freya. With the lasher pack between the back line
+and the Gift, each `reach spell` step ends in a low lasher's blast and the bail walks it back: 19 bails
+in one Gift's life, none of the nine on it ever in reach. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
-each Gift that lives heals every member about 30%, and three took one past two minutes. **Known-open:**
-10-man rosters carry two ranged DPS, too few for a 27k Gift (25-man: 91k): 16 of 27 lived in three
-10-man pulls, against 1 of 25 at 25-man.
+each Gift that lives heals every member about 30%, and three took one past two minutes.
 
 ## The trio wave
 
@@ -101,7 +109,8 @@ got Lay on Hands outside the trio or right after a soulstone rise, and once each
 of Sacrifice after a soulstone rise, dying under both. Cast alongside his own buttons, externals overlapped
 them (19.5 of 20s in one wave) and he died bare 5.5s after the last ran out, the Snaplasher at 8%. Two
 trio waves can come back to back, 60s apart, and the second outlasts a bear's 3-minute buttons: it gets
-Barkskin alone.
+Barkskin alone. A lasher a Gift healed back beside the Snaplasher kills him with buttons up: 6.5-8.5k
+swings between its 20-31k ones killed a bear under Survival Instincts and Frenzied Regeneration.
 
 **A damage dealer near the add tank's threat on the Snaplasher moves to a sibling**
 (`ShedSnaplasherThreat`, not yet verified in a pull). The generic `threat` strategy is never added
@@ -307,14 +316,15 @@ The add tank taunts the **Snaplasher and Conservator only**; the rest of its lad
 damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
 their own pickup ([below](#detonating-lasher-waves)).
 
-**The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice; not
-yet verified in a pull), since every add-tank death came with them spent earlier or on someone else
-([Hardened Bark](#the-trio-wave)). `freya add tank defensive hold` blocks the class nodes' tank cooldowns
-(`HeldTankDefensiveNames`) for assist tank 0 while Freya is not on him, above
-`ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank external hold` zeroes healers'
-class Pain Suppression (a disc priest's own critical-health one shares the name), Guardian Spirit and Hand
-of Sacrifice aimed at anyone but the main tank (user's choice) while an add tank lives who is not holding
-her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
+**The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice),
+since every add-tank death came with them spent earlier or on someone else
+([Hardened Bark](#the-trio-wave)). Verified: no two layers overlapped, he stood bare 1-12s a trio wave
+(9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya add tank
+defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
+Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank
+external hold` zeroes healers' class Pain Suppression (a disc priest's own critical-health one shares the
+name), Guardian Spirit and Hand of Sacrifice aimed at anyone but the main tank (user's choice) while an add
+tank lives who is not holding her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
 the entry fallback sees her before the pull too, and no trio comes once it drops. Both find Freya by entry
 when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at
 43% that way.
@@ -598,9 +608,9 @@ one in reach, 11-52% of the ranged in reach shot another lasher and 0-40% shot o
 under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed four of them back to
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
 Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in. Ahead of the Gift (user's
-choice; not yet verified in a pull) it takes only one hitting the back line, a ranged DPS or healer
-(`backLineOnly`), one or two casts, except while the trio is locked: with one in reach and a Gift up, half
-the ranged in reach sat on the Gift (10-man: 94%), and a Gift heals it back to ~65%.
+choice) it takes only one hitting the back line, a ranged DPS or healer (`backLineOnly`), one or two casts,
+except while the trio is locked, since a Gift heals it back to ~65%: with one in reach and a Gift up, the
+ranged in reach went from 54% on the Gift and 21% on that lasher to 36% and 44%.
 
 **A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
 trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a
@@ -735,18 +745,21 @@ about what is up.
 ## What a trace answers
 
 `tools/botobs/bosses/freya.py <trace>`; probes are the notes `freya.kite` (the chased bot's "<Snaplasher> vs
-<own> run speed" in hundredths, on change: 25-man first drops under 7.0 at 6.96), `freya.adddef` and
-`freya.addext`. A pull files under the first Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
-living Elder into combat before Freya's own hook runs, and the recorder never renames a named trace.
+<own> run speed" in hundredths, on change: 25-man first drops under 7.0 at 6.96), `freya.adddef`,
+`freya.addext` and `freya.giftcut` (a cut walk, "<bot> of <walk's end> yd" from the Gift). A pull files
+under the first Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the
+engage pulls each living Elder into combat before Freya's own hook runs, and the recorder never renames a
+named trace.
 `cfg.hardmode` has no Freya key, so the report's column reads `-`; the banner reads hard mode off the
 Elders' essence channels into Freya at her engage (62483-62485), else their empowers (Ground Tremor casts,
 Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
-62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
+62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile, and per Gift the most
+ranged and melee DPS on it in one snapshot and its cut walks;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a
-cast that can still fail), and per Snaplasher the seconds its first tank held it under his own buttons,
-externals, both and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
+cast that can still fail), and per Snaplasher the seconds its longest-holding tank held it under his own
+buttons, externals, both and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
 Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
