@@ -1264,8 +1264,9 @@ choice** (share `joined`): waiting at a stage spot left the last 1-3 tentacles t
 of 9 damage dealers stood, ~10 s a wave. Ties go to the one nearest `…_ICECROWN_STAGE_SPOT` /
 `…_STORMWIND_STAGE_SPOT` (on the navmesh path from landing to Brain, 6 / 3 yd past the landing, since
 both doors are inside the brain room's 50 yd circle and a bot at one reads as already in the brain room),
-and it keeps its current tentacle while no other has fewer attackers. The Chamber keeps plain spread,
-where nobody waits.
+and it keeps its current tentacle while no other has fewer attackers or, as in the spread (which a
+one-tentacle share overrides), no lower GUID is also on it. The Chamber keeps plain spread, where nobody
+waits.
 
 **Grim Reprisal is what kills the brain team, and only a hit triggers it.**
 `spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;

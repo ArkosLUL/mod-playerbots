@@ -785,3 +785,9 @@ phase 3.
 **Question for the user.** In an illusion room, should the room's healer heal a reprisal-held bot first, since it
 deals nothing until 70%? **Recommended: yes**: uld2's wave 4 lost two of eight damage dealers for 26-28 s of a 46 s
 clear, and the charm that followed wiped the pull; the risk is a mate under Grim Reprisal waiting a heal longer.
+
+**Review fixes.** `YoggSaronTentacleToJoin` also keeps the bot's current tentacle while no lower GUID room member is
+on it, the spread's settle rule. A joined bot's share allows only the one tentacle it returns, so `SpreadTarget`'s
+own keep never applies, and two joiners on one tentacle that both read another with fewer attackers before either
+switched would leave together and come back together. The Icecrown orphans, whose cluster's last tentacle dies
+under all of them at once, are the likely case.

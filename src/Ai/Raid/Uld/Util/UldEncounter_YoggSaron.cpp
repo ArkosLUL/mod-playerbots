@@ -4612,7 +4612,7 @@ bool YoggSaronIcecrownClusterManned(YoggSaronEncounterState const& state, Player
     return false;
 }
 
-uint32 YoggSaronTentacleAttackers(Player* bot, Unit* tentacle, YoggSaronRoom room)
+uint32 YoggSaronTentacleAttackers(Player* bot, Unit* tentacle, YoggSaronRoom room, bool lowerGuidOnly = false)
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -4623,7 +4623,8 @@ uint32 YoggSaronTentacleAttackers(Player* bot, Unit* tentacle, YoggSaronRoom roo
     {
         Player* member = ref->GetSource();
         if (member && member != bot && member->IsAlive() && !PlayerbotAI::IsHeal(member) &&
-            member->GetTarget() == tentacle->GetGUID() && YoggSaronRoomOf(member) == room)
+            member->GetTarget() == tentacle->GetGUID() && YoggSaronRoomOf(member) == room &&
+            (!lowerGuidOnly || member->GetGUID() < bot->GetGUID()))
             ++attackers;
     }
 
@@ -4651,7 +4652,8 @@ Unit* YoggSaronTentacleToJoin(PlayerbotAI* botAI, std::vector<Unit*> const& mobs
 
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     if (current && std::find(mobs.begin(), mobs.end(), current) != mobs.end() &&
-        YoggSaronTentacleAttackers(bot, current, room) <= bestKey.first)
+        (YoggSaronTentacleAttackers(bot, current, room) <= bestKey.first ||
+         !YoggSaronTentacleAttackers(bot, current, room, true)))
         return current;
 
     return best;
