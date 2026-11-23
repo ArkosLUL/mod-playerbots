@@ -54,7 +54,15 @@ going, though: one sent as a Gift spawned carried five ranged on it 5-48 yd fart
 follows its anchor, the lowest-GUID ranged bot, so the anchor's own generic flee from a lasher drags every
 later gather: one fled to the south wall, 54 yd from Freya. With the lasher pack between the back line
 and the Gift, each `reach spell` step ends in a low lasher's blast and the bail walks it back: 19 bails
-in one Gift's life, none of the nine on it ever in reach. **A Gift that lives is why a lasher wave
+in one Gift's life, none of the nine on it ever in reach. So a ranged DPS bot out of `SpellDistance` of its
+Gift, with a low or submerged lasher within that distance plus 18 yd, walks round them (`freya reach gift`,
+`ACTION_RAID + 1`; user's choice, not yet verified in a pull) to the nearest spot within `SpellDistance` −
+`ULDUAR_FREYA_GIFT_WALK_MARGIN` (1 yd) of the Gift, clear of bombs, beams, low lashers by `_DETONATE_RADIUS` + 1
+and submerged ones by `_LASHER_CAMP_STANDOFF`, on a straight walk crossing none of those lasher circles and
+going at most `CONTACT_DISTANCE` deeper into one already holding it, so it never crosses a pack it starts
+beside; latched `_GIFT_WALK_LATCH_MS` (3 s) while its `MoveTo` is the bot's last, a failed sweep retried after
+`_GIFT_WALK_RETRY_MS` (1 s), `MOVEMENT_COMBAT`. Inside a low lasher's blast the bail goes first; with no spot, `reach spell` walks as
+before. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
 each Gift that lives heals every member about 30%, and three took one past two minutes.
@@ -250,7 +258,18 @@ a median escape latency of **0.65s**.
   from every live bomb; none means hold. Unchecked, it picked the in-reach spot past the bombs: 10 of 20
   25-man bomb deaths in 36 pulls were melee it walked back through from 13-17 yd, the fuse running out
   mid-walk. The first escape prefers such a walk too (bombs already covering the bot excepted), in reach,
-  then anywhere, before the crossing sweeps (not yet verified in a pull).
+  then anywhere, before the crossing sweeps. Since: 1 of 12 melee escapes walked into a live bomb (14 of 28
+  before), no bomb death walked in, the burn held (78-90s, melee 50.8-57.6k/s).
+- **The bomb's plant blocks every sweep for 5s.** GO 194902 is display 391 `G_PulsatingPlant.mdx`, ±2.4 yd
+  wide and 0.74 yd tall, solid until the bomb script sets it `GO_STATE_ACTIVE` 5s in (`GameObject::SetGoState`
+  → `EnableCollision`). The collision check casts at the bot's half height, so from a short bot, or one on a
+  slope, standing in it every ray hits the plant and every sweep, the straight step included, returns nothing
+  ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)): over 40 pulls 86 escapes were ordered
+  5.0-6.0s after the landing against 6 at 4.0-4.5s, gnome casters the most, and they made 6 of one window's 7
+  bomb deaths. With the collision chain empty the escape re-runs its in-reach walk-clear, walk-clear and
+  `_AVOID_RADIUS` + 1 sweeps on the static floor (`FindFreyaStaticFloorSpot`, `ValidateStaticFloorPoint` per
+  point) before the straight step (not yet verified in a pull). The main tank's escape has no such fallback: a
+  bomb landed at his feet once in those pulls.
 - **Fallbacks.** Where overlapping bombs leave nothing clearing the full margin it takes AVOID + 1
   (without it: false on 164 of 394 attempts, 77% with 4+ bombs in range). Below that it clears the
   blast itself (`_BLAST_RADIUS`, 10), then walks straight out of the circles covering the bot, on the
@@ -300,10 +319,10 @@ water, the melee ring and half the raid strung out behind her. Past `ULDUAR_FREY
 from `ULDUAR_FREYA_TANK_ANCHOR` the `preferNear` flips to the anchor, and `freya tank hold freya`
 (`ACTION_RAID + 1`, under the escape, which must still be able to leave the leash) walks her home,
 only for the bot she is hitting, and waits while a live bomb lies within `_CLEAR_RADIUS` of the anchor or
-`_AVOID_RADIUS` of the walk (not yet verified in a pull): the walk home once took the main tank onto the
-anchor's bombs, the escape idle on that stale latch until 0.9s before they blew, 100% to 11%, and
-Freya's next swing killed him. It walks onto the anchor itself, since she stops a boss length short in
-his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched for at most
+`_AVOID_RADIUS` of the walk (since: none of its walks into a live bomb, 2 of 2 before): the walk home once
+took the main tank onto the anchor's bombs, the escape idle on that stale latch until 0.9s before they
+blew, 100% to 11%, and Freya's next swing killed him. It walks onto the anchor itself, since she stops a
+boss length short in his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched for at most
 `_TANK_HOLD_LATCH_MS` (3 s) because a re-issued `MoveTo` clears the walk it repeats. The
 anchor **(2360.0847, -43.1235, 425.333)** is navprobe-verified on `--nav 0x09`: 0.52 yd from the
 nearest poly, `UpdateAllowedPositionZ` 425.333, and a 12 yd ring around it 8/8 on mesh.
@@ -331,7 +350,8 @@ since every add-tank death came with them spent earlier or on someone else
 ([Hardened Bark](#the-trio-wave)). Verified: no external landed on his buttons, he stood bare 1-12s a
 trio wave (9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya
 add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
-Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank
+Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%); **known-open:** under a lasher
+pile too, which took a bear from 66% to dead in 1.7s, the last resort never getting a tick. `freya add tank
 external hold` zeroes healers' class Pain Suppression (a disc priest's own critical-health one shares the
 name), Guardian Spirit and Hand of Sacrifice aimed at anyone but the main tank (user's choice) while an add
 tank lives who is not holding her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
@@ -347,12 +367,13 @@ landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s 
 `freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
 Sacrifice it can reach, only while none of the three is up and he has no own button running, or ready and
 affordable now (`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them
-too). Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a
-paladin healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`,
-`freya.addext`: the button cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's
-repeat filter keeps a later cast of the same button.
-**Known-open:** a running Survival Instincts or Frenzied Regeneration counts as a layer though it cuts no
-swing, so a bear died under Survival Instincts twice in one pull, one swing from 61% and from 43%, with Pain
+too). Under `_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%) only a running external is cover, so one goes on
+top of his own button (user's choice; not yet verified in a pull). Reach is spell range plus LOS, checked
+first: `CanCastSpell` passes an out-of-range target, and a paladin healing from 40 yd tried a 30 yd Hand of
+Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button cast, else `covered` (a layer up, or his
+own ready) or `none`, so the trace's repeat filter keeps a later cast of the same button.
+**Known-open:** above 25% a running Survival Instincts or Frenzied Regeneration counts as a layer though it
+cuts no swing, so a bear died under Survival Instincts twice in one pull, one swing from 61% and from 43%, with Pain
 Suppression and Guardian Spirit held as `covered` all wave. A healer mid-cast cannot start the next layer
 (the engine waits out a cast): Hand of Sacrifice's paladin had begun a Holy Light 0.1s before Pain
 Suppression ran out, and the bear died bare 1.1s later.
@@ -503,12 +524,15 @@ camp move orders against 270), and ranged damage halve, **109.5k/s → 51.2k/s**
 **21%** of moving ticks against **78%** standing. Eonar's Gift then lived **14.5s** rather than 4-8 and
 took the five surviving lashers from 7-17% back to **60-68%**.
 
-**The gather walks the back line onto a submerged pack** (known-open). In 10 of 30 waves at least half of
-the camp's orders in the 5s submerge ended nearer a lasher, at a median 2.2-6.2 yd from one. Over the first
-30s after the wake, six waves kept the back line a median 4-6 yd from a lasher and it took 116-514k lasher
-damage; the other 23 with the raid intact, at 10-24 yd, took 0-203k, 21 of them under 90k. Distance at the
-wake alone does not decide: clean waves stood 2-7 yd off then too, and the worst lost its Army at 5 ghouls
-to a Ground Tremor cast 0.5s into the channel.
+**The back line walks off a submerged pack** (user's trial; not yet verified in a pull). The gather walked it
+on: in 10 of 30 waves at least half of the camp's orders in the 5s submerge ended nearer a lasher, at a median
+2.2-6.2 yd from one. Over the first 30s after the wake, six waves kept the back line a median 4-6 yd from a
+lasher and it took 116-514k lasher damage; the other 23 with the raid intact, at 10-24 yd, took 0-203k, 21 of
+them under 90k. Distance at the wake alone does not decide: clean waves stood 2-7 yd off then too, and the
+worst lost its Army at 5 ghouls to a Ground Tremor cast 0.5s into the channel. A lasher is submerged while
+alive and `REACT_PASSIVE`, its first 5s (`IsFreyaLasherSubmerged`); meanwhile a ranged DPS or healer within
+`_LASHER_CAMP_STANDOFF` (18 yd) of one takes the bail's walk (below) clear of every submerged and low lasher,
+and the gather waits for the wake. Judge it by the back line's lasher damage over the 30s after the wake.
 
 **Melee bail per lasher.** `freya lasher about to blow` (`ACTION_RAID + 3`) steps melee out of the blast
 of the lashers that are nearly dead, the only warning this wave gives. A lasher under
@@ -544,8 +568,8 @@ can't clear it: every bot it passes bails again and stops casting (249 orders in
 six), and the back line drifted to a median 57 yd from Freya; hence the ranged finish it first
 ([ranged focus](#detonating-lasher-waves)).
 
-**Otherwise the back line gathers**, except while any lasher within `_HAZARD_SEARCH_RADIUS` is low: then
-a bot outside the blasts stays put, since the walk to the ball crosses one. The camp is
+**Otherwise the back line gathers**, except while any lasher within `_HAZARD_SEARCH_RADIUS` is low (the
+walk to the ball crosses its blast) or any is submerged: then a bot outside them stays put. The camp is
 `GetFreyaRangedCampAnchor`, the lowest-GUID living ranged DPS, so every bot picks the same one with no
 shared state and a live bot is always on the mesh; anchored on each bot itself, the camp sat
 23.8-35.7 yd from Freya and moved 27.5 yd between waves. It re-picks from the living, so it jumps as
@@ -676,8 +700,8 @@ in-reach spot toward them. `freya nature bomb reach guard` blocks a non-tank mel
 charges (`Family::Charge`) whose stop on its side of the target lies within `_AVOID_RADIUS` of a live bomb,
 or whose straight walk passes within it of one not already covering the bot: once the escape's latch dropped
 (a beam over its spot, a refused `MoveTo`), a Charge and an Intercept landed two warriors in three bombs
-under a second before they blew. It holds only until the bomb blows or the tank drags Freya clear (not yet
-verified in a pull).
+under a second before they blew. It holds only until the bomb blows or the tank drags Freya clear. Since: no
+charge into a live bomb (3 of 3 before), 11-18 vetoes a pull.
 
 ## Hard mode
 
@@ -788,7 +812,7 @@ named trace.
 Elders' essence channels into Freya at her engage (62483-62485), else their empowers (Ground Tremor casts,
 Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile, and per Gift the most
-ranged and melee DPS on it in one snapshot and its cut walks;
+ranged and melee DPS on it in one snapshot, its cut walks and its `freya reach gift` walks;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a
@@ -802,7 +826,10 @@ Snaplasher's holder;
 wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
 blast, and their samples inside one; `--lows` per lasher wave, its lashers under the bail line, those there
 8s or more and hitting a player, what the ranged in reach of one hitting a player shot (with a Gift up, the
-share on it), and the back line's bails from one hitting them; `--bombs` per action and role, the orders from
-outside every live bomb's avoid radius whose straight walk passes inside one and the charges landing inside
-one, those then hit by it, and how each bomb death got in (a bomb is live 6s from its first snapshot);
-`--deaths` by killer and spell.
+share on it), and the back line's bails from one hitting them; `--submerge` per lasher wave, the ranged and
+healers within 18 yd of a lasher at its spawn and its wake 5s later, the camp's orders meanwhile and those
+ending 18 yd clear, and the lashers' melee and Flame Lash on them over the 30s after the wake; `--bombs` per
+action and role, the orders from outside every live bomb's avoid radius whose straight walk passes inside one
+and the charges landing inside one, those then hit by it, how soon each non-tank a bomb landed on (1.5 yd)
+ordered its escape (from 4.5s on: the plant's collision outlasted), and how each bomb death got in (a bomb is
+live 6s from its first snapshot); `--deaths` by killer and spell.

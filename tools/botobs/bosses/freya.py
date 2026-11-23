@@ -12,8 +12,10 @@
     freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
                              hitting a player shot (the Gift, while one was up), and the back line's bails from
                              one hitting them
-    freya.py <file> --bombs  Nature Bomb walks and charges into a live bomb per action, and how each bot a bomb
-                             killed got there
+    freya.py <file> --submerge  per lasher wave, the back line near the pack while it is submerged, the camp's
+                             orders then, and the lasher damage on the back line after it wakes
+    freya.py <file> --bombs  Nature Bomb walks and charges into a live bomb per action, how soon a bot a bomb landed
+                             on ordered its escape, and how each bot a bomb killed got there
 
 What the generic views miss here:
 
@@ -55,13 +57,19 @@ What the generic views miss here:
   outside every live bomb's avoid radius whose straight walk passes inside one, and a charge whose landing (the
   snapshot `CHARGE_LAND_MS` after the cast) is inside one, once per cast: the triggered stun or leap carries the
   charge's name too and is skipped; "then hit" is a Nature Bomb hit from such a bomb on that
-  bot within the fuse. A bomb death "walked in" when such an order or charge reached a bomb that hit it.
+  bot within the fuse. A bomb death "walked in" when such an order or charge reached a bomb that hit it. A bomb
+  landed at a bot's feet when that snapshot has it within `ON_BOMB_YD`; its escape is the bot's first
+  `freya move away nature bomb` order in the fuse, once per bot per volley.
+- **A pack is submerged for `SUBMERGE_MS` from its first snapshot.** `--submerge` measures the ranged and
+  healers' nearest lasher in that snapshot and the last one before the wake, and the lashers' melee and Flame
+  Lash on them over `WAKE_WINDOW_MS` from the wake.
 """
 from __future__ import annotations
 
 import bisect
 import collections
 import pathlib
+import statistics
 import sys
 
 # Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
@@ -135,6 +143,15 @@ BLAST_TAIL_MS = 1000
 # A lasher under the bail line usually blows within about 4 s; one still up after this is being left alone.
 LINGER_MS = 8000
 CAMP_ACTION = "freya ranged camp"
+GIFT_WALK_ACTION = "freya reach gift"
+BOMB_ESCAPE_ACTION = "freya move away nature bomb"
+ON_BOMB_YD = 1.5
+ESCAPE_EARLY_MS = 500
+ESCAPE_QUICK_MS = 1500
+ESCAPE_LATE_MS = 4500
+SUBMERGE_MS = 5000
+WAKE_WINDOW_MS = 30000
+FLAME_LASH = 62608
 
 
 def mine(trace: Trace) -> bool:
@@ -226,6 +243,7 @@ def show_waves(trace: Trace) -> None:
               f"{left}, {dead} raid death(s) meanwhile")
     end = last_snapshot(trace)
     cuts = [rec for rec in trace.of("note") if rec.get("k") == GIFT_CUT_NOTE and rec.get("txt")]
+    walks = [rec for rec in trace.of("move") if rec.get("by") == GIFT_WALK_ACTION and rec.get("ok")]
     for gift in sorted(sightings(trace, (NPC_EONARS_GIFT,)).values(), key=lambda r: r["first"]):
         lived = gift["last"] - gift["first"]
         if lived >= GIFT_CAST_MS:
@@ -234,8 +252,10 @@ def show_waves(trace: Trace) -> None:
             verdict = "alive at the end" if gift["last"] >= end else "killed"
         takers = gift_takers(trace, gift)
         cut = sum(1 for rec in cuts if gift["first"] <= rec["t"] <= gift["last"])
+        walked = sum(1 for rec in walks if gift["first"] <= rec["t"] <= gift["last"])
         print(f"  {clock(gift['first'])} Eonar's Gift {lived / 1000:.1f}s, {verdict}; on it at most "
-              f"{takers['ranged']} ranged and {takers['melee']} melee; {cut} walk(s) away from it cut")
+              f"{takers['ranged']} ranged and {takers['melee']} melee; {cut} walk(s) away from it cut, "
+              f"{walked} walk(s) to it round the lashers")
 
 
 def gift_takers(trace: Trace, gift: dict) -> dict:
@@ -680,6 +700,62 @@ def show_lows(trace: Trace) -> None:
         print("  no lasher wave")
 
 
+def submerge_counts(trace: Trace, wave: dict) -> dict:
+    standoff = radius("ULDUAR_FREYA_LASHER_CAMP_STANDOFF")
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    members = {member["g"] for member in wave["members"]}
+    wake = wave["t"] + SUBMERGE_MS
+
+    def lashers(index: int) -> list:
+        rows = snaps[index].get("u", []) if 0 <= index < len(snaps) else []
+        return [row[1:3] for row in rows if row[0] in members and row[5] > 0]
+
+    def back_line(index: int) -> list[float]:
+        spots = lashers(index)
+        if not spots:
+            return []
+        return [min(dist2(row[1:3], spot) for spot in spots) for row in snaps[index].get("u", [])
+                if row[5] > 0 and trace.role(row[0]) in ("ranged", "heal")]
+
+    spawn = back_line(bisect.bisect_left(stamps, wave["t"]))
+    woke = back_line(bisect.bisect_right(stamps, wake) - 1)
+    orders = clear = 0
+    for rec in trace.of("move"):
+        if rec.get("by") != CAMP_ACTION or not rec.get("ok") or not wave["t"] <= rec["t"] < wake:
+            continue
+        spots = lashers(bisect.bisect_right(stamps, rec["t"]) - 1)
+        orders += 1
+        dest = (rec.get("x", 0.0), rec.get("y", 0.0))
+        clear += bool(spots) and all(dist2(dest, spot) >= standoff for spot in spots)
+    damage = sum(rec.get("a", 0) for rec in trace.of("dmg")
+                 if rec.get("s") in members and rec.get("sp", 0) in (0, FLAME_LASH)
+                 and trace.role(rec.get("d")) in ("ranged", "heal") and wake <= rec["t"] < wake + WAKE_WINDOW_MS)
+    return {"standoff": standoff, "spawn": spawn, "wake": woke, "orders": orders, "clear": clear,
+            "damage": damage}
+
+
+def show_submerge(trace: Trace) -> None:
+    print("SUBMERGE")
+    if not mine(trace):
+        return
+    found = False
+    for wave in waves(trace):
+        if wave["kind"] != "lashers":
+            continue
+        found = True
+        c = submerge_counts(trace, wave)
+        near = [sum(1 for gap in gaps if gap < c["standoff"]) for gaps in (c["spawn"], c["wake"])]
+        medians = " then ".join(f"{statistics.median(gaps):.1f}" if gaps else "-" for gaps in (c["spawn"], c["wake"]))
+        print(f"  {clock(wave['t'])} lashers: back line within {c['standoff']:g} yd of a lasher {near[0]} of "
+              f"{len(c['spawn'])} at the spawn, {near[1]} of {len(c['wake'])} at the wake (nearest, median {medians} "
+              f"yd); {c['orders']} '{CAMP_ACTION}' order(s) in the submerge, {c['clear']} ending {c['standoff']:g} yd "
+              f"clear; {c['damage'] / 1000:.0f}k lasher melee and Flame Lash on the back line in the "
+              f"{WAKE_WINDOW_MS // 1000}s after the wake")
+    if not found:
+        print("  no lasher wave")
+
+
 def segment_gap(start, end, point) -> float:
     dx, dy = end[0] - start[0], end[1] - start[1]
     length = dx * dx + dy * dy
@@ -738,7 +814,39 @@ def bomb_counts(trace: Trace) -> dict:
                if crossed & killers and death["t"] - BOMB_FUSE_MS <= when <= death["t"]]
         deaths.append((death, max(how) if how else None))
     return {"bombs": len(bombs), "hits": len(hits), "orders": orders, "into": into, "hit": then_hit,
-            "deaths": deaths}
+            "deaths": deaths, "escapes": bomb_escapes(trace, bombs)}
+
+
+def bomb_escapes(trace: Trace, bombs: list) -> collections.Counter:
+    snaps = {snap["t"]: snap for snap in frames(trace)}
+    moves: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") == BOMB_ESCAPE_ACTION and rec.get("ok"):
+            moves[rec["g"]].append(rec["t"])
+    last_on: dict[int, int] = {}
+    out: collections.Counter = collections.Counter()
+    for _, first, spot in sorted(bombs, key=lambda bomb: bomb[1]):
+        snap = snaps.get(first)
+        if not spot or not snap:
+            continue
+        for row in snap.get("u", []):
+            if row[5] <= 0 or trace.role(row[0]) in ("?", "tank") or dist2(row[1:3], spot) > ON_BOMB_YD:
+                continue
+            if first - last_on.get(row[0], -BOMB_FUSE_MS) < BOMB_FUSE_MS:
+                continue
+            last_on[row[0]] = first
+            went = next((max(0, t - first) for t in moves[row[0]]
+                         if first - ESCAPE_EARLY_MS <= t <= first + BOMB_FUSE_MS), None)
+            out["landed"] += 1
+            if went is None:
+                out["never"] += 1
+            elif went <= ESCAPE_QUICK_MS:
+                out["quick"] += 1
+            elif went >= ESCAPE_LATE_MS:
+                out["late"] += 1
+            else:
+                out["between"] += 1
+    return out
 
 
 def show_bombs(trace: Trace) -> None:
@@ -750,6 +858,10 @@ def show_bombs(trace: Trace) -> None:
         print("  no Nature Bomb")
         return
     print(f"  {c['bombs']} Nature Bomb(s), {c['hits']} hit(s) on the raid, {len(c['deaths'])} death(s) to one")
+    e = c["escapes"]
+    if e["landed"]:
+        print(f"  {e['landed']} landed at a non-tank's feet: escape ordered within {ESCAPE_QUICK_MS / 1000:g}s "
+              f"{e['quick']}, later {e['between']}, from {ESCAPE_LATE_MS / 1000:g}s on {e['late']}, never {e['never']}")
     for key in sorted(c["into"], key=lambda key: (-c["into"][key], key)):
         print(f"  {key[0]} ({key[1]}): {c['into'][key]} of {c['orders'][key]} into a live bomb, "
               f"{c['hit'][key]} then hit by it")
@@ -789,6 +901,8 @@ SECTIONS = (
      show_blasts),
     ("lows", "per lasher wave, lashers left under the bail line, what the ranged in reach shot, back-line bails",
      show_lows),
+    ("submerge", "per lasher wave, the back line near the pack at its spawn and wake, the camp's orders meanwhile, "
+     "and lasher damage on it after the wake", show_submerge),
     ("bombs", "Nature Bomb walks and charges into a live bomb per action, and how each bomb death got there",
      show_bombs),
     ("deaths", "deaths by killer and spell", show_deaths),

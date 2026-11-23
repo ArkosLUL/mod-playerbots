@@ -367,7 +367,13 @@ bool HasFreyaTankExternal(Player* tank)
 
 bool IsFreyaAddTankCovered(Player* tank)
 {
-    return HasFreyaTankExternal(tank) || RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
+    if (HasFreyaTankExternal(tank))
+        return true;
+
+    if (tank->GetHealthPct() < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT)
+        return false;
+
+    return RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
 }
 
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)
@@ -1021,6 +1027,74 @@ std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveSt
     }
 
     return low;
+}
+
+bool IsFreyaLasherSubmerged(Unit* lasher)
+{
+    Creature* creature = lasher ? lasher->ToCreature() : nullptr;
+    return creature && creature->IsAlive() && creature->GetEntry() == NPC_DETONATING_LASHER &&
+           creature->HasReactState(REACT_PASSIVE);
+}
+
+std::vector<Position> GetFreyaSubmergedLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float radius)
+{
+    Player* bot = botAI->GetBot();
+    std::vector<Position> submerged;
+
+    for (Unit* lasher : state.detonatingLashers)
+        if (IsFreyaLasherSubmerged(lasher) && bot->GetExactDist2d(lasher) <= radius)
+            submerged.push_back(lasher->GetPosition());
+
+    return submerged;
+}
+
+Position FindFreyaStaticFloorSpot(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
+                                  Position const* preferNear, std::function<bool(float, float)> const& accept)
+{
+    auto const clearOf = [&hazards](float x, float y)
+    {
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(x, y) < hazard.second)
+                return false;
+
+        return true;
+    };
+
+    for (float distance = ULDUAR_FREYA_SWEEP_STEP; distance <= maxRadius; distance += ULDUAR_FREYA_SWEEP_STEP)
+    {
+        Position best;
+        float bestScore = 0.0f;
+        bool found = false;
+
+        for (float angle = 0.0f; angle < 2.0f * static_cast<float>(M_PI); angle += ULDUAR_FREYA_SWEEP_ANGLE_STEP)
+        {
+            float const x = bot->GetPositionX() + distance * std::cos(angle);
+            float const y = bot->GetPositionY() + distance * std::sin(angle);
+            if (!clearOf(x, y))
+                continue;
+
+            Position const floor = ValidateStaticFloorPoint(bot, Position(x, y, bot->GetPositionZ(), 0.0f));
+            if (!clearOf(floor.GetPositionX(), floor.GetPositionY()) ||
+                (accept && !accept(floor.GetPositionX(), floor.GetPositionY())))
+                continue;
+
+            if (!preferNear)
+                return floor;
+
+            float const score = preferNear->GetExactDist2d(floor.GetPositionX(), floor.GetPositionY());
+            if (!found || score < bestScore)
+            {
+                best = floor;
+                bestScore = score;
+                found = true;
+            }
+        }
+
+        if (found)
+            return best;
+    }
+
+    return Position();
 }
 
 Position GetFreyaLasherCampSpot(PlayerbotAI* botAI)

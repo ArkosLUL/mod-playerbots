@@ -1611,3 +1611,146 @@ and 19, two Feral Charge - Cat (which leaps behind the target) among them.
   skips tanks, `freya tank nature bomb` is main tank only, "assist tank 0 is excluded" for the Conservator's spore, which
   phase 2 has none of). uld1's off tank Uldxam stood 8.7 yd from the anchor's bombs on `reach melee` and took four hits at
   5:43.93.
+
+**User answers (2026-11-23):** Q8 yes, accept two trio waves close together (no change). Q11 yes, option (b): a
+dedicated walk for Gift takers to a spot in spell range of the Gift and clear of low-lasher blasts, on a path that
+crosses none. Q12 yes, option (b), as a one-window trial: while a lasher of a fresh pack is still submerged, ranged
+and healers within 18 yd of one walk to 18 yd from every submerged lasher, and the camp gather waits until they wake.
+Q13 yes, a third healer in the 10-man comp (the orchestrator changes the DC roster row). Round 12 review's option (b)
+yes: below the add tank's 25% last-resort line, a healer external may go on top of his running own cooldown. Pending,
+not built: Q14 (option c, only damage-cutting own buttons hold back the externals) and Q15 (the next external at 1.5s
+left on the running one).
+
+## Round 14 (build 90400b39c: round 13 built)
+
+**Data:** window 21, `report --boss freya --raid uld --head 90400b39c --pulls 10`, one valid 25-man pull per pool, no DC
+veto inside a pull: `tr-20261123-184856-8` (uld1, DK add tank), `-184856-9` (uld2, bear), `-184756-7` (uld3, bear);
+traces `env/dist/logs/botobs/603_{8,9,7}_elder-stonebark_{1795459785,1795459792,1795459719}.ndjson`. Window 19 is the
+baseline, windows 8-21 (40 Freya traces) for the bomb escapes. Ad hoc scripts: `scratchpad/freya-r14/` (`rows.py`,
+`bomb_latency.py`, `bomb_perbot.py`, `bomb_z.py`, `races.py`, `godisplay.py`), plus `freya-r13/burn.py`,
+`bomb_deaths.py`, `bomb_track.py`, `bomb_entry.py`, `freya-r12/wave_hold.py`, `submerge_moves.py`, `addtank_tl.py`.
+
+**Hard mode.** All three pulls 3 of 3 Elders from their essence channels; both kills cast chest 62952.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795459785 | **kill 6:03, 1** | Flame Lash 1 (melee 4:08.9, second lasher wave) |
+| uld2 | 1795459792 | wipe 8:09, 30 | second lasher wave (3:28): lasher melee 3 (a ranged 3:34.8, a melee 3:48.7, the bear add tank 4:08.8); trio 2 (4:28) with the bear risen: Snaplasher 4 (the bear again 4:52.6, two melee 5:13.0 and 5:31.2, the main tank 5:53.8), own Iron Roots 1, Nature Bomb 1 (melee 5:39.5); then Freya melee 19 and Nature Bomb 2 (a healer 7:45.7, a rooted ranged 8:04.5) |
+| uld3 | 1795459719 | **kill 6:32, 7** | Nature Bomb 4 (three melee 6:08.3 in one volley, one 6:26.3); Unstable Energy 3 (two ranged 3:57.05, 0.4-0.5s into their dodges, one again after Reincarnation 4:00.1) |
+
+**Stop rules:** kills on uld1 (1 death) and uld3 (7, four of them this round's bug), uld2 wiped: not polished. Picks:
+round 12 the add tank, round 13 bot moves into live bombs, this round the bomb escape blocked by the bomb itself; two
+Nature Bomb rounds running, each a different cause.
+
+**Round 13 verdict: held.** `--bombs`: `freya move away nature bomb` (melee) walks into a live bomb 1 of 12 in uld3,
+none elsewhere (window 19 uld1: 14 of 28); `freya tank hold freya` and charges into one 0 (2 of 2, 3 of 3); no bomb
+death walked in. `freya nature bomb reach guard` vetoed 17/11/18 times a pull. Burn after the last wave 78s (uld1) and
+90s (uld3), melee 57.6 and 50.8k/s (`burn.py`; 74-107s, 46.5-62.5k/s). No main tank died after bomb hits on his walk
+home. But Nature Bomb deaths 0/3/4 (windows 14-19: 11 in 18 pulls), every one "stood in it": below.
+
+**Rounds 1-12 still hold.** Cover `both` 0.0s in all six trio waves; one Righteous Defense on a melee (uld1 0:13.2), no
+Roar or Shout; Freya on the main tank 100/85.2/100% (uld2 off him from his death at 5:53.8). `--ghouls` no lasher in
+reach / on Freya 0/0 and 11/10% (uld1), 16/17 and 0/0 (uld2), 0/4 and 0/0 (uld3). `--blasts` 3-18 melee approach
+orders into a low blast a wave, no melee Detonate death. `--lows` uld2's second wave left 6 lashers 8s+ under the line
+on a player (its collapse), the others 0-1. Gifts living 12s+: 4 of 28 (uld1 0:31 in trio 1, uld2 0:31 in a lasher
+wave, 5:05 and 5:50 in the collapse).
+
+**Ranking** (38 deaths). (1) uld2's second lasher wave and what followed, 30: the back line on the submerged pack (14 of
+14 within 18 yd at the spawn and the wake, 20 camp orders in the submerge, none ending clear; Army at +5.3s, ghouls 31%
+of lasher time, 69k on the back line), the bear add tank dead to the pile at 4:08.8, trio 2 at 4:28 on a raid without
+him; Q12 is built this round, the add tank's death is Q16. (2) Nature Bomb 7, six of them bots whose escape could not
+start (picked) and one rooted for 6s. (3) Unstable Energy 3, Flame Lash 1.
+
+**Failure picked: a bomb that lands on a bot blocks its escape for 5s.**
+
+- uld3 6:02.257: four bombs on three melee in reach of Freya at (2362, -31), z 423.9. `freya move away nature bomb`
+  FAILED at 6:02.29-6:02.43 with no move row (every sweep, `StepOffNatureBombs` included, found no spot), then went at
+  6:07.33-6:07.53, 5.07-5.27s after the landing; all three died at 6:08.32, 15-16 yd short (`rows.py`,
+  `bomb_track.py`). Uldzag the same, 6:20.26 → 6:25.53, dead 6:26.33; uld2 Uldyay 5:33.55 → 5:38.70, dead 5:39.51,
+  and healer Uldyac 7:39.75 → 7:44.76, dead 7:45.72.
+- Cause: GO 194902 is display 391 `World\Goober\G_PulsatingPlant.mdx`, bounds ±2.4 yd by -0.14..0.74 yd
+  (GameObjectDisplayInfo.dbc, `godisplay.py`), solid while `GO_STATE_READY`; `boss_freya_nature_bomb::UpdateAI` sets
+  `GO_STATE_ACTIVE` at 5000 ms and `GameObject::SetGoState` collides only in READY (`GameObject.cpp:2594`).
+  `Map::CheckCollisionAndGetValidCoords` raycasts the dynamic tree at half the bot's height (`Map.cpp:3519`); from a
+  short bot, or one on a slope, standing in the plant every ray hits it, so `FindNearestPositionClearOfHazards`
+  (`EncounterHelpers.cpp:739`) refuses every point. The walk itself is never blocked: nothing collides a walking bot
+  with a gameobject (pitfalls, Hodir's campfire).
+- Scale (`bomb_perbot.py`, `bomb_z.py`, 40 pulls): of 1652 bots a bomb landed on (1.5 yd) that ordered an escape, 101
+  did so 4.5s+ late; the latency histogram has 86 at 5.0-6.0s against 6 at 4.0-4.5s. It repeats per bot: each pool's
+  gnome warlock 9-18 times. The bomb's height over the bot is 0.0 yd in both groups. Window 21: 6/10/7 of 62/84/68
+  landings (`--bombs`), window 19 2/0/0.
+
+**Classification: bug.** The escape exists to take bots out of a bomb; the strategy never meant the bomb's own model to
+hold them in it.
+
+**Fix** (Freya files only, any size or difficulty, no player branch): with the collision chain empty, the escape
+re-runs its in-reach walk-clear, walk-clear and `_AVOID_RADIUS` + 1 sweeps through `FindFreyaStaticFloorSpot` (the same
+rings, each point through `ValidateStaticFloorPoint`, the navmesh raycast without the dynamic pass) before
+`StepOffNatureBombs`. Escapes the collision chain already finds are unchanged. Reader: `--bombs` gives, per pull, the
+bombs landing at a non-tank's feet and how soon each ordered its escape, tested.
+
+**Built, the user's answers** (Freya files only, any size or difficulty, no player branch):
+
+- Q11: `freya reach gift` (`ACTION_RAID + 1`): a ranged DPS bot whose target is a Gift, out of `SpellDistance` of it,
+  with a low or submerged lasher within its distance plus 18 yd and outside every low lasher's blast (the bail goes
+  first there), sweeps to the nearest spot within `SpellDistance` - 1 of the Gift (preferring the Gift), clear of bombs,
+  beams, low lashers by `_DETONATE_RADIUS` + 1 and submerged ones by 18, on a straight walk crossing none of those
+  lasher circles but one already holding it; latched 3s, retried after 1s, `MOVEMENT_COMBAT`. No spot leaves
+  `reach spell` as before. Submerged lashers count, so the walk never ends on a waking pack Q12 would walk it off.
+  Reader: each Gift line counts its `freya reach gift` walks, tested.
+- Q12 (trial): `IsFreyaLasherSubmerged` (alive, `REACT_PASSIVE`: the core's first 5s); `freya ranged camp` fires for a
+  ranged DPS or healer within 18 yd of one and walks it through the bail's walk clear of every submerged and low
+  lasher, and the gather waits while any lasher is submerged. Reader: new `--submerge`, tested. Baseline (window 21, at
+  the spawn and the wake): uld1 13 then 14 of 14 within 18 yd, 9 camp orders none clear, 61k on the back line in the
+  30s after the wake, and 12 then 13 of 14, 0k; uld2 14 and 14 of 14, 20 orders none clear, 69k; uld3 13 and 13 of 13,
+  11 orders, 0k; window 19 uld2's wipe wave 13 then 14 of 14, 273k.
+- Round 12 review (b): `IsFreyaAddTankCovered` counts only a running external under
+  `_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%), so `freya add tank external` goes out on top of his running or ready own
+  button there.
+
+**Next window should show** (`freya.py --bombs`, `--submerge`, `--waves`, `--tanks`):
+
+- `--bombs`: escapes ordered from 4.5s on near 0 (window 21: 6/10/7); no Nature Bomb death of a bot free to walk (window
+  21: 6); round 13's walk-ins still near 0.
+- Q12: the back line within 18 yd of a lasher at the wake well under 13-14 of 14, camp orders in the submerge ending
+  18 yd clear, back-line lasher damage over the 30s after the wake no higher (61k, 69k worst here, 273k in window 19);
+  lasher waves still dying before the next spawn.
+- Q11: `freya reach gift` walks on Gifts with low lashers about; Gifts living 12s+ in lasher waves no more often (here
+  1 of 28 Gifts).
+- 25%: any external landing on the add tank under 25% while his own button runs (cover `both` above 0 only then).
+- Rounds 1-13 as above.
+
+**Not picked:** uld3's two Unstable Energy deaths in one beam cluster (dodges ordered 0.4-0.5s before death); uld2's
+loose Snaplasher at 12% killed its kiter (9 kite orders, slower in 45 of 45 reads) with a 79k swing; a rooted ranged in
+a bomb (uld2 8:04.5); the main tank's escape has no static fallback (a bomb landed at his feet once in 40 pulls).
+
+**Questions:**
+
+16. uld2's bear add tank died to a lasher pile at 4:08.8 with his buttons held: 100% at 4:02, Frenzied Regeneration
+    vetoed by `freya add tank defensive hold` at 66% (4:07.0), then 53% → 30% → 16% → dead in 0.7s (two Flame Lashes
+    and a swing), so the 25% last resort never got a tick; trio 2 came 20s later onto a raid without him (27 more
+    deaths). Options: (a) keep the hold as Q2 (c) built it; (b) release it while 3+ lashers hit him, at the cost of his
+    3-minute buttons for the next trio; (c) raise his last-resort line to 50% while lashers hit him. Recommendation: (a)
+    for another window (one case in six pulls since the hold), then (c) if an add tank dies to lashers with buttons held
+    again.
+14. and 15. pending as written in round 13.
+
+**Shared code:** none changed; `ValidateStaticFloorPoint`, `FindNearestPositionClearOfHazards` and
+`SegmentCrossesCircle` are read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files
+only. Reproduced: uld3's three melee `freya move away nature bomb` FAILED at 6:02.285-6:02.427 with no move row and
+moved at 6:07.328-6:07.531; `--bombs` 6/10/7 of 62/84/68 from 4.5s on; over the 40 traces (`bomb_perbot.py`) 74
+escapes at 5.0s and 12 at 5.5s against 6 at 4.0s. The 5.0s edge is the plant's only state change
+(`boss_freya_nature_bomb::UpdateAI` sets `GO_STATE_ACTIVE`); the dynamic pass is `Map.cpp:3519`, which
+`ValidateStaticFloorPoint` skips and `MoveTo` never runs. Q11, Q12 and the 25% line match the user's answers. Fixed:
+
+- `freya reach gift`'s walk check exempted every lasher circle already holding the bot, and the Gift walk outranks
+  the camp's walk-off, so a Gift taker within 18 yd of a submerged lasher could walk across the pack to a spot past
+  it. It now goes at most `CONTACT_DISTANCE` deeper into such a circle; with no spot the camp walks it off first.
+- Its 3s latch returned true after a beam dodge or bomb escape had replaced the walk, idling the bot at the
+  dodge's spot; it now also needs its `MoveTo` to be the bot's last, as round 13's tank escape does.
+
+Left: `freya reach held pack`'s latch has the same gap (round 3, no case seen). `FindFreyaStaticFloorSpot` takes a
+point whose navmesh raycast failed as it is, where the collision sweep drops it; it runs only once that sweep found
+nothing, and Freya's floor is open.
