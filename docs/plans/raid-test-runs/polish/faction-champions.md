@@ -675,15 +675,17 @@ pre-hit sample: Tocxak, Tocxap, Tocxaw and Tocxat each used theirs right after a
 
 **Fixed too (bug, independent and small): the totem duty went to the Enhancement's own ice DK.**
 
-- `--adds` (new `ice` cell): toc1 34 holds, 64.0 s, by Tocxam (DK tank, Broln's ice DK); toc3 2, 35.1 s, by Toczai;
-  window 13 toc1 7, 31.3 s. The long ones: Tocxam's Tremor 1:15.4 (19.3 s), Windfury 1:46.1 (19.3 s) and 3:24.5 (18.2 s),
-  Toczai's Tremor 0:19.1 (33.6 s), window 13 Tocxam's Tremor 2:47.5 (24.4 s); those totems lived 23-35 s, every other
-  holder's 0.2-5 s. toc1 1:15-1:35: Tocxam 13.2 yd off the totem throughout, target the totem 41 samples and Broln 36,
-  no move row. 0:45-0:52: 27 holds of 0.0-0.7 s on one Windfury.
+- `--adds` (new `ice` cell): toc1 34 holds, 64.0 s, 32 of them Tocxam's (DK tank, Broln's ice DK); toc3 2, 35.1 s, by
+  Toczai; window 13 toc1 7, 31.3 s. The long ones: Tocxam's Tremor 1:15.4 (19.3 s), Windfury 1:46.1 (19.3 s) and 3:24.5
+  (18.2 s), Toczai's Tremor 0:19.1 (33.6 s), window 13 Tocxam's Tremor 2:47.5 (24.4 s); those totems lived 23-35 s,
+  every other holder's 0-5 s. toc1 1:15-1:35: Tocxam 13.2 yd off the totem throughout, target the totem 41 samples and
+  Broln 36, no move row. 0:45-0:52: 28 holds of 0.0-0.7 s on one Windfury.
 - `CanKillTotem` (`ToCHelpers_FactionChampionsDefence.cpp:963-968` before the fix) takes the nearest non-healer bot in
   control within 30 yd; Broln drops totems at his feet, next to his ice DK, which hits only its own champion: `faction
-  champions ice target` (`ACTION_RAID + 2`) and `faction champions kill totem` (`+ 2.7`) flip its target, and the ice
-  and kite holds keep it from walking.
+  champions ice target` (`ACTION_RAID + 2`) and `faction champions kill totem` (`+ 2.7`) each fire while the other's
+  target is current (`ToCTriggers_FactionChampionsBall.cpp:29`, `ToCTriggers_FactionChampionsDefence.cpp:35`), so its
+  target flips and nothing lower, `reach melee` included, gets a turn. No champion had Tocxam as victim at 1:15, so the
+  kite hold wasn't what held it.
 - Cost not measured in deaths: a live Tremor clears our fears on champions within 30 yd (5 such Fears held 0.2-2.4 s
   against medians 2.2-3.5 s elsewhere), Windfury hastes the melee champions.
 
@@ -716,3 +718,17 @@ Round 7 on the same window: `--peel` "Disarm or Dismantle while iced" above 0 on
   the DK ahead of the Rogue for one window, which changes only the two-DK rosters.
 
 **Shared code.** None; the fix is in this fight's files and its reader.
+
+**Review.** The case holds: `--adds` on windows 11-15 (old builds) gives every Broln totem hold over 12 s to an ice duty
+DK, and every wall grip overlapping a totem hold is an ice DK's too. At each long hold's start a non-healer bot off ice
+duty stood within 30 yd (toc1 1:46.1 only Tocxag, 19.8 yd, and Tocxau, 26.9), so the duty keeps a taker. No size, mode
+or player branch: ice duties go to bot DKs on every difficulty, and a player in the raid leaves both duties to the bots
+as before.
+
+- Review fixes: the counts and the mechanism above (32 of 34 holds Tocxam's, 28 short ones, other holders 0-5 s; the
+  two triggers' target flip, not the holds); the boss doc's totem lifetimes (23-35 s, where 18-34 was the hold length)
+  and the flip.
+- Left: the hold churns on one holder every 0.1-0.7 s and comes back within 25 ms (toc1 0:45-0:52, Tocxam steady 6.5
+  yd off, so not the 30 yd edge); cause not traced, harmless while the same bot retakes it. A chased melee holder can't
+  reach its totem either, the kite hold zeroing `reach melee`: window 12 toc2 Tocyag (Rogue), Maz'dinah's victim 16-17
+  yd off, held a Windfury 11.0 and 8.0 s. Not seen in windows 13-15; watch `--adds` for long holds by bots off ice duty.
