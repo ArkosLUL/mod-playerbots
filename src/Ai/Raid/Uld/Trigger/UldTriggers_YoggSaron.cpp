@@ -440,8 +440,7 @@ bool YoggSaronUsePortalTrigger::IsActive()
     if (AI_VALUE(std::string, "rti") != "diamond")
         return false;
 
-    return bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS, true) !=
-           nullptr;
+    return YoggSaronPlannedPortal(botAI) != nullptr;
 }
 
 bool YoggSaronIllusionRoomTrigger::IsActive()

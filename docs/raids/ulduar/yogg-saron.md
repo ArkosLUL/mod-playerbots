@@ -1065,13 +1065,20 @@ charges, follow and random moves while `YoggSaronHoldingPortalSpot` holds (slot 
 plan); the Yogg dodges still move it. The out-of-phase-2 reset clears the clock but not `waveOrdinal`,
 harmless while `slotWave` carries with it, so read `yogg.wave` as a session counter.
 
-**Rebuild the plan when the portals spawn, and take one that is still there.** A plan keyed on the wave
-ordinal alone never rebuilt, since the ordinal is the same before and after the portals appear, and was
-built off stale positions. And a slot is only a suggestion: the click takes whichever portal is inside
-`ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS`, so bots took each other's and left others stranded beside empty
-spots. So the plan rebuilds once more on the tick the portals are first seen, a bot whose own spot is
-empty walks to the nearest portal still alive, and arriving and clicking share one radius, so `holding`
-implies clickable.
+**Rebuild the plan when the portals spawn, and click only your own.** A plan keyed on the wave ordinal
+alone never rebuilt, since the ordinal is the same before and after the portals appear, and was built off
+stale positions. So the plan rebuilds once more on the tick the portals are first seen, but a bot already
+within `ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS` of its spot keeps it: re-picked greedily in team order,
+holders lost their spot to an earlier bot standing nearer it and walked 12-24 yd to another.
+
+**A used portal stands for another second.** `OnSpellClick` clears its npcflags and despawns it 1 s later,
+and a click on it casts only the visual 51347. Clicking whatever stood inside the radius let a bot passing
+another's spot take that portal while its owner clicked the spent one: a third of all clicks, a bot left
+on the platform every fourth wave, two waves without their healer. So a portal counts only while it carries
+`UNIT_NPC_FLAG_SPELLCLICK` (`YoggSaronPortalOpen`), a bot clicks only the one on its planned spot
+(`YoggSaronPlannedPortal`), and one whose own is gone walks to the nearest open portal whose spot no living
+teammate still on the platform holds. Arriving and clicking share one radius, so `holding` at an open
+portal is clickable.
 
 **The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a 60 s
 race on foot, and it doubles as the Crush answer. GUID order within each band so every bot derives the same
@@ -1085,7 +1092,17 @@ counted as taking a portal of his own, so the bot team is one smaller.
 **Phase 2 always hands phase 3 some tentacles.** `AddPortals` cuts `_summonSpeed` by 0.1 a wave, so by the
 sixth a Crusher spawns every 20-24 s, a Corruptor every 12-16 and a Constrictor every 6-8. The stun is the
 only time the platform gains: `DelayEvents` holds every spawn timer, and nothing channels or swings. With
-every melee on the brain team the stun is left to ranged, pets and the tank.
+every melee on the brain team the stun is left to ranged, pets and the tank. At `_summonSpeed` 1 the spawns
+bring ~78k health a second (Crusher 2.69M, Corruptor 0.81M, Constrictor 0.1M in the scaled 25-man), rising
+to ~190k by the sixth wave, against 17-45k/s of platform damage, so fewer waves is the only way to start
+phase 3 with few tentacles.
+
+**A wave takes ~10% of the Brain, so phase 3 needs about five.** The team on it deals ~50k/s, 0.57% a
+second of its scaled 8.91M, from its first hit after the door until the cast ends. The room clear takes a
+median 31 s; the first Brain hit comes 2-4 s after the door from Stormwind and Icecrown, 9-13 s from the
+Chamber, whose team ends at its far end 150-166 yd out; melee arrive 10-12 s after the door (Chamber 18 s);
+the exit leaves ~6 s early. Medians: Stormwind 16%, Icecrown 14%, Chamber 8%; 25% a wave needs ~44 s on the
+Brain.
 
 **Brain Link's partner is readable from the cast, never from an aura.** 63802 goes on **one** player:
 `spell_yogg_saron_brain_link_aura` picks a random living player within 50 yd on apply, keeps that GUID to
@@ -1980,8 +1997,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 
 **What the reader infers, because no row records it:**
 
-- A portal taken shows only as the bot's own Illusion Room cast (63988): the portal is never sampled and a
-  failed click leaves nothing.
+- A portal taken shows only as the bot's own Illusion Room cast (63988): the portal is never sampled. A
+  click on a spent portal leaves only its 51347 cast; `--portals` counts those per wave, with the entries
+  over 2 s after the open.
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name

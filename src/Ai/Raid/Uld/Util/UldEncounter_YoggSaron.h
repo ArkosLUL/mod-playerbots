@@ -538,6 +538,8 @@ enum YoggSaronPortalIntent : uint32
 
 YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot);
 
+Creature* YoggSaronPlannedPortal(PlayerbotAI* botAI);
+
 bool YoggSaronPortalWalkPending(PlayerbotAI* botAI);
 
 bool YoggSaronHoldingPortalSpot(PlayerbotAI* botAI);
