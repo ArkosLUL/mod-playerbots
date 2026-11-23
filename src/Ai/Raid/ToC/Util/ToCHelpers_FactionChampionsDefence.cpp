@@ -59,6 +59,10 @@ constexpr uint32 HAZARD_NOTE_MS = 1000;
 
 constexpr float BLADESTORM_RADIUS = 8.0f;
 constexpr float BLADESTORM_CLEARANCE = 12.0f;
+constexpr float BLADESTORM_WALK_S = 1.5f;
+constexpr float WALK_CIRCLE_STEP = 3.0f;
+constexpr uint32 AOE_BREAK_HOLD_MS = 1000;
+constexpr int32 AOE_BREAK_MIN_LEFT_MS = 300;
 constexpr float HELLFIRE_RADIUS = 10.0f;
 constexpr float HELLFIRE_CLEARANCE = 13.0f;
 constexpr float IN_AOE_MARGIN = 1.0f;
@@ -226,6 +230,8 @@ struct HazardSource
     ObjectGuid guid;
     uint32 spellId = 0;
     Position pos;
+    Position walk;
+    ObjectGuid victim;
     float radius = 0.0f;
     float clearance = 0.0f;
     ObjectGuid kicker;
@@ -324,6 +330,7 @@ struct FactionChampionsDefenceState
     std::vector<HazardSource> hazards;
     std::vector<ObjectGuid> totems;
     std::unordered_map<ObjectGuid, uint32> hazardNotedMs;
+    std::unordered_map<ObjectGuid, uint32> aoeBreaks;
     std::unordered_map<ObjectGuid, CcDispel> ccDispels;
     ObjectGuid massDispeller;
     ObjectGuid massDispelTarget;
@@ -391,9 +398,62 @@ void SortByRole(std::vector<Member>& members, bool healersFirst)
 
 bool LastsAtLeast(Aura const* aura, int32 ms) { return aura && (aura->GetDuration() < 0 || aura->GetDuration() >= ms); }
 
+Position BladestormWalk(Unit* warrior, Unit* victim, Aura const* storm)
+{
+    float const gap = warrior->GetExactDist2d(victim);
+    float const seconds = storm->GetDuration() < 0
+                              ? BLADESTORM_WALK_S
+                              : std::min(BLADESTORM_WALK_S, static_cast<float>(storm->GetDuration()) / 1000.0f);
+    float const walk = std::min(gap, warrior->GetSpeed(MOVE_RUN) * seconds);
+    if (walk <= 0.0f)
+        return warrior->GetPosition();
+
+    float const angle = warrior->GetAbsoluteAngle(victim);
+    return Position(warrior->GetPositionX() + std::cos(angle) * walk, warrior->GetPositionY() + std::sin(angle) * walk,
+                    warrior->GetPositionZ());
+}
+
+float WalkGap(HazardSource const& source, Player* bot)
+{
+    float const dx = source.walk.GetPositionX() - source.pos.GetPositionX();
+    float const dy = source.walk.GetPositionY() - source.pos.GetPositionY();
+    float const length = dx * dx + dy * dy;
+    float along = 0.0f;
+    if (length > 0.0f && source.victim != bot->GetGUID())
+        along = std::clamp(((bot->GetPositionX() - source.pos.GetPositionX()) * dx +
+                            (bot->GetPositionY() - source.pos.GetPositionY()) * dy) / length,
+                           0.0f, 1.0f);
+
+    return bot->GetExactDist2d(source.pos.GetPositionX() + dx * along, source.pos.GetPositionY() + dy * along);
+}
+
+void AddClearance(std::vector<EncounterHelpers::HazardCircle>& out, HazardSource const& source, Player* bot)
+{
+    out.emplace_back(source.pos, source.clearance);
+    if (source.victim == bot->GetGUID())
+        return;
+
+    float const walk = source.pos.GetExactDist2d(source.walk);
+    uint32 const steps = static_cast<uint32>(std::ceil(walk / WALK_CIRCLE_STEP));
+    for (uint32 step = 1; step <= steps; ++step)
+    {
+        float const along = static_cast<float>(step) / static_cast<float>(steps);
+        out.emplace_back(
+            Position(source.pos.GetPositionX() + (source.walk.GetPositionX() - source.pos.GetPositionX()) * along,
+                     source.pos.GetPositionY() + (source.walk.GetPositionY() - source.pos.GetPositionY()) * along,
+                     source.pos.GetPositionZ()),
+            source.clearance);
+    }
+}
+
 bool InControl(Player* player)
 {
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
+}
+
+bool CanLeave(Player* player)
+{
+    return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasAuraType(SPELL_AURA_MOD_ROOT);
 }
 
 bool MidCast(Player* player) { return player->IsNonMeleeSpellCast(false, false, true); }
@@ -902,10 +962,18 @@ void UpdateHazards(FactionChampionsDefenceState& state, Player* bot, std::vector
         HazardSource source;
         source.guid = creature->GetGUID();
         source.pos = creature->GetPosition();
+        source.walk = source.pos;
         if (IsWarrior(creature->GetEntry()))
         {
-            if (!LastsAtLeast(creature->GetAura(SPELL_BLADESTORM), BLADESTORM_MIN_LEFT_MS))
+            Aura const* storm = creature->GetAura(SPELL_BLADESTORM);
+            if (!LastsAtLeast(storm, BLADESTORM_MIN_LEFT_MS))
                 continue;
+
+            if (Unit* victim = creature->GetVictim())
+            {
+                source.victim = victim->GetGUID();
+                source.walk = BladestormWalk(creature, victim, storm);
+            }
 
             source.spellId = SPELL_BLADESTORM;
             source.radius = BLADESTORM_RADIUS;
@@ -2715,6 +2783,8 @@ bool IsAutocast(Pet* pet, uint32 spellId)
     return false;
 }
 
+void BreakCastsInAoe(FactionChampionsDefenceState& state, std::vector<Member> const& members, uint32 now);
+
 FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
 {
     if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
@@ -2737,6 +2807,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     std::vector<Unit*> const champions = FactionChampionsInCombat(botAI);
     UpdatePhysicalLatch(state, botAI, killTarget);
     UpdateHazards(state, bot, members, now);
+    BreakCastsInAoe(state, members, now);
     UpdateTotemKillers(state, bot, members);
     UpdateCcDispels(state, members);
     UpdateMassDispel(state, botAI, members, killTarget);
@@ -2758,8 +2829,7 @@ bool IgnoredBy(HazardSource const& source, Player* bot) { return source.kicker =
 
 bool LeftToKite(HazardSource const& source, Player* bot)
 {
-    if (source.spellId != SPELL_BLADESTORM || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-        bot->HasAuraType(SPELL_AURA_MOD_ROOT))
+    if (source.spellId != SPELL_BLADESTORM || !CanLeave(bot))
         return false;
 
     Unit* warrior = ObjectAccessor::GetUnit(*bot, source.guid);
@@ -2767,6 +2837,39 @@ bool LeftToKite(HazardSource const& source, Player* bot)
 }
 
 bool DodgeSkips(HazardSource const& source, Player* bot) { return IgnoredBy(source, bot) || LeftToKite(source, bot); }
+
+bool InAoeOf(HazardSource const& source, Player* bot)
+{
+    return CanLeave(bot) && !DodgeSkips(source, bot) && WalkGap(source, bot) <= source.radius + IN_AOE_MARGIN;
+}
+
+void BreakCastsInAoe(FactionChampionsDefenceState& state, std::vector<Member> const& members, uint32 now)
+{
+    if (state.hazards.empty())
+        return;
+
+    for (Member const& member : members)
+    {
+        Player* player = member.player;
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(player);
+        Spell* cast = player->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!memberAI || !cast || cast->getState() != SPELL_STATE_PREPARING || !player->IsMovementPreventedByCasting() ||
+            cast->GetCastTimeRemaining() <= AOE_BREAK_MIN_LEFT_MS)
+            continue;
+
+        auto const asked = state.aoeBreaks.find(player->GetGUID());
+        if (asked != state.aoeBreaks.end() && getMSTimeDiff(asked->second, now) < AOE_BREAK_HOLD_MS)
+            continue;
+
+        if (std::none_of(state.hazards.begin(), state.hazards.end(),
+                         [player](HazardSource const& source) { return InAoeOf(source, player); }))
+            continue;
+
+        state.aoeBreaks[player->GetGUID()] = now;
+        memberAI->RequestSpellInterrupt();
+        RaidObs::Note(player, "fc.aoebreak", std::string(cast->GetSpellInfo()->SpellName[0]));
+    }
+}
 
 Creature* AliveCreature(Player* bot, ObjectGuid guid)
 {
@@ -2873,11 +2976,7 @@ bool FactionChampionsInAoe(PlayerbotAI* botAI)
 
     Player* bot = botAI->GetBot();
     return std::any_of(state->hazards.begin(), state->hazards.end(),
-                       [bot](HazardSource const& source)
-                       {
-                           return !DodgeSkips(source, bot) &&
-                                  bot->GetExactDist2d(source.pos) <= source.radius + IN_AOE_MARGIN;
-                       });
+                       [bot](HazardSource const& source) { return InAoeOf(source, bot); });
 }
 
 std::vector<EncounterHelpers::HazardCircle> FactionChampionsAoeClearances(PlayerbotAI* botAI)
@@ -2889,7 +2988,7 @@ std::vector<EncounterHelpers::HazardCircle> FactionChampionsAoeClearances(Player
 
     for (HazardSource const& source : state->hazards)
         if (!IgnoredBy(source, botAI->GetBot()))
-            clearances.emplace_back(source.pos, source.clearance);
+            AddClearance(clearances, source, botAI->GetBot());
 
     return clearances;
 }
@@ -3382,7 +3481,7 @@ Position FactionChampionsAoeDodgeSpot(PlayerbotAI* botAI)
         if (DodgeSkips(source, bot))
             continue;
 
-        clearances.emplace_back(source.pos, source.clearance);
+        AddClearance(clearances, source, bot);
         if (bot->GetExactDist2d(source.pos) > source.radius + IN_AOE_MARGIN)
             others.emplace_back(source.pos, source.radius);
     }

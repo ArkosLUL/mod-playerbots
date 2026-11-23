@@ -16,7 +16,9 @@
     faction_champions.py <file> --purge    raid offensive dispels on champions, kill target or not, and the
                                            champions' Bloodlust, Avenging Wrath and Hand of Freedom
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
-    faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash
+    faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash,
+                                           Bladestorm ticks on raiders by how they came in reach, the casts
+                                           broken so a dodge can run
     faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds, raid Greater
                                            Fire Elementals and the CC on their targets
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
@@ -359,6 +361,14 @@ CROWD_AOE = (
 CHANNELS = ("Bladestorm", "Hellfire")
 # an instant AoE's victim rows land 0-6 ms before its cast row
 AOE_LEAD_MS = 50
+SPELL_BLADESTORM_TICK = 65946
+STORM_IN_YD = 9.0
+STORM_LATE_MS = 500
+STORM_SAMPLE_GAP_MS = 700
+STORM_DODGE_LEAD_MS = 300
+STORM_KINDS = (("late", "within 9 yd under 0.5 s"), ("casting", "casting and no dodge"),
+               ("dodged", "dodged and still hit"), ("other", "other"))
+AOE_BREAK = "fc.aoebreak"
 
 # The Enhancement Shaman's totems and the Balance Druid's Force of Nature, cast id -> name
 SUMMONS = {65989: "Grounding Totem", 65990: "Windfury Totem", 65992: "Tremor Totem", 65861: "Force of Nature"}
@@ -489,7 +499,7 @@ STRANDED_KITE_MS = 1500
 STRANDED_DAMAGE_MS = 2000
 SHORT_HOP = ", short"
 # a pull with no chased run, escape, kite, broken cast, wall grip or skipped link writes none
-OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, CAST_BREAK, WALL, LINK_SKIP))
+OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, CAST_BREAK, WALL, LINK_SKIP, AOE_BREAK))
 KICK = "fc.kick"
 # champion channels: id -> name, every difficulty
 CHANNEL_SPELLS = {**dict.fromkeys((65816, 68145, 68146, 68147), "Hellfire"),
@@ -1755,9 +1765,86 @@ def show_aoe(trace: Trace) -> None:
     print("  raid splash: " + (", ".join(f"{name} {count}" for name, count in splash.most_common())
                                if splash else "none"))
     print(f"  {AVOID_AOE_ACTION}: {ok_rows(trace, AVOID_AOE_ACTION)} OK row(s)")
+    hits = storm_hits(trace)
+    if hits:
+        kinds = collections.Counter(hit["kind"] for hit in hits)
+        damage = collections.Counter()
+        for hit in hits:
+            damage[hit["kind"]] += hit["amount"]
+        others = sum(count for kind, count in kinds.items() if kind != "victim")
+        print(f"  Bladestorm ticks on raiders, tanks apart: his victim {kinds['victim']} ({damage['victim'] // 1000}k);"
+              f" others {others} ({(sum(damage.values()) - damage['victim']) // 1000}k): "
+              + ", ".join(f"{label} {kinds[kind]} ({damage[kind] // 1000}k)" for kind, label in STORM_KINDS))
+    breaks = aoe_breaks(trace)
+    print(f"  {AOE_BREAK}: {sum(breaks.values())}"
+          + (" (" + ", ".join(f"{name} {count}" for name, count in breaks.most_common()) + ")" if breaks else ""))
     print("  a victim is a raid player hit by that cast (a `dmg` row), or feared by it for the two fears,"
           f" from {AOE_LEAD_MS} ms before its cast row; hits per victim is for the two channels, which tick"
-          " once a second")
+          " once a second; a Bladestorm tick's raider came within"
+          f" {STORM_IN_YD:.0f} yd of the warrior (centre to centre) at its entry, his victim is his target at the tick,"
+          f" late an entry under {STORM_LATE_MS} ms before it, casting a cast-time spell running at the entry with no"
+          f" dodge after, dodged a `{AVOID_AOE_ACTION}` OK row from the entry on")
+
+
+def storm_hits(trace: Trace) -> list[dict]:
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    roster = roster_guids(trace)
+    warriors = {guid for guid, entry in trace.entries.items() if entry in WARRIOR_CHAMPIONS}
+    if not warriors:
+        return []
+    near: dict[int, list[tuple[int, float, bool]]] = collections.defaultdict(list)
+    for snap in frames(trace):
+        rows = snap.get("u", [])
+        storm = [row for row in rows if row[0] in warriors and row[5] > 0]
+        if not storm:
+            continue
+        for row in rows:
+            if row[0] in roster and row[5] > 0:
+                gap = min(distance(row, warrior) for warrior in storm)
+                near[row[0]].append((snap["t"], gap, any(warrior[7] == row[0] for warrior in storm)))
+    casts: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("s") in roster and rec.get("ct") and not rec.get("tr"):
+            casts[rec["s"]].append((rec["t"], rec["t"] + rec["ct"]))
+    dodges: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("act"):
+        if rec.get("a") == AVOID_AOE_ACTION and rec.get("vd") == "OK":
+            dodges[rec["g"]].append(rec["t"])
+    out = []
+    for rec in trace.of("dmg"):
+        guid = rec.get("d")
+        if rec.get("sp") != SPELL_BLADESTORM_TICK or rec.get("s") not in warriors or trace.roles.get(guid) == "tank":
+            continue
+        samples = near.get(guid, [])
+        index = bisect.bisect_right(samples, (rec["t"], math.inf, True)) - 1
+        if index < 0:
+            continue
+        hit = {"t": rec["t"], "guid": guid, "amount": rec.get("a", 0)}
+        if samples[index][2]:
+            out.append({**hit, "kind": "victim"})
+            continue
+        entry = index
+        while (entry > 0 and samples[entry - 1][1] <= STORM_IN_YD
+               and samples[entry][0] - samples[entry - 1][0] <= STORM_SAMPLE_GAP_MS):
+            entry -= 1
+        entered = samples[entry][0]
+        dodged = any(entered - STORM_DODGE_LEAD_MS <= when <= rec["t"] for when in dodges.get(guid, []))
+        casting = any(start <= entered < stop for start, stop in casts.get(guid, []))
+        if rec["t"] - entered < STORM_LATE_MS:
+            kind = "late"
+        elif dodged:
+            kind = "dodged"
+        elif casting:
+            kind = "casting"
+        else:
+            kind = "other"
+        out.append({**hit, "kind": kind})
+    return out
+
+
+def aoe_breaks(trace: Trace) -> collections.Counter:
+    return collections.Counter(rec.get("txt", "") for rec in notes(trace, AOE_BREAK))
 
 
 def own_splash(trace: Trace) -> collections.Counter:
@@ -4319,7 +4406,8 @@ SECTIONS = (
     ("dispel", "champion CC on the raid, the dispels on it, Unstable Affliction backlash", show_dispel),
     ("purge", "raid offensive dispels on champions, kill target or not, by spell and class", show_purge),
     ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
-    ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
+    ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels, Bladestorm ticks on"
+            " raiders by how they came, casts broken for a dodge", show_aoe),
     ("adds", "champion totems and treants, treant damage, fc.totem holds, raid Greater Fire Elementals",
      show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
