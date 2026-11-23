@@ -1370,3 +1370,149 @@ fire bot cull, the ACU tank, the cast cut, the least-burn fallback, the melee ri
   every 250 ms scan while it stands in fire, a healer too. The reader folds cuts under 1 s apart into one,
   so read the raw `castcut` notes: a run on one bot with no `flames` leg after it means the cut should wait
   for the last dodge to have issued.
+
+## Round 13 (build a88ea2ade, round 12 built)
+
+**Data:** window 22, `raidtest.py report --boss mimiron --raid uld --head a88ea2ade --pulls 10`: one valid pull per
+pool, no DC veto inside any. Baselines: windows 16-21. Scripts in the lane scratchpad (`mim13/`: `p3line.py`,
+`coreuse.py`, `carrier.py`, `p4pos.py`, `p4dps.py`, `p4bombs.py`, `bombscene.py`, `bombcross.py`, `bombcharge.py`,
+`walkins.py`, `acupre.py`, `castcut.py`, `revtime.py`, `pets.py`, `hm.py`; round 10's `parts.py`, round 11's
+`deathmech.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-200230-1` | `603_1_…_1795464213` | **kill** 9:45.6, hard mode, no Berserk cast | 7: P3 Bomb Bot 3 (two ranged in one blast at 4:51.4, one of them again at 5:09.2); P4 Frost Bomb 2 (a rogue's Killing Spree at 7:21.3 and a warrior's Intercept at 8:04.9 into a live bomb, 0.9 and 2.1 s before its blast), Rocket Strike 1 (ranged), Hand Pulse 1 (melee 9:04.2) |
+| uld2 | `tr-20261123-200230-2` | `603_2_…_1795464213` | wipe 10:18 in P4 at Berserk (10:00.2), parts 21-26% | 31: P2 Rapid Burst 2 (a healer, a melee); P3 Water Spray 3 (a ranged twice, a melee), ACU Plasma Ball 1, Bomb Bot 1; Berserk 24 |
+| uld3 | `tr-20261123-200230-3` | `603_3_…_1795464217` | wipe 10:12 in P4 at Berserk (10:00.2), parts 10/10/14% | 31: P2 Rapid Burst 1, Flames 2 (that melee revived, and a healer after a dodge arrived); P3 Water Spray 2, Bomb Bot 1; P4 Hand Pulse 7 (8:05-9:26, six within 15 s of a Frost Bomb); Berserk 18 |
+
+69 deaths: Berserk 42; before it Hand Pulse 8, Bomb Bot 5, Water Spray 5, P2 Rapid Burst 3, Flames 2, Frost Bomb 2,
+Rocket Strike 1, P3 ACU Plasma Ball 1. Hard mode in all three: Summon Flames (Initial) at 7.1-7.2 s, Flames from
+13.2-15.9 s, Emergency Mode at phase 2.
+
+**Stop rules:** one kill of three, 7 deaths in it: not polished. No failure picked three times (the Frost Bomb is new).
+
+**Verdict on round 12.**
+
+- **Fire bot cull in the 3→4 handover (Q4): held.** H3 aim at fire bots 52/72/97 bot-s (0 since round 8), fire bots
+  4/7/4 at H3's open and 0 at its close and at phase 4's open in all three (window 21: 3-7 into phase 4); phase 4
+  Water Spray 0 hits, siren 0 raid-s, splash holds 0 (window 19: 1-4 hits, 143-256 raid-s); no aim at a fire bot in
+  phase 3. uld1's phase 4 ran 140.8 s at 105k/s with 22.7 alive (window 21's kill: 130.1 s, 113k/s, 25 alive).
+- **The off-tank on the ACU (Q5): held, with a leak.** Before Berserk the ACU targeted the off-tank 99/58/81%
+  (window 21: 1%), Plasma Ball hit ranged 0/7/6 times (29-37 a phase 4 before), no death to it before Berserk
+  (windows 18-19: 9 and 3), the off-tank aimed at the ACU 99-100%. uld2's ranged Uldyap took it back for 18 s
+  (8:57-9:15) and for 2-5 s four more times; the off-tank there is the roster B bear.
+- **Cast cut in fire: held.** No hunter died at the opening (roster B lost one or both in windows 7, 16, 19 and 21); 66 `castcut` notes,
+  10 without a flames leg within 1.5 s. Side effect: roster B's hunters, petless from the pull, lived and kept
+  starting Revive Pet: 46 starts, none finished, 175-176 s each (29% of the fight, 25-43% of phases 1-2), the fire
+  chains walking to the still caster and the cut ending it. Fixed below.
+- **Fire dodge fallback: held.** 7/10/14 `flames` fallbacks, all with a bearing, 3 of 31 legs ending in a burn (window
+  21: 15 of 32, 47 notes with 15 issuing no leg); `unsafe` 1 (55).
+- Round 11's: no mine kill on a barrage leg; barrage-leg mine hits 0/2/1.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 90.8 | 48.3 | 81.8 | 24.2 | 138.6 | 32.0 | 7:08.8 | 140.8 s at 105k/s, then 13 s of Self Repair rounds; kill 9:45.6 |
+| uld2 | 84.9 | 48.1 | 96.8 | 24.3 | **201.1** | 32.3 | 8:20.6 | 99.6 s to Berserk at 86k/s, parts 21-26% |
+| uld3 | 83.3 | 48.0 | 93.3 | 23.9 | 137.0 | 31.8 | 7:10.7 | 169.5 s to Berserk at **69k/s**, parts 10-14% |
+
+- **uld2 lost phase 3.** Its first core went down at 5:08.1 while the ACU chased a ranged: the core landed under the
+  unit, which was 14 yd away when the core's 12 yd pull-down (64436, 3 s after the use) went out, so the first landing
+  came at 5:36.4, ~25 s late, with every add timer behind it (1 miss in 62 uses over windows 14-22). Its landings then
+  took 22.8/29.5/27.6 points (uld1 27.5/47.3/7.2, uld3 32.9/31.1/16.7) with three healers and both hunters casting
+  Revive Pet 15% of the phase and 28-43% of phase 2 (uld2's phase 2 ran 97 s, 15 s over uld1).
+- **uld3 lost phase 4.** It arrived 2 s behind uld1 but dealt 69k/s against 105k/s: 20 alive at the open, then the
+  7:59 and 8:58 Frost Bombs split it (below), six dead to Hand Pulse inside those two windows and 1.04M lost there.
+
+**Failure picked: in phase 4 the formation walks bots into the live Frost Bomb.** The 20 s from a phase 4 bomb's spawn
+were 39% of twelve phase 4s (windows 16-22) and held 57 of their 97 deaths before Berserk, Hand Pulse 15.8k/s against
+8.6k/s outside; the 13 bombs that moved the stack 20 yd or more cost a median 0.49M of raid damage each (up to
+0.99M).
+
+- The stack follows the main tank's escape, so slots round VX-001 end up across the bomb. uld3 7:59 (`bombscene.py`):
+  bomb 13 yd from VX-001; Uldzaa fled, then his `p4tank` arc spread leg walked him back toward his spot
+  17.5 yd from the bomb (8:01.3), the escape fired again (`frostbomb ok +113`, shock refusals) and took him to (2699,
+  2574), 46 yd off centre; VX-001 followed to 43 yd. Melee ran the other way: Uldzag's escape to (2752, 2593), then
+  `mimiron arc spread action` to its `p4melee` slot across the blast, the escape at 30 yd, the arc spread again, every
+  ~280 ms for the whole fuse (11 escape legs). Ranged sat 55-63 yd from VX-001, healers 26-53.
+- uld3 8:58: the stack went one way to 34 yd off centre, healers the other to 63-72 yd from it, and three melee walking
+  back on arc spread legs died to three Hand Pulses at 9:04.2-9:07.8 at 6-16% health with no healer in range.
+- `--bomb`'s new walk-in count gives 40/35/90 non-escape legs a pull into a live phase 4 bomb (full phase 4s of windows 16-21: 19-72;
+  phase 2 0-4 in every pull), nearly all `mimiron arc spread action`; escape legs 136/84/144 a phase 4 (phase 2
+  6-54). The main tank took 12-22 escape legs a bomb (Uldxaa 22 and 12, Uldzaa 13 and 12).
+- Code: `MimironArcSpreadAction::Execute` (`UldActions_Mimiron.cpp:815` at `a88ea2ade`) sends the main tank to his
+  anchor slot with no hazard test, and `MimironArcSpreadTrigger` skips the approach for him
+  (`UldTriggers_Mimiron.cpp:125`); `GetMimironSlotApproaches` (`UldEncounter_Mimiron.cpp:930-948`) tests a leg against
+  fire and mines but not a bomb, whose radius only the endpoints are screened for (`IsMimironSpotBombSafe`, 32 yd).
+  In phase 2 VX-001 never moves, so slots stay on the bot's side and the gap never showed.
+- Also: the charges and Killing Spree. `mimiron frost bomb guard` holds the walking movers within 38 yd of a live
+  bomb, and `mimiron charge guard` holds charges only for a bot already inside one, so a gap-closer from outside lands
+  in it: 49 in windows 16-22 (32 in phase 2), 7 killed by the blast, both of uld1's Frost Bomb deaths this window.
+
+**Classification:** bug. The findings doc's frost bomb guard exists because "the generic movers walk bots back onto the
+edge, and the flee ping-pongs there for the whole fuse"; the formation and the gap-closers do exactly that.
+
+**Fix** (Mimiron files and reader only, every size and mode, with or without a player):
+
+- `IsMimironLegBombSafe`: a leg is refused when it runs deeper inside `ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS` (32)
+  of a live bomb than the bot stands, so walking out passes. `GetMimironSlotApproaches` applies it to the direct leg,
+  `cross`, both legs of every detour, the over-mines walk and `stranded`; with nothing left it notes `mimiron.approach
+  none bomb` and the arc spread stands down until the blast. The main tank's anchor walk takes the same leg test in
+  `MimironArcSpreadTrigger`, so he holds where his escape left him, the MK II and the stack with him; his spot stays
+  exempt from every other screen.
+- `mimiron frost bomb guard` also holds `Family::Charge` (Charge, Intercept, Feral Charge) and `killing spree`.
+
+**Fixed, small and independent: `mimiron revive pet hold`** blocks `revive pet` while the hard-mode encounter is
+engaged (`MimironFireFight`). Roster B's hunters have no pet in any Mimiron pull of windows 18-22 and started Revive
+Pet 18+18, 1+13, 1+2 and 20+26 times; none finished. Before the engage they still try.
+
+Reader: `--bomb` adds per bomb the walk-ins (accepted legs, any mover but the bomb's own escape, that ran deeper
+inside 32 yd than the bot stood) by mover and how far VX-001 moved over the fuse, with a test. Findings doc: "In
+phase 4 the formation walked bots through the fuse", the guard's new rows, the anchor's one exception, "A dead pet
+stays dead under Firefighter", the `none bomb` note.
+
+**Next window should show** (`--bomb`, `--acutank`, `--firebots`; `mim13/p4bombs.py`, `bombcharge.py`, `revtime.py`):
+
+- Phase 4 `walks into the live bomb` near 0 and no `mimiron arc spread action` among them (40/35/90), escape legs far
+  under 136/84/144 a phase 4, the main tank 1-3 escape legs a bomb (12-22), `none bomb` notes during fuses.
+- VX-001 moved over a fuse at most ~25 yd (31 twice this window), no stack past ~35 yd off centre after a bomb (43).
+- In the 20 s after a phase 4 bomb: Hand Pulse near the outside rate (15.8k/s against 8.6k/s), deaths well under
+  this window's 6 (uld3), and a median loss well under 0.49M for a bomb that moves the stack.
+- No gap-closer into a live bomb (`bombcharge.py`; 49 in windows 16-22) and no Frost Bomb death.
+- Roster B hunters: no Revive Pet after the engage, `mimiron revive pet hold` veto rows, their Auto Shot and Steady
+  Shot back (uld2: 175 s each on Revive Pet), uld2's phase 2 near 82-90 s.
+- Round 12's checks hold: fire bots 0 at phase 4's open, the ACU on the off-tank, no opening hunter death.
+
+**Not picked.**
+
+- uld2's missed core (1 in 62 uses): a use while the ACU flies to a ranged target, which a stationary-unit gate on
+  `IsMimironCoreUseReady` would catch at the cost of a later use; next if it repeats.
+- The ACU leaking to ranged in uld2 (31% of its phase 4 before Berserk): the bear off-tank lost it for 18 s.
+- Bomb Bots 5 (uld1's blast took two ranged at once), Water Spray 5, phase 2 Rapid Burst 3 and Flames 2.
+- The raid still splits round a phase 4 bomb on the first escape: everyone flees straight away from it while the
+  stack goes with the main tank. If deaths in bomb windows stay up once the walk-ins are gone, a plan question:
+  bias every escape toward the main tank's side of the bomb.
+
+**Questions for the user:** none.
+
+**Shared code:** none (Mimiron files and its reader).
+
+**Review.**
+
+- Checked and holding: `--bomb` reproduces the phase 4 walk-ins 40/35/90, 140 of them `mimiron arc spread action`
+  and 59 of those the main tank's (Uldxaa 23, Uldyaa 20, Uldzaa 16). uld3's 7:59 bomb: Uldzaa's arc spread leg ran from
+  34 yd to his spot 17.3 yd off the bomb and alternated with the escape every ~270 ms from 8:05.8 to 8:09.0, the leg
+  the trigger now refuses. uld1's Killing Spree (37 → 26 yd) and Intercept (34 → 24) began inside the guard's 38 yd,
+  so `Family::Charge` and `killing spree` cover both deaths. uld2's hunters cast Revive Pet 46 times, `castcut 982`
+  cut it, and no pet of theirs appears in the trace. Normal mode and 10-man run the same code (no bomb, so
+  `hazards.bombs` is empty); a real player changes nothing. The pet hold keys on the config toggle like every
+  Firefighter gate, so a normal-mode pull with the toggle on also holds Revive Pet (findings doc, "Firefighter").
+- The next window's `walks into the live bomb` cannot reach 0: the fix leaves `combat formation move` (19 in
+  window 22, 34 → 29-32 yd, the unstacker the guard leaves alone) and reach legs starting past the guard's 38 yd (6:
+  `reach spell` 40 → 24, `reach party member to heal` 43 → 28, `reach melee`, the core carrier). Judge the fix by
+  `mimiron arc spread action` walk-ins near 0 and the main tank's 1-3 escapes a bomb.
+- `none bomb` cannot be counted: `NoteDerived` writes a `mimiron.approach` value only when it differs from the bot's
+  last one, and a direct leg writes none, so most bots log it once a pull. The main tank's anchor hold writes no
+  note at all. Read the hold from the walk-ins.
+- Removed the fixture comment the round added to `test_mimiron.py` (no-comments rule).

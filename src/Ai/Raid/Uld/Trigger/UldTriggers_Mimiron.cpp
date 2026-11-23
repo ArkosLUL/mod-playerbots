@@ -122,8 +122,12 @@ bool MimironArcSpreadTrigger::IsActive()
         }
     }
 
-    if (!IsMimironTankAnchorSlot(botAI, bot) &&
-        GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)).empty())
+    if (IsMimironTankAnchorSlot(botAI, bot))
+    {
+        if (!IsMimironLegBombSafe(bot->GetPosition(), GetMimironFirefighterHazards(botAI), slot))
+            return false;
+    }
+    else if (GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)).empty())
         return false;
 
     if (Unit* vx001 = GetUldUnitByEntry(botAI, NPC_VX001))

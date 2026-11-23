@@ -642,7 +642,8 @@ def bomb_rows(trace: Trace) -> list[dict]:
     bombs = guids_of_entry(trace, NPC_FROST_BOMB)
     samples = Samples(trace)
     blasts = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_FROST_BOMB_EXPLOSIONS]
-    dodges = [rec for recs in accepted_moves(trace).values() for rec in recs if rec.get("by") == BOMB_DODGE]
+    moves = accepted_moves(trace)
+    dodges = [rec for recs in moves.values() for rec in recs if rec.get("by") == BOMB_DODGE]
 
     sampled = {}
     for index, snap in enumerate(samples.snaps):
@@ -658,7 +659,7 @@ def bomb_rows(trace: Trace) -> list[dict]:
         when = cast["t"]
         row = {"t": when, "seen": None, "spot": None, "inside": collections.Counter(), "moving": 0.0,
                "casting": 0.0, "out_of_reach": 0, "hits": 0, "escapes": 0, "short_stand": 0,
-               "short_clearance": 0}
+               "short_clearance": 0, "walk_ins": collections.Counter(), "vx_moved": 0.0}
         rows.append(row)
         first = min((found for found in sampled.values() if when <= found[0] <= when + LANDING_MS),
                     default=None)
@@ -688,6 +689,22 @@ def bomb_rows(trace: Trace) -> list[dict]:
                 1 for guid, unit in end_units.items()
                 if guid in roster and living(unit) and trace.role(guid) in ("ranged", "heal")
                 and dist2((unit[1], unit[2]), (boss[1], boss[2])) > VX_REACH)
+
+        start_units = samples.before(seen)
+        start_boss = next((start_units[guid] for guid in vx if guid in start_units), None)
+        if boss and start_boss:
+            row["vx_moved"] = dist2((start_boss[1], start_boss[2]), (boss[1], boss[2]))
+
+        for guid, recs in moves.items():
+            for rec in recs:
+                if not seen <= rec["t"] <= seen + FUSE_MS or rec.get("by") == BOMB_DODGE:
+                    continue
+                unit = samples.before(rec["t"]).get(guid)
+                if not unit:
+                    continue
+                stood = dist2((unit[1], unit[2]), spot)
+                if off_segment((unit[1], unit[2]), (rec["x"], rec["y"]), spot) < min(stood, BOMB_STAND):
+                    row["walk_ins"][rec.get("by", "?")] += 1
 
         row["hits"] = sum(1 for rec in blasts if seen <= rec["t"] <= seen + FUSE_MS + 1500)
         for rec in dodges:
@@ -719,6 +736,11 @@ def show_bomb(trace: Trace) -> None:
         if row["escapes"]:
             print(f"            {row['escapes']} escapes, {row['short_stand']} under {BOMB_STAND:.0f} yd,"
                   f" {row['short_clearance']} under {BOMB_CLEARANCE:.0f}")
+        walk_ins = ", ".join(f"{by} {n}" for by, n in row["walk_ins"].most_common())
+        print(f"            walks into the live bomb {sum(row['walk_ins'].values())}"
+              f"{f' ({walk_ins})' if walk_ins else ''}; VX-001 moved {row['vx_moved']:.0f} yd over the fuse")
+    print(f"\n  a walk-in is an accepted leg, any mover but the bomb's own escape, that ran deeper inside"
+          f" {BOMB_STAND:.0f} yd of the bomb than the bot stood")
 
 
 # ---------------------------------------------------------------------------------------------- slots

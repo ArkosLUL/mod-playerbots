@@ -281,6 +281,8 @@ std::vector<Position> GetMimironMines(PlayerbotAI* botAI);
 
 bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest);
 
+bool IsMimironLegBombSafe(Position const& from, MimironFirefighterHazards const& hazards, Position const& dest);
+
 bool IsMimironWalkMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest);
 
 bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest);

@@ -109,6 +109,9 @@ def mimiron_pull() -> list[dict]:
         move(28500, AGONY, mm.BOMB_DODGE, 43.0, 0.0),
         move(28600, TREE, mm.BOMB_DODGE, 10.0, 45.0),
 
+        move(29000, SHADOW, mm.FORMATION, 12.0, 0.0),
+        move(29000, BULWARK, mm.FORMATION, -20.0, 0.0),
+
         {"t": 30000, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 2000], "x": 3.0, "y": 0.0},
         {"t": 38200, "e": "dmg", "s": BOMB, "d": BULWARK, "sp": 65333, "a": 40000},
         {"t": 39000, "e": "death", "g": BULWARK, "killer": BULWARK, "cause": "reset", "x": -3.0, "y": 0.0},
@@ -593,6 +596,11 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(sum(row["inside"].values()), 4)
         self.assertEqual((row["escapes"], row["short_stand"], row["short_clearance"]), (2, 0, 1))
         self.assertEqual(row["hits"], 1)
+
+    def test_a_walk_deeper_into_a_live_bomb_is_a_walk_in(self):
+        row = mm.bomb_rows(self.trace)[0]
+        self.assertEqual(row["walk_ins"], {mm.FORMATION: 1})
+        self.assertEqual(row["vx_moved"], 0.0)
 
     def test_slot_changes_split_by_cause(self):
         cell = mm.slot_churn(self.trace)["P2"]

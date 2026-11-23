@@ -172,9 +172,20 @@ most don't.
 
 **The generic movers walk bots back onto the edge**, and the flee ping-pongs there for the whole fuse:
 114-150 `frost bomb <-> reach melee` a pull before the guard. `mimiron frost bomb guard` zeroes `reach
-melee`, `reach spell`, `reach party member to heal`, `set behind`, `follow` and `mimiron approach target
-action` within `ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE` + `_HOLD_MARGIN` (38 yd) of a live bomb; a healer may be out of
+melee`, `reach spell`, `reach party member to heal`, `set behind`, `follow`, `mimiron approach target
+action`, the charges and `killing spree` (49 gap-closers into a live bomb in fifteen pulls, 7 killed by
+its blast) within `ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE` + `_HOLD_MARGIN` (38 yd) of a live bomb; a healer may be out of
 range of a far tank for the 10 s.
+
+**In phase 4 the formation walked bots through the fuse.** The stack follows the main tank's escape, so
+slots round VX-001 land across the bomb: an arc spread leg crossed the blast, the escape fired mid-walk,
+and the pair alternated every ~280 ms for the whole fuse (one window: 162 such legs, 84 of them the main
+tank's, whose `p4tank` anchor skips every spot screen). Each of his walks dragged the stack along, up to
+43 yd off centre, and split the raid round the bomb, healers 60-70 yd from melee under Hand Pulse: over
+twelve phase 4s the 20 s after a bomb held 57 of 97 deaths in 39% of the time, at 1.8× the Hand Pulse
+damage. `IsMimironLegBombSafe` refuses a leg running deeper inside `_STAND_RADIUS` than the bot stands
+(walking out passes) on every slot approach leg (`none bomb` when none is left) and on the main tank's
+anchor walk, so he holds where his escape left him, and the stack with him, until the blast.
 
 **A bomb near VX-001 packs the raid because of the melee, not the room.** Ground at least 32 yd from a
 bomb 10.6-15.1 yd off VX-001 spans 97-178° of bearing at the ranged radii, so the far side has room; the
@@ -789,7 +800,8 @@ follows, and over five minutes that walks the fight round the room. The main tan
 mode) is `ULDUAR_MIMIRON_ROOM_CENTER`, the point `boss_mimiron.cpp` charges the MK II to, so he drags it
 home after every cast. His slot is exempt from `IsMimironSpotSafe` (`IsMimironTankAnchorSlot`, phases 1
 and 4, the two that park the MK II and lay mines): the MK II parks on the mine field it just laid, and a
-tank refusing to stand in one never returns.
+tank refusing to stand in one never returns. Only a live Frost Bomb holds his walk
+([the fuse](#the-frost-bomb-is-30-yd-and-it-lands-in-your-own-fire)).
 
 ## Phase 2 is a healing race, and Heat Wave is why
 
@@ -1202,6 +1214,11 @@ In phase 4 pets go where the melee go, and hold when the melee hold: a hunter's 
 its damage, and leaking that into the rendezvous is what the floor exists to prevent. That includes the
 ACU while the pair waits on it, reachable at ground level in phase 4.
 
+**A dead pet stays dead under Firefighter.** Revive Pet is an 8.8 s cast, and a hunter standing still
+draws the fire chains, so a dodge or the cast cut ends it: two petless hunters started it 46 times in one
+pull and spent 29% of the fight on it, and none of ~100 casts in five pulls finished. `mimiron revive pet
+hold` blocks `revive pet` while the hard-mode encounter is engaged.
+
 **`MOVEMENTFLAG_HOVER` cannot mean "phase 3".** Nothing in the vehicle entry path or the phase 3 defeat
 branch clears it, so it survives into phase 4 whenever the ACU was airborne when it went down; keyed on
 it, the node fired in phase 4, found no adds, and stopped every pet in the raid for the whole phase. Both
@@ -1528,7 +1545,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `castcut` | The spell id of a cast the encounter tick cut for the flames dodge; a cut can write two notes 250 ms apart |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
-| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left |
+| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left, `none bomb` when every leg ran into a live Frost Bomb |
 | `close` | A melee approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
@@ -1550,7 +1567,8 @@ older traces show too; `--firebots` counts the splash guard by its `veto` rows, 
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's
 cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
 before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
-before; and a phase that
+before; `--bomb` counts as a walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of
+the bomb than the bot stood; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated
