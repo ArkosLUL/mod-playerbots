@@ -58,6 +58,8 @@ SPELL_DASH = 33357
 # Warrior Charge and Intercept, the two the brain charge node casts at the Brain.
 SPELL_BRAIN_CHARGES = (11578, 20252)
 SPELL_DIMINISH_POWER = 64145
+DIMINISH_POWER_DAMAGE = 0.79
+DIMINISH_POWER_STEP_MS = 500
 
 # A step under this between samples is standing still, and a turn past this while standing is a spin.
 WALK_STILL_YD = 0.3
@@ -2500,6 +2502,7 @@ def show_brain_waves(trace: Trace) -> None:
         return count
 
     ends = [start for start, _ in waves[1:]] + [trace.records[-1].get("t", 0)]
+    diminish = source_windows(trace.of("aura"), SPELL_DIMINISH_POWER, ends[-1])
     print("\n  per wave: room clear time, one-target snapshots and the top target's median share, melee walking,"
           f"\n  healer from the room middle and mates past {HEAL_RANGE:.0f} yd, its closest approach and"
           "\n  heals landed, set behind moves, door to the first Brain hit, healer to the Brain, exit"
@@ -2605,6 +2608,21 @@ def show_brain_waves(trace: Trace) -> None:
               f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%"
               f"{outside_note}")
 
+        carried, dealt = [], []
+        for guid in team:
+            below = next((row[0] for row in rows.get(guid, [])
+                          if start <= row[0] <= stop and row[4] < BRAIN_LEVEL_Z and row[6] > 0), None)
+            if below is None:
+                continue
+            carried.append(stacks_at(diminish.get(guid, []), below))
+            share = diminished_damage(diminish.get(guid, []), below, fight_end) if guid not in healers else None
+            if share is not None:
+                dealt.append(share)
+        if any(carried):
+            print(f"      Diminish Power carried below: {sum(1 for n in carried if n)} of {len(carried)},"
+                  f" stacks {sorted(carried, reverse=True)}, damage dealers x{median_or_dash(dealt, '.2f')}"
+                  f" until the door")
+
         if door and brain:
             staged, joined, out, on_brain = 0, 0, [], []
             for guid in team - healers:
@@ -2708,6 +2726,33 @@ def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
             out.append((guid, open_at.pop(guid), rec["t"]))
     out.extend((guid, start, end) for guid, start in open_at.items())
     return sorted(out, key=lambda w: w[1])
+
+
+def source_windows(rows: list[dict], spell: int, end: int) -> dict[int, list[tuple[int, int]]]:
+    """Per target, one (applied, removed) window for each caster's copy of `spell`, so copies from several
+    casters read as stacks; a copy that never lifts closes at `end`."""
+    open_at: dict[tuple[int, int], int] = {}
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in sorted((r for r in rows if r.get("sp") == spell), key=lambda r: r["t"]):
+        key = (rec.get("d", 0), rec.get("s", 0))
+        if not rec.get("r"):
+            open_at.setdefault(key, rec["t"])
+        elif key in open_at:
+            out[key[0]].append((open_at.pop(key), rec["t"]))
+    for (target, _), start in open_at.items():
+        out[target].append((start, end))
+    return dict(out)
+
+
+def stacks_at(windows: list[tuple[int, int]], when: int) -> int:
+    return sum(1 for start, stop in windows if start <= when < stop)
+
+
+def diminished_damage(windows: list[tuple[int, int]], start: int, stop: int,
+                      step: int = DIMINISH_POWER_STEP_MS) -> float | None:
+    """Mean damage multiplier over [start, stop) under Diminish Power, 21% off a stack, stacks multiplying."""
+    samples = [DIMINISH_POWER_DAMAGE ** stacks_at(windows, when) for when in range(start, stop, step)]
+    return sum(samples) / len(samples) if samples else None
 
 
 def melee_constrictor_split(rows: dict[int, list[list]], start: int, stop: int,

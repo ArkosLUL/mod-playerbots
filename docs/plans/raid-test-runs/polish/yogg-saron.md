@@ -1298,3 +1298,132 @@ wave 1 shows the one 6.5/0.5 walk (6.0 s). Window 22's ranged and healers at the
 - Review fix: `caught by it` lost the comma after `s left` when a decided bot had no row or the pull no clean exit.
 - Left: at 1.2× the lead budgets 5.8 yd/s from the Brain; melee now make ~8.4, but the findings doc's older 4-6 yd/s
   walks would be charmed. The revert rule above covers it.
+
+## Round 15 (2026-11-24, window 24 build baf47824b: rounds 13 and 14)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head baf47824b --pulls 10` (window report
+`scratchpad/window24/window24-yogg-saron.md`): one valid pull per pool, 0 humans, Freya's 62670 on the raid, no DC veto
+inside a pull. Read with the full `yogg_saron.py` and scratch scripts (`scratchpad/yogg-r15/`: Diminish Power stacks per
+bot and wave, channel drops against Judgements and seal hits, area casts beside live Crushers over every pull since
+window 12, phase 3 positions, team damage dealt per bot) over `aura`, `cast`, `death`, `act` and snapshot rows. Window 22
+(round 12's build) is the baseline.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261123-222828-13` | `603_13_yogg-saron_1795472953` | wipe 11:54, 32 deaths | 131.6 s, 0 deaths | 439.3 s, 5: C 9.5, S 19.0, I 23.4, C 8.5, S 9.6 (held from 36.1% at 19.6 s left, finished at 8.0 s, phase 3 7.2 s before the end) | from 9:30.8 with 4 tentacles (3.95M; Crushers 9.8% and 100%, the second spawned 31.8 s before; Corruptors 23.6, 100%), 143 s, Yogg 29.6 → 20.8% |
+| uld2 | `tr-20261123-222908-14` | `603_14_yogg-saron_1795472994` | wipe 8:56, 29 | 143.4 s, 5 deaths | 392.1 s: S 17.6, I 11.1, C 0.9, S never cleared (7 Insane), wave 5 never went down; Brain at 70.5% | never |
+| uld3 | `tr-20261123-223008-15` | `603_15_yogg-saron_1795473055` | wipe 13:05, 32 | 154.5 s, 0 deaths | 511.5 s, 6: C 8.8, S 18.9, I 14.1, C 8.6, S 12.3, I 7.3 (held from 36.2% at 30.3 s left, the Brain still reached 30% 13.8 s before the end) | from 11:05.9 with 9 (9.41M; four Crushers 7-96%, five Corruptors), 119 s, Yogg 29.9 → 26.4% |
+
+**Cycles to 30%:** five, none and six (window 22: five, none, five). Phase 3 opened with 4 / – / 9 tentacles, two and four
+of them Crushers; uld1's goal-like start (one Crusher at 9.8%, dead at +10.9 s) still carried a fresh 2.69M Crusher.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 2 Death Ray 1 (Uldxai 3:09, two death rows 0.5 s apart; every walk refused for the 2 s before); phase 3
+  Immortal Guardian 30 (first +38.8 s, the tanks at +83 s and +97 s, rezzed and dead again by +110 s).
+- uld2: phase 1 Shadow Nova 5 (1:07 Uldyak, low before it, Reincarnated 0.3 s later and dead again at 1:36; 1:48
+  Uldyaw, two novas 3.6 s apart, the second Guardian finished inside the gap by Death and Decay, Deep Wounds, Blood Plague
+  and a Corruption; 2:13 Uldyag and Uldyat, a handover leftover). Phase 2 Death Ray 3 (Uldyam 3:20 walking for its
+  portal; Uldyae twice inside a Constrictor's grab), self-inflicted 2 (Uldyao's Shadow Word: Death backlash 4:45, Uldyav
+  7:44), Laughing Skull 1 (Uldyay, held below), Squeeze 6, Curse of Doom 4, Psychosis 1, Insane 7 (Uldyau from the wave 3
+  Chamber, six of the wave 4 Stormwind team at 8:55).
+- uld3: phase 2 Crush 2 (Uldzax and Uldzaj 6:27, the Bladestorm below), Laughing Skull 1 (held below), Curse of Doom 1;
+  phase 3 Immortal Guardian 24 (first +13.1 s, six ranged dead by +43 s, the tanks at +68 s and +71 s), Corruptor 3,
+  Lunatic Gaze 1.
+
+**Verdict on round 13, regroup into the healer's sight: works on its own check, the holds no shorter.** `regroup walks`
+`sight` 7 / 6 / 8 bots (range 6 / 2 / 7); `passed over` 8 of 19 / 3 of 29 / 5 of 17 heal casts (window 22: 7 of 13 / 12
+of 34 / 7 of 14), 16 of 65 against 26 of 61. `heals in a hold` 21 / 13 / 33 on a held bot against 36 / 59 / 58 on
+others, still mostly others; holds 13 / 8 / 21, median 5.0 / 5.5 / 4.6 s (4.6 / 4.5 / 5.4). Chamber clears median 30.2 s
+(28.2) and Chamber cycles 8.6% (8.8%), not readable: those teams carried Diminish Power (below).
+
+**Verdict on round 13, casts cut under a Death Ray: fixed.** `casts cut for a ray` 14 / 13 / 15 (Lightning Bolt, Revive
+Pet twice, Incinerate, Chain Heal ...); no Death Ray death on a casting bot (window 22: 2): Uldxai's and Uldyam's were
+walking, Uldyae's two in a grab, which the cut leaves alone.
+
+**Verdict on round 14, exit lead 1.2×: keep it.** 74 melee exits (30 / 8 / 36): decided a median 5.3 s before the end
+(p10 5.1-5.2; window 22 6.6), surfaced with 2.2 / 2.3 / 2.1 s to spare (p10 2.0 / 2.1 / 1.9, min 1.9 / 2.1 / 1.8; window
+22 3.6, min 2.9), 0 under 1 s, 0 charmed after deciding; decision to surfacing median 3.0 / 3.0 / 3.1 s (p90 3.2 / 3.1 /
+3.3), unchanged, so the replay held (2.3 s, p10 2.1, min 1.8). No `caught by it` bot had decided: uld2's seven never
+did, in a room that never opened. Brain per unheld Stormwind / Icecrown cycle median 17.6% (window 22 15.9%), Chamber
+8.6% (8.8%): no worse, too noisy for the ~0.8% a cycle the change buys. The revert rule (a charmed melee, or `under 1 s`
+more than once or twice a pull) did not fire.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked; its loss is read below. Rounds 8-14 picked
+phase 2 failures, none twice.
+
+**Ranking** across pools: phase 3 Immortal Guardians 54 (stuck); uld2's phase 2 collapse 21 from 6:25 (Squeeze 6, Insane
+7, Curse of Doom 4, grabbed Death Rays 2, Psychosis 1, self 1); Shadow Nova 5; phase 3 Corruptor and gaze 4; Crush 2;
+Death Ray 2 outside a grab; Laughing Skull 2; self-inflicted 1; phase 2 Curse of Doom 1.
+
+**Why uld2 wiped in phase 2: Diminish Power taken below.** Phase 1 cost three melee and a ranged, so the platform killed
+Crushers slowly (one lived 3:28-8:55) and four were channelling by 7:13. Each Crusher's 64145 is −21% damage, multiplied
+across Crushers, and a bot carries it below until that channel breaks (the re-cast skips Illusion Room 63988 carriers).
+New `--brain` line `Diminish Power carried below`, damage dealers' median multiplier until the door: wave 3 (Chamber)
+went down under two stacks, ×0.62, cleared in 39.7 s and took 0.9% of the Brain; wave 4 (Stormwind, six bots) under
+four, ×0.39: its four damage dealers made 1.1-2.7k/s each over the room (snapshot `dealt`) and the room never opened, Induce Madness
+took the team, and the platform, alone under five Crushers, died to Squeeze and Curse of Doom. Window 22's uld2, which
+round 13 read as a dry healer and out-of-sight holds, went the same way: waves 6 and 7 at ×0.44 and ×0.39. Across window
+24, 13 of 15 waves carried some (×0.39-1.00, ×0.79 typical).
+
+Only three things end the channel. The stun: at each room clear every Crusher's 64145 drops from everybody, the team below
+included (uld2 6:44.58, three channels, 36 rows), so a team pays until its door, not at the Brain. A Crusher's death. And a
+melee-class hit, which the strategy keeps off live Crushers by design (melee and tanks off them, the pet guard), with
+`yogg-saron diminish power judgement` as the stated replacement. **It no longer breaks anything**: core `fe0e00d8e`
+(upstream #28297, 2026-11-04, on Custom since 2026-11-09) makes `spell_yogg_saron_diminish_power_aura` return for a
+paladin Judgement damage spell (`SpellFamilyFlags[0] & 0x800000`). Over window 24, 33 plain Judgements (54158) mid-channel
+dropped none; a prot paladin's Judgement of Vengeance dropped it 2 of 2 times its Seal of Vengeance hit (42463, from
+Judgements of the Just) landed with it, a ret's 0 of 2. The channel was up 52 / 78 / 60% of Crusher-alive time. A plan
+question, not a bug: the only breaker left is a melee hit on a live Crusher (question below).
+
+**Why both phase 3s were lost to the Guardians: what phase 2 handed over, and Diminish Power.** The tried fixes still do
+their part (class taunts held 24 / 7; tank taunts by aim mostly `loose` and `another tank`; ranged DoTs on Yogg 66-100%
+in uld1). uld1: the ranged put 83% of 55.8k/s into the four leftovers and 90-95% of their targets for 90 s, the fresh
+Crusher dying at +95.3 s; every one of 11 Guardians left stasis on a non-tank (+4.0 s, 8 onto melee), 44% of Guardian
+samples sat at 90%+, up to five over 30% stood on one tank from +70 s, and the 11:11 beacon healed six more; Yogg lost
+8.8%, melee 72% on him and ranged 1%. uld3: the brain team surfaced 56 yd west, the station released the ranged onto the nine
+leftovers from there, 43-80 yd west of Yogg inside the Guardian spawn ring (38-48 yd), so two of nine Guardians spawned
+on them and took a ranged at +0.0-0.2 s; ranged 92-100% on tentacles all phase, never at the station, Diminish Power on
+the average raider 40% of phase 3, 84% of Guardian samples at 90%+, Yogg 3.5%. Same mechanism as rounds 3-7 with the
+user's goal (at most one Crusher) not met; Diminish Power, unbroken, slows the cycles that decide it.
+
+**Picked second, independent and small, a bug: the Crusher area hold never held Bladestorm.** uld3 6:21.2: Uldzax's
+Bladestorm 7.7 yd from a channelling Crusher (inside the hold's 9.33), its whirls broke the channel and took the threat,
+and the Crush at 6:27.2 killed him and Uldzaj beside him. `YoggSaronCrusherAreaHoldMultiplier` exempted a positive
+spell, meant for Heroism and shouts, and Bladestorm 46924 (a self-aura whose periodic Whirlwind hits enemies), Sweeping
+Strikes and Blade Flurry read positive. Since window 12 the hold vetoed Bladestorm 12 times and Sweeping Strikes 14, all
+for prot warrior tanks, whose missing spell skips the positivity test, and never for the arms and fury warriors and
+combat rogues who cast them 150 / 80 / 71 times. Fix (`UldMultipliers_YoggSaron.cpp`): a positive spell is exempt only
+when it is no named multi-target action (`facts.multiTarget`) and no periodic trigger of it hits enemies. Same at 10 and
+25, normal and hard mode, with or without a player. No shared code.
+
+**Reader.** `--brain` per wave: `Diminish Power carried below`, each team bot's stacks at its first sample below and the
+damage dealers' median multiplier until the door (`source_windows`, `stacks_at`, `diminished_damage`, tested).
+
+**Next window should show:** `--crush` `area held in a swinging Crusher's reach` with `bladestorm`, `sweeping strikes`
+or `blade flurry` from warriors and rogues who have them, not only tanks; no Crush death after a Bladestorm in a Crusher's
+reach (here 2). `Diminish Power carried below` as the baseline for the question: here ×0.39-1.00 until the door, 13 of
+15 waves. Rounds 13 and 14 checks as above.
+
+**Question for the user (who breaks Diminish Power).** Judgement stopped breaking it with core `fe0e00d8e`, and the
+strategy keeps melee, tanks and pets off live Crushers, so outside the stun nothing does: the brain team takes the
+stacks below, and both phase 2 collapses (window 22 uld2, window 24 uld2) were rooms fought at ×0.44-0.39. Options: (a)
+the off-tank holds one live Crusher in phase 2, so it swings at him and never channels (Crushes on him, others stay off
+it); (b) once the brain team has clicked, a bot tank hits each channelling Crusher once and steps out of its reach, so
+the re-cast skips the team below (one or two Crushes on the tank per Crusher, the platform debuffed as before); (c)
+leave it. **Recommended: (b) for one window**: it ends the collapse mechanism at the cost of a few Crushes on a tank;
+(a) does more (platform and phase 3 damage too) but puts a tank under a Crusher for whole waves.
+
+**Round 14's queued question (a healer under 30% mana goes after every healer above it).** No case in window 24: the
+lowest healer at a team pick was 41% (uld3 wave 3), the room healers left at 25-38% and were back at 41-94% by the next
+pick. Window 22's two cases came in waves already at ×0.44 / ×0.39, so the dry healer was not what stalled them. It no
+longer stands as asked; recommended: drop it unless a later window shows a dry healer in a clean room.
+
+**Seen, not picked.**
+
+- uld3 wave 6's brain hold latched at 36.2% with 30.3 s left and nine tentacles up, and the Brain still reached 30% 13.8 s
+  before the end with no finish note (DoTs started before 36% and pets keep going).
+- uld2 phase 1: a nova-gap double (1:44.8 / 1:48.5) finished by Death and Decay, Deep Wounds, Blood Plague and a
+  Corruption on the parked Guardian, and the tank's own Heroic Strike and Cleave on another (0:52.5 / 0:55.1).
+- The judgement node still costs a holy paladin a GCD on a channelling Crusher for nothing; left until the question is
+  answered, since a prot paladin's still breaks it.

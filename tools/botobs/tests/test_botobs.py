@@ -1870,6 +1870,16 @@ class YoggPhases(unittest.TestCase):
                          (6.0, 2.5, 20.0, False))
         self.assertEqual(yogg_saron.exit_timing(walk, 54000, 60000, None), (6.0, None, None, False))
 
+    def test_diminish_power_reads_one_stack_per_crusher_and_multiplies(self):
+        auras = [{"t": 1000, "sp": 64145, "d": 7, "s": 100}, {"t": 2000, "sp": 64145, "d": 7, "s": 200},
+                 {"t": 3000, "sp": 64145, "d": 7, "s": 100, "r": 1}, {"t": 1500, "sp": 1, "d": 7, "s": 300}]
+        windows = yogg_saron.source_windows(auras, 64145, 9000)
+        self.assertEqual(sorted(windows[7]), [(1000, 3000), (2000, 9000)])
+        self.assertEqual(yogg_saron.stacks_at(windows[7], 2500), 2)
+        self.assertEqual(yogg_saron.stacks_at(windows[7], 500), 0)
+        self.assertAlmostEqual(yogg_saron.diminished_damage(windows[7], 2000, 4000, 1000), (0.79 ** 2 + 0.79) / 2)
+        self.assertIsNone(yogg_saron.diminished_damage(windows[7], 4000, 4000))
+
     def test_spread_line_reads_median_p10_p90_and_extremes(self):
         self.assertEqual(yogg_saron.spread_line([3.0, 1.0, 2.0]), "median 2.0 (p10 1.0, p90 2.0, 1.0-3.0)")
         self.assertEqual(yogg_saron.spread_line([4.0]), "median 4.0 (p10 4.0, p90 4.0, 4.0-4.0)")
