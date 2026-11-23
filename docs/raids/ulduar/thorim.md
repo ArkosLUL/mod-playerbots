@@ -1058,18 +1058,18 @@ player was on the instance left the corridor standing while he stayed in the are
   walk while he fights (`ThorimGauntletLeaderFighting`: his target is a gauntlet mob in combat within 50 yd,
   or one attacks him): every corridor step of nine 25-man pulls came mid-fight, leaving the first pack's
   guards on ranged, and the right lane's fifth waypoint, 20.0 yd from the second pack's west guard, pulls
-  that pack. The Giant walk never holds (below). The last waypoint pair, (2237.2, −360.5) and (2219.5,
-  −360.57) (user, 2026-11-23), is the pull line: 36.5-37 yd from the Colossus, `GetDistance` 29-29.5 (his
-  combat reach ~6). Farther than the 30 yd pull test, he walks on to 29 yd, a yard
-  (`ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN`) inside it: a stop on the test itself lands a hair either
-  side, and one left just over it re-issued its own point as a duplicate and stood 5.2 s until a DPS
-  pulled. There, once no Iron Ring Guard or corridor Acolyte lives within 50 yd and every squad
+  that pack. The Giant walk never holds (below). The last waypoint pair (user, 2026-11-23; placed from
+  trace positions), (2237.2, −360.5) and (2219.5, −360.57), is the pull line: 36.5-37 yd from the
+  Colossus, `GetDistance` 29-29.5 (his combat reach ~6). Farther than the 30 yd pull test, he walks on to
+  29 yd, a yard (`ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN`) inside it: a stop on the test itself lands a
+  hair either side, and one left just over it re-issued its own point as a duplicate and stood 5.2 s
+  until a DPS pulled. There, once no Iron Ring Guard or corridor Acolyte lives within 50 yd and every squad
   non-healer stands within 20 yd of him (`ULDUAR_THORIM_LEAD_COLOSSUS_GATHER_DISTANCE`, under the step's
   15 s cap), he attacks him (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into
   him until he is in combat, which also ends the Runic Smash; no trace shows his proximity aggro, as
   nobody got within 32 yd of him idle. Waypoint and gather put the squad in cast range at the pull (the
   step's 30 yd passes with trailing followers 25 yd behind); with the lanes ending at y −329 it stood
-  55-65 yd out and walked in after the pull, under 10k/s on him for 6-9 s. No follower opens him idle
+  ~69 yd out and walked in after the pull, under 10k/s on him for 6-9 s. No follower opens him idle
   (`GetThorimDpsTarget` offers him out of combat only through `ThorimGauntletColossusPull`): the pull line
   is inside their 50 yd pick, and a real player leading pulls him himself; waiting for a follower's pick
   cost 1-10 s a pull. Once the Colossus is dead he
@@ -1120,7 +1120,7 @@ player was on the instance left the corridor standing while he stayed in the are
   Giant 43-63 s, his death to the balcony hit 15-20 s. Phase 2 came 156-204 s after the lever: hard mode in
   five pulls, 4.9-39.7 s late in the other ten. With both (three pulls, before the Giant hold): the lever
   0.1-0.2 s after the sixth death, so 170 s to 62565, and the Colossus engaged 0.5-1.8 s after the leader's
-  stop, but the squad, held on the last lane waypoints 55-65 yd out until then, walks in after the pull
+  stop, but the squad, held on the last lane waypoints ~69 yd out until then, walks in after the pull
   (under 10k/s on him for 6-9 s), so the Colossus took 31-36 s; phase 2 172-183 s after the lever, 2-13 s
   late. With the Giant hold (three pulls, its lock still refusing the walk down): the Giant p50 3-5 yd
   from the spot, but adds and Giant still 53-60 s, since the squad kills the adds first and the Giant

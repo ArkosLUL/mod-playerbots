@@ -1364,7 +1364,7 @@ corridor floor, the smash reach and the new waypoints.
 | w19 uld1 / 2 / 3 | 0.1-0.2 | 12.3-17.2 | 45.7 / 61.5 / 40.2 | 9.5 / 1.5 / 5.8 | 30.5 / 36.5 / 24.0 | 4.8-10.9 | 51.2 / 55.8 / 53.2 | 21.5 / 23.2 / 20.8 | 180.5 / 206.5 / 161.9 | +10.6 / +36.7 / made by 8.0 |
 
 uld1's 14.0 s to the Colossus: a Runic Smash flip (1:34.8) took the leader from the right lane's last waypoint across 30 yd to the
-left's, then 4.3 s to his stop and 1.5 s there. The Colossus took 35.5 / 36.7 s in uld1/uld2 with the squad walking in from 55-65 yd.
+left's, then 4.3 s to his stop and 1.5 s there. The Colossus took 35.5 / 36.7 s in uld1/uld2 with the squad walking in from 67-69 yd.
 
 **uld3's hard-mode wipe: the race again.** First tank death at P2 +101.7 s (4:53.9, bear Uldzab: nine Thorim swings, 98.8k in 10 s, Thorim
 56.7%), healers alive at 28-53% mana; Thorim lost 0.37%/s (hard-mode pulls before: 0.41-0.45). Six melee died before it, by P2 +78.6 s:
@@ -1427,3 +1427,19 @@ where bots fell: no path segment under z ~410), left new ↔ right new (the dodg
   the pair after his Charge pulling off-lane melee back to it (the formation's off-lane walk has no fighting gate).
 
 **Questions for the user:** none new (the ring-under-Blizzard question waits for a second hard-mode pull).
+
+**Review (round 14).** The cause holds: at the Colossus' first health drop the w21 uld1/uld2 squads stood 67-69 yd from him (the
+y −329 waypoints sit 68.7 / 69.9 yd from his spawn; earlier rounds' 55-65 is about their `GetDistance`) and he lost 1.5 / 2.1% in the
+first 6 s, against 9.8% in uld3, whose squad had already walked to 40-48 yd; w16 the same (56-98 yd, 1.4-5.7%). Leader stops
+(2235.3, −360.52) and (2219.44, −360.29); the uld2 leader walked right waypoint 5 to the new right point at z 412.13 (x 2216-2219.6 over
+y −337..−355). Within 1 yd of the new left point 33 floor samples in 8 pulls, none below (floor to x 2239.8 at y −360); of the right
+235, 8 below from one fallen bot. Smash reach rerun: 605 hits, farthest 11.34 yd. No size, mode or player branch (the gather counts
+squad bots like the step's cohesion check; a real leader pulls him himself); Thorim files only; no comments. The user's x ~2242 / ~2212
+at ~39 yd moved onto the floor and inside the 30 yd test, within the answer's "picked from trace positions". In the 30 Colossus fights on
+disk the leader never stood within 3.5 yd of either new point, so the off-lane walk without a fighting gate stays a watch. `pb-check`
+passes. Fixed: the findings doc credited the trace-picked coordinates to the user and gave 55-65 yd for the ~69 yd of the old last
+waypoints.
+
+Left: the answer's "navprobed" is still open (no Docker in a lane or review): both points and the three paths above before the merge.
+The leader alone still walks the 16-18 yd between the last two lane discs (y ~−340 to −357) with no lane index, so with no smash dodge,
+as on the old walk to his stop; followers cross it on his index once he stands on the new point.
