@@ -1304,3 +1304,18 @@ independent and small, fixed as the second), the Colossus walk-in (the pending q
 - uld2's Colossus charged north at 2:11 (49%) and was finished at y −363..−370; the leader then started the ramp walk 40 yd north of the spawn.
 
 **Questions for the user:** none new. The lane waypoint near y −360 stays pending and unbuilt.
+
+**Review (round 13).** The anchor cause holds: in uld3 Thorim stood 4.54 yd from the tank spot at bearing 44° from 4:07.6 to the cast,
+slot 2 latched at 54° (`thorim.ringspot`), its point 4.4 yd from the holder, Uldzax on it and 4.0 yd from him; the 64390 cast at
+4:11.71 hit 8 and killed Uldzat, Uldzax and Uldzaa, then Uldzab on the next swing. `relatch_geo3.py` (the code's rule: no distance
+gate, 0.5 yd gain) rerun on the 18 pulls gives 42.3% → 2.0% at 0-3 re-latches a pull; with the midpoint anchor at landing too
+(scratchpad `thorim_r13_review/relatch_midland.py`) 1.2%, 19 re-latches. The snapshot's moving flag is the `isMoving()` the code
+reads, so the replay's settle test is the code's. Corridor: in uld2 the leader stood on right lane waypoint 3 from 1:19.7 to 1:27.2
+with five ranged on waypoint 0 and four melee on 1, and both healers stopped on waypoint 2 once inside it (no positioning move after
+1:20.8), which is the in-lane gap. Both are bugs against the doc's intent (tank side clear, followers on the leader's waypoint); no
+size, mode or player branch (a real tank or gauntlet leader takes the same path); Thorim files only; no comments. `pb-check` passes.
+Fixed: the findings doc still said the ring "cannot rotate as the boss shuffles", above the re-latch paragraph.
+
+Left: the re-latch has no settle time, so a stop mid-drag can fire it (in the replay's 0-3 a pull; w18 uld3 two in the opening). In
+uld3's re-latch slot 2 turns 100° and its straight walk passes ~2.6 yd from the off-tank spot for ~2 s: watch chains during re-latch
+walks next window.

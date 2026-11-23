@@ -313,7 +313,7 @@ degrees, which leaves the whole tank side clear and puts the stacks 12.4 yd apar
 per guid, handed out least-loaded so the melee spread evenly, and kept while a bot is dead, or a
 rezzed bot's slot comes back a quarter turn off. **`RingAnchorBearing` reads only the two tank spots**
 (the bearing to their midpoint): the live tank is deliberately not an input, as the rule rather than a
-fallback, so the ring cannot rotate as the boss shuffles. Arrival uses a 3 yd / 5 yd deadband, because a
+fallback, so the ring does not follow each shuffle. Arrival uses a 3 yd / 5 yd deadband, because a
 tight one against a ring recomputed from a moving boss leaves the bot sliding in place, and a moving bot
 casts nothing. The trigger sets the arrival latch on a "stay" answer and the action clears it right
 before it moves, since the action only runs when there is a move; set in a trigger it only widens the
