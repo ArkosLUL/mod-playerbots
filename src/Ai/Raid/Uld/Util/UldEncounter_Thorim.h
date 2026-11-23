@@ -381,12 +381,17 @@ bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader);
 
+bool ThorimFightingStartPack(PlayerbotAI* botAI, Player* bot);
+
 bool ThorimLeverUsable(Player* bot, ObjectGuid& lever);
+bool ThorimLeverWaiting(PlayerbotAI* botAI, Player* bot, ObjectGuid& lever);
 void ThorimNoteLeverPulled(Player* bot);
 
 bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out);
 
 Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot);
+
+Unit* ThorimGauntletColossusPull(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot);
 

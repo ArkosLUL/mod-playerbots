@@ -810,3 +810,135 @@ part of the strategy.
 **Questions for the user:** none new. Round 7's three (balcony runner, the gauntlet tank waiting at the lever, the gauntlet tank pulling
 the Colossus) stand, recommended yes; this window adds 12.3 / 13.5 s at the Colossus stop (uld3 / uld2, 3.2 s in uld1) and balcony
 walks of 15.2-20.2 s.
+
+**User answers (2026-11-23) to round 7's questions:** Q1 (balcony runner): no. Starting phase 2 while the gauntlet squad
+is still deep in the corridor is a recipe for disaster; the gauntlet clear itself has to get faster. Q2 (the gauntlet
+tank waits at the lever while the start pack dies): yes. Q3 (the gauntlet tank pulls the Colossus from his 30 yd stop
+once the corridor trash is dead): yes. Round 10 builds Q2 and Q3 and works on the user's direction: optimize how the
+gauntlet is cleared.
+
+## Round 10 (window 15: build 523b2f60f with rounds 8 and 9; window 15a: build c350347ff, round 8 only)
+
+**Data:** window 15, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-122603-8`
+(uld1), `tr-20261123-122522-7` (uld2), `tr-20261123-122644-9` (uld3); traces
+`env/dist/logs/botobs/603_{8,7,9}_thorim_{1795436805,1795436765,1795436846}.ndjson`. Window 15a: `tr-20261123-112654-{1,2,3}`,
+traces `603_{1,2,3}_thorim_{1795433300,1795433289,1795433304}`. Read through `raidtest.py report --boss thorim --raid uld --head
+523b2f60f --pulls 10` (window 15a's report from the orchestrator), `thorim.py --phase2`, `postmortem.py --bot`/`--probes`, round 7
+and 9 scripts (`budget.py`, `seg.py`, `dps.py`, `perbot_seg.py`, `movesrc.py`, `loose.py`, `pack2.py`) and new ones in session
+scratchpad `thorim_r10/` (`startpack.py`, `notarget.py`, `tethergap.py`, `leadstop.py`, `smashlatch.py`, `smashcost.py`,
+`dodgeundo.py`, `smashhits.py`, `waittank.py`, `holderpos.py`, `colaggro.py`) over `snap`, `move`, `act`, `dmg` (62465), `haz` (62057/62058),
+`note` (`thorim.smashside`, `thorim.leverpulled`, `thorim.p2start`, `thorim.p2role`, `thorim.anchortank`) and Sif's `cast` rows.
+
+| Window | Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| 15 | uld1 | 1795436805 | wipe 5:46, **hard mode** (phase 2 3:09.1, deadline 62507 + 150 s = 3:14.7) | phase 1: Rune Giant Stomp 1 (the gauntlet tank, 2:27.1); phase 2: Thorim melee on a non-tank 17, on a tank 4, Chain Lightning 4 (one cast at 5:06.2 after the tanks fell), Lightning Charge 4, Blizzard 2, Sif Frostbolt 1 |
+| 15 | uld2 | 1795436765 | kill 5:54, normal (62565 3:16.6, phase 2 3:33.0) | none |
+| 15 | uld3 | 1795436846 | kill 5:37, normal (62565 3:16.0, phase 2 3:20.9) | Runic Colossus Smash 62339 1 (melee, 1:58.1) |
+| 15a | uld1 | 1795433300 | kill 6:40, normal (phase 2 3:35.6) | Iron Ring Guard Impale 1, melee 1 (1:06-1:16); Runic Smash 2 (one cast, 1:20.7); Giant Stomp 1, Rune Detonation 1 (3:13-3:17); Chain Lightning 2 (4:02.6) |
+| 15a | uld2 | 1795433289 | kill 6:05, normal (phase 2 3:35.9) | Iron Ring Guard melee 1 (1:12.2); Chain Lightning 3 |
+| 15a | uld3 | 1795433304 | kill 5:47, normal (phase 2 3:25.8) | Iron Ring Guard Whirling Trip 1 (1:15.1); arena Champion Mortal Strike 1 (2:22.8); Iron Honor Guard Shield Smash 1 (2:27.4) |
+
+**Round 8 verdict (off-tank spot): held in four of six pulls, one gap.** The waiting tank stood at (−3.5, 0) and on the holder
+1.2-1.5% (w15 uld1, uld2; w15a uld1; windows 12-14: 40-58%). In w15 uld3 (50.8%) and w15a uld2 (30.0%; w15a uld3 14.7%) the
+anchor tank, holding Thorim again after its taunt from the off-tank spot, stopped 2.1-2.3 yd short of the tank spot on the
+off-tank side ((−1.9, −0.9) / (−2.2, −0.7) in every snapshot it held), inside the tanks' arrival test (`GetDistance` ≤ 1 yd,
+2.5 yd exact), so the waiting tank on its spot stood within 2 yd of it; the other tank's holds sat on (0, 0). Other lines:
+trades moved him p50 0 yd; strike to swap p50 0.2-0.4 s; waiting-tank moves 4-9 a pull (no tug-of-war); tank-to-ring chain
+hops 0-2; Thorim lost 0.54-0.74 %/s in normal mode (w13: 0.66-0.73). Hard mode (w15 uld1): Blizzard on the waiting tank 45 hits
+(160k) against the holder's 21 (75k) (w14 uld1: 18 (36k) / 27 (99k)), the cost of the new spot's 1 yd clearance from the
+Blizzard track; first tank death at +103.1 s (w14 +82.4). Candidate next round: the holder stopping short (a bug: round 8
+means the holder on the tank spot).
+
+**Round 9 verdict (corridor packs one at a time): held.** Pack 2 first moved 3.5-4.1 s after pack 1's last death in all three
+pulls (before: with pack 1's guards up in nine of nine); no lead move while the leader's target was an engaged corridor mob (52
+over nine pulls before); Iron Ring Guard seconds on non-tank players 2 / 19 / 6 (w14 22 / 88 / 51); no Iron Ring Guard death (w14:
+3). Corridor 43.0 / 47.2 / 36.7 s (w14 46-48).
+
+**Stop rules:** not polished (the one hard-mode phase 2 wiped). Not stuck: rounds 3-10 picked eight different causes.
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → 62565 163.2-164.8 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w15 uld1 | 5.3 | 12.6 | 43.0 | 16.0 | 19.5 | 7.5 | 43.2 | 17.4 | 159.2 | made by 5.6 |
+| w15 uld2 | 6.4 | 14.2 | 47.2 | 9.7 | 21.2 | 7.3 | 61.8 | 18.7 | 180.0 | +16.4 |
+| w15 uld3 | 6.5 | 11.8 | 36.7 | 16.2 | 28.8 | 7.2 | 52.3 | 15.4 | 168.5 | +4.9 |
+| w15a uld1 | 6.1 | 12.6 | 44.5 | 3.7 | 31.4 | 7.6 | 62.7 | 18.6 | 181.1 | +17.1 |
+| w15a uld2 | 6.8 | 14.6 | 39.0 | 8.3 | 35.2 | 7.5 | 57.3 | 20.1 | 182.0 | +18.8 |
+| w15a uld3 | 5.2 | 12.6 | 51.8 | 2.0 | 25.7 | 7.8 | 54.0 | 17.3 | 171.2 | +6.4 |
+| fastest on record per segment | 4.5 | 11.8 | 33.0 | 2.0 | 18.5 | 5.3 | 43.2 | 15.2 | 156.2 (w12 uld3) | |
+
+**Where the seconds go** (window 15, against the fastest segments):
+1. **Honor Guards, Acolyte and Giant, 43-62 s.** The leader walks past the adds and pulls the Giant at his spawn ("all the way in",
+   round 3: the Giant spawns an Honor Guard 20 s after the first one engages, then every 10 s until he is pulled), and holds him
+   alone 4.5 / 19.5 / 9.8 s while the squad kills the adds 40-60 yd down the ramp; then the squad walks up, 5-8 s with almost no
+   damage, and the Giant dies 22-25 s after it arrives. Ranged had no target 19-32% of the segment; 10-14 tether orders a pull sent a
+   DPS between targets toward the leader at the Giant while an engaged add was within 50 yd, most when the next pick was out of
+   sight up the ramp (`Attack()` needs line of sight, so the tether is what brings them in). Where to fight the Giant is a tactic:
+   question below.
+2. **The wait at the Colossus stop, 3.7 / 4.6 / 8.4 s** (w14 −0.3-10.0, w15a 1.0-5.8): the leader stands 30 yd out until a follower
+   drifts inside the 50 yd pick range. User's Q3, built.
+3. **The lever, 5.3-6.5 s after the sixth start-pack death:** the gauntlet tank has soldiers or the Captain on him for
+   19-54 mob-seconds of the start pack (`startpack.py`, w15a uld1/uld3) and walks ~35 yd to the lever after it. User's Q2,
+   built.
+4. **Corridor trash, 36.7-47.2 s at 22-29k** against 37-54k on the Colossus: DPS walk 19-69% of it, 34-151 bot-seconds of it Runic
+   Smash dodges; pack 2 starts 3.5-4.1 s after pack 1 dies (round 9's serial cost, accepted). The dodge itself is needed: 93 smash
+   hits landed on the corridor squad in these six pulls (1-25 a pull), 2 deaths in w15a uld1, each costing the rest of the gauntlet
+   DPS (two dead ranged made a Colossus 40 s against 24 s in window 14).
+5. **Balcony walk, 15.4-18.7 s:** walking pace for ~150 yd; the user ruled out the runner.
+
+**Bug picked with the two answers: arena scans switch the Runic Smash dodge off.** `GetThorimRunicColossus`
+(`UldEncounter_Thorim.cpp:1011` at 523b2f60f) dropped its cached guid on every 500 ms rescan and scanned from whichever bot asked,
+and every bot runs `TickRunicSmash` through `ThorimRunicSmashTrigger::IsActive` (the squad check comes after
+`ThorimRunicSmashImminent`). Arena bots ask from 158-175 yd, past the 150 yd search: a miss reads "no Colossus" and clears
+`runicSmashSide` and `runicSmashSeenMs`. Between the lever and the Colossus' engage, arena bots cleared the latch 13 / 16 / 22 times
+(w15 uld1/2/3; `smashlatch.py`), leaving it off 31.6 / 17.4 / 29.6 s of 66 / 64 / 57 s. While it is off the dodge trigger is quiet and
+`ThorimPreferredGauntletLane` gives no safe lane. **81 of the 93 corridor smash hits landed in a cast during which the latch had
+dropped** (`smashcost.py`, six pulls). The boss doc's own rule is "armed 10 s from the last scan that saw a cast". Churn from it is
+small (13 of 341 dodges undone within 4 s, one leader lane flip), so this is a damage and lives fix more than seconds.
+
+**Classification:** Q2 and Q3 are the user's answers; the latch is a bug (round 6 and 7 saw it, unfixed while it cost no death).
+
+**Fix** (Thorim files only, no size, mode or player branch):
+- **Lever wait (Q2).** `ThorimLeverWaiting` (`UldEncounter_Thorim.cpp`): the bot gauntlet leader, Thorim in combat on his balcony
+  (`ThorimSplitActive`), lever not yet pulled and still locked (`GO_FLAG_NOT_SELECTABLE`), the leader not past the portcullis, and no
+  start-pack mob attacking him (`ThorimStartPackOn`: the main tank has the pack). `ThorimGauntletLeverTrigger` fires on it until he is
+  at interact distance; the action walks him to touching distance and uses the lever the moment it unlocks. Rule `thorim lever wait`
+  (`UldDefinition_Thorim.cpp`): `OwnMovement` keeping Attack and AvoidAoe with only the lever action as mover, and a `Block` on tank
+  assist, taunts and the DPS pickers, so he neither walks back to the pack nor taunts soldiers to the gate. A start-pack mob on him
+  drops the wait and he tanks it as before. Followers at the gate: `ThorimFightingStartPack` keeps a non-healer whose target is a live
+  start-pack mob within 50 yd on the pack (trigger and action of the gate walk); healers still gather on the leader, ~30 yd from the
+  pack. The same holds for a real player waiting at the gate: his non-healers finish the pack first.
+- **Colossus pull (Q3).** `ThorimGauntletLeadColossus`: within 30 yd of an out-of-combat Colossus and with no Iron Ring Guard or
+  corridor Acolyte (33110) alive within 50 yd (`ThorimCorridorTrashNear`), it keeps the Colossus as the lead target; the lead action
+  then walks to his own position at combat priority until he is in combat, and `ThorimGauntletColossusPull` fires
+  `ThorimDpsPriorityTrigger` for the leading tank so `GetThorimDpsTarget` hands him the Colossus and he attacks it (proximity aggro
+  is unproven: in seven pulls checked nobody came within 32 yd exact of the idle Colossus; `colaggro.py`). His `JustEngagedWith`
+  interrupts the smash cast and cancels the next. Beyond 30 yd the walk to the stop is unchanged.
+- **Latch (bug).** `GetThorimRunicColossus` keeps a live cached Colossus and returns it to every bot; only a bot within 150 yd of his
+  spawn (2227.5, −396.18) scans, so an arena miss no longer clears anything and arena bots read his real casts. The barrier bail
+  (`ThorimBarrierBailColossus`, `ThorimTickBarrierBail`) now checks the gauntlet squad, since arena melee would otherwise see a
+  shielded Colossus (harmless, but noise in `thorim.barrierbail`).
+
+**Estimated gain** on window 15: Q2 ~5-6 s, Q3 2.7-7.4 s (the stop wait less ~1 s to aggro): uld3 made by ~8 s, uld2 still ~7 s
+late, uld1 ~13 s early. The latch fix saves hits and lives, not measured seconds. The ramp (item 1) decides the slow pulls.
+
+**Next window should show:**
+- Q2: `thorim gauntlet lever action` moves within ~1-6 s of the pull; the leader at interact distance before the sixth start-pack
+  death; `thorim.leverpulled` within ~1 s of the sixth death (62507 − 20 s; was 4.5-7.7 s); no Growl or tank assist from him while he
+  waits; gauntlet non-healers on the pack until it dies (no gate-walk move while their target is a start-pack mob). Watch the main
+  tank's health with all six on him and the Behemoth's Acid Breath on the gate group; a start-pack death would be new.
+- Q3: a lead move at the Colossus' own position and the leader's `thorim.dpstarget` on him within ~1 s of the leader reaching
+  his stop with the corridor clear, the Colossus engaged within ~2-3 s of the arrival (`leadstop.py`: wait 3.7-10 s before); "to
+  Colossus" 2-12 s (was 9.7-16.2). Watch a 62465 hit on the leader during the walk-in.
+- Latch: `thorim.smashside` never back to 0 between the first seen cast and the Colossus' engage (cleared 13-22 times a pull before),
+  no arena bot setting it to 0; corridor smash hits well under 10 a pull (1-25), no Runic Smash death.
+- Lever to phase 2 ~150-170 s; hard mode in two of three if the ramp segment stays near 43-52 s.
+
+**Questions for the user** (tactics, not built):
+1. **Fight the Rune Giant where the squad kills his adds.** Today the gauntlet tank pulls the Giant at the top of the ramp and holds
+   him alone 4.5-19.5 s while the squad kills two Honor Guards and an Acolyte 40-60 yd lower, then the squad walks up 5-8 s with
+   almost no damage; the gauntlet healers trail the tank up and leave the add fight 15-30 yd behind. Should the tank, once the Giant is
+   pulled, walk him back down to ~15 yd from the add fight, so adds and Giant die in one place? Saves ~5-8 s a pull and keeps the
+   healers on everyone; costs the Giant's Stomp (around him) and Rune Detonation (a random player) landing among the squad up to ~20 s
+   earlier. Recommended: yes.

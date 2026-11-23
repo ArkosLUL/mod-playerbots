@@ -33,7 +33,12 @@ bool ThorimDpsPriorityTrigger::IsActive()
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
     if (PlayerbotAI::IsTank(bot) && !ThorimPhase2Active(botAI))
+    {
+        if (Unit* colossus = ThorimGauntletColossusPull(botAI, bot))
+            return colossus != currentTarget;
+
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
+    }
 
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
         return true;
@@ -54,9 +59,9 @@ bool ThorimGauntletPositioningTrigger::IsActive()
     if (!leader || leader == bot)
         return false;
 
-    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
-        bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
-        return true;
+    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS)
+        return bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE &&
+               !ThorimFightingStartPack(botAI, bot);
 
     uint8 leaderIndex = 0;
     bool leftLane = false;
@@ -85,7 +90,14 @@ bool ThorimGauntletLeverTrigger::IsActive()
         return false;
 
     ObjectGuid lever;
-    return ThorimLeverUsable(bot, lever);
+    if (ThorimLeverUsable(bot, lever))
+        return true;
+
+    if (!ThorimLeverWaiting(botAI, bot, lever))
+        return false;
+
+    GameObject* go = botAI->GetGameObject(lever);
+    return go && !go->IsAtInteractDistance(bot);
 }
 
 bool ThorimGauntletLeadTrigger::IsActive()

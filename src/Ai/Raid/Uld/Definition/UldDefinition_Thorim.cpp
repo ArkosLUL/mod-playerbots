@@ -83,6 +83,12 @@ bool ThorimFrostAuraHeld(PlayerbotAI* botAI) { return IsThorimFrostAuraPaladin(b
 
 bool ThorimTankAnchored(PlayerbotAI* botAI) { return ThorimTankOnAnchor(botAI, botAI->GetBot()); }
 
+bool ThorimLeverWait(PlayerbotAI* botAI)
+{
+    ObjectGuid lever;
+    return ThorimLeverWaiting(botAI, botAI->GetBot(), lever);
+}
+
 void TickThorim(PlayerbotAI* botAI)
 {
     ThorimTickBarrierBail(botAI, botAI->GetBot());
@@ -159,6 +165,10 @@ void DefineThorim(EncounterBuilder& e)
                   Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
                   {ThorimBalconyAdvanceAction::Name});
     e.Multiplier<ThorimBalconyGuardMultiplier>(Family::Attack | Family::Reach | Family::ReachHeal);
+
+    e.OwnMovement("thorim lever wait", Role::Any, ThorimLeverWait, Family::Attack | Family::AvoidAoe,
+                  {ThorimGauntletLeverAction::Name});
+    e.Block("thorim lever wait", Role::Any, ThorimLeverWait, Family::TankAssist | Family::Taunt | DPS_PICKERS);
 
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 

@@ -90,6 +90,8 @@ RaidInstanceState<ThorimEncounterState> thorimStates;
 
 ThorimEncounterState& ThorimStateFor(Player* bot) { return thorimStates.For(bot->GetInstanceId()); }
 
+Position const THORIM_RUNIC_COLOSSUS_SPAWN(2227.5f, -396.179f, 412.176f);
+
 struct GauntletWaypoint
 {
     Position const* position;
@@ -1015,11 +1017,18 @@ Unit* GetThorimRunicColossus(PlayerbotAI* botAI)
         return nullptr;
 
     ThorimEncounterState& state = ThorimStateFor(bot);
-    if (state.colossusScanMs && GetMSTimeDiffToNow(state.colossusScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+    if (state.colossusGuid)
     {
         Unit* cached = botAI->GetUnit(state.colossusGuid);
-        return cached && cached->IsAlive() ? cached : nullptr;
+        if (cached && cached->IsAlive())
+            return cached;
     }
+
+    if (bot->GetExactDist(THORIM_RUNIC_COLOSSUS_SPAWN) > ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE)
+        return nullptr;
+
+    if (state.colossusScanMs && GetMSTimeDiffToNow(state.colossusScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+        return nullptr;
 
     state.colossusScanMs = getMSTime();
     state.colossusGuid.Clear();
@@ -1431,6 +1440,43 @@ bool ThorimGauntletLeaderFighting(PlayerbotAI* botAI, Player* bot)
 
     return false;
 }
+
+bool IsThorimStartPackMob(Unit const* unit)
+{
+    switch (unit->GetEntry())
+    {
+        case NPC_JORMUNGAR_BEHEMOT:
+        case NPC_CAPTURED_MERCENARY_SOLDIER_ALLY:
+        case NPC_CAPTURED_MERCENARY_SOLDIER_HORDE:
+        case NPC_CAPTURED_MERCENARY_CAPTAIN_ALLY:
+        case NPC_CAPTURED_MERCENARY_CAPTAIN_HORDE:
+        case NPC_DARK_RUNE_ACOLYTE_I:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ThorimStartPackOn(Player* bot)
+{
+    for (Unit* attacker : bot->getAttackers())
+        if (attacker && attacker->IsAlive() && IsThorimStartPackMob(attacker))
+            return true;
+
+    return false;
+}
+
+bool ThorimCorridorTrashNear(PlayerbotAI* botAI)
+{
+    ThorimEncounterTargets targets;
+    GatherThorimEncounterTargets(botAI, targets);
+
+    auto const corridorTrash = [](Unit* unit)
+    { return unit->GetEntry() == NPC_IRON_RING_GUARD || unit->GetEntry() == NPC_DARK_RUNE_ACOLYTE_G; };
+
+    return std::any_of(targets.guards.begin(), targets.guards.end(), corridorTrash) ||
+           std::any_of(targets.acolytes.begin(), targets.acolytes.end(), corridorTrash);
+}
 }
 
 Player* ThorimGauntletLeader(PlayerbotAI* botAI)
@@ -1502,6 +1548,18 @@ bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
     return healer || !ThorimGauntletFighting(botAI, bot);
 }
 
+bool ThorimFightingStartPack(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || PlayerbotAI::IsHeal(bot))
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive() || !target->IsInCombat() || !target->IsHostileTo(bot))
+        return false;
+
+    return IsThorimStartPackMob(target) && bot->GetDistance(target) <= ULDUAR_THORIM_DPS_TARGET_RANGE;
+}
+
 bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
 {
     ThorimEncounterState* state = FindState(bot);
@@ -1528,6 +1586,22 @@ bool ThorimLeverUsable(Player* bot, ObjectGuid& leverGuid)
         state->leadStepMs = getMSTime();
         return false;
     }
+
+    leverGuid = lever->GetGUID();
+    return true;
+}
+
+bool ThorimLeverWaiting(PlayerbotAI* botAI, Player* bot, ObjectGuid& leverGuid)
+{
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || state->leverPulled || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet ||
+        !ThorimSplitActive(botAI) || PastThorimPortcullis(bot) || !ThorimIsBotGauntletLeader(botAI, bot) ||
+        ThorimStartPackOn(bot))
+        return false;
+
+    GameObject* lever = bot->FindNearestGameObject(THORIM_ARENA_LEVER_ENTRY, THORIM_LEVER_SEARCH_RANGE);
+    if (!lever || !lever->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
+        return false;
 
     leverGuid = lever->GetGUID();
     return true;
@@ -1608,10 +1682,25 @@ Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
         return nullptr;
 
     Unit* colossus = GetThorimRunicColossus(botAI);
-    if (!colossus || !colossus->IsAlive() || bot->GetDistance(colossus) <= ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
+    if (!colossus || !colossus->IsAlive())
+        return nullptr;
+
+    if (bot->GetDistance(colossus) > ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
+        return colossus;
+
+    if (colossus->IsInCombat() || ThorimCorridorTrashNear(botAI))
         return nullptr;
 
     return colossus;
+}
+
+Unit* ThorimGauntletColossusPull(PlayerbotAI* botAI, Player* bot)
+{
+    if (!ThorimIsBotGauntletLeader(botAI, bot))
+        return nullptr;
+
+    Unit* colossus = ThorimGauntletLeadColossus(botAI, bot);
+    return colossus && bot->GetDistance(colossus) <= ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE ? colossus : nullptr;
 }
 
 Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
@@ -1733,7 +1822,8 @@ Unit* ThorimBarrierBailColossus(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot || bot->GetMapId() != ULDUAR_MAP_ID)
         return nullptr;
 
-    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || !NearThorimEncounter(bot))
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || !NearThorimEncounter(bot) ||
+        GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return nullptr;
 
     return GetThorimRunicColossus(botAI);
@@ -1754,7 +1844,7 @@ void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot)
         return;
 
     ThorimEncounterState& state = ThorimStateFor(bot);
-    if (!ThorimColossusShielded(GetThorimRunicColossus(botAI)))
+    if (!ThorimColossusShielded(ThorimBarrierBailColossus(botAI, bot)))
     {
         state.barrierBailing.erase(bot->GetGUID());
         return;
