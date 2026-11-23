@@ -776,11 +776,14 @@ twice by the time they arrive), then anywhere, so a bot with nothing near still 
 nearest the arena centre, which puts them all on one unit. Within a tier the current target holds unless
 another is `ULDUAR_THORIM_TARGET_SWITCH_MARGIN` (8 yd) closer, or the pick flips between equidistant adds
 mid-cast. The corridor squad takes Acolytes, Iron Ring and Iron Honor Guards, walk-in trash, then the
-Colossus, then the Rune Giant, **one pack at a time**: while any of those is in combat in its 50 yd sweep,
-the idle ones drop out (`DropIdleGauntletMobsWhileFighting`). Tiers alone handed DPS the second corridor
-pack's Acolyte 39-50 yd out the moment the first pack's died, so the second pack joined the first's guards
-in all nine 25-man pulls traced, and four Iron Ring Guards against one tank killed ranged with Impale and
-Whirling Trip. Each loss carries through the gauntlet: two dead ranged made a Colossus 40 s against 24 s.
+Colossus, then the Rune Giant, **one pack at a time**: while a guard, gauntlet Acolyte, Colossus or Giant
+is in combat in its 50 yd sweep, the idle ones drop out (`DropIdleGauntletMobsWhileFighting`). Tiers alone
+handed DPS the second corridor pack's Acolyte 39-50 yd out the moment the first pack's died; that or the
+bot leader walking on mid-fight (**Who leads the gauntlet**, below) opened the second pack on the first's
+guards in eight of nine 25-man pulls traced, and four Iron Ring Guards against one tank killed ranged with
+Impale and Whirling Trip. In the ninth a hunter's Disengage left him 22 yd from it and it turned on him,
+which neither gate stops. Each loss carries through the gauntlet: two dead ranged made a Colossus 40 s
+against 24 s.
 
 **`thorim disable automatic targeting` holds the generic pickers for every non-tank in phase 1**, or
 they alternate with `ThorimDpsPriorityAction` instead of losing to it: the row goes quiet once the bot

@@ -757,7 +757,7 @@ of the gauntlet); no other phase 1 death.
 **Failure picked: the bot-led corridor fights both trash packs at once** (all nine 25-man pulls of windows 12-14).
 
 - Pack 2 (Acolyte (2227.5, −345.4), guards (2217.7, −337.4) and (2235.3, −338.3)) started moving 6-16 s after pack 1, with both of
-  pack 1's guards up, every pull. Two paths open it, whichever comes first:
+  pack 1's guards up, every pull. Three paths opened it, whichever came first:
   - **The picker** (first in four pulls: w13 uld1, uld3, w14 uld2, uld3). `GetThorimDpsTarget`'s gauntlet tiers
     (`UldEncounter_Thorim.cpp:1200-1206` at c350347ff) take any Acolyte in the 50 yd sweep, idle or not; a DPS took pack 2's Acolyte
     from 41-49 yd within 1 s of pack 1's Acolyte dying (w14 uld2 0:57.77 Uldyax at 48 yd, pack 2 moved 1:00.3).
@@ -765,6 +765,9 @@ of the gauntlet); no other phase 1 death.
     within 30 yd, fight or not: all 63 lead moves between the first corridor engage and the last guard's death came with engaged
     trash up, 52 of them with the leader's own target engaged. The right lane's fifth waypoint (2212.1, −318.2) is 20.0 yd from pack
     2's west guard: w14 uld1's pack 2 moved at 0:55.3, the leader 20.4 yd away, before any bot targeted it.
+  - **A Disengage** (w13 uld2). Hunter Uldyau, his target pack 1's dying Acolyte, cast Disengage at 1:03.96 and stood 22.3 yd
+    from pack 2's east guard when pack 2 turned on him at 1:04.82, with no bot targeting pack 2 and the leader 33-40 yd off.
+    Neither half of the fix below holds it.
 - Effect: the tank-leader walks south onto pack 2 and pack 1's guards stay on ranged and pets. Iron Ring Guard seconds on non-tank
   players 22 / 88 / 51 (w14; w12-13 28-71); w14 uld3: pack 1's guards sat on a voidwalker and a hunter 0:58-1:30 while the tank held
   pack 2, then killed the warlock; uld2: one pack 1 guard on the warlock Uldyav for 30 s (0:52.8-1:22.3) until Impale killed him,
@@ -801,7 +804,8 @@ part of the strategy.
 - still open: the 12-13.5 s wait at the Colossus stop and the 15-20 s balcony walk (questions 1 and 3), so hard mode only on the
   faster pulls. Round 8's phase 2 measures land in the same window (its table above).
 - Watch: a leader holding more than ~15 s on one step while nothing dies (a guard kited out of reach), and pack 2 now opened by DPS
-  from 39-50 yd once pack 1 is dead rather than by the tank.
+  from 39-50 yd once pack 1 is dead rather than by the tank. A bot's own escape to ~22 yd of pack 2 (Disengage, w13 uld2) still
+  opens it early.
 
 **Questions for the user:** none new. Round 7's three (balcony runner, the gauntlet tank waiting at the lever, the gauntlet tank pulling
 the Colossus) stand, recommended yes; this window adds 12.3 / 13.5 s at the Colossus stop (uld3 / uld2, 3.2 s in uld1) and balcony
