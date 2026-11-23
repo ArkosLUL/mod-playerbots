@@ -559,3 +559,113 @@ settles; the marked bot still moves and nothing died near one.
 
 **Questions.** None new. The fix holds the round 3 answer; if the user reads the Animus-phase pull as a
 new position, the alternative is ranged dps fixed on their rows and the race lost.
+
+## Round 6 (2026-11-23, build 523b2f60f)
+
+**Data.** Window 15 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 523b2f60f
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.4, no vapor hit),
+against window 11 (`--head d2874f536`) and window 14 (round 4's table). Analysis scripts: session
+scratchpad `vezax-r6/`.
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-121740-1` | `603_1_general-vezax_1795436349` | kill 5:43, 0 deaths, the Animus dead in 76 s |
+| uld2 | `tr-20261123-121740-2` | `603_2_general-vezax_1795436352` | wipe 4:55, 30 deaths, the Animus at 24.2% |
+| uld3 | `tr-20261123-121740-3` | `603_3_general-vezax_1795436349` | wipe 6:25, 30 deaths, the Animus at 3.4% at the collapse |
+
+**Stop rules.** Not polished: two wipes. Round 5 picked ranged out of the Animus's reach and uld3 shows
+it again (second round; a third stops).
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the collapse | Collapse |
+|---|---|---|
+| uld1 | none | none |
+| uld2 | 2 ranged to Animus melee (3:23, 3:25) and a healer to Profound Darkness after its hits (3:28), all with the Animus loose | from 3:58: 19 Profound Darkness, 2 Animus melee, 2 Vezax melee, 2 Mark, 2 Shadow Crash |
+| uld3 | none | from 4:34 (main tank to Vezax melee on the first big Profound Darkness wave): 13 Profound Darkness, 10 Vezax melee, 4 Shadow Crash, 2 Animus melee, 1 Mark |
+
+**Verdict on round 5 (slots pulled into the Animus's reach): it worked where the Animus stood beside or
+ahead of him, and failed where it stood behind him**, the case its own floor stop leaves out.
+
+| `--animus`, `geometry.py` | uld1 | uld2 | uld3 | window 11 |
+|---|---|---|---|---|
+| Animus from Vezax along the camp bearing | −2.4 | +5.3 | **−9.6** (he settled 14.1 yd north of the anchor) | −1.9 to +4.9 |
+| Ranged `past` / `walks` | 6-33% / 0-5 | 8-40% / 0-8 | **73-91% / 22-34** | 0-28% / 0-4 |
+| `vezax.reach` written | pulled 10, floor 3 | floor 10, pulled 9 | **floor 9 of 9** | - |
+| `flip.move.by:reach spell <-> vezax raid position` /min (window 14) | 0.18 (2.92) | 1.03 (24.86) | **36.96** (4.07) | 0 |
+| Pace, raid / ranged | 1.31 %/s, 161k / 89k | 0.87 %/s, 108k / 48k (loose) | 1.12 %/s, 138k / 61k | 1.24-1.35, 153-165k / 82-85k |
+| Mark far at 3:52 | 14/9 | 12/9 | 3/9 | |
+
+Crash deaths before the collapse 0 in all three. In uld3 the line to the Animus crosses row 0's radius
+first (`PullVezaxSlotIntoAnimusReach`, `UldEncounter_Vezax.cpp:197-211`), so every ranged slot stopped
+there, 40 yd from it; reach spell walked them to ~37 and the position node back, ranged median 28.2-29.5
+yd from Vezax, inside the Mark floor anyway.
+
+**Ranking.** uld2 and uld3 tie at 30.
+
+1. *uld2: the Animus loose from +7 s (bug, fixed below).* The bear off-tank Uldyab landed the first hit
+   at 3:08.77 and was its victim from 3:10.05; the warrior main tank Uldyaa, on the anchor 3.4 yd from it,
+   opened with Sunder, Rend and Shockwave IMPOSSIBLE and never got it. Every redirect (Misdirection
+   3:08.71, 3:09.31, Tricks 3:08.76, 3:09.28) went to Uldyaa (`VezaxAnimusRedirectAction`,
+   `UldActions_Vezax.cpp:137-145`), and `vezax threat multiplier` capped dps at 90% of the main tank's
+   threat (`UldMultipliers_Vezax.cpp:87-97` before), so above the bear's: 15 vetoes at +5-10 s and 23 at
+   +10-15 s (uld1, main tank holding: none before +60 s). A resto shaman's heals (34k in 7.5 s) took it
+   at 3:15.5 and the bear retook it at 3:16.7; demonology warlock Uldyav, vetoed at 3:17.19, cast Soul
+   Fire at 3:17.46 and took it from 36 yd at 3:19.77 while Uldyaa stood 9.1-9.9 yd off it. It hopped
+   through the camp (Uldyah, Uldyap dead), Heroism at +0 went on that, a healer died at 3:28, and
+   Uldyaa held it only from 3:45.0. Deaths ran from +50 s, the collapse at +68 s with 41% of it left.
+2. *uld3: the Animus behind Vezax (position question, Q1).* At a 14.1 yd north settle it stands 9.6 yd
+   behind him from the camp; no slot both clears the Mark floor and reaches it without new positions.
+   The same settle put row 0 44-48 yd from the main tank (healers within 41.5 of him 2-5% of the minute
+   before the spawn), round 3's predicted cost of the user's rows.
+
+**Also fixed, from round 5's review: healers' reach spell on the Animus (bug).** Healers switch to it
+(`VezaxSaroniteAnimusTrigger`, `UldTriggers_Vezax.cpp:112-135`), and the formation rule keeps reach
+spell for every ranged role (`UldDefinition_Vezax.cpp:47-48`), so a healer past 37 yd of it walked in and
+the position node walked it back: uld3's four healers 12-28 walks, 89-98% of the phase past (84 healer
+reach spell moves against 62 position moves), window 14 uld2 Uldyac 12 walks.
+
+**Fix** (Vezax files only):
+
+- `VezaxThreatMultiplier` (`UldMultipliers_Vezax.cpp:76-100`): the cap is 90% of the boss's victim's
+  threat when the victim is a tank, else the main tank's as before (with the Vezax stand-down). With the
+  main tank holding, as in 8 of the 9 Animus pulls since window 11, nothing changes.
+- Rule `vezax healer animus reach hold` (`UldDefinition_Vezax.cpp:52`): reach spell holds for a healer
+  whose target is the live Animus (`VezaxTargetingAnimus`, `UldEncounter_Vezax.cpp:776`, also used by
+  the field cast hold). Slots unchanged.
+
+Docs: `docs/raids/ulduar/vezax.md` (threat paragraph and Animus bullet, camp ceiling bullet, the
+north-settle gap). 10/25 and normal/hard: the threat cap keys on whoever the boss hits, tanks recognised
+by spec for a real player too; the Animus exists only in hard mode. Shared code: none.
+
+**Next window should show.**
+
+- Healers: `walks` 0 in `--animus`, `vezax healer animus reach hold` vetoes on healers only
+  (`postmortem.py --vetoes`), the reach spell/position flip no longer fed by healers. In a north settle
+  the walks were carrying healers toward the main tank (2.2k/s healing on him in uld3's phase against
+  1.2k/s the minute before): a main tank death before the collapse in such a pull is this hold's cost.
+- An off-tank holding the Animus: `vezax threat multiplier` vetoes on dps under its threat, the Animus on
+  a tank ~98% until the collapse, no non-tank victim in its first 60 s.
+- uld1-like geometry unchanged: pace 1.24 %/s or more, ranged `past` under ~33%, `walks` 0-5.
+- A north settle still loses the race until Q1 is answered: `vezax.reach = floor` on every ranged dps.
+
+**Observations, not chased.** A resto shaman's heal threat outran a bear's at +7 s from 36 yd; the
+threat change does not touch healers. The warrior main tank's first Animus GCDs read IMPOSSIBLE, so the
+off-tank beat him to it.
+
+**Questions (user).**
+
+- *Q1. When he settles 10+ yd north of the anchor the Animus stands behind him from the camp: which
+  constraint gives?* (a) Ranged dps cross the Mark floor only where the floor stop would leave their slot
+  past the Animus's ceiling, going to reach spell's own end point (~25 yd from him at uld3's settle). The
+  floor already fails there: ranged stood a median 28.2-29.5 yd from him and far was 3/9 at the 3:52
+  mark. Cost: the one Animus-phase mark (~+44 s) is drawn from the whole raid, ~44% melee or a tank.
+  Gain: uld1's ranged did 89k/s on it against uld3's 61k/s, ~18% of its health over 80 s, and uld3 was
+  3.4% short. (b) The main tank stands ~10 yd north of the anchor (round 3's (b)): he stays on his spawn,
+  the Animus by the tank sits on the camp side, and row 0 reaches the tank in every settle; needs the
+  south mark spots, the Animus melee lanes and `set behind` reworked, and navprobe. (c) Ranged arc round
+  at the floor radius to where it meets the Animus's reach (~70° off the camp bearing): keeps the floor,
+  but each group piles on one point ~5 yd from its own mark arc spot, so the arc must move too. (d) Keep:
+  the race is lost in that settle (1 of 9 Animus pulls since window 11). *Recommended: (a)*, small and
+  acting only where the floor is already lost to the flip; (b) if north settles keep starving the main
+  tank of heals.
