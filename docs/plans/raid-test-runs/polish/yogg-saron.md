@@ -791,3 +791,104 @@ on it, the spread's settle rule. A joined bot's share allows only the one tentac
 own keep never applies, and two joiners on one tentacle that both read another with fewer attackers before either
 switched would leave together and come back together. The Icecrown orphans, whose cluster's last tentacle dies
 under all of them at once, are the likely case.
+
+## Round 10 (2026-11-23, window 16 build 2d7853f0e: round 8; window 17 build 8bc2a82d3: rounds 8 and 9)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 2d7853f0e --pulls 10` and `--head 8bc2a82d3`: one
+valid pull per pool per window, 0 humans, Freya's 62670 on the raid. Read with the full `yogg_saron.py` and scratch
+scripts (`scratchpad/yogg-r10/`) over snapshots, `note`, `cast`, `act` and `move` rows: per wave the team by role,
+its damage on tentacles and on the Brain, where each bot stood when the door opened and when it reached the Brain,
+where joiners went, late portal entries against the hazards at their spot, phase 1 raid damage per window.
+
+| Window | Pool | Run | Trace | Out | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| 16 | uld1 | `tr-20261123-141451-20` | `603_20_yogg-saron_1795443342` | wipe 12:02, 32 deaths | 5: Icecrown 21.0, Chamber 9.5, Stormwind 9.6, Icecrown 19.2, Chamber 10.7 | from 9:45.9 with 3 tentacles (Crushers 4.7, 94.0%; Corruptor 92.4%), Yogg 30 → 19.7% |
+| 16 | uld2 | `tr-20261123-141451-21` | `603_21_yogg-saron_1795443347` | wipe 11:32, 31 | 5: I 18.3, C 7.0, S 12.9, I 23.0, C 8.8 | from 9:42.7 with 6 (Crushers 42.2, 25.3, 88.7%; Corruptors 14.8, 74.4, 83.4%), 30 → 24.8% |
+| 16 | uld3 | `tr-20261123-141411-19` | `603_19_yogg-saron_1795443297` | wipe 11:28, 31 | 5: C 13.6, S 17.1, I 17.3, C 9.8, S 12.2 | from 9:38.9 with 5 (Crushers 92.3, 98.0%; Corruptors 21.8, 68.2, 96.0%), 30 → 24.7% |
+| 17 | uld1 | `tr-20261123-145333-8` | `603_8_yogg-saron_1795445659` | wipe 11:49, 32 | I 14.3, C 8.1, S 11.5, I 6.6, C 0.8, S never cleared; Brain 58.8% | never |
+| 17 | uld2 | `tr-20261123-145233-7` | `603_7_yogg-saron_1795445599` | wipe 10:24, 30 | S 10.8, I 5.1, C 1.3, S 2.3, I never cleared (three healers); 80.5% | never |
+| 17 | uld3 | `tr-20261123-145554-9` | `603_9_yogg-saron_1795445800` | wipe 14:10, 33 | C 9.6, S 15.0, I 13.7, C 4.9, S 3.6, I 12.2, C 1.5, S never cleared; 39.6% | never |
+
+**Cycles to 30%:** window 16 five in every pull, the first window where all three reached phase 3; window 17 none
+(six, five and eight cycles, the Brain at 58.8 / 80.5 / 39.6%). Phase 3 opened with 3 / 6 / 5 tentacles, two,
+three and two of them Crushers (uld1's 4.7% one died at +4.1 s), against the user's goal of at most one.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- w16 uld1: phase 1 Shadow Nova 2 (Uldxai twice); phase 2 Death Ray 1; phase 3 Immortal Guardian 29.
+- w16 uld2: phase 2 Death Ray 1, Induce Madness script kill 1 (Uldyaj); phase 3 Immortal Guardian 29.
+- w16 uld3: phase 1 Shadow Nova 2 (Uldzaj twice); phase 2 Corruptor 1; phase 3 Immortal Guardian 28.
+- w17 uld1: phase 1 Shadow Nova 6 (three ranged at 1:10.9); phase 2 Laughing Skull 1, Death Ray 1, Squeeze 8,
+  Corruptor 7, Psychosis 1, Induce Madness script kills 8 (cycle 6's team, room never cleared).
+- w17 uld2: phase 1 Shadow Nova 6 (four melee at 1:51.75); phase 2 Grim Reprisal 1, Laughing Skull 2, Squeeze 5,
+  Corruptor 6, Malady 1, Psychosis 2, Brain Link 1, Induce Madness script kills 6.
+- w17 uld3: phase 1 Shadow Nova 4; phase 2 Laughing Skull 4, Death Ray 3, Squeeze 8, Corruptor 8, Brain Link 2,
+  Psychosis 1, Induce Madness script kills 3.
+
+**Verdict on round 8 (own-portal clicks, Flame Shock): spent clicks fixed, the rest not.** Clicks on a spent portal
+0 in every cycle of both windows (window 15: 13 / 7 / 14). Entries over 2 s after the open 26 / 23 / 20 of 50
+(w16) and 22 / 18 / 28 of 58 / 41 / 74 (w17) against 13 / 14 / 22 of ~48 a pull in window 15: no better. Never got
+one 0 / 0 / 0 (w16), 2 / 3 / 7 (w17, most in collapse waves). A cycle without its healer: w16 uld3 cycle 1 (ten
+melee, the bug picked below), w17 uld3 cycle 5 (Uldzac assigned, walked, never got a portal) and cycle 8.
+Flame Shock on Yogg 88 / 92 / 87% (w16; w17 had no phase 3), `yogg.p3dot` `flame shock` rows.
+
+**Verdict on round 9: the join made cycles worse; the exit cast hold works.** `joined` rows 15-29 a pull, 4-6 bots a
+Stormwind or Icecrown wave. Room clears against window 15 (Stormwind 28.9, Icecrown 23.6) and window 16, the same
+build staged: Stormwind 31.6 (24.5-39.8) and Icecrown 29.7 (26.0-37.1), w16 28.6 and 22.1. At the door nobody
+stood within 10 yd of the stage spot (w16: 12 bot-waves over its 9 such waves), melee reached the
+Brain a median 11.7 s after the door (w16 9.8 s), the first Brain hit came 7.1 s after it (w16 4.4 s), and
+Stormwind / Icecrown cycles took a median 11.2% (w16 17.3%). All 30 joins that took a tentacle took one
+53-85 yd from the stage, 26 of them with none inside 40 yd alive: the last tentacles are the far ones, so a joiner
+ends the clear
+there instead of walking back to the door. Joiners dealt 30k / 64k in all (uld1 / uld3), mostly walking 22-35 yd
+to their tentacle. The Chamber, untouched by it, also slowed (median 27.2 → 36.0 s), so not all of it is the join:
+w17's teams were weaker (16 phase 1 deaths left 1-4 melee dead, uld2's cycles 1-4 went down with 1-5 melee).
+Exit hold: no `caught by it` bot casting; 40 holds in uld1 (Army of the Dead 8, Slam 6, Frostbolt 5). uld2's
+Revive Pet hunter Uldyaj was charmed again at 7:05, casting nothing: the Chamber cleared at +38.5 s and he
+reached the brain room with 3.9 s left, 37 yd from the portal he walked to.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5). Rounds 8-10 picked three different phase 2 failures.
+
+**Ranking** across the six: phase 3 Immortal Guardians 86 (w16, stuck); w17's phase 2 collapse 59 (Corruptor 21,
+Squeeze 21, Induce Madness 17, all from cycle 4-5 on with 10-22M of tentacles on the platform); Shadow Nova 20
+(16 in w17); Laughing Skull 7; Death Ray 6; Psychosis 4; Brain Link 3; Malady, Grim Reprisal 1 each.
+
+**Top: the collapse is slow cycles, and its plain cause is round 9's join, a plan question** (below, not built).
+The rest of w17's loss: phase 1 raid damage was the same in all three windows (80-104k/s), so the bots were not
+weaker; the teams were (dead and benched melee), and with the per-second Brain rate unchanged once the team hits
+(0.80 against 0.86%/s, uld1 cycle 1), the cycle lost its seconds to the clear and the walk.
+
+**Picked, a bug: the brain team drops its healer when the melee fill it.** `GetYoggSaronBrainTeam`
+(`UldEncounter_YoggSaron.cpp:1014-1022` before the fix) built melee, the first healer, ranged, other healers, then
+cut to the spot count, so ten living unbenched melee at 25 (roster C has exactly ten) or four at 10 pushed the
+healer off. w16 uld3 cycle 1: ten melee went down, no healer (w15 and w17 uld3 each lost a melee in phase 1, so it
+did not show). The doc's rule is "melee first, then exactly one healer". Fix: with a healer available the melee band
+stops one slot short. Same at 10 and 25, normal and hard mode, with or without a player (a human non-tank master
+already takes one slot off the size). No shared code. Reader: `--portals` wave lines print the team by role and
+`NO HEALER` (`room_team_roles`, tested).
+
+**Next window should show:** every `--portals` wave line with `heal 1` unless its healer missed the portal, and a
+uld3 cycle with ten melee alive going down as nine melee and a healer. Round 9's join is still built, so cycles
+should read as w17's unless the user answers the question first.
+
+**Question for the user (round 9's join, a plan change).** Finished brain team bots that join a tentacle end the
+clear 53-85 yd from the door instead of at it, and the clear got no shorter. Should a finished bot go back to
+waiting at the stage spot when no live tentacle is within 40 yd of it (`…_STORMWIND_HELPER_RADIUS`, the strategy's
+"near the stage"), joining only one inside that? **Recommended: yes**: melee reached the Brain ~2 s sooner and the
+first hit ~3 s sooner when staged, about 2% of the Brain on two cycles in three; nothing measured paid for the join.
+
+**Seen, not picked.**
+
+- Late portal entries: of 18-28 a pull, 43% had a Death Ray within its 14 yd clear radius of the bot's spot at the
+  open, most trading the phase 2 spacing node against the portal walk; 2-5 a pull were moved to a farther spot
+  by the portals-up rebuild, which keeps only bots within 2 yd of theirs.
+- Phase 1 double novas: w17 uld2 1:47.86 / 1:51.75 (3.9 s apart, four melee dead) and uld3 1:00.57 / 1:05.33: the
+  raid took a second Guardian under 30% while the first waited out the gap, then Death and Decay ticks, Deep
+  Wounds, running DoTs and 0-5 `… on attacker` DoT casts a pull on parked Guardians (uld2: Curse of Agony at 1:50.3
+  and Corruption at 1:51.3 on a 3% one) finished it inside the gap.
+- w17 uld1 1:10.92: a Guardian dying 2.6 yd from the middle hit 20 raiders: cloud dodges had left the back line at
+  18.2-19.5 yd from the middle, 16.1-17.4 yd from it; three ranged died.
+
+**Review fixes.** A non-tank healer human master already counts as the team's one healer, so with him no bot
+healer goes and the melee fill the bot slots: the fix as built sent a bot healer beside him and one melee fewer,
+two healers in a room whose rule is exactly one.

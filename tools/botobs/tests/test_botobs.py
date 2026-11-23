@@ -1252,6 +1252,11 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.spent_clicks(clicks, entries), {2: (300, 4800), 3: (900, 1210), 4: (400, None)})
         self.assertEqual(yogg_saron.spent_clicks([], entries), {})
 
+    def test_room_team_roles_flags_a_wave_without_a_healer(self):
+        self.assertEqual(yogg_saron.room_team_roles({1: "melee", 2: "melee", 3: "heal", 4: "ranged"}),
+                         "heal 1 melee 2 ranged 1")
+        self.assertEqual(yogg_saron.room_team_roles({1: "melee", 2: "melee"}), "melee 2, NO HEALER")
+
     def test_station_catches_counts_deaths_inside_the_reach_of_the_ranged_spot(self):
         x, y = yogg_saron.RANGED_SPOT
         deaths = [(x + 12.1, y), (x + 14.9, y + 1.0), (x + 15.2, y), (x + 21.5, y), (x + 10.0, y + 20.0)]

@@ -1080,14 +1080,15 @@ on the platform every fourth wave, two waves without their healer. So a portal c
 teammate still on the platform holds. Arriving and clicking share one radius, so `holding` at an open
 portal is clickable.
 
-**The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a 60 s
-race on foot, and it doubles as the Crush answer. GUID order within each band so every bot derives the same
+**The brain team is melee first, then exactly one healer, then ranged; tanks never.** Melee stop one slot
+short of a full team, so the healer always goes. The room is a 60 s race on foot, and it doubles as the
+Crush answer. GUID order within each band so every bot derives the same
 team, except healers: Val'anyr's wielder (46017, its heals shield) first, since item level can't pick it,
 then priest, druid, shaman, paladin, since a cast-time spell cannot go off on the move
 ([pitfalls](../../engine/pitfalls.md#a-moving-bot-cannot-cast)) and a holy paladin spends a third to
 two-thirds of the room walking with most heals on a cast time. `GetYoggSaronBrainTeam` is the single owner,
 read by trigger and action alike, and benches low Sanity (below). A non-tank human master in the raid is
-counted as taking a portal of his own, so the bot team is one smaller.
+counted as taking a portal of his own, so the bot team is one smaller; a healer master is its one healer.
 
 **Phase 2 always hands phase 3 some tentacles.** `AddPortals` cuts `_summonSpeed` by 0.1 a wave, so by the
 sixth a Crusher spawns every 20-24 s, a Corruptor every 12-16 and a Constrictor every 6-8. The stun is the
