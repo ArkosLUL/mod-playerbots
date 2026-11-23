@@ -764,6 +764,9 @@ def firebot_pull() -> list[dict]:
         move(17500, TREE, mm.FIREBOT_STEP, 5.0, 22.0),
         {**move(17600, TREE, mm.FIREBOT_STEP, 6.0, 22.0), "ok": 0},
         move(18000, TREE, mm.FORMATION, 0.0, 22.0),
+        {"t": 16500, "e": "cast", "s": VX, "sp": mm.SPELL_SPINNING_UP, "tgt": 0, "ct": 4000},
+        {"t": 13500, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray ok +0 (back0)"},
+        {"t": 16900, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "flames+3 ok +0 (back0)"},
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
     records += [firebot_snap(when) for when in range(0, 20000, 250)]
@@ -807,12 +810,30 @@ class FireBotPull(unittest.TestCase):
         self.assertEqual((p4["aimed"], p4["aoe_holds"], p4["steps"]), (1.0, 2, 1))
         self.assertEqual(self.rows["P3"]["aoe_holds"], 1)
 
+    def test_a_spray_inside_a_barrage_window_with_no_spray_note_in_the_3_s_before(self):
+        p4 = self.rows["P4"]
+        self.assertEqual(p4["barrage_s"], 3.5)
+        self.assertEqual((p4["barrage_spray_hits"], p4["barrage_spray_deaths"], p4["barrage_spray_silent"]),
+                         (1, 1, 1))
+        self.assertEqual(p4["barrage_steps"], 1)
+        self.assertEqual(self.rows["P3"]["barrage_s"], 0.0)
+
+    def test_a_spray_note_in_the_3_s_before_means_the_escape_ran(self):
+        records = firebot_pull() + [
+            {"t": 15000, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray locked (move1)"}]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_7_mimiron_1789700006.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
+        self.assertEqual(rows["P4"]["barrage_spray_silent"], 0)
+
     def test_the_view_prints_each_phase(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             mm.show_firebots(self.trace)
         self.assertIn("P4", out.getvalue())
         self.assertIn("fire bots open 1", out.getvalue())
+        self.assertIn("in barrage windows (4 s): Water Spray 1 hits, 1 dead, 1 with no spray note", out.getvalue())
 
 
 AIM = 4294970600

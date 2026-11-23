@@ -284,10 +284,6 @@ bool MimironFireBotTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI))
         return false;
 
-    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
-    if (barrage.IsActive())
-        return false;
-
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
     if (IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE,
                                  ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))

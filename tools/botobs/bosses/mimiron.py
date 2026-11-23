@@ -86,6 +86,7 @@ AIM_LOOKAHEAD_MS = 500
 # event map unloads Heat Wave, Rocket Strike and Frost Bomb within a few seconds of each other.
 SPIN_WINDOW_MS = 14500
 SPIN_AFTER_MS = 15000
+SPRAY_NOTE_MS = 3000
 # Unit::GetMeleeRange against VX-001: its combat reach of 8, a player's 1.5, plus 4/3.
 MELEE_RANGE = 10.83
 FUSE_MS = 10000
@@ -1506,6 +1507,18 @@ def firebot_rows(trace: Trace) -> list[dict]:
     silences = siren_silences(trace, roster)
     holds = [rec["t"] for rec in trace.of("veto") if rec.get("m") == FIREBOT_AOE_GUARD]
     steps = [rec["t"] for recs in accepted_moves(trace).values() for rec in recs if rec.get("by") == FIREBOT_STEP]
+    windows = [(rec["t"], rec["t"] + SPIN_WINDOW_MS) for rec in trace.of("cast")
+               if rec.get("sp") == SPELL_SPINNING_UP]
+    spray_notes: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in notes(trace, "mimiron.flee"):
+        if str(rec.get("txt", "")).startswith("spray"):
+            spray_notes[rec["g"]].append(rec["t"])
+
+    def in_barrage(when: int) -> bool:
+        return any(start <= when < stop for start, stop in windows)
+
+    def silent(hit: dict) -> bool:
+        return not any(hit["t"] - SPRAY_NOTE_MS <= when <= hit["t"] for when in spray_notes[hit["d"]])
 
     rows = []
     for low, high, label in spans[first:]:
@@ -1524,6 +1537,7 @@ def firebot_rows(trace: Trace) -> list[dict]:
         inside = [rec for rec in hits if low <= rec["t"] < high]
         flames = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_FLAMES]
         spray = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_WATER_SPRAY]
+        barrage_hits = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and in_barrage(rec["t"])]
         rows.append({
             "label": label, "span": (low, high),
             "open": counts[0] if counts else 0, "close": counts[-1] if counts else 0,
@@ -1537,6 +1551,11 @@ def firebot_rows(trace: Trace) -> list[dict]:
             "aimed": aimed * SAMPLE_MS / 1000.0,
             "aoe_holds": sum(1 for when in holds if low <= when < high),
             "steps": sum(1 for when in steps if low <= when < high),
+            "barrage_s": sum(max(0, min(stop, high) - max(start, low)) for start, stop in windows) / 1000.0,
+            "barrage_spray_hits": len(barrage_hits),
+            "barrage_spray_deaths": sum(1 for when in spray_deaths if low <= when < high and in_barrage(when)),
+            "barrage_spray_silent": sum(1 for rec in barrage_hits if silent(rec)),
+            "barrage_steps": sum(1 for when in steps if low <= when < high and in_barrage(when)),
         })
     return rows
 
@@ -1559,8 +1578,14 @@ def show_firebots(trace: Trace) -> None:
               f" {row['spray_deaths']} dead; Deafening Siren {row['siren']} on, {row['silenced']:.0f} raid-s silenced")
         print(f"       raid aimed at a fire bot {row['aimed']:.0f} bot-s; splash guard holds {row['aoe_holds']};"
               f" spray or siren steps {row['steps']}")
+        if row["barrage_s"]:
+            print(f"       in barrage windows ({row['barrage_s']:.0f} s): Water Spray {row['barrage_spray_hits']} hits,"
+                  f" {row['barrage_spray_deaths']} dead, {row['barrage_spray_silent']} with no spray note before;"
+                  f" spray or siren steps {row['barrage_steps']}")
     print("\n  'gone' fire bots were alive in the phase and not at its end; holds are the guard's veto rows,"
-          " which latch per action, so they count episodes, not ticks")
+          " which latch per action, so they count episodes, not ticks; a barrage window is Spinning Up's"
+          f" cast plus {SPIN_WINDOW_MS / 1000:.1f} s, and 'no spray note' means the victim wrote none in the"
+          f" {SPRAY_NOTE_MS / 1000:.0f} s before the hit")
 
 
 def unreach_rows(trace: Trace) -> dict:
