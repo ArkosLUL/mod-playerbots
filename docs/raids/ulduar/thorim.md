@@ -295,15 +295,15 @@ Positioning has to clear 5 yd between stacks. The main tank drags Thorim to
 and 12 off Sif's loop), **latched per bot** (`EnsureRangedSlot`, `thorim.rangedslot`), because the
 shelter table is keyed by slot and a live re-derivation moves the key. Melee take a **dynamic ring of
 radius 8.8 around Thorim's live position**, three slots at the ring anchor bearing +90 / +180 / +270
-degrees, which leaves the whole tank side clear and puts the stacks 12.4 yd apart. The off-tank sits at
-+20 degrees, inside taunt range for the Unbalancing Strike swap. Slots are sticky per guid, handed out
-least-loaded so the melee spread evenly, and kept while a bot is dead, or a rezzed bot's slot comes
-back a quarter turn off. **`RingAnchorBearing` reads only the tank spot**: the live tank is deliberately
-not an input, as the rule rather than a fallback, so the ring cannot rotate as the boss shuffles.
-Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring recomputed from a moving boss
-leaves the bot sliding in place, and a moving bot casts nothing. The trigger sets the arrival latch on
-a "stay" answer and the action clears it right before it moves, since the action only runs when there
-is a move; set in a trigger it only widens the tolerance, so a second ask that tick still says stay.
+degrees, which leaves the whole tank side clear and puts the stacks 12.4 yd apart. Slots are sticky
+per guid, handed out least-loaded so the melee spread evenly, and kept while a bot is dead, or a
+rezzed bot's slot comes back a quarter turn off. **`RingAnchorBearing` reads only the tank spot**: the
+live tank is deliberately not an input, as the rule rather than a fallback, so the ring cannot rotate
+as the boss shuffles. Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring
+recomputed from a moving boss leaves the bot sliding in place, and a moving bot casts nothing. The
+trigger sets the arrival latch on a "stay" answer and the action clears it right before it moves,
+since the action only runs when there is a move; set in a trigger it only widens the tolerance, so a
+second ask that tick still says stay.
 
 **The deadband breaks for a hazard.** At ring radius a whole cone dodge is a chord of about 5 yd, so a
 settled bot in the cone never moved: **nine cone hits over two pulls** had a safe spot under 5 yd away.
@@ -384,10 +384,8 @@ polys.
 instant). A bot holds its bearing while a zone sits on it, so giving zones up cost 6-14 consecutive ticks
 at 4.3-4.9k, against 40-90k once for a hop. **The anchor term is still angle-only** — the tank sits at
 r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed. Nor does it
-count the off-tank: his spot sits **7.1 yd** from slot 2's default point (anchor +270°), so a chain
-reaching either tank runs on into slot 2, three lethal casts in three hard-mode pulls, two of them tank
-deaths. The bridge escape can't clear it (slot 2's point isn't clear); it takes a navprobed move of a
-tank spot or the slot.
+count the waiting tank, whose [spot](#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it) is
+placed off the ring instead.
 
 **A rotation does not always exist.** With a median **4 zones up at once (max 6)**, the 11 yd
 clearance leaves under 105° of ring free — too little for three slots plus the anchor — in
@@ -538,8 +536,9 @@ alive, still a tank and still on the floor, so a trade moves nobody. It is clear
 not active, not on reset, so it cannot ride into the next pull. Never the ring for either tank: a ring
 point is measured off the boss, so a tank on one orbits him at 8 yd instead of walking him, which once
 left Thorim **26 yd** off the anchor for a whole pull. An off-tank does not run the ring's
-arrive/reposition path in the positioning trigger and action either. The main tank backs into his
-spot, so he keeps facing the boss he drags. `ThorimTankPicked` takes
+arrive/reposition path in the positioning trigger and action either. The holder backs into its spot
+when the spot lies away from him and walks in forward otherwise, so it always faces the boss it drags.
+`ThorimTankPicked` takes
 `tank assist` away from tanks in phase 2 only: left voting, it held a tank on a Warbringer for the first
 30 s while Thorim ate the camp, and in phase 1 holding whatever swings at the raid beats steering a tank
 onto the ranged pick.
@@ -550,7 +549,9 @@ him from the off-tank spot turns him **39°** off it over 399, half the phase ea
 against that axis, so the swing is what drags the outer slots into his front arc. **Whichever tank
 holds him now takes the anchor**, every other tank the off-tank spot, and both are fixed points: at
 3.5 yd apart a trade steps him inside `ULDUAR_THORIM_RING_REPOSITION_TOLERANCE` (5), so it no longer
-unlatches the ring the way the old 7.07 yd off-tank spot did.
+unlatches the ring the way the old 7.07 yd off-tank spot did. **That includes the anchor tank while it
+waits**: keyed on its role, it kept the anchor and stood on the holder for 40-58% of the waiting time in
+nine 25-man pulls. It keeps the anchor only while no tank holds him, for the pickup.
 
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
 phase 1, so the pickup taunt hands him straight back
@@ -569,11 +570,27 @@ trace.
 
 **Both tank spots are absolute**, because an anchor measured off the thing you are dragging has no
 fixed point: an off-tank spot off the boss's live position walked the pair **256 and 92 yd** in phase
-2 against **39 yd** in a kill. The off-tank's is **(2114.25, -252.65, 419.508), 3.5 yd** off the tank
+2 against **39 yd** in a kill. The off-tank's is **(2107.25, −252.65, 419.371), 3.5 yd west** of the tank
 spot, inside the ring's 5.0 yd reposition tolerance, so a taunt trade does not unlatch the ring;
-navprobe settles that Z and reads **16/16 on mesh** on a 3.5 yd sweep. The old 7.07 yd offset and 3.5
-both sit inside the 8 yd jump, so **the tank pair bridges either way**, still unfixed. Two related
-traps: **a victim change re-seats him at the chase near point and he never moves again**
+navprobe settles that Z, with a straight path from the tank spot. The pair still bridges (3.5 yd against
+the 8 yd jump), but **west keeps the chain off the ring**. Thorim rests 4.8-7.4 yd south-east of the tank
+spot, so the old spot 3.5 yd east stood 2.9-5.7 yd from his centre and 7.1 yd from slot 2's default
+point: a chain reaching either tank ran on into slot 2, three lethal casts in three hard-mode pulls, two of
+them tank deaths, and the bridge escape can't clear it (slot 2's point isn't clear). Replayed on six
+25-man pulls, a non-tank body stood within 8 yd of the old spot in 84-100% of settled phase 2 snapshots
+(slot 2's in 67-100%), of the new one in 18-36% (one pull 88%; slot 2's 0-46%). Its costs:
+
+- **Sif's Blizzard**: 1.0 yd off the bunny's path (leg (2104.3, −256.3) → (2109.3, −246.4)), against 4.1
+  for the tank spot and 7.2 for the old one; replayed zone drops give it the tank spot's 36-61 ticks a
+  hard-mode pull, the old spot 30-50.
+- **Melee reach**: 7.1-10.2 yd from his centre, past the 9.0 yd where `reach melee` fires in most
+  snapshots of two pulls of six. Reach is exempt from the tank anchor guard, so the waiting tank steps in;
+  the positioning row walks him back only past 2.5 yd (its 1 yd is net of his 1.5 reach).
+
+Sif's Frost Nova lands farther off: her floor spots came 8.1-9.8 yd from it at nearest, the old spot
+2.5-8.0.
+
+Two related traps: **a victim change re-seats him at the chase near point and he never moves again**
 (`ChaseMovementGenerator::DoUpdate`; in one pull he rested 7.4 yd off the tank spot against 4.1-5.9 in
 the others, putting the outermost ranged slot 6.9 yd outside the melee ring), and whoever holds him
 eats the Blizzard, which is why the dodge was towing him across the arena for **36,283 and 32,799** of
@@ -1092,3 +1109,20 @@ band, and seven shelters land 4.5-17.3 yd from the anchor against the 22 yd floo
 bridging Chain Lightning in. It is a full re-solve of six home spots and twelve shelters plus eighteen
 navprobes, not a nudge, and each new point needs the hazard check navprobe does not make
 ([pitfalls](../../engine/pitfalls.md#a-solved-table-outlives-the-traces-it-was-solved-from)).
+
+## What a trace answers
+
+`tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode) and
+`thorim.ringspot` (each ring bot's slot):
+
+- `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
+- `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
+  slot, tank-to-ring hops and deaths; tank deaths; Thorim's distance off the tank spot and facing off its
+  axis; trades (his move across one, strike to swap, his time on a non-tank); the waiting tank's offset,
+  time on the holder, distance from him, share past 9.0 yd and moves; who stands within 8 yd of each
+  tank; ring spacing, front-arc share, uptime and moves; camp spacing; Blizzard, Lightning Charge and
+  Frost Nova on holder and waiting tank; his health lost per second.
+
+Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
+counts from 15 s after the drop. Hop order is damage order (each hop does 1.5 times the last), and pets'
+hops are not in the trace.
