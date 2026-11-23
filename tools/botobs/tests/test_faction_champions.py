@@ -1424,6 +1424,68 @@ class IceDuty(unittest.TestCase):
         self.assertEqual(fc.escapee_seconds(self.trace), {ROGUE_C: 3.0})
 
 
+NARRHOK_C = CREATURE | 20
+BROLN_C = CREATURE | 21
+
+
+def tauren_pull() -> list[dict]:
+    roster = [{"g": WARRIOR, "n": "Shield", "r": "tank", "c": 1, "h": 0},
+              {"g": ICE_DK, "n": "Felesta", "r": "melee", "c": 6, "h": 0},
+              {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0}]
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": NARRHOK_C, "en": 34453, "n": "Narrhok Steelbreaker", "b": 1},
+        {"t": 1, "e": "unit", "g": BROLN_C, "en": 34455, "n": "Broln Stouthorn", "b": 1},
+        note(0, ICE_DK, fc.ICE, NARRHOK_C),
+        cast(0, ICE_DK, fc.SPELL_CHAINS_OF_ICE, NARRHOK_C),
+        note(1000, ROGUE, fc.PEEL, NARRHOK_C),
+        cast(1000, ROGUE, 51722, NARRHOK_C),
+        note(1100, ROGUE, fc.PEEL, 0),
+        cast(3000, BROLN_C, 65970, ROGUE),
+        cast(4000, NARRHOK_C, 68784, ROGUE),
+        cast(5000, NARRHOK_C, 68764, ROGUE),
+        cast(9000, ICE_DK, fc.SPELL_CHAINS_OF_ICE, NARRHOK_C),
+        cast(14000, NARRHOK_C, 65924, ROGUE),
+        cast(22000, WARRIOR, 676, NARRHOK_C),
+        cast(25000, NARRHOK_C, 68784, ROGUE),
+        {"t": 30000, "e": "end", "out": "wipe"},
+    ]
+
+
+class IcedTaurenDisarm(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in tauren_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_disarm_while_iced_reads_the_gated_casts_after_it_and_the_rest(self):
+        self.assertEqual(fc.iced_disarms(self.trace), [
+            {"guid": NARRHOK_C, "disarms": [1000], "after": 1, "other": 1},
+            {"guid": BROLN_C, "disarms": [], "after": 0, "other": 0}])
+        self.assertEqual([(row["t"], row["spell"], row["duty"], row["iced"]) for row in fc.peel_casts(self.trace)],
+                         [(1000, "Dismantle", True, True), (22000, "Disarm", False, False)])
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_peel(self.trace)
+        text = out.getvalue()
+        self.assertRegex(text, r"Dismantle +rogue +1  1 / 0; iced 1")
+        self.assertRegex(text, r"Disarm +warrior +1  0 / 1; iced 0")
+        self.assertIn("Narrhok Steelbreaker (Tauren): Disarm or Dismantle while iced 1 (first 0:01.000); its"
+                      " disarm-gated casts while iced: 1 within 10 s after one, 1 otherwise", text)
+        self.assertIn("Broln Stouthorn (Tauren): Disarm or Dismantle while iced 0; its disarm-gated casts while"
+                      " iced: 0 within 10 s after one, 0 otherwise", text)
+
+
 def run_snap(when: int) -> dict:
     # the warrior champion runs 8 yd/s 5 yd behind the mage to 3.5 s, 4 under Concussive Shot to 6 s, then flees;
     # the iced rogue champion runs 8 yd/s at the mage too, the DK champion at the tank

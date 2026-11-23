@@ -548,3 +548,67 @@ Touch. Recommendation unchanged: yes, Disarm and Dismantle only. Q2: not due (ab
 
 **User answer (2026-11-22) to Q1:** yes: a disarm peel (warrior Disarm, rogue Dismantle) may go on an iced
 Tauren champion whose victim is not a tank.
+
+## Round 7 (2026-11-23, builds Q1; no new pulls)
+
+**Data.** None new: window 14 is pulling round 6. Window 13 (round 5 build `a55056c40`, the three traces of round 6)
+reread for the baseline with the reader's new `--peel` line. Scratch script in the round's scratchpad `fc7/` (gone with
+it).
+
+**Stop rules, verdict, ranking.** Skipped: no pull has round 6 in it. Deaths as round 6's table: toc1 wipe 29 (Ruj'kah 7,
+iced Broln 5 + lapsed 1, Ginselle 4, Maz'dinah 3 + 1, Gorgrim 2 + 2 lapsed, Narrhok never iced 2, Harkzog 2), toc2 kill 3
+(free Narrhok 2, iced Gorgrim 1), toc3 kill 4 (Ruj'kah 2, Vivienne 2).
+
+**Q1 checked before building.**
+
+- Disarm lands on both: Narrhok 34453 and Broln 34455 carry `CreatureImmunitiesId` -12 (25H 35720, 35682: -13), which
+  `creature_immunities` gives charm only (-13 adds taunt and Attack Me); no disarm mechanic (3). Addon aura only
+  Champion's Aegis 68595 (aura 229). No `spell_linked_spell` row on 676, 51722 or the gated spells. `flags_extra` carries
+  `CREATURE_FLAG_EXTRA_ALL_DIMINISH`, so `DIMINISHING_DISARM` applies. Bladestorm 65947's immunity mask 477 maps
+  (`SpellInfo` special case) to snare, root, fear, stun and the like, not disarm.
+- DBC: Disarm 676 auras 67 (main hand), 278 (ranged), Defensive Stance only (Stances 0x20000, form 18), so only a
+  prot warrior casts it; Dismantle 51722 auras 67, 254 (off hand), 278, 60 s. Both 10 s, mechanic 3.
+- What it stops (`boss_faction_champions.cpp`, rechecked every 5 s): Narrhok skips Bladestorm's start, Mortal Strike
+  (68784 on 25H), Overpower, Sunder Armor, Shattering Throw and Retaliation, never Charge or Intimidating Shout. Broln's
+  Lava Lash needs the off hand and Stormstrike skips only with both hands gone, so only Dismantle stops them; his Earth
+  Shock (68102) is gated by silence only. Gorgrim (DK) loses only Frost Strike; Chains of Ice, Death Coil, Death Grip,
+  Icy Touch and Strangulate go on. So no disarm stops a champion's ranged casts, only its weapon specials.
+- White swings: the main hand keeps full damage. `Creature::CalculateMinMaxDamage` multiplies its out-params by 0.5
+  before it computes them, so the halving the boss doc cited (`StatSystem.cpp:1156`) is dead. A disarmed off hand neither
+  swings (`UnitAI::DoMeleeAttackIfReady`) nor deals damage, so Dismantle takes Broln's off-hand swings too; Narrhok
+  carries a shield (46964).
+- The PvP trinket fires on fear, freeze, stun or confuse only (`IsCCed`), so a disarm leaves trinket and Chains alone.
+
+**Baseline, window 13** (`--peel`, the iced Tauren's disarm-gated casts while iced): toc1 iced Broln 48 (Stormstrike 25,
+Lava Lash 23; 345k of his 748k, melee 323k), 0 disarms on him; toc2 iced Narrhok 2 disarms (5:50), 1 gated cast within
+10 s after one, 5 otherwise; toc3 iced Narrhok 0 disarms, 14 gated. Disarms on champions: rogue Dismantle 3, 6, 3; the
+prot warrior tank's Disarm 6 on toc2 (4 off a peel duty).
+
+**Fix** (`ToCHelpers_FactionChampionsDefence.cpp`). The peel takes an iced Tauren (Broln, Narrhok) whose victim is no
+tank within its swing reach + 2.25 yd, ranked after every free champion, and gives it only `ReadyDisarm`: in melee, not
+already disarmed, a rogue's Dismantle or a Defensive Stance warrior's Disarm, the latter never on an Enhancement (it
+stops nothing there), free champions included. The peel's DR, immunity, LOS and guard checks apply as before; no other
+peel, CC or snare reaches an iced champion. Reader `--peel`: peels on an iced champion counted (`iced`), and per Tauren
+the raid's Disarms and Dismantles while iced with its disarm-gated casts while iced, within 10 s after one or not
+(`iced_disarms`). Boss doc: the disarm mechanics corrected (no damage halving, Defensive Stance), Peel, Ice duty.
+
+**Next window should show.** `--peel`: "Disarm or Dismantle while iced" above 0 wherever a Tauren is iced (window 13: 0,
+2, 0), its gated casts "within 10 s after one" few against "otherwise" (48, 5, 14 this window), `Dismantle rogue ...
+iced` above 0, no warrior Disarm on Broln. No more deaths to an iced Tauren (window 13: iced Broln 5 on toc1, iced
+Narrhok 0). A small gain at most: two rogues on a 60 s cooldown, in melee only, the second within 15 s at half duration.
+
+**Seen, not picked.** Every warrior Disarm comes from a prot tank in Defensive Stance; the DPS warriors never cast one.
+
+**Questions for the user.** None new. Q2 (ice order with fewer DKs than melee champions) still not due; recommendation
+unchanged.
+
+**Review.** The case holds: on window 13 toc1 Broln dealt 707k of his 748k while iced, Lava Lash 165k and Stormstrike's
+two hits 180k, and the reader reruns the baseline above unchanged. The core facts check out: Lava Lash gated on the off
+hand, Stormstrike on both, the halving dead, `IsCCed` blind to a disarm. No size, mode or player branch: the entries are
+the base ones on every difficulty, and a player's disarm counts through the unit flags.
+
+- Review fix: `ReadyDisarm` read Broln as disarmed on the main-hand flag, so a main-hand-only disarm (a player's Disarm,
+  Psychic Horror) kept the rogues' Dismantle off him, though only the off hand gates Stormstrike and Lava Lash. On an
+  Enhancement it reads the off-hand flag now.
+- Left: the disarm goes to the Tauren two by entry, as the user answered, so against a Horde raid the Alliance Warrior
+  and Enhancement get none while iced.
