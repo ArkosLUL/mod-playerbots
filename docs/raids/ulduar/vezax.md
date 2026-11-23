@@ -447,8 +447,8 @@ since the collapse tick reads the dead as 0. `--crash`'s `in` counts bots that t
 the dodge aside, toward a landing impact by the strategy's own test; its summary names the movers and how
 many hit bots took one. Its `late` counts bots whose accepted dodge could not leave the blast by the
 landing at 7 yd/s, the strategy's test with base run speed. `--tank` takes the tank he hit longest as
-the main tank: Beacon of Light's share of the pull on him and on another tank, before the Animus and
-after it, the copies landing on him to his first death, and Sacred Shield casts by target.
+the main tank: to his first death, Beacon of Light's share on him and on another tank before the
+Animus and after it and the copies landing on him; Sacred Shield casts by target.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is

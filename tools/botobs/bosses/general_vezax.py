@@ -1170,7 +1170,8 @@ def show_tank(trace: Trace) -> None:
     else:
         for label, share in (("before the Animus", buffs["before"]), ("after it", buffs["after"])):
             if share:
-                print(f"  Beacon of Light {label}: on him {share[0]:.0%}, on another tank {share[1]:.0%}")
+                print(f"  Beacon of Light while he lived, {label}: on him {share[0]:.0%},"
+                      f" on another tank {share[1]:.0%}")
         copies = buffs["copies"]
         print(f"  beacon copies {copies['cast']:,} cast, {copies['him']:,} landed on him and"
               f" {copies['others']:,} on others, overheal aside, to his first death")

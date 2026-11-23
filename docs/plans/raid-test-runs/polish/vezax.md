@@ -1532,3 +1532,15 @@ uld1 0:20: the crash +2.6 s aimed at the marked bot itself, whose dodge headed f
   taking damage within Beacon's 60 yd rather than `HealDistance`? The Vezax nodes cover this boss.
   *Recommended: yes, as its own lane*: every boss with a holy paladin and a tank parked past 38.5 yd
   gets pulled again.
+
+**Review.** The cause holds (`vezax-r12/beaconwhy.py` re-run, `vezax-r12-review/phasecopies.py`). w24
+uld2: the class pick moved Beacon to the bear at 0:16.8 with Uldyaa 42.3 yd from the paladin, past
+`HealDistance` and both reaches; at the 1:47.0 and 3:17.3 refreshes he stood inside it (41.4, 37.7 yd)
+and the swap margin kept the bear. In the phase its copies cast 95.9k on the bear, 8.5k effective, while
+he took 3.99k/s and got 3.07k/s. `--tank` on windows 23-24: Beacon on another tank 92-99% after the spawn
+in w23 uld1, w23 uld2 and w24 uld2, on him 100% in w24 uld1. Not a plan change: the class value means
+Beacon for the tank taking damage (`PaladinTankToBeaconValue.h:15`), and XT-002 does the same. No size,
+mode or player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: `--tank`'s Beacon shares stop at his first death like its copies; its output and the
+  trace section now say so.
