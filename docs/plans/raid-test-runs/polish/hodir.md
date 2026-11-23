@@ -888,3 +888,19 @@ as round 8: uld1 0, uld2 1 (off-tank Frozen Blows swing, window 3, Barkskin up),
 **Also seen.** If the next window still shows ~3 clouds a cycle, the remaining lever is the second
 shaman block ahead of the second mage's last two breakers, which pushes the second fire back (Singed
 lapses 25 s after a landing); not proposed until this round is judged.
+
+**Review (round 9).** The build matches the user's answer (order, 3 shaman breakers, budget 8 while a
+mage or shaman block is up, both gather bugs, `_LAST_WAVE_HEALTH_PCT` untouched), on one code path
+for 10/25, both modes and a player in the raid; no shared code; pb-check passes. The new facts hold:
+`64528` in the spell data is aura 89 at 10% a 1 s tick for 10 s; the lane's `unseated.py` gives the
+61 unseated blocks a median 9.6 s after the first mage; w14 uld2's first clouds land 3.6-4.2 s after
+their shaman block; `replay_1.5.txt` reproduces the cycle means. Fixed:
+- Findings doc: "a 10-man's three face the same eight blocks"; a 10-man spawns four (the `_10` row
+  only; window 15's 10-man traces `603_16`/`603_17`), so one breaker at a time.
+- The reader's two new docstrings went (comments rule).
+- `LatchHodirStormReceivers` built a member list on every gather call (several a bot a tick); it
+  walks the group a second time only when a cloud has landed.
+
+Left, for the next window to judge (already a watch item): a latched receiver now walks back from any
+distance while its cloud lives, and the position node stands down for it all that time, including
+on a stale rally (a tank carrier never walks to its rally; a carrier frozen away from it).

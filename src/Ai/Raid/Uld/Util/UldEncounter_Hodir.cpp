@@ -444,15 +444,12 @@ static void LatchHodirStormReceivers(Player* bot)
 
     HodirBotLatches& latches = HodirLatchesFor(bot);
 
-    std::vector<Player*> members;
     std::vector<std::pair<Player*, Position>> landed;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
             continue;
-
-        members.push_back(member);
 
         Aura const* cloud = HodirStormCloudOn(member);
         if (!cloud)
@@ -472,9 +469,11 @@ static void LatchHodirStormReceivers(Player* bot)
     if (landed.empty())
         return;
 
-    for (Player* member : members)
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
-        if (!IsHodirStormDealer(member) || HodirStormCloudOn(member))
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId() ||
+            !IsHodirStormDealer(member) || HodirStormCloudOn(member))
             continue;
 
         if (!HoldsHodirStormPower(member) && GetHodirStormReceiverCarrier(latches, member))

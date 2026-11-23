@@ -134,21 +134,21 @@ itself too: Biting Cold's tick (`CastCustomSpell(target, SPELL_BITING_COLD_DAMAG
 **Helper blocks are broken mage, shaman, druid, priest** (`GetHodirAssignedHelperBlock`):
 `ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** a mage block, `_SHAMAN_BLOCK_BREAKERS` **3** a shaman
 block, one each for druid and priest, inside the 8-breaker budget, which always leaves
-`_HELPER_BLOCK_MIN_FREE` 2 of the ranged present on him (a 10-man's three face the same eight
-blocks) — **and drops to `_LATE_BLOCK_BREAKERS` 3 once no mage or shaman block is left**, since
-nothing still on ice holds up the next fire or cloud: with the drop keyed on mages alone, **170-176
-bot-seconds a pull**, near a tenth of the ranged group's whole fight, went on ice after the last mage
-was already free. Once the first mage is free, the second keeps its five beside the first shaman's
-three (`static_assert`ed within the 8). **The budget is one ceiling over every block up, never a
-per-block cap**: one freeze ices all eight helpers, so a cap per block multiplied, 8 × 5 slots over
-18 eligible bots, and put every dps on ice, up to eleven on one block a median 21 yd from the boss.
-Breakers are ranged (melee only when the raid has none): a melee bot leaving him makes a ~21 yd
-round trip. Tanks get only the boss: he follows his holder, so a tank walking 20 yd to a block drags
-him onto the ranged. Blocks are swept
-from the boss, not the bot, so every bot sees the same set. A block (32938, 110,675 hp) is summoned
-by the helper inside it, so `ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget`
-writes that kind before the guid. The helper entries come in `_10` and `_25` rows per faction: the
-`_10` row spawns in both sizes, the `_25` row only in 25-man.
+`_HELPER_BLOCK_MIN_FREE` 2 of the ranged present on him (a 10-man's three face four blocks, one
+breaker at a time) — **and drops to `_LATE_BLOCK_BREAKERS` 3 once no mage or shaman block is
+left**, since nothing still on ice holds up the next fire or cloud: with the drop keyed on mages
+alone, **170-176 bot-seconds a pull**, near a tenth of the ranged group's whole fight, went on ice
+after the last mage was already free. Once the first mage is free, the second keeps its five beside
+the first shaman's three (`static_assert`ed within the 8). **The budget is one ceiling over every
+block up, never a per-block cap**: one freeze ices all eight helpers, so a cap per block multiplied,
+8 × 5 slots over 18 eligible bots, and put every dps on ice, up to eleven on one block a median 21
+yd from the boss. Breakers are ranged (melee only when the raid has none): a melee bot leaving him
+makes a ~21 yd round trip. Tanks get only the boss: he follows his holder, so a tank walking 20 yd
+to a block drags him onto the ranged. Blocks are swept from the boss, not the bot, so every bot
+sees the same set. A block (32938, 110,675 hp) is summoned by the helper inside it, so
+`ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget` writes that kind before the
+guid. The helper entries come in `_10` and `_25` rows per faction: the `_10` row spawns in both
+sizes, the `_25` row only in 25-man.
 
 **A mage's fire lands ~9 s after its block breaks, and only the block time is a lever.**
 `npc_ulduar_hodir_mage` polls its release every 1 s (`EVENT_TRY_FREE_HELPER`), then

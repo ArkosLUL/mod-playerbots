@@ -349,8 +349,6 @@ RECEIVER_FATES = ("pulse 1-3", "pulse 4", "pulse 5+", "other cloud", "none")
 
 
 def receiver_fate(start: int, got: int | None, other: bool) -> str:
-    """What a damage dealer in a cloud's leash at landing got: Storm Power from that cloud at `got`,
-    by pulse, else from another cloud during its life, else none."""
     if got is None:
         return "other cloud" if other else "none"
     pulse = round((got - start) / 1000)
@@ -358,8 +356,6 @@ def receiver_fate(start: int, got: int | None, other: bool) -> str:
 
 
 def cycle_clouds(starts: list[int], landings: list[tuple[int, int]]) -> list[list[tuple[int, float]]]:
-    """Storm Clouds by freeze cycle: for each cycle start in `starts` (the pull, then each wave of blocks), the
-    `(t, source)` landings before the next start, as `(source, seconds after the cycle start)`."""
     out = []
     for index, start in enumerate(starts):
         stop = starts[index + 1] if index + 1 < len(starts) else None
