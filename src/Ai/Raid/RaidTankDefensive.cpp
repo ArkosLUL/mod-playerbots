@@ -75,7 +75,7 @@ std::array<TankDefensive, 11> const TANK_DEFENSIVES = { {
 
 constexpr uint32 HEALTH_ROW_AFTER_HIT_MS = 3000;
 
-bool RunesReady(Player* bot, SpellInfo const* info)
+bool RunesReady(Player* bot, SpellInfo const* info, uint32 withinMs)
 {
     SpellRuneCostEntry const* cost = info->RuneCostID ? sSpellRuneCostStore.LookupEntry(info->RuneCostID) : nullptr;
     if (!cost || cost->NoRuneCost() || bot->getClass() != CLASS_DEATH_KNIGHT)
@@ -88,7 +88,7 @@ bool RunesReady(Player* bot, SpellInfo const* info)
     int32 death = 0;
     for (uint8 i = 0; i < MAX_RUNES; ++i)
     {
-        if (bot->GetRuneCooldown(i))
+        if (bot->GetRuneCooldown(i) > withinMs)
             continue;
 
         RuneType const rune = bot->GetCurrentRune(i);
@@ -105,18 +105,18 @@ bool RunesReady(Player* bot, SpellInfo const* info)
     return shortBy <= death;
 }
 
-bool CanPayDefensive(Player* bot, uint32 spellId)
+bool CanPayDefensive(Player* bot, uint32 spellId, uint32 withinMs = 0)
 {
     SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
     if (!info || bot->GetCommandStatus(CHEAT_POWER) || info->PowerType == POWER_HEALTH ||
         info->PowerType >= MAX_POWERS)
         return true;
 
-    if (info->PowerType == POWER_RUNE && !RunesReady(bot, info))
+    if (info->PowerType == POWER_RUNE && !RunesReady(bot, info, withinMs))
         return false;
 
-    return info->CalcPowerCost(bot, info->GetSchoolMask()) <=
-           static_cast<int32>(bot->GetPower(Powers(info->PowerType)));
+    return withinMs || info->CalcPowerCost(bot, info->GetSchoolMask()) <=
+                           static_cast<int32>(bot->GetPower(Powers(info->PowerType)));
 }
 
 uint32 CoverMs(TankDefensive const& entry, uint32 needMs)
@@ -207,7 +207,8 @@ TankDefensive const* FindReadyTankDefensive(Player* bot, bool physicalOnly, uint
                 continue;
         }
 
-        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs)
+        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs &&
+            CanPayDefensive(bot, entry.spellId, withinMs))
             return &entry;
     }
 

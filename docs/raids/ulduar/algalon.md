@@ -90,10 +90,11 @@ healers were still phased. Then:
   left, so it still reaches a hole after the GCD), a paladin Hand of Sacrifice, and healers spend one global
   on it (shield, renew, rejuvenation, lifebloom, riptide, earth shield, sacred shield): only what is already
   on it ticks in the second it is alone.
-- A bot holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown
-  and, for Divine Protection, Forbearance run out in time) hands him to a bot partner that has one and ≤ 2
-  stacks, 15 s out. A holder at 3 stacks with the cast ≤ 15 s away hands over to a partner at ≤ 1: the
-  Phase Punch behind the cast lands on the soaker, and a 5th stack leaves nobody unphased.
+- A bot holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown,
+  Forbearance for Divine Protection and the runes for Vampiric Blood run out in time; runic power isn't
+  judged ahead) hands him to a bot partner that has one and ≤ 2 stacks, 15 s out. A holder at 3 stacks with
+  the cast ≤ 15 s away hands over to a partner at ≤ 1: the Phase Punch behind the cast lands on the soaker,
+  and a 5th stack leaves nobody unphased.
 - The soak buttons are reserved (see "Cooldowns").
 
 Humans get two raid warnings: at cast start, who soaks and that everyone else should stand by a hole (a human

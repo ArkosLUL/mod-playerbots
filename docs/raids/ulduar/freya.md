@@ -322,12 +322,12 @@ when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear sp
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
 time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
 `freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
-Sacrifice it can reach, only while none of the three is up and he has no own button running or ready
-(`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them too). Reach
-is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a paladin healing
-from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button
-cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's repeat filter keeps a later
-cast of the same button.
+Sacrifice it can reach, only while none of the three is up and he has no own button running, or ready and
+affordable now (`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them
+too). Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a
+paladin healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`,
+`freya.addext`: the button cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's
+repeat filter keeps a later cast of the same button.
 
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
