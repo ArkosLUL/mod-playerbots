@@ -120,17 +120,22 @@ terrain height is meaningless here.
 
 **Every boss-relative destination is checked against the floor before the walk**, because he roams:
 after one collapse he chased loose ranged ~100 yd north, four camp bots strafed off the hall's north
-edge and fell under the map, and he regenerated to full where he could not reach them. The slot, the
-strafe and the mark spots go through `Map::CheckCollisionAndGetValidCoords` from the bot, like the hazard
-sweep's candidates, and the walk goes to its answer, which pulls a point past the navmesh edge back onto
-it. A failed call, or an answer more than 5 yd above or below the bot, is refused: for a player the call
+edge and fell under the map, and he regenerated to full where he could not reach them. The slot and the
+strafe go through `Map::CheckCollisionAndGetValidCoords` from the bot, like the hazard sweep's
+candidates, the mark spots along the line from him, and the walk goes to its answer, which pulls a
+point past the navmesh edge back onto it. A failed call, or an answer more than 5 yd above or below
+the bot, is refused: for a player the call
 [settles an off-mesh point on the ground below](../../engine/pitfalls.md#movement-that-silently-no-ops)
 and still passes. A refused slot or mark spot holds the bot where it stands; a refused strafe, or one
 pulled back into the blast, falls to the hazard sweep, which here and in the melee mark break accepts
 only ground within 5 yd of the bot's height. The slot is checked only when the bot has to walk, since the
 position node runs every 2 s for every camp bot. The check is a straight line, so a navmesh hole between
 bot and slot strands the bot at its edge where a pathed walk goes round: `vezax.floor = edge` while he
-stands near his spawn means that.
+stands near his spawn means that. One sits at about (1860-1862, 113.5-115), in front of or inside the
+camp as he settles; every edge read in windows 14-22 clipped there. From the bot it cut the walk to an
+arc spot across the camp: the marked bot stopped at the clip, read itself arrived, and stood in its own
+group's leech (41-75 ticks in four windows against a median 11; one let him heal 5% and drained two
+healers 20 points). Lines from him to the arc and south spots never cross it.
 
 ## Mark of the Faceless is the fight
 
@@ -205,6 +210,15 @@ a 1.9s walk. The strafe ignores where the crash went, so its spot is checked aga
 floor or still in the blast. A slot pulled toward the Animus can sit past its group's inner file, so its
 strafe may end only 10.2 yd clear. The dodge itself yields once the bot is clear, so the soak can walk it
 back into the field the missile leaves and class interrupts get the ticks between.
+
+**A ranged dps on the Animus strafes into its reach** (`vezax.dodge = pulled`): when the strafe ends
+farther from it than the slot pull's reach, the strafe gets the same pull, kept only if it stays 11 yd
+off the impact; else the plain strafe. 15 yd across from a pulled slot left the Animus's 37 yd ceiling
+in 416 of 597 ranged dodges in its phase (windows 15-22), always the group on his far side from it:
+that group spent 19-44% of the phase past the ceiling, walking back by reach spell and position,
+against 5-13% for the near one; in a pull that lost the race 7% short it did 14k/s less on it than in a
+kill of the same roster. Replayed, 90% of those dodges get a pulled spot 11+ yd clear, 24.5-28 yd from
+him, inside the Mark floor as crossed slots are.
 
 **While the missile flies, no other walk goes toward it** (`VezaxWalkMeetsShadowCrash`): one ending
 within 11 yd of the impact, or passing within 11 nearer than it starts, waits for the landing. Position
@@ -369,7 +383,8 @@ that walks the bot's own threat list, so a bot switched to the Animus or a vapor
 `vezax.slot` is the stored assignment, a bare number: 0-9 group L, 10-19 group R, row-major inside each so
 the low bit is the file; `vezax.joined` is the gate's latch, `1` from a bot's first tick inside it.
 `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
-(`strafe`/`search`/`none`: which rule produced the destination, which the move record can't tell apart),
+(`strafe`/`pulled`/`search`/`none`: which rule produced the destination, which the move record can't
+tell apart),
 `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`: a vapor is hard mode
 about to end, `none` the target guard with no source behind it), `vezax.meleespot` (`spot`/`none`),
 `vezax.floor` (`on`/`edge`/`off`: the last floor check took the point as asked, pulled it back over 1 yd,
@@ -408,8 +423,9 @@ which is only written inside the gate. `--band`'s `on` column is the share of th
 open, `kept` the share the latch alone held it, `out s` a bot's living time shut out after joining.
 `--animus` measures the Animus fight from its spawn to its kill, the collapse (under four fifths of
 the sampled roster alive) or the pull's end: its pace and, per ranged and healer, casts, field share,
-damage, mana, living time past its 37 yd ceiling (`past`) and accepted reach spell walks (`walks`), then
-which `vezax.reach` values were written after the spawn. Mana comes from the bot's last living sample,
+damage, mana, living time past its 37 yd ceiling (`past`), accepted reach spell walks (`walks`) and
+accepted dodges ending past that ceiling, of all (`dodges`), then which `vezax.reach` and
+`vezax.dodge` values were written after the spawn. Mana comes from the bot's last living sample,
 since the collapse tick reads the dead as 0. `--crash`'s `in` counts bots that took an accepted walk,
 the dodge aside, toward a landing impact by the strategy's own test; its summary names the movers and how
 many hit bots took one.

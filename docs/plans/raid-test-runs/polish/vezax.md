@@ -1076,3 +1076,138 @@ the two north settles. No size, mode or player branch, no shared code, no commen
   pull keeps so a parked bot stays inside the ceiling. With the Animus loose after the main tank died a
   crossed slot can sit at his feet (w17 uld3 replay: down to 4.2 yd at 4:21-4:25, 105 of 2740 samples
   under 20); collapse only.
+
+## Round 10 (2026-11-23, build b9dd70fcc)
+
+**Data.** Window 22a at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head b9dd70fcc
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.3-3:08.8, no vapor
+hit), against window 21 (round 8, `--head 90400b39c`) and window 19 (`--head 99188e0f1`). Only Vezax r9
+and Faction Champions changed between the two builds. Analysis scripts: session scratchpad `vezax-r10/`
+(`compare.py` over windows 11-22, `settle.py`, `geomgroups.py`, `pastwhy.py`, `pastwhy2.py`, `perbot.py`,
+`threatvetoes.py`, `markdetail.py`, `markedges.py`, `markedmovers.py`, `edges.py`, `strafe_replay.py`,
+`replay_cross.py`, `magemana.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-194527-1` | `603_1_general-vezax_1795463232` | wipe 4:42, 31 deaths, the Animus at 34.2% at the collapse (4:10.1) |
+| uld2 | `tr-20261123-194527-2` | `603_2_general-vezax_1795463202` | kill 5:24, 0 deaths, the Animus dead in 75 s |
+| uld3 | `tr-20261123-194527-3` | `603_3_general-vezax_1795463228` | wipe 5:00, 30 deaths, the Animus at 7.4% at the collapse (4:32.5) |
+
+**Stop rules.** Not polished: one kill. Both failures picked below are new causes. The symptom of the
+second, ranged dps past the Animus's ceiling, was round 5's pick (slots) and round 9's built answer (north
+settles); if the far group still sits past it next window, that is the third round on it and the lane
+stops there.
+
+**Settle per pull** (Vezax from the anchor, `settle.py`, `geomgroups.py`): uld1 7.7 then 9.9 yd north
+(normal), swung east to (+9.9, +0.2) at the spawn, the Animus 7.1 yd west of him; uld2 8.3 then 9.9
+(normal), swung west to (−3.8, +9.1), the Animus 7.5 east; uld3 10.2 north, swung east to (+6.5, +7.8),
+the Animus 9.0 west and 2.6 behind him. No north settle in the Animus phase.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the collapse | Collapse |
+|---|---|---|
+| uld1 | 2 ranged to Mark leech at 1:08.8-1:09.8 (the 1:00.5 mark, 75 ticks); 4 to Mark leech at 3:57.4-3:58.3 (the 3:52.8 mark, 32 ticks: Uldxaq, Uldxae, and Uldxau and Uldxaw re-raised from the first) | from 4:06.6 (DK main tank to Profound Darkness at +57.8 s): 10 Animus melee, 7 Profound Darkness, 6 Vezax melee, 2 Mark |
+| uld2 | none | none |
+| uld3 | none | from 4:23.5 (bear main tank to Vezax melee at +75.2 s): 12 Profound Darkness, 9 Vezax melee, 5 Animus melee, 4 Mark (the 4:32.6 mark on a melee, far 2/9) |
+
+**Verdict on round 9 (formation latch, ranged crossing the Mark floor): both did what they were built
+for, and neither caused a wipe.**
+
+- *Latch.* `--band` `out s` 0.0 for every camp bot in all three (w21 uld3: 203 bot-s); `kept` 0% but
+  Uldxaw 2%; `vezax.formation = kept` 4 rows in uld1 (Uldxag 3:24.5 and 3:25.2, Uldxaw 3:38.1, the dead
+  main tank 4:31), none in uld2 and uld3; `vezax.joined = 1` for every bot from the first second. Both
+  east swings kept the camp inside 45 yd this time, so the latch had little to hold, and it kept nobody
+  in a formation it should have left.
+- *Cross.* `vezax.reach = cross` from 7 / 10 / 8 bots. Replayed on round 9's slots (`replay_cross.py`):
+  crossed 6 / 85 / 46% of ranged slot samples in the phase, a median 29.2-29.9 yd from him (min 24.4;
+  row 0 is 30.5, the floor 29.1). Each is where the old floor stop left the slot farther from the Animus
+  than the pull's own target, two slot tolerances inside its 37 yd ceiling, as built; past the ceiling
+  itself the floor stop would have left only 1-2%, so in normal settles a cross mostly moves a slot
+  under 2.4 yd. No cost seen: far 13-14/9 at every in-phase mark (3:12, 3:52), none of them on a melee
+  or a tank before the collapse, one Animus-phase crash hit before it in three pulls (Uldxaw 3:37.4,
+  lived), none on a crossed bot. uld2 crossed 85% of the time and killed it fastest since window 11.
+  **Keeping the Q1 answer cost no kill here.**
+- *Pace* 1.07 / 1.33 / 1.10 %/s (window 21's normal settles 1.22-1.24). Ranged `past` 19 / 25 / 22% of
+  the phase, all off-slot (dodge, reach spell, position and soak walks); no pulled slot itself past the
+  ceiling (`pastwhy.py`).
+- *Threat vetoes* rose (uld1 100, uld3 157 in the phase, window 21 0-32), 93 and 141 of them from the
+  10 s bin of the main tank's death on (+57.8 and +75.2 s): a consequence, not a cause.
+
+**Ranking.**
+
+1. *uld1, 31: a marked healer stranded inside its group by the floor check (bug).* The 1:00.5 mark on
+   Uldxac (L, row 0) sent it toward its arc spot (1884.6, 103.6), but from 1:00.9 the straight-line
+   check from where it stood clipped the spot to (1861.1, 114.6), 9 yd away (`vezax.floor = edge`
+   1:00.9-1:05.6). There `TryGetVezaxMarkSpot` (`UldEncounter_Vezax.cpp:478` before) clipped to the same
+   point, the trigger read it arrived (`UldTriggers_Vezax.cpp:53`), and the soak walked it back into the
+   camp's field twice (1:03.2, 1:05.3); it left only after a dodge at 1:06.3 moved it past the clip. Group
+   L stayed within
+   7-15 yd: 75 ticks (w21 uld1 21, w19 uld1 21), Uldxau and Uldxaw dead, Vezax healed at +0.543 %/s
+   for the window (−0.21 in w19/w21), and the fire mage Uldxaq spent three Mana Shields on the leech and
+   hit 0 at 2:07. Healers Uldxab and Uldxae stood at 31/30% at 2:00 (w19/w21 51-66 / 50-52), Uldxab dry
+   from 3:03; Vezax was 31.8% at the spawn (26.4-28.4); in the Animus phase ranged did 65k/s (81-93k),
+   two of them dry (the fire mage at 0%, the re-raised Uldxaw at 6%), the 3:52 mark killed four of the
+   weakened group (32 ticks; the
+   3:54 crash strafed group L along the marked bot's arc), and the main tank died at +57.8 s.
+   `edges.py`: every `edge` read in windows 14-22 clipped at (1860.0-1861.7, 113.6-114.7), from west or
+   east, whatever his settle: a small navmesh hole the pathed walk goes round. `markedges.py`: 84 marks
+   before the spawn, those with an edge held over 1.9 s (w17 uld2 0:20 and 1:00, w21 uld2 0:20, w22 uld1
+   1:00) leeched 41-75 ticks against a median 11 (max 33) for the 73 with none; soak walks of marked bots
+   came 8 from edge windows, 2 from the rest (`markedmovers.py`).
+2. *uld3, 30: the far group's strafes leave the Animus's reach (bug).* The race ended 7.4% short at
+   1.10 %/s (w19 uld3, same roster, 1.28). Group L, on his far side from the Animus, spent 30-44% of the
+   phase past its 37 yd ceiling against 1-9% for R; all 39 of L's accepted dodges ended past it, 2 of
+   R's 29 (reader's new `dodges` column). L's ranged did 39k/s against 53k/s in w19 uld3; the 14k/s is
+   ~0.12 %/s, a kill at ~82 s before the 84 s collapse. Cause: `TryGetVezaxDodgeSpot` (`:939` before)
+   strafes 15 yd across the camp from the slot round 5 pulled toward the Animus, so a group whose
+   strafe points away from it leaves its reach, and reach spell and the position node walk it back
+   (`pastwhy2.py`: the group with its strafe past the ceiling spends 19-44% of the phase past it in every
+   normal settle since window 15, kills included, the other 5-13%). Windows 15-22 (`strafe_replay.py`):
+   416 of 597 ranged dodges in the phase ended past the ceiling. The findings doc already had the strafe
+   pulled with the slot into the ceiling; only its start was.
+3. Profound Darkness collapse after the main tank's death: the end of both wipes, not a cause.
+
+**Picked: both, independent.** Two separate helpers, one per pull.
+
+**Fix** (`UldEncounter_Vezax.cpp` only):
+
+- Mark spots are floor-checked along the line from Vezax (`CheckVezaxFloor` takes an origin, `:134`; the
+  side and south spots pass his position, `:527`, `:557`); the slot and the strafe still check from the
+  bot. The spot no longer moves with the bot, so the trigger never reads a clip as arrival, and the walk
+  (pathed by `MoveTo`) goes round the hole. Lines from him to the arc spots (±65.5° off the camp
+  bearing) and the south spots never cross the hole for any settle within 30 yd of the anchor; the hall's north
+  edge still pulls a spot back as before.
+- A ranged dps targeting the live Animus whose strafe ends farther from it than the slot pull's reach gets
+  the strafe pulled the same way (`TryGetVezaxStrafeInAnimusReach`, `:213`, used first at `:989`), kept
+  only if it lands on the floor and 11 yd (`ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE`) off the impact;
+  else the plain strafe and its 10 yd test as before. New `vezax.dodge = pulled`. The pull's geometry is
+  shared with the slot pull (`PullVezaxSpotIntoAnimusReach`, `:174`); `vezax.reach` is written only for
+  the slot as before. Replay: 373 of the 416 get a spot 11+ yd clear (27 at 10-11 and 16 inside 10 keep
+  the plain strafe), 24.5 yd from him at least, median 28.2, 7.5 yd from the plain strafe (max 11.5).
+  This crosses the Mark floor for the seconds of a dodge, in the same case the user's Q1 answer lets a
+  slot cross it (out of the Animus's reach otherwise).
+
+Reader: `--animus` gains `dodges` (accepted dodges ending past the Animus's ceiling, of all) per caster
+and prints `vezax.dodge` values after the spawn (test added). Docs: `docs/raids/ulduar/vezax.md` (floor
+paragraph with the hole, Shadow Crash section, trace keys, `--animus`).
+
+10/25 and normal/hard: the mark spots and their check run in every mode; the strafe pull only on a live
+Animus, so hard mode only, and it keys on distances, not raid size. Bots only, keyed
+on the bot's own target and position, so the same with or without a real player. Shared code: none.
+
+**Next window should show.**
+
+- `--mark`: no `vezax.floor = edge` on a marked bot held past a second, no mark window over ~35 ticks
+  before the spawn, no soak walk by a marked bot.
+- `--animus`: `dodges` near 0 past for both groups (they were 39/39 against 2/29 in uld3);
+  `vezax.dodge = pulled` written by most ranged dps after the spawn; ranged `past` under ~15% for the
+  group on his far side from the Animus too; pace 1.24 %/s or more in a normal settle whichever way he
+  swings.
+- `--crash`: no hit on a bot whose dodge read `pulled`; Animus-phase crash deaths 0-1 a pull.
+- Cost to watch: pulled strafes stand 24.5-28 yd from him, so an in-phase mark cast during a far-group
+  dodge sees up to ~5 fewer far; `far` under 9 at 3:12 or 3:52, or a mark on a melee or tank there,
+  is this fix's cost.
+
+**Questions.** None new. Q1 (a) cost no kill in this window (uld2 crossed 85% of its samples and killed
+fastest); the north settle's healer reach to the main tank stays open as before.

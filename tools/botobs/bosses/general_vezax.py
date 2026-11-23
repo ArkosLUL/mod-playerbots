@@ -880,6 +880,18 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     holds = [rec for rec in trace.of("veto") if rec.get("m") == HOLD and spawn <= rec["t"] <= stop]
     walks = [rec for rec in trace.of("move")
              if rec.get("by") == REACH_SPELL and not rec.get("r") and spawn <= rec["t"] <= stop]
+    dodges = [rec for rec in trace.of("move")
+              if rec.get("by") == DODGE and rec.get("ok") and not rec.get("r") and rec.get("x") is not None
+              and spawn <= rec["t"] <= stop]
+
+    def dodges_past(guid: int) -> tuple[int, int]:
+        mine = [rec for rec in dodges if rec.get("g") == guid]
+        past = 0
+        for rec in mine:
+            target = samples.row(animus, rec["t"])
+            if target and math.dist((rec["x"], rec["y"]), target[1:3]) > ANIMUS_REACH_CEILING:
+                past += 1
+        return len(mine), past
 
     def past_reach(guid: int) -> float | None:
         alive = past = 0
@@ -929,6 +941,7 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
             "held_on": sum(1 for rec in held if on_animus(guid, rec["t"])),
             "past_reach": past_reach(guid),
             "reach_walks": sum(1 for rec in walks if rec.get("g") == guid),
+            "dodges": dodges_past(guid),
         })
 
     health = (samples.row(animus, spawn)[5], samples.row(animus, stop)[5])
@@ -942,12 +955,16 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     }
 
 
-def reach_states(trace: Trace, spawn: int) -> dict[str, set[int]]:
+def probe_states(trace: Trace, key: str, spawn: int) -> dict[str, set[int]]:
     out: dict[str, set[int]] = collections.defaultdict(set)
-    for rec in notes(trace, "vezax.reach"):
+    for rec in notes(trace, key):
         if rec["t"] >= spawn:
             out[str(rec.get("txt", ""))].add(rec["g"])
     return dict(sorted(out.items()))
+
+
+def reach_states(trace: Trace, spawn: int) -> dict[str, set[int]]:
+    return probe_states(trace, "vezax.reach", spawn)
 
 
 def show_animus(trace: Trace) -> None:
@@ -998,9 +1015,10 @@ def show_animus(trace: Trace) -> None:
 
     show_animus_casters(trace, animus_casters(trace, samples))
 
-    reach = reach_states(trace, spawn)
-    print("  vezax.reach after the spawn: " + (", ".join(f"{value} {len(bots)} bot(s)"
-                                                       for value, bots in reach.items()) or "never written"))
+    for key in ("vezax.reach", "vezax.dodge"):
+        states = probe_states(trace, key, spawn)
+        print(f"  {key} after the spawn: " + (", ".join(f"{value} {len(bots)} bot(s)"
+                                                       for value, bots in states.items()) or "never written"))
 
     deaths = [death for death in combat_deaths(trace) if death["t"] >= spawn]
     if deaths:
@@ -1033,19 +1051,20 @@ def show_animus_casters(trace: Trace, fight: dict | None) -> None:
         return "-" if value is None else f"{value:.0f}"
 
     print(f"    {'bot':14} {'role':6} {'casts/min':>9} {'on it':>6} {'outside':>8} {'field':>6} {'dealt/s':>8}"
-          f" {'mana':>9} {'held':>7} {'past':>5} {'walks':>5}")
+          f" {'mana':>9} {'held':>7} {'past':>5} {'walks':>5} {'dodges':>7}")
     for row in rows:
         mana = f"{pct(row['mana'][0])}>{pct(row['mana'][1])}"
         held = f"{row['holds']}/{row['held_on']}"
         past = "-" if row["past_reach"] is None else f"{row['past_reach']:.0%}"
+        dodges = f"{row['dodges'][1]}/{row['dodges'][0]}"
         print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6}"
               f" {row['casts'] * 60.0 / span:9.1f} {row['on_animus']:6} {row['outside']:8}"
               f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {held:>7}"
-              f" {past:>5} {row['reach_walks']:5}")
+              f" {past:>5} {row['reach_walks']:5} {dodges:>7}")
     print("    casts are starts, outside is those made out of a field, mana is at the spawn and the stop,"
           " held is cast hold vetoes, all/with the Animus targeted")
     print(f"    past is living time over {ANIMUS_REACH_CEILING:.1f} yd from the Animus, where reach spell"
-          " fires; walks are its accepted moves")
+          " fires; walks are its accepted moves; dodges are accepted Shadow Crash dodges ending past it/all")
 
 
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
