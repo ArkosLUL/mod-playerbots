@@ -52,7 +52,8 @@ enum UlduarMimironIds
     NPC_FROST_BOMB = 34149,
     NPC_EMERGENCY_FIRE_BOT = 34147,
 
-    SPELL_MIMIRON_RAPID_BURST = 63382
+    SPELL_MIMIRON_RAPID_BURST = 63382,
+    NPC_BURST_TARGET = 34211
 };
 
 inline constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M_PI) / 180.0f;
@@ -407,6 +408,8 @@ inline constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS = 6.0f;
 
 inline constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE = 12.0f;
 
+inline constexpr float ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE = 30.0f;
+
 inline constexpr float ULDUAR_MIMIRON_DETOUR_TURNS_DEG[] = {20.0f, 35.0f, 50.0f, 65.0f};
 
 inline constexpr float ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE = 15.0f;
@@ -416,7 +419,6 @@ inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS = 32.0f;
 inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
 inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 
-inline constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
 inline constexpr uint32 ULDUAR_MIMIRON_JUNK_BOT_PILE = 4;
 
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 18.0f;

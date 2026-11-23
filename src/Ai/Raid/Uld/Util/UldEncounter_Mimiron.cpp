@@ -35,6 +35,7 @@
 #include <cmath>
 #include <limits>
 #include <list>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -844,6 +845,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
 
     float const distance = from.GetExactDist2d(goal.GetPositionX(), goal.GetPositionY());
     float const bearing = from.GetAngle(goal.GetPositionX(), goal.GetPositionY());
+    std::vector<std::pair<Position, float>> waypoints;
     for (float degrees : ULDUAR_MIMIRON_DETOUR_TURNS_DEG)
     {
         float const turn = degrees * static_cast<float>(M_PI) / 180.0f;
@@ -853,7 +855,11 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
             Position const waypoint(from.GetPositionX() + leg * std::cos(bearing + sign * turn),
                                     from.GetPositionY() + leg * std::sin(bearing + sign * turn),
                                     from.GetPositionZ());
-            if (standable(waypoint) && legSafe(from, waypoint) && legSafe(waypoint, goal))
+            if (!standable(waypoint))
+                continue;
+
+            waypoints.emplace_back(waypoint, sign * turn);
+            if (legSafe(from, waypoint) && legSafe(waypoint, goal))
                 approaches.push_back({waypoint, "detour", sign * turn});
         }
     }
@@ -866,6 +872,29 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         else if (approaches.empty() && RaidObs::Active())
             RaidObs::NoteDerived(bot, "mimiron.approach", "none mines");
     }
+
+    if (!approaches.empty() || distance <= ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE ||
+        bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT || MimironPhase1Active(botAI))
+        return approaches;
+
+    std::optional<MimironApproach> leastBurn;
+    if (directMineSafe)
+        leastBurn = MimironApproach{goal, "stranded", 0.0f, MeasureMimironLegBurn(from, hazards, goal).yards};
+
+    for (auto const& [waypoint, turn] : waypoints)
+    {
+        if (!IsMimironLegMineSafe(from, markers.mines, waypoint) ||
+            !IsMimironLegMineSafe(waypoint, markers.mines, goal))
+            continue;
+
+        float const yards = MeasureMimironLegBurn(from, hazards, waypoint).yards +
+                            MeasureMimironLegBurn(waypoint, hazards, goal).yards;
+        if (!leastBurn || yards < leastBurn->burn)
+            leastBurn = MimironApproach{waypoint, "stranded", turn, yards};
+    }
+
+    if (leastBurn)
+        approaches.push_back(*leastBurn);
 
     return approaches;
 }
@@ -1698,26 +1727,27 @@ namespace
 MimironRapidBurstWindow ReadMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
     MimironRapidBurstWindow window;
-    if (!botAI || !bot || !vx001 || !vx001->IsAlive())
+    if (!botAI || !bot || !vx001 || !vx001->IsAlive() || vx001->GetVehicleBase())
         return window;
 
-    Group* group = bot->GetGroup();
-    if (!group)
-        return window;
-
-    Player* carrier = nullptr;
-    for (GroupReference* ref = group->GetFirstMember(); ref && !carrier; ref = ref->next())
+    std::list<Creature*> aims;
+    vx001->GetCreatureListWithEntryInGrid(aims, NPC_BURST_TARGET, ULDUAR_MIMIRON_ROOM_SEARCH_RANGE);
+    for (Creature* aim : aims)
     {
-        Player* member = ref->GetSource();
-        if (member && member->IsAlive() && member->HasAura(SPELL_MIMIRON_RAPID_BURST))
-            carrier = member;
+        if (aim && aim->HasAura(SPELL_MIMIRON_RAPID_BURST, vx001->GetGUID()))
+        {
+            window.valid = true;
+            window.centreline = vx001->GetAngle(aim->GetPositionX(), aim->GetPositionY());
+            return window;
+        }
     }
 
-    if (!carrier)
-        return window;
+    if (vx001->HasAura(SPELL_MIMIRON_RAPID_BURST))
+    {
+        window.valid = true;
+        window.centreline = vx001->GetOrientation();
+    }
 
-    window.valid = true;
-    window.centreline = vx001->GetAngle(carrier->GetPositionX(), carrier->GetPositionY());
     return window;
 }
 }
@@ -1915,12 +1945,8 @@ void NoteMimironCoreSpent(Player* bot)
 
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !bot || !IsMimironHardModeActive(botAI))
-        return {};
-
-    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-    if (!aerialCommandUnit || IsMimironPhase4(bot) ||
-        aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT)
+    if (!botAI || !bot || !IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot) ||
+        !BossStateGateLive(botAI, ULD_BOSS_MIMIRON))
         return {};
 
     MimironFightState& state = MimironFightStateFor(bot);

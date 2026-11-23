@@ -410,11 +410,5 @@ bool MimironSetDpsPriorityTrigger::IsActive()
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    if (IsMimironEngaged(botAI))
-        return true;
-
-    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
-        return false;
-
-    return bot->FindNearestCreature(NPC_EMERGENCY_FIRE_BOT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE) != nullptr;
+    return IsMimironEngaged(botAI);
 }
