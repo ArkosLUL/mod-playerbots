@@ -1019,7 +1019,7 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     uint8 slotIndex = 0;
     Position slot;
     Position late;
-    bool lateFound = false;
+    char const* lateKind = nullptr;
     if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex) && TryGetVezaxSlotPosition(bot, slotIndex, slot))
     {
         PullVezaxSlotIntoAnimusReach(bot, vezax, slot);
@@ -1039,7 +1039,7 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
             }
 
             late = pulled;
-            lateFound = true;
+            lateKind = "pulled";
         }
 
         if (VezaxPlaceOnFloor(bot, strafed) &&
@@ -1053,9 +1053,11 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
                 return true;
             }
 
-            if (!lateFound)
+            if (!lateKind)
+            {
                 late = strafed;
-            lateFound = true;
+                lateKind = "strafe";
+            }
         }
     }
 
@@ -1066,13 +1068,15 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 
     if (candidate == Position())
     {
-        RaidObs::NoteDerived(bot, "vezax.dodge", lateFound ? "strafe" : "none");
-        if (lateFound)
-            spot = late;
-        return lateFound;
+        RaidObs::NoteDerived(bot, "vezax.dodge", lateKind ? lateKind : "none");
+        if (!lateKind)
+            return false;
+
+        spot = late;
+        return true;
     }
 
-    RaidObs::NoteDerived(bot, "vezax.dodge", lateFound ? "late" : "search");
+    RaidObs::NoteDerived(bot, "vezax.dodge", lateKind ? "late" : "search");
     spot = candidate;
     return true;
 }

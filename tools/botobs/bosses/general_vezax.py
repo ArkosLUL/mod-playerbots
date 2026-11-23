@@ -577,7 +577,7 @@ def show_crash(trace: Trace) -> None:
           + (", ".join(f"{by} {count}" for by, count in movers.most_common()) or "-")
           + f"; {walked_hit} of {sum(len(row['hits']) for row in rows)} hit(s) on a bot that took one")
     late = [(row, {rec["g"] for rec in row["late"]}) for row in rows]
-    print(f"  {sum(len(bots) for _, bots in late)} dodge(s) that could not leave the blast by the landing at"
+    print(f"  {sum(len(bots) for _, bots in late)} bot(s) whose dodge could not leave the blast by the landing at"
           f" {RUN_SPEED:.0f} yd/s, {sum(1 for row, bots in late for rec in row['hits'] if rec.get('d') in bots)}"
           " of them hit")
     issued, left = evictions(trace, samples)
