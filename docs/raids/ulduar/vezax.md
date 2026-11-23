@@ -301,14 +301,14 @@ target source** ([action-selection](../../engine/action-selection.md#multiplier-
 waited for a vapor already held it never fired, and two pulls ended at 99% boss health.
 
 **Dps hold under the tank's threat, on Vezax as on the Animus** (`vezax threat multiplier`): damage
-from non-tank, non-healer bots holds once their threat reaches 90% of the tank's that boss is hitting on
-its threat list, or of the main tank's when it hits no tank. No bot runs the `threat` strategy, and a
-field outruns any tank: an affliction warlock in one passed 130% of a DK and of a warrior main tank, and
-Vezax walked into the camp and killed four. On that fallback it stands down on Vezax while the main tank
-isn't on his list, so a tank that never engages can't park the raid; the Animus spawns with an empty
-list, and there the switch already waits for the tanks. Threat comes off
-the threat list, never the `"threat"` value ([a `uint8` percentage that
-overflows](../../engine/pitfalls.md#detection-that-never-fires)). Auto-attack already swinging goes on.
+from non-tank, non-healer bots holds once their threat on that boss's list reaches 90% of its victim's
+when that is a tank, else of the main tank's. No bot runs the `threat` strategy, and a field outruns any
+tank: an affliction warlock in one passed 130% of a DK and of a warrior main tank, and Vezax walked into
+the camp and killed four. On that fallback it stands down on Vezax while the main tank isn't on his list,
+so a tank that never engages can't park the raid; the Animus spawns with an empty list, and there the
+switch already waits for the tanks. Threat comes off the threat list, never the `"threat"` value ([a
+`uint8` percentage that overflows](../../engine/pitfalls.md#detection-that-never-fires)). Auto-attack
+already swinging goes on.
 
 **Tricks of the Trade goes only to a tank** (`vezax tricks on tank multiplier`). At the pull the generic
 pick decides the tank needs no redirect ([pitfalls](../../engine/pitfalls.md)) and takes the
@@ -418,8 +418,8 @@ it:
   ones follow the caster's current target: Tricks went to a dps 0.6s before the spawn, and that dps had it 1s in.
 - **Dps hold at 90% of its tank's threat** (`vezax threat multiplier`, as on Vezax). It leaves room for a
   cast in flight and lets a tank retake it at 110%. Not the main tank's: both tanks switch at once, so an
-  off-tank can land the first hit while the redirects feed the main tank. Capped on his threat, ranged ran
-  at the cap from +5 s, a demonology warlock passed the bear holding it at +11 s, and it walked through
+  off-tank can land the first hit while the redirects feed the main tank. Capped on his threat, ranged hit
+  the cap from +9 s, a demonology warlock passed the bear holding it at +11 s, and it walked through
   the camp for 25 s.
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
   chasing drags Vezax off it, so whoever the Animus is hitting walks to within 3 yd of him, which leaves

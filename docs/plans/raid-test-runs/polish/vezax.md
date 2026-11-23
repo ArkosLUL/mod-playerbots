@@ -669,3 +669,18 @@ off-tank beat him to it.
   the race is lost in that settle (1 of 9 Animus pulls since window 11). *Recommended: (a)*, small and
   acting only where the floor is already lost to the flip; (b) if north settles keep starving the main
   tank of heals.
+
+**Review.** Both causes hold. uld2 snapshots (`snap.u[7]`, spawn 3:08.43): the Animus's victim was a
+fury warrior at +0.1 s, the bear from +1.1 s, the resto shaman at +7.1 s, the bear at +8.1 s, Uldyav at
++11.3 s, then three more ranged until Uldyaa at +36.6 s; all four redirects went to Uldyaa at +0.3-0.9 s;
+`vezax threat multiplier` rows 15 at +5-10 s and 23 at +10-15 s, the first at +7.8 s (+8.8 s on ranged).
+In uld1 and uld3 the main tank was the victim of Vezax and of the Animus from +1.1 s, so the cap there is
+as before. uld3 healers: 84 reach spell moves (12-28 each) against 63 position moves. No size, mode or
+player branch: a real tank counts as the holder by spec. `pb-check` passes.
+
+- Review fix: the findings doc's "+5 s" first cap was the bin start; now +9 s, and the cap sentence
+  reworded.
+- Left: redirects still go to the main tank while the off-tank holds the Animus, so they raise his
+  threat and not the cap dps are held under; who they feed follows who tanks it, a tactic. While a
+  non-tank holds it the cap falls back to the main tank's, which can sit above the holding tank's; the
+  bear retook it in 1 s in uld2.
