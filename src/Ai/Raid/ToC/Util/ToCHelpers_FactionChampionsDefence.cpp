@@ -1694,9 +1694,9 @@ bool ClearOfOurHits(std::vector<Member> const& members, Unit* champion)
         if (player->GetVictim() == champion || player->GetTarget() == champion->GetGUID())
             return false;
 
-        Pet* pet = player->GetPet();
-        if (pet && pet->IsAlive() && pet->GetVictim() == champion)
-            return false;
+        for (Unit* controlled : player->m_Controlled)
+            if (controlled->IsAlive() && controlled->GetVictim() == champion)
+                return false;
     }
 
     return !FactionChampionsCarriesGroupDot(champion);

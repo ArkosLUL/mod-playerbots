@@ -19,7 +19,8 @@ using namespace TrialOfTheCrusaderHelpers;
 namespace
 {
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
-                                          "avenger's shield", "blood boil", "consecration", "swipe (bear)"};
+                                          "avenger's shield", "blood boil", "consecration", "swipe (bear)",
+                                          "fire elemental totem"};
 }
 
 bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)

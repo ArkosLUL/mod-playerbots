@@ -15,7 +15,8 @@
                                            champions' Bloodlust, Avenging Wrath and Hand of Freedom
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash
-    faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
+    faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds, raid Greater
+                                           Fire Elementals and the CC on their targets
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
     faction_champions.py <file> --chain    each player's pull: the bot DK links by post and the player's grip,
                                            skipped links, their gaps and carry, the order, what cut each; bot grips
@@ -356,6 +357,7 @@ NPC_TREANT = 36070
 # Grounding, Windfury and Tremor Totem, and the treant. The raid's own totems share these entries, so
 # a unit counts only with a champion owner.
 ADD_ENTRIES = frozenset((5925, 6112, 5913, NPC_TREANT))
+NPC_FIRE_ELEMENTAL = 15438
 
 GRIP = "fc.grip"
 SPELL_DEATH_GRIP = 49576
@@ -1733,6 +1735,58 @@ def totem_holds(trace: Trace) -> list[dict]:
     return sorted(out, key=lambda row: (row["start"], row["bot"]))
 
 
+def raid_fire_elementals(trace: Trace) -> list[dict]:
+    """Every raid Greater Fire Elemental (a Fire Elemental Totem's) live from the pull: `guid`, `owner`, `first` and
+    `last` snapshot, `samples`, `on_kill` those whose target was the kill target, `victim` the champion other than
+    the kill target it targeted most (None for none), and `breaks`, per Polymorph and Fear the `fc.ccaura` spans
+    held on a champion that was its target when the span began, in ms."""
+    if encounter_of(trace) != ENCOUNTER:
+        return []
+    targets = champions(trace)
+    start = pull_start(trace)
+    kills = kill_spans(trace)
+    elementals = {guid for guid, entry in trace.entries.items()
+                  if entry == NPC_FIRE_ELEMENTAL and raid_caster(trace, guid) is not None}
+    aimed: dict[int, tuple[list[int], list[int]]] = {guid: ([], []) for guid in elementals}
+    rows = {}
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        for unit in snap.get("u", []):
+            guid = unit[0]
+            if guid not in elementals or unit[5] <= 0:
+                continue
+            target = unit[7] if len(unit) > 7 else 0
+            aimed[guid][0].append(snap["t"])
+            aimed[guid][1].append(target)
+            row = rows.setdefault(guid, {"guid": guid, "owner": trace.owners.get(guid), "first": snap["t"],
+                                         "samples": 0, "on_kill": 0, "off": collections.Counter(),
+                                         "breaks": collections.defaultdict(list)})
+            row["last"] = snap["t"]
+            row["samples"] += 1
+            kill = held_at(kills, snap["t"])
+            row["on_kill"] += bool(kill) and target == kill
+            if target in targets and target != kill:
+                row["off"][target] += 1
+    for champion, spans in holder_spans(trace, CC_AURA, pull_end(trace)).items():
+        for value, begin, stop in spans:
+            name = CC_SPELLS.get(as_guid(value))
+            if name not in ("Polymorph", "Fear"):
+                continue
+            for guid, row in rows.items():
+                stamps, picks = aimed[guid]
+                at = bisect.bisect_right(stamps, begin) - 1
+                if at >= 0 and picks[at] == champion and begin <= row["last"]:
+                    row["breaks"][name].append(stop - begin)
+    out = []
+    for row in rows.values():
+        off = row.pop("off")
+        row["victim"] = off.most_common(1)[0][0] if off else None
+        row["breaks"] = dict(row["breaks"])
+        out.append(row)
+    return sorted(out, key=lambda row: (row["first"], row["guid"]))
+
+
 def show_adds(trace: Trace) -> None:
     print("TOTEMS AND TREANTS")
     casts = summon_casts(trace)
@@ -1768,8 +1822,19 @@ def show_adds(trace: Trace) -> None:
     else:
         print("  fc.totem never held a totem")
     print(f"  {KILL_TOTEM_ACTION}: {ok_rows(trace, KILL_TOTEM_ACTION)} OK row(s)")
+
+    elementals = raid_fire_elementals(trace)
+    print(f"\n  raid Greater Fire Elementals in the pull: {len(elementals)}, which want none")
+    for row in elementals:
+        victim = trace.name(row["victim"]) if row["victim"] else "-"
+        breaks = ", ".join(f"{name} {len(held)} held a median {statistics.median(held) / 1000:.1f}s"
+                           for name, held in sorted(row["breaks"].items())) or "no Polymorph or Fear on its target"
+        print(f"    {trace.name(row['owner'])[:14]:14} {clock(row['first']):>9} {clock(row['last']):>9}"
+              f" on the kill target {row['on_kill'] * 100 // max(row['samples'], 1)}%, off it mostly {victim};"
+              f" {breaks}")
     print("  first and last are the unit's snapshots; gone means the totem left the snapshots inside the"
-          " hold, killed or run out; ice marks a holder with an fc.ice duty at the hold's start, which wants none")
+          " hold, killed or run out; ice marks a holder with an fc.ice duty at the hold's start, which wants none;"
+          " an elemental's Polymorph and Fear are those that began on the champion it had as target")
 
 
 def distance(a: list, b: list) -> float:
@@ -3970,7 +4035,8 @@ SECTIONS = (
     ("purge", "raid offensive dispels on champions, kill target or not, by spell and class", show_purge),
     ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
-    ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
+    ("adds", "champion totems and treants, treant damage, fc.totem holds, raid Greater Fire Elementals",
+     show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
     ("chain", "each player's pull: the bot DK links by post and the player's grip, skipped links, gaps, carry,"
      " order; bot grips outside a pull", show_chain),
