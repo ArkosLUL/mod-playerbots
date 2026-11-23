@@ -20,7 +20,7 @@ namespace
 {
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
                                           "avenger's shield", "blood boil", "consecration", "swipe (bear)",
-                                          "fire elemental totem"};
+                                          "fire elemental totem", "searing totem", "starfall"};
 }
 
 bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
@@ -28,7 +28,7 @@ bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
     RaidSplashCache::Facts& facts = _splash.Of(action);
     bool const ownSplash = _ownSplash.Get(action, [action] { return OWN_SPLASH.count(action->getName()) != 0; });
 
-    if (ownSplash || facts.summon)
+    if (ownSplash || facts.summon || facts.multiTarget)
         return true;
 
     if (!SpellSplashes(botAI, action, _splash))

@@ -941,3 +941,125 @@ Thrakgar 20.0 s). A small gain at most: one champion's CC for up to 2 min a pull
   is wanted: 9 of his 15 kill-target kills in windows 14-16 came with both rogues dead.
 
 **Shared code.** None; the change is in this fight's multiplier, its CC and Peel clear checks, and its reader.
+
+## Round 11 (2026-11-23, window 18 on build c01caf9cc)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head c01caf9cc --pulls 10`, round 10 in it: toc1
+`tr-20261123-153900-4` kill 7:54 (DC 8:30), 10 deaths (`649_4_erin-misthoof_1795448470`), toc2 `tr-20261123-153900-5` kill
+6:21, 2 (`649_5_thrakgar_1795448442`), toc3 `tr-20261123-153900-6` kill 6:12, 3 (`649_6_thrakgar_1795448450`). Windows 15
+and 16 toc1 (same lineup) reread for the comparison, windows 14-18 (15 pulls) for the CC breaks and Chains lapses.
+Scripts in the round's scratchpad `fc11/` (gone with it); the reader's new `--cc` line covers the key one.
+
+**Stop rules.** Kills on all three pools, toc2 and toc3 within 3 deaths, toc1 at 10: not polished, one pool short.
+toc3's first kill since window 13 came on a new lineup (Liandra, Thrakgar, Erin; Vivienne for Birana, no Caiphus).
+
+**Lineups.** toc1 window 16 toc1's: Caiphus, Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Malithas, Harkzog,
+Ginselle; three DKs ice Maz'dinah, Gorgrim and Malithas, Narrhok from 4:25. toc2 and toc3: Liandra, Thrakgar, Erin;
+Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog, Vivienne, Ginselle.
+
+**Deaths by top damage dealer** (its share in the 10 s before). Iced: its duty's Chains in the 10 s before; lapsed: older,
+its DK alive; second life: the same bot again after Reincarnation or Rebirth.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 10 | iced Gorgrim 2 (Tocxak 1:25, Tocxap 2:41), iced Malithas 1 (Tocxac 3:52), iced Narrhok 1 (Tocxac's second life 4:46, one 19.8k swing from 100%), lapsed Maz'dinah 1 (Tocxas 0:49), lapsed Malithas 1 (Tocxag 5:13), Ruj'kah 2 (Tocxai 0:25 under a 9-champion focus from 0:03, Narrhok 31% of it; Tocxap's second life 3:29), Ginselle 1 (Tocxai's second life 1:37), free Narrhok 1 (Tocxaq 4:10) |
+| toc2 kill | 2 | Ruj'kah 2 (Tocyaq 1:49.9 with Vivienne 32% and Ginselle 31%, Tocyap 1:58.5 with Ginselle 33%) |
+| toc3 kill | 3 | Harkzog 2 (Toczas 0:44, Toczad 1:39), Ruj'kah 1 as kill target (Toczal 2:47) |
+
+**Verdict on round 10 (no raid fire elemental, no breakable CC into a raid summon's target): held.**
+
+- `--adds`: raid Greater Fire Elementals 0, 0, 0 (window 16: 2, 2, 2); `--vetoes`: `fire elemental totem` 27, 69, 69.
+- Polymorph, Fear and Hex cast at a champion a raid summon had as target: 0, 0, 2 (window 16: 14, 6, 10), both on toc3
+  with the caster's own summon (Toczav's Felguard on Vivienne, Toczaq's Mirror Images on Narrhok).
+- Polymorph off the kill target held a median 2.2, 2.5, 1.9 s (windows 15-16, six pulls: 1.6 s), Fear 3.7, 4.4, 3.6 s
+  (3.7 s).
+- Healers off the latch, our Polymorph, Fear, Cyclone and Banish held over their time off it: Thrakgar 35%, 51%, 17%, Erin 67%, 60%,
+  63% (window 16: Thrakgar 47%, 37%, toc3 23%; Erin 57%, 59%; Caiphus on toc3 25%). toc3's Thrakgar got 8.3 s in 46.5 s
+  (window 16's toc3: 20.0 s in 83.4 s), on a different lineup; no clear gain there.
+
+**Why toc1 took 10 deaths and 8:30.** Same lineup and roster as windows 15-16 (0 and 3 deaths, 5:53 and 6:20), and the
+champions dealt the same rate (6.4k/s against 5.9k/s and 6.5k/s); the pull ran long and the deaths came with it.
+
+1. The opening: 9 champions on Tocxai (Enhancement) 0:03-0:25, a Hand of Sacrifice and Lay on Hands spent on him (windows
+   15-16: 4 champions on the cat for 8 s). Their threat pick weighs distance, health and armour (`RecalculateThreat`
+   every ~9 s), so this is the draw.
+2. Two of the three Fear warlocks dead by 1:25: Tocxas to Maz'dinah in her DK's only Chains gap (below), Tocxak from full
+   after Lay on Hands in 2.5 s to iced Gorgrim's swing and Frost Strike and Malithas' Crusader Strike. They cast 7 Fears
+   (windows 15-16: 21 and 15); CC landed 2.26 per 10 s (2.69, 2.60).
+3. Every later kill hold ran 10-27 s longer: Maz'dinah 48 s (35, 36), Gorgrim 46 (29, 36), Narrhok 55 (34, 37), Malithas
+   61 (34, 34). The extra 1.5-2 min with three iced melee champions alive gave them 4 kills from 2:41, and two of the
+   pull's Chains lapses came there.
+4. 3 of the 10 were second lives, standing up unbuffed: Tocxap from 97.9% in 0.2 s, Tocxac from 100% in one swing.
+
+**Failure ranking (15 deaths).**
+
+1. Caster champions 8: Ruj'kah 5, Harkzog 2, Ginselle 1. Our breakable CC on them breaks early, much of it to our own
+   splash (picked below).
+2. Iced melee champions 4, all toc1: Gorgrim 2 (Death Coil, Frost Strike), Malithas 1, Narrhok 1.
+3. Chains lapses after an ice DK's wall walk 2, toc1 (picked too).
+4. Free Narrhok 1.
+
+**Picked: our own splash breaks our CC (bug).**
+
+- The AoE rule suppresses the raid's own splash, but `faction champions suppress aoe multiplier`
+  (`ToCMultipliers_FactionChampions.cpp:21-32` before the fix) took only area spells, two summon lists and named ones.
+  Starfall (53201, a self aura whose stars pick enemies within 30 yd), Searing Totem (`TotemAI` takes the nearest
+  attackable unit) and the shared `MULTI_TARGET_ACTIONS` (Bladestorm, Sweeping Strikes, Cleave, Blade Flurry, Swipe (cat),
+  Multi-Shot) went out: `--aoe` raid splash on window 18 Cleave 1143, 1309, 808, Multi-Shot 49, 41, 58, Swipe (Cat) 40, 0,
+  7, Sweeping Strikes 9, 10, 11, Starfall 8, 7, 0, Bladestorm 6, 4, 4, Blade Flurry 4, 4, 4, Searing Totem 1, 6, 7. None of
+  their spells carries `SPELL_ATTR6_DO_NOT_CHAIN_TO_CROWD_CONTROLLED_TARGETS` (DBC), so all hit a held champion.
+- Raid cast rows naming a champion our Polymorph or Fear held, windows 14-18, those ending it within 0.7 s in brackets:
+  Starfall stars 111 (87); warrior Deep Wounds, Trauma and Blood Frenzy 79 (50), of which 47 inside the warrior's
+  Bladestorm and 24 after its Cleave; Searing Totem attacks 51 (21); Blade Flurry 31 (26); Sweeping Strikes 29 (27).
+  A lower bound: most hits write no row.
+- toc2 1:46.8-1:52.8: Tocyax's Bladestorm on Erin (kill target, 2 yd) broke Ginselle's Polymorph as it began (3.2 yd),
+  Vivienne's Fear at 1:48.98 and the Polymorph and Fear recast on her at 1:49.8 and 1:49.97 (5.5 yd); Ruj'kah's Polymorph
+  ended at 1:49.8, 11 yd off. Those three dealt 99% of Tocyaq's damage (dead 1:49.95) and 91% of Tocyap's (1:58.5), the
+  pull's only deaths. toc1 3:29: Ruj'kah's Fear broke 1.4 s in with Tocxax cleaving 3.8 yd off, and he killed Tocxap 2.8 s
+  later.
+
+**Picked too: an ice DK's wall walk outruns its own Chains (bug, small, independent).**
+
+- An ice duty DK takes the wall duty on its own champion while its Chains has over 4 s left (`OwnChainsHold`,
+  `WallVictim`, `ToCHelpers_FactionChampionsDefence.cpp:1403-1429` before the fix) and walks up to 6 s to a stand 22-27 yd
+  off the champion, past Chains range. At 4 s left the duty releases before the grip, the champion has run on at its
+  victim, and the ice reach walks back after the Chains ran out.
+- toc1 0:40.5-0:51.0: Tocxah took Maz'dinah's wall duty with 6.2 s of Chains left, released at 0:42.8 short of the stand,
+  walked back 8 s and recast at 0:50.97; Maz'dinah, unchained from 0:46.8, killed Tocxas at 0:49.8. 5:02.9-5:14: Tocxam
+  took Malithas' at 8.9 s left, re-elected three stands as Malithas ran, released at 5:07.75, his Chains out at 5:11.8;
+  Malithas killed Tocxag at 5:13.8.
+- Windows 14-18: 64 Chains lapses (181 s) followed such a walk with no grip, 2 of them with a kill (both above); 4
+  followed one with a grip (21 s) and 24 had no walk (140 s), none with a kill.
+
+**Fix** (`ToCMultipliers_FactionChampions.cpp`, `ToCHelpers_FactionChampionsDefence.cpp`). The suppress multiplier also
+zeroes the shared multi-target actions (`RaidSplashCache::Facts::multiTarget`, buffs included) and lists `searing totem`
+and `starfall`. An ice DK's own-champion wall duty is elected and kept only while its Chains has over 4 s plus the walk to
+the stand plus 1 s left (`WallWalkFits`, `OwnChainsHold`'s new spare). Reader: `--cc` counts the raid's cast rows naming a
+champion our Polymorph, Fear or Hex held, by spell, with those it ended within 0.7 s (`splash_hits`); `--aoe`'s raid splash
+adds Starfall, Sweeping Strikes, Blade Flurry, Swipe (Cat) and Searing Totem. Boss doc: AoE and Wall grip rows, Known gaps,
+`--cc`. Every size and difficulty; a player's own casts and grips untouched.
+
+**Next window should show.** `--vetoes`: `faction champions suppress aoe multiplier` rows on `starfall`, `bladestorm`,
+`cleave`, `sweeping strikes`, `blade flurry`, `swipe (cat)`, `multi-shot`, `searing totem`. `--aoe` raid splash near 0
+for all of them (above). `--cc` raid hits: Starfall, Searing Totem's Attack, Blade Flurry, Sweeping Strikes and the
+warrior procs near 0 (window 18: Starfall 12, 6, 0; Attack 0, 13, 7; Deep Wounds, Trauma, Blood Frenzy 6, 7, 17).
+Polymorph off the kill target above a median 2.2, 2.5, 1.9 s, Fear above 3.7, 4.4, 3.6 s; fewer caster kills (8 of 15).
+`--ice` on a three-DK pool: longest Chains gaps under toc1's 4.2, 7.3, 11.8, 10.1 s, uptime no lower (97, 95, 95, 93%),
+grips no far below 6, 7, 9, 1. Kill holds no longer than toc2's and toc3's 29-44 s (the splash lost lands mostly off
+the kill target).
+
+**Seen, not picked.**
+
+- Our CC also breaks on the bear tank's Maul (its glyph's second target: Infected Wounds on a held champion 37 times, 34
+  ending it, windows 14-18), Mirror Images on their mage's Polymorph target (19, 12), and a Hammer of Justice on a held
+  champion (25, stun over our CC).
+- Iced Gorgrim kills at range again (Death Coil, Icy Touch; 23 of his 41 kites caught on toc1). No kite answers it; only
+  a silence would, a plan matter not asked yet.
+- Second lives die fast: unbuffed after Reincarnation or Rebirth (Tocxac's max health under 19.8k).
+- toc3: Harkzog under no CC 1:22.6-1:38.4 while he killed Toczad.
+
+**Questions for the user.** None new. Q4 (cat druid Cyclone duty without a ranged druid) and Q5 (a DPS warrior disarms
+the Hunter with no rogue alive and no prot warrior) still wait; not built.
+
+**Shared code.** None changed: the multiplier reads the shared `MULTI_TARGET_ACTIONS` list through `RaidSplashCache`, and
+the change is in this fight's multiplier, its wall duty and its reader.

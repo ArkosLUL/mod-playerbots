@@ -1400,10 +1400,11 @@ Member const* VictimMember(std::vector<Member> const& members, Unit* champion)
     return member != members.end() ? &*member : nullptr;
 }
 
-bool OwnChainsHold(Player* dk, Unit* champion)
+bool OwnChainsHold(Player* dk, Unit* champion, uint32 spareMs = 0)
 {
     Aura const* chains = champion->GetAura(SPELL_CHAINS_OF_ICE, dk->GetGUID());
-    return chains && (chains->GetDuration() < 0 || chains->GetDuration() > ICE_RECAST_LEFT_MS);
+    return chains && (chains->GetDuration() < 0 ||
+                      chains->GetDuration() > ICE_RECAST_LEFT_MS + static_cast<int32>(spareMs));
 }
 
 bool WallDk(FactionChampionsDefenceState const& state, Player* player)
@@ -1426,6 +1427,12 @@ bool WallVictim(std::vector<Member> const& members, Player* dk, Unit* champion, 
     return !IsTankMember(victim->player) &&
            std::none_of(members.begin(), members.end(), [champion](Member const& member)
                         { return FactionChampionsIceDutyOf(member.player) == champion->GetGUID(); });
+}
+
+bool WallWalkFits(Player* dk, Unit* champion, Position const& stand)
+{
+    return FactionChampionsIceDutyOf(dk) != champion->GetGUID() ||
+           OwnChainsHold(dk, champion, WalkMs(dk, stand) + GRIP_READY_SLACK_MS);
 }
 
 bool WallGrippable(FactionChampionsDefenceState const& state, PlayerbotAI* botAI, Unit* champion, Unit* killTarget,
@@ -1507,7 +1514,7 @@ void UpdateWalls(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::v
             keep = getMSTimeDiff(duty.sinceMs, now) < GRIP_DUTY_MS && GripReadyInTime(dk, duty.stand, true) &&
                    champion->GetExactDist2d(&duty.stand) <= GRIP_KEEP_RANGE &&
                    WallVictim(members, dk, champion, VictimMember(members, champion)) &&
-                   WallGrippable(state, botAI, champion, killTarget, now);
+                   WallWalkFits(dk, champion, duty.stand) && WallGrippable(state, botAI, champion, killTarget, now);
 
         if (!keep)
             released.push_back(dkGuid);
@@ -1574,7 +1581,7 @@ void UpdateWalls(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::v
         {
             Position stand;
             if (!DeriveWallStand(state, dk, candidate.champion, candidate.victim->player, members, stand) ||
-                !GripReadyInTime(dk, stand, true))
+                !GripReadyInTime(dk, stand, true) || !WallWalkFits(dk, candidate.champion, stand))
                 continue;
 
             state.walls[dk->GetGUID()] = {candidate.champion->GetGUID(), stand, now, 0, false};
