@@ -1946,6 +1946,8 @@ std::vector<YoggSaronDot> YoggSaronDotSpells(PlayerbotAI* botAI)
             return {{"serpent sting", true}};
         case CLASS_MAGE:
             return {{"living bomb", false}};
+        case CLASS_SHAMAN:
+            return {{"flame shock", true}};
         default:
             return {};
     }

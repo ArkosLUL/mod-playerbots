@@ -622,14 +622,14 @@ Guardian swings from up to 14 yd.
   4.1`: over the rotation, under Shadowform (a DoT keeps the crit it was cast with), Dispersion, kicks and
   walks), cast past the resolver, so the target stays: warlock Corruption plus Unstable Affliction, or
   Immolate without it; shadow priest Vampiric Touch, Shadow Word: Pain, Devouring Plague; balance druid
-  Insect Swarm, Moonfire; hunter Serpent Sting; fire mage Living Bomb. Each when missing or ending within its
+  Insect Swarm, Moonfire; hunter Serpent Sting; fire mage Living Bomb; elemental shaman Flame Shock, though it
+  shares the shock cooldown the main target's Lava Burst crit needs. Each when missing or ending within its
   cast time + 1 s (`…_PHASE_3_DOT_REFRESH_MS`); Living Bomb and Devouring Plague only when missing, since a
   refresh skips the bomb's explosion and restarts the plague's tick timer (a leech; damage DoTs keep theirs).
   In range and sight, never during a gaze, since the cast turns the bot to Yogg. The class "on attacker"
-  nodes alone left most under half the phase. Curses stay with the class curse choice; Flame Shock stays off, sharing the shock
-  cooldown the main target's Lava Burst crit needs. Worth roughly 1% of Yogg a 25-man phase 3: the melee
-  carry him (`yogg.p3dot`; `--phase3` `ranged DoTs on Yogg`, uptime off the casts at base durations, a floor,
-  since creature auras have no row).
+  nodes alone left most under half the phase. Curses stay with the class curse choice. Worth roughly 1% of
+  Yogg a 25-man phase 3: the melee carry him (`yogg.p3dot`; `--phase3` `ranged DoTs on Yogg`, uptime off the
+  casts at base durations, a floor, since creature auras have no row).
 
 **Nobody hits a Guardian a tank does not lead on.** `SetInCombatWithZone` hands a fresh one a threatless
 first victim and heal threat reaches every Guardian in combat, so they left the tank a median **+1.0 s**
