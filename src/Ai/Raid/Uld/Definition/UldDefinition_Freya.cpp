@@ -42,6 +42,12 @@ bool FreyaTankOnLasher(PlayerbotAI* botAI)
     return target && target->GetEntry() == NPC_DETONATING_LASHER;
 }
 
+bool FreyaTargetIsGift(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->IsAlive() && target->GetEntry() == NPC_EONARS_GIFT;
+}
+
 bool FreyaTargetOnOtherTank(PlayerbotAI* botAI)
 {
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
@@ -214,6 +220,8 @@ void DefineFreya(EncounterBuilder& e)
     e.Multiplier<FreyaArmyRuneReserveMultiplier>(Family::Spell);
 
     e.Block("freya avoid aoe hold", Role::Any, FreyaAlive, Family::AvoidAoe);
+
+    e.Block("freya gift dot hold", Role::Dps, FreyaTargetIsGift, Family::DebuffOnAttacker);
 
     e.Block("freya lasher taunt reserve", Role::Tank, FreyaTankOnLasher, 0,
             {"hand of reckoning", "righteous defense", "taunt", "growl", "dark command", "death grip", "mocking blow"});
