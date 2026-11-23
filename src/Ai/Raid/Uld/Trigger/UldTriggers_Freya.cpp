@@ -197,7 +197,8 @@ bool FreyaLasherAboutToBlowTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return !GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS)
+    return !GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS,
+                                       true)
                 .empty();
 }
 

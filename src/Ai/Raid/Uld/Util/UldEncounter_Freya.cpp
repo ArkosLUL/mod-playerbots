@@ -276,6 +276,31 @@ Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float 
     return best;
 }
 
+bool IsFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state, Unit* lasher)
+{
+    if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= ULDUAR_FREYA_LASHER_BAIL_PCT ||
+        lasher->GetVictim() != bot || lasher->HasUnitState(UNIT_STATE_NOT_MOVE))
+        return false;
+
+    return state.LivingTrio().empty() && !(state.conservator && state.conservator->IsAlive());
+}
+
+Unit* GetFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state)
+{
+    Unit* best = nullptr;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!IsFreyaLowLasherChasing(bot, state, lasher))
+            continue;
+
+        if (!best || lasher->GetHealth() < best->GetHealth() ||
+            (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))
+            best = lasher;
+    }
+
+    return best;
+}
+
 bool IsFreyaLasherTail(FreyaWaveState const& state)
 {
     uint64 summed = 0;
@@ -1031,7 +1056,7 @@ uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state
 }
 
 std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float maxPct,
-                                                 float radius)
+                                                 float radius, bool spareChasers)
 {
     Player* bot = botAI->GetBot();
     std::vector<Position> low;
@@ -1039,6 +1064,9 @@ std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveSt
     for (Unit* lasher : state.detonatingLashers)
     {
         if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= maxPct)
+            continue;
+
+        if (spareChasers && IsFreyaLowLasherChasing(bot, state, lasher))
             continue;
 
         if (bot->GetExactDist2d(lasher) <= radius)

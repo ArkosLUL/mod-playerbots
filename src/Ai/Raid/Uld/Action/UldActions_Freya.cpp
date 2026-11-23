@@ -625,6 +625,10 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     auto const pickLasher = [&]() -> Unit*
     {
+        if (!isRanged)
+            if (Unit* chaser = GetFreyaLowLasherChasing(bot, state))
+                return chaser;
+
         float const reach = isRanged ? sPlayerbotAIConfig.SpellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
 
         Unit* lasher = isRanged ? GetFreyaLowLasherOnPlayer(bot, state, reach) : nullptr;
@@ -1292,9 +1296,9 @@ bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return StepOutOfBlasts(
-        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
-        ULDUAR_FREYA_LASHER_PACK_CLEAR);
+    return StepOutOfBlasts(GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT,
+                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, true),
+                           ULDUAR_FREYA_LASHER_PACK_CLEAR);
 }
 
 bool FreyaLasherBailAction::StepOutOfBlasts(std::vector<Position> const& blasts, float clearance)
