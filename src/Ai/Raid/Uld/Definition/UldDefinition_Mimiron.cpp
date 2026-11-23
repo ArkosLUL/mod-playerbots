@@ -73,6 +73,11 @@ bool MimironFormationHeld(PlayerbotAI* botAI)
 
 bool MimironFireFight(PlayerbotAI* botAI) { return IsMimironHardModeActive(botAI) && IsMimironEngaged(botAI); }
 
+bool MimironFirefighterLive(PlayerbotAI* botAI)
+{
+    return IsMimironHardModeActive(botAI) && BossStateGateLive(botAI, ULD_BOSS_MIMIRON);
+}
+
 bool MimironNearFire(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -220,7 +225,7 @@ void DefineMimiron(EncounterBuilder& e)
 
     e.Block("mimiron avoid aoe guard", Role::Any, MimironFireFight, 0, {"avoid aoe"});
 
-    e.Block("mimiron revive pet hold", Role::Any, MimironFireFight, 0, {"revive pet"});
+    e.Block("mimiron revive pet hold", Role::Any, MimironFirefighterLive, 0, {"revive pet"});
 
     e.Block("mimiron formation guard", Role::Any, MimironFormationHeld, Family::CombatFormationMove);
 
