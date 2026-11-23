@@ -150,7 +150,8 @@ inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RESISTED_AT = 130;
 inline constexpr float ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT = 20.0f;
 inline constexpr float ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT = 10.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS = 12000;
-inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS = 5000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_DUE_MS = 4000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_OVERDUE_NEED_MS = 1;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
 

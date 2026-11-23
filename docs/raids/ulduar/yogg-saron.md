@@ -194,12 +194,25 @@ Guardian death in the last **6 s** (`…_P1_NOVA_GAP_MS`), and `YoggSaronNovaLea
   leaves too little; Aura Mastery plus either, or Guardian Spirit, does.
 
 **Two health gates, and the tighter one decides whether to spend.** A Guardian first under **20%**
-detonated a median 4.8 s later, as late as 11.5; under **10%** a median 2.4 s, never later than 3.7. So
-`…_NOVA_NOW_HEALTH_PCT` (10) is where a bot spends its own button and a healer its external,
-`…_NOVA_NOW_WINDOW_MS` (5 s) always covering the hit; `…_NOVA_SOON_HEALTH_PCT` (20) and its 12 s window
-are Divine Sacrifice's alone, since one cast covers 25 raiders for 10 s. Everything here is instant, so
-0.3 s is castable. At the wider gate the raid emptied eight cooldowns on one mild nova and had nothing
-for the next eight.
+detonated a median 3.5 s later, as late as 14; under **10%** a median 1.2 s, 90% within 3.8 and 5 of 135
+past 5 s (windows 9-12). So `…_NOVA_NOW_HEALTH_PCT` (10) is where a bot spends its own button and a
+healer its external; `…_NOVA_SOON_HEALTH_PCT` (20) and its 12 s window are Divine Sacrifice's alone, since
+one cast covers 25 raiders for 10 s. Everything here is instant, so 0.3 s is castable. At the wider gate
+the raid emptied eight cooldowns on one mild nova and had nothing for the next eight.
+
+**The button's `needMs` counts down to the nova** (`YoggSaronNovaNeedFrom`), as the
+[shared picker](../README.md#defensive-windows-and-threat-brakes) needs: `…_NOVA_NOW_DUE_MS` (4 s) from
+the Guardian's first read under 10%, the soonest Guardian in reach deciding, then
+`…_NOVA_OVERDUE_NEED_MS` (1 ms). So a running button covers while it outlasts the nova, and once the nova
+is overdue, until it fades. A fixed 5 s read a 5 s Anti-Magic Shell as no cover the tick after its cast
+and stacked Vampiric Blood or Icebound Fortitude on it.
+
+- The first read (`novaGates`) is stamped room-wide by `YoggSaronNovaVictim`'s scan; one taken only when
+  a bot first reads itself at risk comes late and overstates `needMs`.
+- Due at 4, not 5: a 5 s button cast on the stamping tick reads a few ms short after its first aura
+  update, and the next goes on top. Above 5, Anti-Magic Shell and Cloak of Shadows go only once 5 s are
+  left.
+- Overdue at 1 ms, not 0: a 0 `needMs` means no nova in reach and stands the button down.
 
 Three tiers, in relevance order, since one cast covering 25 raiders beats any single bot's own:
 

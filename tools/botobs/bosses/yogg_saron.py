@@ -182,6 +182,7 @@ NOVA_DEFENSIVES = {
     55233: "vampiric blood", 48792: "icebound fortitude", 30823: "shamanistic rage",
     31224: "cloak of shadows",
 }
+NOVA_DEFENSIVE_AURAS = {12976 if spell == 12975 else spell: name for spell, name in NOVA_DEFENSIVES.items()}
 NOVA_EXTERNALS = {33206: "pain suppression", 47788: "guardian spirit", 6940: "hand of sacrifice"}
 
 # Divine Sacrifice is the cast; Divine Guardian is the raid-wide 20% its talent procs, and the one that
@@ -4622,7 +4623,7 @@ def show_phase3(trace: Trace) -> None:
         died_at[rec.get("g", 0)].append(rec["t"])
     covers: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
     for rec in trace.of("aura"):
-        name = NOVA_DEFENSIVES.get(rec.get("sp")) or NOVA_EXTERNALS.get(rec.get("sp"))
+        name = NOVA_DEFENSIVE_AURAS.get(rec.get("sp")) or NOVA_EXTERNALS.get(rec.get("sp"))
         if name and not rec.get("r") and rec.get("d") in roster and start <= rec["t"] <= stop:
             covers[rec.get("d")].append((rec["t"], name))
     hunter_casts = [(rec["t"], rec.get("s"), rec.get("sp"), rec.get("tgt", 0)) for rec in trace.of("cast")
@@ -4964,6 +4965,20 @@ def defensive_spans(trace: Trace, until: int, wanted: dict[int, str]) -> dict[in
     return spans
 
 
+def ladder_stacks(spans: dict[int, list[tuple[int, int, str]]], until: int) -> list[tuple[int, int, str, str]]:
+    found = []
+    for guid, rows in spans.items():
+        rows = sorted(rows)
+        for index, (start, _, name) in enumerate(rows):
+            if start > until:
+                continue
+            running = next((other for begin, end, other in rows[:index] if begin <= start < end and other != name),
+                           None)
+            if running:
+                found.append((start, guid, running, name))
+    return sorted(found)
+
+
 def show_novas(trace: Trace) -> None:
     print("SHADOW NOVA")
     p1_end = phase1_end(phase_spans(trace))
@@ -4993,7 +5008,7 @@ def show_novas(trace: Trace) -> None:
         print("  no nova hit a raider")
         return
 
-    own = defensive_spans(trace, end, NOVA_DEFENSIVES)
+    own = defensive_spans(trace, end, NOVA_DEFENSIVE_AURAS)
     ext = defensive_spans(trace, end, NOVA_EXTERNALS)
     raid = defensive_spans(trace, end, NOVA_RAID_AURAS)
 
@@ -5213,13 +5228,19 @@ def show_novas(trace: Trace) -> None:
     if quiet:
         print(f"    a human pressed these and no bot did: {', '.join(quiet)}")
 
+    stacked = ladder_stacks({guid: rows for guid, rows in own.items() if guid not in trace.humans}, p1_end)
+    print(f"  ladder row put up over another still running on the same bot, in phase 1: {len(stacked)}")
+    for when, guid, running, added in stacked[:8]:
+        print(f"    {clock(when):>9}  {trace.name(guid):14} {added} over {running}")
+
 
 SECTIONS = (
     ("phases", "phase timeline, the Keepers freed, the pre-pull window, leftover Guardian deaths after the"
      " handover", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
-    ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
+    ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them, ladder rows"
+     " stacked on a running one", show_novas),
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves, assignments, and who never walked for one", show_portals),
     ("phase2", "Constrictor and what the busy melee did per grab, Brain Link, node handovers", show_phase2),
