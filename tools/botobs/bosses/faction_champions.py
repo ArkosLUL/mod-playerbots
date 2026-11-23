@@ -487,8 +487,9 @@ OWN_SPLASH = {49938: "Death and Decay", 50842: "Pestilence", 49941: "Blood Boil"
               47502: "Thunder Clap", 48562: "Swipe (Bear)", 49048: "Multi-Shot", 58434: "Volley",
               51723: "Fan of Knives", 49271: "Chain Lightning", 42921: "Arcane Explosion", 42940: "Blizzard",
               47820: "Rain of Fire", 47836: "Seed of Corruption", 48467: "Hurricane", 53201: "Starfall",
-              12328: "Sweeping Strikes", 13877: "Blade Flurry", 62078: "Swipe (Cat)",
+              12328: "Sweeping Strikes", 13877: "Blade Flurry", 62078: "Swipe (Cat)", 58734: "Magma Totem",
               **dict.fromkeys((58699, 58703, 58704), "Searing Totem")}
+CALL_OF_THE_ELEMENTS_SPLASH = {58734, 58699, 58703, 58704}
 BREAKABLE_CC = ("Polymorph", "Fear", "Hex")
 SPLASH_BREAK_MS = 700
 OPENER = "fc.opener"
@@ -1698,7 +1699,9 @@ def own_splash(trace: Trace) -> collections.Counter:
     start = pull_start(trace)
     roster = roster_guids(trace)
     return collections.Counter(OWN_SPLASH[rec["sp"]] for rec in trace.of("cast")
-                               if rec.get("sp") in OWN_SPLASH and not rec.get("tr") and rec["t"] >= start
+                               if rec.get("sp") in OWN_SPLASH
+                               and (not rec.get("tr") or rec["sp"] in CALL_OF_THE_ELEMENTS_SPLASH)
+                               and rec["t"] >= start
                                and rec.get("s") in roster and rec.get("s") not in trace.humans)
 
 

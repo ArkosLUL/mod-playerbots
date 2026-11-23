@@ -1063,3 +1063,15 @@ the Hunter with no rogue alive and no prot warrior) still wait; not built.
 
 **Shared code.** None changed: the multiplier reads the shared `MULTI_TARGET_ACTIONS` list through `RaidSplashCache`, and
 the change is in this fight's multiplier, its wall duty and its reader.
+
+**Review.** Both causes hold: windows 14-18's `--cc` raid hits sum to the figures above (Starfall 111 (87), Searing
+Totem 51 (21), Blade Flurry 31 (26)), and window 18 toc1's two lapses read as written (Tocxah's holds 0:38.0-0:42.8,
+Tocxam's 5:02.9-5:07.7, each released at 4.0 s of Chains, then 6-7 s of ice reach that never got back in range). No
+size, mode or player branch.
+
+- Review fix: the stand search took the stand farthest from the victim within 6 s and only then tested the Chains fit,
+  so an ice DK whose farthest stand didn't fit took no wall duty though a nearer one did; the search now caps the walk
+  at what the Chains leave (`WallWalkBudget`).
+- Review fix: Call of the Elements dropped the bar's Magma Totem past the multiplier, 20 in windows 14-18, all from
+  Enhancement bots (`AiFactory` gives them `magma`). The multiplier zeroes it while the fire slot holds Magma or Searing
+  Totem, and `--aoe`'s raid splash counts the totems it drops (window 18: Magma Totem 0, 2, 0); next window 0.

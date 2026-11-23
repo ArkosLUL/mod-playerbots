@@ -1435,6 +1435,22 @@ bool WallWalkFits(Player* dk, Unit* champion, Position const& stand)
            OwnChainsHold(dk, champion, WalkMs(dk, stand) + GRIP_READY_SLACK_MS);
 }
 
+uint32 WallWalkBudget(Player* dk, Unit* champion)
+{
+    if (FactionChampionsIceDutyOf(dk) != champion->GetGUID())
+        return WALL_WALK_MAX_MS;
+
+    Aura const* chains = champion->GetAura(SPELL_CHAINS_OF_ICE, dk->GetGUID());
+    if (!chains)
+        return 0;
+
+    if (chains->GetDuration() < 0)
+        return WALL_WALK_MAX_MS;
+
+    int32 const spare = chains->GetDuration() - ICE_RECAST_LEFT_MS - static_cast<int32>(GRIP_READY_SLACK_MS);
+    return static_cast<uint32>(std::clamp<int32>(spare, 0, static_cast<int32>(WALL_WALK_MAX_MS)));
+}
+
 bool WallGrippable(FactionChampionsDefenceState const& state, PlayerbotAI* botAI, Unit* champion, Unit* killTarget,
                    uint32 now)
 {
@@ -1447,7 +1463,7 @@ bool WallGrippable(FactionChampionsDefenceState const& state, PlayerbotAI* botAI
 }
 
 bool DeriveWallStand(FactionChampionsDefenceState const& state, Player* dk, Unit* champion, Unit* victim,
-                     std::vector<Member> const& members, Position& stand)
+                     std::vector<Member> const& members, uint32 maxWalkMs, Position& stand)
 {
     float const minAway = victim->GetExactDist2d(champion) + GRIP_MIN_GAIN;
     bool found = false;
@@ -1462,7 +1478,7 @@ bool DeriveWallStand(FactionChampionsDefenceState const& state, Player* dk, Unit
             float const offCentre = ARENA_CENTER.GetExactDist2d(spot);
             float const away = victim->GetExactDist2d(&spot);
             if (offCentre > ARENA_FLOOR_RADIUS || offCentre < WALL_MIN_OFF_CENTRE || away < minAway ||
-                (found && away <= best) || WalkMs(dk, spot) > WALL_WALK_MAX_MS)
+                (found && away <= best) || WalkMs(dk, spot) > maxWalkMs)
                 continue;
 
             bool const healed = std::any_of(members.begin(), members.end(),
@@ -1580,7 +1596,8 @@ void UpdateWalls(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::v
         for (Candidate const& candidate : candidates)
         {
             Position stand;
-            if (!DeriveWallStand(state, dk, candidate.champion, candidate.victim->player, members, stand) ||
+            if (!DeriveWallStand(state, dk, candidate.champion, candidate.victim->player, members,
+                                 WallWalkBudget(dk, candidate.champion), stand) ||
                 !GripReadyInTime(dk, stand, true) || !WallWalkFits(dk, candidate.champion, stand))
                 continue;
 

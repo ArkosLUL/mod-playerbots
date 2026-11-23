@@ -17,8 +17,14 @@ public:
 private:
     bool Splashes(Action* action);
 
+    struct Names
+    {
+        bool ownSplash = false;
+        bool callOfTheElements = false;
+    };
+
     RaidSplashCache _splash;
-    RaidActionCache<bool> _ownSplash;
+    RaidActionCache<Names> _names;
 };
 
 class FactionChampionsThreatRedirectVetoMultiplier : public Multiplier

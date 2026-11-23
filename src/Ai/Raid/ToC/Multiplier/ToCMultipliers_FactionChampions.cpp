@@ -1,5 +1,7 @@
 #include "ToCMultipliers_FactionChampions.h"
 
+#include <algorithm>
+#include <iterator>
 #include <set>
 #include <string>
 
@@ -13,6 +15,7 @@
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "TotemsShamanStrategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 
@@ -21,15 +24,34 @@ namespace
 std::set<std::string> const OWN_SPLASH = {"death and decay", "pestilence", "hammer of the righteous",
                                           "avenger's shield", "blood boil", "consecration", "swipe (bear)",
                                           "fire elemental totem", "searing totem", "starfall"};
+
+bool FireSlotSplashes(Player* bot)
+{
+    ActionButton const* fire = bot->GetActionButton(TOTEM_BAR_SLOT_FIRE);
+    if (!fire || fire->GetType() != ACTION_BUTTON_SPELL)
+        return false;
+
+    uint32 const spell = fire->GetAction();
+    return std::find(std::begin(MAGMA_TOTEM), std::end(MAGMA_TOTEM), spell) != std::end(MAGMA_TOTEM) ||
+           std::find(std::begin(SEARING_TOTEM), std::end(SEARING_TOTEM), spell) != std::end(SEARING_TOTEM);
+}
 }
 
 bool FactionChampionsSuppressAoeMultiplier::Splashes(Action* action)
 {
     RaidSplashCache::Facts& facts = _splash.Of(action);
-    bool const ownSplash = _ownSplash.Get(action, [action] { return OWN_SPLASH.count(action->getName()) != 0; });
+    Names const& names = _names.Get(action,
+                                    [action]
+                                    {
+                                        std::string const name = action->getName();
+                                        return Names{OWN_SPLASH.count(name) != 0, name == "call of the elements"};
+                                    });
 
-    if (ownSplash || facts.summon || facts.multiTarget)
+    if (names.ownSplash || facts.summon || facts.multiTarget)
         return true;
+
+    if (names.callOfTheElements)
+        return FireSlotSplashes(bot);
 
     if (!SpellSplashes(botAI, action, _splash))
         return false;

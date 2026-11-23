@@ -940,6 +940,8 @@ def splash_pull() -> list[dict]:
         note(4000, MAGE_C, fc.CC_AURA, 6215),
         note(8000, MAGE_C, fc.CC_AURA, 0),
         cast(1800, MAGE, 53190, MAGE_C, triggered=True),
+        cast(2500, SHAMAN, 58734, 0, triggered=True),
+        cast(2600, SHAMAN, 49271, DISC, triggered=True),
         cast(3000, MAGE, 53190, MAGE_C, triggered=True),
         cast(4500, SEARING, 58702, MAGE_C),
         cast(5000, MAGE, 12826, MAGE_C, 1500),
@@ -967,6 +969,13 @@ class SplashOnCc(unittest.TestCase):
         self.assertEqual(hits, {"Starfall": [1, 1], "Attack (Searing Totem X)": [1, 0]})
         self.assertIn("raid hits on a champion our Polymorph, Fear, Hex held (ended within 0.7 s):"
                       " Attack (Searing Totem X) 1 (0), Starfall 1 (1)", out.getvalue())
+
+    def test_own_splash_counts_a_called_totem_but_no_other_triggered_cast(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_shocuul_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in splash_pull()) + "\n", encoding="utf-8")
+            splash = fc.own_splash(Trace(path))
+        self.assertEqual(splash, collections.Counter({"Magma Totem": 1}))
 
 
 class PackAndPeel(unittest.TestCase):
