@@ -746,7 +746,8 @@ bool FreyaKiteSnaplasherAction::Execute(Event /*event*/)
     Position const ahead(from.GetPositionX() + clear * std::cos(away), from.GetPositionY() + clear * std::sin(away),
                          from.GetPositionZ(), 0.0f);
 
-    HazardCircle const swing(snaplasherAt, std::min(gap, snaplasher->GetMeleeRange(bot)) - CONTACT_DISTANCE);
+    HazardCircle const swing(snaplasherAt,
+                             std::max(0.0f, std::min(gap, snaplasher->GetMeleeRange(bot)) - CONTACT_DISTANCE));
     auto const keepsClear = [&from, &swing](float x, float y)
     { return !SegmentCrossesCircle(from, Position(x, y, from.GetPositionZ(), 0.0f), swing); };
 

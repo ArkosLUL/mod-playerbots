@@ -849,9 +849,9 @@ with 2.
 **Next window should show** (`freya.py --tanks`, `postmortem.py --vetoes`, `--coverage`):
 
 - No `freya.snaphold` note and no `freya snaplasher hold` or `freya release held snaplasher` row.
-- 25-man loose stretches above about 22% with `freya.kite` reads "8.0 vs 7.0" and no kite order, bark hits
-  climbing (the raid keeps hitting it), and the stretch ending with its death or a tank, not a 20 s+ wait at
-  1-9% (window 12 uld1). Under about 22%, reads below the bot's speed and kite orders from its victim.
+- 25-man loose stretches above about 22% with `freya.kite` reads "8.00 vs 7.00" and no kite order, bark
+  hits climbing (the raid keeps hitting it), and the stretch ending with its death or a tank, not a 20 s+
+  wait at 1-9% (window 12 uld1). Under about 22%, reads below the bot's speed and kite orders from its victim.
 - A 10-man check pull with a loose Snaplasher: reads under 7.0 from 3 stacks, kite orders, near 0 deaths
   to it. Melee kiters: vetoes under the two kite guards, no `reach melee` into it.
 - Round 7's checks as written there; rounds 1-6 still holding.
@@ -862,3 +862,23 @@ with 2.
    with nothing extra on it. The other reading is a burn (every DPS on it first): 4-10 s to kill, but its
    siblings rarely die inside its 11 s revive, so it comes back and the wave restarts its sync.
    Recommendation: keep the split.
+
+**Review:** built as the user answered, on one code path (no size, mode or player branch), no shared code.
+Reproduced: the baseline stretches (`--tanks` on windows 12-13, adjacent stretches summed), the DBC (62663
+auras 79, 33 at -5 a stack and 61; 64190 79 and 61) and the core (`UpdateSpeed`'s health slow, the slow
+aura times its stacks in `CalculateAmount`, `SetSpeed` clamping at 0). Fixed:
+
+- `FreyaShedsSnaplasherThreat` never shed while a non-tank held the Snaplasher, add tank alive or not, so
+  a damage dealer ripping it off a living add tank after the head start put every bot on it back on it,
+  and the next one took it once he died, while the taunt cooled down (before round 3 they shed). It now
+  measures against the living add tank's threat alone (`GetGroupAssistTank(bot, 0)`); none, or none on
+  it (risen, not yet taunting): the pick stands. The main tank's stray threat still never counts.
+- `freya.kite` rounded to tenths, so 25-man's first read under 7.0 (6.96 at 22%) printed "7.0 vs 7.0"
+  beside kite orders. It writes hundredths now.
+- The kite's swing circle went negative with the bot within 0.25 yd of the Snaplasher's centre, and
+  `SegmentCrossesCircle` squares the radius, so every walk was refused. Clamped at 0.
+
+Left: a melee kiter whose sibling stands inside the kite margin idles (its reach is blocked) rather than
+going down the ladder; the 5 s head start still sheds with no add tank alive (a trio spawning after his
+death, as before round 3); `--tanks` splits one loose run wherever the Snaplasher briefly has no player
+target, so sum adjacent stretches.

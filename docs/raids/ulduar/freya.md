@@ -95,15 +95,17 @@ Suppression, Guardian Spirit, Lay on Hands and Hand of Sacrifice mostly went to 
 add tank got Lay on Hands outside the trio or right after a soulstone rise, and once each Pain Suppression
 and Hand of Sacrifice after a soulstone rise, dying under both.
 
-**A damage dealer near the tank's threat on the Snaplasher moves to a sibling** (`ShedSnaplasherThreat`,
-not yet verified in a pull). The generic `threat` strategy is never added (`AiFactory`), so nothing
-else stops a bot overtaking. At `ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT` (80%) of the highest living
-tank's threat the pick becomes the healthiest non-suppressed sibling, returning under
-`_THREAT_RETURN_PCT` (60%); aggro flips at 110% in melee. The tank gets `_SNAPLASHER_TANK_LEAD_MS` (5s)
-alone on a fresh one, since a ratio cannot cover the opener. Damage moves, none is withheld: with no
-sibling to hit, or after the head start with no add tank on it (on the main tank, a non-tank or nobody),
-the pick stands. Shedding off a loose one would keep the raid off it whenever the main tank had any
-threat on it, from a Consecration or a chain.
+**A damage dealer near the add tank's threat on the Snaplasher moves to a sibling**
+(`ShedSnaplasherThreat`, not yet verified in a pull). The generic `threat` strategy is never added
+(`AiFactory`), so nothing else stops a bot overtaking. At `ULDUAR_FREYA_SNAPLASHER_THREAT_SHED_PCT`
+(80%) of the living add tank's threat the pick becomes the healthiest non-suppressed sibling, returning
+under `_THREAT_RETURN_PCT` (60%); aggro flips at 110% in melee. The tank gets
+`_SNAPLASHER_TANK_LEAD_MS` (5s) alone on a fresh one, since a ratio cannot cover the opener. Damage
+moves, none is withheld: with no sibling to hit, or after the head start with no living add tank that has
+threat on it (dead, or risen and not yet taunted it), the pick stands. The ratio ignores the main tank,
+whose stray threat (a Consecration, a chain) would keep the raid off a loose one; it ignores who holds it
+too, so a damage dealer who rips it off a living add tank leaves the others shedding and his death
+doesn't hand it to the next one while the taunt cools down.
 
 **Storm Lasher needs nothing.** Generic interrupts stop Stormbolt (62938, 1.5s cast: 12 of 13 in one
 pull); Lightning Lash (62939), its bigger hitter, is instant and cannot be interrupted.
@@ -703,8 +705,8 @@ about what is up.
 ## What a trace answers
 
 `tools/botobs/bosses/freya.py <trace>`; probes are the notes `freya.kite` (the chased bot's "<Snaplasher> vs
-<own> run speed", on change), `freya.adddef` and `freya.addext`. A pull files under the first
-Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
+<own> run speed" in hundredths, on change: 25-man first drops under 7.0 at 6.96), `freya.adddef` and
+`freya.addext`. A pull files under the first Elder alive at her engage, `elder-stonebark` with all three (aliased to `freya`): the engage pulls each
 living Elder into combat before Freya's own hook runs, and the recorder never renames a named trace.
 `cfg.hardmode` has no Freya key, so the report's column reads `-`; the banner reads hard mode off the
 Elders' essence channels into Freya at her engage (62483-62485), else their empowers (Ground Tremor casts,

@@ -33,9 +33,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <list>
-#include <string>
 #include <vector>
 
 using namespace EncounterHelpers;
@@ -803,13 +803,11 @@ Unit* GetFreyaSnaplasherToKite(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
     {
-        auto const tenths = [](float speed)
-        {
-            long const scaled = std::lround(speed * 10.0f);
-            return std::to_string(scaled / 10) + "." + std::to_string(scaled % 10);
-        };
+        char speeds[32] = "";
+        if (chaser)
+            std::snprintf(speeds, sizeof(speeds), "%.2f vs %.2f", chaserSpeed, ownSpeed);
 
-        RaidObs::NoteDerived(bot, "freya.kite", chaser ? tenths(chaserSpeed) + " vs " + tenths(ownSpeed) : "");
+        RaidObs::NoteDerived(bot, "freya.kite", speeds);
     }
 
     return chaser && chaserSpeed < ownSpeed ? chaser : nullptr;
@@ -949,21 +947,8 @@ bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 see
     if (seenForMs < ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS)
         return true;
 
-    Unit* victim = snaplasher->GetVictim();
-    Player* holder = victim ? victim->ToPlayer() : nullptr;
-    if (!holder || !PlayerbotAI::IsTank(holder) || PlayerbotAI::IsMainTank(holder))
-        return false;
-
-    float tankThreat = 0.0f;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || !PlayerbotAI::IsTank(member))
-            continue;
-
-        tankThreat = std::max(tankThreat, snaplasher->GetThreatMgr().GetThreat(member));
-    }
-
+    Player* addTank = GetGroupAssistTank(bot, 0);
+    float const tankThreat = addTank ? snaplasher->GetThreatMgr().GetThreat(addTank) : 0.0f;
     if (tankThreat <= 0.0f)
         return false;
 
