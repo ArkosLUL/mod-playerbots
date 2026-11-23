@@ -116,9 +116,12 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
                       false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(),
-                  ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false, false, false, true,
-                  MovementPriority::MOVEMENT_FORCED, true, false);
+    Position destination = ULDUAR_YOGG_SARON_MIDDLE;
+    YoggSaronPhase1TankPullSpot(botAI, destination);
+
+    return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
+                  destination.GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED, true,
+                  false);
 }
 
 bool YoggSaronSanityAction::Execute(Event /*event*/)

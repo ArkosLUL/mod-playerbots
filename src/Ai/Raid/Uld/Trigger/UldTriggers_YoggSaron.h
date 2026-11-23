@@ -97,6 +97,7 @@ public:
 
 private:
     bool returning = false;
+    bool pulling = false;
 };
 
 class YoggSaronSanityTrigger : public YoggSaronTrigger

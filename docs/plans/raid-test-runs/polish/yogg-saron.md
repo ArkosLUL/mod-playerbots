@@ -435,3 +435,112 @@ deaths no higher than 1-9 a pull.
 shows as an aura), so `--novas` covers, the stack line and `--phase3` covers see a running Last Stand, and the stack
 line leaves humans out. Re-read over the nine pulls, the line stays 0. `yogg.novadef` `covered` dropped from the
 checks: the trigger stands down while a row covers, so the action seldom runs to note it.
+
+## Round 7 (2026-11-23, window 14 build 1fa3c332c: round 5 + shared `PickDefensive` fix; round 6 merged, not built)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 1fa3c332c --pulls 10`: one valid pull per pool, 0
+humans, Freya's 62670 on the raid in all three. The report's boss reader crashed in `--threat` on every trace (two
+functions named `taunt_aim`, the phase 3 one shadowing the phase 1 one); fixed in this round, then read with the full
+`yogg_saron.py` and scratch scripts over snapshots and `dmg` rows (each phase 1 nova's Guardian position against the
+middle, the ranged spot and its holding tank; the same over all twelve pulls of windows 9, 10, 12 and 14).
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2 | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261123-104610-25` | `603_25_yogg-saron_1795430816` | wipe 11:21, 32 deaths | 136.8 s, 0 deaths | 434.6 s, 5 waves: Brain −20.7, −19.9, 0.0 (Chamber, nobody reached it), −15.9, −13.6 | from 9:31, 120.6 s, Yogg 29.8 → 26.3% |
+| uld2 | `tr-20261123-105112-26` | `603_26_yogg-saron_1795431118` | wipe 5:00, 30 deaths | 161.2 s, 13 deaths | 150.8 s, 1 wave, Brain untouched | never |
+| uld3 | `tr-20261123-105152-27` | `603_27_yogg-saron_1795431158` | wipe 13:08, 31 deaths | 142.0 s, 6 deaths | 608.3 s, 7 waves: −17.2, −10.5, −18.4, −19.3, −3.1, −0.6; Brain at 30.9% when Induce Madness took the wave 7 team | never |
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 2 Laughing Skull 3 (wave 3 Chamber); phase 3 Immortal Guardian 28, Lunatic Gaze 1 (a fire mage at 25%,
+  finished by the gaze ticks). First phase 3 death at +39.7 s, both tanks dead by +81 s.
+- uld2: phase 1 Shadow Nova 13: 1:05 one melee; **1:14 eight** (four ranged, two healers, a Fervor holder, a melee
+  through Hand of Sacrifice) from a Guardian 9.3 yd out toward the station; 1:22 three melee left low by it with two
+  healers dead; 2:22 one melee. Phase 2 Dark Volley 6 (five phase 1 leftovers), Squeeze 2, Corruptor 2, Death Ray 1,
+  Induce Madness script kills 6.
+- uld3: phase 1 Shadow Nova 6: 1:05 a healer, from a Guardian 7.4 yd out toward the station; 1:40 a Fervor holder
+  that never left; 1:45 two melee (two novas 5.4 s apart); 1:54 and 2:13 one melee twice. Phase 2 Corruptor 10,
+  Squeeze 6, Malady 1, Death Ray 1, Induce Madness script kills 7.
+
+**Verdict on round 5 (ranged DoTs on Yogg): working on its own check.** Only uld1 reached phase 3. `ranged DoTs on
+Yogg`: hunters Serpent Sting 100 / 86%; shadow SW:P 98, VT 86, DP 85; destruction Corruption 99, Immolate 99;
+demonology Corruption 100, Immolate 52; balance IS 89, MF 71; fire Living Bomb 77; affliction Corruption 53, UA 44
+(window 12 uld1: 0-48% for most). `yogg.p3dot` wrote every listed spell (corruption 16, immolate 9, serpent sting 7,
+vampiric touch 6, insect swarm 5, shadow word: pain 5, living bomb 4, moonfire 4, devouring plague 4, unstable
+affliction 2). The two ranged with none are the arcane mage and the elemental shaman (Flame Shock, the user's open
+question). No gaze cost seen: the one ranged gaze death was a bot at 25% after Guardian hits, its Living Bomb 7 s
+earlier. Yogg's rate is not readable: ranged put 98% into six phase 2 leftover tentacles (below).
+
+**Round 6 confirmed needed (not judged).** `--novas` `ladder row put up over another still running`: 2 / 2 / 2, every
+one Icebound Fortitude over Anti-Magic Shell within 0.1-0.2 s (uld1 1:09.2, 2:03.2; uld2 1:00.8 twice; uld3 0:59.3,
+0:59.4). Phase 1 ladder casts ran 41 / 20 / 41 a pull (Barkskin 20 / 5 / 16) against 17 in windows 9-12: window 14
+also built the shared `PickDefensive` fix, so that is the baseline round 6 is read against.
+
+**Stop rules.** No kill. **Phase 3 is stuck**: picked in rounds 3 (question, declined), 4 (class taunt hold) and 5
+(the user's DoTs) and still the bulk of uld1's deaths, so it is not picked again; question below. The nova pick
+below is a new root cause (round 6 was the defensive picker).
+
+**Ranking** across pools: phase 3 Immortal Guardians 28 (stuck); phase 1 Shadow Nova 19, plus uld2's collapse
+downstream of its 1:14 nova (17 more); Corruptor 12; Induce Madness script kills 13; Squeeze 8; Dark Volley 6
+(uld2's leftovers); Laughing Skull 3; Death Ray 2.
+
+**Picked: Guardians die off the stack and catch the back line.** uld2's 0:36.7, 0:57.1 and 1:14.2 novas came from
+Guardians 8.2, 9.4 and 9.3 yd from the middle at bearing 174-176° (the station is due west, 180°), 12.1-13.3 yd from
+the back line: 13, 13 and 11 back-line hits, six back-line deaths at 1:14. Each stood on the tank Uldyaa, 2.9-3.8 yd
+out, and the raid kept hitting it under 35% (the focus, the whole raid on it every frame at 0:36), the floor it would have parked at
+off the stack. uld3's 0:54.4 and 1:05.0 the same
+at 8.4 and 7.4 yd. Over the twelve pulls of windows 9-14, 151 phase 1 novas: every one that died within 15 yd of the
+ranged spot caught the back line (11 novas, 137 hits, 9 deaths), none at 15.1-15.9 yd (8); by distance from the middle,
+7 of 10 at 8-10 yd caught it, 5 of 18 at 6.5-8, 2 of 73 inside 5.5.
+
+Root cause: core `2026_11_06_01` gave the Guardian's display 28465 a combat reach of 4 (was 0,
+`data/sql/updates/db_world/2026_11_06_01.sql:2140`), the reach audit's "no stale site" missing two effects:
+
+1. `YoggSaronDistanceFromMiddle` read `GetDistance2d` (`UldEncounter_YoggSaron.cpp:3218`), which subtracts it, so
+   `YoggSaronGuardianOnTheStack` (≤ 6.5) took Guardians out to 10.5 yd: killable below the 35% park floor
+   (`YoggSaronPhase1GuardianKillable`) and ignored by the back line's nova dodge (`GetYoggSaronNovaThreats`). The
+   taunt pick (its own `GetDistance2d`, `:3267`) and `YoggSaronGuardianCountsForSara` (≤ 15) read the same 4 yd short.
+2. A standing Guardian waits 2-6.2 yd off its tank (stationary samples: p50 3.7-4.7, p90 6.2), on the side it came
+   from, so a tank inside its 6.5 / 2.8 leash (holding tanks sat a median 0.8-4.2 yd out) held Guardians to ~12 yd.
+
+Bug, not a plan change: the doc's leash and stack are about where the Guardian dies, 6.5 yd from the middle by
+centre. Fix (`UldEncounter_YoggSaron.h/.cpp`, `UldTriggers_YoggSaron.h/.cpp`, `UldActions_YoggSaron.cpp`):
+
+- `YoggSaronDistanceFromMiddle` reads the centre (`GetExactDist2d`), so the stack, Sara-count and taunt tests (the
+  taunt now through `YoggSaronGuardianOnTheStack`) mean what the doc says. The phase 1 AoE hold keeps the edge read
+  (`GetDistance2d`, inline), since a player's area spell adds the target's reach. On the station's side 6.5 leaves
+  the spot 15.0 yd off, the measured line.
+- `YoggSaronPhase1TankPullSpot`: a bot tank in phase 1, in the room, outside the handover, holding a Guardian off
+  the stack (its victim, the lowest such) walks to `…_P1_TANK_PULL_OFFSET` (1.5 yd) past the middle opposite it,
+  until within `…_P1_TANK_PULL_ARRIVED` (1 yd). The Guardian follows to 6.2 − 1.5 + 1 = 5.7 yd at most, on the
+  stack, and the tank never leaves the 2.8 yd cloud-free radius, so the control's walk (beyond 2.8) never fights it.
+  The guardian positioning node carries it (trigger fires on the pull too; the action walks to the pull spot,
+  else the middle), probe `yogg.p1pull` (`pull` / `held`).
+
+Same room, Guardians and reach at 10 and 25, normal and hard mode; a human tank's Guardians park as before, only the
+bot tanks pull. No shared code. Reader: `--phases` prints Guardian deaths within 15 yd of the ranged spot and the
+tank pulls.
+
+**Next window should show:** `--phases` `within 15 yd of the ranged spot` at 0 (here 0 / 3 / 2) and `reaching the
+21.5 yd station (over 6.5 yd out)` under 5 / 5 / 4 of 13; `tank pulls onto the stack` above 0; `--novas` `back line
+caught by a nova in phase 1` near 0 (here 2 / 14 / 13 bots); nova deaths no higher than 0 / 13 / 6; phase 1 no
+longer than 137-161 s (parks cost time if the pull lags). Round 6's checks land in the same window.
+
+**Seen, not picked.**
+
+- Phase 3 in uld1 opened with six phase 2 leftovers (6.08M: three Crushers at 30-65%, two Corruptors at 100%);
+  ranged put 98% into them (leftover Crusher first by design), 0% into Immortal Guardians, one Crusher died at
+  +42.5 s; every Guardian left a tank within a median +4.0 s and ran at 90%+ for 79% of samples.
+- `YoggSaronLowGuardians` and `GetYoggSaronNovaThreats` sweep by `GetCreatureListWithEntryInGrid`, which adds both
+  sizes, so their 17 / 20 yd radii now reach Guardian centres at 22.5 / 25.5 yd: the nova ladder reads Guardians
+  out of the nova's reach as a threat. Left while round 6 (the ladder) is judged.
+- uld3 missed phase 3 by 0.9% of the Brain: wave 6 took 0.6%, and the wave 7 team was taken by Induce Madness
+  before a door opened. Corruptor and Squeeze took 16 of its 18 phase 2 deaths before the script kills, from 10:19.
+- `--novas` `resurrected straight back into it` matches deaths to any Rebirth or Reincarnation within 5 s, so one
+  cast 0.3 s after uld2's 1:14 nova marked 11 deaths as rezzed: read it per target, not as a count.
+
+**Question for the user (phase 3, stop rule).** Tried: the Empowering Shadows question (round 3, declined), the
+class taunt hold (round 4), ranged DoTs on Yogg (round 5). With three leftover Crushers at phase 3, the leftover
+Crusher rule kept every ranged on them for the whole phase while the Guardians stayed at full power. Should phase 3
+ranged take only the lowest leftover Crusher first and the others after the Immortal Guardians? **Recommended: yes**:
+one Crusher's Diminish Power is what the rule answers, and a phase spent on three leaves the tanks alone.

@@ -3217,8 +3217,8 @@ namespace
 {
 float YoggSaronDistanceFromMiddle(Unit* unit)
 {
-    return unit->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
-                               ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+    return unit->GetExactDist2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                                ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
 }
 }
 
@@ -3230,6 +3230,34 @@ bool YoggSaronGuardianCountsForSara(Unit* guardian)
 bool YoggSaronGuardianOnTheStack(Unit* guardian)
 {
     return guardian && YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_LEASH;
+}
+
+bool YoggSaronPhase1TankPullSpot(PlayerbotAI* botAI, Position& spot)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsTank(bot) || !YoggSaronInPhase1(botAI) || !YoggSaronInPhase1Room(bot))
+        return false;
+
+    Unit* pulled = nullptr;
+    for (Unit* attacker : bot->getAttackers())
+    {
+        if (attacker->GetEntry() != NPC_GUARDIAN_OF_YS || !attacker->IsAlive() || attacker->GetVictim() != bot ||
+            YoggSaronGuardianOnTheStack(attacker))
+            continue;
+
+        if (!pulled || attacker->GetHealth() < pulled->GetHealth())
+            pulled = attacker;
+    }
+
+    if (!pulled || YoggSaronHandoverState(botAI).active)
+        return false;
+
+    Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
+    float const across = pulled->GetAngle(middle.GetPositionX(), middle.GetPositionY());
+    spot.Relocate(middle.GetPositionX() + ULDUAR_YOGG_SARON_P1_TANK_PULL_OFFSET * std::cos(across),
+                  middle.GetPositionY() + ULDUAR_YOGG_SARON_P1_TANK_PULL_OFFSET * std::sin(across),
+                  middle.GetPositionZ());
+    return true;
 }
 
 bool YoggSaronPhase1GuardianPreferred(Unit* candidate, Unit* incumbent)
@@ -3264,8 +3292,7 @@ Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI)
         if (victim && PlayerbotAI::IsTank(victim))
             continue;
 
-        if (guardian->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
-                                    ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <= ULDUAR_YOGG_SARON_P1_LEASH)
+        if (YoggSaronGuardianOnTheStack(guardian))
             continue;
 
         if (bot->GetDistance(guardian) > ULDUAR_YOGG_SARON_P1_TAUNT_RANGE)
@@ -3465,7 +3492,8 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
             guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT)
             continue;
 
-        if (YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS ||
+        if (guardian->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                                    ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS ||
             (focus && guardian->GetExactDist2d(focus) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS))
             return true;
     }

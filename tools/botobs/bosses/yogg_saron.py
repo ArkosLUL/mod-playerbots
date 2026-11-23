@@ -681,11 +681,13 @@ def show_phases(trace: Trace) -> None:
     where = tracks(trace, guardians)
     deaths = []
     dead = []
+    spots = []
     for when, guid in novas:
         pts = [p for p in where.get(guid, []) if p[0] <= when]
         if pts:
             deaths.append((when, math.dist((pts[-1][1], pts[-1][2]), BODY)))
             dead.append((when, guid))
+            spots.append((pts[-1][1], pts[-1][2]))
     kinds = dict(zip(deaths, kill_kinds(trace, dead)))
     radii = [radius for _, radius in deaths]
     if radii:
@@ -694,6 +696,11 @@ def show_phases(trace: Trace) -> None:
               f"from the middle")
         print(f"    reaching the {RANGED_STATION:.1f} yd station (over "
               f"{RANGED_STATION - NOVA_RADIUS:.1f} yd out): {wide} of {len(radii)}")
+        print(f"    within {NOVA_RADIUS:.0f} yd of the ranged spot (the back line in the blast): "
+              f"{station_catches(spots, RANGED_SPOT, NOVA_RADIUS)} of {len(radii)}")
+        pulls = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.p1pull")
+                                    if rec["t"] <= (p1_end or 0))
+        print(f"    tank pulls onto the stack (yogg.p1pull): {pulls['pull']}")
 
         # The only number that says how close the phase came. A kill outside the nova's reach of Sara
         # does nothing at all for it, so 13 deaths can still be 9 kills.
@@ -731,6 +738,10 @@ def show_phases(trace: Trace) -> None:
         show_room_gate(trace, p1_end)
 
     show_handover(trace)
+
+
+def station_catches(spots: list[tuple[float, float]], station: tuple[float, float], reach: float) -> int:
+    return sum(1 for spot in spots if math.dist(spot, station) < reach)
 
 
 def chain_deaths(trace: Trace, dead: list[tuple[int, int]],
@@ -5235,8 +5246,8 @@ def show_novas(trace: Trace) -> None:
 
 
 SECTIONS = (
-    ("phases", "phase timeline, the Keepers freed, the pre-pull window, leftover Guardian deaths after the"
-     " handover", show_phases),
+    ("phases", "phase timeline, the Keepers freed, the pre-pull window, Guardian deaths in the back line's"
+     " reach and tank pulls, leftover Guardian deaths after the handover", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them, ladder rows"

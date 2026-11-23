@@ -1234,6 +1234,12 @@ class YoggPhases(unittest.TestCase):
                           (12000, 9, "barkskin", "frenzied regeneration")])
         self.assertEqual(yogg_saron.ladder_stacks(spans, 1100), [])
 
+    def test_station_catches_counts_deaths_inside_the_reach_of_the_ranged_spot(self):
+        x, y = yogg_saron.RANGED_SPOT
+        deaths = [(x + 12.1, y), (x + 14.9, y + 1.0), (x + 15.2, y), (x + 21.5, y), (x + 10.0, y + 20.0)]
+        self.assertEqual(yogg_saron.station_catches(deaths, yogg_saron.RANGED_SPOT, 15.0), 2)
+        self.assertEqual(yogg_saron.station_catches([], yogg_saron.RANGED_SPOT, 15.0), 0)
+
     def test_roar_verdict_needs_a_press_and_no_silence(self):
         self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
         self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")
