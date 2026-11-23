@@ -934,7 +934,7 @@ of the target and `YoggSaronRouteClearOfBody` says the straight line passes insi
 arc waypoint, then stands down. Under every raid node and over `charge` and both `reach melee` entries, so
 the price is one shadowed gap-closer per arc leg. It skips a target inside the clear radius, Yogg included,
 where no arc arrives, and tests reach with combat reach: centre distance never passes on Yogg or a
-full-health Guardian.
+full-health Guardian. It stands down while the bot's portal walk is pending ([Portals](#portals)).
 
 **Phase 3 keeps the body.** Unhandled there, phase 3 had fifteen times phase 2's launches: the brain team
 surfaces west of Yogg and P3 positioning walked it in one forced line, passing 2 yd from his middle, to
@@ -1050,7 +1050,8 @@ All navprobe-clean, settled z 324.87-325.04, **20.1-23.2 yd from the body** and 
 them in code rather than reading live creatures: the team has to be *standing* on its spot before any
 portal exists.
 
-**Spread before the wave, nearest first.** By group index the walk ran ~3× the distance to the nearest spot.
+**Spread before the wave, nearest pair first**: the closest free bot and spot, repeatedly. By group index
+the walk ran ~3× the distance to the nearest spot.
 The plan is latched once per wave so it does not churn, off a per-instance wave clock: predict the first
 wave at +60 s, re-anchor on every wave a bot sees, and roll the prediction forward a period when one passes
 unseen, or it reads "any moment now" forever. Only a sighting moves the clock: a bot underground sees no
@@ -1062,14 +1063,18 @@ distance / runSpeed × 2)`, measured rather than flat since time waiting on a sp
 and holds until the portal appears under it. The walk goes quiet on arrival and reach would take the bot
 back, so `yogg-saron portal spot hold` blocks reach, heal reach, set behind, rear flank, formation moves,
 charges, follow and random moves while `YoggSaronHoldingPortalSpot` holds (slot and distance read before the
-plan); the Yogg dodges still move it. The out-of-phase-2 reset clears the clock but not `waveOrdinal`,
-harmless while `slotWave` carries with it, so read `yogg.wave` as a session counter.
+plan); the Yogg dodges still move it. The body detour is reach by another name, so it stands down while
+the walk is pending (`YoggSaronPortalWalkPending`: spreading, holding or late): left in, it walked holders
+toward a target across the body, half of all bots off a held spot at the open, and a walk it broke
+entered a median 2.8 s late against 0.7. The out-of-phase-2 reset clears the clock but not
+`waveOrdinal`, harmless while `slotWave` carries with it, so read `yogg.wave` as a session counter.
 
 **Rebuild the plan when the portals spawn, and click only your own.** A plan keyed on the wave ordinal
 alone never rebuilt, since the ordinal is the same before and after the portals appear, and was built off
 stale positions. So the plan rebuilds once more on the tick the portals are first seen, but a bot already
-within `ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS` of its spot keeps it: re-picked greedily in team order,
-holders lost their spot to an earlier bot whose nearest free spot it was and walked 11-40 yd to another.
+within `ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS` of its spot keeps it, and the rest pair up as above:
+re-picked greedily in team order, holders lost their spot to an earlier bot whose nearest free spot it was
+and walked 11-40 yd to another, and so did a bot a dodge had left 3-7 yd off.
 
 **A used portal stands for another second.** `OnSpellClick` clears its npcflags and despawns it 1 s later,
 and a click on it casts only the visual 51347. Clicking whatever stood inside the radius let a bot passing
@@ -2008,6 +2013,10 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - A portal taken shows only as the bot's own Illusion Room cast (63988): the portal is never sampled. A
   click on a spent portal leaves only its 51347 cast; `--portals` counts those per wave, with the entries
   over 2 s after the open.
+- Leaving a portal spot leaves no row either: `--portals` reads it off `yogg.portal` turning from `holding`
+  before the open and names the walks accepted in between, counts body detour walks under a pending intent,
+  and lists bots the open's rebuild sent from within 8 yd of their spot to a farther one, by a snapshot up to
+  0.3 s old (a Constrictor's Lunge at the open reads as a near bot moved).
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name

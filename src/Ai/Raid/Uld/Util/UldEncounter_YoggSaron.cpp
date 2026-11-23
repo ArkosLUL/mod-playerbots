@@ -1130,31 +1130,38 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
         }
 
         for (Player* member : team)
-        {
             state.brainTeam.insert(member->GetGUID());
-            if (state.portalSlot.count(member->GetGUID()))
-                continue;
 
-            uint32 best = spotCount;
-            float bestDistance = 0.0f;
-            for (uint32 candidate = 0; candidate < spotCount; ++candidate)
+        while (true)
+        {
+            Player* pick = nullptr;
+            uint32 pickSlot = spotCount;
+            float pickDistance = 0.0f;
+            for (Player* member : team)
             {
-                if (taken[candidate])
+                if (state.portalSlot.count(member->GetGUID()))
                     continue;
 
-                float const distance = member->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[candidate]);
-                if (best == spotCount || distance < bestDistance)
+                for (uint32 candidate = 0; candidate < spotCount; ++candidate)
                 {
-                    best = candidate;
-                    bestDistance = distance;
+                    if (taken[candidate])
+                        continue;
+
+                    float const distance = member->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[candidate]);
+                    if (!pick || distance < pickDistance)
+                    {
+                        pick = member;
+                        pickSlot = candidate;
+                        pickDistance = distance;
+                    }
                 }
             }
 
-            if (best == spotCount)
+            if (!pick)
                 break;
 
-            taken[best] = true;
-            state.portalSlot[member->GetGUID()] = static_cast<uint8>(best);
+            taken[pickSlot] = true;
+            state.portalSlot[pick->GetGUID()] = static_cast<uint8>(pickSlot);
         }
     }
 

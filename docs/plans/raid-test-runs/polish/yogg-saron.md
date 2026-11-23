@@ -892,3 +892,108 @@ first hit ~3 s sooner when staged, about 2% of the Brain on two cycles in three;
 **Review fixes.** A non-tank healer human master already counts as the team's one healer, so with him no bot
 healer goes and the melee fill the bot slots: the fix as built sent a bot healer beside him and one melee fewer,
 two healers in a room whose rule is exactly one.
+
+## Round 11 (2026-11-23, window 19 build 99188e0f1: round 10 built, round 9's join still in)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 99188e0f1 --pulls 10`: one valid pull per pool, 0
+humans, Freya's 62670 on the raid. Read with the full `yogg_saron.py` and scratch scripts (`scratchpad/yogg-r11/`)
+over `note`, `move`, `cast` and snapshot rows: per late portal entry the bot's intents and accepted walks from
+25 s before the open, slot changes at the open's rebuild, the corridor trash's path, exit walk times.
+
+| Pool | Run | Trace | Out | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|
+| uld1 | `tr-20261123-171514-15` | `603_15_yogg-saron_1795454160` | wipe 12:25, 33 deaths | 6: I 20.0, C 2.3, S 16.8, I 13.6, C 5.1, S 12.2 (held from 36.0%, phase 3 4.4 s before the end) | from 10:53.6 with 11 tentacles (9.47M; Crushers 8.7, 78.7, 96.7%), Yogg 30 → 27.2% |
+| uld2 | `tr-20261123-170952-13` | `603_13_yogg-saron_1795453838` | wipe 13:50, 31 | 7: S 13.8, I 14.6, C 9.3, S 13.0, I 12.0, C 5.8 (held from 36.1% at 10.2 s left, survived at 31.5%), S 1.6 (held, phase 3 2.7 s before the end) | from 12:22.7 with 15 (17.50M; six Crushers 30-100%), 30 → 28.2% |
+| uld3 | `tr-20261123-171333-14` | `603_14_yogg-saron_1795454059` | wipe 11:38, 30 | 5: S 18.0, C 9.4, I 18.9, S 13.8, C 9.9 (held from 36.0% at 9.5 s left, survived at 30.0%, phase 3 7 s after the end) | from 9:56.5 with 7 (6.70M; Crushers 72.5, 99.5%), 30 → 25.5% |
+
+**Cycles to 30%:** six, seven and five; window 16 five in all three, window 17 none. Phase 3 opened with 11 / 15 / 7
+tentacles, three, six and two of them Crushers: the user's goal of at most one was not met. Brain per cycle, held
+cycles left out: Stormwind / Icecrown median 14.2% (window 17 11.2%, window 16 17.3%), Chamber 7.2% (2.3-9.4). Room
+clears: Stormwind 24.6 s, Icecrown 23.1, Chamber 31.4 (window 17 31.6 / 29.7). From Stormwind and Icecrown the first
+Brain hit came a median 8.8 s after the door (window 16 4.4, window 17 7.1), melee on the Brain at 13.8 s (9.8 / 11.7),
+4-6 joiners a wave ending at the far tentacles.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 5 (Uldxai twice; 1:10.6 a Guardian at the middle caught 8 of the back line, Uldxau
+  finished by Sara's Blessing; 2:04.9 a leftover killed by splash 5.9 s after the last nova, Uldxas and Uldxau);
+  phase 2 none; phase 3 Immortal Guardian 23, Corruptor 2, Faceless Horror 2, Lunatic Gaze 1.
+- uld2: phase 1 Shadow Nova 1; phase 2 Death Ray 1, Corruptor 1; phase 3 Immortal Guardian 22, Corruptor 5 (four
+  inside the collapse at 13:09-13:13), Lunatic Gaze 1.
+- uld3: phase 1 none; phase 2 Corruptor 1; phase 3 Immortal Guardian 23, Faceless Horror 2, Void Beast 2, Brain Link
+  1, Deafening Roar 1.
+
+**Verdict on round 10 (one healer per brain team): fixed.** Every `--portals` wave line reads `heal 1`, 18 of 18
+(window 16 uld3 cycle 1 went down with ten melee). uld3 (roster C, ten melee, no death before 9:19) sent cycles 1 and
+2 down as nine melee and a healer. Phase 2 deaths 0 / 2 / 1 (window 17: 59 in all).
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked. Rounds 8-11 picked four different phase 2
+failures (round 8's portal clicks fixed the spent clicks; this is the late entries it left).
+
+**Ranking** across pools: phase 3 Immortal Guardians 68 (stuck); Corruptor 9 (7 in phase 3, from the leftovers);
+corridor trash 6 (harness, below); Shadow Nova 6; Lunatic Gaze 2; Death Ray, Brain Link, Deafening Roar 1 each. Phase 2
+is nearly deathless now, so the pick is the user's direction: cycles to 30%.
+
+**Picked: brain team bots are off their portal spot when the portals open.** 83 of 180 entries came over 2 s after
+the open (21 / 38 / 24), 9 of 18 waves with their healer 2-15 s late. 55 bot-waves had stood on their spot
+(`holding`) and were off it at the open: 28 walked off by `yogg-saron body detour`, 22 by the phase 2 spacing dodge
+(meant), the rest by the portal walk's own re-route or nothing recorded. An entry whose walk carried a detour walk
+came a median 2.8 s late (21 of 32 over 2 s), the rest 0.7 s (62 of 148); windows 16-17 4.4 against 0.2 s (73 of 96).
+And the open's rebuild then handed 6 bots that stood 2.7-7.4 yd off their spot a farther one (7.7-16.2 yd); a
+seventh reads so only because a Constrictor's Lunge moved it at the open.
+
+uld1 wave 2, the window's worst cycle (Chamber, 37.1 s clear, Brain −2.3%): Uldxac, the disc priest and the room's
+healer, reached slot 8 at 4:36.37 (`holding`); at 4:36.67 the detour walked it toward (1996.2, −44.1), after a
+Constrictor across the body; at the open (4:37.77) it stood 7.2 yd off, the rebuild gave slot 8 to Uldxan (melee,
+detoured off its own slot 9 the same way) and Uldxac slot 2, 16 yd off; in at +15.2 s, and the room ran with its
+healer 33.7 yd from the middle. uld2 wave 5: Uldyap holding at 8:38.98, detoured at 8:39.24 toward a Crusher across
+the body, grabbed by a Constrictor 18 yd off its spot at 8:41.9, in at +19.3 s.
+
+Root cause, two parts:
+
+1. `YoggSaronBodyDetourTrigger::IsActive` (`UldTriggers_YoggSaron.cpp:665-688`) has no portal gate. The detour walks
+   toward the bot's target the way reach does, but it is its own node (`ACTION_RAID − 1`), not a `Family::Reach`, so
+   `yogg-saron portal spot hold` (`UldDefinition_YoggSaron.cpp:151`) never blocks it, and under `holding` the portal
+   walk (`ACTION_RAID`, `UldTriggers_YoggSaron.cpp:394-407`: spreading and late only) does not run to outrank it.
+   Window 19: 32 detour walks under a pending intent (30 `holding`, 2 `late`); windows 16-17: 86.
+2. The plan's assignment loop (`UldEncounter_YoggSaron.cpp:1132-1158` before the fix) gave the free spots in team
+   order, so at the open's rebuild an earlier off-spot bot took the spot of a later one standing a few yards from it.
+
+Bug, not a plan change: the plan already means a bot to stand on its spot until its portal appears. Fix
+(`UldTriggers_YoggSaron.cpp`, `UldEncounter_YoggSaron.cpp`): the body detour stands down while
+`YoggSaronPortalWalkPending` (spreading, holding, late); the plan gives free spots by nearest pair, the closest free
+bot and spot first, repeatedly, holders within the click radius still kept first. Same spots at 10 (four) and 25,
+normal and hard mode; a human takes his own portal as before. No shared code. Reader: `--portals` prints `body detour
+walks while a portal walk was pending`, and per wave `left a held spot before the open` by the walks that took them
+off and `moved off a near spot by the open's rebuild` (`walks_while_pending`, `left_held_spot`, `rebuild_losses`,
+tested).
+
+**Next window should show:** `body detour walks while a portal walk was pending: 0` (here 11 / 13 / 8); no `yogg-saron
+body detour action` in any `left a held spot` line (here 8 / 12 / 8 bot-waves); `moved off a near spot` near 0 (here 1
+/ 3 / 3, one a Constrictor's Lunge at the open); `in over 2 s after the open` under 21 / 38 / 24; no healer in over 5 s
+late (here 6 waves). Brain per cycle no lower than 14.2% (Stormwind, Icecrown) and 7.2% (Chamber); round 9's join is
+still built, so read the fix on the entries.
+
+**Harness, for the orchestrator (DC, by analogy with the Freya, XT-002 and Kologarn trash).** The Descent into Madness
+still holds two Faceless Horrors (33772, 2.36M each) at (1880, 78, 342) and (1821, 77, 342), ~100 yd north-west of
+Sara, which a real raid has cleared. An enhancement shaman's Feral Spirit wolves, left on the platform while the shaman
+is in the Stormwind room below, path toward its x/y and out the corridor: uld3 3:52 pulled one onto the platform, a
+warlock pet held it through phase 2, it summoned a Void Beast (33806) at 6:21, and the two killed 4 in phase 3; uld1
+10:23 the same, 2 deaths. Recommended: despawn both on `uld-yogg`.
+
+**Question for the user (exit lead, the user's 1.5×).** Over six pulls (windows 16 and 19), 241 melee exits from the
+Brain: decided 6.6 s before the end, surfaced a median 3.1 s later (p90 3.3, max 6.0), 3.6 s to spare (p10 3.3). At 1.2×
+the lead for the usual 31 yd is 5.3 s: 1.3 s more for every melee on the Brain, ~0.8% of it a cycle, ~5% over six;
+the one 6.0 s exit would have been charmed. **Recommended: yes, 1.2× for one window.**
+
+**Still open with the user, not built:** a finished bot goes back to the stage wait unless a live tentacle is within
+40 yd (yes); an illusion room's healer heals a reprisal-held bot first (yes).
+
+**Seen, not picked.**
+
+- The brain hold cannot finish a late start: held from 36.0-36.1% with 9.5-10.7 s left, the Brain survived at
+  30.0-31.5% (uld2 here, cost a seventh cycle and 10 → 15 tentacles; uld3 here; window 16 uld1; window 14 uld3 at
+  34.6% with 12.6 s left). The hold took nothing from those teams (they never reached 32%); they were too slow.
+- uld1's 1:10.6 nova: a Guardian dying at the middle caught 8 of the back line, as window 17 uld1's at 1:10.9 did (cloud
+  dodges leave the back line 16-19 yd out).
+- Chamber cycles 2.3-9.9%: clears 27.9-37.1 s with melee walking 52-65% of them, then 146-169 yd to the melee spot.

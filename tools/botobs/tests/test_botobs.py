@@ -1252,6 +1252,30 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.spent_clicks(clicks, entries), {2: (300, 4800), 3: (900, 1210), 4: (400, None)})
         self.assertEqual(yogg_saron.spent_clicks([], entries), {})
 
+    def test_walks_while_pending_counts_a_node_only_under_a_pending_portal_intent(self):
+        intents = [(1000, "waiting"), (5000, "spreading"), (7000, "holding"), (9000, "notteam")]
+        moves = [(2000, "yogg-saron body detour action"), (5500, "reach melee"),
+                 (7000, "yogg-saron body detour action"), (8000, "yogg-saron body detour action"),
+                 (9500, "yogg-saron body detour action")]
+        self.assertEqual(yogg_saron.walks_while_pending(intents, moves, "yogg-saron body detour action"), 2)
+        self.assertEqual(yogg_saron.walks_while_pending([], moves, "yogg-saron body detour action"), 0)
+
+    def test_left_held_spot_names_the_walks_that_took_a_holder_off_before_the_open(self):
+        moves = [(4000, "yogg-saron move to enter portal action"), (6100, "yogg-saron body detour action"),
+                 (9000, "reach melee")]
+        held_then_left = [(1000, "spreading"), (6000, "holding"), (6300, "spreading"), (10500, "late")]
+        self.assertEqual(yogg_saron.left_held_spot(held_then_left, moves, 10000),
+                         ["yogg-saron body detour action"])
+        self.assertIsNone(yogg_saron.left_held_spot([(1000, "spreading"), (6000, "holding")], moves, 10000))
+        self.assertIsNone(yogg_saron.left_held_spot([(1000, "spreading"), (10500, "late")], moves, 10000))
+        self.assertEqual(yogg_saron.left_held_spot([(6000, "holding"), (6300, "spreading")], [], 10000), [])
+
+    def test_rebuild_losses_keeps_only_a_near_bot_sent_farther(self):
+        changes = [(1, (0.0, 0.0), (12.0, 0.0), (3.0, 0.0)), (2, (0.0, 0.0), (12.0, 0.0), (9.0, 0.0)),
+                   (3, (0.0, 0.0), (12.0, 0.0), (-9.0, 0.0))]
+        self.assertEqual(yogg_saron.rebuild_losses(changes), [(1, 3.0, 9.0)])
+        self.assertEqual(yogg_saron.rebuild_losses([]), [])
+
     def test_room_team_roles_flags_a_wave_without_a_healer(self):
         self.assertEqual(yogg_saron.room_team_roles({1: "melee", 2: "melee", 3: "heal", 4: "ranged"}),
                          "heal 1 melee 2 ranged 1")
