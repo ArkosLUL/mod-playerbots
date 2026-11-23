@@ -379,7 +379,9 @@ verified in a pull):
   external on top: held as cover, a bear died under Survival Instincts twice in one pull, one swing from 61%
   and from 43%, Pain Suppression and Guardian Spirit in hand.
 - nothing of his running and a button ready and affordable now (`ReadyTankDefensive`), so his goes first; a
-  human add tank's unpressed buttons hold them too.
+  human add tank's unpressed buttons hold them too. **Known-open:** so does one he cannot press yet, at any
+  health (`ReadyTankDefensive` checks no form): a risen bear's Frenzied Regeneration or Survival Instincts in
+  caster form.
 
 Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a paladin
 healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button

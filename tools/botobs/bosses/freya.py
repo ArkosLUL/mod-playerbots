@@ -37,13 +37,12 @@ What the generic views miss here:
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
 - **Cover is read off auras, not the cooldown notes.** A healer notes `freya.addext` before its cast, so a cast that
   fails (out of range) still writes the name. The cover line takes the tank who held the Snaplasher longest and measures
-  his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap,
-  time two layers spent on one stretch, and how much of it lay on a damage cut of his own (Barkskin, Icebound
-  Fortitude, Shield Wall, Divine Protection) rather than a health button; `two externals` the time two ran at
-  once; `no damage cut` the time with neither such a button nor an external up; `none` the time he held it
-  bare. The trace logs the auras a death strips
-  1-2 ms before the death row itself, so "died under" also counts an aura that ended up to `DEATH_AURA_SLACK_MS`
-  before the death.
+  his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap, time
+  two layers spent on one stretch, and how much of it lay on a damage cut of his own (Barkskin, Icebound Fortitude,
+  Shield Wall, Divine Protection) rather than a health button; `two externals` the time two ran at once;
+  `no damage cut` the time with neither such a button nor an external up; `none` the time he held it bare. The trace
+  logs the auras a death strips 1-2 ms before the death row itself, so "died under" also counts an aura that ended up
+  to `DEATH_AURA_SLACK_MS` before the death.
 - **A loose Snaplasher is read off the snapshots.** A stretch runs while its target is a raid member who is not a
   tank, and ends at the first snapshot it is on a tank or gone. Each line counts the deaths to it, the hits on its
   bark (Hardened Bark stack casts), the `freya kite snaplasher` orders, and the `freya.kite` notes: the chased

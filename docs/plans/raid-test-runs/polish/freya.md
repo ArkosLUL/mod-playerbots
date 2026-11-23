@@ -1984,3 +1984,16 @@ trio waves ran 31.7-40.8s with the add tank alive, window 22's 10-man ones 46.2-
 **Questions:** none new; Q16 and Q17 pending as written in round 15.
 
 **Shared code:** none changed; `RunningTankDefensive` and `ReadyTankDefensive` are read, not edited.
+
+**Review:** Q14 and Q15 built as answered (Q14 "replaces" the 25% rule), on one code path (no size, mode or player
+branch), Freya files only. Reproduced on window 19: uld3's bear died under Survival Instincts at 0:44.602 and
+4:58.276, the healers on `covered` from 0:16.2, which the new test answers with an external at once. uld2's paladin
+was mid Holy Light (cast rows are cast starts: 4:11.725 and 4:13.211, 1.34s each) when Pain Suppression reached 1.5s
+left, so the lead sends Hand of Sacrifice at 4:13.211 in place of the second, 0.14s before it ran out and 1.2s before
+the bear died (sent 4:15.737); the other healers had no external left and the bear no button (Barkskin back at
+4:42.9). The baseline matches `--tanks` on windows 21-22, wave lengths too. Fixed: reflowed the reader's ragged cover
+paragraph. Left:
+
+- The lane commit's message has no blank line after its subject, so git reads all four lines as the subject (no
+  amend).
+- A ready button he cannot press yet holds the externals at any health; now known-open in the findings doc.
