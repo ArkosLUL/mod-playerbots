@@ -131,6 +131,15 @@ public:
     bool IsActive() override;
 };
 
+class FreyaReachGiftTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "freya reach gift";
+
+    FreyaReachGiftTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class FreyaFrostNovaLashersTrigger : public Trigger
 {
 public:

@@ -13,9 +13,11 @@ melee bot walking back into a low lasher's blast and dying to its Detonate. A fo
 chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-held lasher and bails
 from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
 ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. A seventh pins a
-melee bot joining a ranged one on a Gift after its walk away from it was cut. An eighth pins a melee bot walking
-through a live Nature Bomb and dying to it, while another charges into it. The shared v14 fixture shows every
-section reads empty elsewhere.
+melee bot joining a ranged one on a Gift after its walk away from it was cut, while the ranged one walks to it round
+the lashers. An eighth pins a melee bot walking through a live Nature Bomb and dying to it, while another charges
+into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
+pins the back line near a submerged lasher pack, one walking clear in the submerge, and the lasher damage on it
+after the wake. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -315,6 +317,10 @@ def gift_fill_pull() -> list[dict]:
         gift_fill_snap(42000, GIFT),
         gift_fill_snap(42500, FREYA, gift=False),
         {"t": 40500, "e": "note", "g": MELEE, "k": fr.GIFT_CUT_NOTE, "txt": "12 of 30 yd"},
+        {"t": 40600, "e": "move", "g": CASTER, "k": "point", "x": 2342.0, "y": -58.0, "z": 425.3, "ok": 1,
+         "by": fr.GIFT_WALK_ACTION},
+        {"t": 40700, "e": "move", "g": CASTER, "k": "point", "x": 2342.0, "y": -58.0, "z": 425.3, "ok": 0,
+         "by": fr.GIFT_WALK_ACTION},
         {"t": 43000, "e": "end", "out": "kill"},
     ]
 
@@ -360,6 +366,69 @@ def bomb_pull() -> list[dict]:
     ]
 
 
+def feet_bomb_pull() -> list[dict]:
+    header, freya, bomb = bomb_pull()[:3]
+    return [
+        header,
+        freya,
+        bomb,
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        {"t": 300000, "e": "snap", "u": [
+            [FREYA, 2362.0, -43.0, 425.3, 0, 60, 0, MAIN],
+            [BOMB, 2350.0, -50.0, 425.3, 0, 100, 0, 0],
+            [MAIN, 2350.0, -50.5, 425.3, 0, 100, 100, FREYA],
+            [MELEE, 2350.5, -50.0, 425.3, 0, 100, 100, FREYA],
+            [CHARGER, 2349.6, -50.2, 425.3, 0, 100, 100, FREYA],
+        ]},
+        melee_move(300300, 2338.0, "freya move away nature bomb"),
+        {"t": 305200, "e": "move", "g": CHARGER, "k": "point", "x": 2338.0, "y": -50.0, "z": 425.3, "ok": 1,
+         "by": "freya move away nature bomb"},
+        {"t": 307000, "e": "end", "out": "kill"},
+    ]
+
+
+HEALER_TWO = 7709
+
+
+def submerge_snap(t: int, near_x: float, healer_spot: tuple) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, 100, 0, 0],
+        [LASHERS[1], 2344.0, -50.0, 425.3, 0, 100, 0, 0],
+        [MAIN, 2360.0, -43.0, 425.3, 0, 100, 100, FREYA],
+        [FAR, 2380.0, -50.0, 425.3, 0, 100, 100, FREYA],
+        [NEAR, near_x, -50.0, 425.3, 0, 100, 100, FREYA],
+        [HEALER_TWO, *healer_spot, 425.3, 0, 100, 100, 0],
+    ]}
+
+
+def submerge_pull() -> list[dict]:
+    lasher_hit = {"e": "dmg", "s": LASHERS[0], "d": HEALER_TWO, "ok": 0, "sc": 1, "ab": 0, "rs": 0, "hp": 80.0}
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": FAR, "n": "Faraway", "r": "ranged", "c": 8, "h": 0},
+                    {"g": NEAR, "n": "Nearby", "r": "ranged", "c": 3, "h": 0},
+                    {"g": HEALER_TWO, "n": "Mender", "r": "heal", "c": 5, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS[:2]),
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        submerge_snap(60000, 2350.0, (2346.0, -55.0)),
+        {"t": 61000, "e": "move", "g": NEAR, "k": "point", "x": 2368.0, "y": -50.0, "z": 425.3, "ok": 1,
+         "by": fr.CAMP_ACTION},
+        {"t": 62000, "e": "move", "g": HEALER_TWO, "k": "point", "x": 2352.0, "y": -55.0, "z": 425.3, "ok": 1,
+         "by": fr.CAMP_ACTION},
+        submerge_snap(64900, 2368.0, (2352.0, -55.0)),
+        {"t": 66000, **lasher_hit, "sp": 0, "a": 5000},
+        {"t": 70000, **lasher_hit, "sp": fr.FLAME_LASH, "a": 10000},
+        {"t": 71000, **lasher_hit, "sp": 62937, "a": 7000},
+        {"t": 72000, **lasher_hit, "d": MAIN, "sp": 0, "a": 9000},
+        submerge_snap(75000, 2368.0, (2352.0, -55.0)),
+        {"t": 76000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -393,12 +462,13 @@ class Waves(unittest.TestCase):
             "WAVES\n"
             "  0:10.000 .. 0:24.000  trio        3 add(s), 1 raid death(s) meanwhile\n"
             "  0:10.000 Eonar's Gift 14.0s, lived to heal, 60% left; on it at most 1 ranged and 0 melee; "
-            "0 walk(s) away from it cut\n"))
+            "0 walk(s) away from it cut, 0 walk(s) to it round the lashers\n"))
 
-    def test_a_melee_filler_on_the_gift_and_a_walk_away_cut(self):
+    def test_a_melee_filler_on_the_gift_a_walk_away_cut_and_a_walk_to_it(self):
         self.assertEqual(printed(fr.show_waves, load(gift_fill_pull())), (
             "WAVES\n"
-            "  0:40.000 Eonar's Gift 2.0s, killed; on it at most 1 ranged and 1 melee; 1 walk(s) away from it cut\n"))
+            "  0:40.000 Eonar's Gift 2.0s, killed; on it at most 1 ranged and 1 melee; 1 walk(s) away from it cut, "
+            "1 walk(s) to it round the lashers\n"))
 
 
 class Tanks(unittest.TestCase):
@@ -517,6 +587,24 @@ class Bombs(unittest.TestCase):
 
     def test_trio_pull_has_no_bomb(self):
         self.assertEqual(printed(fr.show_bombs, load(pull())), "BOMBS\n  no Nature Bomb\n")
+
+    def test_escapes_from_a_bomb_at_the_feet_one_at_once_one_after_its_plant_turns_active(self):
+        self.assertEqual(printed(fr.show_bombs, load(feet_bomb_pull())), (
+            "BOMBS\n"
+            "  1 Nature Bomb(s), 0 hit(s) on the raid, 0 death(s) to one\n"
+            "  2 landed at a non-tank's feet: escape ordered within 1.5s 1, later 0, from 4.5s on 1, never 0\n"))
+
+
+class Submerge(unittest.TestCase):
+    def test_the_back_line_near_a_submerged_pack_and_the_lasher_damage_after_it_wakes(self):
+        self.assertEqual(printed(fr.show_submerge, load(submerge_pull())), (
+            "SUBMERGE\n"
+            "  1:00.000 lashers: back line within 18 yd of a lasher 2 of 3 at the spawn, 1 of 3 at the wake "
+            "(nearest, median 6.0 then 24.0 yd); 2 'freya ranged camp' order(s) in the submerge, 1 ending 18 yd "
+            "clear; 15k lasher melee and Flame Lash on the back line in the 30s after the wake\n"))
+
+    def test_trio_pull_has_no_lasher_wave(self):
+        self.assertEqual(printed(fr.show_submerge, load(pull())), "SUBMERGE\n  no lasher wave\n")
 
 
 class Deaths(unittest.TestCase):

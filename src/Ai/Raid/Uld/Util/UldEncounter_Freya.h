@@ -12,6 +12,7 @@
 #include "Position.h"
 #include "UldData.h"
 
+#include <functional>
 #include <vector>
 
 class GameObject;
@@ -174,6 +175,12 @@ inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_LATCH_MS = 3000;
 
 inline constexpr uint32 ULDUAR_FREYA_HELD_PACK_RETRY_MS = 1000;
 
+inline constexpr float ULDUAR_FREYA_GIFT_WALK_MARGIN = 1.0f;
+
+inline constexpr uint32 ULDUAR_FREYA_GIFT_WALK_LATCH_MS = 3000;
+
+inline constexpr uint32 ULDUAR_FREYA_GIFT_WALK_RETRY_MS = 1000;
+
 struct FreyaWaveState
 {
     Unit* eonarsGift = nullptr;
@@ -305,6 +312,14 @@ bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 see
 
 std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float maxPct,
                                                  float radius);
+
+bool IsFreyaLasherSubmerged(Unit* lasher);
+
+std::vector<Position> GetFreyaSubmergedLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float radius);
+
+Position FindFreyaStaticFloorSpot(Player* bot, std::vector<EncounterHelpers::HazardCircle> const& hazards,
+                                  float maxRadius, Position const* preferNear,
+                                  std::function<bool(float, float)> const& accept);
 
 Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state);
 

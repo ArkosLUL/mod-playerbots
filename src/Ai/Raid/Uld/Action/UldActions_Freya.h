@@ -189,6 +189,21 @@ private:
     uint32 retryMs = 0;
 };
 
+class FreyaReachGiftAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "freya reach gift";
+
+    FreyaReachGiftAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Position walkSpot;
+    uint32 walkSpotMs = 0;
+    uint32 retryMs = 0;
+};
+
 class FreyaFrostNovaLashersAction : public Action
 {
 public:

@@ -316,6 +316,22 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS,
                                                  ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &sweep);
 
+    if (safe == Position() && freya)
+        safe = FindFreyaStaticFloorSpot(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, &freyaAt, inReachWalkClear);
+
+    if (safe == Position())
+        safe = FindFreyaStaticFloorSpot(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, nullptr, walkClear);
+
+    if (safe == Position())
+    {
+        std::vector<HazardCircle> blasts;
+        blasts.reserve(bombs.size());
+        for (Position const& bomb : bombs)
+            blasts.emplace_back(bomb, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS + 1.0f);
+
+        safe = FindFreyaStaticFloorSpot(bot, blasts, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, nullptr, {});
+    }
+
     if (safe == Position())
         safe = StepOffNatureBombs(bot, bombs);
 
@@ -1343,10 +1359,13 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    std::vector<Position> const blasts =
+    std::vector<Position> keepOff =
         GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    if (!blasts.empty())
-        return StepOutOfBlasts(blasts, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
+    std::vector<Position> const submerged =
+        GetFreyaSubmergedLasherPositions(botAI, state, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    keepOff.insert(keepOff.end(), submerged.begin(), submerged.end());
+    if (!keepOff.empty())
+        return StepOutOfBlasts(keepOff, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
 
     Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
@@ -1422,6 +1441,102 @@ bool FreyaReachHeldPackAction::Execute(Event /*event*/)
     Position const spot = FindNearestPositionClearOfHazards(
         bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
         &focusAt, [&focusAt, reach](float x, float y) { return focusAt.GetExactDist2d(x, y) <= reach; }, &sweep);
+
+    if (spot == Position())
+    {
+        retryMs = now;
+        return false;
+    }
+
+    if (!MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_COMBAT))
+        return false;
+
+    walkSpot = spot;
+    walkSpotMs = now;
+
+    return true;
+}
+
+bool FreyaReachGiftAction::isUseful()
+{
+    FreyaReachGiftTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaReachGiftAction::Execute(Event /*event*/)
+{
+    if (FreyaBotCannotWalk(bot) || bot->IsMovementPreventedByCasting())
+    {
+        walkSpotMs = 0;
+        return false;
+    }
+
+    Unit* gift = AI_VALUE(Unit*, "current target");
+    if (!gift || !gift->IsAlive() || gift->GetEntry() != NPC_EONARS_GIFT)
+    {
+        walkSpotMs = 0;
+        return false;
+    }
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    float const giftDistance = bot->GetExactDist2d(gift);
+    float const corridor = giftDistance + ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
+
+    std::vector<HazardCircle> blasts;
+    for (Position const& low : GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, corridor))
+        blasts.emplace_back(low, ULDUAR_FREYA_DETONATE_RADIUS + 1.0f);
+
+    for (Position const& waking : GetFreyaSubmergedLasherPositions(botAI, state, corridor))
+        blasts.emplace_back(waking, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
+
+    std::vector<HazardCircle> hazards =
+        BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(bot, corridor), GetFreyaSunBeamPositions(botAI, corridor));
+    hazards.insert(hazards.end(), blasts.begin(), blasts.end());
+
+    float const reach = sPlayerbotAIConfig.SpellDistance - ULDUAR_FREYA_GIFT_WALK_MARGIN;
+    Position const giftAt = gift->GetPosition();
+    Position const from = bot->GetPosition();
+
+    auto const walkClear = [&blasts, &from](float x, float y)
+    {
+        Position const to(x, y, from.GetPositionZ(), 0.0f);
+        for (HazardCircle const& blast : blasts)
+            if (blast.first.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) >= blast.second &&
+                SegmentCrossesCircle(from, to, blast))
+                return false;
+
+        return true;
+    };
+
+    auto const inReachWalkClear = [&giftAt, reach, &walkClear](float x, float y)
+    { return giftAt.GetExactDist2d(x, y) <= reach && walkClear(x, y); };
+
+    auto const usable = [&hazards, &inReachWalkClear](Position const& spot)
+    {
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < hazard.second)
+                return false;
+
+        return inReachWalkClear(spot.GetPositionX(), spot.GetPositionY());
+    };
+
+    uint32 const now = getMSTime();
+    if (walkSpotMs && getMSTimeDiff(walkSpotMs, now) < ULDUAR_FREYA_GIFT_WALK_LATCH_MS && usable(walkSpot) &&
+        bot->GetExactDist2d(walkSpot.GetPositionX(), walkSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    walkSpotMs = 0;
+
+    if (retryMs && getMSTimeDiff(retryMs, now) < ULDUAR_FREYA_GIFT_WALK_RETRY_MS)
+        return false;
+
+    HazardSweepCache sweep;
+    Position const spot =
+        FindNearestPositionClearOfHazards(bot, hazards, giftDistance, ULDUAR_FREYA_SWEEP_STEP,
+                                          ULDUAR_FREYA_SWEEP_ANGLE_STEP, &giftAt, inReachWalkClear, &sweep);
 
     if (spot == Position())
     {

@@ -177,6 +177,7 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaRangedCampTrigger, FreyaRangedCampAction>(ACTION_RAID);
 
     e.Node<FreyaReachHeldPackTrigger, FreyaReachHeldPackAction>(ACTION_RAID + 1);
+    e.Node<FreyaReachGiftTrigger, FreyaReachGiftAction>(ACTION_RAID + 1);
 
     e.Node<FreyaMoveToHealingSporeTrigger, FreyaMoveToHealingSporeAction>(ACTION_RAID + 2);
 

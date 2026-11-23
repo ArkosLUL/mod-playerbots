@@ -217,14 +217,24 @@ bool FreyaRangedCampTrigger::IsActive()
 
     std::vector<Position> const blasts =
         GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    if (!blasts.empty())
-    {
-        for (Position const& blast : blasts)
-            if (bot->GetExactDist2d(blast.GetPositionX(), blast.GetPositionY()) <= ULDUAR_FREYA_DETONATE_RADIUS)
-                return true;
+    for (Position const& blast : blasts)
+        if (bot->GetExactDist2d(blast.GetPositionX(), blast.GetPositionY()) <= ULDUAR_FREYA_DETONATE_RADIUS)
+            return true;
 
-        return false;
+    bool submerged = false;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!IsFreyaLasherSubmerged(lasher))
+            continue;
+
+        if (bot->GetExactDist2d(lasher) < ULDUAR_FREYA_LASHER_CAMP_STANDOFF)
+            return true;
+
+        submerged = true;
     }
+
+    if (!blasts.empty() || submerged)
+        return false;
 
     if (PlayerbotAI::IsRangedDps(bot) && IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state)))
         return false;
@@ -262,6 +272,33 @@ bool FreyaReachHeldPackTrigger::IsActive()
         return false;
 
     return IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state));
+}
+
+bool FreyaReachGiftTrigger::IsActive()
+{
+    if (PlayerbotAI::IsTank(bot) || !PlayerbotAI::IsRangedDps(bot))
+        return false;
+
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    Unit* gift = AI_VALUE(Unit*, "current target");
+    if (!gift || !gift->IsAlive() || gift->GetEntry() != NPC_EONARS_GIFT ||
+        bot->IsWithinCombatRange(gift, sPlayerbotAIConfig.SpellDistance))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    float const corridor = bot->GetExactDist2d(gift) + ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
+    std::vector<Position> const blasts =
+        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, corridor);
+    for (Position const& blast : blasts)
+        if (bot->GetExactDist2d(blast.GetPositionX(), blast.GetPositionY()) <= ULDUAR_FREYA_DETONATE_RADIUS)
+            return false;
+
+    return !blasts.empty() || !GetFreyaSubmergedLasherPositions(botAI, state, corridor).empty();
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
