@@ -1552,9 +1552,9 @@ new).
 - **Bomb windows:** no death in the 20 s after a phase 4 bomb (window 22: 6); all five phase 4 deaths fell outside them.
   Hand Pulse there still 19.7k/s against 12.6k/s outside.
 - **Revive Pet: held while engaged, not in the handovers.** No start in P1, P2 or P4 and 35 hold vetoes, but roster B's
-  hunters started it 7 times in Z1 (2, cut by fire), Z2 (2), H1 (1) and H2 (2): 33 s (Uldyau) and 59 s (Uldyaj) on it
-  against 175 s each; none finished. `MimironFireFight` needs a construct in combat, and none is in a handover. Fixed
-  below. uld2's phase 2 ran 91.3 s (96.8).
+  hunters started it 9 times, at 0:00.1 before the first phase latch (2), Z1 (2, cut by fire), Z2 (2), H1 (1) and H2
+  (2): 33 s (Uldyau) and 59 s (Uldyaj) on it against 175 s each; none finished. `MimironFireFight` needs a construct in
+  combat, and none is in a handover. Fixed below. uld2's phase 2 ran 91.3 s (96.8).
 - Round 12's hold: fire bots 0 at phase 4's open in both (the H3 cull took 7 and 4), the ACU on the off-tank 78% in both,
   Plasma Ball on ranged 3 and 4, no hunter death at the opening.
 
@@ -1606,7 +1606,7 @@ Findings doc: the pet hold's new scope, the burning re-aimed wedge as an open it
 
 **Next window should show** (`mim14/revcasts.py`, `mtesc.py`, `postbarrage.py`, `p2cone.py`; `--bomb`):
 
-- No `revive pet` cast by roster B's hunters from the pull to its end, Z and H spans included (window 24a: 7), and
+- No `revive pet` cast by roster B's hunters from the pull to its end, Z and H spans included (window 24a: 9), and
   `mimiron revive pet hold` vetoes in those spans.
 - Round 13's checks still: phase 4 `mimiron arc spread action` walk-ins near 0, the main tank 1-2 escape legs a bomb, no
   Frost Bomb death.
@@ -1633,3 +1633,17 @@ Findings doc: the pet hold's new scope, the burning re-aimed wedge as an open it
   the Frost Bomb within 0.5-4 s) and fire chains drawn toward a second sector.
 
 **Shared code:** none (Mimiron definition, findings doc, this log).
+
+**Review.**
+
+- Checked and holding: uld2's hunters started Revive Pet 9 times, none in P1, P2 or P4, all 35 hold vetoes in P1-P3,
+  and no pet of either appears in the trace. The core sets Mimiron `IN_PROGRESS` in his `JustEngagedWith` and back to
+  `NOT_STARTED` through `_Reset` on the evade, so the new gate covers the opening (both 0:00.1 starts follow the
+  trace's `pull engage` row) and every handover, and lifts on a wipe, leaving the time between pulls to revive. Same
+  predicate at 10 and 25; the block runs only in bot engines, so a real player changes nothing.
+- The phase 2 pile reproduces: Spinning Up 2:56.8, `reaim 176` 2:56.9, the 3:12 burst on 9 ranged and 3 healers (a
+  tank from 3:14), the 3:25.5 one on 8 and 3, 17 phase 2 deaths. `GetMimironWedgeCentreline` re-aims on the barrage
+  only, never on fire, so Q6 is a new position rule: plan change holds.
+- Fixed: the start count (7 → 9, the two at 0:00.1 were left out). Findings doc: a `none bomb` note can be followed by
+  a `stranded` leg from the same call (`GetMimironSlotApproaches` writes the note before the stranded fallback; window
+  24a: 2 in uld1 and 2 in uld3 within 1.5 s), and the 33-59 s are a hunter's whole pull, opening included.
