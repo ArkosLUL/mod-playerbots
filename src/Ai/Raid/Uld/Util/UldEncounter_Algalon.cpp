@@ -4115,10 +4115,15 @@ int32 AlgalonHideSlackMs(Player* bot)
         for (AlgalonScanUnit const* across = smash; across; across = crossed(late))
             late = SmashImpactMs(*state, *across, now) + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_SPREAD_MS;
 
+        int32 const waitIn = late + straightMs;
+        int32 const go = std::max(0, routeSlack);
         int32 const starDeath = last ? std::numeric_limits<int32>::max() : CastStarDeathMs(*state, remaining, now);
-        bool const outUnderStar = late + straightMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS > starDeath;
-        bool const inFirst = round || std::max(0, routeSlack) + walkMs + ULDUAR_ALGALON_FIELD_PULSE_MS <= starDeath;
-        if (late + straightMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS <= remaining && !(outUnderStar && inFirst))
+        bool const outUnderStar = waitIn + ULDUAR_ALGALON_LAST_IN_MARGIN_MS > starDeath;
+        bool const inFirst =
+            round ? go + walkMs < waitIn
+                  : go + walkMs + ULDUAR_ALGALON_FIELD_PULSE_MS <= starDeath &&
+                        !SmashAcrossPath(*state, bot->GetPosition(), to, straight, go, walkMs, 0, now);
+        if (waitIn + ULDUAR_ALGALON_LAST_IN_MARGIN_MS <= remaining && !(outUnderStar && inFirst))
             return late;
     }
 

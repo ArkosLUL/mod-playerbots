@@ -496,19 +496,22 @@ The replay reproduces 11 of uld1's 12 dead hiders' waits and detours (Uldxae ran
 - `CastStarDeathMs` (`:2782`): the earliest drain death in the cast among under-stars and any star dying by the
   hit + 0.6 s; `UnderHideExtraMs` stretches from it, so a released star draining into the cast gets an
   under-star's +3 s (stretched, at most 4 s).
-- `AlgalonHideSlackMs` (`:4119`): the meteor wait is skipped when it leaves the hider out at that star (wait,
-  walk and 1.5 s past its death) and going round, or straight with a pulse in hand, gets it in first; it then
-  runs on its route's slack. A bot going last keeps the old rule.
+- `AlgalonHideSlackMs` (`:4118`): the meteor wait is skipped when it leaves the hider out at that star (wait,
+  walk and 1.5 s past its death) and going round gets it in sooner, or, with no way round, straight gets it
+  phased first (a pulse in hand) with no meteor landing on its walk before the hole; it then runs on its route's
+  slack. A bot going last keeps the old rule. The review added the two last terms: without them any detour
+  skipped the wait (a tank on one too long for the hit could drop to `noshelter`), and a straight walk could cross
+  a landing meteor. The replay of all 35 casts with a star going off in them is unchanged by them.
 
 10 and 25-man alike; with no star dying in the cast both rules are unchanged. Replay: in uld1, Uldxah, Uldxai
 and Uldxal run straight at +0.91, in at +2.66, phased by the +3.04 pulse, before the impact (+3.48) and the
 stars (+4.04): 3 saved. Uldxaf, Uldxar and Uldxad go round at +0.40, in at +3.05-3.42, phased by the +4.04
 pulse, the stars' own tick (in the trace the explosion came 1 ms first): not counted. The east group (22.8-25.8
 yd at the cast after the meteors landed on their spots) can't be in by +3.04 on any route. In uld3, 13 of 15
-hiders are phased at +2.98..+4.98 against the star at +5.07 (now +5.98; Uldzaz on its detour isn't, Uldzag's hole
-shows no pulse); of the dead, Uldzan, Uldzaf and Uldzaw make it. The other 10 Big Bang 2 casts on disk: one hider changes (`603_2`'s
-Uldxaq, 0.3 s sooner on the same detour). Cost: when a released star drains into a cast, hiders spend 3-4 s
-more in the void (62169 at 1.3-1.9 k/s, Dark Matter).
+hiders are phased at +2.98..+4.98 against the star at +5.07 (now +5.98; Uldzaz on its detour isn't, Uldzag's
+hole shows no pulse); of the dead, Uldzan, Uldzaf and Uldzaw make it. The other 10 Big Bang 2 casts on disk:
+one hider changes (`603_2`'s Uldxaq, 0.3 s sooner on the same detour). Cost: when a released star drains into a
+cast, hiders spend 3-4 s more in the void (62169 at 1.3-1.9 k/s, Dark Matter).
 
 **Not picked.**
 

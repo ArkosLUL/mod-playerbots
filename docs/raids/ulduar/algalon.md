@@ -126,10 +126,11 @@ so a hide walk is judged by where the bot is at each impact (at run speed, phase
 hole, the impact up to 0.3 s late), not by its whole line. When one would land within 10 yd of it, the hider in turn:
 - sets off in time to be phased 0.5 s before the impact, if it still can (not one going last);
 - else waits where it dodged until the impact, then runs, while that leaves its walk plus 1.5 s before the hit
-  (a meteor within 6 yd always killed), and before a star dying in the cast (Stars) unless its only other way,
-  straight, wouldn't have it phased before that star either: two under-stars went off 0.6 s after Big Bang 2's
-  meteors on bots waiting them out or going round, and no cover or button outlasts two (12 dead). One going
-  last ignores the star. Not once on its way round: the spot it would stop on was never checked;
+  (a meteor within 6 yd always killed), and before a star dying in the cast (Stars) unless the other way is no
+  better (round gets in no sooner; with no way round, straight isn't phased before that star or has a meteor land
+  on its walk): two under-stars went off 0.6 s after Big Bang 2's meteors on bots waiting them out or going
+  round, and no cover or button outlasts two (12 dead). One going last ignores the star. Not once on its way
+  round: the spot it would stop on was never checked;
 - else goes round via a point 12 yd off the impact;
 - else walks straight. Straight through Big Bang 2's three, 9 died.
 
