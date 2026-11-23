@@ -10,7 +10,8 @@
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
     freya.py <file> --blasts per lasher wave, Detonate on the melee and their walks into a low lasher's blast
     freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
-                             hitting a player shot, and the back line's bails from one hitting them
+                             hitting a player shot (the Gift, while one was up), and the back line's bails from
+                             one hitting them
 
 What the generic views miss here:
 
@@ -558,7 +559,8 @@ def show_blasts(trace: Trace) -> None:
 
 def low_lasher_counts(trace: Trace, wave: dict) -> dict:
     """One lasher wave: its lashers that went under the bail line and how many stayed there LINGER_MS or more, the
-    ranged DPS in reach of a low lasher hitting a player and whether they shot one, and the back line's bail orders
+    ranged DPS in reach of a low lasher hitting a player and whether they shot one (or, with Eonar's Gift up, the
+    Gift), and the back line's bail orders
     away from a low lasher hitting one of them. A ranged bot counts once a snapshot, however many such lashers it
     reaches, so shooting the lowest of two is on one, not on another lasher."""
     low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
@@ -567,7 +569,7 @@ def low_lasher_counts(trace: Trace, wave: dict) -> dict:
     end = wave["end"] + BLAST_TAIL_MS
     members = {member["g"] for member in wave["members"]}
     spans: dict[int, list[dict]] = {}
-    in_reach = on_it = on_other = 0
+    in_reach = on_it = on_other = gift_up = on_gift = 0
     for snap in snaps:
         if not wave["t"] <= snap["t"] <= end:
             continue
@@ -589,6 +591,7 @@ def low_lasher_counts(trace: Trace, wave: dict) -> dict:
                 span["player"] += 1
         hitting = [row for row in rows if trace.entries.get(row[0]) == NPC_DETONATING_LASHER and row[5] < low_pct
                    and trace.role(row[7]) != "?"]
+        gifts = {row[0] for row in rows if trace.entries.get(row[0]) == NPC_EONARS_GIFT}
         for other in rows:
             if trace.role(other[0]) != "ranged":
                 continue
@@ -596,6 +599,9 @@ def low_lasher_counts(trace: Trace, wave: dict) -> dict:
             if not near & members:
                 continue
             in_reach += 1
+            if gifts:
+                gift_up += 1
+                on_gift += other[7] in gifts
             if other[7] in near:
                 on_it += 1
             elif trace.entries.get(other[7]) == NPC_DETONATING_LASHER:
@@ -615,7 +621,8 @@ def low_lasher_counts(trace: Trace, wave: dict) -> dict:
             for row in rows.values())
     return {"low": sum(1 for lasher in spans.values() if lasher), "lingered": len(lingered),
             "on_player": sum(1 for span in lingered if 2 * span["player"] > span["samples"]),
-            "in_reach": in_reach, "on_it": on_it, "on_other": on_other, "bails": bails}
+            "in_reach": in_reach, "on_it": on_it, "on_other": on_other, "gift_up": gift_up, "on_gift": on_gift,
+            "bails": bails}
 
 
 def show_lows(trace: Trace) -> None:
@@ -629,11 +636,13 @@ def show_lows(trace: Trace) -> None:
         found = True
         c = low_lasher_counts(trace, wave)
         reach = c["in_reach"] or 1
+        gift = (f", {c['gift_up']} of them with Eonar's Gift up, {100.0 * c['on_gift'] / c['gift_up']:.0f}% on the "
+                f"Gift" if c["gift_up"] else "")
         print(f"  {clock(wave['t'])} lashers: {c['low']} under the bail line, {c['lingered']} of them "
               f"{LINGER_MS // 1000}s+ there ({c['on_player']} hitting a player); ranged DPS in reach of a low lasher "
               f"hitting a player: {c['in_reach']} sample(s), {100.0 * c['on_it'] / reach:.0f}% on one, "
-              f"{100.0 * c['on_other'] / reach:.0f}% on another lasher; {c['bails']} back-line bail order(s) from "
-              f"one hitting the back line")
+              f"{100.0 * c['on_other'] / reach:.0f}% on another lasher{gift}; {c['bails']} back-line bail order(s) "
+              f"from one hitting the back line")
     if not found:
         print("  no lasher wave")
 

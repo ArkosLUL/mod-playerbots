@@ -199,8 +199,7 @@ void DefineFreya(EncounterBuilder& e)
 
     e.Block("freya add tank defensive hold", Role::Tank, IsFreyaAddTankDefensiveHeld, 0, HeldTankDefensiveNames());
 
-    e.Block("freya add tank external hold", Role::Heal, IsFreyaAddTankExternalHeld, 0,
-            {"pain suppression", "pain suppression on party", "guardian spirit on party", "hand of sacrifice on party"});
+    e.Multiplier<FreyaAddTankExternalHoldMultiplier>(Family::Spell);
 
     e.Block("freya nature bomb melee guard", Role::Melee, FreyaMeleeNearBomb, 0, {"set behind"});
 

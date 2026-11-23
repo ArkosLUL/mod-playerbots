@@ -10,6 +10,8 @@
 #include "Define.h"
 #include "Multiplier.h"
 
+#include <unordered_map>
+
 class FreyaTrioSyncMultiplier : public Multiplier
 {
 public:
@@ -42,6 +44,16 @@ private:
 
     uint32 cachedAtMs = 0;
     bool cachedReserve = false;
+};
+
+class FreyaAddTankExternalHoldMultiplier : public Multiplier
+{
+public:
+    FreyaAddTankExternalHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya add tank external hold") {}
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, bool> held;
 };
 
 class FreyaGroundTremorCastGateMultiplier : public Multiplier
