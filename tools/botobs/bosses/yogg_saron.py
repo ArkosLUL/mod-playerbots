@@ -249,6 +249,9 @@ LAUGHING_SKULL_RADIUS = 30.0
 
 # TEMPSUMMON_TIMED_DESPAWN on every portal, so the whole window a wave offers is this long.
 PORTAL_DESPAWN_MS = 25000
+SPELL_PORTAL_CLICK_VISUAL = 51347
+SPENT_CLICK_WINDOW_MS = 300
+PORTAL_LATE_ENTRY_MS = 2000
 
 # A creature that stops being sampled below this was almost certainly killed; one that vanishes near
 # full health was despawned by the phase. Nothing records a creature death, so this is the line.
@@ -1688,6 +1691,19 @@ def walked_for_a_portal(trace: Trace, guids: set[int], start: int, until: int) -
             and rec.get("g") in guids and start <= rec["t"] <= until}
 
 
+def spent_clicks(clicks: list[tuple[int, int]], entries: list[tuple[int, int]],
+                 window_ms: int = SPENT_CLICK_WINDOW_MS) -> dict[int, tuple[int, int | None]]:
+    out: dict[int, tuple[int, int | None]] = {}
+    for when, guid in sorted(clicks):
+        if guid in out:
+            continue
+        if any(other == guid and 0 <= at_ms - when <= window_ms for at_ms, other in entries):
+            continue
+        after = [at_ms for at_ms, other in entries if other == guid and at_ms >= when]
+        out[guid] = (when, min(after) if after else None)
+    return out
+
+
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
     """Portals taken against bots told to take one. AddPortals spawns RAID_MODE(4, 10) per wave, one use each, so the
     gap is bots that walked to a used spot or, when the node never ran, never walked."""
@@ -1704,12 +1720,25 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
         plan = assignments[max(rounds)] if rounds else {}
         stale = (start - max(rounds)) / 1000.0 if rounds else 0.0
 
-        took = {rec.get("s") for rec in trace.of("cast")
-                if rec.get("sp") == SPELL_ILLUSION_ROOM and start <= rec["t"] <= start + PORTAL_DESPAWN_MS}
+        entries = [(rec["t"], rec.get("s")) for rec in trace.of("cast")
+                   if rec.get("sp") == SPELL_ILLUSION_ROOM and start <= rec["t"] <= start + PORTAL_DESPAWN_MS]
+        took = {guid for _, guid in entries}
         missed = {guid for guid in plan if guid not in took}
+        late = sorted(when - start for when, _ in entries if when - start > PORTAL_LATE_ENTRY_MS)
+        clicks = [(rec["t"], rec.get("s")) for rec in trace.of("cast")
+                  if rec.get("sp") == SPELL_PORTAL_CLICK_VISUAL and start <= rec["t"] <= start + PORTAL_DESPAWN_MS]
+        spent = spent_clicks(clicks, entries)
+        unplanned = sorted(trace.name(guid) for guid in took if plan and guid not in plan)
 
         print(f"  wave {ordinal}: {len(took)} of {len(PORTAL_SPOTS)} portals taken,"
               f" {len(plan)} bots assigned a spot, plan was {stale:.0f} s old")
+        print(f"    in over {PORTAL_LATE_ENTRY_MS / 1000:.0f} s after the open: {len(late)}"
+              f"{' (' + ', '.join(f'{ms / 1000:.1f}' for ms in late) + ' s)' if late else ''};"
+              f" clicked a spent portal: {len(spent)}"
+              f"{', taken by a bot off the plan: ' + ', '.join(unplanned) if unplanned else ''}")
+        for guid, (when, got_in) in sorted(spent.items(), key=lambda item: item[1][0]):
+            outcome = f"in {(got_in - when) / 1000:.1f} s later" if got_in is not None else "never got in"
+            print(f"      {trace.name(guid):14} {trace.role(guid):6} at +{(when - start) / 1000:.1f} s, {outcome}")
         if missed:
             walked = walked_for_a_portal(trace, missed, start, start + PORTAL_DESPAWN_MS)
             for label, who in (("walked and never got one", missed & walked),

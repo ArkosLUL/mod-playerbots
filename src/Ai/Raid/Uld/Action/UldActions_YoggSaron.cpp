@@ -1238,8 +1238,7 @@ bool YoggSaronStopFollowingAction::Execute(Event /*event*/)
 
 bool YoggSaronUsePortalAction::Execute(Event /*event*/)
 {
-    Creature* assignedPortal =
-        bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS, true);
+    Creature* assignedPortal = YoggSaronPlannedPortal(botAI);
     if (!assignedPortal)
         return false;
 

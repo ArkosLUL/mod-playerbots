@@ -1027,6 +1027,27 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
 
 namespace
 {
+bool YoggSaronPortalOpen(Creature const* portal)
+{
+    return portal && portal->IsAlive() && portal->HasNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
+}
+
+bool YoggSaronPortalClaimedByOther(Player* bot, YoggSaronEncounterState const& state, Creature const* portal,
+                                   uint32 spotCount)
+{
+    for (auto const& [guid, slot] : state.portalSlot)
+    {
+        if (guid == bot->GetGUID() || slot >= spotCount ||
+            portal->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[slot]) > ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
+            continue;
+
+        Player* owner = ObjectAccessor::GetPlayer(*bot, guid);
+        return owner && owner->IsAlive() && !YoggSaronOnBrainLevel(owner);
+    }
+
+    return false;
+}
+
 void YoggSaronBenchLowSanity(Player* bot, YoggSaronEncounterState& state)
 {
     std::unordered_set<ObjectGuid> low;
@@ -1082,15 +1103,34 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
         if (newWave || teamBack)
             YoggSaronBenchLowSanity(bot, state);
 
+        std::unordered_map<ObjectGuid, uint8> const previous = newWave || teamBack
+                                                                    ? std::unordered_map<ObjectGuid, uint8>()
+                                                                    : state.portalSlot.Raw();
+
         state.slotWave = assignmentWave;
         state.slotPortalsUp = wave.portalsUp;
         state.portalSlot.clear();
         state.brainTeam.clear();
 
+        std::vector<Player*> const team = GetYoggSaronBrainTeam(botAI);
         std::vector<bool> taken(spotCount, false);
-        for (Player* member : GetYoggSaronBrainTeam(botAI))
+        for (Player* member : team)
+        {
+            auto const held = previous.find(member->GetGUID());
+            if (held == previous.end() || held->second >= spotCount || taken[held->second] ||
+                member->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[held->second]) >
+                    ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
+                continue;
+
+            taken[held->second] = true;
+            state.portalSlot[member->GetGUID()] = held->second;
+        }
+
+        for (Player* member : team)
         {
             state.brainTeam.insert(member->GetGUID());
+            if (state.portalSlot.count(member->GetGUID()))
+                continue;
 
             uint32 best = spotCount;
             float bestDistance = 0.0f;
@@ -1135,22 +1175,21 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
             bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS,
                                                 ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS);
 
-            Creature* mine = nullptr;
-            Creature* nearest = nullptr;
-            for (Creature* portal : portals)
+            portals.remove_if([](Creature* portal) { return !YoggSaronPortalOpen(portal); });
+
+            auto const atSpot = [&spot](Creature* portal)
+            { return portal->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS; };
+            if (std::none_of(portals.begin(), portals.end(), atSpot))
             {
-                if (!portal->IsAlive())
-                    continue;
+                Creature* nearest = nullptr;
+                for (Creature* portal : portals)
+                    if (!YoggSaronPortalClaimedByOther(bot, state, portal, spotCount) &&
+                        (!nearest || bot->GetExactDist2d(portal) < bot->GetExactDist2d(nearest)))
+                        nearest = portal;
 
-                if (portal->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
-                    mine = portal;
-
-                if (!nearest || bot->GetExactDist2d(portal) < bot->GetExactDist2d(nearest))
-                    nearest = portal;
+                if (nearest)
+                    spot = nearest->GetPosition();
             }
-
-            if (!mine && nearest)
-                spot = nearest->GetPosition();
         }
 
         float const distance = bot->GetExactDist2d(spot);
@@ -1178,6 +1217,27 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     }
 
     return intent;
+}
+
+Creature* YoggSaronPlannedPortal(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_ARENA)
+        return nullptr;
+
+    Position spot;
+    if (YoggSaronPortalPlan(botAI, spot) != YOGG_SARON_PORTAL_HOLDING)
+        return nullptr;
+
+    std::list<Creature*> portals;
+    bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS,
+                                        ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS * 2.0f);
+    for (Creature* portal : portals)
+        if (YoggSaronPortalOpen(portal) &&
+            portal->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
+            return portal;
+
+    return nullptr;
 }
 
 bool YoggSaronPortalWalkPending(PlayerbotAI* botAI)
@@ -1946,6 +2006,8 @@ std::vector<YoggSaronDot> YoggSaronDotSpells(PlayerbotAI* botAI)
             return {{"serpent sting", true}};
         case CLASS_MAGE:
             return {{"living bomb", false}};
+        case CLASS_SHAMAN:
+            return {{"flame shock", true}};
         default:
             return {};
     }

@@ -544,3 +544,142 @@ class taunt hold (round 4), ranged DoTs on Yogg (round 5). With three leftover C
 Crusher rule kept every ranged on them for the whole phase while the Guardians stayed at full power. Should phase 3
 ranged take only the lowest leftover Crusher first and the others after the Immortal Guardians? **Recommended: yes**:
 one Crusher's Diminish Power is what the rule answers, and a phase spent on three leaves the tanks alone.
+
+**User answers (2026-11-23).** Flame Shock: yes, elemental shamans keep it on Yogg in phase 3 like the other
+ranged DoTs (built in round 8). Round 7's phase 3 Crusher question: not as asked, because the goal is to start
+phase 3 with at most one Crusher alive; the user asked how many brain room cycles the bots need to bring the
+Brain to 30%, and moved the next round to phase 2.
+
+## Round 8 (2026-11-23, window 15a build c350347ff: round 6 built, round 7 not; window 14 for phase 2)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head c350347ff --pulls 10`: one valid pull per pool,
+0 humans, Freya's 62670 on the raid. Phase 2 read over these three and window 14's (round 7's data) with
+`yogg_saron.py --portals --tentacles --brain` and scratch scripts over snapshots, `cast`, `move`, `act` and
+`note` rows: per wave the entries and clicks, the room's time split, the team's damage rate in the room and on
+the Brain, the Brain's health.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261123-114441-12` | `603_12_yogg-saron_1795434326` | wipe 12:10, 32 deaths | 143.2 s | 602 s, 7 cycles: 10.0, 14.3, 7.1, 1.9, 5.2, 8.3, 0 (Brain at 53.2%) | never |
+| uld2 | `tr-20261123-114420-11` | `603_11_yogg-saron_1795434306` | wipe 11:45, 31 deaths | 142.1 s | 452.5 s, 5 cycles: 18.4, 17.2, 8.3, 14.0, 12.2 | from 9:54.7, 122 s, Yogg 30 → 28.9% |
+| uld3 | `tr-20261123-114320-10` | `603_10_yogg-saron_1795434245` | wipe 9:03, 31 deaths | 147.0 s | 364 s, 4 cycles: 10.1, 7.2, 5.4, 0 (77.2%; Induce Madness took cycle 4's team) | never |
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 4, Sara's Blessing 1; phase 2 Corruptor 11, Squeeze 8, Grim Reprisal 3 (cycle 3, no
+  healer below), Death Ray 1, Laughing Skull 1, Brain Link 1, Insane 1, Constrictor 1.
+- uld2: phase 1 Shadow Nova 3; phase 2 Laughing Skull 2, Death Ray 1, Insane 1; phase 3 Immortal Guardian 19,
+  Corruptor 4, Lunatic Gaze 1 (both tanks dead by +16 s of the first beacon).
+- uld3: phase 1 Shadow Nova 10 (six at 1:48.68), Sara's Blessing 1; phase 2 Squeeze 6, Corruptor 4, Constrictor
+  1, Malady 1, Brain Link 1, drained Insane below 1, Induce Madness script kills 6.
+
+**Verdict on round 6 (nova countdown): working on its own check.** `--novas` `ladder row put up over another
+still running on the same bot, in phase 1`: 0 / 0 / 0 (window 14: 2 / 2 / 2, every one Icebound Fortitude over
+Anti-Magic Shell). Ladder casts 39 / 37 / 36 a pull (window 14: 41 / 20 / 41). Nova deaths 4 / 3 / 10, none
+with a button up; round 7 (Guardians pulled onto the stack, the nova fix) was not in this build, and window 15
+is pulling it now, so it is not judged here.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked; phase 2 is the user's new
+direction and a new pick.
+
+**Cycles to 30%, the user's question.** Five where phase 3 came (window 14 uld1, window 15a uld2); the other
+three that left phase 1 never got there (window 14 uld3 30.9% after seven, window 15a uld1 53.2% after seven,
+uld3 77.2% after four). Over the 25 cycles whose room cleared the Brain lost a median 10.5% (2-21%; Stormwind
+15.9, Icecrown 13.6, Chamber 8.3). The platform stock went from 3.0-5.0M at cycle 1 to 7.5-25.2M by cycle 5-6.
+
+**Why a cycle does so little.** The team on the Brain deals ~50k/s (nine damage dealers at ~6k/s), 0.57% of its
+8.91M a second, and only from its first hit after the door until the 60 s cast ends. Medians per cycle: room
+clear 30.8 s (Stormwind 29.0, Icecrown 28.5, Chamber 31.3), first Brain hit 2-4 s after the door from
+Stormwind and Icecrown and 9-13 s from the Chamber, melee at the Brain 10-12 s after it (Chamber 18 s), exit
+decided 6.1 s before the end, surfacing with 2.1-4.1 s spare. Inside, the team dealt 15-24k/s to the tentacles,
+a third of its Brain rate, on ~430-480k of tentacles (53,790 each): melee walked 23-52% of the clear between
+tentacles on 30-43 yd rings, fresh openers (an assassination rogue 3.5k/s on its first tentacle, ~6k/s on the
+Brain), and Grim Reprisal's 40% hold after ~50k dealt. Ranked by Brain per cycle at 0.57%/s:
+
+| Cause | Measure | Brain per cycle | Kind |
+|---|---|---|---|
+| Room clear | 30.8 s against ~15 s if the team cleared at its Brain rate after the walk in | ~9% | plan (Q1, Q2) |
+| Stormwind/Icecrown stage tail, inside the clear | first staged bot to the door: median 10.3 / 10.5 s, 3-6 of 9 damage dealers waiting at the stage spot while 1-3 tentacles die to one bot each | ~2-3% net of the shorter walk, on two cycles in three | plan (Q1) |
+| Melee walk to and from the Brain | ranged hit 2-4 s after the door and leave 3 s before the end by their exit portal; melee arrive 10-12 s after it and leave ~6.6 s before the end (31-34 yd to the exit at the 1.5× lead) | ~5% with 7-9 melee on the team | plan (Q2) |
+| Chamber far end | team ends 147-166 yd from the melee spot, Brain hit 7 s later than from the other rooms | ~4% a Chamber cycle | layout (Q2 helps) |
+| Exit margin | surfacing with 2.1-4.1 s spare | ~1.5% | user-set lead, left |
+| **Portal entries (bug, picked)** | 135 of 395 clicks on a spent portal; 41 bot-waves in late (median 3.8 s, up to 18 s), 7 never; 75 of 260 entries over 2 s after the open; 26 bots holding their spot (18 in window 15a) re-assigned 11-40 yd away by the open's rebuild; 2 cycles without their healer | ~0.5% direct, plus deaths below: window 15a uld1's healerless cycle 3 lost 4 bots for cycles 4-7, which took 1.9 / 5.2 / 8.3 / 0% | bug |
+
+**Why the platform loses the race.** At `_summonSpeed` 1 the spawns bring ~78k health a second (Crusher 2.69M every
+50-60 s, Corruptor 0.81M every 30-40, Constrictor 0.1M every 15-20), ~130k after cycle 4 and ~190k after cycle 6,
+held only during the stun (25-35 s of each 80). The platform dealt 17-45k/s live and 14-67k/s on stunned tentacles
+(window 15a uld1 25.3 / 30.3, uld2 42.8 / 43.1, uld3 16.9 / 14.3; window 14 uld1 44.8 / 67.1, uld3 32.5 / 41.0),
+under Diminish Power 63% of the Crusher-alive time in window 15a uld1. So the stock only grows, and faster each
+cycle: the cycle count decides what phase 3 opens on. In cycle 4 it was already 6.1-10.7M with 2-4
+Crushers, so even three cycles leave one or two Crushers for the last stun and the brain hold to take.
+
+**Picked: bots click a portal that is not theirs, or one already used.** Root cause, three parts:
+
+1. `YoggSaronUsePortalTrigger` / `YoggSaronUsePortalAction` (`UldTriggers_YoggSaron.cpp:443`,
+   `UldActions_YoggSaron.cpp:1242` before the fix) clicked whatever portal stood within 2 yd, so a bot walking or
+   dodging past another's spot took that portal.
+2. A used portal stays 1 s: `boss_yoggsaron_descend_portal::OnSpellClick` (core `boss_yoggsaron.cpp:1900-1923`)
+   teleports only while its npcflags are set, then clears them and despawns it after 1 s, and the spellclick row
+   `(34072, 51347)` casts the visual either way. `YoggSaronPortalPlan` read any live portal as the bot's own or as
+   the fallback (`UldEncounter_YoggSaron.cpp:1142-1153`), so the owner held and clicked a spent one, then walked to
+   the nearest live portal, often spent or another's too.
+3. The rebuild on the tick the portals appear re-picked every spot greedily in team order (`:1091`), moving bots
+   already standing on their portal.
+
+Evidence, window 15a uld1 cycle 3: Uldxac, the disc priest and the cycle's one healer, clicked at +0.4, +0.6 and
++0.9 s (51347 each, no Illusion Room) and never got in; Uldxag, off the plan, took a portal at +9.5 s; the room ran
+without a healer and Grim Reprisal killed Uldxai twice and Uldxar, a skull's gaze Uldxaj, and Uldxav went Insane below in
+cycle 4: four corpses for the rest of phase 2. Uldxap clicked a spent portal at +0.8 and +1.0 s, then the Death Ray dodge and the walk to the
+nearest portal traded until `enter gaveup` at +11.9 s; in at +18.8 s.
+
+Bug, not a plan change: the plan already gives each bot a spot and means `holding` to be clickable. Fix
+(`UldEncounter_YoggSaron.h/.cpp`, `UldTriggers_YoggSaron.cpp`, `UldActions_YoggSaron.cpp`): `YoggSaronPortalOpen`
+counts a portal only while it carries `UNIT_NPC_FLAG_SPELLCLICK`; `YoggSaronPlannedPortal` returns the open portal on
+the bot's planned spot when its intent is `holding`, and the use trigger and action click only that; a bot whose own
+portal is gone falls back to the nearest open portal whose spot no living teammate still on the platform holds
+(`YoggSaronPortalClaimedByOther`); the portals-up rebuild keeps the spot of every team member within the click
+radius of it. Same spots and portals at 10 (four) and 25, normal and hard mode; a human takes a portal as before and
+the bot whose spot he took falls back. No shared code. Reader: `--portals` per wave prints entries over 2 s after the
+open, clicks on a spent portal with each bot's delay, and portals taken by a bot off the plan (`spent_clicks`,
+tested).
+
+**Also built: Flame Shock** (the user's answer): `YoggSaronDotSpells` gives a ranged non-healer shaman Flame
+Shock, refreshed like the other damage DoTs; the reader's `ranged DoTs on Yogg` already knows it.
+
+**Next window should show:** `--portals` `clicked a spent portal` 0 every cycle (here 135 clicks by 48 bot-waves
+over 28 cycles), `in over 2 s after the open` well under 2.7 a cycle (75 of 260), `assigned, walked and never got
+one` near 0 (7), every cycle with its healer, no `taken by a bot off the plan`. Then Brain per cycle no lower than
+the 10.5% median, and no cycle that loses a healerless team below. In phase 3, `ranged DoTs on Yogg` with Flame
+Shock for the elemental shaman near 85% and `yogg.p3dot` `flame shock` rows. Round 7's checks land in window 15.
+
+**Questions for the user** (plan changes, not built):
+
+- **Q1, kill order inside.** In Stormwind and Icecrown a bot that cleared its share waits at the stage spot, so
+  the last 1-3 tentacles die to one bot each while 3-6 of 9 damage dealers wait: a median 10.3-10.5 s from the
+  first staged bot to the door. Should a done bot instead join the live tentacle with the fewest attackers, staying
+  near the stage when it can? **Recommended: yes**: ~2-3% of the Brain on two cycles in three, against 2-4 s more
+  walk from the far tentacles.
+- **Q2, who goes in.** The brain team is melee first, so most of it reaches the Brain 10-12 s after the door
+  (Chamber 18 s) and leaves ~6.6 s before the end, while ranged hit from the door side within 2-4 s and leave
+  3 s before the end. Ranged first would add ~5% of the Brain a cycle, but leave melee on the platform, which may not
+  hit a live Crusher (Crush re-aims on whoever swings at it), so the Crushers would die only in the stun or to the
+  few ranged left. **Recommended: no, keep melee first**: the platform is already losing the Crusher race, and Q1
+  plus this fix come first. Worth asking again if cycles stay at ~10%.
+- **Answer to the user's question, for the goal.** At ~0.57% a second the team needs ~44 s on the Brain for 25% a
+  cycle, out of 60 s whose room alone takes ~31 s; a 15 s room would still give ~20%. Expect four cycles at best on
+  these rosters, not three, and one or two Crushers at the last stun.
+
+**Seen, not picked.**
+
+- uld2's phase 3 (the first in window 15a): ranged spent 99-100% on nine phase 2 leftovers (10.24M, three Crushers)
+  for the whole phase; round 7's leftover Crusher question still stands.
+- uld3's 1:48.68 nova killed six (four ranged, a healer, a melee): round 7's pull fix was not in this build.
+- Chamber cycles took a median 8.3% against 13.6-15.9%: the team ends at the far ring; no inside order found that
+  shortens the out-and-back walk overall.
+
+**Review fixes.** The use-portal trigger now reads the plan, and a bot keeps `"diamond"` underground until its
+room node renames it, so `YoggSaronPlannedPortal` returns nothing off the platform (`YoggSaronRoomOf` not
+`ARENA`), like the enter-portal trigger: the arrivals sit 91-98 yd from the nearest portal, and a plan read past
+the 100 yd portal search sees the portals down, rebuilds the next wave's slots mid-wave, and the platform's next
+read rebuilds again without the held spots. The holder count above was re-measured: slot notes at each open
+against each bot's last snapshot within 2 yd of its old spot.

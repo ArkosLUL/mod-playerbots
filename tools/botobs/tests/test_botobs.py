@@ -1246,6 +1246,12 @@ class YoggPhases(unittest.TestCase):
                           (12000, 9, "barkskin", "frenzied regeneration")])
         self.assertEqual(yogg_saron.ladder_stacks(spans, 1100), [])
 
+    def test_spent_clicks_keeps_each_bots_first_click_that_teleported_nobody(self):
+        clicks = [(100, 1), (300, 2), (500, 2), (900, 3), (1200, 3), (400, 4)]
+        entries = [(110, 1), (4800, 2), (1210, 3)]
+        self.assertEqual(yogg_saron.spent_clicks(clicks, entries), {2: (300, 4800), 3: (900, 1210), 4: (400, None)})
+        self.assertEqual(yogg_saron.spent_clicks([], entries), {})
+
     def test_station_catches_counts_deaths_inside_the_reach_of_the_ranged_spot(self):
         x, y = yogg_saron.RANGED_SPOT
         deaths = [(x + 12.1, y), (x + 14.9, y + 1.0), (x + 15.2, y), (x + 21.5, y), (x + 10.0, y + 20.0)]
