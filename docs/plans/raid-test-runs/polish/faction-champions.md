@@ -909,6 +909,12 @@ so `faction champions suppress aoe multiplier` zeroes it while the fight is live
 Fire Elemental, its kill-target share, the champion it targeted most off it, and the Polymorphs and Fears begun on its
 target (`raid_fire_elementals`). Boss doc: AoE row, Known gaps (no ranged druid).
 
+**Review fix.** The multiplier can't stop a player's totem, so the CC duty's `ClearForBreakable` and the Peel's
+`ClearOfOurHits` now check every member's `m_Controlled` victim (pets and guardians, CC bots' too) where they checked
+only `GetPet`. Other raid guardians off the kill target, windows 10-16: Spirit Wolf on a champion 10% of its samples
+(Polymorph begun on its target 13, held a median 1.6 s; Fear 12, 2.2 s), Shadowfiend 21%, Mirror Image 5% (8
+Polymorphs, 0.8 s); the DK ghoul and Gargoyle sit on their owner's iced champion (84%, 82%), which takes no CC anyway.
+
 **Next window should show.** `--vetoes`: `faction champions suppress aoe multiplier` rows on `fire elemental totem`.
 `--adds`: "raid Greater Fire Elementals in the pull: 0" on every pool (window 16: 2, 2, 2). `--cc` on a toc3-like
 lineup: Polymorph and Fear held on the healers that weren't kill target first above window 16's (Caiphus 12.8 s,
@@ -934,4 +940,4 @@ Thrakgar 20.0 s). A small gain at most: one champion's CC for up to 2 min a pull
   the Hunter while he's the kill target. Recommended: yes, kill target only, after Q4's window if one change at a time
   is wanted: 9 of his 15 kill-target kills in windows 14-16 came with both rogues dead.
 
-**Shared code.** None; the change is in this fight's multiplier and its reader.
+**Shared code.** None; the change is in this fight's multiplier, its CC and Peel clear checks, and its reader.

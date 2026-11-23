@@ -13,7 +13,6 @@
 #include "Creature.h"
 #include "Group.h"
 #include "Map.h"
-#include "Pet.h"
 #include "Player.h"
 #include "Playerbots.h"
 #include "RaidCombatHelpers.h"
@@ -804,14 +803,14 @@ bool ClearForBreakable(Unit* target, std::vector<Player*> const& members, std::v
 {
     for (Player* member : members)
     {
+        for (Unit* controlled : member->m_Controlled)
+            if (controlled->IsAlive() && controlled->GetVictim() == target)
+                return false;
+
         if (std::find(ccBots.begin(), ccBots.end(), member->GetGUID()) != ccBots.end())
             continue;
 
         if (member->GetVictim() == target || member->GetTarget() == target->GetGUID())
-            return false;
-
-        Pet* pet = member->GetPet();
-        if (pet && pet->IsAlive() && pet->GetVictim() == target)
             return false;
     }
 

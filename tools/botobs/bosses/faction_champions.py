@@ -15,7 +15,8 @@
                                            champions' Bloodlust, Avenging Wrath and Hand of Freedom
     faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
     faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast, the raid's own splash
-    faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds
+    faction_champions.py <file> --adds     champion totems and treants, treant damage, fc.totem holds, raid Greater
+                                           Fire Elementals and the CC on their targets
     faction_champions.py <file> --pack     champions round each role, early melee deaths, first kill, stalls, grips
     faction_champions.py <file> --chain    each player's pull: the bot DK links by post and the player's grip,
                                            skipped links, their gaps and carry, the order, what cut each; bot grips
@@ -1829,7 +1830,8 @@ def show_adds(trace: Trace) -> None:
         breaks = ", ".join(f"{name} {len(held)} held a median {statistics.median(held) / 1000:.1f}s"
                            for name, held in sorted(row["breaks"].items())) or "no Polymorph or Fear on its target"
         print(f"    {trace.name(row['owner'])[:14]:14} {clock(row['first']):>9} {clock(row['last']):>9}"
-              f" on the kill target {row['on_kill'] * 100 // max(row['samples'], 1)}%, off it mostly {victim}; {breaks}")
+              f" on the kill target {row['on_kill'] * 100 // max(row['samples'], 1)}%, off it mostly {victim};"
+              f" {breaks}")
     print("  first and last are the unit's snapshots; gone means the totem left the snapshots inside the"
           " hold, killed or run out; ice marks a holder with an fc.ice duty at the hold's start, which wants none;"
           " an elemental's Polymorph and Fear are those that began on the champion it had as target")
@@ -4033,7 +4035,8 @@ SECTIONS = (
     ("purge", "raid offensive dispels on champions, kill target or not, by spell and class", show_purge),
     ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
     ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
-    ("adds", "champion totems and treants, treant damage, fc.totem holds", show_adds),
+    ("adds", "champion totems and treants, treant damage, fc.totem holds, raid Greater Fire Elementals",
+     show_adds),
     ("pack", "champions round each role, early melee deaths, first kill, longest stall, grips", show_pack),
     ("chain", "each player's pull: the bot DK links by post and the player's grip, skipped links, gaps, carry,"
      " order; bot grips outside a pull", show_chain),
