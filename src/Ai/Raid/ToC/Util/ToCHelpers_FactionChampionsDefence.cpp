@@ -114,6 +114,8 @@ constexpr uint32 PEEL_BLADESTORM_UNITS = 2;
 constexpr float FROST_NOVA_REACH = 9.0f;
 constexpr float ROOT_AOE_CLEAR = 12.0f;
 constexpr uint32 SPELL_DISARM = 676;
+constexpr uint32 SPELL_DEFENSIVE_STANCE = 71;
+constexpr std::array<uint32, 4> STANCE_RAGE_SPELLS = {12678, 12295, 12676, 12677};
 constexpr uint32 SPELL_DISMANTLE = 51722;
 constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
 constexpr uint32 SPELL_CHAMPION_DETERRENCE = 65871;
@@ -1738,7 +1740,32 @@ bool DisarmedFor(Unit* champion)
     return champion->HasUnitFlag(UNIT_FLAG_DISARMED);
 }
 
-uint32 ReadyDisarm(Player* peeler, Unit* champion)
+int32 RageKeptOnStanceSwap(Player* warrior)
+{
+    int32 kept = 0;
+    for (uint32 spellId : STANCE_RAGE_SPELLS)
+    {
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+        if (info && (warrior->HasSpell(spellId) || warrior->HasTalent(spellId, warrior->GetActiveSpec())))
+            kept += warrior->CalculateSpellDamage(warrior, info, 0) * 10;
+    }
+
+    return kept;
+}
+
+bool StanceSwapFor(Player* warrior, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || !warrior->HasSpell(SPELL_DEFENSIVE_STANCE) || warrior->HasSpellCooldown(SPELL_DEFENSIVE_STANCE) ||
+        warrior->GetGlobalCooldownMgr().HasGlobalCooldown(info) ||
+        info->CheckShapeshift(FORM_DEFENSIVESTANCE) != SPELL_CAST_OK)
+        return false;
+
+    int32 const kept = std::min(static_cast<int32>(warrior->GetPower(POWER_RAGE)), RageKeptOnStanceSwap(warrior));
+    return info->CalcPowerCost(warrior, info->GetSchoolMask()) <= kept;
+}
+
+uint32 ReadyDisarm(Player* peeler, Unit* champion, bool stanceSwap = false)
 {
     bool const enhancement = IsEnhancement(champion->GetEntry());
     if (!peeler->IsWithinMeleeRange(champion) || DisarmedFor(champion))
@@ -1747,10 +1774,24 @@ uint32 ReadyDisarm(Player* peeler, Unit* champion)
     if (peeler->getClass() == CLASS_ROGUE)
         return SpellReady(peeler, SPELL_DISMANTLE) ? SPELL_DISMANTLE : 0;
 
-    return peeler->getClass() == CLASS_WARRIOR && !enhancement && StanceAllows(peeler, SPELL_DISARM) &&
-                   SpellReady(peeler, SPELL_DISARM)
-               ? SPELL_DISARM
-               : 0;
+    if (peeler->getClass() != CLASS_WARRIOR || enhancement || !SpellReady(peeler, SPELL_DISARM))
+        return 0;
+
+    return StanceAllows(peeler, SPELL_DISARM) || (stanceSwap && StanceSwapFor(peeler, SPELL_DISARM)) ? SPELL_DISARM
+                                                                                                         : 0;
+}
+
+bool DisarmSwapWanted(std::vector<Member> const& members, Unit* killTarget)
+{
+    if (!killTarget || !IsHunter(killTarget->GetEntry()))
+        return false;
+
+    return std::none_of(members.begin(), members.end(),
+                        [](Member const& member)
+                        {
+                            uint8 const cls = member.player->getClass();
+                            return cls == CLASS_ROGUE || (cls == CLASS_WARRIOR && IsTankMember(member.player));
+                        });
 }
 
 uint32 ReadyPeel(Player* peeler, Unit* champion, bool nearPackTank, bool danger, bool rangedDruid)
@@ -1820,7 +1861,7 @@ uint32 GroupUnitsWithin(std::vector<Member> const& members, Unit* centre, float 
 }
 
 void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::vector<Member> const& members,
-                std::vector<Unit*> const& champions)
+                std::vector<Unit*> const& champions, Unit* killTarget)
 {
     state.peels.clear();
 
@@ -1910,6 +1951,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
     std::vector<bool> taken(peelers.size(), false);
     bool const rangedDruid = std::any_of(members.begin(), members.end(), [](Member const& member)
                                          { return FactionChampionsRangedDruid(member.player); });
+    bool const disarmSwap = DisarmSwapWanted(members, killTarget);
     for (Needy const& entry : needy)
     {
         Unit* champion = entry.champion;
@@ -1934,9 +1976,10 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
             if (deterred && champion->HasInArc(static_cast<float>(M_PI), peeler))
                 continue;
 
-            uint32 const spellId = entry.iced || entry.hunter ? ReadyDisarm(peeler, champion)
-                                                              : ReadyPeel(peeler, champion, nearPackTank, entry.danger,
-                                                                          rangedDruid);
+            uint32 const spellId =
+                entry.iced || entry.hunter
+                    ? ReadyDisarm(peeler, champion, entry.hunter && disarmSwap && champion == killTarget)
+                    : ReadyPeel(peeler, champion, nearPackTank, entry.danger, rangedDruid);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
             SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
             if (!info || !landing || champion->IsImmunedToSpell(landing) || !peeler->IsWithinLOSInMap(champion))
@@ -2702,7 +2745,7 @@ FactionChampionsDefenceState* Refresh(PlayerbotAI* botAI)
     UpdateGuard(state, bot, champions, now);
     UpdateWalls(state, botAI, members, champions, killTarget, now);
     UpdateSnares(state, botAI, members, champions);
-    UpdatePeel(state, botAI, members, champions);
+    UpdatePeel(state, botAI, members, champions, killTarget);
     UpdateFocusClock(state, bot, champions, now);
     UpdateProtect(state, members, champions);
     UpdateFreedom(state, members, champions);

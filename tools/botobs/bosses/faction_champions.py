@@ -27,7 +27,8 @@
     faction_champions.py <file> --peel     snares and peels on melee champions, trinket poppers on iced ones, the
                                            full-speed chases a snare reached, Disarm against Bladestorm, disarms
                                            on the iced Tauren against the casts they gate, on the Hunter against
-                                           his casts and damage,
+                                           his casts and damage, his kill-target time with no rogue and no tank
+                                           warrior alive and the DPS warriors' Defensive Stance swaps for him,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
@@ -38,7 +39,8 @@
                                            Blinks and circle teleports landing within 12 yd of a melee champion, the
                                            kites each melee champion caught, iced or not, its iced ones inside its
                                            strike reach or past it, the re-hops a kite's own walk refused and how
-                                           long they waited
+                                           long they waited, the broken casts no hop followed and the half-step
+                                           hops
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
@@ -483,6 +485,9 @@ SPELL_CHAINS_OF_ICE = 45524
 LINK_SKIP = "fc.linkskip"
 # a chased bot's hard cast broken so its kite can run, the spell's name
 CAST_BREAK = "fc.castbreak"
+STRANDED_KITE_MS = 1500
+STRANDED_DAMAGE_MS = 2000
+SHORT_HOP = ", short"
 # a pull with no chased run, escape, kite, broken cast, wall grip or skipped link writes none
 OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, CAST_BREAK, WALL, LINK_SKIP))
 KICK = "fc.kick"
@@ -580,6 +585,10 @@ HUNTER_CHAMPIONS = (34448, 34467)
 RANGED_DISARM_GATED = frozenset((65883, 67977, 67978, 67979, 65871, 65866, 67983, 67984, 67985, 65880, 65868, 67988,
                                  67989, 67990, 65867, 66207, 65877))
 DISARM_MS = 10000
+SPELL_DEFENSIVE_STANCE = 71
+SPELL_DISARM = 676
+BACK_STANCES = frozenset((2457, 2458))
+SWAP_DISARM_MS = 3000
 DISARM_DR_STEPS = 3
 DISARM_DR_RESET_MS = 15000
 DISARM_EDGE_MS = 250
@@ -2623,6 +2632,50 @@ def hunter_disarms(trace: Trace) -> list[dict]:
     return out
 
 
+def stance_swaps(trace: Trace) -> dict:
+    """The DPS warriors' Defensive Stance swaps for the Hunter's Disarm, humans and tanks apart: `swaps`, each
+    Defensive Stance cast from the pull; `disarmed`, those followed by the same warrior's Disarm within
+    SWAP_DISARM_MS, `on_hunter` those on a Hunter champion; `back`, ms from each swap to that warrior's next Battle
+    or Berserker Stance, None while none came. Also `uncovered`, ms of samples with a Hunter champion holding
+    `fc.kill`, no rogue and no tank warrior of the roster alive."""
+    out = {"swaps": 0, "disarmed": 0, "on_hunter": 0, "back": [], "uncovered": 0}
+    if encounter_of(trace) != ENCOUNTER:
+        return out
+    roster = trace.header.get("roster", [])
+    warriors = {m["g"] for m in roster if class_name(m.get("c")) == "warrior" and m.get("r") != "tank"
+                and not m.get("h")}
+    rogues = {m["g"] for m in roster if class_name(m.get("c")) == "rogue"}
+    guard_tanks = {m["g"] for m in roster if class_name(m.get("c")) == "warrior" and m.get("r") == "tank"}
+    hunters = {guid for guid, entry in champions(trace).items() if entry in HUNTER_CHAMPIONS}
+    start = pull_start(trace)
+    casts = sorted((rec for rec in trace.of("cast") if rec.get("s") in warriors and rec["t"] >= start
+                    and not rec.get("tr")), key=lambda rec: rec["t"])
+    for rec in casts:
+        if rec.get("sp") != SPELL_DEFENSIVE_STANCE:
+            continue
+        out["swaps"] += 1
+        later = [other for other in casts if other.get("s") == rec.get("s") and other["t"] > rec["t"]]
+        disarm = next((other for other in later if other.get("sp") == SPELL_DISARM
+                       and other["t"] - rec["t"] <= SWAP_DISARM_MS), None)
+        if disarm:
+            out["disarmed"] += 1
+            out["on_hunter"] += disarm.get("tgt") in hunters
+        back = next((other for other in later if other.get("sp") in BACK_STANCES), None)
+        out["back"].append(back["t"] - rec["t"] if back else None)
+    killed = kill_spans(trace)
+    last = None
+    for snap in frames(trace):
+        when = snap["t"]
+        step = when - last if last is not None and when - last <= CHASE_STEP_MS else 0
+        last = when
+        if when < start or held_at(killed, when) not in hunters:
+            continue
+        alive = {row[0] for row in snap.get("u", []) if row[5] > 0}
+        if not alive & (rogues | guard_tanks):
+            out["uncovered"] += step
+    return out
+
+
 def warrior_disarms(trace: Trace) -> list[dict]:
     """Per Warrior champion: `guid`, its Bladestorm casts (`bladestorms`) and the raid's Disarm, Dismantle
     and Psychic Horror casts on it (`disarms`), each a list of times."""
@@ -2737,6 +2790,15 @@ def show_peel(trace: Trace) -> None:
               + f"; his casts: {row['after']} while one held ({DISARM_MS // 1000} s, halved per DR step),"
               f" {row['other']} otherwise; his damage {row['damage_after'] / 1000:.0f}k while one held,"
               f" {row['damage_other'] / 1000:.0f}k otherwise")
+    swaps = stance_swaps(trace)
+    back = [ms for ms in swaps["back"] if ms is not None]
+    back_text = (f"back to Battle or Berserker Stance after a median {statistics.median(back) / 1000:.1f} s"
+                 f" (max {max(back) / 1000:.1f} s), {len(swaps['back']) - len(back)} never") if back else \
+        "none back to Battle or Berserker Stance"
+    print(f"  Hunter kill target with no rogue and no tank warrior alive: {swaps['uncovered'] / 1000:.1f} s;"
+          f" DPS warrior Defensive Stance swaps {swaps['swaps']}, a Disarm within {SWAP_DISARM_MS // 1000} s after"
+          f" {swaps['disarmed']} ({swaps['on_hunter']} on the Hunter)"
+          + (f", {back_text}" if swaps["swaps"] else ""))
 
     externals = external_casts(trace)
     if externals:
@@ -3765,6 +3827,37 @@ def kite_waits(trace: Trace) -> dict:
     return out
 
 
+def stranded_breaks(trace: Trace) -> dict:
+    """The kite's cast breaks against its hops: `breaks`, every `fc.castbreak`; `stranded`, those with no `fc.kite`
+    hop of the same bot within STRANDED_KITE_MS after, and `damage`, the melee champions' damage on the bot in the
+    STRANDED_DAMAGE_MS after each of those; `hops`, every `fc.kite` hop, and `short`, those at the half step."""
+    out = {"breaks": 0, "stranded": 0, "damage": 0, "hops": 0, "short": 0}
+    if encounter_of(trace) != ENCOUNTER:
+        return out
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    hops: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in notes(trace, KITE):
+        hops[rec.get("g")].append(rec["t"])
+        out["hops"] += 1
+        out["short"] += str(rec.get("txt", "")).endswith(SHORT_HOP)
+    for times in hops.values():
+        times.sort()
+    hits: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("s") in melee:
+            hits[rec.get("d")].append((rec["t"], rec.get("a", 0)))
+    for rec in notes(trace, CAST_BREAK):
+        bot, when = rec.get("g"), rec["t"]
+        out["breaks"] += 1
+        times = hops.get(bot, [])
+        at = bisect.bisect_left(times, when)
+        if at < len(times) and times[at] - when <= STRANDED_KITE_MS:
+            continue
+        out["stranded"] += 1
+        out["damage"] += sum(amount for hit, amount in hits[bot] if when <= hit < when + STRANDED_DAMAGE_MS)
+    return out
+
+
 def chase_spacing(trace: Trace) -> list[dict]:
     """Per role in CHASE_ROLES, humans apart, over the roster's live samples from the pull with a melee champion
     alive: `role`, `samples`, `median` distance to the nearest melee champion, `contact`, the share within
@@ -3934,6 +4027,10 @@ def show_personal(trace: Trace) -> None:
               f" melee champion damage on the bot meanwhile {waits['damage'] / 1000:.0f}k")
     else:
         print(f"  {KITE}: none")
+    stranded = stranded_breaks(trace)
+    print(f"  {CAST_BREAK}: {stranded['breaks']}, with no hop by the bot within {STRANDED_KITE_MS / 1000:.1f} s"
+          f" {stranded['stranded']}, melee champion damage on it in the {STRANDED_DAMAGE_MS // 1000} s after those"
+          f" {stranded['damage'] / 1000:.0f}k; half-step hops {stranded['short']} of {stranded['hops']}")
     print("  speed rows are every raid Sprint or Dash cast in the pull; hp is the bot's health in the last sample at or"
           " before the cast or first hop; melee and other are the"
           f" champions with the bot as target then, nearest the nearest of those melee champions then and its"

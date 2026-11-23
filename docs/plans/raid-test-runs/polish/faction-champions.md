@@ -1255,3 +1255,134 @@ while Tocxaw lives. Kill times no longer (6:21, 6:32, 5:52). A small gain at mos
 - Left: a dead Balance druid doesn't count, so a cat takes over when the raid's last ranged druid dies.
 - Left: as a CC bot the cat's own swings no longer block Polymorph, Fear or Hex on its victim (`ClearForBreakable`
   skips CC bots, as for the Enhancement shaman's Hex); its victim is the kill target, which takes no CC.
+
+## Round 14 (2026-11-23, window 22a on build b9dd70fcc; builds Q5)
+
+**Data.** Window 22a, `raidtest.py report --boss faction-champions --raid toc --head b9dd70fcc --pulls 10`, rounds 12 and
+13 in it: toc1 `tr-20261123-194527-4` kill 6:58 (trace 6:22), 4 deaths (`649_4_thrakgar_1795463270`), toc2
+`tr-20261123-194527-5` kill 8:02 (7:27), 7 (`649_5_caiphus-the-stern_1795463271`), toc3 `tr-20261123-194527-6` kill 6:41
+(6:05), 0 (`649_6_erin-misthoof_1795463273`). Window 20 (round 11, kills 2/5/0) reread for the comparison, windows 14
+and 16 for the Q5 baseline. Scripts in the round's scratchpad `fc14/` (gone with it); the reader's new `--peel` and
+`--personal` lines cover the key ones.
+
+**Stop rules.** Kills on all three pools for the second window running; toc3 within 3 deaths, toc1 one over (4), toc2
+four over (7). Not polished.
+
+**Lineups.** toc1 (roster A): Liandra, Caiphus, Thrakgar; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog, Ginselle,
+Birana; three DKs ice Gorgrim, Narrhok and Maz'dinah all pull. toc2 (roster B): window 20 toc2's (Liandra, Caiphus,
+Erin; Maz'dinah, Narrhok, Ruj'kah, Broln, Gorgrim, Harkzog, Ginselle); two DKs ice Broln and Maz'dinah, Gorgrim from
+4:25, Narrhok from 5:14. toc3 (roster C): Liandra, Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog,
+Vivienne, Ginselle; Narrhok iced from 4:32.
+
+**Deaths by top damage dealer** (its share in the 10 s before). Iced: its duty's Chains in the 10 s before; never iced:
+no duty yet.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc2 kill | 7 | never-iced Narrhok 3: Tocyag (rogue) 1:56.9, 36% with never-iced Gorgrim 31% and iced Maz'dinah 31%, three on him from 1:50; Tocyal (warlock) 2:10.7, 65%, Narrhok Bladestorming from 2:03.6 toward Tocyav, Tocyal's dodge spot 12.8 yd off him at the pick, Fear begun 2:08.1 at 9.6 yd as he walked on, broken at 2:08.7, Dazed by iced Maz'dinah; Tocyaf (holy priest) 3:50.2, 52% with iced Maz'dinah 47%, kited from 27 yd, Roots at 3:45.47, his Bladestorm (root-immune) 0.3 s later, he kept 7-13 yd behind for 5 s. Casters 2: Ruj'kah (not kill target) 55% on Tocyap 1:22.6; Harkzog 95% (DoTs, Shadow Bolt) on Tocyaq's second life 3:41.4. Iced Broln 39% on Tocyaq 2:31.4 (Harkzog 30%, Ginselle 29%). Gorgrim as kill target, unchained, 96% on Tocyak 5:48.8 |
+| toc1 kill | 4 | iced Gorgrim 96% on Tocxas (warlock) 3:11.7: 37.7 yd off centre, no kite hop, Immolate recast five times as Gorgrim crawled 17.5 → 4.9 yd (below); iced Narrhok 71% on Tocxak (warlock) 2:20.0, Charge from 20 yd at 2:17.2, past his crawl reach, Gorgrim's Death Grip after; Ruj'kah as kill target 36% on Tocxag 2:23.3, both rogues alive; Thrakgar (kill target, melee) 36% with Harkzog and Ruj'kah on Tocxai (Enhancement) 1:02.6, Dazed |
+| toc3 kill | 0 | - |
+
+**Verdict on round 12 (iced kites past the Tauren strike reach, circle 12 yd off every melee champion): held.**
+
+- `--personal` iced kites, inside the strike reach or past it (weapon hits within 2 s): toc2 Broln inside 13 (7), past
+  37 (1) (window 20, same lineup: 31 (10), 9 (1)); toc1 Narrhok 16 (9), 11 (2) (window 20 toc1: 31 (16), 12 (0)); toc2
+  Narrhok 6 (3), 5 (1); toc3 Narrhok 7 (3), 2 (0).
+- Circle teleports landing within 12 yd of a melee champion 0 of 2, 0 of 7, 0 of 6 (window 20: 0 of 3, 2 of 8, 1 of 9);
+  Blink 0 of 4, 9, 6.
+- Deaths to an iced Tauren 2 of 11 (window 20: 5 of 7): Narrhok's Charge from 20 yd, which no kite answers, and Broln's
+  39% share on Tocyaq.
+- Cost: `fc.castbreak` 63, 29, 24 (window 20: 16, 32, 15), toc1's 63 mostly the stranded breaks below; kite hops 278,
+  380, 284 (272, 282, 304). toc2's kill took 55 s longer on the same lineup: every kill hold 2-11 s longer, raid DPS
+  100k against 113k, 7 deaths against 5, iced Broln's kites 50 against 40, so part of it may be the wider crawl reach.
+
+**Verdict on round 13 (cat Cyclone and Roots without a ranged druid): held.** toc3 (roster C) `--cc`: melee druid
+Toczas Cyclone 48 (37 landed), Entangling Roots 11 (window 20: 0, 0); CC landed 3.06 per 10 s (1.62; toc1 2.62, toc2
+2.55 this window); the second healer, Thrakgar, held 35.8 s of his 82 s off the latch (window 20's Caiphus 0.1 s), Erin
+21.2 of 41.5 s; 0 deaths. toc1's cat Tocxar 0 and 0 while the Balance bot Tocxaw cast 46 Cyclones. Cost: Toczas out of
+Cat Form 29% of 1461 live samples, longest run 15.2 s (back-to-back casts, 59 in 365 s), lowest mana 82%, his damage
+1.59M against 2.61M in window 20; kill 6:05 against 5:52 on another lineup.
+
+**Failure ranking (11 deaths).**
+
+1. Never-iced Narrhok 3 (toc2, two DKs and four melee champions): the ice order, kept by the user.
+2. Casters 4 (Ruj'kah 2, Harkzog 1, the Resto Shaman kill target with casters 1): no single mechanism.
+3. Iced champions 3 (Gorgrim at the wall, Narrhok's Charge, Broln's share), Gorgrim as kill target 1.
+
+The bug inside them: a chased bot with no kite hop stands, its casts broken for nothing (picked below).
+
+**Built: Q5 as answered.** `DisarmSwapWanted`: the kill target is a Hunter champion and no rogue or tank warrior of the
+group is alive on the map, bot or player. Then the peel's Hunter entry, on the kill target only, also takes a DPS warrior
+bot not in Defensive Stance (`ReadyDisarm`'s `stanceSwap`): in melee, Disarm ready and paid for, Defensive Stance known
+and off its 1 s stance cooldown, no global cooldown, and the rage it keeps through the change, `min(rage, Stance Mastery
++ Tactical Mastery)` as `HandleAuraModShapeshift` keeps it (10-25), at least Disarm's 15 (`StanceSwapFor`). The existing
+checks stand: not already ranged-disarmed, immunity, DR immune, LOS, during his Deterrence only from behind. The peel
+action casts the stance the spell needs
+(`StanceForCast`) and returns; the next tick the warrior is in Defensive Stance and casts Disarm (stances share no GCD).
+Back: once the Hunter reads disarmed the peel drops the warrior, and its class trigger (arms `battle stance`,
+`ACTION_HIGH + 10`; fury `berserker stance`, `+ 9`, both below the peel's `ACTION_RAID + 3.3`) recasts its stance once
+the 1 s stance cooldown is up. A dead prot warrior doesn't count, so a DPS warrior takes over when the raid's last one
+dies.
+
+Baseline (`--peel` new line): the Hunter's kill-target time with no rogue or tank warrior alive 0.0 s on all three
+pools this window and window 20; window 14 toc1 58.5 s and toc3 45.5 s, window 16 toc3 67.2 s. DPS warrior Defensive
+Stance swaps 0 everywhere.
+
+**Picked: a chased bot with no kite hop stands, its casts broken every second (bug).**
+
+- `FactionChampionsKite` (`ToCHelpers_FactionChampionsBall.cpp:1077-1099` before the fix) tries 15 yd hops at 0 to ±120°
+  and gives up when every one leaves the floor (44 yd off `ARENA_CENTER`) or lands within 10 yd of another healer.
+  `BreakChasedCasts` (`:517-545`) breaks the cast anyway once a chaser would reach the bot before it lands, so the bot
+  recasts and is broken again a second later.
+- toc1 3:07.2-3:11.7: Tocxas 37.7 yd off centre, iced Gorgrim on him from 17.5 yd closing at ~2.5 yd/s; every 15 yd turn
+  off the floor or by a healer, a 7.5 yd turn (-120°) clear. `fc.castbreak` at 3:07.2, 3:08.2, 3:09.2, 3:10.2, 3:11.2,
+  Immolate recast 0.15-0.25 s after each, no `fc.kite`; Frost Strike and two swings killed him from 100% in 0.2 s.
+- `--personal` new line: breaks with no hop by the bot within 1.5 s 45 of 63, 0 of 29, 1 of 24, melee champion damage on
+  those bots in the 2 s after 287k on toc1; window 20 0 of 16, 4 of 32, 0 of 15; windows 14 2 of 25, 2 of 12.
+- Replay (approximate kite rules, hazards left out): windows 20-22a, 567 chased samples with no 15 yd hop, 418 of them
+  toc1 (Tocxao 290, at the wall with Narrhok on him), 267k of melee damage; a 7.5 yd hop found one in 511, a floor-only
+  15 yd hop (healers ignored) in all 567.
+
+**Fix** (`ToCHelpers_FactionChampionsBall.cpp`). `KiteHop` holds the search; with no 15 yd hop it tries the same turns
+at 7.5 yd (`KITE_STEPS`), the note then ending `, short`. `BreakChasedCasts` breaks a cast only when the bot has a hop.
+The healer gap stays. Reader `--personal`: the `fc.castbreak` notes no hop by the bot followed within 1.5 s with the melee
+champion damage after, and the half-step hops (`stranded_breaks`); `--peel`: the Hunter's kill-target time with no rogue
+or tank warrior alive and the DPS warriors' Defensive Stance swaps, the Disarms within 3 s after and the time back
+(`stance_swaps`). Boss doc: Peel and Kite rows, Known gaps, `--peel`, `--personal`. Every size and difficulty; a player's
+own moves and casts untouched, and a player rogue or prot warrior counts as one.
+
+**Next window should show.** `--personal`: "with no hop by the bot within 1.5 s" near 0 (45 of 63, 0 of 29, 1 of 24),
+"half-step hops" above 0 on a pool with a bot chased at the wall (0 of 278, 380, 284), no bot standing at the wall with
+a melee champion walking up. `--peel`: wherever "Hunter kill target with no rogue and no tank warrior alive" is above 0,
+Defensive Stance swaps about one per 15 s of it with as many Disarms within 3 s, on the Hunter, back to Battle or
+Berserker Stance after ~1-1.5 s, and his casts and damage while one held 0; swaps 0 where it is 0. This window had none,
+so Q5 may stay unjudged. Kill times no longer (6:22, 7:27, 6:05).
+
+**Seen, not picked.**
+
+- Narrhok's Bladestorm walk killed two on toc2: the CC duty began a 1.5 s Fear 9.6 yd from a Bladestorming warrior walking
+  its way (Tocyal), and the dodge's spot, 12.8 yd clear at the pick, wasn't 12 once he walked on. Next round's candidate
+  if it recurs.
+- Iced Narrhok's Charge from 20 yd, past his 16.8 yd crawl reach (Tocxak); Charge is a known gap.
+- A kite with no hop at either step still stands; floor-only hops exist there (replay), but take the chaser within 10 yd
+  of a healer. A question only if the stranded line stays above 0.
+
+**Questions for the user.** None new. Q6 (ranged step off a Tauren not chasing them) still waits; not built.
+
+**Shared code.** None: the peel, its action, the kite and the cast break are this fight's, and the reader its own.
+
+**Review.** Both hold. toc1 3:05-3:12 reread: Tocxas stood 37.7 yd off centre with `fc.castbreak` at 3:07.2, 3:08.2,
+3:09.2, 3:10.2 and 3:11.2 and no `fc.kite` while Gorgrim closed from 16.7 to 5.3 yd; the kite's turns replayed on the
+3:07.0 sample put every 15 yd hop off the floor or within 10 yd of Tocxac, Tocxad or Tocxae, the 7.5 yd ones at +90°
+and -120° clear. Q5 is built as answered. DBC: Disarm 676 needs Defensive Stance and carries the ranged disarm (aura
+278) that `DisarmedFor` reads on the Hunter; the three stances share category 47 (1 s) and trigger no GCD; Stance
+Mastery 12678 and Tactical Mastery 12295, 12676, 12677 are the warrior spells with icon 139 that
+`HandleAuraModShapeshift` sums over the spell and talent maps. No size, mode or player branch: a player rogue or prot
+warrior counts, only bots are asked.
+
+- Review fix: the reader's new constants and the swap test's fixture carried description comments; removed.
+- Left: a swap whose Disarm can't follow (the Hunter Disengages out of melee in between) costs the warrior its rage
+  above what it keeps, and it swaps again once back in melee with the stance cooldown up. The rage check and the
+  Disarm's 60 s cooldown bound it; no swap ran this window to measure.
+- Left: in the tick after its swap the warrior, now in Defensive Stance, can be taken by an earlier needy melee
+  champion in its melee range and Disarm that one instead; still a peel the row allows.
