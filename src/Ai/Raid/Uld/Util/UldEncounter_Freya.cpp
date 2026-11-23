@@ -356,13 +356,18 @@ bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI)
     return freya && freya->GetVictim() != addTank;
 }
 
-bool IsFreyaAddTankCovered(Player* tank)
+bool HasFreyaTankExternal(Player* tank)
 {
     for (FreyaTankExternal const& external : FREYA_TANK_EXTERNALS)
         if (tank->HasAura(external.spellId))
             return true;
 
-    return RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
+    return false;
+}
+
+bool IsFreyaAddTankCovered(Player* tank)
+{
+    return HasFreyaTankExternal(tank) || RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
 }
 
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)

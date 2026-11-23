@@ -318,9 +318,9 @@ their own pickup ([below](#detonating-lasher-waves)).
 
 **The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice),
 since every add-tank death came with them spent earlier or on someone else
-([Hardened Bark](#the-trio-wave)). Verified: no two layers overlapped, he stood bare 1-12s a trio wave
-(9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya add tank
-defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
+([Hardened Bark](#the-trio-wave)). Verified: no external landed on his buttons, he stood bare 1-12s a
+trio wave (9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya
+add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
 Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank
 external hold` zeroes healers' class Pain Suppression (a disc priest's own critical-health one shares the
 name), Guardian Spirit and Hand of Sacrifice aimed at anyone but the main tank (user's choice) while an add
@@ -330,7 +330,10 @@ when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear sp
 43% that way.
 
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
-time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
+time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one,
+and any running external (not yet verified in a pull): a button off cooldown, or back from the rune gap an
+external was spent in, landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s
+after both ran out.
 `freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
 Sacrifice it can reach, only while none of the three is up and he has no own button running, or ready and
 affordable now (`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them
@@ -338,6 +341,10 @@ too). Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out
 paladin healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`,
 `freya.addext`: the button cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's
 repeat filter keeps a later cast of the same button.
+
+**At 10-man two healers run dry by 3:30-4:30** (six of six pulls; 25-man's four keep 25-60%), so the second
+trio wave's add tank dies on his last button, Frenzied Regeneration, with an external still in hand, and a
+raid down to 5-7 still has Freya at 55-56% at Berserk (9 alive burned her in 2:45).
 
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
@@ -480,6 +487,13 @@ one wave that never died had the back line walk **256 yd to net 19** while losin
 camp move orders against 270), and ranged damage halve, **109.5k/s → 51.2k/s**, a ranged bot casting on
 **21%** of moving ticks against **78%** standing. Eonar's Gift then lived **14.5s** rather than 4-8 and
 took the five surviving lashers from 7-17% back to **60-68%**.
+
+**The gather walks the back line onto a submerged pack** (known-open). In 10 of 30 waves at least half of
+the camp's orders in the 5s submerge ended nearer a lasher, at a median 2.2-6.2 yd from one. Over the first
+30s after the wake, six waves kept the back line a median 4-6 yd from a lasher and it took 116-514k lasher
+damage; the other 23 with the raid intact, at 10-24 yd, took 0-203k, 21 of them under 90k. Distance at the
+wake alone does not decide: clean waves stood 2-7 yd off then too, and the worst lost its Army at 5 ghouls
+to a Ground Tremor cast 0.5s into the channel.
 
 **Melee bail per lasher.** `freya lasher about to blow` (`ACTION_RAID + 3`) steps melee out of the blast
 of the lashers that are nearly dead, the only warning this wave gives. A lasher under

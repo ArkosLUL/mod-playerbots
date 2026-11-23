@@ -86,7 +86,18 @@ bool FreyaAddTankDefensiveTrigger::IsActive()
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
-    return GetFreyaStackedSnaplasherTank(state) == bot && NextTankDefensive(botAI, bot, "freya.adddef", true) != 0;
+    if (GetFreyaStackedSnaplasherTank(state) != bot)
+        return false;
+
+    if (HasFreyaTankExternal(bot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "freya.adddef", "covered");
+
+        return false;
+    }
+
+    return NextTankDefensive(botAI, bot, "freya.adddef", true) != 0;
 }
 
 bool FreyaAddTankExternalTrigger::IsActive()
