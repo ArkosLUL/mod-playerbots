@@ -510,7 +510,8 @@ bool YoggSaronReprisalRegroupTrigger::IsActive()
         return false;
 
     Player* healer = YoggSaronRoomHealer(botAI);
-    return healer && bot->GetExactDist2d(healer) > ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE;
+    return healer && (bot->GetExactDist2d(healer) > ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE ||
+                      !healer->IsWithinLOSInMap(bot));
 }
 
 bool YoggSaronReprisalHealTrigger::IsActive()

@@ -1349,9 +1349,13 @@ bool YoggSaronReprisalRegroupAction::Execute(Event /*event*/)
     if (!healer)
         return false;
 
+    bool const seen = healer->IsWithinLOSInMap(bot);
+    float const stop = seen ? ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP : ULDUAR_YOGG_SARON_REPRISAL_REGROUP_SIGHT_STOP;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.regroup", seen ? "range" : "sight");
+
     float const angle = healer->GetAngle(bot);
-    Position const spot(healer->GetPositionX() + std::cos(angle) * ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP,
-                        healer->GetPositionY() + std::sin(angle) * ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP,
+    Position const spot(healer->GetPositionX() + std::cos(angle) * stop, healer->GetPositionY() + std::sin(angle) * stop,
                         healer->GetPositionZ());
 
     YoggSaronReleaseStalledWalk(botAI, "regroup", spot);

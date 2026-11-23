@@ -201,6 +201,7 @@ struct YoggSaronEncounterState
     std::unordered_map<ObjectGuid, BeaconReturn> beaconReturns;
     std::unordered_map<ObjectGuid, uint32> beaconExternalClaims;
     uint32 humanCallScanMs = 0;
+    uint32 castCutScanMs = 0;
 
     bool roarExpected = false;
     uint32 lastRoarMs = 0;
@@ -5281,11 +5282,49 @@ void YoggSaronTickHumanTankCalls(PlayerbotAI* botAI)
             YoggSaronCallHumanPile(bot, human);
     }
 }
+
+void YoggSaronCutCastsInDeathRays(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group || !bot->IsAlive())
+        return;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    uint32 const now = getMSTime();
+    if (getMSTimeDiff(state.castCutScanMs, now) < ULDUAR_YOGG_SARON_DEATH_RAY_CAST_CUT_SCAN_MS)
+        return;
+
+    state.castCutScanMs = now;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!IsYoggSaronBot(member) || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            member->GetPositionZ() <= ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+            continue;
+
+        Spell* spell = member->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell || spell->getState() != SPELL_STATE_PREPARING ||
+            spell->GetCastTimeRemaining() <= ULDUAR_YOGG_SARON_DEATH_RAY_CAST_FINISH_MS)
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !memberAI->CanMove() ||
+            !member->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true))
+            continue;
+
+        memberAI->RequestSpellInterrupt();
+        if (RaidObs::Active())
+            RaidObs::Note(member, "yogg.castcut", std::to_string(spell->GetSpellInfo()->Id));
+    }
+}
 }
 
 void YoggSaronTick(PlayerbotAI* botAI)
 {
     YoggSaronTickHumanTankCalls(botAI);
+    YoggSaronCutCastsInDeathRays(botAI);
     YoggSaronTickHandover(botAI);
     YoggSaronTickRtiMark(botAI);
     YoggSaronTickReprisal(botAI);
