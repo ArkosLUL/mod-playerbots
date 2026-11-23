@@ -229,6 +229,12 @@ just dropped keeps dying that fast, and planned at 9 %/s it was opened again eve
 A death is **clear** outside 1 s before Big Bang to
 3 s after the hit and 4 s before to 5 s after a meteor impact (6-11 k on everyone, then the explosion: 3-4 died
 each time one landed 0.9-1.3 s after), and 8 s from the last explosion and every other star's forecast death.
+A kill opened (due or open) also must not finish 5-10 s after an impact still to land, or after a landed one
+while anyone is under the explosion's line (`smashrecovery`, never the no-clear fallback); a kill under way and a
+drain death keep the 5 s. Three meteors leave a median 15 of 25 under that line at +2 s, 9 at +6, 4 at +10 (45
+impacts, 25 traces), and kills landing 5-8 s after one killed 31 in 27, against 15 in 29 at 8-12 s. An impact is
+still to land for its marker's 5.5 s: the hit comes up to 0.41 s after the planned 4.8 s (203 waves), and a tick
+in between reads the raid's health from before it.
 Meteors are planned off the clock, not only their markers (4.8 s ahead): the first lands 30.9 s after the intro,
 then every 25.5 s (`Repeat(25s + 500ms)`, ±0.15 s); a sighting resets the next one and the two after are
 forecast too, and a forecast one that never shows moves on a cycle. The serial deadline sums blackouts merged,
@@ -247,7 +253,7 @@ or it counted one meteor six times (three impacts, two marker creatures each) an
   6.6 s killed 6);
 - not within 8 s of the last explosion. A "finish stars under 15 %" bypass put two explosions 3.2 s apart
   and killed 12;
-- a **due** star is opened whatever the raid's health, bar Big Bang's aftermath, soonest death first: its own death isn't clear and is
+- a **due** star is opened whatever the raid's health, bar Big Bang's aftermath and `smashrecovery`, soonest death first: its own death isn't clear and is
   ≤ 30 s off (a fresh wave forecasts four deaths together; the next rule paces those), or it dies no later
   than an i-th soonest within i × 16 s (a gap plus a kill each) plus the walk and any blackout before it. Never one within 9 yd
   of a swap tank or the handler (a hole under the holder sets him loose; it did twice), given a choice not
@@ -456,6 +462,10 @@ raid-warns them instead ("`<name>`, taunt Algalon now") every 5 s while the swap
 who is the only one able to pick him up while he is loose is told the same. With a human partner the
 bot still taunts him back at the human's 4th stack.
 
+**A tank druid never leaves bear form** while he is engaged (`caster form` blocked for tanks): as the spare it
+healed in caster form until its mana ran out, too little to shift back, and once in the pair it took him 9-15 s
+late in 3 of 14 pulls with a druid tank: once the holder ate a 5th Phase Punch, once he was loose 16.5 s.
+
 Every swap tank or handler not holding him **yields** while a swap tank does: no damage on him (target guard and
 exclusions; a node that drops auto-attack, which is no action, so the damage guard never stops it, and white
 swings alone take him back; a block on `attack rti target` for a skull on him).
@@ -655,9 +665,10 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
   only).
 - **Computed in the tick:** `algalon.tankrole` (`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot,
   and `algalon.starwindow`
-  (`urgent`/`under`/`bigbang`/`smash`/`prebang`/`recovery`/`spacing`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`;
-  `smash`, `prebang`, `recovery` and `spacing` name what a kill's finish would land on: an impact, the Big Bang
-  window, its aftermath, another star's death), written on the tracker bot since the tick runs on whichever bot comes
+  (`urgent`/`under`/`bigbang`/`smash`/`prebang`/`recovery`/`smashrecovery`/`spacing`/`gap`/`deadline`/
+  `raidhp`/`near`/`open`/`none`; `smash`, `prebang`, `recovery`, `smashrecovery` and `spacing` name what a
+  kill's finish would land on: an impact, the Big Bang window, its aftermath, a meteor's, another star's death),
+  written on the tracker bot since the tick runs on whichever bot comes
   first, with `algalon.starplan` on each change: every star's guid counter, health and forecast death,
   soonest first, then the merged blackouts, in seconds from now
   (`2136 28% 3s, 2133 85% 83s u | smash 2..11 | prebang 59..71 | under 66..69`; `u` an under-star at
