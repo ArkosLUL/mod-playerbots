@@ -110,6 +110,7 @@ struct VezaxHazard
 struct VezaxEncounterState
 {
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
+    RaidObs::ObsGuidSet formationJoined{"vezax.joined"};
 
     Position crashImpact;
     uint32 crashCastMs = 0;

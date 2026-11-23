@@ -55,6 +55,7 @@ SOAK_MAX_TRAVEL = radius("ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL")
 IMPACT_RADIUS = radius("ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS")
 WALK_CLEARANCE = radius("ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE")
 LEECH_RADIUS = radius("ULDUAR_VEZAX_MARK_LEECH_RADIUS")
+ARENA_RADIUS = radius("ULDUAR_VEZAX_ARENA_RADIUS")
 ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 
 # Engine figures, not source constants: the mark's 15 yd of GetDistance and reach spell's 28.5, each
@@ -137,6 +138,16 @@ def latch_spans_for(trace: Trace, key: str, value: str) -> dict[int, list[tuple[
             stop = rows[index + 1][0] if index + 1 < len(rows) else end
             if held == value:
                 out[guid].append((when, stop))
+    return out
+
+
+def formation_spans(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for value in ("on", "kept"):
+        for guid, spans in latch_spans_for(trace, "vezax.formation", value).items():
+            out[guid].extend(spans)
+    for spans in out.values():
+        spans.sort()
     return out
 
 
@@ -548,7 +559,7 @@ def field_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     impacts = pending_impacts(trace)
     field = aura_spans(trace, SPELL_FIELD)
     cost = aura_spans(trace, SPELL_FIELD_COST)
-    formation = latch_spans_for(trace, "vezax.formation", "on")
+    formation = formation_spans(trace)
     block = blocks(trace)
     casts = [rec for rec in trace.of("cast") if not rec.get("tr") and 0 <= rec["t"] <= end]
     moves = [rec for rec in trace.of("move") if rec.get("by") == SOAK]
@@ -1045,23 +1056,32 @@ def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float]
         return [], []
 
     drift = [dist2(row[1:3], ANCHOR) for row in samples.between(boss, 0, end)]
-    formation = latch_spans_for(trace, "vezax.formation", "on")
+    formation = formation_spans(trace)
+    kept = latch_spans_for(trace, "vezax.formation", "kept")
     block = blocks(trace)
     out = []
     for guid in sorted(camp(trace), key=trace.name):
         radii = []
-        for _, when, _ in samples.steps(0, end):
-            if not inside(formation.get(guid, []), when):
-                continue
+        joined = min((start for start, _ in formation.get(guid, [])), default=None)
+        locked = 0
+        for _, when, weight in samples.steps(0, end):
             row, him = samples.row(guid, when), samples.row(boss, when)
-            if row and him and row[5] > 0:
+            living = row and him and row[5] > 0 and him[5] > 0
+            if not inside(formation.get(guid, []), when):
+                if living and joined is not None and when >= joined:
+                    locked += weight
+                continue
+            if living:
                 radii.append(dist2(row[1:3], him[1:3]))
         # Kept even with no radii: a slotted bot that never got inside the gate is the finding.
         on = sum(max(0, min(stop, end) - max(start, 0)) for start, stop in formation.get(guid, []))
+        held = sum(max(0, min(stop, end) - max(start, 0)) for start, stop in kept.get(guid, []))
         out.append({
             "guid": guid,
             "block": block.get(guid, "-"),
             "on": on / end if end > 0 else 0.0,
+            "kept": held / end if end > 0 else 0.0,
+            "locked": locked,
             "median": statistics.median(radii) if radii else None,
             "inside": sum(1 for r in radii if r < BAND_FLOOR) / len(radii) if radii else None,
             "past": sum(1 for r in radii if r > BAND_CEILING) / len(radii) if radii else None,
@@ -1082,19 +1102,20 @@ def show_band(trace: Trace) -> None:
         print("  no camp member in the trace")
         return
 
-    print(f"\n  {'bot':14} {'role':6} {'blk':4} {'on':>5} {'median':>7} {'<' + format(BAND_FLOOR, '.1f'):>7}"
-          f" {'>' + format(BAND_CEILING, '.1f'):>7}")
+    print(f"\n  {'bot':14} {'role':6} {'blk':4} {'on':>5} {'kept':>5} {'out s':>6} {'median':>7}"
+          f" {'<' + format(BAND_FLOOR, '.1f'):>7} {'>' + format(BAND_CEILING, '.1f'):>7}")
     for row in rows:
         figures = (f"{'-':>7} {'-':>7} {'-':>7}" if row["median"] is None else
                    f"{row['median']:7.1f} {row['inside'] * 100:6.1f}% {row['past'] * 100:6.1f}%")
         print(f"  {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['block']:4}"
-              f" {row['on'] * 100:4.0f}% {figures}")
+              f" {row['on'] * 100:4.0f}% {row['kept'] * 100:4.0f}% {row['locked'] / 1000:6.1f} {figures}")
     never = sum(1 for row in rows if row["median"] is None)
     if never:
         print(f"\n  {never} of {len(rows)} never inside the formation gate:"
               " no slot, no dodge, no movement guard")
-    print(f"\n  on is the share of the pull the formation gate was open; radius from the boss where he"
-          f" stood, gate open only; slots sit at {CAMP_RADIUS:.1f}")
+    print(f"\n  on is the share of the pull the formation gate was open, kept the share the fight's latch held"
+          f" it open past {ARENA_RADIUS:.0f} yd, out s the living time shut out after joining; radius from the"
+          f" boss where he stood, gate open only; slots sit at {CAMP_RADIUS:.1f}")
 
 
 SECTIONS = (

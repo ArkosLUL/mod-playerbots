@@ -189,29 +189,11 @@ void PullVezaxSlotIntoAnimusReach(Player* bot, Unit* vezax, Position& slot)
         return;
     }
 
-    float const dirX = toAnimusX / apart;
-    float const dirY = toAnimusY / apart;
-    float const fromVezaxX = slot.GetPositionX() - vezax->GetPositionX();
-    float const fromVezaxY = slot.GetPositionY() - vezax->GetPositionY();
-    float const inward = dirX * fromVezaxX + dirY * fromVezaxY;
-    float const floorRadius = VezaxSlotRadius(0);
-    float const discriminant =
-        inward * inward - (fromVezaxX * fromVezaxX + fromVezaxY * fromVezaxY) + floorRadius * floorRadius;
+    float const step = (apart - reach) / apart;
+    slot.Relocate(slot.GetPositionX() + toAnimusX * step, slot.GetPositionY() + toAnimusY * step, slot.GetPositionZ());
 
-    float step = apart - reach;
-    char const* reason = "pulled";
-    if (inward < 0.0f && discriminant > 0.0f)
-    {
-        float const entry = std::max(0.0f, -inward - std::sqrt(discriminant));
-        if (entry < step)
-        {
-            step = entry;
-            reason = "floor";
-        }
-    }
-
-    RaidObs::NoteDerived(bot, "vezax.reach", reason);
-    slot.Relocate(slot.GetPositionX() + dirX * step, slot.GetPositionY() + dirY * step, slot.GetPositionZ());
+    bool const crossed = slot.GetExactDist2d(vezax) < VezaxSlotRadius(0);
+    RaidObs::NoteDerived(bot, "vezax.reach", crossed ? "cross" : "pulled");
 }
 
 }
@@ -240,7 +222,8 @@ enum class VezaxFormation
     Outside,
     NoBoss,
     Idle,
-    On
+    On,
+    Kept
 };
 
 VezaxFormation ReadVezaxFormation(PlayerbotAI* botAI)
@@ -253,17 +236,29 @@ VezaxFormation ReadVezaxFormation(PlayerbotAI* botAI)
     if (!vezax)
         return VezaxFormation::NoBoss;
 
-    bool const inRoom =
-        bot->GetExactDist2d(vezax) <= ULDUAR_VEZAX_ARENA_RADIUS &&
-        std::fabs(bot->GetPositionZ() - vezax->GetPositionZ()) <= ULDUAR_VEZAX_ARENA_HEIGHT;
-    if (!inRoom)
+    if (std::fabs(bot->GetPositionZ() - vezax->GetPositionZ()) > ULDUAR_VEZAX_ARENA_HEIGHT)
         return VezaxFormation::Outside;
 
-    return vezax->IsInCombat() ? VezaxFormation::On : VezaxFormation::Idle;
+    bool const inRoom = bot->GetExactDist2d(vezax) <= ULDUAR_VEZAX_ARENA_RADIUS;
+    if (!vezax->IsInCombat())
+        return inRoom ? VezaxFormation::Idle : VezaxFormation::Outside;
+
+    VezaxEncounterState& state = vezaxEncounterStates.For(bot->GetInstanceId());
+    if (inRoom)
+    {
+        state.formationJoined.insert(bot->GetGUID());
+        return VezaxFormation::On;
+    }
+
+    return state.formationJoined.count(bot->GetGUID()) ? VezaxFormation::Kept : VezaxFormation::Outside;
 }
 }
 
-bool VezaxFormationActive(PlayerbotAI* botAI) { return ReadVezaxFormation(botAI) == VezaxFormation::On; }
+bool VezaxFormationActive(PlayerbotAI* botAI)
+{
+    VezaxFormation const formation = ReadVezaxFormation(botAI);
+    return formation == VezaxFormation::On || formation == VezaxFormation::Kept;
+}
 
 void TickVezax(PlayerbotAI* botAI)
 {
@@ -281,6 +276,9 @@ void TickVezax(PlayerbotAI* botAI)
             break;
         case VezaxFormation::Idle:
             reason = "idle";
+            break;
+        case VezaxFormation::Kept:
+            reason = "kept";
             break;
         case VezaxFormation::On:
             break;
@@ -998,6 +996,7 @@ void ResetVezaxEncounterState(Player* bot, bool clearInstance)
         return;
 
     state->slotAssignments.erase(bot->GetGUID());
+    state->formationJoined.erase(bot->GetGUID());
 }
 
 bool VezaxHasEncounterState(Player* bot)

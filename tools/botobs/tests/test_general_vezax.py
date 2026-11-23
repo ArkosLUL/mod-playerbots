@@ -64,6 +64,9 @@ def vezax_pull() -> list[dict]:
         {"t": 10, "e": "note", "g": BULWARK, "k": "vezax.block", "txt": "tank"},
         {"t": 10, "e": "note", "g": AGONY, "k": "vezax.formation", "txt": "on"},
         {"t": 10, "e": "note", "g": TREE, "k": "vezax.formation", "txt": "on"},
+        {"t": 4000, "e": "note", "g": TREE, "k": "vezax.formation", "txt": "kept"},
+        {"t": 6000, "e": "note", "g": TREE, "k": "vezax.formation", "txt": "outside"},
+        {"t": 8000, "e": "note", "g": TREE, "k": "vezax.formation", "txt": "on"},
         # Fel holds slot 12 and never gets a block row. The wipe reset erases it, written as "0".
         {"t": 10, "e": "note", "g": FEL, "k": "vezax.slot", "txt": "12"},
         {"t": 10, "e": "note", "g": FEL, "k": "vezax.formation", "txt": "outside"},
@@ -225,6 +228,15 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(fel["on"], 0.0)
         agony = next(row for row in rows if row["guid"] == AGONY)
         self.assertAlmostEqual(agony["on"], 1.0, places=2)
+
+    def test_the_latch_keeps_the_gate_open_and_a_shut_out_spell_after_joining_counts(self):
+        _, rows = gv.band_rows(self.trace)
+        tree = next(row for row in rows if row["guid"] == TREE)
+        self.assertAlmostEqual(tree["kept"], 2000 / 15000)
+        self.assertAlmostEqual(tree["on"], (15000 - 10 - 2000) / 15000)
+        self.assertEqual(tree["locked"], 2000)
+        fel = next(row for row in rows if row["guid"] == FEL)
+        self.assertEqual(fel["locked"], 0)
 
     def test_a_kicked_searing_flames_is_not_counted_as_one_that_landed(self):
         starts, landed, hits = gv.searing_flames(self.trace, BOSS)

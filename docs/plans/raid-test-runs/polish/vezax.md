@@ -949,3 +949,130 @@ passes.
   dodge at 10 yd stops it. Pre-existing: the position node walks a marked bot back toward its slot each
   time it stands within 3 yd of its mark spot (10-13 position moves from marked bots per w19 pull), cut
   off by the mark node after ~3 yd.
+
+**User answer (2026-11-23):** Q1: yes, option (a). In a north settle a ranged dps bot whose pulled slot
+would stay out of the Animus's reach goes to where reach spell would end its walk toward it, crossing the
+Mark floor; only in that case and only while it targets the Animus; healers keep their slots.
+
+## Round 9 (2026-11-23, build 90400b39c)
+
+**Data.** Window 21 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 90400b39c
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.52-3:08.58, no vapor
+hit). Analysis scripts: session scratchpad `vezax-r9/` (`compare.py` over windows 11-21, `settle.py`,
+`shift.py`, `outside.py`, `lastmove.py`, `fields.py`, `holds.py`, `flights.py`, `replay_cross.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-183252-1` | `603_1_general-vezax_1795458835` | kill 5:43, 0 deaths, the Animus dead in 81 s |
+| uld2 | `tr-20261123-183252-2` | `603_2_general-vezax_1795458836` | kill 5:37, 0 deaths, the Animus dead in 82 s |
+| uld3 | `tr-20261123-183252-3` | `603_3_general-vezax_1795458839` | wipe 4:37, 29 deaths, the Animus at 71.6% at the collapse (3:30.8) |
+
+**Stop rules.** Not polished, one pool short as in window 19: uld1 and uld2 are hard-mode kills with 0
+deaths, uld3 wiped. Round 8 picked crash walk-ins; this round's failure is new, so no repeat count.
+
+**Settle per pull** (Vezax from the anchor, `settle.py`, `shift.py`): all three normal before the spawn,
+9.9 yd (uld1 (-3.9, 9.1), uld2 (0, 9.9), uld3 (3.4, 9.3) from the anchor). At the spawn he swings round
+the main tank on the anchor in every pull, 3:14.5-3:19.8: uld1 and uld2 sideways to (7.4, 5.6) and
+(7.5, 6.5), then (-8.7, 4.8) and (-9.6, 2.6) by 3:45; uld3 to (9.5, -3.0), 12.3 yd straight away from the
+camp, with the Animus at (4.7, 4.4), 7.1 yd ahead of him toward the camp. No north settle.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Deaths |
+|---|---|
+| uld1 | none |
+| uld2 | none |
+| uld3 | 23 Shadow Crash: 5 camp at 3:28.86, 6 at 3:38.95, 3 at 3:49.06 (two of them re-raised), then with the camp gone 6 melee at 4:05.09 and 2 melee and the main tank at 4:15.67; 1 Profound Darkness (Uldzak 3:30.58, hit by the 3:28 crash); 2 Animus melee, 3 Vezax melee from 4:17 |
+
+**Verdict on round 8 (crash walk hold, Shadow Word: Death hold): both did what they targeted.**
+
+- `--crash` `in`: 0 / 0 / 2, the two in uld3 from `vezax animus melee spot action` (not gated by design);
+  0 of 32 hits on a bot that took a walk toward the impact. uld1 and uld2 took no crash hit at all (31 and
+  30 crashes).
+- `vezax shadow crash walk hold`: 2 / 4 / 7 vetoes, all on reach spell, every one inside a crash flight
+  (`flights.py`); `vezax mark walk wait`: 0 in all three (no marked bot's walk met a crash).
+- No Shadow Crash death in a pull that kept its main tank through a dodging camp; uld3's 23 came from the
+  gate lockout below, with the walk test holding (`in` 0 for gated walks).
+- `vezax shadow word: death hold`: 2 / 1 / 0 vetoes, only shadow priests (Uldxao, Uldyao), only after the
+  spawn (4:28-5:42); no 32409 damage in any pull (window 19: 5 backlashes, 1 death).
+- Pace in the normal settles 1.24 and 1.22 %/s (window 11: 1.24-1.35); uld3 1.29 %/s until the collapse.
+
+**Picked: the camp shut out of the formation gate (bug, 29 of 29 deaths).** `VezaxFormationActive`
+(`UldEncounter_Vezax.cpp:246-266` before) wants a bot within 45 yd 2D of Vezax; outside it the slot
+(`VezaxRaidPositionTrigger`, `UldTriggers_Vezax.cpp:256`) and the dodge (`VezaxShadowCrashDodgeTrigger`,
+`:71-83`) never fire. As he swung away (`shift.py`), every camp bot's last move before it went
+`outside` was a soak walk (`vezax shadow crash soak action`, forced) to the 3:03.02 crash's field at the
+old camp spot, 46.9-48.7 yd from him (`lastmove.py`; Uldzar 3:17.62 to Uldzaq 3:22.34), and
+`vezax.formation` read `outside` for 12 of 13 at 3:19.1-3:23.7. Reach spell on the Animus (stop 37 yd
+from it) then stacked them on one point, (1851.54, 122.74), 37.4 yd from it and 45.6 from him, and
+nothing walked them back: 203 bot-s shut out while alive (`outside.py`), against 0-28 in every other pull
+of windows 11-21 (brief knockbacks; w14 uld1's 14 bots ~2 s each at 3:16.6, just after the spawn). The
+crash cast at 3:24.12 on Uldzad landed on that point at 3:28.68 and hit the 12 shut out, none of
+them dodging; Uldzap, the one camp bot still inside the gate, strafed at 3:25.40 and lived, then
+soaked out at 3:33.99 and died at 3:38.95. The crashes at 3:38.77 and 3:48.86 landed on the same point and took the rest, and
+with no ranged left past his 17.1 yd skip they then went to the melee with ~0.4 s of flight (dodges
+issued 4:04.67-4:04.89 for 4:05.09).
+
+The doc's own rule says the gate holds only while it contains every stop a generic mover can leave a
+bot at; the Animus phase breaks that twice over (his swing, and reach spell measured from the Animus).
+
+**Fix** (Vezax files only):
+
+- `ReadVezaxFormation` (`UldEncounter_Vezax.cpp:229`): a bot inside the gate in combat joins
+  `formationJoined` (`ObsGuidSet`, probe `vezax.joined`), and while he stays in combat a joined bot past
+  45 yd reads `kept`, which `VezaxFormationActive` counts as open. The height band still shuts it; the
+  per-bot reset (`ResetVezaxEncounterState`) and the tracker's instance reset clear it. Bots that never
+  entered keep today's 45 yd gate, so the doc's wall concern holds: a joined bot stands on the hall
+  floor, and its slot, strafe and mark spots are floor-checked from there.
+- User answer Q1 (a): `PullVezaxSlotIntoAnimusReach` (`:168`) no longer stops at row 0's radius; a
+  ranged dps targeting the live Animus always goes the full step to two slot tolerances inside reach
+  spell's stop on it. `vezax.reach` reads `cross` where the slot ends inside row 0's radius (was `floor`
+  where the radius stopped it). The floor stop only ever acted when it left the slot out of reach, so
+  "only in that case" is exactly where it used to fire; healers return before the pull as before.
+
+Replay (`replay_cross.py`, windows 15-21, Vezax and the Animus where they stood, slots exact): ranged dps
+slots past the Animus's 37 yd ceiling 1-100% (north settles 32-100%) → 0% in every pull; crossed slots a
+median 25-30 yd from him, under 20 only in w17 uld3 and w19 uld2 at 4:21-4:25 with the main tank dead
+and the Animus loose. Mark far pool at in-phase marks: unchanged (13-14) in normal settles, 13-14 → 4 in
+north settles (w15 uld3, w17 all three, w19 uld2), so those marks draw from the whole raid.
+
+Reader: `--band` gains `kept` (share of the pull the latch held the gate) and `out s` (living time shut
+out after joining), and its `on` and `--field`'s gate count `kept` as open (`formation_spans`, test
+added). Docs: `docs/raids/ulduar/vezax.md` (gate latch paragraph, Animus ceiling bullet, floor bullet,
+trace keys, `--band`, north settle gap).
+
+10/25 and normal/hard: the gate and its latch run in every mode; the Animus pull only in hard mode.
+Bots only, keyed on the bot's own position and target, so the same with or without a real player.
+Shared code: none.
+
+**Next window should show.**
+
+- `--band` `out s` 0 for every camp bot (a death or the height band aside); `vezax.formation = kept`
+  rows where he swings away at the spawn or a crash knocks a bot back, followed by `vezax raid position
+  action` walks back to the slot; `vezax.joined = 1` for every slotted bot early in the pull.
+- `--crash`: no Animus-phase crash with 0 dodgers in both blocks while the camp lives; Animus-phase crash
+  deaths 0-1 a pull.
+- In a north settle: `vezax.reach = cross` on most ranged dps, ranged `past` under ~33% and `walks` 0-5
+  as in normal settles, `flip.move.by:reach spell <-> vezax raid position` near 0, pace 1.22 %/s or more.
+  Its cost: in-phase marks with far 4/9 and on melee or a tank about 4 times in 9; healers still 42+ yd
+  from the main tank there (the doc's north settle gap).
+- Normal settles unchanged: 1.22-1.28 %/s, 0-3 deaths.
+
+**Questions.** None new. The north settle's healer reach to the main tank stays open (Q1 (b) was the
+alternative that would also fix it).
+
+**Review.** Both causes hold. uld3 (`vezax-r9-review/lockout.py`): Vezax went from (+3.4, +9.3) off the
+anchor at 3:14 to (+9.5, −3.0) at 3:20; each of the 12 shut-out bots' last move before `outside` was a
+soak walk to the field at (1850.7, 125.7), 48.7 yd from where he stopped, most then reach spell to
+(1851.5, 122.7), 45.6 from him and 37.4 from the Animus; crash-killed camp bots 5 / 6 / 3 at
+3:28.9 / 3:38.9 / 3:49.1, 12 distinct. `--band` `out s` sums to 203 s. `replay_cross.py` re-run on
+w15 uld3, w17 uld3, w21 uld3: past the ceiling 100 / 100 / 3% → 0%, far at in-phase marks 13 → 4 in
+the two north settles. No size, mode or player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: Uldzap dodged the 3:28.68 crash (`--crash` 1 of 13), so "0 of 13 dodging" above is now the
+  12 shut out none dodging; the findings doc's "the one bot still inside dodged and lived" now says a
+  soak walk took it out too (dead at 3:38.95, one of the 12). One overlong doc line rewrapped.
+- Left: crossed slots go two slot tolerances (2.4 yd) past reach spell's own stop, the margin round 5's
+  pull keeps so a parked bot stays inside the ceiling. With the Animus loose after the main tank died a
+  crossed slot can sit at his feet (w17 uld3 replay: down to 4.2 yd at 4:21-4:25, 105 of 2740 samples
+  under 20); collapse only.
