@@ -175,6 +175,7 @@ inline constexpr float ULDUAR_ALGALON_STAR_DYING_HOLD_RADIUS = 12.0f;
 inline constexpr float ULDUAR_ALGALON_STAR_DRAIN_SLACK_PCT = 3.0f;
 inline constexpr float ULDUAR_ALGALON_STAR_TEAM_REACH = 28.0f;
 inline constexpr float ULDUAR_ALGALON_STAR_TEAM_STANDOFF = 25.0f;
+inline constexpr float ULDUAR_ALGALON_STAR_TEAM_HOLD_MIN = 12.0f;
 inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_10 = 2;
 inline constexpr uint8 ULDUAR_ALGALON_STAR_TEAM_25 = 3;
 inline constexpr float ULDUAR_ALGALON_SPLASH_RADIUS = 15.0f;

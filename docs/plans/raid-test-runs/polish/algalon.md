@@ -661,3 +661,116 @@ impact + 5 s. Fixed: an impact counts as still to land for its marker's 5.5 s (`
 serial deadline doesn't count the 5 s hold (round 3: lengthening the blackout moves every due and serial deadline); the
 watch above covers it. No druid tank cast Rebirth or Innervate in any of the 14 pulls with one, so the form block
 costs only its party heals.
+
+## Round 8 (2026-11-23, build 8bc2a82d3 with round 7 and the shared ReadyTankDefensive fix d70101432)
+
+**Data.** Window 17, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head 8bc2a82d3
+--pulls 10`). All 25 Algalon traces on disk reread for the explosions after Big Bang 2 and the star team's time
+(scratch `alg8/`: `postbb2.py`/`leftover.py`/`wave3.py` explosions, leftovers and wave fates after Big Bang 2,
+`spacing.py` explosions against the previous one and the meteors, `drainsrc.py`/`hpcurve.py` raid under the line,
+`healmana.py` healer mana, `teamtime.py`/`teammoves.py`/`movedist.py` the team's walking, `holdsim.py` the spot rule
+replayed on the real star tracks).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-150716-11` | `603_11_…_1795446539` | wipe 5:45, Ascend 5:42.4, boss 33% | 34: loose 12, Constellation Barrage 8, star explosion 6, on tank 4, Cosmic Smash 3, Big Bang 1 |
+| uld2 | `tr-20261123-150455-10` | `603_10_…_1795446431` | wipe 5:39, Ascend 5:36.5, boss 41% | 32: loose 12, Barrage 8, star explosion 6, on tank 5, Dark Matter in Big Bang 1 |
+| uld3 | `tr-20261123-151158-12` | `603_12_…_1795446821` | wipe 5:09, Ascend 5:06.5, boss 46% | 30: loose 14, on tank 7, star explosion 7, Black Hole DoT 1, Barrage 1 |
+
+What started each wipe:
+
+- uld1: one death (the holder, 1:45.1, 109 k in 6 s, its tank healers 29-33 yd off) before Big Bang 2. Of wave 3's two
+  leftovers, 1645's `deadline` kill landed 4:05.2 (4 under the line, 0 dead) and 1644 drained 2.1 s after the 4:21.5
+  meteor (4:23.6, 17 under, 5 dead, 2 healers); Barrage took 2 more, Big Bang 3 the holder on `noshelter` (36 yd from a
+  hole), then tank deaths 5:13.7-5:27.4 and 23.5 s loose.
+- uld2: one death before Big Bang 2. 1635's `deadline` kill landed 9.8 s after a meteor with 15 under (4:05.8, 2 dead,
+  a healer), its twin 1636 drained 2.2 s after the next (4:23.8, 20 under, 4 dead); Barrage killed the tank Uldyaa
+  (4:51.0), the holder died 4:53.4, loose 14.8 s.
+- uld3: the holders died 2:13.2, 2:36.5, 3:01.5 (104-138 k in 6 s, both tank healers alive); a released under-star's
+  kill (3:15.5, 7 under, 1 dead) landed 8.0 s before wave 2's 1601 drained (3:23.5, 11 under, 2 dead); the one
+  leftover 1634's kill landed 4:09.2 with 13 under (3 dead); tank deaths to 4:47.5, loose 16.2 s.
+
+**Stop rules.** Not polished (three wipes; waived on 226 rosters). The failure picked below is new.
+
+**Verdict on round 7.**
+
+- Meteor aftermath: held on the kills it targeted. No `deadline`/`open` kill landed 5-9 s after an impact (window
+  15: 7, 8 dead); two landed at +9.3 (uld1, 4 under, 0 dead) and +9.8 s (uld2, 15 under, 2 dead), opened 3.4-4.3 s
+  after the impact as the hold lifted (uld1 nobody under then, uld2's band starting 0.01 s past impact + 10 s).
+  `smashrecovery` in the timeline: 25.0, 19.2, 2.8 s. The watch item hit: the hold moved the first of wave 3's two
+  leftovers to 4:05, and the second, whose own death sits on the 4:21 meteor, drained onto it (uld1 5 dead, uld2 4).
+  Explosion deaths between Big Bang 2 and 3: 6, 5, 3 (window 15: 6, 4, 3).
+- Bear form: held. Uldyab and Uldzab stayed in Dire Bear Form from the 1:27 shift to their deaths (one re-shift after
+  a rez), no `dire bear form` FAILED, `algalon tank form hold` vetoed caster form 8 and 5 times.
+- Shared ReadyTankDefensive (d70101432): not exercised. No `algalon.handover` row in any pull: every Big Bang was a
+  Dispersion soak but uld3's third (no disperser, a paladin soak with the pair dead), and `DefensiveHandoverDue` needs
+  a tank soak. Nothing to go back and forth.
+
+**Failures by deaths** (96): tank burst 16 and loose 38 (Q2 stands); star explosion 19 = wave 3's leftovers after Big
+Bang 2 14 (uld1 5, uld2 6, uld3 3), uld3's pre-Big Bang 2 pair 3, Big Bang casts 2; Barrage 17 (5 within 30 s after the
+leftovers' explosions, 12 in the collapse); Cosmic Smash 3; Big Bang 1; Dark Matter 1; Black Hole DoT 1.
+
+**Picked: wave 3's leftovers after Big Bang 2** (14, and the start of the uld1 and uld2 wipes). Bug: the team is meant
+to work a star from a spot of its own, but the spot followed the star and the team spent a third of its star time
+walking.
+
+- Structure: wave 3 spawns at 136.5 and drains to death at 236.5, 1.6 s after the meteor at 234.9 (T0 + 30.9 + 25.5 k),
+  in every pull. After Big Bang 2's hit (188.5) the aftermath, the 209.4 meteor and its `smashrecovery` leave
+  219.4-230.9 clear: one explosion fits, two only 8-11.5 s apart. 25 traces: one wave-3 star left after Big Bang 2 cost 1.5 dead
+  a pull (8 pulls), two 6.2 (13), whether the second was killed 11-14 s after the first (9, 3, 1, 4, 2, 4 dead, before
+  round 7) or drained onto the meteor (5, 4, 0).
+- Two are left when the bulk lands only one of the two wave-3 under-stars it planned: the other is released `late` 8-14
+  s before the cast at 38-70% (12 of 25 traces; window 17 uld1 1645 at 66%, uld2 1636 at 70%). Bulk median +0.4 to +3.0
+  %/s beyond the drain over a pull (planned +5); both need ~+3.1 (~94% extra by cast − 5 s, less wave 2's kill). The
+  two pulls that landed both ran +2.8 and +1.8.
+- The team's star damage per second is far under its damage on him: uld1's mage 2.1 k against 7.1 k, warlock 4.1
+  against 6.8, hunter 4.2 against 5.6 (snapshot `dealt` by target). Over its focus time a member walked 14-57%
+  (median 37%) and cast at the star 8-60% (`teamtime.py`, 3 pulls). Moves: 80-111 a pull by `algalon raid position
+  action` on `star` (median 8.6 yd, star 29-32 yd off) and 27-51 by `reach spell` (star 37-40 yd off).
+- Cause, `StarTeamSpot` (`UldEncounter_Algalon.cpp`): a star wanders up to 25 yd round its spawn (`MoveRandom(25.0f)`)
+  at a median 2.5 yd/s, and the spot sat 25 yd from it, so it moved with the star; the raid position action re-walked
+  each time it drifted 4 yd (`ULDUAR_ALGALON_SLOT_TOLERANCE` × 2), about every 1.9 s a member, and `CanCastSpell`
+  refuses a cast while moving. With the star back within 28 yd of the slot the spot was the slot, another walk.
+- Replay (`holdsim.py`, the real star tracks of windows 15 and 17, 6 pulls, 1838 s of member focus time): the current
+  rule gives 28% walking and 44% castable time (still and in range, less 1 s per broken cast), against the 42% cast at
+  the star the traces show. Holding while the star is 12-28 yd off: 22% walking, 54% castable, walks 427 → 269 (8 yd:
+  56%; 16 yd: 52%; the standoff past the hold barely matters).
+
+**Fix** (Algalon files only): `StarTeamSpot` holds a ranged team member where it stands (`algalon.spot=starhold`)
+while its focus star is `ULDUAR_ALGALON_STAR_TEAM_HOLD_MIN` 12 to 28 yd off, it is unphased, in the room and 13.5 yd
+clear of him; otherwise as before. 12 yd keeps the hold off the kill's 7 yd clearance (5 yd for a kill under way).
+Unchanged: the `nearhole` spot before Big Bang (checked first), dodges, the planner. 10 and 25-man alike; humans are
+never on the team.
+
+**Not picked.**
+
+- Tank deaths and loose: Q2 stands (uld3's seven took 104-146 k in 6 s with both tank healers alive).
+- Opening the second leftover inside the 8 s `gap`: it would land 8-11 s after the first, worse than the 11-14 s that
+  killed 3.8 a pull before round 7; with two leftovers no timing wins.
+- uld3's pair: at 3:10 the fallback took 1636 to land 5.8 s before 1601's drain death, since 1636's own death sat in
+  Big Bang 2's prebang blackout. Design.
+- Healer mana: one healer per pool was under 15% by 4:00 (Uldxae, Uldyaf, Uldzae), so the raid stayed under the line
+  10-15 s after a meteor (uld2 15 at +9.8 s, uld3 13 at +13.3 s, against the round 7 curve's 4 at +10).
+- The team's other casts on the focus (12-27%: buffs, Mana Shield, Hunter's Mark) and the bulk planned at min(measured,
+  6) %/s: not traced.
+
+**Questions for the user.**
+
+- Q6: if wave 3 still leaves two stars after Big Bang 2 in most pulls with this fix, add a fourth ranged to the 25-man
+  star team from wave 3's spawn to Big Bang 2's cast? It costs one damage dealer on him for ~45 s a cycle.
+  Recommendation: judge this fix first; add the member only if two leftovers stay the rule.
+
+**Next window should show** (`algalon.py --stars`, `--formation`, scratch `alg8/teamtime.py`, `leftover.py`): the
+team walking about 30% of its focus time (window 17: median 37%), `algalon.spot=starhold` most of its star time, the
+bulk beyond the drain above window 17's median +1.7 to +2.3 %/s, fewer `late` releases before Big Bang 2 (window 17:
+2 of 3) and wave-3 stars left after it (2, 2, 1), and explosion deaths between Big Bang 2 and 3 (6, 5, 3). Watch: a kill
+dropped or flipping because a holding member stood within 5 yd of its star, team members in his reach, and `reach
+spell` walks on `starhold`.
+
+**Review.** The cause holds on window 17: 80-111 raid position walks on `star` a pull, and stars move at 2.5 yd/s 80%
+of the time (mean 2.0). The walking range above read 27-57% but `teamtime.py` gives 14-57%, median 37%; the replay's
+current rule gives 28% where the traces show 37%, so its 6-point cut puts the hold near 30%, not 20%. `teamtime.py`
+counts each proc or triggered spell as a 1 s cast at something else (34075 Viper, 15258 Shadow Weaving, 15290
+Vampiric Embrace, 31818/57946 Life Tap), so its cast-at-star share undercounts and the 12-27% other casts are mostly
+those. Watch too: a member holding far from its ring slot can stand farther from a hole than the old spot let it,
+since `FarHoleSpot` measures from the slot (team members on `noshelter` at a Big Bang).
