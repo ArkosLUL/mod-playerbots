@@ -1064,10 +1064,10 @@ alternative that would also fix it).
 **Review.** Both causes hold. uld3 (`vezax-r9-review/lockout.py`): Vezax went from (+3.4, +9.3) off the
 anchor at 3:14 to (+9.5, −3.0) at 3:20; each of the 12 shut-out bots' last move before `outside` was a
 soak walk to the field at (1850.7, 125.7), 48.7 yd from where he stopped, most then reach spell to
-(1851.5, 122.7), 45.6 from him and 37.4 from the Animus; crash-killed camp bots 5 / 6 / 3 at 3:28.9 / 3:38.9 / 3:49.1, 12 distinct.
-`--band` `out s` sums to 203 s. `replay_cross.py` re-run on w15 uld3, w17 uld3, w21 uld3: past the
-ceiling 100 / 100 / 3% → 0%, far at in-phase marks 13 → 4 in the two north settles. No size, mode or
-player branch, no shared code, no comments. `pb-check` passes.
+(1851.5, 122.7), 45.6 from him and 37.4 from the Animus; crash-killed camp bots 5 / 6 / 3 at
+3:28.9 / 3:38.9 / 3:49.1, 12 distinct. `--band` `out s` sums to 203 s. `replay_cross.py` re-run on
+w15 uld3, w17 uld3, w21 uld3: past the ceiling 100 / 100 / 3% → 0%, far at in-phase marks 13 → 4 in
+the two north settles. No size, mode or player branch, no shared code, no comments. `pb-check` passes.
 
 - Review fix: Uldzap dodged the 3:28.68 crash (`--crash` 1 of 13), so "0 of 13 dodging" above is now the
   12 shut out none dodging; the findings doc's "the one bot still inside dodged and lived" now says a
