@@ -630,6 +630,12 @@ outranks the fire dodge; that gets the tick only when nothing is clean. Still op
 between beams and fire die with every flee bearing refused (`cone9 fire2`); in those windows fire took
 74-292k against 18-20k in clean pulls.
 
+**Open: a burning re-aimed wedge piles the ranged.** When its slots and the 12 yd round them burn, or every
+leg there crosses fire, ranged and healers get no approach and stand where the dodge left them, all on the
+first clean bearing past the band edge, and each later dodge (bomb, fire) moves the pile as one. Once 10-12
+of 14 stood in one 60° cone for 20 s after the first barrage, two Rapid Bursts hit 12 and 11 of them
+(100k each), and the raid lost phase 2.
+
 ## Raid nodes resolve bosses by entry, not by threat
 
 `"find target"` walks only the bot's own threat list
@@ -1217,7 +1223,8 @@ ACU while the pair waits on it, reachable at ground level in phase 4.
 **A dead pet stays dead under Firefighter.** Revive Pet is an 8.8 s cast, and a hunter standing still
 draws the fire chains, so a dodge or the cast cut ends it: two petless hunters started it 46 times in one
 pull and spent 29% of the fight on it, and none of ~100 casts in five pulls finished. `mimiron revive pet
-hold` blocks `revive pet` while the hard-mode encounter is engaged.
+hold` blocks `revive pet` while the boss is in progress under Firefighter: keyed on a construct in combat,
+it let them start it at the opening and in every handover, 33-59 s a hunter a pull.
 
 **`MOVEMENTFLAG_HOVER` cannot mean "phase 3".** Nothing in the vehicle entry path or the phase 3 defeat
 branch clears it, so it survives into phase 4 whenever the ACU was airborne when it went down; keyed on
@@ -1545,7 +1552,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `castcut` | The spell id of a cast the encounter tick cut for the flames dodge; a cut can write two notes 250 ms apart |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
-| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left, `none bomb` when every leg ran into a live Frost Bomb |
+| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left, `none bomb` when the direct leg ran into a live Frost Bomb and no detour passed, fire refusals included, so not proof the bomb held the bot; a `stranded` leg can still follow |
 | `close` | A melee approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 

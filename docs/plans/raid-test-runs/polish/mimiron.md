@@ -1516,3 +1516,134 @@ stays dead under Firefighter", the `none bomb` note.
   last one, and a direct leg writes none, so most bots log it once a pull. The main tank's anchor hold writes no
   note at all. Read the hold from the walk-ins.
 - Removed the fixture comment the round added to `test_mimiron.py` (no-comments rule).
+
+## Round 14 (build 02de71ee6, round 13 built)
+
+**Data:** window 24a, `raidtest.py report --boss mimiron --raid uld --head 02de71ee6 --pulls 10`: one valid pull per
+pool, no DC veto inside any. Baselines: windows 16-22 (`mim13/traces.txt`). Scripts in the lane scratchpad (`mim14/`:
+`mtesc.py`, `p2storm.py`, `bursts.py`, `burstcasts.py`, `p2cone.py`, `offslot.py`, `postbarrage.py`, `rhscene.py`,
+`approach_replay.py`, `replay_batch.py`, `subst_replay.py`, `bombleg_replay.py`, `wedgefire.py`, `pulses.py`,
+`healrange.py`, `track.py`, `revcasts.py`, `clock.py`, `alive.py`; round 13's `bombcharge.py`, `p4bombs.py`,
+`walkins.py`, `revtime.py`, `hm.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-213557-1` | `603_1_…_1795469817` | wipe 6:19.3 in P3, raid dead | 32: P1 Napalm Shell 1; P2 Rapid Burst 9, Heat Wave 4, Flames 4 (three ranged in 0.1 s at 3:26.5, at 4-36% walking fire dodges); P3 (11 alive, one healer) Bomb Bot 4, Junk Bot 4, Assault Bot 3, ACU Plasma Ball 2, Water Spray 1 |
+| uld2 | `tr-20261123-213557-2` | `603_2_…_1795469819` | **kill** 10:16.3, hard mode | 5: Flames 2 (two ranged at 6-8% walking the second barrage dodge on P2's last second, 3:58.6-3:59.6); P3 Bomb Bot 1; P4 Hand Pulse 2 (a battle-rezzed ranged at 36%, a melee after three straight pulses on the melee) |
+| uld3 | `tr-20261123-213557-3` | `603_3_…_1795469820` | **kill** 9:34.5, hard mode, no Berserk cast | 5: P2 Heat Wave 1, Rapid Burst 1 (one ranged, revived between); P4 Hand Pulse 3 (two melee on one Shock Blast escape point at 8:51.4, one of them again at 8:58.8) |
+
+42 deaths: phase 2 lost on healing 21 (uld1 17, uld2 2, uld3 2) and uld1's phase 3 after it 14, P4 Hand Pulse 5, Bomb
+Bot 1, Napalm Shell 1. Hard mode in all three: Summon Flames (Initial) at 7.1 s, Flames from 8.2-16.2 s, Emergency Mode
+at phase 2. The first window with two Mimiron kills.
+
+**Stop rules:** two kills of three, 5 deaths in each: not polished. No failure picked three times (the phase 2 pile is
+new).
+
+**Verdict on round 13.**
+
+- **Walks into a live phase 4 bomb: held.** Non-escape walk-ins 0/2/10 (uld2) and 6/1 (uld3) a bomb, against 40/35/90 a
+  pull; `mimiron arc spread action` 1 and 1 (window 22: 140, 59 of them the main tank's). The 10 at uld2's 9:54.8 bomb
+  are all the Laser Barrage dodge's plain-step fallback; the rest `reach party member to heal` 3 and `combat formation
+  move` 4, as the review expected. Gap-closers into a live bomb 1 (an Intercept from 40 yd, outside the guard's 38,
+  landing at 29; lived) against 10 in window 22; no Frost Bomb death (2).
+- **The main tank's anchor hold: held.** 1/1/1 and 1/2 escape legs a phase 4 bomb (12-22).
+- **VX-001 over a fuse: mostly held.** 4/34/0 and 12/22 yd (window 22: 14/31/6, 10/23, 1/31/23). uld2's 9:09.6 bomb, 13
+  yd off VX-001, took the stack 21 → 42 yd off centre on the main tank's single escape and cost 0.94M.
+- **Bomb windows:** no death in the 20 s after a phase 4 bomb (window 22: 6); all five phase 4 deaths fell outside them.
+  Hand Pulse there still 19.7k/s against 12.6k/s outside.
+- **Revive Pet: held while engaged, not in the handovers.** No start in P1, P2 or P4 and 35 hold vetoes, but roster B's
+  hunters started it 9 times, at 0:00.1 before the first phase latch (2), Z1 (2, cut by fire), Z2 (2), H1 (1) and H2
+  (2): 33 s (Uldyau) and 59 s (Uldyaj) on it against 175 s each; none finished. `MimironFireFight` needs a construct in
+  combat, and none is in a handover. Fixed below. uld2's phase 2 ran 91.3 s (96.8).
+- Round 12's hold: fire bots 0 at phase 4's open in both (the H3 cull took 7 and 4), the ACU on the off-tank 78% in both,
+  Plasma Ball on ranged 3 and 4, no hunter death at the opening.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 84.9 | 48.2 | **119.9**, 17 dead | 24.2 | 88.7, raid dead (11 alive, one healer, at its open) | | | |
+| uld2 | 84.3 | 47.9 | 91.3 | 24.4 | 149.5 | 32.0 | 7:22.9 | 155.3 s at 95k/s, 22 alive; Berserk cast at 10:00.2 in the Self Repair rounds (P4 ended 9:58.2), hit nobody; kill 10:16.3 |
+| uld3 | 84.3 | 48.2 | 92.2 | 24.4 | 120.4 | 32.2 | **6:55.1** | 138.8 s at 105k/s, 25 alive; kill 9:34.5 |
+
+uld3's is the fastest phase 4 entry yet (window 21's uld1: 6:58.7). uld2 had 4 s to spare: phase 3 ran 29 s over uld3's.
+
+**Why uld1 wiped at 6:23: the ranged and healers piled in one Rapid Burst cone after the first barrage.**
+
+- At Spinning Up (2:56.8) the wedge re-aimed 0° → 176°, onto the phase 1 field west (14 of 32 nodes inside it; window
+  22-24a re-aimed to 132-176° in five of six phase 2s). The ranged and healers, standing at 300-60°, ran the `ahead`
+  exit clockwise and stopped on the first clean bearing past the band edge: 12 of 14 at 222-244° by 3:04.8, most within
+  ±2° in two rows (18 and 24 yd).
+- Nothing spread them. At 3:12 (beams off) 8 of their 14 slots burned and 13 of 14 direct legs crossed 2-12 nodes
+  (`approach_replay.py`); `GetMimironSlotApproaches` returns nothing under `ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE` (30)
+  when fire refuses every leg, and writes no note. The three bots past 30 yd took `stranded` least-burn legs into the
+  fire and the barrage `refuge` walked them back every ~0.5 s: 56 `arc spread <-> p3wx2 laser barrage` flips (uld2 5,
+  uld3 3).
+- The Frost Bomb (3:14.6, 31 yd from the pile) sent nine of them to one point (2731-2735, 2550-2554), and from 3:17 to
+  the blast they wrote `none bomb`. The bomb rule held none of them alone: at 3:19 no off-slot ranged or healer had a
+  fire-clean leg (`bombleg_replay.py`), so round 13 is not implicated; `none bomb` is written whenever the direct leg
+  fails the bomb test, fire or not. The fire dodges at 3:22.5-3:23.6 then moved the pile as one, to (2723-2726,
+  2546-2549).
+- Cone-mates of a ranged or healer (others inside its 60° cone off VX-001, 2 s samples) ran 8.0-9.6 from 3:04.8 to
+  3:13 and 6.9-8.3 to 3:24, against a phase 2 mean of 3.5-5.0 in every other pull of windows 19-24a. The first burst after the beams (3:11.4) hit 12 ranged and healers
+  plus a tank for 100k, the 3:24.0 one 11 of them for 100k; Heat Waves at 3:21.5 and 3:26.5 then killed three ranged in
+  fire at 3:26.5 and the healers fell to the next bursts (3:27.1, 3:29.6, 3:38.4, 3:40.7). Phase 2 ran 120 s with 17
+  dead, and phase 3 opened with 11 alive and one healer.
+- uld2 had the same re-aim (174°) with 11 nodes in it, but only 2 of 14 ranged and healers had no clean leg and they
+  were on their slots by 3:08: 0 phase 2 deaths before its last second.
+
+**Classification: plan change.** Every rule did what it intends: the barrage forces the wedge into the 117-126° safe
+sector, the slot approach never walks a bot through fire, the refuge stops a bot on the first clean bearing. Getting the
+ranged off a burning wedge needs a new position rule: Q6.
+
+**Fixed, small and independent: `mimiron revive pet hold` covers the whole fight.** It now keys on
+`MimironFirefighterLive` (the toggle and `BossStateGateLive(ULD_BOSS_MIMIRON)`, boss in progress) instead of
+`MimironFireFight` (a construct in combat), so the opening and every handover hold too. One code path: the block runs in
+bot engines only, 10 and 25 alike; as before, a normal-mode pull with the toggle on holds it as well.
+
+Findings doc: the pet hold's new scope, the burning re-aimed wedge as an open item under "A burning band edge", and the
+`none bomb` caveat in the trace key table.
+
+**Next window should show** (`mim14/revcasts.py`, `mtesc.py`, `postbarrage.py`, `p2cone.py`; `--bomb`):
+
+- No `revive pet` cast by roster B's hunters from the pull to its end, Z and H spans included (window 24a: 9), and
+  `mimiron revive pet hold` vetoes in those spans.
+- Round 13's checks still: phase 4 `mimiron arc spread action` walk-ins near 0, the main tank 1-2 escape legs a bomb, no
+  Frost Bomb death.
+- The phase 2 pile is untouched until Q6 is answered: expect cone-mates after a barrage of 4-6, and a pile like uld1's
+  whenever the re-aimed wedge burns.
+
+**Not picked.**
+
+- P4 Hand Pulse 5, both kills: streaks of three pulses on the melee sector. uld3's two melee stood on one Shock Blast
+  escape point 20 yd out, (2766, 2589), healers 29-46 yd off, and took 7-8k a pulse against 3.1k of healing between
+  them; uld2's melee had healers 26-56 yd off and 1.6k of healing in its last 5 s. Next candidate: healer reach to the melee after a phase 4
+  Shock Blast escape.
+- uld2's 9:09.6 bomb moving the stack 34 yd; Bomb Bot 1; uld1's phase 3 deaths (11 alive at its open).
+
+**Questions for the user.**
+
+- **Q6 (plan change): where ranged stand when the barrage re-aims the wedge onto fire.** The re-aimed wedge stays put
+  for the rest of phase 2, usually on the phase 1 field west. When its slots burn, the ranged and healers pile at the
+  band edge in one burst cone and every dodge moves the pile, which lost uld1 its phase 2 (17 dead). Options: (a) once
+  the beams stop, re-aim the wedge to the 120° whose slots hold the fewest burning nodes, ties nearest the current
+  centreline, the handover band's pick: uld1 would have taken 285-300° (0 nodes, 52-67° from the pile); (b) keep the
+  wedge and give a bot with no approach the nearest clean spot on its own bearing slice. Recommendation: (a). It reuses
+  a tested pick and walks the pile ~20 yd, against a walk inside the post-barrage storm (Heat Wave, Rocket Strike and
+  the Frost Bomb within 0.5-4 s) and fire chains drawn toward a second sector.
+
+**Shared code:** none (Mimiron definition, findings doc, this log).
+
+**Review.**
+
+- Checked and holding: uld2's hunters started Revive Pet 9 times, none in P1, P2 or P4, all 35 hold vetoes in P1-P3,
+  and no pet of either appears in the trace. The core sets Mimiron `IN_PROGRESS` in his `JustEngagedWith` and back to
+  `NOT_STARTED` through `_Reset` on the evade, so the new gate covers the opening (both 0:00.1 starts follow the
+  trace's `pull engage` row) and every handover, and lifts on a wipe, leaving the time between pulls to revive. Same
+  predicate at 10 and 25; the block runs only in bot engines, so a real player changes nothing.
+- The phase 2 pile reproduces: Spinning Up 2:56.8, `reaim 176` 2:56.9, the 3:12 burst on 9 ranged and 3 healers (a
+  tank from 3:14), the 3:25.5 one on 8 and 3, 17 phase 2 deaths. `GetMimironWedgeCentreline` re-aims on the barrage
+  only, never on fire, so Q6 is a new position rule: plan change holds.
+- Fixed: the start count (7 → 9, the two at 0:00.1 were left out). Findings doc: a `none bomb` note can be followed by
+  a `stranded` leg from the same call (`GetMimironSlotApproaches` writes the note before the stranded fallback; window
+  24a: 2 in uld1 and 2 in uld3 within 1.5 s), and the 33-59 s are a hunter's whole pull, opening included.
