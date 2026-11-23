@@ -376,6 +376,23 @@ uint32 PendingPeriodicHp(Creature* star)
         }
     }
 
+    SpellInfo const* explosive = sSpellMgr->GetSpellInfo(SPELL_ALGALON_EXPLOSIVE_SHOT_TICK);
+    for (AuraEffect const* effect : star->GetAuraEffectsByType(SPELL_AURA_PERIODIC_DUMMY))
+    {
+        SpellInfo const* info = effect->GetSpellInfo();
+        int32 const left = effect->GetTotalTicks() - static_cast<int32>(effect->GetTickNumber());
+        Unit* caster = effect->GetCaster();
+        if (!explosive || !caster || left <= 0 || effect->GetAmount() <= 0 ||
+            info->SpellFamilyName != SPELLFAMILY_HUNTER ||
+            !(info->SpellFamilyFlags[1] & ULDUAR_ALGALON_EXPLOSIVE_SHOT_FAMILY_FLAG_1))
+            continue;
+
+        uint32 const done = caster->SpellDamageBonusDone(star, explosive, static_cast<uint32>(effect->GetAmount()),
+                                                         SPELL_DIRECT_DAMAGE, EFFECT_0);
+        uint32 const tick = star->SpellDamageBonusTaken(caster, explosive, done, SPELL_DIRECT_DAMAGE);
+        pending += static_cast<uint64>(tick) * left;
+    }
+
     return static_cast<uint32>(std::min<uint64>(pending, star->GetHealth()));
 }
 
@@ -2786,6 +2803,7 @@ AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState& state, uint32 now)
 
 void StopCastsAtLine(Player* bot, Group* group, AlgalonEncounterState const& state, char const* window)
 {
+    ObjectGuid const skull = group->GetTargetIcon(RtiTargetValue::skullIndex);
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -2800,8 +2818,9 @@ void StopCastsAtLine(Player* bot, Group* group, AlgalonEncounterState const& sta
             if (!scanned || !scanned->under || (target == state.focusStar.Get() && std::strcmp(window, "under")))
                 continue;
 
+            bool const left = target != state.focusStar.Get() && target != skull;
             Creature* star = Resolve(bot, target);
-            if (star && star->GetHealth() <= StopLineHp(*scanned) + scanned->pendingHp)
+            if (star && (left || star->GetHealth() <= StopLineHp(*scanned) + scanned->pendingHp))
                 member->InterruptSpell(type);
         }
     }

@@ -774,3 +774,122 @@ counts each proc or triggered spell as a 1 s cast at something else (34075 Viper
 Vampiric Embrace, 31818/57946 Life Tap), so its cast-at-star share undercounts and the 12-27% other casts are mostly
 those. Watch too: a member holding far from its ring slot can stand farther from a hole than the old spot let it,
 since `FarHoleSpot` measures from the slot (team members on `noshelter` at a Big Bang).
+
+## Round 9 (2026-11-23, build 99188e0f1 with round 8)
+
+**Data.** Window 19, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head 99188e0f1
+--pulls 10`). All 28 Algalon traces on disk reread for under-star releases and what lands on a star after the team
+leaves it (scratch `alg9/`: `teamspot.py` team walking and `starhold` share, `holdwatch.py` round 8's watch items,
+`timeline.py` boss health, roles alive and healer mana every 20 s, `explokind.py`/`aftersmash.py` explosions by
+release and by time since the meteor, `early.py`/`overcut.py`/`inflight.py`/`leave.py` what took a star under its
+band, `offfocus.py` team damage on stars it wasn't on, `dotcasts.py` DoT casts on stars and the action behind each).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-172938-18` | `603_18_…_1795455081` | wipe 4:18, Ascend 4:15.6, boss 54% | 34: loose 14, star explosion 12, on tank 5, Constellation Barrage 2, Dark Matter in Big Bang 1 |
+| uld2 | `tr-20261123-172536-16` | `603_16_…_1795454839` | wipe 4:27, Ascend 4:25.0, boss 58% | 31: loose 13, on tank 6, star explosion 6, Cosmic Smash 3, Barrage 2, Black Hole DoT 1 |
+| uld3 | `tr-20261123-172657-17` | `603_17_…_1795454920` | wipe 7:10, Berserk 6:26, Ascend 7:07.6, boss 32.5% | 33: loose 19, star explosion 5, on tank 5, Dark Matter in Big Bang 2, Black Hole DoT 1, Big Bang 1 |
+
+What started each wipe:
+
+- uld1: under-star 1582, released `early`, went off at 1:54.5 on 17 under the line, 5.0 s after under-star 1584 (4
+  dead, healers Uldxad and Uldxae among them, both brought back). Before Big Bang 2 wave 2's 1603 was killed at
+  3:15.6 (7 under, 1 dead), then the released wave-3 under-star 1645 went off 1.0 s before the cast (3:25.6, 14
+  under, a meteor live, 4 dead with Uldxad and Uldxae again) and 1647 in the cast on the running healer Uldxab:
+  one healer left, the three tanks died 3:40.0-3:48.1, loose 27 s, 17 dead.
+- uld2: the holder Uldyaa died at 3:02.0 (92 k in 6 s, both tank healers alive 26-28 yd off), Uldyab at 3:09.9,
+  Uldyaz at 3:15.6; `urgent` (no hole left) killed wave 2's 1602 at 3:15.1 (5 under, 2 dead); loose from 3:16, and
+  the wave-3 leftover 1634 drained at 4:03.4 with him loose (4 dead).
+- uld3: 10 dead by 3:33.5 (wave 2's 1604 drained 13.6 s after a meteor with 7 under, 3 dead; the holder Uldzaa at
+  3:24.9, 88 k in 6 s), then nobody for 3 min; Berserk at 6:26.1 with healer mana at 16/3/1/1%, the pair died
+  6:38.8-6:49.1 (Uldzab 230 k in 2 s), loose.
+
+**What made uld3 last to 7:10.** It lost no healer and only one tank before Berserk. Both wave-3 under-stars went
+off inside Big Bang 2's cast (no leftover), and every later star went off in Big Bang 3's or 4's cast or 0.5 s after
+its hit, on 6 bots at most and 0 dead, so after 3:18.5 no explosion hit the raid outside a Big Bang. The bear
+Uldzab and the blood DK Uldzaz then held him with all four healers up, the two tank healers putting 87-88% of their
+healing on the pair (uld2: 75-83%). It still had no kill in reach: 57.9% at 3:26, 34.1% at Berserk, 32.5% at the
+end. uld1 instead lost three healers to stars by 3:31.5 and its tanks within 17 s; uld2 lost its holder to burst at
+3:02.
+
+**Stop rules.** Not polished (three wipes; waived on 226 rosters). The failure picked below is new as a pick (rounds 2
+and 7 named it the next candidate).
+
+**Verdict on round 8: partly held.**
+
+- Walking cut as forecast: the team walked 31, 27, 25% of its focus time (window 17: 36, 33, 37), `starhold` covered
+  47, 60, 59%, cast at the star 38, 38, 44% (window 17: 41, 31, 34).
+- Bulk not faster: +2.3, +1.9, +1.8 %/s beyond the drain (window 17: +1.7 to +2.3).
+- `late` releases before Big Bang 2 1 of 3 (uld1 1646 at 70%; window 17: 2 of 3); wave-3 stars left after it 1, 2, 0
+  (2, 2, 1); explosion deaths between Big Bang 2 and 3 2, 4, 0 (5, 6, 3), all in collapses with him loose. uld2's two
+  were never under-stars: the planner put one of three under at the spawn, the team measured slow.
+- Watch items: holding members within 5 yd of the focus star 4.5 s of 598 s on `starhold`, in his reach 2.1 s, 5
+  `reach spell` walks on `starhold` (uld3), no team member on `noshelter`.
+- Q6 not asked again: two wave-3 stars survived Big Bang 2 in one pull of three (uld2), and neither was an under-star;
+  round 8 set "in most pulls".
+
+**Failures by deaths** (98): tank burst 16 and loose 46 (Q2 stands); star explosion 23 = under-stars released `early`
+going off before the cast 9 (uld1 1:54.5 4 and 3:25.6 4, uld3 1:56.5 1 in Big Bang 1's cast before anyone hid), wave
+2's star in the 16-20 s before Big Bang 2's hit 6 (1, 2, 3), wave-3 leftovers in collapses 6 (uld2 4, uld1 2),
+under-stars in casts 2 (a running healer, a tank on `hold`); Barrage 4; Cosmic Smash 3; Dark Matter 3; Black Hole
+DoT 2; Big Bang 1 (after Berserk).
+
+**Picked: under-stars over-cut below their band and released `early`** (9, and the start of uld1's wipe). Bug: the
+plan means only the bulk's own casts to land on an under-star, stopped at its line ("a spell landing after the line is
+1-2% of a 4-5 tick band"), but three kinds of damage the plan doesn't count land after the team leaves one.
+
+- 28 traces: 31 `early` releases, 55 dead (26 went off outside a cast, 34 dead; 5 inside, 21). After the bulk finished
+  a star (172 times) a median 1.3-2.2% beyond the drain landed in the next 3 s, p75 3.8-4.5%, up to 9-19%; 12 went
+  `early`. The team put 27% of a star a pull on stars it wasn't on, 18.4% on under-stars: Shadow Bolt 4.9, Explosive
+  Shot 2.7, Arcane Blast 2.4, Auto Shot 1.9, Piercing Shots 1.1, Corruption 0.5.
+- uld1 1645: at 3:09.205 a `deadline` kill on 1603 took the team off it at 29%, 3.5% above its line, and 10% landed in
+  1.6 s: three Explosive Shot ticks (cast 50 ms before the switch, 2.3-2.4% each), an Arcane Blast finishing 0.19 s
+  after it (2.24%), a Shadow Bolt in flight (2.29%), an Auto Shot (0.78%). Released at 17% at 3:10.8 (it needed 18.8 s
+  of drain), it went off 1.0 s before the cast. `StopCastsAtLine` (`UldEncounter_Algalon.cpp:2804`) interrupts a cast
+  on an under-star only at the line, so one at a star the team left above it runs on. Window 7 uld1 `603_42` 1655: an
+  Arcane Blast landed 1.15 s after an `open` kill took the team, 6.6%; `early` at 25%, 10 dead at 3:26.7.
+- uld1 1582: Uldxak's Corruption (1:25.0, refreshed by Everlasting Affliction off the bulk's Shadow Bolts) ticked 5.2%
+  after the bulk finished it at 1:33.8: `early` at 19% at 1:38.5. It came from `corruption on attacker`: the target
+  guard (`UldMultipliers_Algalon.cpp:96`) judged a spell named `current target` on the bot's current target, but
+  `CastDebuffSpellOnAttackerAction` keeps that name and overrides `GetTargetValue()` ("attacker without aura"). 6
+  Corruption casts on stars in 28 traces, all from it (one an unlogged repeat of an OK row); window 12 uld1 `603_21`
+  1675: 6.5%, `early` at 10%, 3 dead; window 19 uld3 one more (Uldzal).
+- Explosive Shot is a periodic dummy (aura 226, 1 s) casting 53352 with the aura's amount, +16% ranged attack power
+  from `spell_bonus_data`, so neither the DoT guard's `MostlyPeriodic` nor `PendingPeriodicHp` (`:360`) sees its two
+  later ticks: 1.5% or more of what landed in 5 of the 14 releases within 3 s of a leave.
+
+**Fix** (Algalon files only):
+
+- `StopCastsAtLine`: a bot's cast, channel or wand on an under-star that isn't the focus is interrupted at once (it was
+  only at the line), the group's skull excepted as in `AlgalonMayDamage`. The bulk's own finish is unchanged.
+- `AlgalonTargetGuardMultiplier`: every damage spell is judged on `action->GetTarget()`, the same unit as before for a
+  plain `current target` spell; positive spells on another target stay unjudged.
+- `PendingPeriodicHp`: Explosive Shot's remaining ticks count, each its amount through `SpellDamageBonusDone` and
+  `SpellDamageBonusTaken` for 53352, so the line and the bulk's work left net them out.
+
+10 and 25-man alike (ticks valued by the core); humans' casts untouched; nothing keyed on a real player. Replay by hand:
+1645 keeps the Arcane Blast (in progress at the switch) and stays under at ~19.2%; window 7's 1655 keeps 6.6% (31.6%);
+1582 without the Corruption is ~24% at 1:38.5, above its ~21% release line. Not covered: projectiles a member
+launched before starting its next cast (no longer its current spell), and splash on idle under-stars (below).
+
+**Not picked.**
+
+- Wave 2's star in the 16-20 s before Big Bang 2 (6, every pull): its kill or drain landed 10.3-13.6 s after the 3:05
+  meteor with 5-7 under, where uld1 and uld2 had 0-4 under and at most one under 14 k in the 10 s before that meteor
+  (uld3 9-10, after another star at 2:51). `SerialDue` leaves the 10 s `smashrecovery` hold out of its budget (round 7's
+  review), so the star turns due too late to land before the meteor's blackout and is held to impact + 10 s. Before
+  round 7 these landed 3:10-3:13 (4 dead in 6 pulls), since then 3:15-3:24 (8 in 6); the two landing before the
+  meteor (2:54.6, 2:58.6) killed nobody. Next candidate; it moves every due and serial deadline and costs bulk time.
+- Idle under-stars splashed under their band: uld1 1584 (4.9% in 21 s), uld3 1581 (6.4% in 32 s: Wandering Plague,
+  Living Bomb, Fire Nova, Cleave, Consecration).
+- Cosmic Smash in Big Bang 2's hide (uld2 3:30.3, 2 dead): the hide brought Uldyac back to 4.6 yd and Uldyau to 11.7.
+- Tank deaths and loose: Q2 stands (uld2's six with a tank healer alive 17-26 yd off).
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --stars`, `--collateral`, `--verdict`; scratch `alg9/early.py`,
+`offfocus.py`): no `early` release within 3 s of a paced kill taking the team off that under-star (window 19: uld1
+1645); no "DoT on a star" (window 19: uld1 and uld3, one each); team damage on under-stars it isn't on under window
+19's 23.1, 15.7, 21.2% of a star; `early` releases under window 19's 4, 0, 2. Watch: bulk speed (interrupted casts are
+lost time; window 19 +1.8 to +2.3 %/s), under-stars above their band at the cast (window 19: uld3 1631 at 12.5%),
+`late` releases.

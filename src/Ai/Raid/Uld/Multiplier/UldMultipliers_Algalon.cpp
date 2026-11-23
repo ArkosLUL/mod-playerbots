@@ -94,9 +94,8 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
         if (dynamic_cast<MeleeAction*>(action) || (ClassifyAction(action) & Family::PetAttack))
             aim = Aim::Current;
         else if (spell && !dynamic_cast<CastHealingSpellAction*>(action))
-            aim = spell->GetTargetName() == "current target" ? Aim::Current
-                  : CastsPositiveSpell(botAI, action)          ? Aim::None
-                                                                : Aim::Own;
+            aim = spell->GetTargetName() != "current target" && CastsPositiveSpell(botAI, action) ? Aim::None
+                                                                                                  : Aim::Own;
 
         cached = aims.emplace(action, aim).first;
     }
