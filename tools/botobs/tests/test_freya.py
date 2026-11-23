@@ -4,7 +4,8 @@
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
 tank's Righteous Defense takes the Snaplasher, and the add tank dies (bare, or under an external whose
-removal is logged 1 ms before the death, after an own button and externals that overlap once), after which
+removal is logged 1 ms before the death, after an own button and externals that overlap once, or after a damage cut
+then a health button with two externals on it that overlap 1.5 s), after which
 the Snaplasher runs
 loose on a healer who kites it, then a ranged bot, while two hits keep its bark up, plus three beam
 dodges (one off a beam the next snapshot first shows) and one healer in range. A second one pins a
@@ -486,8 +487,8 @@ class Tanks(unittest.TestCase):
             "  Freya on Bulwark/tank 84.8% of the pull\n"
             "    0:14.000 .. 0:16.500 on Bruin/tank\n"
             "  Snaplasher 0:10.000 .. 0:24.000: Bruin/tank 87%, Bulwark/tank 13%\n"
-            "  Snaplasher 0:10.000 on Bruin/tank 12.0s: own 0.0s, external 0.0s, both 0.0s, none 12.0s; "
-            "died 0:22.000 under nothing\n"
+            "  Snaplasher 0:10.000 on Bruin/tank 12.0s: own 0.0s, external 0.0s, both 0.0s (0.0s on a damage cut), "
+            "two externals 0.0s, no damage cut 12.0s, none 12.0s; died 0:22.000 under nothing\n"
             "  0:13.500 Bruin Challenging Roar\n"
             "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"))
 
@@ -514,14 +515,25 @@ class Tanks(unittest.TestCase):
         self.assertNotIn("covered", text)
         self.assertNotIn(": none", text)
 
-    def test_add_tank_cover_from_own_buttons_and_externals(self):
-        def aura(t: int, spell: int, removed: int) -> dict:
-            return {"t": t, "e": "aura", "d": ADD, "s": HEALER, "sp": spell, "r": removed, "st": 1, "dur": 0, "p": 1}
+    @staticmethod
+    def aura(t: int, spell: int, removed: int) -> dict:
+        return {"t": t, "e": "aura", "d": ADD, "s": HEALER, "sp": spell, "r": removed, "st": 1, "dur": 0, "p": 1}
 
+    def test_add_tank_cover_from_own_buttons_and_externals(self):
+        aura = self.aura
         auras = [aura(10000, 22812, 0), aura(14000, 22812, 1), aura(13000, 33206, 0), aura(17000, 33206, 1),
                  aura(21000, 47788, 0), aura(21999, 47788, 1), aura(23000, 6940, 0)]
-        self.assertIn("  Snaplasher 0:10.000 on Bruin/tank 12.0s: own 4.0s, external 5.0s, both 1.0s, none 4.0s; "
-                      "died 0:22.000 under Guardian Spirit\n", printed(fr.show_tanks, load(pull() + auras)))
+        self.assertIn("  Snaplasher 0:10.000 on Bruin/tank 12.0s: own 4.0s, external 5.0s, both 1.0s (1.0s on a "
+                      "damage cut), two externals 0.0s, no damage cut 4.0s, none 4.0s; died 0:22.000 under Guardian "
+                      "Spirit\n", printed(fr.show_tanks, load(pull() + auras)))
+
+    def test_externals_on_a_health_button_and_handed_over_early(self):
+        aura = self.aura
+        auras = [aura(10000, 22812, 0), aura(13000, 22812, 1), aura(13000, 61336, 0), aura(20000, 61336, 1),
+                 aura(13500, 33206, 0), aura(19000, 33206, 1), aura(17500, 47788, 0), aura(21000, 47788, 1)]
+        self.assertIn("  Snaplasher 0:10.000 on Bruin/tank 12.0s: own 10.0s, external 7.5s, both 6.5s (0.0s on a "
+                      "damage cut), two externals 1.5s, no damage cut 1.5s, none 1.0s; died 0:22.000 under nothing\n",
+                      printed(fr.show_tanks, load(pull() + auras)))
 
 
 class Beams(unittest.TestCase):

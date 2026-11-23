@@ -37,10 +37,12 @@ What the generic views miss here:
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
 - **Cover is read off auras, not the cooldown notes.** A healer notes `freya.addext` before its cast, so a cast that
   fails (out of range) still writes the name. The cover line takes the tank who held the Snaplasher longest and measures
-  his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap,
-  time two layers spent on one stretch, `none` the time he held it bare. The trace logs the auras a death strips
-  1-2 ms before the death row itself, so "died under" also counts an aura that ended up to `DEATH_AURA_SLACK_MS`
-  before the death.
+  his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap, time
+  two layers spent on one stretch, and how much of it lay on a damage cut of his own (Barkskin, Icebound Fortitude,
+  Shield Wall, Divine Protection) rather than a health button; `two externals` the time two ran at once;
+  `no damage cut` the time with neither such a button nor an external up; `none` the time he held it bare. The trace
+  logs the auras a death strips 1-2 ms before the death row itself, so "died under" also counts an aura that ended up
+  to `DEATH_AURA_SLACK_MS` before the death.
 - **A loose Snaplasher is read off the snapshots.** A stretch runs while its target is a raid member who is not a
   tank, and ends at the first snapshot it is on a tank or gone. Each line counts the deaths to it, the hits on its
   bark (Hardened Bark stack casts), the `freya kite snaplasher` orders, and the `freya.kite` notes: the chased
@@ -128,6 +130,7 @@ COOLDOWN_NO_PICK = {"covered", "none"}
 OWN_DEFENSIVES = {22812: "Barkskin", 22842: "Frenzied Regeneration", 61336: "Survival Instincts",
                   48792: "Icebound Fortitude", 55233: "Vampiric Blood", 871: "Shield Wall", 498: "Divine Protection",
                   12976: "Last Stand"}  # Last Stand's buff, its cast 12975 never shows up as an aura
+OWN_DAMAGE_CUTS = {22812, 48792, 871, 498}
 DEATH_AURA_SLACK_MS = 50
 EXTERNALS = {33206: "Pain Suppression", 47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
@@ -324,7 +327,9 @@ def show_tanks(trace: Trace) -> None:
     for cover in snaplasher_cover(trace):
         line = (f"  Snaplasher {clock(cover['spawn'])} on {holder_label(trace, cover['tank'])} "
                 f"{(cover['until'] - cover['t']) / 1000:.1f}s: own {cover['own'] / 1000:.1f}s, external "
-                f"{cover['ext'] / 1000:.1f}s, both {cover['both'] / 1000:.1f}s, none {cover['none'] / 1000:.1f}s")
+                f"{cover['ext'] / 1000:.1f}s, both {cover['both'] / 1000:.1f}s ({cover['both_cut'] / 1000:.1f}s on a "
+                f"damage cut), two externals {cover['two_ext'] / 1000:.1f}s, no damage cut "
+                f"{cover['no_cut'] / 1000:.1f}s, none {cover['none'] / 1000:.1f}s")
         if cover["died"] is not None:
             line += f"; died {clock(cover['died'])} under {', '.join(cover['under']) or 'nothing'}"
         print(line)
@@ -388,11 +393,15 @@ def snaplasher_cover(trace: Trace) -> list[dict]:
         died = next((d["t"] for d in deaths if d.get("g") == tank and t0 < d["t"] <= snap["last"]), None)
         t1 = died if died is not None else snap["last"]
         own, ext = aura_spans(trace, tank, OWN_DEFENSIVES), aura_spans(trace, tank, EXTERNALS)
+        cut = [span for span in own if span[2] in OWN_DAMAGE_CUTS]
         own_ms, ext_ms, any_ms = covered_ms(own, t0, t1), covered_ms(ext, t0, t1), covered_ms(own + ext, t0, t1)
+        cut_ms, layer_ms = covered_ms(cut, t0, t1), covered_ms(cut + ext, t0, t1)
         under = [{**OWN_DEFENSIVES, **EXTERNALS}[spell] for s, e, spell in sorted(own + ext)
                  if s <= died <= e + DEATH_AURA_SLACK_MS] if died is not None else []
         out.append({"spawn": snap["first"], "tank": tank, "t": t0, "until": t1, "own": own_ms, "ext": ext_ms,
-                    "both": own_ms + ext_ms - any_ms, "none": t1 - t0 - any_ms, "died": died, "under": under})
+                    "both": own_ms + ext_ms - any_ms, "both_cut": cut_ms + ext_ms - layer_ms,
+                    "two_ext": sum(covered_ms([span], t0, t1) for span in ext) - ext_ms,
+                    "no_cut": t1 - t0 - layer_ms, "none": t1 - t0 - any_ms, "died": died, "under": under})
     return out
 
 

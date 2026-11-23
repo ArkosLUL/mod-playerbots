@@ -350,7 +350,7 @@ their own pickup ([below](#detonating-lasher-waves)).
 
 **The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice),
 since every add-tank death came with them spent earlier or on someone else
-([Hardened Bark](#the-trio-wave)). Verified: no external landed on his buttons, he stood bare 1-12s a
+([Hardened Bark](#the-trio-wave)). Verified, one layer at a time: he stood bare 1-12s a
 trio wave (9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya
 add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
 Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%); **known-open:** under a lasher
@@ -362,24 +362,30 @@ the entry fallback sees her before the pull too, and no trio comes once it drops
 when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at
 43% that way.
 
-Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
-time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one,
-and any running external: a button off cooldown, or back from the rune gap an external was spent in,
-landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s after both ran out. Since,
-0.0s doubled in six trio waves, though no button came ready under an external.
+Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, his buttons and the
+externals hand over to each other. `freya add tank defensive` casts his `NextTankDefensive` (physical), which
+waits out a running one, and any running external: a button off cooldown, or back from the rune gap an external
+was spent in, landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s after both ran
+out. Since, 0.0s doubled in six trio waves, though no button came ready under an external.
 `freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
-Sacrifice it can reach, only while none of the three is up and he has no own button running, or ready and
-affordable now (`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them
-too). Under `_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%) only a running external is cover, so one goes on
-top of his own button (user's choice; not yet verified in a pull). Reach is spell range plus LOS, checked
-first: `CanCastSpell` passes an out-of-range target, and a paladin healing from 40 yd tried a 30 yd Hand of
-Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button cast, else `covered` (a layer up, or his
-own ready) or `none`, so the trace's repeat filter keeps a later cast of the same button.
-**Known-open:** above 25% a running Survival Instincts or Frenzied Regeneration counts as a layer though it
-cuts no swing, so a bear died under Survival Instincts twice in one pull, one swing from 61% and from 43%, with Pain
-Suppression and Guardian Spirit held as `covered` all wave. A healer mid-cast cannot start the next layer
-(the engine waits out a cast): Hand of Sacrifice's paladin had begun a Holy Light 0.1s before Pain
-Suppression ran out, and the bear died bare 1.1s later.
+Sacrifice it can reach unless he is covered (`IsFreyaAddTankCovered`, at any health; user's choice, not yet
+verified in a pull):
+
+- an external with `_ADD_TANK_EXTERNAL_LEAD_MS` (1.5s) or more left, so two overlap up to 1.5s: a healer
+  mid-cast cannot start the next (the engine waits out a cast), and a bear died bare 1.1s after Pain
+  Suppression ran out, Hand of Sacrifice's paladin having begun a Holy Light 0.1s before.
+- his own damage cut running: Barkskin, Icebound Fortitude, Shield Wall, Divine Protection. A health button
+  (Survival Instincts, Frenzied Regeneration, Vampiric Blood, Last Stand) cuts no swing, so it takes an
+  external on top: held as cover, a bear died under Survival Instincts twice in one pull, one swing from 61%
+  and from 43%, Pain Suppression and Guardian Spirit in hand.
+- nothing of his running and a button ready and affordable now (`ReadyTankDefensive`), so his goes first; a
+  human add tank's unpressed buttons hold them too. **Known-open:** so does one he cannot press yet, at any
+  health (`ReadyTankDefensive` checks no form): a risen bear's Frenzied Regeneration or Survival Instincts in
+  caster form.
+
+Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a paladin
+healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button
+cast, else `covered` or `none`, so the trace's repeat filter keeps a later cast of the same button.
 
 **At 10-man two healers run dry by 3:30-4:30** (six of six pulls; 25-man's four keep 25-60%), so the second
 trio wave's add tank dies on his last button, Frenzied Regeneration, with an external still in hand, and a
@@ -829,7 +835,8 @@ attacker` casts its takers (target in the snapshot before) landed off it;
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a
 cast that can still fail), and per Snaplasher the seconds its longest-holding tank held it under his own
-buttons, externals, both and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
+buttons, externals, both (and of that on his damage cut), two externals, no damage cut (neither his nor an
+external) and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
 Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;

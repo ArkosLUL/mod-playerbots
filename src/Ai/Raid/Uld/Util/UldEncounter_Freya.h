@@ -60,11 +60,18 @@ enum UlduarFreyaIds
     SPELL_FREYA_PAIN_SUPPRESSION = 33206,
     SPELL_FREYA_GUARDIAN_SPIRIT = 47788,
     SPELL_FREYA_HAND_OF_SACRIFICE = 6940,
+
+    SPELL_FREYA_SHIELD_WALL = 871,
+    SPELL_FREYA_DIVINE_PROTECTION = 498,
+    SPELL_FREYA_BARKSKIN = 22812,
+    SPELL_FREYA_ICEBOUND_FORTITUDE = 48792,
 };
 
 inline constexpr uint32 ULDUAR_FREYA_ADD_TANK_DEFENSIVE_STACKS = 25;
 
 inline constexpr float ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
+
+inline constexpr uint32 ULDUAR_FREYA_ADD_TANK_EXTERNAL_LEAD_MS = 1500;
 
 inline constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 8.0f;
 
@@ -255,7 +262,7 @@ bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI);
 
 bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI);
 
-bool HasFreyaTankExternal(Player* tank);
+bool HasFreyaTankExternal(Player* tank, uint32 forMs = 0);
 
 bool IsFreyaAddTankCovered(Player* tank);
 
