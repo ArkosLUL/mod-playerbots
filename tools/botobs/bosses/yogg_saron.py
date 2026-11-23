@@ -3921,7 +3921,7 @@ def target_kind(target: int, entry: int | None) -> str:
     return "yogg" if entry == NPC_YOGG_SARON else "other"
 
 
-def taunt_aim(caster: int, aim: str, victim: int | None, tanks: set) -> str:
+def phase3_taunt_aim(caster: int, aim: str, victim: int | None, tanks: set) -> str:
     """What a tank's phase 3 taunt went on, from `target_kind` of its target and that Guardian's victim just before:
     a rooted `tentacle`, a Guardian already on the caster (`own`) or on `another tank`, a `loose` one, else `other`."""
     if aim != "guardian":
@@ -4320,7 +4320,7 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
         if rec.get("s") in tanks and rec.get("sp") in TANK_TAUNT_SPELLS and start <= rec["t"] <= stop:
             aim = rec.get("tgt", 0)
             row = row_before(rows.get(aim, []), rec["t"]) if aim in guardians else None
-            aims[taunt_aim(rec["s"], target_kind(aim, trace.entries.get(aim)), row[8] if row else None, tanks)] += 1
+            aims[phase3_taunt_aim(rec["s"], target_kind(aim, trace.entries.get(aim)), row[8] if row else None, tanks)] += 1
     if aims:
         print(f"    tank taunts by aim: {dict(aims)}")
     held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
