@@ -330,7 +330,6 @@ private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
     bool WalkIntoRoom();
-    bool WalkToStage();
 };
 
 class YoggSaronIllusionHealerStationAction : public MovementAction

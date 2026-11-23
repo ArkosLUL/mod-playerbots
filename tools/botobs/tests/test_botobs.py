@@ -1791,6 +1791,12 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.exit_losses(verdicts, walks, casting, 60000), (10.0, 1, 8.0, 4.0))
         self.assertEqual(yogg_saron.exit_losses([(50000, "safe")], walks, casting, 60000), (None, 0, 0.0, 0.0))
 
+    def test_a_cast_still_running_at_the_end_reads_when_it_began(self):
+        casting = [(50000, 0), (54000, 982), (56000, 982), (59500, 982), (61000, 0)]
+        self.assertEqual(yogg_saron.cast_at_end(casting, 60000), (982, 6.0))
+        self.assertIsNone(yogg_saron.cast_at_end(casting[:1], 60000))
+        self.assertIsNone(yogg_saron.cast_at_end([], 60000))
+
     def test_cast_windows_split_on_the_samples_casting_the_spell(self):
         def row(t, spell):
             return [t, 9, 0.0, 0.0, 0.0, 0.0, 100.0, 0, 0, 0, 0, spell]

@@ -143,10 +143,6 @@ void DefineYoggSaron(EncounterBuilder& e)
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
                 Family::AttackLeastHp | Family::AttackRti | Family::DebuffOnAttacker | Family::Charge);
 
-    e.Block("yogg-saron illusion stage hold", Role::Any, YoggSaronIllusionStaged,
-            Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
-                Family::AttackLeastHp | Family::DebuffOnAttacker | Family::Charge);
-
     e.Block("yogg-saron brain hold", Role::Any, YoggSaronBrainHeld,
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
                 Family::AttackLeastHp | Family::AttackRti | Family::Charge | Family::PetAttack);

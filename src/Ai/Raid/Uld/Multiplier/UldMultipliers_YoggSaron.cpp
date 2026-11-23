@@ -188,17 +188,29 @@ float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)
 float YoggSaronExitHoldCastMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
-    if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID || !YoggSaronOnBrainLevel(bot) ||
-        !YoggSaronLeavingBrainLevel(bot))
+    if (!spellAction || bot->GetMapId() != ULDUAR_MAP_ID || !YoggSaronOnBrainLevel(bot))
+        return 1.0f;
+
+    bool const leaving = YoggSaronLeavingBrainLevel(bot);
+    if (!leaving && YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_BRAIN)
         return 1.0f;
 
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spellAction->getSpell()));
     if (!spellInfo)
         return 1.0f;
 
-    bool const locks = spellInfo->HasAura(SPELL_AURA_ALLOW_ONLY_ABILITY);
+    int32 busyMs = spellInfo->CalcCastTime();
+    if (spellInfo->IsChanneled() || spellInfo->HasAura(SPELL_AURA_ALLOW_ONLY_ABILITY))
+        busyMs = std::max({busyMs, spellInfo->GetMaxDuration(), 1});
 
-    return spellInfo->CalcCastTime() || spellInfo->IsChanneled() || locks ? 0.0f : 1.0f;
+    if (busyMs <= 0)
+        return 1.0f;
+
+    if (leaving)
+        return 0.0f;
+
+    uint32 const left = YoggSaronInduceMadnessLeftMs(botAI);
+    return left && static_cast<uint32>(busyMs) + YoggSaronExitLeadMs(bot) > left ? 0.0f : 1.0f;
 }
 
 float YoggSaronHeldTargetCastMultiplier::GetValue(Action* action)

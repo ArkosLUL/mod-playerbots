@@ -1243,8 +1243,8 @@ counted, healers not), then nearest. A bot keeps its tentacle while nothing is l
 one no lower GUID is also on, so two that race onto a free one settle next tick. Grim Reprisal reflects
 per hit, so the split changes nobody's incoming damage.
 
-**In Icecrown and Stormwind a bot clears its share, then waits at the door**: swarming the last tentacle
-left the whole team 106-130 yd from the melee spot when the door opened. `YoggSaronTickIllusionShare`
+**In Icecrown and Stormwind a bot clears its share first**: swarming the last tentacle left the whole
+team 106-130 yd from the melee spot when the door opened. `YoggSaronTickIllusionShare`
 latches per bot per tick what it may take, and `YoggSaronIllusionTentacleAllowed` gates the resolver, its
 `dps target` fallback, the drop of a current target and `WalkIntoRoom`:
 
@@ -1259,12 +1259,13 @@ latches per bot per tick what it may take, and `YoggSaronIllusionTentacleAllowed
   (25 s) of Induce Madness, since the slowest clear left ~29 s and an uncleared room charms everyone.
   Healers, the Chamber and bots off the brain level have no limit.
 
-With nothing allowed and the room alive the state reads `staged`: the illusion room node walks the bot to
-`…_ICECROWN_STAGE_SPOT` / `…_STORMWIND_STAGE_SPOT`, and `yogg-saron illusion stage hold` blocks the
-reprisal hold's target pickers except `AttackRti`. The spots sit on the navmesh path from landing to Brain,
-6 / 3 yd past the landing, because both doors are inside the brain room's 50 yd circle (Icecrown 49.0,
-Stormwind 45.7) and a bot at a door would read as already in the brain room; arrival is 1.5 yd, each spot
-being ~3 yd inside either circle. The Chamber keeps plain spread.
+**A bot with nothing left allowed joins the live tentacle with the fewest attackers, by the user's
+choice** (share `joined`): waiting at a stage spot left the last 1-3 tentacles to one bot each while 3-6
+of 9 damage dealers stood, ~10 s a wave. Ties go to the one nearest `…_ICECROWN_STAGE_SPOT` /
+`…_STORMWIND_STAGE_SPOT` (on the navmesh path from landing to Brain, 6 / 3 yd past the landing, since
+both doors are inside the brain room's 50 yd circle and a bot at one reads as already in the brain room),
+and it keeps its current tentacle while no other has fewer attackers. The Chamber keeps plain spread,
+where nobody waits.
 
 **Grim Reprisal is what kills the brain team, and only a hit triggers it.**
 `spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;
@@ -1405,7 +1406,10 @@ with seconds to spare, so the user cut it; from the Brain the walk out takes 1.5
   back of the Chamber the lead read 40-43 s, bots latched at the door with 36 s left, and the Brain lived
   another wave. Brain under 30% still sends a bot out from anywhere.
 - `yogg-saron exit hold cast multiplier` zeroes cast-time spells and channels while latched (a mage
-  channelled Evocation 5 s, 51 yd from a portal).
+  channelled Evocation 5 s, 51 yd from a portal), and in the brain room before that any whose cast or
+  duration would outlast Induce Madness less the bot's lead (`YoggSaronExitLeadMs`, kept by the exit
+  read): no node runs mid-cast, so a hunter's 9 s Revive Pet begun 6-8 s before the end was charmed in
+  three pulls.
 - **Bladestorm and Killing Spree are cancelled at the portal** (`YoggSaronCancelAbilityLock`,
   `yogg.exitcancel`; at the Descend Into Madness click `yogg.portalcancel`), not on the way, since
   Bladestorm walks and keeps hitting, and held by the multiplier while latched: the ability lock makes the
@@ -1990,7 +1994,7 @@ hand.
 | Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1pull` (`pull` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
-| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `staged` / `reprisal`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `staged` / `lifted`), `reprisal`, `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
+| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `lifted`), `reprisal`, `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
 | Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
@@ -2009,7 +2013,8 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   against the Brain's reach of 27.
 - The exit walk uses its portal at `INTERACTION_DISTANCE`, the 5 yd that also counts as arrived, so a clean
   exit often leaves no `yogg.walk` row; `--brain`'s `caught by it` measures that walk instead, with the
-  seconds under Bladestorm / Killing Spree since the decision.
+  seconds under Bladestorm / Killing Spree since the decision, or the cast a bot that never decided was
+  still in.
 - A Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample; every
   Guardian casts it again at the wipe.
 - A Weakened Guardian's 1 HP reads 0%, so presence is a fresh row, not health; Thorim's casts never reach
