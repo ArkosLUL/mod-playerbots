@@ -888,3 +888,7 @@ first hit ~3 s sooner when staged, about 2% of the Brain on two cycles in three;
   and Corruption at 1:51.3 on a 3% one) finished it inside the gap.
 - w17 uld1 1:10.92: a Guardian dying 2.6 yd from the middle hit 20 raiders: cloud dodges had left the back line at
   18.2-19.5 yd from the middle, 16.1-17.4 yd from it; three ranged died.
+
+**Review fixes.** A non-tank healer human master already counts as the team's one healer, so with him no bot
+healer goes and the melee fill the bot slots: the fix as built sent a bot healer beside him and one melee fewer,
+two healers in a room whose rule is exactly one.

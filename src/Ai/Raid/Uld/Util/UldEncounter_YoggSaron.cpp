@@ -1011,15 +1011,16 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
                   return leftRank != rightRank ? leftRank < rightRank : left->GetGUID() < right->GetGUID();
               });
 
-    if (!healers.empty() && size && melee.size() >= size)
+    bool const botHealerGoes = !healers.empty() && !(masterTakesOne && PlayerbotAI::IsHeal(master));
+    if (botHealerGoes && size && melee.size() >= size)
         melee.resize(size - 1);
 
     std::vector<Player*> team = melee;
-    if (!healers.empty())
-        team.push_back(healers.front());
+    auto otherHealers = healers.begin();
+    if (botHealerGoes)
+        team.push_back(*otherHealers++);
     team.insert(team.end(), ranged.begin(), ranged.end());
-    if (healers.size() > 1)
-        team.insert(team.end(), healers.begin() + 1, healers.end());
+    team.insert(team.end(), otherHealers, healers.end());
 
     if (team.size() > size)
         team.resize(size);

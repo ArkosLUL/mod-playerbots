@@ -1692,7 +1692,6 @@ def walked_for_a_portal(trace: Trace, guids: set[int], start: int, until: int) -
 
 
 def room_team_roles(roles: dict[int, str]) -> str:
-    """The team that reached a wave's room by role, flagged when it went down without a healer."""
     counts = collections.Counter(roles.values())
     text = " ".join(f"{role} {counts[role]}" for role in sorted(counts))
     return text if counts["heal"] else f"{text}, NO HEALER"
