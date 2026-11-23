@@ -1098,7 +1098,8 @@ either lives, 16 of 27 Gifts lived to heal in the three 10-man pulls (all 7 in u
 - Q6: in `ResolveFreyaDpsTarget`, a ranged DPS bot that takes the Gift puts `GetFreyaLowLasherOnPlayer` (under
   `_LASHER_BAIL_PCT`, victim a player, inside `SpellDistance`) ahead of it, except while the trio is locked,
   as the tail pick waits. Built to option (b)'s wording, so a low lasher on a tank or melee counts as well as
-  one on the back line: a Gift heals any of them back to ~65%. Stickiness keeps the bot on it until it dies.
+  one on the back line: a Gift heals any of them back to ~65%. The bot stays on it while it is the lowest such
+  lasher in reach; a lower one takes the bot, and once none is left the Gift does.
 - Reader: `--lows` adds, of the in-reach samples, those with Eonar's Gift up and the share on the Gift, tested.
   Baseline here: 25-man 142 (46% on the Gift), 22 (95%) and 9 (11%), 36 (56%); 10-man 2 (100%), 10 (60%) and
   92 (98%); window 14 20 (100%), 12 (8%), 180 (24%), 285 (68%).
@@ -1123,3 +1124,17 @@ a bug candidate (add it to their hazards while it reads 0 speed), next round's p
 8. (waits for window 15) as written in round 9.
 
 **Shared code:** none.
+
+**Review:** both answers are built as given, on one code path (no size, mode or player branch: a player main
+tank counts through the group's main tank, a player a lasher hits counts like a bot), no shared code. The
+traces bear the round out: the 10-man loose Snaplasher (`--tanks`: 50.3 s, 10 kite orders, slower in 9 of 9
+reads; Uldyai's bail 4:41.2, Uldyag's 5:10.9, Uldyac's spore walk 5:17.4), 16 of 27 10-man Gifts living 12 s+
+(uld1's last, at 8:46.7, cut by the kill) against 1 of 25 at 25-man, and the `--lows` baselines. Fixed:
+
+- The findings doc said two thirds of the ranged in reach sat on the Gift; pooled `--lows` reads 52% (window
+  14, 497 samples), 52% (window 15a 25-man, 209) and 94% (10-man, 104). Q6's built line overstated the
+  stickiness: a lower low lasher takes the bot.
+
+Watch: Q6 counts a low lasher on a tank or melee too (the option's wording), so a tank-held pile going low
+one lasher at a time can hold the Gift takers off the Gift for several casts. The next window's "Gifts living
+12 s+ no more often" check covers it.

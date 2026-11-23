@@ -24,13 +24,13 @@ read back a tick later. A human's own marks are not honoured here.
 
 Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya (for ranged, a low
 lasher on a player goes ahead of the Gift and a lasher tail ahead of the trio,
-[below](#detonating-lasher-waves)); once any trio
-member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once
-every member is in the release band nothing pulls a bot away. A bot keeps its current target unless
-something strictly higher on that list is up, so add churn cannot reset swing timers; the trio slot is
-exempt, since the split is already stable and stickiness would freeze each bot's first pick. The pet
-goes at the pick every tick, not only on a switch: on the right target the node returns false, the
-common case, and a pet left on a dead or floored add would never catch up.
+[below](#detonating-lasher-waves)); once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT`
+(30%) the trio outranks the other adds, and once every member is in the release band nothing pulls a bot
+away. A bot keeps its current target unless something strictly higher on that list is up, so add churn
+cannot reset swing timers; the trio slot is exempt, since the split is already stable and stickiness
+would freeze each bot's first pick. The pet goes at the pick every tick, not only on a switch: on the
+right target the node returns false, the common case, and a pet left on a dead or floored add would
+never catch up.
 
 **Eonar's Gift is a ranged job** (12s to a 30-60% Freya heal), so melee never eat the travel both ways;
 melee take it only when no ranged DPS is alive. While a lasher pack is up only the first
@@ -315,8 +315,9 @@ yet verified in a pull), since every add-tank death came with them spent earlier
 class Pain Suppression (a disc priest's own critical-health one shares the name), Guardian Spirit and Hand
 of Sacrifice aimed at anyone but the main tank (user's choice) while an add tank lives who is not holding
 her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
-the entry fallback sees her before the pull too, and no trio comes once it drops. Both find Freya by entry when `find target`
-misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at 43% that way.
+the entry fallback sees her before the pull too, and no trio comes once it drops. Both find Freya by entry
+when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at
+43% that way.
 
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
 time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
@@ -598,7 +599,8 @@ under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed 
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
 Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in. It goes ahead of the Gift too
 (user's choice; not yet verified in a pull), one or two casts, except while the trio is locked: with one
-in reach and a Gift up, two thirds of the ranged sat on the Gift, and a Gift heals it back to ~65%.
+in reach and a Gift up, half the ranged in reach sat on the Gift (10-man: 94%), and a Gift heals it back
+to ~65%.
 
 **A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
 trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a

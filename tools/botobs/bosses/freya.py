@@ -560,9 +560,8 @@ def show_blasts(trace: Trace) -> None:
 def low_lasher_counts(trace: Trace, wave: dict) -> dict:
     """One lasher wave: its lashers that went under the bail line and how many stayed there LINGER_MS or more, the
     ranged DPS in reach of a low lasher hitting a player and whether they shot one (or, with Eonar's Gift up, the
-    Gift), and the back line's bail orders
-    away from a low lasher hitting one of them. A ranged bot counts once a snapshot, however many such lashers it
-    reaches, so shooting the lowest of two is on one, not on another lasher."""
+    Gift), and the back line's bail orders away from a low lasher hitting one of them. A ranged bot counts once a
+    snapshot, however many such lashers it reaches, so shooting the lowest of two is on one, not on another lasher."""
     low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
     snaps = frames(trace)
     stamps = [snap["t"] for snap in snaps]
