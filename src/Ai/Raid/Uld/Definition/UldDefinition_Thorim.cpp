@@ -90,6 +90,10 @@ bool ThorimLeverWait(PlayerbotAI* botAI)
 
 bool ThorimGiantHeld(PlayerbotAI* botAI) { return ThorimGauntletGiantHeld(botAI, botAI->GetBot()) != nullptr; }
 
+bool ThorimCorridorFlee(PlayerbotAI* botAI) { return ThorimCorridorFleeHeld(botAI, botAI->GetBot()); }
+
+bool ThorimGauntletOnClock(PlayerbotAI* botAI) { return ThorimGauntletSquadOnClock(botAI, botAI->GetBot()); }
+
 void TickThorim(PlayerbotAI* botAI)
 {
     ThorimTickBarrierBail(botAI, botAI->GetBot());
@@ -177,6 +181,9 @@ void DefineThorim(EncounterBuilder& e)
     e.OwnMovement("thorim giant hold", Role::Any, ThorimGiantHeld, Family::Attack | Family::AvoidAoe,
                   {ThorimGauntletLeadAction::Name});
     e.Block("thorim giant hold", Role::Any, ThorimGiantHeld, Family::TankAssist | Family::Charge | DPS_PICKERS);
+
+    e.Block("thorim corridor flee hold", Role::Any, ThorimCorridorFlee, Family::Flee);
+    e.Block("thorim revive pet hold", Role::Any, ThorimGauntletOnClock, 0, {"revive pet"});
 
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 

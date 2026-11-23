@@ -1590,3 +1590,133 @@ corridor tank lands ~15 yd out there, while across 49 traces no player stood on 
 first case the step answers could aim into the wall under the balcony. Each point now takes the ground height and
 `CheckCollisionAndGetValidCoords`, as `RingPoint` does, and must still stand 9.75 yd from him; the constant is renamed
 `ULDUAR_THORIM_UNREACH_ARENA_RADIUS`, and the fix line above no longer says his reach doubled. `pb-check` passes.
+
+## Round 16 (window 24: build baf47824b with round 15)
+
+**Data:** window 24, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-220519-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795471607,1795471611,1795471614}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head baf47824b --pulls 10` (its `thorim.py` lines), round 7-15 scripts (`budget.py`, `seg.py`,
+`dps.py`, `leadstop.py`, `leadstall.py`, `pack2.py`, `smashcost.py`, `barrier.py`, `sifclock.py`, `p2rank.py`, `meleebliz.py`, `chain.py`) and
+new ones in session scratchpad `thorim_r16/` (`leadtl.py`, `squadat.py`, `pets.py`, `revive.py`, `othertgt.py`, `sinkport.py`, `flees.py`,
+`zgrid_top.py`, `opencl.py`, `opening.py`, `blizdeath.py`) over `snap`, `move`, `act`, `cast`, `aura`, `dmg`, `death` and `note` rows; all 36
+Thorim traces on disk with a lever for the corridor flees, teleports and Revive Pet casts, all 34 phase 2s for the opening Chain Lightning.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795471607 | wipe 4:58, **hard mode** (62507 0:47.4, no 62565, `thorim.sifjoined`; phase 2 3:08.4 against 3:17.4) | phase 2: Thorim melee on a non-tank 10, Chain Lightning 7, Blizzard 6, Thorim melee on a tank 3, Frostbolt Volley 2, Lightning Charge 2, Frostbolt 1, Unbalancing Strike 1 |
+| uld2 | 1795471611 | kill 6:10, normal (62565 3:30.0, phase 2 3:54.1) | phase 2: Chain Lightning 1 (a healer on a camp spot, P2 +27 s) |
+| uld3 | 1795471614 | kill 6:04, normal (62565 3:18.1, phase 2 3:50.1) | phase 2: Chain Lightning 2 (melee, the opening cast at P2 +11.3 s) |
+
+**Round 15 verdict (cannot-reach step): not triggered, no side effect.** `thorim.unreach` noted "0" in all three phase 2s and never named
+anyone; no `thorim unreachable step action` move; the reader's held-without-losing-health stretches 0 in all three (w23 uld1 25.2 s). The
+latch showed once in 31 phase 2s before, so one window cannot judge it; its checks stand for the next.
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 169.9 / 169.8 / 169.6 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w24 uld1 | 0.15 | 12.5 | 41.8 | 13.0 | 18.3 | 4.3 | 47.3 | 23.9 | 160.9 | made by 8.9 |
+| w24 uld2 | 0.16 | 21.6 | 39.3 | 29.7 | 20.2 | 4.6 | 55.7 | 23.0 | 194.0 | +24.2 |
+| w24 uld3 | 0.37 | 15.0 | 62.7 | 9.8 | 32.5 | 5.6 | 54.0 | 22.4 | 201.8 | +32.2 |
+| w23 uld1 / 2 / 3 | 0.12-0.25 | 12.6-14.2 | 36.2 / 51.2 / 52.5 | 11.2 / 10.5 / 7.0 | 20.2 / 37.8 / 33.3 | 3.5-5.2 | 44.5 / 62.0 / 51.0 | 20.6 / 24.4 / 21.0 | 148.9 / 205.3 / 184.2 | made by 21.0 / +35.6 / +14.4 |
+
+**Why uld2 and uld3 ran late** (against uld1, which took 4 Runic Smash hits, no Runic Barrier and lost only its two healers to the
+teleport below, which the leader's step hold ignores):
+- **Corridor bots teleported to the arena (uld2 4 bots, uld3 5, uld1 2).** A ranged or healer `flee` from the lane waypoints at y −276 and
+  −295 sinks under z 410 and `ThorimFallFromFloorTrigger` (`UldTriggers_Thorim.cpp:144`) `NearTeleportTo`s it onto the raid leader in the
+  arena (`UldActions_Thorim.cpp:406`), 13-22 s from its squad. uld3 lost three of its four ranged and both healers at 0:58.5-1:04.0, mid
+  pack 1: pack 1 took 24.9 s (uld1 16.3), and the squad dealt ~6k/s over pack 2's first 10 s, crossing lanes under the smash while they
+  caught up; uld2 lost two ranged and both
+  healers at 1:15.0-1:15.5, as pack 1 died: pack 2 opened 9.0 s after it (uld1 3.4 s). Cause below.
+- **uld2's squad hunter recasting Revive Pet (~16.5 s).** Uldyau's pet never comes back: 982 completes (its 3 s aura lands) with no pet,
+  and `PetIsDeadValue` (`StatsValues.cpp:45`) reads his `character_pet` row as a dead pet, so he recasts it all fight: 7 casts (63 s)
+  before phase 2, 4 (30 s) in it; arena hunter Uldyaj 5 / 8. Roster B's two hunters have done this in all 12 uld2 Thorim pulls on disk
+  (squad hunter 35-62 s of phase 1 in the pulls he lived through). His 0:36.1 cast, 40 yd off at the gate, held the leader's 30 yd step hold: first lead move 6.7 s after
+  the lever (uld1 / uld3 0.2-0.3 s). His 1:56.2 cast, 32 yd off on the old last left waypoint, held the Colossus gather: the rest stood
+  within 20 yd by ~1:57.5, the pull came at 2:07.3, with two Runic Smash lane flips of the leader in between.
+- **uld3's Colossus +14.2 s:** Runic Barrier at +11.6 s, him at 64% (uld1, uld2: none).
+- **Smash hits** 4 / 29 / 26, all with the latch held (`smashcost.py`); uld3's pack 2 opened in the smash lanes at 1:17.1 when the leader's
+  walk from right waypoint 1 to 4 took him within 20 yd of its west guard, then a dodge carried him across both lanes with it on him.
+
+**uld1's hard-mode phase 2** (`p2rank.py`): first tank death at P2 +47.7 s with Thorim at 84.7% (the five hard-mode pulls before: +57-131 s at
+53-76%), DPS alive 19 / 17 / 8 / 8 / 1 at +0 / 30 / 60 / 90 / 120 s, Thorim losing 0.28 / 0.32 / 0.17 / 0.06 %/s. 17 non-tanks died first:
+- **Chain Lightning 7.** The opening cast (3:19.8, +11.4 s), Thorim 12.6 yd off the tank spot and moving: corridor DK tank Uldxam took him
+  off the balcony (+6.1 s), the main tank's swap taunt walked him to the tank spot (+7.4 s), and Uldxam took him back on threat (+10.4 s,
+  no taunt row) from 17 yd south-east after channelling Army of the Dead (3:16.7, 4 s; w23 uld1 too), so the holder stood on the far side
+  of him from the tank spot. 8 hops: three melee south, the holder, four melee east; Uldxax, Uldxah, Uldxay dead at 32.7k / 49.1k / 83.1k.
+  Then two camp casts: +26.4 s seeded on a camp spot holding a ranged, a melee and a healer (Uldxaw, Uldxax dead), +41.5 s through three
+  ranged on one camp spot (Uldxaq, Uldxas). The +11 s opening casts over the 34 phase 2s on disk: no death before window 24, then 3 (uld1)
+  and 2 (uld3: eight melee strung between two slots during the drag, no tank in it).
+- **Blizzard 6.** Slot 0's Uldxai and Uldxaf (3:39.2-3:45.3): its solved bearing swung 203 → 177 → 153 → 281° in 1.7 s as a zone came, the
+  walk to 281° (15 yd round him) came back `wait` for ~5 s behind `avoid aoe`'s combat-priority bookings while both stood in two
+  overlapping zones (10.4k/s); Uldxai's Reincarnation stood up in the zone and died 4 s later. Camp healer Uldxad and ranged Uldxak walked
+  from home to their shelter (slot 5, orb 1) under the lit cone through two zones with a Volley (3:50.7-3:54.3), and Uldxad's Reincarnation
+  died in the zone 0.9 s later. Melee 40 Blizzard ticks for 185k (w23 uld1 55 / 248k, w21 uld3 21 / 102k).
+- Frostbolt Volley 2, Lightning Charge 2 (melee, 3:54.3).
+
+**Stop rules:** not polished (no hard-mode kill). Not stuck: rounds 3-16 picked fourteen different causes.
+
+**Failure ranking:**
+1. **uld1's hard-mode phase 2 wipe, 32 deaths.** The damage race (rounds 6, 9, 15), lost early: 9 DPS dead by +60 s. Its leaks are the
+   queued Blizzard tactic (re-check below), the camps stacked by construction (14 bots on 6 spots) and the opening chain (5 deaths over
+   two pulls, new this window). No bug to fix here this round.
+2. **uld2 and uld3 missed hard mode** (+24.2, +32.2 s): bugs, fixed below.
+3. Chain Lightning in the two normal-mode kills, 3.
+
+**Bug picked: corridor bots flee off the floor and the fall rescue sends them to the arena.**
+- Trace (`flees.py`, `sinkport.py`, 36 pulls): 1072 accepted `flee` moves by gauntlet-squad bots in the corridor (~30 a pull, 680 by healers),
+  174 dipping under z 411 within 3 s, 71 followed by a teleport into the arena; 47 bots ported from (2216-2218, −274..−296) and
+  (2237-2238, −265..−295), 13-22 s each before they re-entered the corridor, in 14 of 36 pulls (w24 2 / 4 / 5 bots). Stationary players
+  stand on the floor only at x 2216-2240 at y −276 and 2218-2238 at y −295 (`zgrid_top.py`); right waypoints 1-2 (2217.4, −275.9),
+  (2217.9, −295.0) and left 1-2 (2237.2, −275.8), (2236.9, −294.6) sit 1-2 yd inside those edges. Uldzav (w24 uld3): `flee` 0:57.79 from
+  (2218.1, −275.9) to (2212.4, −275.9), z 409.8 at 0:58.33, at (2139.9, −262.9) in the arena at 0:59.55, fighting arena adds, back in the
+  corridor 13.5 s later.
+- Code: `enemy too close for spell` (`RangeTriggers.cpp:14`) fires when the bot's target is within its melee reach and attacking someone
+  else, which is every mob the leader tanks on the waypoint the squad shares; `FleeAction` (`MovementActions.cpp:2015`) moves
+  `FleeDistance` straight away from it, off the edge. The rescue fires below z 410 within 110 yd of the arena centre, 2 yd under the
+  corridor floor (412.1), set against the arena floor (419.5), and teleports to `GetRaidLeaderOnInstance`, the arena's group leader.
+- **Classification: bug.** The squad is meant to hold its lane waypoint and walk with the leader; a generic step off the floor that ends 80
+  yd back in the arena is no part of it. (Round 7 saw the flee sinks farther south and left them.)
+
+**Second, independent and small: a gauntlet hunter's Revive Pet stalls the squad** (uld2 above). **Bug:** the step hold and the gather
+are meant to wait for walkers on a 170 s clock, not for a 9 s cast. The petless roster B hunters are a harness fault (orchestrator: DC
+should give them their pets back, or clear the stale `character_pet` row); the hold stands without it, since any hunter reviving between
+packs stalls the squad the same way.
+
+**Fix** (Thorim files only, no size, mode or player branch; rules run in bot engines only, so a real player is never held):
+- `ThorimGauntletSquadOnClock` (`UldEncounter_Thorim.cpp:2170`): Thorim in combat on his balcony (`ThorimSplitActive`) and the bot in the
+  gauntlet squad. `ThorimCorridorFleeHeld` (`:2175`) adds `PastThorimPortcullis`.
+- `thorim corridor flee hold` (`UldDefinition_Thorim.cpp:185`): `Block` on `Family::Flee` while `ThorimCorridorFleeHeld`. Its triggers
+  (`enemy too close for spell`, a hunter's `enemy too close for auto shot`, 63 of the 1072) fire on a mob attacking the bot itself only when
+  it is rooted or frozen, so almost no escape from damage is lost; hunters keep Disengage, which already outranks their flee and in 58
+  corridor casts sank no hunter without a flee after it.
+- `thorim revive pet hold` (`:186`): `Block` on `revive pet` while `ThorimGauntletSquadOnClock`, from the pull to phase 2, gate included.
+  Arena hunters and phase 2 unchanged.
+- The rescue itself is unchanged: with the flee held nothing measured still reaches it in the corridor.
+
+`pb-check` passes (syntax over 14 TUs, pblint, codestyle).
+
+**Estimated gain on window 24:** uld2 ~16 s from the hold plus ~5 s at the pack 2 gap, ~173 s against 169.8; uld3 ~8-10 s (pack 1 and the
+walk back), ~192 s, still ~22 s late on Runic Barrier and the smash. Hard mode on the pulls without barrier luck.
+
+**Next window should show:**
+- No `flee` move by a gauntlet-squad bot past the portcullis between the pull and phase 2 (w24: 28 / 11 / 33), `thorim corridor flee hold`
+  veto rows instead; no squad bot teleported from the corridor into the arena (2 / 4 / 5); no corridor squad bot targeting an arena add.
+- Roster B (uld2): no `revive pet` cast by its squad hunter before phase 2 (w24: 7, 63 s), `thorim revive pet hold` vetoes; the leader's first
+  lead move within ~1 s of the lever; the Colossus pull within ~4 s of the leader reaching the pull line unless a smash flips him.
+- Pack 2 opened within ~4-5 s of pack 1's last death where the leader fought pack 1 at waypoint 2 (uld2 9.0, uld3 8.8 s).
+- Watch: Iron Ring Guard damage and deaths on corridor ranged and healers, who no longer step out of a tanked mob's reach (Whirling Trip,
+  Impale), against window 24's none; a hunter stuck in melee reach of a tanked mob not shooting; a sink from a barrier bail.
+- Round 15's checks again (`thorim.unreach`, step moves, held stretches).
+
+**The queued Blizzard question still stands, recommendation yes.** Window 24 uld1 is the third hard-mode pull with it: the same solver swing
+(203 → 281° in 1.7 s) and generic `avoid aoe` hops inside overlapping zones, 3 melee deaths, and the ring's escape walk refused `wait`
+for ~5 s behind those hops' bookings, which holding `avoid aoe` off ring melee in phase 2 removes. Seen with it, not asked: a camp bot's
+shelter walk under the lit cone crosses Blizzard by design, and here it crossed two overlapping zones (~11k/s) with a Volley, two deaths;
+reincarnated and soulstoned bots stand up inside the zone that killed them.
+
+**Seen, not picked:** the opening Chain Lightning (above; a candidate if it kills again); the corridor DK tank's Army of the Dead channel
+while holding Thorim, the second pull running (shared DK class code); roster B's petless hunters in phase 2 (Uldyaj 8 casts, 65 s), which
+the hold leaves to the harness fix.
+
+**Questions for the user:** none new. The Blizzard question stays queued with the recommendation yes.
