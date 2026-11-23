@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ULDENCOUNTERHODIR_H
 
 #include "EncounterHelpers.h"
+#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -82,6 +83,7 @@ inline constexpr int32 ULDUAR_HODIR_STORM_GATHER_CAST_SLACK_MS = 250;
 
 struct HodirStormGather
 {
+    ObjectGuid carrier;
     Position rally;
     float dist = 0.0f;
     int32 msToPulse = 0;
@@ -194,9 +196,14 @@ inline constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
 
 inline constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 5;
 
+inline constexpr uint32 ULDUAR_HODIR_SHAMAN_BLOCK_BREAKERS = 3;
+static_assert(ULDUAR_HODIR_MAGE_BLOCK_BREAKERS + ULDUAR_HODIR_SHAMAN_BLOCK_BREAKERS <=
+                  ULDUAR_HODIR_HELPER_BLOCK_BREAKERS,
+              "with the first mage free, the second mage block keeps all its breakers beside the first shaman's");
+
 inline constexpr uint32 ULDUAR_HODIR_LATE_BLOCK_BREAKERS = 3;
 static_assert(ULDUAR_HODIR_LATE_BLOCK_BREAKERS <= ULDUAR_HODIR_HELPER_BLOCK_BREAKERS,
-              "the wave standing down cannot pull in more bots than it had while a mage was iced");
+              "the wave standing down cannot pull in more bots than it had while a mage or shaman was iced");
 
 inline constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
 
@@ -238,8 +245,6 @@ float GetHodirShelterPark(Creature* shelter);
 float GetHodirShelterRelease(Creature* shelter);
 
 bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot);
-
-Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot);
 
 bool GetHodirStormCloudRally(Player* bot, Player* carrier, Position& out);
 

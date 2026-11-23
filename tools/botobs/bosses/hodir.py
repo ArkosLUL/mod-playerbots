@@ -345,6 +345,29 @@ def pulse_counts(start: int, times: list[int]) -> list[tuple[int, int]]:
     return sorted(collections.Counter(round((when - start) / 1000) for when in times).items())
 
 
+RECEIVER_FATES = ("pulse 1-3", "pulse 4", "pulse 5+", "other cloud", "none")
+
+
+def receiver_fate(start: int, got: int | None, other: bool) -> str:
+    """What a damage dealer in a cloud's leash at landing got: Storm Power from that cloud at `got`,
+    by pulse, else from another cloud during its life, else none."""
+    if got is None:
+        return "other cloud" if other else "none"
+    pulse = round((got - start) / 1000)
+    return "pulse 1-3" if pulse < STORM_GATHER_TICK else "pulse 4" if pulse == STORM_GATHER_TICK else "pulse 5+"
+
+
+def cycle_clouds(starts: list[int], landings: list[tuple[int, int]]) -> list[list[tuple[int, float]]]:
+    """Storm Clouds by freeze cycle: for each cycle start in `starts` (the pull, then each wave of blocks), the
+    `(t, source)` landings before the next start, as `(source, seconds after the cycle start)`."""
+    out = []
+    for index, start in enumerate(starts):
+        stop = starts[index + 1] if index + 1 < len(starts) else None
+        out.append([(source, (when - start) / 1000) for when, source in sorted(landings)
+                    if when >= start and (stop is None or when < stop)])
+    return out
+
+
 def run_until_paused(low: int, high: int, pauses: list[int], spans: list[tuple[int, int]]) -> int:
     """Where a probe run over `[low, high)` stops counting: the first pause time in it, or a span
     open at or opening after `low`, else `high`."""
@@ -1272,27 +1295,42 @@ def show_storm(trace: Trace) -> None:
             continue
     holding = aura_spans(trace, SPELL_STORM_POWER)
     dealers = {guid for guid in bots(trace) if trace.role(guid) in ("melee", "ranged")}
+    latched: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "hodir.receiver"):
+        latched[rec["g"]].append((rec["t"], str(rec.get("txt", ""))))
+    latched_at = {guid: [when for when, _ in marks] for guid, marks in latched.items()}
+
+    def carrier_of(guid: int, when: int, live: set[int]) -> int | None:
+        if not latched:
+            return min(live)
+        index = bisect.bisect_right(latched_at.get(guid, []), when) - 1
+        value = latched[guid][index][1] if index >= 0 else "none"
+        return int(value) if value.isdigit() and int(value) in live else None
+
     parked = inside = held = on_rally = 0
     for snap in frames(trace):
         when = snap["t"]
-        live = [carry for carry in carries if carry["start"] <= when <= (carry["end"] or end)]
+        live = {carry["carrier"] for carry in carries if carry["start"] <= when <= (carry["end"] or end)}
         if not live or not 0 <= when < end:
             continue
-        carrier = min(carry["carrier"] for carry in live)
-        marks = [point for mark, point in rallies.get(carrier, []) if mark <= when]
         rows = {row[0]: row for row in snap.get("u", [])}
-        him = rows.get(carrier)
-        if not marks or not him:
-            continue
-        held += 1
-        on_rally += inside_circle((him[1], him[2]), marks[-1], STORM_PARK_YD)
-        for guid in dealers - {carrier}:
+        spots = {}
+        for carrier in (live if latched else {min(live)}):
+            marks = [point for mark, point in rallies.get(carrier, []) if mark <= when]
+            him = rows.get(carrier)
+            if not marks or not him:
+                continue
+            spots[carrier] = (marks[-1], (him[1], him[2]))
+            held += 1
+            on_rally += inside_circle(spots[carrier][1], marks[-1], STORM_PARK_YD)
+        for guid in dealers - (live if latched else {min(live)}):
             row = rows.get(guid)
             if not row or row[5] <= 0 or covered(holding.get(guid, []), when, when + 1):
                 continue
-            if inside_circle((row[1], row[2]), marks[-1], STORM_COLLECT_RELEASE_YD):
+            spot = spots.get(carrier_of(guid, when, live))
+            if spot and inside_circle((row[1], row[2]), spot[0], STORM_COLLECT_RELEASE_YD):
                 parked += 1
-                inside += inside_circle((row[1], row[2]), (him[1], him[2]), STORM_PULSE_YD)
+                inside += inside_circle((row[1], row[2]), spot[1], STORM_PULSE_YD)
     if held:
         print(f"  carrier within {STORM_PARK_YD:.0f} yd of its rally {on_rally / held * 100:.0f}% of {held} samples")
     if parked:
@@ -1303,6 +1341,7 @@ def show_storm(trace: Trace) -> None:
     print(f"  per cloud: landed, carrier, damage dealers lacking it within {STORM_COLLECT_LEASH_YD:.0f} yd of the"
           f" carrier then, how many of them its cloud buffed, its pulses as s:receivers")
     leash_total = leash_buffed = on_gather = 0
+    fates: collections.Counter = collections.Counter()
     for carry in carries:
         start, carrier = carry["start"], carry["carrier"]
         stop = (carry["end"] or end) + 100
@@ -1320,12 +1359,39 @@ def show_storm(trace: Trace) -> None:
         leash_total += len(leash)
         leash_buffed += len(buffed)
         on_gather += sum(count for second, count in pulses if second == STORM_GATHER_TICK)
+        for guid in leash:
+            got = min((rec["t"] for rec in mine if rec.get("d") == guid), default=None)
+            other = any(rec.get("d") == guid and rec.get("s") != carrier and start <= rec["t"] <= stop
+                        for rec in powered)
+            fates[receiver_fate(start, got, other)] += 1
         print(f"    {clock(start)} {trace.role(carrier)[:1]}  leash {len(leash):2d}  buffed {len(buffed):2d}  "
               + " ".join(f"{second}:{count}" for second, count in pulses))
     if leash_total:
         print(f"  damage dealers in the leash at landing buffed by that cloud: {leash_buffed} of {leash_total}"
               f" ({leash_buffed / leash_total * 100:.0f}%); Storm Power on pulse {STORM_GATHER_TICK}, the shared one:"
               f" {on_gather} of {len(powered)}")
+        print("  what they got: " + ", ".join(f"{fate} {fates[fate]}" for fate in RECEIVER_FATES))
+
+    boss = boss_guid(trace)
+    starts = [0] + [cast + FREEZE_LANDS_MS + 1000 for cast in (freeze_casts(trace, boss) if boss is not None else [])
+                    if cast + FREEZE_LANDS_MS + 1000 < end]
+    sources: dict[tuple[int, int], int] = {}
+    for rec in trace.of("aura"):
+        if rec.get("sp") in SPELL_STORM_CLOUD and not rec.get("r") and rec.get("d") in roster:
+            sources.setdefault((rec["t"], rec["d"]), rec.get("s", 0))
+    landings = [(carry["start"], sources.get((carry["start"], carry["carrier"]), 0)) for carry in carries]
+    labels: dict[int, str] = {}
+    for _, source in sorted(landings):
+        labels.setdefault(source, "abcdefgh"[min(len(labels), 7)])
+    print(f"  clouds per freeze cycle, seconds after its blocks spawned, by shaman"
+          f" ({sum(1 for when, _ in landings if when < DEADLINE_MS)} before {clock(DEADLINE_MS)}):")
+    for start, row in zip(starts, cycle_clouds(starts, landings)):
+        by_source: dict[int, list[float]] = collections.defaultdict(list)
+        for source, offset in row:
+            by_source[source].append(offset)
+        print(f"    {clock(start)} {len(row)}  " + "  ".join(
+            f"{labels[source]} " + " ".join(f"+{offset:.1f}" for offset in offsets)
+            for source, offsets in by_source.items()))
 
 
 def show_shed(trace: Trace) -> None:
@@ -1568,12 +1634,14 @@ def show_blocks(trace: Trace) -> None:
         # time the boss could have had. Split out because the two are worth arguing about separately.
         spans = block_target_spans(trace, {guid for guid, _ in batch})
         mages = [rows[-1][0] for guid, rows in batch if kinds.get(guid) == "mage"]
+        early = [rows[-1][0] for guid, rows in batch if kinds.get(guid) in ("mage", "shaman")]
         stop = min(high, end)
         on_ice = sum(covered(rows, spawned, stop) for rows in spans.values())
         after = sum(covered(rows, max(mages), stop) for rows in spans.values()) if mages else 0
+        after_early = sum(covered(rows, max(early), stop) for rows in spans.values()) if early else 0
         if on_ice:
-            tail = (f", {after / 1000:.0f}s of it after the last mage was free" if mages
-                    else " (no mage block named in this trace)")
+            tail = (f", {after / 1000:.0f}s of it after the last mage was free, {after_early / 1000:.0f}s after the"
+                    f" last mage and shaman" if mages else " (no mage block named in this trace)")
             print(f"    bots on ice {on_ice / 1000:.0f}s{tail}")
 
         # Every second a mage breaker casts elsewhere is a second later the wave's fire comes back.

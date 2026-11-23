@@ -1141,6 +1141,18 @@ class HodirReader(unittest.TestCase):
                          [(1, 2), (4, 4), (7, 1)])
         self.assertEqual(hodir.pulse_counts(20000, []), [])
 
+    def test_a_leash_receiver_is_sorted_by_the_pulse_that_reached_it(self):
+        self.assertEqual(hodir.receiver_fate(20000, 22010, False), "pulse 1-3")
+        self.assertEqual(hodir.receiver_fate(20000, 23990, True), "pulse 4")
+        self.assertEqual(hodir.receiver_fate(20000, 26000, False), "pulse 5+")
+        self.assertEqual(hodir.receiver_fate(20000, None, True), "other cloud")
+        self.assertEqual(hodir.receiver_fate(20000, None, False), "none")
+
+    def test_clouds_fall_into_the_freeze_cycle_they_landed_in(self):
+        cycles = hodir.cycle_clouds([0, 60000, 110000], [(15000, 1), (62000, 2), (75000, 1), (105000, 1), (112000, 2)])
+        self.assertEqual(cycles, [[(1, 15.0)], [(2, 2.0), (1, 15.0), (1, 45.0)], [(2, 2.0)]])
+        self.assertEqual(hodir.cycle_clouds([0], []), [[]])
+
 
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):

@@ -11,6 +11,7 @@
 #include "EncounterHelpers.h"
 #include "Group.h"
 #include "MotionMaster.h"
+#include "ObjectAccessor.h"
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -126,6 +127,12 @@ struct HodirStormRally
     Position rally;
 };
 
+struct HodirStormReceiver
+{
+    ObjectGuid carrier;
+    time_t applied = 0;
+};
+
 struct HodirHoldLatch
 {
     bool set = false;
@@ -155,6 +162,8 @@ struct HodirBotLatches
     std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
     std::unordered_map<ObjectGuid, HodirFireLatch> fireStand;
     std::unordered_map<ObjectGuid, HodirStormRally> stormRally;
+    std::unordered_map<ObjectGuid, time_t> stormLanding;
+    std::unordered_map<ObjectGuid, HodirStormReceiver> stormReceiver;
     std::unordered_map<ObjectGuid, HodirShedHopLatch> shedHop;
 
     std::unordered_map<ObjectGuid, Position> blockRank;
@@ -376,40 +385,24 @@ static Position HodirTankSpot(Player* bot, Unit* hodir, HodirHoldLatch const& ho
                       hold.point.GetPositionY() + std::sin(angle) * offset, hold.point.GetPositionZ()));
 }
 
-Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot)
+static Aura* HodirStormCloudOn(Unit* unit)
 {
-    if (!bot || !GetHodir(botAI))
-        return nullptr;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
-
-    uint32 const cloud = sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot);
-
-    Player* best = nullptr;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
-            continue;
-
-        if (!member->HasAura(cloud))
-            continue;
-
-        if (!best || member->GetGUID() < best->GetGUID())
-            best = member;
-    }
-
-    return best;
+    return unit->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, unit));
 }
+
+static bool HoldsHodirStormPower(Unit* unit)
+{
+    return unit->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, unit));
+}
+
+static bool IsHodirStormDealer(Player* member) { return !PlayerbotAI::IsTank(member) && !PlayerbotAI::IsHeal(member); }
 
 bool GetHodirStormCloudRally(Player* bot, Player* carrier, Position& out)
 {
     if (!bot || !carrier)
         return false;
 
-    Aura* cloud = carrier->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, carrier));
+    Aura* cloud = HodirStormCloudOn(carrier);
     if (!cloud)
         return false;
 
@@ -428,26 +421,101 @@ bool GetHodirStormCloudRally(Player* bot, Player* carrier, Position& out)
     return true;
 }
 
+static Player* GetHodirStormReceiverCarrier(HodirBotLatches& latches, Player* member)
+{
+    auto const latch = latches.stormReceiver.find(member->GetGUID());
+    if (latch == latches.stormReceiver.end())
+        return nullptr;
+
+    Player* carrier = ObjectAccessor::GetPlayer(*member, latch->second.carrier);
+    Aura const* cloud = carrier && carrier->IsAlive() ? HodirStormCloudOn(carrier) : nullptr;
+    if (cloud && cloud->GetApplyTime() == latch->second.applied)
+        return carrier;
+
+    latches.stormReceiver.erase(latch);
+    return nullptr;
+}
+
+static void LatchHodirStormReceivers(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    HodirBotLatches& latches = HodirLatchesFor(bot);
+
+    std::vector<Player*> members;
+    std::vector<std::pair<Player*, Position>> landed;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        members.push_back(member);
+
+        Aura const* cloud = HodirStormCloudOn(member);
+        if (!cloud)
+            continue;
+
+        time_t& taken = latches.stormLanding[member->GetGUID()];
+        if (taken == cloud->GetApplyTime())
+            continue;
+
+        taken = cloud->GetApplyTime();
+
+        Position rally;
+        if (GetHodirStormCloudRally(bot, member, rally))
+            landed.emplace_back(member, rally);
+    }
+
+    if (landed.empty())
+        return;
+
+    for (Player* member : members)
+    {
+        if (!IsHodirStormDealer(member) || HodirStormCloudOn(member))
+            continue;
+
+        if (!HoldsHodirStormPower(member) && GetHodirStormReceiverCarrier(latches, member))
+            continue;
+
+        Player* nearest = nullptr;
+        float nearestDist = ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH;
+        for (auto const& [carrier, rally] : landed)
+        {
+            float const dist = member->GetExactDist2d(&rally);
+            if (dist <= nearestDist)
+            {
+                nearest = carrier;
+                nearestDist = dist;
+            }
+        }
+
+        if (nearest)
+            latches.stormReceiver[member->GetGUID()] =
+                HodirStormReceiver{nearest->GetGUID(), HodirStormCloudOn(nearest)->GetApplyTime()};
+    }
+}
+
 bool GetHodirStormGather(PlayerbotAI* botAI, Player* bot, HodirStormGather& out)
 {
     if (!bot || !GetHodir(botAI))
         return false;
 
-    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsHeal(bot))
+    LatchHodirStormReceivers(bot);
+
+    if (!IsHodirStormDealer(bot) || HoldsHodirStormPower(bot) || HodirStormCloudOn(bot))
         return false;
 
-    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
+    Player* carrier = GetHodirStormReceiverCarrier(HodirLatchesFor(bot), bot);
+    if (!carrier || !GetHodirStormCloudRally(bot, carrier, out.rally))
         return false;
 
-    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
-    if (!carrier || carrier == bot || !GetHodirStormCloudRally(bot, carrier, out.rally))
-        return false;
-
+    out.carrier = carrier->GetGUID();
     out.dist = bot->GetExactDist2d(&out.rally);
-    if (out.dist > ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH)
-        return false;
 
-    Aura const* cloud = carrier->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, carrier));
+    Aura const* cloud = HodirStormCloudOn(carrier);
     AuraEffect const* pulse = cloud ? cloud->GetEffect(EFFECT_0) : nullptr;
     if (!pulse || pulse->GetAmplitude() <= 0)
         return false;
@@ -1260,8 +1328,8 @@ bool IsHodirTrappedAllyBreaker(Player* bot, Unit* block)
 enum class HodirHelperKind : uint8
 {
     Mage,
-    Druid,
     Shaman,
+    Druid,
     Priest,
     None
 };
@@ -1383,18 +1451,24 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     std::vector<Creature*> seats;
     for (Creature* block : blocks)
     {
-        uint32 const want =
-            GetHodirHelperKind(block) == HodirHelperKind::Mage ? ULDUAR_HODIR_MAGE_BLOCK_BREAKERS : 1;
+        HodirHelperKind const kind = GetHodirHelperKind(block);
+        uint32 const want = kind == HodirHelperKind::Mage     ? ULDUAR_HODIR_MAGE_BLOCK_BREAKERS
+                            : kind == HodirHelperKind::Shaman ? ULDUAR_HODIR_SHAMAN_BLOCK_BREAKERS
+                                                              : 1;
         for (uint32 i = 0; i < want; ++i)
             seats.push_back(block);
     }
 
-    bool const mageIced = std::any_of(blocks.begin(), blocks.end(), [](Creature* block)
-                                      { return GetHodirHelperKind(block) == HodirHelperKind::Mage; });
+    bool const earlyIced = std::any_of(blocks.begin(), blocks.end(),
+                                       [](Creature* block)
+                                       {
+                                           HodirHelperKind const kind = GetHodirHelperKind(block);
+                                           return kind == HodirHelperKind::Mage || kind == HodirHelperKind::Shaman;
+                                       });
 
     size_t const total = candidates.size();
     size_t budget = std::min<size_t>(
-        mageIced ? ULDUAR_HODIR_HELPER_BLOCK_BREAKERS : ULDUAR_HODIR_LATE_BLOCK_BREAKERS, seats.size());
+        earlyIced ? ULDUAR_HODIR_HELPER_BLOCK_BREAKERS : ULDUAR_HODIR_LATE_BLOCK_BREAKERS, seats.size());
     if (total > ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE)
         budget = std::min(budget, total - ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE);
     else

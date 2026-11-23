@@ -131,17 +131,20 @@ four of six pulls, one of them with a fire 17.5 yd from him burning 12 s empty. 
 itself too: Biting Cold's tick (`CastCustomSpell(target, SPELL_BITING_COLD_DAMAGE)` in
 `spell_hodir_biting_cold_player_aura`) is a magic-negative cast by the player on the player.
 
-**Helper blocks are broken mage first** (`GetHodirAssignedHelperBlock`):
-`ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** each, then druid, shaman, priest at one each, inside the
-8-breaker budget, which always leaves `_HELPER_BLOCK_MIN_FREE` 2 of the ranged present on him (a
-10-man's three face the same eight blocks) — **and drops to `_LATE_BLOCK_BREAKERS` 3 once no mage
-block is left**, since nothing still on ice holds up the next fire and **170-176 bot-seconds a
-pull**, near a tenth of the ranged group's whole fight, went on ice after the last mage was already
-free. **The budget is one ceiling over every block up, never a per-block cap**: one freeze ices all
-eight helpers, so a cap per block multiplied, 8 × 5 slots over 18 eligible bots, and put every dps
-on ice, up to eleven on one block a median 21 yd from the boss. Breakers are ranged (melee only when
-the raid has none): a melee bot leaving him makes a ~21 yd round trip. Tanks get only the boss: he
-follows his holder, so a tank walking 20 yd to a block drags him onto the ranged. Blocks are swept
+**Helper blocks are broken mage, shaman, druid, priest** (`GetHodirAssignedHelperBlock`):
+`ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** a mage block, `_SHAMAN_BLOCK_BREAKERS` **3** a shaman
+block, one each for druid and priest, inside the 8-breaker budget, which always leaves
+`_HELPER_BLOCK_MIN_FREE` 2 of the ranged present on him (a 10-man's three face the same eight
+blocks) — **and drops to `_LATE_BLOCK_BREAKERS` 3 once no mage or shaman block is left**, since
+nothing still on ice holds up the next fire or cloud: with the drop keyed on mages alone, **170-176
+bot-seconds a pull**, near a tenth of the ranged group's whole fight, went on ice after the last mage
+was already free. Once the first mage is free, the second keeps its five beside the first shaman's
+three (`static_assert`ed within the 8). **The budget is one ceiling over every block up, never a
+per-block cap**: one freeze ices all eight helpers, so a cap per block multiplied, 8 × 5 slots over
+18 eligible bots, and put every dps on ice, up to eleven on one block a median 21 yd from the boss.
+Breakers are ranged (melee only when the raid has none): a melee bot leaving him makes a ~21 yd
+round trip. Tanks get only the boss: he follows his holder, so a tank walking 20 yd to a block drags
+him onto the ranged. Blocks are swept
 from the boss, not the bot, so every bot sees the same set. A block (32938, 110,675 hp) is summoned
 by the helper inside it, so `ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget`
 writes that kind before the guid. The helper entries come in `_10` and `_25` rows per faction: the
@@ -161,13 +164,23 @@ still do): a freed mage's fire comes ~15 s after the landing at best and the las
 at 7.6-9.9% (the one before at 31.7-36.7%) and soaked 0.44-0.78 M, its fire burning 2.8 s before the
 kill or never; in window 14 (212-243k) at 11.4-17.4%, skipped only in the fastest (below).
 
-**A shaman's second Storm Cloud of a freeze cycle needs its block dead within ~12 s.** A freed
-`npc_ulduar_hodir_shaman` casts Storm Cloud 1 s after `ScheduleAbilities`, on a random player within
-35 yd, and every 30 s after until the next freeze traps it; the first cloud lands ~3.5 s after the
-block breaks. Over 27 freeze cycles (windows 10-14) a shaman's cloud repeated every time its first
-landed within 15.5 s of the blocks spawning (11) and never from 16.4 s (41). The first shaman block
-gets one breaker once a mage block is free, the second only once a druid is, so they break 10-24 s
-in and most freeze cycles carry two clouds, not four.
+**Freed mages melt the other blocks.** `EVENT_MAGE_MELT_ICE` casts `64528` (aura 89: 10% of the
+block a second for 10 s) on each helper block lacking it, one every 2 s as the mage's own casts
+allow, so a block no bot shoots dies a median 9.5 s after the first mage is free (4-14 s, a few up to
+33).
+
+**A shaman's second Storm Cloud of a freeze cycle needs its block dead within ~12 s, so shamans go
+with the mages.** A freed `npc_ulduar_hodir_shaman` casts Storm Cloud 1 s after `ScheduleAbilities`,
+on a random player within 35 yd, and every 30 s after until the next freeze traps it; the first
+cloud lands 3.1-4.3 s after the block breaks, the repeat 30.0-31.4 s after the first, and only if
+that is over ~1 s before the trap. Over 27 freeze cycles (windows 10-14) a shaman's cloud repeated
+every time its first landed within 15.5 s of the blocks spawning (11) and never from 16.4 s (41). At
+one breaker each, queued behind the druids, shaman blocks broke 10-24 s in and cycles carried 2.2-2.5
+clouds. A replay of those 12 pulls with three each after the mages frees
+them a median 12.1 s in (16.2), for ~3.2 clouds a cycle and ~2 more before 3:00 a pull, against
+~60 more breaker bot-seconds a pull and druid blocks ~3 s later: net +3-6k over 0-3:00, −2.5k
+where a pull already had four a cycle. The second shaman still waits on the second mage (median
+9.6 s in), so ~40% of first clouds stay past 16 s.
 
 **Breakers keep to their own block.** The blocks are attackers, so the `X on attacker` DoTs (relevance
 19-19.5, over the single-target ones at 5-18) spread over all eight blocks and Hodir, and AoE fires on
@@ -489,17 +502,23 @@ for **22%**.
 - So the lap is gone. One **rally** per carry, seeded from where the carrier stood when the cloud
   landed, latched on `Aura::GetApplyTime()` — stack counts repeat across carries, so a rise cannot
   tell them apart — and held **per instance**, not per bot, because a carrier and a receiver that
-  disagree walk past each other. With two carries at once every bot gathers on the lowest-guid
-  carrier. Damage dealers inside `_STORM_CLOUD_COLLECT_LEASH` 15 that lack the buff walk in (timed,
-  below) to park 2.0 (a yard inside the pulse, about what a bot covers between snapshots) / release
-  2.5, `static_assert`ed inside the pulse: at 4.0 a bot 3-4 yd out counted as arrived and waited
-  outside it. Healers and tanks are excluded, and tanks still never carry. **Carrier and receivers walk to the rally
-  point itself.** `MoveInside` parks each bot at its own follow angle on a 2 yd ring, so once
-  `GetFollowAngle` spread the raid (`61011f323`) a carrier and a receiver could stand 4 yd apart,
-  outside the pulse: parked receivers lacking the buff stood in it 20-45% of the time against
-  43-70%, Storm Power a cloud fell by a tenth, and 7 clouds in six pulls ran out of time with
-  charges left against none in three. **The position node stands down** for a carrier, and for a
-  receiver inside release of the rally still lacking the buff, which waits there for the pulse. Its
+  disagree walk past each other.
+- **The receivers are fixed at landing.** The first gather call to see a new cloud latches every
+  damage dealer within `_STORM_CLOUD_COLLECT_LEASH` 15 of its rally on it, each on the nearest cloud
+  new in that pass (`LatchHodirStormReceivers`); one still lacking Storm Power keeps its latch, and
+  one holding it is latched too and walks in if it lapses during that cloud. A leash tested live lost
+  11 of window 14's 143 receivers, walked past 15 yd while they waited (position node, shed, melee
+  chasing him), and gathering everyone on the lowest-guid carrier lost 7 standing round the other
+  one (two clouds landed within a second in 7 of 13 pairs). Receivers lacking the buff walk in
+  (timed, below) to park 2.0 (a yard inside the pulse, about what a bot covers between snapshots) /
+  release 2.5, `static_assert`ed inside the pulse: at 4.0 a bot 3-4 yd out counted as arrived and
+  waited outside it. Healers and tanks are excluded, and tanks still never carry. **Carrier and
+  receivers walk to the rally point itself.** `MoveInside` parks each bot at its own follow angle on
+  a 2 yd ring, so once `GetFollowAngle` spread the raid (`61011f323`) a carrier and a receiver
+  could stand 4 yd apart, outside the pulse: parked receivers lacking the buff stood in it 20-45% of
+  the time against 43-70%, Storm Power a cloud fell by a tenth, and 7 clouds in six pulls ran out of
+  time with charges left against none in three. **The position node stands down** for a carrier,
+  and for a latched receiver still lacking the buff, waiting, walking or parked for the pulse. Its
   anchor or declump walked both off: carriers stood within 2 yd of their rally 18-27% of carry
   samples (windows 7-8), it was a parked ranged receiver's commonest next mover, and its
   `MOVEMENT_COMBAT` lock refused the walk back until it landed. Seeding from the carrier is what
@@ -536,11 +555,9 @@ for **22%**.
     (`hodir storm gather hold`), which pulled melee parked out of his reach back to him first.
 
   In window 14 pulse 4 handed out 44 of 192 Storm Power (9 of 163 before) and took every receiver
-  still in the leash, but 28 of 143 in a leash at landing got none from any cloud. **Open:** 11 were
-  walked past 15 yd while waiting (position node, shed, melee chasing him), and `GetHodirStormGather`
-  tests the leash live; 7 stood round a second carrier, yet every bot gathers on the lowest-guid one
-  and the two shamans' clouds often land together; 6 had the walk cut by icicle dodges; 4 lost it to
-  bots inside at landing spending the cloud on pulses 1-3.
+  still in the leash, but 28 of 143 in a leash at landing got none from any cloud: the 18 the landing
+  latch above answers, and, **open**, 6 whose walk icicle dodges cut and 4 who lost it to bots inside
+  at landing spending the cloud on pulses 1-3.
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -553,7 +570,7 @@ for **22%**.
   live `62457` and killed the rogue 0.4 s later, mid-shed-leg.
 - Healers are excluded from the targeting node entirely, and **5** non-healers break a trapped
   raider's block, picked by a GUID window offset per block so several blocks draw disjoint sets
-  instead of the same five; helper blocks go by the mage-first budget above. Freeing outranks the
+  instead of the same five; helper blocks go by the block order and budget above. Freeing outranks the
   boss (the trapped raider dies to the next freeze) but the block has little health, so only bots
   within 45 yd leave what they were doing. Targeting keeps no stickiness across priority entries: a
   block outranks Hodir while it lives, assigned or not, so holding the current one parked the raid
@@ -687,14 +704,18 @@ death's killing spell, stacks and Frozen Blows window. `--tanks` gives per windo
 sharing the cast's ms), the `hodir.defensive` values (`idle`, `wait`, `spent`, the button, `covered`,
 `none`), and the button up at each tank death. `--storm` gives clouds, Storm Power a cloud by role, clouds
 spent out or timed out, the carrier's share within 2 yd of its rally, how often a receiver parked
-at the rally stood inside the carrier's pulse, and per cloud the damage dealers lacking it within the
-leash at landing, how many of them it buffed, and its pulses (pulse 4 is the shared one);
-`hodir.gather` reads `none`, `wait`, `walk` or `in` (inside release) per bot;
+at its carrier's rally stood inside that carrier's pulse (the carrier `hodir.receiver` names; the
+lowest-guid one on older traces), per cloud the damage dealers lacking it within the leash at
+landing, how many of them it buffed, and its pulses (pulse 4 is the shared one), what those dealers
+got (pulse 1-3, 4, 5+, another cloud, none), and the clouds per freeze cycle by shaman, in seconds
+after the blocks spawned; `hodir.gather` reads `none`, `wait`, `walk` or `in` (inside release) per
+bot, `hodir.receiver` the carrier it is latched on or `none`;
 `--buffs` adds ranged in a legal fire over the first fire window and 0-3:00, and the fire latch's runs
 held out of the band. `--shed` gives per role stacks shed a second, the share of Biting Cold ticks used
 (two a stack is all of them), samples moving, how far a shed took bots off their spot, hops, walked
 legs and cut hops, and how much of each shed a bot that started in Starlight, in melee reach or inside
-a Storm Cloud pulse stayed there. `--blocks` gives per wave the bots on ice and the next fire, and over
+a Storm Cloud pulse stayed there. `--blocks` gives per wave the bots on ice (and how much of it came
+after the last mage, and the last mage and shaman, were free) and the next fire, and over
 the pull the ranged shooting ice: bot-seconds, dps there against on Hodir, moving, walked by the
 position node, and over 35 yd from the block.
 
