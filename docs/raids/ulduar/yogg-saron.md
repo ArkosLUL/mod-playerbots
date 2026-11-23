@@ -1108,7 +1108,7 @@ phase 3 with few tentacles.
 second of its scaled 8.91M, from its first hit after the door until the cast ends. The room clear takes a
 median 31 s; the first Brain hit comes 2-4 s after the door from Stormwind and Icecrown, 9-13 s from the
 Chamber, whose team ends at its far end 150-166 yd out; melee arrive 10-12 s after the door (Chamber 18 s);
-the exit leaves ~6 s early. Medians: Stormwind 16%, Icecrown 14%, Chamber 8%; 25% a wave needs ~44 s on the
+the exit leaves ~5 s early. Medians: Stormwind 16%, Icecrown 14%, Chamber 8%; 25% a wave needs ~44 s on the
 Brain.
 
 **Brain Link's partner is readable from the cast, never from an aura.** 63802 goes on **one** player:
@@ -1419,9 +1419,10 @@ the stunned Crushers. If the Brain survives, the team leaves and finishes it nex
 ### The way out
 
 **The exit lead is measured, not flat**, since every millisecond of lead is damage the Brain does not
-take: `max(3 s, distance / 7 yd/s × 1.5)` at **base** run speed. A 2× lead with a 5 s floor surfaced bots
-with seconds to spare, so the user cut it; from the Brain the walk out takes 1.5-2.8 s for melee and
-2.9-4.2 s for the healer. Illusion Room 63988 adds 30% (`SPELL_AURA_MOD_SPEED_ALWAYS`), but bots made only
+take: `max(3 s, distance / 7 yd/s × 1.2)` at **base** run speed (`…_EXIT_LEAD_SAFETY`), 5.3 s for melee
+31 yd from their portal. The user cut it twice over seconds to spare: from 2× with a 5 s floor, then from
+1.5×, where melee surfaced a median 3.1 s after deciding (p90 3.3, max 3.5 with the cast hold below) with
+3.6 s left. Illusion Room 63988 adds 30% (`SPELL_AURA_MOD_SPEED_ALWAYS`), but bots made only
 4-6 yd/s on the way out, so the boosted figure read `safe` with no time left and charmed bots.
 
 - **`leaving` latches until the cast ends** (`YoggSaronLeavingBrainLevel`): asked fresh, the lead shrank as
@@ -2055,9 +2056,12 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
   against the Brain's reach of 27.
 - The exit walk uses its portal at `INTERACTION_DISTANCE`, the 5 yd that also counts as arrived, so a clean
-  exit often leaves no `yogg.walk` row; `--brain`'s `caught by it` measures that walk instead, with the
-  seconds under Bladestorm / Killing Spree since the decision, or the cast a bot that never decided was
-  still in.
+  exit often leaves no `yogg.walk` row; `--brain` reads it off the snapshots instead. `caught by it` gives
+  each charmed bot's seconds under Bladestorm / Killing Spree since the decision and its distance then from
+  the nearest clean exit, or the cast a bot that never decided was still in. `melee exits from the Brain`
+  gives per wave, tightest first, the seconds of Induce Madness (wave note + 60 s) left at each melee
+  decision in the brain room, which is that bot's lead, and at its first sample above z 300; waves phase 3
+  cut short are left out.
 - A Guardian's spawn is a Simple Teleport (64195) within 3 s of its first sample, else that sample; every
   Guardian casts it again at the wipe.
 - A Weakened Guardian's 1 HP reads 0%, so presence is a fresh row, not health; Thorim's casts never reach

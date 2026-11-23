@@ -2073,6 +2073,7 @@ def show_brain(trace: Trace) -> None:
         print(f"  Induce Madness   : {len(madness)} rows")
 
     show_madness_caught(trace)
+    show_melee_exits(trace)
 
     spread = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.spread"))
     if spread:
@@ -2355,7 +2356,10 @@ def show_madness_caught(trace: Trace) -> None:
         else:
             locked, lock_names = lock_overlap(locks.get(guid, []), when - int(left * 1000), when)
             lock = f", under {'/'.join(lock_names)} {locked:4.1f} s" if lock_names else ""
-            print(f"{'':16}decided with {left:4.1f} s left, back to safe {flips}x,"
+            start = row_before(rows[guid], when - int(left * 1000))
+            off = min((math.dist((start[2], start[3]), spot) for spot in ways_out), default=None) if start else None
+            from_out = f" {off:5.1f} yd from the nearest way out," if off is not None else ""
+            print(f"{'':16}decided with {left:4.1f} s left{from_out} back to safe {flips}x,"
                   f" exit walk refused {refused:4.1f} s, casting {cast:4.1f} s{lock}")
 
     teleported = {guid for _, guid, *_ in caught}
@@ -2363,6 +2367,89 @@ def show_madness_caught(trace: Trace) -> None:
         spot = at(trace, guid, charmed[guid])
         where = "below" if spot and spot[2] < BRAIN_LEVEL_Z else "on the platform"
         print(f"    {clock(charmed[guid]):>10} {trace.name(guid):14} {trace.role(guid):6} drained to 0, {where}")
+
+
+def exit_timing(rows: list[list], decided: int, end: int,
+                charm: int | None) -> tuple[float, float | None, float | None, bool]:
+    start = row_before(rows, decided)
+    below, up = start, None
+    for row in rows:
+        if row[0] <= decided:
+            continue
+        if row[4] >= BRAIN_LEVEL_Z:
+            up = row[0]
+            break
+        below = row
+    walked = math.dist(start[2:4], below[2:4]) if start and below and up is not None else None
+    charmed = up is not None and charm is not None and 0 <= charm - up <= MADNESS_CHARM_MS
+    spare = (end - up) / 1000 if up is not None and not charmed else None
+    return (end - decided) / 1000, spare, walked, charmed
+
+
+def spread_line(values: list[float]) -> str:
+    ordered = sorted(values)
+
+    def pick(share: float) -> float:
+        return ordered[int(share * (len(ordered) - 1))]
+
+    return (f"median {statistics.median(ordered):.1f} (p10 {pick(0.1):.1f}, p90 {pick(0.9):.1f},"
+            f" {ordered[0]:.1f}-{ordered[-1]:.1f})")
+
+
+def show_melee_exits(trace: Trace) -> None:
+    waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
+    melee = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam")
+             if rec.get("txt") == "1" and trace.role(rec.get("g", 0)) == "melee"}
+    if not waves or not melee:
+        return
+    decisions = [(rec["t"], rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.exit")
+                 if rec.get("txt") in ("leaving", "late") and rec.get("g") in melee]
+    charmed, _, _, rows = madness_split(trace)
+    phase3 = next((first for phase, first, _ in phase_spans(trace) if phase == 3), None)
+
+    print("  melee exits from the Brain, s left at the decision / on surfacing, tightest first:")
+    lefts, spares, walks, walked, late, caught, cut = [], [], [], [], 0, [], 0
+    for start, ordinal in waves:
+        end = start + INDUCE_MADNESS_CAST_MS
+        if phase3 is not None and start <= phase3 <= end:
+            cut += 1
+            continue
+        first: dict[int, tuple[int, str]] = {}
+        for when, guid, verdict in decisions:
+            if start <= when <= end:
+                first.setdefault(guid, (when, verdict))
+        pairs = []
+        for guid, (when, verdict) in first.items():
+            spot = row_before(rows.get(guid, []), when)
+            if not spot or spot[4] >= BRAIN_LEVEL_Z or math.dist(spot[2:4], BRAIN_ROOM_MIDDLE) > BRAIN_ROOM_RADIUS:
+                continue
+            left, spare, yards, was_charmed = exit_timing(rows[guid], when, end, charmed.get(guid))
+            lefts.append(left)
+            late += verdict == "late"
+            if spare is not None:
+                spares.append(spare)
+                walks.append(left - spare)
+            if yards is not None and not was_charmed:
+                walked.append(yards)
+            if was_charmed:
+                caught.append((when, guid, left, yards))
+            pairs.append((spare if spare is not None else -1.0, left,
+                          "charmed" if was_charmed else f"{spare:.1f}" if spare is not None else "-"))
+        if pairs:
+            print(f"    wave {ordinal}: " + " ".join(f"{left:.1f}/{up}" for _, left, up in sorted(pairs)))
+    if not lefts:
+        print("    none")
+        return
+    print(f"  melee exits      : {len(lefts)}, left at the decision {spread_line(lefts)}, {late} late")
+    if spares:
+        print(f"    on surfacing   : {spread_line(spares)}, {sum(1 for spare in spares if spare < 1.0)} under 1 s")
+        print(f"    decision to up : {spread_line(walks)} s over {statistics.median(walked):.0f} yd median"
+              if walked else f"    decision to up : {spread_line(walks)} s")
+    print(f"    charmed after deciding: {len(caught)}"
+          + "".join(f"; {trace.name(guid)} {clock(when)} with {left:.1f} s left"
+                    + (f", {yards:.0f} yd" if yards is not None else "") for when, guid, left, yards in caught))
+    if cut:
+        print(f"    {cut} wave(s) cut short by phase 3 left out")
 
 
 def show_brain_waves(trace: Trace) -> None:

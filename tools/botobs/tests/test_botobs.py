@@ -1857,6 +1857,23 @@ class YoggPhases(unittest.TestCase):
         self.assertIsNone(yogg_saron.cast_at_end(casting[:1], 60000))
         self.assertIsNone(yogg_saron.cast_at_end([], 60000))
 
+    def test_exit_timing_reads_the_decision_and_the_surfacing(self):
+        def row(t, x, z):
+            return [t, 5, x, 0.0, z]
+
+        walk = [row(53000, 0.0, 240.0), row(55000, 10.0, 240.0), row(57000, 20.0, 240.0)]
+        self.assertEqual(yogg_saron.exit_timing(walk + [row(57500, 20.0, 330.0)], 54000, 60000, None),
+                         (6.0, 2.5, 20.0, False))
+        self.assertEqual(yogg_saron.exit_timing(walk + [row(60100, 20.0, 330.0)], 54000, 60000, 63000),
+                         (6.0, None, 20.0, True))
+        self.assertEqual(yogg_saron.exit_timing(walk + [row(57500, 20.0, 330.0)], 54000, 60000, 90000),
+                         (6.0, 2.5, 20.0, False))
+        self.assertEqual(yogg_saron.exit_timing(walk, 54000, 60000, None), (6.0, None, None, False))
+
+    def test_spread_line_reads_median_p10_p90_and_extremes(self):
+        self.assertEqual(yogg_saron.spread_line([3.0, 1.0, 2.0]), "median 2.0 (p10 1.0, p90 2.0, 1.0-3.0)")
+        self.assertEqual(yogg_saron.spread_line([4.0]), "median 4.0 (p10 4.0, p90 4.0, 4.0-4.0)")
+
     def test_cast_windows_split_on_the_samples_casting_the_spell(self):
         def row(t, spell):
             return [t, 9, 0.0, 0.0, 0.0, 0.0, 100.0, 0, 0, 0, 0, spell]

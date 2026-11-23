@@ -283,7 +283,7 @@ inline constexpr float ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS = 10.0f;
 inline constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 3000;
-inline constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 1.5f;
+inline constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 1.2f;
 
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
 inline constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
