@@ -243,12 +243,12 @@ portal this way.
   four tank anchors meant 4.5 yd past it **1.2-1.7 yd** from its centre. Nothing on the server
   collides a walking bot with a gameobject, so for a spot on or past a prop use
   `ValidateStaticFloorPoint`: the same navmesh raycast and path-type filter without the dynamic pass.
-  From inside one, every ray hits it: the check casts at half the bot's height, so Freya's 0.74 yd Nature Bomb
-  plant (GO 194902, solid until the bomb turns active 5s in) refused every sweep point to a short bot or one
-  on a slope standing in it ([Freya](../raids/ulduar/freya.md#spreading-hazards-natures-fury-sunbeam-nature-bomb)).
   It also returns true on `PATHFIND_INCOMPLETE` after overwriting the destination with the raycast's
   last point, which can be the bot's own feet, so a flee that must escape needs a minimum-progress
-  check ([Mimiron's flee fan](../raids/ulduar/mimiron.md#the-bearing-fan)).
+  check ([Mimiron's flee fan](../raids/ulduar/mimiron.md#the-bearing-fan)). From inside a solid gameobject
+  the check's rays, cast at half the bot's height, can all hit it: Freya's 0.74 yd Nature Bomb plant (GO 194902,
+  solid until the bomb turns active 5s in) refused every sweep point to a short bot or one on a slope standing
+  in it ([Freya](../raids/ulduar/freya.md#spreading-hazards-natures-fury-sunbeam-nature-bomb)).
 
 - **A floor check passes an off-mesh point for a player.** `PathGenerator::BuildPolyPath` treats any
   source that isn't a creature as able to fly, so with no poly within 3 yd across and 50 yd up or down of

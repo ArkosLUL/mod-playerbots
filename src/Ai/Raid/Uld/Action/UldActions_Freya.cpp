@@ -1504,9 +1504,12 @@ bool FreyaReachGiftAction::Execute(Event /*event*/)
     {
         Position const to(x, y, from.GetPositionZ(), 0.0f);
         for (HazardCircle const& blast : blasts)
-            if (blast.first.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) >= blast.second &&
-                SegmentCrossesCircle(from, to, blast))
+        {
+            float const start = blast.first.GetExactDist2d(from.GetPositionX(), from.GetPositionY());
+            float const keep = start < blast.second ? std::max(0.0f, start - CONTACT_DISTANCE) : blast.second;
+            if (SegmentCrossesCircle(from, to, HazardCircle(blast.first, keep)))
                 return false;
+        }
 
         return true;
     };
@@ -1524,7 +1527,9 @@ bool FreyaReachGiftAction::Execute(Event /*event*/)
     };
 
     uint32 const now = getMSTime();
+    LastMovement const& last = AI_VALUE(LastMovement&, "last movement");
     if (walkSpotMs && getMSTimeDiff(walkSpotMs, now) < ULDUAR_FREYA_GIFT_WALK_LATCH_MS && usable(walkSpot) &&
+        walkSpot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= CONTACT_DISTANCE &&
         bot->GetExactDist2d(walkSpot.GetPositionX(), walkSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
 

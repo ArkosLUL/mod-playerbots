@@ -1737,3 +1737,20 @@ a bomb (uld2 8:04.5); the main tank's escape has no static fallback (a bomb land
 
 **Shared code:** none changed; `ValidateStaticFloorPoint`, `FindNearestPositionClearOfHazards` and
 `SegmentCrossesCircle` are read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files
+only. Reproduced: uld3's three melee `freya move away nature bomb` FAILED at 6:02.285-6:02.427 with no move row and
+moved at 6:07.328-6:07.531; `--bombs` 6/10/7 of 62/84/68 from 4.5s on; over the 40 traces (`bomb_perbot.py`) 74
+escapes at 5.0s and 12 at 5.5s against 6 at 4.0s. The 5.0s edge is the plant's only state change
+(`boss_freya_nature_bomb::UpdateAI` sets `GO_STATE_ACTIVE`); the dynamic pass is `Map.cpp:3519`, which
+`ValidateStaticFloorPoint` skips and `MoveTo` never runs. Q11, Q12 and the 25% line match the user's answers. Fixed:
+
+- `freya reach gift`'s walk check exempted every lasher circle already holding the bot, and the Gift walk outranks
+  the camp's walk-off, so a Gift taker within 18 yd of a submerged lasher could walk across the pack to a spot past
+  it. It now goes at most `CONTACT_DISTANCE` deeper into such a circle; with no spot the camp walks it off first.
+- Its 3s latch returned true after a beam dodge or bomb escape had replaced the walk, idling the bot at the
+  dodge's spot; it now also needs its `MoveTo` to be the bot's last, as round 13's tank escape does.
+
+Left: `freya reach held pack`'s latch has the same gap (round 3, no case seen). `FindFreyaStaticFloorSpot` takes a
+point whose navmesh raycast failed as it is, where the collision sweep drops it; it runs only once that sweep found
+nothing, and Freya's floor is open.

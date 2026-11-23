@@ -58,9 +58,10 @@ in one Gift's life, none of the nine on it ever in reach. So a ranged DPS bot ou
 Gift, with a low or submerged lasher within that distance plus 18 yd, walks round them (`freya reach gift`,
 `ACTION_RAID + 1`; user's choice, not yet verified in a pull) to the nearest spot within `SpellDistance` −
 `ULDUAR_FREYA_GIFT_WALK_MARGIN` (1 yd) of the Gift, clear of bombs, beams, low lashers by `_DETONATE_RADIUS` + 1
-and submerged ones by `_LASHER_CAMP_STANDOFF`, on a straight walk crossing none of those lasher circles but one
-already holding it; latched `_GIFT_WALK_LATCH_MS` (3 s), a failed sweep retried after `_GIFT_WALK_RETRY_MS`
-(1 s), `MOVEMENT_COMBAT`. Inside a low lasher's blast the bail goes first; with no spot, `reach spell` walks as
+and submerged ones by `_LASHER_CAMP_STANDOFF`, on a straight walk crossing none of those lasher circles and
+going at most `CONTACT_DISTANCE` deeper into one already holding it, so it never crosses a pack it starts
+beside; latched `_GIFT_WALK_LATCH_MS` (3 s) while its `MoveTo` is the bot's last, a failed sweep retried after
+`_GIFT_WALK_RETRY_MS` (1 s), `MOVEMENT_COMBAT`. Inside a low lasher's blast the bail goes first; with no spot, `reach spell` walks as
 before. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
