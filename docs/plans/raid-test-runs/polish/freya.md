@@ -2137,3 +2137,19 @@ bail (`freya ranged camp`; 9 stretches of 5s+ over windows 14-24, 0-43 yd), left
     into the trio's melee stack.
 
 **Shared code:** none changed; `FindNearestPositionClearOfHazards` is read, not edited.
+
+**Review:** the failure is real and the fix addresses it, on one code path (no size, mode or player branch).
+Reproduced: lasher 1547 under 15% from 0:42.8, on Uldyai from 0:43.5, both DKs hopping east from x 2364 to 2453
+by 0:59, no ranged within 28.5 yd of it after 0:41, Uldyam rooted at (2427, -89) on his walk back at 1:09, 84-98 yd
+from Freya; 405 and 271 bails over the 30 pulls. Script: `scratchpad/freya-r17-review/chase_speed.py`. Corrected:
+
+- The lasher did not outrun them: snapshot steps read 5.2-6.7 yd/s against the DKs' 7.0 (8.0 is its unslowed
+  run). The bail fails because each spot is 16 yd from where the lasher stood and it follows: at 0:44.6 Uldyam
+  reached his spot with it 6 yd behind. The findings doc no longer gives speed as the reason.
+
+Fixed:
+
+- A melee Gift filler kept the Gift ahead of its chaser: the chaser sat in the lasher pick, below the Gift, so the
+  filler walked to the Gift with the lasher following unhit and unbailed, and the other fillers bailed off the Gift
+  from it. Melee fill the Gift whenever fewer than 5 ranged DPS live: always at 10-man, at 25 once ranged die. The
+  chaser now heads a melee bot's priority, ahead of the Gift.

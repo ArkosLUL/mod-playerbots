@@ -625,10 +625,6 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     auto const pickLasher = [&]() -> Unit*
     {
-        if (!isRanged)
-            if (Unit* chaser = GetFreyaLowLasherChasing(bot, state))
-                return chaser;
-
         float const reach = isRanged ? sPlayerbotAIConfig.SpellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
 
         Unit* lasher = isRanged ? GetFreyaLowLasherOnPlayer(bot, state, reach) : nullptr;
@@ -645,6 +641,9 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     };
 
     std::vector<Unit*> priority;
+
+    if (!isRanged)
+        priority.push_back(GetFreyaLowLasherChasing(bot, state));
 
     if (takesGift && !state.TrioReleased())
     {

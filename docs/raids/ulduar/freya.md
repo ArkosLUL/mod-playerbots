@@ -570,14 +570,14 @@ lasher blows. Since: 2-11% of melee approach orders a wave end in a low blast (3
 hits a wave (40-65), none fatal, and melee damage over a wave's first 40s held (72-101k/s, 50-99k before).
 
 **A melee bot doesn't bail from a low lasher chasing it** while no trio member or Conservator lives
-(`IsFreyaLowLasherChasing`: its victim, not rooted or stunned; not yet verified in a pull). The lasher runs at
-8.0 yd/s, so a bail in front of it never clears the blast: the victim hops 2 yd at a time, melee beside it bail
-along, the guards keep the rest off and the ranged lose reach, so nothing finishes it. One at 13-7% lived 47s and
-dragged two DKs 90 yd off, where Iron Roots killed the one whose Army the next lasher wave needed, out of heal
-range. Over 30 pulls 405 melee bails ran from the bot's own chaser, 271 with only lashers up. Now its victim takes
-it as its lasher pick (`GetFreyaLowLasherChasing`) and the blast guards leave it out for him, so he eats one
-Detonate; bystanders bail as before. With a trio or Conservator up the bail still runs: the victim's pick is that
-add, and walking to it would drag the lasher into the stack.
+(`IsFreyaLowLasherChasing`: its victim, not rooted or stunned; not yet verified in a pull). A bail in front of it
+never clears the blast, since each spot is 16 yd from where the lasher stood and it follows: the victim hops 2 yd
+at a time, melee beside it bail along, the guards keep the rest off and the ranged lose reach, so nothing finishes
+it. One at 13-7% lived 47s and dragged two DKs 90 yd off, where Iron Roots killed the one whose Army the next
+lasher wave needed, out of heal range. Over 30 pulls 405 melee bails ran from the bot's own chaser, 271 with only
+lashers up. Now its victim kills it first, ahead of a Gift he fills (`GetFreyaLowLasherChasing`), and the blast
+guards leave it out for him, so he eats one Detonate; bystanders bail as before. With a trio or Conservator up
+the bail still runs: the victim's pick is that add, and walking to it would drag the lasher into the stack.
 
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
@@ -704,7 +704,7 @@ lashers at 76% summed went to 228%, three at 15% to 130%.
 
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment
 it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. A melee DPS bot's
-own low chaser comes first and has no leash ([melee bail](#detonating-lasher-waves)). They switch
+own low chaser comes first, ahead of a Gift, and has no leash ([melee bail](#detonating-lasher-waves)). They switch
 only to a lasher 10 yd closer than the one held, so two at similar range don't trade the bot every tick.
 The add tank works its normal ladder through a lasher wave.
 
