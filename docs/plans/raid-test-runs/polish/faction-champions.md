@@ -601,3 +601,14 @@ Narrhok 0). A small gain at most: two rogues on a 60 s cooldown, in melee only, 
 
 **Questions for the user.** None new. Q2 (ice order with fewer DKs than melee champions) still not due; recommendation
 unchanged.
+
+**Review.** The case holds: on window 13 toc1 Broln dealt 707k of his 748k while iced, Lava Lash 165k and Stormstrike's
+two hits 180k, and the reader reruns the baseline above unchanged. The core facts check out: Lava Lash gated on the off
+hand, Stormstrike on both, the halving dead, `IsCCed` blind to a disarm. No size, mode or player branch: the entries are
+the base ones on every difficulty, and a player's disarm counts through the unit flags.
+
+- Review fix: `ReadyDisarm` read Broln as disarmed on the main-hand flag, so a main-hand-only disarm (a player's Disarm,
+  Psychic Horror) kept the rogues' Dismantle off him, though only the off hand gates Stormstrike and Lava Lash. On an
+  Enhancement it reads the off-hand flag now.
+- Left: the disarm goes to the Tauren two by entry, as the user answered, so against a Horde raid the Alliance Warrior
+  and Enhancement get none while iced.

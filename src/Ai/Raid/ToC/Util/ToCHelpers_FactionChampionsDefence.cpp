@@ -1701,14 +1701,17 @@ bool ClearOfOurHits(std::vector<Member> const& members, Unit* champion)
 
 uint32 ReadyDisarm(Player* peeler, Unit* champion)
 {
-    if (!peeler->IsWithinMeleeRange(champion) || champion->HasUnitFlag(UNIT_FLAG_DISARMED))
+    bool const enhancement = IsEnhancement(champion->GetEntry());
+    bool const disarmed = enhancement ? champion->HasUnitFlag2(UNIT_FLAG2_DISARM_OFFHAND)
+                                      : champion->HasUnitFlag(UNIT_FLAG_DISARMED);
+    if (!peeler->IsWithinMeleeRange(champion) || disarmed)
         return 0;
 
     if (peeler->getClass() == CLASS_ROGUE)
         return SpellReady(peeler, SPELL_DISMANTLE) ? SPELL_DISMANTLE : 0;
 
-    return peeler->getClass() == CLASS_WARRIOR && !IsEnhancement(champion->GetEntry()) &&
-                   StanceAllows(peeler, SPELL_DISARM) && SpellReady(peeler, SPELL_DISARM)
+    return peeler->getClass() == CLASS_WARRIOR && !enhancement && StanceAllows(peeler, SPELL_DISARM) &&
+                   SpellReady(peeler, SPELL_DISARM)
                ? SPELL_DISARM
                : 0;
 }
