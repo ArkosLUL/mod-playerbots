@@ -871,6 +871,55 @@ def pack_pull() -> list[dict]:
     return records
 
 
+FIRE_ELEMENTAL = CREATURE | 40
+
+
+def fire_elemental_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "shocuul",
+         "roster": [{"g": SHAMAN, "n": "Totem", "r": "melee", "c": 7, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "shocuul", "src": "engage"},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "unit", "g": FIRE_ELEMENTAL, "en": fc.NPC_FIRE_ELEMENTAL, "n": "Greater Fire Elemental",
+         "own": SHAMAN},
+        note(0, SHAMAN, fc.KILL, DISC),
+        note(500, MAGE_C, fc.CC_AURA, 12826),
+        note(1500, MAGE_C, fc.CC_AURA, 0),
+        note(4000, MAGE_C, fc.CC_AURA, 12826),
+        note(4700, MAGE_C, fc.CC_AURA, 0),
+        note(7000, MAGE_C, fc.CC_AURA, 6215),
+        note(9000, MAGE_C, fc.CC_AURA, 0),
+        note(11000, MAGE_C, fc.CC_AURA, 12826),
+        note(11500, MAGE_C, fc.CC_AURA, 0),
+        {"t": 12000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(-1000, 12001, 1000):
+        units = [row(SHAMAN, 100.0, DISC), row(DISC, 100.0, SHAMAN), row(MAGE_C, 100.0, SHAMAN)]
+        if when <= 9000:
+            units.append(row(FIRE_ELEMENTAL, 100.0, DISC if when < 3000 else MAGE_C))
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
+class FireElementals(unittest.TestCase):
+    def test_an_elemental_off_the_kill_target_keeps_the_cc_that_began_on_its_target(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_shocuul_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in fire_elemental_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            rows = fc.raid_fire_elementals(trace)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_adds(trace)
+        self.assertEqual([(row["owner"], row["first"], row["last"], row["samples"], row["on_kill"], row["victim"],
+                           row["breaks"]) for row in rows],
+                         [(SHAMAN, 0, 9000, 10, 3, MAGE_C, {"Polymorph": [700], "Fear": [2000]})])
+        self.assertIn("raid Greater Fire Elementals in the pull: 1", out.getvalue())
+        self.assertIn("on the kill target 30%, off it mostly Noozle Whizzlestick; Fear 1 held a median 2.0s,"
+                      " Polymorph 1 held a median 0.7s", out.getvalue())
+
+
 class PackAndPeel(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

@@ -831,3 +831,107 @@ ranged attacks. The `IsPhysicalChampion` rewrite is the same set.
   a free Dismantle 13.4 s before), with no gated cast in its 10 s either way. A cast record is not a landing: a dodged or
   missed disarm still reads as held, the trace carrying no aura on a champion. The prot tank can spend its Disarm on the
   Hunter and lack it for a Bladestorm within 60 s, which Q3's answer covers.
+
+## Round 10 (2026-11-23, windows 15 and 16 on builds 523b2f60f and 2d7853f0e)
+
+**Data.** Window 16 (`2d7853f0e`, rounds 8 and 9 in it): toc1 `tr-20261123-133438-4` kill 6:56, 3 deaths
+(`649_4_thrakgar_1795441009`), toc2 `tr-20261123-133438-5` kill 7:00, 4 (`649_5_erin-misthoof_1795441016`), toc3
+`tr-20261123-133438-6` wipe 5:01, 29 (`649_6_caiphus-the-stern_1795441012`). Window 15 (`523b2f60f`, round 8 in it):
+toc1 `tr-20261123-121740-4` kill 6:29, 0 (`649_4_erin-misthoof_1795436364`), toc2 `tr-20261123-121740-5` kill 7:51, 5
+(`649_5_erin-misthoof_1795436373`), toc3 `tr-20261123-121741-6` wipe 6:56, 29 (`649_6_thrakgar_1795436387`). For the toc3
+comparison, every pull of windows 10-16 (24, traces in the rounds above). Scripts in the round's scratchpad `fc10/`
+(gone with it); the reader's new `--adds` elemental lines cover the fixed one.
+
+**Stop rules.** toc3 wiped in both windows: not polished. The failure picked is new. (toc3 did kill in window 13,
+4 deaths; its other windows since 11 wiped.)
+
+**Lineups.** toc1 both windows: Caiphus, Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Malithas, Harkzog,
+Ginselle. toc2: window 15 Liandra, Caiphus, Erin with Broln for Malithas; window 16 Liandra, Thrakgar, Erin with
+Vivienne for Malithas. toc3 both windows: Liandra, Caiphus, Thrakgar; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog,
+Ginselle, Birana; two DKs on Maz'dinah and Gorgrim, Narrhok never iced.
+
+**Deaths by killing blow.** Iced: its duty's Chains in the 10 s before; freed: its ice DK dead.
+
+| Pull | Deaths | By |
+|---|---|---|
+| w15 toc1 kill | 0 | - |
+| w15 toc2 kill | 5 | Gorgrim before his ice duty, iced Maz'dinah, iced Broln, Ruj'kah, Harkzog 1 each |
+| w15 toc3 wipe | 29 | never-iced Narrhok 6, freed Gorgrim 6 (Toczam died 4:45) + iced 2, Birana 4, Ruj'kah 2 + Cat 2, Harkzog 3, Ginselle 2, iced Maz'dinah 1 + freed 1 |
+| w16 toc1 kill | 3 | iced Gorgrim 2, Ginselle 1 |
+| w16 toc2 kill | 4 | Ginselle 2, Ruj'kah 1, iced Gorgrim 1 |
+| w16 toc3 wipe | 29 | Ruj'kah 7, Ginselle 6, Harkzog 5, Birana 4, never-iced Narrhok 3, iced Gorgrim 2 + freed 1, iced Maz'dinah 1. Healers dead at 1:55, 1:58, 2:16 |
+
+**Verdict on round 9 (Hunter disarm): works where it lands; on toc3 nobody was left to land it.** `--peel` Hunter
+line, window 16: disarms on Ruj'kah 3, 3, 2 (2, 2, 0 on the kill target; window 15: 0, 0, 0), his casts and damage while
+one held 0 and 0k on all three (68, 75, 112 casts otherwise). His kill-target kills: 0, 0, 4, the four on toc3 at
+2:23-3:25 with both rogues dead (Toczat 1:17.9, Toczag 1:59.5; latch from 2:21.5), roster C bringing no prot warrior.
+Window 14: 5 of 8 likewise.
+
+**Verdict on round 8 (no totem duty for an ice DK): held.** Window 15 toc2, the one pull with Broln: `--adds` held by a
+bot on an ice duty 0 (window 15a toc1, round 7's build: 5 holds, 54.7 s); 13 of 14 totems gone in 0.0-3.5 s, the last,
+a Windfury at 6:26, lived 30 s unheld near the kill (7:14); his ice DK's uptime 100%, longest gap 0.2 s. Window 16 had
+no Broln.
+
+**What makes toc3 different** (windows 10-16). Without Broln, toc1 killed 4 of 4 and toc2 4 of 4, toc3 2 of 6 on the
+same three lineups. Ranked:
+
+1. No ranged druid (roster C: cat and resto). The Balance bot's Cyclone duty, Cyclone stand and Entangling Roots peel
+   don't exist there, and all its CC breaks on damage. Champion healers off the latch were CC'd 10-22% of the first 120 s
+   on toc3, 19-35% on toc1 and toc2. On Narrhok, the free Warrior on every roster, the Balance bot alone put 15-17
+   Cyclones and 12-20 Roots a pull (windows 14-16 toc1, toc2); toc3's control casts on him 0-17 against 8-55. Comp or
+   tactic: Q4.
+2. Two DKs leave Narrhok never iced, as on roster B, whose Balance bot covers him (above). The ice order stays (user,
+   2026-11-23).
+3. No prot warrior: the Hunter's disarms rest on two rogues (round 9 verdict), and Narrhok gets only their Dismantles
+   (roster B's tank added 0-2 Disarms a pull). Q5.
+4. The raid's own Greater Fire Elemental, every roster, worst where CC is all breakable. Picked below.
+
+Damage taken in the first 120 s: toc3 wipes 11.6-15.0k/s, kills on the other pools mostly 9.5-12.0k/s; casters did 22 of
+toc3's 29 window 16 deaths.
+
+**Picked: the Greater Fire Elemental sits on a champion off the kill target and breaks the CC on it (bug).**
+
+- `npc_pet_shaman_fire_elemental::UpdateAI` (core `pet_shaman.cpp:107-117`) attacks the shaman's selected unit once,
+  then keeps its victim till it dies: 2 minutes. Window 16 toc3: Toczaj (Enhancement) dropped the totem at 0:10.761
+  while hitting Liandra (his Flametongue on her at 0:11.0); the elemental took Thrakgar, a healer off the latch, and held him
+  0:10.8-2:10.5, 73 s of it off the latch: 5 Polymorphs held a median 1.3 s, 5 Fears 1.8 s.
+- 24 pulls: elementals targeted the kill target in 14% (Enhancement's) and 22% (Elemental's) of their samples, another
+  champion 61-71%, a pet 14-15%. Polymorph begun on their target held a median 0.7 s (49; elsewhere 2.1 s over 771), Fear
+  1.8 s (51; 3.8 over 697). A healer off the latch in 4 pulls (toc3 windows 10, 14, 16, toc1 window 11), else mostly a
+  caster the CC duty wanted (toc1 window 16: both on Ginselle 85 and 120 s, Polymorphs a median 0.2 s).
+- The CC duty's `ClearForBreakable` (`ToCHelpers_FactionChampions.cpp:803`) sees members and `GetPet` only, so it keeps
+  casting into it. Its Fire Shield (5 yd, 3 s) and Fire Nova (10 yd) didn't measurably break Polymorph nearby (1 of 9 and
+  1 of 15 held at a pulse inside reach ended there).
+- Cost of losing it: 14-22% of its time on the kill target; the Elemental shaman's lived 1-4 s in 16 of 24 pulls.
+
+**Fix** (`ToCMultipliers_FactionChampions.cpp`). `fire elemental totem` (both class nodes' action name) joins `OWN_SPLASH`,
+so `faction champions suppress aoe multiplier` zeroes it while the fight is live. Reader `--adds`: each raid Greater
+Fire Elemental, its kill-target share, the champion it targeted most off it, and the Polymorphs and Fears begun on its
+target (`raid_fire_elementals`). Boss doc: AoE row, Known gaps (no ranged druid).
+
+**Next window should show.** `--vetoes`: `faction champions suppress aoe multiplier` rows on `fire elemental totem`.
+`--adds`: "raid Greater Fire Elementals in the pull: 0" on every pool (window 16: 2, 2, 2). `--cc` on a toc3-like
+lineup: Polymorph and Fear held on the healers that weren't kill target first above window 16's (Caiphus 12.8 s,
+Thrakgar 20.0 s). A small gain at most: one champion's CC for up to 2 min a pull.
+
+**Seen, not picked.**
+
+- Externals spent before the healers were focused, as in earlier rounds: window 16 toc3 Pain Suppression on Toczax
+  (Warrior) at 0:01.4, Guardian Spirit, three Hands of Sacrifice and a Hand of Protection on Toczaj (Enhancement) by
+  0:53; none ready when Toczae and Toczad died at 1:55-1:58.
+- No Mass Dispel on window 16 toc3 (0 casts): Liandra's Divine Shield ran 12.1 s, first kill at 61.4 s (toc1, toc2:
+  34.2, 34.9). Also a full 12 s on window 10 toc1 and toc2, 11 toc2, 12 toc1; 0.2-1.1 s in the other eight.
+- Ginselle's Arcane Explosion: 494k and 501k in the toc3 wipes, 368k and 380k in toc2 kills, 6.5-8.9 victims a cast.
+
+**Questions for the user.**
+
+- Q4 (new, plan): roster C has no ranged druid. (a) In this fight, a cat druid bot takes the Cyclone duty and the
+  Entangling Roots peel when the raid has no ranged druid bot, leaving Cat Form for each cast; (b) swap toc3's cat for a
+  Balance druid in `dc_roster_toc3.conf` (the bear tank keeps Improved Leader of the Pack, as on roster B); (c) leave
+  it. Recommended: (a), which also covers a real raid with no Balance druid, at about 3 s of the cat's casting per 27 s
+  Cyclone cycle.
+- Q5 (new, plan): with no rogue alive and no prot warrior, a DPS warrior bot switches to Defensive Stance to Disarm
+  the Hunter while he's the kill target. Recommended: yes, kill target only, after Q4's window if one change at a time
+  is wanted: 9 of his 15 kill-target kills in windows 14-16 came with both rogues dead.
+
+**Shared code.** None; the change is in this fight's multiplier and its reader.
