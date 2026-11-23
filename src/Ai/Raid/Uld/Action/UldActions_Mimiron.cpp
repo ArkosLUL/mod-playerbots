@@ -492,7 +492,14 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                         boss->GetPositionZ());
     };
 
-    auto const fireFreeOffset = [&](float bearing, float direction, float span)
+    auto const isClean = [&](Position const& spot)
+    {
+        return IsMimironSpotFireSafe(hazards, spot) && IsMimironSpotBombSafe(hazards, spot) &&
+               IsMimironSpotRocketSafe(botAI, spot) &&
+               !IsMimironSpotInFireBotSpray(hazards, spot, ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH);
+    };
+
+    auto const cleanOffset = [&](float bearing, float direction, float span)
     {
         for (float offset = 0.0f; offset <= span; offset += ULDUAR_MIMIRON_BARRAGE_REFUGE_PROBE)
         {
@@ -502,9 +509,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                 if (candidate < shiftMin || candidate > shiftMax)
                     continue;
 
-                Position const spot = onOrbit(bearing + direction * offset, candidate);
-                if (IsMimironSpotFireSafe(hazards, spot) && IsMimironSpotBombSafe(hazards, spot) &&
-                    IsMimironSpotRocketSafe(botAI, spot))
+                if (isClean(onOrbit(bearing + direction * offset, candidate)))
                     return offset;
             }
         }
@@ -532,8 +537,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                 continue;
 
             Position const spot = onOrbit(heading, candidate);
-            if (!IsMimironSpotRocketSafe(botAI, spot) || !IsMimironSpotBombSafe(hazards, spot) ||
-                !IsMimironSpotFireSafe(hazards, spot))
+            if (!isClean(spot))
                 continue;
 
             int score = IsMimironWalkFireSafe(bot, hazards, spot) ? 1 : 0;
@@ -582,8 +586,8 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         if (IsMimironSpotBurning(hazards, bot->GetPosition()))
         {
             float const bearing = boss->GetAngle(bot);
-            float const cwOffset = fireFreeOffset(bearing, -1.0f, twoPi - clearance - cw);
-            float const ccwOffset = fireFreeOffset(bearing, 1.0f, cw - window.sweep - clearance);
+            float const cwOffset = cleanOffset(bearing, -1.0f, twoPi - clearance - cw);
+            float const ccwOffset = cleanOffset(bearing, 1.0f, cw - window.sweep - clearance);
             if (cwOffset >= 0.0f && (ccwOffset < 0.0f || cwOffset <= ccwOffset))
                 return stepRing(-cwOffset, "refuge");
 
@@ -598,8 +602,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                                   boss->GetPositionY() + radius * sin(bearing),
                                   boss->GetPositionZ());
 
-            if (IsMimironSpotMineSafe(bot, inward) && IsMimironSpotFireSafe(hazards, inward) &&
-                IsMimironSpotBombSafe(hazards, inward) && IsMimironSpotRocketSafe(botAI, inward))
+            if (IsMimironSpotMineSafe(bot, inward) && isClean(inward))
             {
                 NoteBarrageDecision("stepin", nullptr, cw);
                 bot->CastStop();
@@ -648,10 +651,10 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     float const cwTravel = Position::NormalizeOrientation(window.sweep + clearance - cw);
     float remaining = goClockwise ? -cwTravel : ccwTravel;
 
-    if (!hazards.flames.empty())
+    if (!hazards.flames.empty() || !hazards.sprayLanes.empty())
     {
         float const direction = goClockwise ? -1.0f : 1.0f;
-        float const beyond = fireFreeOffset(boss->GetAngle(bot) + remaining, direction, sectorWidth);
+        float const beyond = cleanOffset(boss->GetAngle(bot) + remaining, direction, sectorWidth);
         if (beyond > 0.0f)
             remaining += direction * beyond;
     }

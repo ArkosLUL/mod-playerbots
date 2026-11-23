@@ -223,8 +223,9 @@ and its leg (~1.4 s for a 10 yd step, 2.6 s for 18 yd, against `MaxWaitForMove` 
 dodge's own move while the bot stands in the beams. `MoveAwayClearOfMines` rejects any bearing whose
 destination is inside the swept band **at the moment the leg lands**: the cone turns ~10.6°/s, so a 2.6 s
 leg outruns the 15° margin. The mirror: the barrage step refuses a spot within
-`ULDUAR_MIMIRON_ROCKET_CLEARANCE` of a marker (`IsMimironSpotRocketSafe`) or inside a Frost Bomb's stand
-radius, even as its fire fallback, and so does `stepin`; with no clean radius it takes the plain step.
+`ULDUAR_MIMIRON_ROCKET_CLEARANCE` of a marker (`IsMimironSpotRocketSafe`), inside a Frost Bomb's stand
+radius or in a spray lane at `_SPRAY_STAND_HALF_WIDTH`, even as its fire fallback, and so does `stepin`;
+with no clean radius it takes the plain step.
 Fire stays the gap there: a step can land a bot in a node, its flames flee `locked` behind the leg.
 
 **Interrupt only for what kills.** A bot mid-cast cannot be moved and `MoveTo` still reports success
@@ -576,12 +577,19 @@ clean.
 told `clear` or `hold` stood in nodes for 8-14 s. The fire trigger defers only for a bot inside the band,
 where the barrage dodge screens every hop.
 
+**The spray and siren dodge never defers to the barrage.** The barrage dodge's `+ 7` takes the tick
+whenever it moves the bot, and this dodge's fan refuses the band at landing. Standing down for the
+whole window left `clear` and `hold` bots in lanes: once fire bots were kept into phase 4, 25 of its 32
+spray hits over two windows fell inside a barrage window, 23 with no `spray` note and 9 dead, one spray
+hitting 11 of the melee stack.
+
 **A burning band edge is not a place to stop.** When the re-aimed wedge held 22-27 of 38 nodes, 8-11
 bots died to fire in the next 15 s, against none at 11 of 34 or fewer: `ahead` bots `hold` within a yard
 of the band edge, the fire dodge's fan refuses every bearing (band behind, fire ahead, hops capped at
 12 yd), and bots near 3-5 nodes take 12-15k/s, dead from full in under 2 s. Two rules probe the ring in
-5° steps (`_REFUGE_PROBE`, under 2 yd at the ranged ring against a 5 yd flame radius) over the same radius shifts, clean meaning clear of fire, the bomb and
-rockets. A walk ending on a burning edge carries on into the safe sector to the first clean bearing (the
+5° steps (`_REFUGE_PROBE`, under 2 yd at the ranged ring against a 5 yd flame radius) over the same
+radius shifts, clean meaning clear of fire, the bomb, rockets and spray lanes. A walk ending on an
+unclean edge carries on into the safe sector to the first clean bearing (the
 whole sector stays clear for the rest of the cast: the far edge is fixed and the trailing side only
 opens), and a clear bot standing in fire walks the ring to the nearest clean bearing (`refuge`), which
 outranks the fire dodge; that gets the tick only when nothing is clean. Still open: phase 2 melee pinned
@@ -1123,8 +1131,8 @@ as area auras count them) for casters and healers in 25-man,
 in `IsMimironSpotSafe` and the fan; `mimiron fire bot action` (`ACTION_RAID + 3`) steps sideways out of the
 lane, or away from the siren without interrupting, since losing a cast to leave a silence defeats the
 point. It ranks below the fire dodge, whose fan already refuses the line and the silence, since a fire
-bot sprays only on reaching a flame and the fire ticks every second; and it stands down while the
-barrage dodge has the bot, since a fire bot outliving phase 3 can meet the barrage.
+bot sprays only on reaching a flame and the fire ticks every second; and below the barrage dodge, which
+takes a bot in the band ([never defers](#the-dodge)).
 
 **The siren needs a stand radius past its run radius.** A kept bot walks to the next flame, which is in
 the wedge, so spots picked just past 13 yd were walked into soon after: 212 `arc spread <-> fire bot`
@@ -1497,8 +1505,10 @@ the bot's last leg under 4 s old while it moves, else `standing`, and judges leg
 line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
-so episodes rather than ticks; `--bombbots` calls a blast victim chased when the bomb targeted it in the
-snapshot 300 ms before; and a phase that
+so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's
+cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
+before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
+before; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated

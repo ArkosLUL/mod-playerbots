@@ -981,3 +981,126 @@ Replayed on windows 14-16, 217 of the 587 bystander legs would fire, at 3.6 yd m
 - A bot a bomb chased ignored every other bomb's blast, even while it stood still (ranged, or its bomb over 8 yd
   off). Now only the kite skips them. Two bombs overlapped once in windows 14-16 (`603_20`, 5.5 s, one bomb
   living 20.7 s); the rest lived 0-11 s against one every 15 s.
+
+## Round 10 (build c01caf9cc, round 9 built)
+
+**Data:** window 18, `raidtest.py report --boss mimiron --raid uld --head c01caf9cc --pulls 10`: one valid pull
+per pool, no DC veto inside any. Baseline: window 16 (`603_10/11/12_…_17954419xx`). Scripts in the lane scratchpad
+(`mim10/`: `spraybar.py`, `deathacts.py`, `bombflips.py`, `p4flips.py`, `parts.py`; round 5's `mim5/spray.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-154723-7` | `603_7_…_1795448890` | **kill** 10:18.8, hard mode, parts down 9:52.0 / 9:56.6 / 10:06.8, under Berserk (10:00.2) | 11: P3 Water Spray 1; P4 Water Spray 4 (two inside a barrage window), mine 1, ACU Plasma Ball 1; P3b Water Spray 1 (the healer revived 0.9 s before, same lane); after Berserk Frost Bomb 1, ACU Plasma Ball 2 |
+| uld2 | `tr-20261123-154743-9` | `603_9_…_1795448905` | wipe 10:22.5 in P4, parts 1.2/1.9/4.8% at 10:01 | 31: P1 mine 1; P3 Water Spray 3 (one healer twice); P4 ACU Plasma Ball 3, Hand Pulse 3, Flames 1; Berserk 20 |
+| uld3 | `tr-20261123-154723-8` | `603_8_…_1795448895` | wipe 10:19.9 in P4, parts 23-28% at Berserk | 32: P2 Frost Bomb 1, Rapid Burst 2 (the same healer, revived, and a ranged), Heat Wave 1; P3 Water Spray 1, Bomb Bot 1 (chased ranged); P4 Water Spray 4 (two healers and two ranged, 8:03-8:08, all inside a barrage window), mine 1 (a healer, 8:06), ACU Plasma Ball 5, Hand Pulse 11 (8:26-9:52); Berserk 5 |
+
+74 deaths: Berserk 28; before it Water Spray 14, Hand Pulse 14, ACU Plasma Ball 9, phase 2 4, mines 3, Flames 1,
+Bomb Bot 1. Hard mode in all three: Summon Flames (Initial) at 7.1 s, Flames from 13-14 s, Emergency Mode at phase 2.
+
+**Stop rules:** one kill of three, 11 deaths in it: not polished. No failure picked three times (round 5's spray
+pick was the phase 3 lane crossing; this one is the barrage window).
+
+**Verdict on round 9 (Bomb Bot step-out): held.** `--bombbots` against windows 14-16:
+
+- Step-outs 116/75/104 legs at median 2.9/4.2/4.9 yd (before: every leg 30 yd); `bombbot` notes ok 85/59/91,
+  locked 96/72/99, unsafe 6/3/1, fallback 4/4/1.
+- Blast victims chased 3/2/2 (1 dead, uld3's ranged Uldzah), collateral 1/1/2 (none dead); Bomb Bot deaths 1
+  (window 16: 10, 7 of them chased; windows 14-16: 21 collateral hits).
+- Bombs killed or never reaching anyone 2 of 5, 3 of 5, 3 of 6 (window 16: 1 of 12, 2 of 5, 4 of 6).
+- A-B-A on the step: with `reach melee` 26/8/12 (window 16: 10/4/12), the arc spread 3/3/10 (7/17/12), the fire
+  bot step 1/1/3 (10/12/16); 30/17/25 in all against 28/34/41. uld1's `reach melee` pairs rose, with no death
+  after them. `mimiron bomb bot guard` veto rows 0/0/11.
+- Phase 3 moving: melee 47/43/52% (window 16: 46/51/45), ranged 33/32/30% (40/53/37).
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 89.2 | 48.3 | 89.5 | 24.3 | 144.3 | 32.0 | 7:20.7 | 166 s to the last part, 7 s past Berserk |
+| uld2 | 98.9 | 48.3 | 86.7 | 24.2 | 147.2 | 31.9 | 7:30.3 | 150 s to Berserk, parts 1-5% short |
+| uld3 | 84.4 | 48.0 | 89.9 | 24.4 | 160.0 | 32.1 | 7:32.0 | 148 s to Berserk, 21 dead in it |
+
+Phases 1-3 now fit (P4 by 7:20-7:32 in all three); phase 4 needs ~165-170 s and gets ~150. Phase 4 is where the
+clock and the raid go: kept fire bots (Q4), the ACU's Plasma Ball on ranged (Q5) and Hand Pulse.
+
+**Ranking.** Water Spray and Hand Pulse 14 each. uld3's 11 Hand Pulse deaths followed its healer loss at 8:03-8:08
+(spray took two healers and two ranged, a mine a third healer), and round 9 measured the pulse's 22-33% spread as
+the `p4melee` layout's floor; ACU Plasma Ball is Q5. Water Spray is a bug: 9 of its 14
+deaths came in phase 4, 7 of them inside a barrage window with no dodge at all.
+
+**Failure picked: the spray dodge is off for the whole Laser Barrage window.** In windows 16 and 18, 25 of the 32
+phase 4 Water Spray hits fell inside a barrage window (Spinning Up's cast plus 14.5 s, three a phase 4), 23 with no
+`spray` flee note from the victim in the 3 s before, 9 dead; the 7 hits outside the windows all had notes
+(`spraybar.py`).
+
+- `MimironFireBotTrigger::IsActive` (`UldTriggers_Mimiron.cpp:287` at `c01caf9cc`) returned false while
+  `MimironP3Wx2LaserBarrageTrigger` was active, for every bot, Spinning Up included. The barrage dodge returns
+  false for a bot `clear` of the band or holding at its edge (`hold`, under a yard of arc left), so those bots got
+  no dodge at all. uld1 7:58.4: one spray hit 11 of the melee stack (8 noted `hold 120`, 3 `clear 165`), and the
+  death record of Uldxaf shows `mimiron p3wx2 laser barrage action` FAILED every tick for 4 s and no fire bot
+  action queued (`deathacts.py`). uld3 8:08.5: Uldzal and Uldzad the same, `hold 135`.
+- The barrage step's ring spots ignored spray lanes: their test was fire, bomb and rockets only
+  (`UldActions_Mimiron.cpp:506`, `:535`, `:601` at `c01caf9cc`). uld3 8:03-8:06: the step walked healers Uldzae and
+  Uldzac and ranged Uldzaq and Uldzal to one spot round (2759-2763, 2567-2569) on `ahead` steps; three died to
+  spray within 5 s and the fourth to a mine. uld1 9:53: healer Uldxad on a `trailing` step, killed twice.
+- The design meant otherwise: the fire dodge already "keeps running during a barrage for every bot the cone does
+  not own", and the spray fan refuses the band at landing (`FleeFan`, `IsMimironSpotBarrageSafe` with the leg's
+  travel), the fallback too. The gate predates fire bots reaching phase 4 (round 8 keeps them there).
+
+**Classification:** bug. The strategy means every bot to leave a spray lane, phase 4 included (round 8: "the spray
+and siren dodge ... now reach phase 4"); during each barrage they stood in it.
+
+**Fix** (Mimiron files and reader only, every size and mode, with or without a player):
+
+- `MimironFireBotTrigger` no longer stands down for the barrage. Rank does it: the barrage dodge (`+ 7`) takes the
+  tick whenever it moves the bot, and the spray and siren fans keep refusing the band at landing.
+- `MimironP3Wx2LaserBarrageAction`: a ring spot is clean only out of every spray lane at
+  `ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH` too (`isClean`, used by the step's radius pick, the clean-bearing
+  probe and `stepin`), and the walk past an unclean edge runs when lanes exist, not only flames. With no clean
+  radius the step still takes the plain one.
+- Reader `--firebots`: per phase, the Water Spray hits inside a barrage window, their deaths, how many victims wrote
+  no `spray` note in the 3 s before, and spray or siren steps there (tests). Findings doc: "The spray and siren
+  dodge never defers to the barrage" and the clean test.
+
+Normal mode and phase 2 are untouched: no fire bots, so no lanes and no fire bot trigger.
+
+**Next window should show** (`--firebots`, `--spin`, `--flips`; `mim10/p4flips.py`):
+
+- Phase 4 `in barrage windows`: Water Spray hits few and `no spray note` near 0 (this window uld1 13 hits / 2 dead /
+  12 silent, P3b 1/1/1, uld3 4/4/4; window 16: 6/1/6 and 1/1/0), spray or siren steps there above 0 (0/0/0 now,
+  see the review).
+- No beam hits still (`--spin` beam ticks 0 in all three now), no barrage death.
+- No new P4 A-B-A between `mimiron p3wx2 laser barrage action` and `mimiron fire bot action` (none now); arc spread
+  ↔ barrage 22/12/11 and arc spread ↔ fire bot 186/71/87 about as now.
+- Phase 4 Water Spray deaths well under this window's 9.
+
+**Not picked.**
+
+- Phase 4 Hand Pulse (14) and the ACU's Plasma Ball (9): Q5 and the layout's floor, above.
+- Phase 3 Water Spray 5: uld2's three were `spray none`/`unsafe` with all eleven bearings refused for spray (two
+  fire bots crossing near the healer), a dense-lane case, not the barrage.
+- Phase 4 mines on barrage legs (19 hits, 2 dead): the step ranks mine-clear radii first but never refuses one.
+- Phase 2: uld3 only (4).
+
+**Questions for the user:** none new. Q4 (cull the fire bots in the phase 3 to 4 handover) and Q5 (an ACU tank in
+phase 4) stand, not built. This window adds to Q4: kept fire bots sprayed 22 times in phase 4 for 9 deaths and
+silenced 361/137/242 raid-s there, and uld1 and uld2 missed the clock by 7 and ~20 s. And to Q5: the ACU's Plasma
+Ball killed 9 before Berserk, 7 of them ranged.
+
+**Shared code:** none.
+
+**Review.**
+
+- The reader's barrage window ran 14.5 s from Spinning Up's cast, but the cone's `haz` `sweep` rows stop at
+  +13.8-14.0 s (`603_7`: 470.6-484.4 s for the cast at 470.5). All 14/11 spray or siren steps it counted inside a
+  window in uld1/uld2 fell at +14.1-14.3 s: the fire bot trigger firing the moment the barrage released it, not a
+  dodge during the cone. A window now ends at its last `sweep` row (the 14.5 s only without them, test). Hits,
+  deaths and silent counts are unchanged; steps inside are 0 in all six pulls of windows 16 and 18.
+- Root cause checked: `603_7` 7:58.4, 11 hits from one spray, 8 victims on `hold 120`, 3 on `clear 165`, none
+  with a fire bot `act` row in the 5 s before; Uldxaf's death record shows the barrage action `FAILED` every
+  tick from 474.1 s to 478.3 s and no `mimiron fire bot action`. `603_8` 8:03.3/8:03.9 on `ahead` steps,
+  8:08.5 two on `hold 135`. Window 16's `603_11`: 5 of its 6 hits on `clear` bots fresh off `refuge` or
+  `ahead` steps, 1 on a `trailing` step.
+- Left: a `hold` bot whose last move was a barrage step is `locked` for that step's expected time
+  (`IsWaitingForLastMove`, FORCED against FORCED), so its spray flee can log `spray locked` and stay. The
+  reader counts that as a note, not silent; if hits stay up next window, read the notes before the hits.
