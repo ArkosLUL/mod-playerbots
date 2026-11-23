@@ -1688,12 +1688,12 @@ by its own entry's checks.
   which lists the latest-joined first, so the healers take the last indices: the outer 24 yd row in all six phase 4s
   checked (`healslots.py`, median 24-26 yd), in a ~70° arc (quartiles 57-91°), so a pulse that hits a healer hits 1.85
   of them (three or four in 98 of 479, `healhits.py`). From 24 yd on the wedge to 20 yd opposite is 38-44 yd.
-- Healing then: past `Playerbots.HealDistance` (38.5) `PartyMemberToHeal` scores a member 30 points healthier (shared),
-  and the arc spread at `ACTION_RAID` keeps healers within 5 yd of their slots, above every heal and `reach party
-  member to heal`.
-- Rates: 541 melee escapes, 3.19 healers with mana each, 1.02 of them within 38.5 yd, 208 escapes with none
-  (`escrange.py`); a melee hit by a pulse inside a Shock Blast window had 1.32 healers with mana within 40 yd against
-  2.47 outside (`p4pulse.py`). 15 of 37 melee Hand Pulse deaths before Berserk came within 6 s of the victim's own
+- Healing then: past `Playerbots.HealDistance` (38.5 between the two bots' edges, `GetDistance2d`, so 41.5 yd centre
+  to centre) `PartyMemberToHeal` scores a member 30 points healthier (shared), and the arc spread at `ACTION_RAID`
+  keeps healers within 5 yd of their slots, above every heal and `reach party member to heal`.
+- Rates: 541 melee escapes, 3.19 healers with mana each, 1.50 of them in heal reach, 105 escapes with none
+  (`escrange.py`); a melee hit by a pulse inside a Shock Blast window had 1.57 healers with mana in reach against
+  2.55 outside (`p4pulse.py`). 15 of 37 melee Hand Pulse deaths before Berserk came within 6 s of the victim's own
   escape, in about a fifth of phase 4's time.
 - Replay: each healer moved to 18 yd on its own bearing puts all 3.19 in reach (2 of 541 escapes unreached), the
   nearest 34.7 → 27.5 yd. From the 18 yd row to 20 yd anywhere in the `p4melee` sector is 38 yd at most.
@@ -1702,13 +1702,13 @@ by its own entry's checks.
 rows, the arc spread holds the slots. Keeping melee in reach after an escape needs a new rule for who stands where: Q7.
 
 **Fix:** none. Reader: `--pulse`, per phase 4: Hand Pulses and healers hit per pulse that hit one; per Shock Blast,
-melee escapes with the healers with mana within 38.5 yd 3 s after the cast; Hand Pulse deaths split by an own escape
-in the 6 s before. Window 24a reads uld2 0.77 in reach, 18 of 44 escapes with none; uld3 1.35, 9 of 34. Findings
+melee escapes with the healers with mana in heal reach 3 s after the cast; Hand Pulse deaths split by an own escape
+in the 6 s before. Window 24a reads uld2 1.09 in reach, 11 of 44 escapes with none; uld3 1.91, 1 of 34. Findings
 doc: the open item under "Rapid Burst and Hand Pulse are 60° cones".
 
-**Next window should show** (`--pulse`): no change in phase 4 (no strategy change): 0.8-1.4 healers in reach of an
-escaped melee, a third of escapes with none, until Q7 is answered and built; then ~3 in reach, none unreached, and a
-healer-hitting pulse hitting at most 2.
+**Next window should show** (`--pulse`): no change in phase 4 (no strategy change): 1.1-1.9 healers in reach of an
+escaped melee, up to a quarter of escapes with none, until Q7 is answered and built; then ~3 in reach, none
+unreached, and a healer-hitting pulse hitting at most 2.
 
 **Not picked.**
 
@@ -1721,8 +1721,8 @@ healer-hitting pulse hitting at most 2.
 **Questions for the user.**
 
 - **Q7 (plan change): healers on the inner row of the phase 4 wedge.** Healers take the wedge's outer row by group
-  order, and a melee Shock Blast escape lands 38-44 yd from them, past heal range: 1.02 of 3.19 healers in reach, 208
-  of 541 escapes with none, 15 of 37 melee Hand Pulse deaths after one. Options: (a) in phase 4 healers take the
+  order, and a melee Shock Blast escape lands 38-44 yd from them centre to centre, against a heal reach of 41.5: 1.50
+  of 3.19 healers in reach, 105 of 541 escapes with none, 15 of 37 melee Hand Pulse deaths after one. Options: (a) in phase 4 healers take the
   inner row (18 yd off VX-001), spread across it, ranged DPS behind: every escape point is then within 38 yd of every
   healer (replay 3.19 of 3.19), and with four healers 40° apart a pulse hits at most two (1.85, three or four in 98 of
   479); (b) the melee's phase 4 escape bends round the MK II toward the wedge: at most ~66° of bearing for an 18 yd
@@ -1730,3 +1730,15 @@ healer-hitting pulse hitting at most 2.
   phase 4 only: phase 2 melee never escape and stand within 33 yd of the outer row already.
 
 **Shared code:** none (findings doc, reader and its test, this log).
+
+**Review.**
+
+- Checked and holding: `boss_mimiron.cpp:1430` (uniform pick, a pulse every 1.75 s alternating arms, so the 400 ms
+  grouping never merges two casts), the escape to 18 + 2 yd off the MK II, `hmwedge`'s group-order fill
+  (`Group::LinkMember` inserts first), the `ACTION_RAID` arc spread with its 5 yd tolerance. No strategy change, so
+  nothing differs at 10 or 25, normal or hard mode, or with a real player. Plan change holds.
+- Fixed: heal reach. `PartyMemberToHeal` compares `GetDistance2d`, which takes both bots' 1.5 combat reach off, so its
+  38.5 is 41.5 yd centre to centre; `--pulse` and `escrange.py` compared centres to 38.5. Re-read: 541 escapes 1.02 →
+  1.50 in reach, none 208 → 105; window 24a uld2 0.77 → 1.09 (none 18 → 11), uld3 1.35 → 1.91 (none 9 → 1);
+  `p4pulse.py` at 41.5: 1.57 in a Shock Blast window against 2.55 outside. Smaller than the round read, still a
+  fifth of escapes with none; the inner row replay stays 3.19 of 3.19.

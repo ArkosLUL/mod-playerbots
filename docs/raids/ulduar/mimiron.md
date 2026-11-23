@@ -773,13 +773,14 @@ of the raid in every barrage's ~240° band, so only the melee move (`p4melee`, b
 28-33% of the living raid a cast, the floor this layout gives.
 
 **Open: a phase 4 Shock Blast escape takes melee out of heal reach.** `hmwedge` fills in group order,
-which has seated every healer in its outer row (24-26 yd off VX-001) in a ~70° arc, so a pulse that hits
-one healer hits 1.85. The escape walks melee straight out to 20 yd on the far side, 35-47 yd from them:
-past `Playerbots.HealDistance` (38.5), where `PartyMemberToHeal` scores a member 30 points healthier,
-while the arc spread (`ACTION_RAID`) keeps healers within 5 yd of their slots. Over 541 escapes 1.02 of
-3.19 healers with mana stood in reach and 208 escapes had none; 15 of 37 melee Hand Pulse deaths before
-Berserk came within 6 s of the victim's own escape. From the 18 yd row a healer reaches every escape
-point (38 yd at most).
+which in the test pools has seated every healer in its outer row (24-26 yd off VX-001) in a ~70° arc, so
+a pulse that hits one healer hits 1.85. The escape walks melee straight out to 20 yd on the far side,
+35-47 yd from them centre to centre. Heal reach is `Playerbots.HealDistance` (38.5) between the two bots'
+edges (`GetDistance2d`), 41.5 yd centre to centre; past it `PartyMemberToHeal` scores a member 30 points
+healthier, while the arc spread (`ACTION_RAID`) keeps healers within 5 yd of their slots. Over 541
+escapes 1.50 of 3.19 healers with mana stood in reach and 105 escapes had none; 15 of 37 melee Hand
+Pulse deaths before Berserk came within 6 s of the victim's own escape. From the 18 yd row a healer
+reaches every escape point (38 yd at most).
 
 **The ring survives the correction.** Six fixed phase-2 spots stacked the raid into three clumps, the
 worst shape against any cone; a radius-22 ring with one index-derived slot per ranged bot is not. The

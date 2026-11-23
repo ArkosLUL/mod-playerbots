@@ -1102,23 +1102,32 @@ class AcuTankPull(unittest.TestCase):
 PULSE_MKII = 4294970800
 
 
-def pulse_spot(guid: int, when: int) -> tuple[float, float]:
+FAR_ESCAPE = (0.0, -20.0)
+
+
+def pulse_spot(guid: int, when: int, escape: tuple[float, float]) -> tuple[float, float]:
     if guid == SHADOW and when >= 2500:
-        return 0.0, -20.0
+        return escape
     return HOME[guid]
 
 
-def pulse_snap(when: int) -> dict:
+def pulse_snap(when: int, escape: tuple[float, float]) -> dict:
     rows = [[VX, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0],
             [PULSE_MKII, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
     for guid in HOME:
-        x, y = pulse_spot(guid, when)
+        x, y = pulse_spot(guid, when, escape)
         dead = (guid == SHADOW and when >= 5760) or (guid == AGONY and when >= 9000)
         rows.append([guid, x, y, 364.0, 0.0, 0.0 if dead else 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
     return {"t": when, "e": "snap", "u": rows, "hz": []}
 
 
-def pulse_pull() -> list[dict]:
+def pulse_trace(folder: str, escape: tuple[float, float]) -> Trace:
+    path = pathlib.Path(folder) / "603_9_mimiron_1789700010.ndjson"
+    path.write_text("\n".join(json.dumps(rec) for rec in pulse_pull(escape)) + "\n", encoding="utf-8")
+    return Trace(path)
+
+
+def pulse_pull(escape: tuple[float, float]) -> list[dict]:
     records = [
         {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
          "roster": ROSTER},
@@ -1128,17 +1137,17 @@ def pulse_pull() -> list[dict]:
         {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
         {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
         {"t": 2000, "e": "cast", "s": PULSE_MKII, "sp": mm.SPELL_SHOCK_BLAST, "tgt": 0, "ct": 4000},
-        move(2100, SHADOW, mm.SHOCK_ESCAPE, 0.0, -20.0),
+        move(2100, SHADOW, mm.SHOCK_ESCAPE, *escape),
         {**move(2200, AGONY, mm.SHOCK_ESCAPE, 22.0, 4.0), "ok": 0},
         {"t": 4000, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64536, "a": 8000},
         {"t": 5750, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64537, "a": 8000},
         {"t": 5750, "e": "dmg", "s": VX, "d": TREE, "sp": 64537, "a": 8000},
-        {"t": 5760, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 8000], "x": 0.0, "y": -20.0},
+        {"t": 5760, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 8000], "x": escape[0], "y": escape[1]},
         {"t": 8990, "e": "dmg", "s": VX, "d": AGONY, "sp": 64536, "a": 9000},
         {"t": 9000, "e": "death", "g": AGONY, "killer": VX, "blow": [VX, 9000], "x": 22.0, "y": 0.0},
         {"t": 11000, "e": "end", "out": "wipe"},
     ]
-    records += [pulse_snap(when) for when in range(0, 11000, 250)]
+    records += [pulse_snap(when, escape) for when in range(0, 11000, 250)]
     return records
 
 
@@ -1146,9 +1155,7 @@ class PulsePull(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()
-        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700010.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in pulse_pull()) + "\n", encoding="utf-8")
-        cls.trace = Trace(path)
+        cls.trace = pulse_trace(cls.folder.name, FAR_ESCAPE)
         cls.rows = mm.pulse_rows(cls.trace)
 
     @classmethod
@@ -1170,8 +1177,13 @@ class PulsePull(unittest.TestCase):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             mm.show_pulse(self.trace)
-        self.assertIn("melee escapes 1: healers with mana 1.00, within 38.5 yd 0.00, none within it 1", out.getvalue())
+        self.assertIn("melee escapes 1: healers with mana 1.00, in heal reach 0.00, none in reach 1", out.getvalue())
         self.assertIn("melee 1 after its escape, ranged 1", out.getvalue())
+
+    def test_heal_reach_runs_between_the_bots_edges_not_their_centres(self):
+        with tempfile.TemporaryDirectory() as folder:
+            row = mm.pulse_rows(pulse_trace(folder, (0.0, -18.5)))[0]
+        self.assertEqual((row["in_reach"], row["unreached"]), (1, 0))
 
 
 class EveryView(unittest.TestCase):

@@ -137,6 +137,8 @@ REGEN_RISE = 3.0
 REPAIR_FLOOR = 1.0
 
 HEAL_DISTANCE = 38.5
+PLAYER_COMBAT_REACH = 1.5
+HEAL_REACH = HEAL_DISTANCE + 2 * PLAYER_COMBAT_REACH
 PULSE_GROUP_MS = 400
 PULSE_KILL_MS = 50
 ESCAPE_SETTLE_MS = 3000
@@ -1923,7 +1925,7 @@ def pulse_rows(trace: Trace) -> list[dict]:
                 if (trace.role(guid) != "melee" or not unit or not living(unit) or
                         not any(cast <= when <= read for when in escapes_by.get(guid, []))):
                     continue
-                reach = sum(1 for healer in healers if math.dist(healer[1:3], unit[1:3]) <= HEAL_DISTANCE)
+                reach = sum(1 for healer in healers if math.dist(healer[1:3], unit[1:3]) <= HEAL_REACH)
                 escaped += 1
                 with_mana += len(healers)
                 in_reach += reach
@@ -1958,15 +1960,16 @@ def show_pulse(trace: Trace) -> None:
         if row["escaped"]:
             n = row["escaped"]
             print(f"       Shock Blast {row['casts']}, melee escapes {n}: healers with mana {row['with_mana'] / n:.2f},"
-                  f" within {HEAL_DISTANCE} yd {row['in_reach'] / n:.2f}, none within it {row['unreached']}")
+                  f" in heal reach {row['in_reach'] / n:.2f}, none in reach {row['unreached']}")
         else:
             print(f"       Shock Blast {row['casts']}, no melee escape")
         dead = ", ".join(f"{role} {count}{' after its escape' if after else ''}"
                          for (role, after), count in sorted(row["deaths"].items()))
         print(f"       Hand Pulse deaths: {dead or 'none'}")
     print(f"\n  an escape is an accepted `{SHOCK_ESCAPE}` leg by a melee bot within {ESCAPE_SETTLE_MS // 1000} s of"
-          f" the cast, healers read then at {DRY_MANA_PCT:.0f}% mana or more; a death is after its escape when the"
-          f" bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it")
+          f" the cast, healers read then at {DRY_MANA_PCT:.0f}% mana or more; heal reach is HealDistance"
+          f" {HEAL_DISTANCE} between the two bots' edges, {HEAL_REACH} yd centre to centre; a death is after its"
+          f" escape when the bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it")
 
 
 SECTIONS = (
