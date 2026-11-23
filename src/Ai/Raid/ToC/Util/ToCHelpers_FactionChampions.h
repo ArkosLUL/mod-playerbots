@@ -56,6 +56,8 @@ bool IsFactionChampionMelee(uint32 entry);
 
 float FactionChampionsSwingReach(Unit* champion, Unit* victim);
 
+float FactionChampionsStrikeReach(Unit* champion, Unit* victim);
+
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
 Unit* FactionChampionsSuspendedTarget(PlayerbotAI* botAI);

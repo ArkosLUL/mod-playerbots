@@ -2159,6 +2159,36 @@ class FocusAndRepick(unittest.TestCase):
         iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
         self.assertEqual(catches(late + iced + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1, 1, 1]})
 
+    def test_an_iced_kite_splits_on_its_chasers_strike_reach_and_counts_weapon_hits_only(self):
+        def pull(extra: list[dict]) -> Trace:
+            folder = tempfile.TemporaryDirectory()
+            self.addCleanup(folder.cleanup)
+            path = pathlib.Path(folder.name) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in focus_pull() + extra) + "\n", encoding="utf-8")
+            return Trace(path)
+
+        tauren = CREATURE | 19
+        trace = pull([{"t": 1, "e": "unit", "g": tauren, "en": 34453, "n": "Steelbreaker", "b": 1}])
+        self.assertEqual(round(fc.strike_reach(trace, ROGUE_C), 2), 10.74)
+        self.assertEqual(round(fc.strike_reach(trace, tauren), 2), 14.57)
+
+        iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
+        swing = dmg(2000, ROGUE_C, MAGE, 0)
+        coil = [{"t": 1, "e": "spell", "sp": 66019, "n": "Death Coil"}, dmg(2000, ROGUE_C, MAGE, 66019)]
+        self.assertEqual(fc.iced_kite_starts(pull([swing])), {})
+        self.assertEqual(fc.iced_kite_starts(pull(iced + [swing])), {ROGUE_C: [0, 0, 1, 1]})
+        self.assertEqual(fc.iced_kite_starts(pull(iced + coil)), {ROGUE_C: [0, 0, 1, 0]})
+
+        near = focus_snap(1050)
+        near["u"] = [placed(ROGUE_C, 12.0, 0.0, 100.0, MAGE) if unit[0] == ROGUE_C else unit for unit in near["u"]]
+        trace = pull(iced + [swing, near])
+        self.assertEqual(fc.iced_kite_starts(trace), {ROGUE_C: [1, 1, 0, 0]})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_personal(trace)
+        self.assertIn("iced kites started inside the chaser's strike reach or past it, weapon hits within 2 s:"
+                      " Irieth inside 1 of 1, past 0 of 0", out.getvalue())
+
     def test_a_kite_re_hop_refused_by_its_own_walk_waits_until_the_next_hop_issues(self):
         def waits(extra: list[dict]) -> dict:
             with tempfile.TemporaryDirectory() as folder:
