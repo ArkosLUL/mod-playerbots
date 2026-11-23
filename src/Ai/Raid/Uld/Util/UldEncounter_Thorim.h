@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
+class LastMovement;
 class Player;
 class PlayerbotAI;
 class Unit;
@@ -378,6 +379,7 @@ inline constexpr float ULDUAR_THORIM_LEAD_COHESION_DISTANCE = 30.0f;
 inline constexpr uint32 ULDUAR_THORIM_LEAD_STALL_MS = 15000;
 
 inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE = 30.0f;
+inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN = 1.0f;
 
 inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
 
@@ -408,6 +410,8 @@ inline constexpr float ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE = 3.0f;
 Unit* ThorimGauntletGiantHeld(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimGauntletGiantHold(PlayerbotAI* botAI, Player* bot, Position& out);
+
+bool ThorimGiantWalkBooked(LastMovement const& booking);
 
 bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index);
 
