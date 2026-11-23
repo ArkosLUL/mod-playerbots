@@ -108,6 +108,10 @@ bool FactionChampionsCounterspellHold(PlayerbotAI* botAI);
 
 bool FactionChampionsCycloneBot(Player* player);
 
+bool FactionChampionsRangedDruid(Player* player);
+
+bool FactionChampionsCatCaster(Player* player, bool rangedDruid, uint32 spellId);
+
 Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI);
 
 Unit* FactionChampionsDangerTarget(PlayerbotAI* botAI);

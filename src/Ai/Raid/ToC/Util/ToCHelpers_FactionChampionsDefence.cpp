@@ -1753,7 +1753,7 @@ uint32 ReadyDisarm(Player* peeler, Unit* champion)
                : 0;
 }
 
-uint32 ReadyPeel(Player* peeler, Unit* champion, bool nearPackTank, bool danger)
+uint32 ReadyPeel(Player* peeler, Unit* champion, bool nearPackTank, bool danger, bool rangedDruid)
 {
     switch (peeler->getClass())
     {
@@ -1787,10 +1787,11 @@ uint32 ReadyPeel(Player* peeler, Unit* champion, bool nearPackTank, bool danger)
         }
         case CLASS_DRUID:
         {
-            if (nearPackTank || PlayerbotAI::IsHeal(peeler) || PlayerbotAI::IsMelee(peeler))
+            uint32 const rank = FirstKnownRank(peeler, ENTANGLING_ROOTS_RANKS);
+            if (nearPackTank || PlayerbotAI::IsHeal(peeler) ||
+                (PlayerbotAI::IsMelee(peeler) && !FactionChampionsCatCaster(peeler, rangedDruid, rank)))
                 return 0;
 
-            uint32 const rank = FirstKnownRank(peeler, ENTANGLING_ROOTS_RANKS);
             return SpellReady(peeler, rank) && InSpellRange(peeler, champion, rank) ? rank : 0;
         }
         case CLASS_PRIEST:
@@ -1907,6 +1908,8 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                 peelers.push_back(member.player);
 
     std::vector<bool> taken(peelers.size(), false);
+    bool const rangedDruid = std::any_of(members.begin(), members.end(), [](Member const& member)
+                                         { return FactionChampionsRangedDruid(member.player); });
     for (Needy const& entry : needy)
     {
         Unit* champion = entry.champion;
@@ -1932,7 +1935,8 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                 continue;
 
             uint32 const spellId = entry.iced || entry.hunter ? ReadyDisarm(peeler, champion)
-                                                              : ReadyPeel(peeler, champion, nearPackTank, entry.danger);
+                                                              : ReadyPeel(peeler, champion, nearPackTank, entry.danger,
+                                                                          rangedDruid);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
             SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
             if (!info || !landing || champion->IsImmunedToSpell(landing) || !peeler->IsWithinLOSInMap(champion))
