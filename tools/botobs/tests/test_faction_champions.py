@@ -920,6 +920,64 @@ class FireElementals(unittest.TestCase):
                       " Polymorph 1 held a median 0.7s", out.getvalue())
 
 
+SEARING = CREATURE | 41
+
+
+def splash_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "shocuul",
+         "roster": [{"g": SHAMAN, "n": "Totem", "r": "melee", "c": 7, "h": 0},
+                    {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "shocuul", "src": "engage"},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "unit", "g": SEARING, "en": 2523, "n": "Searing Totem X", "own": SHAMAN},
+        {"t": 1, "e": "spell", "sp": 53190, "n": "Starfall"},
+        {"t": 1, "e": "spell", "sp": 58702, "n": "Attack"},
+        note(0, SHAMAN, fc.KILL, DISC),
+        note(1000, MAGE_C, fc.CC_AURA, 12826),
+        note(2000, MAGE_C, fc.CC_AURA, 0),
+        note(4000, MAGE_C, fc.CC_AURA, 6215),
+        note(8000, MAGE_C, fc.CC_AURA, 0),
+        cast(1800, MAGE, 53190, MAGE_C, triggered=True),
+        cast(2500, SHAMAN, 58734, 0, triggered=True),
+        cast(2600, SHAMAN, 49271, DISC, triggered=True),
+        cast(3000, MAGE, 53190, MAGE_C, triggered=True),
+        cast(4500, SEARING, 58702, MAGE_C),
+        cast(5000, MAGE, 12826, MAGE_C, 1500),
+        cast(5500, MAGE, 53190, DISC, triggered=True),
+        cast(6000, MAGE_C, 53190, MAGE_C),
+        {"t": 9000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(-1000, 9001, 1000):
+        units = [row(SHAMAN, 100.0, DISC), row(MAGE, 100.0, DISC), row(DISC, 100.0, SHAMAN),
+                 row(MAGE_C, 100.0, SHAMAN), row(SEARING, 100.0, MAGE_C)]
+        records.append({"t": when, "e": "snap", "u": units, "hz": []})
+    return records
+
+
+class SplashOnCc(unittest.TestCase):
+    def test_raid_hits_count_only_inside_our_breakable_cc_and_mark_the_breaks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_shocuul_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in splash_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            hits = fc.splash_hits(trace)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_cc(trace)
+        self.assertEqual(hits, {"Starfall": [1, 1], "Attack (Searing Totem X)": [1, 0]})
+        self.assertIn("raid hits on a champion our Polymorph, Fear, Hex held (ended within 0.7 s):"
+                      " Attack (Searing Totem X) 1 (0), Starfall 1 (1)", out.getvalue())
+
+    def test_own_splash_counts_a_called_totem_but_no_other_triggered_cast(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_shocuul_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in splash_pull()) + "\n", encoding="utf-8")
+            splash = fc.own_splash(Trace(path))
+        self.assertEqual(splash, collections.Counter({"Magma Totem": 1}))
+
+
 class PackAndPeel(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

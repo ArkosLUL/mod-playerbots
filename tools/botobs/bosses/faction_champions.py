@@ -5,7 +5,8 @@
     faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it; time a
                                            champion healer lived with a non-healer on the latch
     faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed, CC
-                                           ended by its own caster's next cast elsewhere
+                                           ended by its own caster's next cast elsewhere, raid hits on a
+                                           champion our Polymorph, Fear or Hex held
     faction_champions.py <file> --heals    champion cast-time heals and channels, the interrupts that followed
                                            and how far into the cast they came
     faction_champions.py <file> --burst    lust, Exhaustion carried in, first burst cooldowns, burst vetoes
@@ -485,7 +486,12 @@ OWN_SPLASH = {49938: "Death and Decay", 50842: "Pestilence", 49941: "Blood Boil"
               53385: "Divine Storm", 1680: "Whirlwind", 47520: "Cleave", 46924: "Bladestorm",
               47502: "Thunder Clap", 48562: "Swipe (Bear)", 49048: "Multi-Shot", 58434: "Volley",
               51723: "Fan of Knives", 49271: "Chain Lightning", 42921: "Arcane Explosion", 42940: "Blizzard",
-              47820: "Rain of Fire", 47836: "Seed of Corruption", 48467: "Hurricane"}
+              47820: "Rain of Fire", 47836: "Seed of Corruption", 48467: "Hurricane", 53201: "Starfall",
+              12328: "Sweeping Strikes", 13877: "Blade Flurry", 62078: "Swipe (Cat)", 58734: "Magma Totem",
+              **dict.fromkeys((58699, 58703, 58704), "Searing Totem")}
+CALL_OF_THE_ELEMENTS_SPLASH = {58734, 58699, 58703, 58704}
+BREAKABLE_CC = ("Polymorph", "Fear", "Hex")
+SPLASH_BREAK_MS = 700
 OPENER = "fc.opener"
 # The opener's instant AoE fears and Frost Nova, every rank: id -> name
 OPENER_SPELLS = {5246: "Intimidating Shout", **dict.fromkeys((10890, 10888, 8124, 8122), "Psychic Scream"),
@@ -1151,12 +1157,21 @@ def show_cc(trace: Trace) -> None:
           + (", ".join(f"{trace.name(bot)} {count['broken']} of {count['holds']}"
                        for bot, count in sorted(breaks.items(), key=lambda item: trace.name(item[0])))
              or "no CC held to read"))
+    hits = splash_hits(trace)
+    print(f"  raid hits on a champion our {', '.join(BREAKABLE_CC)} held (ended within"
+          f" {SPLASH_BREAK_MS / 1000:.1f} s): "
+          + (", ".join(f"{name} {count} ({broke})"
+                       for name, (count, broke) in sorted(hits.items(), key=lambda item: (-item[1][0], item[0])))
+             or "none"))
     print(f"  feared is the share of the champion's live samples from the pull at moveGen {FLEEING}, fleeing;"
           f" targeted the share with a living raid member or pet targeting it, where Polymorph, Fear and Hex"
           f" wait;"
           f" a cast landed when, inside its cast time + {LAND_SLACK_MS / 1000:.0f} s, its target turned to"
           f" fleeing (Fear) or {CC_AURA} on it to that spell (Cyclone, Polymorph, Banish), n/a without"
-          f" {CC_AURA} and for Roots; a CC broken between two samples never shows, so landed is a lower bound")
+          f" {CC_AURA} and for Roots; a CC broken between two samples never shows, so landed is a lower bound;"
+          f" a raid hit is a cast row of a raid member or its summon naming a champion while our breakable CC"
+          f" held it, which only some spells and procs write (a Starfall star, Deep Wounds, a totem's Attack), so"
+          f" it too is a lower bound")
 
 
 def heal_rows(trace: Trace) -> list[dict]:
@@ -1684,8 +1699,37 @@ def own_splash(trace: Trace) -> collections.Counter:
     start = pull_start(trace)
     roster = roster_guids(trace)
     return collections.Counter(OWN_SPLASH[rec["sp"]] for rec in trace.of("cast")
-                               if rec.get("sp") in OWN_SPLASH and not rec.get("tr") and rec["t"] >= start
+                               if rec.get("sp") in OWN_SPLASH
+                               and (not rec.get("tr") or rec["sp"] in CALL_OF_THE_ELEMENTS_SPLASH)
+                               and rec["t"] >= start
                                and rec.get("s") in roster and rec.get("s") not in trace.humans)
+
+
+def splash_hits(trace: Trace) -> dict[str, list[int]]:
+    if encounter_of(trace) != ENCOUNTER:
+        return {}
+    targets = champions(trace)
+    held = collections.defaultdict(list)
+    for champion, spans in holder_spans(trace, CC_AURA, pull_end(trace)).items():
+        if champion in targets:
+            held[champion] += [(start, stop) for value, start, stop in spans
+                               if CC_SPELLS.get(as_guid(value)) in BREAKABLE_CC]
+    out: dict[str, list[int]] = {}
+    for rec in trace.of("cast"):
+        target, source, spell = rec.get("tgt"), rec.get("s"), rec.get("sp")
+        caster = raid_caster(trace, source)
+        name = trace.spells.get(spell, str(spell))
+        if target not in held or caster is None or spell in CC_SPELLS or name.startswith("Sound Effect"):
+            continue
+        span = next(((start, stop) for start, stop in held[target] if start + 50 <= rec["t"] < stop), None)
+        if span is None:
+            continue
+        if source != caster:
+            name = f"{name} ({trace.name(source).split(' (')[0]})"
+        row = out.setdefault(name, [0, 0])
+        row[0] += 1
+        row[1] += span[1] - rec["t"] <= SPLASH_BREAK_MS
+    return out
 
 
 def summon_casts(trace: Trace) -> list[dict]:
@@ -4027,7 +4071,8 @@ def show_trinket(trace: Trace) -> None:
 SECTIONS = (
     ("kill", "each kill target hold: why, how long, health, who was on it, a healer alive off the latch",
      show_kill),
-    ("cc", "CC duties, CC held and fear uptime per champion, casts started and landed, the pace", show_cc),
+    ("cc", "CC duties, CC held and fear uptime per champion, casts started and landed, the pace, raid hits"
+           " on breakable CC", show_cc),
     ("heals", "champion cast-time heals and the interrupts that followed", show_heals),
     ("burst", "lust, Exhaustion or Sated carried in, first burst cooldown per bot, burst vetoes", show_burst),
     ("fear", "fears on the raid, Fear Ward and Tremor Totem", show_fear),
