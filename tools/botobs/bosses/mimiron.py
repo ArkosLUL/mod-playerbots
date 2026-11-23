@@ -37,6 +37,7 @@ SPELL_FROST_BOMB_EXPLOSIONS = (64626, 65333)
 SPELL_SPINNING_UP = 63414
 SPELL_ROCKET_STRIKE = (64402, 65034)
 SPELL_WATER_SPRAY = 64619
+SPELL_DEAFENING_SIREN = 64616
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
 SPELL_MINE_EXPLOSIONS = (63009, 66351)
@@ -50,6 +51,8 @@ FORMATION = "mimiron arc spread action"
 BOMB_DODGE = "mimiron frost bomb action"
 BURST_STEP = "mimiron rapid burst action"
 FLAMES_DODGE = "mimiron dodge flames action"
+FIREBOT_STEP = "mimiron fire bot action"
+FIREBOT_AOE_GUARD = "mimiron fire bot aoe guard"
 
 # Read from the source so a retune shows up here without a second edit.
 BOMB_RADIUS = radius("ULDUAR_MIMIRON_FROST_BOMB_RADIUS")
@@ -1459,6 +1462,95 @@ def show_p3(trace: Trace) -> None:
               f" ({rate:.2f} %/s){tail}")
 
 
+def siren_silences(trace: Trace, roster) -> list[tuple[int, int]]:
+    spans: list[tuple[int, int]] = []
+    since: dict[int, int] = {}
+    for rec in sorted(trace.of("aura"), key=lambda rec: rec["t"]):
+        if rec.get("sp") != SPELL_DEAFENING_SIREN or rec.get("d") not in roster:
+            continue
+        if not rec.get("r"):
+            since.setdefault(rec["d"], rec["t"])
+        elif rec["d"] in since:
+            spans.append((since.pop(rec["d"]), rec["t"]))
+    end = pull_end(trace)
+    return spans + [(start, end) for start in since.values()]
+
+
+def firebot_rows(trace: Trace) -> list[dict]:
+    spans = phases(trace)
+    first = next((index for index, (_, _, label) in enumerate(spans) if label == "P3"), None)
+    if first is None:
+        return []
+
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    bots = guids_of_entry(trace, NPC_EMERGENCY_FIRE_BOT)
+    hits = [rec for rec in trace.of("dmg")
+            if rec.get("d") in roster and rec.get("sp") in (SPELL_FLAMES, SPELL_WATER_SPRAY)]
+    spray_deaths = [rec["t"] for rec in combat_deaths(trace)
+                    if trace.entries.get(rec.get("killer")) == NPC_EMERGENCY_FIRE_BOT]
+    sirens = [rec["t"] for rec in trace.of("aura")
+              if rec.get("sp") == SPELL_DEAFENING_SIREN and rec.get("d") in roster and not rec.get("r")]
+    silences = siren_silences(trace, roster)
+    holds = [rec["t"] for rec in trace.of("veto") if rec.get("m") == FIREBOT_AOE_GUARD]
+    steps = [rec["t"] for recs in accepted_moves(trace).values() for rec in recs if rec.get("by") == FIREBOT_STEP]
+
+    rows = []
+    for low, high, label in spans[first:]:
+        counts: list[int] = []
+        seen: set[int] = set()
+        alive: set[int] = set()
+        aimed = 0
+        for units in samples.window(low, high):
+            alive = {guid for guid in bots if guid in units and living(units[guid])}
+            counts.append(len(alive))
+            seen |= alive
+            for guid, unit in units.items():
+                if guid in roster and guid not in trace.humans and living(unit) and len(unit) > 7:
+                    aimed += unit[7] in bots
+
+        inside = [rec for rec in hits if low <= rec["t"] < high]
+        flames = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_FLAMES]
+        spray = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_WATER_SPRAY]
+        rows.append({
+            "label": label, "span": (low, high),
+            "open": counts[0] if counts else 0, "close": counts[-1] if counts else 0,
+            "mean": statistics.mean(counts) if counts else 0.0, "max": max(counts, default=0),
+            "seen": len(seen), "gone": len(seen - alive),
+            "flames": sum(flames), "flames_ticks": len(flames),
+            "spray": sum(spray), "spray_hits": len(spray),
+            "spray_deaths": sum(1 for when in spray_deaths if low <= when < high),
+            "siren": sum(1 for when in sirens if low <= when < high),
+            "silenced": sum(max(0, min(stop, high) - max(start, low)) for start, stop in silences) / 1000.0,
+            "aimed": aimed * SAMPLE_MS / 1000.0,
+            "aoe_holds": sum(1 for when in holds if low <= when < high),
+            "steps": sum(1 for when in steps if low <= when < high),
+        })
+    return rows
+
+
+def show_firebots(trace: Trace) -> None:
+    print("FIREBOTS")
+    rows = firebot_rows(trace)
+    if not rows:
+        print("  no phase 3 in this pull")
+        return
+
+    for row in rows:
+        low, high = row["span"]
+        seconds = max((high - low) / 1000.0, 0.001)
+        print(f"  {row['label']:4} {clock(low)} .. {clock(high)}  {seconds:5.1f} s  fire bots open {row['open']},"
+              f" close {row['close']}, {row['mean']:.1f} alive on average, {row['max']} at most,"
+              f" {row['seen']} seen, {row['gone']} gone")
+        print(f"       Flames {row['flames'] // 1000}k ({row['flames'] / seconds / 1000:.1f}k/s,"
+              f" {row['flames_ticks']} ticks); Water Spray {row['spray_hits']} hits {row['spray'] // 1000}k,"
+              f" {row['spray_deaths']} dead; Deafening Siren {row['siren']} on, {row['silenced']:.0f} raid-s silenced")
+        print(f"       raid aimed at a fire bot {row['aimed']:.0f} bot-s; splash guard holds {row['aoe_holds']};"
+              f" spray or siren steps {row['steps']}")
+    print("\n  'gone' fire bots were alive in the phase and not at its end; holds are the guard's veto rows,"
+          " which latch per action, so they count episodes, not ticks")
+
+
 def unreach_rows(trace: Trace) -> dict:
     samples = Samples(trace)
     end = pull_end(trace)
@@ -1532,6 +1624,8 @@ SECTIONS = (
      show_p3),
     ("unreach", "the MK II's cannot-reach flag: whom it named, for how long, and its health rising under it",
      show_unreach),
+    ("firebots", "phase 3 on, per phase: fire bots alive, Flames, Water Spray and Deafening Siren on the raid,"
+     " aim at fire bots and the splash guard", show_firebots),
 )
 
 

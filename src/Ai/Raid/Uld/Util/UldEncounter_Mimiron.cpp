@@ -1915,12 +1915,8 @@ void NoteMimironCoreSpent(Player* bot)
 
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !bot || !IsMimironHardModeActive(botAI))
-        return {};
-
-    Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-    if (!aerialCommandUnit || IsMimironPhase4(bot) ||
-        aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT)
+    if (!botAI || !bot || !IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot) ||
+        !BossStateGateLive(botAI, ULD_BOSS_MIMIRON))
         return {};
 
     MimironFightState& state = MimironFightStateFor(bot);

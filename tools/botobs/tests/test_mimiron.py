@@ -711,6 +711,110 @@ class UnreachPull(unittest.TestCase):
         self.assertIn("rises off the repair floor: 1", out.getvalue())
 
 
+KEPT_A = 4294970500
+KEPT_B = 4294970501
+
+
+def firebot_snap(when: int) -> dict:
+    rows = []
+    for guid, (x, y) in HOME.items():
+        alive = 0.0 if guid == SHADOW and when >= 17000 else 100.0
+        target = KEPT_A if guid == AGONY and 15000 <= when < 16000 else 0
+        rows.append([guid, x, y, 364.0, 0.0, alive, 80.0, target, 0, 0, 0, 0, 0, 0.0])
+    rows.append([KEPT_A, 10.0, 10.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+    if when < 12000:
+        rows.append([KEPT_B, -10.0, 10.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def siren(when: int, guid: int, removed: int) -> dict:
+    return {"t": when, "e": "aura", "d": guid, "s": KEPT_A, "sp": mm.SPELL_DEAFENING_SIREN, "r": removed,
+            "st": 1, "dur": -1, "p": 0}
+
+
+def veto(when: int, guard: str) -> dict:
+    return {"t": when, "e": "veto", "g": AGONY, "m": guard, "a": "rain of fire"}
+
+
+def firebot_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 7, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": KEPT_A, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
+        {"t": 1, "e": "unit", "g": KEPT_B, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "3"},
+        {"t": 10000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 14000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+
+        {"t": 5000, "e": "dmg", "s": KEPT_A, "d": TREE, "sp": mm.SPELL_FLAMES, "a": 3000},
+        {"t": 15000, "e": "dmg", "s": KEPT_A, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3100},
+        {"t": 16000, "e": "dmg", "s": KEPT_A, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3100},
+        {"t": 16000, "e": "dmg", "s": KEPT_A, "d": KEPT_B, "sp": mm.SPELL_FLAMES, "a": 3100},
+        {"t": 17000, "e": "dmg", "s": KEPT_A, "d": SHADOW, "sp": mm.SPELL_WATER_SPRAY, "a": 24000},
+        {"t": 17000, "e": "death", "g": SHADOW, "killer": KEPT_A, "blow": [KEPT_A, 24000], "x": 3.0, "y": 0.0},
+
+        siren(9000, AGONY, 0), siren(11000, AGONY, 1),
+        siren(15000, TREE, 0), siren(17000, TREE, 1),
+        siren(19000, BULWARK, 0),
+
+        veto(8000, mm.FIREBOT_AOE_GUARD),
+        veto(15500, mm.FIREBOT_AOE_GUARD), veto(16500, mm.FIREBOT_AOE_GUARD), veto(16600, "mimiron target guard"),
+
+        move(17500, TREE, mm.FIREBOT_STEP, 5.0, 22.0),
+        {**move(17600, TREE, mm.FIREBOT_STEP, 6.0, 22.0), "ok": 0},
+        move(18000, TREE, mm.FORMATION, 0.0, 22.0),
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    records += [firebot_snap(when) for when in range(0, 20000, 250)]
+    return records
+
+
+class FireBotPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_7_mimiron_1789700005.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in firebot_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = {row["label"]: row for row in mm.firebot_rows(cls.trace)}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_one_row_per_phase_from_phase_3_on(self):
+        self.assertEqual(list(self.rows), ["P3", "H1", "P4"])
+
+    def test_fire_bots_alive_at_each_open_and_close_and_the_one_gone_in_the_handover(self):
+        counts = {label: (row["open"], row["close"], row["max"], row["seen"], row["gone"])
+                  for label, row in self.rows.items()}
+        self.assertEqual(counts, {"P3": (2, 2, 2, 2, 0), "H1": (2, 1, 2, 2, 1), "P4": (1, 1, 1, 1, 0)})
+        self.assertEqual(self.rows["H1"]["mean"], 1.5)
+
+    def test_flames_and_spray_on_the_raid_only(self):
+        p4 = self.rows["P4"]
+        self.assertEqual((p4["flames"], p4["flames_ticks"]), (6200, 2))
+        self.assertEqual((p4["spray"], p4["spray_hits"], p4["spray_deaths"]), (24000, 1, 1))
+        self.assertEqual((self.rows["P3"]["flames"], self.rows["P3"]["spray_hits"]), (3000, 0))
+
+    def test_a_silence_counts_where_it_landed_and_its_time_where_it_ran(self):
+        self.assertEqual([self.rows[label]["siren"] for label in ("P3", "H1", "P4")], [1, 0, 2])
+        self.assertEqual([self.rows[label]["silenced"] for label in ("P3", "H1", "P4")], [1.0, 1.0, 3.0])
+
+    def test_aim_the_splash_guard_and_the_accepted_spray_steps(self):
+        p4 = self.rows["P4"]
+        self.assertEqual((p4["aimed"], p4["aoe_holds"], p4["steps"]), (1.0, 2, 1))
+        self.assertEqual(self.rows["P3"]["aoe_holds"], 1)
+
+    def test_the_view_prints_each_phase(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_firebots(self.trace)
+        self.assertIn("P4", out.getvalue())
+        self.assertIn("fire bots open 1", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

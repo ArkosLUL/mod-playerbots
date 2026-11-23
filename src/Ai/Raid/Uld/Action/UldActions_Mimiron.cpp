@@ -1011,7 +1011,6 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     Unit* aerialCommandUnit = nullptr;
     std::vector<Unit*> bombBots;
     std::vector<Unit*> assaultBots;
-    std::vector<Unit*> fireBots;
     std::vector<Unit*> junkBots;
 
     for (ObjectGuid const& guid :
@@ -1029,10 +1028,6 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
             case NPC_BOMB_BOT:            bombBots.push_back(unit); break;
             case NPC_ASSAULT_BOT:         assaultBots.push_back(unit); break;
             case NPC_JUNK_BOT:            junkBots.push_back(unit); break;
-            case NPC_EMERGENCY_FIRE_BOT:
-                if (!IsMimironFireBotProtected(botAI, bot, unit))
-                    fireBots.push_back(unit);
-                break;
             default: break;
         }
     }
@@ -1050,16 +1045,6 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
     }
 
-    bool const hardMode = IsMimironHardModeActive(botAI);
-    bool const phase4 = IsMimironPhase4(bot);
-    bool const cullFireBots = hardMode && !phase4;
-    bool const fireBotSweep =
-        cullFireBots && aerialCommandUnit &&
-        aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT;
-    if (fireBotSweep && PlayerbotAI::IsRangedDps(bot))
-        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
-                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
-
     if (aerialCommandUnit && (PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsRangedDps(bot)) &&
         IsMimironAcuGrounded(botAI))
         priority.emplace_back(NPC_AERIAL_COMMAND_UNIT, aerialCommandUnit);
@@ -1070,13 +1055,9 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
-    if (cullFireBots && !PlayerbotAI::IsRangedDps(bot))
-        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
-                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
-
     priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
 
-    if (phase4)
+    if (IsMimironPhase4(bot))
     {
         if (Unit* focus = GetMimironPhase4Focus(botAI, bot, PlayerbotAI::IsMelee(bot)))
             priority.emplace_back(focus->GetEntry(), focus);
@@ -1087,10 +1068,6 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     for (Unit* mech : {leviathanMkII, vx001, aerialCommandUnit})
         if (mech)
             priority.emplace_back(mech->GetEntry(), mech);
-
-    if (cullFireBots && !fireBotSweep && PlayerbotAI::IsRangedDps(bot))
-        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
-                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
     return priority;
 }

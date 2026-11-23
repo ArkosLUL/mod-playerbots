@@ -416,7 +416,6 @@ inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS = 32.0f;
 inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
 inline constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 
-inline constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
 inline constexpr uint32 ULDUAR_MIMIRON_JUNK_BOT_PILE = 4;
 
 inline constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 18.0f;

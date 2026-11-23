@@ -599,9 +599,9 @@ before the pull) and leaves `attack rti target`, so a player's mark still wins.
 Within an entry the row takes the add nearest the bot, since adds walk in from pads all round the room;
 a new one must be 10 yd nearer than the current target to take over, or two similar adds trade the bot
 every tick. It keeps the current target unless something strictly more urgent is up, or Junk Bot churn
-keeps resetting swing timers. Entries a role must not touch, kept fire bots among them, are left out of
-the list rather than refused after the pick, or a kept one nearest would hide a cull further away; the
-hold refuses them too, so it cannot keep a bot on one it was already hitting.
+keeps resetting swing timers. Entries a role must not touch are left out of the list rather than refused
+after the pick, or a refused one nearest would hide a valid one further away. The hold refuses a kept fire
+bot, so it cannot keep a bot on one it was already hitting.
 
 ## The two adds need opposite answers
 
@@ -1019,7 +1019,7 @@ tank to the room centre, as `p1tank` does for the MK II, and `MimironTankAnchorG
 tank, not the unit: a melee tank builds little threat on it in the air, and it sat on ranged 22-45% of
 phase 3.
 
-## Emergency Fire Bots are kept, dodged, and killed before phase 4
+## Emergency Fire Bots are kept and dodged
 
 Three at a time every 45 s from the ACU's `_events`, the first ~8 s into phase 3, so a core landing
 postpones them too; the phase 3 defeat stops new waves and survivors carry into phase 4. They never enter
@@ -1030,18 +1030,16 @@ cone into a line about 2.3 yd each side, 18,850-21,150 frost plus Emergency Mode
 The 25-man bot (34148, 50.4k HP, ~63k empowered) also carries **Deafening Siren 64616**, a 10 yd area
 silence, from `creature_template_addon`. Faction 16, so attackable.
 
-**Every one is kept until a 15% sweep.** `GetMimironKeptFireBots`, raid-wide, folded every 250 ms. At 15%
-ACU health (`_FIREBOT_CLEANUP_PCT`) they all join the kill list at once, above everything but the Bomb Bot
-for ranged; a loose one with no unit up (a handover stray) ranks behind the mech; melee keep them behind
-the Assault Bot; and **nobody culls in phase 4**, since a stray spray line is cheaper than pulling anyone
-off the rendezvous. In the phase 4 handover `MimironSetDpsPriorityTrigger` fires with nothing engaged
-while a fire bot is in the room: a reset despawns them, so a live one means this handover. Both
-alternatives were measured: an early cull spent 7% of phase 3 output and 21% of ranged bot-seconds on
-them at ACU 97.9%; demoting them let six live together, spray 248k and kill six bots; keeping two and culling the rest left the raid in a permanent cull with 1.7-2.4
+**Nobody kills one.** `GetMimironKeptFireBots` keeps every live one while the encounter is in progress,
+raid-wide, folded every 250 ms, through phase 3, the phase 4 handover and phase 4: each puts out fire, so a
+dead one only lets the fire build, and a stray spray line is cheaper than pulling anyone off the
+rendezvous. The DPS picker has no fire bot entry. Culls were measured: an early one spent 7% of phase 3
+output and 21% of ranged bot-seconds on them at ACU 97.9%; demoting them let six live together, spray
+248k and kill six bots; keeping two and culling the rest left the raid in a permanent cull with 1.7-2.4
 alive while fire ran to 41-46% of phase 3 intake. A fire bot with no flame within 150 yd stops moving and
 never sprays, so a raid that clears the field ends up with quiet ones. Watch `arc spread <-> fire bot`
-A-B-A and the phase 3 casting share: nine to fifteen alive is nine to fifteen silences walking into the
-raid, and those numbers would say a cull was right after all.
+A-B-A, the casting share and phase 4's splash holds (below): nine to fifteen alive is nine to fifteen
+silences walking into the raid, and those numbers would say a cull was right after all.
 
 **Keeping them out of Mimiron's picker is not enough.** The bot tank killed both kept bots on its own,
 since `MimironSetDpsPriorityTrigger` stands down for tanks and `mimiron target guard` only zeroes
@@ -1055,7 +1053,8 @@ holds splash while a kept bot is within `ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE` (
 target: the widest raid AoE in play is about 10 yd, and 30 switched the raid's AoE off for all of phase 3
 around a dozen bots, the phase a Junk Bot arrives every 10 s. It tests `SpellSplashes`
 ([the Aoe threat type is no splash marker](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)),
-plus the totem and trap summoners by name, and leaves heals alone.
+plus the totem and trap summoners by name, and leaves heals alone. In phase 4 every splash on the stack
+hits all three parts, so a fire bot within 12 yd of it costs the phase real damage.
 
 **Water Spray one-shots, so it outranks the fire.** Cast time index 1, 0 ms: no cast to see, only the hit,
 **23-26k against a 22-24k pool**, a single tick on a standing victim. Three fixes keep bots out of the
@@ -1457,7 +1456,8 @@ dodge burned only with a Flames tick on the bot in the 2 s before it; `--mines` 
 the bot's last leg under 4 s old while it moves, else `standing`, and judges legs on their straight
 line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
-older traces show too; and a phase that
+older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
+so episodes rather than ticks; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated

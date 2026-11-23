@@ -676,3 +676,9 @@ ones are off mesh, the fan falls to the next bearing, then `shock fire`, then `s
 - One other rise exists: `603_15_…_1795373410`, P4 45.3 → 78.6 at 10:01.6, the wipe. The flag reaches
   phase 4, where the step action also runs.
 - The flag's two spans ran 24-25 s each (0:40.6-1:04.3, 1:46.6-2:11.6).
+
+**User answer (2026-11-23), Q3:** why does the sweep exist at all? Emergency Fire Bots put out fire
+patches, so killing them earlier only lets the fire build faster. The sweep's only job is to keep fire
+bots out of phase 4, and that was never measured there. Approved: drop the 15% sweep
+(`ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT` and what hangs off it) for one window and measure phase 4 fire
+against the spray.
