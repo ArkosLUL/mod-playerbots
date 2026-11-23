@@ -1099,6 +1099,81 @@ class AcuTankPull(unittest.TestCase):
         self.assertIn("off-tank 2 for 20k", out.getvalue())
 
 
+PULSE_MKII = 4294970800
+
+
+def pulse_spot(guid: int, when: int) -> tuple[float, float]:
+    if guid == SHADOW and when >= 2500:
+        return 0.0, -20.0
+    return HOME[guid]
+
+
+def pulse_snap(when: int) -> dict:
+    rows = [[VX, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0],
+            [PULSE_MKII, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
+    for guid in HOME:
+        x, y = pulse_spot(guid, when)
+        dead = (guid == SHADOW and when >= 5760) or (guid == AGONY and when >= 9000)
+        rows.append([guid, x, y, 364.0, 0.0, 0.0 if dead else 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def pulse_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 1, "e": "unit", "g": PULSE_MKII, "en": mm.NPC_LEVIATHAN_MKII, "n": "Leviathan Mk II", "b": 1},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+        {"t": 2000, "e": "cast", "s": PULSE_MKII, "sp": mm.SPELL_SHOCK_BLAST, "tgt": 0, "ct": 4000},
+        move(2100, SHADOW, mm.SHOCK_ESCAPE, 0.0, -20.0),
+        {**move(2200, AGONY, mm.SHOCK_ESCAPE, 22.0, 4.0), "ok": 0},
+        {"t": 4000, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64536, "a": 8000},
+        {"t": 5750, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64537, "a": 8000},
+        {"t": 5750, "e": "dmg", "s": VX, "d": TREE, "sp": 64537, "a": 8000},
+        {"t": 5760, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 8000], "x": 0.0, "y": -20.0},
+        {"t": 8990, "e": "dmg", "s": VX, "d": AGONY, "sp": 64536, "a": 9000},
+        {"t": 9000, "e": "death", "g": AGONY, "killer": VX, "blow": [VX, 9000], "x": 22.0, "y": 0.0},
+        {"t": 11000, "e": "end", "out": "wipe"},
+    ]
+    records += [pulse_snap(when) for when in range(0, 11000, 250)]
+    return records
+
+
+class PulsePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700010.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in pulse_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.pulse_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_hits_close_together_are_one_pulse_and_healers_hit_count_per_pulse(self):
+        self.assertEqual((self.rows[0]["pulses"], dict(self.rows[0]["healer_hits"])), (3, {1: 1}))
+
+    def test_an_accepted_melee_escape_reads_the_healers_in_reach_after_it(self):
+        row = self.rows[0]
+        self.assertEqual((row["casts"], row["escaped"], row["with_mana"], row["in_reach"], row["unreached"]),
+                         (1, 1, 1, 0, 1))
+
+    def test_a_pulse_death_splits_by_a_recent_escape_of_its_own(self):
+        self.assertEqual(dict(self.rows[0]["deaths"]), {("melee", True): 1, ("ranged", False): 1})
+
+    def test_the_view_prints_escapes_and_deaths(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_pulse(self.trace)
+        self.assertIn("melee escapes 1: healers with mana 1.00, within 38.5 yd 0.00, none within it 1", out.getvalue())
+        self.assertIn("melee 1 after its escape, ranged 1", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
