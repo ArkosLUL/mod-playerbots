@@ -773,7 +773,8 @@ once a druid is, and they broke 10-24 s in. First clouds after the blocks, freez
 +15.4/+17.5 and +14.3/+15.2 (three repeats), uld3 +15.3/+21.4 and +16.4/+17.4 (one), uld1 +20.3/+22.3
 and +21.4/+27.5 (none). The block order and breaker counts are a plan change: question 1.
 
-**Not built** (stop rules). Bugs in round 7's gather, ready for a round if the user lifts them:
+**Not built** (stop rules), ready for a round if the user lifts them: two bugs in round 7's gather
+and the last-wave threshold.
 - Latch the receiver set at landing (within 15 yd) instead of testing the leash live, and stand the
   position node down for a latched receiver until its walk is due (11 misses).
 - Gather each receiver on its nearest carrier, latched, instead of the lowest guid (7 misses; the two
@@ -793,6 +794,18 @@ pools.
    shamans with the mages. Order the helper blocks mage, shaman, druid, priest, give a shaman block 3
    breakers, and keep the budget of 8 until both mages and both shamans are free, then 3 for druids and
    priests. Worth up to ~3 more clouds before 3:00 a pull, roughly +10-25k over 0-3:00 against gaps of
-   11-22k; costs ~10-20 ranged bot-seconds more on ice a wave and the second mage's fire a few seconds
-   later. *Recommended: yes*, one round with the stop rule lifted, built with the two gather bugs and
-   judged by clouds per freeze cycle and kill time; else Hodir stays polished.
+   11-22k; costs ~10-20 ranged bot-seconds more on ice a wave, and Starlight later: the druid blocks
+   wait for the second mage instead of the first (~4 s median), while the second mage keeps its five
+   breakers. *Recommended: yes*, one round with the stop rule lifted, built with the two gather bugs
+   and judged by clouds per freeze cycle and kill time; else Hodir stays polished.
+
+**Review (round 8).** The cause holds: the lane's `shamans.py` over the 12 pulls of windows 10, 11,
+12b and 14 reproduces 11 of 11 repeats from first clouds within 15.5 s, 0 of 41 from 16.4 s, and each
+pool's first-cloud times; blocks (32938) spawn 9.9-10.0 s after the Flash Freeze cast, as it assumes;
+`pulses.py` gives pulse 4 20/17/7 of 69/66/57. Seats and line refs match the code. No code changed, so
+no size, mode or player branch to check. Fixed:
+- Question 1's cost named the second mage's fire, but its five seats sort ahead of any shaman either
+  way; what waits is the druid blocks. Second mage freed 0.2-19.8 s after the first (median ~4 s, last
+  hits, scratchpad `hodir-r8-review/magegap.py`).
+- Findings doc: the 7.6-9.9% last wave read as current; it was the two pulls that set the skip,
+  window 14's landed at 11.4-17.4%.

@@ -157,8 +157,9 @@ breakers held off it by the post-freeze shelter run, the shed and dodges; three 
 helper block gets breakers once Hodir is under 12%** (`_LAST_WAVE_HEALTH_PCT`, ~21.6 s at the cache
 pace, ~18 s at the 279-291k a raid with nobody on ice runs after the last landing; trapped raiders
 still do): a freed mage's fire comes ~15 s after the landing at best and the last fire's Singed runs
-25 s past it. The last wave goes up at 7.6-9.9% (the one before at 31.7-36.7%) and soaked
-0.44-0.78 M; its fire either burned 2.8 s before the kill or never came.
+25 s past it. Where the last wave lands moves with pace: in the two pulls that set the skip it went up
+at 7.6-9.9% (the one before at 31.7-36.7%) and soaked 0.44-0.78 M, its fire burning 2.8 s before the
+kill or never; in window 14 (212-243k) at 11.4-17.4%, skipped only in the fastest (below).
 
 **A shaman's second Storm Cloud of a freeze cycle needs its block dead within ~12 s.** A freed
 `npc_ulduar_hodir_shaman` casts Storm Cloud 1 s after `ScheduleAbilities`, on a random player within
