@@ -1349,3 +1349,24 @@ fire bot cull, the ACU tank, the cast cut, the least-burn fallback, the melee ri
 **Questions for the user:** none.
 
 **Shared code:** none (Mimiron files and its reader; `MimironTick` now returns whether it scanned, Mimiron-only).
+
+**Review.**
+
+- The least-burn fallback also ran for the Bomb Bot and siren flees, whose hop reaches their clear radius
+  (`clearRadius`, 9 and 19 yd) on the straight bearing only. A side bearing at that hop stopped short of the
+  siren's 19 yd, or ran along a Bomb Bot's blast line and stayed inside the blast the fan had refused,
+  whenever it burned less than the straight leg. Window 21 had 4 `bombbot fallback` and 1 `siren fallback`
+  notes, each with 7-11 bearings refused for fire, so the case is live. Radius flees keep the straight leg
+  now; only the flames dodge ranks bearings.
+- The ranking ignored the fan's two lethal screens, so a flames fallback could trade a straight leg clear
+  of a Bomb Bot blast or Rapid Burst for a side one inside it. Bearings clear of both rank first now, ahead
+  of burning nodes.
+- Checked and holding: the cited evidence (`603_12` Uldyau's Revive Pet from 0:07.1 with 8.86 s to go,
+  Flames kill at 0:14.9; 47 `flames+10 fallback` notes, 15 of 32 legs in a burn; uld1's ACU on ranged 98%,
+  the off-tank on VX-001 88%). The cull's `NOT_SELECTABLE` key cannot fire in phase 4, where a downed part
+  only turns `NON_ATTACKABLE`, and Self Repair lifts the ACU only at phase 4's start, so it holds all of H3.
+  One code path: the cut skips real players, `IsAssistTankOfIndex` counts them.
+- Left: a bot whose dodge cannot issue (every bearing `unsafe`) gets each cast with over 1 s left cut on
+  every 250 ms scan while it stands in fire, a healer too. The reader folds cuts under 1 s apart into one,
+  so read the raw `castcut` notes: a run on one bot with no `flames` leg after it means the cut should wait
+  for the last dodge to have issued.

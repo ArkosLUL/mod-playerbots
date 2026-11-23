@@ -274,11 +274,12 @@ in `mimiron.flee`. Its traps:
   casting MK II to 9.9 yd and its leg locked the escape out. A fallback landing in a live Shock Blast
   (every flee but the escape), a Frost Bomb, a rocket, the barrage cone or a spray lane returns false
   as `unsafe`, leaving the bot in fire at ~3.1k a second and the lock free.
-- **A fallback that may not burn picks the least burn.** Straight away ended 15 of 32 flames fallback legs
-  in one window inside a node. A position flee without `allowFire` (flames, Bomb Bot, siren) falls back to
-  the fan bearing at the full hop with the fewest burning nodes, then off mines, then farthest from a node
-  (to 5 yd), then straightest, among those passing the screens above; `unsafe` only when none does. A unit
-  flee (Frost Bomb, rocket, shock) or one with fire allowed keeps the straight one.
+- **The flames dodge's fallback picks the least burn.** Straight away ended 15 of 32 of its fallback legs
+  in one window inside a node. It takes the fan bearing at the full hop passing the screens above, clear of
+  a Bomb Bot blast and Rapid Burst first, then with the fewest burning nodes, then off mines, then
+  farthest from a node (to 5 yd), then straightest; `unsafe` only when none passes. Every other flee keeps
+  the straight one: a unit flee (Frost Bomb, rocket, shock), one with fire allowed, and a radius flee
+  (Bomb Bot, siren), where only the straight bearing at that hop reaches the radius.
 
 `MoveTowardClearOfMines` aims the fan at a destination by fleeing its mirror through the bot: bearing 0
 walks straight at it, and every swept bearing ends further from the mirror than the bot started, so the

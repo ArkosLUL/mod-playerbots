@@ -306,7 +306,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                IsMimironSpotHolderSafe(holderRadius, spot);
     };
 
-    if (allowFire || fallbackFrom)
+    if (allowFire || fallbackFrom || clearRadius > 0.0f)
     {
         Position const straightAway(bot->GetPositionX() + cos(away) * distance,
                                     bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
@@ -334,6 +334,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         Position dest;
         bool exact = true;
         float offAway = 0.0f;
+        bool lethal = false;
         uint32 burning = 0;
         bool mined = false;
         float clearance = 0.0f;
@@ -369,6 +370,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 !fallbackSafe(spot.dest))
                 continue;
 
+            spot.lethal = !IsMimironSpotBombBotSafe(bombBotBlasts, spot.dest) ||
+                          !IsMimironSpotRapidBurstSafe(vx001, burst, spot.dest);
             spot.clearance = ULDUAR_MIMIRON_FLAMES_RADIUS;
             for (Position const& node : hazards.flames)
             {
@@ -396,6 +399,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     std::stable_sort(spots.begin(), spots.end(),
                      [](FallbackSpot const& a, FallbackSpot const& b)
                      {
+                         if (a.lethal != b.lethal)
+                             return !a.lethal;
                          if (a.burning != b.burning)
                              return a.burning < b.burning;
                          if (a.mined != b.mined)
