@@ -683,7 +683,9 @@ def adds_pull() -> list[dict]:
         # Grounding at 6.5 s: Shiv holds it until it's gone, Bulwark walks off it while it stands.
         cast(6500, ENH_C, 65989, 0),
         note(7500, ROGUE, fc.TOTEM, GROUNDING),
+        note(7900, TANK, fc.ICE, WARRIOR_C),
         note(8000, TANK, fc.TOTEM, GROUNDING),
+        note(8500, TANK, fc.ICE, 0),
         note(9000, TANK, fc.TOTEM, 0),
         note(12000, ROGUE, fc.TOTEM, 0),
         {"t": 7600, "e": "act", "g": ROGUE, "a": fc.KILL_TOTEM_ACTION, "rel": 100.0, "vd": "OK"},
@@ -738,9 +740,9 @@ class CcAndAdds(unittest.TestCase):
                          [(TREANT, 3000, 8000, 2000, 2), (GROUNDING, 7000, 11000, 0, 0)])
 
     def test_a_totem_hold_is_gone_only_when_the_totem_left_inside_it(self):
-        self.assertEqual([(row["bot"], row["totem"], row["start"], row["stop"], row["gone"])
+        self.assertEqual([(row["bot"], row["totem"], row["start"], row["stop"], row["gone"], row["ice"])
                           for row in fc.totem_holds(self.trace)],
-                         [(ROGUE, GROUNDING, 7500, 12000, True), (TANK, GROUNDING, 8000, 9000, False)])
+                         [(ROGUE, GROUNDING, 7500, 12000, True, False), (TANK, GROUNDING, 8000, 9000, False, True)])
 
     def test_the_new_sections_render(self):
         out = io.StringIO()
@@ -761,6 +763,7 @@ class CcAndAdds(unittest.TestCase):
         self.assertRegex(text, r"Treant \(Kavina Grovesong\) +0:03\.000 +0:08\.000 +5\.0s  2000 to 2 raider\(s\)")
         self.assertIn("treants: 1, 2000 damage to the raid", text)
         self.assertIn(f"{fc.KILL_TOTEM_ACTION}: 1 OK row(s)", text)
+        self.assertIn("held by a bot on an ice duty: 1, 1.0 s in all", text)
 
 
 GRIPPER = 5010  # death knight

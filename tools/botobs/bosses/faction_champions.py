@@ -1707,10 +1707,12 @@ def add_units(trace: Trace) -> list[dict]:
 
 
 def totem_holds(trace: Trace) -> list[dict]:
-    """Each `fc.totem` hold: `bot`, `totem`, `start`, `stop`, and `gone`, whether the totem's last
-    snapshot fell inside the hold before the trace's last one."""
+    """Each `fc.totem` hold: `bot`, `totem`, `start`, `stop`, `gone`, whether the totem's last
+    snapshot fell inside the hold before the trace's last one, and `ice`, the bot holding an `fc.ice` duty
+    at the hold's start."""
     samples = Samples(trace)
     final = samples.stamps[-1] if samples.stamps else None
+    ices = duty_holds(trace, ICE)
     out = []
     for bot, spans in holder_spans(trace, TOTEM, pull_end(trace)).items():
         for value, start, stop in spans:
@@ -1719,7 +1721,8 @@ def totem_holds(trace: Trace) -> list[dict]:
                 continue
             last = samples.last_seen(totem)
             out.append({"bot": bot, "totem": totem, "start": start, "stop": stop,
-                        "gone": last is not None and start <= last < stop and last != final})
+                        "gone": last is not None and start <= last < stop and last != final,
+                        "ice": any(hold["bot"] == bot and hold["start"] <= start < hold["stop"] for hold in ices)})
     return sorted(out, key=lambda row: (row["start"], row["bot"]))
 
 
@@ -1747,16 +1750,19 @@ def show_adds(trace: Trace) -> None:
 
     holds = totem_holds(trace)
     if holds:
-        print(f"\n  {'fc.totem holder':14} {'at':>9} {'length':>7} {'totem':32} {'gone':>5}")
+        print(f"\n  {'fc.totem holder':14} {'at':>9} {'length':>7} {'totem':32} {'gone':>5} {'ice':>4}")
         for row in holds:
             print(f"  {trace.name(row['bot'])[:14]:14} {clock(row['start']):>9}"
                   f" {(row['stop'] - row['start']) / 1000:6.1f}s {trace.name(row['totem'])[:32]:32}"
-                  f" {'yes' if row['gone'] else '-':>5}")
+                  f" {'yes' if row['gone'] else '-':>5} {'yes' if row['ice'] else '-':>4}")
+        iced = [row["stop"] - row["start"] for row in holds if row["ice"]]
+        print(f"  held by a bot on an ice duty: {len(iced)}"
+              + (f", {sum(iced) / 1000:.1f} s in all" if iced else ""))
     else:
         print("  fc.totem never held a totem")
     print(f"  {KILL_TOTEM_ACTION}: {ok_rows(trace, KILL_TOTEM_ACTION)} OK row(s)")
     print("  first and last are the unit's snapshots; gone means the totem left the snapshots inside the"
-          " hold, killed or run out")
+          " hold, killed or run out; ice marks a holder with an fc.ice duty at the hold's start, which wants none")
 
 
 def distance(a: list, b: list) -> float:

@@ -964,7 +964,7 @@ bool CanKillTotem(Member const& member, Creature* totem)
 {
     Player* player = member.player;
     return !member.healer && GET_PLAYERBOT_AI(player) && !player->HasUnitState(UNIT_STATE_LOST_CONTROL) &&
-           player->GetExactDist2d(totem) <= TOTEM_DUTY_RANGE;
+           FactionChampionsIceDutyOf(player).IsEmpty() && player->GetExactDist2d(totem) <= TOTEM_DUTY_RANGE;
 }
 
 void UpdateTotemKillers(FactionChampionsDefenceState& state, Player* bot, std::vector<Member> const& members)
