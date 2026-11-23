@@ -68,6 +68,13 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
   against this formation at `ACTION_RAID` and the two deadlock. Only row 4's strafed slots pass it (to
   44.5); a 13-14 bot camp fills rows 0-3, whose widest strafe reads 42.5.
+- **The Animus has its own ceiling, 37 yd from it** (reach 7), and stands ~8.5 yd off his side, so rows
+  1-3 sat past it: ranged dps spent 10-93% of its phase there with up to 28 reach spell walks each, and
+  did 59-64k/s on it against 82-85k/s on the old rows, losing the race. So a ranged dps targeting it has
+  its slot, and its strafe with it, pulled along the line to the Animus to two slot tolerances inside
+  that ceiling (its `GetRange("spell")` plus both live reaches), stopping at row 0's radius from Vezax so
+  the Mark floor holds; with the Animus straight behind him from the camp, as at its spawn, that stop can
+  leave the slot past it. Healers keep their slots.
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
 and Vezax settles 7-12 yd north of it, between tank and camp, having met the tank on its way in from the
@@ -337,7 +344,8 @@ the low bit is the file. `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodg
 `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`: a vapor is hard mode
 about to end, `none` the target guard with no source behind it), `vezax.meleespot` (`spot`/`none`),
 `vezax.floor` (`on`/`edge`/`off`: the last floor check took the point as asked, pulled it back over 1 yd,
-or refused it), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside
+or refused it), `vezax.reach` (`off`/`in`/`pulled`/`floor`: the Animus slot pull, `floor` where row 0's
+radius stopped it), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside
 the helper that derives it so two call sites cannot disagree. Being change-only, `vezax.block` is written
 at each return: a probe mid-helper plus one at the return would read as a flap every tick. `vezax.formation`
 (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
@@ -369,8 +377,9 @@ the vapors themselves are never sampled. The camp is read from `vezax.slot` as w
 which is only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was
 open. `--animus` measures the Animus fight from its spawn to its kill, the collapse (under four fifths of
 the sampled roster alive) or the pull's end: its pace and, per ranged and healer, casts, field share,
-damage and mana. Mana comes from the bot's last living sample, since the collapse tick reads the dead
-as 0.
+damage, mana, living time past its 37 yd ceiling (`past`) and accepted reach spell walks (`walks`), then
+which `vezax.reach` values were written after the spawn. Mana comes from the bot's last living sample,
+since the collapse tick reads the dead as 0.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -458,14 +467,11 @@ hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a 
 
 ## Known gaps
 
-**At ilvl 226 the Animus is a DPS race the rosters lose.** It spawns at 3:08 with 12,236,737 health
-(25-man) and Vezax at 21-27%. The raid does 118-125k/s on it with Heroism, less than on Vezax the minute
-before, so it needs ~100 s; by ~75 s Profound Darkness at 37-40 stacks outruns four healers and the raid
-collapses with it at 22-27% (both pulls that kept their main tank that long). The Barrier only cuts
-damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die under
-40+ stacks. Ranged spend 49-69% of the Animus phase in a field, and a second of casting outside one
-does about a quarter of one inside (no +100% damage or cast speed), so lifting the field cast hold there
-buys an estimated 10%, not the race.
+**At ilvl 226 the Animus is a DPS race won by seconds.** It spawns at 3:08 with 12,236,737 health
+(25-man) and Vezax at 14-27%, and by 76-80 s Profound Darkness at 37-40 stacks outruns four healers and
+the raid collapses. At 153-165k/s it dies in 74-80 s; at 118-138k/s it is left at 7-27%. The Barrier only
+cuts damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die
+under 40+ stacks.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the

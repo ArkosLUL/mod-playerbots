@@ -453,3 +453,109 @@ slots by spec as before, so the same with or without one in the raid.
   11-12's 1-2 a pull.
 
 **Questions.** None new.
+
+## Round 5 (2026-11-23, build 1fa3c332c)
+
+**Data.** Window 14 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 1fa3c332c
+--pulls 10`), one valid pull per pool, compared with window 11 (round 3 code, `--head d2874f536`, the
+three kills in round 4's table). Hard mode held in all three (`--vapors`: `animus` at 3:08.2-3:08.6, no
+vapor hit). Analysis scripts: session scratchpad `vezax-r5/`.
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-102505-17` | `603_17_general-vezax_1795429549` | wipe 4:52, 30 deaths, Animus at 16.2% |
+| uld2 | `tr-20261123-102505-18` | `603_18_general-vezax_1795429556` | wipe 5:04, 30 deaths, Animus at 10.4% |
+| uld3 | `tr-20261123-102445-16` | `603_16_general-vezax_1795429526` | wipe 5:00, 30 deaths, Animus at 7.5% |
+
+**Stop rules.** Not polished: three wipes. Round 4 built answers, not a picked failure, so no repeat count.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the collapse | Collapse |
+|---|---|---|
+| uld1 | 1 Shadow Crash (3:37) | from 4:22 (main tank to Animus melee): 11 Profound Darkness, 7 Animus melee, 9 Vezax melee, 1 Shadow Crash, 1 Mark |
+| uld2 | none | from 4:04: 18 Profound Darkness, 4 Animus melee, 6 Vezax melee, 1 Shadow Crash, 1 Mark |
+| uld3 | 1 Shadow Crash (3:27) | from 4:23 (main tank to Animus melee): 10 Profound Darkness, 6 Animus melee, 10 Vezax melee, 3 Shadow Crash |
+
+**Verdict on round 4 (camp past the Mark floor, floor checks): both did what they targeted, and the camp
+move lost the Animus race.** Marks: every one before the collapse went to a healer or ranged, far 13-14/9
+(window 11: 2 of 24 on melee or a tank). `--band` medians 31.0-37.3, `<29.1` 1-11% per bot. No death
+before the Animus, crash deaths 0-1 a pull before the collapse as in windows 11-12, no bot below z 340.9.
+`vezax.floor` read `edge` six times, four on marked bots' arc spots (1:01-1:02, 3:53) and two elsewhere
+(3:24, 4:11), no death near any. But the Animus, killed in all three window 11 pulls, survived all three:
+
+| `--animus` | Window 11 | Window 14 |
+|---|---|---|
+| Pace | 1.24-1.35 %/s, killed in 74-80 s | 1.02-1.12 %/s, 7.5-18.1% left at the collapse (76-80 s) |
+| Raid / ranged | 153-165k / 82-85k/s | 126-138k / 59-64k/s |
+| Ranged median distance to the Animus | 23.2-34.0 | 31.7-40.5 |
+| Ranged time past reach spell's 37 yd (`past`) | 0-28%, mostly under 12% | 10-93% |
+| Reach spell walks per ranged (`walks`) | 0-4 | 0-28 |
+| Ranged moving share | 28-53% | 32-70% |
+
+Melee lost 3-6k/s, the rest is ranged. Vezax at the spawn (14-25% against 17-22%), healer mana, the Mark
+leech (276-657k against 402-476k) and the field share on the Animus (36-76% against 39-69%) did not
+move.
+
+**Picked: ranged dps out of reach of the Animus, the camp and reach spell deadlocked (bug, 88 of 90
+deaths: the whole collapse in all three pulls).** The Animus stands ~8.5 yd off Vezax's side (median
+offset ±6.8-8.3 across, −4.8 to +5.0 along the camp bearing) and its reach is 7, so reach spell's ceiling
+on it is 28.5 + 1.5 + 7 = 37 yd (its walks ended at a median 37.4). The camp is
+boss-relative (`TryGetVezaxSlotPosition`, `UldEncounter_Vezax.cpp:302` before), so round 4's rows put
+ranged dps at 32.75-37.25 yd from Vezax, 40-47 from the Animus. Reach spell (`ACTION_HIGH`,
+`ReachTargetAction::isUseful`, `ReachTargetActions.cpp:15-33`) is kept by the formation rule
+(`UldDefinition_Vezax.cpp:47`), and the position node (`UldActions_Vezax.cpp:256-291`) walks the bot back
+once it is 2.4 yd off its slot. uld2 Uldyah (arcane mage): position to its slot 43.1 yd from the Animus
+at 3:11.7, reach spell in to 37.4 at 3:12.3, back to the slot 3:13.6, in at 3:14.6, out 3:16.3, in 3:17.3,
+every ~2.5 s, casting on every other leg; `flip.move.by:reach spell <-> vezax raid position` read
+2.9 / 24.9 / 4.1 a minute in window 14 and 0 in window 11. The camp section already forbids that deadlock
+(its ceiling), but round 4 checked it against Vezax's reach only; round 4's review flagged the risk at
+4-40% of samples.
+
+A bug, not a position call: the strategy intends ranged on the Animus to cast at it, and the camp's own
+ceiling rule forbids the deadlock. The fix stops each slot where reach spell already ends the walk, the
+user's rows and fill order stand, and nobody comes nearer Vezax than the healers' row, so the Mark still
+reaches only ranged and healers. None of reach spell's 320 ranged walks in window 14 ended under the 29.1
+floor from Vezax (medians 32.1-36.0), so the Mark floor and the Animus ceiling do not conflict in any
+traced geometry.
+
+**Fix** (`UldEncounter_Vezax.cpp` only): `PullVezaxSlotIntoAnimusReach` (`:168`): for a non-healer slotted
+bot whose current target is the live Animus, a slot farther than `GetRange("spell")` plus both live
+combat reaches minus two slot tolerances (~35 yd) from it slides along the line to the Animus to that
+distance, stopping where the line would cross row 0's radius (30.5) from Vezax. `TryGetVezaxSlot` (`:466`)
+applies it, and the dodge strafes from the pulled slot (`:862`). New probe `vezax.reach`
+(`off`/`in`/`pulled`/`floor`). Reader: `--animus` gains `past` (living time past 37 yd of the Animus) and
+`walks` (accepted reach spell moves) per caster and the `vezax.reach` values written after the spawn
+(tests added). Docs: `docs/raids/ulduar/vezax.md` (camp ceiling bullet, trace section, the race gap
+updated). Shared code: none.
+
+Replay on the six pulls' Vezax and Animus positions (`vezax-r5/clamp_replay.py`, round 4's slots): ranged
+dps slots past 37.4 yd of the Animus 0-25% (window 11 geometry) and 18-100% (window 14) → 0-3%; slots
+moved a median 0-4.7 yd, at most 7; the floor stop ends 0-6% of slot samples, 83% in uld2, where the
+Animus sat south-east, and those still land inside the ceiling. Pulled slots of one file bunch along the
+line to the Animus (nearest neighbour 2.3 → 0.5-0.6 yd median in the three pulls where it acts most); a
+crash already covers a whole group and the leech the whole camp, so that costs nothing new.
+
+10/25 and normal/hard: the Animus exists only in hard mode, so normal mode never pulls a slot; at 10-man
+ranged dps fill rows 0-1 and are mostly inside the ceiling already. Healers and the main tank are left
+alone, and the pull keys on the bot's own target, so the same with or without a real player in the raid.
+
+**Next window should show** (`general_vezax.py --animus`, pulls that keep the main tank to the collapse):
+
+- ranged `past` under ~12% and `walks` 0-4, as in window 11; `vezax.reach` written as `pulled` or
+  `floor` by most ranged dps; `flip.move.by:reach spell <-> vezax raid position` near 0;
+- ranged 80k/s+ and raid 150k/s+ on the Animus, pace 1.24 %/s or more, the Animus dead before ~80 s;
+- the Mark still only on healers and ranged, far at least 9 at the 3:52 mark inside the Animus phase
+  (pulled slots never nearer than 30.5 yd);
+- crash deaths no higher than 1-2 a pull; a dodge from a pulled slot reads `vezax.dodge = strafe`.
+
+If ranged still sit past the ceiling, check `vezax.reach = floor` against where the Animus stood: the
+floor stop is the one case the pull leaves out of reach.
+
+**Observations, not chased.** Healers carry the Animus as their target and take reach spell walks off row
+0 too (0-4 in window 11, 0-12 in window 14, uld2 Uldyac 90% past it); their slots stay as the user chose.
+The `edge` floor reads on marked bots' arc spots say the 35 yd arc is clipped more than 1 yd at some
+settles; the marked bot still moves and nothing died near one.
+
+**Questions.** None new. The fix holds the round 3 answer; if the user reads the Animus-phase pull as a
+new position, the alternative is ranged dps fixed on their rows and the race lost.
