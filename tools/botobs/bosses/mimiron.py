@@ -44,6 +44,8 @@ SPELL_LASER_BARRAGE = 63293
 SPELL_MINE_EXPLOSIONS = (63009, 66351)
 SPELL_BOMB_BOT_BLAST = 63801
 SPELL_PLASMA_BALL_P4 = 65647
+SPELL_SHOCK_BLAST = 63631
+SPELL_HAND_PULSE = (64348, 64352, 64536, 64537)
 # Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
 # a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
@@ -57,6 +59,7 @@ FLAMES_DODGE = "mimiron dodge flames action"
 FIREBOT_STEP = "mimiron fire bot action"
 FIREBOT_AOE_GUARD = "mimiron fire bot aoe guard"
 BOMB_BOT_STEP = "mimiron bomb bot action"
+SHOCK_ESCAPE = "mimiron shock blast action"
 BOMB_BOT_REFUSED = re.compile(r"bombbot(\d+)")
 BOMB_BOT_AIM_LEAD_MS = 300
 BOMB_BOT_KILL_MS = 300
@@ -132,6 +135,15 @@ OLDER_LEG = "an older leg"
 
 REGEN_RISE = 3.0
 REPAIR_FLOOR = 1.0
+
+HEAL_DISTANCE = 38.5
+PLAYER_COMBAT_REACH = 1.5
+HEAL_REACH = HEAL_DISTANCE + 2 * PLAYER_COMBAT_REACH
+PULSE_GROUP_MS = 400
+PULSE_KILL_MS = 50
+ESCAPE_SETTLE_MS = 3000
+ESCAPE_LOOKBACK_MS = 6000
+DRY_MANA_PCT = 10.0
 
 SLOT = re.compile(r"(\S+) (\d+)/(\d+) (-?\d+),(-?\d+),(-?\d+)")
 
@@ -1870,6 +1882,96 @@ def show_acutank(trace: Trace) -> None:
           " an off-tank")
 
 
+def pulse_rows(trace: Trace) -> list[dict]:
+    roster = roster_guids(trace)
+    heals = [guid for guid in roster if trace.role(guid) == "heal"]
+    samples = Samples(trace)
+    mkii = guids_of_entry(trace, NPC_LEVIATHAN_MKII)
+    escapes_by = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") == 1 and rec.get("by") == SHOCK_ESCAPE and rec.get("g") in roster:
+            escapes_by[rec["g"]].append(rec["t"])
+    hits = sorted((rec for rec in trace.of("dmg")
+                   if rec.get("sp") in SPELL_HAND_PULSE and rec.get("d") in roster), key=lambda rec: rec["t"])
+
+    rows = []
+    for low, high, label in phases(trace):
+        if not label.startswith("P4"):
+            continue
+        pulses: list[list[dict]] = []
+        for rec in hits:
+            if not low <= rec["t"] < high:
+                continue
+            if pulses and rec["t"] - pulses[-1][0]["t"] < PULSE_GROUP_MS:
+                pulses[-1].append(rec)
+            else:
+                pulses.append([rec])
+        healer_hits = collections.Counter()
+        for pulse in pulses:
+            struck = len({rec["d"] for rec in pulse if rec["d"] in heals})
+            if struck:
+                healer_hits[struck] += 1
+
+        casts = sorted(rec["t"] for rec in trace.of("cast")
+                       if rec.get("sp") == SPELL_SHOCK_BLAST and rec.get("s") in mkii and low <= rec["t"] < high)
+        escaped = with_mana = in_reach = unreached = 0
+        for cast in casts:
+            read = cast + ESCAPE_SETTLE_MS
+            units = samples.before(read)
+            healers = [units[guid] for guid in heals
+                       if guid in units and living(units[guid]) and units[guid][6] >= DRY_MANA_PCT]
+            for guid in roster:
+                unit = units.get(guid)
+                if (trace.role(guid) != "melee" or not unit or not living(unit) or
+                        not any(cast <= when <= read for when in escapes_by.get(guid, []))):
+                    continue
+                reach = sum(1 for healer in healers if math.dist(healer[1:3], unit[1:3]) <= HEAL_REACH)
+                escaped += 1
+                with_mana += len(healers)
+                in_reach += reach
+                unreached += reach == 0
+
+        deaths = collections.Counter()
+        for rec in combat_deaths(trace):
+            if not low <= rec["t"] < high or not any(
+                    hit["d"] == rec["g"] and 0 <= rec["t"] - hit["t"] <= PULSE_KILL_MS for hit in hits):
+                continue
+            after = any(0 <= rec["t"] - when <= ESCAPE_LOOKBACK_MS for when in escapes_by.get(rec["g"], []))
+            deaths[(trace.role(rec["g"]), after)] += 1
+
+        rows.append({"label": label, "span": (low, high), "pulses": len(pulses), "healer_hits": healer_hits,
+                     "casts": len(casts), "escaped": escaped, "with_mana": with_mana, "in_reach": in_reach,
+                     "unreached": unreached, "deaths": deaths})
+    return rows
+
+
+def show_pulse(trace: Trace) -> None:
+    print("PULSE")
+    rows = pulse_rows(trace)
+    if not rows:
+        print("  no phase 4 in this pull")
+        return
+
+    for row in rows:
+        low, high = row["span"]
+        struck = ", ".join(f"{count} x{pulses}" for count, pulses in sorted(row["healer_hits"].items()))
+        print(f"  {row['label']:4} {clock(low)} .. {clock(high)}  Hand Pulse {row['pulses']}; healers hit by one that"
+              f" hit a healer: {struck or 'none'}")
+        if row["escaped"]:
+            n = row["escaped"]
+            print(f"       Shock Blast {row['casts']}, melee escapes {n}: healers with mana {row['with_mana'] / n:.2f},"
+                  f" in heal reach {row['in_reach'] / n:.2f}, none in reach {row['unreached']}")
+        else:
+            print(f"       Shock Blast {row['casts']}, no melee escape")
+        dead = ", ".join(f"{role} {count}{' after its escape' if after else ''}"
+                         for (role, after), count in sorted(row["deaths"].items()))
+        print(f"       Hand Pulse deaths: {dead or 'none'}")
+    print(f"\n  an escape is an accepted `{SHOCK_ESCAPE}` leg by a melee bot within {ESCAPE_SETTLE_MS // 1000} s of"
+          f" the cast, healers read then at {DRY_MANA_PCT:.0f}% mana or more; heal reach is HealDistance"
+          f" {HEAL_DISTANCE} between the two bots' edges, {HEAL_REACH} yd centre to centre; a death is after its"
+          f" escape when the bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it")
+
+
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
     ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
@@ -1895,6 +1997,8 @@ SECTIONS = (
      " length", show_bombbots),
     ("acutank", "phase 4: whom the ACU targeted and hit with Plasma Ball, and what the off-tank aimed at",
      show_acutank),
+    ("pulse", "phase 4 Hand Pulse: healers hit per pulse, healers in reach of melee after a Shock Blast"
+     " escape, and Hand Pulse deaths after one", show_pulse),
 )
 
 
