@@ -1547,9 +1547,10 @@ Ranked:
 - `ThorimUnreachableBy` (`UldEncounter_Thorim.cpp:3113`): phase 2, Thorim alive and in combat; reads `GetCannotReachTarget()` into the new
   probe `thorim.unreach` (stamped when it changes) and returns him when the flag has named this bot for
   `ULDUAR_THORIM_UNREACH_GRACE_MS` (1 s) and the bot is below the floor line (a balcony bot's answer is its jump).
-- `ThorimUnreachableStep` (`:3138`): a point `GetCombatReach()` × 2 + `ULDUAR_THORIM_UNREACH_STEP_MARGIN` (4) from his centre (11.75 yd),
-  straight away from him, else turned in 30° steps up to 120° until it lies within `ULDUAR_THORIM_UNREACH_FLOOR_RADIUS` (30) of the arena
-  centre (the off-tank spot sits at 29.65), preferring one clear of Blizzard; nothing once the bot stands 2 yd short of it or farther.
+- `ThorimUnreachableStep` (`:3138`): a point his `GetCombatReach()` plus the bot's plus `ULDUAR_THORIM_UNREACH_STEP_MARGIN` (4) from his
+  centre (11.75 yd), straight away from him, else turned in 30° steps up to 120° until it lies within `ULDUAR_THORIM_UNREACH_ARENA_RADIUS`
+  (30) of the arena centre (the off-tank spot sits at 29.65), preferring one clear of Blizzard; nothing once the bot stands 2 yd short of
+  it or farther. (Review: each point is also pulled back onto the navmesh and must still stand 9.75 yd from him.)
 - `ThorimUnreachableTrigger` / `ThorimUnreachableStepAction` (`UldTriggers_Thorim.cpp:189`, `UldActions_Thorim.cpp:467`) at ACTION_RAID + 3,
   `MOVEMENT_FORCED` (a combat-priority positioning booking cannot refuse it), backing out while facing him; both `thorim movement guard` and
   `thorim tank anchor guard` pass it. The chase re-paths as soon as the bot leaves 8.25 yd, which clears the flag; the positioning row then
@@ -1577,3 +1578,15 @@ class code.
    11 yd clear of every zone (about 3-6 yd farther from Thorim, out of his melee reach for up to the zone's 10 s) and walk back once it
    fades, with `avoid aoe` held off ring melee in phase 2? Recommended: yes; the uptime it costs (a covered slot sits out up to ~10 s of a
    36-41 s Blizzard cycle) is less than the melee lost to it now.
+
+**Review (round 15).** The cause holds. In w23 uld1 Thorim's health stops at 97.79% at +16.7 s, the holder stands on the tank spot from
++17.0 s with Thorim 3.6 then 4.8 yd off him, health jumps 97.77 → 100.00% at +23.0-23.3 s (the 5 s regen delay plus a 2 s regen tick after
+a flag set near +16.6 s), all three swap taunts land OK then FAILED with the victim unchanged, and his +41.6 s Chain Lightning (500 ms cast)
+ends it; only a set cannot-reach flag gives all of that. Not explained: at +20.4-20.7 s he moved 1.2 yd under his chase (moving 1, move
+generator 5) without the flag clearing, since the regen still came on the first timer; the new probe will show such moves. The reader
+over the 31 phase 2s on disk finds the one held stretch and no other. No size, mode or player branch; Thorim files only; no comments.
+Fixed: the step trusted the 30 yd disc as floor. Thorim lands 2.7-6.4 yd from the centre on the balcony side (bearing ~260°) and the
+corridor tank lands ~15 yd out there, while across 49 traces no player stood on the floor past 22.5-26.6 yd at bearings 255-315°, so the
+first case the step answers could aim into the wall under the balcony. Each point now takes the ground height and
+`CheckCollisionAndGetValidCoords`, as `RingPoint` does, and must still stand 9.75 yd from him; the constant is renamed
+`ULDUAR_THORIM_UNREACH_ARENA_RADIUS`, and the fix line above no longer says his reach doubled. `pb-check` passes.

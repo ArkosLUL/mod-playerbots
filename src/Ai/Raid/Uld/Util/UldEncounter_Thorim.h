@@ -130,7 +130,7 @@ inline constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
 
 inline constexpr float ULDUAR_THORIM_UNREACH_STEP_MARGIN = 4.0f;
 inline constexpr float ULDUAR_THORIM_UNREACH_ARRIVED = 2.0f;
-inline constexpr float ULDUAR_THORIM_UNREACH_FLOOR_RADIUS = 30.0f;
+inline constexpr float ULDUAR_THORIM_UNREACH_ARENA_RADIUS = 30.0f;
 inline constexpr uint32 ULDUAR_THORIM_UNREACH_GRACE_MS = 1000;
 
 inline constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;

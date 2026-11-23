@@ -654,9 +654,11 @@ tank dragged him onto the tank spot at 2.4 yd, and from +16.5 to +41.7 s he took
 `ULDUAR_THORIM_UNREACH_GRACE_MS` (1 s), on the floor, steps out of his chase range
 (`thorim unreachable step action`, which both movement guards pass): both reaches plus
 `ULDUAR_THORIM_UNREACH_STEP_MARGIN` (4) from his centre, 11.75 yd against the core's 8.25, straight
-away from him or turned in 30° steps until the point lies within `ULDUAR_THORIM_UNREACH_FLOOR_RADIUS`
-(30) of the arena centre, clear of Blizzard where one is. The chase re-paths, and the positioning row
-walks it back.
+away from him or turned in 30° steps until the point, pulled back onto the navmesh, still stands
+9.75 yd from him and within `ULDUAR_THORIM_UNREACH_ARENA_RADIUS` (30) of the arena centre, clear of
+Blizzard where one is. The disc is not the floor: under the balcony, the side he and the corridor
+squad come down on, no trace has a player on the floor past 22.5-26.6 yd from the centre. The chase
+re-paths, and the positioning row walks it back.
 
 **The anchor is also the Chain Lightning answer.** Boss 18-28 yd off the anchor: 8 targets, **174,932**
 damage running 4,695 → 47,024, out of the melee ring and into the ranged camp, **four bots dead in

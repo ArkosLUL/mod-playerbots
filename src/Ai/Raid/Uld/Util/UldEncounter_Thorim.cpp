@@ -3141,7 +3141,8 @@ bool ThorimUnreachableStep(Player* bot, Unit* boss, Position& out)
         return false;
 
     float const step = boss->GetCombatReach() + bot->GetCombatReach() + ULDUAR_THORIM_UNREACH_STEP_MARGIN;
-    if (boss->GetExactDist2d(bot) >= step - ULDUAR_THORIM_UNREACH_ARRIVED)
+    float const clear = step - ULDUAR_THORIM_UNREACH_ARRIVED;
+    if (boss->GetExactDist2d(bot) >= clear)
         return false;
 
     float const away = boss->GetAngle(bot);
@@ -3151,11 +3152,21 @@ bool ThorimUnreachableStep(Player* bot, Unit* boss, Position& out)
     for (int const k : {0, 1, -1, 2, -2, 3, -3, 4, -4})
     {
         float const bearing = away + turn * static_cast<float>(k);
-        Position const spot(boss->GetPositionX() + step * std::cos(bearing),
-                            boss->GetPositionY() + step * std::sin(bearing), bot->GetPositionZ());
-        if (centre.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) > ULDUAR_THORIM_UNREACH_FLOOR_RADIUS)
+        float x = boss->GetPositionX() + step * std::cos(bearing);
+        float y = boss->GetPositionY() + step * std::sin(bearing);
+        if (centre.GetExactDist2d(x, y) > ULDUAR_THORIM_UNREACH_ARENA_RADIUS)
             continue;
 
+        float z = bot->GetMapWaterOrGroundLevel(x, y, bot->GetPositionZ());
+        if (z <= INVALID_HEIGHT)
+            z = bot->GetPositionZ();
+
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                            bot->GetPositionZ(), x, y, z, false) ||
+            boss->GetExactDist2d(x, y) < clear)
+            continue;
+
+        Position const spot(x, y, z);
         if (!found)
         {
             out = spot;
