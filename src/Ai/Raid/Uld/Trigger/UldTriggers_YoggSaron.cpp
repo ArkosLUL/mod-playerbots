@@ -684,7 +684,7 @@ bool YoggSaronBodyDetourTrigger::IsActive()
         return false;
 
     uint32 const phase = YoggSaronPhase(botAI);
-    return phase == 2 || phase == 3;
+    return (phase == 2 || phase == 3) && !YoggSaronHoldingPortalSpot(botAI);
 }
 
 bool YoggSaronLunaticGazeTrigger::IsActive()

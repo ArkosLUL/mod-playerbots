@@ -252,6 +252,8 @@ PORTAL_DESPAWN_MS = 25000
 SPELL_PORTAL_CLICK_VISUAL = 51347
 SPENT_CLICK_WINDOW_MS = 300
 PORTAL_LATE_ENTRY_MS = 2000
+PORTAL_NEAR_SPOT_YD = 8.0
+BODY_DETOUR_NODE = "yogg-saron body detour action"
 
 # A creature that stops being sampled below this was almost certainly killed; one that vanishes near
 # full health was despawned by the phase. Nothing records a creature death, so this is the line.
@@ -1710,6 +1712,52 @@ def spent_clicks(clicks: list[tuple[int, int]], entries: list[tuple[int, int]],
     return out
 
 
+def walks_while_holding(intents: list[tuple[int, str]], moves: list[tuple[int, str]], node: str) -> int:
+    count = 0
+    for when, by in moves:
+        if by != node:
+            continue
+        index = bisect.bisect_right(intents, (when, "￿")) - 1
+        if index >= 0 and intents[index][1] == "holding":
+            count += 1
+    return count
+
+
+def left_held_spot(intents: list[tuple[int, str]], moves: list[tuple[int, str]], open_ms: int,
+                   lead_ms: int = 300) -> list[str] | None:
+    before = [(when, intent) for when, intent in intents if when < open_ms]
+    if not before or before[-1][1] == "holding":
+        return None
+    held = [index for index, (_, intent) in enumerate(before) if intent == "holding"]
+    if not held:
+        return None
+    last_hold, left = before[held[-1]][0], before[held[-1] + 1][0]
+    return sorted({by for when, by in moves if last_hold - lead_ms <= when <= left})
+
+
+def rebuild_losses(changes: list[tuple[int, tuple, tuple, tuple]],
+                   near_yd: float = PORTAL_NEAR_SPOT_YD) -> list[tuple[int, float, float]]:
+    out = []
+    for guid, old, new, where in changes:
+        from_old, from_new = math.dist(where, old), math.dist(where, new)
+        if from_old <= near_yd and from_new > from_old:
+            out.append((guid, from_old, from_new))
+    return out
+
+
+def portal_walk_rows(trace: Trace) -> tuple[dict[int, list[tuple[int, str]]], dict[int, list[tuple[int, str]]]]:
+    intents: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.portal"):
+        intents[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+    moves: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok"):
+            moves[rec.get("g", 0)].append((rec["t"], str(rec.get("by", ""))))
+    for rows in intents.values():
+        rows.sort()
+    return intents, moves
+
+
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
     """Portals taken against bots told to take one. AddPortals spawns RAID_MODE(4, 10) per wave, one use each, so the
     gap is bots that walked to a used spot or, when the node never ran, never walked."""
@@ -1717,8 +1765,14 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
         return
 
     assignments: dict[int, dict[int, int]] = {}
+    slots: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
     for rec in notes(trace, "yogg.portalslot"):
         assignments.setdefault(rec["t"], {})[rec.get("g", 0)] = int(rec.get("txt", 0))
+        slots[rec.get("g", 0)].append((rec["t"], int(rec.get("txt", 0))))
+    intents, moves = portal_walk_rows(trace)
+
+    detours = sum(walks_while_holding(intents[guid], moves.get(guid, []), BODY_DETOUR_NODE) for guid in intents)
+    print(f"\n  body detour walks while holding a portal spot: {detours}")
 
     print()
     for start, ordinal in waves:
@@ -1745,6 +1799,27 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
         for guid, (when, got_in) in sorted(spent.items(), key=lambda item: item[1][0]):
             outcome = f"in {(got_in - when) / 1000:.1f} s later" if got_in is not None else "never got in"
             print(f"      {trace.name(guid):14} {trace.role(guid):6} at +{(when - start) / 1000:.1f} s, {outcome}")
+
+        left_by: collections.Counter = collections.Counter()
+        left = 0
+        changes = []
+        for guid, rows in slots.items():
+            wave_intents = [row for row in intents.get(guid, []) if start - PORTAL_DESPAWN_MS <= row[0]]
+            nodes = left_held_spot(wave_intents, moves.get(guid, []), start)
+            if nodes is not None:
+                left += 1
+                left_by.update(nodes or ["nothing recorded"])
+            old = [slot for when, slot in rows if start - 30000 <= when < start - 50]
+            new = [(when, slot) for when, slot in rows if start - 50 <= when <= start + 3000]
+            if old and new and old[-1] != new[0][1]:
+                where = position_at(trace, guid, new[0][0])
+                if where:
+                    changes.append((guid, PORTAL_SPOTS[old[-1]], PORTAL_SPOTS[new[0][1]], where))
+        losses = rebuild_losses(changes)
+        print(f"    left a held spot before the open: {left}"
+              f"{' (' + ', '.join(f'{node} {n}' for node, n in left_by.most_common()) + ')' if left else ''};"
+              f" moved off a near spot by the open's rebuild: {len(losses)}"
+              f"{' (' + ', '.join(f'{trace.name(guid)} {a:.1f} -> {b:.1f} yd' for guid, a, b in losses) + ')' if losses else ''}")
         if missed:
             walked = walked_for_a_portal(trace, missed, start, start + PORTAL_DESPAWN_MS)
             for label, who in (("walked and never got one", missed & walked),
