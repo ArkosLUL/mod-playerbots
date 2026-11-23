@@ -22,7 +22,8 @@
                                            outside a pull: the landing off ARENA_CENTER, Chains of Ice after,
                                            regrips; fc.wall holds
     faction_champions.py <file> --peel     snares and peels on melee champions, trinket poppers on iced ones, the
-                                           full-speed chases a snare reached, Disarm against Bladestorm,
+                                           full-speed chases a snare reached, Disarm against Bladestorm, disarms
+                                           on the iced Tauren against the casts they gate,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
@@ -546,6 +547,10 @@ HOLD_ONLY_PEELS = ("Death Grip", "Frost Nova", "Freezing Arrow")
 DISARMS = frozenset((676, 51722, 64044))
 SPELL_BLADESTORM = 65947
 WARRIOR_CHAMPIONS = (34475, 34453)
+ICED_DISARMS = frozenset((676, 51722))
+DISARM_GATED = {34453: frozenset((65926, 68782, 68783, 68784, 65924, 65936, 65940, 65932, SPELL_BLADESTORM)),
+                34455: frozenset((65970, 65974))}
+DISARM_MS = 10000
 EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
              47788: "Guardian Spirit", 6940: "Hand of Sacrifice",
              **dict.fromkeys((633, 2800, 10310, 27154, 48788), "Lay on Hands"), 64205: "Divine Sacrifice"}
@@ -2325,11 +2330,12 @@ def taunt_casts(trace: Trace) -> collections.Counter:
 
 
 def peel_casts(trace: Trace) -> list[dict]:
-    """Every raid peel on a champion: `t`, `by`, `spell`, `target`, and `duty`, cast inside the caster's
-    `fc.peel` hold on that champion. Death Grip and Frost Nova count only inside a hold, the target being
-    the hold's champion."""
+    """Every raid peel on a champion: `t`, `by`, `spell`, `target`, `duty`, cast inside the caster's
+    `fc.peel` hold on that champion, and `iced`, an ice duty's Chains of Ice on it (`iced_at`). Death Grip
+    and Frost Nova count only inside a hold, the target being the hold's champion."""
     targets = champions(trace)
     roster = roster_guids(trace)
+    duties = ice_duties(trace)
     holds: dict[int, list[tuple[int, int, int]]] = collections.defaultdict(list)
     for hold in duty_holds(trace, PEEL):
         holds[hold["bot"]].append((as_guid(hold["value"]), hold["start"], hold["stop"]))
@@ -2345,7 +2351,35 @@ def peel_casts(trace: Trace) -> list[dict]:
             target = held if held and target in (0, held) else 0
         if not target:
             continue
-        out.append({"t": rec["t"], "by": caster, "spell": name, "target": target, "duty": held == target})
+        out.append({"t": rec["t"], "by": caster, "spell": name, "target": target, "duty": held == target,
+                    "iced": iced_at(duties, target, rec["t"])})
+    return out
+
+
+def iced_disarms(trace: Trace) -> list[dict]:
+    """Per Tauren champion (Narrhok, Broln): `guid`, the raid's Disarm and Dismantle casts on it while an ice
+    duty's Chains of Ice held it (`disarms`, times), and its casts its script skips while disarmed, made while so
+    held: within DISARM_MS after one of those disarms (`after`) or not (`other`)."""
+    roster = roster_guids(trace)
+    duties = ice_duties(trace)
+    casts = trace.of("cast")
+    out = []
+    for guid, entry in sorted(champions(trace).items()):
+        gated = DISARM_GATED.get(entry)
+        if gated is None:
+            continue
+        disarms = [rec["t"] for rec in casts
+                   if rec.get("tgt") == guid and rec.get("sp") in ICED_DISARMS and rec.get("s") in roster
+                   and not rec.get("tr") and iced_at(duties, guid, rec["t"])]
+        after = other = 0
+        for rec in casts:
+            if rec.get("s") != guid or rec.get("sp") not in gated or not iced_at(duties, guid, rec["t"]):
+                continue
+            if any(0 <= rec["t"] - when < DISARM_MS for when in disarms):
+                after += 1
+            else:
+                other += 1
+        out.append({"guid": guid, "disarms": disarms, "after": after, "other": other})
     return out
 
 
@@ -2430,12 +2464,15 @@ def show_peel(trace: Trace) -> None:
 
     peels = peel_casts(trace)
     if peels:
-        print(f"\n  {len(peels)} peel(s) on champions, by spell and class (on an {PEEL} duty / not):")
-        counted: dict[tuple[str, str], list[bool]] = collections.defaultdict(list)
+        print(f"\n  {len(peels)} peel(s) on champions, by spell and class (on an {PEEL} duty / not; on a champion"
+              " an ice duty holds in Chains of Ice):")
+        counted: dict[tuple[str, str], list[dict]] = collections.defaultdict(list)
         for row in peels:
-            counted[(row["spell"], klass.get(row["by"], "?"))].append(row["duty"])
-        for (spell, name), duty in sorted(counted.items()):
-            print(f"    {spell:16} {name:12} {len(duty):3}  {duty.count(True)} / {duty.count(False)}")
+            counted[(row["spell"], klass.get(row["by"], "?"))].append(row)
+        for (spell, name), rows in sorted(counted.items()):
+            duty = [row["duty"] for row in rows]
+            print(f"    {spell:16} {name:12} {len(duty):3}  {duty.count(True)} / {duty.count(False)};"
+                  f" iced {sum(row['iced'] for row in rows)}")
     else:
         print(f"\n  no peel on a champion")
     peel_holds = duty_holds(trace, PEEL)
@@ -2447,6 +2484,12 @@ def show_peel(trace: Trace) -> None:
         print(f"  {trace.name(row['guid'])} (Warrior): Bladestorm {len(storms)}"
               + (f" (first {clock(storms[0])})" if storms else "")
               + f", disarms {len(disarms)}" + (f" (first {clock(disarms[0])})" if disarms else "") + first)
+    for row in iced_disarms(trace):
+        disarms = row["disarms"]
+        print(f"  {trace.name(row['guid'])} (Tauren): Disarm or Dismantle while iced {len(disarms)}"
+              + (f" (first {clock(disarms[0])})" if disarms else "")
+              + f"; its disarm-gated casts while iced: {row['after']} within {DISARM_MS // 1000} s after one,"
+              f" {row['other']} otherwise")
 
     externals = external_casts(trace)
     if externals:
