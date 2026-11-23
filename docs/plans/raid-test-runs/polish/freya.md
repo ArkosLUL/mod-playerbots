@@ -1156,3 +1156,156 @@ one lasher at a time can hold the Gift takers off the Gift for several casts. Th
 `GetFreyaLowLasherOnPlayer` takes `backLineOnly`, and the pick ahead of the Gift passes it: the victim must be
 a ranged DPS or healer player, not a tank (`IsTank`, `IsRangedDps`, `IsHeal`, which read a human's spec
 too). The round 6 lasher pick still takes any player. The watch item above no longer applies.
+
+**User answer (2026-11-23) to Q10:** yes, at 10 man (any size, by rule) melee help kill Eonar's Gift: while
+fewer than `ULDUAR_FREYA_GIFT_SHARE` (5) ranged DPS are alive, the melee DPS nearest the Gift join until 5 are
+on it.
+
+## Round 11 (build 2d7853f0e: round 10 built, the shared fix d70101432 merged but not built)
+
+**Data:** window 15 (build 523b2f60f, round 9 built): `tr-20261123-123347-11` (uld1, DK add tank),
+`-123307-10` (uld2, bear), `-123407-12` (uld3, bear); traces `env/dist/logs/botobs/603_{11,10,12}_elder-stonebark
+_{1795437270,1795437228,1795437289}.ndjson`. Window 16 (build 2d7853f0e, round 10 built; `report --head 2d7853f0e
+--pulls 10`): `tr-20261123-134321-7` (uld1), `-8` (uld2), `-9` (uld3); traces `603_{7,8,9}_elder-stonebark_
+{1795441471,1795441476,1795441465}`. One valid 25-man pull per pool in each, no DC veto inside a pull. Windows
+14 and 15a are the baseline. Ad hoc scripts: `scratchpad/freya-r11/` (`gift_walk.py`, `gift_away.py`,
+`camp_kind.py`, `gather_inflight.py`, `gift_hits.py`, `q6_check.py`), plus `freya-r7/wave_timeline.py`,
+`gift_reach.py`, `freya-r9/extcasts.py`, `defhp.py`, `tankhp.py`.
+
+**Hard mode.** All six pulls 3 of 3 Elders from their essence channels; the four kills cast chest 62952.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 w15 | 1795437270 | **kill 6:27, 1** | Detonate 1 (melee 3:15) |
+| uld2 w15 | 1795437228 | wipe 5:40, 30 | Unstable Energy 7 (three healers and a melee 3:47.5-3:48.4, one healer twice, in three beams on a spore walk; a melee 1:52.7, a ranged 5:13); second lasher wave (4:39, raid at 20) 23: lasher 18 (melee 11, Flame Lash 6, Detonate 1), Freya 5 (Ground Tremor 2, Sunbeam 2, melee 1) |
+| uld3 w15 | 1795437289 | **kill 7:44, 5** | lasher 4 (ranged, 4:07-4:27, in a second lasher wave that ran 90s), Nature Bomb 1 |
+| uld1 w16 | 1795441471 | **kill 6:17, 1** | Nature Bomb 1 |
+| uld2 w16 | 1795441476 | **kill 6:22, 2** | Unstable Energy 1 (melee), Nature Bomb 1 |
+| uld3 w16 | 1795441465 | wipe 5:06, 29 | second lasher wave (2:33, never cleared): lasher 8 (4 ranged and a melee 2:41.8-3:09.5, 3 in the collapse); Snaplasher 10 (the bear add tank at 3:52.8 under Survival Instincts and Frenzied Regeneration, again 4:07.3 after his soulstone, then 8 non-tanks 4:10-4:51); Freya 5 (melee 3, the main tank twice; Ground Tremor 1, Sunbeam 1); Storm Lasher 4; Water Spirit 1; Conservator 1 |
+
+**Stop rules:** window 16 killed on uld1 (1 death) and uld2 (2), wiped on uld3; window 15 killed on uld1 (1) and
+uld3 (5), wiped on uld2. Not polished. No failure picked three rounds running (round 9 the add tank's death,
+rounds 8 and 10 built answers).
+
+**Round 9 verdict (window 15): held.**
+
+- Cover lines: `both` 0.0s in all six trio waves (window 14: 8.0, 19.5s); `none` 11.7/4.5, 1.9/2.4, 5.1/6.3s
+  (9-30s).
+- Healer Pain Suppression, Guardian Spirit and Hand of Sacrifice went only to the add tank (8 casts); the hold
+  vetoed only healers' class externals. Every `freya.addext` name landed its aura (8 of 8, window 16 6 of 6).
+- Holds vetoed only inside the add phase (0:15 to before each sixth wave's end).
+- Add-tank deaths to the Snaplasher 0/0/0 (window 14: 0/1/1; rounds 4-6: 1-2 a pull). uld3's two trio waves
+  2:49 apart: the bear held the second 69.5s (own 49.5s, external 13.8s, none 6.3s).
+
+**Round 10 verdict (window 16).**
+
+- Q9, externals allowed on the main tank: **untested.** No healer external went to a main tank (he died only in
+  uld3's collapse); none to DPS, healers or pets; the hold vetoed only healers' class externals.
+- Q6, a back-line low lasher before the Gift: **partly held.** Ranged DPS samples in reach of a low lasher hitting
+  a ranged DPS or healer with a Gift up (`q6_check.py`; the reader's `--lows` counts any victim): 45, 36% on the
+  Gift and 44% on that lasher (windows 14-15a: 614, 54% and 21%). Gifts living 12s+: 3 of 23 (window 15: 3 of 25).
+- Round 9 still holds: `both` 0.0s, `none` 3.4/3.0 (uld2), 1.4/6.8 (uld3), 20.6/4.2s (uld1, whose first wave ran
+  61.2s: the DK's Vampiric Blood, Icebound Fortitude and both externals were spent by 0:45.7, no death; the
+  reader had read that wave on the main tank, fixed below); every external named landed.
+- Rounds 1-8: no tank Roar or Shout, Righteous Defense only on non-tanks; Freya on the main tank 99.3/100/95.2%
+  (uld3 off him from 4:44.7, in the collapse). Beam dodges from past 8 yd 0-17% by role. `--ghouls` no lasher in
+  reach 1-10%, on Freya 0-4%. `--blasts` 0-14% of melee approach orders into a low blast, no melee Detonate death
+  (window 15: 2). `--lows` lashers 8s+ on a player 0-1 a wave. No 10-man pull, so round 8's 10-man check waits.
+
+**Q8 decided from the evidence: a question, not built.** No two trio waves came 60s apart in windows 15-16 (gaps
+2:23-4:06). The one add-tank death to the Snaplasher in six pulls came in a pull's second trio wave (uld3 w16,
+3:23 after the first), but not bare: Barkskin at 3:39.95, Survival Instincts at 3:47.96 (43%), Frenzied
+Regeneration at 3:50.71 (19%), dead at 3:52.757 to a Gift-healed lasher's 6.5-8.5k swings between the
+Snaplasher's 9.9-31.2k (`tankhp.py`); no external, held as `covered` while his own buttons were ready. Question
+8 below.
+
+**Ranking.** (1) A lasher wave Eonar's Gift keeps alive past the next spawn: all three bad pulls, 56 deaths
+(w15 uld2 23 after its Unstable Energy 7, w16 uld3 29, w15 uld3 4). Gifts that lived healed the lashers 171% →
+558% summed (w15 uld2 5:01), 25% → 139% under a trio just spawned (w16 uld3 3:31), 117% → 416% with the trio
+due 17s later (w15 uld3 4:17). (2) Unstable Energy 8, 5 of them in one beam cluster. (3) Nature Bomb 3,
+singles. Picked (1).
+
+**Why each of those Gifts lived** (`gift_walk.py`, `gift_hits.py`, `camp_kind.py`; no damage row reaches the
+trace for a Gift, casts at it do):
+
+- w16 uld3 3:31: a walk in flight. `freya ranged camp`'s gather (to (2344, -90), about 50 yd from Freya, where
+  the anchor Uldzah's own generic flee from a lasher at 3:28.2 took him) went out to five ranged at 3:29.7-3:31.4; the Gift
+  spawned at 3:31.27 14.9 yd from Freya, the five took it, and the walk carried them on: Uldzan 10 → 58 yd,
+  Uldzak 39 → 58, Uldzau 41 → 58, Uldzap 53 → 58, Uldzaq 50 → 58 (`gather_inflight.py`), their next order 0.8-7.2s
+  later. Round 7 stood the gather down for a bot whose target is a Gift, which stops new gather orders, not one
+  already walking: `MoveTo`'s `IsWaitingForLastMove` (`MovementActions.cpp:1059-1071`) holds a same-priority
+  `reach spell` up to `MaxWaitForMove` (5s) and Uldzan issued none for 7.2s. 83% left.
+- w15 uld2 5:01: the pack between. Ranged centroid (2360, -14), lashers (2357, -40), Gift (2343, -67): each `reach
+  spell` step ended within 15 yd of a low lasher and the bail walked it back, 19 bails while 9 ranged held it as
+  target and none came within 28.5 yd. 98% left.
+- w15 uld3 4:17: 7 of 8 ranged stayed on lashers all 14.5s, the mage Uldzah after an Invisibility at 4:11.7; six
+  ran generic `dps assist` unvetoed at 4:25.4-4:26.0 (`FreyaOwnsTargets` false). Not root-caused.
+
+Across windows 14-16 (12 pulls), ranged walking away from a Gift while targeting it: 74 bot-seconds on the ones
+that lived, 51 of them under `freya ranged camp` (`gift_away.py`).
+
+**Failure picked: a gather walk under way carries Gift takers away from the Gift.**
+
+**Classification: bug.** Round 7's intent, "the gather undid their walk to it", is defeated by the walk already
+running; the bail-loop case is a position question (Q11).
+
+**Fix** (Freya files only, any size or difficulty, no player branch): `FreyaSetDpsPriorityAction::
+CutWalkAwayFromGift`: a DPS bot whose resolved target is a Gift stops, once per Gift, a walk at
+`MOVEMENT_COMBAT` or below whose end lies farther from the Gift than it stands (`GetMotionMaster()->Clear()`,
+`StopMoving()`, `last movement` cleared), so `reach spell` or `reach melee` takes it there at once. Forced
+escapes (bails, dodges, bombs) run on; once per Gift so a generic flee re-issued next tick isn't cut again.
+Note `freya.giftcut` "<bot> of <walk's end> yd".
+
+**Built, Q10:** `TakesEonarsGift`'s melee branch: a melee DPS bot takes the Gift once `IsFreyaGiftFiller` says it
+is among the `ULDUAR_FREYA_GIFT_SHARE` minus living-ranged-DPS melee DPS bots nearest it (2D, GUID ties), and
+stays on that Gift. Ranged DPS counts every living group member by role, players too, as before; the ranking
+counts bots only, so a human melee never takes a bot's slot. Replaces `FreyaHasLivingRangedDps` (melee only
+with no ranged alive, after the 5s head start with a pack up). 25-man rosters carry 9-10 ranged: unchanged
+until fewer than 5 live.
+
+**Reader:** `--waves` gives each Gift the most ranged and melee DPS on it in one snapshot and its cut walks; the
+cover line takes the tank who held the Snaplasher longest (it took the first one, so w16 uld1's first wave read
+the main tank's 0% on it as 61.5s bare). Tested. Baselines: 10-man window 15a Gifts at most 2 ranged and 0 melee
+on them (one 1 melee), 16 of 27 living.
+
+**Next window should show** (`freya.py --waves`, `gather_inflight.py`, `gift_away.py`):
+
+- `freya.giftcut` notes on Gifts taken mid-walk; ranged walking away from a Gift they target under `freya ranged
+  camp` only from bails (window 16 uld3 3:31: 5-48 yd); no Gift living because a gather carried its takers off.
+- Fewer Gifts living 12s+ in lasher waves (windows 15-16: 6 of 48 lived, 4 of them in lasher waves) and lasher
+  waves done before the next spawn.
+- 10-man (Q10): Gift lines with 3 melee next to the 2 ranged; Gifts living 12s+ well under window 15a's 16 of
+  27. 25-man: 0 melee on a Gift while 5+ ranged live.
+- Rounds 9 and 10 as above; Q9's main-tank externals when he needs one.
+
+**Not picked:**
+
+- The bail loop with the pack between (Q11) and the camp anchor's own flee moving every gather (w16 uld3: to the
+  south wall).
+- w15 uld3 4:17's ranged on lashers through a Gift with `dps assist` unvetoed: read `FreyaOwnsTargets` next
+  round; Invisibility and Feign Death (6 in w16 uld3) may take a bot off Freya's threat list, which turns every
+  `Boss()` trigger off for it (round 6's known gap for a risen bot).
+- Unstable Energy 5 in one second (w15 uld2 3:47.5): two of the healers dodged at 3:43.5, then `freya move to
+  healing spore action` (3:45.2) walked them back across three overlapping beams. The spore walk ignores beams, as it
+  ignores a loose Snaplasher (round 10). Next round's candidate if it repeats.
+- The add tank's death with buttons ready but unpressed while Barkskin ran (externals held as `covered`): one case.
+
+**Questions:**
+
+8. (decided from windows 15-16) Two trio waves 60s apart: none came, and the one add-tank death was a second
+   trio wave 3:23 after the first, with Survival Instincts and Frenzied Regeneration up, to a lasher a Gift had
+   healed beside the Snaplasher. Options as in round 9: (a) accept it; (b) DPS leave the Snaplasher until both
+   siblings near the sync floor, then burn it; (c) the main tank takes a second wave's Snaplasher.
+   Recommendation: (a). (b) withholds damage from the Snaplasher, which the findings doc records as why the trio
+   could never die together, and the evidence shows no button gap; this round's fix goes at the lasher that
+   killed him. Revisit if a back-to-back pair shows an add tank dying bare.
+11. With the lasher pack between the back line and a Gift, the ranged never reach it: each `reach spell` step
+    ends inside a low lasher's blast and the bail walks it back (w15 uld2 5:01: 19 bails, 0 of 9 in reach,
+    lived at 98%, then 21 deaths). Options: (a) leave it; (b) a ranged DPS bot whose target is a Gift and has no
+    spot in reach walks to the nearest spot within `SpellDistance` of it, at least `DETONATE_RADIUS` + 1 from
+    every low lasher, on a walk that crosses no blast, as `freya reach held pack` does for the pack; (c) melee
+    DPS fill the Gift whenever no ranged is in reach of it. Recommendation: (b).
+6. and 7. answered (round 9's user answers).
+
+**Shared code:** none changed. The shared fix d70101432 (`ReadyTankDefensive` judges a button's cost for when the
+tank needs it) is on Custom, not in window 16's build; it changes `IsFreyaAddTankCovered` for a DK add tank.

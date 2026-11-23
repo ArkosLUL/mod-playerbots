@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <utility>
 #include <vector>
 
@@ -454,6 +455,9 @@ bool FreyaSetDpsPriorityAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    if (target->GetEntry() == NPC_EONARS_GIFT)
+        CutWalkAwayFromGift(target);
+
     CommandPetAttack(botAI, target);
 
     bool needsAttack = currentTarget != target;
@@ -469,6 +473,15 @@ bool FreyaSetDpsPriorityAction::TakesEonarsGift(FreyaWaveState const& state)
     {
         giftGuid.Clear();
         return false;
+    }
+
+    if (!PlayerbotAI::IsRangedDps(bot))
+    {
+        ObjectGuid const gift = state.eonarsGift->GetGUID();
+        if (filledGiftGuid != gift && IsFreyaGiftFiller(botAI, state.eonarsGift))
+            filledGiftGuid = gift;
+
+        return filledGiftGuid == gift;
     }
 
     bool packUp = false;
@@ -489,6 +502,34 @@ bool FreyaSetDpsPriorityAction::TakesEonarsGift(FreyaWaveState const& state)
         return true;
 
     return GetFreyaRangedDpsRank(botAI) < ULDUAR_FREYA_GIFT_SHARE;
+}
+
+void FreyaSetDpsPriorityAction::CutWalkAwayFromGift(Unit* gift)
+{
+    if (walkCutGiftGuid == gift->GetGUID())
+        return;
+
+    walkCutGiftGuid = gift->GetGUID();
+
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    if (!last.msTime || last.priority > MovementPriority::MOVEMENT_COMBAT || !bot->isMoving())
+        return;
+
+    float const from = bot->GetExactDist2d(gift);
+    float const to = gift->GetExactDist2d(last.lastMoveToX, last.lastMoveToY);
+    if (to <= from)
+        return;
+
+    bot->GetMotionMaster()->Clear();
+    bot->StopMoving();
+    last.clear();
+
+    if (RaidObs::Active())
+    {
+        char walk[32];
+        std::snprintf(walk, sizeof(walk), "%.0f of %.0f yd", from, to);
+        RaidObs::NoteDerived(bot, "freya.giftcut", walk);
+    }
 }
 
 Unit* FreyaSetDpsPriorityAction::ShedSnaplasherThreat(FreyaWaveState const& state, Unit* assigned)
@@ -538,8 +579,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    bool const takesGift =
-        (PlayerbotAI::IsRangedDps(bot) || !FreyaHasLivingRangedDps(botAI)) && TakesEonarsGift(state);
+    bool const takesGift = TakesEonarsGift(state);
 
     bool const trioLocked = state.TrioLocked();
 

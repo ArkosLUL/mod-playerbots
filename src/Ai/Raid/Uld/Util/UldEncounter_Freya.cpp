@@ -617,20 +617,40 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     return freya;
 }
 
-bool FreyaHasLivingRangedDps(PlayerbotAI* botAI)
+bool IsFreyaGiftFiller(PlayerbotAI* botAI, Unit* gift)
 {
-    Group* group = botAI->GetBot()->GetGroup();
-    if (!group)
+    Player* bot = botAI->GetBot();
+    if (!gift || !PlayerbotAI::IsDps(bot) || PlayerbotAI::IsRangedDps(bot))
         return false;
 
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    float const ownDistance = bot->GetExactDist2d(gift);
+    uint32 ranged = 0;
+    uint32 nearer = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (member && member->IsAlive() && PlayerbotAI::IsRangedDps(member))
-            return true;
+        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (PlayerbotAI::IsRangedDps(member))
+        {
+            ++ranged;
+            continue;
+        }
+
+        if (!GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsDps(member))
+            continue;
+
+        float const distance = member->GetExactDist2d(gift);
+        if (distance < ownDistance || (distance == ownDistance && member->GetGUID() < bot->GetGUID()))
+            ++nearer;
     }
 
-    return false;
+    return ranged < ULDUAR_FREYA_GIFT_SHARE && nearer < ULDUAR_FREYA_GIFT_SHARE - ranged;
 }
 
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius)
