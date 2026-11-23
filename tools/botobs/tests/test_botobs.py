@@ -1831,7 +1831,8 @@ class YoggPhases(unittest.TestCase):
         rooms = {1: [("icecrown", 0, 9000)], 2: [("icecrown", 0, 9000)], 3: [("icecrown", 0, 9000)],
                  4: [("chamber", 0, 9000)], 5: [("arena", 0, 9000)]}
         heals = [{"t": 1500, "s": 2, "d": 1}, {"t": 2000, "s": 2, "d": 3}, {"t": 2500, "s": 4, "d": 4},
-                 {"t": 3000, "s": 5, "d": 5}, {"t": 6000, "s": 2, "d": 3}, {"t": 3500, "s": 3, "d": 1}]
+                 {"t": 3000, "s": 5, "d": 5}, {"t": 6000, "s": 2, "d": 3}, {"t": 3500, "s": 3, "d": 1},
+                 {"t": 4000, "s": 2, "d": 4}]
         self.assertEqual(yogg_saron.heals_during_holds(holds, rooms, heals, {2, 4, 5}), (1, 1))
         self.assertEqual(yogg_saron.heals_during_holds({}, rooms, heals, {2, 4, 5}), (0, 0))
 

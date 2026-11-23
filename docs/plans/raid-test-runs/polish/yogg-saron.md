@@ -1076,7 +1076,7 @@ rows within 50 ms into one plan (`plan_rounds`, tested); re-read, every wave has
    Spells by class (`YoggSaronReprisalHealSpell`): Penance, Flash Heal, Renew if missing; Riptide, Healing Wave,
    Lesser Healing Wave; Holy Shock, Holy Light, Flash of Light; Rejuvenation if missing, Swiftmend, Nourish. Probe
    `yogg.reprisalheal` (spell). Baseline here: `--brain` `heals in a hold` (new, tested) 14 / 16 / 12 heals on a held
-   bot against 23 / 24 / 17 on others in its room (window 19: 41 / 54, 35 / 77, 7 / 28); holds 11 / 10 / 9, median 6.6
+   bot against 21 / 23 / 17 on others in its room (window 19: 41 / 53, 35 / 75, 7 / 28); holds 11 / 10 / 9, median 6.6
    / 3.8 / 3.5 s.
 
 Same rooms at 10 and 25, normal and hard mode. With a player: his target counts as an attacker in the join, and he
@@ -1084,7 +1084,7 @@ is never held (the hold latches in each bot's own tick), so a bot healer puts on
 heals as he chooses. No shared code.
 
 **Next window should show:** `--brain` door lines in Stormwind and Icecrown with `staged` above 0 and fewer than 5-7
-`joined a tentacle`; `room shares` and `room states` with `staged`; melee on the Brain sooner than 14.0 s and the
+`joined a tentacle` (0 in Icecrown, see the review note); `room shares` and `room states` with `staged`; melee on the Brain sooner than 14.0 s and the
 first hit sooner than 8.5 s after the door; Stormwind / Icecrown Brain per cycle above 13.4%. `heals in a hold` mostly
 on the held bot, `reprisal heal` rows by spell, hold medians under 6.6 / 3.8 / 3.5 s. Round 11's entry numbers no
 worse.
@@ -1097,3 +1097,9 @@ worse.
 - Healers still entered over 5 s late in 4 waves (uld1 6.1 and 12.2 s, uld2 8.2, uld3 6.8); not traced yet.
 - Uldxai's Reincarnation stood him up inside the phase 1 stack 0.2 s after a nova, and he died to the next one: three
   deaths in uld1, the same bot as window 16's and window 19's two.
+
+**Review notes.** In all three window 21 pulls no Icecrown tentacle or Deathsworn Zealot stood within 40 yd of
+`…_ICECROWN_STAGE_SPOT` (nearest 56.2 yd; the clusters' centres sit 61-74 yd off), so in Icecrown the join never fires
+and a finished bot always waits, as in round 8; Stormwind had 4-6 units 31-40 yd from its spot. `heals in a hold`
+counted heals on bots outside the healer's room (2 / 1 / 0 here) as `on others in its room`; it now counts only room
+mates, and the baseline above is re-read with it.

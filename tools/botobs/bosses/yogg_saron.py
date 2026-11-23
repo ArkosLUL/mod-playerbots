@@ -1760,8 +1760,6 @@ def portal_walk_rows(trace: Trace) -> tuple[dict[int, list[tuple[int, str]]], di
 
 
 def plan_rounds(rows: list[tuple[int, int, int]], gap_ms: int = PLAN_ROUND_MS) -> dict[int, dict[int, int]]:
-    """`(t, guid, slot)` slot rows folded into plan rebuilds keyed by their first row, a row within `gap_ms` of the
-    rebuild's first joining it."""
     rounds: dict[int, dict[int, int]] = {}
     first = None
     for when, guid, slot in sorted(rows):
@@ -2193,8 +2191,6 @@ def hold_summary(spans: dict[int, list[tuple[str, int, int]]], deaths: list[dict
 
 def heals_during_holds(holds: dict[int, list[tuple[int, int]]], rooms: dict[int, list[tuple[str, int, int]]],
                        heals: list[dict], healers: set) -> tuple[int, int]:
-    """Heals a healer landed while it shared an illusion room with a reprisal-held bot: (on a held bot, on anyone
-    else). `holds` are each bot's held (start, stop) spans, `rooms` its `yogg.room` spans."""
     def room_at(guid: int, when: int) -> str | None:
         return next((room for room, start, stop in rooms.get(guid, []) if start <= when < stop), None)
 
@@ -2210,7 +2206,7 @@ def heals_during_holds(holds: dict[int, list[tuple[int, int]]], rooms: dict[int,
             continue
         if heal.get("d") in held:
             on_held += 1
-        else:
+        elif room_at(heal.get("d"), when) == room:
             on_others += 1
     return on_held, on_others
 
@@ -2238,9 +2234,9 @@ def show_reprisal(trace: Trace) -> None:
         healers = {guid for guid, role in trace.roles.items() if role == "heal"}
         on_held, on_others = heals_during_holds(holds, holder_spans(trace, "yogg.room", end), trace.of("heal"),
                                                 healers)
-        firsts = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.reprisalheal"))
+        by_spell = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.reprisalheal"))
         print(f"  heals in a hold  : {on_held} on a held bot, {on_others} on others in its room;"
-              f" reprisal heal {dict(firsts) or '-'}")
+              f" reprisal heal {dict(by_spell) or '-'}")
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:

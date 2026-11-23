@@ -1276,8 +1276,9 @@ also on it. The spots, `…_ICECROWN_STAGE_SPOT` / `…_STORMWIND_STAGE_SPOT`, s
 landing to Brain, 6 / 3 yd past the landing, because both doors are inside the brain room's 50 yd circle
 and a bot at one reads as already in the brain room; arrival is 1.5 yd, each spot ~3 yd inside either
 circle. Waiting, the state reads `staged`, the illusion room node walks the bot to the spot, and
-`yogg-saron illusion stage hold` blocks the reprisal hold's target pickers except `AttackRti`. The Chamber
-keeps plain spread, where nobody waits.
+`yogg-saron illusion stage hold` blocks the reprisal hold's target pickers except `AttackRti`. Every
+Icecrown tentacle stands 56+ yd from its spot, so there a finished bot always waits; the Chamber keeps
+plain spread, where nobody waits.
 
 **Grim Reprisal is what kills the brain team, and only a hit triggers it.**
 `spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;
@@ -2033,7 +2034,7 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
 - A heal row carries no room: `--brain`'s `heals in a hold` places the healer and the held bot by their
-  `yogg.room` spans.
+  `yogg.room` spans and counts only heals on a room mate.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
   (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
   against the Brain's reach of 27.
