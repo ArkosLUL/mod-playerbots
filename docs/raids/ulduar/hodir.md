@@ -155,9 +155,18 @@ a block the next fire came 17.9-40.8 s (28.5 mean) after each freeze landed — 
 breakers held off it by the post-freeze shelter run, the shed and dodges; three breakers free it in
 **4.4-11.0 s**, and the block carries no mechanic, so that time scales with how many shoot it. **No
 helper block gets breakers once Hodir is under 12%** (`_LAST_WAVE_HEALTH_PCT`, ~21.6 s at the cache
-pace; trapped raiders still do): a freed mage's fire comes ~15 s after the landing at best and the
-last fire's Singed runs 25 s past it. The last wave goes up at 7.6-9.9% (the one before at
-31.7-36.7%) and soaked 0.44-0.78 M; its fire either burned 2.8 s before the kill or never came.
+pace, ~18 s at the 279-291k a raid with nobody on ice runs after the last landing; trapped raiders
+still do): a freed mage's fire comes ~15 s after the landing at best and the last fire's Singed runs
+25 s past it. The last wave goes up at 7.6-9.9% (the one before at 31.7-36.7%) and soaked
+0.44-0.78 M; its fire either burned 2.8 s before the kill or never came.
+
+**A shaman's second Storm Cloud of a freeze cycle needs its block dead within ~12 s.** A freed
+`npc_ulduar_hodir_shaman` casts Storm Cloud 1 s after `ScheduleAbilities`, on a random player within
+35 yd, and every 30 s after until the next freeze traps it; the first cloud lands ~3.5 s after the
+block breaks. Over 27 freeze cycles (windows 10-14) a shaman's cloud repeated every time its first
+landed within 15.5 s of the blocks spawning (11) and never from 16.4 s (41). The first shaman block
+gets one breaker once a mage block is free, the second only once a druid is, so they break 10-24 s
+in and most freeze cycles carry two clouds, not four.
 
 **Breakers keep to their own block.** The blocks are attackers, so the `X on attacker` DoTs (relevance
 19-19.5, over the single-target ones at 5-18) spread over all eight blocks and Hodir, and AoE fires on
@@ -524,6 +533,13 @@ for **22%**.
     the walk outright.
   - From due to 1.5 s past the pulse, a receiver inside release is held from `Reach` and `SetBehind`
     (`hodir storm gather hold`), which pulled melee parked out of his reach back to him first.
+
+  In window 14 pulse 4 handed out 44 of 192 Storm Power (9 of 163 before) and took every receiver
+  still in the leash, but 28 of 143 in a leash at landing got none from any cloud. **Open:** 11 were
+  walked past 15 yd while waiting (position node, shed, melee chasing him), and `GetHodirStormGather`
+  tests the leash live; 7 stood round a second carrier, yet every bot gathers on the lowest-guid one
+  and the two shamans' clouds often land together; 6 had the walk cut by icicle dodges; 4 lost it to
+  bots inside at landing spending the cloud on pulses 1-3.
 - **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
   one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
   **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
@@ -716,6 +732,13 @@ The worst one's first cloud sat 30 s on a tank (3 Storm Power) and its second on
 and 2 of its 8 clouds went to a tank; the best one's second landed on a healer among ranged in the
 first fire and buffed six of them within 2 s. He picks the carrier, so the shared pulse above is what
 lifts the floor.
+
+**So does how many clouds come.** Window 14 paced 243k (cache kept, kill 2:52.7), 223k and 212k,
+all level at the second landing (1:46). From there to 2:52 the two slower ones dealt 4.4 /
+6.4 M less on him: Storm Power ~2.2 M (damage dealers held it 556 / 576 bot-seconds against 809,
+from two clouds against four: their shamans broke too late to repeat, above), ranged on ice 0.6 /
+1.3 M (their last wave landed at 14.7 / 17.4%, over the 12% skip, where the fast pull's at 11.4%
+went unbroken), and melee uptime the rest.
 
 **Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
 (`_LUST_FALLBACK_MS`; first fires come 17-26 s in, ~9 s after the first mage block breaks). Cast at
