@@ -699,8 +699,8 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
             char line[32];
             if (std::strcmp(approach.how, "detour") == 0)
                 snprintf(line, sizeof(line), "detour %+.0f", approach.turn * 180.0f / static_cast<float>(M_PI));
-            else if (std::strcmp(approach.how, "cross") == 0)
-                snprintf(line, sizeof(line), "cross %.1f", approach.burn);
+            else if (std::strcmp(approach.how, "cross") == 0 || std::strcmp(approach.how, "stranded") == 0)
+                snprintf(line, sizeof(line), "%s %.1f", approach.how, approach.burn);
             else
                 snprintf(line, sizeof(line), "substitute r%.0f",
                          approach.dest.GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()));

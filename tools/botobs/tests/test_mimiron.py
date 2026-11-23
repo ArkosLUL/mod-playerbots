@@ -815,6 +815,40 @@ class FireBotPull(unittest.TestCase):
         self.assertIn("fire bots open 1", out.getvalue())
 
 
+AIM = 4294970600
+
+
+def burst_target_pull() -> list[dict]:
+    records = []
+    for rec in mimiron_pull():
+        if rec.get("e") == "cast" and rec.get("sp") == mm.SPELL_RAPID_BURST:
+            rec = {**rec, "tgt": AIM}
+        elif rec.get("e") == "snap" and 20000 <= rec["t"] < 31000:
+            rec = {**rec, "u": rec["u"] + [[AIM, 22.5, 0.5, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0]]}
+        records.append(rec)
+    records.append({"t": 20000, "e": "unit", "g": AIM, "en": 34211, "n": "Burst Target"})
+    return records
+
+
+class BurstTargetPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_8_mimiron_1789700006.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in burst_target_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_raid_member_the_target_was_parked_on_carries_the_burst(self):
+        rows = mm.burst_rows(self.trace)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["carrier"], rows[0]["carrier_ticks"]), (AGONY, 3))
+        self.assertEqual(rows[0]["cone"], [(SHADOW, 1, False)])
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

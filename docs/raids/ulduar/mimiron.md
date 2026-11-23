@@ -347,6 +347,11 @@ plans for trigger and action alike:
   mine at most and at `_MINE_CROSS_HEALTH_PCT` (70) or more, else nothing (`none mines`): a blast is
   9.6-10.8k, 42-49% of a healer's pool, so one leaves it standing and two kill it; a healer at 91% walked
   a leg past five and died to two.
+- A bot farther than `ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE` (30) from its goal with none of these, at
+  60% or more, walks whichever of the straight leg and the detour waypoints burns least, mines still
+  refused (`stranded`). Held, bots in the phase 1 field sat out the handover walk-in 40-70 yd from
+  their phase 2 slots and died in its opening seconds (16 of 26 phase 2 deaths over three windows),
+  their healers swinging between `reach party member to heal` and the slot. A few ticks cost less.
 - Phase 1 keeps holding: its camp leaves its fire by switching anchors, and a stand-in between 6 yd rows
   is a Napalm pair.
 
@@ -665,11 +670,14 @@ A main-tank `unit->Kill()` on both adds, gated on `BotCheatMask::raid`, was remo
 
 ## Rapid Burst and Hand Pulse are 60° cones
 
-`EVENT_SPELL_RAPID_BURST` picks a random player within 80 yd every **3.2 s**, casts **63382 on that
-player**, then `SetFacingToObject`. 63382 is a 3000 ms aura with a 500 ms periodic dummy, **six ticks**,
-each firing 64531/64532 from VX-001 along the facing set when the aura landed. VX-001 does not move, so
-the centreline is `VX-001 → the aura carrier`, fixed for 3 s: **read the carrier, not the boss's
-orientation**. Phase 2 only: `_events.RescheduleEvent((_phase == 2 ? EVENT_SPELL_RAPID_BURST :
+`EVENT_SPELL_RAPID_BURST` parks a **Burst Target (34211)** where a random player within 80 yd stands,
+every **3.6 s** (core `29aadbcb2`; it lives 11 s). The target casts 64841 at VX-001, which faces it and
+casts **63382 on it** unless already casting. 63382 is a 3000 ms aura with a 500 ms periodic dummy,
+**six ticks**, each firing 64531/64532 from VX-001 along that facing; effect 0 lands on the target,
+effect 1 on VX-001. The centreline is `VX-001 → the Burst Target`, fixed for 3 s however the player
+moves. **No player carries 63382**, so a read keyed on a raid member's aura sees no cone:
+`GetMimironRapidBurstWindow` takes the target holding VX-001's 63382, else VX-001's own aura and
+facing. Phase 2 only: `_events.RescheduleEvent((_phase == 2 ? EVENT_SPELL_RAPID_BURST :
 EVENT_HAND_PULSE), 14.5s)`.
 
 **60° is measured.** Bucketing living bots past 14 yd (beyond `IsWithinBoundaryRadius`) by bearing off
@@ -698,8 +706,8 @@ bearing is never keyed off VX-001's facing.
 **Under Firefighter the melee stand opposite the wedge.** A bot in the other group's line takes every
 burst aimed at that group: 21-39% of phase 2 Rapid Burst damage crossed between melee and ranged, once
 643k against a ~400k healing deficit. VX-001 never swings (`AttackStart` empty, no
-`DoMeleeAttackIfReady`) and turns to each burst carrier and the barrage arc, so "behind" moved every
-3.2 s. `p2melee` gives melee and tanks slots on the barrage melee ring (9.0) over
+`DoMeleeAttackIfReady`) and turns to each Burst Target and the barrage arc, so "behind" moved every
+3.6 s. `p2melee` gives melee and tanks slots on the barrage melee ring (9.0) over
 `ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE` (±45°) opposite the wedge centreline, following its barrage
 re-aim. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90° where wedge plus cone ends.
 Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns the melee.
@@ -1411,7 +1419,7 @@ in normal mode too, where Rocket Strike is also cast. Both guards scan
 the Frost Bomb for the mirror reason (else the formation walks the raid back inside the blast for the
 fuse). The fan screens both too. Both come from one `GetMimironFirefighterHazards` pass, since the fan
 tests eleven bearings and rescanning a 50-node field per bearing is not free; that read,
-`GetMimironMarkers` and the Rapid Burst carrier are answered once per trigger pass under
+`GetMimironMarkers` and the Rapid Burst cone are answered once per trigger pass under
 `EncounterTriggerPassId`, since the flames, formation, approach and fire bot triggers all ask; actions and
 multipliers read live. That cache is `thread_local`, which holds because a whole pass runs on one map
 thread. Trigger and action likewise share `GetMimironSpreadSlot`, or they disagree where the bot
@@ -1441,14 +1449,15 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
-| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing) or `cross N` (yd of burn walked through); `none mines` when only a walk past mines was left |
+| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left |
 | `close` | A melee approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record, which
 leaves a dodge that refuses every bearing completely silent.
 
-`tools/botobs/bosses/mimiron.py --help` lists its reports. Beyond it: `--walk` charges a moving sample to
+`tools/botobs/bosses/mimiron.py --help` lists its reports. Beyond it: `--burst` names as carrier the roster
+member nearest the Burst Target at the cast; `--walk` charges a moving sample to
 the bot's last accepted `move` within 6 s (`ATTRIBUTE_MS`), `?` being a walk with none, a human or a
 chase; `--handover` counts a bot on its phase 2 slot only by a slot handed out inside the handover, and
 leaves humans out of positions and mana; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a

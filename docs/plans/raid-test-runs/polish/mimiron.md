@@ -682,3 +682,126 @@ patches, so killing them earlier only lets the fire build faster. The sweep's on
 bots out of phase 4, and that was never measured there. Approved: drop the 15% sweep
 (`ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT` and what hangs off it) for one window and measure phase 4 fire
 against the spray.
+
+## Round 8 (build 523b2f60f, round 7 built)
+
+**Data:** window 15, `raidtest.py report --boss mimiron --raid uld --head 523b2f60f --pulls 10`: one valid
+pull per pool, no DC veto inside any. Baselines for the new view: windows 10, 13 and 14 traces. Scripts in
+the lane scratchpad (`mim8/`: `late.py`, `p2deaths.py`, `stuck.py`, `legs.py`, `movers.py`, `where.py`,
+`botlog.py`, `burstcone.py`; round 7's `mim7/leash.py`, `holder.py`; round 6's `mim6/p1.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-124209-14` | `603_14_…_1795437770` | **kill** 9:39, parts down 9:22.4, hard mode | 10: P3 Bomb Bot 1, Flames 1 (the same ranged, rezzed); P4 Hand Pulse 5, Proximity Mine 3 |
+| uld2 | `tr-20261123-124048-13` | `603_13_…_1795437690` | wipe 10:32 in P3 at Berserk | 31: P1 Flames 1, Shock Blast 1 (a ranged); P2 9 (Heat Wave 3, Flames 3, Rapid Burst 3), 7 of them bots that never walked in (below); P3 Bomb Bot 4, Water Spray 2 (one bot twice), Assault Bot 1; Berserk 13 |
+| uld3 | `tr-20261123-124350-15` | `603_15_…_1795437871` | wipe 10:27 in P4 at Berserk | 32: P3 Water Spray 3, Bomb Bot 2, ACU Plasma Ball 1; P4 Flames 2 (one melee twice), mine 1, Hand Pulse 1; Berserk 22 |
+
+73 deaths: Berserk 35, P2 9, Bomb Bot 7, Hand Pulse 6, Water Spray 5, mines 4, Flames 4 outside P2, Shock Blast,
+Assault Bot and ACU Plasma Ball 1 each. The uld1 kill was hard mode: Summon Flames Initial at 7.1 s,
+Flames from 14 s, Emergency Mode at phase 2, no Berserk cast.
+
+**Stop rules:** one kill of three (10 deaths): not polished. No failure picked three times.
+
+**Verdict on round 7 (holder screen, unreachable step): held.** No MK II health rise in phase 1 and no
+`mimiron.unreach` span at all (window 14: three rises, 24-25 s spans), no reset. Holder Shock Blast legs
+2/4/2, none past 60.1 yd (`holder.py`); `shock` notes with `hold` refusals 2/3/2, every escape `ok` but one
+`shock fire ok` and one `none` (uld2), `shock anchor` only ever `locked`. Mimiron at most 61.0-65.1 yd from his spawn (window 14:
+74.9), and that only as the beaten MK II parks at (2795, 2598). Phase 1 84.9, 89.4 and 85.9 s (window 14:
+93.5-104.2, uld1's 190 s reset). Melee aimed at the MK II 100% of phase 1 in all three, 5.35-5.92M melee
+damage, no `close sight` walk needed.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | before Berserk |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 84.9 | 48.1 | 81.5 | 24.4 | 142.9 | 32.2 | 7:07.3 | 173, kill at 9:22 (P4 135 s) |
+| uld2 | 89.4 | 48.3 | **136.4** | 24.3 | **320.6**, unfinished | | | -, Berserk in P3 |
+| uld3 | 85.9 | 48.0 | 80.5 | 24.4 | **222.4** | 32.1 | 8:26.4 | 94 |
+
+uld1's landings took 36.5 and 39.7 points, uld3's 23.1/17.8/19.5/16.1, uld2's 15.1/17.4/6.8 with Assault Bots
+alive 98 s median (uld1 39 s) after its phase 2 losses.
+
+**Built first: the user's Q3 answer.** Fire bots stay kept through phase 3, the phase 4 handover and phase 4:
+
+- `GetMimironKeptFireBots` keeps every live fire bot while the hard-mode encounter is in progress near the
+  room (no ACU, phase 4 or 15% test); `ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT` removed.
+- `MimironSetDpsPriorityAction::BuildPriorityList` has no fire bot entry left (the sweep, the melee cull
+  behind the Assault Bot, the ranged "loose one" behind the mech), and `MimironSetDpsPriorityTrigger` no
+  longer fires in the phase 4 handover for a fire bot in the room, which was the handover cull (window 15:
+  237 and 49 bot-s aimed at fire bots in H3). The spray and siren dodge, the target exclusions and the
+  splash guard stay and now reach phase 4 too.
+- Reader `mimiron.py --firebots`, from phase 3 on, per phase: fire bots alive at open and close, mean, max,
+  gone; Flames, Water Spray and Deafening Siren (applications and raid-seconds silenced) on the raid; aim
+  at fire bots; splash guard veto rows; spray or siren steps.
+
+Baseline (fire bots never reached phase 4 in windows 10-15): P4 Flames 0.3-2.9k/s (w15 2.8 and 2.9, w14
+1.4-1.7, w13 1.4-2.3, w10 0.3-1.5), P4 spray, siren and splash holds 0; P3 Flames 1.1-8.2k/s (w15 8.2/1.1/4.2), P3
+Water Spray 2/7/9 hits in window 15.
+
+**Failure picked: bots left in the phase 1 fire through the handover walk-in die in phase 2's opening.**
+uld2's phase 2 opened with six deaths in 5 s (2:42.7-2:47.9, five bots, one twice) and lost the pull
+with them: phase 2 ran 136 s, phase 3 321 s. All five, and a sixth that died at 4:40, had stood 51-55 yd
+west of the room centre at phase 2's start, round (2691, 2575) in the phase 1 field, while 16 of 24 were
+on their slots (`stuck.py`).
+
+- Uldyap: hold slot substituted to its own spot at 1:56 (`substitute r12`), `approach none` at 2:13.6, then
+  its walk-in slot `hmwedge 5/13` (2758, 2581), 65 yd east, at 2:17.84, and no `mimiron arc spread action`
+  move, accepted or refused, until a Frost Bomb flee at 2:38.7 (`botlog.py`). The phase 1 field lay
+  across every leg: straight 12.1 yd of burn in two overlapping nodes, the best one-waypoint detour 9.9 yd
+  (`legs.py`, on the snapshot's 40-node cap, so if anything more).
+- Cause: `GetMimironSlotApproaches` (`UldEncounter_Mimiron.cpp:713` at `5c73b742d`) offers a straight walk,
+  a `cross` of at most 4 yd and one burn (`:838`) or a detour whose two legs miss all fire (`:847-859`);
+  else nothing, and `MimironArcSpreadTrigger` stands down on an empty answer
+  (`UldTriggers_Mimiron.cpp:125-127`). The hold was written for a bot near its slot; 40-70 yd out, a walk-in
+  across the phase 1 field rarely has a clean leg.
+- Healers then chased them: from 2:31 to 2:43 all four swung between `reach party member to heal` (targets
+  50+ yd off) and their wedge slots, 165 and 167 refused moves, healing 28-42k a 2.5 s bucket.
+- Every window shows it: 1-8 bots 30-57 yd out at phase 2 in all eight pulls of windows 13-15, and 16 of
+  the 26 phase 2 deaths there were theirs (w15 uld2 7 of 9, w14 uld3 4 of 7, w14 uld2 3 of 7, w13 uld3 2
+  of 2).
+
+**Classification:** bug. The handover's walk-in (Q1) means every bot on its phase 2 slot at phase 2; these
+never start walking.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player): `GetMimironSlotApproaches`, when
+nothing clean is left, the goal is over `ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE` (30) away and the bot is at
+60% or more, offers the least-burn of the straight leg and the standable detour waypoints, mines still
+refused (both legs mine-safe), noted `stranded N` (yd of burn). Near its slot a bot keeps holding. A
+walking bot keeps the 60% fire gate, so the crossing isn't thrown back by its first tick.
+
+**Also fixed, small and independent: the Rapid Burst screen saw no cone.** Since core `29aadbcb2`
+(2026-09-21) VX-001 parks a Burst Target (34211) where a random player stands and casts 63382 on it
+(`boss_mimiron.cpp:1422-1427`, `:1533-1553`); `ReadMimironRapidBurstWindow` looked for a raid member
+carrying 63382 (`UldEncounter_Mimiron.cpp:1712` at `5c73b742d`), and no roster aura row for 63382 exists in
+any window 13-15 trace. So the fan, slot approaches, target approach and arc spread never refused a
+live cone: 33 accepted legs ended in one in window 15 (arc spread 20, flames dodge 13) and 171 ticks,
+306k, hit bots that walked in after the cast (10.5% of the window's Rapid Burst damage; uld3 205k). Now the
+cone runs from VX-001 to the Burst Target holding VX-001's 63382, else VX-001's own aura and facing. The
+reader's `--burst` took the cast target as carrier, so it kept 8 of window 14 uld2's 25 casts and called
+every carrier ranged; it now names the roster member nearest the Burst Target at the cast (16 of uld2's
+casts in window 15 then had the target sampled).
+
+**Next window should show:**
+
+- Fire bots (`--firebots`): alive at P4's open and through it (0 in every pull so far); P4 Flames per second
+  against 0.3-2.9k/s; P4 Water Spray hits and deaths, siren raid-seconds and splash guard holds, all 0 so
+  far; P3 the same against window 15; no raid aim at fire bots in H3 or P4. Watch phase 4's length and
+  part damage: the splash guard now holds AoE on the stack while a fire bot is within 12 yd of it.
+- Stranded: every living bot within ~30 yd of the centre at phase 2's start (`stuck.py`; 1-8 out in
+  windows 13-15), `stranded N` notes in Late and WalkIn, Flames in the handover above window 15's 8-31k but
+  no handover death, no early phase 2 deaths among the walk-in's stragglers, and no healer `reach party
+  member to heal` A-B-A at phase 2's start.
+- Rapid Burst: `burst` refusals in `flee` notes, walked-in hits (`burstcone.py`) well under window 15's
+  171 ticks, and `--burst` covering most casts.
+- Round 7's checks stay: no MK II rise, no reset, phase 1 84-104 s.
+
+**Not picked.**
+
+- Bomb Bots (7) and Hand Pulse (6, five in uld1's phase 4 kill).
+- Water Spray (5, in uld2 and uld3) with the sweep still on; the next window reads it with fire bots kept.
+- uld3's phase 3 (222 s): landings of 16-23 points against uld1's 37-40, the clock's remaining lever.
+- Healers leaving the wedge to reach a far bot (`reach party member to heal` against `mimiron arc spread
+  action`): only with stranded bots here; if it outlives the fix, a Mimiron hold on the reach while on a
+  slot.
+
+**Questions for the user:** none. Q3's measurement is the next window's.

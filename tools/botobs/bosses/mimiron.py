@@ -75,6 +75,7 @@ CORE_LANDING_LOOKBACK_MS = 12000
 # ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE is an expression the source parser does not read.
 BURST_HALF_ANGLE = math.radians(30.0)
 BURST_WINDOW_MS = 3400  # the 3 s aura plus the last tick landing
+AIM_LOOKAHEAD_MS = 500
 # Spinning Up's 4 s channel plus the 10 s barrage, and the stretch after it in which the frozen
 # event map unloads Heat Wave, Rocket Strike and Frost Bomb within a few seconds of each other.
 SPIN_WINDOW_MS = 14500
@@ -548,12 +549,17 @@ def burst_rows(trace: Trace) -> list[dict]:
         when = cast["t"]
         units = samples.before(when)
         boss = next((units[guid] for guid in vx if guid in units), None)
-        carrier = units.get(cast.get("tgt"))
-        if not boss or not carrier:
+        aim = next((frame[cast.get("tgt")] for frame in samples.window(when - SAMPLE_MS, when + AIM_LOOKAHEAD_MS)
+                    if cast.get("tgt") in frame), None)
+        if not boss or not aim:
             continue
 
-        centreline = math.atan2(carrier[2] - boss[2], carrier[1] - boss[1])
-        row = {"t": when, "carrier": cast.get("tgt"), "carrier_ticks": 0, "cone": [], "outside": []}
+        carrier = cast.get("tgt")
+        if carrier not in roster:
+            carrier = min((guid for guid, unit in units.items() if guid in roster and living(unit)),
+                          key=lambda guid: dist2((units[guid][1], units[guid][2]), (aim[1], aim[2])), default=None)
+        centreline = math.atan2(aim[2] - boss[2], aim[1] - boss[1])
+        row = {"t": when, "carrier": carrier, "carrier_ticks": 0, "cone": [], "outside": []}
         for guid, unit in units.items():
             if guid not in roster or not living(unit):
                 continue
