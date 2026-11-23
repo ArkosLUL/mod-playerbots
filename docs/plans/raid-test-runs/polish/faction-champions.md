@@ -612,3 +612,107 @@ the base ones on every difficulty, and a player's disarm counts through the unit
   Enhancement it reads the off-hand flag now.
 - Left: the disarm goes to the Tauren two by entry, as the user answered, so against a Horde raid the Alliance Warrior
   and Enhancement get none while iced.
+
+## Round 8 (2026-11-23, window 14 on build 1fa3c332c)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head 1fa3c332c --pulls 10`, rounds 1-6 and the shared
+tank-defensive fix (`75179aba3`, `6aba04b73`) in it, round 7 (`d3e7d1025`) merged but not built: toc1
+`tr-20261123-095334-1` wipe 3:55, 31 deaths (`649_1_caiphus-the-stern_1795427739`), toc2 `tr-20261123-095334-2` kill
+6:22, 6 (`649_2_caiphus-the-stern_1795427742`), toc3 `tr-20261123-095334-3` wipe 3:28, 29
+(`649_4_erin-misthoof_1795427733`). Window 13 reread for comparison. Scripts in the round's scratchpad `fc8/` (gone with
+it); the reader's new `--adds` cell covers the fixed one.
+
+**Stop rules.** Two wipes: not polished. Round 8 picks a different failure.
+
+**Lineups.** toc1 and toc3 drew window 13 toc1's: healers Liandra, Caiphus, Erin; Maz'dinah, Narrhok, Ruj'kah, Broln,
+Gorgrim, Harkzog, Ginselle. toc1 (roster A, three DKs) leaves Narrhok never iced, toc3 (roster C, two DKs, no Cyclone
+druid) Narrhok and Gorgrim; that pairing also wiped in windows 11 and 12. toc2 drew window 13 toc2's (Birana for Broln).
+
+**Deaths by top damage dealer** (its share of the champion damage in the 10 s before). Iced: its duty's Chains in the
+10 s before; freed: its ice DK dead.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 wipe | 31 | iced Broln 7, never-iced Narrhok 6, Ginselle 6, Ruj'kah 5, iced Gorgrim 4 + freed 2 (Tocxal died 3:30), iced Maz'dinah 1. 10 dead by 2:06, when the third healer died; 5 of the 8 CC bots dead by 1:50 |
+| toc2 kill | 6 | Ruj'kah 3, Narrhok not yet iced 1, Birana 1, iced Gorgrim 1 |
+| toc3 wipe | 29 | Ruj'kah 7, freed Broln 6 (Toczai died 2:12.9), never-iced Narrhok 4 and Gorgrim 4, Harkzog 3, Ginselle 3, Maz'dinah iced 1 + freed 1 (Toczam died 2:48.1). 5 dead by 2:05, 24 after |
+
+**Verdict on round 6 (kite re-hop): held.** `--personal` re-hops refused by the bot's own kite walk 0 of 214, 244, 188
+hops (window 13: 86, 93, 97; 30, 50, 30 over 1 s); `faction champions kite` `wait` move rows 3, 1, 1 (410); hops per kite
+1.77, 1.89, 1.94 (2.05, 1.78, 1.80). Melee-only catches (a swing or weapon special within 2 s), same lineups: toc1 27%
+(20%), toc2 19% (30%). Deaths melee champions did half of: 19/31, 2/6, 17/29 (15/29, 3/3, 0/4).
+
+**Worse than window 13? No.** toc1, same lineup and roster: wipe 29 at 4:38 → 31 at 3:55, raid DPS 70k → 87k, the three
+healers dead by 2:06 (2:57), first death at 0:59 (0:05, 6 by 0:45). toc2, same lineup: kill 3 → 6, 6.4 min both. toc3's
+loss is the lineup draw above. The shared fix reaches this fight only through `toc.personal` (a 4 s focus hit): picks
+per pull alike (toc1 37 against 33, the same spells); `churn.toc.personal` per minute rose (13.8 → 19.2, 2.3 → 6.0,
+3.9 → 17.9) as a fading defensive stopped reading as cover. Healthstones "over 70%" (4/16, 3/6, 5/16) are the reader's
+pre-hit sample: Tocxak, Tocxap, Tocxaw and Tocxat each used theirs right after a 5-12k hit took them under 70%.
+
+**Round 7 baseline** (not built): iced Broln's disarm-gated casts 36 (toc1) and 27 (toc3), no disarm while iced.
+
+**Failure ranking (66 deaths).**
+
+1. Casters 28: Ruj'kah 15 (5, 3, 7), Ginselle 9, Harkzog 3, Birana 1.
+2. Free melee champions 24: never iced 15 (Narrhok 11, Gorgrim 4), freed by their ice DK's death 9 (Broln 6, Gorgrim
+   2, Maz'dinah 1).
+3. Iced melee champions 14: Broln 7 (round 7's), Gorgrim 5 (Death Coil, Icy Touch), Maz'dinah 2.
+
+**Picked: Ruj'kah (Hunter), the top killer on every pool (plan, Q3).**
+
+- 9 of his 15 kills came while he was the kill target, fourth after the three healers, in the collapse: on it 108.6 s
+  (100 → 18%) on toc1 and 82.8 s (100 → 36%) on toc3, against 45.3 s on the toc2 kill. On toc3 48% of his damage went on
+  healers.
+- Off the latch his CC is DR-bound: Polymorph and Fear each 10 + 5 s, then ~15 s with neither landing over 2.5 s; no
+  Cyclone on roster C. Free 53, 54, 71 s before the latch took him. Duties came within ~1 s of each DR reset (toc3:
+  Polymorph DR clear ~1:16.8, duty 1:17.7, after Toczah died at 1:15.2), so no bot fault in the chain. In a 1-3 s
+  handover he kills cloth in two shots: toc2 Tocyad 86% → dead at 1:14.5 (Steady Shot 11.6k, Shoot 7.3k), Polymorph
+  cast 1:12.9, landed 1:14.0, the shots already out.
+- The script stops him whole on a disarm: `npc_toc_hunter::myCanCast` is false under `UNIT_FLAG2_DISARM_RANGED`, checked
+  before every event and his Shoot (`boss_faction_champions.cpp:1242-1262`, `:1333-1337`). Disarm 676 and Dismantle 51722
+  carry aura 278 (round 7), with their own DR and no trinket. The peel aims at melee champions only, so a disarm on him is a
+  new tactic.
+
+**Fixed too (bug, independent and small): the totem duty went to the Enhancement's own ice DK.**
+
+- `--adds` (new `ice` cell): toc1 34 holds, 64.0 s, by Tocxam (DK tank, Broln's ice DK); toc3 2, 35.1 s, by Toczai;
+  window 13 toc1 7, 31.3 s. The long ones: Tocxam's Tremor 1:15.4 (19.3 s), Windfury 1:46.1 (19.3 s) and 3:24.5 (18.2 s),
+  Toczai's Tremor 0:19.1 (33.6 s), window 13 Tocxam's Tremor 2:47.5 (24.4 s); those totems lived 23-35 s, every other
+  holder's 0.2-5 s. toc1 1:15-1:35: Tocxam 13.2 yd off the totem throughout, target the totem 41 samples and Broln 36,
+  no move row. 0:45-0:52: 27 holds of 0.0-0.7 s on one Windfury.
+- `CanKillTotem` (`ToCHelpers_FactionChampionsDefence.cpp:963-968` before the fix) takes the nearest non-healer bot in
+  control within 30 yd; Broln drops totems at his feet, next to his ice DK, which hits only its own champion: `faction
+  champions ice target` (`ACTION_RAID + 2`) and `faction champions kill totem` (`+ 2.7`) flip its target, and the ice
+  and kite holds keep it from walking.
+- Cost not measured in deaths: a live Tremor clears our fears on champions within 30 yd (5 such Fears held 0.2-2.4 s
+  against medians 2.2-3.5 s elsewhere), Windfury hastes the melee champions.
+
+**Fix** (`ToCHelpers_FactionChampionsDefence.cpp`). `CanKillTotem` wants no ice duty (`FactionChampionsIceDutyOf`), as
+the snare duty and physical switch already do; a held duty is released on the next refresh. Reader `--adds`: an `ice`
+cell per `fc.totem` hold and the count and seconds held by a bot on an ice duty.
+
+**Next window should show.** `--adds` "held by a bot on an ice duty: 0" wherever Broln is in (this window 34 / 64.0 s and
+2 / 35.1 s), his Tremor and Windfury Totems gone within ~5 s (23-35 s here), ice uptime unchanged (95/94/99%, 100/95%).
+Round 7 on the same window: `--peel` "Disarm or Dismantle while iced" above 0 on Broln, his gated casts while iced mostly
+"within 10 s after one" (36 and 27 "otherwise" here).
+
+**Seen, not picked.**
+
+- Externals go early: toc1 Pain Suppression and two Hands of Sacrifice on Tocxai (Enhancement) at 0:03-0:25; toc3 six
+  by 0:17, four on melee bots. The healers' later focuses found none (toc1 Tocxac at 0:56.7, 7 champions, dead 3 s
+  later). Melee at any health is the user's call.
+- Breakable CC on the casters ends early (Ginselle's Polymorphs 0.1-4.7 s), burning DR. No `dmg` row reaches a champion,
+  so the breaker is unknown; raid casts on a champion within 8 yd peak at the breaks, single-target ones too.
+- Free Narrhok's white swings hit 12-15k from 11-12 yd (Tocxas 0:51.3 and 0:59.5); his toc1 gaps between CC ran 8-15 s.
+
+**Questions for the user.**
+
+- Q3 (new, plan): may a rogue's Dismantle, or a Defensive Stance warrior's Disarm, go on the Hunter champion whenever one
+  is in melee reach and he isn't disarmed? It stops all his shots and abilities for 10 s (then 5, 2.5 by DR) without his
+  trinket or a DR shared with Polymorph or Fear. Recommended: yes, the kill target first, where 9 of his 15 kills came
+  and the rogues already stand; off the latch only from a bot already in reach.
+- Q2 (plan, due): never-iced champions killed 15 of 66, the top melee cause and the first killer in both wipes (Tocxas
+  0:59.5, Toczav 1:10.2). Three DKs always leave the Warrior free, two the DK and the Warrior. Recommendation unchanged:
+  the DK ahead of the Rogue for one window, which changes only the two-DK rosters.
+
+**Shared code.** None; the fix is in this fight's files and its reader.
