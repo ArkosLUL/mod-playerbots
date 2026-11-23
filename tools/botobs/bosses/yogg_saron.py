@@ -1691,6 +1691,13 @@ def walked_for_a_portal(trace: Trace, guids: set[int], start: int, until: int) -
             and rec.get("g") in guids and start <= rec["t"] <= until}
 
 
+def room_team_roles(roles: dict[int, str]) -> str:
+    """The team that reached a wave's room by role, flagged when it went down without a healer."""
+    counts = collections.Counter(roles.values())
+    text = " ".join(f"{role} {counts[role]}" for role in sorted(counts))
+    return text if counts["heal"] else f"{text}, NO HEALER"
+
+
 def spent_clicks(clicks: list[tuple[int, int]], entries: list[tuple[int, int]],
                  window_ms: int = SPENT_CLICK_WINDOW_MS) -> dict[int, tuple[int, int | None]]:
     out: dict[int, tuple[int, int | None]] = {}
@@ -1780,7 +1787,9 @@ def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
         else:
             delay = "NEVER cast at a tentacle"
         cleared = "cleared" if states & {"tobrain", "atbrain"} else "not cleared"
-        print(f"  wave {ordinal} {room:10} {bots} bots, entered {clock(entered)}, {delay}, {cleared}")
+        team = room_team_roles({rec.get("g", 0): trace.role(rec.get("g", 0)) for rec in window
+                                if str(rec.get("txt", "")) == room})
+        print(f"  wave {ordinal} {room:10} {bots} bots, entered {clock(entered)}, {delay}, {cleared}, {team}")
         print(f"    states: {', '.join(sorted(states)) or 'none'}")
 
     show_frozen(trace)

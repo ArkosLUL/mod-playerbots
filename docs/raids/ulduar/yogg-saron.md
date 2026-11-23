@@ -1080,8 +1080,9 @@ on the platform every fourth wave, two waves without their healer. So a portal c
 teammate still on the platform holds. Arriving and clicking share one radius, so `holding` at an open
 portal is clickable.
 
-**The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a 60 s
-race on foot, and it doubles as the Crush answer. GUID order within each band so every bot derives the same
+**The brain team is melee first, then exactly one healer, then ranged; tanks never.** Melee stop one slot
+short of a full team, so the healer always goes. The room is a 60 s race on foot, and it doubles as the
+Crush answer. GUID order within each band so every bot derives the same
 team, except healers: Val'anyr's wielder (46017, its heals shield) first, since item level can't pick it,
 then priest, druid, shaman, paladin, since a cast-time spell cannot go off on the move
 ([pitfalls](../../engine/pitfalls.md#a-moving-bot-cannot-cast)) and a holy paladin spends a third to
