@@ -1234,6 +1234,12 @@ class YoggPhases(unittest.TestCase):
                           (12000, 9, "barkskin", "frenzied regeneration")])
         self.assertEqual(yogg_saron.ladder_stacks(spans, 1100), [])
 
+    def test_station_catches_counts_deaths_inside_the_reach_of_the_ranged_spot(self):
+        x, y = yogg_saron.RANGED_SPOT
+        deaths = [(x + 12.1, y), (x + 14.9, y + 1.0), (x + 15.2, y), (x + 21.5, y), (x + 10.0, y + 20.0)]
+        self.assertEqual(yogg_saron.station_catches(deaths, yogg_saron.RANGED_SPOT, 15.0), 2)
+        self.assertEqual(yogg_saron.station_catches([], yogg_saron.RANGED_SPOT, 15.0), 0)
+
     def test_roar_verdict_needs_a_press_and_no_silence(self):
         self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
         self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")
@@ -1282,14 +1288,14 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.flip_cause("heal", set()), "heal threat")
         self.assertEqual(yogg_saron.flip_cause("ranged", set()), "none")
 
-    def test_taunt_aim_splits_tentacles_own_another_tank_and_loose(self):
+    def test_phase3_taunt_aim_splits_tentacles_own_another_tank_and_loose(self):
         tanks = {1, 2}
-        self.assertEqual(yogg_saron.taunt_aim(1, "tentacle", None, tanks), "tentacle")
-        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 1, tanks), "own")
-        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 2, tanks), "another tank")
-        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", 7, tanks), "loose")
-        self.assertEqual(yogg_saron.taunt_aim(1, "guardian", None, tanks), "loose")
-        self.assertEqual(yogg_saron.taunt_aim(1, "yogg", None, tanks), "other")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "tentacle", None, tanks), "tentacle")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "guardian", 1, tanks), "own")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "guardian", 2, tanks), "another tank")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "guardian", 7, tanks), "loose")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "guardian", None, tanks), "loose")
+        self.assertEqual(yogg_saron.phase3_taunt_aim(1, "yogg", None, tanks), "other")
 
     def test_area_worth_counts_yogg_by_his_reach_and_only_held_guardians_over_the_floor(self):
         guardian = yogg_saron.NPC_IMMORTAL_GUARDIAN

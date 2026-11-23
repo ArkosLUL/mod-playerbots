@@ -174,6 +174,9 @@ inline constexpr float ULDUAR_YOGG_SARON_P1_DOOR_RADIUS = 90.0f;
 inline constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
 inline constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
 
+inline constexpr float ULDUAR_YOGG_SARON_P1_TANK_PULL_OFFSET = 1.5f;
+inline constexpr float ULDUAR_YOGG_SARON_P1_TANK_PULL_ARRIVED = 1.0f;
+
 inline constexpr float ULDUAR_YOGG_SARON_P1_PILE_LEASH =
     ULDUAR_YOGG_SARON_CLOUD_ORBITS[0] - ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
 inline constexpr float ULDUAR_YOGG_SARON_P1_PILE_RELEASE = 2.0f;
@@ -598,6 +601,7 @@ bool YoggSaronPhase1GuardianPreferred(Unit* candidate, Unit* incumbent);
 
 bool YoggSaronGuardianCountsForSara(Unit* guardian);
 bool YoggSaronGuardianOnTheStack(Unit* guardian);
+bool YoggSaronPhase1TankPullSpot(PlayerbotAI* botAI, Position& spot);
 
 bool YoggSaronInPhase1Room(Player* bot);
 

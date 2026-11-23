@@ -548,6 +548,21 @@ orbit by standing still.** Orbit 1 is 11.6 yd out and wakes inside 8.5, so a foo
 had the melee past it. `…_P1_PILE_RELEASE` (2.0) is its hysteresis. The wide 6.5/2.8 pair stays the
 tank's, since that one is about where the *Guardian* dies, which follows threat.
 
+**A Guardian's combat reach is 4** (display 28465, 0 before core `2026_11_06_01`), which moved it off both
+the stack test and the tank:
+
+- **Read a Guardian by its centre** (`GetExactDist2d`). `GetDistance2d` takes the 4 off, so the stack
+  and taunt tests read Guardians up to 10.5 yd out as on the stack, the Sara count up to 19 as inside
+  15, and the raid killed them there: over 12 pulls 7 of 10 deaths 8-10 yd out caught the back line, 2
+  of 73 inside 5.5. On the station's side 6.5 leaves the spot 15.0 yd off, the nova's centre-to-centre
+  reach there: every death inside 15 yd of it hit the back line (11), none at 15.1-15.9 (8). The phase
+  1 AoE hold keeps the edge read, since a player's area spell adds the target's reach.
+- **A standing Guardian waits 2-6.2 yd off its tank** (median 3.7-4.7) on the side it came from, so a
+  tank inside its 6.5 yd leash held Guardians out to ~12 yd. A bot tank holding one off the stack walks
+  `…_P1_TANK_PULL_OFFSET` (1.5 yd) past the middle, opposite the lowest such Guardian, to within
+  `…_P1_TANK_PULL_ARRIVED` (1 yd), all inside the cloud-free radius; the Guardian follows to 5.7 yd at
+  most (`yogg.p1pull`).
+
 **The cloud dodge aims back at the cloud-free circle.** `set.preferred` asks `…_P1_CLOUD_FREE_RADIUS` of
 the middle for melee that are not healers (`pileDodger`, tank included; `IsMelee` is `!IsRanged`, so a
 melee healer would be pulled into the pile), preferred so it never holds a bot in a cloud. Without it
@@ -678,11 +693,11 @@ so the two cannot disagree. `yogg.p1focus` records each change: `picked`, `parke
 - **Park floor.** A Guardian outside the leash is worn down only to **35%**
   (`ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT`) and parked: the focus moves on, a bot on it drops it (pets
   too), and there is no `dps target` fallback. The taunt takes the lowest-health Guardian outside the
-  leash, the parked one, and inside 6.5 yd it is killable again. The floor covers the ~12 s fetch (taunt
-  cooldown, the walk, a taunted Guardian standing 2 s) against the ~1.7-3%/s an untargeted Guardian near
-  the station loses to splash. Without a living bot tank nothing fetches, so the floor is off. The focus
-  is given up past **15 yd** for a killable one inside **6.5**, a gap that stops a boundary Guardian
-  flipping it.
+  leash, the parked one, or its bot tank pulls it ([Stations](#stations)), and inside 6.5 yd it is
+  killable again. The floor covers the ~12 s fetch (taunt cooldown, the walk, a taunted Guardian
+  standing 2 s) against the ~1.7-3%/s an untargeted Guardian near the station loses to splash. Without
+  a living bot tank nothing fetches, so the floor is off. The focus is given up past **15 yd** for a
+  killable one inside **6.5**, a gap that stops a boundary Guardian flipping it.
 - **The handover has no fetch, so no floor.** The tanks drag every Guardian off the stack to the anchor,
   where each would park at 35% with nothing to bring it back, and pulls killed 0-1 in the 18 s. So while
   `YoggSaronHandoverState(botAI).active` the floor is off and the focus is lowest first, the stack test
@@ -1948,12 +1963,12 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**70 `yogg.` probe keys**, by topic:
+**71 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
 | Phase and pull | `phase`, `engaged` (`engaged` / `idle`), `handover`, `leftover` (`spaced` / `chain` / `lower`) |
-| Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
+| Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1pull` (`pull` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `staged` / `reprisal`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `staged` / `lifted`), `reprisal`, `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |

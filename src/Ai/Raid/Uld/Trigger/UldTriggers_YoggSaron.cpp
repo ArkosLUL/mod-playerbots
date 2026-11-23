@@ -115,6 +115,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     if (YoggSaronHandoverState(botAI).clearing)
     {
         returning = false;
+        pulling = false;
         return true;
     }
 
@@ -130,6 +131,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     if (!beyond && fromSara >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
     {
         returning = false;
+        pulling = false;
         return false;
     }
 
@@ -143,7 +145,17 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
 
     returning = active;
 
-    return returning;
+    Position spot;
+    bool const pull = !active && YoggSaronPhase1TankPullSpot(botAI, spot) &&
+                      bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >
+                          ULDUAR_YOGG_SARON_P1_TANK_PULL_ARRIVED;
+
+    if (pull != pulling && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.p1pull", pull ? "pull" : "held");
+
+    pulling = pull;
+
+    return returning || pulling;
 }
 
 bool YoggSaronSanityTrigger::IsActive()
