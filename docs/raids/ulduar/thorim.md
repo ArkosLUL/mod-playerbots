@@ -536,8 +536,9 @@ alive, still a tank and still on the floor, so a trade moves nobody. It is clear
 not active, not on reset, so it cannot ride into the next pull. Never the ring for either tank: a ring
 point is measured off the boss, so a tank on one orbits him at 8 yd instead of walking him, which once
 left Thorim **26 yd** off the anchor for a whole pull. An off-tank does not run the ring's
-arrive/reposition path in the positioning trigger and action either. The main tank backs into his
-spot, so he keeps facing the boss he drags. `ThorimTankPicked` takes
+arrive/reposition path in the positioning trigger and action either. The holder backs into its spot
+when the spot lies away from him and walks in forward otherwise, so it always faces the boss it drags.
+`ThorimTankPicked` takes
 `tank assist` away from tanks in phase 2 only: left voting, it held a tank on a Warbringer for the first
 30 s while Thorim ate the camp, and in phase 1 holding whatever swings at the raid beats steering a tank
 onto the ranged pick.

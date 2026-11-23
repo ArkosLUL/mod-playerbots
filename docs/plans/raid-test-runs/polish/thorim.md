@@ -691,4 +691,11 @@ missed the change; positioning moves by the waiting tank past ~20 a pull mean `r
 over it (then hold Reach for a waiting tank on its spot); a hard-mode pull is needed for the Blizzard and Frost Nova lines.
 Round 7 (gauntlet) is judged on window 14 by the next round.
 
+**Review:** the positioning action backed the anchor tank (`MainTank` role) into every spot, so after its taunt from the
+off-tank spot it walked the 3.5 yd east to the tank spot backward, its back to Thorim, without parry or block for the walk
+(the old east spot cost the off-tank the same, walking west forward). Now the tank he hits backs in only when its spot lies
+away from him (`ThorimPhase2PositioningAction::Execute`); every other move is forward. The root cause holds in five of the
+nine pulls read per snapshot with `thorim.p2role`: the anchor tank waiting on an off-tank holder in 207-363 snapshots a
+pull, the reverse in 3-28.
+
 **Stop rules:** not checked this round (window 14 belongs to the next one). Not stuck: no failure was picked.
