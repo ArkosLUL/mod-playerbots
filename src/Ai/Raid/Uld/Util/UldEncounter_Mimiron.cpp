@@ -318,9 +318,29 @@ namespace
 struct MimironBombBotMarker
 {
     ObjectGuid victim;
-    Position bomb;
-    Position centre;
+    MimironBombBotBlast blast;
 };
+
+MimironBombBotMarker ReadMimironBombBotMarker(Creature* bombBot)
+{
+    MimironBombBotMarker marker;
+    Unit* const victim = ServerFacade::instance().GetChaseTarget(bombBot);
+    marker.victim = victim ? victim->GetGUID() : ObjectGuid::Empty;
+
+    Position const bomb = bombBot->GetPosition();
+    Position const centre = victim ? victim->GetPosition() : bomb;
+    float const gap = centre.GetExactDist2d(bomb);
+    float const share = gap > 0.0f ? std::min(gap, ULDUAR_MIMIRON_BOMB_BOT_DETONATION_REACH) / gap : 0.0f;
+
+    marker.blast.valid = true;
+    marker.blast.bomb = bomb;
+    marker.blast.centre = centre;
+    marker.blast.reach = Position(centre.GetPositionX() + share * (bomb.GetPositionX() - centre.GetPositionX()),
+                                  centre.GetPositionY() + share * (bomb.GetPositionY() - centre.GetPositionY()),
+                                  centre.GetPositionZ());
+
+    return marker;
+}
 
 struct MimironMarkers
 {
@@ -345,11 +365,7 @@ MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
         else if (unit->GetEntry() == NPC_ROCKET_STRIKE_N)
             markers.rockets.push_back(unit->GetPosition());
         else if (unit->GetEntry() == NPC_BOMB_BOT)
-        {
-            Unit* const victim = ServerFacade::instance().GetChaseTarget(unit);
-            markers.bombBots.push_back({victim ? victim->GetGUID() : ObjectGuid::Empty, unit->GetPosition(),
-                                        victim ? victim->GetPosition() : unit->GetPosition()});
-        }
+            markers.bombBots.push_back(ReadMimironBombBotMarker(unit));
     }
 
     Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
@@ -431,7 +447,7 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
 
     for (MimironBombBotMarker const& bombBot : markers.bombBots)
         if ((!bot || bombBot.victim != bot->GetGUID()) &&
-            dest.GetExactDist2d(bombBot.centre.GetPositionX(), bombBot.centre.GetPositionY()) <
+            dest.GetExactDist2d(GetMimironBombBotBlastNearest(bombBot.blast, dest)) <
                 ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE)
             return false;
 
@@ -671,43 +687,57 @@ MimironBombBotBlast GetMimironBombBotBlast(PlayerbotAI* botAI, Player* bot, floa
     {
         if (bombBot.victim == bot->GetGUID())
         {
-            blast.valid = true;
+            if (PlayerbotAI::IsRangedDps(bot) ||
+                bot->GetExactDist2d(bombBot.blast.bomb) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS)
+                continue;
+
+            blast = bombBot.blast;
             blast.chased = true;
-            blast.bomb = bombBot.bomb;
-            blast.centre = bombBot.bomb;
             return blast;
         }
 
-        float const dist = bot->GetExactDist2d(bombBot.centre.GetPositionX(), bombBot.centre.GetPositionY());
+        float const dist = bot->GetExactDist2d(GetMimironBombBotBlastNearest(bombBot.blast, bot->GetPosition()));
         if (dist < nearest)
         {
             nearest = dist;
-            blast.valid = true;
-            blast.bomb = bombBot.bomb;
-            blast.centre = bombBot.centre;
+            blast = bombBot.blast;
         }
     }
 
     return blast;
 }
 
-std::vector<Position> GetMimironBombBotBlasts(PlayerbotAI* botAI, Player* bot)
+std::vector<MimironBombBotBlast> GetMimironBombBotBlasts(PlayerbotAI* botAI, Player* bot)
 {
-    std::vector<Position> blasts;
+    std::vector<MimironBombBotBlast> blasts;
     if (!botAI || !bot)
         return blasts;
 
     for (MimironBombBotMarker const& bombBot : GetMimironMarkers(botAI).bombBots)
         if (bombBot.victim != bot->GetGUID())
-            blasts.push_back(bombBot.centre);
+            blasts.push_back(bombBot.blast);
 
     return blasts;
 }
 
-bool IsMimironSpotBombBotSafe(std::vector<Position> const& blasts, Position const& dest)
+Position GetMimironBombBotBlastNearest(MimironBombBotBlast const& blast, Position const& at)
 {
-    for (Position const& centre : blasts)
-        if (dest.GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) < ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE)
+    float const fromX = blast.centre.GetPositionX();
+    float const fromY = blast.centre.GetPositionY();
+    float const dx = blast.reach.GetPositionX() - fromX;
+    float const dy = blast.reach.GetPositionY() - fromY;
+    float const lengthSq = dx * dx + dy * dy;
+    float t = 0.0f;
+    if (lengthSq > 0.0f)
+        t = std::clamp(((at.GetPositionX() - fromX) * dx + (at.GetPositionY() - fromY) * dy) / lengthSq, 0.0f, 1.0f);
+
+    return Position(fromX + t * dx, fromY + t * dy, blast.centre.GetPositionZ());
+}
+
+bool IsMimironSpotBombBotSafe(std::vector<MimironBombBotBlast> const& blasts, Position const& dest)
+{
+    for (MimironBombBotBlast const& blast : blasts)
+        if (dest.GetExactDist2d(GetMimironBombBotBlastNearest(blast, dest)) < ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE)
             return false;
 
     return true;

@@ -206,6 +206,7 @@ inline constexpr float ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN = 4.0f;
 inline constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE = 8.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_DETONATION_REACH = 4.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_STEP_MARGIN = 1.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_HOLD_MARGIN = 4.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE = 30.0f;
@@ -259,11 +260,13 @@ struct MimironBombBotBlast
     bool chased = false;
     Position bomb;
     Position centre;
+    Position reach;
 };
 
 MimironBombBotBlast GetMimironBombBotBlast(PlayerbotAI* botAI, Player* bot, float within);
-std::vector<Position> GetMimironBombBotBlasts(PlayerbotAI* botAI, Player* bot);
-bool IsMimironSpotBombBotSafe(std::vector<Position> const& blasts, Position const& dest);
+std::vector<MimironBombBotBlast> GetMimironBombBotBlasts(PlayerbotAI* botAI, Player* bot);
+Position GetMimironBombBotBlastNearest(MimironBombBotBlast const& blast, Position const& at);
+bool IsMimironSpotBombBotSafe(std::vector<MimironBombBotBlast> const& blasts, Position const& dest);
 
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
 

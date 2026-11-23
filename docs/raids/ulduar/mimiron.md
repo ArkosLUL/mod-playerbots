@@ -646,30 +646,36 @@ mines still did 251-418k of phase-1 damage, ~250-390 dps a melee against the ~12
 `set behind` and `reach melee` putting melee on them.
 
 **Bomb Bot (33836)**: `speed_run` 1.14286 is **8.0 yd/s against a player's 7.0**, so it gains on you, and
-it detonates on melee contact (`SMART_EVENT_DAMAGED_TARGET` → 63801, base 23562, 5 yd; **66406 hp** in
+it detonates once its victim is within 3 yd (`SMART_EVENT_RANGE` 0-3 → 63801, base 23562; **66406 hp** in
 25-man, `HealthModifier` 1.5873). Hits of 19.7-25.5k kill a caster from full. Ranged kill one in a few
 globals; it tops the ranged priority list. Its target is plain threat, so it switches to whoever shoots
 it hardest, three bots in 3 s once.
 
 **The chase target decides who shoots it.** A ranged DPS it chases cannot leave, so keeps shooting at any
 range; a chased healer, melee or tank kites `ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE` (30) through the
-bearing fan once it is within `_RADIUS` (8). The trigger reads the chase from `GetMimironBombBotBlast`, the
+bearing fan once it is within `_RADIUS` (8); until then, and a ranged one always, it steps out of other
+bombs' blasts like anyone. The trigger reads the chase from `GetMimironBombBotBlast`, the
 priority list from `GetMimironBombBotChasing`; split on distance instead, each deferred to the other and a
 ranged bot inside 8 yd neither shot nor moved. Bomb Bots out of `SpellDistance` stay out of
 `BuildPriorityList`: chasing one abandons the mech and lands in the `reach spell` against `ACTION_RAID`
 deadlock.
 
-**The blast goes off round the victim, not the bomb.** At contact the bomb stood 0.4-5.1 yd (median 2.5)
-off its target and bystanders it hit 0.4-5.7 yd from that target. So everyone else within
-`_BLAST_CLEARANCE` (8) of the bomb's chase target (the bomb itself before it picks one) steps through the
-fan onto that circle plus `_STEP_MARGIN` (1). A blast centre also fails `IsMimironSpotStandable` and the
-fan (`bombbot` in `mimiron.flee`) for everyone but its victim, and `mimiron bomb bot guard` holds the
-unit-chasing movers within the clearance plus `_HOLD_MARGIN` (4), as the rocket guard does; else the
-formation and `reach melee` walk the step straight back. `GetMimironMarkers` carries the bombs, so trigger,
-action, screen and guard read one chase. It was `MoveAwayFromCreatureAction` off 8 yd of the bomb: every
-leg the full 30 yd (628 of 628 in eight pulls), 63% of them by bots over 8 yd from the victim, and bots
-beside the victim took its compass bearing, ran with the chase and died with it at the end: 7 of 21
-collateral hits, a healer and a ranged to one bomb.
+**The blast goes off round the bomb, a few yards short of its victim.** 63801 is 5 yd round its caster
+(`TARGET_SRC_CASTER` + `TARGET_UNIT_SRC_AREA_ENEMY`, ~6.5 with a player's combat reach), cast once the
+victim is inside 3 yd plus both combat reaches (5.5): at contact the bomb stood 0.4-5.1 yd (median 2.6)
+off its target, and the bystanders it hit 1.2-6.2 yd from it, 0.4-5.7 from the target. So the blast is
+everything within `_BLAST_CLEARANCE` (8) of the line from the bomb's chase target `_DETONATION_REACH` (4)
+toward the bomb (the bomb itself before it picks one); a disc round the target alone left the bomb's side
+open. Everyone else inside steps through the fan to the clearance plus `_STEP_MARGIN` (1) off that line. A
+blast also fails `IsMimironSpotStandable` and the fan (`bombbot` in `mimiron.flee`) for everyone but its
+victim, and `mimiron bomb bot guard` holds the unit-chasing movers within the clearance plus
+`_HOLD_MARGIN` (4), as the rocket guard does; else the formation and `reach melee` walk the step straight
+back. `GetMimironMarkers` carries the bombs, so trigger, action, screen and guard read one chase. It was
+`MoveAwayFromCreatureAction` off 8 yd of the bomb: every leg the full 30 yd (628 of 628 in eight pulls),
+63% of them by bots over 8 yd from the victim, and bots beside the victim took its compass bearing, ran
+with the chase and died with it at the end: 7 of 21 collateral hits, a healer and a ranged to one bomb.
+The step leaves the chased bot alone, and that is most of the dying: 15 of 22 Bomb Bot deaths in windows
+14-16 were the victim's own (11 of 29 chased ranged DPS, 3 of 3 chased healers).
 
 **It is the one Mimiron add that takes a snare.** Its immunity set **−263** leaves `SNARE`, `ROOT`, `STUN`,
 `FREEZE`, `GRIP` and `KNOCKOUT` off, all of which the Assault Bot's **−285** carries; at 8.0 yd/s a

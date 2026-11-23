@@ -960,3 +960,24 @@ Replayed on windows 14-16, 217 of the 587 bystander legs would fire, at 3.6 yd m
   takes the ACU in phase 4 while the main tank keeps the MK II.
 
 **Shared code:** none.
+
+**Review.**
+
+- The blast is round the bomb, not the victim: 63801 is `TARGET_SRC_CASTER` + `TARGET_UNIT_SRC_AREA_ENEMY`,
+  5 yd (~6.5 with a player's combat reach), and the core casts it once the victim is within 3 yd
+  (`SMART_EVENT_RANGE` 0-3, core update `2026_08_21_00`; the findings doc still said melee contact). Hit
+  bystanders sat 1.2-6.2 yd from the bomb, as tight as the 0.4-5.7 from the victim, so the traces don't
+  separate the two and the DBC decides. The victim-centred disc left the bomb's side open: a step-out there
+  ended ~6.4 yd from a median detonation. Now the clearance runs from the line victim to
+  `ULDUAR_MIMIRON_BOMB_BOT_DETONATION_REACH` (4) yd toward the bomb, and the step goes off that line's nearest
+  point. Replayed on windows 14-16 with the step decided 0.5/1/2 s before each blast, step-outs landing within
+  6.5 yd of where the bomb went off fell from 2/4/5 (of 59/49/66) to 0/2/3 (of 61/56/84).
+- The ~15-50 step-outs a pull only replayed legs that fired under the old trigger. Every bot that comes within
+  the clearance of a victim during a bomb's life gives 52-95 a pull (the plain disc 47-74), so expect about as
+  many legs as before, a few yards each instead of 30.
+- Bomb Bot deaths: 7 of uld2's 10 were the chased bot itself (windows 14-16: 15 chased against 7 collateral; chased
+  ranged DPS 11 of 29 dead, chased healers 3 of 3). The step-out only reaches the collateral ones, so read the
+  next window's `--bombbots` as chased against collateral, not as one total under 10.
+- A bot a bomb chased ignored every other bomb's blast, even while it stood still (ranged, or its bomb over 8 yd
+  off). Now only the kite skips them. Two bombs overlapped once in windows 14-16 (`603_20`, 5.5 s, one bomb
+  living 20.7 s); the rest lived 0-11 s against one every 15 s.

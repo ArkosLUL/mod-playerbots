@@ -133,7 +133,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     float const sweep = toward ? 2.0f * ULDUAR_MIMIRON_FLEE_FAN_MAX : ULDUAR_MIMIRON_FLEE_FAN_MAX;
 
     std::vector<Position> const mines = GetMimironMines(botAI);
-    std::vector<Position> const bombBotBlasts = GetMimironBombBotBlasts(botAI, bot);
+    std::vector<MimironBombBotBlast> const bombBotBlasts = GetMimironBombBotBlasts(botAI, bot);
     for (bool const mineClearWalk : {true, false})
     {
         if (mineClearWalk && mines.empty())
@@ -813,8 +813,8 @@ bool MimironBombBotAction::Execute(Event /*event*/)
                                     MovementPriority::MOVEMENT_COMBAT, false, false, "bombbot kite");
 
     float const escape = ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE + ULDUAR_MIMIRON_BOMB_BOT_STEP_MARGIN;
-    return MoveAwayClearOfMines(blast.centre, escape, MovementPriority::MOVEMENT_COMBAT, true, false, "bombbot",
-                                escape);
+    return MoveAwayClearOfMines(GetMimironBombBotBlastNearest(blast, bot->GetPosition()), escape,
+                                MovementPriority::MOVEMENT_COMBAT, true, false, "bombbot", escape);
 }
 
 bool MimironPetControlAction::isUseful()
