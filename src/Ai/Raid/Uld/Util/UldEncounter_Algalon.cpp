@@ -1397,6 +1397,24 @@ char const* StarCollision(StarPlan const& plan, StarSpan when, AlgalonScanUnit c
     return nullptr;
 }
 
+bool InSmashRecovery(StarPlan const& plan, AlgalonEncounterState const& state, uint32 now, bool raidLow, int32 finish)
+{
+    int32 const recovery = static_cast<int32>(ULDUAR_ALGALON_STAR_SMASH_RECOVERY_MS);
+    if (raidLow && state.lastSmashImpactMs && finish < MsUntil(state.lastSmashImpactMs, now) + recovery)
+        return true;
+
+    int32 const tail = static_cast<int32>(ULDUAR_ALGALON_STAR_IMPACT_TAIL_MS);
+    for (StarBlackout const& blackout : plan.blackouts)
+    {
+        int32 const impact = blackout.span.to - tail;
+        if (!std::strcmp(blackout.label, "smash") && impact > 0 && finish >= blackout.span.to &&
+            finish < impact + recovery)
+            return true;
+    }
+
+    return false;
+}
+
 int32 StarSeparation(StarPlan const& plan, StarSpan when, AlgalonScanUnit const* self)
 {
     for (StarBlackout const& blackout : plan.blackouts)
@@ -1539,7 +1557,8 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
         state.lastBigBangEndMs
             ? MsUntil(state.lastBigBangEndMs, now) + static_cast<int32>(ULDUAR_ALGALON_STAR_VOID_RECOVERY_MS)
             : 0;
-    bool const drained = recovery > 0 && !RaidAffordsExplosion(bot, group);
+    bool const raidLow = !RaidAffordsExplosion(bot, group);
+    bool const drained = recovery > 0 && raidLow;
 
     AlgalonScanUnit const* focus = FindScanned(state.stars, state.focusStar.Get());
     if (focus && !focus->under)
@@ -1602,8 +1621,10 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
                     continue;
 
                 StarSpan const finish = FinishBand(state, group, *candidate);
-                bool const inRecovery = drained && finish.from < recovery;
-                char const* collision = inRecovery ? "recovery" : StarCollision(plan, finish, candidate, gap);
+                char const* held = drained && finish.from < recovery ? "recovery"
+                                   : InSmashRecovery(plan, state, now, raidLow, finish.from) ? "smashrecovery"
+                                                                                             : nullptr;
+                char const* collision = held ? held : StarCollision(plan, finish, candidate, gap);
                 if (!collision)
                 {
                     star = candidate;
@@ -1613,7 +1634,7 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
                 if (!std::strcmp(blocked, "near"))
                     blocked = collision;
 
-                if (inRecovery)
+                if (held)
                     continue;
 
                 int32 const separation = StarSeparation(plan, finish, candidate);
@@ -1641,7 +1662,7 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
         return blocked;
     }
 
-    if (!RaidAffordsExplosion(bot, group))
+    if (raidLow)
         return "raidhp";
 
     std::vector<AlgalonScanUnit const*> open;
@@ -1655,7 +1676,11 @@ char const* StarWindow(Player* bot, Unit* boss, AlgalonEncounterState const& sta
     char const* blocked = "near";
     for (AlgalonScanUnit const* candidate : open)
     {
-        char const* collision = StarCollision(plan, FinishBand(state, group, *candidate), candidate, gap);
+        StarSpan const finish = FinishBand(state, group, *candidate);
+        char const* collision = StarCollision(plan, finish, candidate, gap);
+        if (!collision && InSmashRecovery(plan, state, now, raidLow, finish.from))
+            collision = "smashrecovery";
+
         if (!collision)
         {
             star = candidate;
