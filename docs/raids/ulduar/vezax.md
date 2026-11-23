@@ -74,7 +74,9 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   its slot, and its strafe with it, pulled along the line to the Animus to two slot tolerances inside
   that ceiling (its `GetRange("spell")` plus both live reaches), stopping at row 0's radius from Vezax so
   the Mark floor holds; with the Animus straight behind him from the camp, as at its spawn, that stop can
-  leave the slot past it. Healers keep their slots.
+  leave the slot past it. Healers keep their slots, and reach spell holds for a healer targeting the
+  Animus (`vezax healer animus reach hold`): it walked healers off row 0 and the position node walked
+  them back, up to 28 times each in one phase.
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
 and Vezax settles 7-12 yd north of it, between tank and camp, having met the tank on its way in from the
@@ -298,14 +300,15 @@ attacks the boss for anyone not already on him or on the Animus. **That node is 
 target source** ([action-selection](../../engine/action-selection.md#multiplier-semantics)): while it
 waited for a vapor already held it never fired, and two pulls ended at 99% boss health.
 
-**Dps hold under the main tank's threat, on Vezax as on the Animus** (`vezax threat multiplier`): damage
-from non-tank, non-healer bots holds once their threat reaches 90% of the main tank's on that boss's
-threat list. No bot runs the `threat` strategy, and a field outruns any tank: an affliction warlock in one
-passed 130% of a DK and of a warrior main tank, and Vezax walked into the camp and killed four. On Vezax
-it stands down while the main tank isn't on his list, so a tank that never engages can't park the raid;
-the Animus spawns with an empty list, and there the switch already waits for the tanks. Threat comes off
-the threat list, never the `"threat"` value ([a `uint8` percentage that
-overflows](../../engine/pitfalls.md#detection-that-never-fires)). Auto-attack already swinging goes on.
+**Dps hold under the tank's threat, on Vezax as on the Animus** (`vezax threat multiplier`): damage
+from non-tank, non-healer bots holds once their threat on that boss's list reaches 90% of its victim's
+when that is a tank, else of the main tank's. No bot runs the `threat` strategy, and a field outruns any
+tank: an affliction warlock in one passed 130% of a DK and of a warrior main tank, and Vezax walked into
+the camp and killed four. On that fallback it stands down on Vezax while the main tank isn't on his list,
+so a tank that never engages can't park the raid; the Animus spawns with an empty list, and there the
+switch already waits for the tanks. Threat comes off the threat list, never the `"threat"` value ([a
+`uint8` percentage that overflows](../../engine/pitfalls.md#detection-that-never-fires)). Auto-attack
+already swinging goes on.
 
 **Tricks of the Trade goes only to a tank** (`vezax tricks on tank multiplier`). At the pull the generic
 pick decides the tank needs no redirect ([pitfalls](../../engine/pitfalls.md)) and takes the
@@ -413,8 +416,11 @@ it:
   Tricks' 20 yd: [`CanCastSpell` passes an out of range cast](../../engine/action-selection.md#casting)),
   because the window opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s there. The generic
   ones follow the caster's current target: Tricks went to a dps 0.6s before the spawn, and that dps had it 1s in.
-- **Dps hold at 90% of the main tank's threat** (`vezax threat multiplier`, as on Vezax). It leaves room
-  for a cast in flight and lets him retake it at 110%.
+- **Dps hold at 90% of its tank's threat** (`vezax threat multiplier`, as on Vezax). It leaves room for a
+  cast in flight and lets a tank retake it at 110%. Not the main tank's: both tanks switch at once, so an
+  off-tank can land the first hit while the redirects feed the main tank. Capped on his threat, ranged hit
+  the cap from +9 s, a demonology warlock passed the bear holding it at +11 s, and it walked through
+  the camp for 25 s.
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
   chasing drags Vezax off it, so whoever the Animus is hitting walks to within 3 yd of him, which leaves
   the Animus following it in his melee range, and the position node stands down for that bot; it had
@@ -472,6 +478,12 @@ hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a 
 the raid collapses. At 153-165k/s it dies in 74-80 s; at 118-138k/s it is left at 7-27%. The Barrier only
 cuts damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die
 under 40+ stacks.
+
+**When he settles 10+ yd north of the anchor, the Animus sits behind him from the camp.** It stands
+between him and the main tank, so at a 14.1 yd settle it was 9.6 yd behind him: the slot pull stops at
+row 0's radius, 40 yd from it, ranged dps spent 73-91% of its phase past its ceiling flipping between
+reach spell and their slots, and it was left at 3.4%. Row 0 is then also 44-48 yd from the main tank,
+in a healer's reach 2-5% of the time. Both need ranged or the main tank somewhere new.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the

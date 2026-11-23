@@ -70,8 +70,7 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
     if (bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD))
         return 1.0f;
 
-    Unit* target = AI_VALUE(Unit*, "current target");
-    return target && target->IsAlive() && target->GetEntry() == NPC_VEZAX_SARONITE_ANIMUS ? 1.0f : 0.0f;
+    return VezaxTargetingAnimus(botAI) ? 1.0f : 0.0f;
 }
 
 float VezaxThreatMultiplier::GetValue(Action* action)
@@ -84,17 +83,21 @@ float VezaxThreatMultiplier::GetValue(Action* action)
         (boss->GetEntry() != NPC_VEZAX && boss->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS))
         return 1.0f;
 
-    Player* mainTank = GetGroupMainTank(bot);
-    if (!mainTank || mainTank == bot)
-        return 1.0f;
-
     ThreatManager& threat = boss->GetThreatMgr();
 
-    if (boss->GetEntry() == NPC_VEZAX && !threat.IsThreatenedBy(mainTank))
-        return 1.0f;
+    Player* holder = boss->GetVictim() ? boss->GetVictim()->ToPlayer() : nullptr;
+    if (!holder || !PlayerbotAI::IsTank(holder))
+    {
+        holder = GetGroupMainTank(bot);
+        if (!holder || holder == bot)
+            return 1.0f;
+
+        if (boss->GetEntry() == NPC_VEZAX && !threat.IsThreatenedBy(holder))
+            return 1.0f;
+    }
 
     float const own = threat.GetThreat(bot);
-    return own > 0.0f && own >= ULDUAR_VEZAX_THREAT_SHARE * threat.GetThreat(mainTank) ? 0.0f : 1.0f;
+    return own > 0.0f && own >= ULDUAR_VEZAX_THREAT_SHARE * threat.GetThreat(holder) ? 0.0f : 1.0f;
 }
 
 float VezaxTricksOnTankMultiplier::GetValue(Action* action)

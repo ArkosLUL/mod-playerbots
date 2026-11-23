@@ -773,6 +773,12 @@ bool VezaxAnimusPhaseActive(PlayerbotAI* botAI)
     return vezax && vezax->HasAura(SPELL_VEZAX_SARONITE_BARRIER);
 }
 
+bool VezaxTargetingAnimus(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->IsAlive() && target->GetEntry() == NPC_VEZAX_SARONITE_ANIMUS;
+}
+
 float VezaxMeleeHoldDistance(Player* bot, Unit* vezax)
 {
     return ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE + vezax->GetCombatReach() + bot->GetCombatReach() -

@@ -167,6 +167,7 @@ bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs);
 char const* VezaxAnimusRedirectSpell(Player* bot);
 bool IsVezaxAnimusOnBot(Player* bot);
 bool VezaxAnimusPhaseActive(PlayerbotAI* botAI);
+bool VezaxTargetingAnimus(PlayerbotAI* botAI);
 float VezaxMeleeHoldDistance(Player* bot, Unit* vezax);
 bool TryGetVezaxAnimusMeleeSpot(Player* bot, Unit* animus, Position& spot);
 
