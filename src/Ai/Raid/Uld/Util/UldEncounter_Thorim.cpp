@@ -82,6 +82,7 @@ const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2118.75f, -252.65f, 4
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2110.75f, -244.65f, 419.359f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2110.75f, -260.65f, 419.485f);
 const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT = Position(2107.25f, -252.65f, 419.371f);
+const Position ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT = Position(2187.79f, -432.78f, 426.39f);
 
 namespace
 {
@@ -132,6 +133,9 @@ std::array<Position const*, ULDUAR_THORIM_BALCONY_WAYPOINTS> const balconyWaypoi
 
 bool ThorimBalconyWaypointReached(Player const* bot, uint8 index)
 {
+    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
     Position const& here = GetThorimBalconyWaypoint(index);
     return bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
            bot->GetPositionY() > here.GetPositionY();
@@ -1241,6 +1245,9 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
 
     if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
     {
+        if (Unit* giant = ThorimGauntletGiantHeld(botAI, bot))
+            return NoteThorimDpsTarget(bot, giant);
+
         DropIdleGauntletMobsWhileFighting(targets);
 
         std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards,
@@ -1407,6 +1414,7 @@ namespace
 constexpr uint32 THORIM_ARENA_LEVER_ENTRY = 194264;
 constexpr float THORIM_LEVER_SEARCH_RANGE = 150.0f;
 constexpr uint32 THORIM_FIRST_COLOSSUS_DOORS_ENTRY = 194557;
+constexpr uint32 THORIM_SECOND_COLOSSUS_DOORS_ENTRY = 194558;
 
 Position const THORIM_RUNE_GIANT_SPAWN(2134.57f, -440.318f, 438.331f);
 
@@ -1424,6 +1432,19 @@ bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
     {
         doors = bot->FindNearestGameObject(THORIM_FIRST_COLOSSUS_DOORS_ENTRY, ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE);
         state.colossusDoorsGuid = doors ? doors->GetGUID() : ObjectGuid::Empty;
+    }
+
+    return doors && doors->GetGoState() == GO_STATE_ACTIVE;
+}
+
+bool ThorimGiantDoorsOpen(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    GameObject* doors = state.giantDoorsGuid ? botAI->GetGameObject(state.giantDoorsGuid) : nullptr;
+    if (!doors)
+    {
+        doors = bot->FindNearestGameObject(THORIM_SECOND_COLOSSUS_DOORS_ENTRY, ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE);
+        state.giantDoorsGuid = doors ? doors->GetGUID() : ObjectGuid::Empty;
     }
 
     return doors && doors->GetGoState() == GO_STATE_ACTIVE;
@@ -1721,6 +1742,27 @@ Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot)
     return giant;
 }
 
+Unit* ThorimGauntletGiantHeld(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || ThorimPhase2Active(botAI) || !PastThorimPortcullis(bot) ||
+        bot->GetExactDist(THORIM_RUNE_GIANT_SPAWN) > ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE ||
+        !ThorimIsBotGauntletLeader(botAI, bot))
+        return nullptr;
+
+    Unit* giant = GetThorimAncientRuneGiant(botAI);
+    return giant && giant->IsInCombat() && giant->GetVictim() == bot ? giant : nullptr;
+}
+
+bool ThorimGauntletGiantHold(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!ThorimGauntletGiantHeld(botAI, bot) ||
+        bot->GetExactDist2d(&ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT) <= ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE)
+        return false;
+
+    out = ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT;
+    return true;
+}
+
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -1780,12 +1822,26 @@ Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI)
     return giant;
 }
 
+bool ThorimOnBalconySide(Player const* bot)
+{
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return true;
+
+    float const x = bot->GetPositionX();
+    float const y = bot->GetPositionY();
+    return x >= ULDUAR_THORIM_RAMP_BOX_MIN_X && x <= ULDUAR_THORIM_RAMP_BOX_MAX_X &&
+           y >= ULDUAR_THORIM_RAMP_BOX_MIN_Y && y <= ULDUAR_THORIM_RAMP_BOX_MAX_Y;
+}
+
 bool ThorimBalconyOpen(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot || !NearThorimEncounter(bot))
         return false;
 
-    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+    if (!ThorimOnBalconySide(bot))
+        return false;
+
+    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && !ThorimGiantDoorsOpen(botAI, bot))
         return false;
 
     Unit* boss = GetThorim(botAI);
@@ -2679,6 +2735,15 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         return true;
 
     return StaticMeleeSpot(boss, slot, position);
+}
+
+bool ThorimTankSpotNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
+{
+    Unit* const boss = GetThorim(botAI);
+    if (boss && boss->GetVictim() == bot)
+        return bot->GetExactDist2d(&spot) > ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE;
+
+    return bot->GetDistance(spot) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
 }
 
 namespace
