@@ -1507,8 +1507,14 @@ def firebot_rows(trace: Trace) -> list[dict]:
     silences = siren_silences(trace, roster)
     holds = [rec["t"] for rec in trace.of("veto") if rec.get("m") == FIREBOT_AOE_GUARD]
     steps = [rec["t"] for recs in accepted_moves(trace).values() for rec in recs if rec.get("by") == FIREBOT_STEP]
-    windows = [(rec["t"], rec["t"] + SPIN_WINDOW_MS) for rec in trace.of("cast")
-               if rec.get("sp") == SPELL_SPINNING_UP]
+    sweeps = sorted(rec["t"] for rec in trace.of("haz") if rec.get("shape") == "sweep")
+    windows = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") != SPELL_SPINNING_UP:
+            continue
+        stop = rec["t"] + SPIN_WINDOW_MS
+        swept = [when for when in sweeps if rec["t"] <= when < stop]
+        windows.append((rec["t"], swept[-1] + 1 if swept else stop))
     spray_notes: dict[int, list[int]] = collections.defaultdict(list)
     for rec in notes(trace, "mimiron.flee"):
         if str(rec.get("txt", "")).startswith("spray"):
@@ -1583,9 +1589,10 @@ def show_firebots(trace: Trace) -> None:
                   f" {row['barrage_spray_deaths']} dead, {row['barrage_spray_silent']} with no spray note before;"
                   f" spray or siren steps {row['barrage_steps']}")
     print("\n  'gone' fire bots were alive in the phase and not at its end; holds are the guard's veto rows,"
-          " which latch per action, so they count episodes, not ticks; a barrage window is Spinning Up's"
-          f" cast plus {SPIN_WINDOW_MS / 1000:.1f} s, and 'no spray note' means the victim wrote none in the"
-          f" {SPRAY_NOTE_MS / 1000:.0f} s before the hit")
+          " which latch per action, so they count episodes, not ticks; a barrage window runs from Spinning"
+          " Up's cast to the cone's last sweep row (or"
+          f" {SPIN_WINDOW_MS / 1000:.1f} s without them), and 'no spray note' means the victim wrote none in"
+          f" the {SPRAY_NOTE_MS / 1000:.0f} s before the hit")
 
 
 def unreach_rows(trace: Trace) -> dict:

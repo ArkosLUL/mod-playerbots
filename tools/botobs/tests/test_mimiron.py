@@ -827,6 +827,19 @@ class FireBotPull(unittest.TestCase):
             rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
         self.assertEqual(rows["P4"]["barrage_spray_silent"], 0)
 
+    def test_the_cone_s_last_sweep_row_ends_the_barrage_window(self):
+        records = firebot_pull() + [
+            {"t": when, "e": "haz", "sp": mm.SPELL_SPINNING_UP, "shape": "sweep", "x": 0.0, "y": 0.0, "z": 364.0,
+             "ttl": 250, "lead": 1.0, "sweep": 1.8, "rate": 0.18, "live": 0.0} for when in (16600, 16850, 17100)]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_7_mimiron_1789700007.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
+        p4 = rows["P4"]
+        self.assertEqual(p4["barrage_s"], 0.601)
+        self.assertEqual((p4["barrage_spray_hits"], p4["barrage_spray_deaths"]), (1, 1))
+        self.assertEqual(p4["barrage_steps"], 0)
+
     def test_the_view_prints_each_phase(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):

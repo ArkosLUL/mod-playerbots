@@ -1067,7 +1067,8 @@ Normal mode and phase 2 are untouched: no fire bots, so no lanes and no fire bot
 **Next window should show** (`--firebots`, `--spin`, `--flips`; `mim10/p4flips.py`):
 
 - Phase 4 `in barrage windows`: Water Spray hits few and `no spray note` near 0 (this window uld1 13 hits / 2 dead /
-  12 silent, P3b 1/1/1, uld3 4/4/4; window 16: 6/1/6 and 1/1/0), spray or siren steps there above 14/11/0.
+  12 silent, P3b 1/1/1, uld3 4/4/4; window 16: 6/1/6 and 1/1/0), spray or siren steps there above 0 (0/0/0 now,
+  see the review).
 - No beam hits still (`--spin` beam ticks 0 in all three now), no barrage death.
 - No new P4 A-B-A between `mimiron p3wx2 laser barrage action` and `mimiron fire bot action` (none now); arc spread
   ↔ barrage 22/12/11 and arc spread ↔ fire bot 186/71/87 about as now.
@@ -1087,3 +1088,19 @@ silenced 361/137/242 raid-s there, and uld1 and uld2 missed the clock by 7 and ~
 Ball killed 9 before Berserk, 7 of them ranged.
 
 **Shared code:** none.
+
+**Review.**
+
+- The reader's barrage window ran 14.5 s from Spinning Up's cast, but the cone's `haz` `sweep` rows stop at
+  +13.8-14.0 s (`603_7`: 470.6-484.4 s for the cast at 470.5). All 14/11 spray or siren steps it counted inside a
+  window in uld1/uld2 fell at +14.1-14.3 s: the fire bot trigger firing the moment the barrage released it, not a
+  dodge during the cone. A window now ends at its last `sweep` row (the 14.5 s only without them, test). Hits,
+  deaths and silent counts are unchanged; steps inside are 0 in all six pulls of windows 16 and 18.
+- Root cause checked: `603_7` 7:58.4, 11 hits from one spray, 8 victims on `hold 120`, 3 on `clear 165`, none
+  with a fire bot `act` row in the 5 s before; Uldxaf's death record shows the barrage action `FAILED` every
+  tick from 474.1 s to 478.3 s and no `mimiron fire bot action`. `603_8` 8:03.3/8:03.9 on `ahead` steps,
+  8:08.5 two on `hold 135`. Window 16's `603_11`: 5 of its 6 hits on `clear` bots fresh off `refuge` or
+  `ahead` steps, 1 on a `trailing` step.
+- Left: a `hold` bot whose last move was a barrage step is `locked` for that step's expected time
+  (`IsWaitingForLastMove`, FORCED against FORCED), so its spray flee can log `spray locked` and stay. The
+  reader counts that as a note, not silent; if hits stay up next window, read the notes before the hits.

@@ -578,10 +578,10 @@ told `clear` or `hold` stood in nodes for 8-14 s. The fire trigger defers only f
 where the barrage dodge screens every hop.
 
 **The spray and siren dodge never defers to the barrage.** The barrage dodge's `+ 7` takes the tick
-whenever it moves the bot, and its fan refuses the band at landing. Standing down for the whole window
-left `clear` and `hold` bots in lanes: once fire bots were kept into phase 4, 25 of its 32 spray hits over
-two windows fell inside a barrage window, 23 with no `spray` note and 9 dead, one spray hitting 11 of the
-melee stack.
+whenever it moves the bot, and this dodge's fan refuses the band at landing. Standing down for the
+whole window left `clear` and `hold` bots in lanes: once fire bots were kept into phase 4, 25 of its 32
+spray hits over two windows fell inside a barrage window, 23 with no `spray` note and 9 dead, one spray
+hitting 11 of the melee stack.
 
 **A burning band edge is not a place to stop.** When the re-aimed wedge held 22-27 of 38 nodes, 8-11
 bots died to fire in the next 15 s, against none at 11 of 34 or fewer: `ahead` bots `hold` within a yard
@@ -1506,8 +1506,9 @@ line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's
-cast plus 14.5 s), counting victims with no `spray` note in the 3 s before; `--bombbots` calls a blast
-victim chased when the bomb targeted it in the snapshot 300 ms before; and a phase that
+cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
+before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
+before; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated
