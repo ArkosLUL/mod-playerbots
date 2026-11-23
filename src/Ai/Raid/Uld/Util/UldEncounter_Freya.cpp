@@ -23,9 +23,11 @@
 #include "Playerbots.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "ThreatManager.h"
 #include "Timer.h"
 #include "UldScripts.h"
@@ -299,6 +301,30 @@ Player* GetFreyaStackedSnaplasherTank(FreyaWaveState const& state)
     return stacks >= ULDUAR_FREYA_ADD_TANK_DEFENSIVE_STACKS ? tank : nullptr;
 }
 
+namespace
+{
+Unit* GetFreyaForHold(PlayerbotAI* botAI)
+{
+    Unit* freya = GetFreyaScan(botAI).Boss();
+    if (!freya)
+        freya = GetFreyaBossByEntry(botAI);
+
+    return freya && freya->IsAlive() ? freya : nullptr;
+}
+
+struct FreyaTankExternal
+{
+    uint32 spellId;
+    char const* castName;
+};
+
+constexpr FreyaTankExternal FREYA_TANK_EXTERNALS[] = {
+    {SPELL_FREYA_PAIN_SUPPRESSION, "pain suppression"},
+    {SPELL_FREYA_GUARDIAN_SPIRIT, "guardian spirit"},
+    {SPELL_FREYA_HAND_OF_SACRIFICE, "hand of sacrifice"},
+};
+}  // namespace
+
 bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -306,8 +332,27 @@ bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI)
         bot->GetHealthPct() < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT)
         return false;
 
-    Unit* freya = GetFreyaScan(botAI).Boss();
-    return freya && freya->IsAlive() && freya->GetVictim() != bot;
+    Unit* freya = GetFreyaForHold(botAI);
+    return freya && freya->GetVictim() != bot;
+}
+
+bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI)
+{
+    Player* addTank = GetGroupAssistTank(botAI->GetBot(), 0);
+    if (!addTank)
+        return false;
+
+    Unit* freya = GetFreyaForHold(botAI);
+    return freya && freya->GetVictim() != addTank;
+}
+
+bool IsFreyaAddTankCovered(Player* tank)
+{
+    for (FreyaTankExternal const& external : FREYA_TANK_EXTERNALS)
+        if (tank->HasAura(external.spellId))
+            return true;
+
+    return RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
 }
 
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)
@@ -317,16 +362,16 @@ char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)
     GatherFreyaWaveState(botAI, state);
 
     tank = GetFreyaStackedSnaplasherTank(state);
-    if (!tank || tank == bot)
+    if (!tank || tank == bot || IsFreyaAddTankCovered(tank))
         return nullptr;
 
-    for (uint32 spellId : {SPELL_FREYA_PAIN_SUPPRESSION, SPELL_FREYA_GUARDIAN_SPIRIT, SPELL_FREYA_HAND_OF_SACRIFICE})
-        if (tank->HasAura(spellId))
-            return nullptr;
-
-    for (char const* external : {"pain suppression", "guardian spirit", "hand of sacrifice"})
-        if (botAI->CanCastSpell(external, tank))
-            return external;
+    for (FreyaTankExternal const& external : FREYA_TANK_EXTERNALS)
+    {
+        SpellInfo const* info = sSpellMgr->GetSpellInfo(external.spellId);
+        if (info && bot->IsWithinDistInMap(tank, info->GetMaxRange(true, bot)) && bot->IsWithinLOSInMap(tank) &&
+            botAI->CanCastSpell(external.spellId, tank))
+            return external.castName;
+    }
 
     return nullptr;
 }

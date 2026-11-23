@@ -882,3 +882,129 @@ Left: a melee kiter whose sibling stands inside the kite margin idles (its reach
 going down the ladder; the 5 s head start still sheds with no add tank alive (a trio spawning after his
 death, as before round 3); `--tanks` splits one loose run wherever the Snaplasher briefly has no player
 target, so sum adjacent stretches.
+
+## Round 9 (build 1fa3c332c: round 7 built, round 8 merged but not built)
+
+**Data:** window 14, `report --boss freya --raid uld --head 1fa3c332c --pulls 10`, one valid pull per pool, no
+DC veto inside a pull: `tr-20261123-103707-22` (uld1, DK add tank), `-104450-24` (uld2, bear), `-104429-23`
+(uld3, bear); traces `env/dist/logs/botobs/603_{22,24,23}_elder-stonebark_{1795430269,1795430731,
+1795430711}.ndjson`. Windows 12 and 13 are the baseline. Ad hoc scripts: `scratchpad/freya-r9/` (`extcasts.py`,
+`defhp.py`, `tankhp.py`, `healpos.py`, `gift_gathers.py`), plus `freya-r5/addtank.py`, `freya-r7/`,
+`freya-r6/low_life.py`. Round 8 is not in this binary: the hold still ran, so it is judged by nothing here.
+
+**Hard mode.** All three pulls 3 of 3 Elders from their essence channels. uld1's kill cast chest 62952: a
+hard-mode kill, 3 deaths.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795430269 | **kill 7:11, 3** | Detonating Lasher 3 (ranged Flame Lash 1:07, ranged 4:46, melee 5:29) |
+| uld2 | 1795430731 | wipe 4:21, 31 | Flame Lash 2 (the bear add tank and a melee, 0:20.0); trio 1: the bear add tank at 2:32.6 to the Snaplasher with nothing up, then the held Snaplasher at 2-7% killed 3 melee (2:35-2:40) while its siblings revived (2:43, 2:45.8) and so did it (2:56); the 3:01 lasher wave landed on the live trio: 25 (Flame Lash 8, lasher melee 9, Storm Lasher 3, Snaplasher 2, own Iron Roots 2, Freya 1, the main tank at 4:13) |
+| uld3 | 1795430711 | wipe 5:34, 29 | lasher melee 1 (ranged, 1:00.6); trio 2: the bear add tank at 3:20.9 to the Snaplasher with nothing up, then the held Snaplasher at 2-3% killed 3 melee (3:28-3:35) while its siblings revived (3:38.6); the Conservator (3:44) and lasher wave (4:44) landed on the live trio: 24 (lasher melee 8, Flame Lash 7, Freya 7 with the main tank dead at 5:22.7, Nature's Fury 1, own Iron Roots 1) |
+
+**Stop rules:** one hard-mode kill in three pools, not polished. The add tank's death was picked in round 2
+(heal range) and is again here; round 7 built answers, not a pick.
+
+**Round 7 verdict.**
+
+- Q2, the add tank's own buttons: **held.** No held button above 25% in a lasher or Conservator wave but one
+  case: uld2's bear, risen on his soulstone at 0:20.3, cast Barkskin and Survival Instincts at 43% (0:21.4)
+  with no veto, because the hold read Freya through `find target`, and a risen bot is not on her threat list
+  (round 6's known gap). Last resorts under 25%: uld3's Survival Instincts under lashers (1:03.8, 15%),
+  Barkskin (3:57, risen) and Survival Instincts (5:15.9) in the collapse. `freya.adddef` 2.6-7.3s into each
+  trio wave with a button ready (uld1's second: Vampiric Blood 25s in, when it came off cooldown), the next
+  1.4-1.5s after the last ran out.
+- Q2, the healers' externals: **not held.** New `--tanks` cover line, own / external / both / none seconds
+  per trio wave: uld1 22.0/8.0/8.0/15.3 of 37.3 and 10.0/0/0/30.2 of 40.2; uld2 22.0/20.0/19.5/9.1 of 31.6,
+  died bare; uld3 22.0/0/0/20.0 of 42.0 and 12.0/0/0/24.4 of 36.4, died bare (windows 12-13: none 10-45s a
+  wave). Three faults: (1) externals ran alongside his own buttons (uld1 Pain Suppression with Icebound
+  Fortitude; uld2 Hand of Sacrifice with Barkskin, Pain Suppression with Frenzied Regeneration), so uld2's
+  bear was bare 5.5s later; (2) class code spent them first: uld3's disc priest Pain Suppression on a melee
+  and holy priest Guardian Spirit on a ranged at 1:01.5-1:03.8 in the lasher wave, uld2's holy priest Guardian
+  Spirit on a warlock's Felguard at 0:07.3, so uld3 got none at all; (3) uld1's holy paladin noted Hand of
+  Sacrifice 20 times and never landed one: he healed from 35-42 yd (`healpos.py`), it reaches 30, and
+  `CanCastSpell` passes `SPELL_FAILED_OUT_OF_RANGE` (`PlayerbotAI.cpp:3617`).
+- Add-tank deaths to the Snaplasher 0/1/1 (rounds 4-6: 1-2 a pull), both bare with the Snaplasher at 7-10%
+  and its siblings at 3-19%.
+- Q5: no trio spawned onto a lasher tail (every intact lasher wave ended before the next spawn): untested.
+- Gift: **held.** `gift_camp.py` counts 3 and 7 gathers from a bot targeting the Gift, but every one had a
+  lasher under 15% 9.6-16 yd off (`gift_gathers.py`): bails at the blast edge its 15.5 yd cut misreads. Gifts
+  living 12s+ in intact lasher waves 2 of 4 (window 12: 5 in three); lasher waves 46-70s, each done before
+  the next spawn. Both of those Gifts healed a ghoul-held pack's lashers from 4-11% back to 52-94% (uld1
+  1:28-1:33, uld2 0:40-0:46) with 9-10 ranged on the Gift.
+- Round 6: **held.** `--lows` lashers 8s+ under the bail line on a player 0/0/1 (4/3/5); ranged in reach on
+  one 86/89/76/40%, on another 0/2/8/10%; back-line bails 110 over the pulls (249). `low_life.py` median 4.0s,
+  ghoul-held 3.7s (3.2-4.2). Its "no low lasher healed back by a Gift" failed twice (the Gifts above).
+- Round 5: the release fired in each hold (uld2 89 times by 22 bots, uld3 7), but both holds began on a
+  Snaplasher at 7-8% whose siblings then revived: question 4 (d)'s cost, gone with round 8.
+- Rounds 1-4: no tank Roar or Shout; Righteous Defense on a pet (uld1 0:04.7), a melee (2:01.8) and two
+  ranged in uld3's collapse. Freya on the main tank 99.2/98.8/94.1% (uld3 off him from 4:49.6, in the
+  collapse). Beam dodges from past 8 yd 0-24% by role; ended farther from Freya heal 62% pooled (round 5's
+  45%). `--ghouls` no lasher in reach 0-9%, on Freya 0-2%. `--blasts` melee orders into a low blast 0-17%,
+  Detonate hits 0-14 a wave, no melee Detonate death.
+
+**Ranking.** (1) The trio chain, both wipes: 57 of 60 deaths from the add tank's death on. The add tank dies
+bare at the wave's end (2); the held Snaplasher at 2-7% kills 6 while its siblings revive (round 8 drops the
+hold); the next waves land on a live trio (49). (2) Lasher deaths on an intact raid: 6. Picked the add tank's
+death, the part round 8 does not touch.
+
+**Failure picked: the add tank dies bare at the end of a trio wave; the externals add no cover.** Evidence
+above. Each death needed one layer: uld3's bear took 31.4k at 91% (3:18.5), was healed to 63%, then 40.4k
+(3:20.9); Pain Suppression (40%), Guardian Spirit or Hand of Sacrifice (30%) each turns that into a survival.
+
+**Classification: bug.** Q2 (c) is (a), keep the add tank's buttons for the trio and spend one at a time so
+they chain, plus the healers' externals under a stacked Snaplasher; nothing kept the externals, and round 7
+cast them in parallel.
+
+**Fix** (Freya files only, any size or difficulty, no player branch):
+
+- `freya add tank external hold` (Role::Heal) blocks the class `pain suppression`, `pain suppression on
+  party`, `guardian spirit on party` and `hand of sacrifice on party` while Freya lives and an add tank does
+  who is not holding her (`IsFreyaAddTankExternalHeld`). Lay on Hands is not in the user's list and stays free.
+- `IsFreyaAddTankCovered`: the externals wait while one of the three is up or the tank has an own button
+  running or ready (`RunningTankDefensive` / `ReadyTankDefensive`, physical), so one layer runs at a time.
+  `freya.addext` notes `covered` then.
+- `GetFreyaTankExternal` checks spell range (`GetMaxRange(true)`) and LOS before `CanCastSpell`.
+- Both holds find Freya by entry (`GetFreyaBossByEntry`) when the scan misses her, so a risen add tank keeps
+  his buttons.
+- Reader: `--tanks` cover line per Snaplasher, from auras (the `freya.addext` note precedes a cast that can
+  fail), tested.
+
+**What it would have changed here:** uld2 keeps Survival Instincts and Guardian Spirit: Barkskin, Frenzied
+Regeneration, then Survival Instincts from ~2:24 to ~2:44, past the 2:32.6 swing, with three externals still
+in hand. uld3's first trio gets Pain Suppression and Guardian Spirit after Frenzied Regeneration
+(its 20s bare), but its second still gets Barkskin alone (question 8). uld1 unchanged but for no Hand of
+Sacrifice tries and Pain Suppression after Vampiric Blood instead of on Icebound Fortitude.
+
+**Cost to watch:** healers' Pain Suppression, Guardian Spirit and Hand of Sacrifice no longer go to DPS or
+healers while an add tank lives (window 14: 7 such casts, 2 of them in uld1's kill on a healer who lived),
+and a disc priest's own critical-health Pain Suppression shares the held name.
+
+**Next window should show** (`freya.py --tanks`, `extcasts.py`, `postmortem.py --vetoes`):
+
+- Cover lines with `both` near 0 (window 14: 8.0, 19.5s) and `none` well under 9-30s in single and first trio
+  waves; externals landing only after his own run out.
+- No healer Pain Suppression, Guardian Spirit or Hand of Sacrifice on anyone but a Snaplasher's tank while the
+  add tank lives; vetoes under `freya add tank external hold`.
+- No `freya.addext` name without the aura landing (no out-of-range tries); `covered` notes in trio waves.
+- A risen add tank: vetoes under `freya add tank defensive hold` within a second of rising, no button above 25%.
+- Add-tank deaths to the Snaplasher under 1 a pull; any left should be the second of back-to-back trio waves.
+- Round 8's checks as written there; rounds 1-7 still holding.
+
+**Not picked:** lasher deaths on an intact raid (6, no common cause); Gifts healing ghoul-held packs from
+under 15% (two this window); `FreyaAlive` (area taunt hold, owned targeting) still reads the scan, so a risen
+bot runs generic taunts and targeting until Freya has him on her threat list.
+
+**Questions:**
+
+8. Two trio waves can come back to back, 60s apart (uld1 and uld3 this window). The add tank's 3-minute
+   buttons (Frenzied Regeneration, Survival Instincts; Icebound Fortitude 2) and the healers' externals cover
+   one trio wave, not two: uld3's bear held the second on Barkskin alone and died bare 36s in. Options: (a)
+   accept it; (b) DPS leave the Snaplasher alone until both siblings are near the sync floor, so its bark
+   stays down (stacks drop 4s after the last hit; 7 stacks at +2s, capped by +15s), then burn it: the add tank
+   takes capped swings for ~15s instead of ~35s; the risk is the sync (the findings doc records that withheld
+   Snaplasher damage, in a hold with no tank, kept the trio from dying together); (c) the main tank takes the
+   second wave's Snaplasher while the add tank's buttons are down. Recommendation: read window 15 first; if
+   the only add-tank deaths left are second waves, (b).
+6. and 7. (still open, not built) as written in rounds 7 and 8.
+
+**Shared code:** none changed; `RunningTankDefensive` and `ReadyTankDefensive` are read, not edited.

@@ -2,7 +2,8 @@
 """Read a Freya pull from a RaidObs trace: hard mode, add waves, who held Freya and the Snaplasher, deaths.
 
     freya.py <file>          every section
-    freya.py <file> --tanks  who Freya and each Snaplasher were on, every area taunt or Righteous
+    freya.py <file> --tanks  who Freya and each Snaplasher were on, how long the add tank's own buttons and
+                             the healers' externals covered him under it, every area taunt or Righteous
                              Defense a tank cast, and each stretch a Snaplasher spent loose on a non-tank
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
@@ -27,6 +28,10 @@ What the generic views miss here:
   add tank, so `--tanks` names the holder.
 - **A dodge is a move, not a hit.** `--moves` lists every re-issued order of a walk; `--beams` counts the
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
+- **Cover is read off auras, not the cooldown notes.** A healer notes `freya.addext` before its cast, so a cast that
+  fails (out of range) still writes the name. The cover line takes the first tank a Snaplasher went to and measures
+  his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap,
+  time two layers spent on one stretch, `none` the time he held it bare.
 - **A loose Snaplasher is read off the snapshots.** A stretch runs while its target is a raid member who is not a
   tank, and ends at the first snapshot it is on a tank or gone. Each line counts the deaths to it, the hits on its
   bark (Hardened Bark stack casts), the `freya kite snaplasher` orders, and the `freya.kite` notes: the chased
@@ -94,6 +99,11 @@ KITE_NOTE = "freya.kite"
 COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
 # not casts, the probes write these so the same button cast again next wave still gets its own row
 COOLDOWN_NO_PICK = {"covered", "none"}
+# The add tank's own buttons by the aura each puts up (Last Stand's cast 12975 puts up 12976).
+OWN_DEFENSIVES = {22812: "Barkskin", 22842: "Frenzied Regeneration", 61336: "Survival Instincts",
+                  48792: "Icebound Fortitude", 55233: "Vampiric Blood", 871: "Shield Wall", 12976: "Last Stand",
+                  498: "Divine Protection"}
+EXTERNALS = {33206: "Pain Suppression", 47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
 BARK_STACKS = (62663, 64190)
 NPC_ARMY_GHOUL = 24207
@@ -232,6 +242,13 @@ def show_tanks(trace: Trace) -> None:
         total = sum(held.values()) or 1
         share = ", ".join(f"{holder_label(trace, g)} {100.0 * ms / total:.0f}%" for g, ms in held.most_common(4))
         print(f"  Snaplasher {clock(snap['first'])} .. {clock(snap['last'])}: {share}")
+    for cover in snaplasher_cover(trace):
+        line = (f"  Snaplasher {clock(cover['spawn'])} on {holder_label(trace, cover['tank'])} "
+                f"{(cover['until'] - cover['t']) / 1000:.1f}s: own {cover['own'] / 1000:.1f}s, external "
+                f"{cover['ext'] / 1000:.1f}s, both {cover['both'] / 1000:.1f}s, none {cover['none'] / 1000:.1f}s")
+        if cover["died"] is not None:
+            line += f"; died {clock(cover['died'])} under {', '.join(cover['under']) or 'nothing'}"
+        print(line)
     for rec in trace.of("cast"):
         if rec.get("sp") in AREA_TAUNTS and trace.role(rec.get("s")) == "tank" and not rec.get("tr"):
             target = f" on {holder_label(trace, rec['tgt'])}" if rec.get("tgt") else ""
@@ -248,6 +265,55 @@ def show_tanks(trace: Trace) -> None:
         if stretch["reads"]:
             line += f", slower than its victim in {stretch['slower']} of {stretch['reads']} speed read(s)"
         print(line)
+
+
+def aura_spans(trace: Trace, guid, spells: dict) -> list[tuple[int, int, int]]:
+    """(start, end, spell) of each of these auras on the unit; one still up at the end runs to the last record."""
+    up: dict[int, int] = {}
+    out: list[tuple[int, int, int]] = []
+    for rec in trace.of("aura"):
+        if rec.get("d") != guid or rec.get("sp") not in spells:
+            continue
+        if not rec.get("r"):
+            up.setdefault(rec["sp"], rec["t"])
+        elif rec["sp"] in up:
+            out.append((up.pop(rec["sp"]), rec["t"], rec["sp"]))
+    end = max(last_snapshot(trace), max((t for t in up.values()), default=0))
+    out += [(t, end, spell) for spell, t in up.items()]
+    return out
+
+
+def covered_ms(spans: list[tuple[int, int, int]], t0: int, t1: int) -> int:
+    cut = sorted((max(s, t0), min(e, t1)) for s, e, _ in spans if e > t0 and s < t1)
+    total, start, end = 0, None, None
+    for s, e in cut:
+        if end is None or s > end:
+            total += (end - start) if end is not None else 0
+            start, end = s, e
+        else:
+            end = max(end, e)
+    return total + ((end - start) if end is not None else 0)
+
+
+def snaplasher_cover(trace: Trace) -> list[dict]:
+    """Per Snaplasher, the first tank it went to: how long its own buttons and the healers' externals were up on
+    him while he held it, from its first sample on him to his death or its last sample."""
+    deaths = combat_deaths(trace)
+    out: list[dict] = []
+    for snap in sorted(sightings(trace, (NPC_SNAPLASHER,)).values(), key=lambda r: r["first"]):
+        first = next((span for span in snap["spans"] if trace.role(span[2]) == "tank"), None)
+        if first is None:
+            continue
+        tank, t0 = first[2], first[0]
+        died = next((d["t"] for d in deaths if d.get("g") == tank and t0 < d["t"] <= snap["last"]), None)
+        t1 = died if died is not None else snap["last"]
+        own, ext = aura_spans(trace, tank, OWN_DEFENSIVES), aura_spans(trace, tank, EXTERNALS)
+        own_ms, ext_ms, any_ms = covered_ms(own, t0, t1), covered_ms(ext, t0, t1), covered_ms(own + ext, t0, t1)
+        under = [{**OWN_DEFENSIVES, **EXTERNALS}[spell] for s, e, spell in sorted(own + ext) if s <= died <= e] \
+            if died is not None else []
+        out.append({"spawn": snap["first"], "tank": tank, "t": t0, "until": t1, "own": own_ms, "ext": ext_ms,
+                    "both": own_ms + ext_ms - any_ms, "none": t1 - t0 - any_ms, "died": died, "under": under})
+    return out
 
 
 def slower(text: str) -> bool:
@@ -596,8 +662,8 @@ def show_deaths(trace: Trace) -> None:
 
 SECTIONS = (
     ("waves", "each add wave and Eonar's Gift: when it came, when it ended, raid deaths meanwhile", show_waves),
-    ("tanks", "who held Freya and each Snaplasher, every area taunt or Righteous Defense, each loose Snaplasher",
-     show_tanks),
+    ("tanks", "who held Freya and each Snaplasher, the add tank's cover under it, every area taunt or Righteous "
+     "Defense, each loose Snaplasher", show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
     ("blasts", "per lasher wave, Detonate on the melee and their approach orders into a low lasher's blast",

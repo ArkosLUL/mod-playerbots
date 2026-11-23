@@ -246,6 +246,10 @@ Player* GetFreyaStackedSnaplasherTank(FreyaWaveState const& state);
 
 bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI);
 
+bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI);
+
+bool IsFreyaAddTankCovered(Player* tank);
+
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank);
 
 Unit* GetFreyaConservatorSpore(Unit* conservator);
