@@ -819,6 +819,9 @@ bool FreyaKiteSnaplasherAction::Execute(Event /*event*/)
 
 bool FreyaAddTankDefensiveAction::Execute(Event /*event*/)
 {
+    if (HasFreyaTankExternal(bot))
+        return false;
+
     uint32 const spellId = NextTankDefensive(botAI, bot, "freya.adddef", true);
     return spellId && botAI->CastSpell(spellId, bot);
 }

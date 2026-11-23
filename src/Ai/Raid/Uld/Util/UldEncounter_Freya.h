@@ -248,6 +248,8 @@ bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI);
 
 bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI);
 
+bool HasFreyaTankExternal(Player* tank);
+
 bool IsFreyaAddTankCovered(Player* tank);
 
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank);

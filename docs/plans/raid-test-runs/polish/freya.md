@@ -1316,3 +1316,147 @@ of 48 Gifts lived 12s+ in windows 15-16), Q10 is built as answered on one code p
 sent after a Q6 low-lasher pick died (camp and priority share `ACTION_RAID`) was never cut; it now latches
 only on a cut. Left: `IsFreyaGiftFiller` ranks by distance alone, so a latched filler a dodge carries
 farther frees its rank and one more melee can join.
+
+## Round 12 (build 8bc2a82d3: round 11 and the shared fix d70101432 built)
+
+**Data:** window 17, `report --boss freya --raid uld --head 8bc2a82d3 --pulls 10` (plus `--diff 10n`), one valid
+pull per pool at each size, no DC veto inside a pull. 25-man: `tr-20261123-144612-5` (uld1, DK add tank),
+`-144551-4` (uld2, bear), `-144612-6` (uld3, bear); traces `env/dist/logs/botobs/603_{5,4,6}_elder-stonebark_
+{1795445223,1795445194,1795445227}.ndjson`. 10-man: `tr-20261123-151600-14` (uld1), `-151359-13` (uld2),
+`-152000-15` (uld3); traces `603_{14,13,15}_elder-stonebark_{1795446997,1795446875,1795447237}`. Windows 14-16 and
+15a are the baseline. Ad hoc scripts: `scratchpad/freya-r12/` (`addtank_tl.py`, `wave_hold.py`,
+`spawn_on_back.py`, `submerge_moves.py`), plus `freya-r6/army_delay.py`, `lasher_tgts.py`, `freya-r9/extcasts.py`,
+`healpos.py`, `freya-r11/gift_walk.py`, `gift_away.py`, `gather_inflight.py`.
+
+**Hard mode.** All six pulls 3 of 3 Elders from their essence channels; the kills cast chest 62952 (25) and 62950 (10).
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 25 | 1795445223 | wipe 5:16, 31 | first lasher wave (0:55) 6: ranged 5 at 1:05-1:15 (lasher melee 2, Flame Lash 3), a melee 1:35; trio 1: the DK add tank at 2:26.5 bare (below), again 3:00.5 after his soulstone; then Snaplasher 7 in all, Storm Lasher 5, Water Spirit 3, Ground Tremor 2, Nature's Fury 2, Sunbeam 1, own Iron Roots 1, lasher 3 in the 4:57 wave, Freya melee 1 |
+| uld2 25 | 1795445194 | wipe 4:43, 30 | the bear add tank to Flame Lash at 0:19.9 (risen); second lasher wave (3:06): lasher 22 (melee 17, Flame Lash 4, Detonate 1; 7 back line 3:12-3:28), Conservator melee 2, Freya melee 2, own Iron Roots 2, Sunbeam 1 |
+| uld3 25 | 1795445227 | **kill 7:32, 4** | Freya melee 2 (ranged, 3:20-3:23), Detonate 1 (melee), Nature Bomb 1 |
+| uld1 10 | 1795446997 | **kill 8:16, 1** | lasher melee 1 (ranged) |
+| uld2 10 | 1795446875 | wipe 10:23 at Berserk, 11 | the bear add tank to the Snaplasher at 4:34.6 (end of trio 2), Tidal Wave 1, Conservator melee 1, Sunbeam 1 (5:18); Berserk 7 (Freya melee 6, Sunbeam 1) |
+| uld3 10 | 1795447237 | wipe 10:00.5, 12 | own Iron Roots 1 (healer, 2:47), the bear add tank to the Snaplasher at 4:13.9 (end of trio 2), Water Spirit melee 1, Nature's Fury 1, Sunbeam 2, Ground Tremor 1 (5:43); the last 5 at 9:43-10:00, Freya at 55%, before Berserk was cast (Freya melee 3 from the main tank's death at 9:52 on, Ground Tremor 1, Sunbeam 1) |
+
+**Stop rules:** one 25-man hard-mode kill (4 deaths), not polished. The add tank's death was picked in round 2 (heal
+range) and round 9 (externals cast alongside his buttons); this round picks its mirror, his own button cast on a
+running external, which round 9's verified fix (w15-16: `both` 0.0s in all twelve trio waves) never covered and
+d70101432 made likelier. Different cause each time; flagged here in case the orchestrator counts it as the third.
+
+**Round 11 verdict.**
+
+- Gift cut: **held.** `freya.giftcut` 36 notes at 25, 43 at 10. `gather_inflight.py`: 23 bots took a Gift mid
+  gather, median 0.0 yd lost (w16 uld3 3:31: 5-48 yd). Cut walks: spore walks (12 of 17 in uld1 25), camp gathers,
+  generic `flee`, and the 10-man melee fillers' `reach melee` / `set behind`.
+- Gifts living 12s+: 25-man 6 of 23 (windows 15-16: 6 of 48), **not fewer**, but none from a gather: uld1 1:16 in
+  the first lasher collapse (5 ranged dead), uld1 3:34 and 4:18 in a Conservator wave (spore walks 8.6s and 5.6s
+  off them, which the Grip's pacify needs), uld2 3:30 (4 ranged alive), uld3 2:48 (Q11's bail loop: 8.7s of bails
+  from low lashers 15 yd off the Gift, 2% left), uld3 5:49 (after the add phase, 47 yd from the back line, bomb
+  escapes 9.3s).
+- Q10, melee on the Gift: **held.** 10-man Gifts had 2-4 melee beside 1-2 ranged; 1 of 37 lived 12s+ (window 15a:
+  16 of 27). 25-man melee on a Gift only with 4 or fewer ranged alive (uld1 4:18: 2 melee, uld2 3:30: 1, uld2 4:16:
+  5 with 2 alive, a ranged dying mid-Gift and latched fillers staying).
+- Lasher waves done before the next spawn: no (uld1 25 92s past the trio, uld3 25 87s past the Conservator).
+
+**Round 10's Q9: held where tested.** uld3 25 4:03.1 Pain Suppression on the main tank in trio 2 with the add tank
+alive; no healer external on DPS, healers or pets while an add tank lived. Rounds 1-9: no tank Roar or Shout;
+Righteous Defense only on non-tanks (5); Freya on the main tank 98.6/97.6/99.0% (25), 99.7/97.9/96.7% (10).
+
+**Did round 11 or d70101432 make the 25-man worse?** Neither opened a wipe. uld1's first deaths came at 1:05 in the
+first lasher wave, before any trio or Gift; uld2's at 3:12 in the second lasher wave, the next Gift at 3:30. Round
+11's cuts touched no lasher-wave death. d70101432 did cost uld1's DK at 2:26.5 (`addtank_tl.py`): Icebound Fortitude
+off at 2:15.08, Vampiric Blood off cooldown but no blood rune, so `IsFreyaAddTankCovered` read no own button ready
+(`ReadyTankDefensive` → `CanPayDefensive(…, 0)`, `RaidTankDefensive.cpp:96-108`) and Pain Suppression went out at
+2:15.40; the rune came back and Vampiric Blood went on top at 2:15.68 (`freya add tank defensive` never looks at
+externals, `UldTriggers_Freya.cpp:82-90` at `c01caf9cc`). Both ran out at 2:23.4 and 2:25.7, all four healers noted
+`none` (no Guardian Spirit on roster A, Hand of Sacrifice out of reach), and a 47.5k raw swing killed him at 2:26.46.
+Before d70101432 the healers would have held `covered` and Pain Suppression would have landed about 2:25.7, under
+that swing. He rose, took Hand of Sacrifice at 2:29.6 and died bare at 3:00.5 with every button and external spent
+(the trio ran 85s on a raid six DPS short).
+
+**Why both 10-man wipes ran to 10 minutes: too few left to beat Berserk.** uld2 took Berserk (47008 at 10:00.03,
+Freya melee 84-222k from 10:03); uld3 fell apart at 9:43-10:00 with Freya at 55%, the main tank dying at 9:52 to
+plain swings, before Berserk came. Freya is untouchable until the sixth wave dies (~5:30-6:20); the kill burned her
+100% → 0 in 2:45 with 9 alive. In both wipes the
+healers ran dry first: both under 25% by 3:30-4:30 and near 0 for minutes, as in all six 10-man pulls (window 15a's
+too; 25-man's four keep 25-60%). Trio 2's bear died at its end on his last button: uld2 4:34.6 under Frenzied
+Regeneration, both healers 37-74 yd off for the wave's first 27s (low lashers chasing the back line south, `freya
+ranged camp` bails), then in range from 4:24 to his death, the priest at 0-2% mana and the paladin at 12-25% holding
+Hand of Sacrifice (last cast 1:40) as `covered` under Survival Instincts, then Frenzied Regeneration, while the bear
+sat at 3-32%; uld3 4:13.9 under Frenzied Regeneration with both healers in range at 1% and 12% mana; Pain Suppression
+still held as `covered`. 3 and 5 more died by 5:18 / 5:43, the burn ran from ~6:00 with 7 and 5 alive, Freya at
+56% / 55% at 10:00; uld2's 8:04 Gift lived 14.2s and healed her 64% → 88%. Question 13.
+
+**Ranking** (89 deaths). (1) The lasher pack on the back line at 25: 28 lasher kills, both 25-man wipes (uld1's
+first wave, uld2's second). A plan question (Q12). (2) The add tank's death and what follows: uld1 25's DK
+(the bug below), the two 10-man bears (healers dry, Q13), each opening a chain (Snaplasher 7 in uld1 25; 3 and 5
+dead, then 12 at 9:43-10:19 at 10). (3) Singles: Sunbeam 6, Ground Tremor 4, own Iron Roots 4, Nature's Fury 3, Tidal Wave 3.
+Picked the bug in (2).
+
+**Why the lasher wave lands on the back line** (`wave_hold.py`, `spawn_on_back.py`, `submerge_moves.py`, 30 waves of
+windows 14-17 at 25): the pack spawns within 15 yd of Freya and stands 5s; the back line was standing in that ring
+(uld2 3:06: a median 4.7 yd from a lasher, 13 of 14 within 10) or the camp gather walked it in (uld1 0:55: 9.3 → 2.1
+yd by the wake, 13 of 22 camp orders ending nearer a lasher; at least half did in 10 of 30 waves). Over the first
+30s after the wake, six waves kept the back line a median 4-6 yd from a lasher and it took 116-514k of lasher
+damage; 21 of the other 23 with the raid intact, at 10-24 yd, took under 90k. Clean waves also stood 2-7 yd off at
+the wake, so distance there alone does not decide; uld2's Army was cut at 5 ghouls by a Ground Tremor cast 0.5s
+into the channel (lasher time on ghouls 34% against 56-93% in clean waves; lashers on the back line 49%). No node
+moves the back line off a submerged pack (findings doc: "nothing intercepts a fresh pack"), so a fix is a new
+position: Q12.
+
+**Failure picked: the add tank's own button goes on top of a running external.** 3 of 11 trio waves (`--tanks` cover
+`both`): uld1 25 trio 1 7.7s (above), uld1 10 trio 2 5.2s (Icebound Fortitude off cooldown 3:53.5 during Hand of
+Sacrifice 3:48.8-4:00.8, cast 3:55.6), uld2 10 trio 1 4.2s (Barkskin 1:48.05 during Hand of Sacrifice from 1:40.4).
+So the gap predates d70101432 (any button coming off cooldown under an external); d70101432 added the rune-gap
+route for a DK.
+
+**Classification: bug.** Q2 (c) as round 9 built it is one layer at a time; the healers wait for his buttons, his
+buttons did not wait for theirs.
+
+**Fix** (Freya files only, any size or difficulty, no player branch): `HasFreyaTankExternal` (Pain Suppression,
+Guardian Spirit, Hand of Sacrifice on him); `FreyaAddTankDefensiveTrigger` stands down while one is up and notes
+`freya.adddef` `covered`, and the action re-checks. `IsFreyaAddTankCovered` reads the same helper. Class nodes under
+25% still fire as a last resort.
+
+**What it would have changed here:** uld1 25: Vampiric Blood waits to 2:23.4 and runs to 2:33.4, through the
+2:24.0 and 2:26.5 swings. uld1 10: Icebound Fortitude 4:00.8-4:12.8 instead of 3:55.6-4:07.6. uld2 10 trio 1:
+Barkskin from 1:52.4.
+
+**Next window should show** (`freya.py --tanks`, `addtank_tl.py`):
+
+- Cover lines `both` 0.0s in every trio wave (window 17: 7.7, 5.2, 4.2s); no own button cast while Pain
+  Suppression, Guardian Spirit or Hand of Sacrifice is on him, the next one within about a second of its end;
+  `freya.adddef` `covered` while an external runs.
+- No add tank dying bare right after an external and his own button ran out together.
+- Round 9-11 checks as above; the Q12 baseline: `wave_hold.py` back-line lasher damage per wave.
+
+**Questions:**
+
+12. A fresh lasher pack spawns within 15 yd of Freya and stands 5s; the back line is often inside that ring or the
+    camp gather walks it in, and both 25-man wipes this window started there (28 lasher kills). Options: (a) leave
+    it; (b) while a lasher is submerged, ranged and healers within `_LASHER_CAMP_STANDOFF` (18 yd) of one walk to
+    the nearest spot 18 yd from every submerged lasher (the back-line bail's walk), and the gather waits for the
+    wake; (c) only the gather waits, no walk. Recommendation: (b), judged by back-line lasher damage over a wave's
+    first 30s. The evidence is mixed (clean waves too stood 2-7 yd off at the wake), so it is a trial.
+13. (orchestrator, DC comp) 10-man Freya hard mode with two healers runs them dry by 3:30-4:30 in six of six pulls,
+    and both 10-man wipes this window followed. The decisions table allows 3 at 10-man where a fight needs it.
+    Recommendation: three healers in the `uld-freya` 10-man comp.
+8. and 11. pending with the user, not built. Q8: no two trio waves came 60s apart in window 17 (gaps 1:51-3:00).
+   Q11: uld3 25's 2:48 Gift lived on 8.7s of bails from low lashers between it and the back line.
+
+**Shared code:** none changed; `RaidTankDefensive` is read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files
+only. Reproduced: `--tanks` cover `both` 7.7, 5.2 and 4.2s; all three own casts came from `freya add tank defensive`
+(rel 64), not a class node, so the stand-down catches each. uld1 25's Vampiric Blood had not been cast before
+2:15.68, so the healers' `none` at 2:15.40 was the blood rune. uld2 10's Pain Suppression at 4:11.98 failed (no
+aura) and Survival Instincts came off cooldown 0.17s later (cast 4:12.29): a fourth overlap had it landed. Fixed: the
+uld2 10 trio-2 death above, which read as out of heal range; both healers were in range for his last 10s.
+
+Left, a round 13 question (not built): the externals count a running health row (Frenzied Regeneration, Survival
+Instincts, Vampiric Blood, Last Stand) as cover at any health, and the external hold keeps the healers' class
+externals off the add tank at any health, so uld2 10's paladin kept Hand of Sacrifice in hand while the bear sat at
+3-32%. His own buttons have the 25% last resort; the externals have none. Options: (a) leave it, one layer at a time
+(Q2 (c)); (b) below `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` an external may go on top of a running own
+button. Recommendation: (b), alongside Q13.
