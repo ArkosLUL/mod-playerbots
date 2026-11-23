@@ -724,9 +724,9 @@ walking.
   %/s beyond the drain over a pull (planned +5); both need ~+3.1 (~94% extra by cast − 5 s, less wave 2's kill). The
   two pulls that landed both ran +2.8 and +1.8.
 - The team's star damage per second is far under its damage on him: uld1's mage 2.1 k against 7.1 k, warlock 4.1
-  against 6.8, hunter 4.2 against 5.6 (snapshot `dealt` by target). Over its focus time a member walked 27-57% and cast
-  at the star 34-60% (`teamtime.py`, 3 pulls). Moves: 80-111 a pull by `algalon raid position action` on `star`
-  (median 8.6 yd, star 29-32 yd off) and 27-51 by `reach spell` (star 37-40 yd off).
+  against 6.8, hunter 4.2 against 5.6 (snapshot `dealt` by target). Over its focus time a member walked 14-57%
+  (median 37%) and cast at the star 8-60% (`teamtime.py`, 3 pulls). Moves: 80-111 a pull by `algalon raid position
+  action` on `star` (median 8.6 yd, star 29-32 yd off) and 27-51 by `reach spell` (star 37-40 yd off).
 - Cause, `StarTeamSpot` (`UldEncounter_Algalon.cpp`): a star wanders up to 25 yd round its spawn (`MoveRandom(25.0f)`)
   at a median 2.5 yd/s, and the spot sat 25 yd from it, so it moved with the star; the raid position action re-walked
   each time it drifted 4 yd (`ULDUAR_ALGALON_SLOT_TOLERANCE` × 2), about every 1.9 s a member, and `CanCastSpell`
@@ -761,8 +761,16 @@ never on the team.
   Recommendation: judge this fix first; add the member only if two leftovers stay the rule.
 
 **Next window should show** (`algalon.py --stars`, `--formation`, scratch `alg8/teamtime.py`, `leftover.py`): the
-team walking ~20% of its focus time (window 17: 27-57%), `algalon.spot=starhold` most of its star time, the bulk
-beyond the drain above window 17's median +1.7 to +2.3 %/s, fewer `late` releases before Big Bang 2 (window 17: 2 of 3)
-and wave-3 stars left after it (2, 2, 1), and explosion deaths between Big Bang 2 and 3 (6, 5, 3). Watch: a kill
+team walking about 30% of its focus time (window 17: median 37%), `algalon.spot=starhold` most of its star time, the
+bulk beyond the drain above window 17's median +1.7 to +2.3 %/s, fewer `late` releases before Big Bang 2 (window 17:
+2 of 3) and wave-3 stars left after it (2, 2, 1), and explosion deaths between Big Bang 2 and 3 (6, 5, 3). Watch: a kill
 dropped or flipping because a holding member stood within 5 yd of its star, team members in his reach, and `reach
 spell` walks on `starhold`.
+
+**Review.** The cause holds on window 17: 80-111 raid position walks on `star` a pull, and stars move at 2.5 yd/s 80%
+of the time (mean 2.0). The walking range above read 27-57% but `teamtime.py` gives 14-57%, median 37%; the replay's
+current rule gives 28% where the traces show 37%, so its 6-point cut puts the hold near 30%, not 20%. `teamtime.py`
+counts each proc or triggered spell as a 1 s cast at something else (34075 Viper, 15258 Shadow Weaving, 15290
+Vampiric Embrace, 31818/57946 Life Tap), so its cast-at-star share undercounts and the 12-27% other casts are mostly
+those. Watch too: a member holding far from its ring slot can stand farther from a hole than the old spot let it,
+since `FarHoleSpot` measures from the slot (team members on `noshelter` at a Big Bang).

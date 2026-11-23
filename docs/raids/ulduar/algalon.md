@@ -300,7 +300,7 @@ the slot node walks it back, so a deadline star 35-68 yd out drained untouched. 
 it stands while its focus star is 12-28 yd off (nearer blocks the kill's clearance), unphased, in the room and
 13.5 yd clear of him (`starhold`); else, with the star over 28 yd from its slot, it stands 25 yd from the star
 towards the slot (`star`), outside his reach. Stars wander up to 25 yd round their spawn at 2.5 yd/s: a spot that
-followed the star kept the team walking 27-57% of its focus time, and a bot can't cast while it walks.
+followed the star kept the team walking 14-57% of its focus time, and a bot can't cast while it walks.
 
 **A star at 5% or less, or forecast dead within 4 s, is a hazard** for the dodge: anyone unphased within 8 yd steps off it, since it dies
 within seconds whoever is on it (`algalon.hazard`). As with a meteor, the generic movers are held within 12 yd
