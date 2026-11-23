@@ -1290,7 +1290,11 @@ never with Induce Madness under 15 s, since an uncleared room charms everyone. T
 target, cutting only a cast aimed at the tentacle so a self-heal still lands, `yogg-saron reprisal hold`
 blocks the other pickers, melee and charges, the room state reads `reprisal` so the walk-in leaves it alone,
 and `yogg-saron reprisal regroup` walks it to 15 yd of the healer past 25, since most of those deaths had
-the healer 37-50 yd away.
+the healer 37-50 yd away, and to 4 yd at any distance the healer cannot see it (`yogg.regroup` `range` /
+`sight`): every heal pick, the reprisal heal's and `PartyMemberToHeal`'s, skips a mate out of sight. From the
+Chamber's healer station on its last tentacles, (2133.3, −26.3, 242) on the raised floor's ramp, both picks
+passed over held bots 15 yd toward the room's middle for 3-12 s while healing higher mates, with every test but
+sight passing: inferred from the trace, not navprobed.
 
 **The room's healer heals a held bot first, by the user's choice**: a held bot deals nothing until 70%,
 yet the healer's casts went mostly to mates at 28-90%, 0-3 of them to the held bot, and one room lost two
@@ -1506,6 +1510,13 @@ this wave's holders still wait.
 permanently** — so a proximity test on it can never fire. The hazard is `NPC_DEATH_RAY` (33881), which
 falls to the floor, warns 5 s with `63882`, then runs `63883 → 63884`: **3 yd radius**, base 19999, walking
 **eight 9-yard legs every 1625 ms** on a re-rolled cardinal axis. Four rays per orb, one orb every 22 s.
+
+**A bot mid-cast cannot dodge one**
+([pitfalls](../../engine/pitfalls.md#a-bot-mid-cast-cannot-be-moved-at-all)): a ray crosses the 9 yd dodge
+trigger in ~1.3 s, and a hunter casting Revive Pet (8.9 s) and a warlock casting Incinerate died where they
+stood. The encounter tick, on a 250 ms scan, requests the interrupt for any bot on the platform that can
+move, casts with over 0.5 s left and has a live ray within 9 yd (`yogg.castcut`, spell), so the phase 2
+dodge runs on its next update.
 
 ## `64163 Lunatic Gaze` is an aura, not a channel
 
@@ -2006,15 +2017,15 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**72 `yogg.` probe keys**, by topic:
+**74 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
 | Phase and pull | `phase`, `engaged` (`engaged` / `idle`), `handover`, `leftover` (`spaced` / `chain` / `lower`) |
 | Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1pull` (`pull` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
-| Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
+| Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
-| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
+| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
 | Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
@@ -2034,7 +2045,12 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
 - A heal row carries no room: `--brain`'s `heals in a hold` places the healer and the held bot by their
-  `yogg.room` spans and counts only heals on a room mate.
+  `yogg.room` spans and counts only heals on a room mate. Nor does sight show: its `passed over` counts heal
+  casts in a hold that went past a lower held mate within heal distance, mostly one out of sight.
+  `yogg.regroup` is derived, written only when its value changes, so `regroup walks` counts bots per reason.
+- `--crush`'s Death Ray hits name the cast-time spell running in the 1.5 s before (`cut` once
+  `yogg.castcut` cut it, since a cut cast still logs its full cast time), or `grabbed`: a bot in a
+  Constrictor's grab rides its seat, `CanMove` is false, and neither the cut nor the dodge acts on it.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
   (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
   against the Brain's reach of 27.

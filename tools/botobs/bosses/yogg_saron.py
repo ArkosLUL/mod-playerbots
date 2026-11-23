@@ -287,6 +287,9 @@ BRAIN_LEVEL_Z = 300.0
 # or half health to dead in one to three seconds, so five covers the run without the room before it.
 REPRISAL_DEATH_WINDOW_MS = 5000
 
+# same as ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT in the module, change both together
+REPRISAL_RESUME_PCT = 70.0
+
 # The brain level's floor runs 236 to 244. Anything well above it is in the air, where the Brain's own
 # model hangs at 265 and a gap-closer aimed at it leaves the bot with nothing to walk on.
 BRAIN_FLOOR_Z = 244.0
@@ -472,6 +475,7 @@ STUN_CRUSH_WATCH_MS = 5000
 SPELL_DEATH_RAY_DAMAGE = (63884, 63883)
 DEATH_RAY_LOOK_MS = 3000
 DEATH_RAY_DODGERS = ("yogg-saron phase 2 spacing action", "avoid aoe")
+DEATH_RAY_CAST_LOOK_MS = 1500
 
 # The phase 3 tank swap: how far apart the Guardians on each tank are read after a swap starts, and how
 # long after a taunt its Guardian sitting on the other tank counts as bounced back.
@@ -2211,6 +2215,54 @@ def heals_during_holds(holds: dict[int, list[tuple[int, int]]], rooms: dict[int,
     return on_held, on_others
 
 
+def held_passed_over(healer: tuple[float, float, float], target_hp: float,
+                     mates: list[tuple[float, float, float, float]]) -> bool:
+    """Whether a heal on a target at target_hp went past a held room mate (x, y, z, hp) lower than it and under the
+    resume line, within heal distance of the healer: the one the reprisal heal should have taken first. Out of
+    the healer's sight is the usual reason, which the trace cannot show."""
+    return any(hp < min(target_hp, REPRISAL_RESUME_PCT) and math.dist(healer, (x, y, z)) <= HEAL_DISTANCE
+               for x, y, z, hp in mates)
+
+
+def heals_passing_over_held(trace: Trace, holds: dict[int, list[tuple[int, int]]],
+                            rooms: dict[int, list[tuple[str, int, int]]]) -> tuple[int, int]:
+    """Heal casts by a healer in an illusion room while a room mate was held, and how many of them went past a
+    lower held mate in heal distance (`held_passed_over`)."""
+    healers = {guid for guid, role in trace.roles.items() if role == "heal"}
+    roster = set(trace.roles)
+    heal_names = {trace.spells.get(rec.get("sp")) for rec in trace.of("heal") if rec.get("s") in healers}
+    heal_names.discard(None)
+    rows = snapshot_rows(trace, roster)
+    stamps = {guid: [row[0] for row in own] for guid, own in rows.items()}
+
+    def room_at(guid: int, when: int) -> str | None:
+        return next((room for room, start, stop in rooms.get(guid, []) if start <= when < stop), None)
+
+    def row_at(guid: int, when: int) -> list | None:
+        index = bisect.bisect_right(stamps.get(guid, []), when)
+        return rows[guid][index - 1] if index else None
+
+    casts, passed = 0, 0
+    for rec in trace.of("cast"):
+        healer, target, when = rec.get("s"), rec.get("tgt"), rec["t"]
+        if (healer not in healers or rec.get("tr") or target not in roster
+                or trace.spells.get(rec.get("sp")) not in heal_names):
+            continue
+        room = room_at(healer, when)
+        if room not in ("stormwind", "icecrown", "chamber"):
+            continue
+        held = [guid for guid, spans in holds.items() if guid != target and room_at(guid, when) == room
+                and any(start <= when < stop for start, stop in spans)]
+        own, aim = row_at(healer, when), row_at(target, when)
+        if not held or own is None or aim is None:
+            continue
+        mates = [(row[2], row[3], row[4], row[6]) for row in (row_at(guid, when) for guid in held)
+                 if row is not None and row[6] > 0]
+        casts += 1
+        passed += held_passed_over((own[2], own[3], own[4]), aim[6], mates)
+    return casts, passed
+
+
 def show_reprisal(trace: Trace) -> None:
     deaths = combat_deaths(trace)
     dead = {death.get("g") for death in deaths}
@@ -2237,6 +2289,15 @@ def show_reprisal(trace: Trace) -> None:
         by_spell = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.reprisalheal"))
         print(f"  heals in a hold  : {on_held} on a held bot, {on_others} on others in its room;"
               f" reprisal heal {dict(by_spell) or '-'}")
+        casts, passed = heals_passing_over_held(trace, holds, holder_spans(trace, "yogg.room", end))
+        print(f"  passed over      : {passed} of {casts} heal casts in a hold went past a lower held mate in heal"
+              f" distance (out of the healer's sight, mostly)")
+        regroup: dict[str, set] = collections.defaultdict(set)
+        for rec in notes(trace, "yogg.regroup"):
+            regroup[str(rec.get("txt", ""))].add(rec.get("g"))
+        if regroup:
+            print(f"  regroup walks    : bots per reason {({reason: len(bots) for reason, bots in regroup.items()})}"
+                  f"  (sight = out of the healer's sight, walked to 4 yd of it)")
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -2979,6 +3040,16 @@ def show_death_rays(trace: Trace) -> None:
     died: dict[int, list[int]] = collections.defaultdict(list)
     for rec in death_records(trace):
         died[rec.get("g", 0)].append(rec["t"])
+    casts: dict[int, list[tuple[int, int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("s") in roster and rec.get("ct", 0) > 0 and not rec.get("tr"):
+            casts[rec["s"]].append((rec["t"], rec["ct"], rec.get("sp", 0)))
+    cuts: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.castcut"):
+        cuts[rec.get("g", 0)].append(rec["t"])
+    grabs: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, start, stop in aura_windows(trace, SPELL_SQUEEZE):
+        grabs[guid].append((start, stop))
     print(f"\n  Death Ray hits     : {len(hits)}")
     last: dict[int, int] = {}
     for when, victim in hits:
@@ -2989,8 +3060,29 @@ def show_death_rays(trace: Trace) -> None:
         mover, tried = ray_hit_movers(moves[victim], when)
         dodges = ", ".join(f"{action} {'walked' if ok else 'refused'}" for action, ok in tried.items()) or "no dodge"
         dead = any(when <= then <= when + DEATH_RAY_LOOK_MS for then in died[victim])
+        pinned = cast_pinning(casts[victim], cuts[victim], when, DEATH_RAY_CAST_LOOK_MS)
+        if any(start <= when <= stop for start, stop in grabs[victim]):
+            cast = "; grabbed"
+        elif pinned:
+            cast = f"; {'cut' if pinned[1] else 'casting'} {trace.spells.get(pinned[0], pinned[0])}"
+        else:
+            cast = ""
         print(f"    {clock(when)}  {trace.name(victim):14} {trace.role(victim):6} last walk {mover}; {dodges}"
-              f"{'; died' if dead else ''}")
+              f"{cast}{'; died' if dead else ''}")
+    cut = collections.Counter(trace.spells.get(int(rec.get("txt", 0) or 0), rec.get("txt"))
+                              for rec in notes(trace, "yogg.castcut"))
+    if cut:
+        print(f"  casts cut for a ray: {dict(cut.most_common(8))}")
+
+
+def cast_pinning(casts: list[tuple[int, int, int]], cuts: list[int], when: int,
+                 look_ms: int) -> tuple[int, bool] | None:
+    """The cast-time spell (start, cast ms, spell) one bot had running in the look_ms before a hit at `when`, and
+    whether `yogg.castcut` cut it (a cut cast still logs its full cast time); None when nothing pinned it."""
+    for start, length, spell in reversed(casts):
+        if start <= when and start + length >= when - look_ms:
+            return spell, any(start <= mark <= start + length for mark in cuts)
+    return None
 
 
 def merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:

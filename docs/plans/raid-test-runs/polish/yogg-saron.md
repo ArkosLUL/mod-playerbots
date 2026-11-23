@@ -1103,3 +1103,148 @@ worse.
 and a finished bot always waits, as in round 8; Stormwind had 4-6 units 31-40 yd from its spot. `heals in a hold`
 counted heals on bots outside the healer's room (2 / 1 / 0 here) as `on others in its room`; it now counts only room
 mates, and the baseline above is re-read with it.
+
+## Round 13 (2026-11-23, window 22 build a88ea2ade: round 12 built)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head a88ea2ade --pulls 10`: one valid pull per pool, 0
+humans, Freya's 62670 on the raid, no DC veto inside a pull. Read with the full `yogg_saron.py` and scratch scripts
+(`scratchpad/yogg-r13/`) over `cast`, `heal`, `act`, `note` and snapshot rows: each reprisal hold against the room
+healer's casts and positions, every Death Ray hit against the victim's casts, each healer's mana at every wave.
+Window 21's three pulls (round 12's data) are the baseline.
+
+| Pool | Run | Trace | Out | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|
+| uld1 | `tr-20261123-202316-9` | `603_9_yogg-saron_1795465442` | wipe 12:20, 33 deaths | 5: C 14.6, I 21.1, S 16.1, C 7.2, I 11.0 (held from 36.1% at 23.6 s left, phase 3 7.7 s before the end) | from 9:30.3 with 4 tentacles (2.18M; one Crusher at 10.4%, dead at +5.6 s; Corruptors 37.3, 100, 98.2%), 183 s, Yogg 30 → 17.4% |
+| uld2 | `tr-20261123-202256-8` | `603_8_yogg-saron_1795465421` | wipe 13:02, 31 | 6: S 11.4, I 21.7, C 8.8, S 11.9, I 8.2, C 0.7; wave 7's Stormwind team of six never opened its door; Brain at 37.3% | never |
+| uld3 | `tr-20261123-201954-7` | `603_7_yogg-saron_1795465240` | wipe 11:53, 32 | 5: S 15.9, C 11.3, I 25.4, S 6.2, C 11.2 (held from 36.1% at 10.7 s left, survived at 30.0%, phase 3 3 s after the end) | from 9:57.6 with 6 (5.30M; Crushers 26.4, 96.3%; three Corruptors 78-80%; a Constrictor), 129 s, Yogg 30 → 25.1% |
+
+**Cycles to 30%:** five, none (six, and a seventh whose team never cleared) and five; window 21 the same. Phase 3
+opened with 4 / – / 6 tentacles (window 21: 6 / – / 3). uld1 met the user's goal: one Crusher, at 10.4%, dead in 5.6 s.
+uld3 opened with two (26.4%, 96.3%) and ranged spent 95% of phase 3 on tentacles under Diminish Power (on the raid 81% of
+the phase). Over windows 21-22, two pulls of six opened phase 3 with at most one Crusher: **not reliable yet**.
+
+**Phase 3 numbers for the stuck item** (rounds 3-5). With the goal met, phase 3 still ends on the Immortal Guardian
+pile: window 22 uld1 Yogg 30 → 17.4% in 183 s (149k/s raid damage, 27% on Yogg: melee 61% on Yogg, ranged 2% on Yogg,
+60% on Guardians over 30%, 29% on the Corruptors); 13 of 14 fresh Guardians off their tank at a median +4.1 s, 11 of
+them onto melee; 35% of Guardian samples at 90% or more; first death +60.3 s. Window 21 uld3 (one Crusher at 12.3%):
+30 → 7.5% in 253 s. With two Crushers (uld3 here) 30 → 25.1%. So fewer Crushers buys 8-18% of Yogg, not the kill.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 3 (Uldxai, the enhancement shaman, stood up by Reincarnation 0.2 s after the 1:05.4 nova
+  and killed by the next; Uldxad, the resto shaman, at 1:12.4); phase 2 none; phase 3 Immortal Guardian 30 (one by Drain
+  Life; first +60.3 s).
+- uld2: phase 1 Shadow Nova 2 (2:01.9: Uldyaw through Hand of Sacrifice, Uldyax finished by Sara's Blessing); phase 2
+  Death Ray 5 (3:19.5 a hunter mid Revive Pet; 8:45.9 a warlock mid Incinerate, a wave 5 team member; 10:22.6 twice
+  and 11:30.5), Corruptor 10 (Curse of Doom 5, Draining Poison 5), Squeeze 8, Psychosis 1, Induce Madness script kills 5
+  (12:30, wave 7's team). All but the first Death Ray from 8:45 on.
+- uld3: phase 1 Shadow Nova 1; phase 2 Death Ray 1 (6:21.0, in a Constrictor's grab); phase 3 Immortal Guardian 30
+  (first +49.5 s).
+
+**Verdict on round 12, stage wait: fixed.** `staged` room states 17 / 17 / 23; at the door 4-6 of 8-9 staged in every
+Stormwind and Icecrown wave but uld3's wave 4 (0 of 7, 5 joined: its tentacles stood inside 40 yd); joined at a door 0 /
+1 / 5 in all (window 21: 5-7 a wave). From Stormwind and Icecrown the first Brain hit came a median 4.1 s after the door
+(8.5) and melee were on the Brain at 11.5 s (14.0); Brain per cycle there 15.9% over the nine cycles cleared without a
+brain hold (13.4%), Icecrown 21.4, Stormwind 11.9. Clears: Stormwind 29.1 s, Icecrown 19.1, Chamber 28.2 (26.1 / 25.1 /
+28.1); Chamber cycles 8.8% (8.6%).
+
+**Verdict on round 12, reprisal heal: fires, not mostly on the held bot.** `reprisal heal` 13 / 18 / 14 casts; `heals
+in a hold` 30 / 23 / 24 on a held bot against 50 / 95 / 29 on others in its room (14 / 16 / 12 against 21 / 23 / 17);
+holds 12 / 17 / 17, median 4.6 / 4.5 / 5.4 s (6.6 / 3.8 / 3.5), no shorter. The cause is the pick below, plus uld2's dry
+healer (question). Round 11's entries: over 2 s after the open 21 of 50 / 19 of 65 / 16 of 48 (15 / 20 / 18 of 50 / 72 /
+50), body detour walks while holding 0 / 1 / 0.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked. Rounds 8-12 picked five different phase 2
+failures; this is the reprisal heal's own check.
+
+**Ranking** across pools: phase 3 Immortal Guardians 60 (stuck); uld2's phase 2 collapse 28 from 8:45 (Corruptor 10,
+Squeeze 8, Death Ray 4, Induce Madness 5, Psychosis 1); Shadow Nova 6; Death Ray 2 outside it.
+
+**Picked: a held bot out of the room healer's sight is never healed.** uld2's collapse came out of its sixth cycle
+(Chamber, 40.7 s clear, Brain −0.7%), where three of nine damage dealers sat held 9-27 s. Uldyag, held at 40% from
+10:18.7, walked in by the regroup to 15.0 yd of the healer at 10:26.7 and waited there 12 s: from 10:25.7 to 10:38.0
+the healer cast seven times on mates at 74-89% (PW:S, Prayer of Mending, Renew) and never on him, and no `yogg-saron
+reprisal heal` row exists from 10:25 to 10:37. Its trigger was false with the healer at 100% and standing still, the
+held bot in the same room, at 40% and 15 yd: of `YoggSaronReprisalHealTarget`'s tests only sight is left. The same in
+all three pulls, from the same healer spot, (2133.3, −26.3, 242.0), the Chamber station on its last tentacles at the
+raised floor's ramp: uld1 7:34.2-7:36.6 the druid cast three heals on held mates at 31-37% past Uldxaf at 27% and
+15.2 yd, and reached him at 7:40.9 only after the station walk had moved her ~10 yd; uld3 5:14.8-5:18.7 four casts went
+past Uldzag (37-40%, 15.2 yd) and Uldzai (38%, 15.8 yd), one of them the reprisal heal itself on Uldzaw at 41%. Every
+skipped bot stood on the low floor (z 239.7-242.7) toward the room's middle; mates on the raised floor in the same
+direction were healed.
+
+Root cause: both heal picks need sight. `YoggSaronReprisalHealTarget` (`UldEncounter_YoggSaron.cpp:4420`) and
+`PartyMemberToHeal::Check` (`PartyMemberToHeal.cpp:145`) skip a mate failing `IsWithinLOSInMap`, so neither the reprisal
+heal nor any class heal picks it, and `reach party member to heal` never walks to it. `YoggSaronReprisalRegroupTrigger`
+(`UldTriggers_YoggSaron.cpp:507`) walks a held bot only past 25 yd and stops it at 15 yd on the straight line, which in
+the Chamber lands it below the ramp's lip. Measured: held bots under 70% within 25 yd of the room healer and unhealed
+for 3 s, Chamber 72 bot-seconds over the three pulls (healed 50), Stormwind 35 (32 of them uld2's wave 7 under a 1.3%
+mana healer). `--brain` `passed over` (new): 7 of 13 / 12 of 34 / 7 of 14 heal casts in a hold went past a lower held
+mate in heal distance.
+
+Bug: the regroup exists to bring a held bot where the healer can heal it. Fix (`UldEncounter_YoggSaron.h`,
+`UldTriggers_YoggSaron.cpp`, `UldActions_YoggSaron.cpp`): the regroup also fires while the room healer has no line of
+sight to the held bot, at any distance, and then walks it to `…_REPRISAL_REGROUP_SIGHT_STOP` (4 yd) of the healer
+instead of 15; probe `yogg.regroup` (`range` / `sight`). Same rooms at 10 and 25, normal and hard mode; a human healer
+counts as the room's healer as before. No shared code.
+
+**Picked second, independent and small: a bot mid-cast cannot dodge a Death Ray.** The AI yields while a cast-time spell
+prepares, so the phase 2 spacing node never runs for it. Over windows 16-22 (15 pulls) four ray hits landed on a bot
+casting from before the ray crossed the 9 yd trigger, three of them lethal: uld2 here, hunter Uldyau's Revive Pet (982,
+8.9 s) begun 6.3 s before the hit, the ray inside 9 yd for the last 1.3 s; warlock Uldyap's Incinerate (1.85 s) at
+8:43.8, two rays stacked inside 9 yd for 1.4 s before 2 × 19,400 at 8:45.9; window 17 uld1's Starfire. A ray walks its
+9 yd legs at ~5.5 yd/s, so the dodge has about 1.3 s. Fix (`UldEncounter_YoggSaron.h/.cpp`, Mimiron's
+`CutMimironCastsInFire` shape): `YoggSaronCutCastsInDeathRays` in the encounter tick, on a 250 ms instance scan,
+requests the interrupt for every bot on the platform that can move, casts with over
+`…_DEATH_RAY_CAST_FINISH_MS` (500) left and has a live ray within the 9 yd trigger; probe `yogg.castcut` (spell). Same at
+10 and 25, normal and hard mode; real players are never touched. No shared code. Reader: `--crush` Death Ray hit lines
+name the cast running in the 1.5 s before (`cut` once cut) and print `casts cut for a ray`.
+
+**Next window should show:** `--brain` `regroup walks` with `sight` rows; `passed over` well under 7 of 13 / 12 of 34 /
+7 of 14; `heals in a hold` mostly on the held bot; Chamber hold medians and clears under this window's (28.2 s median)
+and Chamber cycles above 8.8%. `--crush` `casts cut for a ray` rows and no Death Ray death on a bot `casting` (here 2).
+Round 12's door numbers no worse (first hit ~4 s, melee on the Brain ~11.5 s, Stormwind / Icecrown 15.9%).
+
+**Question for the user (brain team healer, an assignment).** The room healer is the first by Val'anyr, then priest,
+druid, shaman, paladin, then GUID, so the same priest goes down in 4-5 of every 5-7 waves and loses 20-40% mana a
+trip. uld2 sent its disc priest to wave 6 at 17% (paladin 70%, shaman 42%, holy priest 37%): out at 1.8%, the room
+took 40.7 s and the Brain 0.7%; then the holy priest to wave 7 at 2% (paladin 59%), and that room never cleared.
+Window 19 uld3 sent priests at 41%, 49% and 5% to waves 3-5. Should a healer under 30% mana when the plan picks the
+next team go after every healer above it, latched per wave like the Sanity bench? **Recommended: yes, for one
+window**: the cost is a less mobile paladin or shaman on some trips; a dry healer stalls the room's reprisal holds,
+which is what ends a pull's phase 2.
+
+**Still open with the user, not built:** the exit lead from the Brain 1.5× to 1.2× (round 11).
+
+**Seen, not picked.**
+
+- Constrictor grabs in uld2: 38, longest 21.5 s, 8 Squeeze deaths and two Death Ray deaths of grabbed bots (uld3 one
+  more); 5 rescues cast.
+- Uldxai, the enhancement shaman, Reincarnated onto the phase 1 stack and died to the next nova again (fourth window
+  running).
+- The brain hold again could not finish a late start: uld3 held from 36.1% at 10.7 s left, survived at 30.0%, and
+  phase 3 came 3 s after the end anyway.
+
+**Review.** Both fixes hold. uld2 10:18.7-10:45.3 reread: Uldyag stood at (2118.4, −24.3, 242.7), 15.0 yd from
+Uldyad at (2133.3, −26.3, 242.0), at 40% for 12 s while Uldyad, at 100% health and 9-16% mana, put PW:S, Prayer of
+Mending and Renew on mates at 74-89%; `PartyMemberToHeal::Check` tests only map, charm, twice heal distance and sight,
+so sight is the one test left, as the log says. That is inferred, not navprobed, and the findings doc now says so;
+Uldyag stood level with the healer (uld1's Uldxaf at z 239.7 was below). A grabbed bot rides the Constrictor's seat,
+where `CanMove` is false (`IsInVehicle(true)`), so the cut never touches it; the hold ends once the room's tentacles
+are dead, so the sight regroup never pulls a bot back off the brain walk. No size, mode or player branch: a human
+room healer is walked to like a bot one, and only bots' casts are cut.
+
+- Review fix: `--crush` read uld2's two grabbed ray deaths (Uldyax's 0.5 s Slam at 10:05.9, Uldyae's Chain Heal at
+  10:22.6) as `casting`, four in all against this log's 2; a victim inside a Squeeze aura now reads `grabbed`, and
+  uld2 reads 2. Its `Death Ray 5` counts Uldyae twice (death rows at 10:22.57 and 10:23.07), not a rez.
+- Review fix: `regroup walks` counted `yogg.regroup` notes, which as a derived note are written only when a bot's
+  value changes; it now counts bots per reason.
+- Review fix: the reader's new constants and the tests' fixtures carried description comments; removed, with
+  `REGROUP_SIGHT_STOP` (only a label used it). `REPRISAL_RESUME_PCT` keeps a one-line note to change it with the
+  module's.
+- Left: a cut bot whose dodge finds no spot casts again and is cut again every 250 ms while the ray stays within
+  9 yd; the dodge's fallback spots make that rare, and no window has run the cut yet.
+- Left: a sight regroup is one move, so the bot walks the whole way to 4 yd even when sight comes back sooner, and a
+  melee bot walks back once at 70%.
+- Left, older than this round: the reader's `SPELL_SQUEEZE` is the 25-man 64126, so at 10-man `--phase2`'s grabs
+  and `--crush`'s `grabbed` read nothing (10-man's aura is 64125).
