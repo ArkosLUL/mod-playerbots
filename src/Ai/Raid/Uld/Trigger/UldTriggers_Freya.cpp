@@ -374,5 +374,15 @@ bool FreyaTankHoldFreyaTrigger::IsActive()
     if (!PlayerbotAI::IsMainTank(bot) || boss->GetVictim() != bot)
         return false;
 
-    return boss->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) > ULDUAR_FREYA_TANK_LEASH;
+    if (boss->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) <= ULDUAR_FREYA_TANK_LEASH)
+        return false;
+
+    std::vector<Position> const bombs = GetFreyaNatureBombPositions(
+        bot, bot->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) + ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS);
+    for (Position const& bomb : bombs)
+        if (bomb.GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) < ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS)
+            return false;
+
+    return !FreyaWalkCrossesNatureBomb(bot->GetPosition(), ULDUAR_FREYA_TANK_ANCHOR, bombs,
+                                       ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
 }

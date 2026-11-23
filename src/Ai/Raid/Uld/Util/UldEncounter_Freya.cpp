@@ -674,6 +674,17 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
     return positions;
 }
 
+bool FreyaWalkCrossesNatureBomb(Position const& from, Position const& to, std::vector<Position> const& bombs,
+                                float clearance)
+{
+    for (Position const& bomb : bombs)
+        if (bomb.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) >= clearance &&
+            SegmentCrossesCircle(from, to, HazardCircle(bomb, clearance)))
+            return true;
+
+    return false;
+}
+
 std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchRadius)
 {
     Player* bot = botAI->GetBot();
