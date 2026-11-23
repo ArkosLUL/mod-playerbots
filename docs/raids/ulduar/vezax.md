@@ -92,6 +92,15 @@ and past 43 yd 3D (heal range 40 plus both reaches) no heal lands from the slot.
 stood, row 0 at 30.5 keeps a healer within 41.5 of the tank 74-100% of the time while Vezax settles up to
 ~10 yd north, 0% where he settled 11.5 yd north; rows from 33.75 out reach him 72% of the time at best.
 
+**Beacon of Light and Sacred Shield go on the main tank** (`vezax tank beacon`, `vezax tank sacred
+shield`, the class ones held by `vezax tank buffs on the holder`), or on the tank he hits once the main
+tank is dead; each only inside its own range (Beacon 60 yd, Sacred Shield 40). The class pick
+(`tank to beacon`) takes the lowest tank inside `HealDistance` and keeps it until another is 75 points
+lower, and from row 0 the main tank stands past that 26-54% of a pull, so the idle off-tank nearer the
+camp kept it. A warrior main tank then had it 0-10% of the Animus phase in three pulls: in one, 96k of
+copies in 53 s went to a full-health bear while he died 0.9k/s short. On a DK main tank it copied 87k
+in that phase, 1.2k/s, a third of his healing.
+
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor `(1852.78, 81.3856, 342.461)`
 itself: a tank on the spawn point is what keeps Vezax there for every other radius here. The arrival
 deadband is twice the tolerance, so 1.5 or more would span the 3 yd gap between neighbours and let a bot
@@ -437,7 +446,9 @@ accepted dodges ending past that ceiling, of all (`dodges`), then which `vezax.r
 since the collapse tick reads the dead as 0. `--crash`'s `in` counts bots that took an accepted walk,
 the dodge aside, toward a landing impact by the strategy's own test; its summary names the movers and how
 many hit bots took one. Its `late` counts bots whose accepted dodge could not leave the blast by the
-landing at 7 yd/s, the strategy's test with base run speed.
+landing at 7 yd/s, the strategy's test with base run speed. `--tank` takes the tank he hit longest as
+the main tank: Beacon of Light's share of the pull on him and on another tank, before the Animus and
+after it, the copies landing on him to his first death, and Sacred Shield casts by target.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -553,10 +564,12 @@ walk) lost it, all three normal ones with the main tank holding the Animus kille
 **A crash cast just after a mark walks the marked bot's group along its arc.** Each group's strafe points
 the way its own arc runs, so for the 3-4 s the marked bot needs to get clear its group follows it.
 Every Animus-phase mark (3:52) has a crash cast 1.3-1.8 s behind it: marks whose bot dodged a crash
-averaged 28 ticks in windows 11-23 against 13-16 for the rest, the 3:52 one putting Vezax back
-+0.4 to +1.3 %/s over its window and killing 1-4 bots in three pulls. Replayed, walking the marked bot
-straight to its arc instead of with its group saves about 1 tick in 7; its group strafing the other
-way, a fifth; both, a third.
+averaged 29-31 ticks in windows 11-24 against 12-15 for the rest, the 3:52 one putting Vezax back
++0.4 to +1.3 %/s over its window, killing 1-4 bots in three pulls and in a fourth draining the
+healers off a main tank who died 9 s later. A crash aimed at the marked bot itself does the same,
+its dodge heading for its group's strafe (53 ticks, 38 on its own group). Replayed, walking the marked
+bot straight to its arc instead of with its group saves about 1 tick in 7; its group strafing the
+other way, a fifth; both, a third.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the

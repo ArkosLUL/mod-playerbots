@@ -355,6 +355,75 @@ class AnimusWindow(unittest.TestCase):
         self.assertEqual(fight["health"], (100.0, 0.0))
 
 
+HOLDER = 7001
+SPARE = 7002
+LIGHT = 7003
+TANK_ANIMUS = 4294969400
+
+
+def tank_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 6, "diff": 1,
+         "boss": "general-vezax", "roster": [
+             {"g": HOLDER, "n": "Holder", "r": "tank", "c": "warrior", "h": 0},
+             {"g": SPARE, "n": "Spare", "r": "tank", "c": "druid", "h": 0},
+             {"g": LIGHT, "n": "Light", "r": "heal", "c": "paladin", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
+        {"t": 1, "e": "unit", "g": TANK_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
+        {"t": 0, "e": "cast", "s": LIGHT, "sp": gv.SPELL_BEACON, "tgt": SPARE, "ct": 0},
+        {"t": 0, "e": "aura", "d": SPARE, "s": LIGHT, "sp": gv.SPELL_BEACON, "r": 0},
+        {"t": 6000, "e": "aura", "d": SPARE, "s": LIGHT, "sp": gv.SPELL_BEACON, "r": 1},
+        {"t": 6000, "e": "cast", "s": LIGHT, "sp": gv.SPELL_BEACON, "tgt": HOLDER, "ct": 0},
+        {"t": 6000, "e": "aura", "d": HOLDER, "s": LIGHT, "sp": gv.SPELL_BEACON, "r": 0},
+        {"t": 3000, "e": "heal", "s": LIGHT, "d": SPARE, "sp": 53652, "a": 2000, "oh": 1500},
+        {"t": 7000, "e": "heal", "s": LIGHT, "d": HOLDER, "sp": 53654, "a": 3000, "oh": 0},
+        {"t": 9500, "e": "heal", "s": LIGHT, "d": HOLDER, "sp": 53652, "a": 4000, "oh": 0},
+        {"t": 2000, "e": "cast", "s": LIGHT, "sp": gv.SPELL_SACRED_SHIELD, "tgt": SPARE, "ct": 0},
+        {"t": 8000, "e": "cast", "s": LIGHT, "sp": gv.SPELL_SACRED_SHIELD, "tgt": HOLDER, "ct": 0},
+        {"t": 6500, "e": "veto", "g": LIGHT, "m": gv.TANK_BUFFS_HOLD, "a": "beacon of light on tank"},
+        {"t": 9000, "e": "death", "g": HOLDER, "killer": BOSS},
+        {"t": 10000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 11000, 1000):
+        units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, SPARE if when < 1000 else HOLDER, 0, 0, 0, 0],
+                 [HOLDER, 1.0, 0.0, 0.0, 0.0, 0.0 if when >= 9000 else 100.0, 0.0, BOSS, 0, 0, 0, 0],
+                 [SPARE, 2.0, 0.0, 0.0, 0.0, 100.0, 0.0, BOSS, 0, 0, 0, 0],
+                 [LIGHT, 30.0, 0.0, 0.0, 0.0, 100.0, 50.0, 0, 0, 0, 0, 0]]
+        if when >= 4000:
+            units.append([TANK_ANIMUS, 1.0, 1.0, 0.0, 0.0, 100.0, 0.0, HOLDER, 0, 0, 0, 0])
+        records.append({"t": when, "e": "snap", "u": units})
+    return records
+
+
+class TankBuffs(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "603_6_general-vezax_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in tank_pull()) + "\n", encoding="utf-8")
+        self.trace = Trace(path)
+
+    def test_the_main_tank_is_the_one_he_hit_longest(self):
+        self.assertEqual(gv.main_tank(self.trace), HOLDER)
+
+    def test_beacon_shares_split_at_the_spawn_and_stop_at_his_death(self):
+        buffs = gv.tank_buffs(self.trace)
+        self.assertEqual(buffs["death"], 9000)
+        self.assertEqual(buffs["before"], (0.0, 1.0))
+        self.assertAlmostEqual(buffs["after"][0], 3000 / 5000)
+        self.assertAlmostEqual(buffs["after"][1], 2000 / 5000)
+
+    def test_copies_count_effective_healing_up_to_his_death(self):
+        copies = gv.tank_buffs(self.trace)["copies"]
+        self.assertEqual((copies["him"], copies["others"], copies["cast"]), (3000, 500, 5000))
+
+    def test_sacred_shield_and_the_hold_are_counted(self):
+        buffs = gv.tank_buffs(self.trace)
+        self.assertEqual(buffs["shields"], {"tank": 1, "him": 1})
+        self.assertEqual((buffs["beacons"], buffs["holds"]), (2, 1))
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

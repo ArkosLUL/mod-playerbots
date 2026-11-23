@@ -41,6 +41,10 @@ SPELL_TRICKS = 57934
 REDIRECT_SPELLS = (SPELL_MISDIRECTION, SPELL_TRICKS)
 # Heroism, Bloodlust
 LUST_SPELLS = (32182, 2825)
+SPELL_BEACON = 53563
+BEACON_COPIES = (53652, 53653, 53654)
+SPELL_SACRED_SHIELD = 53601
+TANK_BUFFS_HOLD = "vezax tank buffs on the holder"
 
 DODGE = "vezax shadow crash dodge action"
 SOAK = "vezax shadow crash soak action"
@@ -1099,6 +1103,83 @@ def show_animus_casters(trace: Trace, fight: dict | None) -> None:
           " fires; walks are its accepted moves; dodges are accepted Shadow Crash dodges ending past it/all")
 
 
+def main_tank(trace: Trace, samples: Samples | None = None) -> int | None:
+    boss = boss_guid(trace)
+    found = (samples or Samples(trace)).rows.get(boss) if boss else None
+    if not found:
+        return None
+    held: collections.Counter = collections.Counter()
+    stamps, rows = found
+    for index in range(len(rows) - 1):
+        row = rows[index]
+        if row[5] > 0 and len(row) > 7 and trace.role(row[7]) == "tank":
+            held[row[7]] += min(stamps[index + 1] - stamps[index], MAX_STEP_MS)
+    return held.most_common(1)[0][0] if held else None
+
+
+def tank_buffs(trace: Trace, samples: Samples | None = None) -> dict | None:
+    samples = samples or Samples(trace)
+    tank = main_tank(trace, samples)
+    if tank is None:
+        return None
+    end = pull_end(trace)
+    death = next((rec["t"] for rec in combat_deaths(trace) if rec.get("g") == tank), end)
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    beacon = aura_spans(trace, SPELL_BEACON)
+
+    def shares(low: int, high: int) -> tuple[float, float] | None:
+        if high <= low:
+            return None
+        mine = covered(beacon.get(tank, []), low, high)
+        other = sum(covered(spans, low, high) for guid, spans in beacon.items()
+                    if guid != tank and trace.role(guid) == "tank")
+        return mine / (high - low), other / (high - low)
+
+    split = min(spawn, death) if spawn is not None else death
+    copies = collections.Counter()
+    for rec in trace.of("heal"):
+        if rec.get("sp") in BEACON_COPIES and rec["t"] < death:
+            copies["him" if rec.get("d") == tank else "others"] += rec.get("a", 0) - rec.get("oh", 0)
+            copies["cast"] += rec.get("a", 0)
+    shields = collections.Counter(
+        "him" if rec.get("tgt") == tank else trace.role(rec.get("tgt"))
+        for rec in trace.of("cast") if rec.get("sp") == SPELL_SACRED_SHIELD and not rec.get("tr"))
+    return {
+        "tank": tank,
+        "death": death if death < end else None,
+        "before": shares(0, split),
+        "after": shares(spawn, death) if spawn is not None else None,
+        "copies": copies,
+        "shields": shields,
+        "beacons": sum(1 for rec in trace.of("cast") if rec.get("sp") == SPELL_BEACON and not rec.get("tr")),
+        "holds": sum(1 for rec in trace.of("veto") if rec.get("m") == TANK_BUFFS_HOLD),
+    }
+
+
+def show_tank(trace: Trace) -> None:
+    print("MAIN TANK")
+    buffs = tank_buffs(trace)
+    if not buffs:
+        print("  no tank held him")
+        return
+    death = clock(buffs["death"]) if buffs["death"] is not None else "never"
+    print(f"  {trace.name(buffs['tank'])}, the tank he hit longest; first death {death}")
+    if not buffs["beacons"]:
+        print("  no Beacon of Light cast")
+    else:
+        for label, share in (("before the Animus", buffs["before"]), ("after it", buffs["after"])):
+            if share:
+                print(f"  Beacon of Light {label}: on him {share[0]:.0%}, on another tank {share[1]:.0%}")
+        copies = buffs["copies"]
+        print(f"  beacon copies {copies['cast']:,} cast, {copies['him']:,} landed on him and"
+              f" {copies['others']:,} on others, overheal aside, to his first death")
+    shields = buffs["shields"]
+    print("  Sacred Shield casts: " + (", ".join(f"{key} {count}" for key, count in shields.most_common())
+                                       or "none"))
+    print(f"  {TANK_BUFFS_HOLD} vetoes {buffs['holds']}")
+
+
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
     samples = samples or Samples(trace)
     boss = boss_guid(trace)
@@ -1177,6 +1258,7 @@ SECTIONS = (
     ("mana", "mana, Life Tap and what it returned", show_mana),
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),
     ("animus", "who held the Animus, redirects, lust, its pace and casters, deaths", show_animus),
+    ("tank", "where Beacon of Light and Sacred Shield sat against his main tank", show_tank),
     ("band", "each camp member's distance from the boss", show_band),
 )
 

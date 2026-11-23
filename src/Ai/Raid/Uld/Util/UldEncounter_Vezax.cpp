@@ -17,6 +17,7 @@
 #include "RaidInstanceState.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "SpellMgr.h"
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -755,6 +756,45 @@ bool VezaxMarkWalkMeetsShadowCrash(PlayerbotAI* botAI)
 bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI)
 {
     return botAI->GetBot()->HasAura(SPELL_VEZAX_PROFOUND_DARKNESS);
+}
+
+Player* VezaxTankBuffHolder(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_PALADIN || !PlayerbotAI::IsHeal(bot) || !VezaxEncounterActive(botAI))
+        return nullptr;
+
+    Player* holder = GetGroupMainTank(bot);
+    if (!holder)
+    {
+        Unit* victim = GetVezax(botAI)->GetVictim();
+        holder = victim ? victim->ToPlayer() : nullptr;
+        if (holder && !PlayerbotAI::IsTank(holder))
+            holder = nullptr;
+    }
+
+    if (!holder || holder == bot || !holder->IsAlive() || !holder->IsInWorld() ||
+        holder->GetMapId() != bot->GetMapId())
+        return nullptr;
+
+    return holder;
+}
+
+bool VezaxHolderTakesTankBuffs(PlayerbotAI* botAI) { return VezaxTankBuffHolder(botAI) != nullptr; }
+
+Player* VezaxTankBuffTarget(PlayerbotAI* botAI, std::string const& spell)
+{
+    Player* holder = VezaxTankBuffHolder(botAI);
+    if (!holder || botAI->HasAura(spell, holder, false, spell == "beacon of light"))
+        return nullptr;
+
+    Player* bot = botAI->GetBot();
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info || !bot->IsWithinDistInMap(holder, info->GetMaxRange(true)) || !bot->IsWithinLOSInMap(holder))
+        return nullptr;
+
+    return botAI->CanCastSpell(spell, holder) ? holder : nullptr;
 }
 
 bool VezaxHardModePending(PlayerbotAI* botAI)

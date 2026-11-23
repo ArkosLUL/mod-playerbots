@@ -13,6 +13,7 @@
 
 #include "ObjectGuid.h"
 
+#include <string>
 #include <vector>
 
 class Creature;
@@ -157,6 +158,10 @@ bool VezaxWalkMeetsShadowCrash(PlayerbotAI* botAI, Position const& destination);
 bool VezaxReachSpellMeetsShadowCrash(PlayerbotAI* botAI);
 bool VezaxMarkWalkMeetsShadowCrash(PlayerbotAI* botAI);
 bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI);
+
+Player* VezaxTankBuffHolder(PlayerbotAI* botAI);
+bool VezaxHolderTakesTankBuffs(PlayerbotAI* botAI);
+Player* VezaxTankBuffTarget(PlayerbotAI* botAI, std::string const& spell);
 
 bool VezaxHardModePending(PlayerbotAI* botAI);
 bool VezaxDamageHeld(PlayerbotAI* botAI);
