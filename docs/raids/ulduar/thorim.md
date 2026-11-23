@@ -249,7 +249,11 @@ has no damage shield: its Runic Fortification (62942) is a friendly buff on its 
 
 The two corridor lanes (left x ~2237-2242, right x ~2212-2219) are **index-matched by y**, so a dodge is
 the same waypoint number in the other lane. Each lane sits 2-9 yd from its own hand's bunnies and
-15.5-22.9 yd from the other's. The bot side latches the hand it sees casting and holds the opposite lane
+15.5-22.9 yd from the other's. A smash hits within 10 yd of a bunny plus the target's reach (11.3 yd 2D
+at most over 605 hits), and a waypoint's radius is net of the bot's own reach, so the last pair (narrow
+floor, **The last 36 yd** below) clears the other hand's bunnies by only 15.7-16.0 yd and takes a 2 yd
+radius: with 10, a bot on the centre line, which both rows hit, would read as in either lane and never
+dodge. The bot side latches the hand it sees casting and holds the opposite lane
 until the other hand goes up; the gauntlet formation follows that preference rather than the master's
 own lane, or it would walk everyone back into the blast. **Switching the moment the next cast shows is
 safe, do not delay it**: the last hit landed 3s earlier, and the 5s cast is all the time there is to
@@ -1054,14 +1058,21 @@ player was on the instance left the corridor standing while he stayed in the are
   walk while he fights (`ThorimGauntletLeaderFighting`: his target is a gauntlet mob in combat within 50 yd,
   or one attacks him): every corridor step of nine 25-man pulls came mid-fight, leaving the first pack's
   guards on ranged, and the right lane's fifth waypoint, 20.0 yd from the second pack's west guard, pulls
-  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to 29 yd from the
-  Colossus, a yard (`ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN`) inside the 30 yd pull test: a stop on the
-  test itself lands a hair either side, and one left just over it re-issued its own point as a duplicate
-  and stood 5.2 s until a DPS pulled. There, once no Iron Ring Guard or corridor Acolyte lives within 50 yd,
-  he attacks him (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into him until
-  he is in combat, which also ends the Runic Smash; no trace shows his proximity aggro, as nobody got within
-  32 yd of him idle. Waiting there instead for a follower's 50 yd pick cost 1-10 s a pull, the smash dodge
-  holding the squad at the last waypoints 55-65 yd out. Once the Colossus is dead he
+  that pack. The Giant walk never holds (below). The last waypoint pair, (2237.2, −360.5) and (2219.5,
+  −360.57) (user, 2026-11-23), is the pull line: 36.5-37 yd from the Colossus, `GetDistance` 29-29.5 (his
+  combat reach ~6). Farther than the 30 yd pull test, he walks on to 29 yd, a yard
+  (`ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN`) inside it: a stop on the test itself lands a hair either
+  side, and one left just over it re-issued its own point as a duplicate and stood 5.2 s until a DPS
+  pulled. There, once no Iron Ring Guard or corridor Acolyte lives within 50 yd and every squad
+  non-healer stands within 20 yd of him (`ULDUAR_THORIM_LEAD_COLOSSUS_GATHER_DISTANCE`, under the step's
+  15 s cap), he attacks him (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into
+  him until he is in combat, which also ends the Runic Smash; no trace shows his proximity aggro, as
+  nobody got within 32 yd of him idle. Waypoint and gather put the squad in cast range at the pull (the
+  step's 30 yd passes with trailing followers 25 yd behind); with the lanes ending at y −329 it stood
+  55-65 yd out and walked in after the pull, under 10k/s on him for 6-9 s. No follower opens him idle
+  (`GetThorimDpsTarget` offers him out of combat only through `ThorimGauntletColossusPull`): the pull line
+  is inside their 50 yd pick, and a real player leading pulls him himself; waiting for a follower's pick
+  cost 1-10 s a pull. Once the Colossus is dead he
   walks on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick
   range: in all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the
   orb. Gated on the first doors (GO 194557, (2227.7, −413.3)) standing open, which the Colossus' death does
@@ -1119,11 +1130,12 @@ player was on the instance left the corridor standing while he stayed in the are
   mode with 8 s to spare, the others 10.6 and 36.7 s late (the slowest lost 21 s in the corridor, 7.5 of
   them to the follower stall above).
 
-**The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
-Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,
-where the smash is most dangerous. The formation hit the same wall: trigger and action both place the
-squad off `ThorimGauntletLaneIndex(leader, …)`, which needs the leader **standing inside a waypoint
-radius**, so once he walks past the chain the row goes quiet for everyone. DPS do not notice, since
+**The last 36 yd of the lower corridor are unwaypointed**: waypoints stop at the pull line, y −360.5
+(the Colossus at y −396), so past it `ThorimRunicSmashAction` cannot resolve a lane index; the pull has
+ended the smash by then. Between y −344 and −366 the floor narrows to x ~2216-2240, so the right lane's
+last waypoint sits at x 2219.5, not 2212. The formation hits the same wall: trigger and action both
+place the squad off `ThorimGauntletLaneIndex(leader, …)`, which needs the leader **standing inside a
+waypoint radius**, so once he walks past the chain the row goes quiet for everyone. DPS do not notice, since
 `reach melee` and `reach spell` chase their targets the rest of the way, but a healer chases nothing and
 `follow` cannot cover it, being `BOT_STATE_NON_COMBAT` in a running fight. Measured: the 11 non-healers
 reached **183-191 yd** out while the two healers stalled at **148 and 129**, one of them with **no move
@@ -1132,13 +1144,16 @@ his last outside heal 21 s before he died. `ULDUAR_THORIM_GAUNTLET_TETHER_DISTAN
 trailing healer to the leader once the lane index fails; non-healers trail as in **Walk** above.
 
 **The fall rescue still stops at 110 yd.** `ThorimFallFromFloorTrigger` bails past
-`ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last three
-waypoints at **117.3 / 120.8 / 126.1 yd** and of the corridor's far end, and it `NearTeleportTo`s onto
-the master, same map only ([pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)). The
+`ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last four
+waypoints at **117.3 / 120.8 / 126.1 / 141.4 yd**, the right lane's last at **129.2** and the corridor's
+far end, and it `NearTeleportTo`s onto the master, same map only
+([pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)). The
 gauntlet row no longer shares that gate: it reads `ULDUAR_THORIM_ENCOUNTER_PROXIMITY` (200), which
 covers the whole corridor. Bots do sink there: a ranged or healer `flee` of 4-5 yd west in the right lane,
 at (2219, −354) and the ramp foot (2217, −423), paths below the floor to z ~390 and back over 6.5-7 s
-(1-7 bots in four of six 25-man pulls), once to z 264 for 56 s. Not navprobed.
+(1-7 bots in four of six 25-man pulls). Every deep sink in 46 traces (five, to z 388 down to −28, some
+never back) was a westward `flee` or barrier bail from x 2215-2220 aimed past the floor's edge at
+y −344..−361 (above). Not navprobed.
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the leader reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It stays: it

@@ -1319,3 +1319,111 @@ Fixed: the findings doc still said the ring "cannot rotate as the boss shuffles"
 Left: the re-latch has no settle time, so a stop mid-drag can fire it (in the replay's 0-3 a pull; w18 uld3 two in the opening). In
 uld3's re-latch slot 2 turns 100° and its straight walk passes ~2.6 yd from the off-tank spot for ~2 s: watch chains during re-latch
 walks next window.
+
+**User answer (2026-11-23) to round 11's question:** yes. One more lane waypoint near y −360 in each lane (left x ~2242, right
+x ~2212, about 39 yd from the Colossus), index-matched like the other lane pairs, so the squad walks up to the Colossus with the
+leader. Points picked from trace positions; round 14 builds it.
+
+## Round 14 (window 21: build 90400b39c with round 13)
+
+**Data:** window 21, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-184054-5` (uld1),
+`tr-20261123-184054-6` (uld2), `tr-20261123-183954-4` (uld3); traces `env/dist/logs/botobs/603_{5,6,4}_thorim_{1795459306,1795459310,1795459237}.ndjson`,
+read through `raidtest.py report --boss thorim --raid uld --head 90400b39c --pulls 10` (its `thorim.py` lines), `postmortem.py --death`,
+round 7, 10 and 13 scripts (`budget.py`, `leadstop.py`, `leadstall.py`, `chain.py`) and new ones in session scratchpad `thorim_r14/`
+(`ringcheck.py`, `ringtime.py`, `track.py`, `bunnypos.py`, `smashreach.py`, `finegrid.py`, `sink.py`, `sinkwide.py`, `stoodat.py`,
+`wpcheck.py`) over `snap`, `move`, `note`, `dmg`, `heal`, `cast` (Sif `"sp":62507`/`62565`) rows; all 46 Thorim traces on disk for the
+corridor floor, the smash reach and the new waypoints.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795459306 | kill 5:55, normal (62565 3:24.9, phase 2 3:38.0) | none |
+| uld2 | 1795459310 | kill 5:59, normal (62565 3:18.2, phase 2 3:37.8) | none |
+| uld3 | 1795459237 | wipe 6:04, **hard mode** (62507 0:46.0, no 62565 cast, `thorim.sifjoined`; phase 2 3:12.2 against 3:16.0) | phase 2: Thorim melee on a non-tank 17, on a tank 1; Blizzard 5; Unbalancing Strike 3; Sif Frostbolt 2, Frostbolt Volley 2; Chain Lightning 1; Lightning Charge 1 |
+
+**Round 13 verdict:**
+- **Ring re-latch: held.** It fired where a latched slot point came within 8 yd of a tank spot: uld3 at 4:03.0 (2.2 s after a trade left
+  Thorim south-west of the tank spot) and 5:22, uld1 once at 4:11; uld2 never needed it. Latched slot point within 8 yd of a tank spot 3.9 /
+  0.0 / 16.0% of settled snapshots; uld3's rest is geometry, Thorim resting 4.6 yd south-south-west of the tank spot, where the best ring
+  clears the off-tank spot by 8.0 yd. Holder within 8 yd of a ring body 10.0 / 26.3 / 40.7% (≤ ~35% asked: uld3 over); moves per ring bot a
+  minute 3.8 / 4.0 / 5.6; melee on Thorim to +100 s 100 / 100 / 99.7%.
+- **Chains through the tanks:** none lethal. One in uld2 (5:34.6, normal mode): three slot 2 melee, then holder 13k and waiting tank 16.6k,
+  all at full health. Not the anchor: a lit orb (5:33.8) turned slot 2's solved bearing 56° → 78°, which the 60° anchor separation allows,
+  and that point stood 7.5 yd from the holder. uld3's one Chain Lightning death (3:38.7) hopped 8.9 yd from the RANGE2 camp into slot 1,
+  before any re-latch, no tank in it.
+- **Lane followers: held.** `leadstall.py` in-lane-behind spans gone: 0.0 / 1.8 / 1.5 s, all on waypoint 0 with the squad still walking
+  from the gate (w19 7.5 / 2.7 / 1.0 with followers on earlier waypoints). Corridor trash 40.7 / 43.3 / 45.5 s (w19 45.7 / 61.5 / 40.2). No
+  phase 1 death in any pull.
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 170.0 / 170.0 / 169.4 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w21 uld1 | 0.09 | 17.0 | 40.7 | 14.0 | 35.5 | 7.0 | 48.0 | 20.8 | 183.0 | +13.1 |
+| w21 uld2 | 0.05 | 13.6 | 43.3 | 8.5 | 36.7 | 7.3 | 56.2 | 24.0 | 189.6 | +19.6 |
+| w21 uld3 | 0.58 | 15.0 | 45.5 | 7.5 | 24.3 | 3.5 | 47.0 | 22.9 | 165.6 | made by 3.8 |
+| w19 uld1 / 2 / 3 | 0.1-0.2 | 12.3-17.2 | 45.7 / 61.5 / 40.2 | 9.5 / 1.5 / 5.8 | 30.5 / 36.5 / 24.0 | 4.8-10.9 | 51.2 / 55.8 / 53.2 | 21.5 / 23.2 / 20.8 | 180.5 / 206.5 / 161.9 | +10.6 / +36.7 / made by 8.0 |
+
+uld1's 14.0 s to the Colossus: a Runic Smash flip (1:34.8) took the leader from the right lane's last waypoint across 30 yd to the
+left's, then 4.3 s to his stop and 1.5 s there. The Colossus took 35.5 / 36.7 s in uld1/uld2 with the squad walking in from 55-65 yd.
+
+**uld3's hard-mode wipe: the race again.** First tank death at P2 +101.7 s (4:53.9, bear Uldzab: nine Thorim swings, 98.8k in 10 s, Thorim
+56.7%), healers alive at 28-53% mana; Thorim lost 0.37%/s (hard-mode pulls before: 0.41-0.45). Six melee died before it, by P2 +78.6 s:
+Sif's Volley 2 and Frostbolt 1, Chain Lightning 1, Blizzard 2. The waiting tank took Blizzard 49 hits (195k) against the holder's 28 (95k),
+the round 8 spot's cost (w15 uld1 45 / 21).
+
+**Seen, not picked: the ring under Blizzard.** At 4:24.6 Blizzard covered slot 0's latched 176° with Thorim south-west of the tank spot,
+beside Sif's track; the solver's relax 1 (slot separation dropped) moved it to 134° (4.6 yd from the off-tank spot), then 308°, slot 1's
+own bearing, within 0.5 s. Off their arrived latch the three melee lost the movement guard, and generic `avoid aoe` walked them in 3-5 yd
+hops still inside the zone, over the tank spots (Uldzag 100 → 72 → 38 → 18%, eight ticks, 44k); the Volley at 4:30.4 and the next ticks
+killed all three. One pull; which constraint gives way when Blizzard covers the ring is a tactic. If a second hard-mode pull shows it, ask:
+may a covered slot step out past the ring to a clear spot until the 10 s zone fades, instead of merging into another slot or the tank side?
+
+**Stop rules:** not polished (one hard-mode pull, a wipe). Not stuck: rounds 3-14 picked twelve different causes; round 13's held.
+
+**Failure ranking:** the uld3 hard-mode race, 32 deaths (not a bug: rounds 6 and 9); no phase 1 death. On Sif's clock, missed by 13.1 /
+19.6 s on the normal pulls: the Colossus walk-in (the user's answer, built here), the lane flip at the last waypoint (30 yd).
+
+**Change: the user's lane waypoint** (Thorim files only, no size, mode or player branch).
+- **Where the floor is.** Between y −344 and −366 the corridor floor narrows to x ~2216-2240 (`finegrid.py`); x 2212 at y −360 is off it.
+  Every deep sink in the 46 traces (five, to z 388 down to −28) was a westward `flee` or barrier bail from x 2215-2220 aimed past that
+  edge (`sink.py`). So the pair sits where players stood and leaders stopped for the pull:
+  - left `ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_2_YARDS_1` **(2237.20, −360.50, 412.1348)**: 1.9 yd from the uld1 leader's stop (2235.3, −360.52);
+    a pet stood on it, players walked through (2239.4, −360.1); 124 player samples within 2 yd, none below the floor.
+  - right `ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_2_YARDS_1` **(2219.50, −360.57, 412.1348)**: the uld2 leader's stop; ranged stood within
+    1-2 yd for minutes ((2220.41, −361.33), (2221.4-2221.7, −360.7)); 2405 samples within 2 yd on the floor (the 9 below are one bot
+    already fallen under at (2219.1, −353.8)).
+  - 36.97 / 36.50 yd from the Colossus spawn (`GetDistance` ~29.5 / 29, inside the 30 yd pull test), not 39: north of y −358 the right
+    lane strip between the floor edge and the left hand's blast is under 2 yd wide. 17.7 yd apart, so a dodge there crosses 17.7 yd
+    instead of the last pair's 30.
+- **Radius 2 yd.** A smash reaches 10 yd plus the target's reach (`smashreach.py`: 605 hits, farthest 11.3 yd 2D), and the lane test is
+  net of the bot's reach (3.5 yd exact, ~4 under Heroism). Left clears the right hand's nearest bunny by 16.0 yd, right the left's by
+  15.7, so a bot at the disc's edge stays clear; at 10 yd both discs would cover the centre line, which both rows hit, and a bot there
+  would read as in either lane and never dodge.
+- **Gather before the pull** (`ThorimGauntletSquadWithin`, the lead step's cohesion loop factored out): the leader now pulls from the
+  new pair, so `ThorimGauntletLeadColossus` also waits until every squad non-healer bot is within 20 yd
+  (`ULDUAR_THORIM_LEAD_COLOSSUS_GATHER_DISTANCE`), under the step's 15 s cap from his arrival. The step's 30 yd would pass at once:
+  followers trail 25 yd behind and only take his waypoint once he stands on it. Followers on the other lane's waypoint are 17.7 yd off.
+- **No follower opens the idle Colossus.** `GetThorimDpsTarget` offers an out-of-combat Colossus only through
+  `ThorimGauntletColossusPull` (the bot leader, at his stop, trash clear, squad gathered): the new pair is inside every follower's 50 yd
+  pick, which would otherwise pull him onto a DPS during the gather (before round 10 a follower's pick did, 1-10 s late). A real player
+  leading pulls him himself, as with any lead job; a non-tank fallback leader pulls through the same gate.
+
+`pb-check` passes (syntax over the 14 including TUs, pblint, codestyle).
+
+**Coordinates to navprobe before the merge:** both points on the mesh at z 412.13; the paths left lane last waypoint (2242.1904, −329.0533)
+→ left new, right lane last waypoint (2212.1956, −328.0144) → right new (its straight line skims the floor edge at x ~2217, y −345..−355
+where bots fell: no path segment under z ~410), left new ↔ right new (the dodge), and each new point → the Colossus spawn (2227.5,
+−396.18, 412.18).
+
+**Next window should show:**
+- After pack 2's death, a `thorim gauntlet lead action` move to (2237.20, −360.50) or (2219.50, −360.57); followers' `thorim gauntlet
+  positioning action` moves to the same index in the safe lane once he stands on it; his Colossus attack only once every squad
+  non-healer is within 20 yd (≤ 15 s after his arrival).
+- The Colossus' first victim the gauntlet leader; no follower targeting him before his engage.
+- Squad damage on the Colossus over 10k/s within ~2 s of the engage (6-9 s now), the Colossus segment from 31-37 s toward ~25 s; "to
+  Colossus" up to ~4 s longer for the gather; lever to phase 2 ~3-5 s shorter, so hard mode on more than the fastest pool.
+- No smash hit on a bot standing on the new pair; no bot under z 409 near it.
+- Watch: the Colossus aggroing on the squad at 36.5 yd (nobody stood inside 37.5 yd of him idle before); a Colossus tanked within 3.5 yd of
+  the pair after his Charge pulling off-lane melee back to it (the formation's off-lane walk has no fighting gate).
+
+**Questions for the user:** none new (the ring-under-Blizzard question waits for a second hard-mode pull).

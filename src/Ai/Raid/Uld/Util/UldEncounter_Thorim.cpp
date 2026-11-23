@@ -49,12 +49,14 @@ const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1 = Position(2236.895f, 
 const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1 = Position(2242.1162f, -310.15308f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2 = Position(2242.018f, -318.66003f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3 = Position(2242.1904f, -329.0533f, 412.1348f);
+const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_2_YARDS_1 = Position(2237.20f, -360.50f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1 = Position(2219.5417f, -264.77167f, 412.17548f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2 = Position(2217.446f, -275.85248f, 412.17548f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1 = Position(2217.8877f, -295.01193f, 412.13434f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1 = Position(2212.193f, -307.44992f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2 = Position(2212.1353f, -318.20795f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3 = Position(2212.1956f, -328.0144f, 412.1348f);
+const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_2_YARDS_1 = Position(2219.50f, -360.57f, 412.1348f);
 const Position ULDUAR_THORIM_BALCONY_1 = Position(2141.0f, -408.0f, 438.247f);
 const Position ULDUAR_THORIM_BALCONY_2 = Position(2151.0f, -396.0f, 438.247f);
 const Position ULDUAR_THORIM_BALCONY_3 = Position(2152.0f, -365.0f, 438.744f);
@@ -107,6 +109,7 @@ std::array<GauntletWaypoint, ULDUAR_THORIM_GAUNTLET_WAYPOINTS> const leftLaneWay
     {&ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1, 10.0f},
     {&ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2, 10.0f},
     {&ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3, 10.0f},
+    {&ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_2_YARDS_1, 2.0f},
 }};
 
 std::array<GauntletWaypoint, ULDUAR_THORIM_GAUNTLET_WAYPOINTS> const rightLaneWaypoints = {{
@@ -116,6 +119,7 @@ std::array<GauntletWaypoint, ULDUAR_THORIM_GAUNTLET_WAYPOINTS> const rightLaneWa
     {&ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1, 10.0f},
     {&ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2, 10.0f},
     {&ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3, 10.0f},
+    {&ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_2_YARDS_1, 2.0f},
 }};
 
 std::array<GauntletWaypoint, ULDUAR_THORIM_GAUNTLET_WAYPOINTS> const& LaneWaypoints(bool leftLane)
@@ -1328,7 +1332,8 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
             if (Unit* pick = SelectThorimTierTarget(currentTarget, *tier, *bot))
                 return NoteThorimDpsTarget(bot, pick);
 
-        if (targets.colossus)
+        if (targets.colossus &&
+            (targets.colossus->IsInCombat() || ThorimGauntletColossusPull(botAI, bot) == targets.colossus))
             return NoteThorimDpsTarget(bot, targets.colossus);
 
         if (targets.runeGiant)
@@ -1494,6 +1499,29 @@ bool OnThisInstance(Player const* member, Player const* bot)
 {
     return member && member->IsInWorld() && member->GetMapId() == bot->GetMapId() &&
            member->GetInstanceId() == bot->GetInstanceId();
+}
+
+bool ThorimGauntletSquadWithin(Player* bot, ThorimEncounterState const& state, float distance)
+{
+    if (getMSTimeDiff(state.leadStepMs, getMSTime()) >= ULDUAR_THORIM_LEAD_STALL_MS)
+        return true;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !OnThisInstance(member, bot) || !member->IsAlive() || !IsBotPlayer(member) ||
+            PlayerbotAI::IsHeal(member) || SquadOf(state, member) != ThorimSquad::Gauntlet)
+            continue;
+
+        if (bot->GetDistance2d(member) > distance)
+            return false;
+    }
+
+    return true;
 }
 
 bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
@@ -1745,22 +1773,9 @@ bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out)
             return false;
     }
 
-    if (ThorimGauntletLeaderFighting(botAI, bot))
+    if (ThorimGauntletLeaderFighting(botAI, bot) ||
+        !ThorimGauntletSquadWithin(bot, *state, ULDUAR_THORIM_LEAD_COHESION_DISTANCE))
         return false;
-
-    if (getMSTimeDiff(state->leadStepMs, now) < ULDUAR_THORIM_LEAD_STALL_MS)
-    {
-        for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
-        {
-            Player* member = ref->GetSource();
-            if (member == bot || !OnThisInstance(member, bot) || !member->IsAlive() || !IsBotPlayer(member) ||
-                PlayerbotAI::IsHeal(member) || SquadOf(*state, member) != ThorimSquad::Gauntlet)
-                continue;
-
-            if (bot->GetDistance2d(member) > ULDUAR_THORIM_LEAD_COHESION_DISTANCE)
-                return false;
-        }
-    }
 
     out = GetThorimGauntletWaypoint(leftLane, state->leadNext);
     return true;
@@ -1781,7 +1796,8 @@ Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
     if (bot->GetDistance(colossus) > ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
         return colossus;
 
-    if (colossus->IsInCombat() || ThorimCorridorTrashNear(botAI))
+    if (colossus->IsInCombat() || ThorimCorridorTrashNear(botAI) ||
+        !ThorimGauntletSquadWithin(bot, *state, ULDUAR_THORIM_LEAD_COLOSSUS_GATHER_DISTANCE))
         return nullptr;
 
     return colossus;
