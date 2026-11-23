@@ -238,7 +238,7 @@ Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state,
 
 Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 
-Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range);
+Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range, bool backLineOnly = false);
 
 bool IsFreyaLasherTail(FreyaWaveState const& state);
 

@@ -11,7 +11,9 @@ dodges (one off a beam the next snapshot first shows) and one healer in range. A
 lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. A third pins a
 melee bot walking back into a low lasher's blast and dying to its Detonate. A fourth pins a low lasher
 chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-held lasher and bails
-from it once, and a fifth two low lashers, each shot by the other one's victim. The shared v14 fixture shows every section reads empty elsewhere.
+from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
+ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. The shared v14
+fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -264,6 +266,27 @@ def two_low_pull() -> list[dict]:
     ]
 
 
+def gift_low_snap(t: int, near_on: int) -> dict:
+    low = low_snap(t, 10, near_on)
+    low["u"].append([GIFT, 2350.0, -40.0, 425.3, 0, 80, 0, 0])
+    return low
+
+
+def gift_low_pull() -> list[dict]:
+    header, freya = low_pull()[:2]
+    return [
+        header,
+        freya,
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS[:2]),
+        {"t": 0, "e": "unit", "g": GHOUL, "en": 24207, "n": "Army of the Dead Ghoul"},
+        {"t": 0, "e": "unit", "g": GIFT, "en": 33228, "n": "Eonar's Gift"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        gift_low_snap(60000, GIFT),
+        gift_low_snap(61000, LASHERS[0]),
+        {"t": 62000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -392,6 +415,13 @@ class Lows(unittest.TestCase):
             "  1:00.000 lashers: 2 under the bail line, 0 of them 8s+ there (0 hitting a player); ranged DPS in reach "
             "of a low lasher hitting a player: 4 sample(s), 100% on one, 0% on another lasher; 0 back-line bail "
             "order(s) from one hitting the back line\n"))
+
+    def test_a_ranged_bot_on_the_gift_with_a_low_lasher_in_reach(self):
+        self.assertEqual(printed(fr.show_lows, load(gift_low_pull())), (
+            "LOWS\n"
+            "  1:00.000 lashers: 1 under the bail line, 0 of them 8s+ there (0 hitting a player); ranged DPS in reach "
+            "of a low lasher hitting a player: 4 sample(s), 75% on one, 0% on another lasher, 4 of them with Eonar's "
+            "Gift up, 25% on the Gift; 0 back-line bail order(s) from one hitting the back line\n"))
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_lows, load(pull())), "LOWS\n  no lasher wave\n")

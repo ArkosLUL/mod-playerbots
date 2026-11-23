@@ -249,7 +249,7 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state)
     return best;
 }
 
-Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range)
+Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range, bool backLineOnly)
 {
     Unit* best = nullptr;
     for (Unit* lasher : state.detonatingLashers)
@@ -260,6 +260,13 @@ Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float 
         Unit* victim = lasher->GetVictim();
         if (!victim || !victim->IsPlayer() || bot->GetExactDist2d(lasher) > range)
             continue;
+
+        if (backLineOnly)
+        {
+            Player* const target = victim->ToPlayer();
+            if (PlayerbotAI::IsTank(target) || !(PlayerbotAI::IsRangedDps(target) || PlayerbotAI::IsHeal(target)))
+                continue;
+        }
 
         if (!best || lasher->GetHealth() < best->GetHealth() ||
             (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))

@@ -22,14 +22,15 @@ rules stand the generic pickers down. The trio target changes several times per 
 converges, which a group icon cannot carry without one bot spamming `SetTargetIcon` for the rest to
 read back a tick later. A human's own marks are not honoured here.
 
-Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya (a lasher tail
-goes ahead of the trio for ranged, [below](#detonating-lasher-waves)); once any trio
-member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio outranks the other adds, and once
-every member is in the release band nothing pulls a bot away. A bot keeps its current target unless
-something strictly higher on that list is up, so add churn cannot reset swing timers; the trio slot is
-exempt, since the split is already stable and stickiness would freeze each bot's first pick. The pet
-goes at the pick every tick, not only on a switch: on the right target the node returns false, the
-common case, and a pet left on a dead or floored add would never catch up.
+Priority is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya (for ranged, a low
+lasher on a player goes ahead of the Gift and a lasher tail ahead of the trio,
+[below](#detonating-lasher-waves)); once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT`
+(30%) the trio outranks the other adds, and once every member is in the release band nothing pulls a bot
+away. A bot keeps its current target unless something strictly higher on that list is up, so add churn
+cannot reset swing timers; the trio slot is exempt, since the split is already stable and stickiness
+would freeze each bot's first pick. The pet goes at the pick every tick, not only on a switch: on the
+right target the node returns false, the common case, and a pet left on a dead or floored add would
+never catch up.
 
 **Eonar's Gift is a ranged job** (12s to a 30-60% Freya heal), so melee never eat the travel both ways;
 melee take it only when no ranged DPS is alive. While a lasher pack is up only the first
@@ -45,7 +46,10 @@ spell` step undone by the spore node or the back-line bail from a low lasher cha
 ([below](#detonating-lasher-waves)). `freya ranged camp`'s gather also pulled them back, so it stands down
 for a ranged DPS bot whose target is a Gift; the bail still runs. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
-it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%).
+it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
+each Gift that lives heals every member about 30%, and three took one past two minutes. **Known-open:**
+10-man rosters carry two ranged DPS, too few for a 27k Gift (25-man: 91k): 16 of 27 lived in three
+10-man pulls, against 1 of 25 at 25-man.
 
 ## The trio wave
 
@@ -307,12 +311,13 @@ their own pickup ([below](#detonating-lasher-waves)).
 yet verified in a pull), since every add-tank death came with them spent earlier or on someone else
 ([Hardened Bark](#the-trio-wave)). `freya add tank defensive hold` blocks the class nodes' tank cooldowns
 (`HeldTankDefensiveNames`) for assist tank 0 while Freya is not on him, above
-`ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank external hold` blocks healers'
+`ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank external hold` zeroes healers'
 class Pain Suppression (a disc priest's own critical-health one shares the name), Guardian Spirit and Hand
-of Sacrifice, on the main tank too, while an add tank lives who is not holding her; Lay on Hands stays
-free. Both run only in the add phase, Freya in combat with Attuned to Nature up: the entry fallback sees
-her before the pull too, and no trio comes once it drops. Both find Freya by entry when `find target`
-misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at 43% that way.
+of Sacrifice aimed at anyone but the main tank (user's choice) while an add tank lives who is not holding
+her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
+the entry fallback sees her before the pull too, and no trio comes once it drops. Both find Freya by entry
+when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at
+43% that way.
 
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
 time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
@@ -349,7 +354,7 @@ only if `--threat 32919` shows DPS keep pulling it. Mocking Blow counts as a tau
 Snaplasher at 64 stacks and die 270 ms later; it falls back to `hamstring` now.
 
 **A Snaplasher on a non-tank is kited while it is slower, else the raid kills it** (user's choice;
-not yet verified in a pull). Nothing holds damage off it: it stays in the split under the sync rules.
+verified at 10-man only). Nothing holds damage off it: it stays in the split under the sync rules.
 `freya kite snaplasher` (`ACTION_RAID + 3`) runs on the bot it chases (`GetFreyaSnaplasherToKite`: its
 victim, never a tank) only while its live run speed is below the bot's own (`GetSpeed(MOVE_RUN)` on
 both, never a per-size constant), once it is inside its melee range + `ULDUAR_FREYA_SNAPLASHER_KITE_MARGIN`
@@ -366,7 +371,12 @@ both sizes; the speeds differ:
   kills it standing.
 - 25-man's 64190 has no slow. The core slows a creature under 30% health 1.66% per % under 30 (integer
   percent; the Snaplasher is not snare-immune), which takes it under 7.0 at about 22%, the sync floor's
-  wait included: only then is it kited. Above that it kills its victim and the next.
+  wait included: only then is it kited. Above that it kills its victim and the next. A raid snare slows it
+  too (2.40 at 96%), and the kite then runs as well.
+
+A 10-man one at 0.00 stood 50s in one spot while its victims kept 16-22 yd off (10 kite orders). The three
+it killed walked into its ~10 yd reach on other orders: two `freya nature fury bail` (above the kite) and a
+healer's spore walk, none of which avoids it. **Known-open.**
 
 The main tank neither taunts nor attacks a loose one: holding it with Freya he lasted 6s, then 20s under
 Shield Wall. A risen add tank's ladder taunts it at once, stacked or not (a DK that did died 4s later).
@@ -587,7 +597,10 @@ outside such a lasher on the premise that it blows in seconds, but off the pile 
 one in reach, 11-52% of the ranged in reach shot another lasher and 0-40% shot one, and 12 of them stayed
 under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed four of them back to
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
-Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in.
+Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in. Ahead of the Gift (user's
+choice; not yet verified in a pull) it takes only one hitting the back line, a ranged DPS or healer
+(`backLineOnly`), one or two casts, except while the trio is locked: with one in reach and a Gift up, half
+the ranged in reach sat on the Gift (10-man: 94%), and a Gift heals it back to ~65%.
 
 **A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
 trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a
@@ -741,5 +754,5 @@ Snaplasher's holder;
 28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--blasts` per lasher
 wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
 blast, and their samples inside one; `--lows` per lasher wave, its lashers under the bail line, those there
-8s or more and hitting a player, what the ranged in reach of one hitting a player shot, and the back line's
-bails from one hitting them; `--deaths` by killer and spell.
+8s or more and hitting a player, what the ranged in reach of one hitting a player shot (with a Gift up, the
+share on it), and the back line's bails from one hitting them; `--deaths` by killer and spell.

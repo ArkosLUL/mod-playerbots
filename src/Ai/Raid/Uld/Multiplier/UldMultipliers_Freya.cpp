@@ -147,6 +147,27 @@ bool FreyaArmyRuneReserveMultiplier::ReserveThisTick()
     return cachedReserve;
 }
 
+float FreyaAddTankExternalHoldMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    auto cached = held.find(action);
+    if (cached == held.end())
+    {
+        static std::set<std::string> const names = {"pain suppression", "pain suppression on party",
+                                                     "guardian spirit on party", "hand of sacrifice on party"};
+        cached = held.emplace(action, names.count(action->getName()) > 0).first;
+    }
+
+    if (!cached->second || !PlayerbotAI::IsHeal(bot) || !IsFreyaAddTankExternalHeld(botAI))
+        return 1.0f;
+
+    Unit* target = action->GetTarget();
+    Player* player = target ? target->ToPlayer() : nullptr;
+    return player && PlayerbotAI::IsMainTank(player) ? 1.0f : 0.0f;
+}
+
 float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);

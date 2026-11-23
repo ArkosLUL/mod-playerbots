@@ -565,7 +565,12 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     std::vector<Unit*> priority;
 
     if (takesGift && !state.TrioReleased())
+    {
+        if (isRanged && !trioLocked)
+            priority.push_back(GetFreyaLowLasherOnPlayer(bot, state, sPlayerbotAIConfig.SpellDistance, true));
+
         priority.push_back(state.eonarsGift);
+    }
 
     if (!trioLocked)
         priority.push_back(state.conservator);

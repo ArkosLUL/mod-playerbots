@@ -1030,3 +1030,116 @@ cover lines reproduce), on one code path (no size, mode or player branch), no sh
 Left: externals also wait on an own button that is off cooldown but unaffordable (a DK's Vampiric Blood
 with no blood rune, up to one rune cooldown), since `ReadyTankDefensive` reads the cooldown only; changing
 it is shared code.
+
+**User answers (2026-11-23):** Q6 yes, as put to the user: a ranged DPS bot with a low lasher hitting the
+back line in reach shoots it before the Gift. Q7 yes: the loose Snaplasher stays in the normal damage split (as built). Q9 no: do not keep
+the healers' externals off the main tank during the add phase. Q8 waits for window 15.
+
+## Round 10 (build c350347ff: round 8 built, round 9 merged but not built)
+
+**Data:** window 15a, one valid pull per pool at each size, no DC veto inside a pull. 25-man:
+`tr-20261123-113618-9` (uld1), `-113537-8` (uld2), `-113516-7` (uld3); traces `env/dist/logs/botobs/603_{9,8,7}
+_elder-stonebark_{1795433820,1795433778,1795433758}.ndjson`. 10-man check (2 tanks, 2 healers, 4 melee, 2
+ranged): `tr-20261123-115845-15` (uld1), `-115804-14` (uld2), `-115422-13` (uld3); traces `603_{15,14,13}
+_elder-stonebark_{1795435160,1795435120,1795434900}`. Window 14 is the baseline. Ad hoc scripts:
+`scratchpad/freya-r10/` (`loose.py`, `low_vs_gift.py`), plus `freya-r7/gift_reach.py`, `wave_timeline.py`,
+`trio_hp.py`. No ranking this round (window 15 is pulling round 9): the user's answers are built.
+
+**Hard mode.** All six pulls 3 of 3 Elders from their essence channels; the 25-man kills cast chest 62952,
+the 10-man kill 62950.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 25 | 1795433820 | **kill 6:31, 5** | Unstable Energy 2 (melee, 4:00-4:01), Nature Bomb 2 (6:18-6:19), own Iron Roots 1 |
+| uld2 25 | 1795433778 | **kill 6:45, 3** | Nature Bomb 2, Flame Lash 1 (ranged, 4:32) |
+| uld3 25 | 1795433758 | **kill 6:18, 4** | Detonating Lasher 3 (melee Detonate 2:29.8; melee Flame Lash and ranged lasher melee 4:32.5), Nature Bomb 1 |
+| uld1 10 | 1795435160 | **kill 8:51, 0** | none |
+| uld2 10 | 1795435120 | wipe 5:26, 11 | Snaplasher 3 (loose), Tidal Wave 2 (the add tank 4:27, the main tank 5:15), Ground Tremor 2, lasher melee 2, Conservator 1, Water Spirit 1 |
+| uld3 10 | 1795434900 | wipe 6:51, 12 | Detonating Lasher 4 (a melee 5:23, healers 5:33, 5:44, 5:53), Freya 7 from 6:11, the main tank at 6:18 among them (melee 4, Ground Tremor 2, Sunbeam 1), Nature Bomb 1 |
+
+**Stop rules:** a 25-man hard-mode kill on all three pools, but 5 and 4 deaths in two: not polished.
+
+**Round 8 verdict: held where tested; the 25-man case is untested.** No `freya.snaphold` note and no hold or
+release row in any trace.
+
+- 25-man: no add tank died, so nothing ran loose but three openers of 1 s (0 deaths). One read 2.40 vs 7.00
+  at 96% (uld2 0:57.8, under the bear's Infected Wounds and a Blizzard's Chilled): the live-speed rule kites
+  then too; no order, as the bot never came inside the margin. No Snaplasher death at 25.
+- 10-man, the kite fired: uld2's add tank died at 4:27.3 and the Snaplasher ran loose 4:27-5:17 at 12% to 35%
+  (`--tanks`: 10 kite orders, slower in 9 of 9 reads). It read 0.00 vs 7.00 from the first second (20+
+  stacks) and stood at (2337.2, -32.4) for 50 s while each victim stayed 16-22 yd off (`loose.py`). The 3
+  it killed walked into its ~10 yd reach on other orders: Uldyai `freya nature fury bail` 4:41.2 to 9.3 yd of it,
+  Uldyag the same 5:10.9 to 7.4 yd (the bail is `ACTION_RAID + 4`, above the kite), healer Uldyac's spore walk
+  5:17.4 to 7.7 yd, one swing each. Neither the Nature's Fury bail nor the spore walk avoids a Snaplasher.
+  Melee kiters: vetoes under both kite guards (Uldyai 4:28.6). uld1 and uld3 had 1 s openers only.
+
+**Why the two 10-man pulls wiped: Eonar's Gift lived.** With two ranged DPS, the only Gift takers while
+either lives, 16 of 27 Gifts lived to heal in the three 10-man pulls (all 7 in uld2), against 1 of 25 at
+25-man; the 10-man Gift has 27,193 health (25-man 90,643). In uld2 the ranged were 31-56 yd off three of them
+(`gift_reach.py`).
+
+- uld2: trio 2 (3:13) took three Gift heals of +25-30% to every member (~3:45, ~4:30, ~5:15; `trio_hp.py`),
+  at 42-60%, 7-12% and 1-6%, so it never died together. The bear add tank held it 73 s and died bare at 4:27
+  (cover own 24.0 / external 20.0 / both 4.2 / none 33.5 s) to three swings and a Tidal Wave; the loose
+  Snaplasher above, the Conservator (4:12) and the third lasher wave (5:13) landed on the live trio, and the
+  main tank died at 5:15.
+- uld3: the 5:01 Gift lived (both ranged on it in reach, 93% to 12%) and took the second lasher wave's six
+  from 105% to 253% summed; low lashers then killed a melee and both healers (5:23-5:53, one healer twice),
+  and the main tank died to Freya at 6:18 with no healer left. The 5:46 Gift lived too, both ranged on it while
+  a lasher at 5% sat 14-31 yd off on the tank. Question 10.
+
+**Built** (Freya files only, any size or difficulty, no player branch):
+
+- Q9: `freya add tank external hold` is now a hand-written multiplier (`FreyaAddTankExternalHoldMultiplier`,
+  `Family::Spell`, same veto name): a healer's class `pain suppression`, `pain suppression on party`,
+  `guardian spirit on party` or `hand of sacrifice on party` is zeroed while `IsFreyaAddTankExternalHeld` holds
+  unless the action's target is the main tank (`PlayerbotAI::IsMainTank`). DPS, healers, pets and a disc
+  priest's self cast stay held; `freya add tank external` still covers the add tank one layer at a time.
+- Q6: in `ResolveFreyaDpsTarget`, a ranged DPS bot that takes the Gift puts `GetFreyaLowLasherOnPlayer` (under
+  `_LASHER_BAIL_PCT`, victim a player, inside `SpellDistance`) ahead of it, except while the trio is locked,
+  as the tail pick waits. Built to option (b)'s wording, so a low lasher on a tank or melee counts as well as
+  one on the back line: a Gift heals any of them back to ~65%. The bot stays on it while it is the lowest such
+  lasher in reach; a lower one takes the bot, and once none is left the Gift does.
+- Reader: `--lows` adds, of the in-reach samples, those with Eonar's Gift up and the share on the Gift, tested.
+  Baseline here: 25-man 142 (46% on the Gift), 22 (95%) and 9 (11%), 36 (56%); 10-man 2 (100%), 10 (60%) and
+  92 (98%); window 14 20 (100%), 12 (8%), 180 (24%), 285 (68%).
+
+**Next window should show** (`freya.py --lows`, `--tanks`, `postmortem.py --vetoes`):
+
+- Q6: `--lows` "with Eonar's Gift up" share on the Gift near 0 (above); Gifts living 12 s+ no more often.
+- Q9: healer Pain Suppression, Guardian Spirit or Hand of Sacrifice on the main tank allowed while an add tank
+  lives; still none on DPS, healers or pets then; `freya add tank external hold` vetoes only on those.
+- Round 9's checks as written there (window 15 pulls it); round 8: no 10-man death to a Snaplasher standing
+  at 0.00 from its own victim.
+
+**Not built:** the Nature's Fury bail and the spore walk ignore a loose Snaplasher's reach (10-man, 3 deaths):
+a bug candidate (add it to their hazards while it reads 0 speed), next round's pick if it repeats.
+
+**Questions:**
+
+10. Eonar's Gift at 10-man: two ranged DPS cannot kill it inside its 12 s cast, and each one that lives heals
+    the trio about 30% or the lashers about 60%: both 10-man wipes this window. Options: (a) keep the Gift a
+    ranged job; (b) while fewer than `ULDUAR_FREYA_GIFT_SHARE` (5) ranged DPS live, the melee DPS nearest the
+    Gift fill the share up to 5 (25-man rosters carry 9-10 ranged, so unchanged there). Recommendation: (b).
+8. (waits for window 15) as written in round 9.
+
+**Shared code:** none.
+
+**Review:** both answers are built as given, on one code path (no size, mode or player branch: a player main
+tank counts through the group's main tank, a player a lasher hits counts like a bot), no shared code. The
+traces bear the round out: the 10-man loose Snaplasher (`--tanks`: 50.3 s, 10 kite orders, slower in 9 of 9
+reads; Uldyai's bail 4:41.2, Uldyag's 5:10.9, Uldyac's spore walk 5:17.4), 16 of 27 10-man Gifts living 12 s+
+(uld1's last, at 8:46.7, cut by the kill) against 1 of 25 at 25-man, and the `--lows` baselines. Fixed:
+
+- The findings doc said two thirds of the ranged in reach sat on the Gift; pooled `--lows` reads 52% (window
+  14, 497 samples), 52% (window 15a 25-man, 209) and 94% (10-man, 104). Q6's built line overstated the
+  stickiness: a lower low lasher takes the bot.
+
+Watch: Q6 counts a low lasher on a tank or melee too (the option's wording), so a tank-held pile going low
+one lasher at a time can hold the Gift takers off the Gift for several casts. The next window's "Gifts living
+12 s+ no more often" check covers it.
+
+**Orchestrator (2026-11-23):** narrowed Q6 to what the user approved, a low lasher hitting the back line.
+`GetFreyaLowLasherOnPlayer` takes `backLineOnly`, and the pick ahead of the Gift passes it: the victim must be
+a ranged DPS or healer player, not a tank (`IsTank`, `IsRangedDps`, `IsHeal`, which read a human's spec
+too). The round 6 lasher pick still takes any player. The watch item above no longer applies.
