@@ -63,9 +63,9 @@ going at most `CONTACT_DISTANCE` deeper into one already holding it, so it never
 beside; latched `_GIFT_WALK_LATCH_MS` (3 s) while its `MoveTo` is the bot's last, a failed sweep retried after
 `_GIFT_WALK_RETRY_MS` (1 s), `MOVEMENT_COMBAT`. Inside a low lasher's blast the bail goes first; with no spot, `reach spell` walks as
 before. **Its takers spread no DoTs** (not yet verified in a pull): the class `… on attacker` actions kept
-dotting other adds, 1706 casts by the takers of 191 25-man Gifts (24-33% of their casts), 7+ for 8 of the 9
-that lived with 25% or less left. `freya gift dot hold` zeroes `Family::DebuffOnAttacker` and `plague strike
-on attacker` for a DPS bot whose target is a living Gift. **A Gift that lives is why a lasher wave
+dotting other adds, 1353 casts by the takers of 191 25-man Gifts (24-33% of their casts), 7+ for 8 of the 9
+that lived with 25% or less left. `freya gift dot hold` zeroes `Family::DebuffOnAttacker`, which holds every
+spread a DPS bot runs, while its target is a living Gift. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
 each Gift that lives heals every member about 30%, and three took one past two minutes.
@@ -824,7 +824,7 @@ Elders' essence channels into Freya at her engage (62483-62485), else their empo
 Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile, and per Gift the most
 ranged and melee DPS on it in one snapshot, its cut walks, its `freya reach gift` walks and the `… on
-attacker` actions its takers ran (target in the snapshot before);
+attacker` casts its takers (target in the snapshot before) landed off it;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a

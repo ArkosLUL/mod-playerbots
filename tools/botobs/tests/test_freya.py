@@ -14,8 +14,8 @@ chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-he
 from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
 ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. A seventh pins a
 melee bot joining a ranged one on a Gift after its walk away from it was cut, while the ranged one walks to it round
-the lashers and spreads a DoT off it once. An eighth pins a melee bot walking through a live Nature Bomb and dying to it, while another charges
-into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
+the lashers and spreads a DoT off it once and once onto it. An eighth pins a melee bot walking through a live
+Nature Bomb and dying to it, while another charges into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
 pins the back line near a submerged lasher pack, one walking clear in the submerge, and the lasher damage on it
 after the wake. The shared v14 fixture shows every section reads empty elsewhere.
 """
@@ -322,9 +322,13 @@ def gift_fill_pull() -> list[dict]:
         {"t": 40700, "e": "move", "g": CASTER, "k": "point", "x": 2342.0, "y": -58.0, "z": 425.3, "ok": 0,
          "by": fr.GIFT_WALK_ACTION},
         {"t": 40800, "e": "act", "g": MELEE, "a": "plague strike on attacker", "rel": 20.0, "vd": "OK"},
+        {"t": 41200, "e": "cast", "s": CASTER, "sp": 172, "tgt": FREYA},
         {"t": 41200, "e": "act", "g": CASTER, "a": "corruption on attacker", "rel": 19.5, "vd": "OK"},
         {"t": 41300, "e": "act", "g": CASTER, "a": "corruption on attacker", "rel": 19.5, "vd": "FAILED"},
+        {"t": 41400, "e": "cast", "s": CASTER, "sp": 172, "tgt": GIFT},
         {"t": 41400, "e": "act", "g": CASTER, "a": "corruption", "rel": 19.0, "vd": "OK"},
+        {"t": 41600, "e": "cast", "s": CASTER, "sp": 27243, "tgt": GIFT},
+        {"t": 41600, "e": "act", "g": CASTER, "a": "seed of corruption on attacker", "rel": 19.5, "vd": "OK"},
         {"t": 43000, "e": "end", "out": "kill"},
     ]
 

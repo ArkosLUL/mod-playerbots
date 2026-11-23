@@ -221,8 +221,7 @@ void DefineFreya(EncounterBuilder& e)
 
     e.Block("freya avoid aoe hold", Role::Any, FreyaAlive, Family::AvoidAoe);
 
-    e.Block("freya gift dot hold", Role::Dps, FreyaTargetIsGift, Family::DebuffOnAttacker,
-            {"plague strike on attacker"});
+    e.Block("freya gift dot hold", Role::Dps, FreyaTargetIsGift, Family::DebuffOnAttacker);
 
     e.Block("freya lasher taunt reserve", Role::Tank, FreyaTankOnLasher, 0,
             {"hand of reckoning", "righteous defense", "taunt", "growl", "dark command", "death grip", "mocking blow"});

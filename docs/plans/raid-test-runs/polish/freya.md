@@ -1792,10 +1792,10 @@ picks sent its takers to those low lashers, which they never finished while bail
 back to ~60% at 1:28; the Conservator (1:10) and trio (2:10) landed on it.
 
 - Why the 0:31.8 Gift lived (`gift_casts.py`, `rows.py`): of its takers' casts, 25 hit it and 12 were `… on attacker`
-  DoT spreads onto lashers (Uldzal cast `corruption on attacker` every GCD 0:32.4-0:39.8 with the Gift as his target);
-  besides, a bail at 0:35.4 (the pack focus under 15% with the back line 14 yd off), a Sunbeam step-out at 0:37.1, the
-  five-bot share starting at four (Uldzak, one of the five, rooted 41 yd off, shooting his roots) and a Q6 flip at
-  0:40.8 (that lasher at 4% on Uldzaq after the 10s reset). It stood at 13% half a second before the heal.
+  DoT spreads onto lashers and Freya (Uldzal cast `corruption on attacker` every GCD 0:32.4-0:39.8 with the Gift as
+  his target); besides, a bail at 0:35.4 (the pack focus under 15% with the back line 14 yd off), a Sunbeam step-out at
+  0:37.1, the five-bot share starting at four (Uldzak, one of the five, rooted 41 yd off, shooting his roots) and a Q6
+  flip at 0:40.8 (that lasher at 4% on Uldzaq after the 10s reset). It stood at 13% half a second before the heal.
 - Round 14 did not cause it. The Q11 Gift walk ran 4 times on that Gift (Uldzal, Uldzan, Uldzav, Uldzar, each about 6
   yd to within 27 yd, then casting), once on each later one; none ended in a blast and no walker died. Q12 did not run:
   the back line stood 20 yd off the pack at the spawn, 0 camp orders in the submerge. No bomb, no trio until 2:10.
@@ -1834,24 +1834,23 @@ Question 17.
 attacker` actions (`CastDebuffSpellOnAttackerAction`: Corruption, Unstable Affliction, Seed of Corruption, Immolate,
 Curse of Agony, Shadow Word: Pain, Vampiric Touch, Insect Swarm, Moonfire, Serpent Sting, Living Bomb, Icy Touch)
 run whatever the bot's target. Over windows 14-22 at 25 (`gift_dots.py`, the reader's count): the takers of 191 Gifts
-ran 1706 of them, 8.9 a Gift, 24% of their casts on Gifts that died and 33% on the 27 that lived; 9 of those 27 lived
-with 25% or less left, and 8 of the 9 had 7+ spreads (window 21's uld1 0:31 at 18% with 17, uld2 0:31 at 6% with
-20, this uld3 0:31 at 8% with 12). 10-man: 2 over 36 Gifts.
+landed 1353 of them off the Gift, 7.1 a Gift, 24% of their casts on Gifts that died and 33% on the 27 that lived; 9 of
+those 27 lived with 25% or less left, and 8 of the 9 had 7+ spreads (window 21's uld1 0:31 at 18% with 15, uld2 0:31
+at 6% with 18, this uld3 0:31 at 8% with 12). 10-man: 2 over 36 Gifts.
 
 **Classification: bug.** The Gift is the ranged job and `FreyaSetDpsPriorityAction` makes it their target; their GCDs
 going to other adds is the bots not doing what the strategy sets.
 
 **Fix** (Freya files only, any size or difficulty, no player branch): `freya gift dot hold` (`e.Block`, `Role::Dps`)
-zeroes `Family::DebuffOnAttacker` and `plague strike on attacker` (a melee filler's) while the bot's current target is
-a living Eonar's Gift. Reader: each `--waves` Gift line counts the `… on attacker` actions its takers ran (by their
-target in the snapshot before), tested.
+zeroes `Family::DebuffOnAttacker` while the bot's current target is a living Eonar's Gift. Reader: each `--waves` Gift
+line counts the `… on attacker` casts its takers (by their target in the snapshot before) landed off it, tested.
 
 **Cost to watch:** the pack and trio lose the takers' DoT spreads for a Gift's life (up to 12s, four or five times a
 pull); they resume once it dies.
 
 **Next window should show** (`freya.py --waves`, `postmortem.py --vetoes`):
 
-- Gift lines with DoT spreads by its takers near 0 (window 22 at 25: 174 over 19 Gifts); vetoes under `freya gift dot
+- Gift lines with DoT spreads by its takers near 0 (window 22 at 25: 138 over 19 Gifts); vetoes under `freya gift dot
   hold`.
 - Gifts living 12s+ fewer (windows 14-22 at 25: 27 of 191, 9 of them with 25% or less left).
 - Lasher waves no slower to die with no Gift up; rounds 1-14's checks as above.
@@ -1876,3 +1875,15 @@ The 10-man add tank's bare end of trio 2 (every button and external spent, one c
     button or external left).
 
 **Shared code:** none changed; `CastDebuffSpellOnAttackerAction` and `Family::DebuffOnAttacker` are read, not edited.
+
+**Review:** the cause holds and the hold addresses it, on one code path (no size, mode or player branch), Freya files
+only. Reproduced: uld3's 0:31.8 Gift (Uldzal's Corruption onto a lasher or Freya every GCD 0:32.5-0:39.8, the Gift his
+target), 27 of 191 Gifts living, 8 of the 9 at 25% or less with 7+ spreads, and Ghoul Taunt's 15 yd (DBC radius
+index 18). Fixed:
+
+- The reader counted every `… on attacker` action a taker ran, but 353 of those 1706 (36 of window 22's 174) landed on
+  the Gift itself, the action picking it as an attacker without the DoT. It now counts one only when the bot's own cast
+  at that moment landed off the Gift; the figures above and in the findings doc are the corrected ones.
+- `plague strike on attacker` came off the hold: no DK strategy runs it (nor `icy touch on attacker`), and no Freya
+  trace holds either. `Family::DebuffOnAttacker` holds every spread a DPS bot runs; the one melee variant outside it,
+  `rend on attacker`, is a tank warrior's.

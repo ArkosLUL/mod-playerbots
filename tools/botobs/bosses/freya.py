@@ -145,6 +145,7 @@ LINGER_MS = 8000
 CAMP_ACTION = "freya ranged camp"
 GIFT_WALK_ACTION = "freya reach gift"
 DOT_SPREAD_SUFFIX = " on attacker"
+SPREAD_CAST_SLACK_MS = 50
 BOMB_ESCAPE_ACTION = "freya move away nature bomb"
 ON_BOMB_YD = 1.5
 ESCAPE_EARLY_MS = 500
@@ -263,6 +264,11 @@ def show_waves(trace: Trace) -> None:
 def gift_dot_spreads(trace: Trace, gift: dict) -> int:
     snaps = [snap for snap in frames(trace) if gift["first"] <= snap["t"] <= gift["last"]]
     stamps = [snap["t"] for snap in snaps]
+    lo, hi = gift["first"] - SPREAD_CAST_SLACK_MS, gift["last"] + SPREAD_CAST_SLACK_MS
+    casts = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if not rec.get("tr") and lo <= rec["t"] <= hi:
+            casts[rec.get("s")].append(rec)
     count = 0
     for rec in trace.of("act"):
         if not gift["first"] <= rec["t"] <= gift["last"] or rec.get("vd") != "OK":
@@ -270,7 +276,10 @@ def gift_dot_spreads(trace: Trace, gift: dict) -> int:
         if not rec.get("a", "").endswith(DOT_SPREAD_SUFFIX):
             continue
         index = bisect.bisect_right(stamps, rec["t"]) - 1
-        if index >= 0 and any(row[0] == rec.get("g") and row[7] == gift["g"] for row in snaps[index].get("u", [])):
+        if index < 0 or not any(row[0] == rec.get("g") and row[7] == gift["g"] for row in snaps[index].get("u", [])):
+            continue
+        landed = [cast for cast in casts[rec.get("g")] if abs(cast["t"] - rec["t"]) <= SPREAD_CAST_SLACK_MS]
+        if landed and all(cast.get("tgt") != gift["g"] for cast in landed):
             count += 1
     return count
 
