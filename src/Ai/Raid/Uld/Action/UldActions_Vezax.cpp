@@ -52,7 +52,7 @@ bool VezaxResetEncounterStateAction::Execute(Event /*event*/)
 bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
 {
     Position spot;
-    if (!TryGetVezaxMarkSpot(bot, spot))
+    if (!TryGetVezaxMarkSpot(bot, spot) || VezaxWalkMeetsShadowCrash(botAI, spot))
         return false;
 
     Position impact;
@@ -170,13 +170,7 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
     GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
 
     VezaxHazard field;
-    if (!TryGetVezaxNearestHazard(bot, hazards, field))
-        return false;
-
-    Position impact;
-    if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
-        field.position.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
-            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    if (!TryGetVezaxNearestHazard(bot, hazards, field) || VezaxWalkMeetsShadowCrash(botAI, field.position))
         return false;
 
     if (bot->GetExactDist2d(field.position.GetPositionX(), field.position.GetPositionY()) <=
@@ -262,10 +256,7 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    Position impact;
-    if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
-        slot.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
-            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    if (VezaxWalkMeetsShadowCrash(botAI, slot))
     {
         _slotReached = false;
         return false;

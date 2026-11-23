@@ -33,6 +33,7 @@ enum UlduarVezaxIds
     SPELL_VEZAX_SARONITE_VAPORS_AURA = 63323,
     SPELL_VEZAX_SUMMON_SARONITE_ANIMUS = 63145,
     SPELL_VEZAX_SUMMON_SARONITE_VAPORS = 63081,
+    SPELL_VEZAX_PROFOUND_DARKNESS = 63420,
 
     NPC_VEZAX = 33271,
     NPC_VEZAX_SARONITE_ANIMUS = 33524,
@@ -40,6 +41,7 @@ enum UlduarVezaxIds
 };
 
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
+inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE = 11.0f;
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
 inline constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
@@ -150,6 +152,9 @@ bool TryGetVezaxMarkBreakSpot(Player* bot, Unit* marked, Position& spot);
 
 bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact);
 void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
+bool VezaxWalkMeetsShadowCrash(PlayerbotAI* botAI, Position const& destination);
+bool VezaxReachSpellMeetsShadowCrash(PlayerbotAI* botAI);
+bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI);
 
 bool VezaxHardModePending(PlayerbotAI* botAI);
 bool VezaxDamageHeld(PlayerbotAI* botAI);

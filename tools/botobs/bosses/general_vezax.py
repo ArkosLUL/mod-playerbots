@@ -53,6 +53,7 @@ ANIMUS_SWITCH = "vezax saronite animus action"
 CAMP_RADIUS = radius("ULDUAR_VEZAX_CAMP_RADIUS")
 SOAK_MAX_TRAVEL = radius("ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL")
 IMPACT_RADIUS = radius("ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS")
+WALK_CLEARANCE = radius("ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE")
 LEECH_RADIUS = radius("ULDUAR_VEZAX_MARK_LEECH_RADIUS")
 ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 
@@ -425,14 +426,31 @@ def show_mark(trace: Trace) -> None:
         print(f"  boss health inside windows {inside_rate:+.3f} %/s, outside {outside_rate:+.3f} %/s")
 
 
+def walk_meets_impact(impact, start, dest) -> bool:
+    """The strategy's own test for a walk while a crash flies: it ends within the walk clearance of
+    the impact, or passes within it nearer than it starts."""
+    if dist2(dest, impact) <= WALK_CLEARANCE:
+        return True
+    dx, dy = dest[0] - start[0], dest[1] - start[1]
+    length = dx * dx + dy * dy
+    along = 0.0
+    if length:
+        along = min(1.0, max(0.0, ((impact[0] - start[0]) * dx + (impact[1] - start[1]) * dy) / length))
+    nearest = dist2(impact, (start[0] + dx * along, start[1] + dy * along))
+    return nearest <= WALK_CLEARANCE and nearest < dist2(start, impact)
+
+
 def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Every Shadow Crash. `masked` is what else he cast while the missile flew: on a build that read
-    the impact off his current spell, that cast took the slot and the crash landed unseen."""
+    the impact off his current spell, that cast took the slot and the crash landed unseen. `walk_ins`
+    are accepted moves other than the dodge, issued while it flew, that walk toward the impact."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     block = blocks(trace)
     boss = boss_guid(trace)
     dodges = [rec for rec in trace.of("move") if rec.get("by") == DODGE]
+    walks = [rec for rec in trace.of("move")
+             if rec.get("ok") and rec.get("by") != DODGE and rec.get("x") is not None]
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SHADOW_CRASH_IMPACT]
     his = sorted((rec["t"], rec.get("sp")) for rec in trace.of("cast")
                  if rec.get("s") == boss and not rec.get("tr") and rec.get("sp") not in CRASH_SPELLS)
@@ -453,6 +471,14 @@ def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if cast <= rec["t"] <= impact + 1000 and block.get(rec["g"]) in dodged:
                 dodged[block[rec["g"]]].add(rec["g"])
 
+        walk_ins = []
+        for rec in walks:
+            if not cast <= rec["t"] <= impact:
+                continue
+            here = samples.row(rec["g"], rec["t"])
+            if here and walk_meets_impact((x, y), here[1:3], (rec["x"], rec["y"])):
+                walk_ins.append(rec)
+
         out.append({
             "cast": cast,
             "impact": impact,
@@ -461,6 +487,7 @@ def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             "dodged": dodged,
             "hits": [rec for rec in hits if impact - 500 <= rec["t"] <= impact + 1500],
             "masked": [spell for when, spell in his if cast < when < impact],
+            "walk_ins": walk_ins,
         })
     return out
 
@@ -491,13 +518,13 @@ def show_crash(trace: Trace) -> None:
 
     size = {name: sum(1 for block in blocks(trace).values() if block == name) for name in ("L", "R")}
     print(f"  {'impact':>9} {'target':14} {'blk':4} {'L dodged':>9} {'R dodged':>9} {'his cast in flight':22}"
-          f" {'hits':>5}")
+          f" {'in':>3} {'hits':>5}")
     for row in rows:
         victims = ", ".join(trace.name(rec.get("d")) for rec in row["hits"])
         masked = ", ".join(trace.spell(spell).rsplit(" ", 1)[0] for spell in row["masked"]) or "-"
         print(f"  {clock(row['impact']):>9} {trace.name(row['target'])[:14]:14} {row['block']:4}"
               f" {len(row['dodged']['L']):4} of {size['L']:<2} {len(row['dodged']['R']):4} of {size['R']:<2}"
-              f" {masked[:22]:22} {len(row['hits']):5}  {victims}")
+              f" {masked[:22]:22} {len({rec['g'] for rec in row['walk_ins']}):3} {len(row['hits']):5}  {victims}")
 
     both = sum(1 for row in rows if row["dodged"]["L"] and row["dodged"]["R"])
     mean = statistics.mean(len(row["dodged"]["L"]) + len(row["dodged"]["R"]) for row in rows)
@@ -507,6 +534,12 @@ def show_crash(trace: Trace) -> None:
     print(f"  {len(masked)} of {len(rows)} crashes had another cast of his in flight:"
           f" {sum(len(row['hits']) for row in masked)} hit(s), against"
           f" {sum(len(row['hits']) for row in rows if not row['masked'])} for the rest")
+    movers = collections.Counter(rec.get("by") for row in rows for rec in row["walk_ins"])
+    walked_hit = sum(1 for row in rows for rec in row["hits"]
+                     if rec.get("d") in {walk["g"] for walk in row["walk_ins"]})
+    print(f"  {sum(movers.values())} walk(s) toward a landing impact by: "
+          + (", ".join(f"{by} {count}" for by, count in movers.most_common()) or "-")
+          + f"; {walked_hit} of {sum(len(row['hits']) for row in rows)} hit(s) on a bot that took one")
     issued, left = evictions(trace, samples)
     if issued:
         print(f"  {left} of {issued} dodges issued from inside a field were aimed outside every field")
@@ -1070,7 +1103,7 @@ def show_band(trace: Trace) -> None:
 SECTIONS = (
     ("boss", "what he cast, Searing Flames, interrupters", show_boss),
     ("mark", "Mark of the Faceless windows", show_mark),
-    ("crash", "Shadow Crash impacts, who dodged, his cast in flight", show_crash),
+    ("crash", "Shadow Crash impacts, who dodged, his cast in flight, walks toward it", show_crash),
     ("field", "field uptime, in-field casts, soak, cast hold", show_field),
     ("mana", "mana, Life Tap and what it returned", show_mana),
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),

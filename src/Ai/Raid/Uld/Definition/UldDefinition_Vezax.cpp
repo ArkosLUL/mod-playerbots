@@ -52,6 +52,10 @@ void DefineVezax(EncounterBuilder& e)
     e.Block("vezax main tank anchor hold", Role::MainTank, VezaxAnimusOffAnchor, Family::Charge,
             {"intervene", "reach melee"});
 
+    e.Block("vezax shadow crash walk hold", Role::Any, VezaxReachSpellMeetsShadowCrash, 0, {"reach spell"});
+
+    e.Block("vezax shadow word: death hold", Role::Any, VezaxCarriesProfoundDarkness, 0, {"shadow word: death"});
+
     e.Multiplier<VezaxSuppressLifeTapMultiplier>(Family::Spell);
 
     e.OwnTargeting("vezax target guard multiplier", Role::Any, VezaxEncounterActive,

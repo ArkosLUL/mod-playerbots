@@ -613,6 +613,65 @@ void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs)
     state.crashWindowMs = flightMs + ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS;
 }
 
+namespace
+{
+float VezaxDistanceToWalk(Position const& point, Position const& from, Position const& to)
+{
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    float const lengthSq = dx * dx + dy * dy;
+
+    float along = 0.0f;
+    if (lengthSq > 0.0f)
+        along = std::clamp(((point.GetPositionX() - from.GetPositionX()) * dx +
+                            (point.GetPositionY() - from.GetPositionY()) * dy) /
+                               lengthSq,
+                           0.0f, 1.0f);
+
+    return point.GetExactDist2d(from.GetPositionX() + dx * along, from.GetPositionY() + dy * along);
+}
+}
+
+bool VezaxWalkMeetsShadowCrash(PlayerbotAI* botAI, Position const& destination)
+{
+    Position impact;
+    if (!TryGetVezaxShadowCrashImpact(botAI, impact))
+        return false;
+
+    if (destination.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
+        ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE)
+        return true;
+
+    Player* bot = botAI->GetBot();
+    float const nearest = VezaxDistanceToWalk(impact, bot->GetPosition(), destination);
+    return nearest <= ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE &&
+           nearest < bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY());
+}
+
+bool VezaxReachSpellMeetsShadowCrash(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive())
+        return false;
+
+    Player* bot = botAI->GetBot();
+    float const reach = botAI->GetRange("spell") + bot->GetCombatReach() + target->GetCombatReach();
+    float const apart = bot->GetExactDist2d(target);
+    if (apart <= reach)
+        return false;
+
+    float const share = (apart - reach) / apart;
+    Position const stop(bot->GetPositionX() + (target->GetPositionX() - bot->GetPositionX()) * share,
+                        bot->GetPositionY() + (target->GetPositionY() - bot->GetPositionY()) * share,
+                        bot->GetPositionZ());
+    return VezaxWalkMeetsShadowCrash(botAI, stop);
+}
+
+bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI)
+{
+    return botAI->GetBot()->HasAura(SPELL_VEZAX_PROFOUND_DARKNESS);
+}
+
 bool VezaxHardModePending(PlayerbotAI* botAI)
 {
     if (!IsVezaxHardModeActive(botAI) || !VezaxEncounterActive(botAI))

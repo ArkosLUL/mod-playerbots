@@ -75,9 +75,9 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   that ceiling (its `GetRange("spell")` plus both live reaches), stopping at row 0's radius from Vezax so
   the Mark floor holds; with the Animus straight behind him from the camp, as at its spawn, that stop can
   leave the slot past it. Healers keep their slots and their reach spell walks onto it, up to 28 a phase
-  each with the position node walking them back: in a north settle (below) those walks carry the main
-  tank's heals, and holding them cut his healing there from 3.6k/s to 2.4k/s; he died 8 s before the
-  collapse.
+  each with the position node walking them back: in a north settle (below) holding them cut a bear main
+  tank's healing from 3.6k/s to 2.4k/s and he died 8 s before the collapse, though a warrior with them
+  still got only 2.3k/s and died at +72 s.
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
 and Vezax settles 7.7-14 yd north of it, between tank and camp, having met the tank on its way in from the
@@ -198,10 +198,17 @@ the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against
 widening the files widens the strafe. Flight time is not tight: the front rank's 30.5 yd is 3.1s against
 a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against the impact;
 `FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe off the
-floor or still in the blast. Position and soak both decline while an impact covers their destination, as
-on Algalon; without that the bot clears, walks straight back with the missile still inbound, and never
-casts. The dodge itself yields once the bot is clear, so the soak can walk it back into the field the
-missile leaves and class interrupts get the ticks between.
+floor or still in the blast. A slot pulled toward the Animus can sit past its group's inner file, so its
+strafe may end only 10.2 yd clear. The dodge itself yields once the bot is clear, so the soak can walk it
+back into the field the missile leaves and class interrupts get the ticks between.
+
+**While the missile flies, no other walk goes toward it** (`VezaxWalkMeetsShadowCrash`): one ending
+within 11 yd of the impact, or passing within 11 nearer than it starts, waits for the landing. Position,
+soak and the mark walk decline it; reach spell is held for it (`vezax shadow crash walk hold`), measured
+to where reach spell would stop. Without it a dodged bot walks straight back with the missile inbound and
+never casts (as on Algalon), or dies: the blast takes a player within exactly 10 yd 3D of its centre (no
+reach added for a creature caster), and reach spell toward the Animus, a mark walk across the impact and
+a position walk through it killed 7 from the Animus spawn on in windows 11-19, every death of three kills.
 
 **Key the dodge off the cast, never the field.** The boss is **never** in `UNIT_STATE_CASTING` for this
 one, so a trigger must not gate on that; crashes come every 10s, so one stored impact is enough. The
@@ -383,7 +390,9 @@ open. `--animus` measures the Animus fight from its spawn to its kill, the colla
 the sampled roster alive) or the pull's end: its pace and, per ranged and healer, casts, field share,
 damage, mana, living time past its 37 yd ceiling (`past`) and accepted reach spell walks (`walks`), then
 which `vezax.reach` values were written after the spawn. Mana comes from the bot's last living sample,
-since the collapse tick reads the dead as 0.
+since the collapse tick reads the dead as 0. `--crash`'s `in` counts bots that took an accepted walk,
+the dodge aside, toward a landing impact by the strategy's own test; its summary names the movers and how
+many hit bots took one.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -399,6 +408,10 @@ Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** sp
 invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark — each
 bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): it is room-wide, so the only
 answer is killing the Animus faster.
+
+**Shadow Word: Death holds while the bot carries Profound Darkness** (`vezax shadow word: death hold`):
+the backlash is shadow, so at ~40 stacks, right after the Animus died, it hit 22k-health shadow priests
+for 12.8-21.9k and killed one.
 
 **Only threat holds the Animus**, and it spawns on the main tank's anchor. From outside its melee range a
 new victim needs 130% of the current one's threat, 110% inside (`ThreatManager::ReselectVictim`). The
@@ -490,6 +503,8 @@ camp.** It stands between him and the main tank, so at a 14.1 yd settle it was 9
 slot pull stops at row 0's radius, 40 yd from it, ranged dps spent 73-91% of its phase past its ceiling
 flipping between reach spell and their slots, and it was left at 3.4%. Row 0 is then also 44-48 yd from
 the main tank, in a healer's reach 2-5% of the time. Both need ranged or the main tank somewhere new.
+The settle decides the race: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
+walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the

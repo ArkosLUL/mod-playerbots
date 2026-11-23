@@ -90,6 +90,14 @@ def vezax_pull() -> list[dict]:
          "ok": 1, "r": "", "by": gv.DODGE},
         {"t": 5600, "e": "move", "g": TREE, "k": "point", "x": 0.0, "y": 45.0, "z": 0.0,
          "ok": 1, "r": "", "by": gv.DODGE},
+        # While it flies Tree walks to 9.4 yd of the impact, Agony walks straight away from it, and
+        # Bulwark's walk never comes near it.
+        {"t": 6500, "e": "move", "g": TREE, "k": "point", "x": 22.0, "y": 5.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.REACH_SPELL},
+        {"t": 7000, "e": "move", "g": AGONY, "k": "point", "x": 50.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.REACH_SPELL},
+        {"t": 7100, "e": "move", "g": BULWARK, "k": "point", "x": 1.0, "y": -5.0, "z": 0.0,
+         "ok": 1, "r": "", "by": "vezax raid position action"},
 
         {"t": 7000, "e": "aura", "d": AGONY, "s": BOSS, "sp": gv.SPELL_FIELD, "r": 0},
         {"t": 12000, "e": "aura", "d": AGONY, "s": BOSS, "sp": gv.SPELL_FIELD, "r": 1},
@@ -161,6 +169,13 @@ class SyntheticPull(unittest.TestCase):
     def test_a_crash_names_what_else_he_cast_while_it_flew(self):
         # The 6 s Searing Flames goes out inside the 5 s to 8 s flight; the 2 s and 10 s ones don't.
         self.assertEqual(gv.crashes(self.trace)[0]["masked"], [gv.SPELL_SEARING_FLAMES])
+
+    def test_a_walk_in_ends_or_passes_near_the_impact_and_walking_away_is_not_one(self):
+        walk_ins = gv.crashes(self.trace)[0]["walk_ins"]
+        self.assertEqual([(rec["g"], rec["by"]) for rec in walk_ins], [(TREE, gv.REACH_SPELL)])
+        self.assertTrue(gv.walk_meets_impact((30.0, 0.0), (15.0, 5.0), (45.0, 5.0)))
+        self.assertFalse(gv.walk_meets_impact((30.0, 0.0), (15.0, 15.0), (45.0, 15.0)))
+        self.assertFalse(gv.walk_meets_impact((30.0, 0.0), (25.0, 5.0), (15.0, 15.0)))
 
     def test_a_star_on_a_vapor_is_counted_though_nobody_targeted_it(self):
         self.assertEqual(gv.vapor_hits(self.trace), {(TREE, 53190): [9500]})

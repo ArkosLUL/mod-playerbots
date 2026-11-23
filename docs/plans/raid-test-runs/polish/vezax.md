@@ -807,3 +807,118 @@ as the bot victims do. `pb-check` passes.
 - Left: the hold measures the Animus from the anchor, not from the main tank, who may park up to 6 yd
   off it (twice his tolerance), so a returned Animus just out of his melee range on his far side from the
   anchor gets no step from him. Not seen: returns stood 8.1-8.4 yd from him with him on the anchor.
+
+## Round 8 (2026-11-23, build 99188e0f1)
+
+**Data.** Window 19 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 99188e0f1
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.39-3:08.50, no vapor
+hit). Analysis scripts: session scratchpad `vezax-r8/` (`compare.py` over windows 11-19, `settle.py`,
+`mtheals.py`, `mtanchor.py`, `crash.py`, `crashpaths.py`, `replay.py`, `swd.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-163804-1` | `603_1_general-vezax_1795451940` | kill 6:25, 3 deaths, the Animus dead in 79.5 s |
+| uld2 | `tr-20261123-163804-2` | `603_2_general-vezax_1795451942` | wipe 5:10, 30 deaths, the Animus at 12.3% at the collapse |
+| uld3 | `tr-20261123-163804-3` | `603_3_general-vezax_1795451946` | kill 5:31, 1 death, the Animus dead in 77.9 s |
+
+**Stop rules.** Not polished, one pool short: uld1 and uld3 are hard-mode kills with 3 and 1 deaths,
+uld2 wiped. Round 7 picked new failures, so no repeat count.
+
+**Settle per pull** (Vezax from the anchor, `settle.py`, `mtanchor.py`): uld1 9.3 from the opener, 9.0-10.1
+through the Animus phase (normal); uld2 12.8 from the opener, 12.4-12.8 to the collapse (north); uld3
+7.7, then 9.9 (normal).
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Deaths |
+|---|---|
+| uld1 | 3 Shadow Crash in the Animus phase: Uldxaj and Uldxaq at 3:47.6, the marked Uldxas at 3:57.5 |
+| uld2 | collapse from 4:20.8 (main tank to Animus melee at +72.3 s): 16 Profound Darkness, 8 Vezax melee, 6 Animus melee |
+| uld3 | 1 own Shadow Word: Death backlash (4:26.6, 20,220, 0.2 s after the Animus died) |
+
+**Verdict on round 7 (main tank anchor hold, healer walks back).**
+
+- *Anchor hold: did what it targeted.* Vetoes 0 / 9 / 0. uld2's nine fell at 4:22.4-4:44.5 on the
+  re-raised main tank, with the Animus loose on ranged 13.6-21.6 yd off the anchor after his first death;
+  none while he held it. Alive, every main tank stood on the anchor (0.0 yd) through the phase, and Vezax
+  kept his settle.
+- *Healer walks: back, but they did not feed the main tank in the north settle.* uld2's healers walked
+  16/6/6/9 times (normal settles: 9 and 3 in all), stood a median 42 yd off him, and he got 2.25k/s from
+  everyone (1.5k/s from healers) over the first 69 s, against 2.4k/s in w17 uld2 and 3.6k/s for the bear
+  in w15 uld3; he died at +72.3 s, 8 s before the collapse.
+- *Pace:* normal settles 1.26 and 1.28 %/s, dead in 79.5 and 77.9 s (window 11: 1.24-1.35); uld2's north
+  settle 1.10 %/s with ranged `past` 51-81% and `vezax.reach = floor` on 10 bots.
+- *DoT leak past the threat cap (round 7's candidate): not borne out.* uld2's warrior main tank held the
+  Animus from +1.0 s to his death (tank 84.8%, every non-tank sample after it); `vezax threat multiplier`
+  vetoed 198 actions in the phase (ranged 129, melee 69; uld1 13, uld3 1) and the cap held. Not built.
+
+**Ranking.**
+
+1. *uld2's collapse, 30 deaths: a north settle from the opener* (Q1, pending, not built). Every north
+   settle in windows 15-19 lost the race (w15 uld3, w17 all three, w19 uld2: 12.6-15.7 yd, four from the
+   opener walk, one from the chase round 7 held), every normal settle with the main tank holding the
+   Animus killed it (w15 uld1, w19 uld1, w19 uld3: 76-80 s).
+2. *Walks into a landing Shadow Crash, 3 deaths (uld1): bug, fixed below.*
+3. *Shadow Word: Death backlash, 1 death (uld3): bug, small and independent, fixed below.*
+
+**Picked: walks into a landing Shadow Crash.** The crash cast at 3:44.39 on healer Uldxac (L, row 0)
+landed at 3:47.49 on (1864.6, 119.8). Uldxaq's and Uldxaj's slots, pulled toward the Animus to the
+south-west, sat 4.3 and 5.5 yd west of the impact, past their group's inner file, so the 15 yd L strafe
+east ended 10.7 and 10.2 yd from it. The dodge stops issuing past 10 yd (`UldActions_Vezax.cpp:92`), and
+reach spell toward the Animus walked them back to 8.7 and 8.2 (3:46.84, 3:47.21, 3:47.41): dead at 9.84
+and 9.95 yd from the centre. Uldxas, marked at 3:52.68 and on his way to his arc spot when the 3:54.39
+crash took his position, dodged to ~12 yd, then his mark action, which releases the dodge's walk once
+the bot is past 10 yd (`:58-62`), walked him back across the impact toward the spot 23.5 yd beyond it
+(3:56.35, 3:56.83): dead at 9.86 yd. The core hits a player within the radius of a creature's DEST area
+spell 3D from its centre, no reach added (`Spell.cpp:9507-9524`). Position and soak declined only a
+destination inside the blast (`UldActions_Vezax.cpp:176-180`, `:265-272` before), never a path through
+it; reach spell and the mark walk not at all.
+
+Across windows 11-19 (`crashpaths.py`, `replay.py`) such walks killed 7 from the Animus spawn on, before
+any collapse: w11 uld2 Uldyah (a position walk through it, that kill's only death), w11 uld3 Uldzae and Uldzax
+(mark walks, both of that kill's deaths), w17 uld2 Uldyaj (reach spell to 9 yd of it before his dodge),
+and w19 uld1's three. 0-13 such walks per Animus phase, most landing clear.
+
+**Fix** (Vezax files only):
+
+- `VezaxWalkMeetsShadowCrash` (`UldEncounter_Vezax.cpp:635`): while a crash flies, a walk that ends within
+  `ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE` (11, the dodge trigger's own reach, which now uses it) of the
+  impact, or passes within it nearer than the bot stands, waits for the landing. The position, soak and
+  mark actions decline on it, the first two in place of their destination-only test.
+- Rule `vezax shadow crash walk hold` (`UldDefinition_Vezax.cpp:55`, predicate
+  `VezaxReachSpellMeetsShadowCrash`): reach spell holds when its walk, measured to where it would stop
+  (spell range plus both reaches from the target), meets the crash.
+- Rule `vezax shadow word: death hold` (`UldDefinition_Vezax.cpp:57`, `VezaxCarriesProfoundDarkness`):
+  Shadow Word: Death holds while the bot carries Profound Darkness. `swd.py`: 5 backlashes in windows
+  11-19, all at 4:23-4:44 just after the Animus died, 12.8-21.9k on ~22k-health shadow priests, one death.
+- Reader: `--crash` gains `in`, the bots that took an accepted walk other than the dodge toward the landing
+  impact by the code's own test, and a summary of the movers and the hit bots that took one (test added).
+  w19 uld1 reads 11 walks (reach spell 5, position 4, mark 2) and 3 of 3 hits on such bots.
+
+Replay on the walks as issued (`replay.py`): the hold stops 0-13 a pull in the Animus phase, each for at
+most the rest of a ~3 s flight, 1-28 s of bot time a pull against ~14 casters over 80 s, and it stops a
+walk for each of the 7 deaths. Docs: `docs/raids/ulduar/vezax.md` (Shadow Crash walk hold, Shadow Word:
+Death hold, `--crash` reader, the healer-walk bullet, the north settle tally).
+
+10/25 and normal/hard: crashes come in every mode; Profound Darkness only in hard mode, so the Shadow Word:
+Death hold never fires in normal. Bots only, keyed on the crash and the bot's own walk or aura, so the same
+with or without a real player. Shared code: none.
+
+**Next window should show.**
+
+- `--crash`: `in` 0 for reach spell, position, soak and mark walks (the melee spot and bring-back walks are
+  not gated, and the dodge is not counted); no hit on a bot that walked toward the impact; no Animus-phase
+  crash death in a pull that keeps its main tank.
+- `postmortem.py --vetoes`: `vezax shadow crash walk hold -> reach spell` only inside crash flights, a few
+  to ~15 a pull; `vezax shadow word: death hold` only on shadow priests, only after the spawn. No 32409
+  damage after the spawn.
+- Normal settles still at 1.24 %/s or more.
+- A north settle still loses until Q1 is answered.
+
+**Observation, not chased.** The warrior main tank (roster B) capped the dps on the Animus far more than
+the DK and the bear (198 threat vetoes in the phase against 13 and 1).
+
+**Questions (user).** Q1 (north settle) stays queued with recommendation (a). Window 19 adds a fifth
+north settle of five lost: uld2, 12.8 yd from the opener, the Animus at 12.3%, ranged 51-81% past its
+ceiling, healers 42 yd from the main tank. Until it is answered a window passes only when all three pools
+happen to settle normally.

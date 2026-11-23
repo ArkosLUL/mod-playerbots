@@ -81,7 +81,7 @@ bool VezaxShadowCrashDodgeTrigger::IsActive()
         return false;
 
     return bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
-           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS + 1.0f;
+           ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE;
 }
 
 bool VezaxSearingFlamesInterruptTrigger::IsActive()
