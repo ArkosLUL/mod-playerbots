@@ -286,6 +286,12 @@ def animus_pull(collapse: bool, dart_x: float = 30.0) -> list[dict]:
          "ok": 1, "r": "", "by": gv.REACH_SPELL},
         {"t": 3200, "e": "move", "g": DART, "k": "point", "x": 20.0, "y": 0.0, "z": 0.0,
          "ok": 1, "r": "dup", "by": gv.REACH_SPELL},
+        {"t": 2500, "e": "move", "g": DART, "k": "point", "x": 40.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.DODGE},
+        {"t": 2600, "e": "move", "g": DART, "k": "point", "x": 40.0, "y": 0.0, "z": 0.0,
+         "ok": 0, "r": "dup", "by": gv.DODGE},
+        {"t": 3500, "e": "move", "g": DART, "k": "point", "x": 20.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.DODGE},
         {"t": 1500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "off"},
         {"t": 2500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "pulled"},
         {"t": 3500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "floor"},
@@ -320,6 +326,10 @@ class AnimusWindow(unittest.TestCase):
         self.assertEqual(near["past_reach"], 0.0)
         self.assertEqual(far["past_reach"], 1.0)
         self.assertEqual(far["reach_walks"], 1)
+
+    def test_dodges_count_accepted_ones_and_those_ending_past_the_ceiling(self):
+        dart = gv.animus_casters(self.trace_of(collapse=True))["rows"][0]
+        self.assertEqual(dart["dodges"], (2, 1))
 
     def test_reach_states_are_the_bots_writing_each_value_from_the_spawn(self):
         self.assertEqual(gv.reach_states(self.trace_of(collapse=True), 2000), {"floor": {DART}, "pulled": {DART}})
