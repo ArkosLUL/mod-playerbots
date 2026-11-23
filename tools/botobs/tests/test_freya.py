@@ -14,7 +14,7 @@ chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-he
 from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
 ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. A seventh pins a
 melee bot joining a ranged one on a Gift after its walk away from it was cut, while the ranged one walks to it round
-the lashers. An eighth pins a melee bot walking through a live Nature Bomb and dying to it, while another charges
+the lashers and spreads a DoT off it once. An eighth pins a melee bot walking through a live Nature Bomb and dying to it, while another charges
 into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
 pins the back line near a submerged lasher pack, one walking clear in the submerge, and the lasher damage on it
 after the wake. The shared v14 fixture shows every section reads empty elsewhere.
@@ -321,6 +321,10 @@ def gift_fill_pull() -> list[dict]:
          "by": fr.GIFT_WALK_ACTION},
         {"t": 40700, "e": "move", "g": CASTER, "k": "point", "x": 2342.0, "y": -58.0, "z": 425.3, "ok": 0,
          "by": fr.GIFT_WALK_ACTION},
+        {"t": 40800, "e": "act", "g": MELEE, "a": "plague strike on attacker", "rel": 20.0, "vd": "OK"},
+        {"t": 41200, "e": "act", "g": CASTER, "a": "corruption on attacker", "rel": 19.5, "vd": "OK"},
+        {"t": 41300, "e": "act", "g": CASTER, "a": "corruption on attacker", "rel": 19.5, "vd": "FAILED"},
+        {"t": 41400, "e": "act", "g": CASTER, "a": "corruption", "rel": 19.0, "vd": "OK"},
         {"t": 43000, "e": "end", "out": "kill"},
     ]
 
@@ -462,13 +466,13 @@ class Waves(unittest.TestCase):
             "WAVES\n"
             "  0:10.000 .. 0:24.000  trio        3 add(s), 1 raid death(s) meanwhile\n"
             "  0:10.000 Eonar's Gift 14.0s, lived to heal, 60% left; on it at most 1 ranged and 0 melee; "
-            "0 walk(s) away from it cut, 0 walk(s) to it round the lashers\n"))
+            "0 walk(s) away from it cut, 0 walk(s) to it round the lashers, 0 DoT spread(s) off it by its takers\n"))
 
     def test_a_melee_filler_on_the_gift_a_walk_away_cut_and_a_walk_to_it(self):
         self.assertEqual(printed(fr.show_waves, load(gift_fill_pull())), (
             "WAVES\n"
             "  0:40.000 Eonar's Gift 2.0s, killed; on it at most 1 ranged and 1 melee; 1 walk(s) away from it cut, "
-            "1 walk(s) to it round the lashers\n"))
+            "1 walk(s) to it round the lashers, 1 DoT spread(s) off it by its takers\n"))
 
 
 class Tanks(unittest.TestCase):

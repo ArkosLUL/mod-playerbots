@@ -62,7 +62,10 @@ and submerged ones by `_LASHER_CAMP_STANDOFF`, on a straight walk crossing none 
 going at most `CONTACT_DISTANCE` deeper into one already holding it, so it never crosses a pack it starts
 beside; latched `_GIFT_WALK_LATCH_MS` (3 s) while its `MoveTo` is the bot's last, a failed sweep retried after
 `_GIFT_WALK_RETRY_MS` (1 s), `MOVEMENT_COMBAT`. Inside a low lasher's blast the bail goes first; with no spot, `reach spell` walks as
-before. **A Gift that lives is why a lasher wave
+before. **Its takers spread no DoTs** (not yet verified in a pull): the class `… on attacker` actions kept
+dotting other adds, 1706 casts by the takers of 191 25-man Gifts (24-33% of their casts), 7+ for 8 of the 9
+that lived with 25% or less left. `freya gift dot hold` zeroes `Family::DebuffOnAttacker` and `plague strike
+on attacker` for a DPS bot whose target is a living Gift. **A Gift that lives is why a lasher wave
 outlives its 60s:** waves clear in 31-49s otherwise, and each that ran past the next spawn had a Gift heal
 it mid-wave, about 60% per lasher (a tail of two at 8-12% back to 66-67%). It stretches a trio wave too:
 each Gift that lives heals every member about 30%, and three took one past two minutes.
@@ -524,7 +527,7 @@ camp move orders against 270), and ranged damage halve, **109.5k/s → 51.2k/s**
 **21%** of moving ticks against **78%** standing. Eonar's Gift then lived **14.5s** rather than 4-8 and
 took the five surviving lashers from 7-17% back to **60-68%**.
 
-**The back line walks off a submerged pack** (user's trial; not yet verified in a pull). The gather walked it
+**The back line walks off a submerged pack** (user's trial). The gather walked it
 on: in 10 of 30 waves at least half of the camp's orders in the 5s submerge ended nearer a lasher, at a median
 2.2-6.2 yd from one. Over the first 30s after the wake, six waves kept the back line a median 4-6 yd from a
 lasher and it took 116-514k lasher damage; the other 23 with the raid intact, at 10-24 yd, took 0-203k, 21 of
@@ -533,6 +536,9 @@ worst lost its Army at 5 ghouls to a Ground Tremor cast 0.5s into the channel. A
 alive and `REACT_PASSIVE`, its first 5s (`IsFreyaLasherSubmerged`); meanwhile a ranged DPS or healer within
 `_LASHER_CAMP_STANDOFF` (18 yd) of one takes the bail's walk (below) clear of every submerged and low lasher,
 and the gather waits for the wake. Judge it by the back line's lasher damage over the 30s after the wake.
+In its first window it cleared the back line (4-6 of 14 within 18 yd at the wake, 13-14 before) but left it
+27-36 yd from the Army's DK, out of the ghouls' reach (below): ghouls took 4 of the 15 lashers that woke onto
+it, and its damage read 0, 12, 28, 80 and 266k (the last with Army 6.8s late), against 0-69k the window before.
 
 **Melee bail per lasher.** `freya lasher about to blow` (`ACTION_RAID + 3`) steps melee out of the blast
 of the lashers that are nearly dead, the only warning this wave gives. A lasher under
@@ -614,11 +620,14 @@ stay above it.
   10 yd, 30s, **-50%**, taking a lasher to 4.0 yd/s, the only thing that makes one slower than the raid.
   It lands because Detonating Lasher has **no `creature_immunities` row**. `FreyaLasherTrapReserveMultiplier`
   zeroes Explosive Trap for the wave: traps share a **30s category cooldown** and only one may be down.
-- `freya summon army` opens Army of the Dead on the wave. Its ghouls AoE-taunt through **43263**, whose
-  script filters only `isWorldBoss()` targets, so **cast on time it is the wave**: the only thing that
-  takes a lasher off a bot at all. Ghouls holding 7-10 of 10 lashers by +5.5s let through **0.3k and
-  15.7k** of lasher melee and Flame Lash; cast 6.1s late, 102k and a death; not cast (spent on Auriaya),
-  **416k in 20s** and five dead. Deliberately **not** named `army of the dead`: `IsBurstCooldownAction`
+- `freya summon army` opens Army of the Dead on the wave. Its ghouls AoE-taunt through **43263**, **15 yd**
+  round each ghoul, whose script filters only `isWorldBoss()` targets, so **cast on time it is the wave**:
+  the only thing that takes a lasher off a bot at all. They spawn on the DK in melee, so they take a lasher
+  that woke onto a back-line bot only while the back line stands near him: within 22 yd of him at the wake,
+  61 of 71 such lashers and 1 of 23 waves with 100k+ lasher damage on the back line over the next 30s;
+  farther, 11 of 47 and 8 of 18 (windows 14-21). Ghouls holding 7-10 of 10 lashers by +5.5s let through
+  **0.3k and 15.7k** of lasher melee and Flame Lash; cast 6.1s late, 102k and a death; not cast (spent on
+  Auriaya), **416k in 20s** and five dead. Deliberately **not** named `army of the dead`: `IsBurstCooldownAction`
   matches on the name, and the Ulduar burst gate holds that list until Attuned to Nature drops, the whole
   add phase. Without it a wave runs the raid: ghouls on **4%** of lasher time against 50-61% with a working Army,
   **920k** and 7 deaths, and Eonar's Gift healed the unfinished pack from ~18% to ~66% each.
@@ -637,9 +646,11 @@ stay above it.
 - **Nothing of ours cuts or starves the channel.** Army costs a rune of each kind and `CanCastSpell`
   ignores runes, so the rotation spent each one as it returned and Army landed 10-11s late:
   `FreyaArmyRuneReserveMultiplier` zeroes rune spenders for the DK whose turn it is (runic power still
-  runs). The trigger waits out a Ground Tremor cast (2s at most); `freya ground tremor hold cast` skips
-  Army, since ghouls already out outlive the Tremor's cut; `FreyaBotCannotWalk` is true while channeling,
-  so all six escapes stand down for the 4s, where the melee bail had cut one after a single ghoul.
+  runs). **Known-open:** the reserve starts at the spawn, so a rune spent in the seconds before still
+  delays it: second-wave Armies landed a median 4.5s after the spawn (first waves 1.6s), most after a
+  `FAILED` first try. The trigger waits out a Ground Tremor cast (2s at most); `freya ground tremor hold
+  cast` skips Army, since ghouls already out outlive the Tremor's cut; `FreyaBotCannotWalk` is true while
+  channeling, so all six escapes stand down for the 4s, where the melee bail had cut one after a single ghoul.
 
 **Ranged focus** is `GetFreyaLasherPackFocus`, the lasher with the most lashers within
 `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd), lowest GUID on ties, or evenly spread lashers split the raid's
@@ -812,7 +823,8 @@ named trace.
 Elders' essence channels into Freya at her engage (62483-62485), else their empowers (Ground Tremor casts,
 Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core picks by that count (25-man
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile, and per Gift the most
-ranged and melee DPS on it in one snapshot, its cut walks and its `freya reach gift` walks;
+ranged and melee DPS on it in one snapshot, its cut walks, its `freya reach gift` walks and the `… on
+attacker` actions its takers ran (target in the snapshot before);
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a

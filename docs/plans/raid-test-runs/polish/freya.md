@@ -1754,3 +1754,125 @@ escapes at 5.0s and 12 at 5.5s against 6 at 4.0s. The 5.0s edge is the plant's o
 Left: `freya reach held pack`'s latch has the same gap (round 3, no case seen). `FindFreyaStaticFloorSpot` takes a
 point whose navmesh raycast failed as it is, where the collision sweep drops it; it runs only once that sweep found
 nothing, and Freya's floor is open.
+
+## Round 15 (build a88ea2ade: round 14 built)
+
+**Data:** window 22, `report --boss freya --raid uld --head a88ea2ade --pulls 10` (plus `--diff 10n`), one valid pull
+per pool at each size, no DC veto inside a pull. 25-man: `tr-20261123-201433-4` (uld1, DK add tank), `-201513-5` (uld2,
+bear), `-201513-6` (uld3, bear); traces `env/dist/logs/botobs/603_{4,5,6}_elder-stonebark_{1795464917,1795464964,
+1795464971}.ndjson`. 10-man (three healers, DC 518a87e): `tr-20261123-203740-11` (uld1), `-203800-12` (uld2),
+`-203337-10` (uld3); traces `603_{11,12,10}_elder-stonebark_{1795466296,1795466316,1795466054}`. Window 21 is the
+baseline, windows 14-22 (24 25-man pulls) for the Gifts and the Army. Ad hoc scripts: `scratchpad/freya-r15/`
+(`lash_tl.py`, `ranged_tl.py`, `gift_in_lashers.py`, `gift_casts.py`, `gift_offcasts.py`, `gift_dots.py`,
+`army_tries.py`, `wake_pick.py`), plus `freya-r12/wave_hold.py`, `freya-r14/rows.py`.
+
+**Hard mode.** All six pulls 3 of 3 Elders from their essence channels; the kills cast chest 62952 (25) and 62950 (10).
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 25 | 1795464917 | **kill 6:54, 4** | Detonate 1 (melee 1:46.8), Flame Lash 1 (ranged 3:43.8), lasher melee 1 (melee 3:53.9), own Iron Roots 1 (ranged 3:55.2) |
+| uld2 25 | 1795464964 | wipe 5:35, 31 | Snaplasher 1 (melee 0:13.4, trio 1 opener), Storm Lasher 1 (healer 3:13.9), Unstable Energy 1 (4:07.3); the 4:40 lasher wave (Army +6.8s) and the collapse: lasher melee 12, Flame Lash 5, Freya melee 7 (the main tank from 4:54.9), Unstable Energy 2, Sunbeam 2 |
+| uld3 25 | 1795464971 | wipe 2:24, 32 | all inside the first lasher wave (0:10), which never ended: lasher melee 13, Flame Lash 7, Storm Lasher 3, Ground Tremor 2, Freya melee 1, Conservator 2 (melee, Nature's Fury), Water Spirit 1, Snaplasher 1, Unstable Energy 1, own Iron Roots 1 |
+| uld1 10 | 1795466296 | **kill 9:17, 0** | none |
+| uld2 10 | 1795466316 | **kill 9:25, 1** | lasher melee 1 (ranged 5:47.1) |
+| uld3 10 | 1795466054 | **kill 9:06, 3** | Flame Lash 1 (healer 1:30.1), Lightning Lash 1 (healer 5:43.2), Snaplasher 1 (the bear add tank 6:04.9 at the end of trio 2, every button and external spent, healers noting `none`) |
+
+**Stop rules:** 25-man one kill in three (uld1, 4 deaths, one over the line); not polished. Window 21 killed two
+(1 and 7), window 15a three (5, 3, 4), no window yet three at 3 or fewer. 10-man check: three hard-mode kills with
+0/1/3 deaths, so it counts as passed once 25-man is polished. No failure picked three rounds running (round 13 bomb
+walk-ins, round 14 the bomb's own collision; this round the Gift's takers).
+
+**What wiped uld3 at 2:24, and round 14's part in it.** The first lasher wave (0:10) started clean: Army +1.6s,
+ghouls 76% of lasher time, 0k on the back line over the 30s after the wake. At 0:31.8 a Gift spawned at (2371,
+-37), 31 yd from the ghoul-held pack and 29-41 yd from the ranged; it lived with 8% left and at 0:43.8 healed the
+pack from 2-50% (154% summed, plus the add tank's lasher at 70%) to 51-92% (492%), 8s before the ghouls expired. From
+0:52 the pack went onto the back line; low lashers chasing ranged bots kept them bailing (112 back-line bails, 8
+lashers 8s+ under the line); the 1:16.6 Gift spawned at (2320, -43), 36-58 yd from the ranged, took no damage (Q6
+picks sent its takers to those low lashers, which they never finished while bailing) and healed four lashers at 1-10%
+back to ~60% at 1:28; the Conservator (1:10) and trio (2:10) landed on it.
+
+- Why the 0:31.8 Gift lived (`gift_casts.py`, `rows.py`): of its takers' casts, 25 hit it and 12 were `… on attacker`
+  DoT spreads onto lashers (Uldzal cast `corruption on attacker` every GCD 0:32.4-0:39.8 with the Gift as his target);
+  besides, a bail at 0:35.4 (the pack focus under 15% with the back line 14 yd off), a Sunbeam step-out at 0:37.1, the
+  five-bot share starting at four (Uldzak, one of the five, rooted 41 yd off, shooting his roots) and a Q6 flip at
+  0:40.8 (that lasher at 4% on Uldzaq after the 10s reset). It stood at 13% half a second before the heal.
+- Round 14 did not cause it. The Q11 Gift walk ran 4 times on that Gift (Uldzal, Uldzan, Uldzav, Uldzar, each about 6
+  yd to within 27 yd, then casting), once on each later one; none ended in a blast and no walker died. Q12 did not run:
+  the back line stood 20 yd off the pack at the spawn, 0 camp orders in the submerge. No bomb, no trio until 2:10.
+
+**Round 14 verdicts.**
+
+- Bomb escape through the static floor: **held.** `--bombs` escapes ordered from 4.5s on 0 of 72 landings (uld1 25),
+  0 of 32/39/38 (10-man); window 21: 6/10/7 of 62/84/68. No Nature Bomb death in the four pulls with bombs (window 21:
+  7). Round 13's walk-ins still 0 for `freya move away nature bomb`, the tank hold and charges.
+- Q11, the Gift walk: **held where tested, no harm seen.** 11 walks on 5 Gifts at 25 (uld1 1:16 and 3:31, uld3's
+  three), each a few yards into reach; no walker hit by a blast or killed after one. Gifts living 12s+: 3 of 19 at 25
+  (all uld3's endless wave; window 21: 4 of 28), 2 of 36 at 10.
+- Q12, the submerge walk-out (trial): **does what it was built to, but moves the back line out of the ghouls'
+  reach** (`--submerge`, `wake_pick.py`). At the wake 4-6 of 14 within 18 yd of a lasher (window 21: 13-14 of 14), the
+  camp orders in the submerge ending clear (20/20, 11/13, 8/8, 12/12). But back-line lasher damage over the 30s after
+  the wake did not drop: 28k, 80k, 12k, 266k (window 21: 66k, 16k, 8k, 69k, 0k, 0k). Ghoul Taunt 43263 reaches 15 yd
+  round each ghoul (DBC radius index 18) and the ghouls spawn on the DK in melee; in windows 14-21, with the back line
+  within 22 yd of the Army's DK at the wake, ghouls took 61 of the 71 lashers that woke onto a back-line bot and 1 of
+  23 waves put 100k+ on the back line; farther, 11 of 47 and 8 of 18. Q12 left the back line 27-36 yd from the DK in
+  all five 25-man waves: ghouls took 4 of 15. uld2's 4:40 wave (6 woke onto the back line 36 yd off, 2 taken, Army 6.8s
+  late: runes spent on Death and Decay 2.1s and Plague Strike 0.8s before the spawn, the first try `FAILED` at +2.1s)
+  put 266k on the back line, 13 lasher kills in 30s, 27 deaths. 10-man waves 0-67k. Question 17.
+- 25% line: **untested.** Cover `both` 0.0s in all four 25-man and five 10-man trio waves; no add tank stood under 25%
+  with his own button running and an external in hand.
+- Rounds 1-13: no tank Roar or Shout; Righteous Defense only on melee (uld3 1:35.5, 1:43.8, 2:11.9); Freya on the main
+  tank 99.1/91.4/93.1% (off him only in the collapses). `--ghouls` no lasher in reach 2-12%, on Freya 0-5%. `--blasts`
+  0-8 melee orders into a low blast a wave; one melee Detonate death (uld1 1:46.8). `--lows` 8s+ on a player 0 outside
+  uld3's collapse.
+
+**Ranking** (67 deaths at 25). (1) uld3's endless first wave, 32: the 0:31.8 Gift living by half a second, then the
+1:16.6 Gift untouched. (2) uld2's 4:40 wave, 27: the back line out of the ghouls' reach (Q12, a user's answer) and a
+late Army (the rune gap, below). (3) Singles. Picked (1)'s root, the Gift takers' casts going elsewhere; (2) is
+Question 17.
+
+**Failure picked: Gift takers spend their GCDs spreading DoTs onto other adds.** The class rotation's `… on
+attacker` actions (`CastDebuffSpellOnAttackerAction`: Corruption, Unstable Affliction, Seed of Corruption, Immolate,
+Curse of Agony, Shadow Word: Pain, Vampiric Touch, Insect Swarm, Moonfire, Serpent Sting, Living Bomb, Icy Touch)
+run whatever the bot's target. Over windows 14-22 at 25 (`gift_dots.py`, the reader's count): the takers of 191 Gifts
+ran 1706 of them, 8.9 a Gift, 24% of their casts on Gifts that died and 33% on the 27 that lived; 9 of those 27 lived
+with 25% or less left, and 8 of the 9 had 7+ spreads (window 21's uld1 0:31 at 18% with 17, uld2 0:31 at 6% with
+20, this uld3 0:31 at 8% with 12). 10-man: 2 over 36 Gifts.
+
+**Classification: bug.** The Gift is the ranged job and `FreyaSetDpsPriorityAction` makes it their target; their GCDs
+going to other adds is the bots not doing what the strategy sets.
+
+**Fix** (Freya files only, any size or difficulty, no player branch): `freya gift dot hold` (`e.Block`, `Role::Dps`)
+zeroes `Family::DebuffOnAttacker` and `plague strike on attacker` (a melee filler's) while the bot's current target is
+a living Eonar's Gift. Reader: each `--waves` Gift line counts the `… on attacker` actions its takers ran (by their
+target in the snapshot before), tested.
+
+**Cost to watch:** the pack and trio lose the takers' DoT spreads for a Gift's life (up to 12s, four or five times a
+pull); they resume once it dies.
+
+**Next window should show** (`freya.py --waves`, `postmortem.py --vetoes`):
+
+- Gift lines with DoT spreads by its takers near 0 (window 22 at 25: 174 over 19 Gifts); vetoes under `freya gift dot
+  hold`.
+- Gifts living 12s+ fewer (windows 14-22 at 25: 27 of 191, 9 of them with 25% or less left).
+- Lasher waves no slower to die with no Gift up; rounds 1-14's checks as above.
+
+**Not picked:** the Army rune gap: the reserve starts at the spawn, so a rune spent in the seconds before delays Army;
+second-wave Armies landed a median 4.5s after the spawn over windows 14-22 (first waves 1.6s), most after a `FAILED`
+first try; a fix needs the next wave's time and kind, larger than this round. The share's five counting a rooted bot.
+The 10-man add tank's bare end of trio 2 (every button and external spent, one case).
+
+**Questions:**
+
+17. Q12's walk-out (trial, window 22's numbers above) clears the back line off the waking pack, but leaves it 27-36 yd
+    from the Army's DK, where the ghouls' 15 yd taunt took 4 of the 15 lashers that woke onto it (windows 14-21: 61
+    of 71 within 22 yd of the DK, 11 of 47 farther), and back-line damage after the wake did not drop (28k, 80k, 12k,
+    266k). Options: (a) keep the trial another window; (b) drop the walk-out, keep the gather's wait for the wake; (c)
+    drop the trial, back to round 13. Recommendation: (c); (b) still leaves the back line wherever it stood.
+16. (round 14) uld3's risen bear add tank died to the lasher pile at 2:00.4, 99% to 32% in 6s, with Barkskin
+    (1:53.3), Frenzied Regeneration (1:55.7) and Survival Instincts (1:58.2, at 32%) vetoed by `freya add tank
+    defensive hold`; the case round 14 named, though inside a collapse. Recommendation: (c), raise his last-resort line to 50% while
+    lashers hit him, as round 14 set for a repeat.
+14. and 15. pending as written in round 13; no case this window (the only add-tank trio death, 10-man uld3, had no
+    button or external left).
+
+**Shared code:** none changed; `CastDebuffSpellOnAttackerAction` and `Family::DebuffOnAttacker` are read, not edited.
