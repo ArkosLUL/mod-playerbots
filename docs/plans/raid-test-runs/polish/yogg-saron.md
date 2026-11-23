@@ -1248,3 +1248,53 @@ room healer is walked to like a bot one, and only bots' casts are cut.
   melee bot walks back once at 70%.
 - Left, older than this round: the reader's `SPELL_SQUEEZE` is the 25-man 64126, so at 10-man `--phase2`'s grabs
   and `--crush`'s `grabbed` read nothing (10-man's aura is 64125).
+
+**User answer (2026-11-23) to round 11's exit lead question:** yes, lower the exit lead from the Brain from 1.5× to
+1.2× for one window (round 14 builds it). Round 13's healer mana question stays open, not built.
+
+## Round 14 (2026-11-23, no pulls on round 13: merged, not built)
+
+**Data.** No Yogg-Saron trace since window 22 (`--head a88ea2ade`). The baseline for this change is the new `--brain`
+`melee exits from the Brain` over window 22's three pulls and windows 16, 17, 19 and 21 (15 pulls in all). Stop rules,
+verdict and ranking skipped: nothing ran on round 13.
+
+**Built: the user's answer.** `ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY` (`UldEncounter_YoggSaron.h`) 1.5 → 1.2, the
+multiplier on the walk time in the exit read's lead (`YoggSaronLeaveBrainLevelNow`): `max(…_EXIT_LEAD_FLOOR_MS` 3 s,
+2D distance to the nearest Flee portal / 7 yd/s × 1.2`)`. For melee at the Brain, 31 yd from their portal, 6.6 → 5.3 s.
+Round 9's exit cast hold reads the same lead (`YoggSaronExitLeadMs`, stored per bot by the exit read), so before the
+latch a cast now runs when its cast time plus 5.3 s fits in what is left. Ranged and healers by their portal keep the
+3 s floor, which now holds out to 17.5 yd (was 14). Same at 10 and 25, normal and hard mode, with or without a player:
+the lead is per bot and reads no player. No shared code.
+
+**Reader** (`--brain`). `melee exits from the Brain`: per wave, tightest first, each melee decision in the brain room
+as seconds of Induce Madness left at the decision (the bot's lead) / on surfacing, `charmed` for one the charm's
+teleport brought up; then median, p10, p90 and range of both and of decision to surfacing, `under 1 s`, and `charmed
+after deciding` by name and seconds left; waves phase 3 cut short left out (`exit_timing`, `spread_line`, tested).
+`caught by it` also prints a decided bot's distance from the nearest clean exit at its decision.
+
+**Baseline at 1.5×.** Window 22: 105 melee exits, decided at 6.6 s left (p10 6.5, p90 6.8), surfaced 3.1 s later (p90
+3.3, max 3.4) with 3.6 s to spare (p10 3.4, min 2.9), none charmed. Windows 16-22: 499 exits, one walk over 3.5 s, the
+6.0 s of round 11's question: window 16 uld3 (`603_19_yogg-saron_1795443297`) wave 1, Uldzam decided at 4:13.1 with
+6.5 s left inside an Army of the Dead (4 s) begun 1.1 s before, walked from 4:16.2 and surfaced with 0.5 s left.
+Round 9's cast hold, built from window 17, now holds that cast (4 + 5.3 s over the 7.7 s left). Replayed at 1.2× (lead
+× 0.8, the same walks), window 22's melee surface with 2.3 s to spare (p10 2.1, min 1.8).
+
+**Next window should show:** `melee exits` left at the decision a median ~5.3 s (6.6 here), `on surfacing` ~2.2 s
+(3.6), p10 ~2.0, `under 1 s` 0 or near it, decision to up unchanged (median 3.1, p90 3.3); `charmed after deciding: 0`,
+and no melee with `decided with` in `caught by it`. The gain is 1.3 s more on the Brain for every melee, ~0.8% of the
+Brain a cycle (round 11): Brain per cycle above round 12's 15.9% (Stormwind / Icecrown, unheld) and 8.8% (Chamber),
+too noisy to read in one window. A melee charmed after deciding, or `under 1 s` more than once or twice a pull, means
+back to 1.5×. Round 13's checks (`regroup walks` `sight`, `passed over`, `casts cut for a ray`) land in the same window.
+
+**Still open with the user, not built:** round 13's healer mana question (a healer under 30% mana goes after every
+healer above it).
+
+**Review.** Built as the user answered, nothing else in C++. The constant feeds only the exit read and, through
+`YoggSaronExitLeadMs`, the exit cast hold; no size, mode or player branch. `--brain` on window 22 reread 38/35/32 melee
+exits (105), decided at a median 6.6 s left, surfaced with 3.6 s to spare, 26 yd walked in 3.1 s; window 16 uld3's
+wave 1 shows the one 6.5/0.5 walk (6.0 s). Window 22's ranged and healers at the Brain all decided at 2.8-3.1 s left
+(the floor, `late`) and surfaced with 2.1-2.8 s to spare, so 1.2× leaves them as they were.
+
+- Review fix: `caught by it` lost the comma after `s left` when a decided bot had no row or the pull no clean exit.
+- Left: at 1.2× the lead budgets 5.8 yd/s from the Brain; melee now make ~8.4, but the findings doc's older 4-6 yd/s
+  walks would be charmed. The revert rule above covers it.
