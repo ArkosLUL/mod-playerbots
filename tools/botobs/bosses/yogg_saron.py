@@ -252,6 +252,7 @@ PORTAL_DESPAWN_MS = 25000
 SPELL_PORTAL_CLICK_VISUAL = 51347
 SPENT_CLICK_WINDOW_MS = 300
 PORTAL_LATE_ENTRY_MS = 2000
+PLAN_ROUND_MS = 50
 PORTAL_NEAR_SPOT_YD = 8.0
 BODY_DETOUR_NODE = "yogg-saron body detour action"
 
@@ -1758,17 +1759,27 @@ def portal_walk_rows(trace: Trace) -> tuple[dict[int, list[tuple[int, str]]], di
     return intents, moves
 
 
+def plan_rounds(rows: list[tuple[int, int, int]], gap_ms: int = PLAN_ROUND_MS) -> dict[int, dict[int, int]]:
+    rounds: dict[int, dict[int, int]] = {}
+    first = None
+    for when, guid, slot in sorted(rows):
+        if first is None or when - first > gap_ms:
+            first = when
+        rounds.setdefault(first, {})[guid] = slot
+    return rounds
+
+
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
     """Portals taken against bots told to take one. AddPortals spawns RAID_MODE(4, 10) per wave, one use each, so the
     gap is bots that walked to a used spot or, when the node never ran, never walked."""
     if not waves:
         return
 
-    assignments: dict[int, dict[int, int]] = {}
+    slot_rows = [(rec["t"], rec.get("g", 0), int(rec.get("txt", 0))) for rec in notes(trace, "yogg.portalslot")]
+    assignments = plan_rounds(slot_rows)
     slots: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
-    for rec in notes(trace, "yogg.portalslot"):
-        assignments.setdefault(rec["t"], {})[rec.get("g", 0)] = int(rec.get("txt", 0))
-        slots[rec.get("g", 0)].append((rec["t"], int(rec.get("txt", 0))))
+    for when, guid, slot in slot_rows:
+        slots[guid].append((when, slot))
     intents, moves = portal_walk_rows(trace)
 
     detours = sum(walks_while_holding(intents[guid], moves.get(guid, []), BODY_DETOUR_NODE) for guid in intents)
@@ -2178,6 +2189,28 @@ def hold_summary(spans: dict[int, list[tuple[str, int, int]]], deaths: list[dict
             "median": statistics.median(lengths) if lengths else None, "died": died}
 
 
+def heals_during_holds(holds: dict[int, list[tuple[int, int]]], rooms: dict[int, list[tuple[str, int, int]]],
+                       heals: list[dict], healers: set) -> tuple[int, int]:
+    def room_at(guid: int, when: int) -> str | None:
+        return next((room for room, start, stop in rooms.get(guid, []) if start <= when < stop), None)
+
+    on_held, on_others = 0, 0
+    for heal in heals:
+        source, when = heal.get("s"), heal["t"]
+        room = room_at(source, when) if source in healers else None
+        if room not in ("stormwind", "icecrown", "chamber"):
+            continue
+        held = {guid for guid, spans in holds.items()
+                if any(start <= when < stop for start, stop in spans) and room_at(guid, when) == room}
+        if not held:
+            continue
+        if heal.get("d") in held:
+            on_held += 1
+        elif room_at(heal.get("d"), when) == room:
+            on_others += 1
+    return on_held, on_others
+
+
 def show_reprisal(trace: Trace) -> None:
     deaths = combat_deaths(trace)
     dead = {death.get("g") for death in deaths}
@@ -2197,6 +2230,13 @@ def show_reprisal(trace: Trace) -> None:
         median = f"{summary['median']:.1f} s" if summary["median"] is not None else "-"
         print(f"  reprisal holds   : {summary['holds']} by {summary['bots']} bots, median {median},"
               f" {summary['died']} ended in a death")
+        holds = {guid: [(start, stop) for held, start, stop in rows if held == "1"] for guid, rows in spans.items()}
+        healers = {guid for guid, role in trace.roles.items() if role == "heal"}
+        on_held, on_others = heals_during_holds(holds, holder_spans(trace, "yogg.room", end), trace.of("heal"),
+                                                healers)
+        by_spell = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.reprisalheal"))
+        print(f"  heals in a hold  : {on_held} on a held bot, {on_others} on others in its room;"
+              f" reprisal heal {dict(by_spell) or '-'}")
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:

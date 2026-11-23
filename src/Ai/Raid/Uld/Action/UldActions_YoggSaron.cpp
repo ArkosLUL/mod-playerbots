@@ -1258,7 +1258,7 @@ bool YoggSaronIllusionRoomAction::Execute(Event /*event*/)
     bool resultSetRtiMark = SetRtiMark(yoggSaronTrigger);
     bool resultGoToBrainRoom = GoToBrainRoom(yoggSaronTrigger);
 
-    return resultSetRtiMark || resultGoToBrainRoom || WalkIntoRoom();
+    return resultSetRtiMark || resultGoToBrainRoom || WalkIntoRoom() || WalkToStage();
 }
 
 bool YoggSaronIllusionRoomAction::WalkIntoRoom()
@@ -1282,6 +1282,20 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
 
     return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronIllusionRoomAction::WalkToStage()
+{
+    Position spot;
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_STAGED || !YoggSaronIllusionStageSpot(bot, spot) ||
+        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS)
+        return false;
+
+    YoggSaronTakeOverForcedWalk(AI_VALUE(LastMovement&, "last movement"), spot);
+    YoggSaronReleaseStalledWalk(botAI, "stage", spot);
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
@@ -1344,6 +1358,19 @@ bool YoggSaronReprisalRegroupAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronReprisalHealAction::Execute(Event /*event*/)
+{
+    Player* held = YoggSaronReprisalHealTarget(botAI);
+    char const* spell = held ? YoggSaronReprisalHealSpell(botAI, held) : nullptr;
+    if (!spell || !botAI->CastSpell(spell, held))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.reprisalheal", spell);
+
+    return true;
 }
 
 bool YoggSaronBrainSpotAction::Execute(Event /*event*/)

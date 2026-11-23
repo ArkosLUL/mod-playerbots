@@ -203,6 +203,8 @@ private:
     bool SetRtiMarkRequired();
 
     bool WalkIntoRoomRequired();
+
+    bool StageRequired();
 };
 
 class YoggSaronIllusionHealerStationTrigger : public YoggSaronTrigger
@@ -222,6 +224,15 @@ public:
 
     YoggSaronReprisalRegroupTrigger(PlayerbotAI* botAI)
         : YoggSaronTrigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class YoggSaronReprisalHealTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron reprisal heal trigger";
+
+    YoggSaronReprisalHealTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
     bool IsActive() override;
 };
 

@@ -327,6 +327,10 @@ inline constexpr float ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS = 40.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_SHARE_LIFT_MS = 25000;
 
+inline constexpr float ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS = 1.5f;
+
+inline constexpr float ULDUAR_YOGG_SARON_STAGE_JOIN_RADIUS = 40.0f;
+
 inline constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
 
 inline constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
@@ -464,6 +468,7 @@ enum YoggSaronRoomState : uint32
     YOGG_SARON_ROOM_STATE_TO_BRAIN = 4,
     YOGG_SARON_ROOM_STATE_AT_BRAIN = 5,
     YOGG_SARON_ROOM_STATE_REPRISAL = 6,
+    YOGG_SARON_ROOM_STATE_STAGED = 7,
 };
 
 YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI);
@@ -548,6 +553,10 @@ bool YoggSaronHoldingPortalSpot(PlayerbotAI* botAI);
 bool YoggSaronReprisalHold(PlayerbotAI* botAI);
 
 Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
+
+Player* YoggSaronReprisalHealTarget(PlayerbotAI* botAI);
+
+char const* YoggSaronReprisalHealSpell(PlayerbotAI* botAI, Player* target);
 
 std::vector<Unit*> GetYoggSaronInterruptCasters(PlayerbotAI* botAI);
 
@@ -749,6 +758,8 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const*
 std::vector<Unit*> GetYoggSaronRoomIllusionMobs(PlayerbotAI* botAI);
 
 bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle);
+
+bool YoggSaronIllusionStaged(PlayerbotAI* botAI);
 
 bool YoggSaronIllusionStageSpot(Player* bot, Position& spot);
 

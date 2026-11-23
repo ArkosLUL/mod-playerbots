@@ -330,6 +330,7 @@ private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
     bool WalkIntoRoom();
+    bool WalkToStage();
 };
 
 class YoggSaronIllusionHealerStationAction : public MovementAction
@@ -350,6 +351,16 @@ public:
 
     YoggSaronReprisalRegroupAction(PlayerbotAI* botAI)
         : MovementAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+class YoggSaronReprisalHealAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron reprisal heal action";
+
+    YoggSaronReprisalHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };

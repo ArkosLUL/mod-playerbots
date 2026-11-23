@@ -1822,6 +1822,20 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.exit_losses(verdicts, walks, casting, 60000), (10.0, 1, 8.0, 4.0))
         self.assertEqual(yogg_saron.exit_losses([(50000, "safe")], walks, casting, 60000), (None, 0, 0.0, 0.0))
 
+    def test_plan_rounds_fold_a_rebuild_that_crosses_a_millisecond(self):
+        rows = [(1000, 1, 0), (1000, 2, 1), (1001, 3, 2), (21000, 1, 3)]
+        self.assertEqual(yogg_saron.plan_rounds(rows), {1000: {1: 0, 2: 1, 3: 2}, 21000: {1: 3}})
+
+    def test_heals_during_holds_count_only_the_held_bots_room(self):
+        holds = {1: [(1000, 5000)]}
+        rooms = {1: [("icecrown", 0, 9000)], 2: [("icecrown", 0, 9000)], 3: [("icecrown", 0, 9000)],
+                 4: [("chamber", 0, 9000)], 5: [("arena", 0, 9000)]}
+        heals = [{"t": 1500, "s": 2, "d": 1}, {"t": 2000, "s": 2, "d": 3}, {"t": 2500, "s": 4, "d": 4},
+                 {"t": 3000, "s": 5, "d": 5}, {"t": 6000, "s": 2, "d": 3}, {"t": 3500, "s": 3, "d": 1},
+                 {"t": 4000, "s": 2, "d": 4}]
+        self.assertEqual(yogg_saron.heals_during_holds(holds, rooms, heals, {2, 4, 5}), (1, 1))
+        self.assertEqual(yogg_saron.heals_during_holds({}, rooms, heals, {2, 4, 5}), (0, 0))
+
     def test_a_cast_still_running_at_the_end_reads_when_it_began(self):
         casting = [(50000, 0), (54000, 982), (56000, 982), (59500, 982), (61000, 0)]
         self.assertEqual(yogg_saron.cast_at_end(casting, 60000), (982, 6.0))
