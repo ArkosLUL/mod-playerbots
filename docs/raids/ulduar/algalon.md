@@ -178,6 +178,12 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
 | 3 | 136.5 s, 4 | 236.5 | under Big Bang 2, ~48% each |
 | 4 | 196.5 s, 4 | 296.5 | under Big Bang 3, ~17.5% each |
 
+**Wave 3 must go under.** Its untouched death lands 1.6 s after the meteor at 234.9, and after Big Bang 2 the
+aftermath, the 209.4 meteor and its `smashrecovery` leave 219.4-230.9 clear: room for one explosion. One wave-3 star
+left after Big Bang 2 cost 1.5 dead a pull, two cost 6.2 (25 pulls), whether the second was killed 11-14 s after the
+first or drained onto the meteor. Two are left when the bulk lands only one of its two wave-3 under-stars (the other
+released `late` at 38-70%), so its speed (median +1.9 %/s beyond the drain; both need ~+3.1) decides it.
+
 - **Plan**, per tick outside the cast, only with a disperser latched (a tank soaker would take each explosion
   whole), started afresh at each cast: a new star joins if its drain death isn't before the window and the
   team's work ends 5 s before the cast (at 6 %/s, or the measured speed when lower, less the drain, which moves
@@ -290,8 +296,11 @@ the bot; Death and Decay, Blizzard, Flamestrike, Hurricane, Rain of Fire, Volley
 round its target. The star the bot is hitting doesn't count; friendly spells are never held. Humans' Consecration, HotR and Death and Decay still chew them.
 
 **The team works a far star from a spot of its own**: from its ring slot, `reach spell` walks half the gap and
-the slot node walks it back, so a deadline star 35-68 yd out drained untouched. A ranged team member whose focus
-star is over 28 yd from its slot stands 25 yd from the star towards the slot (`star`), outside his reach.
+the slot node walks it back, so a deadline star 35-68 yd out drained untouched. A ranged team member holds where
+it stands while its focus star is 12-28 yd off (nearer blocks the kill's clearance), unphased, in the room and
+13.5 yd clear of him (`starhold`); else, with the star over 28 yd from its slot, it stands 25 yd from the star
+towards the slot (`star`), outside his reach. Stars wander up to 25 yd round their spawn at 2.5 yd/s: a spot that
+followed the star kept the team walking 27-57% of its focus time, and a bot can't cast while it walks.
 
 **A star at 5% or less, or forecast dead within 4 s, is a hazard** for the dodge: anyone unphased within 8 yd steps off it, since it dies
 within seconds whoever is on it (`algalon.hazard`). As with a meteor, the generic movers are held within 12 yd
@@ -658,7 +667,7 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
   (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`; `hold` is a chased bot waiting
   to go last), `algalon.kite` (`taunt`/`behind`/`stage`/`wait`/`cross`/`parked`/`kept`/`gather`/`nohole`/`stuck`/`none`;
   older traces `hole`), `algalon.spot`
-  (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`),
+  (`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`starhold`/`nearhole`/`buried`/`blocked`/`smash`/`none`),
   `algalon.hazard` (`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`,
   `cross` meaning only a path over a hole was clear; written on change only, so it resets to `idle` while
   nothing threatens, or two waves dodged the same way read as one), `algalon.defensive` (the pick, on change

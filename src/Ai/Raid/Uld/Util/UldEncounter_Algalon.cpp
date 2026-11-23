@@ -1854,15 +1854,30 @@ bool FarHoleSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Po
     return closest != std::numeric_limits<float>::max();
 }
 
-bool StarTeamSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Position const& anchor,
-                  Position& spot)
+char const* StarTeamSpot(Player* bot, Unit* boss, AlgalonEncounterState const& state, Position const& anchor,
+                         Position& spot)
 {
     if (!IsAlgalonStarTeam(bot))
-        return false;
+        return nullptr;
 
     AlgalonScanUnit const* star = FindScanned(state.stars, state.focusStar.Get());
-    return star && star->position.GetExactDist2d(anchor) > ULDUAR_ALGALON_STAR_TEAM_REACH &&
-           SpotOffFrom(boss, star->position, anchor, ULDUAR_ALGALON_STAR_TEAM_STANDOFF, spot);
+    if (!star)
+        return nullptr;
+
+    float const reach = bot->GetExactDist2d(star->position);
+    bool const inReach = reach >= ULDUAR_ALGALON_STAR_TEAM_HOLD_MIN && reach <= ULDUAR_ALGALON_STAR_TEAM_REACH;
+    if (inReach && !IsAlgalonPhased(bot) && AlgalonSpotInRoom(bot->GetPositionX(), bot->GetPositionY()) &&
+        (!boss || boss->GetExactDist2d(bot) >= ULDUAR_ALGALON_FORMATION_CLEARANCE))
+    {
+        spot = Position(bot->GetPositionX(), bot->GetPositionY(), ULDUAR_ALGALON_ROOM_CENTER.GetPositionZ());
+        return "starhold";
+    }
+
+    if (star->position.GetExactDist2d(anchor) > ULDUAR_ALGALON_STAR_TEAM_REACH &&
+        SpotOffFrom(boss, star->position, anchor, ULDUAR_ALGALON_STAR_TEAM_STANDOFF, spot))
+        return "star";
+
+    return nullptr;
 }
 
 char const* SwapTankSlot(Player* bot, PlayerbotAI* botAI, Position& slot)
@@ -1938,10 +1953,11 @@ char const* RawSlot(Player* bot, Position& slot)
         return "nearhole";
     }
 
-    if (kind && PlayerbotAI::IsRanged(bot) && StarTeamSpot(bot, boss, *state, anchor, spot))
+    if (char const* team =
+            (kind && PlayerbotAI::IsRanged(bot)) ? StarTeamSpot(bot, boss, *state, anchor, spot) : nullptr)
     {
         slot = spot;
-        return "star";
+        return team;
     }
 
     return kind;
