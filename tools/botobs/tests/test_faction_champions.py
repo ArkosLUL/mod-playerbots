@@ -1505,11 +1505,16 @@ def hunter_pull() -> list[dict]:
         cast(1000, RUJKAH_C, 67990, MAGE, triggered=True),
         dmg(1100, RUJKAH_C, MAGE, 67990),
         note(2000, ROGUE, fc.KILL, RUJKAH_C),
+        cast(2900, RUJKAH_C, 67990, MAGE, triggered=True),
         cast(3000, ROGUE, 51722, RUJKAH_C),
+        dmg(3200, RUJKAH_C, MAGE, 67990),
         cast(5000, RUJKAH_C, 67979, MAGE),
         dmg(5200, RUJKAH_C, MAGE, 67979),
+        cast(12900, RUJKAH_C, 65868, MAGE, triggered=True),
         cast(20000, WARRIOR, 676, RUJKAH_C),
         note(25000, ROGUE, fc.KILL, 0),
+        cast(27000, RUJKAH_C, 65867, MAGE),
+        dmg(27200, RUJKAH_C, MAGE, 65867),
         cast(35000, RUJKAH_C, 67985, MAGE),
         dmg(35100, RUJKAH_C, MAGE, 67985),
         dmg(36000, RUJKAH_C, TANK, 67985),
@@ -1529,18 +1534,28 @@ class HunterDisarm(unittest.TestCase):
     def tearDownClass(cls):
         cls.folder.cleanup()
 
-    def test_a_disarm_reads_his_casts_and_damage_after_it_and_the_rest(self):
+    def test_a_disarm_reads_his_casts_and_damage_while_it_held_and_the_rest(self):
         self.assertEqual(fc.hunter_disarms(self.trace), [
-            {"guid": RUJKAH_C, "disarms": [3000, 20000], "kill": 2, "after": 1, "other": 2, "damage_after": 1000,
-             "damage_other": 2000}])
+            {"guid": RUJKAH_C, "disarms": [3000, 20000], "kill": 2, "after": 1, "other": 5, "damage_after": 1000,
+             "damage_other": 4000}])
 
     def test_the_section_renders(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             fc.show_peel(self.trace)
         self.assertIn("Ruj'kah (Hunter): Disarm or Dismantle 2 (first 0:03.000), 2 on the kill target; his casts: 1"
-                      " within 10 s after one, 2 otherwise; his damage 1k within 10 s after one, 2k otherwise",
-                      out.getvalue())
+                      " while one held (10 s, halved per DR step), 5 otherwise; his damage 1k while one held, 4k"
+                      " otherwise", out.getvalue())
+
+
+class DisarmWindows(unittest.TestCase):
+    def test_each_dr_step_halves_the_hold_until_immune_and_15_s_clear_resets_it(self):
+        self.assertEqual(fc.disarm_windows([19500, 0, 12000, 17000, 34501]),
+                         [(0, 10000), (12000, 17000), (17000, 19500), (34501, 44501)])
+
+    def test_an_overlapping_disarm_keeps_the_dr_clock_on_the_later_end(self):
+        self.assertEqual(fc.disarm_windows([0, 2000, 23000, 40501]),
+                         [(0, 10000), (2000, 7000), (23000, 25500), (40501, 50501)])
 
 
 def run_snap(when: int) -> dict:

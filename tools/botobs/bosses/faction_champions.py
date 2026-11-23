@@ -555,6 +555,9 @@ HUNTER_CHAMPIONS = (34448, 34467)
 RANGED_DISARM_GATED = frozenset((65883, 67977, 67978, 67979, 65871, 65866, 67983, 67984, 67985, 65880, 65868, 67988,
                                  67989, 67990, 65867, 66207, 65877))
 DISARM_MS = 10000
+DISARM_DR_STEPS = 3
+DISARM_DR_RESET_MS = 15000
+DISARM_EDGE_MS = 250
 EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
              47788: "Guardian Spirit", 6940: "Hand of Sacrifice",
              **dict.fromkeys((633, 2800, 10310, 27154, 48788), "Lay on Hands"), 64205: "Divine Sacrifice"}
@@ -2393,11 +2396,26 @@ def iced_disarms(trace: Trace) -> list[dict]:
     return out
 
 
+def disarm_windows(starts: list[int]) -> list[tuple[int, int]]:
+    out = []
+    step = 0
+    clear = None
+    for start in sorted(starts):
+        if clear is not None and start - clear > DISARM_DR_RESET_MS:
+            step = 0
+        if step < DISARM_DR_STEPS:
+            stop = start + (DISARM_MS >> step)
+            out.append((start, stop))
+            clear = stop if clear is None else max(clear, stop)
+        step += 1
+    return out
+
+
 def hunter_disarms(trace: Trace) -> list[dict]:
     """Per Hunter champion: `guid`, the raid's Disarm and Dismantle casts on it (`disarms`, times), how many came
     while it held `fc.kill` (`kill`), its casts its script skips under a ranged disarm (all of them but the pet
-    call) and its own damage to the raid, within DISARM_MS after one of those disarms (`after`, `damage_after`) or
-    not (`other`, `damage_other`)."""
+    call) and its own damage to the raid by the cast that fired it, while one of those disarms held by
+    `disarm_windows`, less its last DISARM_EDGE_MS (`after`, `damage_after`), or not (`other`, `damage_other`)."""
     roster = roster_guids(trace)
     casts = trace.of("cast")
     killed = kill_spans(trace)
@@ -2408,9 +2426,21 @@ def hunter_disarms(trace: Trace) -> list[dict]:
         disarms = [rec["t"] for rec in casts
                    if rec.get("tgt") == guid and rec.get("sp") in PEEL_DISARMS and rec.get("s") in roster
                    and not rec.get("tr")]
+        windows = disarm_windows(disarms)
+        fired: dict[int, list[int]] = collections.defaultdict(list)
+        for rec in casts:
+            if rec.get("s") == guid:
+                fired[rec.get("sp")].append(rec["t"])
+        for times in fired.values():
+            times.sort()
 
         def disarmed(when: int) -> bool:
-            return any(0 <= when - start < DISARM_MS for start in disarms)
+            return any(start <= when < stop - DISARM_EDGE_MS for start, stop in windows)
+
+        def fired_at(rec: dict) -> int:
+            times = fired.get(rec.get("sp"), [])
+            at = bisect.bisect_right(times, rec["t"])
+            return times[at - 1] if at else rec["t"]
 
         row = {"guid": guid, "disarms": disarms,
                "kill": sum(held_at(killed, when) == guid for when in disarms),
@@ -2420,7 +2450,7 @@ def hunter_disarms(trace: Trace) -> list[dict]:
                 row["after" if disarmed(rec["t"]) else "other"] += 1
         for rec in trace.of("dmg"):
             if rec.get("s") == guid and rec.get("d") in roster:
-                row["damage_after" if disarmed(rec["t"]) else "damage_other"] += rec.get("a", 0)
+                row["damage_after" if disarmed(fired_at(rec)) else "damage_other"] += rec.get("a", 0)
         out.append(row)
     return out
 
@@ -2536,8 +2566,8 @@ def show_peel(trace: Trace) -> None:
         disarms = row["disarms"]
         print(f"  {trace.name(row['guid'])} (Hunter): Disarm or Dismantle {len(disarms)}"
               + (f" (first {clock(disarms[0])}), {row['kill']} on the kill target" if disarms else "")
-              + f"; his casts: {row['after']} within {DISARM_MS // 1000} s after one, {row['other']} otherwise;"
-              f" his damage {row['damage_after'] / 1000:.0f}k within {DISARM_MS // 1000} s after one,"
+              + f"; his casts: {row['after']} while one held ({DISARM_MS // 1000} s, halved per DR step),"
+              f" {row['other']} otherwise; his damage {row['damage_after'] / 1000:.0f}k while one held,"
               f" {row['damage_other'] / 1000:.0f}k otherwise")
 
     externals = external_casts(trace)

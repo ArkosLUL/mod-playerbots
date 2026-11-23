@@ -743,7 +743,8 @@ round 8 not: toc1 `tr-20261123-112654-4` kill 6:54, 3 deaths (`649_4_caiphus-the
 (`649_6_thrakgar_1795433335`). Window 14 (round 8's traces) reread for the Hunter baseline. Scripts in the round's
 scratchpad `fc9/` (gone with it); the reader's new `--peel` Hunter line covers the key one.
 
-**Stop rules, ranking.** Skipped: window 15 is pulling round 8.
+**Stop rules.** Not polished: toc3 wiped. Ranking skipped: the round builds Q3 as answered, and window 15 is pulling round
+8.
 
 **Lineups.** toc1 window 14 toc1's (Broln, Narrhok, Maz'dinah, Gorgrim; three DKs ice Maz'dinah, Gorgrim, Broln; Narrhok
 from 3:50). toc2 and toc3: Malithas for Broln, two DKs on Malithas and Maz'dinah; toc2 iced Gorgrim from 3:24 and Narrhok
@@ -793,13 +794,14 @@ with a ready spell, and the Hunter ranks after every melee champion, free or ice
 refresh's Dismantle on the Tauren. Nothing reserves a cooldown for a need that comes later.
 
 Reader `--peel`: per Hunter champion the raid's Disarms and Dismantles, those on the kill target, and his casts and damage
-within 10 s after one or not (`hunter_disarms`).
+while one held or not (`hunter_disarms`; DR-cut spans since the review below).
 
 **Next window should show.** `--peel` Hunter line: disarms above 0 on every pool, mostly on the kill target (window 15a 0,
-1, 0); his casts and damage "within 10 s after one" up against "otherwise" (0, 1, 0 casts; 0k, 3k, 0k); fewer Ruj'kah kills
-as kill target (window 14: 3, 0, 5). Narrhok's and the iced Tauren's disarms not far below this window's (Narrhok 7, 5, 4;
-iced Broln 2), since the Hunter's Dismantle spends the same 60 s cooldown. A small gain at most: about one Dismantle per
-rogue in a 45-55 s kill-target hold.
+1, 0); his casts and damage "while one held" near 0 against "otherwise" (window 15a 0 casts and 0k on all three, review
+reader); fewer Ruj'kah kills as kill target with a rogue alive and in reach (window 14: 3 of the 8, window 15a 2 of 2).
+Narrhok's and the iced Tauren's disarms not far below this window's (Narrhok 7, 5, 4; iced Broln 2), since the Hunter's
+Dismantle spends the same 60 s cooldown. A small gain at most: about one Dismantle per rogue in a 45-55 s kill-target
+hold.
 
 **Seen, not picked.** The prot warrior tank's class Disarm lands on casters with nothing to gate, one each: Harkzog and
 Thrakgar here, Birana, Harkzog, Liandra and Thrakgar in window 14.
@@ -807,3 +809,25 @@ Thrakgar here, Birana, Harkzog, Liandra and Thrakgar in window 14.
 **Questions for the user.** None.
 
 **Shared code.** None; the change is in this fight's helper and its reader.
+
+**Review.** The fix holds as built: entries are the base ones on every size and difficulty (both Hunters' difficulty rows
+carry the same immunities and `ALL_DIMINISH`, no `NO_PARRY`), peelers are bots as before, and a player's disarm counts
+through the ranged flag. The Deterrence check matches `MeleeSpellHitResult`: parry from the front only, its deflect only on
+ranged attacks. The `IsPhysicalChampion` rewrite is the same set.
+
+- Root cause narrower than stated. By killing blow window 14 gave Ruj'kah 14, 8 as kill target (round 8's 15 and 9 count
+  the top damage dealer). 5 of those 8 came with both rogues dead: toc1 3:10.1 (Tocxat died 1:24.8, Tocxaf 2:56.3),
+  toc3 2:48.1, 2:49.7, 2:55.9 and 3:15.4 (Toczat 2:25.0, Toczag 2:42.4), neither roster bringing a prot warrior. Only 3
+  had a rogue within 5.5 yd (4.3, 5.4, 4.5 yd). A rogue that close for 29%, 92%, 18% of his kill-target time there; the
+  86-90% is window 15a's, where both his kill-target kills had both rogues within 5 yd.
+- Review fixes: the reader's "within 10 s after one" would count casts past a DR-cut disarm, which the fix chains (10, 5,
+  2.5 s), and both baseline leaks were artefacts: the casts came 9.92 s (window 15a toc2) and 9.99 s (window 14 toc2,
+  two) after the disarm's cast record, its aura running out up to a map update early, and the 3k was a Shoot fired
+  0.1 s before the Disarm. `hunter_disarms` now holds each disarm for its DR-cut span (`disarm_windows`: 10 s halved per
+  step, none once immune, reset 15 s after the last ran out) less its last 250 ms, and books damage at the cast that
+  fired it; both landed disarms read 0 casts and 0k while held. The boss doc's Peel evidence, which paired window 14's
+  kills with window 15a's rogue share, is corrected.
+- Left: `iced_disarms` keeps the flat 10 s window; one of window 15a's five iced disarms was DR-cut (toc1 Narrhok 5:21.5,
+  a free Dismantle 13.4 s before), with no gated cast in its 10 s either way. A cast record is not a landing: a dodged or
+  missed disarm still reads as held, the trace carrying no aura on a champion. The prot tank can spend its Disarm on the
+  Hunter and lack it for a Bladestorm within 60 s, which Q3's answer covers.
