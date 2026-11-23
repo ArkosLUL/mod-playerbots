@@ -1164,6 +1164,39 @@ Unit* NoteThorimDpsTarget(Player* bot, Unit* target)
     return target;
 }
 
+bool IsThorimGauntletMob(Unit const* unit)
+{
+    switch (unit->GetEntry())
+    {
+        case NPC_IRON_RING_GUARD:
+        case NPC_IRON_HONOR_GUARD:
+        case NPC_DARK_RUNE_ACOLYTE_G:
+        case NPC_RUNIC_COLOSSUS:
+        case NPC_ANCIENT_RUNE_GIANT:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void DropIdleGauntletMobsWhileFighting(ThorimEncounterTargets& targets)
+{
+    auto const engaged = [](Unit* unit) { return unit && IsThorimGauntletMob(unit) && unit->IsInCombat(); };
+    bool const fighting = std::any_of(targets.acolytes.begin(), targets.acolytes.end(), engaged) ||
+                          std::any_of(targets.guards.begin(), targets.guards.end(), engaged) ||
+                          engaged(targets.colossus) || engaged(targets.runeGiant);
+    if (!fighting)
+        return;
+
+    auto const idle = [](Unit* unit) { return unit && IsThorimGauntletMob(unit) && !unit->IsInCombat(); };
+    std::erase_if(targets.acolytes, idle);
+    std::erase_if(targets.guards, idle);
+    if (idle(targets.colossus))
+        targets.colossus = nullptr;
+    if (idle(targets.runeGiant))
+        targets.runeGiant = nullptr;
+}
+
 }
 
 Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
@@ -1199,6 +1232,8 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
 
     if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
     {
+        DropIdleGauntletMobsWhileFighting(targets);
+
         std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards,
                                                               &targets.trash};
         for (auto const* tier : tiers)
@@ -1384,6 +1419,18 @@ bool ThorimColossusDoorsOpen(PlayerbotAI* botAI, Player* bot)
 
     return doors && doors->GetGoState() == GO_STATE_ACTIVE;
 }
+
+bool ThorimGauntletLeaderFighting(PlayerbotAI* botAI, Player* bot)
+{
+    if (ThorimGauntletFighting(botAI, bot))
+        return true;
+
+    for (Unit* attacker : bot->getAttackers())
+        if (attacker && attacker->IsAlive() && IsThorimGauntletMob(attacker))
+            return true;
+
+    return false;
+}
 }
 
 Player* ThorimGauntletLeader(PlayerbotAI* botAI)
@@ -1439,17 +1486,7 @@ bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot)
     if (!target || !target->IsAlive() || !target->IsInCombat() || !target->IsHostileTo(bot))
         return false;
 
-    switch (target->GetEntry())
-    {
-        case NPC_IRON_RING_GUARD:
-        case NPC_IRON_HONOR_GUARD:
-        case NPC_DARK_RUNE_ACOLYTE_G:
-        case NPC_RUNIC_COLOSSUS:
-        case NPC_ANCIENT_RUNE_GIANT:
-            return bot->GetDistance(target) <= ULDUAR_THORIM_DPS_TARGET_RANGE;
-        default:
-            return false;
-    }
+    return IsThorimGauntletMob(target) && bot->GetDistance(target) <= ULDUAR_THORIM_DPS_TARGET_RANGE;
 }
 
 bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
@@ -1541,6 +1578,9 @@ bool ThorimGauntletLeadStep(PlayerbotAI* botAI, Player* bot, Position& out)
             return false;
     }
 
+    if (ThorimGauntletLeaderFighting(botAI, bot))
+        return false;
+
     if (getMSTimeDiff(state->leadStepMs, now) < ULDUAR_THORIM_LEAD_STALL_MS)
     {
         for (GroupReference* ref = bot->GetGroup()->GetFirstMember(); ref; ref = ref->next())
@@ -1563,7 +1603,8 @@ Unit* ThorimGauntletLeadColossus(PlayerbotAI* botAI, Player* bot)
 {
     ThorimEncounterState const* state = FindState(bot);
     if (!state || state->leadNext < ULDUAR_THORIM_GAUNTLET_WAYPOINTS ||
-        bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD || ThorimPhase2Active(botAI))
+        bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD || ThorimPhase2Active(botAI) ||
+        ThorimGauntletLeaderFighting(botAI, bot))
         return nullptr;
 
     Unit* colossus = GetThorimRunicColossus(botAI);

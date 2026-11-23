@@ -699,3 +699,114 @@ nine pulls read per snapshot with `thorim.p2role`: the anchor tank waiting on an
 pull, the reverse in 3-28.
 
 **Stop rules:** not checked this round (window 14 belongs to the next one). Not stuck: no failure was picked.
+
+## Round 9 (window 14: build 1fa3c332c with round 7 and the shared PickDefensive fix; round 8 merged, not built)
+
+**Data:** window 14, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-095334-4`
+(uld1), `-5` (uld2), `-6` (uld3); traces `env/dist/logs/botobs/603_{3,5,6}_thorim_{1795427707,1795427695,1795427705}.ndjson`,
+read through `raidtest.py report --boss thorim --raid uld --head 1fa3c332c --pulls 10`, `thorim.py --deaths --phase2`,
+`postmortem.py` (deaths, `--bot` timelines) and scripts in session scratchpad `thorim_r7/` (`seg.py`, `budget.py`, `branch.py`,
+`tetherloss.py`) and `thorim_r9/` (`perbot_seg.py`, `movesrc.py`, `corr_targets.py`, `loose.py`, `pack2.py`, `replay_hold.py`,
+`p2heal.py`, `bliz_heal.py`) over `snap`, `move`, `act`, `heal`, `dmg`, Sif's `cast` rows (`"sp":62565`) and `note`
+(`thorim.leverpulled`, `thorim.p2start`, `thorim.sifjoined`). Windows 12 and 13 (six pulls) re-read for the corridor.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795427707 | wipe 5:55, **hard mode** (phase 2 3:18.2, no 62565 cast) | phase 2: Thorim melee on a non-tank 22, on a tank 3, Blizzard 2 (the holy paladin twice), Chain Lightning 2, Lightning Charge 2, Frostbolt Volley 1 (a tank) |
+| uld2 | 1795427695 | kill 6:30, normal (62565 at 3:16.6, phase 2 3:56.3) | Iron Ring Guard: Whirling Trip 1 (ranged, 1:15.2), Impale 1 (ranged, 1:22.3) |
+| uld3 | 1795427705 | kill 6:06, normal (62565 at 3:18.2, phase 2 3:42.6) | Iron Ring Guard melee 1 (ranged, 1:31.2) |
+
+**Step timeline and segments** (from the lever; budget lever → 62565 163.7 s; uld1's deadline 62507 + 150 s = 3:19.3):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs 62565 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| uld1 | 4.5 | 12.2 | 46.0 | 3.2 | 24.3 | 7.7 | 55.8 | 15.2 | 164.4 | made by 1.1 |
+| uld2 | 6.3 | 14.4 | 48.0 | 13.5 | 40.3 | 6.5 | 62.2 | 18.6 | 203.5 | +39.7 |
+| uld3 | 6.4 | 14.5 | 46.2 | 12.3 | 30.4 | 7.3 | 57.0 | 20.2 | 188.1 | +24.4 |
+
+**Round 7 verdict: the mechanic stopped, no time came back.** Trail orders sent to a DPS bot holding a live gauntlet target
+88 / 57 / 91 a pull (window 13) → 8 / 5 / 4; DPS bot-seconds moving without damage behind the tether and the reach back 185 / 144 /
+116 → 42 / 27 / 55. But the Honor Guard + Acolyte + Giant segment stayed at 56-62 s (target ~45), DPS walking up the ramp with no
+target grew 19 / 12 / 15 → 72 / 58 / 69 bot-seconds, and the corridor trash got longer, 39-44 s → 46-48 s (window 12: 33-34.5 s),
+at 22-25k squad dps against 31-33k in window 12. Lever to phase 2 made the budget in one pull (uld1, by ~1 s), as asked.
+
+**Why uld2 and uld3 missed Sif's clock** (against uld1): uld2 +39.1 s = Colossus +16.0, to Colossus +10.3, adds and Giant +6.4,
+balcony +3.4, the rest +3.0; uld3 +23.7 s = to Colossus +9.1, Colossus +6.1, balcony +5.0, the rest +3.5.
+- The Colossus is dead DPS from the corridor: 42.8k with all nine DPS (uld1), 33.6k with eight (uld3, a warlock dead), 25.1k with
+  seven (uld2, the balance druid and a warlock dead); per-bot output and movement on him are otherwise alike.
+- To the Colossus: the squad stood 12-13.5 s with no target while the leader waited at his 30 yd stop (round 7's "pinned at the
+  last waypoint", round 7 question 3). Balcony 15-20 s (question 1).
+
+**Why Thorim's melee reached 22 non-tanks in uld1:** every one died after both tanks were down (5:28.8, P2 +130.6 s); with a tank
+up he spent 2.0 s on a non-tank all phase. The first tank death (blood DK Uldxam, +82.4 s) came with healer mana at 46.6%, not
+the mana wall (window 12: 5-33% at +107-190 s). Thorim lost 0.42%/s, the same as window 12's hard-mode pulls (0.41-0.45). What
+differed: the holy paladin Uldxab died at +80.6 s and +119.4 s, 1.8 s and 0.4 s before a tank death, to Blizzard on top of a
+Volley (11.7k at full health, then two 5.6-5.9k ticks); healers took 30k of Blizzard in uld1 against 0 in all three window 12
+hard-mode pulls. At +80.6 s her escape (`ThorimCampBlizzardEscape`, `UldEncounter_Thorim.cpp:2710` at c350347ff) walked from a
+zone dropped 6.5 yd from her, slowed by the Volley, past the next zone's edge (8.7 yd): it tests the end point clear by 11 yd,
+not the walk. Chain Lightning one-shot two melee stacked 0.4 yd apart at +72 s (28.3k, 37.7k). The DK tank cast Death Strike 5
+times in the 82 s before his first death against 17 Icy Touches spending the Frost rune (class rotation, shared, not touched).
+**Classification:** the hard-mode race round 6 described, on one hard-mode pull. Not picked. Candidate if a second hard-mode
+pull shows a healer Blizzard death: score the escape walk with `ThorimWalkUnderBlizzard`.
+
+**Stop rules:** not polished (two normal-mode kills). Not stuck: rounds 3-9 picked seven different causes.
+
+**Failure ranking:** the uld1 phase 2 wipe 32 (the race, above); corridor Iron Ring Guards 3 (and the DPS they took from the rest
+of the gauntlet); no other phase 1 death.
+
+**Failure picked: the bot-led corridor fights both trash packs at once** (all nine 25-man pulls of windows 12-14).
+
+- Pack 2 (Acolyte (2227.5, −345.4), guards (2217.7, −337.4) and (2235.3, −338.3)) started moving 6-16 s after pack 1, with both of
+  pack 1's guards up, every pull. Three paths opened it, whichever came first:
+  - **The picker** (first in four pulls: w13 uld1, uld3, w14 uld2, uld3). `GetThorimDpsTarget`'s gauntlet tiers
+    (`UldEncounter_Thorim.cpp:1200-1206` at c350347ff) take any Acolyte in the 50 yd sweep, idle or not; a DPS took pack 2's Acolyte
+    from 41-49 yd within 1 s of pack 1's Acolyte dying (w14 uld2 0:57.77 Uldyax at 48 yd, pack 2 moved 1:00.3).
+  - **The leader** (first in four: w12 ×3, w14 uld1). `ThorimGauntletLeadStep` (`:1508` at c350347ff) steps on whenever the squad is
+    within 30 yd, fight or not: all 63 lead moves between the first corridor engage and the last guard's death came with engaged
+    trash up, 52 of them with the leader's own target engaged. The right lane's fifth waypoint (2212.1, −318.2) is 20.0 yd from pack
+    2's west guard: w14 uld1's pack 2 moved at 0:55.3, the leader 20.4 yd away, before any bot targeted it.
+  - **A Disengage** (w13 uld2). Hunter Uldyau, his target pack 1's dying Acolyte, cast Disengage at 1:03.96 and stood 22.3 yd
+    from pack 2's east guard when pack 2 turned on him at 1:04.82, with no bot targeting pack 2 and the leader 33-40 yd off.
+    Neither half of the fix below holds it.
+- Effect: the tank-leader walks south onto pack 2 and pack 1's guards stay on ranged and pets. Iron Ring Guard seconds on non-tank
+  players 22 / 88 / 51 (w14; w12-13 28-71); w14 uld3: pack 1's guards sat on a voidwalker and a hunter 0:58-1:30 while the tank held
+  pack 2, then killed the warlock; uld2: one pack 1 guard on the warlock Uldyav for 30 s (0:52.8-1:22.3) until Impale killed him,
+  pack 2's guards on the druid Uldyas until Whirling Trip did. Window 13 uld1's three Impale deaths were the same four-guard window.
+  Round 7 likely made it worse: DPS no longer trail the leader mid-fight, so the fight no longer moves with the tank (corridor 39-44
+  → 46-48 s, guard seconds on ranged 20-32 → 20-58).
+- Core: `boss_thorim_gauntlet_npcs` is a plain `ScriptedAI`, out of combat until aggro or damage; `JustEngagedWith`
+  `CallForHelp(25)`, and the packs stand ~40 yd apart, so only bots join them.
+
+**Classification: bug.** The corridor squad and its leader are meant to clear the corridor pack by pack, like round 7's tether is
+meant to move the squad between fights; neither a picker handing out the next pack nor a tank walking off the guards he holds is
+part of the strategy.
+
+**Fix** (`UldEncounter_Thorim.cpp`, Thorim only, no size, mode or player branch):
+- `DropIdleGauntletMobsWhileFighting` (`:1182`, called in `GetThorimDpsTarget` `:1235`): while any corridor mob (`IsThorimGauntletMob`,
+  `:1167`: Iron Ring and Honor Guards, gauntlet Acolyte 33110, Colossus, Giant) in the bot's 50 yd sweep is in combat, the idle ones
+  are dropped from the gauntlet picks. With nothing engaged the picker opens the next pack as before, so the walk-in, the Colossus and
+  the Giant open unchanged. The arena entries and the start pack are not filtered.
+- `ThorimGauntletLeaderFighting` (`:1423`): the leader's target is an engaged corridor mob within 50 yd (`ThorimGauntletFighting`, round
+  7) or a corridor mob attacks him. `ThorimGauntletLeadStep` (`:1581`) and `ThorimGauntletLeadColossus` (`:1607`) hold while it is true;
+  the waypoint bookkeeping before it still runs, the Runic Smash lane dodge is a separate row and still moves him, and the Giant walk is
+  not held (the Giant spawns Honor Guards until he is pulled). Replayed (lever to Colossus): the own-target half holds 52 of the 61 lead moves made with an engaged corridor mob within 50 yd;
+  most of the rest had a guard at 100% (just aggroed) as target or one on him.
+- A real player leading changes nothing for the lead (the lead nodes run only for a bot leader); the picker runs the same for every
+  corridor bot behind any leader.
+
+**Next window should show** (`pack2.py`, `loose.py`, `replay_hold.py`, `perbot_seg.py`, `budget.py` on the new traces):
+- pack 2's first movement after pack 1's last death in every pull, and no bot targeting an idle corridor mob while another is
+  engaged in its 50 yd;
+- no `thorim gauntlet lead action` move while the leader's target is an engaged corridor mob (52 over nine pulls before);
+- Iron Ring Guard seconds on non-tank players from 22-88 toward ~20 a pull, and no Iron Ring Guard death (3);
+- all nine corridor DPS alive at the Colossus, so the Colossus in ~24-30 s; the corridor itself no longer than 46-48 s (serial packs
+  add a walk between them but lose the loose guards);
+- still open: the 12-13.5 s wait at the Colossus stop and the 15-20 s balcony walk (questions 1 and 3), so hard mode only on the
+  faster pulls. Round 8's phase 2 measures land in the same window (its table above).
+- Watch: a leader holding more than ~15 s on one step while nothing dies (a guard kited out of reach), and pack 2 now opened by DPS
+  from 39-50 yd once pack 1 is dead rather than by the tank. A bot's own escape to ~22 yd of pack 2 (Disengage, w13 uld2) still
+  opens it early.
+
+**Questions for the user:** none new. Round 7's three (balcony runner, the gauntlet tank waiting at the lever, the gauntlet tank pulling
+the Colossus) stand, recommended yes; this window adds 12.3 / 13.5 s at the Colossus stop (uld3 / uld2, 3.2 s in uld1) and balcony
+walks of 15.2-20.2 s.
