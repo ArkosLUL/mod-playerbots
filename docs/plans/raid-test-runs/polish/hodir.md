@@ -708,3 +708,104 @@ receiver outside release (collect pre-empted them from landing), and one walked 
 a cloud drifters (healers, tanks) empty before pulse 4 buffs no waiting receiver. The due walk also
 clears a shed hop's jump lock, so `DoMovePoint` ends the hop mid-air as a dodge does, without the
 `hodir.shuttle cut` note.
+
+## Round 8 (2026-11-23, on Custom c350347ff)
+
+**Data.** Window 14 (build `1fa3c332c`: round 7 plus the shared `PickDefensive` fix), `raidtest.py
+report --boss hodir --raid uld --head 1fa3c332c --pulls 10`; windows 10, 11 and 12b re-read for the
+cloud timing. Scratch scripts in the session scratchpad `hodir-r8/`: `slices.py` (per slice rates and
+states), `deficit.py` (damage on him by role, Storm Power, ice), `gather_detail.py` / `classify.py`
+(each leash receiver's fate), `shamans.py` (clouds per freeze cycle by shaman).
+
+| Pool | Run | Trace | Out | Cache | Deaths | Pace 0-3:00 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261123-101943-13` | `603_13_hodir_1795429235` | kill 3:16.3 | shattered 2:59.97 | 0 | 212.3k |
+| uld2 | `tr-20261123-102023-15` | `603_15_hodir_1795429265` | kill 2:52.7 | **kept** | 1: off-tank (bear) Frozen Blows swing 2:52.6, window 3, Barkskin up | 243.4k |
+| uld3 | `tr-20261123-101943-14` | `603_14_hodir_1795429230` | kill 3:08.6 | shattered 2:59.99 | 0 | 223.2k |
+
+**Stop rules.** The cache still shatters after round 7 (two pools of three), so the user's answer to
+round 6 applies: Hodir is judged on kills and deaths at 226, and window 14 qualifies (three kills, 0/1/0
+deaths), as windows 11 and 12b did. **Polished at 25n; the 10-man check follows.** Pace was also
+picked in rounds 3, 5, 6 and 7, the lift was for round 7 only, so no pace change is built. The workflow
+asked for a full round, so the analysis below is complete; its top cause is a plan change (question 1).
+
+**Round 7 verdict: the timing works, the leash does not hold.** Against its checks (w12b → w14):
+- Storm Power on pulse 4 9 of 163 → 44 of 192 (20/17/7): moved, but not most of it. Wherever the
+  receivers stayed in the leash pulse 4 took them all: uld1 2:08.7 seven, 2:14.8 six, 2:56.3 seven;
+  uld3 1:45.2 six. `hodir.gather` turned `walk` 1.6-3.3 s after landing, `in` at 3.4-3.8 s.
+- Leash dealers buffed by their cloud 59-60% → 59/70/58% (target 85%+); Storm Power a cloud
+  5.6-7.3 → 6.9/6.0/6.3 (9+); ranged Storm Power share 47/22/37% → 25/35/34% (50%+); pace above
+  234.6k on one pool, not two. Missed.
+- Per leash receiver at landing (143 over 0-3:00): pulse 1-3 45, pulse 4 33, pulse 5+ 13, from the
+  other cloud 24, none 28. Of the 28: 11 walked out of the 15 yd leash while waiting
+  (`GetHodirStormGather` tests it live, `UldEncounter_Hodir.cpp:447`; position node, shed, melee
+  chasing him; uld1 2:56.3: five ranged at 12.9-13.8 yd went `none` 0.4-1.4 s in), 7 stood round the
+  other of two carriers (`GetHodirStormCloudCarrier` takes the lowest guid, `:400`), 6 had the walk cut
+  by icicle dodges 3-5 times, 4 lost a cloud emptied on pulses 1-3 by bots inside at landing.
+- Watch items: cast-hold vetoes 26/11/15 a pull; Ice Shards 9/6/3 hits; no ranged or healer death.
+
+**Round 2's mechanic:** one off-tank Frozen Blows death in 9 windows (uld2 2:52.6, Barkskin up), as
+before; option (b) stays unbuilt.
+
+**Where uld1 and uld3 lost the seconds.** Level with uld2 at the second landing: bots' damage on him to
+1:46.3 22.3 / 21.9 / 22.3 M (uld1/uld2/uld3). Boss dps per slice, first fire window / cycle 2 / cycle 3
+to the 2:35 landing / after it: uld1 303/238/207/156k, uld2 273/252/276/279k, uld3 302/239/242/175k.
+From 1:46.3 to uld2's kill the bots dealt 11.6 / 18.0 / 13.6 M on him (uld1 −6.4 M, ranged −3.1 and
+melee −3.3; uld3 −4.4 M, ranged −1.5 and melee −2.9):
+- Storm Power ~2.1-2.3 M: damage dealers held it 576 / 809 / 556 bot-seconds there, worth ~9k a
+  bot-second (on him with it 15-19k, without 8k). Clouds landing then: uld1 2, uld2 4, uld3 2 (both on
+  ranged carriers away from the melee: 8 Storm Power of 12 charges, both timed out).
+- Ice ~1.3 / 0.6 M: ranged on ice 220 / 68 / 143 bot-seconds. The last wave landed at 17.4 / 11.4 /
+  14.7%; uld2 was under `_LAST_WAVE_HEALTH_PCT` 12 (`:1326`) and broke none, uld1 and uld3 spent 93 / 53
+  ranged bot-seconds on it before 3:00, ~3.3 / 2.4 s.
+- The rest is melee uptime: in uld1 a mage dropped a fire 0.5 s after the 2:35 landing, the hold moved
+  to it and the Frozen Blows swap followed, so Hodir walked 90 yd from the landing to 3:00 and melee
+  stood within 8 yd of him 36% against 55%; uld2's melee stood in Starlight 39% of cycle 3, uld1's 1%.
+
+**Top cause: the second Storm Cloud of a freeze cycle.** A freed shaman casts Storm Cloud 1 s after
+`ScheduleAbilities`, then every 30 s until the next freeze traps it (`boss_hodir.cpp:956`, `:1010`);
+its first cloud lands ~3.5 s after its block breaks. Over 27 freeze cycles in windows 10-14 a shaman's
+cloud repeated in the cycle every time its first landed within 15.5 s of the blocks spawning (11 of 11)
+and never from 16.4 s (0 of 41). Seats are mage ×5, mage ×5, druid, druid, shaman, shaman, priest,
+priest under a budget of 8, then 3 once no mage is iced (`GetHodirAssignedHelperBlock`, `:1383-1397`),
+so the first shaman gets one breaker once a mage is free (5-14 s in, `hodir.dpstarget`), the second
+once a druid is, and they broke 10-24 s in. First clouds after the blocks, freeze cycles 1 and 2: uld2
++15.4/+17.5 and +14.3/+15.2 (three repeats), uld3 +15.3/+21.4 and +16.4/+17.4 (one), uld1 +20.3/+22.3
+and +21.4/+27.5 (none). The block order and breaker counts are a plan change: question 1.
+
+**Not built** (stop rules), ready for a round if the user lifts them: two bugs in round 7's gather
+and the last-wave threshold.
+- Latch the receiver set at landing (within 15 yd) instead of testing the leash live, and stand the
+  position node down for a latched receiver until its walk is due (11 misses).
+- Gather each receiver on its nearest carrier, latched, instead of the lowest guid (7 misses; the two
+  shamans' clouds landed within a second of each other in 7 of 13 pairs).
+- `_LAST_WAVE_HEALTH_PCT` 12 was sized at the 234.6k cache pace (21.6 s); with nobody on ice the raid
+  ran 279-291k after the last landing (w14 uld2, w12b uld1), so 12% is ~18 s while the last fire's
+  Singed covers 25: about 17%.
+
+**Next window should show** (only if question 1 is built): first clouds within 15 s of the blocks in
+most freeze cycles and four clouds a freeze cycle (now 2-3); damage dealers' Storm Power from the second
+landing to 2:52 near uld2's 809 bot-seconds; ranged on ice per wave up no more than ~20 bot-seconds, the
+second mage still free within ~17 s (Singed lapses 25 s after the landing); pace above 234.6k on two
+pools.
+
+**Questions (user).**
+1. *Plan, only if the cache is still wanted at ilvl 226 (it was accepted without it):* free the helper
+   shamans with the mages. Order the helper blocks mage, shaman, druid, priest, give a shaman block 3
+   breakers, and keep the budget of 8 until both mages and both shamans are free, then 3 for druids and
+   priests. Worth up to ~3 more clouds before 3:00 a pull, roughly +10-25k over 0-3:00 against gaps of
+   11-22k; costs ~10-20 ranged bot-seconds more on ice a wave, and Starlight later: the druid blocks
+   wait for the second mage instead of the first (~4 s median), while the second mage keeps its five
+   breakers. *Recommended: yes*, one round with the stop rule lifted, built with the two gather bugs
+   and judged by clouds per freeze cycle and kill time; else Hodir stays polished.
+
+**Review (round 8).** The cause holds: the lane's `shamans.py` over the 12 pulls of windows 10, 11,
+12b and 14 reproduces 11 of 11 repeats from first clouds within 15.5 s, 0 of 41 from 16.4 s, and each
+pool's first-cloud times; blocks (32938) spawn 9.9-10.0 s after the Flash Freeze cast, as it assumes;
+`pulses.py` gives pulse 4 20/17/7 of 69/66/57. Seats and line refs match the code. No code changed, so
+no size, mode or player branch to check. Fixed:
+- Question 1's cost named the second mage's fire, but its five seats sort ahead of any shaman either
+  way; what waits is the druid blocks. Second mage freed 0.2-19.8 s after the first (median ~4 s, last
+  hits, scratchpad `hodir-r8-review/magegap.py`).
+- Findings doc: the 7.6-9.9% last wave read as current; it was the two pulls that set the skip,
+  window 14's landed at 11.4-17.4%.
