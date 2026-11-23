@@ -58,11 +58,11 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
 - **Floor 29.1 yd.** Mark of the Faceless picks at random from everyone the boss measures beyond
   15 yd, falling back to everyone inside when fewer than 9 qualify (4 in 10-man); his "15 yd" is
   `15 + 12.6 + 1.5` of real distance, 3D. **Every row is past it, so the Mark only reaches ranged and
-  healers** (user's call): the whole camp is far, 13-14 at 25-man and 5 at 10-man, until deaths take
-  it under 9 or 4. With rows from 27, 7 of 37 full-raid marks in windows 7-10 went to melee or the main
-  tank, and 24 of 29 10-man marks in window 12 found under 4 far (15 went to melee or a tank); replayed
-  on the window 11-12 traces the far pool reads 10-14 (25-man) and 3-5 (10-man) as the camp stood,
-  13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd, under the 2.4 yd arrival deadband, so a
+  healers** (user's call): the whole camp is far, 13-14 at 25-man and 5 at 10-man, until deaths or
+  crossed Animus slots (below) take it under 9 or 4. With rows from 27, 7 of 37 full-raid marks in
+  windows 7-10 went to melee or the main tank, and 24 of 29 10-man marks in window 12 found under 4 far
+  (15 went to melee or a tank); replayed on the window 11-12 traces the far pool reads 10-14 (25-man)
+  and 3-5 (10-man) as the camp stood, 13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd, under the 2.4 yd arrival deadband, so a
   front-row bot parked short can still be near.
 - **Ceiling 42.6 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
@@ -72,12 +72,16 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   1-3 sat past it: ranged dps spent 10-93% of its phase there with up to 28 reach spell walks each, and
   did 59-64k/s on it against 82-85k/s on the old rows, losing the race. So a ranged dps targeting it has
   its slot, and its strafe with it, pulled along the line to the Animus to two slot tolerances inside
-  that ceiling (its `GetRange("spell")` plus both live reaches), stopping at row 0's radius from Vezax so
-  the Mark floor holds; with the Animus straight behind him from the camp, as at its spawn, that stop can
-  leave the slot past it. Healers keep their slots and their reach spell walks onto it, up to 28 a phase
-  each with the position node walking them back: in a north settle (below) holding them cut a bear main
-  tank's healing from 3.6k/s to 2.4k/s and he died 8 s before the collapse, though a warrior with them
-  still got only 2.3k/s and died at +72 s.
+  that ceiling (its `GetRange("spell")` plus both live reaches), **crossing the Mark floor if the line
+  passes it** (user's call). Stopping at row 0's radius instead left the slot past the ceiling whenever
+  the Animus stood behind him from the camp: in north settles ranged dps spent 73-91% of the phase past
+  it, flipping between reach spell and their slots, inside the floor anyway. Replayed on windows 15-21,
+  crossing takes every slot inside the ceiling and puts crossed ones a median 25-30 yd from him (under
+  20 only with the Animus loose after the main tank died); a north settle then leaves only the healers
+  far, so in-phase marks draw from the whole raid. Healers keep their slots and their reach spell walks
+  onto it, up to 28 a phase each with the position node walking them back: in a north settle (below)
+  holding them cut a bear main tank's healing from 3.6k/s to 2.4k/s and he died 8 s before the
+  collapse, though a warrior with them still got only 2.3k/s and died at +72 s.
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
 and Vezax settles 7.7-14 yd north of it, between tank and camp, having met the tank on its way in from the
@@ -344,6 +348,16 @@ both spots he has settled on. Measured from the anchor instead, the gate broke t
 crash hit up to 14. Resistance stays presence-gated, the state reset fires once he is dead or out of
 combat, and everything else is combat-gated.
 
+**Once inside, a bot keeps the gate for the fight** (`vezax.joined`, cleared by the reset; the height
+band still applies). Nothing contains the camp once he moves: at the Animus spawn he swings round the
+tank, once 12.3 yd away from the camp in 5 s; soak walks took the whole camp to the last crash's field
+at its old spot, 47-49 yd from him, and reach spell on the Animus, which stops 37 yd from it, stacked
+them on one point 45.6 from him, so nothing walked them back. Shut out, they got no slot and no dodge:
+the next three crashes landed on that point and killed 12 of them, two twice after a rez, the one bot
+still inside dodged and lived, and the wipe followed. Crash knockbacks
+shut bots out for seconds too. The latch only holds bots already on the hall floor, whose slot, strafe
+and mark spots are floor-checked from where they stand.
+
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement rule
 asks once per candidate that reaches its predicate. It has neither a liveness filter nor a range of its
@@ -353,16 +367,18 @@ that walks the bot's own threat list, so a bot switched to the Animus or a vapor
 ## The trace
 
 `vezax.slot` is the stored assignment, a bare number: 0-9 group L, 10-19 group R, row-major inside each so
-the low bit is the file. `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
+the low bit is the file; `vezax.joined` is the gate's latch, `1` from a bot's first tick inside it.
+`vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
 (`strafe`/`search`/`none`: which rule produced the destination, which the move record can't tell apart),
 `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`: a vapor is hard mode
 about to end, `none` the target guard with no source behind it), `vezax.meleespot` (`spot`/`none`),
 `vezax.floor` (`on`/`edge`/`off`: the last floor check took the point as asked, pulled it back over 1 yd,
-or refused it), `vezax.reach` (`off`/`in`/`pulled`/`floor`: the Animus slot pull, `floor` where row 0's
-radius stopped it), `vezax.hold` (`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside
-the helper that derives it so two call sites cannot disagree. Being change-only, `vezax.block` is written
+or refused it), `vezax.reach` (`off`/`in`/`pulled`/`cross`: the Animus slot pull, `cross` where it ends
+inside row 0's radius; older traces wrote `floor` where that radius stopped it), `vezax.hold`
+(`off`/`on`/`tank`) and `vezax.interrupter` are derived, each probed inside the helper that derives it
+so two call sites cannot disagree. Being change-only, `vezax.block` is written
 at each return: a probe mid-helper plus one at the return would read as a flap every tick. `vezax.formation`
-(`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode`
+(`outside`/`noboss`/`idle`/`on`/`kept`, `kept` past 45 yd on the fight's latch) and `vezax.hardmode`
 (`off`/`pending`/`lost`/`animus`) are the exception: the encounter's tick writes them, since the
 formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
 come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
@@ -388,8 +404,9 @@ heal-back aside (it shows only as boss health rate); `--help` lists its views. I
 probes the pull never wrote. No probe was added for it: fields are `snap.hz`, crashes `haz`, the mark an
 aura, the leech `dmg`, vapor targeting `snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid;
 the vapors themselves are never sampled. The camp is read from `vezax.slot` as well as `vezax.block`,
-which is only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was
-open. `--animus` measures the Animus fight from its spawn to its kill, the collapse (under four fifths of
+which is only written inside the gate. `--band`'s `on` column is the share of the pull the gate was
+open, `kept` the share the latch alone held it, `out s` a bot's living time shut out after joining.
+`--animus` measures the Animus fight from its spawn to its kill, the collapse (under four fifths of
 the sampled roster alive) or the pull's end: its pace and, per ranged and healer, casts, field share,
 damage, mana, living time past its 37 yd ceiling (`past`) and accepted reach spell walks (`walks`), then
 which `vezax.reach` values were written after the spawn. Mana comes from the bot's last living sample,
@@ -502,11 +519,10 @@ cuts damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the
 under 40+ stacks.
 
 **When he settles 10+ yd north of the anchor (a north settle), the Animus sits behind him from the
-camp.** It stands between him and the main tank, so at a 14.1 yd settle it was 9.6 yd behind him: the
-slot pull stops at row 0's radius, 40 yd from it, ranged dps spent 73-91% of its phase past its ceiling
-flipping between reach spell and their slots, and it was left at 3.4%. Row 0 is then also 44-48 yd from
-the main tank, in a healer's reach 2-5% of the time. Both need ranged or the main tank somewhere new.
-The settle decides the race: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
+camp.** It stands between him and the main tank, so at a 14.1 yd settle it was 9.6 yd behind him.
+Ranged dps slots cross the Mark floor to reach it (camp section), but row 0 is then 44-48 yd from the
+main tank, in a healer's reach 2-5% of the time, and healers keep their slots. The settle decided the
+race before the crossing: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
 walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
