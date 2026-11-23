@@ -942,3 +942,13 @@ late, uld1 ~13 s early. The latch fix saves hits and lives, not measured seconds
    pulled, walk him back down to ~15 yd from the add fight, so adds and Giant die in one place? Saves ~5-8 s a pull and keeps the
    healers on everyone; costs the Giant's Stomp (around him) and Rune Detonation (a random player) landing among the squad up to ~20 s
    earlier. Recommended: yes.
+
+**Review (round 10).** The latch cause holds: `smashlatch.py` and `smashcost.py` rerun on the six pulls give the same clears
+(arena bots 158-175 yd out, 13 / 16 / 22 a pull) and 81 of 93 hits. At the Colossus stop no Iron Honor Guard is within 50 yd
+(nearest 73-77 yd), so the pull's picker hands the leader the Colossus, not a guard behind the shut doors (scratchpad
+`thorim_r10_review/nearstop.py`). Q2 and Q3 are the user's answers, the latch a bug; no size, mode or player branch; Thorim files
+only. Fixed:
+- The start-pack exemption covered only the gate walk: while the leader walks from the pack to the gate, non-healers more than
+  25 yd behind still took the tether toward him. `ThorimTrailsGauntletLeader` now skips a `ThorimFightingStartPack` bot too.
+- `thorim lever wait` let a bear's Feral Charge and a Warbringer Charge through (`Family::Charge` is no mover), taking a waiting
+  leader back into the pack whenever his target came within 25 yd; the rule now holds charges.

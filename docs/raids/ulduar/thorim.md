@@ -995,11 +995,12 @@ player was on the instance left the corridor standing while he stayed in the are
   too) keys on the leader. The `ThorimFallFromFloor` teleport still targets the group leader.
 - **Lever:** a bot leader walks to the lever (GO 194264, (2173.3, −252.9)) at the pull, once no start-pack
   mob attacks him, and waits there while the main tank holds the pack (`thorim lever wait` holds his pickers,
-  taunts and every mover but the lever walk); the moment it loses `GO_FLAG_NOT_SELECTABLE` (six start-pack
-  deaths), still `GO_STATE_READY`, he sends `CMSG_GAMEOBJ_USE`. Walking there after the sixth death cost
-  4.5-7.7 s of Sif's clock a pull. A real player leading pulls it himself. Followers gather on a leader at the
-  gate, except a non-healer whose target is a live start-pack mob within 50 yd (`ThorimFightingStartPack`):
-  it finishes the pack, or it would shuttle between pack and gate.
+  taunts, charges (no mover to the rules) and every mover but the lever walk); the moment it loses
+  `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths), still `GO_STATE_READY`, he sends `CMSG_GAMEOBJ_USE`.
+  Walking there after the sixth death cost 4.5-7.7 s of Sif's clock a pull. A real player leading pulls it
+  himself. Followers gather on a leader at the gate, except a non-healer whose target is a live start-pack
+  mob within 50 yd (`ThorimFightingStartPack`), which also skips the 25 yd tether while he walks there: it
+  finishes the pack, or it would shuttle between pack and gate.
   **Walk to touching distance:** `IsAtInteractDistance` is the Opening spell's (68398) 5 yd around the
   model box (display 295, scale 3), only 5.4-5.8 yd from its centre west and sideways, while `MoveTo`'s
   distance nets out both sizes (2.7 yd). Stopping at the interaction distance less a yard left all nine bot

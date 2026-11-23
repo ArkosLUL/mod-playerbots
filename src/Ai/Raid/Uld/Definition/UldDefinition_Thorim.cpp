@@ -168,7 +168,8 @@ void DefineThorim(EncounterBuilder& e)
 
     e.OwnMovement("thorim lever wait", Role::Any, ThorimLeverWait, Family::Attack | Family::AvoidAoe,
                   {ThorimGauntletLeverAction::Name});
-    e.Block("thorim lever wait", Role::Any, ThorimLeverWait, Family::TankAssist | Family::Taunt | DPS_PICKERS);
+    e.Block("thorim lever wait", Role::Any, ThorimLeverWait,
+            Family::TankAssist | Family::Taunt | Family::Charge | DPS_PICKERS);
 
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 

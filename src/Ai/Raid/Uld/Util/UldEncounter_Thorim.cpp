@@ -1545,7 +1545,7 @@ bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
     if (bot->GetDistance2d(leader) <= trail)
         return false;
 
-    return healer || !ThorimGauntletFighting(botAI, bot);
+    return healer || (!ThorimGauntletFighting(botAI, bot) && !ThorimFightingStartPack(botAI, bot));
 }
 
 bool ThorimFightingStartPack(PlayerbotAI* botAI, Player* bot)
