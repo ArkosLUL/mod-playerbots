@@ -213,7 +213,7 @@ void PullVezaxSlotIntoAnimusReach(Player* bot, Unit* vezax, Position& slot)
 bool TryGetVezaxStrafeInAnimusReach(Player* bot, Position const& strafed, Position const& impact, Position& spot)
 {
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-    if (!botAI || PlayerbotAI::IsHeal(bot))
+    if (!botAI || PlayerbotAI::IsHeal(bot) || bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
         return false;
 
     Unit* animus = VezaxAnimusTargetOf(botAI);

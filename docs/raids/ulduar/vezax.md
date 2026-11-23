@@ -122,8 +122,8 @@ terrain height is meaningless here.
 after one collapse he chased loose ranged ~100 yd north, four camp bots strafed off the hall's north
 edge and fell under the map, and he regenerated to full where he could not reach them. The slot and the
 strafe go through `Map::CheckCollisionAndGetValidCoords` from the bot, like the hazard sweep's
-candidates, the mark spots along the line from him, and the walk goes to its answer, which pulls a
-point past the navmesh edge back onto it. A failed call, or an answer more than 5 yd above or below
+candidates, and the mark spots from him; the walk goes to its answer, which pulls a point past the
+navmesh edge back onto it. A failed call, or an answer more than 5 yd above or below
 the bot, is refused: for a player the call
 [settles an off-mesh point on the ground below](../../engine/pitfalls.md#movement-that-silently-no-ops)
 and still passes. A refused slot or mark spot holds the bot where it stands; a refused strafe, or one
@@ -135,7 +135,8 @@ stands near his spawn means that. One sits at about (1860-1862, 113.5-115), in f
 camp as he settles; every edge read in windows 14-22 clipped there. From the bot it cut the walk to an
 arc spot across the camp: the marked bot stopped at the clip, read itself arrived, and stood in its own
 group's leech (41-75 ticks in four windows against a median 11; one let him heal 5% and drained two
-healers 20 points). Lines from him to the arc and south spots never cross it.
+healers 20 points). Lines from him to the arc and south spots clear it while he stands within ~25 yd
+of the anchor, past any settle seen.
 
 ## Mark of the Faceless is the fight
 
@@ -214,11 +215,13 @@ back into the field the missile leaves and class interrupts get the ticks betwee
 **A ranged dps on the Animus strafes into its reach** (`vezax.dodge = pulled`): when the strafe ends
 farther from it than the slot pull's reach, the strafe gets the same pull, kept only if it stays 11 yd
 off the impact; else the plain strafe. 15 yd across from a pulled slot left the Animus's 37 yd ceiling
-in 416 of 597 ranged dodges in its phase (windows 15-22), always the group on his far side from it:
-that group spent 19-44% of the phase past the ceiling, walking back by reach spell and position,
-against 5-13% for the near one; in a pull that lost the race 7% short it did 14k/s less on it than in a
-kill of the same roster. Replayed, 90% of those dodges get a pulled spot 11+ yd clear, 24.5-28 yd from
-him, inside the Mark floor as crossed slots are.
+in 416 of 597 ranged dodges in its phase (windows 15-22), mostly the group on his far side from it
+(both in a north settle): that group spent 19-44% of the phase past the ceiling, walking back by reach
+spell and position, against 5-13% for the near one; in a pull that lost the race 7% short it did
+14k/s less on it than in a kill of the same roster. Replayed, 90% of those dodges get a pulled spot
+11+ yd clear, 24.5-37 yd from him (median 28), half of them inside the Mark floor as crossed slots
+are. A marked bot keeps the plain strafe: pulled toward the Animus, one replayed marked dodge took
+its leech onto 6 bots instead of 2.
 
 **While the missile flies, no other walk goes toward it** (`VezaxWalkMeetsShadowCrash`): one ending
 within 11 yd of the impact, or passing within 11 nearer than it starts, waits for the landing. Position

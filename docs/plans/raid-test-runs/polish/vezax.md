@@ -1176,7 +1176,8 @@ for, and neither caused a wipe.**
   side and south spots pass his position, `:527`, `:557`); the slot and the strafe still check from the
   bot. The spot no longer moves with the bot, so the trigger never reads a clip as arrival, and the walk
   (pathed by `MoveTo`) goes round the hole. Lines from him to the arc spots (±65.5° off the camp
-  bearing) and the south spots never cross the hole for any settle within 30 yd of the anchor; the hall's north
+  bearing) and the south spots never cross the hole for any settle within ~25 yd of the anchor (the L arc's
+  line first meets it with him ~25 yd north-west, the R arc's and the south ones' past 32); the hall's north
   edge still pulls a spot back as before.
 - A ranged dps targeting the live Animus whose strafe ends farther from it than the slot pull's reach gets
   the strafe pulled the same way (`TryGetVezaxStrafeInAnimusReach`, `:213`, used first at `:989`), kept
@@ -1205,9 +1206,29 @@ on the bot's own target and position, so the same with or without a real player.
   group on his far side from the Animus too; pace 1.24 %/s or more in a normal settle whichever way he
   swings.
 - `--crash`: no hit on a bot whose dodge read `pulled`; Animus-phase crash deaths 0-1 a pull.
-- Cost to watch: pulled strafes stand 24.5-28 yd from him, so an in-phase mark cast during a far-group
-  dodge sees up to ~5 fewer far; `far` under 9 at 3:12 or 3:52, or a mark on a melee or tank there,
+- Cost to watch: pulled strafes stand 24.5-37 yd from him (median 28.2, 54% inside the 29.1 floor), so an
+  in-phase mark cast during a far-group dodge sees up to ~5 fewer far; `far` under 9 at 3:12 or 3:52, or a mark on a melee or tank there,
   is this fix's cost.
 
 **Questions.** None new. Q1 (a) cost no kill in this window (uld2 crossed 85% of its samples and killed
 fastest); the north settle's healer reach to the main tank stays open as before.
+
+**Review.** Both causes hold. w22 uld1 Uldxac (`vezax-r10-review/markclip.py`): mark move to (1884.63,
+103.63) at 1:00.685, `edge` and a move to (1861.06, 114.64) at 1:00.912, soak walks back to the field at
+1:03.237 and 1:05.291, back on the arc spot only after the 1:06.254 dodge; `--mark` reads 75 ticks,
++0.543 %/s. w22 uld3 `--animus`: L's five ranged dps 39 of 39 dodges past the ceiling, R's four 2 of 29.
+`strafe_replay.py` re-run on windows 15-22: 373 of 416 pulled 11+ yd clear, from him 24.5-37 (median
+28.2). No size, mode or player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: a marked bot no longer gets the strafe pull (`TryGetVezaxStrafeInAnimusReach`). Its dodge
+  is taken from its slot, so the pull drags it toward the Animus and the camp with its leech:
+  `vezax-r10-review/marked_dodges.py` finds 7 marked ranged dodges in Animus phases of windows 15-22,
+  4 the pull would move, bots alive within 16.5 yd of the spot 2 → 6, 4 → 5 and 2 → 2.
+- Review fix: the hole crossing starts at ~25 yd from the anchor, not 30 (`vezax-r10-review/holelines.py`,
+  hole box (1860-1862, 113.5-115)), and pulled strafes stand 24.5-37 yd from him, about half inside the
+  floor, not 24.5-28 all inside; the findings doc said both, and "always the group on his far side",
+  which holds only in a normal settle (both groups in a north one).
+- Left: the dodge picks pulled or plain strafe afresh every tick with no hysteresis, so a pulled spot
+  hovering at 11 yd off the impact while the Animus drifts can flip the bot between two points up to
+  11.5 yd apart. The 10-11 band held 27 of 416 replayed dodges, and the Animus stands still on the main
+  tank. A marked bot's dodge itself still heads for its group's strafe (pre-existing).
