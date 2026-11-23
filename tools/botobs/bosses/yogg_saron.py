@@ -2358,8 +2358,8 @@ def show_madness_caught(trace: Trace) -> None:
             lock = f", under {'/'.join(lock_names)} {locked:4.1f} s" if lock_names else ""
             start = row_before(rows[guid], when - int(left * 1000))
             off = min((math.dist((start[2], start[3]), spot) for spot in ways_out), default=None) if start else None
-            from_out = f" {off:5.1f} yd from the nearest way out," if off is not None else ""
-            print(f"{'':16}decided with {left:4.1f} s left{from_out} back to safe {flips}x,"
+            from_out = f", {off:4.1f} yd from the nearest way out" if off is not None else ""
+            print(f"{'':16}decided with {left:4.1f} s left{from_out}, back to safe {flips}x,"
                   f" exit walk refused {refused:4.1f} s, casting {cast:4.1f} s{lock}")
 
     teleported = {guid for _, guid, *_ in caught}

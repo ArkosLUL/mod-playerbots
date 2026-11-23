@@ -1288,3 +1288,13 @@ back to 1.5×. Round 13's checks (`regroup walks` `sight`, `passed over`, `casts
 
 **Still open with the user, not built:** round 13's healer mana question (a healer under 30% mana goes after every
 healer above it).
+
+**Review.** Built as the user answered, nothing else in C++. The constant feeds only the exit read and, through
+`YoggSaronExitLeadMs`, the exit cast hold; no size, mode or player branch. `--brain` on window 22 reread 38/35/32 melee
+exits (105), decided at a median 6.6 s left, surfaced with 3.6 s to spare, 26 yd walked in 3.1 s; window 16 uld3's
+wave 1 shows the one 6.5/0.5 walk (6.0 s). Window 22's ranged and healers at the Brain all decided at 2.8-3.1 s left
+(the floor, `late`) and surfaced with 2.1-2.8 s to spare, so 1.2× leaves them as they were.
+
+- Review fix: `caught by it` lost the comma after `s left` when a decided bot had no row or the pull no clean exit.
+- Left: at 1.2× the lead budgets 5.8 yd/s from the Brain; melee now make ~8.4, but the findings doc's older 4-6 yd/s
+  walks would be charmed. The revert rule above covers it.
