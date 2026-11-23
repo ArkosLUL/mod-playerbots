@@ -296,15 +296,96 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         return false;
     }
 
-    Position const straightAway(bot->GetPositionX() + cos(away) * distance,
-                                bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
     float const fallbackTravel = speed > 0.0f ? distance / speed : 0.0f;
-    if (!IsMimironSpotShockSafe(botAI, straightAway) ||
-        !IsMimironSpotBombSafe(hazards, straightAway) ||
-        !IsMimironSpotRocketSafe(botAI, straightAway) ||
-        !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel) ||
-        IsMimironSpotInFireBotSpray(hazards, straightAway, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH) ||
-        !IsMimironSpotHolderSafe(holderRadius, straightAway))
+    auto const fallbackSafe = [&](Position const& spot)
+    {
+        return IsMimironSpotShockSafe(botAI, spot) && IsMimironSpotBombSafe(hazards, spot) &&
+               IsMimironSpotRocketSafe(botAI, spot) &&
+               IsMimironSpotBarrageSafe(vx001, barrage, spot, fallbackTravel) &&
+               !IsMimironSpotInFireBotSpray(hazards, spot, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH) &&
+               IsMimironSpotHolderSafe(holderRadius, spot);
+    };
+
+    if (allowFire || fallbackFrom)
+    {
+        Position const straightAway(bot->GetPositionX() + cos(away) * distance,
+                                    bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
+        if (!fallbackSafe(straightAway))
+        {
+            NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
+                            refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                            refusedHold, refusedBombBot);
+            return false;
+        }
+
+        NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                        refusedHold, refusedBombBot);
+
+        if (fallbackFrom)
+            return MoveAway(fallbackFrom, distance);
+
+        return MoveTo(bot->GetMapId(), straightAway.GetPositionX(), straightAway.GetPositionY(),
+                      straightAway.GetPositionZ(), false, false, true, false, priority);
+    }
+
+    struct FallbackSpot
+    {
+        Position dest;
+        bool exact = true;
+        float offAway = 0.0f;
+        uint32 burning = 0;
+        bool mined = false;
+        float clearance = 0.0f;
+    };
+
+    std::vector<FallbackSpot> spots;
+    for (float delta = 0.0f; delta <= ULDUAR_MIMIRON_FLEE_FAN_MAX + 0.001f; delta += ULDUAR_MIMIRON_FLEE_FAN_STEP)
+    {
+        for (float sign : {1.0f, -1.0f})
+        {
+            if (delta == 0.0f && sign < 0.0f)
+                continue;
+
+            FallbackSpot spot;
+            spot.offAway = sign * delta;
+            float const angle = away + spot.offAway;
+            float dx = bot->GetPositionX() + cos(angle) * distance;
+            float dy = bot->GetPositionY() + sin(angle) * distance;
+            float dz = bot->GetPositionZ();
+            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                               bot->GetPositionZ(), dx, dy, dz))
+            {
+                dx = bot->GetPositionX() + cos(angle) * distance;
+                dy = bot->GetPositionY() + sin(angle) * distance;
+                dz = bot->GetPositionZ();
+                spot.exact = false;
+            }
+
+            spot.dest = Position(dx, dy, dz);
+            if (spot.dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+                    distance * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT ||
+                spot.dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started ||
+                !fallbackSafe(spot.dest))
+                continue;
+
+            spot.clearance = ULDUAR_MIMIRON_FLAMES_RADIUS;
+            for (Position const& node : hazards.flames)
+            {
+                float const gap = spot.dest.GetExactDist2d(node.GetPositionX(), node.GetPositionY());
+                spot.burning += gap < ULDUAR_MIMIRON_FLAMES_BURN_RADIUS ? 1 : 0;
+                spot.clearance = std::min(spot.clearance, gap);
+            }
+
+            for (Position const& mine : mines)
+                spot.mined = spot.mined || spot.dest.GetExactDist2d(mine.GetPositionX(), mine.GetPositionY()) <
+                                               ULDUAR_MIMIRON_MINE_CLEARANCE;
+
+            spots.push_back(spot);
+        }
+    }
+
+    if (spots.empty())
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                         refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
@@ -312,16 +393,32 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         return false;
     }
 
+    std::stable_sort(spots.begin(), spots.end(),
+                     [](FallbackSpot const& a, FallbackSpot const& b)
+                     {
+                         if (a.burning != b.burning)
+                             return a.burning < b.burning;
+                         if (a.mined != b.mined)
+                             return !a.mined;
+                         return a.clearance > b.clearance;
+                     });
+
+    for (FallbackSpot const& spot : spots)
+    {
+        if (TryMoveTo(bot->GetMapId(), spot.dest.GetPositionX(), spot.dest.GetPositionY(), spot.dest.GetPositionZ(),
+                      false, false, true, spot.exact, priority) != MoveOutcome::Issued)
+            continue;
+
+        NoteFleeOutcome(what, "fallback", &spot.offAway, refusedBack, refusedMine, refusedCone, refusedFire,
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                        refusedHold, refusedBombBot);
+        return true;
+    }
+
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                     refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
                     refusedHold, refusedBombBot);
-
-    if (fallbackFrom)
-        return MoveAway(fallbackFrom, distance);
-
-    return MoveTo(bot->GetMapId(), bot->GetPositionX() + cos(away) * distance,
-                  bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ(), false, false, true,
-                  false, priority);
+    return false;
 }
 
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
@@ -805,6 +902,10 @@ bool MimironPhase4FocusAction::Execute(Event /*event*/)
     if (AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE)
         SET_AI_VALUE(float, "disperse distance", ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE);
 
+    Unit* const acuFocus = GetMimironPhase4AcuTankFocus(botAI, bot);
+    if (acuFocus && AI_VALUE(Unit*, "current target") != acuFocus)
+        return Attack(acuFocus);
+
     return false;
 }
 
@@ -1076,6 +1177,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     std::vector<Unit*> bombBots;
     std::vector<Unit*> assaultBots;
     std::vector<Unit*> junkBots;
+    std::vector<Unit*> fireBots;
 
     for (ObjectGuid const& guid :
          botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
@@ -1092,6 +1194,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
             case NPC_BOMB_BOT:            bombBots.push_back(unit); break;
             case NPC_ASSAULT_BOT:         assaultBots.push_back(unit); break;
             case NPC_JUNK_BOT:            junkBots.push_back(unit); break;
+            case NPC_EMERGENCY_FIRE_BOT:  fireBots.push_back(unit); break;
             default: break;
         }
     }
@@ -1120,6 +1223,10 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
     priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
+
+    if (IsMimironFireBotCullActive(botAI, bot))
+        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
+                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
     if (IsMimironPhase4(bot))
     {

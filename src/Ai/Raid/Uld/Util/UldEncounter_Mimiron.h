@@ -248,6 +248,7 @@ bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Posit
 
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot);
 bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot);
+bool IsMimironFireBotCullActive(PlayerbotAI* botAI, Player* bot);
 
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
 
@@ -352,7 +353,7 @@ bool IsNearMimironRoom(Player* bot);
 
 MimironHandoverStep GetMimironHandoverStep(PlayerbotAI* botAI, Player* bot);
 
-void MimironTick(PlayerbotAI* botAI);
+bool MimironTick(PlayerbotAI* botAI);
 
 bool IsMimironEngaged(PlayerbotAI* botAI);
 
@@ -371,6 +372,9 @@ Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot);
 Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee);
 
 Unit* GetMimironPhase4TankFocus(PlayerbotAI* botAI, Player* bot);
+
+bool IsMimironPhase4AcuTank(Player* bot);
+Unit* GetMimironPhase4AcuTankFocus(PlayerbotAI* botAI, Player* bot);
 
 Player* GetMimironCoreCarrier(PlayerbotAI* botAI);
 
@@ -461,6 +465,8 @@ inline constexpr float ULDUAR_MIMIRON_FLAMES_PARKED_DODGE_HEALTH_PCT = 80.0f;
 inline constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
 
 inline constexpr uint32 ULDUAR_MIMIRON_FLAMES_HOLD_MS = 2500;
+
+inline constexpr int32 ULDUAR_MIMIRON_FLAMES_CAST_FINISH_MS = 1000;
 
 inline constexpr float ULDUAR_MIMIRON_APPROACH_INSET = 2.0f;
 

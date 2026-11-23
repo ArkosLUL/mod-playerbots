@@ -184,6 +184,10 @@ bool MimironPhase4FocusTrigger::IsActive()
         return focus && AI_VALUE(Unit*, "current target") != focus;
     }
 
+    Unit* const acuFocus = GetMimironPhase4AcuTankFocus(botAI, bot);
+    if (acuFocus && AI_VALUE(Unit*, "current target") != acuFocus)
+        return true;
+
     return AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE;
 }
 
@@ -402,5 +406,5 @@ bool MimironSetDpsPriorityTrigger::IsActive()
     if (PlayerbotAI::IsTank(bot))
         return false;
 
-    return IsMimironEngaged(botAI);
+    return IsMimironEngaged(botAI) || (!PlayerbotAI::IsHeal(bot) && IsMimironFireBotCullActive(botAI, bot));
 }

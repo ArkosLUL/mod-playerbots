@@ -236,6 +236,12 @@ Laser Barrage, Rocket Strike, Shock Blast, the flames and the Frost Bomb. Proxim
 So does the Bomb Bot step-out, though its blast kills a caster: it starts when the bomb picks a victim,
 seconds before it arrives.
 
+**A dodge cannot cut a cast it never runs for.** While a bot casts, `PlayerbotAI` yields before the engine,
+so no trigger of its own fires: hunters casting Revive Pet (8.8 s) on the drop burned to death without a
+flee note in four windows. The encounter tick, on its 250 ms scan, runs `MimironDodgeFlamesTrigger` for
+every bot casting with more than `ULDUAR_MIMIRON_FLAMES_CAST_FINISH_MS` (1 s) left and requests the
+interrupt where it fires (`mimiron.castcut`), so the dodge runs on the bot's next update.
+
 ### The bearing fan
 
 The hazard flees share one fan, `MoveAwayClearOfMines` / `FleeFan`: eleven bearings
@@ -268,6 +274,11 @@ in `mimiron.flee`. Its traps:
   casting MK II to 9.9 yd and its leg locked the escape out. A fallback landing in a live Shock Blast
   (every flee but the escape), a Frost Bomb, a rocket, the barrage cone or a spray lane returns false
   as `unsafe`, leaving the bot in fire at ~3.1k a second and the lock free.
+- **A fallback that may not burn picks the least burn.** Straight away ended 15 of 32 flames fallback legs
+  in one window inside a node. A position flee without `allowFire` (flames, Bomb Bot, siren) falls back to
+  the fan bearing at the full hop with the fewest burning nodes, then off mines, then farthest from a node
+  (to 5 yd), then straightest, among those passing the screens above; `unsafe` only when none does. A unit
+  flee (Frost Bomb, rocket, shock) or one with fire allowed keeps the straight one.
 
 `MoveTowardClearOfMines` aims the fan at a destination by fleeing its mirror through the bot: bearing 0
 walks straight at it, and every swept bearing ends further from the mirror than the bot started, so the
@@ -579,7 +590,9 @@ and 10° (`_SHORT_STEPS`) and takes the longest arc with a clean, mine-clear leg
 replayed, that clears 40 of the 76 ranged crossings. A short arc shifts radius by at most its chord:
 the simulation cleared constant-radius steps only, and a 10° step with an 8 yd shift turns 8°/s,
 slower than the sweep, where the cap keeps every short step at 12.7°/s or more over `[14, 24]`. With
-no mine on the floor (phases 2 and 3) nothing changes.
+no mine on the floor (phases 2 and 3) nothing changes. Measured over one phase 4, no ranged or healer
+step passed a mine (0 of 24); melee steps did, 12 of 64: the chassis had moved its 8 yd melee ring onto
+two old mines, which the ring's 5-8 yd shifts cannot get round, and one stack step took 9 hits, no death.
 
 **The fire dodge keeps running during a barrage for every bot the cone does not own.** The window is
 22-26% of phase 2 and carried 36-76% of its fire damage; one window killed 13 bots to Flames while bots
@@ -979,8 +992,7 @@ keep the Assault Bot, the only Magnetic Core source; a grounded unit outranks bo
 DPS.
 
 Open: **the MK II's opening swing** goes to a random raid member with the tank 24-34 yd off, and once
-one-shot a healer; **the ACU has no tank in phase 4**, so it sat on ranged 82% of one phase 4 for 407k
-and three killing blows.
+one-shot a healer.
 
 ## The Magnetic Core needs a carrier that walks
 
@@ -1080,10 +1092,10 @@ cone into a line about 2.3 yd each side, 18,850-21,150 frost plus Emergency Mode
 The 25-man bot (34148, 50.4k HP, ~63k empowered) also carries **Deafening Siren 64616**, a 10 yd area
 silence, from `creature_template_addon`. Faction 16, so attackable.
 
-**Nobody kills one.** `GetMimironKeptFireBots` keeps every live one while the encounter is in progress,
-raid-wide, folded every 250 ms, through phase 3, the phase 4 handover and phase 4: each puts out fire, so a
-dead one only lets the fire build, and a stray spray line is cheaper than pulling anyone off the
-rendezvous. The DPS picker has no fire bot entry. Culls were measured: an early one spent 7% of phase 3
+**Nobody kills one, bar the phase 4 handover.** `GetMimironKeptFireBots` keeps every live one while the
+encounter is in progress, raid-wide, folded every 250 ms, through phase 3 and phase 4: each puts out fire, so
+a dead one only lets the fire build, and a stray spray line is cheaper than pulling anyone off the
+rendezvous. The DPS picker has no fire bot entry then. Culls were measured: an early one spent 7% of phase 3
 output and 21% of ranged bot-seconds on them at ACU 97.9%; demoting them let six live together, spray
 248k and kill six bots; keeping two and culling the rest left the raid in a permanent cull with 1.7-2.4
 alive while fire ran to 41-46% of phase 3 intake. A fire bot with no flame within 150 yd stops moving and
@@ -1091,12 +1103,19 @@ never sprays, so a raid that clears the field ends up with quiet ones. Watch `ar
 A-B-A, the casting share and phase 4's splash holds (below): nine to fifteen alive is nine to fifteen
 silences walking into the raid, and those numbers would say a cull was right after all.
 
-**Kept into phase 4 they cost more than the fire they put out.** With every one kept there, phase 4
-Flames fell to 0.3-1.1k/s from 1.4-2.9k/s and killed nobody, but Water Spray hit 10 times and killed 3,
-the siren silenced 199-361 raid-s, ranged cast 36-39% of the phase against 40-66% in nine earlier
-phase 4s, and the comparable kill dealt 92.9k/s there against 108.7k/s: 160 s against 135 s, on a clock
-that left it 8. Phase 3 lost nothing: Flames, spray and siren stayed in the earlier range, with no aim at
-a fire bot.
+**Kept into phase 4 they cost more than the fire they put out, so the phase 4 handover kills them.** With
+every one kept there, phase 4 Flames fell to 0.3-1.1k/s from 1.4-2.9k/s and killed nobody, but Water Spray
+hit 10 times and killed 3, the siren silenced 199-361 raid-s, ranged cast 36-39% of the phase against
+40-66% in nine earlier phase 4s, and the comparable kill dealt 92.9k/s there against 108.7k/s: 160 s
+against 135 s, on a clock that left it 8. Phase 3 lost nothing: Flames, spray and siren stayed in the
+earlier range, with no aim at a fire bot.
+
+The handover's 32 s hold 3-7 of them (~63k each) and nothing else of Mimiron's is attackable. It reads as a
+spent, unselectable ACU in the room (`NOT_SELECTABLE`, under `ULDUAR_MIMIRON_SPENT_HEALTH_PCT`; it sits at
+0.2% throughout). There the fold hands the live ones to `IsMimironFireBotCullActive` instead of the kept set:
+`mimiron target guard` and, for DPS, `mimiron set dps priority` stay on while one lives, and DPS take them
+after any leftover Assault, Junk or Bomb Bot; the splash guard and the target exclusions lift with the kept
+set. A survivor into phase 4 is kept again.
 
 **Keeping them out of Mimiron's picker is not enough.** The bot tank killed both kept bots on its own,
 since `MimironSetDpsPriorityTrigger` stands down for tanks and `mimiron target guard` only zeroes
@@ -1222,9 +1241,18 @@ This holds in both modes.
 
 **Melee at the floor hit the ACU instead of holding.** It is the leader then, so every hit closes the gap;
 held, melee were targetless 24-81% of a phase 4. Melee and pets take it while the lower ground part is
-within twice the converge (8 points) of it, and hold past that, since cleave splashes the pair. The main
-tank never holds, nor does a healer. A hold (`p4hold`) claims the tick so the class strategies don't
-re-engage; dodges above `ACTION_RAID` still run.
+within twice the converge (8 points) of it, and hold past that, since cleave splashes the pair. No tank
+holds, nor does a healer. A hold (`p4hold`) claims the tick so the class strategies don't re-engage; dodges
+above `ACTION_RAID` still run.
+
+**The off-tank tanks the ACU** while the main tank keeps the MK II. Phase 4 resets the ACU's threat and it
+casts Plasma Ball (65647: single target, 50,000 yd range, ~9.4-10.6k, every ~4 s) at its victim, so untanked
+it rode the top-threat ranged: 72-99% of a phase 4's samples, 29-37 balls on ranged, up to 9 deaths a window.
+`GetMimironPhase4AcuTankFocus` gives the first living assist tank the ACU while it is attackable, else the
+melee focus; `MimironPhase4FocusAction` attacks it, `mimiron phase 4 acu tank target guard` keeps `tank
+assist` off his target, and his class `lose aggro` taunt takes the ACU back. A real player as that assist tank
+does the job himself: the index counts players. Nothing moves: the ACU's combat reach is 0, so its 5 yd melee
+range lies inside his `p4melee` slot's 5 yd tolerance.
 
 **Every restriction lifts the moment a part starts self-repairing.** `IsMimironPhase4` is keyed on VX-001
 riding the chassis, not on all three being attackable, so it stays true through that window, the most
@@ -1496,7 +1524,8 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
+| `castcut` | The spell id of a cast the encounter tick cut for the flames dodge; a cut can write two notes 250 ms apart |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left |
 | `close` | A melee approach steered round the fire instead of straight at the target |
@@ -1510,9 +1539,11 @@ member nearest the Burst Target at the cast; `--walk` charges a moving sample to
 the bot's last accepted `move` within 6 s (`ATTRIBUTE_MS`), `?` being a walk with none, a human or a
 chase; `--handover` counts a bot on its phase 2 slot only by a slot handed out inside the handover, and
 leaves humans out of positions and mana; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a
-dodge burned only with a Flames tick on the bot in the 2 s before it; `--mines` charges a mine hit to
-the bot's last leg under 4 s old while it moves, else `standing`, and judges legs on their straight
-line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
+dodge burned only with a Flames tick on the bot in the 2 s before it, a fallback leg burning when it ends
+within 3.5 yd of a live Flames (Spread), and counts `castcut` notes 1 s apart as one cut; `--acutank`
+takes whoever got a `p4tank` slot as the main tank and every other roster tank as the off-tank;
+`--mines` charges a mine hit to the bot's last leg under 4 s old while it moves, else `standing`, and
+judges legs on their straight line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's

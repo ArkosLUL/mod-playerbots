@@ -1233,3 +1233,119 @@ pick over windows 16-19 (`rv_mim11/short_pick.py` in the scratchpad), 4 of ~80 s
 bots turned below the sweep and slower than their full step. Short arcs now cap the shift at the arc's chord (12.7°/s
 or more over 14-24 yd), keeping 40 of the 76 ranged and 22 of the 56 melee crossings (43 and 24 uncapped), and the
 short search runs only when the move can issue. The next-window expectations above stand.
+
+**User answers (2026-11-23).**
+
+- **Q4: yes.** Keep the fire bots through phase 3 (no sweep) and kill them in the phase 3 to 4 handover, when nothing
+  else can be attacked.
+- **Q5: yes.** The off-tank tanks the ACU in phase 4 while the main tank keeps the MK II.
+
+## Round 12 (build 90400b39c, round 11 built)
+
+**Data:** window 21, `raidtest.py report --boss mimiron --raid uld --head 90400b39c --pulls 10`: one valid pull per
+pool, no DC veto inside any. Baselines: windows 16-19. Scripts in the lane scratchpad (`mim12/`: `barrage_mines.py`,
+`mine_scene.py`, `acu_p4.py`, `h3_units.py`, `opening.py`, `fallback.py`; round 11's `deathmech.py`,
+`barrage_alt.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-185658-11` | `603_11_…_1795460261` | **kill** 9:25.7, hard mode, no Berserk cast | 2: P2 Rapid Burst 2 (one melee on an arc spread leg, revived, again) |
+| uld2 | `tr-20261123-185919-12` | `603_12_…_1795460403` | wipe 10:09.7, P4 opened 9:56.7 | 30: P1 Flames 2 (both hunters casting Revive Pet on the drop, 0:14.9), Shock Blast 2 (0:38.3, one of them revived); P3 Bomb Bot 4, Water Spray 3, ACU Plasma Ball 1; Berserk 18 |
+| uld3 | `tr-20261123-185618-10` | `603_10_…_1795460221` | wipe 9:32.1 in P3, raid dead | 31: P1 Shock Blast 1; P2 Rapid Burst 6, Heat Wave 3 (a healer twice, a ranged twice); P3 Bomb Bot 7, ACU Plasma Ball 4, Water Spray 3, Junk Bot 4, Assault Bot 1, Flames 2 |
+
+63 deaths: Berserk 18, Bomb Bot 11 (9 of them the chased bot), phase 2 Rapid Burst and Heat Wave 11, Water Spray 6, phase
+3 Plasma Ball 5, Junk and Assault Bots 5, Flames 4, Shock Blast 3. Hard mode in all three (Flames from the opening,
+Emergency Mode at phase 2).
+
+**Stop rules:** one kill of three (2 deaths): not polished. No failure picked three times.
+
+**Verdict on round 11 (short barrage steps over mines): held for its target, on one phase 4.** Only uld1 reached a real
+phase 4 (uld2's lasted 12.9 s into Berserk, uld3 died in phase 3). There no ranged or healer barrage leg passed a live
+mine (0 of 24; window 19: uld1 17 of 63, uld3 11 of 53), none took a mine hit (9 and 8) and no mine killed anyone on a
+barrage leg (5). Melee legs did: 12 of 64, all in the first barrage, where the chassis had moved the 8 yd melee ring
+onto two mines of the 7:22 cast and one stack step at 7:29.9 took 9 hits (83k), no death; the ring's radius shifts
+(5-8 yd) have no room round them. Beam ticks 0 in all three barrage windows, first phase 4 barrage window deaths 0
+(window 19 uld3: 5), phase 2 barrage legs 47 (46). Round 10's check stays: no Water Spray hit in a phase 4 barrage window.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 84.3 | 48.3 | 84.9 | 24.2 | 131.9 | 32.0 | 6:58.7 | 130.1 s, then a 7 s Self Repair round; kill 9:25.7 |
+| uld2 | 101.3 | 48.1 | 103.3 | 24.3 | **274.2** | 32.3 | 9:56.7 | 12.9 s, Berserk 10:00.2 |
+| uld3 | 95.8 | 48.0 | 95.1 | 24.3 | **295.6**, raid dead | | | |
+
+uld1 is the fastest phase 4 entry yet (window 19: 7:16-7:19). The two wipes lost phase 3: landings of 20/20/8/20/6 points
+(uld2) and 12/9/8 (uld3, nine dead in phase 2 first) against uld1's 33/39/5, with fire bots at 4.9 and 7.9 alive on
+average and Bomb Bots reaching their target 8 of 11 and 13 of 14 times.
+
+**Built: the user's Q4 (fire bots killed in the phase 3 to 4 handover).** Every window since round 8 had 3-7 kept fire
+bots through H3 with no aim at them (window 21: uld1 4, uld2 3) and into phase 4.
+
+- `GetMimironKeptFireBots`' 250 ms fold splits the live ones: kept as before, except while a spent, unselectable ACU
+  stands in the room (`NOT_SELECTABLE`, under `ULDUAR_MIMIRON_SPENT_HEALTH_PCT`; traced at 0.18-0.19% through every H3),
+  when they go to the new `IsMimironFireBotCullActive` instead. Phases 3 and 4 are unchanged; a survivor into phase 4 is
+  kept again.
+- `mimiron target guard` also runs while the cull is on, and `MimironSetDpsPriorityTrigger` for non-healers;
+  `BuildPriorityList` puts the fire bots after the leftover Bomb, Assault and Junk Bots (uld2 entered H3 with 4 Junk
+  Bots and an Assault Bot). The splash guard and the strategy's target exclusions read the kept set, so they lift in H3.
+
+**Built: the user's Q5 (the off-tank tanks the ACU in phase 4).** Untanked, the ACU's Plasma Ball (65647, single
+target, range 50,000) rode its top-threat ranged: in eight phase 4s of windows 16-21 its target was a ranged 72-99% of
+samples, 29-37 balls on ranged a phase 4, while the off-tank aimed at VX-001 88-99% from his `p4melee` slot.
+
+- `GetMimironPhase4AcuTankFocus`: the first living assist tank (`IsAssistTankOfIndex(bot, 0, true)`, which counts real
+  players, so a real off-tank does the job himself) gets the ACU while it is attackable, else the melee focus.
+  `MimironPhase4FocusTrigger`/`Action` attack it; `mimiron phase 4 acu tank target guard` (`Role::Tank`) keeps `tank
+  assist` off his target; his class `lose aggro` taunt (Growl, Dark Command, Righteous Defense) takes it back. No tank
+  ever ran `p4hold`, so he never holds.
+- **What moves: nothing.** The main tank keeps `p4tank` and its fire drag, the off-tank his `p4melee` slot on the melee
+  arc. The three parts share one point, the ACU's combat reach is 0 (model 28979), so its 5 yd melee range lies within
+  the slot's 5 yd tolerance, and the ball has no splash. Only the ball moves, onto him.
+
+**Fixed: a bot mid-cast in fire (round 11's candidate; evidence holds).** uld2's hunters Uldyaj and Uldyau began Revive
+Pet (982, 8.8 s) at 0:07.1-0:07.2 on the drop, took six Flames ticks each from 0:13.9 and died at 0:14.9 with no flee
+note, while every other bot there dodged (`flames+3 ok`); windows 7, 16, 19 and 21, always roster B. `PlayerbotAI`
+yields before the engine while a cast prepares (`PlayerbotAI.cpp:340-418`), so the dodge trigger never runs. Now the
+encounter tick (`MimironEncounterTick`, on `MimironTick`'s 250 ms scan) runs `MimironDodgeFlamesTrigger` for every bot
+casting with more than `ULDUAR_MIMIRON_FLAMES_CAST_FINISH_MS` (1 s) left and calls `RequestSpellInterrupt` where it
+fires, noted `mimiron.castcut`; the bot's next update interrupts and the dodge runs. Real players are skipped.
+
+**Fixed: the flames ladder's fallback landing in fire (round 11's candidate; evidence holds).** 47 `flames+10 fallback`
+notes in window 21; 15 of the 32 legs they issued ended within 3.5 yd of a live node (uld2's H1: 6 of 6), and 15 notes
+issued no leg at all (uld3's healer Uldzac wrote 12 in 8 s at 1:13-1:21, taking Flames throughout). For a
+position flee without `allowFire` (flames, Bomb Bot, siren), `FleeFan`'s fallback now scores every fan bearing at the
+full hop, collision-clamped, past the same hard screens (shock, bomb, rocket, barrage, spray lane, holder) and the
+backtrack and progress tests: fewest burning nodes, then off mines, then farthest from a node up to 5 yd, then
+straightest; it tries them in that order until one issues and notes the bearing taken. `unsafe` now means no bearing
+passes. Unit flees (Frost Bomb, rocket, shock) and fire-allowed ones keep the straight fallback.
+
+Reader: `--acutank` (phase 4: the ACU's target by off-tank, main tank or role, the off-tank's aim, Plasma Ball hits and
+deaths by victim) and `--fire` (fallbacks and how many legs ended in a burn, casts cut), with tests. Findings doc: the
+fire bot cull, the ACU tank, the cast cut, the least-burn fallback, the melee ring's mines.
+
+**Next window should show** (`--firebots`, `--acutank`, `--fire`, `--mines`; `mim12/acu_p4.py`, `fallback.py`):
+
+- H3: aim at fire bots above 0 bot-s (0 in every pull since round 8), 0 fire bots alive at H3's close and at phase 4's
+  open, phase 4 Water Spray and siren near 0 (window 19: 1-4 spray hits, 143-256 raid-s), phase 4 shorter for the
+  splash it gets back (uld1 130 s).
+- Phase 4: the ACU on the off-tank most of the phase (window 21 uld1: 1%, ranged 98%), Plasma Ball on ranged near 0
+  (30), the off-tank aiming at the ACU most samples, no ranged death to Plasma Ball (windows 18-19: 9 and 3), and no
+  off-tank death to it.
+- Opening: `castcut` notes for Revive Pet when fire lands on a reviving hunter, no hunter dead to Flames at 0:14-0:16
+  (roster B).
+- Fallback legs ending in a burn near 0 (15 of 32), `fallback` notes with a bearing, none repeating without a leg.
+- Round 11's: no ranged or healer barrage leg past a mine.
+
+**Not picked.**
+
+- Phase 3 length (uld2 274 s, uld3 296 s) and its Bomb Bots (11; 9 chased victims, bombs reaching their target 21 of
+  25): next round's candidate once the cull and the ACU tank are judged.
+- Phase 2 Rapid Burst and Heat Wave (uld3 9, a healer and a ranged twice each).
+- Melee barrage legs over mines (above): the ring's 5-8 yd shifts leave no room; a short arc cannot clear a mine on
+  the ring itself.
+- Shock Blast 3, the uld1 melee's two Rapid Burst deaths on an arc spread leg.
+
+**Questions for the user:** none.
+
+**Shared code:** none (Mimiron files and its reader; `MimironTick` now returns whether it scanned, Mimiron-only).
