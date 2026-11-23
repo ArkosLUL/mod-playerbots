@@ -849,6 +849,90 @@ class BurstTargetPull(unittest.TestCase):
         self.assertEqual(rows[0]["cone"], [(SHADOW, 1, False)])
 
 
+CHASER = 4294970700
+SPENT = 4294970701
+
+
+def bombbot_snap(when: int) -> dict:
+    rows = []
+    for guid, (x, y) in HOME.items():
+        alive = 0.0 if guid == TREE and when >= 6000 else 100.0
+        rows.append([guid, x, y, 364.0, 0.0, alive, 80.0, 0, 0, 0, 0, 0, 0, 0.0])
+    if when < 6000:
+        rows.append([CHASER, 22.0 - (6000 - when) / 1000.0, 0.0, 364.0, 0.0, 80.0, 0.0, AGONY, 1, 0, 0, 0, 0, 0.0])
+    if when < 3000:
+        rows.append([SPENT, -10.0, 0.0, 364.0, 0.0, 100.0 - when / 100.0, 0.0, BULWARK, 1, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def bombbot_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": CHASER, "en": mm.NPC_BOMB_BOT, "n": "Bomb Bot"},
+        {"t": 1, "e": "unit", "g": SPENT, "en": mm.NPC_BOMB_BOT, "n": "Bomb Bot"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "3"},
+
+        move(2000, SHADOW, mm.BOMB_BOT_STEP, 3.0, 9.0),
+        {**move(2100, SHADOW, mm.BOMB_BOT_STEP, 3.0, 10.0), "ok": 0},
+        move(2500, TREE, mm.FLAMES_DODGE, 0.0, 30.0),
+        {"t": 2000, "e": "note", "g": SHADOW, "k": "mimiron.flee",
+         "txt": "bombbot ok +0 (back0 mine0 cone0 fire0 bomb0 rocket0 burst0 shock0 spray0 move0 hold0 bombbot0)"},
+        {"t": 2400, "e": "note", "g": TREE, "k": "mimiron.flee",
+         "txt": "flames+3 ok +22 (back0 mine0 cone0 fire1 bomb0 rocket0 burst0 shock0 spray0 move0 hold0 bombbot2)"},
+        {"t": 5800, "e": "note", "g": BULWARK, "k": "mimiron.flee",
+         "txt": "bombbot kite none (back0 mine0 cone0 fire0 bomb0 rocket0 burst0 shock0 spray0 move0 hold0 bombbot0)"},
+
+        {"t": 6000, "e": "dmg", "s": CHASER, "d": AGONY, "sp": mm.SPELL_BOMB_BOT_BLAST, "a": 15000},
+        {"t": 6000, "e": "dmg", "s": CHASER, "d": TREE, "sp": mm.SPELL_BOMB_BOT_BLAST, "a": 24000},
+        {"t": 6000, "e": "death", "g": TREE, "killer": CHASER, "blow": [CHASER, 24000], "x": 0.0, "y": 22.0},
+        {"t": 8000, "e": "end", "out": "wipe"},
+    ]
+    records += [bombbot_snap(when) for when in range(0, 8000, 250)]
+    return records
+
+
+class BombBotPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700007.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in bombbot_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.bombbot_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_bomb_lives_until_it_was_last_seen(self):
+        lives = self.rows["lives"]
+        self.assertEqual((lives[CHASER]["first"], lives[CHASER]["last"]), (0, 5750))
+        self.assertEqual((lives[SPENT]["last"], lives[SPENT].get("victims")), (2750, None))
+
+    def test_the_bombs_target_is_chased_and_the_rest_collateral(self):
+        victims = self.rows["victims"]
+        self.assertEqual((victims["chased"], victims["chased dead"]), (1, 0))
+        self.assertEqual((victims["collateral"], victims["collateral dead"]), (1, 1))
+        self.assertEqual(self.rows["lives"][CHASER]["chased"], AGONY)
+
+    def test_only_accepted_step_outs_count_with_their_length(self):
+        self.assertEqual(self.rows["legs"], [9.0])
+        self.assertEqual(self.rows["steps"], {"bystander": 1})
+
+    def test_step_and_kite_outcomes_and_the_other_dodges_blast_refusals(self):
+        self.assertEqual(self.rows["outcomes"], {"step ok": 1, "kite none": 1})
+        self.assertEqual(self.rows["screened"], 2)
+
+    def test_the_view_prints_victims_and_legs(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_bombbots(self.trace)
+        self.assertIn("collateral 1 (1 dead)", out.getvalue())
+        self.assertIn("median 9.0 yd", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

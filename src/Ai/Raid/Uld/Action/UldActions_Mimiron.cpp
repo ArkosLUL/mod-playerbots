@@ -94,6 +94,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedSpray = 0;
     uint32 refusedMove = 0;
     uint32 refusedHold = 0;
+    uint32 refusedBombBot = 0;
 
     if (interrupt)
         bot->CastStop();
@@ -101,7 +102,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     UpdateMovementState();
     if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
     {
-        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0);
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0);
         return false;
     }
 
@@ -132,6 +133,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     float const sweep = toward ? 2.0f * ULDUAR_MIMIRON_FLEE_FAN_MAX : ULDUAR_MIMIRON_FLEE_FAN_MAX;
 
     std::vector<Position> const mines = GetMimironMines(botAI);
+    std::vector<Position> const bombBotBlasts = GetMimironBombBotBlasts(botAI, bot);
     for (bool const mineClearWalk : {true, false})
     {
         if (mineClearWalk && mines.empty())
@@ -218,6 +220,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                     continue;
                 }
 
+                if (!IsMimironSpotBombBotSafe(bombBotBlasts, dest))
+                {
+                    ++refusedBombBot;
+                    continue;
+                }
+
                 if (!IsMimironSpotRocketSafe(botAI, dest))
                 {
                     ++refusedRocket;
@@ -267,7 +275,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 {
                     NoteFleeOutcome(what, "ok", &offAway, refusedBack, refusedMine, refusedCone, refusedFire,
                                     refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray,
-                                    refusedMove, refusedHold);
+                                    refusedMove, refusedHold, refusedBombBot);
                     return true;
                 }
 
@@ -284,7 +292,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                         refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
-                        refusedHold);
+                        refusedHold, refusedBombBot);
         return false;
     }
 
@@ -300,13 +308,13 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                         refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
-                        refusedHold);
+                        refusedHold, refusedBombBot);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                     refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
-                    refusedHold);
+                    refusedHold, refusedBombBot);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -320,7 +328,7 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
                                         uint32 refusedFire, uint32 refusedBomb, uint32 refusedRocket,
                                         uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,
-                                        uint32 refusedMove, uint32 refusedHold)
+                                        uint32 refusedMove, uint32 refusedHold, uint32 refusedBombBot)
 {
     if (!RaidObs::Active())
         return;
@@ -329,11 +337,12 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
     if (taken)
         snprintf(bearing, sizeof(bearing), " %+.0f", *taken * 180.0f / static_cast<float>(M_PI));
 
-    char line[192];
+    char line[224];
     snprintf(line, sizeof(line),
-             "%s %s%s (back%u mine%u cone%u fire%u bomb%u rocket%u burst%u shock%u spray%u move%u hold%u)",
+             "%s %s%s (back%u mine%u cone%u fire%u bomb%u rocket%u burst%u shock%u spray%u move%u hold%u"
+             " bombbot%u)",
              what, outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
-             refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove, refusedHold);
+             refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove, refusedHold, refusedBombBot);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -784,6 +793,28 @@ bool MimironProximityMineAction::Execute(Event /*event*/)
                                 ULDUAR_MIMIRON_MINE_MAX_STEP);
     return MoveAwayClearOfMines(nearest, std::max(step, ULDUAR_MIMIRON_MINE_MIN_STEP),
                                 MovementPriority::MOVEMENT_COMBAT, false, false, "mine");
+}
+
+bool MimironBombBotAction::isUseful()
+{
+    MimironBombBotTrigger mimironBombBotTrigger(botAI);
+    return mimironBombBotTrigger.IsActive();
+}
+
+bool MimironBombBotAction::Execute(Event /*event*/)
+{
+    MimironBombBotBlast const blast =
+        GetMimironBombBotBlast(botAI, bot, ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE);
+    if (!blast.valid)
+        return false;
+
+    if (blast.chased)
+        return MoveAwayClearOfMines(blast.bomb, ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE,
+                                    MovementPriority::MOVEMENT_COMBAT, false, false, "bombbot kite");
+
+    float const escape = ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE + ULDUAR_MIMIRON_BOMB_BOT_STEP_MARGIN;
+    return MoveAwayClearOfMines(blast.centre, escape, MovementPriority::MOVEMENT_COMBAT, true, false, "bombbot",
+                                escape);
 }
 
 bool MimironPetControlAction::isUseful()

@@ -826,3 +826,137 @@ casts in window 15 then had the target sampled).
   cited, no arc spread act between its slot and phase 2, so an empty answer by elimination); Rapid Burst
   casts target Burst Targets and no roster aura row for 63382 exists in windows 13-15; 63382 puts effect 0
   on the target and effect 1 on VX-001 (Spell.dbc).
+
+## Round 9 (build 2d7853f0e, round 8 built)
+
+**Data:** window 16, `raidtest.py report --boss mimiron --raid uld --head 2d7853f0e --pulls 10`: one valid pull
+per pool, no DC veto inside any. Baselines: windows 14 and 15 (`603_19/20/21_…_17954299xx`, `603_13/14/15_…_17954376xx`
+/ `_1795437871`). Scripts in the lane scratchpad (`mim9/`: `p4.py`, `p4rate.py`, `p4spread.py`, `hand.py`,
+`notes.py`, `bombs.py`, `bombaim.py`, `bombtrack.py`, `bomblegs.py`, `bomblegs2.py`, `collateral.py`,
+`blastgeom.py`, `project.py`; round 8's `mim8/stuck.py`, `burstcone.py`, `botlog.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-135204-11` | `603_11_…_1795441975` | **kill**, parts down 9:52.4, hard mode | 10: P3 Water Spray 2 (melee, one spray); P4 Water Spray 2, ACU Plasma Ball 1, Shock Blast 1, Hand Pulse 4 (9:09-9:22) |
+| uld2 | `tr-20261123-135204-12` | `603_12_…_1795441979` | wipe 8:56 in P3, raid dead | 31: P1 Flames 1 (hunter casting Revive Pet on the drop, 0:15.9), Shock Blast 1; Z2 Flames 1; P2 Laser Barrage 1, Rapid Burst 1, Flames 3 (melee after a Frost Bomb escape), Rocket Strike 1, Frost Bomb 1; P3 Bomb Bot 10, Assault Bot 6, Junk Bot 3, Water Spray 1, ACU Plasma Ball 1 |
+| uld3 | `tr-20261123-135043-10` | `603_10_…_1795441886` | wipe 10:02 in P4, parts 28-33% | 31: P1 Flames 1 (after the MK II's opening swing, 14.7k on a ranged at 0:14); P2 Rapid Burst 4 (healers 3, one revived and dead again); P3 ACU Plasma Ball 1, Water Spray 1; P4 Hand Pulse 10 (six melee 7:41-7:44), ACU Plasma Ball 8 (ranged, 7:54-9:57), mines 2, MK II melee 1, Laser Barrage 1, Water Spray 1; Berserk 1 |
+
+72 deaths: Hand Pulse 14, ACU Plasma Ball 11, Bomb Bot 10, Water Spray 7, Flames 6, Assault Bot 6, Rapid Burst 5,
+Junk Bot 3, mines, Shock Blast and Laser Barrage 2 each, MK II melee, Rocket Strike, Frost Bomb and Berserk 1 each.
+The uld1 kill was hard mode: Summon Flames Initial 7.1 s, Flames from 16 s, Emergency Mode at phase 2, no Berserk
+cast (uld3's at 10:00.2).
+
+**Stop rules:** one kill of three (10 deaths): not polished. No failure picked three times (Bomb Bots are new).
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 86.6 | 48.4 | 81.2 | 24.1 | 146.9 | 32.0 | 7:12.3 | 160.0 s, parts down 7.6 s before Berserk |
+| uld2 | 100.2 | 48.2 | **126.3** | 24.1 | **224.4**, raid dead | | | |
+| uld3 | 82.7 | 48.3 | 84.4 | 24.3 | 154.9 | 31.9 | 7:19.7 | 160 s left, raid dead by 10:00 |
+
+uld2 entered phase 3 with 16 alive (6 ranged) and landed the unit once (5.5 points); uld3 entered phase 4 with 21 alive but two
+healers, both wipes losing the raid in phase 2 first.
+
+**Verdict on round 8.**
+
+- **Fire bots kept (the user's experiment): helped in phase 3, hurt in phase 4.** `--firebots` against windows 14-15:
+
+  | | P3 Flames k/s | P3 spray hits/dead | P3 siren raid-s | P4 fire bots open/mean | P4 Flames k/s | P4 spray hits/dead | P4 siren raid-s |
+  |---|---|---|---|---|---|---|---|
+  | w16 uld1 / uld2 / uld3 | 3.3 / 1.3 / 2.7 | 3/2, 4/1, 2/1 | 1017 / 456 / 746 | 4/2.6, -, 7/7.0 | 1.1, -, 0.3 | 9/2, -, 1/1 | 361, -, 199 |
+  | w15 uld1 / uld2 / uld3 | 8.2 / 1.1 / 4.2 | 2/0, 7/2, 9/3 | 353 / 752 / 1190 | 0 | 2.8, -, 2.9 | 0 | 0 |
+  | w14 uld2 / uld3 | 2.2 / 2.3 | 5/0, 4/0 | 791 / 410 | 0 | 1.4 (11 s), 1.7 | 0 | 0 |
+
+  Aim at fire bots 0 bot-s in every phase (w14-15: P3 1-156, H3 49-237). Phase 3 stayed inside the earlier range on
+  every count. Phase 4 Flames fell to 179k and 47k from 211-374k with no Flames death (w15 uld3: 2), but the kept
+  bots sprayed 10 times for 3 deaths, silenced 560 raid-s, held splash 144 times, and ranged cast 39% and 36% of phase
+  4 against 40-66% in nine earlier phase 4s (`p4rate.py`). The comparable pull, uld1 with 23+ alive in both
+  windows, dealt 92.9k/s there against 108.7k/s and needed 160 s against 135 s for the same ~14.8M; it killed with
+  7.6 s to spare. The fire they put out is healable, the time is not: plainly, keeping them into phase 4 hurt.
+  Question Q4.
+- **Stranded walk-in: held.** Bots over 30 yd out at phase 2: 1, 2, 0 (windows 13-15: 1-8), all three on a detour
+  leg; on a phase 2 slot at phase 2 24/25, 20/23, 24/25 (w15 uld2 16/24); no phase 2 opening deaths; `stranded`
+  notes in Z2 and H1 1/9, 4/20, 1/5, no death within 5 s of one. Handover Flames 35k/90k/9k (w15 8-31k), one
+  handover death (uld2 Uldyat, Z2, 14 ticks after a fire dodge `arrived`, not stranded).
+- **Rapid Burst read: held.** `burst` refusals in phase 2 `flee` notes 50/136/54 (none possible before), legs into a
+  live cone 0/1/1 (w15: 10/4/19), walked-in ticks 91 for 158k (w15 171 for 306k), `--burst` 17/17, 17/17, 19/19
+  casts with a carrier.
+- **Round 7's checks:** no MK II rise, no `unreach` span, no reset, phase 1 82.7-100.2 s.
+
+**Ranking.** Hand Pulse (14) and the ACU's Plasma Ball (11) are phase 4's, and both follow from raids reaching it
+short: uld3 had two healers. Hand Pulse hit 22-33% of the raid a cast (`p4spread.py`), as in windows 10-15, the floor
+the `p4melee` layout was measured to give, so not a bug. The ACU has no tank in phase 4 (`boss_mimiron.cpp`: `case
+4` resets threat, then `DoSpellAttackIfReady(SPELL_PLASMA_BALL_P2)` on its victim), so its 65647 rides the top-threat
+ranged: a plan change, Q5. Next, Bomb Bots (10): a bug.
+
+**Failure picked: the Bomb Bot step-out runs 30 yd, along the chase.** `MimironBombBotAction` was the generic
+`MoveAwayFromCreatureAction` (`UldActions_Mimiron.h:248` at `8bc2a82d3`; `MovementActions.cpp:3036`: eight compass
+bearings, 3-30 yd, keep the spot farthest from the bomb, no hazard screen), fired by any bot within 8 yd of the bomb
+(`UldTriggers_Mimiron.cpp:204`).
+
+- Every leg is the full 30 yd: 628 of 628 in eight pulls of windows 14-16 (`bomblegs.py`), 52-157 a pull, 316 of them
+  melee. 370 of 587 bystander legs began over 8 yd from the bot the bomb was chasing (`bomblegs2.py`), where the blast
+  never reaches: it goes off on contact with that target, the bomb then 0.4-5.1 yd off it (median 2.5), hitting
+  bystanders 0.4-5.7 yd from it (`blastgeom.py`, 60 blasts).
+- Bots near the chase run its way. uld2 5:29-5:36 (`bombtrack.py`, `botlog.py`): the first bomb's target went Uldyac,
+  Uldyap, Uldyaq in 3 s (threat); Uldyap (5:32.5), Uldyae (5:32.2) and Uldyaq itself (5:31.9, just before it was
+  chased) all ran `mimiron bomb bot action` to (2779, 2548) within 2 yd, the bomb 2.2-3.4 yd behind the two bystanders
+  all the way, and blew all three (Uldyae healer and Uldyap dead). In windows 14-16, 7 of 21 collateral hits came off
+  this leg, 6 off the spray/siren fan, which had no blast screen either (`collateral.py`).
+- The legs also cost the shooters: ranged on the bomb were moving 23-75% of each uld2 bomb's life (`bombaim.py`), the
+  step a top mover, and uld2's bombs died once in 12 (uld3 4 of 6).
+
+**Classification:** bug. The strategy means bystanders to step out of the blast ("everyone else inside the blast
+steps out"); they sprint 30 yd from the bomb, mostly when out of it, and beside its victim when in it.
+
+**Fix** (Mimiron files and reader only, every size and mode, with or without a player):
+
+- `GetMimironMarkers` reads Bomb Bots with their chase target; `GetMimironBombBotBlast` gives the bot's blast: chased,
+  or the nearest centre (the chase target, else the bomb) within a radius.
+- `MimironBombBotTrigger`: a bystander within `ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE` (8) of a centre; a chased
+  healer, melee or tank with the bomb within 8 yd as before; a chased ranged DPS never.
+- `MimironBombBotAction` is a `MimironFleeAction`: a bystander steps through the bearing fan onto the clearance + 1
+  (`bombbot`, unfiltered fallback), a chased bot kites 30 yd through it (`bombbot kite`, no fallback); both screened
+  like every Mimiron flee.
+- A blast centre fails `IsMimironSpotStandable` and the fan (new `bombbot` refusal count in `mimiron.flee`) for
+  everyone but its victim; `mimiron bomb bot guard` holds `reach melee`, `reach spell`, heal reach, `set behind`,
+  `follow` and the approach within the clearance + 4, as the rocket guard does.
+- Reader `mimiron.py --bombbots` with tests: each bomb's life and end, chased and collateral victims (dead), step-out
+  legs and median yards, `bombbot` outcomes, other dodges' blast refusals. Findings doc: "The blast goes off round the
+  victim", the corrected Bomb Bot damage (63009 was the mine's), and the fire bot measurement.
+
+Replayed on windows 14-16, 217 of the 587 bystander legs would fire, at 3.6 yd median (p90 7.2) instead of 30.
+
+**Next window should show** (`--bombbots`, `--walk`, `--flips`):
+
+- Bomb Bot step-outs a few yards (median well under 10) and fewer (~15-50 a pull against 52-157), `bombbot ok`
+  notes, few `none`.
+- Collateral blast victims near 0 (windows 14-16: 21 hits; w16 3 deaths), no bystander landing beside the chased bot.
+- More Bomb Bots killed before contact (w16 1 of 12, 2 of 5, 4 of 6) and Bomb Bot deaths under 10; phase 3 moving
+  shares down (w16 melee 46/51/45%, ranged 40/53/37%).
+- No new A-B-A between `mimiron bomb bot action` and `reach melee` or `mimiron arc spread action`; `mimiron bomb bot
+  guard` veto rows during bombs.
+
+**Not picked.**
+
+- uld2's hunter Uldyaj died casting Revive Pet on the drop in three nodes (0:15.9), as in window 7: no trigger moves a
+  bot out of a cast it started there.
+- uld3's three phase 2 healer deaths (Rapid Burst under Heat Wave at 56-60% raid health) and uld2's melee burning
+  after the 3:29 Frost Bomb escape: phase 2 still cuts the raid both wipes lose later.
+- Water Spray 7: mostly bots mid-move (`spray locked`) or walked in by other legs.
+- The MK II's opening swing (uld3 0:14, 14.7k on a ranged on the drop), the findings doc's open item.
+- A chased tank still kites 30 yd and drags the add pile; the kite was kept as it was.
+
+**Questions for the user.**
+
+- **Q4 (plan change, kill order): kill the fire bots in the phase 4 handover.** Kept into phase 4 they cost uld1 25 s
+  of a clock it beat by 7.6 s, three spray deaths and 560 raid-s of silence, to save ~0.2-0.3M of healable fire.
+  Recommendation: keep them through phase 3 (no sweep), and cull them in H3, 32 s in which nothing else is
+  attackable (4-7 bots, ~63k each, a few seconds of raid output), so phase 4 starts without them.
+- **Q5 (plan change, tank): an ACU tank in phase 4.** Its Plasma Ball (65647, 8-11k every ~4 s) rides the
+  top-threat ranged: uld3 lost eight to it, uld1 one, and the findings doc has it open. Recommendation: the off-tank
+  takes the ACU in phase 4 while the main tank keeps the MK II.
+
+**Shared code:** none.

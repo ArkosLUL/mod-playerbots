@@ -205,6 +205,10 @@ inline constexpr float ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN = 4.0f;
 
 inline constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE = 8.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_STEP_MARGIN = 1.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_HOLD_MARGIN = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE = 30.0f;
 
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
 
@@ -249,6 +253,18 @@ Unit* GetMimironUnreachableMech(PlayerbotAI* botAI, Player* bot);
 
 bool IsMimironSpotRocketSafe(PlayerbotAI* botAI, Position const& dest);
 
+struct MimironBombBotBlast
+{
+    bool valid = false;
+    bool chased = false;
+    Position bomb;
+    Position centre;
+};
+
+MimironBombBotBlast GetMimironBombBotBlast(PlayerbotAI* botAI, Player* bot, float within);
+std::vector<Position> GetMimironBombBotBlasts(PlayerbotAI* botAI, Player* bot);
+bool IsMimironSpotBombBotSafe(std::vector<Position> const& blasts, Position const& dest);
+
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
 
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
@@ -288,6 +304,7 @@ bool IsMimironFireHoldActive(Player* bot);
 
 bool IsMimironNearFrostBomb(PlayerbotAI* botAI);
 bool IsMimironNearRocket(PlayerbotAI* botAI);
+bool IsMimironNearBombBotBlast(PlayerbotAI* botAI);
 bool IsMimironHeldByFire(PlayerbotAI* botAI);
 
 bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
