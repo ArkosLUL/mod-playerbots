@@ -3,7 +3,8 @@
 
     thorim.py <file>           every section
     thorim.py <file> --deaths  deaths by mechanic, phase 1 and phase 2 apart
-    thorim.py <file> --phase2  Chain Lightning, tank deaths, Thorim's spot and facing, tank trades, the waiting
+    thorim.py <file> --phase2  Chain Lightning, tank deaths, his cannot-reach flag and stretches held without
+                               losing health, Thorim's spot and facing, tank trades, the waiting
                                tank, chain bridges, melee ring and camp spacing, hazards on each tank
 """
 from __future__ import annotations
@@ -47,7 +48,11 @@ TRADE_LOOK_MS = 3000
 SWAP_WAIT_MS = 15000
 FACING_OFF_DEG = 20.0
 STACKED_YD = 2.0
+STALL_MS = 3000
+STALL_GAP_MS = 1000
+STALL_HP = 0.03
 RING_MOVER = "thorim phase 2 positioning action"
+UNREACH_MOVER = "thorim unreachable step action"
 RINGSPOT = re.compile(r"slot (\d+)")
 
 
@@ -312,6 +317,37 @@ class Phase2:
                 casts.append([rec])
         return casts
 
+    def stalls(self) -> list[tuple[int, int, float, float]]:
+        held = [(t, hp) for (t, hp), (_, victim, _) in zip(self.boss_hp, self.victims) if victim in self.tanks]
+        found = []
+        index = 0
+        while index < len(held):
+            begin, floor = held[index]
+            top = floor
+            last = index
+            while (last + 1 < len(held) and held[last + 1][1] >= top - STALL_HP
+                   and held[last + 1][0] - held[last][0] <= STALL_GAP_MS):
+                last += 1
+                top = max(top, held[last][1])
+            if held[last][0] - begin >= STALL_MS:
+                found.append((begin, held[last][0], floor, top))
+                index = last + 1
+            else:
+                index += 1
+        return found
+
+    def unreach_spans(self) -> list[tuple[int, int, int]] | None:
+        marks = notes(self.trace, "thorim.unreach")
+        if not marks:
+            return None
+        spans = []
+        for index, rec in enumerate(marks):
+            flagged = int(rec.get("txt") or 0)
+            stop = marks[index + 1]["t"] if index + 1 < len(marks) else self.end
+            if flagged and stop > self.start:
+                spans.append((max(rec["t"], self.start), stop, flagged))
+        return spans
+
     def tank_hazards(self) -> dict:
         tally = collections.defaultdict(lambda: [0, 0])
         for rec in self.trace.of("dmg"):
@@ -370,6 +406,25 @@ def tank_death_line(phase: Phase2) -> str:
     return f"{len(deaths)}, first at +{first:.1f} s: " + ", ".join(f"{name} {n}" for name, n in kinds.most_common())
 
 
+def untouchable_line(phase: Phase2) -> str:
+    stalls = phase.stalls()
+    stall_text = (f"held without losing health {len(stalls)}x, "
+                  f"{sum(stop - begin for begin, stop, _, _ in stalls) / 1000.0:.1f} s"
+                  + "".join(f"; +{(begin - phase.start) / 1000.0:.1f}..+{(stop - phase.start) / 1000.0:.1f} s "
+                            f"{low:.1f}% to max {high:.1f}%" for begin, stop, low, high in stalls))
+    spans = phase.unreach_spans()
+    if spans is None:
+        return f"no thorim.unreach probe (a build before it); {stall_text}"
+    steps = sum(1 for rec in phase.trace.of("move")
+                if rec.get("ok") and rec.get("by") == UNREACH_MOVER and phase.start <= rec["t"] <= phase.end)
+    total = sum(stop - begin for begin, stop, _ in spans) / 1000.0
+    longest = max(((stop - begin) / 1000.0 for begin, stop, _ in spans), default=0.0)
+    named = collections.Counter(phase.trace.name(guid) for _, _, guid in spans)
+    who = ", ".join(f"{name} {n}" for name, n in named.most_common(3)) or "nobody"
+    return (f"cannot-reach flag {len(spans)}x, {total:.1f} s, longest {longest:.1f} s ({who}); "
+            f"step moves {steps}; {stall_text}")
+
+
 def show_phase2(trace: Trace) -> None:
     print("PHASE 2")
     if not mine(trace):
@@ -384,6 +439,7 @@ def show_phase2(trace: Trace) -> None:
           f"{(phase.end - start) / 1000.0:.1f} s on the floor; settled snapshots with a tank holding him {c['held']}")
     print(f"  chain lightning   {chain_line(phase)}")
     print(f"  tank deaths       {tank_death_line(phase)}")
+    print(f"  untouchable       {untouchable_line(phase)}")
     print(f"  thorim spot       off the tank spot p50 {yd(quantile(lists['boss_off_spot'], .5))} "
           f"p90 {yd(quantile(lists['boss_off_spot'], .9))} yd; facing off the tank-spot axis "
           f"p50 {yd(quantile(lists['facing'], .5))} p90 {yd(quantile(lists['facing'], .9))} deg, "

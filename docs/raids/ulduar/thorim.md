@@ -280,6 +280,9 @@ pull, 58-89k on the worst-hit melee, which healers carried. Non-tank melee inste
 below 55% health and return above 80%, keeping their target the whole time so ranged and instant
 abilities keep landing.
 
+It also sets the Colossus' clock. Bot-led, it landed 11-18 s after the engage in five of six pulls,
+with him at 21-81%, and the rest took 7-26 s; the one Colossus dead in 20 s never got one.
+
 ## Phase 2
 
 | Spell | Id | Detail |
@@ -640,6 +643,20 @@ Two related traps: **a victim change re-seats him at the chase near point and he
 the others, putting the outermost ranged slot 6.9 yd outside the melee ring), and whoever holds him
 eats the Blizzard, which is why the dodge was towing him across the arena for **36,283 and 32,799** of
 avoided damage against 11-38k from a single Thorim swing.
+
+**A failed chase path makes him untouchable**, as it does
+[Mimiron's MK II](mimiron.md#an-mk-ii-that-cannot-reach-its-tank-is-immune-and-heals): the core flags
+his victim unreachable (`Creature::GetCannotReachTarget`), every hit and taunt on him evades, and 5 s
+later he regenerates. The flag clears only on a chase move that dispatches or a cast with a cast time
+(Chain Lightning), never while the victim stands still in his reach. Once in 31 phase 2s: the corridor
+tank dragged him onto the tank spot at 2.4 yd, and from +16.5 to +41.7 s he took nothing, went
+97.8 → 100% and evaded three swap taunts, about 29 s of the race. A bot the flag has named for
+`ULDUAR_THORIM_UNREACH_GRACE_MS` (1 s), on the floor, steps out of his chase range
+(`thorim unreachable step action`, which both movement guards pass): both reaches plus
+`ULDUAR_THORIM_UNREACH_STEP_MARGIN` (4) from his centre, 11.75 yd against the core's 8.25, straight
+away from him or turned in 30° steps until the point lies within `ULDUAR_THORIM_UNREACH_FLOOR_RADIUS`
+(30) of the arena centre, clear of Blizzard where one is. The chase re-paths, and the positioning row
+walks it back.
 
 **The anchor is also the Chain Lightning answer.** Boss 18-28 yd off the anchor: 8 targets, **174,932**
 damage running 4,695 → 47,024, out of the melee ring and into the ranged camp, **four bots dead in
@@ -1128,7 +1145,11 @@ player was on the instance left the corridor standing while he stayed in the are
   lever, 8.5-17 s late. Walk-down unlocked (three pulls): the leader on the hold spot 4.3-10.7 s after the
   Giant took him (12.2-15.1 before), adds and Giant 51-56 s; phase 2 162-207 s after the lever, one hard
   mode with 8 s to spare, the others 10.6 and 36.7 s late (the slowest lost 21 s in the corridor, 7.5 of
-  them to the follower stall above).
+  them to the follower stall above). Pulling from the y −360 line (three pulls): squad non-healers within
+  15.6-22.1 yd of the leader at the pull, the Colossus down 8-12% in the first 6 s (1.5-2.1% from y −329),
+  then 20-38 s on Runic Barrier; phase 2 149-205 s after the lever, one hard mode with 21 s to spare, the
+  others 14 and 36 s late, each losing 15-16 s in the corridor (12-13 Runic Smash hits against 1, two
+  dead ranged, a second pack's Acolyte healing itself under 8 DPS for 22 s).
 
 **The last 36 yd of the lower corridor are unwaypointed**: waypoints stop at the pull line, y −360.5
 (the Colossus at y −396), so past it `ThorimRunicSmashAction` cannot resolve a lane index; the pull has
@@ -1218,16 +1239,18 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 
 ## What a trace answers
 
-`tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode) and
-`thorim.ringspot` (each ring bot's slot):
+`tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
+`thorim.ringspot` (each ring bot's slot) and `thorim.unreach` (whom his cannot-reach flag names):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
-  slot, tank-to-ring hops and deaths; tank deaths; Thorim's distance off the tank spot and facing off its
-  axis; trades (his move across one, strike to swap, his time on a non-tank); the waiting tank's offset,
-  time on the holder, distance from him, share past 9.0 yd and moves; who stands within 8 yd of each
-  tank; ring spacing, front-arc share, uptime and moves; camp spacing; Blizzard, Lightning Charge and
-  Frost Nova on holder and waiting tank; his health lost per second.
+  slot, tank-to-ring hops and deaths; tank deaths; his cannot-reach spans and step moves, and stretches
+  of 3 s or more a tank held him without his health falling (old traces too); Thorim's distance off the
+  tank spot and facing off its axis; trades (his move across one, strike to swap, his time on a
+  non-tank); the waiting tank's offset, time on the holder, distance from him, share past 9.0 yd and
+  moves; who stands within 8 yd of each tank; ring spacing, front-arc share, uptime and moves; camp
+  spacing; Blizzard, Lightning Charge and Frost Nova on holder and waiting tank; his health lost per
+  second.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Hop order is damage order (each hop does 1.5 times the last), and pets'
