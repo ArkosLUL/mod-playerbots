@@ -230,9 +230,10 @@ Fire stays the gap there: a step can land a bot in a node, its flames flee `lock
 **Interrupt only for what kills.** A bot mid-cast cannot be moved and `MoveTo` still reports success
 ([pitfalls](../../engine/pitfalls.md#a-bot-mid-cast-cannot-be-moved-at-all)); a balance druid died to
 Rocket Strike that way. The dodges that kill outright call `botAI->InterruptSpell()` before moving:
-Laser Barrage, Rocket Strike, Shock Blast, the flames and the Frost Bomb. Proximity Mine (**9,000**) and
-Bomb Bot (**12,000**, 63009) keep the cast: both are healable, and clipping a cast every time a mine
-lands costs more than the mine.
+Laser Barrage, Rocket Strike, Shock Blast, the flames and the Frost Bomb. Proximity Mine (**9,000**,
+63009) keeps the cast: healable, and clipping a cast every time a mine lands costs more than the mine.
+So does the Bomb Bot step-out, though its blast kills a caster: it starts when the bomb picks a victim,
+seconds before it arrives.
 
 ### The bearing fan
 
@@ -645,14 +646,36 @@ mines still did 251-418k of phase-1 damage, ~250-390 dps a melee against the ~12
 `set behind` and `reach melee` putting melee on them.
 
 **Bomb Bot (33836)**: `speed_run` 1.14286 is **8.0 yd/s against a player's 7.0**, so it gains on you, and
-it detonates on melee contact (`SMART_EVENT_DAMAGED_TARGET` → 63801, base 23562, 5 yd; **66406 hp** in
-25-man, `HealthModifier` 1.5873). Ranged kill one in a few globals; it tops the ranged priority list.
+it detonates once its victim is within 3 yd (`SMART_EVENT_RANGE` 0-3 → 63801, base 23562; **66406 hp** in
+25-man, `HealthModifier` 1.5873). Hits of 19.7-25.5k kill a caster from full. Ranged kill one in a few
+globals; it tops the ranged priority list. Its target is plain threat, so it switches to whoever shoots
+it hardest, three bots in 3 s once.
 
-**The chase target decides who shoots it.** The bot it chases cannot leave, so keeps shooting at any
-range; everyone else inside the blast steps out, and healers and melee always sidestep. Both rules read
-`GetMimironBombBotChasing`; split on distance instead, each deferred to the other and a ranged bot inside
-8 yd neither shot nor moved. Bomb Bots out of `SpellDistance` stay out of `BuildPriorityList`: chasing one
-abandons the mech and lands in the `reach spell` against `ACTION_RAID` deadlock.
+**The chase target decides who shoots it.** A ranged DPS it chases cannot leave, so keeps shooting at any
+range; a chased healer, melee or tank kites `ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE` (30) through the
+bearing fan once it is within `_RADIUS` (8); until then, and a ranged one always, it steps out of other
+bombs' blasts like anyone. The trigger reads the chase from `GetMimironBombBotBlast`, the
+priority list from `GetMimironBombBotChasing`; split on distance instead, each deferred to the other and a
+ranged bot inside 8 yd neither shot nor moved. Bomb Bots out of `SpellDistance` stay out of
+`BuildPriorityList`: chasing one abandons the mech and lands in the `reach spell` against `ACTION_RAID`
+deadlock.
+
+**The blast goes off round the bomb, a few yards short of its victim.** 63801 is 5 yd round its caster
+(`TARGET_SRC_CASTER` + `TARGET_UNIT_SRC_AREA_ENEMY`, ~6.5 with a player's combat reach), cast once the
+victim is inside 3 yd plus both combat reaches (5.5): at contact the bomb stood 0.4-5.1 yd (median 2.6)
+off its target, and the bystanders it hit 1.2-6.2 yd from it, 0.4-5.7 from the target. So the blast is
+everything within `_BLAST_CLEARANCE` (8) of the line from the bomb's chase target `_DETONATION_REACH` (4)
+toward the bomb (the bomb itself before it picks one); a disc round the target alone left the bomb's side
+open. Everyone else inside steps through the fan to the clearance plus `_STEP_MARGIN` (1) off that line. A
+blast also fails `IsMimironSpotStandable` and the fan (`bombbot` in `mimiron.flee`) for everyone but its
+victim, and `mimiron bomb bot guard` holds the unit-chasing movers within the clearance plus
+`_HOLD_MARGIN` (4), as the rocket guard does; else the formation and `reach melee` walk the step straight
+back. `GetMimironMarkers` carries the bombs, so trigger, action, screen and guard read one chase. It was
+`MoveAwayFromCreatureAction` off 8 yd of the bomb: every leg the full 30 yd (628 of 628 in eight pulls),
+63% of them by bots over 8 yd from the victim, and bots beside the victim took its compass bearing, ran
+with the chase and died with it at the end: 7 of 21 collateral hits, a healer and a ranged to one bomb.
+The step leaves the chased bot alone, and that is most of the dying: 15 of 22 Bomb Bot deaths in windows
+14-16 were the victim's own (11 of 29 chased ranged DPS, 3 of 3 chased healers).
 
 **It is the one Mimiron add that takes a snare.** Its immunity set **−263** leaves `SNARE`, `ROOT`, `STUN`,
 `FREEZE`, `GRIP` and `KNOCKOUT` off, all of which the Assault Bot's **−285** carries; at 8.0 yd/s a
@@ -1049,6 +1072,13 @@ alive while fire ran to 41-46% of phase 3 intake. A fire bot with no flame withi
 never sprays, so a raid that clears the field ends up with quiet ones. Watch `arc spread <-> fire bot`
 A-B-A, the casting share and phase 4's splash holds (below): nine to fifteen alive is nine to fifteen
 silences walking into the raid, and those numbers would say a cull was right after all.
+
+**Kept into phase 4 they cost more than the fire they put out.** With every one kept there, phase 4
+Flames fell to 0.3-1.1k/s from 1.4-2.9k/s and killed nobody, but Water Spray hit 10 times and killed 3,
+the siren silenced 199-361 raid-s, ranged cast 36-39% of the phase against 40-66% in nine earlier
+phase 4s, and the comparable kill dealt 92.9k/s there against 108.7k/s: 160 s against 135 s, on a clock
+that left it 8. Phase 3 lost nothing: Flames, spray and siren stayed in the earlier range, with no aim at
+a fire bot.
 
 **Keeping them out of Mimiron's picker is not enough.** The bot tank killed both kept bots on its own,
 since `MimironSetDpsPriorityTrigger` stands down for tanks and `mimiron target guard` only zeroes
@@ -1448,7 +1478,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing), `cross N` or `stranded N` (yd of burn walked through); `none mines` when only a walk past mines was left |
 | `close` | A melee approach steered round the fire instead of straight at the target |
@@ -1467,7 +1497,8 @@ the bot's last leg under 4 s old while it moves, else `standing`, and judges leg
 line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
-so episodes rather than ticks; and a phase that
+so episodes rather than ticks; `--bombbots` calls a blast victim chased when the bomb targeted it in the
+snapshot 300 ms before; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated

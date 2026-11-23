@@ -203,11 +203,7 @@ bool MimironProximityMineTrigger::IsActive()
 
 bool MimironBombBotTrigger::IsActive()
 {
-    if (PlayerbotAI::IsRangedDps(bot) && GetMimironBombBotChasing(botAI, bot))
-        return false;
-
-    TooCloseToCreatureTrigger tooCloseToBombBot(botAI);
-    return tooCloseToBombBot.TooCloseToCreature(NPC_BOMB_BOT, ULDUAR_MIMIRON_BOMB_BOT_RADIUS);
+    return GetMimironBombBotBlast(botAI, bot, ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE).valid;
 }
 
 bool MimironApproachTargetTrigger::IsActive()

@@ -57,7 +57,7 @@ private:
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
                          uint32 refusedRocket, uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,
-                         uint32 refusedMove, uint32 refusedHold);
+                         uint32 refusedMove, uint32 refusedHold, uint32 refusedBombBot);
 };
 
 class MimironUnreachableStepAction : public MimironFleeAction
@@ -245,14 +245,16 @@ public:
     bool isUseful() override;
 };
 
-class MimironBombBotAction : public MoveAwayFromCreatureAction
+class MimironBombBotAction : public MimironFleeAction
 {
 public:
     static constexpr char const* Name = "mimiron bomb bot action";
 
     MimironBombBotAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, Name, NPC_BOMB_BOT,
-                                     ULDUAR_MIMIRON_BOMB_BOT_RADIUS) {}
+        : MimironFleeAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
 class MimironPetControlAction : public Action

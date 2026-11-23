@@ -185,6 +185,9 @@ void DefineMimiron(EncounterBuilder& e)
     e.Block("mimiron rocket guard", Role::Any, IsMimironNearRocket, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
+    e.Block("mimiron bomb bot guard", Role::Any, IsMimironNearBombBotBlast, 0,
+            {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
+             MimironApproachTargetAction::Name});
 
     e.Multiplier<MimironFireBotAoeGuardMultiplier>(Family::AnyAction);
     e.Multiplier<MimironPlasmaDefensiveHoldMultiplier>(Family::AnyAction);

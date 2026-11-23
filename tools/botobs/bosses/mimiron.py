@@ -27,6 +27,7 @@ NPC_ASSAULT_BOT = 34057
 NPC_JUNK_BOT = 33855
 NPC_EMERGENCY_FIRE_BOT = 34147
 NPC_FLAMES_SPREAD = 34121
+NPC_BOMB_BOT = 33836
 
 SPELL_RAPID_BURST = 63382
 SPELL_RAPID_BURST_HITS = (64531, 64532, 63387, 64019)
@@ -41,6 +42,7 @@ SPELL_DEAFENING_SIREN = 64616
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
 SPELL_MINE_EXPLOSIONS = (63009, 66351)
+SPELL_BOMB_BOT_BLAST = 63801
 # Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
 # a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
@@ -53,6 +55,10 @@ BURST_STEP = "mimiron rapid burst action"
 FLAMES_DODGE = "mimiron dodge flames action"
 FIREBOT_STEP = "mimiron fire bot action"
 FIREBOT_AOE_GUARD = "mimiron fire bot aoe guard"
+BOMB_BOT_STEP = "mimiron bomb bot action"
+BOMB_BOT_REFUSED = re.compile(r"bombbot(\d+)")
+BOMB_BOT_AIM_LEAD_MS = 300
+BOMB_BOT_KILL_MS = 300
 
 # Read from the source so a retune shows up here without a second edit.
 BOMB_RADIUS = radius("ULDUAR_MIMIRON_FROST_BOMB_RADIUS")
@@ -1611,6 +1617,105 @@ def show_unreach(trace: Trace) -> None:
         print(f"      {clock(rise['t'])}  {rise['phase']:4} {rise['from']:5.1f} -> {rise['to']:5.1f}")
 
 
+def bombbot_rows(trace: Trace) -> dict:
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    bombs = guids_of_entry(trace, NPC_BOMB_BOT)
+    if not bombs:
+        return {}
+
+    lives: dict[int, dict] = {}
+    for index, snap in enumerate(samples.snaps):
+        units = samples.rows(index)
+        for guid in bombs:
+            row = units.get(guid)
+            if row and living(row):
+                cell = lives.setdefault(guid, {"first": snap["t"], "last": snap["t"], "hp": row[5]})
+                cell["last"] = snap["t"]
+                cell["hp"] = row[5]
+
+    killers = {(rec["g"], rec["t"]) for rec in combat_deaths(trace) if rec.get("killer") in bombs}
+    blasts: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") == SPELL_BOMB_BOT_BLAST and rec.get("s") in bombs and rec.get("d") in roster:
+            blasts[rec["s"]].append(rec)
+
+    victims = collections.Counter()
+    for guid, hits in blasts.items():
+        units = samples.before(hits[0]["t"] - BOMB_BOT_AIM_LEAD_MS)
+        chased = units[guid][7] if guid in units and len(units[guid]) > 7 else 0
+        seen = set()
+        for rec in hits:
+            if rec["d"] in seen:
+                continue
+            seen.add(rec["d"])
+            kind = "chased" if rec["d"] == chased else "collateral"
+            victims[kind] += 1
+            if any(guid_t[0] == rec["d"] and abs(guid_t[1] - rec["t"]) <= BOMB_BOT_KILL_MS for guid_t in killers):
+                victims[kind + " dead"] += 1
+        if guid in lives:
+            lives[guid]["victims"] = len(seen)
+            lives[guid]["chased"] = chased
+
+    legs = []
+    steps = collections.Counter()
+    for rec in trace.of("move"):
+        if rec.get("by") != BOMB_BOT_STEP or rec.get("ok") != 1 or rec.get("g") not in roster:
+            continue
+        units = samples.before(rec["t"])
+        me = units.get(rec["g"])
+        if not me:
+            continue
+        legs.append(math.dist((me[1], me[2]), (rec["x"], rec["y"])))
+        near = [units[guid] for guid in bombs if guid in units and living(units[guid])]
+        nearest = min(near, key=lambda row: math.dist((row[1], row[2]), (me[1], me[2])), default=None)
+        steps["chased" if nearest and nearest[7] == rec["g"] else "bystander"] += 1
+
+    outcomes = collections.Counter()
+    screened = 0
+    for rec in notes(trace, "mimiron.flee"):
+        text = str(rec.get("txt", ""))
+        if text.startswith("bombbot kite "):
+            outcomes["kite " + text.split()[2]] += 1
+        elif text.startswith("bombbot "):
+            outcomes["step " + text.split()[1]] += 1
+        else:
+            refused = BOMB_BOT_REFUSED.search(text)
+            screened += int(refused.group(1)) if refused else 0
+
+    return {"lives": lives, "victims": victims, "legs": legs, "steps": steps, "outcomes": outcomes,
+            "screened": screened}
+
+
+def show_bombbots(trace: Trace) -> None:
+    print("BOMBBOTS")
+    rows = bombbot_rows(trace)
+    if not rows:
+        print("  no Bomb Bot in this pull")
+        return
+
+    lives = rows["lives"]
+    exploded = sum(1 for cell in lives.values() if cell.get("victims"))
+    print(f"  {len(lives)} Bomb Bots, {exploded} exploded, {len(lives) - exploded} killed or never reached anyone")
+    for guid, cell in sorted(lives.items(), key=lambda item: item[1]["first"]):
+        tail = (f"  blew up on {trace.name(cell['chased'])[:10]} and {cell['victims'] - 1} more"
+                if cell.get("victims") else "")
+        print(f"      {clock(cell['first'])} .. {clock(cell['last'])}  {(cell['last'] - cell['first']) / 1000:4.1f} s"
+              f"  ended at {cell['hp']:3.0f}%{tail}")
+    victims = rows["victims"]
+    print(f"  blast victims: chased {victims['chased']} ({victims['chased dead']} dead),"
+          f" collateral {victims['collateral']} ({victims['collateral dead']} dead)")
+    legs = rows["legs"]
+    if legs:
+        print(f"  step-outs: {len(legs)} legs ({rows['steps']['bystander']} bystander, {rows['steps']['chased']}"
+              f" chased), median {statistics.median(legs):.1f} yd, longest {max(legs):.1f}")
+    if rows["outcomes"]:
+        print("  flee notes: " + ", ".join(f"{key} {n}" for key, n in sorted(rows["outcomes"].items())))
+    print(f"  other dodges refused a spot in a blast {rows['screened']} times")
+    print("\n  'chased' is the bomb's target in the snapshot before the blast; a step-out is chased when the nearest"
+          " bomb was after the bot itself")
+
+
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
     ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
@@ -1632,6 +1737,8 @@ SECTIONS = (
      show_unreach),
     ("firebots", "phase 3 on, per phase: fire bots alive, Flames, Water Spray and Deafening Siren on the raid,"
      " aim at fire bots and the splash guard", show_firebots),
+    ("bombbots", "Bomb Bots: how each ended, chased and collateral blast victims, the step-outs and their"
+     " length", show_bombbots),
 )
 
 
