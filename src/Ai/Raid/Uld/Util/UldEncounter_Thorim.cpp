@@ -11,6 +11,7 @@
 #include "EncounterHelpers.h"
 #include "GameObject.h"
 #include "Group.h"
+#include "LastMovementValue.h"
 #include "Map.h"
 #include "MotionMaster.h"
 #include "PetDefines.h"
@@ -1761,6 +1762,14 @@ bool ThorimGauntletGiantHold(PlayerbotAI* botAI, Player* bot, Position& out)
 
     out = ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT;
     return true;
+}
+
+bool ThorimGiantWalkBooked(LastMovement const& booking)
+{
+    return booking.priority == MovementPriority::MOVEMENT_COMBAT &&
+           std::hypot(booking.lastMoveToX - THORIM_RUNE_GIANT_SPAWN.GetPositionX(),
+                      booking.lastMoveToY - THORIM_RUNE_GIANT_SPAWN.GetPositionY()) <=
+               ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE;
 }
 
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane)

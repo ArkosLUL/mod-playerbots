@@ -1085,3 +1085,105 @@ is the user's answer, the holder a bug; no size, mode or player branch (a real g
 Left: the hold spot is not navprobed (no Docker in the review), though the Giant and players stood on it and walked the ramp to it.
 The leader walks the Giant ~54 yd down with his back to him (~7 s, no dodge, parry or block from behind): watch the Giant's melee on
 him during the walk.
+
+## Round 12 (window 18: build c01caf9cc with round 11)
+
+**Data:** window 18, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-153900-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795448420,1795448430,1795448432}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head c01caf9cc --pulls 10` (its `thorim.py` phase 2 lines), `postmortem.py --death`, round 7,
+10 and 11 scripts (`seg.py`, `budget.py`, `leadstop.py`, `r10checks.py`, `holderpos.py`, `gianttrack.py`, `ramp.py`, `rampidle.py`) and new
+ones in session scratchpad `thorim_r12/` (`holder.py`, `corridor.py`, `tgtdps.py`, `idle.py`, `nodmg.py`, `balcony.py`, `walkback.py`,
+`giantdmg.py`, `holdmoves.py`, `colpos.py`, `ev.py`, `botrow.py`, `snapsq.py`, `auras.py`) over `snap`, `move`, `act`, `aura`, `dmg`, `cast`
+and `note` rows. Window 16's three pulls (`603_{1,2,3}_thorim_{1795440972,1795440974,1795440980}`) re-read as the baseline.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795448420 | kill 5:55, normal (62565 3:20.7, phase 2 3:37.8) | phase 2: Dark Rune Champion Mortal Strike + melee on an arena ranged walking to its spot, P2 +3.9 s |
+| uld2 | 1795448430 | kill 5:59, normal (62565 3:16.5, phase 2 3:30.9) | phase 2: Thorim's first melee (29.2k) on a warlock 10.5 yd from his landing, P2 +1.1 s |
+| uld3 | 1795448432 | kill 5:46, normal (62565 3:20.7, phase 2 3:29.2) | phase 1 at the Giant hold: Rune Detonation 10.6k + Stomp 8.8k + Iron Honor Guard Cleave 8.9k on a rogue in 0.34 s (2:42.7) |
+
+**Round 11 verdict:**
+- **Giant hold: positions held, no time came back.** The Giant stood p50 4 / 3 / 5 yd from the spot (w16: 47 / 62 / 40); the leader's only
+  accepted move from the Giant's engage to his death was the hold walk (no `tank face`, `reach melee`, charge or taunt). But the hold walk
+  was refused ("wait") for **2.7 / 3.0 / 2.8 s** after the Giant engaged (check: within ~1 s), and the Honor Guards + Acolyte + Giant segment
+  was 59.7 / 55.5 / 53.0 s against 53.5 / 59.3 / 54.3 (check: shorter). DPS bot-seconds dealing no damage over the last 2 s in that
+  segment 60 / 40 / 52 (w16 71 / 77 / 64); the snapshot-target count used before reads 112 / 85 / 89 (w16 85 / 101 / 84), but casters cast
+  with an empty snapshot target, so it overcounts ranged. The Giant took 8-13% while the adds lived and died 20-23 s after the last add
+  (w16 18.6-20.1): the picker kills adds first, so the hold only moves where the serial kill happens.
+- **Balcony walk from the ramp: held.** First `thorim balcony advance action` move +0.1-0.5 s after the Giant's death (median +0.5-0.8);
+  nobody on the floor north of y −385 afterwards; first `BALCONY_5` +20.3 / +18.7 / +17.1 s (predicted 18-22). Giant death to phase 2
+  22.8 / 21.9 / 20.5 s (w16 18.7 / 16.8 / 16.5): the hold's ~4 s cost, as estimated.
+- **Holder arrival: held.** The tank Thorim hits stood on (0, 0) in 94.0-97.4% of holding snapshots, the rest the 3.5 yd trade walk from
+  the off-tank spot along y +0.0 (no short hold like w16's (−2.7, −0.5)); under Heroism 94.0 / 96.8 / 96.2%, without 96.7 / 96.4 / 97.4%.
+  Waiting tank on the holder 1.9 / 1.5 / 1.2% (w16 uld2 8.1%); waiting-tank positioning moves 7 / 6 / 5.
+- **Stomp and Rune Detonation on the squad** (leader excluded): Stomp 11 / 13 / 14 hits (w16 15 / 22 / 9), Rune Detonation 26 / 4 / 14
+  (w16 21 / 19 / 13); one death (uld3, above). The Giant turned on a squad melee once (uld2 2:25.2-2:25.4) and came straight back.
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → 62565 168.5 / 169.5 / 170.0 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w18 uld1 | 1.6 | 13.0 | 39.0 | 12.1 | 32.7 | 6.3 | 59.7 | 22.8 | 185.6 | +17.1 |
+| w18 uld2 | 0.5 | 15.0 | 49.2 | 7.2 | 30.0 | 5.1 | 55.5 | 21.9 | 183.9 | +14.4 |
+| w18 uld3 | 0.05 | 14.7 | 48.7 | 13.0 | 21.3 | 7.5 | 53.0 | 20.5 | 178.6 | +8.5 |
+| w16 uld1 / 2 / 3 | 0.1-0.2 | 14.6-15.2 | 46.8 / 34.5 / 41.0 | 9.5 / 9.3 / 7.3 | 35.7 / 31.4 / 32.6 | 3.8-8.5 | 53.5 / 59.3 / 54.3 | 18.7 / 16.8 / 16.5 | 182.6 / 171.8 / 174.8 | +12.7 / +1.9 / +4.9 |
+
+uld1's lever came 1.6 s after the pack: a start-pack mob was on the leader until 0:28.8, which drops the wait as designed. uld2's corridor
+lost ~6 s between the packs (pack 2 engaged 11.3 s after pack 1, not 4.5): a Runic Smash flip took the leader from the left lane back to
+the right while the squad stood. uld3's pack 2 took 28.8 s: a mage's Frost Nova (1:10.98) rooted its guards in the smash lane, the leader
+walked back to them and the melee stayed in the safe lane 14-19 yd away until the smash flipped at 1:26.2 (`reach melee` against
+`thorim runic smash action` 9.4 flips a minute, 2.6 before). Both one-pull cases, not picked.
+
+**Stop rules:** not polished (three normal-mode kills, 1 death each). Not stuck: rounds 3-12 picked ten different causes.
+
+**Failure ranking:** deaths are one a pull from three different mechanics; the failure is Sif's clock, missed by 8.5-17.1 s. On the clock,
+against window 16: the adds and Giant unchanged, the balcony +4 s; the hold walk's lock and the overshoot it causes ~5 s in all three pulls
+(below); the Colossus stop 5.2 s in uld3 (below); the Colossus walk-in (the pending lane waypoint question, not built).
+
+**Bug 1 (all three pulls): the hold walk waits out the leader's own walk to the Giant.**
+- Trace: the leader re-issues the walk to the Giant's spawn (2134.57, −440.32, 438.33) at combat priority every ~5 s on the way up. The Giant
+  engaged at 2:27.07 / 2:24.40 / 2:26.77 with the leader at x ~2154-2156, but every hold move until 2:29.81 / 2:27.43 / 2:29.55 came back
+  `wait` (`hms` counting down from the Giant walk's booking), so he ran on to x 2134.7-2140 and only then turned: ~15-20 yd up and back,
+  ~4.5-5 s, with the Honor Guards on him (Hamstring, a 3 s Shield Smash stun and a Stomp knockback on the way down in uld1). He reached the
+  spot 15.1 / 13.6 / 12.2 s after the engage; the squad, its foot adds dead, stood without damage for 2-6 s and walked up to meet the guard he carried.
+- Code: `ThorimGauntletLeadAction::Execute` (`UldActions_Thorim.cpp:291-297` at c01caf9cc) walks to the Giant with `MoveTo(…,
+  MOVEMENT_COMBAT)`, booking `last movement` for the walk's length (up to `MaxWaitForMove`, 5 s); the hold walk is also `MOVEMENT_COMBAT`, and
+  `MovementAction::IsWaitingForLastMove` refuses anything not strictly above the booking (pitfalls, "A single mover is refused its own
+  re-target").
+- **Classification: bug** (round 11's walk-down, delayed by its own previous leg).
+
+**Bug 2 (uld3): the Colossus stop sits on the pull test.**
+- Trace: the leader reached (2235.44, −359.53), 37.50 yd exact from the Colossus, at 1:41.8; every later lead move re-issued that same
+  point as `dup` until a DPS pulled the Colossus at 1:46.97 (leader `tank assist` at 1:46.60); uld1 and uld2 stopped 37.5 yd out too and
+  pulled at once (0.5-2.0 s).
+- Code: the action walks to `MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)`, a point where `GetDistance` is 30 to float precision,
+  and `ThorimGauntletLeadColossus` / `ThorimGauntletColossusPull` pull only at `GetDistance ≤ 30`; one arrival lands a hair over, and
+  `MoveTo(WorldObject*)` then recomputes the same point (needToGo ~0), a duplicate.
+- **Classification: bug** in round 10's Colossus pull (the user's Q3).
+
+**Fix** (Thorim files only, no size, mode or player branch; the lead nodes run only for a bot leader, so a real player leading is unchanged):
+1. `ThorimGiantWalkBooked` (`UldEncounter_Thorim.cpp`): the bot's `last movement` is a combat-priority walk aimed within 3 yd
+   (`ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE`) of the Giant's spawn. The hold branch of the lead action lowers that booking to
+   `MOVEMENT_NORMAL` before its own combat-priority walk, the Onyxia / Putricide re-aim precedent; a forced dodge still blocks it, and any
+   other booking (an AvoidAoe step) is left alone.
+2. The walk to the Colossus stops `ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN` (1 yd) inside the 30 yd pull test (29 yd); the beyond-the-stop
+   and pull tests keep 30, so a leader waiting there for trash does not move between them.
+
+`pb-check` passes (syntax check of the 14 including TUs, pblint, codestyle).
+
+**Next window should show:**
+- Hold: the first hold move (`thorim gauntlet lead action` to (2187.79, −432.78)) accepted within ~0.5 s of the Giant's engage, no `wait`
+  row aimed at the hold spot; no leader position west of x ~2148 after the engage; the leader at the spot ~7-10 s after the engage (12.2-15.1 now);
+  the Honor Guards + Acolyte + Giant segment ~3-5 s shorter than 53-60 s.
+- Colossus: in every pull the leader's lead move to the Colossus' own position within ~1 s of reaching his stop (36.5 yd exact), no `dup`
+  rows there; "to Colossus" no longer 12-13 s from a stall.
+- Phase 2 ~3-8 s earlier, so hard mode is possible on the fastest pool; the others stay 5-12 s late until the Colossus walk-in question
+  and the serial add-then-Giant kill are addressed.
+- Watch: the Giant's melee and the carried Honor Guards on the leader during the shorter walk down (his health dipped to 22-29% at
+  2:33-2:36 in uld2/uld3 this window).
+
+**Seen, not picked:** ranged squad bots at the ramp foot (z 412) lose line of sight to adds on the ramp (z 416-422); `invalid target` then
+drops the target (`AttackersValue::IsValidTarget` needs LOS) while `GetThorimDpsTarget` reads `possible targets no los`, so they idle until the
+25 yd trail walks them up (uld2: four ranged 2:18.9-2:23.5). Generic LOS handling, shared.
+
+**Questions for the user:** none new. The lane waypoint near y −360 stays pending and unbuilt.

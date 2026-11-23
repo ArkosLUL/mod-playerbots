@@ -1035,12 +1035,14 @@ player was on the instance left the corridor standing while he stayed in the are
   walk while he fights (`ThorimGauntletLeaderFighting`: his target is a gauntlet mob in combat within 50 yd,
   or one attacks him): every corridor step of nine 25-man pulls came mid-fight, leaving the first pack's
   guards on ranged, and the right lane's fifth waypoint, 20.0 yd from the second pack's west guard, pulls
-  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to 30 yd from the
-  Colossus and, once no Iron Ring Guard or corridor Acolyte lives within 50 yd, attacks him
-  (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into him until he is in combat,
-  which also ends the Runic Smash; no trace shows his proximity aggro, as nobody got within 32 yd of him
-  idle. Waiting there instead for a follower's 50 yd pick cost 1-10 s a pull, the smash dodge holding the
-  squad at the last waypoints 55-65 yd out. Once the Colossus is dead he
+  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to 29 yd from the
+  Colossus, a yard (`ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN`) inside the 30 yd pull test: a stop on the
+  test itself lands a hair either side, and one left just over it re-issued its own point as a duplicate
+  and stood 5.2 s until a DPS pulled. There, once no Iron Ring Guard or corridor Acolyte lives within 50 yd,
+  he attacks him (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into him until
+  he is in combat, which also ends the Runic Smash; no trace shows his proximity aggro, as nobody got within
+  32 yd of him idle. Waiting there instead for a follower's 50 yd pick cost 1-10 s a pull, the smash dodge
+  holding the squad at the last waypoints 55-65 yd out. Once the Colossus is dead he
   walks on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick
   range: in all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the
   orb. Gated on the first doors (GO 194557, (2227.7, −413.3)) standing open, which the Colossus' death does
@@ -1056,22 +1058,26 @@ player was on the instance left the corridor standing while he stayed in the are
   once an Iron Honor Guard engages, the Giant spawns another every 10-20 s until he is pulled, and the squad
   picks guards first. **Once the Giant is in combat on him, he walks him back down** to
   `ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT` (2187.79, −432.78, 426.39) and holds him there, so squad and healers
-  fight adds and Giant in one place (user, 2026-11-23). Left at the top, the Giant stood 40-62 yd from it
-  while the squad killed the foot Honor Guard and the Acolyte at the ramp foot and then walked ~65 yd up:
-  84-101 DPS bot-seconds a pull without a target. The spot is 15 yd up the ramp from the median of the adds
-  fought off the leader over fifteen 25-man pulls, (2202.6, −430.7, 418.8), and the Giant and players have
-  stood on it. Stomp (62413: 10 yd around the Giant, a ~3 yd knockback every 8 s) pushes the tank down the
-  ramp, so he walks back past 3 yd (`ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE`) and the Giant settles just
-  above the spot. While he holds the Giant he targets him (`ThorimGauntletGiantHeld`, through the encounter
-  picker), and `thorim giant hold` keeps every mover but the lead walk, `tank assist`, the DPS pickers and
-  charges off him: `tank face`, `reach melee` or a Feral Charge would drag the Giant into the adds. Taunts
-  stay. Costs: Stomp and Rune Detonation (15 yd around a random player) land nearer the squad, and the
-  balcony walk starts ~30 yd lower. Followers, behind a bot or a real player alike, take the leader's
-  waypoint; between waypoints they walk to him once more than 25 yd (healers 20 yd) behind, except a non-healer fighting a
-  gauntlet mob in combat within the 50 yd pick range (`ThorimGauntletFighting`): that tether fought `reach
-  melee` whenever he walked on mid-fight, 116-185 DPS bot-seconds a pull of moving without damage, three
-  quarters of it on the Honor Guards and Giant. The gate walk re-adds follow-master only when the leader is
-  the bot's master.
+  fight adds and Giant in one place (user, 2026-11-23). His walk up books a combat-priority movement lock
+  (up to 5 s) toward the Giant's spawn, which refused the hold walk 2.7-3.0 s after the Giant engaged, so
+  he ran 15-20 yd on to the spawn and back with the Honor Guards on him; the hold walk first lowers that
+  booking to normal priority (`ThorimGiantWalkBooked`;
+  [pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)). Left at the top, the Giant stood
+  40-62 yd from it while the squad killed the foot Honor Guard and the Acolyte at the ramp foot and then
+  walked ~65 yd up: 84-101 DPS bot-seconds a pull without a target. The spot is 15 yd up the ramp from the
+  median of the adds fought off the leader over fifteen 25-man pulls, (2202.6, −430.7, 418.8), and the
+  Giant and players have stood on it. Stomp (62413: 10 yd around the Giant, a ~3 yd knockback every 8 s)
+  pushes the tank down the ramp, so he walks back past 3 yd (`ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE`) and
+  the Giant settles just above the spot. While he holds the Giant he targets him (`ThorimGauntletGiantHeld`,
+  through the encounter picker), and `thorim giant hold` keeps every mover but the lead walk, `tank assist`,
+  the DPS pickers and charges off him: `tank face`, `reach melee` or a Feral Charge would drag the Giant into
+  the adds. Taunts stay. Costs: Stomp and Rune Detonation (15 yd around a random player) land nearer the
+  squad, and the balcony walk starts ~30 yd lower, +4 s from his death to the balcony hit. Followers, behind
+  a bot or a real player alike, take the leader's waypoint; between waypoints they walk to him once more
+  than 25 yd (healers 20 yd) behind, except a non-healer fighting a gauntlet mob in combat within the 50 yd
+  pick range (`ThorimGauntletFighting`): that tether fought `reach melee` whenever he walked on mid-fight,
+  116-185 DPS bot-seconds a pull of moving without damage, three quarters of it on the Honor Guards and
+  Giant. The gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s, against the ~28 s opening wait a human led squad accepts. The corridor
   fights set the clock. Measured on 25-man (fifteen bot-led pulls, before the lever wait and the Colossus
@@ -1083,7 +1089,10 @@ player was on the instance left the corridor standing while he stayed in the are
   0.1-0.2 s after the sixth death, so 170 s to 62565, and the Colossus engaged 0.5-1.8 s after the leader's
   stop, but the squad, held on the last lane waypoints 55-65 yd out until then, walks in after the pull
   (under 10k/s on him for 6-9 s), so the Colossus took 31-36 s; phase 2 172-183 s after the lever, 2-13 s
-  late.
+  late. With the Giant hold (three pulls, its lock still refusing the walk down): the Giant p50 3-5 yd
+  from the spot, but adds and Giant still 53-60 s, since the squad kills the adds first and the Giant
+  alone then takes 20-23 s, and his death to the balcony hit 20.5-22.8 s; phase 2 179-186 s after the
+  lever, 8.5-17 s late.
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,

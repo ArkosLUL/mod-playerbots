@@ -282,7 +282,8 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
     if (Unit* colossus = ThorimGauntletLeadColossus(botAI, bot))
     {
         if (bot->GetDistance(colossus) > ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
-            return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
+            return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE - ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN,
+                          MovementPriority::MOVEMENT_COMBAT);
 
         return MoveTo(colossus->GetMapId(), colossus->GetPositionX(), colossus->GetPositionY(),
                       colossus->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -293,8 +294,14 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
                       false, false, false, MovementPriority::MOVEMENT_COMBAT);
 
     if (ThorimGauntletGiantHold(botAI, bot, next))
+    {
+        LastMovement& booking = AI_VALUE(LastMovement&, "last movement");
+        if (ThorimGiantWalkBooked(booking))
+            booking.priority = MovementPriority::MOVEMENT_NORMAL;
+
         return MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false,
                       false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    }
 
     return false;
 }
