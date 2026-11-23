@@ -44,6 +44,22 @@ using namespace EncounterHelpers;
 namespace
 {
 constexpr float SET_BEHIND_SPOT_ANGLE = 3.0f * static_cast<float>(M_PI) / 5.0f;
+
+bool PeriodicTriggerHitsEnemies(SpellInfo const* spellInfo)
+{
+    for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+    {
+        if (!effect.IsAura(SPELL_AURA_PERIODIC_TRIGGER_SPELL) &&
+            !effect.IsAura(SPELL_AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE))
+            continue;
+
+        SpellInfo const* triggered = sSpellMgr->GetSpellInfo(effect.TriggerSpell);
+        if (triggered && !triggered->IsPositive())
+            return true;
+    }
+
+    return false;
+}
 }
 
 float YoggSaronMovementGuardMultiplier::FleeGuard()
@@ -346,7 +362,7 @@ float YoggSaronCrusherAreaHoldMultiplier::GetValue(Action* action)
 
     SpellInfo const* spellInfo =
         facts.cast ? sSpellMgr->GetSpellInfo(facts.spellId.Get(botAI, facts.cast)) : nullptr;
-    if (spellInfo && spellInfo->IsPositive())
+    if (spellInfo && spellInfo->IsPositive() && !facts.multiTarget && !PeriodicTriggerHitsEnemies(spellInfo))
         return 1.0f;
 
     uint32 const phase = YoggSaronPhase(botAI);

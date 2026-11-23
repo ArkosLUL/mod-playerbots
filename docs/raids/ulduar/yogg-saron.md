@@ -777,8 +777,8 @@ whoever is swung at, so a clear bot becomes collinear without moving. `IsAllowed
   (`YoggSaronTankTargetOwned`), dropping it to the Guardian, Constrictor and Corruptor tiers, and the
   movement guard covers what it does not hand out. That rule's window (phase 2, or phase 3 with a
   holdable Guardian within 70 yd) must match what the resolver and guardian control cover, or a tank has
-  no target source. The Crusher loses the tank's Diminish Power breaks,
-  which the Judgement node replaces.
+  no target source. The Crusher loses the tank's Diminish Power breaks, and Judgement no longer replaces
+  them ([below](#diminish-power-is-why-the-crusher-dies-first)).
 
 **The tentacle cannot be tanked or steered**: `DamageTaken` does `DoResetThreatList(); AddThreat(who,
 100000); AttackStart(who)` on any white swing (`DIRECT_DAMAGE`), so it re-faces whoever hit it last.
@@ -790,7 +790,10 @@ each Diminish Power cast zeroes the threat list, so area threat from a bot besid
 and a melee-class hit (Swipe, Maul, Whirlwind) breaks the channel, so it swings at once. A bear's Swipe on
 a Corruptor 5 yd from a channelling Crusher did both, and Crush coned the three melee and the warrior tank
 stacked on that Corruptor dead in 4 s; a fury warrior's Whirlwind did the same, and he died in place. So
-`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action,
+`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action
+(a named multi-target buff or one whose periodic trigger hits enemies is harmful: read as buffs, Bladestorm,
+Sweeping Strikes and Blade Flurry were never held for their casters, and one Bladestorm 7.7 yd from a
+channelling Crusher took its threat and the cone killed two melee),
 plus Maul (glyphed), Hammer of the Righteous, Heart Strike and Avenger's Shield, which also hit enemies
 next to their target, in phases 2 and 3 while the bot stands within a Crusher's live melee range +
 `…_CRUSHER_AREA_HOLD_SLACK` (2 yd) and its stun does not hold. Area damage from outside the reach stays:
@@ -872,37 +875,40 @@ slack), else the furthest. Same answer for every bot; back to the ranged spot on
 
 ## Diminish Power is why the Crusher dies first
 
-`64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide** with
-no distance pruning, **multiplicative** across tentacles (two up = −37.6%, three = −50.7%), `DispelType 0`,
+`64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−20% damage done raid-wide** with
+no distance pruning, **multiplicative** across tentacles (two up = −36%, three = −48.8%), `DispelType 0`,
 and unkickable twice over: the tentacle is immune to `MECHANIC_INTERRUPT` and `MECHANIC_SILENCE`
 (`CreatureImmunitiesId −361`), and the channel carries flag `0x10`, not the interruptible `0x08`. It
 ignores LOS and immunities. **A cast skips anyone underground**: `ExcludeTargetAuraSpell` is Illusion
 Room `63988`, which every portal teleport (63989 / 63997 / 63998) force-casts and only `63993` on the way
-out removes. A bot debuffed before its portal keeps it until that channel breaks.
+out removes. **So the brain team carries its stacks below** until each channel breaks, and its room clear
+pays: one pull's last team went down under four (×0.41) and never cleared, and Induce Madness ended the
+pull. `--brain`'s `Diminish Power carried below` gives, per wave, each bot's stacks at its first sample
+below and the damage dealers' median multiplier until the door.
 
-Only two things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `64148` on the tentacle has
+Three things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `64148` on the tentacle has
 `ProcTypeMask 0x28` (taken melee swing, taken melee-class spell), `spell_yogg_saron_diminish_power_aura`
 breaks the channel once channelling but never during its 1.5 s cast, and `_diminishReady` is set once at
-6 s and never reset, so it re-casts straight away. Shattered Illusion only pauses it. Or the tentacle dies
-— **2,000,001 HP** in 25-man, 25-34 s for the whole raid even debuffed, against a respawn of 45-54 s
+6 s and never reset, so it re-casts straight away. **Shattered Illusion** drops every channel, the team's
+stacks below with it, when a room clears; they re-cast once the stun lifts. Or the tentacle dies —
+**2,000,001 HP** in 25-man, 25-34 s for the whole raid even debuffed, against a respawn of 45-54 s
 tightening to 25-30 s by the sixth wave. So the Crusher is the **top** target for everyone who can safely
 stand there: every ranged and healer.
 
-**Judgement breaks it from outside the reach.** Every Judgement damage spell (54158, 20187, 20467, 31804,
-53726, 53733) is `DmgClass 2`. They are triggered, but `SPELL_ATTR3_NOT_A_PROC` and the generated proc
-entry for a taken-flag `PROC_TRIGGER_SPELL` aura (`PROC_ATTR_TRIGGERED_CAN_PROC`) each clear
-`Aura::GetProcEffectMask`. The damage is `SPELL_DIRECT_DAMAGE`, so `DamageTaken`'s aggro grab never fires,
-and 10 yd through `IsWithinCombatRange` is ~19.5 yd centre to centre. `yogg-saron diminish power
-judgement` (`ACTION_RAID − 0.5`) has any paladin with a channelling Crusher already in reach judge it
-(wisdom, light, justice, one shared cooldown), with no walk and no target change, gated on
-`SPELL_STATE_CASTING`. No stagger: the Judgement lands inside `Spell::cast` and the next paladin finds no
-channel. Each drops 64145 raid-wide in the same millisecond; it is re-cast 60-80 ms later.
+**Judgement no longer breaks it** (core `fe0e00d8e`): the aura script returns before the break for a
+paladin Judgement damage spell (`SpellFamilyFlags[0] & 0x800000`). So `yogg-saron diminish power judgement`
+(`ACTION_RAID − 0.5`: any paladin with a Crusher channelling, `SPELL_STATE_CASTING`, in its ~19.5 yd judges
+it, wisdom, light or justice, no walk, no target change) breaks nothing by its own hit: 33 plain Judgements mid-channel in one window dropped none. Only a
+seal hit landing with it still breaks: a prot paladin's Judgement with Judgements of the Just and Seal of
+Vengeance casts 42463, melee-class and outside that mask, and broke it both times. **Open: with melee,
+tanks and pets kept off live Crushers (above), nothing else breaks it outside the stun**, so the channel ran
+52-78% of Crusher-alive time.
 
 **Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only once
 its victim is out of melee range, and otherwise swings, so a break followed by Crushes leaves no cast
-row. Uptime *rises* once ranged stop hitting it in melee, so judge the Judgement node on channel drops
-within 300 ms of a Judgement; the recorder writes that drop ~1 ms *before* the Judgement's cast row, so
-read the channel 50 ms before the cast.
+row. Uptime *rises* once ranged stop hitting it in melee. `--crush` counts channel drops within 300 ms of a
+Judgement; the recorder writes a drop ~1 ms *before* the cast row that caused it, so it reads the channel
+50 ms before the cast.
 
 ## Phase 2: the body is a wall, and the portals run on a clock
 
