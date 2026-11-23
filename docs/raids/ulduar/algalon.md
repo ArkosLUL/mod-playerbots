@@ -125,9 +125,11 @@ mana gem stopping the walk left 11 bots phased again.
 so a hide walk is judged by where the bot is at each impact (at run speed, phased a pulse after reaching its
 hole, the impact up to 0.3 s late), not by its whole line. When one would land within 10 yd of it, the hider in turn:
 - sets off in time to be phased 0.5 s before the impact, if it still can (not one going last);
-- else waits where it dodged until the impact, then runs, while that leaves its walk plus 1.5 s, star under or
-  not: out under a star it still gets the cover or its button, and a meteor within 6 yd always killed. Not once
-  on its way round: the spot it would stop on was never checked;
+- else waits where it dodged until the impact, then runs, while that leaves its walk plus 1.5 s before the hit
+  (a meteor within 6 yd always killed), and before a star dying in the cast (Stars) unless its only other way,
+  straight, wouldn't have it phased before that star either: two under-stars went off 0.6 s after Big Bang 2's
+  meteors on bots waiting them out or going round, and no cover or button outlasts two (12 dead). One going
+  last ignores the star. Not once on its way round: the spot it would stop on was never checked;
 - else goes round via a point 12 yd off the impact;
 - else walks straight. Straight through Big Bang 2's three, 9 died.
 
@@ -202,8 +204,10 @@ it. It can't open sooner: the tanks hold him until the cast starts or he resets,
   under with DoTs held), and a paced star's Insect Swarm and Moonfire killed it 3.6 s after its neighbour (6
   dead). The bulk ran +1.6 %/s beyond the drain with them, +1.9 without. `pendingHp` still counts humans' DoTs.
   An "on attacker" spell is judged on its own target: Corruption and Unstable Affliction reached stars that way.
-- **Hide**: with a star under, every margin (handler and tanks included) gains 3 s, stretched so all are in
-  1.5 s before the earliest drain death, capped at 4 s; the handler no longer waits on stragglers.
+- **Hide**: with a star under, or any star draining to death by the hit + 0.6 s (one released `nosoak` 7 s before
+  Big Bang 2 went off in its cast on 12 bots, 6 dead), every margin (handler and tanks included) gains 3 s,
+  stretched so all are in 1.5 s before the earliest such death, capped at 4 s; the handler no longer waits on
+  stragglers.
 - Phased bots keep 8 yd off an under-star in its last 3 s (exit and leave trigger): its hole lands under them at
   the strip.
 

@@ -427,3 +427,106 @@ in the 60 s before a cast while 2 or fewer holes stood; holes at Big Bang 2's ca
 0), unless dives on healers took them; `urgent` before Big Bang 2 near zero. Watch: `stray` losses eaten by a
 constellation on the handler, Barrage deaths before Big Bang 2 (windows 10 and 12: 1), and round 4's checks
 (no 12 s `cross`/`stage` stills; constellations 5-7.5 yd up kited).
+
+## Round 6 (2026-11-23, build 1fa3c332c: round 5 and the shared PickDefensive fix)
+
+**Data.** Window 14, one valid pull per pool (`raidtest.py report --boss algalon --raid uld --head 1fa3c332c
+--pulls 10`). All 19 Algalon traces on disk reread for stars going off in a Big Bang cast (`--bigbang`,
+`--stars`); scratch `hiders.py` (each hider's hide notes, run, phase and death per cast) and `replay.py`
+(`AlgalonHideSlackMs`, `HideRoute` and `FindSmashDetour` re-run per hider per snapshot, each hole's real pulse
+phase from its 62168 applications).
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-105934-29` | `603_29_…_1795431677` | wipe 4:43, Ascend 4:36.3, boss 47% | 33: star explosion 13, loose 9, on tank 6, Constellation Barrage 5 |
+| uld2 | `tr-20261123-105813-28` | `603_28_…_1795431596` | wipe 4:31, Ascend 4:24.0, boss 54% | 32: loose 16, star explosion 6, on tank 6, Barrage 2, Dark Matter stray 1, Big Bang 1 |
+| uld3 | `tr-20261123-110656-30` | `603_30_…_1795432119` | wipe 3:54, Ascend 3:48.1, boss 56% | 31: star explosion 13, loose 9, on tank 3, Cosmic Smash 3, Barrage 2, Dark Matter in Big Bang 1 |
+
+What started each wipe:
+
+- uld1: nobody died before Big Bang 2. Under-stars 1636 and 1637 (4.2% and 4.7% at the cast) went off on one tick
+  at 3:30.64, the under window's first (hit − 4.0 s), 0.56 s after the cast's three meteors: 15 unphased bots
+  hit, 12 dead, 3 of them healers. Tank deaths 3:52-4:29, then loose.
+- uld2: the holder died at 2:53.2 (106 k in 6 s, 47 k healed, both tank healers alive); the partner, still on 4
+  stacks from 2:38, got him back on threat and the 5th phased it at 2:54.9; the handler took him 3.9 s later from
+  20 yd off its slot (2 dead) and died at 3:00.1, the third at 3:12.3. A constellation on the handler (3:15.8)
+  and a stray (3:25.9) took the near holes: Big Bang 2's three stood 38-64 yd from the raid, 1 dead to the hit.
+  Tank deaths 3:41-4:00, loose 22 s.
+- uld3: the holder died at 2:36.4 (97 k in 6 s); a `deadline` kill went off with 10 under the line (3:10.6, 2
+  dead); the next holder died at 3:15.2 and he was loose 16.5 s, the shadow priest among the dead. With no
+  disperser both under-stars were released `nosoak` at 3:19.8 (11%, 20%): 1638 went off in Big Bang 2's cast
+  (3:31.67, hit − 2.9 s) on 12 bots, 6 dead, and 1637 drained into the aftermath (3:40.7, +6.1 s, 9 under, 5
+  dead).
+
+**Stop rules.** Not polished (three wipes; waived on 226 rosters). The failure picked below is new.
+
+**Verdict on round 5: held.** No `algalon.holelost kite` in the 60 s before a cast with 2 or fewer holes standing
+(uld2's at 3:15.8 left 3); holes at Big Bang 2's cast 3, 3, 4 (window 12: 3, 1, 0); `urgent` never set. Watch
+items: Barrage deaths before Big Bang 2 1 in 3 pulls (uld3 1:48.8; windows 10 and 12: 1 in 6); round 4's checks
+hold (parked 3.0-5.8 s, `stuck` fired in uld2, no 12 s still). The holes didn't save Big Bang 2: uld1 had its
+near hole and lost 12 to the under-stars; uld2's three stood far from the raid.
+
+**Failures by deaths** (96): tank burst 15 and loose 34 (Q2 stands); star explosion 32 = in Big Bang 2's cast on
+hiders 18 (uld1 12, uld3 6), a released under-star drained into the aftermath 5 (uld3), `deadline` kills on a
+drained raid 3 (uld3 3:10.6 2, uld2 3:15.9 1), Big Bang 1's cast 1 (uld2), the collapse 5; Barrage 9; Cosmic
+Smash 3 (uld3, in Big Bang 2's hide); Big Bang 1; Dark Matter 2.
+
+**Picked: stars going off in Big Bang 2's cast on hiders** (18). Bug: the hide means every hider to be in 1.5 s
+before a star dies in the cast (`UnderHideExtraMs`); two paths leave them out.
+
+- uld1, the meteor wait. Big Bang 2's three meteors land 4.5 s before the hit, 0.4-0.6 s before the under window
+  opens. A hider whose walk crosses one and can't be phased 0.5 s before it waits for the impact while that
+  leaves its walk plus 1.5 s before the hit, "star under or not" (doc). Uldxah, Uldxai, Uldxal (17 yd from hole
+  8914 after dodging to (1637.4, -340.6)) missed that early slot by 20-270 ms on the cast's first ticks, waited
+  from 3:27.2, ran at 3:29.0 once the crossing test cleared by 0.1 yd, lost 34-53% of their health to the
+  meteors 11.0-11.2 yd off, and were 5-6 yd from the hole when the stars went off; Uldxaf and Uldxar waited until
+  3:29.4 and 3:29.8. Uldxab, Uldxag, Uldxas, Uldxav ran at the cast on the detour 12 yd round the meteors and
+  died 14-21 yd short. Hole 8914 pulsed at cast +3.04 and +4.04; the stars went off at +4.04. The doc's case
+  for waiting, "out under a star it still gets the cover or its button", failed: two stars on one tick (14-18 k
+  each after resistance), and Anti-Magic Shell, Cloak and Ice Block are held through the cast (4 died with one
+  ready).
+- uld3, a released star. `UnderHideExtraMs` counted `under` stars only, so 1638 draining into the cast after its
+  `nosoak` release added no margin: the near hiders set off on the base margin (cast +4.0..+5.2 s), and 7 were
+  still running and 3 waiting when it went off at +5.07.
+
+The replay reproduces 11 of uld1's 12 dead hiders' waits and detours (Uldxae ran 1.4 s late in the trace).
+
+**Fix** (Algalon files only, `UldEncounter_Algalon.cpp`):
+
+- `CastStarDeathMs` (`:2782`): the earliest drain death in the cast among under-stars and any star dying by the
+  hit + 0.6 s; `UnderHideExtraMs` stretches from it, so a released star draining into the cast gets an
+  under-star's +3 s (stretched, at most 4 s).
+- `AlgalonHideSlackMs` (`:4119`): the meteor wait is skipped when it leaves the hider out at that star (wait,
+  walk and 1.5 s past its death) and going round, or straight with a pulse in hand, gets it in first; it then
+  runs on its route's slack. A bot going last keeps the old rule.
+
+10 and 25-man alike; with no star dying in the cast both rules are unchanged. Replay: in uld1, Uldxah, Uldxai
+and Uldxal run straight at +0.91, in at +2.66, phased by the +3.04 pulse, before the impact (+3.48) and the
+stars (+4.04): 3 saved. Uldxaf, Uldxar and Uldxad go round at +0.40, in at +3.05-3.42, phased by the +4.04
+pulse, the stars' own tick (in the trace the explosion came 1 ms first): not counted. The east group (22.8-25.8
+yd at the cast after the meteors landed on their spots) can't be in by +3.04 on any route. In uld3, 13 of 15
+hiders are phased at +2.98..+4.98 against the star at +5.07 (now +5.98; Uldzaz on its detour isn't, Uldzag's hole
+shows no pulse); of the dead, Uldzan, Uldzaf and Uldzaw make it. The other 10 Big Bang 2 casts on disk: one hider changes (`603_2`'s
+Uldxaq, 0.3 s sooner on the same detour). Cost: when a released star drains into a cast, hiders spend 3-4 s
+more in the void (62169 at 1.3-1.9 k/s, Dark Matter).
+
+**Not picked.**
+
+- The aftermath drain (uld3 3:40.7, 5 dead): drain deaths aren't made due (round 2), and the release came 7 s
+  before the cast with him loose and no disperser.
+- `deadline` kills on a drained raid (uld3 3:10.6 with 10 under, uld2 3:15.9 with 11): due kills skip the
+  raid-health gate by design (round 4).
+- uld1's east group: Big Bang 2's meteors landed on the `nearhole` spots east of the only near hole, and the
+  dodge left them 24-26 yd out, too far for a star on the window's first tick. Under-stars on that tick are the
+  bulk's overshoot (4.2-8.4% at the cast against the 4.0-9.6% band, 19 traces).
+- uld2's Big Bang 2 holes far from the raid (1 dead, 9 bots 43-64 yd from any hole).
+- Tank deaths and loose: Q2 stands.
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --bigbang`, `--verdict`): with a star going off in Big Bang 2's cast,
+no hider still `wait` past a meteor's impact in it, and the star's hit list mostly tanks on `hold`/`noshelter`
+rather than `run`/`wait` hiders (window 14: uld1 15 hit, 12 dead; uld3 12, 6). A star released before a cast
+and draining into it moves the hiders' runs 3-4 s earlier. Watch: Cosmic Smash deaths in Big Bang 2's hide
+(window 14: uld3 3) and hiders "brought back inside 15 yd by the impact", and Dark Matter deaths while phased in
+a Big Bang (window 14: 1).
