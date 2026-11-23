@@ -1031,6 +1031,8 @@ Left: externals also wait on an own button that is off cooldown but unaffordable
 with no blood rune, up to one rune cooldown), since `ReadyTankDefensive` reads the cooldown only; changing
 it is shared code.
 
+**Shared fix (`rt/shared-ready-defensive`):** `ReadyTankDefensive` now skips a button the tank can't pay for now.
+
 **User answers (2026-11-23):** Q6 yes, as put to the user: a ranged DPS bot with a low lasher hitting the
 back line in reach shoots it before the Gift. Q7 yes: the loose Snaplasher stays in the normal damage split (as built). Q9 no: do not keep
 the healers' externals off the main tank during the add phase. Q8 waits for window 15.

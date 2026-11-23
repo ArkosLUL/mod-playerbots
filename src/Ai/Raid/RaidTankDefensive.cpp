@@ -207,7 +207,8 @@ TankDefensive const* FindReadyTankDefensive(Player* bot, bool physicalOnly, uint
                 continue;
         }
 
-        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs)
+        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs &&
+            CanPayDefensive(bot, entry.spellId))
             return &entry;
     }
 

@@ -91,7 +91,8 @@ healers were still phased. Then:
   on it (shield, renew, rejuvenation, lifebloom, riptide, earth shield, sacred shield): only what is already
   on it ticks in the second it is alone.
 - A bot holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown
-  and, for Divine Protection, Forbearance run out in time) hands him to a bot partner that has one and ≤ 2
+  and, for Divine Protection, Forbearance run out in time, and he can pay for it now, so a Death Knight
+  short of runes or runic power on any tick reads bare) hands him to a bot partner that has one and ≤ 2
   stacks, 15 s out. A holder at 3 stacks with the cast ≤ 15 s away hands over to a partner at ≤ 1: the
   Phase Punch behind the cast lands on the soaker, and a 5th stack leaves nobody unphased.
 - The soak buttons are reserved (see "Cooldowns").
