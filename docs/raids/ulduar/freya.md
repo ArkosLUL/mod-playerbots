@@ -90,10 +90,14 @@ gap kill the bear, with four healers in range. Each add tank that held a trio wa
 Instincts, Frenzied Regeneration, Vampiric Blood or Icebound Fortitude up; deaths came with them spent
 earlier (Icebound Fortitude in a Conservator or lasher wave; a bear's Barkskin and Frenzied Regeneration in
 a lasher wave, all three once on a lasher pile 4s before the trio; Survival Instincts before or in the first
-trio) or unpressed (Vampiric Blood), and once with Survival Instincts up, to two swings 2.4s apart. Pain
-Suppression, Guardian Spirit, Lay on Hands and Hand of Sacrifice mostly went to DPS, healers and pets; the
-add tank got Lay on Hands outside the trio or right after a soulstone rise, and once each Pain Suppression
-and Hand of Sacrifice after a soulstone rise, dying under both.
+trio) or unpressed (Vampiric Blood), and once with Survival Instincts up, to two swings 2.4s apart. Left
+to the class code, Pain Suppression, Guardian Spirit, Lay on Hands and Hand of Sacrifice mostly went to
+DPS, healers and pets (a Felguard's Guardian Spirit at 0:07), so none was ready for the trio; the add tank
+got Lay on Hands outside the trio or right after a soulstone rise, and once each Pain Suppression and Hand
+of Sacrifice after a soulstone rise, dying under both. Cast alongside his own buttons, externals overlapped
+them (19.5 of 20s in one wave) and he died bare 5.5s after the last ran out, the Snaplasher at 8%. Two
+trio waves can come back to back, 60s apart, and the second outlasts a bear's 3-minute buttons: it gets
+Barkskin alone.
 
 **A damage dealer near the add tank's threat on the Snaplasher moves to a sibling**
 (`ShedSnaplasherThreat`, not yet verified in a pull). The generic `threat` strategy is never added
@@ -299,15 +303,26 @@ The add tank taunts the **Snaplasher and Conservator only**; the rest of its lad
 damage. Taunting Freya would fight a human main tank whose raid roles are set differently. Lashers have
 their own pickup ([below](#detonating-lasher-waves)).
 
-**The add tank's cooldowns wait for a stacked Snaplasher** (user's choice; not yet verified in a pull),
-since every add-tank death came with them spent in an earlier wave ([Hardened Bark](#the-trio-wave)).
-`freya add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for
-assist tank 0 while Freya lives and is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT`
-(25%). Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, `freya add
-tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one, so they chain
-through the wave; `freya add tank external` has a healer cast Pain Suppression, Guardian Spirit or Hand of
-Sacrifice on him whenever none of the three is up. Notes `freya.adddef`, `freya.addext`: the button cast,
-else `covered` or `none`, so the trace's repeat filter keeps a later cast of the same button.
+**The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice; not
+yet verified in a pull), since every add-tank death came with them spent earlier or on someone else
+([Hardened Bark](#the-trio-wave)). `freya add tank defensive hold` blocks the class nodes' tank cooldowns
+(`HeldTankDefensiveNames`) for assist tank 0 while Freya is not on him, above
+`ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank external hold` blocks healers'
+class Pain Suppression (a disc priest's own critical-health one shares the name), Guardian Spirit and Hand
+of Sacrifice, on the main tank too, while an add tank lives who is not holding her; Lay on Hands stays
+free. Both run only in the add phase, Freya in combat with Attuned to Nature up: the entry fallback sees
+her before the pull too, and no trio comes once it drops. Both find Freya by entry when `find target`
+misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at 43% that way.
+
+Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
+time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
+`freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
+Sacrifice it can reach, only while none of the three is up and he has no own button running or ready
+(`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them too). Reach
+is spell range plus LOS, checked first: `CanCastSpell` passes an out-of-range target, and a paladin healing
+from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`, `freya.addext`: the button
+cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's repeat filter keeps a later
+cast of the same button.
 
 **Generic taunts must not cross the split** (not yet verified in a pull). A trio wave stands on Freya,
 so a bear's `high aoe` Challenging Roar (a warrior's Challenging Shout alike) takes her off the main
@@ -698,7 +713,9 @@ it adds behind Freya's tree trunks drop out and the trio split disagrees between
 sides; `Stalkers()` that sweep plus a LOS ray, tested on the entry first so only Healthy Spores and the
 two Sun Beam stalkers pay it; `LasherCamp()` the camp spot. It is tick-scoped on purpose: a queued action can be
 `Playerbots.ExpireActionTime` old when popped. `GetFreyaBossByEntry` finds her without the target list,
-because the Ground Tremor nodes run wherever the gate is open, trash included. `FreyaWaveState` is one
+because the Ground Tremor nodes run wherever the gate is open, trash included, and a bot risen from a
+soulstone is off her threat list until he threatens her: the add tank holds fall back on it, while
+`FreyaAlive`'s rules (area taunt hold, owned targeting) stay off for him meanwhile. `FreyaWaveState` is one
 grid pass that the priority action, the tank action and both multipliers read, so they never disagree
 about what is up.
 
@@ -714,7 +731,9 @@ Strengthened Iron Roots, Sun Beam stalkers), and a kill's chest, which the core 
 62952 = three); `--waves` each add wave and Eonar's Gift, with raid deaths meanwhile;
 `--tanks` who held Freya and each Snaplasher, every tank's Challenging Roar, Challenging Shout or
 Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths, bark procs, kite orders
-and speed reads, and each cooldown a tank or healer spent under a stacked Snaplasher; `--beams` Unstable Sun
+and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a
+cast that can still fail), and per Snaplasher the seconds its first tank held it under his own buttons,
+externals, both and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
 Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;

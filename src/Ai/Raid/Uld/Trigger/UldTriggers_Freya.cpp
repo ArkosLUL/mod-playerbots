@@ -97,7 +97,7 @@ bool FreyaAddTankExternalTrigger::IsActive()
     Player* tank = nullptr;
     char const* external = GetFreyaTankExternal(botAI, tank);
     if (!external && tank && RaidObs::Active())
-        RaidObs::NoteDerived(bot, "freya.addext", "none");
+        RaidObs::NoteDerived(bot, "freya.addext", IsFreyaAddTankCovered(tank) ? "covered" : "none");
 
     return external != nullptr;
 }
