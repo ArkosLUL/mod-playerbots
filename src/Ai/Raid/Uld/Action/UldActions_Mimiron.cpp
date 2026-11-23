@@ -517,53 +517,83 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         return -1.0f;
     };
 
+    struct RingStep
+    {
+        float heading = 0.0f;
+        float radius = 0.0f;
+        int score = -1;
+    };
+
     auto const stepRing = [&](float remaining, char const* branch)
     {
-        float const stepped =
-            std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
-        float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
+        float const bearing = boss->GetAngle(bot);
+        float const fullArc = std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP);
 
         std::vector<Position> const mines = GetMimironMines(botAI);
         int const bestScore = 3;
-        float stepRadius = radius;
-        int stepScore = -1;
+        int const mineClearScore = 2;
 
         UpdateMovementState();
         bool const canIssue = !IsWaitingForLastMove(MovementPriority::MOVEMENT_FORCED);
-        for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
+        auto const pickOnArc = [&](float arc, float maxShift)
         {
-            float const candidate = radius + shift;
-            if (candidate < shiftMin || candidate > shiftMax)
-                continue;
-
-            Position const spot = onOrbit(heading, candidate);
-            if (!isClean(spot))
-                continue;
-
-            int score = IsMimironWalkFireSafe(bot, hazards, spot) ? 1 : 0;
-            if (IsMimironWalkMineSafe(bot, mines, spot))
-                score += 2;
-
-            if (score >= 2 && score > stepScore && canIssue && !IsMimironPathMineSafe(bot, mines, spot))
-                score -= 2;
-
-            if (score > stepScore)
+            RingStep pick;
+            pick.heading = Position::NormalizeOrientation(bearing + std::copysign(arc, remaining));
+            pick.radius = radius;
+            for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
             {
-                stepRadius = candidate;
-                stepScore = score;
+                float const candidate = radius + shift;
+                if (candidate < shiftMin || candidate > shiftMax || std::fabs(shift) > maxShift)
+                    continue;
+
+                Position const spot = onOrbit(pick.heading, candidate);
+                if (!isClean(spot))
+                    continue;
+
+                int score = IsMimironWalkFireSafe(bot, hazards, spot) ? 1 : 0;
+                if (IsMimironWalkMineSafe(bot, mines, spot))
+                    score += 2;
+
+                if (score >= 2 && score > pick.score && canIssue && !IsMimironPathMineSafe(bot, mines, spot))
+                    score -= 2;
+
+                if (score > pick.score)
+                {
+                    pick.radius = candidate;
+                    pick.score = score;
+                }
+
+                if (score == bestScore)
+                    break;
             }
 
-            if (score == bestScore)
-                break;
+            return pick;
+        };
+
+        RingStep step = pickOnArc(fullArc, std::numeric_limits<float>::max());
+        if (canIssue && step.score < mineClearScore && !mines.empty())
+        {
+            for (float arc : ULDUAR_MIMIRON_BARRAGE_SHORT_STEPS)
+            {
+                if (arc >= fullArc)
+                    continue;
+
+                RingStep const shorter = pickOnArc(arc, 2.0f * radius * std::sin(0.5f * arc));
+                if (shorter.score >= mineClearScore)
+                {
+                    step = shorter;
+                    break;
+                }
+            }
         }
 
         NoteBarrageDecision(branch, remaining < 0.0f ? "cw" : (remaining > 0.0f ? "ccw" : nullptr), cw);
 
         bot->CastStop();
 
-        Position const step = onOrbit(heading, stepRadius);
-        MoveTo(boss->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false,
-               false, false, true, MovementPriority::MOVEMENT_FORCED, true);
+        Position const stepSpot = onOrbit(step.heading, step.radius);
+        MoveTo(boss->GetMapId(), stepSpot.GetPositionX(), stepSpot.GetPositionY(), stepSpot.GetPositionZ(),
+               false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 
         botAI->SetNextCheckDelay(100);
 

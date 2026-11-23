@@ -567,10 +567,19 @@ dead in 6 s.
 **Radius is the free parameter, so it dodges the fire, walk and endpoint.** A step takes the nearest
 radius within ±8 whose destination **and** straight leg are clear, falling back to a clean endpoint and
 then to the plain step, because the cone kills in a tick. The search stays in `[14, 24]` for ranged and
-`[5, 9]` for melee, who give ground inward only (inside 5 the orbit runs through VX-001's model). A radius whose endpoint and leg miss every mine ranks
-above both, for every bot, never refusing the step: a blast is about three fire ticks, and healthy bots
-took two or three in one step. Mines land within 15 yd of the MK II, so the outer radii are usually
-clean.
+`[5, 9]` for melee, who give ground inward only (inside 5 the orbit runs through VX-001's model). A
+radius whose endpoint and leg miss every mine ranks above both, for every bot, never refusing the step.
+
+**Phase 4 mines sit on the ranged ring, so a mined step shortens its arc.** The ten land on a 15.0 yd
+circle round the chassis, and most of the last cast's lie 19-25 yd out once it has moved: in windows
+16-19, 132 of 715 phase 4 steps passed a live mine, 105 of them with every clean radius at the 40°
+heading crossing one. Two blasts (9.3-10.8k) kill a ranged from ~80%, and all nine mine deaths on
+barrage legs there were ranged or healers. A step with no mine-clear radius therefore tries 30°, 20°
+and 10° (`_SHORT_STEPS`) and takes the longest arc with a clean, mine-clear leg, else the full step;
+replayed, that clears 40 of the 76 ranged crossings. A short arc shifts radius by at most its chord:
+the simulation cleared constant-radius steps only, and a 10° step with an 8 yd shift turns 8°/s,
+slower than the sweep, where the cap keeps every short step at 12.7°/s or more over `[14, 24]`. With
+no mine on the floor (phases 2 and 3) nothing changes.
 
 **The fire dodge keeps running during a barrage for every bot the cone does not own.** The window is
 22-26% of phase 2 and carried 36-76% of its fire damage; one window killed 13 bots to Flames while bots
@@ -622,8 +631,9 @@ bot, so it cannot keep a bot on one it was already hitting.
 
 **Proximity Mine (34362)** carries `unit_flags = 2` (`UNIT_FLAG_NON_ATTACKABLE`), so nothing removes one.
 It arms 2.5 s after landing, polls every 500 ms for a player inside **1.9 yd**, blasts 3 yd (66351), and
-self-detonates at 35 s. Ten land inside 15 yd of the MK II (65347, radius idx 18) 8 s after every Shock
-Blast. Non-selectable, so never in `"possible targets"` and invisible to pathing; `IsMimironSpotMineSafe`
+self-detonates at 35 s. Ten land exactly 15 yd from the MK II at random bearings (65347,
+`TARGET_DEST_CASTER_RADIUS`, radius idx 18) 8 s after every Shock Blast. Non-selectable, so never in
+`"possible targets"` and invisible to pathing; `IsMimironSpotMineSafe`
 gates the destination of every Mimiron move **except the barrage dodge**, where the cone kills and a mine
 does not; that step and every fan prefer a mine-clear walk instead.
 
