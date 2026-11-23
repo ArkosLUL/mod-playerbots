@@ -1389,3 +1389,158 @@ comments. `pb-check` passes.
   existing pulled → plain cascade), so that dodge can end past the Animus's ceiling. `--crash` `late`
   cannot tell strafes from searches; reading "late 0 on strafes" needs the `vezax.dodge` note at the
   move, as `exitreplay.py` does.
+
+## Round 12 (2026-11-24, build baf47824b)
+
+**Data.** Window 24 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head baf47824b
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.3-3:08.5, no vapor
+hit), against windows 21-23 (`cmp3.py`). Analysis scripts: session scratchpad `vezax-r12/` (`cmp3.py`,
+`surge.py`, `mtwindow.py`, `palheals.py`, `beacon.py`, `beaconhist.py`, `beaconwhy.py`, `copies.py`,
+`copies2.py`, `tankbuffs.py`, `leak.py`, `dealt24.py`, `threatvetoes.py`, `markcrash.py`,
+`exitreplay.py`, `latenotes.py`, `vezvictim.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-222105-10` | `603_10_general-vezax_1795472506` | kill 5:35, 0 deaths, the Animus dead in 73.5 s |
+| uld2 | `tr-20261123-222226-11` | `603_11_general-vezax_1795472587` | wipe 4:52, 30 deaths, the Animus at 25.5% at the collapse (4:20.5) |
+| uld3 | `tr-20261123-222246-12` | `603_12_general-vezax_1795472608` | kill 5:32, 0 deaths, the Animus dead in 79 s |
+
+**Stop rules.** Not polished: uld2 wiped. Round 11's failure (late strafes) is gone (below); this round's
+pick is new, so no repeat count.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the main tank's death | From it |
+|---|---|---|
+| uld1 | none | - |
+| uld2 | none | from 4:01.6 (warrior main tank to Animus melee at +53.1 s): 11 Profound Darkness, 10 Vezax melee, 7 Animus melee (him included), 2 Shadow Crash (the re-raised main tank 4:31.4, a re-raised melee 4:47.5) |
+| uld3 | none | - |
+
+**Verdict on round 11 (a late crash dodge takes the search): it did what it targeted.**
+
+- `exitreplay.py`: 1 of 930 strafe or pulled dodges could not leave the blast in time (uld2 Uldyae
+  4:16.9, 2.1 s needed against 2.1 left), not hit; no strafe or pulled dodge hit at all (windows 11-23:
+  12 of 7249 late, 10 hit).
+- `vezax.dodge = late` 1 / 3 / 2 bots; the four with a matched move walked 3.5-10 yd to 12-12.7 yd
+  from the impact, and none of the six was hit. More than the replay's 12 in 39 pulls, all harmless.
+- No crash hit on a camp bot before a collapse in any pull; uld2's two crash deaths came 11-27 s into
+  its collapse.
+- Everything else as window 23: strafe and pulled the bulk of dodges, ranged `past` 1-12% (uld3 one
+  ranged at 18%). One pre-spawn mark over ~30 ticks: uld1 0:20 (53, below).
+
+**Animus and Vezax per pull** (`cmp3.py`, `surge.py`; settle is Vezax from the anchor, across the
+Animus off him; main tank healing all sources, spawn to his death or the stop).
+
+| Pull | Settle; across | Vezax at spawn | Animus +30 / +45 / +60 s | Animus | Raid / ranged k/s | MT healed / taken k/s | Beacon on the MT in the phase | Vezax |
+|---|---|---|---|---|---|---|---|---|
+| uld1 (DK) | 9.9; −7.0 | 19.6% | 60.9 / 37.9 / 17.1 | kill 73.5 s, 1.36 %/s | 167 / 96 | 3.5 / 3.5 | 100%, 87k copied | dead 5:35.2 |
+| uld2 (warrior) | 9.9; +8.1 | 21.6% | 66.1 / 50.4 / 35.3 | 39.9% at his death (+53.1), 25.5% at the collapse (+72) | 128 / 58 | 3.1 / 4.0 | 0%, 96k copied onto the bear | 21.4% floor, wipe 4:47.7 |
+| uld3 (bear) | 9.9; −7.2 | 24.4% | 61.2 / 42.0 / 27.9 | kill 79 s, 1.27 %/s | 156 / 77 | 2.7 / 3.0 | no holy paladin | dead 5:31.9 |
+
+All three settled normally. uld2 ran window 21 uld2's kill pace to +45 s (67.8 / 51.2) and lost it with
+its main tank.
+
+**Why the uld2 main tank died at 4:01.6.** The warrior Uldyaa held Vezax all pull and the Animus from
++1.0 s, on the anchor; he took 4.0k/s in the phase, the top of windows 21-24's 2.4-4.0, and got
+3.1k/s.
+
+1. *Beacon of Light sat on the idle bear off-tank Uldyab from 0:16.8 to his death* (`beacon.py`): the
+   holy paladin Uldyac refreshed it there at 1:47.0 and 3:17.3 with Uldyaa at 80%. In the phase its
+   copies cast 95.9k (1.81k/s) onto a full-health bear, 8.5k effective; on uld1's DK main tank they
+   landed 87k effective (1.2k/s, 34% of his healing). Sacred Shield went the same way (bear 5, him 2;
+   uld1 him 7).
+2. *The 3:52.5 mark on healer Uldyaf (L) and a crash on its group 1.6 s later*: 40 ticks, 25 of them at
+   3:54-3:56; Uldyac and Uldyad fell to 38% and healed themselves and the ranged. From 3:52 to 4:01.5 he
+   took 69.7k and got 38.5k (`mtwindow.py`); the paladin's Lay on Hands at 3:58.6 went on a ranged
+   (23.7k, copied onto the bear) with him at 27-37%. Uldyaf was at 3-7% mana.
+3. *Earlier, the Animus loose 12 s on the shadow priest Uldyao* (3:32.7-3:44.7): held by `vezax threat
+   multiplier` from 3:19.7, his DoTs in a field still did 205k in 13 s (15.8k/s, `dealt24.py`) and
+   passed 130% of the warrior's threat. The bring-back walked it in at 31% health and Uldyaa retook it.
+   The same bot did it in window 17 uld2 (round 7's DoT leak candidate); not in windows 19, 22a, 23.
+
+**What followed.** Both bosses loose: Vezax killed Uldyap 4:06.0, Uldyav 4:07.8 and Uldyaw 4:09.7, the
+Animus Uldyal 4:03.2 and Uldyao 4:06.1; the bear took the Animus at 4:07.9 and Vezax at 4:23.7. The
+collapse came at 4:20.5 with the Animus at 25.5%, a second Heroism at 4:30.7, Profound Darkness killed
+11 at 4:20-4:36, wipe at 4:47.7.
+
+**Beacon placement since window 11** (`beaconhist.py`, rosters A and B, the two with a holy paladin; C
+has none). On the main tank 80%+ of the phase in 5 of 18 pulls: 4 kills, his death before +80 s in 1
+(w19 uld2, a north settle). Under 60% in 13: 4 kills, his death before +80 s in 5 (w14 uld1, w17 uld2,
+w22a uld1, w23 uld1, w24 uld2). `beaconwhy.py`: the main tank on the anchor stood past the paladin's
+`HealDistance` 26-54% of the pull (windows 21, 23, 24); the off-tank 0-39%.
+
+**Ranking** (30 deaths, all uld2, all from its main tank's death).
+
+1. *Beacon of Light and Sacred Shield on the idle off-tank: bug, fixed below.*
+2. *The 3:52 mark × crash: plan question (Q1, queued from round 11).* Below.
+3. *DoTs carrying a held dps past the threat cap on the Animus: bug, not small* (estimate a DoT's
+   remaining threat, or hold its application near the cap). Candidate for a later round.
+
+**Picked: tank buffs on the idle off-tank.** The strategy has the main tank hold Vezax and the Animus on
+the anchor for the whole fight; the class pick meant to beacon "the one actually taking damage"
+(`PaladinTankToBeaconValue::Calculate`, `src/Ai/Class/Paladin/Value/PaladinTankToBeaconValue.cpp:24`)
+drops a tank past `HealDistance` (`:44`), so from row 0 only the off-tank, standing nearer the camp,
+qualified at most refreshes, and its 75-point swap margin (`:17`, `:65`) kept the beacon there once it
+held it. Beacon reaches 60 yd and Sacred Shield 40 (`spell.reference.csv` range indexes 14 and 5).
+
+**Fix** (Vezax files only):
+
+- `VezaxTankBuffHolder` (`UldEncounter_Vezax.cpp:761`): for a holy paladin bot while he fights, the
+  living main tank, else the tank he is hitting. `VezaxTankBuffTarget` (`:785`) returns him when he lacks
+  the buff (Beacon: the bot's own), stands inside the spell's range and line of sight, and
+  `CanCastSpell` passes.
+- Nodes `vezax tank beacon` (`ACTION_CRITICAL_HEAL + 7`) and `vezax tank sacred shield` (`+ 2`), where
+  the class nodes sit (`UldDefinition_Vezax.cpp:46-61`; `VezaxTankBuffTrigger`/`Action`).
+- Rule `vezax tank buffs on the holder` (`:63`): the class `beacon of light on tank`, `… on main tank`,
+  `sacred shield on tank` and `… on main tank` hold for a healer while the holder exists.
+
+Reader: `general_vezax.py --tank` (main tank = the tank he hit longest; Beacon share on him and on
+another tank before the Animus and after it, copies landing on him to his first death, Sacred Shield
+casts by target, the rule's vetoes; tests added). Docs: `docs/raids/ulduar/vezax.md` (camp section,
+trace section, the mark × crash gap). 10/25 and normal/hard: the main tank holds Vezax in every mode
+and no branch keys on size or the Animus. A real main tank is the group's flagged one like a bot; a
+real paladin runs no rule. Shared code: none.
+
+**Next window should show** (uld1 and uld2; uld3 has no holy paladin).
+
+- `--tank`: Beacon on the main tank ~100% before and after the spawn, copies landing on him ~1.2k/s in
+  the phase (uld2 had 0 of 1.8k/s cast); Sacred Shield casts on him only; Beacon casts ~4-5 a pull
+  (w23 uld2 flipped 11 times).
+- `postmortem.py --vetoes`: `vezax tank buffs on the holder` only on the holy paladin, on the class
+  beacon and Sacred Shield actions.
+- No main tank death before the Animus dies in a normal settle; in uld2 his healing at or above the
+  ~4k/s he takes.
+
+**Q1 (round 11) against window 24: it still matters.** Animus-phase 3:52 marks: uld1 Uldxag (R) 49
+ticks, the crash cast +1.5 s on its own group (impact on Uldxab), the marked bot dodging, Vezax
++1.20 %/s; uld2 Uldyaf (L) 40 ticks, crash +1.6 s on its own group, +0.86 %/s, and the leech drew the
+healers off the main tank 9 s before his death (above); uld3 Uldzae (R) 22 ticks, the crash on the
+other group, the marked bot not dodging, +0.60 %/s. `markcrash.py` over windows 11-24: Animus-phase
+marks whose bot dodged a crash 17, median 32 ticks (mean 29.1), Vezax +0.76 %/s; with a crash but no
+dodge by the marked bot 38, median 7 (12.3), +0.06; none 12, median 17 (15.2), +0.23. A variant at
+uld1 0:20: the crash +2.6 s aimed at the marked bot itself, whose dodge headed for its group's strafe:
+53 ticks, 38 on its own group.
+
+**Questions (user).**
+
+- *Q1 (from round 11, unchanged). A crash cast 1.3-1.8 s after a fresh mark sends the marked bot's group
+  along its arc: change who moves?* (a) the marked bot walks straight to its arc and its group strafes
+  the other way where that clears the impact, else the search; (b) the group takes the search clear of
+  the impact and the marked bot; (c) keep. *Recommended: (a)*; window 24's two own-group cases leeched
+  49 and 40 ticks and the second cost uld2 its main tank.
+- *Q2 (shared, optional). Fix `PaladinTankToBeaconValue` in class code* so the beacon follows the tank
+  taking damage within Beacon's 60 yd rather than `HealDistance`? The Vezax nodes cover this boss.
+  *Recommended: yes, as its own lane*: every boss with a holy paladin and a tank parked past 38.5 yd
+  gets pulled again.
+
+**Review.** The cause holds (`vezax-r12/beaconwhy.py` re-run, `vezax-r12-review/phasecopies.py`). w24
+uld2: the class pick moved Beacon to the bear at 0:16.8 with Uldyaa 42.3 yd from the paladin, past
+`HealDistance` and both reaches; at the 1:47.0 and 3:17.3 refreshes he stood inside it (41.4, 37.7 yd)
+and the swap margin kept the bear. In the phase its copies cast 95.9k on the bear, 8.5k effective, while
+he took 3.99k/s and got 3.07k/s. `--tank` on windows 23-24: Beacon on another tank 92-99% after the spawn
+in w23 uld1, w23 uld2 and w24 uld2, on him 100% in w24 uld1. Not a plan change: the class value means
+Beacon for the tank taking damage (`PaladinTankToBeaconValue.h:15`), and XT-002 does the same. No size,
+mode or player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: `--tank`'s Beacon shares stop at his first death like its copies; its output and the
+  trace section now say so.

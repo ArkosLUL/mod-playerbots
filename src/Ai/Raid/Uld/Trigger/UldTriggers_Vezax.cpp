@@ -34,6 +34,8 @@ bool VezaxResetEncounterStateTrigger::IsActive()
     return VezaxHasEncounterState(bot);
 }
 
+bool VezaxTankBuffTrigger::IsActive() { return VezaxTankBuffTarget(botAI, spell) != nullptr; }
+
 bool VezaxMarkOfTheFacelessTrigger::IsActive()
 {
     if (!bot->HasAura(SPELL_MARK_OF_THE_FACELESS))

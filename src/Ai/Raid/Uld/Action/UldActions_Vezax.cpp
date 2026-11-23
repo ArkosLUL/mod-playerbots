@@ -144,6 +144,12 @@ bool VezaxAnimusRedirectAction::Execute(Event /*event*/)
     return botAI->CastSpell(redirect, mainTank);
 }
 
+bool VezaxTankBuffAction::Execute(Event /*event*/)
+{
+    Player* holder = VezaxTankBuffTarget(botAI, spell);
+    return holder && botAI->CastSpell(spell, holder);
+}
+
 bool VezaxAnimusBringBackAction::Execute(Event /*event*/)
 {
     Player* mainTank = GetGroupMainTank(bot);

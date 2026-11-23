@@ -133,6 +133,19 @@ public:
     bool IsActive() override;
 };
 
+class VezaxTankBuffTrigger : public Trigger
+{
+public:
+    VezaxTankBuffTrigger(PlayerbotAI* botAI, std::string const name, std::string const spell)
+        : Trigger(botAI, name), spell(spell)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    std::string spell;
+};
+
 class VezaxRaidPositionTrigger : public Trigger
 {
 public:

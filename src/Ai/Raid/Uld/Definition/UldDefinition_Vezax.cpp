@@ -43,6 +43,26 @@ void DefineVezax(EncounterBuilder& e)
         [](PlayerbotAI* botAI) -> Action* { return new BossShadowResistanceAction(botAI, "general vezax"); },
         ACTION_RAID + 1);
     e.Node<VezaxRaidPositionTrigger, VezaxRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
+    e.Node(
+        "vezax tank beacon",
+        [](PlayerbotAI* botAI) -> Trigger*
+        { return new VezaxTankBuffTrigger(botAI, "vezax tank beacon", "beacon of light"); },
+        "vezax tank beacon action",
+        [](PlayerbotAI* botAI) -> Action*
+        { return new VezaxTankBuffAction(botAI, "vezax tank beacon action", "beacon of light"); },
+        ACTION_CRITICAL_HEAL + 7);
+    e.Node(
+        "vezax tank sacred shield",
+        [](PlayerbotAI* botAI) -> Trigger*
+        { return new VezaxTankBuffTrigger(botAI, "vezax tank sacred shield", "sacred shield"); },
+        "vezax tank sacred shield action",
+        [](PlayerbotAI* botAI) -> Action*
+        { return new VezaxTankBuffAction(botAI, "vezax tank sacred shield action", "sacred shield"); },
+        ACTION_CRITICAL_HEAL + 2);
+
+    e.Block("vezax tank buffs on the holder", Role::Heal, VezaxHolderTakesTankBuffs, 0,
+            {"beacon of light on tank", "beacon of light on main tank", "sacred shield on tank",
+             "sacred shield on main tank"});
 
     e.OwnMovement("vezax control movement multiplier", Role::Ranged | Role::MainTank, VezaxFormationActive,
                   Family::Attack | Family::Reach | Family::ReachHeal);

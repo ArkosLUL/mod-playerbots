@@ -147,6 +147,20 @@ public:
     bool Execute(Event event) override;
 };
 
+class VezaxTankBuffAction : public Action
+{
+public:
+    VezaxTankBuffAction(PlayerbotAI* botAI, std::string const name, std::string const spell)
+        : Action(botAI, name), spell(spell)
+    {
+    }
+
+    bool Execute(Event event) override;
+
+private:
+    std::string spell;
+};
+
 class VezaxRaidPositionAction : public MovementAction
 {
 public:
