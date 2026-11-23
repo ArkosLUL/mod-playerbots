@@ -81,7 +81,7 @@ const Position ULDUAR_THORIM_PHASE2_OPENING4_SPOT = Position(2146.0f, -244.0f, 4
 const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2118.75f, -252.65f, 419.596f);
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2110.75f, -244.65f, 419.359f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2110.75f, -260.65f, 419.485f);
-const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT = Position(2114.25f, -252.65f, 419.508f);
+const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT = Position(2107.25f, -252.65f, 419.371f);
 
 namespace
 {
@@ -2514,7 +2514,10 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 
     if (role == ThorimPhase2Role::OffTank || role == ThorimPhase2Role::MainTank)
     {
-        position = (role == ThorimPhase2Role::MainTank || (boss && boss->GetVictim() == bot))
+        Unit* const victim = boss ? boss->GetVictim() : nullptr;
+        Player* const holder = victim ? victim->ToPlayer() : nullptr;
+        bool const tankHolds = holder && PlayerbotAI::IsTank(holder);
+        position = (victim == bot || (role == ThorimPhase2Role::MainTank && !tankHolds))
                        ? ULDUAR_THORIM_PHASE2_TANK_SPOT
                        : ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;
         return true;

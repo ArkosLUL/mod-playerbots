@@ -1,7 +1,7 @@
 # Thorim polish log (25-man hard mode)
 
-Reader: none yet (`tools/botobs/bosses/` has no `thorim.py`). Round 1 needed only the pre-roll
-`snap` rows (target, position, move generator per roster bot), read with throwaway scripts.
+Reader: `tools/botobs/bosses/thorim.py` from round 8 (`--deaths`, `--phase2`; `raidtest.py report` runs it on
+every counted pull). Rounds 1-7 read the traces with throwaway scripts.
 
 ## Round 1 (build 61011f323, DC 5443dbc)
 
@@ -619,3 +619,76 @@ the off-tank spot to (2107.25, -252.65), navprobed on the floor at z 419.371 wit
 tank spot, then compare before and after, since boss positioning affects other things. Only the waiting
 tank stands there (the holder takes the anchor), 3.5 yd from it like today, so a trade stays inside the
 ring's 5 yd reposition tolerance.
+
+## Round 8 (builds the user's Q2 answer; round 7 not judged here)
+
+**Data:** the "before" numbers come from window 12 (`603_{4,5,6}_thorim_{1795376561,1795376561,1795376560}`, build ebe746ad1,
+hard mode, round 5 ring code) and window 13 (`603_{4,5,6}_thorim_{1795381228,1795381235,1795381236}`, build a55056c40, normal
+mode, round 6 ring code), read with the new reader `tools/botobs/bosses/thorim.py --phase2` and replays in session scratchpad
+`thorim_r8/` (`replay.py`, `bliz.py`, `hazards.py`, `spots.py`). Window 14's three Thorim pulls landed while this round ran
+(`tr-20261123-095334-{4,5,6}`, traces `603_{3,5,6}_thorim_{1795427707,1795427695,1795427705}`: uld1 a hard-mode wipe at 5:55, 32
+deaths, phase 2 at 3:18.2; uld2 and uld3 normal-mode kills with 2 and 1 phase 1 deaths). They run the same phase 2 code as
+window 15 minus this change, so they are the closest "before" and get their own column; round 7's verdict, the stop rules
+and the ranking are left to the round that reads window 14's report. Deaths by mechanic: rounds 6 and 7's tables, and
+window 14 uld1: phase 2 Thorim melee on a non-tank 22, on a tank 3, Blizzard 2, Chain Lightning 2, Lightning Charge 2,
+Frostbolt Volley 1; uld2 Iron Ring Guard Impale 1, Whirling Trip 1; uld3 Iron Ring Guard melee 1.
+
+**Change** (`UldEncounter_Thorim.cpp`, Thorim only, no size, mode or player branch):
+- `ULDUAR_THORIM_PHASE2_OFFTANK_SPOT` (2114.25, −252.65, 419.508) → **(2107.25, −252.65, 419.371)**, 3.5 yd west of the tank
+  spot instead of east, navprobed by the orchestrator (floor, straight path from the tank spot).
+- **Bug found building it:** `TryGetThorimPhase2Spot` (`:2515`) sent the anchor tank (`MainTank` role, latched for the phase)
+  to the tank spot even while the other tank held Thorim, so after every trade that took him off the anchor tank both tanks
+  stood on the tank spot: the waiting tank stood within 2 yd of the holder for **40-58%** of its waiting time in all nine
+  pulls of windows 12-14, and the off-tank spot was used about half the time. The doc and the user's answer both say every waiting tank takes
+  it. Now a tank he is hitting takes the tank spot, any other the off-tank spot while a tank holds him, and the anchor tank
+  keeps the tank spot only while no tank holds him (its pickup, unchanged). A human tank holding him makes the bot tank the
+  waiting one (`PlayerbotAI::IsTank` reads a human by spec); no human is moved.
+
+**Every other user of the old spot, and what moves** (Thorim rests 4.8-7.4 yd south-east of the tank spot, bearing −37° to
+−61°, in all six pulls):
+
+| User | Old spot | New spot | Moves |
+|---|---|---|---|
+| Code: positioning trigger/action, `ThorimTankOnAnchor` (tank anchor guard) | only reader of the constant | same | the waiting tank's point, 7 yd west |
+| Melee ring (`SolveRingBearings` off Thorim's live position and the tank-spot bearing) | not an input | not an input | nothing in the solve; `RingBodyBridgesChain` counts the waiting tank where it stands, so slot 2's bridge escapes should fire less |
+| Static melee fallback spots | MELEE1 4.5 yd, MELEE2/3 8.7 | 11.5 / 8.7 | no |
+| Ranged homes, shelters, opening spots | nearest 18.9 (RANGE4, RANGE6) | nearest 21.7 (OPENING1), 22.9 (orb 2 slot 2 shelter) | no |
+| Chain spread: a non-tank body (players and pets) within 8 yd of the spot, settled P2 snapshots, replayed at fixed points | 84-100%; slot 2 67-100% | 18-36%, w13 uld1 88%; slot 2 0-46% | the target |
+| Sif's Blizzard track (`boss_thorim_sif_blizzard` waypoints) | 7.2 yd off the path | **1.0 yd** (leg (2104.3, −256.3) → (2109.3, −246.4)); tank spot 4.1 | replayed zone drops (one per 2 s along the traced bunny, 10 s life, 9.8 yd reach), hard-mode ticks a pull: old 46/30/50, new 55/36/61 = the tank spot's |
+| Sif's Frost Nova (teleport box x 2108-2150, y −284..−238) | inside; her floor spots 2.5-8.0 yd at nearest | outside; 8.1-9.8 | fewer novas on the waiting tank |
+| Arena tether and scan box (phase 1 only: `ThorimArenaLeashBreached` returns early outside the split) | 23.2 yd from the centre | 29.65 yd, inside the 30 yd leash and the box | no |
+| Thorim's melee reach for the waiting tank | 2.9-5.7 yd from his centre | 7.1-10.2; past 9.0 yd (where `reach melee` fires: 0.75 + 0.5 contact + 1.5 + 6.25) in 16/17/99.6% (w12) and 0/0/87% (w13) of snapshots | the waiting tank steps up to ~1.7 yd in (reach is exempt from the tank anchor guard); the positioning row only walks it back past 2.5 yd exact (`GetDistance` nets its 1.5 reach), so no tug-of-war expected |
+| Thorim's position and facing | holder always on the tank spot; facing p50 0.0-0.2° off the boss→tank-spot axis | unchanged for the holder | during a taunt from the off-tank spot he faces ~19° off the axis instead of ~47°, until the taunter reaches the tank spot |
+
+**Before/after measures** (`thorim.py <trace> --phase2`, one line each; settled = from P2 +15 s, held by a tank; "waiting" =
+any living floor tank he is not hitting). Window 12 is hard mode on round 5's ring code, window 13 normal mode on round 6's,
+window 14 the current code (uld1 hard, uld2/uld3 normal): compare a window 15 pull with window 14 first, then the same mode.
+
+| Measure (reader line) | w12 uld1 / uld2 / uld3 (hard) | w13 uld1 / uld2 / uld3 (normal) | w14 uld1 (hard) / uld2 / uld3 (normal) | After should |
+|---|---|---|---|---|
+| CL casts; hits on players | 12, 32 / 5, 15 / 11, 31 | 6, 22 / 5, 19 / 7, 21 | 7, 27 / 9, 23 / 7, 20 | same |
+| CL hits on tanks (damage) | 7 (77k) / 0 / 9 (44k) | 4 (13k) / 6 (13k) / 2 (6k) | 2 (26k) / 0 / 2 (23k) | about the same (the pair still bridges) |
+| CL hits on slot 0/1/2; slot 2 damage | 0/0/6, 72k / 3/3/0, 0 / 3/3/9, 112k | 0/0/4, 26k / 3/2/3, 39k / 4/3/0, 0 | 3/5/3, 29k / 6/3/0, 0 / 0/3/3, 15k | slot 2 hits and damage down |
+| CL tank-to-ring hops; CL deaths | 2, 3 / 0, 3 / 2, 3 | 2, 0 / 3, 0 / 0, 0 | 1, 2 / 0, 0 / 0, 0 | hops toward 0 |
+| Tank deaths, first at | 5 +118.6 s / 4 +106.9 / 4 +190.0 | none | 4 +82.4 s / none / none | no earlier |
+| Thorim off the tank spot p50 | 6.6 / 4.8 / 6.2 yd | 4.8 / 4.8 / 7.4 | 7.2 / 4.8 / 7.5 | unchanged |
+| Facing off the axis p50; share over 20° | 0.2°, 3.5% / 0.2°, 2.3% / 0.2°, 2.4% | 0.0°, 1.1% / 0.0°, 1.4% / 0.2°, 1.6% | 0.2°, 3.3% / 0.0°, 2.3% / 0.2°, 2.0% | unchanged |
+| Trades; Thorim moved across one p50 / p90 | 13, 0.0/0.0 / 6, 0.0/13.8 / 12, 0.0/2.1 yd | 6, 0.0/0.0 / 6, 0.0/0.0 / 9, 0.0/2.6 | 6, 0.0/0.0 / 8, 0.0/0.0 / 7, 0.0/2.6 | p50 0, p90 no higher (a taunt from 7-10 yd may step him toward the taunter) |
+| Strike to swap p50 / max; time on a non-tank with a tank up | 0.3/3.6 s, 5.0 s / 0.5/6.4, 2.1 / 0.3/2.4, 1.9 | 0.3/1.5, 3.4 / 0.2/3.1, 0.3 / 0.2/3.1, 0.0 | 0.2/3.2 (1 unanswered), 2.0 / 0.3/0.7, 1.7 / 0.2/0.3, 0.2 | no slower |
+| Waiting tank offset from the tank spot (median); on the holder | (+3.5, 0) 40.0% / (0, 0) 58.0% / (0, 0) 52.9% | (+1.5, 0) 43.6% / (+3.5, 0) 41.6% / (+1.8, 0) 40.2% | (0, 0) 51.3% / (0, 0) 52.4% / (+1.9, 0) 42.8% | (−3.5, 0) or up to ~1.7 yd toward him; on the holder ~0% |
+| Waiting tank from Thorim p50; past 9.0 yd | 5.7, 5.3% / 4.8, 0.5% / 6.2, 0.3% | 4.4, 0% / 3.2, 0% / 5.6, 0% | 7.2, 4.1% / 4.8, 0% / 5.5, 0% | 7-10 yd; past 9.0 where he rests far |
+| Waiting tank moves (accepted): positioning, reach melee | 12, 1 / 2, 0 / 5, 2 | 1, 0 / 2, 0 / 3, 0 | 4, 1 / 3, 0 / 2, 0 | positioning up by the trade walks only; reach melee some; **20+ positioning a pull = tug-of-war** |
+| Waiting tank within 8 yd of a non-tank body / ring body / slot 2 | 94.5 / 44.9 / 44.9% · 100 / 65.9 / 53.7% · 77.4 / 52.9 / 52.9% | 100 / 99.6 / 98.7% · 97.3 / 52.9 / 52.9% · 82.7 / 39.2 / 39.2% | 91.6 / 46.3 / 46.3% · 100 / 20.0 / 13.9% · 55.9 / 47.7 / 44.1% | non-tank ~20-40%, slot 2 under ~10% |
+| Holder within 8 yd of a ring body | 19.5 / 33.8 / 18.5% | 99.6 / 5.3 / 13.0% | 34.9 / 10.5 / 18.0% | unchanged (the holder's spot did not move) |
+| Ring: in his front arc; two slots within 8 yd; on Thorim to +100 s; moves per ring bot a minute | 23.2%, 62.3%, 100%, 4.7 / 25.4%, 60.3%, 100%, 4.3 / 31.8%, 83.5%, 100%, 4.0 | 24.1%, 16.1%, 100%, 3.2 / 31.9%, 8.0%, 100%, 2.0 / 58.2%, 5.2%, 100%, 2.7 | 31.6%, 27.3%, 99.8%, 7.4 / 18.8%, 4.3%, 100%, 3.3 / 30.1%, 16.0%, 100%, 2.7 | front arc and uptime unchanged; moves a little down |
+| Camp off Thorim p50; a camp body within 8 yd of a tank | 25.3, 6.3% / 25.7, 1.1% / 25.4, 0.0% | 26.7, 1.8% / 26.7, 0.4% / 24.2, 2.3% | 24.7, 0.9% / 25.8, 0.7% / 24.1, 0.0% | unchanged |
+| Tank hazards holder / waiting: Blizzard hits (damage) | 28 (86k) / 35 (120k) · 29 (96k) / 17 (63k) · 37 (145k) / 40 (143k) | none (normal mode) | 27 (99k) / 18 (36k) · none · none | hard mode: waiting about the holder's (replay +6-11 ticks a pull over the old spot) |
+| Lightning Charge, Frost Nova hits holder / waiting | LC 1/4, FN 0/1 · LC 0/0, FN 1/1 · LC 2/1, FN 1/1 | LC 1/1 · 2/3 · 0/2, FN 0 | LC 0/1, FN 1/0 · LC 0/1 · LC 1/1 | Frost Nova on the waiting tank no higher; LC read only |
+| Thorim health lost | 0.45 / 0.42 / 0.41 %/s | 0.66 / 0.70 / 0.73 | 0.42 / 0.65 / 0.70 | no lower in the same mode |
+
+**Watch in window 15:** the waiting tank on the old line `(+3.5, 0)` or "on the holder" above a few percent means the build
+missed the change; positioning moves by the waiting tank past ~20 a pull mean `reach melee` and the positioning row fight
+over it (then hold Reach for a waiting tank on its spot); a hard-mode pull is needed for the Blizzard and Frost Nova lines.
+Round 7 (gauntlet) is judged on window 14 by the next round.
+
+**Stop rules:** not checked this round (window 14 belongs to the next one). Not stuck: no failure was picked.
