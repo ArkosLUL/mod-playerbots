@@ -1069,7 +1069,7 @@ harmless while `slotWave` carries with it, so read `yogg.wave` as a session coun
 alone never rebuilt, since the ordinal is the same before and after the portals appear, and was built off
 stale positions. So the plan rebuilds once more on the tick the portals are first seen, but a bot already
 within `ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS` of its spot keeps it: re-picked greedily in team order,
-holders lost their spot to an earlier bot standing nearer it and walked 12-24 yd to another.
+holders lost their spot to an earlier bot whose nearest free spot it was and walked 11-40 yd to another.
 
 **A used portal stands for another second.** `OnSpellClick` clears its npcflags and despawns it 1 s later,
 and a click on it casts only the visual 51347. Clicking whatever stood inside the radius let a bot passing
@@ -1472,7 +1472,9 @@ killed below, kept its room tag and never walked for a portal again (nine of ten
 tick clears anything but `"skull"` or `"diamond"` whenever the bot reads `ARENA`; on the platform it cannot
 be in a room, whatever the tag says. The same leak kills `WalkIntoRoom`, which stands down on `"square"`.
 `"diamond"` is the portal walk's own tag, keeping the enter-portal node live before the wave exists;
-underground it stays until the illusion room node renames it, so that trigger also tests for `ARENA`.
+underground it stays until the illusion room node renames it, so that trigger and `YoggSaronPlannedPortal`
+also test for `ARENA`: a plan read below, out of the portals' 100 yd, rebuilds the next wave's slots while
+this wave's holders still wait.
 
 ## The Death Orb is not the hazard
 

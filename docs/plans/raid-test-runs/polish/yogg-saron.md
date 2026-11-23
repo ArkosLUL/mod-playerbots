@@ -603,7 +603,7 @@ Brain), and Grim Reprisal's 40% hold after ~50k dealt. Ranked by Brain per cycle
 | Melee walk to and from the Brain | ranged hit 2-4 s after the door and leave 3 s before the end by their exit portal; melee arrive 10-12 s after it and leave ~6.6 s before the end (31-34 yd to the exit at the 1.5× lead) | ~5% with 7-9 melee on the team | plan (Q2) |
 | Chamber far end | team ends 147-166 yd from the melee spot, Brain hit 7 s later than from the other rooms | ~4% a Chamber cycle | layout (Q2 helps) |
 | Exit margin | surfacing with 2.1-4.1 s spare | ~1.5% | user-set lead, left |
-| **Portal entries (bug, picked)** | 135 of 395 clicks on a spent portal; 41 bot-waves in late (median 3.8 s, up to 18 s), 7 never; 75 of 260 entries over 2 s after the open; 7 bots standing on a portal moved 12-24 yd by the open's rebuild; 2 cycles without their healer | ~0.5% direct, plus deaths below: window 15a uld1's healerless cycle 3 lost 4 bots for cycles 4-7, which took 1.9 / 5.2 / 8.3 / 0% | bug |
+| **Portal entries (bug, picked)** | 135 of 395 clicks on a spent portal; 41 bot-waves in late (median 3.8 s, up to 18 s), 7 never; 75 of 260 entries over 2 s after the open; 26 bots holding their spot (18 in window 15a) re-assigned 11-40 yd away by the open's rebuild; 2 cycles without their healer | ~0.5% direct, plus deaths below: window 15a uld1's healerless cycle 3 lost 4 bots for cycles 4-7, which took 1.9 / 5.2 / 8.3 / 0% | bug |
 
 **Why the platform loses the race.** At `_summonSpeed` 1 the spawns bring ~78k health a second (Crusher 2.69M every
 50-60 s, Corruptor 0.81M every 30-40, Constrictor 0.1M every 15-20), ~130k after cycle 4 and ~190k after cycle 6,
@@ -676,3 +676,10 @@ Shock for the elemental shaman near 85% and `yogg.p3dot` `flame shock` rows. Rou
 - uld3's 1:48.68 nova killed six (four ranged, a healer, a melee): round 7's pull fix was not in this build.
 - Chamber cycles took a median 8.3% against 13.6-15.9%: the team ends at the far ring; no inside order found that
   shortens the out-and-back walk overall.
+
+**Review fixes.** The use-portal trigger now reads the plan, and a bot keeps `"diamond"` underground until its
+room node renames it, so `YoggSaronPlannedPortal` returns nothing off the platform (`YoggSaronRoomOf` not
+`ARENA`), like the enter-portal trigger: the arrivals sit 91-98 yd from the nearest portal, and a plan read past
+the 100 yd portal search sees the portals down, rebuilds the next wave's slots mid-wave, and the platform's next
+read rebuilds again without the held spots. The holder count above was re-measured: slot notes at each open
+against each bot's last snapshot within 2 yd of its old spot.

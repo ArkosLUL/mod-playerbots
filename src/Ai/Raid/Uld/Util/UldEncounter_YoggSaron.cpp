@@ -1221,13 +1221,17 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
 
 Creature* YoggSaronPlannedPortal(PlayerbotAI* botAI)
 {
+    Player* bot = botAI->GetBot();
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_ARENA)
+        return nullptr;
+
     Position spot;
     if (YoggSaronPortalPlan(botAI, spot) != YOGG_SARON_PORTAL_HOLDING)
         return nullptr;
 
     std::list<Creature*> portals;
-    botAI->GetBot()->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS,
-                                                    ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS * 2.0f);
+    bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS,
+                                        ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS * 2.0f);
     for (Creature* portal : portals)
         if (YoggSaronPortalOpen(portal) &&
             portal->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)

@@ -1737,7 +1737,7 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
               f" clicked a spent portal: {len(spent)}"
               f"{', taken by a bot off the plan: ' + ', '.join(unplanned) if unplanned else ''}")
         for guid, (when, got_in) in sorted(spent.items(), key=lambda item: item[1][0]):
-            outcome = f"in {(got_in - when) / 1000:.1f} s later" if got_in else "never got in"
+            outcome = f"in {(got_in - when) / 1000:.1f} s later" if got_in is not None else "never got in"
             print(f"      {trace.name(guid):14} {trace.role(guid):6} at +{(when - start) / 1000:.1f} s, {outcome}")
         if missed:
             walked = walked_for_a_portal(trace, missed, start, start + PORTAL_DESPAWN_MS)
