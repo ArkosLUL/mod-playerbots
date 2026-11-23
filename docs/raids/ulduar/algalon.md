@@ -200,18 +200,26 @@ released `late` at 38-70%), so its speed (median +1.9 %/s beyond the drain; both
 - **Bulk** (`algalon.starwindow` `under`): with no paced kill, the team takes an under-star to half a tick under
   its band's top and stays on it until done (re-picked each tick, it moved every ~3 s and only matched the drain),
   the one with most left next; a bulk starts once the work left plus 35 s reaches the cast and then stays latched
-  (gated each tick, a fast team flipped on and off it). A spell landing after
-  the line is 1-2% of a 4-5 tick band; one overshooting below it is released `early`. No wands: they took
+  (gated each tick, a fast team flipped on and off it). What lands after the team leaves a star (median
+  1.3-2.2%, p75 4-4.5%, up to 19%, 28 pulls) can overshoot its 4-5 tick band; one below it is released `early`
+  (31 in 28 pulls, 55 dead). No wands: they took
   0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
-  strip and killed 5. At the line the tick interrupts any cast, channel or wand on the star, a paced kill's focus
-  excepted.
+  strip and killed 5. At the line the tick interrupts any bot cast, channel or wand on the star, a paced kill's
+  focus excepted, and on an under-star that isn't the focus at once (a paced kill took the team, or the cast
+  began; a skull excepted): an Arcane Blast landing 1.1 s after a switch put 6.6% on one (`early`, 10 dead). The
+  line and the work left net out `pendingHp`, which counts Explosive Shot's later ticks too (a periodic dummy
+  casting 53352 each second, ~2.3% of a 25-man star, valued with the caster's bonuses; the second-largest share
+  landing on under-stars after the team left).
 - **No DoT on any star** (target guard): a non-channelled spell doing more by ticks than by its hit, at base values
   (Moonfire, Immolate, Flame Shock; Fireball, Pyroblast, Holy Fire are nukes). Allowed, they ticked 12-24 s after
   the team moved on, 16-24% beyond the drain and more than `pendingHp` counts (base ticks, no Haunt, Shadow
   Embrace, Earth and Moon or crits): 6 of 7 under-stars in a kill and all 5 in a wipe went `early` (3 of 7 died
   under with DoTs held), and a paced star's Insect Swarm and Moonfire killed it 3.6 s after its neighbour (6
   dead). The bulk ran +1.6 %/s beyond the drain with them, +1.9 without. `pendingHp` still counts humans' DoTs.
-  An "on attacker" spell is judged on its own target: Corruption and Unstable Affliction reached stars that way.
+  A spell is judged on the target it casts at (`GetTarget()`): an "on attacker" debuff keeps the target name
+  `current target` but picks an attacker, so judging the bot's current target let Corruption onto a star 6 times
+  in 28 pulls (one ticked 5.2% off an under-star the team had left: `early`, 4 dead). Explosive Shot (2 s of
+  ticks, a survival hunter's main shot) isn't held.
 - **Hide**: with a star under, or any star draining to death by the hit + 0.6 s (one released `nosoak` 7 s before
   Big Bang 2 went off in its cast on 12 bots, 6 dead), every margin (handler and tanks included) gains 3 s,
   stretched so all are in 1.5 s before the earliest such death, capped at 4 s; the handler no longer waits on
