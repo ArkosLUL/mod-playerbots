@@ -684,3 +684,108 @@ player branch: a real tank counts as the holder by spec. `pb-check` passes.
   threat and not the cap dps are held under; who they feed follows who tanks it, a tactic. While a
   non-tank holds it the cap falls back to the main tank's, which can sit above the holding tank's; the
   bear retook it in 1 s in uld2.
+
+## Round 7 (2026-11-23, build 8bc2a82d3)
+
+**Data.** Window 17 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 8bc2a82d3
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.4-3:08.5, no vapor
+hit), against window 15 (round 5, `--head 523b2f60f`) and window 11's kills (`--head d2874f536`).
+Analysis scripts: session scratchpad `vezax-r7/` (`compare.py` runs the table below over windows 11-17).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-143850-1` | `603_1_general-vezax_1795444796` | wipe 5:01, 31 deaths, the Animus at 23.8% at the collapse |
+| uld2 | `tr-20261123-143850-2` | `603_2_general-vezax_1795444791` | wipe 4:54, 30 deaths, the Animus at 21.7% |
+| uld3 | `tr-20261123-143850-3` | `603_3_general-vezax_1795444798` | wipe 5:00, 30 deaths, the Animus at 19.0% |
+
+**Stop rules.** Not polished: three wipes. Round 6 fixed two new failures, so no repeat count.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the collapse | Collapse |
+|---|---|---|
+| uld1 | 3 Mark leech and 1 Profound Darkness at 3:58-3:59 (the 3:52 mark, below) | from 4:20: 18 Profound Darkness, 5 Vezax melee, 3 Mark, 1 Animus melee |
+| uld2 | 1 Shadow Crash (3:37), 1 ranged to Animus melee with it loose (3:45) | from 4:04: 18 Profound Darkness, 4 Animus melee, 4 Mark, 2 Vezax melee |
+| uld3 | none | from 4:17.96 (main tank to Vezax melee): 11 Profound Darkness, 9 Vezax melee, 9 Animus melee, 1 Mark |
+
+**Verdict on round 6 (threat cap on the holder, healers' reach spell held on the Animus).**
+
+- *Threat cap on the holder: never exercised.* No tank but the main tank was the victim of Vezax or the
+  Animus in any pull (`vezax-r7/holder.py`), so the cap ran exactly as round 5's. Not a cause.
+- *Healer hold: did what it targeted, and its named cost showed up.* Healer `walks` 0 in all three,
+  `vezax healer animus reach hold` vetoes on healers only (20/19/24, all reach spell). uld3 settled
+  14.0 yd north as in window 15 (Animus 9.5 behind him from the camp), and the main tank got 2.4k/s of
+  healing over the first 69 s against 3.6k/s in window 15 (`vezax-r7/mtheals.py`; one healer landed
+  none on him, another 28 heals against 64), died at +69.5 s against +85.9 s, and the collapse came 8 s
+  earlier. Total healer output fell too (11.4k/s against 12.8k/s), so the walks it stopped were not
+  costing heals. In uld1 and uld2 his healing did not drop (3.3k and 2.4k/s against 3.0k and 2.3k/s).
+- uld1-like geometry did not occur; uld3's `vezax.reach` read `floor` for 9 of 9 ranged dps.
+
+**What regressed.** Window 15's kill was the one normal settle in that window; window 17 had none.
+
+| `compare.py`, Animus phase | Window 11 kills | w15 uld1 / uld2 / uld3 | w17 uld1 / uld2 / uld3 |
+|---|---|---|---|
+| Pace, %/s | 1.24-1.35 | 1.31 / 0.87 / 1.12 | 1.00 / 0.98 / 1.04 |
+| Raid / ranged, k/s | 153-165 / 82-85 | 161/89, 108/48, 138/61 | 124/57, 121/51, 129/53 |
+| Vezax from the anchor, median | 9.5-9.9 | 9.9 / 8.9 / 14.1 | 12.6 / 15.7 / 14.0 |
+| Animus along the camp bearing | −1.9 to +4.9 | −2.4 / +5.3 / −9.6 | −8.0 then +0.6 / −6.2 then −6.7 / −9.5 |
+| Ranged `past`, median | 0-6% | 19 / 22 / 82% | 69 / 48 / 79% |
+| Healers to the main tank, 2D median | 23-40 | 36-40 / 36-40 / 43-45 | 41-43 / 41-46 / 44-45 |
+| Healer `walks` | 6-10 | 4 / 2 / 84 | 0 / 0 / 0 |
+| Main tank death | none | - / +86 / +86 s | +88 / +80 / +70 s |
+| Non-tank Animus victim | 1% | 1 / 39 / 1% | 1 / 29 / 11% (after the main tank died) |
+
+- *North settles in all three.* uld1 left the opener 12.6 yd north (window 15: 7.7, then 9.9), the
+  Animus 8 yd behind him for the first 30 s (ranged `past` 97-100%), then beside him; uld3 14.0 as in
+  window 15. The opener walk sets this: the tank runs from the drop through Vezax to the anchor and he
+  stops 7.7-14 yd north of it. Not a round 6 effect; the pending Q1.
+- *uld2: the main tank chased the loose Animus off the anchor (bug, fixed below).* A shadow priest
+  (Uldyao) took it at 3:23.57 (+15 s) with the warrior main tank Uldyaa holding: `vezax threat
+  multiplier` held him from 3:17.88, and his Vampiric Touch, Shadow Word: Pain and Devouring Plague in a
+  field then did 90.8k in 5.5 s (16.5k/s, `snap.u[11]`) with no cast of his. Uldyaa ran `reach melee` from
+  3:24.5 and `charge` at 3:26.6 to (1857.2, 101.4), 21 yd north, back past Vezax at 3:32, and Vezax went
+  from 9.9 yd north of the anchor to 15.7 by 3:39 and stayed there: ranged `past` 24% → 55-62%, healers
+  within 41.5 of the main tank 68-100% → 0-15%. Window 15's uld2 chase reached 37 yd and dragged Vezax to
+  18.8 before he came back to 8.4. The findings doc already says the main tank stays on the anchor and the
+  victim brings the Animus to him; `reach melee` and charges were never held for him (the formation keeps
+  Reach for the main tank).
+- *uld3: the healer hold's cost*, above.
+- *uld1's 3:52 mark* killed three of the marked bot's group (Uldxas, Uldxav, Uldxab at 3:58-3:59): the
+  crash at 3:54.4 strafed group R west along the marked R bot's own arc, and it took until 3:58.5 to get
+  17 yd clear. Window 15's same mark: 30 ticks, no deaths. Not chased.
+
+**Picked: round 6's healer hold (regression) and the main tank's chase (independent, small).**
+
+**Fix** (Vezax files only):
+
+- Rule `vezax healer animus reach hold` removed (`UldDefinition_Vezax.cpp`): healers' reach spell walks
+  onto the Animus come back, the only thing that carries heals to the main tank in a north settle.
+- Rule `vezax main tank anchor hold` (`UldDefinition_Vezax.cpp:52`, predicate `VezaxAnimusOffAnchor`,
+  `UldEncounter_Vezax.cpp:782`): for the main tank whose target is the live Animus standing farther from
+  the anchor than his melee range plus `ULDUAR_VEZAX_TANK_SLOT_TOLERANCE`, `reach melee` and the
+  `Charge` family hold. The Animus spawns by the anchor and the bring-back walks its victim to within
+  3 yd of him, so it comes back inside that range and he can step to it.
+
+Docs: `docs/raids/ulduar/vezax.md` (Animus ceiling bullet, threat bullet with the DoT leak, bring-back
+bullet, settle range, north settle named). 10/25 and normal/hard: the Animus exists only in hard mode;
+the rule keys on the main tank's own target, a real player tanking runs no rule. Shared code: none.
+
+**Next window should show.**
+
+- `vezax main tank anchor hold` vetoes on the main tank only, only with the Animus loose; while alive the
+  main tank within 3 yd of the anchor through the Animus phase; a loose Animus leaves Vezax's settle where
+  it was.
+- In a north settle, healer `walks` back to window 15's 12-28 each and the main tank healed ~3.5k/s, alive
+  at the collapse; in a normal settle walks stay near 0-4.
+- Pace in a normal settle 1.24 %/s or more, as window 15's uld1; a north settle still loses the race
+  until Q1 is answered.
+
+**Next candidate (bug): DoTs leak past the threat cap.** The cap zeroes new casts only; DoTs already on
+the Animus keep ticking (uld2 above: +40% of the main tank's threat in 5.7 s). Hold DoT application
+where its remaining ticks would carry the bot past the cap, or count them toward it. Only uld2 (roster B,
+warrior main tank) has lost the Animus early, in windows 15 and 17.
+
+**Questions (user).** Q1 (north settle, queued with recommendation (a)) gets window 17's data: all
+three pulls had one, two from the opener (12.6 and 14.0 yd), against one in window 15. With the healer
+walks back, healers cross the Mark floor in a north settle as before round 6; Q1 (b) (main tank ~10 yd
+north of the anchor) would end both the ranged and the healer reach problem.

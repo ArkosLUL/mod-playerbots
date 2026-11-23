@@ -779,6 +779,17 @@ bool VezaxTargetingAnimus(PlayerbotAI* botAI)
     return target && target->IsAlive() && target->GetEntry() == NPC_VEZAX_SARONITE_ANIMUS;
 }
 
+bool VezaxAnimusOffAnchor(PlayerbotAI* botAI)
+{
+    if (!VezaxTargetingAnimus(botAI))
+        return false;
+
+    Player* bot = botAI->GetBot();
+    Unit* animus = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return animus->GetExactDist2d(ULDUAR_VEZAX_ANCHOR.GetPositionX(), ULDUAR_VEZAX_ANCHOR.GetPositionY()) >
+           bot->GetMeleeRange(animus) + ULDUAR_VEZAX_TANK_SLOT_TOLERANCE;
+}
+
 float VezaxMeleeHoldDistance(Player* bot, Unit* vezax)
 {
     return ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE + vezax->GetCombatReach() + bot->GetCombatReach() -

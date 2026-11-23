@@ -49,7 +49,7 @@ void DefineVezax(EncounterBuilder& e)
 
     e.OwnMovement("vezax animus melee movement multiplier", Role::Melee, VezaxAnimusPhaseActive);
 
-    e.Block("vezax healer animus reach hold", Role::Heal, VezaxTargetingAnimus, 0, {"reach spell"});
+    e.Block("vezax main tank anchor hold", Role::MainTank, VezaxAnimusOffAnchor, Family::Charge, {"reach melee"});
 
     e.Multiplier<VezaxSuppressLifeTapMultiplier>(Family::Spell);
 
