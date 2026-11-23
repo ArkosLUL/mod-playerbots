@@ -875,14 +875,14 @@ slack), else the furthest. Same answer for every bot; back to the ranged spot on
 
 ## Diminish Power is why the Crusher dies first
 
-`64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide** with
-no distance pruning, **multiplicative** across tentacles (two up = −37.6%, three = −50.7%), `DispelType 0`,
+`64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−20% damage done raid-wide** with
+no distance pruning, **multiplicative** across tentacles (two up = −36%, three = −48.8%), `DispelType 0`,
 and unkickable twice over: the tentacle is immune to `MECHANIC_INTERRUPT` and `MECHANIC_SILENCE`
 (`CreatureImmunitiesId −361`), and the channel carries flag `0x10`, not the interruptible `0x08`. It
 ignores LOS and immunities. **A cast skips anyone underground**: `ExcludeTargetAuraSpell` is Illusion
 Room `63988`, which every portal teleport (63989 / 63997 / 63998) force-casts and only `63993` on the way
 out removes. **So the brain team carries its stacks below** until each channel breaks, and its room clear
-pays: one pull's last team went down under four (×0.39) and never cleared, and Induce Madness ended the
+pays: one pull's last team went down under four (×0.41) and never cleared, and Induce Madness ended the
 pull. `--brain`'s `Diminish Power carried below` gives, per wave, each bot's stacks at its first sample
 below and the damage dealers' median multiplier until the door.
 
@@ -901,7 +901,7 @@ paladin Judgement damage spell (`SpellFamilyFlags[0] & 0x800000`). So `yogg-saro
 it, wisdom, light or justice, no walk, no target change) breaks nothing by its own hit: 33 plain Judgements mid-channel in one window dropped none. Only a
 seal hit landing with it still breaks: a prot paladin's Judgement with Judgements of the Just and Seal of
 Vengeance casts 42463, melee-class and outside that mask, and broke it both times. **Open: with melee,
-tanks and pets kept off live Crushers (above), nothing breaks it outside the stun**, so the channel ran
+tanks and pets kept off live Crushers (above), nothing else breaks it outside the stun**, so the channel ran
 52-78% of Crusher-alive time.
 
 **Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only once

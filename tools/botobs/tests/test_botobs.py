@@ -1877,7 +1877,7 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(sorted(windows[7]), [(1000, 3000), (2000, 9000)])
         self.assertEqual(yogg_saron.stacks_at(windows[7], 2500), 2)
         self.assertEqual(yogg_saron.stacks_at(windows[7], 500), 0)
-        self.assertAlmostEqual(yogg_saron.diminished_damage(windows[7], 2000, 4000, 1000), (0.79 ** 2 + 0.79) / 2)
+        self.assertAlmostEqual(yogg_saron.diminished_damage(windows[7], 2000, 4000, 1000), (0.8 ** 2 + 0.8) / 2)
         self.assertIsNone(yogg_saron.diminished_damage(windows[7], 4000, 4000))
 
     def test_spread_line_reads_median_p10_p90_and_extremes(self):

@@ -1357,14 +1357,14 @@ phase 2 failures, none twice.
 Death Ray 2 outside a grab; Laughing Skull 2; self-inflicted 1; phase 2 Curse of Doom 1.
 
 **Why uld2 wiped in phase 2: Diminish Power taken below.** Phase 1 cost three melee and a ranged, so the platform killed
-Crushers slowly (one lived 3:28-8:55) and four were channelling by 7:13. Each Crusher's 64145 is −21% damage, multiplied
+Crushers slowly (one lived 3:28-8:55) and four were channelling by 7:13. Each Crusher's 64145 is −20% damage, multiplied
 across Crushers, and a bot carries it below until that channel breaks (the re-cast skips Illusion Room 63988 carriers).
 New `--brain` line `Diminish Power carried below`, damage dealers' median multiplier until the door: wave 3 (Chamber)
-went down under two stacks, ×0.62, cleared in 39.7 s and took 0.9% of the Brain; wave 4 (Stormwind, six bots) under
-four, ×0.39: its four damage dealers made 1.1-2.7k/s each over the room (snapshot `dealt`) and the room never opened, Induce Madness
+went down under two stacks, ×0.64, cleared in 39.7 s and took 0.9% of the Brain; wave 4 (Stormwind, six bots) under
+four, ×0.41: its four damage dealers made 1.1-2.7k/s each over the room (snapshot `dealt`) and the room never opened, Induce Madness
 took the team, and the platform, alone under five Crushers, died to Squeeze and Curse of Doom. Window 22's uld2, which
-round 13 read as a dry healer and out-of-sight holds, went the same way: waves 6 and 7 at ×0.44 and ×0.39. Across window
-24, 13 of 15 waves carried some (×0.39-1.00, ×0.79 typical).
+round 13 read as a dry healer and out-of-sight holds, went the same way: waves 6 and 7 at ×0.46 and ×0.41. Across window
+24, 14 of 15 waves carried some (×0.41-1.00, ×0.80 typical).
 
 Only three things end the channel. The stun: at each room clear every Crusher's 64145 drops from everybody, the team below
 included (uld2 6:44.58, three channels, 36 rows), so a team pays until its door, not at the Brain. A Crusher's death. And a
@@ -1400,14 +1400,15 @@ when it is no named multi-target action (`facts.multiTarget`) and no periodic tr
 **Reader.** `--brain` per wave: `Diminish Power carried below`, each team bot's stacks at its first sample below and the
 damage dealers' median multiplier until the door (`source_windows`, `stacks_at`, `diminished_damage`, tested).
 
-**Next window should show:** `--crush` `area held in a swinging Crusher's reach` with `bladestorm`, `sweeping strikes`
-or `blade flurry` from warriors and rogues who have them, not only tanks; no Crush death after a Bladestorm in a Crusher's
-reach (here 2). `Diminish Power carried below` as the baseline for the question: here ×0.39-1.00 until the door, 13 of
-15 waves. Rounds 13 and 14 checks as above.
+**Next window should show:** `--crush` `area buffs held by role` with `bladestorm`, `sweeping strikes` or `blade
+flurry` on `melee` rows, not only `tank`; no Crush death after a Bladestorm in a Crusher's reach (here 2). `Diminish
+Power carried below` as the baseline for the question: here ×0.41-1.00 until the door, 14 of 15 waves. Rounds 13 and 14
+checks as above.
 
 **Question for the user (who breaks Diminish Power).** Judgement stopped breaking it with core `fe0e00d8e`, and the
-strategy keeps melee, tanks and pets off live Crushers, so outside the stun nothing does: the brain team takes the
-stacks below, and both phase 2 collapses (window 22 uld2, window 24 uld2) were rooms fought at ×0.44-0.39. Options: (a)
+strategy keeps melee, tanks and pets off live Crushers, so outside the stun nothing but a prot paladin's seal hit does: the
+brain team takes the stacks below, and both phase 2 collapses (window 22 uld2, window 24 uld2) were rooms fought at
+×0.46-0.41. Options: (a)
 the off-tank holds one live Crusher in phase 2, so it swings at him and never channels (Crushes on him, others stay off
 it); (b) once the brain team has clicked, a bot tank hits each channelling Crusher once and steps out of its reach, so
 the re-cast skips the team below (one or two Crushes on the tank per Crusher, the platform debuffed as before); (c)
@@ -1416,7 +1417,7 @@ leave it. **Recommended: (b) for one window**: it ends the collapse mechanism at
 
 **Round 14's queued question (a healer under 30% mana goes after every healer above it).** No case in window 24: the
 lowest healer at a team pick was 41% (uld3 wave 3), the room healers left at 25-38% and were back at 41-94% by the next
-pick. Window 22's two cases came in waves already at ×0.44 / ×0.39, so the dry healer was not what stalled them. It no
+pick. Window 22's two cases came in waves already at ×0.46 / ×0.41, so the dry healer was not what stalled them. It no
 longer stands as asked; recommended: drop it unless a later window shows a dry healer in a clean room.
 
 **Seen, not picked.**
@@ -1427,3 +1428,21 @@ longer stands as asked; recommended: drop it unless a later window shows a dry h
   Corruption on the parked Guardian, and the tank's own Heroic Strike and Cleave on another (0:52.5 / 0:55.1).
 - The judgement node still costs a holy paladin a GCD on a channelling Crusher for nothing; left until the question is
   answered, since a prot paladin's still breaks it.
+
+**Review.** The fix holds. Bladestorm 46924's one periodic trigger, Whirlwind 50622, targets an enemy area, which
+`SpellInfo::_IsPositiveEffect` never counts against the caster's own aura, so Bladestorm read positive, as Sweeping
+Strikes and Blade Flurry do; uld3 reread: Bladestorm at 6:21.174, 64145 off the whole raid at 6:21.181, and again at
+6:23.17 and 6:25.18, each re-cast broken by the next whirl. `facts.multiTarget` alone now holds all three; the periodic test
+holds an unnamed positive aura whose trigger hits enemies. Window 24's Bladestorm and Sweeping Strikes vetoes were all
+uld2's warrior tank. No size, mode or player branch; other phases and bosses untouched.
+
+- Review fix: Diminish Power is −20% a copy, not −21% (64145 effect 2, aura 79, base points −21 + 1 from DieSides 1).
+  The reader's `DIMINISH_POWER_DAMAGE` is now 0.80, and this round's multipliers above, reread, and the findings doc's
+  stacked figures follow; the reread also gives 14 of 15 waves carrying some, not 13.
+- Review fix: `--crush` printed only the 8 commonest held actions, which cut uld2's `bladestorm` and `sweeping
+  strikes` (13 kinds); it now prints all, and `area buffs held by role` splits the three buffs by role for the check
+  above.
+- Review fix: the two new reader helpers carried docstrings; removed. The findings doc and the question said nothing
+  breaks the channel outside the stun, right after the prot paladin's seal hit that does.
+- Left: the hold gates the cast only, so a Sweeping Strikes or Blade Flurry cast outside the reach still splashes a
+  Crusher once the bot walks in beside one.

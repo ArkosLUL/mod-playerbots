@@ -44,6 +44,7 @@ SPELL_GRIM_REPRISAL = 64039
 SPELL_CRUSH_CONE = 64147
 # The multiplier that keeps area damage off a swinging Crusher from inside its reach; its veto rows are the record.
 CRUSHER_AREA_HOLD = "yogg-saron crusher area hold multiplier"
+CRUSHER_AREA_HOLD_BUFFS = ("bladestorm", "sweeping strikes", "blade flurry")
 SPELL_KNOCK_BACK = 64020
 SPELL_SHADOW_NOVA_SARA = 65719
 SPELL_SQUEEZE = 64126
@@ -58,7 +59,7 @@ SPELL_DASH = 33357
 # Warrior Charge and Intercept, the two the brain charge node casts at the Brain.
 SPELL_BRAIN_CHARGES = (11578, 20252)
 SPELL_DIMINISH_POWER = 64145
-DIMINISH_POWER_DAMAGE = 0.79
+DIMINISH_POWER_DAMAGE = 0.80
 DIMINISH_POWER_STEP_MS = 500
 
 # A step under this between samples is standing still, and a turn past this while standing is a spin.
@@ -2729,8 +2730,6 @@ def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
 
 
 def source_windows(rows: list[dict], spell: int, end: int) -> dict[int, list[tuple[int, int]]]:
-    """Per target, one (applied, removed) window for each caster's copy of `spell`, so copies from several
-    casters read as stacks; a copy that never lifts closes at `end`."""
     open_at: dict[tuple[int, int], int] = {}
     out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
     for rec in sorted((r for r in rows if r.get("sp") == spell), key=lambda r: r["t"]):
@@ -2750,7 +2749,6 @@ def stacks_at(windows: list[tuple[int, int]], when: int) -> int:
 
 def diminished_damage(windows: list[tuple[int, int]], start: int, stop: int,
                       step: int = DIMINISH_POWER_STEP_MS) -> float | None:
-    """Mean damage multiplier over [start, stop) under Diminish Power, 21% off a stack, stacks multiplying."""
     samples = [DIMINISH_POWER_DAMAGE ** stacks_at(windows, when) for when in range(start, stop, step)]
     return sum(samples) / len(samples) if samples else None
 
@@ -3144,10 +3142,14 @@ def show_crush(trace: Trace) -> None:
     if judged:
         print(f"  judgement node   : {dict(judged)}")
 
-    held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
-                               if rec.get("m") == CRUSHER_AREA_HOLD)
+    vetoes = [rec for rec in trace.of("veto") if rec.get("m") == CRUSHER_AREA_HOLD]
+    held = collections.Counter(str(rec.get("a", "")) for rec in vetoes)
     if held:
-        print(f"  area held in a swinging Crusher's reach: {dict(held.most_common(8))}")
+        print(f"  area held in a swinging Crusher's reach: {dict(held.most_common())}")
+    buffs = collections.Counter(f"{rec.get('a')} {trace.role(rec.get('g', 0))}" for rec in vetoes
+                                if rec.get("a") in CRUSHER_AREA_HOLD_BUFFS)
+    if buffs:
+        print(f"    area buffs held by role: {dict(buffs.most_common())}")
 
     show_launches(trace)
     show_crush_melee(trace)
