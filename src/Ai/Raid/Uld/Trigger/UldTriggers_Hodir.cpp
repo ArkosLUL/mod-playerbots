@@ -115,7 +115,7 @@ bool HodirRaidPositionTrigger::IsActive()
         return false;
 
     HodirStormGather gather;
-    if (GetHodirStormGather(botAI, bot, gather) && gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE)
+    if (GetHodirStormGather(botAI, bot, gather))
         return false;
 
     Position anchor;
@@ -212,7 +212,12 @@ bool HodirCollectStormPowerTrigger::IsActive()
     bool const in = receiver && gather.dist <= ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.gather", !receiver ? "none" : in ? "in" : gather.msToWalk > 0 ? "wait" : "walk");
+    {
+        RaidObs::NoteDerived(bot, "hodir.gather",
+                             !receiver ? "none" : in ? "in" : gather.msToWalk > 0 ? "wait" : "walk");
+        RaidObs::NoteDerived(bot, "hodir.receiver",
+                             receiver ? RaidObs::DescribeAssignment(gather.carrier) : std::string("none"));
+    }
 
     if (!receiver || in || gather.msToWalk > 0)
         return false;

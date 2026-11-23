@@ -809,3 +809,98 @@ no size, mode or player branch to check. Fixed:
   hits, scratchpad `hodir-r8-review/magegap.py`).
 - Findings doc: the 7.6-9.9% last wave read as current; it was the two pulls that set the skip,
   window 14's landed at 11.4-17.4%.
+
+**User answer (2026-11-23):** Q1 yes, free the helper shamans together with the mages: one more round
+with the stop rule lifted to chase the cache (Hodir stays polished at 25 without it), built with
+the two gather bugs; `_LAST_WAVE_HEALTH_PCT` stays.
+
+## Round 9 (2026-11-23, on Custom 523b2f60f)
+
+**Data.** No new pulls: window 15 is pulling Hodir at 10-man as the 10-man check, not awaited. Stop
+rules, verdict and ranking skipped (the user's answer above). Deaths by mechanic per pull, window 14
+as round 8: uld1 0, uld2 1 (off-tank Frozen Blows swing, window 3, Barkskin up), uld3 0. Windows 10,
+11, 12b and 14 (12 pulls; window 13 had no Hodir) re-read for the replay below, scratchpad
+`hodir-r9/` (`extract.py`, `calib.py`, `replay.py`, `pace.py`, `firsts.py`).
+
+**Built** (`UldEncounter_Hodir.h/.cpp`, `UldTriggers_Hodir.cpp`; reader `hodir.py`, tests):
+- Block order mage, shaman, druid, priest (`HodirHelperKind`); `ULDUAR_HODIR_SHAMAN_BLOCK_BREAKERS`
+  3; the budget of 8 holds while a mage or shaman block is up, then `_LATE_BLOCK_BREAKERS` 3. Seats:
+  mage ×5 + mage ×3, then (first mage free) mage ×5 + shaman ×3 (`static_assert`ed within 8), then
+  shaman ×3 + shaman ×3 + druid + druid, then druid, druid, priest.
+- Receivers latched at landing: the first `GetHodirStormGather` call to see a new cloud (carrier and
+  apply time, `stormLanding`) latches every damage dealer within the 15 yd leash of its rally on it,
+  each on the nearest of the clouds new in that pass (`LatchHodirStormReceivers`). A dealer still
+  lacking Storm Power keeps its live latch; one holding it is latched too and walks in if it lapses
+  during that cloud. The gather reads the latch (same carrier alive, same apply time), with no live
+  leash test; `GetHodirStormCloudCarrier` (lowest guid) is gone. A carrier is never a receiver.
+- `HodirRaidPositionTrigger` stands down for any latched receiver (wait, walk, in), not only inside
+  release. New probe `hodir.receiver`: the carrier, or `none`.
+- Reader: `--storm` adds what each leash dealer at landing got (pulse 1-3, 4, 5+, other cloud, none)
+  and the clouds per freeze cycle by shaman, as seconds after the blocks spawned; parked samples
+  follow `hodir.receiver` (lowest guid on older traces). `--blocks` adds time on ice after the last
+  mage and shaman were free.
+- 10/25, modes, player: 10-man has one helper of each kind and a budget of 1 (3 ranged less 2), so the
+  shaman now goes before the druid there too; hard mode is only the timer. Players are latched like
+  anyone and a player carrier gathers the same way; block seats stay bots only, as before.
+
+**Replay of the new order.**
+- *Melt Ice* (new fact): a freed mage casts `64528` (aura 89, 10% of the block a second for 10 s) on
+  every helper block lacking it, one every 2 s when its own casts allow: the 61 blocks no bot was
+  seated on died a median 9.5 s after the first mage was free (most 4-14 s, a few up to 33).
+  Breakers shorten that.
+- *Model:* each non-mage block loses its recorded health, less what its recorded seats dealt (a seat
+  counts 1.5 s after it is given, at the pull's ranged rate on ice, 5.1-8.0k a second), plus what
+  the replayed order's seats deal; past its recorded death the rest keeps its last rate. Mage blocks
+  keep their recorded deaths (same seats in both orders). A first cloud lands 3.5 s after its shaman
+  block dies (3.1-4.3 over 66 pairs) and repeats 30.0-31.4 s later, only when that lands over ~1 s
+  before the trap (margin 0.3-10.1 s with a repeat, up to +0.9 without). The same model of the
+  current order gives 10.0 clouds before 3:00 a pull against 9.1 recorded, so it runs a little
+  early; the estimate below is model against model.
+- *Result,* freeze cycles 1-2: shaman blocks freed median +12.1 s after the blocks spawn (model of the
+  current order +15.1, recorded +16.2); first clouds median +15.6 s, 60% within 16 s (recorded 23%);
+  clouds per freeze cycle 3.5 / 3.0 (recorded 2.5 / 2.2, model 2.8 / 2.3), the pull's cycle 4.0
+  (3.5); clouds before 3:00 11-14 a pull (recorded 7-11, model 8-12), +2.1 a pull. Not four a cycle:
+  the second shaman block gets its three only once the second mage is free (median 9.6 s in, 5.8-19.2),
+  so ~40% of first clouds still land past 16 s.
+- *Pace,* 0-3:00, at the recorded 4.1-6.1 damage dealers a cloud buffed and 4.9-7k a Storm Power
+  bot-second: Storm Power +6-11k, ice −3.6-4.8k (+36-85 breaker bot-seconds a pull at 9.7-15.3k
+  on Hodir), Starlight −0.5k (druid blocks freed median +18.4 s against +15.6). Net +3 to +6k (seat
+  delay 1.0-2.5 s: +1 to +7k); per pull −2.8 to +14k, the two pulls that already had four clouds a
+  cycle (w11 uld2, w14 uld2) losing ~2.5k to the ice.
+- *The gather fixes on top:* 18 of window 14's 143 leash receivers missed by walking out of the leash
+  (11) or standing round the other carrier (7), ~6 a pull at ~25 s each: +4-6k.
+- Together roughly +5-12k against window 14's gaps of 22.3k (uld1) and 11.4k (uld3): the cache on
+  the pools already pacing near it, not on all three.
+
+**Next window should show** (`--storm`, `--blocks`):
+- clouds per freeze cycle 3+ in cycles 1-2 (window 14 mean ~2.5), most first clouds within 16 s of
+  the blocks;
+- shaman blocks dying before the druid blocks, the second mage freed no later than now (window 14
+  cycles 1-2: 6.3-10.7 s);
+- `what they got`: `none` well under window 14's 23 / 6 / 5 (34 of 152 over the fight), and no
+  receiver dropping to `hodir.receiver none` while its cloud lives and it lacks Storm Power;
+- `hodir.receiver` naming the nearer carrier when two clouds land together;
+- ranged on ice up ~15-25 bot-seconds a wave (window 14: 276-435 a pull), druid blocks ~3 s later;
+- pace 0-3:00 above 234.6k on the pools pacing 223k+.
+- Watch: a latched receiver walking back 15+ yd to a rally after a shelter run, the position node
+  standing down ~3.5 s on a waiting ranged receiver, cast-hold vetoes (26 / 11 / 15 a pull).
+
+**Also seen.** If the next window still shows ~3 clouds a cycle, the remaining lever is the second
+shaman block ahead of the second mage's last two breakers, which pushes the second fire back (Singed
+lapses 25 s after a landing); not proposed until this round is judged.
+
+**Review (round 9).** The build matches the user's answer (order, 3 shaman breakers, budget 8 while a
+mage or shaman block is up, both gather bugs, `_LAST_WAVE_HEALTH_PCT` untouched), on one code path
+for 10/25, both modes and a player in the raid; no shared code; pb-check passes. The new facts hold:
+`64528` in the spell data is aura 89 at 10% a 1 s tick for 10 s; the lane's `unseated.py` gives the
+61 unseated blocks a median 9.6 s after the first mage; w14 uld2's first clouds land 3.6-4.2 s after
+their shaman block; `replay_1.5.txt` reproduces the cycle means. Fixed:
+- Findings doc: "a 10-man's three face the same eight blocks"; a 10-man spawns four (the `_10` row
+  only; window 15's 10-man traces `603_16`/`603_17`), so one breaker at a time.
+- The reader's two new docstrings went (comments rule).
+- `LatchHodirStormReceivers` built a member list on every gather call (several a bot a tick); it
+  walks the group a second time only when a cloud has landed.
+
+Left, for the next window to judge (already a watch item): a latched receiver now walks back from any
+distance while its cloud lives, and the position node stands down for it all that time, including
+on a stale rally (a tank carrier never walks to its rally; a carrier frozen away from it).
