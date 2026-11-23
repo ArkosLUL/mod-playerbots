@@ -252,7 +252,6 @@ PORTAL_DESPAWN_MS = 25000
 SPELL_PORTAL_CLICK_VISUAL = 51347
 SPENT_CLICK_WINDOW_MS = 300
 PORTAL_LATE_ENTRY_MS = 2000
-PORTAL_WALK_PENDING = ("spreading", "holding", "late")
 PORTAL_NEAR_SPOT_YD = 8.0
 BODY_DETOUR_NODE = "yogg-saron body detour action"
 
@@ -1713,13 +1712,13 @@ def spent_clicks(clicks: list[tuple[int, int]], entries: list[tuple[int, int]],
     return out
 
 
-def walks_while_pending(intents: list[tuple[int, str]], moves: list[tuple[int, str]], node: str) -> int:
+def walks_while_holding(intents: list[tuple[int, str]], moves: list[tuple[int, str]], node: str) -> int:
     count = 0
     for when, by in moves:
         if by != node:
             continue
         index = bisect.bisect_right(intents, (when, "￿")) - 1
-        if index >= 0 and intents[index][1] in PORTAL_WALK_PENDING:
+        if index >= 0 and intents[index][1] == "holding":
             count += 1
     return count
 
@@ -1729,11 +1728,10 @@ def left_held_spot(intents: list[tuple[int, str]], moves: list[tuple[int, str]],
     before = [(when, intent) for when, intent in intents if when < open_ms]
     if not before or before[-1][1] == "holding":
         return None
-    held = [when for when, intent in before if intent == "holding"]
+    held = [index for index, (_, intent) in enumerate(before) if intent == "holding"]
     if not held:
         return None
-    last_hold = held[-1]
-    left = next(when for when, _ in before if when > last_hold)
+    last_hold, left = before[held[-1]][0], before[held[-1] + 1][0]
     return sorted({by for when, by in moves if last_hold - lead_ms <= when <= left})
 
 
@@ -1773,8 +1771,8 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
         slots[rec.get("g", 0)].append((rec["t"], int(rec.get("txt", 0))))
     intents, moves = portal_walk_rows(trace)
 
-    detours = sum(walks_while_pending(intents[guid], moves.get(guid, []), BODY_DETOUR_NODE) for guid in intents)
-    print(f"\n  body detour walks while a portal walk was pending: {detours}")
+    detours = sum(walks_while_holding(intents[guid], moves.get(guid, []), BODY_DETOUR_NODE) for guid in intents)
+    print(f"\n  body detour walks while holding a portal spot: {detours}")
 
     print()
     for start, ordinal in waves:

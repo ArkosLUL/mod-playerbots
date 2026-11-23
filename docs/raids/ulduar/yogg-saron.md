@@ -934,7 +934,7 @@ of the target and `YoggSaronRouteClearOfBody` says the straight line passes insi
 arc waypoint, then stands down. Under every raid node and over `charge` and both `reach melee` entries, so
 the price is one shadowed gap-closer per arc leg. It skips a target inside the clear radius, Yogg included,
 where no arc arrives, and tests reach with combat reach: centre distance never passes on Yogg or a
-full-health Guardian. It stands down while the bot's portal walk is pending ([Portals](#portals)).
+full-health Guardian. It stands down while the bot holds its portal spot ([Portals](#portals)).
 
 **Phase 3 keeps the body.** Unhandled there, phase 3 had fifteen times phase 2's launches: the brain team
 surfaces west of Yogg and P3 positioning walked it in one forced line, passing 2 yd from his middle, to
@@ -1063,11 +1063,12 @@ distance / runSpeed × 2)`, measured rather than flat since time waiting on a sp
 and holds until the portal appears under it. The walk goes quiet on arrival and reach would take the bot
 back, so `yogg-saron portal spot hold` blocks reach, heal reach, set behind, rear flank, formation moves,
 charges, follow and random moves while `YoggSaronHoldingPortalSpot` holds (slot and distance read before the
-plan); the Yogg dodges still move it. The body detour is reach by another name, so it stands down while
-the walk is pending (`YoggSaronPortalWalkPending`: spreading, holding or late): left in, it walked holders
-toward a target across the body, half of all bots off a held spot at the open, and a walk it broke
-entered a median 2.8 s late against 0.7. The out-of-phase-2 reset clears the clock but not
-`waveOrdinal`, harmless while `slotWave` carries with it, so read `yogg.wave` as a session counter.
+plan); the Yogg dodges still move it. The body detour is reach by another name, so the same hold stands it
+down: left in, it walked holders toward a target across the body, half the holders found off their spot
+at the open, and a walk it broke entered a median 2.8 s late against 0.7. Spreading or late it stays
+up: a portal walk that gave up hands the tick to reach, which would cross the body without it. The
+out-of-phase-2 reset clears the clock but not `waveOrdinal`, harmless while `slotWave` carries with it, so
+read `yogg.wave` as a session counter.
 
 **Rebuild the plan when the portals spawn, and click only your own.** A plan keyed on the wave ordinal
 alone never rebuilt, since the ordinal is the same before and after the portals appear, and was built off
@@ -2014,7 +2015,7 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   click on a spent portal leaves only its 51347 cast; `--portals` counts those per wave, with the entries
   over 2 s after the open.
 - Leaving a portal spot leaves no row either: `--portals` reads it off `yogg.portal` turning from `holding`
-  before the open and names the walks accepted in between, counts body detour walks under a pending intent,
+  before the open and names the walks accepted in between, counts body detour walks under `holding`,
   and lists bots the open's rebuild sent from within 8 yd of their spot to a farther one, by a snapshot up to
   0.3 s old (a Constrictor's Lunge at the open reads as a near bot moved).
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`

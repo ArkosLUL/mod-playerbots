@@ -964,11 +964,11 @@ Bug, not a plan change: the plan already means a bot to stand on its spot until 
 `YoggSaronPortalWalkPending` (spreading, holding, late); the plan gives free spots by nearest pair, the closest free
 bot and spot first, repeatedly, holders within the click radius still kept first. Same spots at 10 (four) and 25,
 normal and hard mode; a human takes his own portal as before. No shared code. Reader: `--portals` prints `body detour
-walks while a portal walk was pending`, and per wave `left a held spot before the open` by the walks that took them
-off and `moved off a near spot by the open's rebuild` (`walks_while_pending`, `left_held_spot`, `rebuild_losses`,
+walks while holding a portal spot`, and per wave `left a held spot before the open` by the walks that took them
+off and `moved off a near spot by the open's rebuild` (`walks_while_holding`, `left_held_spot`, `rebuild_losses`,
 tested).
 
-**Next window should show:** `body detour walks while a portal walk was pending: 0` (here 11 / 13 / 8); no `yogg-saron
+**Next window should show:** `body detour walks while holding a portal spot: 0` (here 9 / 13 / 8); no `yogg-saron
 body detour action` in any `left a held spot` line (here 8 / 12 / 8 bot-waves); `moved off a near spot` near 0 (here 1
 / 3 / 3, one a Constrictor's Lunge at the open); `in over 2 s after the open` under 21 / 38 / 24; no healer in over 5 s
 late (here 6 waves). Brain per cycle no lower than 14.2% (Stormwind, Icecrown) and 7.2% (Chamber); round 9's join is
@@ -997,3 +997,11 @@ the one 6.0 s exit would have been charmed. **Recommended: yes, 1.2× for one wi
 - uld1's 1:10.6 nova: a Guardian dying at the middle caught 8 of the back line, as window 17 uld1's at 1:10.9 did (cloud
   dodges leave the back line 16-19 yd out).
 - Chamber cycles 2.3-9.9%: clears 27.9-37.1 s with melee walking 52-65% of them, then 146-169 yd to the melee spot.
+
+**Review fixes.** The detour stands down only under `yogg-saron portal spot hold` (`YoggSaronHoldingPortalSpot`),
+where reach does too. Spreading or late, a portal walk that gave up (17-64 `enter gaveup` notes a pull) hands the
+tick to reach, and only the detour keeps reach off the body: uld1's two late detours (Uldxai 4:43.4 and 4:44.3, walk
+given up) stood in for a `reach melee` whose line passed 13.2 and 14.4 yd from the middle (8.2 yd a few ticks
+before), at the 13.3 yd knockback's edge. The 30 holding detours stay gated. `left_held_spot` no longer raises when a hold and the next intent share a millisecond.
+Nearest pair re-run on this window's positions at each open keeps 4 of the 6 near bots; Uldxac and Uldzam lose their
+spot to a nearer bot either way, so `moved off a near spot` falls only as far as the gate keeps bots on their spot.
