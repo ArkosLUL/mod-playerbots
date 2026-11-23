@@ -203,8 +203,6 @@ private:
     bool SetRtiMarkRequired();
 
     bool WalkIntoRoomRequired();
-
-    bool StageRequired();
 };
 
 class YoggSaronIllusionHealerStationTrigger : public YoggSaronTrigger

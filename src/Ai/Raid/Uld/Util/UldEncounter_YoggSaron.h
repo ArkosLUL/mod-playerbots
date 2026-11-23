@@ -327,8 +327,6 @@ inline constexpr float ULDUAR_YOGG_SARON_STORMWIND_HELPER_RADIUS = 40.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_SHARE_LIFT_MS = 25000;
 
-inline constexpr float ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS = 1.5f;
-
 inline constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
 
 inline constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
@@ -466,7 +464,6 @@ enum YoggSaronRoomState : uint32
     YOGG_SARON_ROOM_STATE_TO_BRAIN = 4,
     YOGG_SARON_ROOM_STATE_AT_BRAIN = 5,
     YOGG_SARON_ROOM_STATE_REPRISAL = 6,
-    YOGG_SARON_ROOM_STATE_STAGED = 7,
 };
 
 YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI);
@@ -478,6 +475,10 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
 bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 
 bool YoggSaronLeavingBrainLevel(Player* bot);
+
+uint32 YoggSaronInduceMadnessLeftMs(PlayerbotAI* botAI);
+
+uint32 YoggSaronExitLeadMs(Player* bot);
 
 uint32 YoggSaronCancelAbilityLock(Player* bot);
 
@@ -748,8 +749,6 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const*
 std::vector<Unit*> GetYoggSaronRoomIllusionMobs(PlayerbotAI* botAI);
 
 bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle);
-
-bool YoggSaronIllusionStaged(PlayerbotAI* botAI);
 
 bool YoggSaronIllusionStageSpot(Player* bot, Position& spot);
 

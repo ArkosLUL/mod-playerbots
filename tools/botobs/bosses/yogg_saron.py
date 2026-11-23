@@ -2165,7 +2165,9 @@ def show_madness_caught(trace: Trace) -> None:
         casting = [(row[0], row[11] if len(row) > 11 else 0) for row in rows[guid] if row[4] < BRAIN_LEVEL_Z]
         left, flips, refused, cast = exit_losses(verdicts[guid], walks[guid], casting, when)
         if left is None:
-            print(f"{'':16}never decided to leave")
+            through = cast_at_end(casting, when)
+            through_note = (f", casting {trace.spell(through[0])} from {through[1]:.1f} s left" if through else "")
+            print(f"{'':16}never decided to leave{through_note}")
         else:
             locked, lock_names = lock_overlap(locks.get(guid, []), when - int(left * 1000), when)
             lock = f", under {'/'.join(lock_names)} {locked:4.1f} s" if lock_names else ""
@@ -2199,6 +2201,7 @@ def show_brain_waves(trace: Trace) -> None:
     snap_stamps = [snap["t"] for snap in snaps]
     room_notes = notes(trace, "yogg.room")
     state_notes = notes(trace, "yogg.roomstate")
+    share_notes = notes(trace, "yogg.share")
     exit_notes = [rec for rec in notes(trace, "yogg.exit") if rec.get("txt") in ("leaving", "late")]
     behind = [rec for rec in trace.of("move")
               if rec.get("by") == "set behind" and rec.get("ok") and rec.get("g") in team
@@ -2332,7 +2335,7 @@ def show_brain_waves(trace: Trace) -> None:
               f"{outside_note}")
 
         if door and brain:
-            staged, out, on_brain = 0, [], []
+            staged, joined, out, on_brain = 0, 0, [], []
             for guid in team - healers:
                 own = [row for row in rows.get(guid, []) if start <= row[0] <= stop]
                 at_door = row_before(own, door)
@@ -2341,6 +2344,8 @@ def show_brain_waves(trace: Trace) -> None:
                 out.append(math.dist((at_door[2], at_door[3]), BRAIN_MELEE_SPOT))
                 before = [rec["txt"] for rec in state_notes if rec.get("g") == guid and start <= rec["t"] < door]
                 staged += bool(before) and before[-1] == "staged"
+                joined += any(rec.get("g") == guid and start <= rec["t"] < door and rec.get("txt") == "joined"
+                              for rec in share_notes)
                 when = brain_arrival(own, door, brain)
                 if when is not None and when <= im_end:
                     on_brain.append((when - door) / 1000)
@@ -2348,7 +2353,8 @@ def show_brain_waves(trace: Trace) -> None:
             boosts = {"nitro": sum(1 for rec in casts if rec.get("sp") == SPELL_NITRO_BOOSTS_USE),
                       "dash": sum(1 for rec in casts if rec.get("sp") == SPELL_DASH),
                       "charge": sum(1 for rec in casts if rec.get("sp") in SPELL_BRAIN_CHARGES and rec.get("tgt") == brain)}
-            print(f"      door open: {staged}/{len(out)} staged, {median_or_dash(out, '.0f')} yd from the melee spot,"
+            print(f"      door open: {staged}/{len(out)} staged, {joined} joined a tentacle,"
+                  f" {median_or_dash(out, '.0f')} yd from the melee spot,"
                   f" on the Brain {median_or_dash(on_brain, '.1f')} s / last"
                   f" {format(max(on_brain), '.1f') if on_brain else '-'} s,"
                   f" {', '.join(f'{label} {n}' for label, n in boosts.items())}")
@@ -2940,6 +2946,19 @@ def cast_windows(rows: list[list], spell: int) -> list[tuple[int, int]]:
     if start is not None:
         windows.append((start, last))
     return windows
+
+
+def cast_at_end(casting: list[tuple[int, int]], end: int) -> tuple[int, float] | None:
+    """The spell still casting at the last (t, spell) sample up to `end`, and the seconds before `end` it began."""
+    before = [(t, spell) for t, spell in casting if t <= end]
+    if not before or not before[-1][1]:
+        return None
+    spell, began = before[-1][1], before[-1][0]
+    for t, other in reversed(before):
+        if other != spell:
+            break
+        began = t
+    return spell, (end - began) / 1000.0
 
 
 def exit_losses(verdicts: list[tuple[int, str]], walks: list[tuple[int, str]], casting: list[tuple[int, int]],

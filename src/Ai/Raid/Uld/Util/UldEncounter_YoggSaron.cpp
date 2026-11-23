@@ -136,6 +136,7 @@ struct YoggSaronEncounterState
     uint32 returnPlanWave = 0;
 
     std::unordered_map<ObjectGuid, uint32> leavingUntilMs;
+    std::unordered_map<ObjectGuid, uint32> exitLeadMs;
 
     std::unordered_map<ObjectGuid, YoggSaronRoom> lastIllusionRoom;
 
@@ -157,7 +158,6 @@ struct YoggSaronEncounterState
     struct IllusionShare
     {
         std::vector<ObjectGuid> allowed;
-        bool staged = false;
     };
     std::unordered_map<ObjectGuid, IllusionShare> illusionShare;
     std::array<int8, 3> brainSpotSight{-1, -1, -1};
@@ -539,8 +539,6 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
             Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
             if (target && target->IsAlive() && bot->IsWithinLOSInMap(target))
                 state = YOGG_SARON_ROOM_STATE_FIGHTING;
-            else if (YoggSaronIllusionStaged(botAI))
-                state = YOGG_SARON_ROOM_STATE_STAGED;
             else
                 state = YOGG_SARON_ROOM_STATE_WALKING_IN;
             break;
@@ -551,8 +549,7 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
     {
-        char const* names[] = {"none",   "walkingin", "fighting", "doorshut",
-                               "tobrain", "atbrain",  "reprisal", "staged"};
+        char const* names[] = {"none", "walkingin", "fighting", "doorshut", "tobrain", "atbrain", "reprisal"};
         RaidObs::NoteDerived(bot, "yogg.roomstate", names[state]);
     }
 
@@ -593,6 +590,8 @@ bool YoggSaronLeaveBrainLevelNow(PlayerbotAI* botAI)
             if (portal)
                 lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / baseMoveSpeed[MOVE_RUN] *
                                                           ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY * IN_MILLISECONDS));
+
+            YoggSaronStateFor(bot).exitLeadMs[bot->GetGUID()] = lead;
 
             if (latched || (inBrainRoom && castingTimeLeft < lead))
             {
@@ -4382,17 +4381,32 @@ Player* YoggSaronRoomHealer(PlayerbotAI* botAI)
     return nearest;
 }
 
+uint32 YoggSaronInduceMadnessLeftMs(PlayerbotAI* botAI)
+{
+    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+    if (!brain || !brain->IsAlive() || !brain->HasUnitState(UNIT_STATE_CASTING))
+        return 0;
+
+    Spell* induceMadness = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!induceMadness || induceMadness->m_spellInfo->Id != SPELL_INDUCE_MADNESS)
+        return 0;
+
+    return static_cast<uint32>(std::max(1, induceMadness->GetCastTimeRemaining()));
+}
+
+uint32 YoggSaronExitLeadMs(Player* bot)
+{
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const lead = state.exitLeadMs.find(bot->GetGUID());
+    return lead == state.exitLeadMs.end() ? ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS : lead->second;
+}
+
 namespace
 {
 bool YoggSaronInduceMadnessWithin(PlayerbotAI* botAI, uint32 ms)
 {
-    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
-    if (!brain || !brain->IsAlive() || !brain->HasUnitState(UNIT_STATE_CASTING))
-        return false;
-
-    Spell* induceMadness = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    return induceMadness && induceMadness->m_spellInfo->Id == SPELL_INDUCE_MADNESS &&
-           induceMadness->GetCastTimeRemaining() <= static_cast<int32>(ms);
+    uint32 const left = YoggSaronInduceMadnessLeftMs(botAI);
+    return left && left <= ms;
 }
 
 bool YoggSaronPlatformTentacleAlive(PlayerbotAI* botAI)
@@ -4598,21 +4612,51 @@ bool YoggSaronIcecrownClusterManned(YoggSaronEncounterState const& state, Player
     return false;
 }
 
-bool YoggSaronTentacleHeldByOther(Player* bot, Unit* tentacle, YoggSaronRoom room)
+uint32 YoggSaronTentacleAttackers(Player* bot, Unit* tentacle, YoggSaronRoom room, bool lowerGuidOnly = false)
 {
     Group* group = bot->GetGroup();
     if (!group)
-        return false;
+        return 0;
 
+    uint32 attackers = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (member && member != bot && member->IsAlive() && !PlayerbotAI::IsHeal(member) &&
-            member->GetTarget() == tentacle->GetGUID() && YoggSaronRoomOf(member) == room)
-            return true;
+            member->GetTarget() == tentacle->GetGUID() && YoggSaronRoomOf(member) == room &&
+            (!lowerGuidOnly || member->GetGUID() < bot->GetGUID()))
+            ++attackers;
     }
 
-    return false;
+    return attackers;
+}
+
+Unit* YoggSaronTentacleToJoin(PlayerbotAI* botAI, std::vector<Unit*> const& mobs, YoggSaronRoom room)
+{
+    Player* bot = botAI->GetBot();
+    Position stage;
+    if (!YoggSaronIllusionStageSpot(bot, stage))
+        stage = bot->GetPosition();
+
+    Unit* best = nullptr;
+    std::pair<uint32, float> bestKey;
+    for (Unit* mob : mobs)
+    {
+        std::pair<uint32, float> const key{YoggSaronTentacleAttackers(bot, mob, room), mob->GetExactDist2d(stage)};
+        if (!best || key < bestKey)
+        {
+            best = mob;
+            bestKey = key;
+        }
+    }
+
+    Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (current && std::find(mobs.begin(), mobs.end(), current) != mobs.end() &&
+        (YoggSaronTentacleAttackers(bot, current, room) <= bestKey.first ||
+         !YoggSaronTentacleAttackers(bot, current, room, true)))
+        return current;
+
+    return best;
 }
 
 void YoggSaronTickIllusionShare(PlayerbotAI* botAI)
@@ -4702,7 +4746,7 @@ void YoggSaronTickIllusionShare(PlayerbotAI* botAI)
         if (stormwind.role == YoggSaronEncounterState::STORMWIND_DONE)
         {
             for (Unit* mob : mobs)
-                if ((onTentacle && mob == target) || !YoggSaronTentacleHeldByOther(bot, mob, room))
+                if ((onTentacle && mob == target) || !YoggSaronTentacleAttackers(bot, mob, room))
                     allow(mob);
 
             label = "done";
@@ -4719,9 +4763,11 @@ void YoggSaronTickIllusionShare(PlayerbotAI* botAI)
         std::find(share.allowed.begin(), share.allowed.end(), marked->GetGUID()) == share.allowed.end())
         allow(marked);
 
-    share.staged = !mobs.empty() && share.allowed.empty();
-    if (share.staged)
-        label = "staged";
+    if (!mobs.empty() && share.allowed.empty())
+    {
+        allow(YoggSaronTentacleToJoin(botAI, mobs, room));
+        label = "joined";
+    }
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.share", label);
@@ -5039,15 +5085,6 @@ bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle)
 
     std::vector<ObjectGuid> const& allowed = it->second.allowed;
     return std::find(allowed.begin(), allowed.end(), tentacle->GetGUID()) != allowed.end();
-}
-
-bool YoggSaronIllusionStaged(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
-    auto const it = state.illusionShare.find(bot->GetGUID());
-
-    return it != state.illusionShare.end() && it->second.staged;
 }
 
 bool YoggSaronIllusionStageSpot(Player* bot, Position& spot)

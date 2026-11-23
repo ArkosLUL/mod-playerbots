@@ -683,3 +683,111 @@ room node renames it, so `YoggSaronPlannedPortal` returns nothing off the platfo
 the 100 yd portal search sees the portals down, rebuilds the next wave's slots mid-wave, and the platform's next
 read rebuilds again without the held spots. The holder count above was re-measured: slot notes at each open
 against each bot's last snapshot within 2 yd of its old spot.
+
+**User answers (2026-11-23) to round 8's questions.** Q1 yes: in Stormwind and Icecrown a brain team bot that
+has finished its share of tentacles joins the live tentacle with the fewest attackers, staying near the stage
+spot when it can, instead of waiting at the stage spot (round 9 builds it, and checks the Chamber for the same
+idle wait). Q2 yes, keep melee first in the brain team: no change.
+
+## Round 9 (2026-11-23, window 15 build 523b2f60f: round 7 built, round 8 not)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 523b2f60f --pulls 10`: one valid pull per pool,
+0 humans, Freya's 62670 on the raid in all three. Read with the full `yogg_saron.py` and scratch scripts over
+snapshots, `act`, `cast`, `heal` and `note` rows (per wave the team's time split below by room state and target,
+every Induce Madness charm with the bot's last action and long casts, reprisal holds against the heals they got).
+Window 16 (build `2d7853f0e`, round 8) pulls Yogg-Saron last and had not reached it when this round closed, so
+round 8 is not judged.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261123-125914-19` | `603_19_yogg-saron_1795438800` | wipe 11:33, 33 deaths | 137.9 s, 0 deaths | 361.9 s, 4 cycles: Stormwind 15.2, Icecrown 22.1, Chamber 13.2, Stormwind 19.4 | from 8:20 with one Corruptor left (0.66M), 205 s, Yogg 29.3 → 11.3% |
+| uld2 | `tr-20261123-130035-20` | `603_20_yogg-saron_1795438881` | wipe 10:26, 30 deaths | 139.6 s | 449 s: Chamber 8.6, Stormwind 11.2, Icecrown 10.4, Chamber 0.2 (team charmed), Stormwind never cleared; Brain at 69.2% | never |
+| uld3 | `tr-20261123-130215-21` | `603_21_yogg-saron_1795438981` | wipe 12:46, 33 deaths | 140.5 s | 519.7 s, 6 cycles: Stormwind 14.8, Chamber 7.7, Icecrown 18.3, Stormwind 11.4, Chamber 6.1, Icecrown 11.8 | from 11:00 with 8 tentacles (9.4M), 118.5 s |
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 none; phase 2 none; phase 3 Immortal Guardian 33 (first +7.1 s, the first tank at +101.8 s).
+- uld2: phase 1 Shadow Nova 1; phase 2 Death Ray 1, then Induce Madness: wave 3's hunter Uldyaj charmed in the
+  brain room (killed by the script 8:05), wave 4's Chamber team of 9 charmed at 8:22 (script kills 9), the
+  charmed raiders killed 9 on the platform (both tanks among them), Psychosis 2, Squeeze 1, and wave 5's
+  Stormwind team, 7 bots under a collapsing platform, never cleared and was charmed (script kills 6).
+- uld3: phase 1 Shadow Nova 3 (0:38, 1:14, 2:08); phase 2 Death Ray 1; phase 3 Immortal Guardian 27, Lunatic
+  Gaze 1, Corruptor 1.
+
+**Verdict on round 7 (Guardians pulled onto the stack, read from the centre): fixed.** `--phases` `within 15 yd of
+the ranged spot` 0 / 0 / 0 (window 14: 0 / 3 / 2); `reaching the 21.5 yd station (over 6.5 yd out)` 1 of 12, 1 of
+12, 2 of 13 (5 / 5 / 4 of 13); `tank pulls onto the stack` 17 / 15 / 12 (none before); `--novas` `back line caught
+by a nova in phase 1` 0 / 0 / 0 bots (2 / 14 / 13); nova deaths 0 / 1 / 3 (0 / 13 / 6), Guardian deaths a median
+3.0-4.6 yd from the middle; phase 1 137.9-140.5 s (137-161). Round 6's stack line 1 / 0 / 0 (uld1: an
+Anti-Magic Shell over Icebound Fortitude at 1:57).
+
+**Round 8 baseline from this window** (its portals built after it): clicks on a spent portal 13 / 7 / 14, entries
+over 2 s after the open 13 / 14 / 22 of 143 taken, assigned and never got one 2 / 3 / 2, one portal taken off the
+plan.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5), not picked. uld1 met the user's phase 2 goal: four
+cycles, phase 3 with one tentacle up, and Yogg still went only 29.3 → 11.3% over 160 s with the ranged on
+Guardians 68-100% of every 10 s.
+
+**Ranking** across pools: phase 3 Immortal Guardians 60 (stuck); uld2's Induce Madness chain 28; Shadow Nova 4;
+Death Ray 2; Lunatic Gaze 1; Corruptor 1. Brain per cycle over the 13 cycles whose team reached it: median 11.8%
+(round 8: 10.5%), Stormwind 14.8, Icecrown 15.1, Chamber 8.2.
+
+**Built first: Q1, the user's answer.** Team time below per wave (scratch, snapshots by `yogg.roomstate` and target):
+`staged` took 8-21% of Stormwind teams' time and 5-18% of Icecrown's (uld2 wave 3: 49 s, three bots 16 s each),
+while the last tentacles died to one bot each. `YoggSaronTickIllusionShare` (`UldEncounter_YoggSaron.cpp`): when a
+bot's share leaves nothing allowed in a live room, `YoggSaronTentacleToJoin` allows the live tentacle with the
+fewest attackers (room members, healers out, by `GetTarget`, `YoggSaronTentacleAttackers`), ties to the one
+nearest the room's stage spot, keeping the bot's current one while no other has fewer; share note `joined`. Nothing
+stages any more, so the `staged` room state, `yogg-saron illusion stage hold`, the stage walk (trigger and action)
+and `…_STAGE_ARRIVED_RADIUS` are gone; the stage spots stay as the tie-break. **The Chamber has no such wait**:
+it keeps plain spread (no share), and its teams spent no time staged; their still time without a target was the
+reprisal hold (3-16%) and 1-2 s of gaps, so nothing was applied there. Same rooms at 10 and 25, normal and hard
+mode, with or without a player (a human's target counts as an attacker). Reader: `--brain`'s door line prints
+`joined a tentacle`.
+
+**Picked: a cast that outlasts the exit (inside uld2's Induce Madness chain).** Over every phase 2 trace since
+window 9 (18 pulls), each Induce Madness charm with the bot's last action and long casts: uld2's hunter Uldyaj
+began Revive Pet (982, 8.8-9.2 s) in the brain room at 6.9 s (window 9), 7.8 s (15a) and 5.8 s (15)
+before the end and was charmed every time, with no `yogg.exit` verdict: no node runs while the bot casts (uld2
+window 15: `revive pet` OK at 6:56.83, its next row at 7:05.75, teleported). `YoggSaronExitHoldCastMultiplier`
+held cast-time spells only once the bot was latched leaving, and the latch comes at the lead (3 s here, 9 yd from a
+portal). The rest of the chain is not a bug of this kind: wave 4's Chamber cleared at 45.9 s (two of eight damage
+dealers sat 26-28 s in reprisal holds the healer never ended, a tenth bot never got a portal), and the other team
+charms since window 9 came from clears that opened the door 1.7-13.8 s before the end, or never, leaving no
+reachable portal.
+
+Bug: the strategy means a brain room bot to leave on its lead. Fix (`UldEncounter_YoggSaron.h/.cpp`,
+`UldMultipliers_YoggSaron.cpp`): the exit read keeps the lead it computes per bot (`exitLeadMs`,
+`YoggSaronExitLeadMs`); `YoggSaronInduceMadnessLeftMs` reads the cast. In the brain room before the latch, the
+multiplier zeroes a cast-time spell, channel or ability lock whose cast time (channels and locks: duration) plus the
+lead exceeds the time left; latched, it holds them all as before. Instants are never held. Same room at 10 and 25,
+normal and hard mode, with or without a player. Reader: `--brain`'s `caught by it` prints the cast a bot that never
+decided was still in (`cast_at_end`, tested); here `casting Revive Pet 982 from 5.5 s left`.
+
+**Next window should show:** `--brain` door lines in Stormwind and Icecrown with `0/N staged` and `joined a
+tentacle` above 0, share `joined` rows; Stormwind and Icecrown room clears under this window's (Stormwind 24.1-32.7
+s, median 28.9; Icecrown 18.6-32.0, median 23.6); Brain per cycle above 11.8%. No `caught by it` bot `casting …`
+and uld2's Uldyaj never charmed. Round 8's portal checks against the baseline above, and Flame Shock on Yogg in
+phase 3.
+
+**Seen, not picked.**
+
+- Reprisal holds the one room healer cannot end: 20 / 177 / 122 s held a pull here, 25 holds over 10 s in windows
+  14-15; uld2 wave 4's two ended only at the 15 s Induce Madness release. During such holds the healer's casts
+  went mostly to others (Renew, Prayer of Mending, Circle of Healing on bots at 28-90%), 0-3 to the held bot.
+  Question below.
+- uld1's phase 3 (the first opened as the user wants): ranged on Guardians over the 30% floor 90-100% of the phase,
+  every fresh Guardian off its tank at +4 s (13 of 17 to melee), Yogg −0.11%/s; still the stuck item.
+- Chamber cycles lose a median 7.7% against 14.8-15.1%: the team ends 161-169 yd from the melee spot and the room
+  clear runs 22.6-45.9 s.
+
+**Question for the user.** In an illusion room, should the room's healer heal a reprisal-held bot first, since it
+deals nothing until 70%? **Recommended: yes**: uld2's wave 4 lost two of eight damage dealers for 26-28 s of a 46 s
+clear, and the charm that followed wiped the pull; the risk is a mate under Grim Reprisal waiting a heal longer.
+
+**Review fixes.** `YoggSaronTentacleToJoin` also keeps the bot's current tentacle while no lower GUID room member is
+on it, the spread's settle rule. A joined bot's share allows only the one tentacle it returns, so `SpreadTarget`'s
+own keep never applies, and two joiners on one tentacle that both read another with fewer attackers before either
+switched would leave together and come back together. The Icecrown orphans, whose cluster's last tentacle dies
+under all of them at once, are the likely case.

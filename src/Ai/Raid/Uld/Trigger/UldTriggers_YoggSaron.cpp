@@ -454,22 +454,12 @@ bool YoggSaronIllusionRoomTrigger::IsActive()
     if (GoToBrainRoomRequired())
         return true;
 
-    return WalkIntoRoomRequired() || StageRequired();
+    return WalkIntoRoomRequired();
 }
 
 bool YoggSaronIllusionRoomTrigger::WalkIntoRoomRequired()
 {
     return YoggSaronRoomStateOf(botAI) == YOGG_SARON_ROOM_STATE_WALKING_IN && !PlayerbotAI::IsHeal(bot);
-}
-
-bool YoggSaronIllusionRoomTrigger::StageRequired()
-{
-    Position spot;
-    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_STAGED || !YoggSaronIllusionStageSpot(bot, spot) ||
-        bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_STAGE_ARRIVED_RADIUS)
-        return false;
-
-    return YoggSaronWalkMakingProgress(botAI, "stage", spot);
 }
 
 bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
