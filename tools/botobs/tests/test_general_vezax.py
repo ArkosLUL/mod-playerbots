@@ -243,9 +243,10 @@ CHOPS = [6002, 6003, 6004, 6005]
 LATE_ANIMUS = 4294969300
 
 
-def animus_pull(collapse: bool) -> list[dict]:
+def animus_pull(collapse: bool, dart_x: float = 30.0) -> list[dict]:
     """Five bots and an Animus from 2 s. With `collapse` Dart and two others die at 6 s, else the
-    Animus leaves the snapshots at 2% after 4 s and the raid stands to the 10 s end."""
+    Animus leaves the snapshots at 2% after 4 s and the raid stands to the 10 s end. Dart stands at
+    `dart_x` on the x axis, the Animus at (1, 1)."""
     records = [
         {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 5, "diff": 1,
          "boss": "general-vezax", "roster": [{"g": DART, "n": "Dart", "r": "ranged", "c": "mage", "h": 0}]
@@ -254,12 +255,21 @@ def animus_pull(collapse: bool) -> list[dict]:
         {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
         {"t": 1, "e": "unit", "g": LATE_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
         {"t": 3500, "e": "veto", "g": DART, "m": gv.HOLD, "a": "frostbolt"},
+        {"t": 1500, "e": "move", "g": DART, "k": "point", "x": 20.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.REACH_SPELL},
+        {"t": 3000, "e": "move", "g": DART, "k": "point", "x": 20.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.REACH_SPELL},
+        {"t": 3200, "e": "move", "g": DART, "k": "point", "x": 20.0, "y": 0.0, "z": 0.0,
+         "ok": 1, "r": "dup", "by": gv.REACH_SPELL},
+        {"t": 1500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "off"},
+        {"t": 2500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "pulled"},
+        {"t": 3500, "e": "note", "g": DART, "k": "vezax.reach", "txt": "floor"},
         {"t": 10000, "e": "end", "out": "wipe" if collapse else "kill"},
     ]
     for when in range(0, 11000, 1000):
         dead = collapse and when >= 6000
         units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0, 0, 0, 0, 0],
-                 [DART, 30.0, 0.0, 0.0, 0.0, 0.0 if dead else 100.0, 0.0 if dead else 60.0 - when / 500.0,
+                 [DART, dart_x, 0.0, 0.0, 0.0, 0.0 if dead else 100.0, 0.0 if dead else 60.0 - when / 500.0,
                   LATE_ANIMUS, 0, 0, 0, when * 10.0]]
         units += [[guid, 1.0, 1.0, 0.0, 0.0, 0.0 if dead and index < 2 else 100.0, 0.0, LATE_ANIMUS, 0, 0, 0, 0]
                   for index, guid in enumerate(CHOPS)]
@@ -271,12 +281,23 @@ def animus_pull(collapse: bool) -> list[dict]:
 
 
 class AnimusWindow(unittest.TestCase):
-    def trace_of(self, collapse: bool) -> Trace:
+    def trace_of(self, collapse: bool, dart_x: float = 30.0) -> Trace:
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         path = pathlib.Path(folder.name) / "603_5_general-vezax_1789500000.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in animus_pull(collapse)) + "\n", encoding="utf-8")
+        path.write_text("\n".join(json.dumps(rec) for rec in animus_pull(collapse, dart_x)) + "\n",
+                        encoding="utf-8")
         return Trace(path)
+
+    def test_reach_counts_living_time_past_the_ceiling_and_accepted_walks_in_the_window(self):
+        near = gv.animus_casters(self.trace_of(collapse=True))["rows"][0]
+        far = gv.animus_casters(self.trace_of(collapse=True, dart_x=40.0))["rows"][0]
+        self.assertEqual(near["past_reach"], 0.0)
+        self.assertEqual(far["past_reach"], 1.0)
+        self.assertEqual(far["reach_walks"], 1)
+
+    def test_reach_states_are_the_bots_writing_each_value_from_the_spawn(self):
+        self.assertEqual(gv.reach_states(self.trace_of(collapse=True), 2000), {"floor": {DART}, "pulled": {DART}})
 
     def test_a_collapse_reads_mana_from_the_last_living_sample(self):
         fight = gv.animus_casters(self.trace_of(collapse=True))

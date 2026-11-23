@@ -165,6 +165,55 @@ std::function<bool(float, float)> VezaxFloorFilter(Player* bot)
     };
 }
 
+void PullVezaxSlotIntoAnimusReach(Player* bot, Unit* vezax, Position& slot)
+{
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI || !vezax || PlayerbotAI::IsHeal(bot))
+        return;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target || !target->IsAlive() || target->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS)
+    {
+        RaidObs::NoteDerived(bot, "vezax.reach", "off");
+        return;
+    }
+
+    float const reach = botAI->GetRange("spell") + bot->GetCombatReach() + target->GetCombatReach() -
+                        2.0f * ULDUAR_VEZAX_SLOT_TOLERANCE;
+    float const toAnimusX = target->GetPositionX() - slot.GetPositionX();
+    float const toAnimusY = target->GetPositionY() - slot.GetPositionY();
+    float const apart = std::hypot(toAnimusX, toAnimusY);
+    if (apart <= reach)
+    {
+        RaidObs::NoteDerived(bot, "vezax.reach", "in");
+        return;
+    }
+
+    float const dirX = toAnimusX / apart;
+    float const dirY = toAnimusY / apart;
+    float const fromVezaxX = slot.GetPositionX() - vezax->GetPositionX();
+    float const fromVezaxY = slot.GetPositionY() - vezax->GetPositionY();
+    float const inward = dirX * fromVezaxX + dirY * fromVezaxY;
+    float const floorRadius = VezaxSlotRadius(0);
+    float const discriminant =
+        inward * inward - (fromVezaxX * fromVezaxX + fromVezaxY * fromVezaxY) + floorRadius * floorRadius;
+
+    float step = apart - reach;
+    char const* reason = "pulled";
+    if (inward < 0.0f && discriminant > 0.0f)
+    {
+        float const entry = std::max(0.0f, -inward - std::sqrt(discriminant));
+        if (entry < step)
+        {
+            step = entry;
+            reason = "floor";
+        }
+    }
+
+    RaidObs::NoteDerived(bot, "vezax.reach", reason);
+    slot.Relocate(slot.GetPositionX() + dirX * step, slot.GetPositionY() + dirY * step, slot.GetPositionZ());
+}
+
 }
 
 Unit* GetVezax(PlayerbotAI* botAI)
@@ -411,7 +460,11 @@ bool TryGetVezaxSlot(Player* bot, Position& position)
     }
 
     RaidObs::NoteDerived(bot, "vezax.block", VezaxSlotBlockName(assignmentItr->second));
-    return TryGetVezaxSlotPosition(bot, assignmentItr->second, position);
+    if (!TryGetVezaxSlotPosition(bot, assignmentItr->second, position))
+        return false;
+
+    PullVezaxSlotIntoAnimusReach(bot, GetVezax(GET_PLAYERBOT_AI(bot)), position);
+    return true;
 }
 
 bool VezaxPlaceOnFloor(Player* bot, Position& point)
@@ -803,13 +856,14 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
 
     uint8 slotIndex = 0;
-    if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex))
+    Position slot;
+    if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex) && TryGetVezaxSlotPosition(bot, slotIndex, slot))
     {
+        PullVezaxSlotIntoAnimusReach(bot, vezax, slot);
+
         float const strafe = VezaxSlotIsRightGroup(slotIndex) ? ULDUAR_VEZAX_CAMP_STRAFE
                                                               : -ULDUAR_VEZAX_CAMP_STRAFE;
-        Position strafed =
-            VezaxCampPosition(vezax->GetPosition(), VezaxSlotRadius(slotIndex),
-                              VezaxSlotTangentialOffset(slotIndex) + strafe);
+        Position strafed = VezaxCampPosition(slot, 0.0f, strafe);
 
         if (VezaxPlaceOnFloor(bot, strafed) &&
             strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=

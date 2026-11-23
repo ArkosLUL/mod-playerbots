@@ -62,6 +62,9 @@ ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 COMBAT_REACH = 12.6
 BAND_FLOOR = 15.0 + COMBAT_REACH + 1.5
 BAND_CEILING = 28.5 + COMBAT_REACH + 1.5
+ANIMUS_COMBAT_REACH = 7.0
+ANIMUS_REACH_CEILING = 28.5 + ANIMUS_COMBAT_REACH + 1.5
+REACH_SPELL = "reach spell"
 
 # ULDUAR_VEZAX_GROUP_SLOTS, a product of two uint8 constants the float parser cannot read: slots
 # [0,10) are group L and [10,20) group R.
@@ -823,7 +826,8 @@ def animus_window(trace: Trace, samples: Samples, spawn: int) -> tuple[int, str]
 def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     """The Animus fight from the spawn to `animus_window`: its health, the raid's damage, and per
     ranged and healer bot what it cast, how much of it from a field, damage dealt, mana and cast holds,
-    all and those with the Animus as its sampled target. None when it never spawned."""
+    all and those with the Animus as its sampled target, the share of its living time spent past reach
+    spell's ceiling on the Animus and the reach spell walks it took. None when it never spawned."""
     animus = animus_guid(trace)
     spawn = first_seen(trace, [animus]) if animus else None
     if spawn is None:
@@ -833,6 +837,20 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
     field = aura_spans(trace, SPELL_FIELD)
     casts = [rec for rec in trace.of("cast") if not rec.get("tr") and spawn <= rec["t"] <= stop]
     holds = [rec for rec in trace.of("veto") if rec.get("m") == HOLD and spawn <= rec["t"] <= stop]
+    walks = [rec for rec in trace.of("move")
+             if rec.get("by") == REACH_SPELL and not rec.get("r") and spawn <= rec["t"] <= stop]
+
+    def past_reach(guid: int) -> float | None:
+        alive = past = 0
+        for _, when, weight in samples.steps(spawn, stop):
+            row = samples.row(guid, when)
+            target = samples.row(animus, when)
+            if not row or row[5] <= 0 or not target:
+                continue
+            alive += weight
+            if math.dist(row[1:4], target[1:4]) > ANIMUS_REACH_CEILING:
+                past += weight
+        return past / alive if alive else None
 
     def dealt(guid: int, when: int) -> float:
         row = samples.row(guid, when)
@@ -868,6 +886,8 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
             "mana": (mana(guid, spawn), mana(guid, stop)),
             "holds": len(held),
             "held_on": sum(1 for rec in held if on_animus(guid, rec["t"])),
+            "past_reach": past_reach(guid),
+            "reach_walks": sum(1 for rec in walks if rec.get("g") == guid),
         })
 
     health = (samples.row(animus, spawn)[5], samples.row(animus, stop)[5])
@@ -879,6 +899,15 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
         "raid": sum(dealt(guid, stop) - dealt(guid, spawn) for guid in roster_guids(trace)),
         "rows": rows,
     }
+
+
+def reach_states(trace: Trace, spawn: int) -> dict[str, set[int]]:
+    """Per `vezax.reach` value written from the spawn on, the bots that wrote it."""
+    out: dict[str, set[int]] = collections.defaultdict(set)
+    for rec in notes(trace, "vezax.reach"):
+        if rec["t"] >= spawn:
+            out[str(rec.get("txt", ""))].add(rec["g"])
+    return dict(sorted(out.items()))
 
 
 def show_animus(trace: Trace) -> None:
@@ -929,6 +958,10 @@ def show_animus(trace: Trace) -> None:
 
     show_animus_casters(trace, animus_casters(trace, samples))
 
+    reach = reach_states(trace, spawn)
+    print("  vezax.reach after the spawn: " + (", ".join(f"{value} {len(bots)} bot(s)"
+                                                       for value, bots in reach.items()) or "never written"))
+
     deaths = [death for death in combat_deaths(trace) if death["t"] >= spawn]
     if deaths:
         print(f"  {len(deaths)} death(s) after the spawn:")
@@ -960,15 +993,19 @@ def show_animus_casters(trace: Trace, fight: dict | None) -> None:
         return "-" if value is None else f"{value:.0f}"
 
     print(f"    {'bot':14} {'role':6} {'casts/min':>9} {'on it':>6} {'outside':>8} {'field':>6} {'dealt/s':>8}"
-          f" {'mana':>9} {'held':>7}")
+          f" {'mana':>9} {'held':>7} {'past':>5} {'walks':>5}")
     for row in rows:
         mana = f"{pct(row['mana'][0])}>{pct(row['mana'][1])}"
         held = f"{row['holds']}/{row['held_on']}"
+        past = "-" if row["past_reach"] is None else f"{row['past_reach']:.0%}"
         print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6}"
               f" {row['casts'] * 60.0 / span:9.1f} {row['on_animus']:6} {row['outside']:8}"
-              f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {held:>7}")
+              f" {row['field'] / 1000.0 / span:6.0%} {row['dealt'] / span:8.0f} {mana:>9} {held:>7}"
+              f" {past:>5} {row['reach_walks']:5}")
     print("    casts are starts, outside is those made out of a field, mana is at the spawn and the stop,"
           " held is cast hold vetoes, all/with the Animus targeted")
+    print(f"    past is living time over {ANIMUS_REACH_CEILING:.1f} yd from the Animus, where reach spell"
+          " fires; walks are its accepted moves")
 
 
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
