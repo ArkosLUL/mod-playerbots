@@ -1997,3 +1997,159 @@ paragraph. Left:
 - The lane commit's message has no blank line after its subject, so git reads all four lines as the subject (no
   amend).
 - A ready button he cannot press yet holds the externals at any health; now known-open in the findings doc.
+
+## Round 17 (build baf47824b: rounds 15 and 16 built)
+
+**Data:** window 24 (build baf47824b, rounds 15 and 16), `report --boss freya --raid uld --head baf47824b --pulls 10`,
+one valid 25-man pull per pool, no DC veto inside a pull: `tr-20261123-221301-7` (uld1, DK add tank), `-221423-9`
+(uld2, bear), `-221403-8` (uld3, bear); traces `env/dist/logs/botobs/603_{7,9,8}_elder-stonebark_{1795472022,
+1795472106,1795472085}.ndjson`. Window 24a (build 02de71ee6, round 15 without round 16): `603_{4,6,5}_elder-stonebark_
+{1795470324,1795470543,1795470502}` (uld1-3). Windows 14-22 (24 25-man pulls) are the baseline. Ad hoc scripts:
+`scratchpad/freya-r17/` (`deaths.py`, `botlife.py`, `chaser.py`, `chaser2.py`, `lasher_watch.py`, `onhim.py`,
+`chased_bails.py`, `where.py`), plus `freya-r15/army_tries.py`, `wake_pick.py`.
+
+**Hard mode.** All six pulls 3 of 3 Elders from their essence channels; the five kills cast chest 62952.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 w24 | 1795472022 | **kill 6:09, 1** | Detonate 1 (melee 3:07) |
+| uld2 w24 | 1795472106 | wipe 6:11, 31 | first lasher wave (0:10): Flame Lash 2 (a melee 0:20.1; the bear add tank 0:40.2, his buttons held, risen on his soulstone); own Iron Roots 1 (the DK Uldyam 1:19.1, 92 yd east of Freya, below); trio 2: Tidal Wave 2 (ranged 4:43.6), Unstable Energy 1; the 5:05 lasher wave with no Army: 25 (lasher melee 14, Flame Lash 7, Ground Tremor 2, Unstable Energy 1, Freya melee 1 on the main tank 6:01.7) |
+| uld3 w24 | 1795472085 | **kill 6:54, 2** | Flame Lash 2 (the bear add tank 0:20.1 under a lasher pile, his buttons held; a melee 4:51.6) |
+| uld1 w24a | 1795470324 | **kill 9:57, 14** | Snaplasher 4 (trio 1 at 0:10: a healer to Hand of Sacrifice 0:37.6, the DK add tank 0:40.1 at 60% to a 30.5k swing, again 0:47.4 risen; trio 2 the DK 4:12.7 under Vampiric Blood); Unstable Energy 4 (melee, 3:13 and three in the 4:30 Conservator wave); Freya melee 2 (a melee at 0:02 in the opener, a ranged 5:54 she turned on); Nature Bomb 2 (ranged, stood in it); Flame Lash 1; Conservator melee 1 |
+| uld2 w24a | 1795470543 | **kill 7:37, 5** | Flame Lash 3 (three melee in one at 2:07.1); Snaplasher 1 (a melee 0:13.5, trio 1 opener); Unstable Energy 1 |
+| uld3 w24a | 1795470502 | **kill 7:58, 6** | Flame Lash 3 (ranged 1:20, 1:30; the bear add tank 4:58.3 under a lasher pile, Survival Instincts 0.3s before); lasher melee 1; Freya melee 1 (a ranged 0:53.6 she turned on); Unstable Energy 1 |
+
+**Stop rules:** window 24 killed on uld1 (1 death) and uld3 (2), the best two yet, and wiped on uld2: not polished.
+Window 24a killed on all three, at 14, 5 and 6. Picks: round 13 bomb walk-ins, round 14 the bomb's collision, round
+15 the Gift's DoT spreads, round 16 built answers; this round's failure is new, though round 6 picked its ranged twin
+(a low lasher on a player lingering because the bails never end).
+
+**Round 16 verdict (Q14, Q15; window 24): held.** `--tanks`, per trio wave:
+
+- `both` only on health buttons: 9.7, 0.0 (uld1), 9.8, 19.8 (uld2), 16.7, 0.0s (uld3), "0.0s on a damage cut" in all
+  six. Every external landed under Frenzied Regeneration, Survival Instincts or Vampiric Blood, or in a handoff; none
+  under Barkskin or Icebound Fortitude, whose end the next layer waited for (uld2 Hand of Sacrifice 0.8s after
+  Barkskin).
+- Time on a health button alone (`no damage cut` minus `none`): 0.3, 9.9, 0.2, 0.2, 6.2, 0.0s (window 24a on the old
+  rule: 7.3, 6.8, 20.0, 27.1, 10.0, 0.0s; window 22: 0.0-24.9s). uld1's 9.9s was Vampiric Blood with both externals
+  spent in trio 1, 80-87s earlier.
+- `two externals` 0.3, 1.4, 1.7 (two handoffs), 1.3s; Q15's lead sent the next one 0.3-1.4s before the running one ended.
+- The cost: `none` 25.8s (uld1 trio 2) and 27.1s (uld3 trio 2) at the end of the second trio wave, no add-tank death to
+  the Snaplasher in window 24 (window 24a: the DK three times, 0:40.1 and 0:47.4 in a pull-opening trio, 4:12.7 under
+  Vampiric Blood).
+
+**Round 15 verdict (Gift DoT hold; windows 24a and 24): held.** 0 DoT spreads off a Gift by its takers in all six
+pulls (window 22: 138 over 19 Gifts), 81-117 `freya gift dot hold` vetoes a pull. Gifts living 12s+: 2 of 58 (windows
+14-22: 27 of 191), uld3 w24a 6:32 (3% left, after the add phase) and uld2 w24 5:46 (in the collapse, 2 ranged on it).
+Lasher waves with the raid intact 31-55s (31-49s before).
+
+**Rounds 1-14 still hold.** No tank Roar or Shout; Righteous Defense only on non-tanks and a ghoul (w24 uld1 3:15). Freya
+on the main tank 99.1/99.6/99.9% (w24), 99.3/100/99.1% (w24a; two ranged held her 1.5-2s each, w24a uld1 5:52 and uld3
+0:51.8, one death each). Beam dodges from past 8 yd 0-21% by role (w24a uld1's tank 3 of 10). `--ghouls` no lasher in
+reach 0-4%. `--blasts` 3-13% of melee approach orders into a low blast, one melee Detonate death. `--bombs` escapes from
+4.5s on 0 in all five pulls
+with bombs; two bomb deaths (w24a uld1, ranged standing in one). Healers on the Snaplasher's holder: median 4.
+
+**Why uld2 wiped.** The 5:05 lasher wave had no Army of the Dead: Uldyai spent his at 0:10.4 on the first wave
+(cooldown 6-10 min), and Uldyam, the DK whose turn it was, died at 1:19.1 to his own Iron Roots at (2427, -89), 92 yd
+from Freya and 106 yd from the healers. He got there by bailing: lasher 1547 went under 15% at 0:43 chasing
+Uldyai (`lasher_watch.py`), who stepped `freya lasher about to blow` 2 yd at a time in front of it at its 8.0 yd/s, and
+Uldyam, beside him, bailed the same way, 2 yd hops along y -38.x from x 2364 to 2453 (0:41-0:59, `botlife.py`). No
+ranged bot came within 28.5 yd of it after 0:41, the melee bailed off it, so it sat at 13-7% for 47s, dragged two
+healers next (42 and 13 yd) and died on the main tank at 1:30. Iron Roots hit Uldyam at 1:09.1: he auto-attacked the
+root for 10s at 4.6-6.5k a tick, no heal reached him, no Hand of Freedom (paladins 30 yd), dead at 1:19.1. With no
+ghouls, 4 of 10 lashers woke onto the back line, the walk-out put 8 of 12 clear but nothing took them off, and 311k of
+lasher melee and Flame Lash landed on the back line in 30s: 25 deaths. The Rebirth (Uldyas) had gone on a melee at
+0:21.7.
+
+**Ranking** (34 deaths in window 24, 25 in 24a). (1) uld2's second lasher wave without an Army, 25: its root is the
+melee bail in front of a chasing low lasher (below), its last link the DK dying out of heal range. (2) The add tank
+dying to a lasher pile with his buttons held, 2 (w24 uld3 0:20.1, uld2 0:40.2; w24a uld3 4:58.3): Q16, with the user.
+(3) Singles: Unstable Energy 2, Tidal Wave 2, Flame Lash 1, Detonate 1 (window 24a adds the uld1 DK's three Snaplasher
+deaths and four Unstable Energy). Picked (1).
+
+**Failure picked: a melee bot a low lasher is chasing bails from it forever.**
+
+- `freya lasher about to blow` (`UldTriggers_Freya.cpp:188-202`, `UldActions_Freya.cpp:1290-1298`) fires for every low
+  lasher within `_DETONATE_RADIUS` and walks to 16 yd from all of them; a lasher chasing the bailing bot runs at 8.0 yd/s
+  against its 7.0, so every arrival is back inside 15 yd: 2 yd hops every 0.3-0.5s, the bot never swinging. Melee beside
+  it bail the same way, round 4's guards keep the rest out, the ranged lose reach as it drags its victim off, and Eonar's
+  Gift may heal it: nothing makes "it blows in seconds" (the bail's premise) true.
+- Scale (`--blasts`, new, over windows 14-24, 30 pulls): 405 melee bails from the bot's own chaser, 271 with no trio
+  member or Conservator up; most in five pulls (w15a uld1 83, w15 uld3 36, w17 uld3 39, w22 uld3 54, w24 uld2 82).
+  `chaser2.py`: 19 stretches of 5s+ in which one low lasher chased one melee bot, the bot walking 22-73 yd; 11 of them
+  with only lashers up, 5 in a trio wave, 3 in a Conservator wave.
+
+**Classification: bug.** The bail exists to leave a blast that is about to go off; one chasing the bot never goes off,
+and the walk takes the bot out of the fight (round 6 found the same of ranged victims and gave them the low lasher).
+
+**Fix** (Freya files only, any size or difficulty, no player branch):
+
+- `IsFreyaLowLasherChasing`: a lasher under `_LASHER_BAIL_PCT` whose victim is the bot, not rooted or stunned
+  (`UNIT_STATE_NOT_MOVE`; a rooted one can't follow, so the bail clears it), while no trio member or Conservator lives.
+  `GetFreyaLowLasherChasing` returns the lowest such (GUID ties).
+- The melee bail's trigger and walk skip such a lasher (`GetFreyaLowLasherPositions(…, spareChasers)`); the blast guards
+  (`FreyaLowLasherBlasts`) leave it out for its victim; a melee DPS bot's lasher pick takes it first, past the 12 yd
+  leash. The bot stands, kills it and eats one Detonate; bystanders still bail.
+- With a trio member or the Conservator up nothing changes: the victim's pick is that add, and its walk there would
+  drag the lasher into the stack (Q18).
+- Reader: `--blasts` counts per lasher wave the melee bails from a low lasher chasing that bot, and of those the ones
+  with no trio or Conservator up, tested. Baseline above; window 24: 30 and 52 in uld2, 0 elsewhere.
+
+**What it would have changed here:** uld2 0:43, Uldyai stands and hits lasher 1547 (13%, ~30k) instead of hopping east;
+Uldyam bails once and waits, so both stay near the anchor, the 1:09 Iron Roots lands in heal range, and the 5:05 wave
+can get Uldyam's Army.
+
+**Next window should show** (`freya.py --blasts`, `--lows`, `--waves`; `chaser2.py`):
+
+- `--blasts` bails from a chasing lasher "with no trio or Conservator up" near 0 (window 24: 30 and 52; 271 over 30
+  pulls); the rest, with a trio or Conservator up, unchanged.
+- No melee bot walked 20+ yd by a low lasher with only lashers up; `--lows` lashers 8s+ under the bail line on a player
+  down in lasher-only waves.
+- The cost: about one more melee Detonate hit per chase, no melee Detonate death from one; `--blasts` approach orders
+  "into a low lasher's blast" may now include a bot's walk to its own chaser.
+- Rounds 15 and 16 as above; rounds 1-14 still holding.
+
+**Not picked:** Q16's add-tank deaths (2 here); Freya turning on a ranged bot for 1.5-2s (w24a uld1 5:52, uld3 0:51.8,
+one death each); the pull-opening trio wave in w24a uld1, where the DK add tank died at 60% to one 30.5k swing with
+Hand of Sacrifice up, healers under 2 in range for 36% of it; ranged and healer victims of a chasing low lasher still
+bail (`freya ranged camp`; 9 stretches of 5s+ over windows 14-24, 0-43 yd), left to round 6's ranged pick.
+
+**Questions:**
+
+16. (pending, re-checked against window 24) The add tank's buttons held under a lasher pile. Two more bears died that
+    way in window 24 and one in 24a, five in the last 12 pulls (windows 21, 22, 24a, 24 twice): w24 uld3 100% at 0:15.1
+    to dead at 0:20.1 under 3-4 lashers, Barkskin (70%), Frenzied Regeneration (54%) and Survival Instincts (33%)
+    vetoed, three Flame Lashes for 30.9k; w24 uld2 1-3 lashers, Barkskin (86%), Frenzied Regeneration (63%) and
+    Survival Instincts (37%) vetoed, dead at 0:40.2 to two Flame Lashes for 26.6k from 37%; w24a uld3 3-5 lashers, the
+    three vetoed at 86%, 57% and 37%, Survival Instincts at 20% 0.3s before 37.8k of Flame Lash. (c) (last resort at 50%
+    while lashers hit him) releases his buttons 0.9s, 5.5s and 1.9s before the killing blows; (b) (3+ lashers) 4.4s,
+    0.4s and 4.7s before, spending Barkskin at 70% and 86%. Recommendation unchanged: (c).
+17. (pending, re-checked against windows 24a and 24) Q12's walk-out. Over its three windows, the waves the back line
+    started inside the pack's ring with an Army: back-line lasher damage over the 30s after the wake a median 34k, 3 of
+    12 at 100k+ (windows 14-21: 30k, 9 of 32), ghouls taking 12 of the 33 lashers that woke onto the back line (64 of
+    105), the back line 23-37 yd from the Army's DK. Window 24's two best kills ran with it, but their waves read 69k,
+    0k and 8k, the pre-trial median. Recommendation unchanged: (c), drop the trial and go back to round 13.
+18. (new) With a trio member or the Conservator up, a melee bot a low lasher chases still bails in front of it (134 of
+    405 such bails over windows 14-24; 8 of the 19 chases of 5s+, 22-73 yd each). Options: (a) leave it; (b) its
+    victim kills it first, ahead of the trio slot and the Conservator, and stops bailing from it, as with only lashers
+    up (one or two GCDs at under 15%). Recommendation: (b); (a) keeps the drag, and the skip alone would walk the lasher
+    into the trio's melee stack.
+
+**Shared code:** none changed; `FindNearestPositionClearOfHazards` is read, not edited.
+
+**Review:** the failure is real and the fix addresses it, on one code path (no size, mode or player branch).
+Reproduced: lasher 1547 under 15% from 0:42.8, on Uldyai from 0:43.5, both DKs hopping east from x 2364 to 2453
+by 0:59, no ranged within 28.5 yd of it after 0:41, Uldyam rooted at (2427, -89) on his walk back at 1:09, 84-98 yd
+from Freya; 405 and 271 bails over the 30 pulls. Script: `scratchpad/freya-r17-review/chase_speed.py`. Corrected:
+
+- The lasher did not outrun them: snapshot steps read 5.2-6.7 yd/s against the DKs' 7.0 (8.0 is its unslowed
+  run). The bail fails because each spot is 16 yd from where the lasher stood and it follows: at 0:44.6 Uldyam
+  reached his spot with it 6 yd behind. The findings doc no longer gives speed as the reason.
+
+Fixed:
+
+- A melee Gift filler kept the Gift ahead of its chaser: the chaser sat in the lasher pick, below the Gift, so the
+  filler walked to the Gift with the lasher following unhit and unbailed, and the other fillers bailed off the Gift
+  from it. Melee fill the Gift whenever fewer than 5 ranged DPS live: always at 10-man, at 25 once ranged die. The
+  chaser now heads a melee bot's priority, ahead of the Gift.

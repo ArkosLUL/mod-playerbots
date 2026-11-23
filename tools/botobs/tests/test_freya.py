@@ -18,7 +18,9 @@ melee bot joining a ranged one on a Gift after its walk away from it was cut, wh
 the lashers and spreads a DoT off it once and once onto it. An eighth pins a melee bot walking through a live
 Nature Bomb and dying to it, while another charges into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
 pins the back line near a submerged lasher pack, one walking clear in the submerge, and the lasher damage on it
-after the wake. The shared v14 fixture shows every section reads empty elsewhere.
+after the wake, and an eleventh a low lasher chasing a melee bot that bails from it twice, once with the
+Snaplasher up, while a melee bot beside it bails once. The shared v14 fixture shows every section reads empty
+elsewhere.
 """
 from __future__ import annotations
 
@@ -214,6 +216,47 @@ def blast_pull() -> list[dict]:
         {"t": 61300, "e": "death", "g": MELEE, "killer": LASHERS[0], "x": 2352.0, "y": -50.0, "z": 425.3,
          "rewind": [[61200, LASHERS[0], 62937, 9000]]},
         {"t": 62000, "e": "end", "out": "wipe"},
+    ]
+
+
+BYSTANDER = 7708
+
+
+def chase_snap(t: int, low_hp: float, trio: bool = False) -> dict:
+    units = [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, low_hp, 0, MELEE],
+        [MELEE, 2350.0, -50.0, 425.3, 0, 100, 100, LASHERS[0]],
+        [BYSTANDER, 2346.0, -50.0, 425.3, 0, 100, 100, FREYA],
+    ]
+    if trio:
+        units.append([SNAPLASHER, 2356.0, -40.0, 425.3, 0, 80, 0, MAIN])
+    return {"t": t, "e": "snap", "u": units}
+
+
+def bail(t: int, mover: int) -> dict:
+    return {"t": t, "e": "move", "g": mover, "k": "point", "x": 2370.0, "y": -50.0, "z": 425.3, "ok": 1,
+            "by": fr.BAIL_ACTION}
+
+
+def chase_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": MELEE, "n": "Chased", "r": "melee", "c": 4, "h": 0},
+                    {"g": BYSTANDER, "n": "Beside", "r": "melee", "c": 1, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        {"t": 0, "e": "unit", "g": LASHERS[0], "en": 32918, "n": "Detonating Lasher"},
+        {"t": 0, "e": "unit", "g": SNAPLASHER, "en": 32916, "n": "Snaplasher"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        chase_snap(60000, 90),
+        chase_snap(60500, 10),
+        chase_snap(62500, 10, True),
+        bail(60700, MELEE),
+        bail(60800, BYSTANDER),
+        bail(62700, MELEE),
+        {"t": 63000, "e": "end", "out": "wipe"},
     ]
 
 
@@ -564,7 +607,15 @@ class Blasts(unittest.TestCase):
         self.assertEqual(printed(fr.show_blasts, load(blast_pull())), (
             "BLASTS\n"
             "  1:00.000 lashers: melee took 1 Detonate hit(s), 1 death(s); 1 of 2 approach order(s) into a low "
-            "lasher's blast; melee inside one 33% of samples\n"))
+            "lasher's blast; melee inside one 33% of samples; 1 of 1 melee bail order(s) away from a low lasher "
+            "chasing that bot, 1 with no trio or Conservator up\n"))
+
+    def test_bails_from_a_low_lasher_chasing_the_bailing_bot(self):
+        self.assertEqual(printed(fr.show_blasts, load(chase_pull())), (
+            "BLASTS\n"
+            "  1:00.000 lashers: melee took 0 Detonate hit(s), 0 death(s); 0 of 0 approach order(s) into a low "
+            "lasher's blast; melee inside one 67% of samples; 2 of 3 melee bail order(s) away from a low lasher "
+            "chasing that bot, 1 with no trio or Conservator up\n"))
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_blasts, load(pull())), "BLASTS\n  no lasher wave\n")

@@ -8,7 +8,8 @@
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
-    freya.py <file> --blasts per lasher wave, Detonate on the melee and their walks into a low lasher's blast
+    freya.py <file> --blasts per lasher wave, Detonate on the melee, their walks into a low lasher's blast and
+                             their bails from a low lasher chasing them
     freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
                              hitting a player shot (the Gift, while one was up), and the back line's bails from
                              one hitting them
@@ -54,7 +55,8 @@ What the generic views miss here:
   calls a stretch of 8 s or more lingering, and counts a lasher as hitting a player when its victim is a raid member.
 - **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
   order whose point lies inside the blast edge of a lasher under the bail line in the snapshot before it. Tanks
-  are left out: they never bail.
+  are left out: they never bail. A bail is "from a low lasher chasing that bot" when such a lasher inside the
+  blast edge has the bailing bot as its target in the snapshot before the order.
 - **A bomb is live for its fuse from the snapshot that first shows it.** `--bombs` counts an order given from
   outside every live bomb's avoid radius whose straight walk passes inside one, and a charge whose landing (the
   snapshot `CHARGE_LAND_MS` after the cast) is inside one, once per cast: the triggered stun or leap carries the
@@ -100,6 +102,8 @@ ESSENCE_CHANNELS = {62483: "Stonebark", 62484: "Ironbranch", 62485: "Brightleaf"
 KILL_CHESTS = {62957: 0, 62958: 0, 62955: 1, 62956: 1, 62953: 2, 62954: 2, 62950: 3, 62952: 3}
 DETONATE = (62598, 62937)
 APPROACH_ACTIONS = ("reach melee", "set behind")
+BAIL_ACTION = "freya lasher about to blow"
+OUTRANK_LASHERS = (NPC_CONSERVATOR, *TRIO)
 # Spells that take every unit near the caster or hitting the target, rather than the caster's own target.
 AREA_TAUNTS = {5209: "Challenging Roar", 1161: "Challenging Shout", 31789: "Righteous Defense"}
 
@@ -593,7 +597,9 @@ def low_lashers(snap: dict, trace: Trace, low_pct: float) -> list:
 
 def blast_counts(trace: Trace, wave: dict) -> dict:
     """One lasher wave: Detonate hits and deaths on the melee, their approach orders aimed into a low lasher's
-    blast, and how much of the wave they stood in one."""
+    blast, how much of the wave they stood in one, and their bail orders away from a low lasher that had that bot
+    as its victim (it follows, so the bail never clears it), split off by whether a trio member or the Conservator
+    was alive."""
     low_pct = radius("ULDUAR_FREYA_LASHER_BAIL_PCT")
     edge = radius("ULDUAR_FREYA_DETONATE_RADIUS") + 1.0
     snaps = frames(trace)
@@ -624,8 +630,22 @@ def blast_counts(trace: Trace, wave: dict) -> dict:
             if row[0] in melee and row[5] > 0:
                 samples += 1
                 inside += any(dist2(row[1:3], low) <= DETONATE_REACH_YD for low in lows)
+    bails = chased = lone = 0
+    for rec in trace.of("move"):
+        if (not rec.get("ok") or rec.get("by") != BAIL_ACTION or rec.get("g") not in melee
+                or not wave["t"] <= rec["t"] <= end):
+            continue
+        bails += 1
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        rows = snaps[index].get("u", []) if index >= 0 else []
+        me = next((row for row in rows if row[0] == rec["g"]), None)
+        if not me or not any(trace.entries.get(row[0]) == NPC_DETONATING_LASHER and 0 < row[5] < low_pct
+                             and row[7] == rec["g"] and dist2(row[1:3], me[1:3]) < edge for row in rows):
+            continue
+        chased += 1
+        lone += not any(trace.entries.get(row[0]) in OUTRANK_LASHERS and row[5] > 0 for row in rows)
     return {"hits": len(hits), "deaths": deaths, "orders": orders, "into": into, "samples": samples,
-            "inside": inside}
+            "inside": inside, "bails": bails, "chased": chased, "lone": lone}
 
 
 def show_blasts(trace: Trace) -> None:
@@ -641,7 +661,8 @@ def show_blasts(trace: Trace) -> None:
         share = 100.0 * c["inside"] / c["samples"] if c["samples"] else 0.0
         print(f"  {clock(wave['t'])} lashers: melee took {c['hits']} Detonate hit(s), {c['deaths']} death(s); "
               f"{c['into']} of {c['orders']} approach order(s) into a low lasher's blast; melee inside one "
-              f"{share:.0f}% of samples")
+              f"{share:.0f}% of samples; {c['chased']} of {c['bails']} melee bail order(s) away from a low lasher "
+              f"chasing that bot, {c['lone']} with no trio or Conservator up")
     if not found:
         print("  no lasher wave")
 
@@ -932,8 +953,8 @@ SECTIONS = (
      "Defense, each loose Snaplasher", show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
-    ("blasts", "per lasher wave, Detonate on the melee and their approach orders into a low lasher's blast",
-     show_blasts),
+    ("blasts", "per lasher wave, Detonate on the melee, their approach orders into a low lasher's blast and their "
+     "bails from one chasing them", show_blasts),
     ("lows", "per lasher wave, lashers left under the bail line, what the ranged in reach shot, back-line bails",
      show_lows),
     ("submerge", "per lasher wave, the back line near the pack at its spawn and wake, the camp's orders meanwhile, "

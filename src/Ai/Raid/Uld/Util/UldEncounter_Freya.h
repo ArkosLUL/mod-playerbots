@@ -254,6 +254,10 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 
 Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range, bool backLineOnly = false);
 
+bool IsFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state, Unit* lasher);
+
+Unit* GetFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state);
+
 bool IsFreyaLasherTail(FreyaWaveState const& state);
 
 Player* GetFreyaStackedSnaplasherTank(FreyaWaveState const& state);
@@ -318,7 +322,7 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI);
 bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 seenForMs, bool shedding);
 
 std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float maxPct,
-                                                 float radius);
+                                                 float radius, bool spareChasers = false);
 
 bool IsFreyaLasherSubmerged(Unit* lasher);
 

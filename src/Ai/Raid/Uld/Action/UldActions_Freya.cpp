@@ -642,6 +642,9 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     std::vector<Unit*> priority;
 
+    if (!isRanged)
+        priority.push_back(GetFreyaLowLasherChasing(bot, state));
+
     if (takesGift && !state.TrioReleased())
     {
         if (isRanged && !trioLocked)
@@ -1292,9 +1295,9 @@ bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return StepOutOfBlasts(
-        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
-        ULDUAR_FREYA_LASHER_PACK_CLEAR);
+    return StepOutOfBlasts(GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT,
+                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, true),
+                           ULDUAR_FREYA_LASHER_PACK_CLEAR);
 }
 
 bool FreyaLasherBailAction::StepOutOfBlasts(std::vector<Position> const& blasts, float clearance)
