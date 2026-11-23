@@ -1656,8 +1656,6 @@ class HunterDisarm(unittest.TestCase):
 
 
 def swap_pull() -> list[dict]:
-    # the rogue dies at 4 s, the warrior swaps at 6 s, disarms the Hunter at 6.2 s and is back at 7.5 s; its second
-    # swap at 15 s gets no Disarm and no stance back
     roster = [{"g": WARRIOR, "n": "Blade", "r": "melee", "c": 1, "h": 0},
               {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
               {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]

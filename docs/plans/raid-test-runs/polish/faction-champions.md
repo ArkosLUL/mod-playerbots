@@ -1370,3 +1370,19 @@ so Q5 may stay unjudged. Kill times no longer (6:22, 7:27, 6:05).
 **Questions for the user.** None new. Q6 (ranged step off a Tauren not chasing them) still waits; not built.
 
 **Shared code.** None: the peel, its action, the kite and the cast break are this fight's, and the reader its own.
+
+**Review.** Both hold. toc1 3:05-3:12 reread: Tocxas stood 37.7 yd off centre with `fc.castbreak` at 3:07.2, 3:08.2,
+3:09.2, 3:10.2 and 3:11.2 and no `fc.kite` while Gorgrim closed from 16.7 to 5.3 yd; the kite's turns replayed on the
+3:07.0 sample put every 15 yd hop off the floor or within 10 yd of Tocxac, Tocxad or Tocxae, the 7.5 yd ones at +90°
+and -120° clear. Q5 is built as answered. DBC: Disarm 676 needs Defensive Stance and carries the ranged disarm (aura
+278) that `DisarmedFor` reads on the Hunter; the three stances share category 47 (1 s) and trigger no GCD; Stance
+Mastery 12678 and Tactical Mastery 12295, 12676, 12677 are the warrior spells with icon 139 that
+`HandleAuraModShapeshift` sums over the spell and talent maps. No size, mode or player branch: a player rogue or prot
+warrior counts, only bots are asked.
+
+- Review fix: the reader's new constants and the swap test's fixture carried description comments; removed.
+- Left: a swap whose Disarm can't follow (the Hunter Disengages out of melee in between) costs the warrior its rage
+  above what it keeps, and it swaps again once back in melee with the stance cooldown up. The rage check and the
+  Disarm's 60 s cooldown bound it; no swap ran this window to measure.
+- Left: in the tick after its swap the warrior, now in Defensive Stance, can be taken by an earlier needy melee
+  champion in its melee range and Disarm that one instead; still a peel the row allows.

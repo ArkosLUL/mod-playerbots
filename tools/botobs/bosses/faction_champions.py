@@ -485,10 +485,8 @@ SPELL_CHAINS_OF_ICE = 45524
 LINK_SKIP = "fc.linkskip"
 # a chased bot's hard cast broken so its kite can run, the spell's name
 CAST_BREAK = "fc.castbreak"
-# a broken cast with no kite hop of the same bot this soon after left it standing; its melee damage counts this long
 STRANDED_KITE_MS = 1500
 STRANDED_DAMAGE_MS = 2000
-# an fc.kite note's suffix for a hop at the half step, taken when no full step had a spot
 SHORT_HOP = ", short"
 # a pull with no chased run, escape, kite, broken cast, wall grip or skipped link writes none
 OPTIONAL_PROBES = frozenset((NITRO, ESCAPE, KITE, CAST_BREAK, WALL, LINK_SKIP))
@@ -587,8 +585,6 @@ HUNTER_CHAMPIONS = (34448, 34467)
 RANGED_DISARM_GATED = frozenset((65883, 67977, 67978, 67979, 65871, 65866, 67983, 67984, 67985, 65880, 65868, 67988,
                                  67989, 67990, 65867, 66207, 65877))
 DISARM_MS = 10000
-# a DPS warrior's Defensive Stance for the Hunter's Disarm, the Disarm it should cast this soon after, and its
-# Battle and Berserker Stance back
 SPELL_DEFENSIVE_STANCE = 71
 SPELL_DISARM = 676
 BACK_STANCES = frozenset((2457, 2458))
