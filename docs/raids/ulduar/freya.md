@@ -597,10 +597,10 @@ outside such a lasher on the premise that it blows in seconds, but off the pile 
 one in reach, 11-52% of the ranged in reach shot another lasher and 0-40% shot one, and 12 of them stayed
 under the line 8s or more in three pulls (6 in six before). Eonar's Gift healed four of them back to
 65-75%, and they ran loose through the trio wave, which outranks lashers, killing 10 healers and ranged.
-Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in. It goes ahead of the Gift too
-(user's choice; not yet verified in a pull), one or two casts, except while the trio is locked: with one
-in reach and a Gift up, half the ranged in reach sat on the Gift (10-man: 94%), and a Gift heals it back
-to ~65%.
+Ghoul-held ones are left to the pile's AoE: they blow a median 3.2-4.2s in. Ahead of the Gift (user's
+choice; not yet verified in a pull) it takes only one hitting the back line, a ranged DPS or healer
+(`backLineOnly`), one or two casts, except while the trio is locked: with one in reach and a Gift up, half
+the ranged in reach sat on the Gift (10-man: 94%), and a Gift heals it back to ~65%.
 
 **A lasher tail outranks the trio for ranged DPS** (user's choice; not yet verified in a pull). While a
 trio member lives and the living lashers sum under one lasher's maximum health (`IsFreyaLasherTail`), a

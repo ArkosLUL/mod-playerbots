@@ -567,7 +567,7 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     if (takesGift && !state.TrioReleased())
     {
         if (isRanged && !trioLocked)
-            priority.push_back(GetFreyaLowLasherOnPlayer(bot, state, sPlayerbotAIConfig.SpellDistance));
+            priority.push_back(GetFreyaLowLasherOnPlayer(bot, state, sPlayerbotAIConfig.SpellDistance, true));
 
         priority.push_back(state.eonarsGift);
     }
