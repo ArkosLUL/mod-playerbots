@@ -952,3 +952,118 @@ only. Fixed:
   25 yd behind still took the tether toward him. `ThorimTrailsGauntletLeader` now skips a `ThorimFightingStartPack` bot too.
 - `thorim lever wait` let a bear's Feral Charge and a Warbringer Charge through (`Family::Charge` is no mover), taking a waiting
   leader back into the pack whenever his target came within 25 yd; the rule now holds charges.
+
+**User answer (2026-11-23) to round 10's question:** yes. Once the Rune Giant is pulled, the gauntlet tank walks him back down to
+about 15 yd from the Honor Guard/Acolyte add fight, so the squad and healers fight both together.
+
+## Round 11 (window 16: build 2d7853f0e with round 10)
+
+**Data:** window 16, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-133438-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795440972,1795440974,1795440980}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head 2d7853f0e --pulls 10` (its `thorim.py` phase 2 lines), `postmortem.py --death`/
+`--probes`, round 7 and 10 scripts (`seg.py`, `budget.py`, `dps.py`, `lead.py`, `leadstop.py`, `smashlatch.py`, `smashcost.py`,
+`smashhits.py`, `startpack.py`, `holderpos.py`) and new ones in session scratchpad `thorim_r11/` (`r10checks.py`, `ramp.py`,
+`addfight.py`, `gianttrack.py`, `stood.py`, `rampidle.py`, `shortstop.py`, `tankacts.py`, `rawpos.py`) over `snap`, `move`, `act`,
+`aura` (32182), `dmg` (62465) and `note` rows. For the Giant hold: windows 13-16's twelve pulls plus window 15a's three for the add
+fight, window 11 uld3 (`603_6_thorim_1795372131`, the one pull whose Giant came down the ramp) and all 37 Thorim traces for stood
+positions.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795440972 | kill 5:51, normal (62565 3:22.3, phase 2 3:34.9) | none |
+| uld2 | 1795440974 | kill 5:45, normal (62565 3:24.6, phase 2 3:26.5) | none |
+| uld3 | 1795440980 | kill 5:43, normal (62565 3:19.4, phase 2 3:24.2) | phase 2 Chain Lightning 1 (melee at 5:06.5, 31k, his Fire Elemental 2.2 yd off) |
+
+**Round 10 verdict:**
+- **Lever wait (Q2): held.** The leader stood 2.7 yd from the lever by 0:05 in all three; `thorim.leverpulled` 0.11 / 0.18 / 0.08 s
+  after the sixth start-pack death (was 4.5-7.7 s), so lever → 62565 is 169.8-169.9 s (was 163.2-164.8). No taunt, tank assist,
+  charge or picker from him while waiting; no gate-walk move by a non-healer with a start-pack target; main tank lowest 79 / 97 / 98%;
+  no start-pack death.
+- **Colossus pull (Q3): held as built, no seconds back.** Engaged 1.8 / 0.5 / 0.5 s after the leader reached his stop (was 3.7-10 s);
+  "to Colossus" 9.5 / 9.3 / 7.3 s (w15 9.7-16.2); no 62465 hit on him during the walk-in. But the squad, held on the last lane
+  waypoints 55-65 yd out until the engage, now walks in after it: squad damage on him stayed under 10k/s for 6-9 s and the Colossus
+  took 35.7 / 31.4 / 32.6 s (w15 19.5-28.8). To-Colossus plus Colossus 40-45 s (w15 31-45). Question 1.
+- **Smash latch: held.** `thorim.smashside` never cleared between the first seen cast and the engage (13-22 arena clears a pull
+  before); all 25 corridor smash hits (11 / 4 / 10) landed with the latch held (w15: 81 of 93 with it dropped, 15.5 a pull); no Runic
+  Smash death. Under 10 a pull in one of three.
+- **Lever to phase 2 150-170 s: missed.** 182.6 / 171.8 / 174.8 s, 12.7 / 1.9 / 4.9 s after 62565: normal mode in all three.
+
+**Round 8 gap (the anchor tank short of the tank spot): still there, now root-caused.** uld2's anchor tank (warrior) held him from
+(−2.7, −0.5) for 33 of its 212 holding snapshots (4:06.5-4:14.5), the waiting tank on the holder 8.1%; uld1 and uld3 sat on (0, 0).
+The tanks' arrival test `GetDistance(spot) ≤ 1` nets the bot's combat reach, 1.5 × its model scale, and Heroism 32182 / Bloodlust 2825
+carry +30% `SPELL_AURA_MOD_SCALE`, so under lust it passes to 2.95 yd exact. The tank had stepped 0.9 yd in from the off-tank spot
+(`reach melee`), took him at 4:06.5 standing 2.78 yd off the tank spot, and logged no positioning row (rotation only) until Heroism
+ended at 4:15.2; at its next pickup (4:34.2, no lust) it walked to (0, 0) in 0.7 s. Window 15's (−1.9, −0.9) and (−2.2, −0.7) holds,
+2.1-2.3 yd exact, pass even without lust (2.5 yd).
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → 62565 169.8-169.9 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w16 uld1 | 0.1 | 14.6 | 46.8 | 9.5 | 35.7 | 3.8 | 53.5 | 18.7 | 182.6 | +12.7 |
+| w16 uld2 | 0.2 | 15.2 | 34.5 | 9.3 | 31.4 | 5.3 | 59.3 | 16.8 | 171.8 | +1.9 |
+| w16 uld3 | 0.1 | 14.8 | 41.0 | 7.3 | 32.6 | 8.5 | 54.3 | 16.5 | 174.8 | +4.9 |
+| fastest before | 4.5 | 11.8 | 33.0 | 2.0 | 18.5 | 5.3 | 43.2 | 15.2 | 156.2 | |
+
+Against the fastest segments the Colossus loses 13-17 s (the walk-in above, then Runic Barrier), the adds and Giant 10-16 s, the
+corridor 1.5-14 s. On the ramp the leader pulls the foot Honor Guard, walks up past the second one and the Acolyte (both take him)
+and pulls the Giant 11.5-12 s after the first guard engages; the squad kills the foot guard and the Acolyte at the ramp foot, then
+walks ~65 yd up to the second guard and the Giant: DPS spent 84-101 bot-seconds a pull without a target between the first guard's
+engage and the Giant's death (w15 85-96), the Giant stood 40-62 yd (p50) from the hold spot below, and died 18.6-20.1 s after the last
+add.
+
+**Stop rules:** not polished (no hard mode). Not stuck: rounds 3-11 picked nine different causes.
+
+**Failure ranking:** deaths, phase 2 Chain Lightning 1 (a melee in a pile with a guardian; normal mode, not picked). On the clock:
+the Colossus walk-in 6-9 s (question 1), the ramp walk (the user's answer, built), the corridor trash (spread 34.5-46.8 s).
+
+**Change** (Thorim files only, no size, mode or player branch):
+1. **Rune Giant hold (the user's answer).** `ThorimGauntletGiantHeld` (`UldEncounter_Thorim.cpp`): the bot gauntlet leader, past the
+   portcullis and within 150 yd of the Giant's spawn, while the Giant is in combat on him. `ThorimGauntletGiantHold` adds the walk:
+   farther than `ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE` (3 yd, 2D exact) from `ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT`
+   **(2187.79, −432.78, 426.39)**, the lead trigger fires and the lead action walks him there at combat priority. While he holds the
+   Giant, `GetThorimDpsTarget` hands him the Giant and the tank branch of `ThorimDpsPriorityTrigger` fires until he targets him; rule
+   `thorim giant hold`: `OwnMovement` keeping Attack and AvoidAoe with the lead action as the only mover, and a `Block` on tank assist,
+   charges and the DPS pickers, so `tank face`, `reach melee` or a Feral Charge cannot walk the Giant into the add fight. Taunts stay
+   (an add taunted off a healer comes to him). With a real player leading nothing changes: the lead nodes run only for a bot leader.
+   - The spot: the median position of the Honor Guards and Acolytes fought off the leader over fifteen 25-man pulls is
+     (2202.6, −430.7, 418.8); the spot is 15.0 yd (2D) up the ramp from it. The Giant stood on it in window 11 uld3 (2:21.2) and
+     players within 0.6 yd ((2188.02, −433.31, 426.31) w11 uld3, (2187.7, −431.8, 426.34) w13 uld2).
+   - Stomp (62413: 10 yd around the Giant, a ~3 yd knockback every 8 s) pushes the tank down-ramp; the 3 yd tolerance walks him back,
+     so the Giant should settle 1-8 yd up-ramp of the spot, 15-22 yd from the adds.
+2. **Balcony walk from the ramp (needed by 1).** The Giant now dies at z ~426 with the squad at z 412-426, below the floor line, where
+   `ThorimBalconyOpen` refused every bot (window 11 uld3: 8 of 11 walked back down the corridor). `ThorimOnBalconySide`: above the
+   floor line, or inside the ramp box `ULDUAR_THORIM_RAMP_BOX_*` (x 2150-2235, y −445..−385); below the line the walk also needs the
+   second Colossus doors (GO 194558, (2135.08, −417.905, 440.0)) open, which the Giant's death does and Thorim's reset undoes, not the
+   Giant scan, whose cached miss reads "Giant dead". `ThorimBalconyWalk` (the `thorim balcony guard` gate) takes the same side test.
+3. **Holder arrival (round 8's gap, bug).** `ThorimTankSpotNeedsMove`: the tank Thorim is hitting counts as arrived only within
+   `ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE` (1 yd, 2D exact); the waiting tank keeps the 1 yd net test, which leaves room for its reach
+   step. The holder needs no such room: Thorim chases his victim.
+
+**New coordinate to navprobe before the merge:** `ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT` (2187.79, −432.78, 426.39): on the mesh at that
+z; a path down from the Giant's spawn (2134.57, −440.32, 438.33); a path up to `ULDUAR_THORIM_BALCONY_1` (2141.0, −408.0, 438.247)
+with the second doors open. The ramp box is a region test, not a walked point.
+
+**Estimated gain:** the walk up the ramp (most of the 84-101 idle DPS bot-seconds, ~5-8 s) against a balcony walk starting ~30 yd
+farther down (~4-5 s): about 1-4 s a pull. The hold's case is one place to fight and heal, not the clock.
+
+**Next window should show:**
+- Hold: a `thorim gauntlet lead action` move to (2187.79, −432.78) within ~1 s of the Giant's first hit on the leader; the Giant's
+  `snap` track coming down the ramp and his distance to the spot p50 under ~8 yd (40-62 now); the leader's `thorim.dpstarget` the
+  Giant while he holds; no `tank face`, `reach melee` or charge move from him then; DPS bot-seconds without a target from the first
+  Honor Guard's engage to the Giant's death well under 84-101; the Honor Guards + Acolyte + Giant segment under 53.5-59.3 s.
+- Balcony: `thorim balcony advance action` moves from corridor bots below z 429.6 within ~1 s of the Giant's death; nobody walking
+  north of y −385 after it; the first `BALCONY_5` latch 18-22 s after his death (15.4-20.2 now).
+- Holder: the anchor tank's holds on (0, 0) in ~98%+ and the waiting tank on the holder under ~2% in every pull, Heroism or not;
+  holder positioning moves no more than ~5 above the waiting tank's (a tug-of-war shows as dozens).
+- Watch: Stomp and Rune Detonation hits and deaths among the squad and healers at the hold (none before); a Giant that turns on a
+  squad member instead of the leader (no hold then, he walks into the adds).
+- Unexplained, not picked: uld2's ring had two slots within 8 yd in 94.1% of settled snapshots (uld1 31.2%, uld3 64.5%; window 15
+  3.9-38.3%) with its slot bearings 90° apart and no Chain Lightning death; reread if ring Chain Lightning deaths come back.
+
+**Questions for the user** (tactics, not built):
+1. **The squad walks to the Colossus with the leader.** Since round 10 he pulls the Colossus from his 30 yd stop at once, but the
+   squad still waits on the last lane waypoints (y −318/−329), 55-65 yd out, until the engage ends the smash: squad damage stays
+   under 10k/s for 6-9 s after the pull and the Colossus took 31-36 s against 19-29 before. Extend each lane by one index-matched
+   waypoint near y −360 (left x ~2242, right x ~2212, ~39 yd from him, picked from trace positions and navprobed) so the Runic Smash
+   dodge holds the squad there when the leader goes on? Saves ~6-9 s a pull. Recommended: yes.

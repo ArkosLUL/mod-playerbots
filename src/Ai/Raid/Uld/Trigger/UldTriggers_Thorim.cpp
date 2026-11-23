@@ -37,6 +37,9 @@ bool ThorimDpsPriorityTrigger::IsActive()
         if (Unit* colossus = ThorimGauntletColossusPull(botAI, bot))
             return colossus != currentTarget;
 
+        if (Unit* giant = ThorimGauntletGiantHeld(botAI, bot))
+            return giant != currentTarget;
+
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
     }
 
@@ -110,7 +113,7 @@ bool ThorimGauntletLeadTrigger::IsActive()
 
     Position next;
     return ThorimGauntletLeadStep(botAI, bot, next) || ThorimGauntletLeadColossus(botAI, bot) ||
-           ThorimGauntletLeadRuneGiant(botAI, bot);
+           ThorimGauntletLeadRuneGiant(botAI, bot) || ThorimGauntletGiantHold(botAI, bot, next);
 }
 
 bool ThorimBalconyAdvanceTrigger::IsActive()
@@ -164,7 +167,7 @@ bool ThorimPhase2PositioningTrigger::IsActive()
         return false;
 
     if (role == ThorimPhase2Role::MainTank || role == ThorimPhase2Role::OffTank)
-        return bot->GetDistance(spot) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
+        return ThorimTankSpotNeedsMove(botAI, bot, spot);
 
     if (role == ThorimPhase2Role::Ranged)
     {

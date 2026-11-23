@@ -292,6 +292,10 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
         return MoveTo(giant->GetMapId(), giant->GetPositionX(), giant->GetPositionY(), giant->GetPositionZ(), false,
                       false, false, false, MovementPriority::MOVEMENT_COMBAT);
 
+    if (ThorimGauntletGiantHold(botAI, bot, next))
+        return MoveTo(bot->GetMapId(), next.GetPositionX(), next.GetPositionY(), next.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_COMBAT, true);
+
     return false;
 }
 
@@ -440,6 +444,9 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 
     if (ringSlot)
         return true;
+
+    if (tank)
+        return !ThorimTankSpotNeedsMove(botAI, bot, targetPosition);
 
     return bot->GetDistance(targetPosition) <= ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
 }

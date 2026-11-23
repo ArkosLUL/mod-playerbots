@@ -87,6 +87,11 @@ inline constexpr float ULDUAR_THORIM_BALCONY_BOX_MIN_Y = -455.0f;
 inline constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Y = -280.0f;
 inline constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Z = 450.0f;
 
+inline constexpr float ULDUAR_THORIM_RAMP_BOX_MIN_X = 2150.0f;
+inline constexpr float ULDUAR_THORIM_RAMP_BOX_MAX_X = 2235.0f;
+inline constexpr float ULDUAR_THORIM_RAMP_BOX_MIN_Y = -445.0f;
+inline constexpr float ULDUAR_THORIM_RAMP_BOX_MAX_Y = -385.0f;
+
 inline constexpr float ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE = 150.0f;
 
 inline constexpr uint32 ULDUAR_THORIM_RUNIC_SMASH_LATCH_MS = 10000;
@@ -116,6 +121,7 @@ inline constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MAX_MS = 25000;
 inline constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 
 inline constexpr float ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE = 1.0f;
+inline constexpr float ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE = 1.0f;
 
 inline constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 inline constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
@@ -205,6 +211,7 @@ extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;
+extern const Position ULDUAR_THORIM_RUNE_GIANT_HOLD_SPOT;
 
 struct ThorimEncounterState
 {
@@ -269,6 +276,7 @@ struct ThorimEncounterState
     uint32 runeGiantScanMs = 0;
 
     ObjectGuid colossusDoorsGuid;
+    ObjectGuid giantDoorsGuid;
 
     RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
@@ -395,6 +403,12 @@ Unit* ThorimGauntletColossusPull(PlayerbotAI* botAI, Player* bot);
 
 Unit* ThorimGauntletLeadRuneGiant(PlayerbotAI* botAI, Player* bot);
 
+inline constexpr float ULDUAR_THORIM_RUNE_GIANT_HOLD_TOLERANCE = 3.0f;
+
+Unit* ThorimGauntletGiantHeld(PlayerbotAI* botAI, Player* bot);
+
+bool ThorimGauntletGiantHold(PlayerbotAI* botAI, Player* bot, Position& out);
+
 bool ThorimResolveGauntletIndex(PlayerbotAI* botAI, Player* bot, uint8& index);
 
 bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane);
@@ -411,6 +425,8 @@ inline constexpr float ULDUAR_THORIM_BALCONY_HOLD_TOLERANCE = 1.5f;
 Position const& GetThorimBalconyWaypoint(uint8 index);
 
 Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI);
+
+bool ThorimOnBalconySide(Player const* bot);
 
 bool ThorimBalconyOpen(PlayerbotAI* botAI, Player* bot);
 
@@ -468,6 +484,8 @@ bool ThorimBalconyHoldSpot(PlayerbotAI* botAI, Player* bot, Position& out);
 
 ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot);
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position);
+
+bool ThorimTankSpotNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 
 bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 

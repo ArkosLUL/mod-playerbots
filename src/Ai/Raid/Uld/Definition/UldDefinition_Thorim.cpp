@@ -71,8 +71,7 @@ bool ThorimTauntWouldSteal(PlayerbotAI* botAI)
 bool ThorimBalconyWalk(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD ||
-        GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+    if (!ThorimOnBalconySide(bot) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
 
     ThorimBalconyAdvanceTrigger balconyAdvance(botAI);
@@ -88,6 +87,8 @@ bool ThorimLeverWait(PlayerbotAI* botAI)
     ObjectGuid lever;
     return ThorimLeverWaiting(botAI, botAI->GetBot(), lever);
 }
+
+bool ThorimGiantHeld(PlayerbotAI* botAI) { return ThorimGauntletGiantHeld(botAI, botAI->GetBot()) != nullptr; }
 
 void TickThorim(PlayerbotAI* botAI)
 {
@@ -170,6 +171,10 @@ void DefineThorim(EncounterBuilder& e)
                   {ThorimGauntletLeverAction::Name});
     e.Block("thorim lever wait", Role::Any, ThorimLeverWait,
             Family::TankAssist | Family::Taunt | Family::Charge | DPS_PICKERS);
+
+    e.OwnMovement("thorim giant hold", Role::Any, ThorimGiantHeld, Family::Attack | Family::AvoidAoe,
+                  {ThorimGauntletLeadAction::Name});
+    e.Block("thorim giant hold", Role::Any, ThorimGiantHeld, Family::TankAssist | Family::Charge | DPS_PICKERS);
 
     e.Block("thorim taunt guard", Role::Any, ThorimTauntWouldSteal, Family::Taunt);
 
