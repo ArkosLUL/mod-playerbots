@@ -4964,6 +4964,21 @@ def defensive_spans(trace: Trace, until: int, wanted: dict[int, str]) -> dict[in
     return spans
 
 
+def ladder_stacks(spans: dict[int, list[tuple[int, int, str]]], until: int) -> list[tuple[int, int, str, str]]:
+    """(t, guid, running, added) for each ladder aura a bot gained up to `until` while another of its own was up."""
+    found = []
+    for guid, rows in spans.items():
+        rows = sorted(rows)
+        for index, (start, _, name) in enumerate(rows):
+            if start > until:
+                continue
+            running = next((other for begin, end, other in rows[:index] if begin <= start < end and other != name),
+                           None)
+            if running:
+                found.append((start, guid, running, name))
+    return sorted(found)
+
+
 def show_novas(trace: Trace) -> None:
     print("SHADOW NOVA")
     p1_end = phase1_end(phase_spans(trace))
@@ -5213,13 +5228,19 @@ def show_novas(trace: Trace) -> None:
     if quiet:
         print(f"    a human pressed these and no bot did: {', '.join(quiet)}")
 
+    stacked = ladder_stacks(own, p1_end)
+    print(f"  ladder row put up over another still running on the same bot, in phase 1: {len(stacked)}")
+    for when, guid, running, added in stacked[:8]:
+        print(f"    {clock(when):>9}  {trace.name(guid):14} {added} over {running}")
+
 
 SECTIONS = (
     ("phases", "phase timeline, the Keepers freed, the pre-pull window, leftover Guardian deaths after the"
      " handover", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
-    ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
+    ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them, ladder rows"
+     " stacked on a running one", show_novas),
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves, assignments, and who never walked for one", show_portals),
     ("phase2", "Constrictor and what the busy melee did per grab, Brain Link, node handovers", show_phase2),

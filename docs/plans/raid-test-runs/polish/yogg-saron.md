@@ -385,3 +385,50 @@ bomb (`spell_mage_living_bomb` fires only on expiry or dispel), so the 1 s lead 
 damage; refreshing a leech restarts its tick timer (`AuraEffect::CalculatePeriodic` keeps it only for periodic
 damage). The node moved to `ACTION_HIGH + 4.1`, under the shadow priest's Shadowform (24.2: a DoT keeps the crit
 it was cast with) and low-mana Dispersion (25, a tie before).
+
+## Round 6 (2026-11-23, no pulls on round 5: window 14 in flight)
+
+**Data.** No trace since window 12. Round 5 and the shared `PickDefensive` fix (`a797da29f`) are first pulled in
+window 14, so no trace shows this bug yet. Measured on all nine pulls of windows 9, 10 and 12 (rounds 2-4) with
+scratch scripts over snapshots, `cast` and `dmg` rows: each Guardian's first read under 10% against its nova, and
+each phase 1 ladder cast against the next nova on the caster. Stop rules, verdict and ranking skipped.
+
+**Picked (the orchestrator's bug): the nova defensive stacks a second button on a running one.** `PickDefensive`
+(`RaidTankDefensive.cpp:134-169`) counts a running row as cover only while its aura lasts `CoverMs(needMs)`
+(`:122-130`): `needMs` for a cut row, 3 s more for a health row. Yogg-Saron's callers, before the fix:
+
+| Caller | `needMs` | After `a797da29f` | Change |
+|---|---|---|---|
+| `YoggSaronNovaDefensiveTrigger::IsActive` (`UldTriggers_YoggSaron.cpp:893`), `YoggSaronNovaDefensiveAction::Execute` (`UldActions_YoggSaron.cpp:2076`, `yogg.novadef`) | `YoggSaronNovaNeedMs(bot, true)` → `YoggSaronNovaNeedFrom` (`UldEncounter_YoggSaron.cpp:2853`): always 5000 (`…_NOVA_NOW_WINDOW_MS`), its list holding only Guardians under 10% in reach | a 5 s Anti-Magic Shell or Cloak of Shadows reads as no cover the tick after its cast, and a DK casts Vampiric Blood or Icebound Fortitude on top; a Barkskin from the last nova with under 5 s left gets Frenzied Regeneration or Survival Instincts | countdown |
+| `YoggSaronNovaAfterOwnButton` (`UldEncounter_YoggSaron.cpp:2865`, under `YoggSaronNovaVictim`) via `BestMagicDefensiveCut` | `YoggSaronNovaNeedFrom(low, member)`: 5000 | a DK under Anti-Magic Shell reads as the next row's cut (Icebound 30, Vampiric Blood 0), so a healer spends an external on him | countdown |
+| `YoggSaronCallHumanNova` (`UldEncounter_YoggSaron.cpp:4957`) via `ReadyTankDefensiveSpell` | `YoggSaronNovaNeedMs(human, …)`: 5000, or 12000 off the 10% gate | none: `FindReadyTankDefensive` has no running test | countdown at the 10% gate, same pick (every tank row runs 5 s or more); 12000 kept |
+| `YoggSaronBeaconDefensiveTrigger::IsActive` (`UldTriggers_YoggSaron.cpp:931`), `YoggSaronBeaconDefensiveAction::Execute` (`UldActions_YoggSaron.cpp:2167`, `yogg.dragdef`) | 0 | none: healed Guardians hit now and keep hitting, so a running cut row covers to its end and a health row to 3 s before, the shared rule | none |
+| `YoggSaronBeaconExternalVictim` (`RunningTankDefensive`, `ReadyTankDefensive`), `YoggSaronTankWrathHeld`, `YoggSaronCallHumanPile`, the `yogg-saron nova defensive hold` Block | none | not `PickDefensive` | none |
+
+**Evidence.** Under 10% to the nova: 135 novas, median 1.2 s, 90% within 3.8 s, 16 past 3.7 s (the findings doc
+said never), 5 past 5 s (longest 9.8 s, window 9 uld1 at 1:52.97). Phase 1 ladder casts over the nine pulls (156,
+17 a pull): Barkskin 33, Cloak of Shadows 33, Anti-Magic Shell 24, Shamanistic Rage 18, Divine Protection 16,
+Icebound Fortitude 10, Last Stand 2, Shield Wall 1; the nova hit the caster a median 1.8 s after the cast, 9 of 81
+past 4 s, 3 past 5 s. Each of the 24 Anti-Magic Shells would draw a second DK row under the shared fix. Under the
+old rule (any running row covers) no bot put a ladder row over a running one in phase 1 in any of the nine (`--novas`,
+new line); the stacks seen fall in phases 2-3 on tanks (bears, a DK), outside the nova node, not looked at.
+
+**Fix** (`UldEncounter_YoggSaron.h/.cpp`). `YoggSaronNovaNeedFrom` returns the time left to the soonest nova in
+reach: `…_NOVA_NOW_DUE_MS` (4000) from the Guardian's first read under 10%, then `…_NOVA_OVERDUE_NEED_MS` (1) once
+due, so a running button covers while it outlasts the nova and, overdue, until it fades. The first read is kept per
+Guardian in the encounter state (`novaGates`), stamped room-wide each tick by `YoggSaronNovaVictim`'s scan (healers
+and paladins) and on any need read. Due at 4 s, not 5: a 5 s button cast on the stamping tick reads a few ms short
+once its aura first updates (the bot AI runs in `OnPlayerAfterUpdate`, after an aura tick whose diff starts before
+the cast), and the next row goes on top; 4 s still covers 90% of novas. The trigger, action and
+`BestMagicDefensiveCut` read it unchanged through `YoggSaronNovaNeedMs` / `YoggSaronNovaNeedFrom`; the human call's
+pick is unchanged. Nothing reads a player; same room, Guardians and gates at 10 and 25, normal and hard mode. No
+shared code. Reader: `--novas` prints `ladder row put up over another still running on the same bot, in phase 1`
+(`ladder_stacks`, tested).
+
+**Next window should show:** window 14 (round 5 plus the shared fix, before this one) a DK's Anti-Magic Shell
+followed within a second by Vampiric Blood or Icebound Fortitude, so that `--novas` line above 0. On this fix that
+line at 0, `yogg.novadef` `covered` while Anti-Magic Shell runs, phase 1 ladder casts no more than 17 a pull, and
+nova deaths no higher than 1-9 a pull.
+
+**Seen, not picked.** The reader's `NOVA_DEFENSIVES` keys Last Stand by its cast 12975, not its aura 12976, so
+`--novas` covers and the new line miss a running Last Stand.

@@ -1223,6 +1223,17 @@ class YoggPhases(unittest.TestCase):
         }
         self.assertEqual(yogg_saron.room_entries(samples, 80000), {1: 9000, 2: None, 3: None, 4: None})
 
+    def test_ladder_stacks_counts_a_row_put_up_over_a_running_one_before_the_cutoff(self):
+        spans = {
+            7: [(1000, 6000, "anti-magic shell"), (1200, 11200, "vampiric blood"), (20000, 32000, "barkskin")],
+            8: [(1000, 13000, "barkskin"), (13000, 23000, "frenzied regeneration")],
+            9: [(1000, 13000, "barkskin"), (12000, 22000, "frenzied regeneration")],
+        }
+        self.assertEqual(yogg_saron.ladder_stacks(spans, 15000),
+                         [(1200, 7, "anti-magic shell", "vampiric blood"),
+                          (12000, 9, "barkskin", "frenzied regeneration")])
+        self.assertEqual(yogg_saron.ladder_stacks(spans, 1100), [])
+
     def test_roar_verdict_needs_a_press_and_no_silence(self):
         self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
         self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")

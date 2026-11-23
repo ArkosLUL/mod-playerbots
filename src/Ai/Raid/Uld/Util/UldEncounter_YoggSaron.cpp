@@ -169,6 +169,7 @@ struct YoggSaronEncounterState
 
     std::unordered_map<ObjectGuid, uint32> novaClaims;
     std::unordered_map<ObjectGuid, std::pair<ObjectGuid, uint32>> novaCovers;
+    std::unordered_map<ObjectGuid, uint32> novaGates;
 
     ObjectGuid phase1Focus;
 
@@ -2850,16 +2851,45 @@ bool YoggSaronNovaLeavesNothing(uint32 expected, Unit* target)
     return expected && target->GetHealth() <= expected;
 }
 
+uint32 YoggSaronNovaGateMs(Creature const* guardian, uint32 now)
+{
+    return yoggSaronStates.For(guardian->GetInstanceId()).novaGates.emplace(guardian->GetGUID(), now).first->second;
+}
+
+void StampYoggSaronNovaGates(std::vector<Creature*> const& low)
+{
+    uint32 const now = getMSTime();
+    for (Creature const* guardian : low)
+    {
+        if (guardian->GetHealthPct() <= ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT)
+            YoggSaronNovaGateMs(guardian, now);
+    }
+}
+
+uint32 YoggSaronNovaLeftMs(Creature const* guardian)
+{
+    uint32 const now = getMSTime();
+    uint32 const since = getMSTimeDiff(YoggSaronNovaGateMs(guardian, now), now);
+
+    return since < ULDUAR_YOGG_SARON_NOVA_NOW_DUE_MS ? ULDUAR_YOGG_SARON_NOVA_NOW_DUE_MS - since
+                                                     : ULDUAR_YOGG_SARON_NOVA_OVERDUE_NEED_MS;
+}
+
 uint32 YoggSaronNovaNeedFrom(std::vector<Creature*> const& low, Unit* target)
 {
-    for (Creature* guardian : low)
+    uint32 needMs = 0;
+    for (Creature const* guardian : low)
     {
-        if (guardian->GetHealthPct() <= ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT &&
-            target->GetExactDist2d(guardian) <= ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS)
-            return ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS;
+        if (guardian->GetHealthPct() > ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT ||
+            target->GetExactDist2d(guardian) > ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS)
+            continue;
+
+        uint32 const left = YoggSaronNovaLeftMs(guardian);
+        if (!needMs || left < needMs)
+            needMs = left;
     }
 
-    return ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS;
+    return needMs ? needMs : ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS;
 }
 
 uint32 YoggSaronNovaAfterOwnButton(std::vector<Creature*> const& low, Player* member, uint32 expected)
@@ -3067,6 +3097,8 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
                                                              ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
     if (low.empty())
         return nullptr;
+
+    StampYoggSaronNovaGates(low);
 
     Player* victim = nullptr;
     int64 worst = 0;
