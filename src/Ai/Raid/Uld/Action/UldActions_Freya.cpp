@@ -509,8 +509,6 @@ void FreyaSetDpsPriorityAction::CutWalkAwayFromGift(Unit* gift)
     if (walkCutGiftGuid == gift->GetGUID())
         return;
 
-    walkCutGiftGuid = gift->GetGUID();
-
     LastMovement& last = AI_VALUE(LastMovement&, "last movement");
     if (!last.msTime || last.priority > MovementPriority::MOVEMENT_COMBAT || !bot->isMoving())
         return;
@@ -519,6 +517,8 @@ void FreyaSetDpsPriorityAction::CutWalkAwayFromGift(Unit* gift)
     float const to = gift->GetExactDist2d(last.lastMoveToX, last.lastMoveToY);
     if (to <= from)
         return;
+
+    walkCutGiftGuid = gift->GetGUID();
 
     bot->GetMotionMaster()->Clear();
     bot->StopMoving();

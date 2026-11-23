@@ -1309,3 +1309,10 @@ on them (one 1 melee), 16 of 27 living.
 
 **Shared code:** none changed. The shared fix d70101432 (`ReadyTankDefensive` judges a button's cost for when the
 tank needs it) is on Custom, not in window 16's build; it changes `IsFreyaAddTankCovered` for a DK add tank.
+
+**Review:** the round holds: the traces bear out the pick (w16 uld3 3:31, `gather_inflight.py` as quoted; 6
+of 48 Gifts lived 12s+ in windows 15-16), Q10 is built as answered on one code path, no shared code. Fixed:
+`CutWalkAwayFromGift` spent its once-per-Gift cut the first tick it saw the Gift, walking or not, so a gather
+sent after a Q6 low-lasher pick died (camp and priority share `ACTION_RAID`) was never cut; it now latches
+only on a cut. Left: `IsFreyaGiftFiller` ranks by distance alone, so a latched filler a dodge carries
+farther frees its rank and one more melee can join.
