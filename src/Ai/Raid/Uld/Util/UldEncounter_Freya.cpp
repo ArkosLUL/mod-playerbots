@@ -333,6 +333,22 @@ constexpr FreyaTankExternal FREYA_TANK_EXTERNALS[] = {
     {SPELL_FREYA_GUARDIAN_SPIRIT, "guardian spirit"},
     {SPELL_FREYA_HAND_OF_SACRIFICE, "hand of sacrifice"},
 };
+
+constexpr uint32 FREYA_TANK_DAMAGE_CUTS[] = {
+    SPELL_FREYA_SHIELD_WALL,
+    SPELL_FREYA_DIVINE_PROTECTION,
+    SPELL_FREYA_BARKSKIN,
+    SPELL_FREYA_ICEBOUND_FORTITUDE,
+};
+
+bool HasFreyaTankDamageCut(Player* tank)
+{
+    for (uint32 spellId : FREYA_TANK_DAMAGE_CUTS)
+        if (tank->HasAura(spellId))
+            return true;
+
+    return false;
+}
 }  // namespace
 
 bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI)
@@ -356,24 +372,27 @@ bool IsFreyaAddTankExternalHeld(PlayerbotAI* botAI)
     return freya && freya->GetVictim() != addTank;
 }
 
-bool HasFreyaTankExternal(Player* tank)
+bool HasFreyaTankExternal(Player* tank, uint32 forMs)
 {
     for (FreyaTankExternal const& external : FREYA_TANK_EXTERNALS)
-        if (tank->HasAura(external.spellId))
+    {
+        Aura const* aura = tank->GetAura(external.spellId);
+        if (aura && (aura->GetDuration() < 0 || static_cast<uint32>(aura->GetDuration()) >= forMs))
             return true;
+    }
 
     return false;
 }
 
 bool IsFreyaAddTankCovered(Player* tank)
 {
-    if (HasFreyaTankExternal(tank))
+    if (HasFreyaTankExternal(tank, ULDUAR_FREYA_ADD_TANK_EXTERNAL_LEAD_MS))
         return true;
 
-    if (tank->GetHealthPct() < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT)
-        return false;
+    if (RunningTankDefensive(tank, true, 0))
+        return HasFreyaTankDamageCut(tank);
 
-    return RunningTankDefensive(tank, true, 0) || ReadyTankDefensive(tank, true, 0);
+    return ReadyTankDefensive(tank, true, 0) != nullptr;
 }
 
 char const* GetFreyaTankExternal(PlayerbotAI* botAI, Player*& tank)

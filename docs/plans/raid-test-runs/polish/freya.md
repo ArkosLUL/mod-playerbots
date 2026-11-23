@@ -1887,3 +1887,100 @@ index 18). Fixed:
 - `plague strike on attacker` came off the hold: no DK strategy runs it (nor `icy touch on attacker`), and no Freya
   trace holds either. `Family::DebuffOnAttacker` holds every spread a DPS bot runs; the one melee variant outside it,
   `rend on attacker`, is a tank warrior's.
+
+**User answers (2026-11-23):** Q14 yes, option (c), replacing round 14's 25% rule: only a running own button that
+cuts damage taken (Barkskin, Icebound Fortitude, Shield Wall, Divine Protection) holds back the healers' externals;
+health-only buttons (Survival Instincts, Frenzied Regeneration, Vampiric Blood, Last Stand) no longer do. Q15 yes,
+option (b): the next external may go out once the running one has 1.5s left, so two externals overlap by up to
+1.5s, since a healer mid-cast sends it late. Q16 and Q17 pending.
+
+## Round 16 (on Custom 17b74a9a4, no new pulls)
+
+**Data:** none new. Round 15 (the Gift DoT hold) is merged but not built, so no verdict, stop rule or ranking.
+Window 22's view is `report --boss freya --raid uld --head a88ea2ade --pulls 10`, round 15's traces. Built the
+user's Q14 and Q15 and removed round 14's 25% rule. Ad hoc scripts: none.
+
+**Built** (Freya files only, any size or difficulty, no player branch; a human add tank reads the same auras and
+cooldowns):
+
+- `IsFreyaAddTankCovered`, the cover test behind `freya add tank external`: covered while (1) an external has
+  `ULDUAR_FREYA_ADD_TANK_EXTERNAL_LEAD_MS` (1500) or more left (Q15), else (2) when any own physical button runs
+  (`RunningTankDefensive`), only if one of `FREYA_TANK_DAMAGE_CUTS` is up: Shield Wall 871, Divine Protection 498,
+  Barkskin 22812, Icebound Fortitude 48792 (Q14; the same four rows as the shared table's physical tank rows with
+  a cut, read by aura id because that table exposes no cut for a running button), else (3) with nothing of his
+  running, while a button is ready and affordable (`ReadyTankDefensive`, unchanged: his goes first).
+- The 25% line is gone from the cover test (round 14's `GetHealthPct() < _LAST_RESORT_PCT` return). The constant
+  stays for `freya add tank defensive hold`.
+- `HasFreyaTankExternal(tank, forMs = 0)`: an external with at least `forMs` left. Only the cover test passes the
+  lead.
+- Reader: the `--tanks` cover line splits `both` (its share on a damage cut of his) and adds `two externals` and
+  `no damage cut` (neither his damage cut nor an external), tested.
+
+**Every caller checked:**
+
+- `GetFreyaTankExternal` (the healers' `freya add tank external`) and the healer's `freya.addext` note
+  (`covered` / `none`): both read the new test.
+- `FreyaAddTankDefensiveTrigger` and `FreyaAddTankDefensiveAction` (the add tank's own `freya add tank defensive`):
+  call `HasFreyaTankExternal(bot)` with no lead, so his own buttons still wait out any running external to its
+  end, and `NextTankDefensive` still runs one own button at a time. Unchanged.
+- `freya add tank defensive hold` (`IsFreyaAddTankDefensiveHeld`, the class nodes above 25%) and `freya add tank
+  external hold` (the healers' class externals off everyone but the add tank and the main tank) do not call the
+  cover test. Unchanged; Q16 would change the first.
+
+**What changes per tank class** (`NextTankDefensive` order, physical rows; one trio wave with everything ready):
+
+- Druid (the bear add tank of uld2 and uld3): Barkskin first, which holds the externals as before; Frenzied
+  Regeneration and Survival Instincts now each take one at once, a tick after he presses it. Roster C (Pain
+  Suppression, Guardian Spirit): Barkskin 0-12s, Frenzied Regeneration 12-22 with Pain Suppression 12-20, Guardian
+  Spirit 18.5-28.5, Survival Instincts 28.5-48.5 alone (it waits out Guardian Spirit); before, one layer at a
+  time to 60s. Roster B adds Hand of Sacrifice on Survival Instincts, 28.5-40.5.
+- Death knight (uld1's add tank): Vampiric Blood first, now with an external at once; Icebound Fortitude holds
+  them; Anti-Magic Shell is never offered (physical). Roster A (Pain Suppression, Hand of Sacrifice): Vampiric
+  Blood 0-10 with Pain Suppression 0-8, Hand of Sacrifice 6.5-18.5, Icebound Fortitude 18.5-30.5; before, to 42s.
+  The rune gap is as before: Vampiric Blood unaffordable is not ready, so an external goes and Vampiric Blood
+  waits it out.
+- Warrior (no Freya add tank on the three rosters; roster B's main tank): Last Stand first, now with an external
+  at once; Shield Wall holds them.
+- Paladin (no Freya add tank; roster A's and C's main tank, who can end up holding a Snaplasher): Divine
+  Protection holds them, as before; under Forbearance (a Lay on Hands on him) it is not ready, so they go.
+- Any class, below 25%: round 14 let an external go on top of any own button; now not on a damage cut, and a ready
+  button with nothing running holds them for his press, as before round 14.
+- Any class: an external hands over 1.5s early only when no button of his is ready; with one ready the healers
+  wait and he presses it at the external's end.
+
+So the add tank gets a damage cut from the wave's start and layers on his health buttons, but his chain ends
+11-12s sooner (the cost the user took with Q14), and a long wave's tail goes bare sooner. Windows 21-22's 25-man
+trio waves ran 31.7-40.8s with the add tank alive, window 22's 10-man ones 46.2-78.0s.
+
+**Baseline** (`--tanks`, new fields: `no damage cut` minus `none` is the time under a health button alone):
+
+- Window 22, 25-man: uld1 (DK) 0.0 and 10.0s, uld2 (bear) 24.9 and 0.0s; `both` 0.0s, `two externals` 0.0s in
+  every wave. 10-man: 10.0 and 14.3s, 28.0 and 0.0s, 27.9 and 27.7s.
+- Window 21, 25-man: uld1 10.0 and 7.2s, uld2 19.1s (trio 2's longest holder was the warrior main tank, 19.9s),
+  uld3 21.5 and 0.0s.
+
+**Next window should show** (`freya.py --tanks`):
+
+- `both` above 0 only on health buttons: "0.0s on a damage cut" in every trio wave, but for a class node's last
+  resort under 25%; time under a health button alone (above) well down where an external was in hand.
+- `two externals` at most about 1.5s per handoff from one external to the next, and no gap between them.
+- `freya.addext` casts landing under Frenzied Regeneration, Survival Instincts or Vampiric Blood, none under
+  Barkskin or Icebound Fortitude.
+- The cost: `none` at the end of long trio waves; add-tank deaths to the Snaplasher no more than windows 21-22's
+  (window 21 uld2's bear, risen after dying to lashers; window 22 none at 25-man, and at 10-man uld3's bear bare at
+  the end of trio 2 with every layer spent).
+- Round 15's checks as written there; rounds 1-14 still holding.
+
+**Left:**
+
+- If add tanks die under a health button once the externals went on the one before (Survival Instincts after
+  Guardian Spirit on roster C), the question is whether his health buttons should stop waiting out an external,
+  so they run alongside it.
+- A ready button he cannot cast (a risen bear in caster form for Frenzied Regeneration or Survival Instincts)
+  holds the externals until he can, now at any health, as before round 14.
+- The 1.5s lead covers a handoff between externals only; one from his damage cut to an external still waits
+  for its end (windows 15-19's handoffs: 0.0-0.6s, twice 1.2-1.7s).
+
+**Questions:** none new; Q16 and Q17 pending as written in round 15.
+
+**Shared code:** none changed; `RunningTankDefensive` and `ReadyTankDefensive` are read, not edited.
