@@ -874,7 +874,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     }
 
     if (!approaches.empty() || distance <= ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE ||
-        bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT)
+        bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT || MimironPhase1Active(botAI))
         return approaches;
 
     std::optional<MimironApproach> leastBurn;
@@ -1727,7 +1727,7 @@ namespace
 MimironRapidBurstWindow ReadMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
     MimironRapidBurstWindow window;
-    if (!botAI || !bot || !vx001 || !vx001->IsAlive())
+    if (!botAI || !bot || !vx001 || !vx001->IsAlive() || vx001->GetVehicleBase())
         return window;
 
     std::list<Creature*> aims;

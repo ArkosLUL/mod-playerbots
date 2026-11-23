@@ -348,12 +348,13 @@ plans for trigger and action alike:
   9.6-10.8k, 42-49% of a healer's pool, so one leaves it standing and two kill it; a healer at 91% walked
   a leg past five and died to two.
 - A bot farther than `ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE` (30) from its goal with none of these, at
-  60% or more, walks whichever of the straight leg and the detour waypoints burns least, mines still
-  refused (`stranded`). Held, bots in the phase 1 field sat out the handover walk-in 40-70 yd from
-  their phase 2 slots and died in its opening seconds (16 of 26 phase 2 deaths over three windows),
-  their healers swinging between `reach party member to heal` and the slot. A few ticks cost less.
-- Phase 1 keeps holding: its camp leaves its fire by switching anchors, and a stand-in between 6 yd rows
-  is a Napalm pair.
+  the crossing's 75% or more, walks whichever of the straight leg and the detour waypoints burns least,
+  mines still refused (`stranded`); its first tick leaves it above the walking dodge's 60%. Held, bots in
+  the phase 1 field sat out the handover walk-in 40-70 yd from their phase 2 slots and died in its
+  opening seconds (16 of 26 phase 2 deaths over three windows), their healers swinging between `reach
+  party member to heal` and the slot. A few ticks cost less.
+- Phase 1 keeps holding, `stranded` included: its camp leaves its fire by switching anchors, and a
+  stand-in between 6 yd rows is a Napalm pair.
 
 `mimiron.approach` notes each non-direct leg, and `none` when no ring is clear, without which an empty
 answer reads exactly like the trigger never firing.
@@ -678,7 +679,7 @@ effect 1 on VX-001. The centreline is `VX-001 → the Burst Target`, fixed for 3
 moves. **No player carries 63382**, so a read keyed on a raid member's aura sees no cone:
 `GetMimironRapidBurstWindow` takes the target holding VX-001's 63382, else VX-001's own aura and
 facing. Phase 2 only: `_events.RescheduleEvent((_phase == 2 ? EVENT_SPELL_RAPID_BURST :
-EVENT_HAND_PULSE), 14.5s)`.
+EVENT_HAND_PULSE), 14.5s)`, so the read skips a VX-001 riding the chassis.
 
 **60° is measured.** Bucketing living bots past 14 yd (beyond `IsWithinBoundaryRadius`) by bearing off
 VX-001 the tick before each hit, the hit rate holds at 74-83% to 30° and falls to **9%** at 30-40°, ~1%

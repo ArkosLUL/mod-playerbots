@@ -805,3 +805,24 @@ casts in window 15 then had the target sampled).
   slot.
 
 **Questions for the user:** none. Q3's measurement is the next window's.
+
+**Review.**
+
+- `stranded` also ran in phase 1: the phase 1 test in `GetMimironSlotApproaches` guards only the
+  substitute ring, against the findings doc's "phase 1 keeps holding". Window 15 had ranged over 30 yd off
+  their `p1stack` slot with fire down for 174-511 samples a pull (~240 ms each). Now skipped while
+  `MimironPhase1Active`.
+- Its 60% gate was looser than the 75% a 4 yd `cross` needs: one Flames tick (3.6-4.1k in uld2, 15-19% of a
+  caster) took a 60-75% walker under the walking dodge's 60%, which threw it off the leg. Now the crossing's
+  75%; uld2's six stragglers stood at 100% at the walk in.
+- It still runs in Hold, phase 2, phase 3 and phase 4, not only in Late and WalkIn. Window 15 had bots over
+  30 yd off their slot with fire down for 315-1084 `p3wedge` and 601-928 phase 4 `hmwedge` samples a pull.
+  Next window, add: `stranded` notes by phase, and Flames and deaths on a bot within 5 s of its note.
+- The Rapid Burst read is skipped while VX-001 rides the chassis: phase 4 casts Hand Pulse, and the read is
+  a 100 yd grid search per bot pass.
+- Left: a `stranded` waypoint can end within 30 yd of the slot with a burning second leg, and the bot then
+  holds on the clean waypoint. On uld2's six stragglers every least-burn waypoint's second leg was clean.
+- Checked: uld2's stragglers (six bots 51-54 yd out at phase 2, five dead 2:42.7-2:47.9, Uldyap's notes as
+  cited, no arc spread act between its slot and phase 2, so an empty answer by elimination); Rapid Burst
+  casts target Burst Targets and no roster aura row for 63382 exists in windows 13-15; 63382 puts effect 0
+  on the target and effect 1 on VX-001 (Spell.dbc).
