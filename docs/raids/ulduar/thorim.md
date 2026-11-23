@@ -311,13 +311,29 @@ shelter table is keyed by slot and a live re-derivation moves the key. Melee tak
 radius 8.8 around Thorim's live position**, three slots at the ring anchor bearing +90 / +180 / +270
 degrees, which leaves the whole tank side clear and puts the stacks 12.4 yd apart. Slots are sticky
 per guid, handed out least-loaded so the melee spread evenly, and kept while a bot is dead, or a
-rezzed bot's slot comes back a quarter turn off. **`RingAnchorBearing` reads only the tank spot**: the
-live tank is deliberately not an input, as the rule rather than a fallback, so the ring cannot rotate
-as the boss shuffles. Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring
-recomputed from a moving boss leaves the bot sliding in place, and a moving bot casts nothing. The
-trigger sets the arrival latch on a "stay" answer and the action clears it right before it moves,
-since the action only runs when there is a move; set in a trigger it only widens the tolerance, so a
-second ask that tick still says stay.
+rezzed bot's slot comes back a quarter turn off. **`RingAnchorBearing` reads only the two tank spots**
+(the bearing to their midpoint): the live tank is deliberately not an input, as the rule rather than a
+fallback, so the ring cannot rotate as the boss shuffles. Arrival uses a 3 yd / 5 yd deadband, because a
+tight one against a ring recomputed from a moving boss leaves the bot sliding in place, and a moving bot
+casts nothing. The trigger sets the arrival latch on a "stay" answer and the action clears it right
+before it moves, since the action only runs when there is a move; set in a trigger it only widens the
+tolerance, so a second ask that tick still says stay.
+
+**The anchor latches where he lands and re-latches only when that ring reaches a tank.** A taunt from
+the west off-tank spot can re-seat him south-west of the tank spot for good
+([trap](#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it)), up to 4.5 yd off it and 3.2 off
+the off-tank spot. The landing anchor then put a slot point inside 8 yd of the holder (median 4.9-5.4
+yd) in 61-94% of settled snapshots in four pulls, and an 8-hop Chain Lightning through that slot killed
+both tanks at P2 +57 s (62k and 92k): a wipe. `RelatchRingAnchor` re-latches while he stands still on a
+tank, when a latched slot point lies within 8 yd (the 5 yd jump plus both 1.5 reaches) of either tank
+spot and the live anchor's ring clears them by `ULDUAR_THORIM_RING_ANCHOR_GAIN` (0.5 yd) more. Each slot
+takes the new bearing that keeps the largest turn smallest, the arrival latches drop, and the
+`thorim.ringspot` bearing moves. Over 18 replayed pulls: a slot point within 8 yd of a tank spot in 42%
+of settled snapshots, 2% with the re-latch, at 0-3 re-latches a pull and none in eight of nine clear pulls.
+A bearing threshold can't separate the cases (4-6 yd from him, 20° of drift already puts a slot in the
+jump; a 25° rule left 16%), and the tank spot alone as anchor leaves the waiting tank 6.4-7.0 yd from a
+slot whenever he sits south-west (midpoint: 8.2-9.0). At his deepest the pair spans 50° of his circle
+and the best ring still leaves a slot 7.7 yd from the waiting tank.
 
 **The deadband breaks for a hazard.** At ring radius a whole cone dodge is a chord of about 5 yd, so a
 settled bot in the cone never moved: **nine cone hits over two pulls** had a safe spot under 5 yd away.
@@ -399,7 +415,7 @@ instant). A bot holds its bearing while a zone sits on it, so giving zones up co
 at 4.3-4.9k, against 40-90k once for a hop. **The anchor term is still angle-only** — the tank sits at
 r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed. Nor does it
 count the waiting tank, whose [spot](#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it) is
-placed off the ring instead.
+placed off the ring instead; only the anchor re-latch measures yards to both spots.
 
 **A rotation does not always exist.** With a median **4 zones up at once (max 6)**, the 11 yd
 clearance leaves under 105° of ring free — too little for three slots plus the anchor — in
@@ -595,8 +611,8 @@ fixed point: an off-tank spot off the boss's live position walked the pair **256
 2 against **39 yd** in a kill. The off-tank's is **(2107.25, −252.65, 419.371), 3.5 yd west** of the tank
 spot, inside the ring's 5.0 yd reposition tolerance, so a taunt trade does not unlatch the ring;
 navprobe settles that Z, with a straight path from the tank spot. The pair still bridges (3.5 yd against
-the 8 yd jump), but **west keeps the chain off the ring**. Thorim rests 4.8-7.4 yd south-east of the tank
-spot, so the old spot 3.5 yd east stood 2.9-5.7 yd from his centre and 7.1 yd from slot 2's default
+the 8 yd jump), but **west keeps the chain off the ring**. Thorim rested 4.8-7.4 yd south-east of the
+tank spot, so the old spot 3.5 yd east stood 2.9-5.7 yd from his centre and 7.1 yd from slot 2's default
 point: a chain reaching either tank ran on into slot 2, three lethal casts in three hard-mode pulls, two of
 them tank deaths, and the bridge escape can't clear it (slot 2's point isn't clear). Replayed on six
 25-man pulls, a non-tank body stood within 8 yd of the old spot in 84-100% of settled phase 2 snapshots
@@ -608,6 +624,9 @@ them tank deaths, and the bridge escape can't clear it (slot 2's point isn't cle
 - **Melee reach**: 7.1-10.2 yd from his centre, past the 9.0 yd where `reach melee` fires in most
   snapshots of two pulls of six. Reach is exempt from the tank anchor guard, so the waiting tank steps in;
   the positioning row walks him back only past 2.5 yd (its 1 yd is net of his 1.5 reach).
+- **His side**: a taunt from it can leave him south-west of the tank spot, for most of the phase in four
+  of fifteen pulls, where a ring anchored at his landing sits a slot on the holder; the ring
+  [re-latches](#phase-2) for it.
 
 Sif's Frost Nova lands farther off: her floor spots came 8.1-9.8 yd from it at nearest, the old spot
 2.5-8.0.
@@ -1073,11 +1092,14 @@ player was on the instance left the corridor standing while he stayed in the are
   the DPS pickers and charges off him: `tank face`, `reach melee` or a Feral Charge would drag the Giant into
   the adds. Taunts stay. Costs: Stomp and Rune Detonation (15 yd around a random player) land nearer the
   squad, and the balcony walk starts ~30 yd lower, +4 s from his death to the balcony hit. Followers, behind
-  a bot or a real player alike, take the leader's waypoint; between waypoints they walk to him once more
-  than 25 yd (healers 20 yd) behind, except a non-healer fighting a gauntlet mob in combat within the 50 yd
-  pick range (`ThorimGauntletFighting`): that tether fought `reach melee` whenever he walked on mid-fight,
-  116-185 DPS bot-seconds a pull of moving without damage, three quarters of it on the Honor Guards and
-  Giant. The gate walk re-adds follow-master only when the leader is the bot's master.
+  a bot or a real player alike, take the leader's waypoint, also from an earlier waypoint of the lane
+  unless fighting: placing only bots off the lane left a squad on waypoints 0-1 31-43 yd behind a leader
+  on 3, whose 30 yd hold stood 7.5 s until a Runic Smash dodge moved everyone. Between waypoints they walk
+  to him once more than 25 yd (healers 20 yd) behind, except a non-healer fighting, which means targeting
+  a gauntlet mob in combat within the 50 yd pick range (`ThorimGauntletFighting`): that tether fought
+  `reach melee` whenever he walked on mid-fight, 116-185 DPS bot-seconds a pull of moving without damage,
+  three quarters of it on the Honor Guards and Giant. The gate walk re-adds follow-master only when the
+  leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s, against the ~28 s opening wait a human led squad accepts. The corridor
   fights set the clock. Measured on 25-man (fifteen bot-led pulls, before the lever wait and the Colossus
@@ -1092,7 +1114,10 @@ player was on the instance left the corridor standing while he stayed in the are
   late. With the Giant hold (three pulls, its lock still refusing the walk down): the Giant p50 3-5 yd
   from the spot, but adds and Giant still 53-60 s, since the squad kills the adds first and the Giant
   alone then takes 20-23 s, and his death to the balcony hit 20.5-22.8 s; phase 2 179-186 s after the
-  lever, 8.5-17 s late.
+  lever, 8.5-17 s late. Walk-down unlocked (three pulls): the leader on the hold spot 4.3-10.7 s after the
+  Giant took him (12.2-15.1 before), adds and Giant 51-56 s; phase 2 162-207 s after the lever, one hard
+  mode with 8 s to spare, the others 10.6 and 36.7 s late (the slowest lost 21 s in the corridor, 7.5 of
+  them to the follower stall above).
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,

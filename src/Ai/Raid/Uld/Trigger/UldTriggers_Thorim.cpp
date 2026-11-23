@@ -78,7 +78,7 @@ bool ThorimGauntletPositioningTrigger::IsActive()
         if (!ThorimGauntletLaneIndexInLane(bot, leftLane, botIndex))
             return bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 
-        return false;
+        return botIndex < leaderIndex && !ThorimGauntletFighting(botAI, bot);
     }
 
     return ThorimTrailsGauntletLeader(botAI, bot, leader);

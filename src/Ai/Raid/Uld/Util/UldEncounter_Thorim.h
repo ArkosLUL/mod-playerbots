@@ -107,6 +107,7 @@ inline constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.8f;
 inline constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 
 inline constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;
+inline constexpr float ULDUAR_THORIM_RING_ANCHOR_GAIN = 0.5f;
 
 inline constexpr float ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP = 5.0f;
 inline constexpr float ULDUAR_THORIM_RING_CHAIN_MARGIN = 0.5f;
