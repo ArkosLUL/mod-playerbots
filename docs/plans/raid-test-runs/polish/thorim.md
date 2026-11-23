@@ -1067,3 +1067,21 @@ farther down (~4-5 s): about 1-4 s a pull. The hold's case is one place to fight
    under 10k/s for 6-9 s after the pull and the Colossus took 31-36 s against 19-29 before. Extend each lane by one index-matched
    waypoint near y −360 (left x ~2242, right x ~2212, ~39 yd from him, picked from trace positions and navprobed) so the Runic Smash
    dodge holds the squad there when the leader goes on? Saves ~6-9 s a pull. Recommended: yes.
+
+**Review (round 11).** The holder cause holds: in uld2 Heroism 32182 sat on both tanks 3:35.2-4:15.2, Uldyaa took Thorim at 4:06.5
+from (−2.7, −0.5), 2.75 yd exact, with no positioning move until the swap at 4:14.5, Uldyab 0.9 yd from it on the off-tank spot.
+32182 carries aura 61 (`SPELL_AURA_MOD_SCALE`, +30%) and `Player::SetObjectScale` sets combat reach to 1.5 × scale, so `GetDistance`
+≤ 1 passed to 2.95 yd. Giant hold: window 11 uld3's Giant walked the ramp at ~7.3 yd/s and stood on the hold spot at 2:21.2; GO
+194558 is `DATA_THORIM_SECOND_DOORS`, opened only by the Giant's `JustDied` and closed by Thorim's `CloseDoors` on reset. The hold
+is the user's answer, the holder a bug; no size, mode or player branch (a real gauntlet leader keeps the job); Thorim files only.
+`pb-check` passes. Fixed:
+- `ThorimBalconyWaypointReached` also counts a waypoint once the bot's y passes it, a measure of progress only on the balcony: a
+  ramp-box bot at y > −408 read as past `BALCONY_1` (> −396: `BALCONY_2`) and was aimed at a balcony waypoint from the floor below.
+  Waypoints now count only above the floor line. In window 11 uld3 every box bot stood at y < −428 when the Giant died.
+- `ThorimBalconyGuardMultiplier` still zeroed phase 2's reach only above the floor line while the guard rule now covers the ramp box;
+  it takes `ThorimOnBalconySide` too, so a phase 2 straggler on the ramp is not reach-walked back through the corridor.
+- The findings doc said the doors stand in for the Giant scan below the line; the walk needs both.
+
+Left: the hold spot is not navprobed (no Docker in the review), though the Giant and players stood on it and walked the ramp to it.
+The leader walks the Giant ~54 yd down with his back to him (~7 s, no dodge, parry or block from behind): watch the Giant's melee on
+him during the walk.

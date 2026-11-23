@@ -166,12 +166,14 @@ centre → east wall → centre. The chain's worst leg clears a bunny by **15.8 
   or below it inside the ramp box (`ULDUAR_THORIM_RAMP_BOX_*`: x 2150-2235, y −445..−385) once the second
   Colossus doors (GO 194558, (2135.08, −417.905, 440.0)) stand open, which only his death does. The
   [hold](#known-gaps) kills him at z ~426 with the squad at z 412-426; on height alone, 8 of 11 bots of a pull
-  whose Giant died at z 427.6 walked back down the corridor. Below the line the doors stand in for the
-  Giant scan, whose cached miss reads "Giant dead".
+  whose Giant died at z 427.6 walked back down the corridor. Below the line the doors back up the
+  Giant scan, whose cached miss reads "Giant dead". A balcony waypoint counts as reached only above the line:
+  the y-passed test would put a ramp bot at y > −408 past `BALCONY_1` (> −396: `BALCONY_2`) and aim it
+  at a balcony waypoint from below.
 - **`thorim balcony guard` holds the generic movers** for a corridor bot on that side while the
   walk has somewhere to go: `follow` would take the only walkable way down to the master, 300 yd back
   through the corridor. `AvoidAoe` stays, since Rune Detonation lands up there. In phase 2
-  `ThorimBalconyGuardMultiplier` also zeroes `ReachTargetAction` up there: a reach walks the bot back
+  `ThorimBalconyGuardMultiplier` also zeroes `ReachTargetAction` on that side: a reach walks the bot back
   through the hallway, and pulls a ranged bot off its wait spot. The walk has no master check and sits
   at `ACTION_RAID + 2`, over the corridor walk, which has no waypoint to offer up there.
 - **A pet chasing down the corridor pulls packs the gauntlet squad has not reached**, which is what

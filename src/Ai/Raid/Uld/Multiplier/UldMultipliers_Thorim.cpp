@@ -83,8 +83,7 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
     if (!action || (!dynamic_cast<AttackAction*>(action) && !dynamic_cast<ReachTargetAction*>(action)))
         return 1.0f;
 
-    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD ||
-        GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+    if (!ThorimOnBalconySide(bot) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return 1.0f;
 
     if (ThorimIsTargetSelectionAction(action))

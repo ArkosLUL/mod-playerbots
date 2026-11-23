@@ -133,6 +133,9 @@ std::array<Position const*, ULDUAR_THORIM_BALCONY_WAYPOINTS> const balconyWaypoi
 
 bool ThorimBalconyWaypointReached(Player const* bot, uint8 index)
 {
+    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
     Position const& here = GetThorimBalconyWaypoint(index);
     return bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
            bot->GetPositionY() > here.GetPositionY();
