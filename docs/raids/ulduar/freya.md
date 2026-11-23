@@ -281,7 +281,9 @@ the far side of Freya from `GetFreyaRangedCampAnchor`: it only reorders spots th
 tank never takes a longer trip or drags her toward the back line. Melee re-close on the generic `reach
 melee`, except into a live bomb ([movement guards](#movement-guards)). The reposition latches for at most
 `ULDUAR_FREYA_TANK_BOMB_LATCH_MS` (3 s): enough to walk the clearance at 7 yd/s, short enough that a tank
-stopped on the way doesn't hold Freya still for a whole volley.
+stopped on the way doesn't hold Freya still for a whole volley. It holds only while his last `MoveTo` is
+that spot (not yet verified in a pull): once the hold's walk home replaced it, the escape sat idle 1.8s
+with him inside `_AVOID_RADIUS` of six bombs.
 
 **The drag clears Freya, not only the tank** (not yet verified in a pull). She stops in reach 6-7 yd
 in front of him, so clearing him alone left her **5.9-8.2 yd from a bomb** in 3 of 4 volleys, her
@@ -298,8 +300,8 @@ water, the melee ring and half the raid strung out behind her. Past `ULDUAR_FREY
 from `ULDUAR_FREYA_TANK_ANCHOR` the `preferNear` flips to the anchor, and `freya tank hold freya`
 (`ACTION_RAID + 1`, under the escape, which must still be able to leave the leash) walks her home,
 only for the bot she is hitting, and waits while a live bomb lies within `_CLEAR_RADIUS` of the anchor or
-`_AVOID_RADIUS` of the walk (not yet verified in a pull): the escape only fires inside `_AVOID_RADIUS`, so
-the walk home once took the main tank onto the anchor's bombs 0.9s before they blew, 100% to 11%, and
+`_AVOID_RADIUS` of the walk (not yet verified in a pull): the walk home once took the main tank onto the
+anchor's bombs, the escape idle on that stale latch until 0.9s before they blew, 100% to 11%, and
 Freya's next swing killed him. It walks onto the anchor itself, since she stops a boss length short in
 his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched for at most
 `_TANK_HOLD_LATCH_MS` (3 s) because a re-issued `MoveTo` clears the walk it repeats. The
@@ -671,8 +673,8 @@ dodge 1.9s before that bot died. Freya's nodes read every hazard at once, so it 
 `freya nature bomb melee guard` blocks `set behind` for non-tank melee with a bomb within
 `_HAZARD_SEARCH_RADIUS`: Freya faces her tank, away from the bombs, so "behind" walks a bot from its
 in-reach spot toward them. `freya nature bomb reach guard` blocks a non-tank melee bot's `reach melee` and
-charges (`Family::Charge`) whose stop on its side of the target lies, or whose straight walk passes, within
-`_AVOID_RADIUS` of a live bomb, bombs already covering the bot excepted: once the escape's latch dropped
+charges (`Family::Charge`) whose stop on its side of the target lies within `_AVOID_RADIUS` of a live bomb,
+or whose straight walk passes within it of one not already covering the bot: once the escape's latch dropped
 (a beam over its spot, a refused `MoveTo`), a Charge and an Intercept landed two warriors in three bombs
 under a second before they blew. It holds only until the bomb blows or the tank drags Freya clear (not yet
 verified in a pull).

@@ -1560,9 +1560,9 @@ wave in the ten kills of windows 14-19: 74-107s, melee 46.5-62.5k/s (`burn.py`).
 
 **Next window should show** (`freya.py --bombs`, `--tanks`; `postmortem.py --vetoes`):
 
-- `--bombs`: `freya move away nature bomb` (melee), `freya tank hold freya`, charge and intercept orders into a live bomb
-  near 0 (window 19: 14 of 28, 2 of 2, 4 of 4 in uld1); no bomb death "walked in" by any of them; vetoes under `freya
-  nature bomb reach guard`.
+- `--bombs`: `freya move away nature bomb` (melee), `freya tank hold freya` and charges (Charge, Intercept, Feral Charge -
+  Cat) into a live bomb near 0 (window 19 uld1: 14 of 28, 2 of 2, 3 of 3); no bomb death "walked in" by any of them;
+  vetoes under `freya nature bomb reach guard`.
 - Nature Bomb deaths well under windows 14-19's 11 in 18 pulls; no main tank death after bomb hits on his walk home.
 - Melee damage over the burn no more than ~10% under 46.5-62.5k/s; burn time no longer than 74-107s.
 - Round 12's checks as written there; rounds 1-11 still holding.
@@ -1590,3 +1590,24 @@ wave; a position question if it repeats); ranged Nature Bomb deaths standing in 
 11. and 13. pending as written in rounds 11 and 12.
 
 **Shared code:** none changed; `SegmentCrossesCircle` (`EncounterHelpers`) is read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files only.
+Reproduced: uld1's Intercept 6:20.656 and Charge 6:21.029 into three bombs; the re-sweep walks behind w15 uld3 Uldzag
+6:31.893 and w17 uld3 Uldzaw 7:28.122; uld1's hold walk 5:40.114 with bombs 2.5-12.0 yd from the anchor and its walk 0.5-3.5
+yd from them. The reach guard's stop or walk test catches all 8 charges that landed inside 11 yd of a bomb in windows 15-17
+and 19, two Feral Charge - Cat (which leaps behind the target) among them.
+
+- Corrected: the tank escape did not wait for 11 yd. Its trigger was live from 5:41.21 (10.6 yd), 2.7s before the blast,
+  but its 3s latch on the 5:39.891 kite spot returned true without moving him, the hold's `MoveTo` having replaced that walk,
+  until 5:42.89; its next move came at 5:43.002. Fixed: the latch also needs his last `MoveTo` to be the kite spot.
+- Fixed: `--bombs` counted each charge twice (the triggered Intercept stun 20253, Charge 34846 and Feral Charge - Cat 61138
+  carry the same name); now once per cast, pinned by the test. The uld1 baseline above is corrected (3 of 3, not 4 of 4).
+- Left, no payoff seen: the first escape's walk-clear preference. In windows 15-17 and 19 first escapes (from inside a
+  bomb's avoid radius) crossed another live bomb in melee 40 of 319 and ranged and healers 2 of 451, none then hit by it;
+  melee may now land out of reach instead, so read it with the burn check.
+- Left: the hold yields only before a walk. A volley landing on a walk in flight leaves the spline running; the escape
+  catches it at 11 yd, now on time. Volleys are 18s apart, so rare.
+- Left, a question for a later round: no bomb node covers a tank other than the main tank (`freya near nature bomb`
+  skips tanks, `freya tank nature bomb` is main tank only, "assist tank 0 is excluded" for the Conservator's spore, which
+  phase 2 has none of). uld1's off tank Uldxam stood 8.7 yd from the anchor's bombs on `reach melee` and took four hits at
+  5:43.93.

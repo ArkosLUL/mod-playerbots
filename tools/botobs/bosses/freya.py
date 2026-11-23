@@ -53,7 +53,8 @@ What the generic views miss here:
   are left out: they never bail.
 - **A bomb is live for its fuse from the snapshot that first shows it.** `--bombs` counts an order given from
   outside every live bomb's avoid radius whose straight walk passes inside one, and a charge whose landing (the
-  snapshot `CHARGE_LAND_MS` after the cast) is inside one; "then hit" is a Nature Bomb hit from such a bomb on that
+  snapshot `CHARGE_LAND_MS` after the cast) is inside one, once per cast: the triggered stun or leap carries the
+  charge's name too and is skipped; "then hit" is a Nature Bomb hit from such a bomb on that
   bot within the fuse. A bomb death "walked in" when such an order or charge reached a bomb that hit it.
 """
 from __future__ import annotations
@@ -721,7 +722,7 @@ def bomb_counts(trace: Trace) -> dict:
               {guid for guid, spot in lit if segment_gap(here, dest, spot) < avoid})
     for rec in trace.of("cast"):
         name = trace.spells.get(rec.get("sp"))
-        lit = live(rec["t"]) if name in CHARGES else []
+        lit = live(rec["t"]) if name in CHARGES and not rec.get("tr") else []
         landed = at(trace, rec.get("s"), rec["t"] + CHARGE_LAND_MS) if lit else None
         if landed is None:
             continue

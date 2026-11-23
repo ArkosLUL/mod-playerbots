@@ -373,8 +373,10 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
     };
 
     uint32 const now = getMSTime();
+    LastMovement const& last = AI_VALUE(LastMovement&, "last movement");
 
     if (kiteSpotMs && getMSTimeDiff(kiteSpotMs, now) < ULDUAR_FREYA_TANK_BOMB_LATCH_MS && stillClear(kiteSpot) &&
+        kiteSpot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= CONTACT_DISTANCE &&
         !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(kiteSpot.GetPositionX(), kiteSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
