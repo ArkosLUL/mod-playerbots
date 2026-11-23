@@ -1,6 +1,8 @@
 #include "ToCActions_FactionChampionsDefence.h"
 
 #include <algorithm>
+#include <array>
+#include <utility>
 #include <vector>
 
 #include "EncounterHelpers.h"
@@ -68,6 +70,22 @@ bool ShiftForCast(PlayerbotAI* botAI, Player* bot, uint32 spellId)
 
     botAI->RemoveShapeshift();
     return true;
+}
+
+uint32 StanceForCast(Player* bot, uint32 spellId)
+{
+    static constexpr std::array<std::pair<ShapeshiftForm, uint32>, 3> STANCES = {
+        {{FORM_BATTLESTANCE, 2457}, {FORM_DEFENSIVESTANCE, 71}, {FORM_BERSERKERSTANCE, 2458}}};
+
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || bot->getClass() != CLASS_WARRIOR || info->CheckShapeshift(bot->GetShapeshiftForm()) == SPELL_CAST_OK)
+        return 0;
+
+    for (auto const& stance : STANCES)
+        if (info->CheckShapeshift(stance.first) == SPELL_CAST_OK && bot->HasSpell(stance.second))
+            return stance.second;
+
+    return 0;
 }
 }
 
@@ -336,6 +354,9 @@ bool FactionChampionsPeelAction::Execute(Event /*event*/)
     if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId) ||
         !ShiftForCast(botAI, bot, spellId))
         return false;
+
+    if (uint32 const stance = StanceForCast(bot, spellId))
+        return botAI->CastSpell(stance, bot);
 
     return botAI->CastSpell(spellId, champion);
 }

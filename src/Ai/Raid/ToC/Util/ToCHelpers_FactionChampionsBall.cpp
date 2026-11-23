@@ -90,7 +90,7 @@ constexpr float FROST_TRAP_SLICK = 10.0f;
 constexpr float DISENGAGE_DIST = 15.0f;
 
 constexpr float KITE_CLEAR = 30.0f;
-constexpr float KITE_STEP = 15.0f;
+constexpr std::array<float, 2> KITE_STEPS = {15.0f, 7.5f};
 constexpr uint32 KITE_STEP_MS = 2500;
 constexpr float KITE_HEALER_GAP = 10.0f;
 constexpr float KITE_HOLD = 45.0f;
@@ -406,6 +406,58 @@ bool Healed(float gap, float nowGap)
     return gap <= KITE_HEAL_REACH || gap < nowGap || nowGap == std::numeric_limits<float>::max();
 }
 
+bool KiteHop(PlayerbotAI* botAI, BallState const& state, Player* bot, std::vector<Unit*> const& chasers,
+             Position& hop, bool& shortHop)
+{
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    for (Unit* chaser : chasers)
+    {
+        sumX += chaser->GetPositionX();
+        sumY += chaser->GetPositionY();
+    }
+
+    std::vector<Player*> const healers = HealersOnMap(bot, state);
+    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
+    Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
+    float const nowGap = HealerGap(bot, healers, bot->GetPosition());
+    for (float step : KITE_STEPS)
+    {
+        bool found = false;
+        bool bestHealed = false;
+        float bestClear = 0.0f;
+        float bestGap = 0.0f;
+        for (float turn : RUN_TURNS)
+        {
+            Position const target = Along(bot->GetPosition(), Rotate(away, turn), step);
+            if (!Clear(target, hazards) || NearHealer(bot, healers, target))
+                continue;
+
+            float const gap = HealerGap(bot, healers, target);
+            bool const healed = Healed(gap, nowGap);
+            float const clear = MeleeClearance(botAI, target);
+            bool const better = !found || (healed && !bestHealed) ||
+                                (healed == bestHealed && (healed ? clear > bestClear : gap < bestGap));
+            if (better)
+            {
+                found = true;
+                bestHealed = healed;
+                bestClear = clear;
+                bestGap = gap;
+                hop = target;
+            }
+        }
+
+        if (found)
+        {
+            shortHop = step != KITE_STEPS.front();
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool CycloneSpot(BallState& state, Player* druid, Unit* kill, Unit* healer, Position const& centre,
                  std::vector<EncounterHelpers::HazardCircle> const& hazards, Position& spot)
 {
@@ -535,7 +587,9 @@ void BreakChasedCasts(BallState& state, PlayerbotAI* botAI, std::vector<Player*>
                                                        FactionChampionsStrikeReach(chaser, member) <=
                                                    chaser->GetSpeed(MOVE_RUN) * leftSec;
                                         });
-        if (!caught || !KiteFree(state, botAI, member))
+        Position hop;
+        bool shortHop = false;
+        if (!caught || !KiteFree(state, botAI, member) || !KiteHop(memberAI, state, member, chasers, hop, shortHop))
             continue;
 
         state.castBreaks[member->GetGUID()] = now;
@@ -1055,52 +1109,19 @@ bool FactionChampionsKite(PlayerbotAI* botAI, Position& spot)
         state->kites.erase(kite);
     }
 
-    float sumX = 0.0f;
-    float sumY = 0.0f;
+    Position best;
+    bool shortHop = false;
+    if (!KiteHop(botAI, *state, bot, chasers, best, shortHop))
+        return false;
+
     float nearest = std::numeric_limits<float>::max();
     for (Unit* chaser : chasers)
-    {
         nearest = std::min(nearest, bot->GetExactDist2d(chaser));
-        sumX += chaser->GetPositionX();
-        sumY += chaser->GetPositionY();
-    }
-
-    std::vector<Player*> const healers = HealersOnMap(bot, *state);
-    std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-    Vec const away = Unit2(bot->GetPositionX() - sumX / chasers.size(), bot->GetPositionY() - sumY / chasers.size());
-    float const nowGap = HealerGap(bot, healers, bot->GetPosition());
-    bool found = false;
-    bool bestHealed = false;
-    float bestClear = 0.0f;
-    float bestGap = 0.0f;
-    Position best;
-    for (float turn : RUN_TURNS)
-    {
-        Position const target = Along(bot->GetPosition(), Rotate(away, turn), KITE_STEP);
-        if (!Clear(target, hazards) || NearHealer(bot, healers, target))
-            continue;
-
-        float const gap = HealerGap(bot, healers, target);
-        bool const healed = Healed(gap, nowGap);
-        float const clear = MeleeClearance(botAI, target);
-        bool const better = !found || (healed && !bestHealed) ||
-                            (healed == bestHealed && (healed ? clear > bestClear : gap < bestGap));
-        if (better)
-        {
-            found = true;
-            bestHealed = healed;
-            bestClear = clear;
-            bestGap = gap;
-            best = target;
-        }
-    }
-
-    if (!found)
-        return false;
 
     state->kites[guid] = {now, best};
     RaidObs::Note(bot, "fc.kite",
-                  std::to_string(chasers.size()) + " melee, " + std::to_string(static_cast<int>(nearest)) + " yd");
+                  std::to_string(chasers.size()) + " melee, " + std::to_string(static_cast<int>(nearest)) + " yd" +
+                      (shortHop ? ", short" : ""));
     spot = best;
     return true;
 }

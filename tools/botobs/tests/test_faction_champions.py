@@ -1655,6 +1655,69 @@ class HunterDisarm(unittest.TestCase):
                       " otherwise", out.getvalue())
 
 
+def swap_pull() -> list[dict]:
+    # the rogue dies at 4 s, the warrior swaps at 6 s, disarms the Hunter at 6.2 s and is back at 7.5 s; its second
+    # swap at 15 s gets no Disarm and no stance back
+    roster = [{"g": WARRIOR, "n": "Blade", "r": "melee", "c": 1, "h": 0},
+              {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": RUJKAH_C, "en": 34448, "n": "Ruj'kah", "b": 1},
+        cast(-500, WARRIOR, fc.SPELL_DEFENSIVE_STANCE, WARRIOR),
+        note(2000, MAGE, fc.KILL, RUJKAH_C),
+        cast(6000, WARRIOR, fc.SPELL_DEFENSIVE_STANCE, WARRIOR),
+        cast(6200, WARRIOR, fc.SPELL_DISARM, RUJKAH_C),
+        cast(7500, WARRIOR, 2458, WARRIOR),
+        cast(15000, WARRIOR, fc.SPELL_DEFENSIVE_STANCE, WARRIOR),
+        note(16000, MAGE, fc.KILL, 0),
+    ]
+    for when in range(0, 20001, 500):
+        units = [placed(WARRIOR, 0.0, 0.0, 100.0, RUJKAH_C),
+                 placed(ROGUE, 0.0, 0.0, 0.0 if when >= 4000 else 100.0, RUJKAH_C),
+                 placed(MAGE, 0.0, 0.0, 100.0, RUJKAH_C), placed(RUJKAH_C, 5.0, 0.0, 100.0, MAGE)]
+        records.append({"t": when, "e": "snap", "u": units})
+    records.append({"t": 20000, "e": "end", "out": "wipe"})
+    return records
+
+
+class StanceSwap(unittest.TestCase):
+    def test_a_swap_reads_its_disarm_its_way_back_and_the_uncovered_kill_target_time(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in swap_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            self.assertEqual(fc.stance_swaps(trace), {"swaps": 2, "disarmed": 1, "on_hunter": 1, "back": [1500, None],
+                                                      "uncovered": 12000})
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_peel(trace)
+        self.assertIn("Hunter kill target with no rogue and no tank warrior alive: 12.0 s; DPS warrior Defensive Stance"
+                      " swaps 2, a Disarm within 3 s after 1 (1 on the Hunter), back to Battle or Berserker Stance after"
+                      " a median 1.5 s (max 1.5 s), 1 never", out.getvalue())
+
+
+class StrandedBreaks(unittest.TestCase):
+    def test_a_break_with_no_hop_after_strands_the_bot_and_a_short_hop_counts(self):
+        extra = [note(1000, MAGE, fc.CAST_BREAK, "Frostbolt"), note(1500, MAGE, fc.KITE, "1 melee, 9 yd, short"),
+                 note(3000, MAGE, fc.CAST_BREAK, "Frostbolt"), dmg(4000, ROGUE_C, MAGE, 0),
+                 dmg(5500, ROGUE_C, MAGE, 0), note(6000, MOON, fc.CAST_BREAK, "Wrath")]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in focus_pull() + extra) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            hops = len(fc.notes(trace, fc.KITE))
+            self.assertEqual(fc.stranded_breaks(trace), {"breaks": 3, "stranded": 2, "damage": 1000, "hops": hops,
+                                                         "short": 1})
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_personal(trace)
+        self.assertIn(f"fc.castbreak: 3, with no hop by the bot within 1.5 s 2, melee champion damage on it in the 2 s"
+                      f" after those 1k; half-step hops 1 of {hops}", out.getvalue())
+
+
 class DisarmWindows(unittest.TestCase):
     def test_each_dr_step_halves_the_hold_until_immune_and_15_s_clear_resets_it(self):
         self.assertEqual(fc.disarm_windows([19500, 0, 12000, 17000, 34501]),
