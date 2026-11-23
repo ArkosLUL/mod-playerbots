@@ -535,7 +535,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
         UpdateMovementState();
         bool const canIssue = !IsWaitingForLastMove(MovementPriority::MOVEMENT_FORCED);
-        auto const pickOnArc = [&](float arc)
+        auto const pickOnArc = [&](float arc, float maxShift)
         {
             RingStep pick;
             pick.heading = Position::NormalizeOrientation(bearing + std::copysign(arc, remaining));
@@ -543,7 +543,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
             for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
             {
                 float const candidate = radius + shift;
-                if (candidate < shiftMin || candidate > shiftMax)
+                if (candidate < shiftMin || candidate > shiftMax || std::fabs(shift) > maxShift)
                     continue;
 
                 Position const spot = onOrbit(pick.heading, candidate);
@@ -570,15 +570,15 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
             return pick;
         };
 
-        RingStep step = pickOnArc(fullArc);
-        if (step.score < mineClearScore && !mines.empty())
+        RingStep step = pickOnArc(fullArc, std::numeric_limits<float>::max());
+        if (canIssue && step.score < mineClearScore && !mines.empty())
         {
             for (float arc : ULDUAR_MIMIRON_BARRAGE_SHORT_STEPS)
             {
                 if (arc >= fullArc)
                     continue;
 
-                RingStep const shorter = pickOnArc(arc);
+                RingStep const shorter = pickOnArc(arc, 2.0f * radius * std::sin(0.5f * arc));
                 if (shorter.score >= mineClearScore)
                 {
                     step = shorter;

@@ -1226,3 +1226,10 @@ and 4 hits there (5 dead), Deafening Siren 256 and 143 raid-s; to Q5: the ACU's 
 Berserk.
 
 **Shared code:** none.
+
+**Review.** A short arc searched the full ±8 yd radius shifts, so a 10° step could take an 8 yd shift and turn 8°/s
+against the sweep's 10.64°/s; the simulation's "40° down to 10°" cleared constant-radius steps only. Replaying the
+pick over windows 16-19 (`rv_mim11/short_pick.py` in the scratchpad), 4 of ~80 short picks for `inside` or `ahead`
+bots turned below the sweep and slower than their full step. Short arcs now cap the shift at the arc's chord (12.7°/s
+or more over 14-24 yd), keeping 40 of the 76 ranged and 22 of the 56 melee crossings (43 and 24 uncapped), and the
+short search runs only when the move can issue. The next-window expectations above stand.
