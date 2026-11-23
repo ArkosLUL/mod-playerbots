@@ -1372,3 +1372,20 @@ the stored flight. Bots only, so the same with or without a real player. Shared 
   yd), scattering it for one crash. (c) Keep: ~12 extra ticks a window (~50k raid damage), Vezax +0.82
   %/s over such Animus-phase windows against +0.24 for those without a crash.
   *Recommended: (a)*; the arc walk alone saves about 1 tick in 7.
+
+**Review.** The cause holds. w23 uld3 Uldzae (`vezax-r11-review/uldzae.py`): crash cast 3:44.171,
+landing 3:47.361 at (1843.8, 115.8). The bot stood still 10.4 yd east channeling Hymn of Hope (64901,
+3:42.672-3:45.066), just outside the cast-time interrupt's 10 yd, so the 3:42.937 position walk moved
+it only once the channel ended; inside 10 yd, the 3:45.167 dodge sent it to (1824.9, 114.4), 18.9 yd
+past the impact, through 0.9 yd at 3:46.512, dead 6.8 yd past at 3:47.524. `exitreplay.py` re-run on
+windows 11-23: 12 of 7249 strafe or pulled dodges late (11 crossing), 10 of them hit; the other 7237 took
+10 hits. On that bot the fix's search walks ~4 yd out. No size, mode or player branch, no shared code, no
+comments. `pb-check` passes.
+
+- Review fix: a late dodge with no clear spot noted `vezax.dodge = strafe` even when it kept the pulled
+  strafe; it now notes the kind it keeps.
+- Review fix: `--crash`'s summary counted bots and called them dodges.
+- Left: a late pulled strafe falls to the plain strafe before the search when that one is in time (the
+  existing pulled → plain cascade), so that dodge can end past the Animus's ceiling. `--crash` `late`
+  cannot tell strafes from searches; reading "late 0 on strafes" needs the `vezax.dodge` note at the
+  move, as `exitreplay.py` does.
