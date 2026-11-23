@@ -1181,16 +1181,17 @@ gauntlet row no longer shares that gate: it reads `ULDUAR_THORIM_ENCOUNTER_PROXI
 covers the whole corridor.
 
 **Corridor bots never flee** (`thorim corridor flee hold`: gauntlet squad, past the portcullis, during the
-split). The generic `flee` (`enemy too close for spell`: the bot's target, held by someone else, within its
-melee reach) steps 4-6 yd off a mob tanked on the lane waypoint the squad shares, and the first two lane
-pairs sit 1-2 yd inside the floor's edges (x 2216-2240 at y −276, 2218-2238 at y −295). Over 36 pulls:
-1072 corridor flees, two thirds by healers, 174 dipping under z 411. Inside 110 yd the rescue's z 410 is
-2 yd under the corridor floor (412.1; the arena's is 419.5), so a dip teleports the bot to the raid
-leader in the arena: 71 teleports, each 13-22 s from its squad, once three of four ranged and both
-healers mid-pack. Farther out, flees west at (2219, −354) and the ramp foot (2217, −423) sank to z ~390
-and back over 6.5-7 s, and every deep sink in 46 traces (five, to z 388 down to −28, some never back) was
-a westward `flee` or barrier bail from x 2215-2220 aimed past the floor's edge at y −344..−361 (above).
-The barrier bail still can. Not navprobed.
+split). The generic `flee` (`enemy too close for spell`, a hunter's `enemy too close for auto shot`: the
+bot's target within its melee reach, held by someone else or rooted) steps 4-6 yd off a mob tanked on the
+lane waypoint the squad shares, and the first two lane pairs sit 1-2 yd inside the floor's edges (x
+2216-2240 at y −276, 2218-2238 at y −295). Over 36 pulls: 1072 corridor flees, two thirds by healers, 174
+dipping under z 411. Inside 110 yd the rescue's z 410 is 2 yd under the corridor floor (412.1; the arena's
+is 419.5), so a dip teleports the bot to the raid leader in the arena: 47 teleports in 14 pulls, each
+13-22 s from its squad, once three of four ranged and both healers mid-pack. Farther out, flees west at
+(2219, −354) and the ramp foot (2217, −423) sank to z ~390 and back over 6.5-7 s, and every deep sink in
+46 traces (five, to z 388 down to −28, some never back) was a westward `flee` or barrier bail from x
+2215-2220 aimed past the floor's edge at y −344..−361 (above). The barrier bail still can. Disengage stays:
+in 58 corridor casts it sank no hunter without a flee after it. Not navprobed.
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the leader reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It stays: it

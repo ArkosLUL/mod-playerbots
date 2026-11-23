@@ -1686,8 +1686,10 @@ packs stalls the squad the same way.
 **Fix** (Thorim files only, no size, mode or player branch; rules run in bot engines only, so a real player is never held):
 - `ThorimGauntletSquadOnClock` (`UldEncounter_Thorim.cpp:2170`): Thorim in combat on his balcony (`ThorimSplitActive`) and the bot in the
   gauntlet squad. `ThorimCorridorFleeHeld` (`:2175`) adds `PastThorimPortcullis`.
-- `thorim corridor flee hold` (`UldDefinition_Thorim.cpp:185`): `Block` on `Family::Flee` while `ThorimCorridorFleeHeld`. The trigger never
-  fires on a mob attacking the bot itself, so no escape from damage is lost; hunters keep Disengage, which already outranks their flee.
+- `thorim corridor flee hold` (`UldDefinition_Thorim.cpp:185`): `Block` on `Family::Flee` while `ThorimCorridorFleeHeld`. Its triggers
+  (`enemy too close for spell`, a hunter's `enemy too close for auto shot`, 63 of the 1072) fire on a mob attacking the bot itself only when
+  it is rooted or frozen, so almost no escape from damage is lost; hunters keep Disengage, which already outranks their flee and in 58
+  corridor casts sank no hunter without a flee after it.
 - `thorim revive pet hold` (`:186`): `Block` on `revive pet` while `ThorimGauntletSquadOnClock`, from the pull to phase 2, gate included.
   Arena hunters and phase 2 unchanged.
 - The rescue itself is unchanged: with the flee held nothing measured still reaches it in the corridor.
