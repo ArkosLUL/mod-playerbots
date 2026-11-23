@@ -16,7 +16,6 @@
 #include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Map.h"
-#include "Pet.h"
 #include "PetDefines.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -27,7 +26,6 @@
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
-#include "SpellMgr.h"
 #include "ThreatManager.h"
 #include "Timer.h"
 #include "UldScripts.h"
@@ -35,6 +33,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <list>
 #include <vector>
@@ -191,16 +190,14 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
     if (!group)
         return nullptr;
 
-    Unit* held = GetFreyaHeldSnaplasher(botAI);
-
     std::vector<Unit*> candidates;
     for (Unit* member : state.LivingTrio())
     {
-        if (member != held && !FreyaTrioSyncSuppress(state, member))
+        if (!FreyaTrioSyncSuppress(state, member))
             candidates.push_back(member);
     }
 
-    if (candidates.empty() && !held)
+    if (candidates.empty())
         candidates = state.LivingTrio();
 
     if (candidates.empty())
@@ -504,12 +501,12 @@ Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI)
     return best;
 }
 
-static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget, Unit* skip)
+static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget)
 {
     Unit* best = nullptr;
     for (Unit* member : state.LivingTrio())
     {
-        if (member == skip || FreyaTrioSyncSuppress(state, member))
+        if (FreyaTrioSyncSuppress(state, member))
             continue;
 
         if (!best || member->GetHealthPct() > best->GetHealthPct())
@@ -521,7 +518,7 @@ static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTa
 
     for (Unit* member : state.LivingTrio())
     {
-        if (member != currentTarget || member == skip || FreyaTrioSyncSuppress(state, member))
+        if (member != currentTarget || FreyaTrioSyncSuppress(state, member))
             continue;
 
         if (best->GetHealthPct() - member->GetHealthPct() < ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT)
@@ -540,11 +537,6 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
 
     if (PlayerbotAI::IsMainTank(bot))
     {
-        Unit* snap = state.snaplasher;
-        if (snap && snap->IsAlive() && snap->GetVictim() == bot && !FreyaTrioSyncSuppress(state, snap) &&
-            bot->IsWithinMeleeRange(snap))
-            return snap;
-
         Unit* storm = state.stormLasher;
         if (storm && storm->IsAlive() && !FreyaTrioSyncSuppress(state, storm) && bot->IsWithinMeleeRange(storm))
             return storm;
@@ -555,15 +547,13 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* 
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return nullptr;
 
-    Unit* held = GetFreyaHeldSnaplasher(botAI);
-    if (state.snaplasher && state.snaplasher->IsAlive() &&
-        (state.snaplasher != held || IsFreyaHeldSnaplasherFree(botAI)))
+    if (state.snaplasher && state.snaplasher->IsAlive())
         return state.snaplasher;
 
     if (state.conservator && state.conservator->IsAlive())
         return state.conservator;
 
-    if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget, held))
+    if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget))
         return member;
 
     if (Unit* lasher = GetFreyaLocalLasherTarget(botAI, state, currentTarget, ULDUAR_FREYA_MELEE_LASHER_RANGE))
@@ -791,222 +781,41 @@ bool HasUncoveredFreyaLasher(PlayerbotAI* botAI, FreyaWaveState const& state)
     return false;
 }
 
-namespace
-{
-enum FreyaSnaplasherHold : uint8
-{
-    FREYA_SNAPLASHER_HOLD_OFF = 0,
-    FREYA_SNAPLASHER_HOLD_STACKED = 1,
-    FREYA_SNAPLASHER_HOLD_FREE = 2,
-};
-
-struct FreyaSnaplasherHoldState
-{
-    ObjectGuid snaplasher;
-    uint32 updatedMs = 0;
-    RaidObs::ObsValue<uint8> held{"freya.snaphold", FREYA_SNAPLASHER_HOLD_OFF};
-};
-
-RaidInstanceState<FreyaSnaplasherHoldState> freyaSnaplasherHolds;
-
-bool IsFreyaSnaplasherBarkReset(Unit* snaplasher)
-{
-    return !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_10) && !snaplasher->HasAura(SPELL_HARDENED_BARK_STACK_25);
-}
-}
-
-void TickFreya(PlayerbotAI* botAI)
+Unit* GetFreyaSnaplasherToKite(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    uint32 const instanceId = bot->GetInstanceId();
-    if (!instanceId || botAI->GetState() != BOT_STATE_COMBAT)
-        return;
-
-    Unit* freya = GetFreyaScan(botAI).Boss();
-    if (!freya || !freya->IsAlive())
-        return;
-
-    FreyaSnaplasherHoldState& hold = freyaSnaplasherHolds.For(instanceId);
-    uint32 const now = getMSTime();
-    if (hold.updatedMs == now)
-        return;
-
-    hold.updatedMs = now;
-
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
-
-    Unit* snap = state.snaplasher;
-    if (!snap)
-    {
-        hold.snaplasher.Clear();
-        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
-        return;
-    }
-
-    if (hold.snaplasher != snap->GetGUID())
-    {
-        hold.snaplasher = snap->GetGUID();
-        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
-    }
-
-    Unit* victim = snap->GetVictim();
-    Player* holder = victim ? victim->ToPlayer() : nullptr;
-    if (holder && PlayerbotAI::IsTank(holder))
-        hold.held = FREYA_SNAPLASHER_HOLD_OFF;
-    else if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_OFF && !GetGroupAssistTank(bot, 0))
-        hold.held = FREYA_SNAPLASHER_HOLD_STACKED;
-
-    if (hold.held.Get() == FREYA_SNAPLASHER_HOLD_STACKED && IsFreyaSnaplasherBarkReset(snap))
-        hold.held = FREYA_SNAPLASHER_HOLD_FREE;
-}
-
-Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI)
-{
-    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
-    FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
-    if (!hold || hold->held.Get() == FREYA_SNAPLASHER_HOLD_OFF)
+    if (PlayerbotAI::IsTank(bot))
         return nullptr;
 
-    Unit* snap = botAI->GetUnit(hold->snaplasher);
-    return snap && snap->IsAlive() ? snap : nullptr;
-}
-
-bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI)
-{
-    uint32 const instanceId = botAI->GetBot()->GetInstanceId();
-    FreyaSnaplasherHoldState const* hold = instanceId ? freyaSnaplasherHolds.Find(instanceId) : nullptr;
-    return hold && hold->held.Get() == FREYA_SNAPLASHER_HOLD_FREE;
-}
-
-bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo)
-{
-    if (!spellInfo)
-        return false;
-
-    for (SpellEffectInfo const& effect : spellInfo->GetEffects())
+    Unit* chaser = nullptr;
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).PossibleTargets())
     {
-        if (effect.ApplyAuraName != SPELL_AURA_PERIODIC_TRIGGER_SPELL &&
-            effect.ApplyAuraName != SPELL_AURA_PERIODIC_TRIGGER_SPELL_WITH_VALUE &&
-            effect.ApplyAuraName != SPELL_AURA_PERIODIC_DUMMY)
-            continue;
-
-        SpellInfo const* tick = effect.TriggerSpell ? sSpellMgr->GetSpellInfo(effect.TriggerSpell) : nullptr;
-        if (tick ? tick->IsAffectingArea() && !tick->IsPositive()
-                 : effect.Effect == SPELL_EFFECT_PERSISTENT_AREA_AURA && !spellInfo->IsPositive())
-            return true;
-    }
-
-    return false;
-}
-
-bool IsFreyaChainDamage(SpellInfo const* spellInfo)
-{
-    if (!spellInfo || spellInfo->IsPositive())
-        return false;
-
-    for (SpellEffectInfo const& effect : spellInfo->GetEffects())
-    {
-        if (effect.IsEffect() && effect.ChainTarget > 1)
-            return true;
-    }
-
-    return false;
-}
-
-bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop)
-{
-    Player* bot = botAI->GetBot();
-    if (!held)
-        return false;
-
-    bool hits = false;
-
-    if (bot->GetVictim() == held)
-    {
-        hits = true;
-        if (stop)
-            bot->AttackStop();
-    }
-
-    Spell* autoRepeat = bot->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL);
-    if (autoRepeat && autoRepeat->m_targets.GetUnitTarget() == held)
-    {
-        hits = true;
-        if (stop)
-            bot->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
-    }
-
-    Value<Unit*>* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target");
-    if (current->Get() == held)
-    {
-        hits = true;
-        if (stop)
-            current->Set(nullptr);
-    }
-
-    Guardian* pet = bot->GetGuardianPet();
-    for (Unit* minion : bot->m_Controlled)
-    {
-        if (!minion || minion->IsTotem() || !minion->IsAlive() || minion->GetVictim() != held)
-            continue;
-
-        hits = true;
-        if (!stop)
-            continue;
-
-        if (minion != pet)
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == NPC_SNAPLASHER && unit->GetVictim() == bot)
         {
-            minion->AttackStop();
-            continue;
-        }
-
-        Unit* aim = current->Get();
-        if (aim && aim != held && aim->IsAlive())
-            CommandPetAttack(botAI, aim);
-
-        if (pet->GetVictim() == held)
-            StopPet(botAI);
-    }
-
-    Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-    if (channel && !IsFreyaArmyChanneling(bot) && IsFreyaLingeringAreaDamage(channel->GetSpellInfo()))
-    {
-        Position centre = bot->GetPosition();
-        if (channel->m_targets.HasDst())
-            centre = channel->m_targets.GetDstPos()->GetPosition();
-        else if (Unit* aim = channel->m_targets.GetUnitTarget())
-            centre = aim->GetPosition();
-
-        if (held->GetExactDist2d(&centre) <= ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH)
-        {
-            hits = true;
-            if (stop)
-                bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
+            chaser = unit;
+            break;
         }
     }
 
-    if (bot->GetExactDist2d(held) > ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH)
-        return hits;
+    float const chaserSpeed = chaser ? chaser->GetSpeed(MOVE_RUN) : 0.0f;
+    float const ownSpeed = bot->GetSpeed(MOVE_RUN);
 
-    std::vector<uint32> lingering;
-    for (auto const& [spellId, aura] : bot->GetOwnedAuras())
+    if (RaidObs::Active())
     {
-        SpellInfo const* spellInfo = aura->GetSpellInfo();
-        if (aura->GetCasterGUID() == bot->GetGUID() && !spellInfo->IsChanneled() &&
-            IsFreyaLingeringAreaDamage(spellInfo))
-            lingering.push_back(spellId);
+        char speeds[32] = "";
+        if (chaser)
+            std::snprintf(speeds, sizeof(speeds), "%.2f vs %.2f", chaserSpeed, ownSpeed);
+
+        RaidObs::NoteDerived(bot, "freya.kite", speeds);
     }
 
-    if (!lingering.empty())
-    {
-        hits = true;
-        if (stop)
-            for (uint32 spellId : lingering)
-                bot->RemoveAurasDueToSpell(spellId, bot->GetGUID());
-    }
+    return chaser && chaserSpeed < ownSpeed ? chaser : nullptr;
+}
 
-    return hits;
+float GetFreyaSnaplasherKiteReach(Unit* snaplasher, Player* bot, float margin)
+{
+    return snaplasher->GetMeleeRange(bot) + margin;
 }
 
 Player* GetFreyaLooseLasherVictim(Unit* lasher)
@@ -1138,16 +947,8 @@ bool FreyaShedsSnaplasherThreat(PlayerbotAI* botAI, Unit* snaplasher, uint32 see
     if (seenForMs < ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS)
         return true;
 
-    float tankThreat = 0.0f;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive() || !PlayerbotAI::IsTank(member))
-            continue;
-
-        tankThreat = std::max(tankThreat, snaplasher->GetThreatMgr().GetThreat(member));
-    }
-
+    Player* addTank = GetGroupAssistTank(bot, 0);
+    float const tankThreat = addTank ? snaplasher->GetThreatMgr().GetThreat(addTank) : 0.0f;
     if (tankThreat <= 0.0f)
         return false;
 

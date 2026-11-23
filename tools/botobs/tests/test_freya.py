@@ -3,13 +3,13 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic pull pins a trio wave where the add tank's Challenging Roar puts Freya on it, the main
-tank's Righteous Defense takes the Snaplasher, and the add tank dies, which sets off the Snaplasher hold
-while two hits keep its bark up, plus three beam dodges (one off a beam the next snapshot first shows)
-and one healer in range. A second one pins a lasher wave a ghoul holds for two snapshots, with one
-ranged bot out of reach on Freya. A third pins a melee bot walking back into a low lasher's blast and
-dying to its Detonate. A fourth pins a low lasher chasing a ranged bot for 9 s while another ranged bot
-in reach shoots a ghoul-held lasher and bails from it once, and a fifth two low lashers, each shot by
-the other one's victim. The shared v14 fixture shows every section reads empty elsewhere.
+tank's Righteous Defense takes the Snaplasher, and the add tank dies, after which the Snaplasher runs
+loose on a healer who kites it, then a ranged bot, while two hits keep its bark up, plus three beam
+dodges (one off a beam the next snapshot first shows) and one healer in range. A second one pins a
+lasher wave a ghoul holds for two snapshots, with one ranged bot out of reach on Freya. A third pins a
+melee bot walking back into a low lasher's blast and dying to its Detonate. A fourth pins a low lasher
+chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-held lasher and bails
+from it once, and a fifth two low lashers, each shot by the other one's victim. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -111,12 +111,22 @@ def pull() -> list[dict]:
         cast(21000, SNAPLASHER, 64190) | {"tr": 1},
         cast(22500, SNAPLASHER, 64190) | {"tr": 1},
         cast(22900, SNAPLASHER, 64190) | {"tr": 1},
-        {"t": 22100, "e": "note", "g": CASTER, "k": fr.HOLD_NOTE, "txt": "1"},
-        {"t": 22300, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "1"},
-        {"t": 23100, "e": "note", "g": HEALER, "k": fr.HOLD_NOTE, "txt": "2"},
-        {"t": 23500, "e": "note", "g": MAIN, "k": fr.HOLD_NOTE, "txt": "0"},
     ]
     return records
+
+
+def loose() -> list[dict]:
+    return [
+        snap(22000, MAIN, HEALER),
+        snap(23000, MAIN, CASTER),
+        {"t": 22100, "e": "note", "g": HEALER, "k": fr.KITE_NOTE, "txt": "6.8 vs 7.0"},
+        {"t": 22600, "e": "note", "g": HEALER, "k": fr.KITE_NOTE, "txt": "7.2 vs 7.0"},
+        {"t": 22700, "e": "note", "g": HEALER, "k": fr.KITE_NOTE, "txt": ""},
+        {"t": 22200, "e": "move", "g": HEALER, "k": "point", "x": 2400.0, "y": -40.0, "z": 425.3, "ok": 1,
+         "by": fr.KITE_ACTION},
+        {"t": 22800, "e": "death", "g": HEALER, "killer": SNAPLASHER, "x": 2392.0, "y": -40.0, "z": 425.3,
+         "rewind": [[22700, SNAPLASHER, 0, 61000]]},
+    ]
 
 
 LASHERS = [(1 << 32) | 20, (1 << 32) | 21, (1 << 32) | 22]
@@ -295,16 +305,19 @@ class Tanks(unittest.TestCase):
             "    0:14.000 .. 0:16.500 on Bruin/tank\n"
             "  Snaplasher 0:10.000 .. 0:24.000: Bruin/tank 87%, Bulwark/tank 13%\n"
             "  0:13.500 Bruin Challenging Roar\n"
-            "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"
-            "  0:22.100 Snaplasher hold on for 1.0s: 2 hit(s) on its bark, 0 death(s) to it\n"
-            "  0:23.100 Snaplasher hold on, bark gone\n"
-            "  0:23.500 Snaplasher hold off\n"))
+            "  0:16.200 Bulwark Righteous Defense on Bruin/tank\n"))
 
-    def test_hold_counts_deaths_to_the_loose_snaplasher(self):
-        death = {"t": 22800, "e": "death", "g": HEALER, "killer": SNAPLASHER, "x": 2392.0, "y": -40.0, "z": 425.3,
-                 "rewind": [[22700, SNAPLASHER, 0, 61000]]}
-        self.assertIn("0:22.100 Snaplasher hold on for 1.0s: 2 hit(s) on its bark, 1 death(s) to it\n",
-                      printed(fr.show_tanks, load(pull() + [death])))
+    def test_a_loose_snaplasher_its_deaths_bark_and_kite(self):
+        self.assertIn("  0:22.000 .. 0:24.000 Snaplasher of 0:10.000 loose 2.0s, 80% to 80%, on Mender/heal, "
+                      "Caster/ranged: 1 death(s) to it, 2 hit(s) on its bark, 1 kite order(s), slower than its "
+                      "victim in 1 of 2 speed read(s)\n",
+                      printed(fr.show_tanks, load(pull() + loose())))
+
+    def test_a_loose_snaplasher_without_kite_rows(self):
+        records = [rec for rec in pull() + loose() if rec.get("e") not in ("note", "move", "death")]
+        self.assertIn("Snaplasher of 0:10.000 loose 2.0s, 80% to 80%, on Mender/heal, Caster/ranged: "
+                      "0 death(s) to it, 2 hit(s) on its bark, 0 kite order(s)\n",
+                      printed(fr.show_tanks, load(records)))
 
     def test_add_tank_cooldowns_under_the_snaplasher(self):
         notes = [{"t": 12000, "e": "note", "g": ADD, "k": "freya.adddef", "txt": "barkskin"},

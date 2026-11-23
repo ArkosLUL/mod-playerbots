@@ -21,6 +21,7 @@
 #include "UldTriggers_Freya.h"
 
 #include <cmath>
+#include <vector>
 
 namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
@@ -56,44 +57,81 @@ bool FreyaMeleeNearBomb(PlayerbotAI* botAI)
            bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
 }
 
-bool FreyaMeleeApproachEndsInBlast(PlayerbotAI* botAI, bool behind)
+bool FreyaMeleeApproachEndsIn(PlayerbotAI* botAI, bool behind,
+                              std::vector<EncounterHelpers::HazardCircle> const& keepOut)
 {
-    Player* bot = botAI->GetBot();
-    if (PlayerbotAI::IsTank(bot))
+    if (keepOut.empty())
         return false;
 
+    Player* bot = botAI->GetBot();
     Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
     if (!target)
         return false;
 
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
-    if (state.detonatingLashers.empty())
-        return false;
-
     float const reach = sPlayerbotAIConfig.MeleeDistance + bot->GetCombatReach() + target->GetCombatReach();
-    auto const endsInBlast = [&state, target, reach](float angle)
+    auto const endsIn = [&keepOut, target, reach](float angle)
     {
         float const x = target->GetPositionX() + reach * std::cos(angle);
         float const y = target->GetPositionY() + reach * std::sin(angle);
-        for (Unit* lasher : state.detonatingLashers)
-            if (lasher->IsAlive() && lasher->GetHealthPct() < ULDUAR_FREYA_LASHER_BAIL_PCT &&
-                lasher->GetExactDist2d(x, y) < ULDUAR_FREYA_DETONATE_RADIUS + 1.0f)
+        for (auto const& [centre, radius] : keepOut)
+            if (centre.GetExactDist2d(x, y) < radius)
                 return true;
 
         return false;
     };
 
     if (!behind)
-        return endsInBlast(target->GetAngle(bot));
+        return endsIn(target->GetAngle(bot));
 
     float const flank = float(M_PI) * 3.0f / 5.0f;
-    return endsInBlast(target->GetOrientation() + flank) || endsInBlast(target->GetOrientation() - flank);
+    return endsIn(target->GetOrientation() + flank) || endsIn(target->GetOrientation() - flank);
 }
 
-bool FreyaMeleeReachIntoBlast(PlayerbotAI* botAI) { return FreyaMeleeApproachEndsInBlast(botAI, false); }
+std::vector<EncounterHelpers::HazardCircle> FreyaLowLasherBlasts(PlayerbotAI* botAI)
+{
+    if (PlayerbotAI::IsTank(botAI->GetBot()))
+        return {};
 
-bool FreyaMeleeBehindIntoBlast(PlayerbotAI* botAI) { return FreyaMeleeApproachEndsInBlast(botAI, true); }
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    std::vector<EncounterHelpers::HazardCircle> blasts;
+    for (Unit* lasher : state.detonatingLashers)
+        if (lasher->IsAlive() && lasher->GetHealthPct() < ULDUAR_FREYA_LASHER_BAIL_PCT)
+            blasts.emplace_back(lasher->GetPosition(), ULDUAR_FREYA_DETONATE_RADIUS + 1.0f);
+
+    return blasts;
+}
+
+std::vector<EncounterHelpers::HazardCircle> FreyaKitedSnaplasherReach(PlayerbotAI* botAI)
+{
+    Unit* snaplasher = GetFreyaSnaplasherToKite(botAI);
+    if (!snaplasher)
+        return {};
+
+    float const reach = GetFreyaSnaplasherKiteReach(snaplasher, botAI->GetBot(), ULDUAR_FREYA_SNAPLASHER_KITE_MARGIN);
+    return {{snaplasher->GetPosition(), reach}};
+}
+
+bool FreyaMeleeReachIntoBlast(PlayerbotAI* botAI)
+{
+    return FreyaMeleeApproachEndsIn(botAI, false, FreyaLowLasherBlasts(botAI));
+}
+
+bool FreyaMeleeBehindIntoBlast(PlayerbotAI* botAI)
+{
+    return FreyaMeleeApproachEndsIn(botAI, true, FreyaLowLasherBlasts(botAI));
+}
+
+bool FreyaMeleeReachIntoKite(PlayerbotAI* botAI)
+{
+    return FreyaMeleeApproachEndsIn(botAI, false, FreyaKitedSnaplasherReach(botAI));
+}
+
+bool FreyaMeleeBehindIntoKite(PlayerbotAI* botAI)
+{
+    return FreyaMeleeApproachEndsIn(botAI, true, FreyaKitedSnaplasherReach(botAI));
+}
 
 void DefineFreya(EncounterBuilder& e)
 {
@@ -108,10 +146,10 @@ void DefineFreya(EncounterBuilder& e)
     e.Node<FreyaAddTankExternalTrigger, FreyaAddTankExternalAction>(ACTION_RAID + 4);
 
     e.Node<FreyaLasherAboutToBlowTrigger, FreyaLasherAboutToBlowAction>(ACTION_RAID + 3);
+    e.Node<FreyaKiteSnaplasherTrigger, FreyaKiteSnaplasherAction>(ACTION_RAID + 3);
     e.Node<FreyaFrostNovaLashersTrigger, FreyaFrostNovaLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaTrapLashersTrigger, FreyaTrapLashersAction>(ACTION_RAID + 2);
     e.Node<FreyaSummonArmyTrigger, FreyaSummonArmyAction>(ACTION_RAID + 2);
-    e.Node<FreyaReleaseHeldSnaplasherTrigger, FreyaReleaseHeldSnaplasherAction>(ACTION_RAID + 2);
     e.Node<FreyaRangedCampTrigger, FreyaRangedCampAction>(ACTION_RAID);
 
     e.Node<FreyaReachHeldPackTrigger, FreyaReachHeldPackAction>(ACTION_RAID + 1);
@@ -144,7 +182,6 @@ void DefineFreya(EncounterBuilder& e)
     e.OwnTargeting("freya disable automatic targeting", Role::Tank, FreyaOwnsTargets, Family::TankAssist);
 
     e.Multiplier<FreyaTrioSyncMultiplier>(Family::Melee | Family::Spell);
-    e.Multiplier<FreyaSnaplasherHoldMultiplier>(Family::AnyAction);
 
     e.Multiplier<FreyaLasherFinishAoeMultiplier>(Family::AnyAction);
 
@@ -167,10 +204,11 @@ void DefineFreya(EncounterBuilder& e)
     e.Block("freya lasher blast reach guard", Role::Melee, FreyaMeleeReachIntoBlast, Family::Charge, {"reach melee"});
     e.Block("freya lasher blast behind guard", Role::Melee, FreyaMeleeBehindIntoBlast, Family::SetBehind);
 
+    e.Block("freya snaplasher kite reach guard", Role::Melee, FreyaMeleeReachIntoKite, Family::Charge, {"reach melee"});
+    e.Block("freya snaplasher kite behind guard", Role::Melee, FreyaMeleeBehindIntoKite, Family::SetBehind);
+
     e.Multiplier<FreyaGroundTremorCastGateMultiplier>(Family::Spell);
     e.Multiplier<BossNatureAspectHoldMultiplier>(Family::Spell, "freya");
-
-    e.Tick(TickFreya);
 }
 }
 

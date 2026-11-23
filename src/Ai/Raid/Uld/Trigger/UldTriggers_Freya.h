@@ -41,12 +41,12 @@ public:
     bool IsActive() override;
 };
 
-class FreyaReleaseHeldSnaplasherTrigger : public Trigger
+class FreyaKiteSnaplasherTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "freya release held snaplasher";
+    static constexpr char const* Name = "freya kite snaplasher";
 
-    FreyaReleaseHeldSnaplasherTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    FreyaKiteSnaplasherTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

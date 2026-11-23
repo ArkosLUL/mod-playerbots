@@ -65,13 +65,18 @@ bool FreyaTankAddsTrigger::IsActive()
     return PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
 }
 
-bool FreyaReleaseHeldSnaplasherTrigger::IsActive()
+bool FreyaKiteSnaplasherTrigger::IsActive()
 {
-    Unit* held = GetFreyaHeldSnaplasher(botAI);
-    if (!held || (PlayerbotAI::IsTank(bot) && IsFreyaHeldSnaplasherFree(botAI)))
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
         return false;
 
-    return FreyaStopHittingHeldSnaplasher(botAI, held, false);
+    Unit* snaplasher = GetFreyaSnaplasherToKite(botAI);
+    if (!snaplasher)
+        return false;
+
+    return bot->GetExactDist2d(snaplasher) <
+           GetFreyaSnaplasherKiteReach(snaplasher, bot, ULDUAR_FREYA_SNAPLASHER_KITE_MARGIN);
 }
 
 bool FreyaAddTankDefensiveTrigger::IsActive()

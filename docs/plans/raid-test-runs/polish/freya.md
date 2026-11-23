@@ -779,4 +779,106 @@ Next window, read the Q5 check as "ranged on the tail while it is in reach and n
 
 **User answer (2026-11-22) to Q4, after the 25-man check:** drop the Snaplasher hold (rounds 3 and 5).
 Kite a loose Snaplasher only while its live speed is below the kiter's (its stacks slow it at 10-man only);
-otherwise, with no add tank alive, the raid kills it.
+otherwise, with no add tank alive, the raid kills it. Follow-up (2026-11-23): at 25 man the loose Snaplasher
+is killed.
+
+## Round 8 (on Custom 1fa3c332c, no new pulls)
+
+**Data:** none new: round 7 is being pulled in window 14, so no verdict, stop rule or ranking. Built the
+user's Q4 answer. Baseline from the reader's new loose view (`freya.py --tanks`) on window 12 (`603_{14,13,15}
+_elder-stonebark_{1795378042,1795377898,1795378140}`, round 3's hold without the release) and window 13
+(`603_{17,18,16}_elder-stonebark_{1795383500,1795383581,1795383459}`, hold plus release; `report --head
+a55056c40`). Ad hoc scripts: none.
+
+**What the code did with a loose Snaplasher before this round** (Custom 1fa3c332c, any size):
+
+- Kite: none. Nothing moved a bot away from a Snaplasher.
+- Hold (rounds 3, 5): `TickFreya` latched it once the Snaplasher was off every tank with no assist tank 0
+  alive; then no bot hit it (multiplier on aimed, area within 15 yd, chain, lingering within 30 yd; the
+  release node stopped swings, Auto Shot, wands, pets, channels and own lingering auras), the trio split and
+  the redirect dropped it, and the add tank's ladder skipped it while stacked. Once no stack was left
+  ("free"), a living add tank's ladder taunted it, else the main tank class-taunted it and attacked it while
+  it was on him in melee range, ahead of the Storm Lasher.
+- Target order: DPS split over the trio (held one out), with `ShedSnaplasherThreat` moving a bot on it to the
+  healthiest sibling at 80% of the highest living tank's threat after the 5 s lead, whoever held it.
+
+**Facts checked:** `spell.reference.csv`: 62663 has aura 79 (+10%) and aura 33 (`EffectBasePoints` -6,
+`DieSides` 1: -5% a stack), cap 99; 64190 has 79 and 61 (scale), no 33. Core `Unit::UpdateSpeed` applies the
+strongest `MOD_DECREASE_SPEED` and `AuraEffect::CalculateAmount` multiplies it by the stacks, so 10-man runs
+8.0 x (1 - 0.05 n): under 7.0 from 3 stacks, 0 from 20 (`SetSpeed` clamps the rate at 0). `speed_run`
+1.14286 for 32916 (base `creature_template.sql`): 8.0 yd/s against a player's 7.0. Under 30% health
+`UpdateSpeed` also slows a creature `(int)(1.66 x (hp - 30))` % unless snare-immune or a dungeon boss; the
+Snaplasher's immunity set -269 has no SNARE and `flags_extra` 0, so 25-man drops under 7.0 at -13%, about 22%
+health.
+
+**Built** (Freya files only, any size or difficulty, no player branch):
+
+- The hold is gone: `TickFreya` and its instance state and note `freya.snaphold`, `GetFreyaHeldSnaplasher`,
+  `IsFreyaHeldSnaplasherFree`, `freya snaplasher hold` (with `IsFreyaLingeringAreaDamage`,
+  `IsFreyaChainDamage` and both reaches), `freya release held snaplasher` (`FreyaStopHittingHeldSnaplasher`),
+  and its skips in the trio split, the add tank's ladder and the redirect. The main tank's taunt of a freed
+  one and his attack on a Snaplasher on him go too (round 2's option (a), not chosen).
+- `freya kite snaplasher` (`ACTION_RAID + 3`): a non-tank bot a Snaplasher is hitting
+  (`GetFreyaSnaplasherToKite`) whose live `GetSpeed(MOVE_RUN)` is above the Snaplasher's walks, once it is
+  inside the Snaplasher's melee range + 5 yd, to the nearest spot 10 yd past that range, toward straight away,
+  clear of the escape hazards, on a walk that never crosses its swing; `MOVEMENT_FORCED`, cast cut, latched
+  1 s. A melee kiter's trio pick goes to the healthiest sibling (none: down the ladder), and `freya
+  snaplasher kite reach guard` / `behind guard` block its `reach melee`, charges and set behind ending inside
+  that margin. Note `freya.kite` on the chased bot: "<Snaplasher> vs <own> run speed", "" once off it.
+- `FreyaShedsSnaplasherThreat` sheds only while a tank other than the main tank holds it. Without that, any
+  main-tank threat on a loose one (Consecration, a chain) made every DPS on it shed to a sibling, a hold by
+  another name.
+- Reader: `--tanks` lists each stretch a Snaplasher spent on a non-tank (deaths to it, bark hits, kite orders,
+  speed reads), tested; the hold rows are gone.
+
+**After the change** (one code path, the speeds decide):
+
+- 10-man: a loose Snaplasher on a non-tank bot is kited from 3 stacks and stands still from 20; the raid's
+  hits keep the stacks up, so its victim steps out and the raid kills it in the split. Under 3 stacks (8.0-7.2
+  yd/s) its victim takes it. The opener (a DPS pulls it before the add tank's taunt) kites the same way.
+- 25-man: no slow above 30%, so no kite: it kills its victim and the next while the raid kills it in the
+  split, the sync floor unchanged. Under about 22% it drops below 7.0 and its victim kites it, the sync
+  floor's wait included.
+- Both: a risen add tank taunts it at once, stacked or not; the main tank never takes it on purpose.
+
+**Baseline** (loose stretches, deaths to the Snaplasher): window 12 uld1 5:21.5-5:47.3 at 9% to 1%, 7 (its
+siblings revived meanwhile); uld2 5:08-5:54, four stretches, 8; uld3 3:53.6-4:10.0 3 and 4:36.8-4:46.8 2.
+Window 13 uld1 none; uld2 one 1 s opener, 0; uld3 2:03.7-2:31.8 at 70% to 61%, 11, plus short stretches
+with 2.
+
+**Next window should show** (`freya.py --tanks`, `postmortem.py --vetoes`, `--coverage`):
+
+- No `freya.snaphold` note and no `freya snaplasher hold` or `freya release held snaplasher` row.
+- 25-man loose stretches above about 22% with `freya.kite` reads "8.00 vs 7.00" and no kite order, bark
+  hits climbing (the raid keeps hitting it), and the stretch ending with its death or a tank, not a 20 s+
+  wait at 1-9% (window 12 uld1). Under about 22%, reads below the bot's speed and kite orders from its victim.
+- A 10-man check pull with a loose Snaplasher: reads under 7.0 from 3 stacks, kite orders, near 0 deaths
+  to it. Melee kiters: vetoes under the two kite guards, no `reach melee` into it.
+- Round 7's checks as written there; rounds 1-6 still holding.
+
+**Questions:**
+
+7. "The raid kills it" is built as: the loose Snaplasher stays in the DPS split and under the sync floor,
+   with nothing extra on it. The other reading is a burn (every DPS on it first): 4-10 s to kill, but its
+   siblings rarely die inside its 11 s revive, so it comes back and the wave restarts its sync.
+   Recommendation: keep the split.
+
+**Review:** built as the user answered, on one code path (no size, mode or player branch), no shared code.
+Reproduced: the baseline stretches (`--tanks` on windows 12-13, adjacent stretches summed), the DBC (62663
+auras 79, 33 at -5 a stack and 61; 64190 79 and 61) and the core (`UpdateSpeed`'s health slow, the slow
+aura times its stacks in `CalculateAmount`, `SetSpeed` clamping at 0). Fixed:
+
+- `FreyaShedsSnaplasherThreat` never shed while a non-tank held the Snaplasher, add tank alive or not, so
+  a damage dealer ripping it off a living add tank after the head start put every bot on it back on it,
+  and the next one took it once he died, while the taunt cooled down (before round 3 they shed). It now
+  measures against the living add tank's threat alone (`GetGroupAssistTank(bot, 0)`); none, or none on
+  it (risen, not yet taunting): the pick stands. The main tank's stray threat still never counts.
+- `freya.kite` rounded to tenths, so 25-man's first read under 7.0 (6.96 at 22%) printed "7.0 vs 7.0"
+  beside kite orders. It writes hundredths now.
+- The kite's swing circle went negative with the bot within 0.25 yd of the Snaplasher's centre, and
+  `SegmentCrossesCircle` squares the radius, so every walk was refused. Clamped at 0.
+
+Left: a melee kiter whose sibling stands inside the kite margin idles (its reach is blocked) rather than
+going down the ladder; the 5 s head start still sheds with no add tank alive (a trio spawning after his
+death, as before round 3); `--tanks` splits one loose run wherever the Snaplasher briefly has no player
+target, so sum adjacent stretches.
