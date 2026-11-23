@@ -1175,6 +1175,7 @@ struct MimironFightState
     ObjectGuid playerCoreCarrier;
 
     std::vector<ObjectGuid> keptFireBots;
+    std::vector<ObjectGuid> culledFireBots;
     uint32 fireBotScanMs = 0;
 
     float wedgeBearing = 0.0f;
@@ -1389,7 +1390,16 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 }
 }
 
-void MimironTick(PlayerbotAI* botAI) { TickMimironObs(botAI, botAI->GetBot()); }
+bool MimironTick(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
+        return false;
+
+    uint32 const lastScanMs = MimironObsStateFor(bot).scanMs;
+    TickMimironObs(botAI, bot);
+    return MimironObsStateFor(bot).scanMs != lastScanMs;
+}
 
 MimironHandoverStep GetMimironHandoverStep(PlayerbotAI* botAI, Player* bot)
 {
@@ -1619,6 +1629,22 @@ Unit* GetMimironPhase4TankFocus(PlayerbotAI* botAI, Player* bot)
 
     if (Unit* leviathanMkII = GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
         return leviathanMkII;
+
+    return GetMimironPhase4Focus(botAI, bot, true);
+}
+
+bool IsMimironPhase4AcuTank(Player* bot)
+{
+    return bot && PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) && IsMimironPhase4(bot);
+}
+
+Unit* GetMimironPhase4AcuTankFocus(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !IsMimironPhase4AcuTank(bot))
+        return nullptr;
+
+    if (Unit* aerialCommandUnit = GetUldUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        return aerialCommandUnit;
 
     return GetMimironPhase4Focus(botAI, bot, true);
 }
@@ -2054,32 +2080,61 @@ void NoteMimironCoreSpent(Player* bot)
         MimironFightStateFor(bot).coreSpentMs = getMSTime();
 }
 
+namespace
+{
+bool MimironFireBotsInPlay(PlayerbotAI* botAI, Player* bot)
+{
+    return botAI && bot && IsMimironHardModeActive(botAI) && IsNearMimironRoom(bot) &&
+           BossStateGateLive(botAI, ULD_BOSS_MIMIRON);
+}
+
+bool IsMimironPhase4Handover(Player* bot)
+{
+    Creature* aerialCommandUnit =
+        bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
+    return aerialCommandUnit && aerialCommandUnit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+           aerialCommandUnit->GetHealthPct() < ULDUAR_MIMIRON_SPENT_HEALTH_PCT;
+}
+
+MimironFightState const& ScanMimironFireBots(Player* bot)
+{
+    MimironFightState& state = MimironFightStateFor(bot);
+    if (state.fireBotScanMs &&
+        GetMSTimeDiffToNow(state.fireBotScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
+        return state;
+
+    state.fireBotScanMs = getMSTime();
+    state.keptFireBots.clear();
+    state.culledFireBots.clear();
+
+    std::list<Creature*> fireBots;
+    bot->GetCreatureListWithEntryInGrid(fireBots, NPC_EMERGENCY_FIRE_BOT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
+
+    std::vector<ObjectGuid> alive;
+    for (Creature* fireBot : fireBots)
+        if (fireBot && fireBot->IsAlive())
+            alive.push_back(fireBot->GetGUID());
+
+    if (alive.empty())
+        return state;
+
+    std::sort(alive.begin(), alive.end());
+    (IsMimironPhase4Handover(bot) ? state.culledFireBots : state.keptFireBots) = std::move(alive);
+    return state;
+}
+}
+
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
 {
-    if (!botAI || !bot || !IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot) ||
-        !BossStateGateLive(botAI, ULD_BOSS_MIMIRON))
+    if (!MimironFireBotsInPlay(botAI, bot))
         return {};
 
-    MimironFightState& state = MimironFightStateFor(bot);
-    if (!state.fireBotScanMs ||
-        GetMSTimeDiffToNow(state.fireBotScanMs) >= ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
-    {
-        state.fireBotScanMs = getMSTime();
+    return ScanMimironFireBots(bot).keptFireBots;
+}
 
-        std::list<Creature*> fireBots;
-        bot->GetCreatureListWithEntryInGrid(fireBots, NPC_EMERGENCY_FIRE_BOT,
-                                            ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
-
-        std::vector<ObjectGuid> alive;
-        for (Creature* fireBot : fireBots)
-            if (fireBot && fireBot->IsAlive())
-                alive.push_back(fireBot->GetGUID());
-
-        std::sort(alive.begin(), alive.end());
-        state.keptFireBots = alive;
-    }
-
-    return state.keptFireBots;
+bool IsMimironFireBotCullActive(PlayerbotAI* botAI, Player* bot)
+{
+    return MimironFireBotsInPlay(botAI, bot) && !ScanMimironFireBots(bot).culledFireBots.empty();
 }
 
 bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot)

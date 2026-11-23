@@ -43,6 +43,7 @@ SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
 SPELL_MINE_EXPLOSIONS = (63009, 66351)
 SPELL_BOMB_BOT_BLAST = 63801
+SPELL_PLASMA_BALL_P4 = 65647
 # Raid cooldowns for --heal's events, off the caster's cast record. Heroism and Bloodlust share one name:
 # a raid only ever has one of them, and which one says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
@@ -111,9 +112,11 @@ DODGE_GAP_MS = 1500
 BURNED_LOOKBACK_MS = 2000
 # How near a detour note and its formation leg sit: both are written by the same action pass.
 NOTE_MOVE_MS = 300
+CAST_CUT_REPEAT_MS = 1000
 
 ROOM_CENTRE = anchor("ULDUAR_MIMIRON_ROOM_CENTER")[:2]
 SPREAD_TOLERANCE = radius("ULDUAR_MIMIRON_SPREAD_TOLERANCE")
+FLAMES_BURN_RADIUS = radius("ULDUAR_MIMIRON_FLAMES_BURN_RADIUS")
 # MimironHandoverStep, as the `mimiron.handover` latch writes it.
 HANDOVER_STEPS = {"1": "hold", "2": "late", "3": "walk in"}
 # Mimiron boards VX-001 this long before phase 2: where the walk in starts when no step was written.
@@ -920,13 +923,16 @@ def slot_point(slot_notes: list[dict], guid: int, when: int):
 
 def fire_rows(trace: Trace) -> dict[str, dict]:
     """Per phase: fire dodges against the Flames ticks behind them, where the dodges went relative to the
-    bot's target, the formation legs `mimiron.approach` named, and Flames damage by role."""
+    bot's target, the ladder's fallbacks, the casts cut for the dodge, the formation legs
+    `mimiron.approach` named, and Flames damage by role."""
     roster = roster_guids(trace)
     spans = phases(trace)
     samples = Samples(trace)
+    flames = guids_of_entry(trace, NPC_FLAMES_SPREAD)
 
     def blank() -> dict:
         return {"dodges": 0, "burned": 0, "full_unburned": 0, "judged": 0, "farther": 0, "closer": 0,
+                "fallbacks": 0, "fallback_legs": 0, "fallback_burning": 0, "cuts": collections.Counter(),
                 "approach": collections.Counter(), "detour_extra": [], "fire": collections.Counter()}
 
     rows: dict[str, dict] = collections.defaultdict(blank)
@@ -970,6 +976,29 @@ def fire_rows(trace: Trace) -> dict[str, dict]:
             row["farther"] += int(now - was > 1.0)
             row["closer"] += int(was - now > 1.0)
 
+    for rec in notes(trace, "mimiron.flee"):
+        text = str(rec.get("txt", "")).split()
+        if len(text) < 2 or not text[0].startswith("flames+") or text[1] != "fallback":
+            continue
+        row = rows[phase_at(spans, rec["t"])]
+        row["fallbacks"] += 1
+        leg = next((m for m in moves.get(rec.get("g"), []) if m.get("by") == FLAMES_DODGE
+                    and abs(m["t"] - rec["t"]) <= NOTE_MOVE_MS), None)
+        if not leg:
+            continue
+        row["fallback_legs"] += 1
+        units = samples.before(leg["t"] + 1)
+        row["fallback_burning"] += int(any(dist2((leg["x"], leg["y"]), (unit[1], unit[2])) < FLAMES_BURN_RADIUS
+                                           for guid, unit in units.items() if guid in flames and living(unit)))
+
+    last_cut: dict[int, int] = {}
+    for rec in sorted(notes(trace, "mimiron.castcut"), key=lambda rec: rec["t"]):
+        previous = last_cut.get(rec.get("g"))
+        last_cut[rec.get("g")] = rec["t"]
+        if previous is not None and rec["t"] - previous < CAST_CUT_REPEAT_MS:
+            continue
+        rows[phase_at(spans, rec["t"])]["cuts"][trace.spell(int(rec.get("txt") or 0))] += 1
+
     slot_notes = notes(trace, "mimiron.slot")
     for rec in notes(trace, "mimiron.approach"):
         kind = str(rec.get("txt", "")).split(" ")[0]
@@ -1004,6 +1033,10 @@ def show_fire(trace: Trace) -> None:
         print(f"  {label:4} dodges {dodges}: burned in the {BURNED_LOOKBACK_MS / 1000:.0f} s before {burned},"
               f" unburned at >=90% hp {row['full_unburned']};"
               f" ended farther from target {row['farther']}, closer {row['closer']} of {row['judged']}")
+        if row["fallbacks"] or row["cuts"]:
+            cuts = ", ".join(f"{spell} {count}" for spell, count in row["cuts"].most_common())
+            print(f"       fallbacks {row['fallbacks']}, {row['fallback_burning']} of {row['fallback_legs']} legs"
+                  f" ended in a burn; casts cut for the dodge: {cuts or 'none'}")
         extra = sorted(row["detour_extra"])
         detour = (f" (extra median {statistics.median(extra):.1f} yd, max {extra[-1]:.1f})" if extra else "")
         kinds = ", ".join(f"{kind} {count}" for kind, count in sorted(row["approach"].items()))
@@ -1012,7 +1045,8 @@ def show_fire(trace: Trace) -> None:
         print(f"       Flames {sum(fire.values()) // 1000}k: "
               + "  ".join(f"{role} {fire[role] // 1000}k" for role in ROLES if fire[role]))
     print(f"\n  'burned' means a Flames tick on the bot inside {BURNED_LOOKBACK_MS / 1000:.0f} s before the dodge;"
-          " legs within 1 yd of where they started count neither way")
+          " legs within 1 yd of where they started count neither way; a fallback leg ended in a burn when it"
+          f" stopped within {FLAMES_BURN_RADIUS:.1f} yd of a live Flames (Spread)")
 
 
 # -------------------------------------------------------------------------------------------- handover
@@ -1748,6 +1782,72 @@ def show_bombbots(trace: Trace) -> None:
           " bomb was after the bot itself")
 
 
+def acutank_rows(trace: Trace) -> list[dict]:
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    acu = guids_of_entry(trace, NPC_AERIAL_COMMAND_UNIT)
+    parts = {**{guid: "ACU" for guid in acu},
+             **{guid: "VX-001" for guid in guids_of_entry(trace, NPC_VX001)},
+             **{guid: "MK II" for guid in guids_of_entry(trace, NPC_LEVIATHAN_MKII)}}
+    main = next((rec["g"] for rec in notes(trace, "mimiron.slot")
+                 if str(rec.get("txt", "")).startswith("p4tank")), None)
+    off = {guid for guid in roster if trace.role(guid) == "tank" and guid != main}
+
+    def who(guid: int) -> str:
+        if guid in off:
+            return "off-tank"
+        if guid == main:
+            return "main tank"
+        return trace.role(guid) if guid in roster else "none"
+
+    rows = []
+    for low, high, label in phases(trace):
+        if not label.startswith("P4"):
+            continue
+        targeted = collections.Counter()
+        aim = collections.Counter()
+        for units in samples.window(low, high):
+            for guid, unit in units.items():
+                if guid in acu and living(unit) and len(unit) > 7:
+                    targeted[who(unit[7])] += 1
+                elif guid in off and living(unit) and len(unit) > 7:
+                    aim[parts.get(unit[7], "other")] += 1
+        balls = collections.Counter()
+        damage = collections.Counter()
+        for rec in trace.of("dmg"):
+            if rec.get("sp") == SPELL_PLASMA_BALL_P4 and rec.get("d") in roster and low <= rec["t"] < high:
+                balls[who(rec["d"])] += 1
+                damage[who(rec["d"])] += rec.get("a", 0)
+        dead = collections.Counter(who(rec["g"]) for rec in combat_deaths(trace)
+                                   if rec.get("killer") in acu and low <= rec["t"] < high)
+        rows.append({"label": label, "span": (low, high), "targeted": targeted, "aim": aim,
+                     "balls": balls, "damage": damage, "dead": dead})
+    return rows
+
+
+def show_acutank(trace: Trace) -> None:
+    print("ACU TANK")
+    rows = acutank_rows(trace)
+    if not rows:
+        print("  no phase 4 in this pull")
+        return
+
+    def shares(counter: collections.Counter) -> str:
+        total = sum(counter.values())
+        return ", ".join(f"{key} {count / total * 100:.0f}%" for key, count in counter.most_common()) if total else "-"
+
+    for row in rows:
+        low, high = row["span"]
+        print(f"  {row['label']:4} {clock(low)} .. {clock(high)}  ACU target: {shares(row['targeted'])}")
+        print(f"       off-tank aim: {shares(row['aim'])}")
+        balls = ", ".join(f"{key} {count} for {row['damage'][key] // 1000}k"
+                          for key, count in row["balls"].most_common())
+        dead = ", ".join(f"{key} {count}" for key, count in row["dead"].most_common())
+        print(f"       Plasma Ball: {balls or 'none'}; killed by the ACU: {dead or 'none'}")
+    print("\n  shares are of snapshots; the main tank is whoever took a p4tank slot, every other roster tank is"
+          " an off-tank")
+
+
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
     ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
@@ -1771,6 +1871,8 @@ SECTIONS = (
      " aim at fire bots and the splash guard", show_firebots),
     ("bombbots", "Bomb Bots: how each ended, chased and collateral blast victims, the step-outs and their"
      " length", show_bombbots),
+    ("acutank", "phase 4: whom the ACU targeted and hit with Plasma Ball, and what the off-tank aimed at",
+     show_acutank),
 )
 
 

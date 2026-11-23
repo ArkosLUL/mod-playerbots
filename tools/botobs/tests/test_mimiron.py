@@ -300,6 +300,55 @@ class FirePull(unittest.TestCase):
         self.assertEqual(dict(row["fire"]), {"ranged": 3000})
 
 
+def fallback_pull() -> list[dict]:
+    refused = "(back0 mine0 cone0 fire11 bomb0 rocket0 burst0 shock0 spray0 move0 hold0 bombbot0)"
+    records = [rec for rec in fire_pull() if rec.get("e") not in ("snap", "end")]
+    records += [
+        {"t": 1, "e": "unit", "g": FLAME, "en": mm.NPC_FLAMES_SPREAD, "n": "Flames (Spread)"},
+        {"t": 16000, "e": "note", "g": BULWARK, "k": "mimiron.flee", "txt": f"flames+10 fallback +22 {refused}"},
+        move(16100, BULWARK, mm.FLAMES_DODGE, 40.5, 1.0),
+        {"t": 17000, "e": "note", "g": TREE, "k": "mimiron.castcut", "txt": "982"},
+        {"t": 17250, "e": "note", "g": TREE, "k": "mimiron.castcut", "txt": "982"},
+        {"t": 18000, "e": "note", "g": BULWARK, "k": "mimiron.flee", "txt": f"flames+10 fallback -45 {refused}"},
+        move(18050, BULWARK, mm.FLAMES_DODGE, 30.0, 20.0),
+        {"t": 19000, "e": "note", "g": BULWARK, "k": "mimiron.flee", "txt": f"flames+10 fallback {refused}"},
+        {"t": 19500, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": f"flames+3 ok +0 {refused}"},
+        {"t": 20000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 20000, 250):
+        record = fire_snap(when)
+        record["u"].append([FLAME, 40.0, 0.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+        records.append(record)
+    return records
+
+
+class FallbackPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_4_mimiron_1789700012.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in fallback_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_fallback_leg_counts_as_burning_only_inside_a_live_node(self):
+        row = mm.fire_rows(self.trace)["P2"]
+        self.assertEqual((row["fallbacks"], row["fallback_legs"], row["fallback_burning"]), (3, 2, 1))
+
+    def test_a_cast_cut_is_counted_by_spell(self):
+        row = mm.fire_rows(self.trace)["P2"]
+        self.assertEqual(sum(row["cuts"].values()), 1)
+
+    def test_the_view_prints_the_fallbacks(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_fire(self.trace)
+        self.assertIn("fallbacks 3, 1 of 2 legs ended in a burn", out.getvalue())
+
+
 # A 1 to 2 handover from 11 s to 59 s: both bots hold 40 yd west, walk in from 46 s, and at phase 2
 # Agony stands on her wedge slot while Tree is 9 yd short of hers.
 CX, CY = mm.ROOM_CENTRE
@@ -965,6 +1014,81 @@ class BombBotPull(unittest.TestCase):
             mm.show_bombbots(self.trace)
         self.assertIn("collateral 1 (1 dead)", out.getvalue())
         self.assertIn("median 9.0 yd", out.getvalue())
+
+
+ACU = 4294970700
+ACU_MKII = 4294970701
+WARD = 5005
+
+ACU_ROSTER = ROSTER + [{"g": WARD, "n": "Ward", "r": "tank", "c": "druid", "h": 0}]
+
+
+def acutank_snap(when: int) -> dict:
+    on_ward = when >= 5000
+    rows = [[VX, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0],
+            [ACU_MKII, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0],
+            [ACU, 0.0, 0.0, 364.0, 0.0, 60.0, 0.0, WARD if on_ward else AGONY, 0, 0, 0, 0, 0, 0.0]]
+    for guid, (x, y) in HOME.items():
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 80.0, ACU_MKII if guid == BULWARK else VX, 0, 0, 0, 0, 0, 0.0])
+    rows.append([WARD, 4.0, 0.0, 364.0, 0.0, 100.0, 80.0, ACU if on_ward else VX, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def acutank_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": ACU_ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 1, "e": "unit", "g": ACU_MKII, "en": mm.NPC_LEVIATHAN_MKII, "n": "Leviathan Mk II", "b": 1},
+        {"t": 1, "e": "unit", "g": ACU, "en": mm.NPC_AERIAL_COMMAND_UNIT, "n": "Aerial Command Unit", "b": 1},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 500, "e": "note", "g": BULWARK, "k": "mimiron.slot", "txt": "p4tank 2745,2571,364"},
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+        {"t": 2000, "e": "dmg", "s": ACU, "d": AGONY, "sp": mm.SPELL_PLASMA_BALL_P4, "a": 9000},
+        {"t": 4000, "e": "death", "g": AGONY, "killer": ACU, "blow": [ACU, 9000], "x": 22.0, "y": 0.0},
+        {"t": 6000, "e": "dmg", "s": ACU, "d": WARD, "sp": mm.SPELL_PLASMA_BALL_P4, "a": 10000},
+        {"t": 8000, "e": "dmg", "s": ACU, "d": WARD, "sp": mm.SPELL_PLASMA_BALL_P4, "a": 10000},
+        {"t": 11000, "e": "end", "out": "wipe"},
+    ]
+    records += [acutank_snap(when) for when in range(0, 11000, 250)]
+    return records
+
+
+class AcuTankPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700009.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in acutank_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.acutank_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_one_row_per_phase_4_span(self):
+        self.assertEqual([(row["label"], row["span"]) for row in self.rows], [("P4", (1000, 11000))])
+
+    def test_the_acu_target_splits_by_off_tank_and_role(self):
+        self.assertEqual(dict(self.rows[0]["targeted"]), {"ranged": 16, "off-tank": 24})
+
+    def test_the_off_tank_is_every_tank_but_the_p4tank_holder(self):
+        self.assertEqual(dict(self.rows[0]["aim"]), {"VX-001": 16, "ACU": 24})
+
+    def test_plasma_balls_and_deaths_by_victim(self):
+        row = self.rows[0]
+        self.assertEqual(dict(row["balls"]), {"ranged": 1, "off-tank": 2})
+        self.assertEqual(dict(row["damage"]), {"ranged": 9000, "off-tank": 20000})
+        self.assertEqual(dict(row["dead"]), {"ranged": 1})
+
+    def test_the_view_prints_shares(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_acutank(self.trace)
+        self.assertIn("ACU target: off-tank 60%, ranged 40%", out.getvalue())
+        self.assertIn("off-tank 2 for 20k", out.getvalue())
 
 
 class EveryView(unittest.TestCase):

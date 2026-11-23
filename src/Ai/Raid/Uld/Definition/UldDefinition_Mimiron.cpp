@@ -9,9 +9,13 @@
 #include "BossAuraActions.h"
 #include "BossAuraTriggers.h"
 #include "EncounterHelpers.h"
+#include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
+#include "Spell.h"
+#include "SpellInfo.h"
 #include "Strategy.h"
 #include "UldActions_Mimiron.h"
 #include "UldEncounterGate.h"
@@ -127,6 +131,54 @@ bool MimironMeleeSector(PlayerbotAI* botAI)
 
 bool MimironPhase4MainTank(PlayerbotAI* botAI) { return IsMimironPhase4(botAI->GetBot()); }
 
+bool MimironPhase4AcuTank(PlayerbotAI* botAI) { return IsMimironPhase4AcuTank(botAI->GetBot()); }
+
+void CutMimironCastsInFire(PlayerbotAI* botAI)
+{
+    if (!IsMimironHardModeActive(botAI))
+        return;
+
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInMap(bot) || IsRealPlayer(member))
+            continue;
+
+        Spell* spell = member->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell || spell->getState() != SPELL_STATE_PREPARING ||
+            spell->GetCastTimeRemaining() <= ULDUAR_MIMIRON_FLAMES_CAST_FINISH_MS)
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI)
+            continue;
+
+        MimironDodgeFlamesTrigger dodge(memberAI);
+        if (!dodge.IsActive())
+            continue;
+
+        memberAI->RequestSpellInterrupt();
+        if (RaidObs::Active())
+            RaidObs::Note(member, "mimiron.castcut", std::to_string(spell->GetSpellInfo()->Id));
+    }
+}
+
+void MimironEncounterTick(PlayerbotAI* botAI)
+{
+    if (MimironTick(botAI))
+        CutMimironCastsInFire(botAI);
+}
+
+bool MimironOwnsTargets(PlayerbotAI* botAI)
+{
+    return IsMimironEngaged(botAI) || IsMimironFireBotCullActive(botAI, botAI->GetBot());
+}
+
 void DefineMimiron(EncounterBuilder& e)
 {
     e.Node<MimironP3Wx2LaserBarrageTrigger, MimironP3Wx2LaserBarrageAction>(ACTION_RAID + 7);
@@ -157,9 +209,11 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironFireBotTrigger, MimironFireBotAction>(ACTION_RAID + 3);
     e.Node<MimironResetEncounterStateTrigger, MimironResetEncounterStateAction>(ACTION_RAID);
 
-    e.OwnTargeting("mimiron target guard", Role::NonTank, IsMimironEngaged, Family::DpsAssist);
+    e.OwnTargeting("mimiron target guard", Role::NonTank, MimironOwnsTargets, Family::DpsAssist);
 
     e.OwnTargeting("mimiron phase 4 tank target guard", Role::MainTank, MimironPhase4MainTank);
+
+    e.OwnTargeting("mimiron phase 4 acu tank target guard", Role::Tank, MimironPhase4AcuTank);
 
     e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge,
             {"reach melee", "killing spree"});
@@ -201,7 +255,7 @@ void DefineMimiron(EncounterBuilder& e)
 
     e.Block("mimiron vx001 facing guard", Role::Any, MimironMeleeSector, Family::TankFace, {"set behind"});
 
-    e.Tick(MimironTick);
+    e.Tick(MimironEncounterTick);
 }
 }
 
