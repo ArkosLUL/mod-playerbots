@@ -2122,6 +2122,29 @@ class FocusAndRepick(unittest.TestCase):
         self.assertEqual((priest["near"], priest["dropped"]), ([None, None], None))
         self.assertRegex(self.render(fc.show_personal), r"0:01\.000 Frost +Blink +2\+2 +\d+% +20 +20 +yes  yes")
 
+    def test_a_blink_landing_counts_once_the_bot_moved_and_reads_every_melee_champion_there(self):
+        def pull(spot: tuple[float, float] | None) -> Trace:
+            folder = tempfile.TemporaryDirectory()
+            self.addCleanup(folder.cleanup)
+            path = pathlib.Path(folder.name) / "649_1_velanaa_1789500000.ndjson"
+            jumped = focus_snap(1500)
+            if spot:
+                jumped["u"] = [placed(MAGE, *spot, 60.0, PALADIN) if unit[0] == MAGE else unit
+                               for unit in jumped["u"]]
+            records = [jumped if rec.get("e") == "snap" and rec["t"] == 1500 else rec for rec in focus_pull()]
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            return Trace(path)
+
+        self.assertEqual(fc.landing_clearances(pull(None)), {})
+        self.assertEqual(fc.landing_clearances(pull((40.0, 0.0))), {"Blink": [1, 0]})
+        trace = pull((8.0, 0.0))
+        self.assertEqual(fc.landing_clearances(trace), {"Blink": [1, 1]})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_personal(trace)
+        self.assertIn("landed within 12 yd of a melee champion, at the first sample after the jump: Blink 1 of 1",
+                      out.getvalue())
+
     def test_sprint_and_dash_read_the_champions_on_their_bot(self):
         rows = fc.speed_rows(self.trace)
         self.assertEqual([(row["t"], row["bot"], row["spell"], row["melee"], row["others"]) for row in rows],

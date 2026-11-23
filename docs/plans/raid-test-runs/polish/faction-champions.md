@@ -1163,8 +1163,8 @@ moves untouched.
 **Next window should show.** `--personal` "iced kites started inside the chaser's strike reach or past it": Broln and
 Narrhok far more past than inside (window 20: Broln inside 31 and 27, past 9 and 11; Narrhok toc1 inside 31, past 12) and
 their weapon hits inside down from 10, 6 and 16. `fc.castbreak` notes up some (16, 32, 15), kites per pull up a little
-(272, 282, 304 hops). No Demonic Circle: Teleport row in the escape table with its nearest melee champion under 12 yd at
-+2 s from a champion not on the bot. Fewer deaths to an iced Tauren (window 20: 5 of 7). Kill time no longer (6:21,
+(272, 282, 304 hops). `--personal` "landed within 12 yd of a melee champion": Demonic Circle: Teleport 0 (window 20: 0
+of 3, 2 of 8, 1 of 9; windows 14-20 17 of 82), Blink still about 0 (1 of 122). Fewer deaths to an iced Tauren (window 20: 5 of 7). Kill time no longer (6:21,
 6:32, 5:52).
 
 **Seen, not picked.**
@@ -1192,3 +1192,15 @@ their weapon hits inside down from 10, 6 and 16. `fc.castbreak` notes up some (1
 
 **Shared code.** None: the strike reach is this fight's helper, the reach facts went into its boss doc, and the reader is
 its own.
+
+**Review.** Both causes hold: `--personal` on window 20 gives the iced kite splits above, toc2 5:37.6 Tocyao's hop and
+Broln's Stormstrike pair from 12.5 yd 0.5 s later, and 2:50.5 Tocyap's teleport with Broln's Lava Lash and swing from 9.0
+yd 0.6 s later. `Spell::CheckRange` gives the 3 yd past the swing reach as written. No size, mode or player branch: the
+reach is read live, the cast break skips players, and a player's moves are untouched.
+
+- Review fix: the next-window check for the circle read the escape table's +2 s column, which only follows the melee
+  champions already on the bot, so it couldn't show a landing next to another one. `--personal` now prints the Blinks
+  and circle teleports whose first sample 8+ yd off lands within 12 yd of any living melee champion
+  (`landing_clearances`); windows 14-20: circle 17 of 82, Blink 1 of 122 (Blink's own 12 yd gate, so ~1 is sample lag).
+- Left: the circle's 12 yd floor is Blink's, inside the Tauren's 12.6 yd Stormstrike and Lava Lash pick, but he hits
+  there only a bot topping his threat that he isn't on, a 0.6 yd band.

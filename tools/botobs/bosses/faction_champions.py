@@ -34,6 +34,7 @@
                                            melee champions' share, the pins, a kite before), healthstones over 70%,
                                            the escapes, Sprint and Dash casts and kites, how far the chasers were
                                            at an escape and after, whether they dropped the bot and it lived, the
+                                           Blinks and circle teleports landing within 12 yd of a melee champion, the
                                            kites each melee champion caught, iced or not, its iced ones inside its
                                            strike reach or past it, the re-hops a kite's own walk refused and how
                                            long they waited
@@ -430,6 +431,10 @@ SPEED_SPELLS = {2983: "Sprint", 8696: "Sprint", 11305: "Sprint", 1850: "Dash", 9
 ESCAPE_WATCH_MS = 10000
 # a 2.25-reach champion's swings reach 7.7 yd, so only the Tauren two (6.075) hit a bot from past this
 ESCAPE_FAR_YD = 8.0
+LANDING_SPELLS = ("Blink", "Demonic Circle: Teleport")
+LANDING_CLEAR = 12.0
+LANDING_MOVED = 8.0
+LANDING_LOOK_MS = 1000
 # a bot's hop off the melee champions on it, `<chasers> melee, <nearest> yd`
 KITE = "fc.kite"
 # hops this close together by one bot are one kite
@@ -3541,6 +3546,37 @@ def escape_rows(trace: Trace) -> list[dict]:
              **chase_after(trace, rec.get("g"), rec["t"])} for rec in notes(trace, ESCAPE)]
 
 
+def landing_clearances(trace: Trace, escapes: list[dict] | None = None) -> dict[str, list[int]]:
+    """Per LANDING_SPELLS spell, `[landed, near]` over its escapes: landed one whose bot's first sample in the
+    LANDING_LOOK_MS after has it LANDING_MOVED+ yd off where it stood at the note, near one with a living melee
+    champion, on the bot or not, within LANDING_CLEAR of it in that sample."""
+    escapes = escape_rows(trace) if escapes is None else escapes
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    stamps = snap_stamps(trace)
+    snaps = frames(trace)
+    out: dict[str, list[int]] = {}
+    for row in escapes:
+        if row["spell"] not in LANDING_SPELLS:
+            continue
+        before = snap_at(trace, row["t"])
+        start = next((unit for unit in before.get("u", []) if unit[0] == row["bot"]), None) if before else None
+        if not start:
+            continue
+        for snap in snaps[bisect.bisect_right(stamps, row["t"]):]:
+            if snap["t"] > row["t"] + LANDING_LOOK_MS:
+                break
+            units = snap.get("u", [])
+            me = next((unit for unit in units if unit[0] == row["bot"]), None)
+            if not me or math.dist(me[1:3], start[1:3]) < LANDING_MOVED:
+                continue
+            cell = out.setdefault(row["spell"], [0, 0])
+            cell[0] += 1
+            cell[1] += any(unit[0] in melee and unit[5] > 0 and math.dist(unit[1:3], me[1:3]) < LANDING_CLEAR
+                           for unit in units)
+            break
+    return out
+
+
 def speed_rows(trace: Trace) -> list[dict]:
     """Every raid Sprint or Dash cast in the pull: `t`, `bot`, `spell`, and the `chase_after` fields at it."""
     if encounter_of(trace) != ENCOUNTER:
@@ -3805,6 +3841,10 @@ def show_personal(trace: Trace) -> None:
                                   if row["at"] is not None and row["at"] > ESCAPE_FAR_YD)
         print(f"  with the nearest melee champion past {ESCAPE_FAR_YD:.0f} yd: {sum(far.values())}"
               + "".join(f", {name} {count}" for name, count in far.most_common()))
+        landings = landing_clearances(trace, escapes)
+        if landings:
+            print(f"  landed within {LANDING_CLEAR:.0f} yd of a melee champion, at the first sample after the jump: "
+                  + ", ".join(f"{spell} {near} of {landed}" for spell, (landed, near) in sorted(landings.items())))
     else:
         print("\n  fc.escape: none")
     speeds = speed_rows(trace)
