@@ -6,7 +6,8 @@
                                            champion healer lived with a non-healer on the latch
     faction_champions.py <file> --cc       CC duties, CC held on each champion, casts started and landed, CC
                                            ended by its own caster's next cast elsewhere, raid hits on a
-                                           champion our Polymorph, Fear or Hex held
+                                           champion our Polymorph, Fear or Hex held, each melee druid's
+                                           Cyclones and Roots and its time out of Cat Form
     faction_champions.py <file> --heals    champion cast-time heals and channels, the interrupts that followed
                                            and how far into the cast they came
     faction_champions.py <file> --burst    lust, Exhaustion carried in, first burst cooldowns, burst vetoes
@@ -233,6 +234,9 @@ CC_PACE_MS = 10000
 # MotionMaster's FLEEING_MOTION_TYPE, snapshot column 9
 MOVEGEN_COLUMN = 9
 FLEEING = 9
+MANA_COLUMN = 6
+POWER_TYPE_COLUMN = 12
+POWER_ENERGY = 3
 # a CC cast lands inside its cast time plus this, snapshot and refresh lag included
 LAND_SLACK_MS = 1000
 
@@ -1117,6 +1121,41 @@ def cc_spell_name(trace: Trace, spell: int) -> str:
     return f"{CC_SPELLS[spell]} {spell}" if spell in CC_SPELLS else trace.spell(spell)
 
 
+def cat_casters(trace: Trace) -> list[dict]:
+    cats = {member["g"] for member in trace.header.get("roster", [])
+            if member.get("r") == "melee" and class_name(member.get("c")) == "druid"}
+    rows = {bot: {"bot": bot, "cyclones": 0, "roots": 0, "samples": 0, "out": 0, "longest": None, "mana": None}
+            for bot in cats}
+    if not rows:
+        return []
+    targets = champions(trace)
+    for rec in trace.of("cast"):
+        row = rows.get(rec.get("s"))
+        if row is None or rec.get("tr") or rec.get("tgt") not in targets:
+            continue
+        name = CC_SPELLS.get(rec.get("sp"))
+        row["cyclones"] += name == "Cyclone"
+        row["roots"] += name == "Entangling Roots"
+    start = pull_start(trace)
+    since: dict[int, int] = {}
+    for snap in frames(trace):
+        if snap["t"] < start:
+            continue
+        live = {unit[0]: unit for unit in live_rows(snap, cats) if len(unit) > POWER_TYPE_COLUMN}
+        for bot in cats - live.keys():
+            since.pop(bot, None)
+        for bot, unit in live.items():
+            row = rows[bot]
+            row["samples"] += 1
+            row["mana"] = unit[MANA_COLUMN] if row["mana"] is None else min(row["mana"], unit[MANA_COLUMN])
+            if unit[POWER_TYPE_COLUMN] == POWER_ENERGY:
+                since.pop(bot, None)
+                continue
+            row["out"] += 1
+            row["longest"] = max(row["longest"] or 0, snap["t"] - since.setdefault(bot, snap["t"]))
+    return [rows[bot] for bot in sorted(rows)]
+
+
 def show_cc(trace: Trace) -> None:
     print("CC")
     duties = cc_duties(trace)
@@ -1165,6 +1204,13 @@ def show_cc(trace: Trace) -> None:
     landed, seconds = cc_pace(trace, rows)
     rate = landed * CC_PACE_MS / 1000 / seconds if seconds > 0 else 0.0
     print(f"  landed per 10 s: {rate:.2f} ({landed} in {seconds:.0f} s)")
+    for row in cat_casters(trace):
+        shape = "no live sample with a power type"
+        if row["samples"]:
+            shape = (f"out of Cat Form {row['out'] * 100 / row['samples']:.0f}% of {row['samples']} live samples,"
+                     f" longest {(row['longest'] or 0) / 1000:.1f} s; lowest mana {row['mana']:.0f}%")
+        print(f"  melee druid {trace.name(row['bot'])}: Cyclone {row['cyclones']}, Entangling Roots {row['roots']}"
+              f" on champions; {shape}")
     breaks = own_breaks(trace)
     print("  ended by its caster's next one elsewhere: "
           + (", ".join(f"{trace.name(bot)} {count['broken']} of {count['holds']}"

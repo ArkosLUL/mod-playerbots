@@ -80,6 +80,7 @@ constexpr std::array<uint32, 4> POLYMORPH_RANKS = {12826, 12825, 12824, 118};
 constexpr std::array<uint32, 3> FEAR_RANKS = {6215, 6213, 5782};
 constexpr std::array<uint32, 2> BANISH_RANKS = {18647, 710};
 constexpr uint32 SPELL_HEX_RANK = 51514;
+constexpr uint32 SPELL_CAT_FORM = 768;
 constexpr float CC_WALK_REACH = 15.0f;
 constexpr uint32 CC_WALK_MS = 3000;
 constexpr float CC_CHASED_RADIUS = 30.0f;
@@ -380,13 +381,28 @@ bool InControl(Player* player)
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
 }
 
-bool CycloneBot(Player* member)
+bool RangedDruid(Player* member)
 {
-    return member && member->getClass() == CLASS_DRUID && GET_PLAYERBOT_AI(member) && IsRaidDpsBot(member) &&
-           !PlayerbotAI::IsMelee(member) && member->HasSpell(SPELL_CYCLONE);
+    return member && member->getClass() == CLASS_DRUID && IsRaidDpsBot(member) && !PlayerbotAI::IsMelee(member) &&
+           member->HasSpell(SPELL_CYCLONE);
 }
 
-std::vector<uint32> CcSpells(Player* member, Map* map)
+bool CycloneBot(Player* member) { return RangedDruid(member) && GET_PLAYERBOT_AI(member); }
+
+bool CatCaster(Player* member, bool rangedDruid, uint32 spellId)
+{
+    if (rangedDruid || !member || member->getClass() != CLASS_DRUID || !GET_PLAYERBOT_AI(member) ||
+        !IsRaidDpsBot(member) || !PlayerbotAI::IsMelee(member) || !spellId || !member->HasSpell(spellId))
+        return false;
+
+    SpellInfo const* spell = sSpellMgr->GetSpellInfo(spellId);
+    SpellInfo const* form = sSpellMgr->GetSpellInfo(SPELL_CAT_FORM);
+    return spell && form &&
+           spell->CalcPowerCost(member, spell->GetSchoolMask()) + form->CalcPowerCost(member, form->GetSchoolMask()) <=
+               static_cast<int32>(member->GetPower(POWER_MANA));
+}
+
+std::vector<uint32> CcSpells(Player* member, Map* map, bool rangedDruid)
 {
     std::vector<uint32> spells;
     if (!member || !member->IsInWorld() || !member->IsAlive() || member->FindMap() != map ||
@@ -409,7 +425,7 @@ std::vector<uint32> CcSpells(Player* member, Map* map)
             add(FirstKnownRank(member, FEAR_RANKS));
             break;
         case CLASS_DRUID:
-            if (CycloneBot(member))
+            if (CycloneBot(member) || CatCaster(member, rangedDruid, SPELL_CYCLONE))
                 add(SPELL_CYCLONE);
             break;
         case CLASS_SHAMAN:
@@ -903,9 +919,10 @@ void UpdateCcDuties(FactionChampionsState& state, Player* bot, std::vector<Playe
     Map* map = bot->FindMap();
     std::vector<std::pair<Player*, std::vector<uint32>>> casters;
     std::vector<ObjectGuid> ccBots;
+    bool const rangedDruid = std::any_of(members.begin(), members.end(), RangedDruid);
     for (Player* member : members)
     {
-        std::vector<uint32> spells = CcSpells(member, map);
+        std::vector<uint32> spells = CcSpells(member, map, rangedDruid);
         if (spells.empty())
             continue;
 
@@ -1598,6 +1615,13 @@ bool FactionChampionsCounterspellHold(PlayerbotAI* botAI)
 }
 
 bool FactionChampionsCycloneBot(Player* player) { return CycloneBot(player); }
+
+bool FactionChampionsRangedDruid(Player* player) { return RangedDruid(player); }
+
+bool FactionChampionsCatCaster(Player* player, bool rangedDruid, uint32 spellId)
+{
+    return CatCaster(player, rangedDruid, spellId);
+}
 
 Unit* FactionChampionsBlobHealer(PlayerbotAI* botAI)
 {

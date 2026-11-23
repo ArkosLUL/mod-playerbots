@@ -56,6 +56,19 @@ bool StandForCast(Player* bot, LastMovement& last, uint32 spellId)
     last.clear();
     return true;
 }
+
+bool ShiftForCast(PlayerbotAI* botAI, Player* bot, uint32 spellId)
+{
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+    if (!info || bot->getClass() != CLASS_DRUID || info->CheckShapeshift(bot->GetShapeshiftForm()) == SPELL_CAST_OK)
+        return true;
+
+    if (bot->GetGlobalCooldownMgr().HasGlobalCooldown(info))
+        return false;
+
+    botAI->RemoveShapeshift();
+    return true;
+}
 }
 
 bool FactionChampionsAvoidAoeAction::IssueLeg(Position const& spot, uint32 now)
@@ -304,7 +317,7 @@ bool FactionChampionsCrowdControlAction::Execute(Event /*event*/)
     }
 
     DropWalk();
-    if (!StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+    if (!StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId) || !ShiftForCast(botAI, bot, spellId))
         return false;
 
     return botAI->CastSpell(spellId, champion);
@@ -320,7 +333,8 @@ bool FactionChampionsPeelAction::Execute(Event /*event*/)
 {
     uint32 spellId = 0;
     Unit* champion = FactionChampionsPeelTarget(botAI, spellId);
-    if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId))
+    if (!champion || !StandForCast(bot, AI_VALUE(LastMovement&, "last movement"), spellId) ||
+        !ShiftForCast(botAI, bot, spellId))
         return false;
 
     return botAI->CastSpell(spellId, champion);

@@ -1204,3 +1204,54 @@ reach is read live, the cast break skips players, and a player's moves are untou
   (`landing_clearances`); windows 14-20: circle 17 of 82, Blink 1 of 122 (Blink's own 12 yd gate, so ~1 is sample lag).
 - Left: the circle's 12 yd floor is Blink's, inside the Tauren's 12.6 yd Stormstrike and Lava Lash pick, but he hits
   there only a bot topping his threat that he isn't on, a 0.6 yd band.
+
+**User answers (2026-11-23) to Q4 and Q5.** Q4: yes, option (a): when the raid has no ranged (Balance) druid bot, the
+cat druid bot takes the Cyclone duty and the Entangling Roots peel, leaving Cat Form for each cast; the CC duty's rules
+stay as they are (DR, immunity, LOS, the clear check). Q5: yes, a DPS warrior switches to Defensive Stance to Disarm the
+Hunter kill target when no rogue lives and there is no prot warrior, but built in the window after Q4's, not with it.
+Q6 (ranged step off a Tauren that isn't on them) still waits.
+
+## Round 13 (2026-11-23, builds Q4; no new pulls)
+
+**Data.** None new: round 12 (`4160ce285`) is merged but not built, and window 21 pulls it. Window 20 (build
+`5d9e7320d`, round 12's three traces) reread for the druids' baseline with the reader's new `--cc` line. Scratch script
+in the round's scratchpad `fc13/` (gone with it).
+
+**Stop rules, verdict, ranking.** Skipped: no pull has round 12 in it. Deaths as round 12's table: toc1 kill 2 (iced
+Narrhok 2), toc2 kill 5 (iced Broln 3, Ruj'kah as kill target 1, Narrhok before his ice duty 1), toc3 kill 0.
+
+**Q4 checked before building.**
+
+- Pools and rosters: toc1 is roster A (a Balance and a cat bot), toc2 B (a Balance, no cat), toc3 C (a cat, no Balance).
+  Window 20: Tocxaw (toc1) Cyclone 43, Roots 2; Tocyas (toc2) Cyclone 47, Roots 22; toc3 no Cyclone or Roots, CC landed
+  1.62 per 10 s (2.31, 2.42), the off-latch Disc Priest Caiphus held 0.1 s in all.
+- DBC: Cyclone 33786 and Entangling Roots 53308 carry `SPELL_ATTR0_NOT_SHAPESHIFT` (Attributes 0x10000), so
+  `SpellInfo::CheckShapeshift` fails them in Cat Form. `PlayerbotAI::CanCastSpell` counts `SPELL_FAILED_NOT_SHAPESHIFT`
+  as castable and `CastSpell` then fails, so the cast must drop the form itself. The class `caster form` prerequisite
+  only runs above `MediumHealth` mana (`CastCasterFormAction::isUseful`). Costs: Cyclone 8% of base mana, Roots 7%, Cat
+  Form 35% before talents.
+- Both cats sat at 98.6-100% mana with 0% of their live samples out of Cat Form (toc1 Tocxar, toc3 Toczas). The cat
+  strategy's `cat form` trigger (28) shifts back once no raid action runs; a cat short of the mana for Cat Form stays in
+  caster form, Bear Form, its alternative, costing mana too.
+
+**Fix** (`ToCHelpers_FactionChampions.{h,cpp}`, `ToCHelpers_FactionChampionsDefence.cpp`,
+`ToCActions_FactionChampionsDefence.cpp`). `RangedDruid`: a druid, neither tank nor healer, not melee, knowing Cyclone,
+bot or player. With none alive on the map, a melee DPS druid bot (`CatCaster`) gets Cyclone as a CC spell and the
+Entangling Roots peel while its mana covers the spell plus Cat Form; every other CC duty and peel rule as before, and no
+Cyclone stand. The CC and peel actions drop a druid's form when the spell can't be cast in it and the global cooldown
+is clear (`ShiftForCast`), after the stand-for-cast check, right before the cast. Reader `--cc`: per melee druid its
+Cyclones and Roots on champions, the share of its live samples out of Cat Form, the longest such run and its lowest mana
+(`cat_casters`). Boss doc: CC and Peel rows, Known gaps, `--cc`.
+
+**Next window should show.** toc3: `--cc` "melee druid Toczas: Cyclone N, Entangling Roots N" above 0 (window 20: 0, 0),
+out of Cat Form a small share in runs of a few seconds (0%); CC landed per 10 s above 1.62, toward 2.3-2.4; the
+off-latch healers held longer (Caiphus 0.1 s, Erin Fear 23.2 s and Banish 18.1 s). toc1: Tocxar's Cyclone and Roots 0
+while Tocxaw lives. Kill times no longer (6:21, 6:32, 5:52). A small gain at most: the cat's mana bounds its casts.
+
+**Questions for the user.** None new. Q5 goes in next round as answered; Q6 still waits.
+
+**Shared code.** None changed: `PlayerbotAI::RemoveShapeshift` and `IsRaidDpsBot` are called, not changed.
+
+- Left: a dead Balance druid doesn't count, so a cat takes over when the raid's last ranged druid dies.
+- Left: as a CC bot the cat's own swings no longer block Polymorph, Fear or Hex on its victim (`ClearForBreakable`
+  skips CC bots, as for the Enhancement shaman's Hex); its victim is the kill target, which takes no CC.

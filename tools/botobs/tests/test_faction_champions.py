@@ -2423,6 +2423,54 @@ class ChaseAndWall(unittest.TestCase):
         self.assertRegex(text, r"0:19\.500 Frost +ranged +1 +0\.0")
 
 
+CAT = 5023
+
+
+def cat_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": [{"g": CAT, "n": "Claws", "r": "melee", "c": 11, "h": 0},
+                    {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        cast(1000, CAT, 33786, PALADIN, 1500),
+        cast(3000, CAT, 53308, PALADIN, 1500),
+        cast(4000, CAT, 33786, MAGE),
+        cast(5000, CAT, 33786, PALADIN, triggered=True),
+        {"t": 10000, "e": "end", "out": "kill"},
+    ]
+    forms = {-1000: 0, 0: 3, 1000: 0, 2000: 0, 3000: 0, 4000: 3, 5000: 0, 6000: 0, 7000: 3, 8000: 3, 9000: 3}
+    for when, form in forms.items():
+        claws = placed(CAT, 0.0, 0.0, 0.0 if when == 5000 else 100.0, PALADIN) + [form, 100.0]
+        claws[6] = {5000: 10.0, 6000: 70.0}.get(when, 90.0)
+        records.append({"t": when, "e": "snap", "hz": [],
+                        "u": [claws, placed(PALADIN, 2.0, 0.0, 100.0, CAT) + [0, 100.0]]})
+    return records
+
+
+class CatCasters(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in cat_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_melee_druid_counts_its_cc_on_champions_and_its_live_time_out_of_cat_form(self):
+        self.assertEqual(fc.cat_casters(self.trace),
+                         [{"bot": CAT, "cyclones": 1, "roots": 1, "samples": 9, "out": 4, "longest": 2000,
+                           "mana": 70.0}])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_cc(self.trace)
+        self.assertIn("melee druid Claws: Cyclone 1, Entangling Roots 1 on champions; out of Cat Form 44% of 9 live"
+                      " samples, longest 2.0 s; lowest mana 70%", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
@@ -2468,6 +2516,7 @@ class EveryView(unittest.TestCase):
         self.assertEqual(fc.battle_res_casts(trace), [])
         self.assertEqual(fc.taunt_casts(trace), collections.Counter())
         self.assertEqual(fc.ball_windows(trace), [])
+        self.assertEqual(fc.cat_casters(trace), [])
         self.assertEqual(fc.kill_isolation(trace), [])
         self.assertEqual(fc.escapee_seconds(trace), {})
         self.assertEqual(fc.champion_trinkets(trace), [])
