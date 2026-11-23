@@ -1232,3 +1232,143 @@ fastest); the north settle's healer reach to the main tank stays open as before.
   hovering at 11 yd off the impact while the Animus drifts can flip the bot between two points up to
   11.5 yd apart. The 10-11 band held 27 of 416 replayed dodges, and the Animus stands still on the main
   tank. A marked bot's dodge itself still heads for its group's strafe (pre-existing).
+
+## Round 11 (2026-11-23, build e440e6f17)
+
+**Data.** Window 23 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head e440e6f17
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.3, no vapor hit),
+against window 21 (round 8, `--head 90400b39c`) and window 22a (round 9, `--head b9dd70fcc`). Only Vezax
+r10 changed for Vezax between the builds. Analysis scripts: session scratchpad `vezax-r11/` (`cmp3.py`
+the table below, `perbot.py`, `surge.py`, `mtdeath.py`, `healcasts.py`, `dodgecost.py`, `movers.py`,
+`markcrash.py`, `markreplay.py`, `exitreplay.py`, `latetotal.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261123-210611-8` | `603_8_general-vezax_1795468054` | wipe 4:50, 29 deaths, the Animus at 23.7% at the collapse (4:16.0) |
+| uld2 | `tr-20261123-210631-9` | `603_9_general-vezax_1795468062` | wipe 5:02, 29 deaths, the Animus at 11.8% at the collapse (4:28.5) |
+| uld3 | `tr-20261123-210551-7` | `603_7_general-vezax_1795467993` | wipe 6:11, 31 deaths, the Animus at 1.9% at the collapse (4:32.3) |
+
+**Stop rules.** Not polished: no kill. Round 10's far-group failure (ranged dodges past the Animus's
+ceiling) is gone (below), so its lineage stops nothing; this round's picks are new. The race itself is
+the waived gear check.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Before the collapse | Collapse |
+|---|---|---|
+| uld1 | none | from 4:08.0 (DK main tank to Vezax melee at +59.5 s): 10 Profound Darkness, 10 Vezax melee, 7 Animus melee, 1 Mark, 1 Shadow Crash |
+| uld2 | 1 Mark leech (3:57.2, the 3:52 mark) | from 4:18.4 (a healer at +69.9 s): 20 Profound Darkness, 4 Animus melee, 3 Shadow Crash, 1 Vezax melee |
+| uld3 | 1 Shadow Crash (healer Uldzae 3:47.5, a strafe across the impact) | from 4:24.4: 14 Profound Darkness, 11 Vezax melee, 3 Mark, 2 Animus melee |
+
+**Verdict on round 10 (mark spots from Vezax, pulled dodges): both did what they targeted.**
+
+- *Mark spots.* Marks before the spawn leeched 15-27 ticks (window 22a uld1's stranded one 75); one
+  `edge` read on a marked bot (uld2 1:00.5 Uldyaf, a declined position walk, on its spot by 1:05.5, 17
+  ticks); no soak walk by a marked bot (windows 21-22a: 2).
+- *Pulled dodges.* `vezax.dodge = pulled` from 10/10/9 bots; ranged dodges ending past the ceiling 0-1
+  per bot (window 22a uld3 group L 39 of 39); ranged `past` 4-15 / 1-24 / 1-17% (uld3's L group 1-17%
+  against 30-44%); reach spell walks 0.6-1.6 per ranged bot-minute against 2.2-3.3. A pulled dodge costs
+  what a strafe does (`dodgecost.py`): walk 14.0-14.8 yd against 15.0, field again 2.6-3.2 s after the
+  landing (strafes in windows 21-22a 2.6-3.2), 4 casts from the cast to 6 s after the landing (3-4).
+- *Crashes.* No hit on a bot whose dodge read `pulled`; Animus-phase crash deaths before the collapse
+  0/0/1, the one a healer (never pulled).
+- *Cost watch.* Far 14/14/13 at 3:12 and 3:52; no in-phase mark on melee or a tank before a collapse.
+
+**Windows 21, 22a and 23 pull by pull** (`cmp3.py`; settle is Vezax from the anchor; main tank healing
+all sources, before the spawn over its last minute, in the phase to his death or the stop).
+
+| Pull | Settle; Animus off him | Animus | Raid / ranged k/s | Healer mana spawn → stop | MT healed / taken k/s | Mark ticks pre / phase | Crash hits pre / phase | MT death |
+|---|---|---|---|---|---|---|---|---|
+| w21 uld1 | 9.9; across +9.1 | kill 81 s, 1.24 %/s | 153 / 84 | 20-56 → 0-9 | 1.1, 2.8 / 3.0 | 72 / 8, 16 | 0 / 0 | - |
+| w21 uld2 | 9.9; +8.9 | kill 82 s, 1.22 | 150 / 75 | 48-69 → 0-46 | 1.0, 2.4 / 2.9 | 82 / 21 | 0 / 0 | - |
+| w21 uld3 | 9.9, swung away; −4.7 | lockout, 71.6% at 22 s | 158 / 89 | 42-81 → 35-78 | 1.2, 2.5 / 2.4 | 52 / - | 0 / 12 | +66.9 |
+| w22 uld1 | 9.9; −7.1 | 34.2% at 61 s, 1.07 | 133 / 65 | 0-74 → 0-49 | 1.6, 2.5 / 3.1 | 126 / 32 | 0 / 1 | +57.8 |
+| w22 uld2 | 9.9; +7.5 | kill 75 s, 1.33 | 165 / 89 | 47-69 → 0-46 | 1.3, 2.1 / 2.5 | 74 / 19 | 0 / 0 | - |
+| w22 uld3 | 10.2; −9.0 | 7.4% at 84 s, 1.10 | 136 / 62 | 46-81 → 0-43 | 1.6, 3.6 / 4.0 | 47 / 19, 26 | 0 / 0 | +75.2 |
+| w23 uld1 | 9.6; −2.8 | 23.7% at 67 s, 1.13 | 139 / 73 | 38-67 → 1-47 | 1.9, 2.8 / 3.5 | 62 / 7, 32 | 0 / 0 | +59.5 |
+| w23 uld2 | 9.9; +8.9 | 11.8% at 80 s, 1.10 | 137 / 61 | 37-70 → 3-15 | 0.7, 2.3 / 2.6 | 76 / 19, 41 | 0 / 0 | +92.1 |
+| w23 uld3 | 10.6; +8.5 | 1.9% at 84 s, 1.17 | 144 / 70 | 41-73 → 0-46 | 1.6, 2.6 / 3.1 | 49 / 25, 21 | 0 / 1 | +82.1 |
+
+All nine settled normally. The pace to a collapse reads low, so `surge.py` reads the Animus at +60 s,
+everyone alive: uld1 28.3 / 34.8 / 28.2%, uld2 33.5 / 19.2 / 33.7%, uld3 40.5 (the lockout) / 29.5 /
+27.1% (windows 21 / 22a / 23). Window 23 kept window 21's two kills' pace to the minute and lost after it:
+
+- uld1: the main tank died at +59.5 s (window 21: alive). In the 14.5 s before, healers landed 11.4k on
+  him against 25.4k in window 21 (Beacon of Light on him there), and spent the rest on group L and the
+  healers, drained by the 3:52 mark (32 ticks, 133k; window 21's 16). He took 3.5k/s against 3.0k/s.
+- uld2: healers dry by +70 s (Uldyae 70 → 0), deaths from +69.9 s; the Animus went 33.7 → 11.8% over
+  +60-80 s against window 21's 33.5 → 2.3%. The 3:52 mark leeched 41 ticks, 162k (window 21: 21).
+- uld3: a healer killed at +39 s by a strafe across the impact (below); 1.9% short at the collapse.
+
+**Which round helps, which hurts.** Neither hurts by any measure here.
+
+- Round 9's latch: `out s` 0 for every camp bot in all six pulls since (window 21 uld3: 203 bot-s and
+  its 29 deaths). Helps, at no cost.
+- Round 9's crossing (Q1): `cross` from 7/10/8 and 9/5/1 bots; far 13-14/9 at every in-phase mark
+  before a collapse in six pulls. Window 22a uld2 crossed 85% of its samples and killed fastest since
+  window 11. No cost found; the Animus pace at +60 s does not separate the windows.
+- Round 10's mark spots: marks before the spawn 62/76/49 ticks a pull (window 22a 126/74/47, window 21
+  72/82/52). Helps.
+- Round 10's pulled dodges: uld3 at +60 s 29.5 → 27.1%, 7.4% → 1.9% short; elsewhere neutral (ranged
+  travel 190-222 yd per bot-minute against 169-235, same walk and field time per dodge).
+
+**A change from the Q1 answer did not cost these kills.**
+
+**Ranking** (89 deaths).
+
+1. *The collapse, 87.* The waived gear race; window 23 lost it by survival after +60 s (above).
+2. *The 3:52 mark × crash, 1 death (uld2) and 32/41/21 ticks: a plan question (Q1).* The crash cast
+   1.3-1.8 s after every Animus-phase mark makes the marked bot's group strafe the way its arc runs
+   (`markdetail.py` uld2: at 3:55.8-3:56.8 group R's four ranged and two healers 3.4-5.9 yd from Uldyah,
+   the marked bot, which itself dodged to its group's strafe spot). `markcrash.py`: marks whose bot dodged
+   a crash averaged 28 ticks in windows 11-23 (21 windows), against 13-16 for the rest; the 3:52 one
+   killed 4, 4 and 1 in w17 uld1, w22 uld1 and w23 uld2.
+3. *A strafe across the impact, 1 death (uld3): bug, fixed below.*
+
+**Picked: the late strafe.** Crash cast at 3:44.17 on healer Uldzac, landing at 3:47.36 on (1843.8,
+115.8) (`crash.py`). Uldzae (R, slot 10, row 0 inner file) stood 10.4 yd east of it, 14 yd east of its
+slot, with a position walk toward that slot (4.1 yd from the impact) issued at 3:42.94, before the cast.
+It carried the bot inside 10 yd, and the dodge at 3:45.17 sent it to group R's strafe 15 yd west of the
+slot, 18.9 yd beyond the impact: 9.6 yd from the centre at 3:45.19, 0.9 at 3:46.51, dead at 6.8 past it
+at 3:47.53. `TryGetVezaxDodgeSpot` (`UldEncounter_Vezax.cpp:971` before) checks only where the strafe
+ends (10 yd off the impact), never whether the walk there leaves the blast before the landing.
+`exitreplay.py` over windows 11-23: 12 of 7249 strafe or pulled dodges could not leave the blast in the
+flight left at 7 yd/s, 11 of them across the impact (most from 9-11 yd, clear only after 18-20), and 10 of
+the 12 bots were hit, 6 dead, all but one in the Animus phase; 10 hits came from the other 7237.
+
+**Fix** (`UldEncounter_Vezax.cpp` only): `VezaxDodgeClearsInTime` (`:691`) walks the bot's path to a
+strafe or pulled strafe (`VezaxBlastExitWalk`, `:664`: distance along it until it leaves the 10 yd blast
+for good) at its run speed against the flight left (`crashCastMs`, the stored window less its 500 ms
+slack). A strafe that cannot make it falls to the search (12 yd clear, nearest first), noted
+`vezax.dodge = late`; with no clear spot it keeps the strafe. For the edge bots that died the search's
+spot is 2-4 yd away. Reader: `--crash` gains `late`, bots whose accepted dodge could not leave the blast
+by the landing at 7 yd/s, and a summary of how many were hit (test added; windows 11-23: 32 such dodges of
+all kinds, 22 hit). Docs: `docs/raids/ulduar/vezax.md` (Shadow Crash, trace keys, `--crash`, the mark ×
+crash gap).
+
+10/25 and normal/hard: crashes come in every mode and the test keys on the bot's own position, speed and
+the stored flight. Bots only, so the same with or without a real player. Shared code: none.
+
+**Next window should show.**
+
+- `vezax.dodge = late` on a few bots a pull at most (replay: 12 in 39 pulls), each followed by a dodge
+  of a few yards; `--crash` `late` 0 on strafes (a search can still be late when the bot is deep in);
+  no Animus-phase crash death on a camp bot before a collapse.
+- Everything else as window 23: `strafe`/`pulled` the bulk of dodges, ranged `past` under ~15%,
+  marks before the spawn under ~30 ticks.
+
+**Questions (user).**
+
+- *Q1. A crash cast 1.3-1.8 s after the Animus-phase mark sends the marked bot's group along its arc.
+  Change who moves?* The strafe is fixed per group and runs the way that group's arc does, so the group
+  follows the marked bot for 3-4 s: 21-41 ticks on the 3:52 mark in window 23, the leech drawing the
+  healers off the main tank in uld1 before his death and draining uld2's healers. (a) For a crash cast
+  inside a fresh mark, the marked bot walks straight to its arc instead of joining its group's strafe,
+  and its group strafes the other way where that strafe clears the impact, else the search. Replayed on
+  the 21 such windows of windows 11-23 (the group's own walks mirrored, the impact test not applied):
+  modelled leech targets 34.8 → 23.5 a window, window 23's 3:52 marks 37/43/26 → 23/27/15. Cost: that
+  group lands toward the other group's side for one crash, its field walk back unmeasured. (b) The
+  marked bot's group takes the search clear of both the impact and the marked bot (the melee break's 18
+  yd), scattering it for one crash. (c) Keep: ~12 extra ticks a window (~50k raid damage), Vezax +0.82
+  %/s over such Animus-phase windows against +0.24 for those without a crash.
+  *Recommended: (a)*; the arc walk alone saves about 1 tick in 7.

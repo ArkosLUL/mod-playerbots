@@ -205,10 +205,15 @@ was dead a minute later.
 their radius, so each group keeps its shape and the field lands on the vacated footprint for them to
 walk back into. The distance is set by the inner-file bot of the group that was hit, which has to cross
 the impact: 15 yd of strafe minus the group's own 3 yd width leaves **12 against a 10 yd blast**, so
-widening the files widens the strafe. Flight time is not tight: the front rank's 30.5 yd is 3.1s against
-a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against the impact;
-`FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no slot or a strafe off the
-floor or still in the blast. A slot pulled toward the Animus can sit past its group's inner file, so its
+widening the files widens the strafe. Flight time is not tight from the slot: the front rank's 30.5 yd
+is 3.1s against a 1.9s walk. The strafe ignores where the crash went, so its spot is checked against
+the impact, and its walk against the flight left: walked along the path at run speed, the bot must be
+out of the blast for good by the landing (`vezax.dodge = late` when not). A bot off its slot at the
+blast's edge otherwise took the group vector straight across the impact, 18-20 yd before it was clear:
+12 strafes in windows 11-23 could not leave in time, 10 hit and 6 dead, all but one in the Animus
+phase, where slots move. `FindNearestPositionClearOfHazards` at 12 yd is the fallback for a bot with no
+slot, a strafe off the floor, still in the blast or too late; a late bot with no clear spot keeps the
+strafe. A slot pulled toward the Animus can sit past its group's inner file, so its
 strafe may end only 10.2 yd clear. The dodge itself yields once the bot is clear, so the soak can walk it
 back into the field the missile leaves and class interrupts get the ticks between.
 
@@ -386,8 +391,8 @@ that walks the bot's own threat list, so a bot switched to the Animus or a vapor
 `vezax.slot` is the stored assignment, a bare number: 0-9 group L, 10-19 group R, row-major inside each so
 the low bit is the file; `vezax.joined` is the gate's latch, `1` from a bot's first tick inside it.
 `vezax.block` (`L`/`R`/`tank`/`unslotted`), `vezax.dodge`
-(`strafe`/`pulled`/`search`/`none`: which rule produced the destination, which the move record can't
-tell apart),
+(`strafe`/`pulled`/`search`/`late`/`none`: which rule produced the destination, which the move record
+can't tell apart; `late` is the search taking over a strafe too slow to clear),
 `vezax.mark` (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`: a vapor is hard mode
 about to end, `none` the target guard with no source behind it), `vezax.meleespot` (`spot`/`none`),
 `vezax.floor` (`on`/`edge`/`off`: the last floor check took the point as asked, pulled it back over 1 yd,
@@ -431,7 +436,8 @@ accepted dodges ending past that ceiling, of all (`dodges`), then which `vezax.r
 `vezax.dodge` values were written after the spawn. Mana comes from the bot's last living sample,
 since the collapse tick reads the dead as 0. `--crash`'s `in` counts bots that took an accepted walk,
 the dodge aside, toward a landing impact by the strategy's own test; its summary names the movers and how
-many hit bots took one.
+many hit bots took one. Its `late` counts bots whose accepted dodge could not leave the blast by the
+landing at 7 yd/s, the strategy's test with base run speed.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -543,6 +549,14 @@ Ranged dps slots cross the Mark floor to reach it (camp section), but row 0 is t
 main tank, in a healer's reach 2-5% of the time, and healers keep their slots. The settle decided the
 race before the crossing: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
 walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
+
+**A crash cast just after a mark walks the marked bot's group along its arc.** Each group's strafe points
+the way its own arc runs, so for the 3-4 s the marked bot needs to get clear its group follows it.
+Every Animus-phase mark (3:52) has a crash cast 1.3-1.8 s behind it: marks whose bot dodged a crash
+averaged 28 ticks in windows 11-23 against 13-16 for the rest, the 3:52 one putting Vezax back
++0.4 to +1.3 %/s over its window and killing 1-4 bots in three pulls. Replayed, walking the marked bot
+straight to its arc instead of with its group saves about 1 tick in 7; its group strafing the other
+way, a fifth; both, a third.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the
