@@ -220,6 +220,8 @@ void DefineMimiron(EncounterBuilder& e)
 
     e.Block("mimiron avoid aoe guard", Role::Any, MimironFireFight, 0, {"avoid aoe"});
 
+    e.Block("mimiron revive pet hold", Role::Any, MimironFireFight, 0, {"revive pet"});
+
     e.Block("mimiron formation guard", Role::Any, MimironFormationHeld, Family::CombatFormationMove);
 
     e.Block("mimiron generic redirect guard", Role::Any, MimironPhase1Active, 0, {"tricks of the trade"});
@@ -230,9 +232,9 @@ void DefineMimiron(EncounterBuilder& e)
     e.Block("mimiron handover drink hold", Role::Any, MimironHandoverDrinkHold, 0, {"drink", "eat"});
     e.Block("mimiron handover follow hold", Role::Any, MimironHandoverFollowHold, 0, {"follow"});
 
-    e.Block("mimiron frost bomb guard", Role::Any, IsMimironNearFrostBomb, 0,
+    e.Block("mimiron frost bomb guard", Role::Any, IsMimironNearFrostBomb, Family::Charge,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
-             MimironApproachTargetAction::Name});
+             "killing spree", MimironApproachTargetAction::Name});
     e.Block("mimiron fire hold guard", Role::Any, IsMimironHeldByFire, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});

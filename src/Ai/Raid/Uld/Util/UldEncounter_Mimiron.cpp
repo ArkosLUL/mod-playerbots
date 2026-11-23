@@ -571,6 +571,27 @@ bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& min
     return IsMimironLegClearOf(from, mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);
 }
 
+bool IsMimironLegBombSafe(Position const& from, MimironFirefighterHazards const& hazards, Position const& dest)
+{
+    float const fromX = from.GetPositionX();
+    float const fromY = from.GetPositionY();
+    float const dx = dest.GetPositionX() - fromX;
+    float const dy = dest.GetPositionY() - fromY;
+    float const lengthSq = dx * dx + dy * dy;
+    for (Position const& bomb : hazards.bombs)
+    {
+        float const bx = bomb.GetPositionX() - fromX;
+        float const by = bomb.GetPositionY() - fromY;
+        float const t = lengthSq > 0.0f ? std::clamp((bx * dx + by * dy) / lengthSq, 0.0f, 1.0f) : 0.0f;
+        float const closest = std::hypot(bx - t * dx, by - t * dy);
+        float const limit = std::min(std::hypot(bx, by), ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS);
+        if (closest < limit)
+            return false;
+    }
+
+    return true;
+}
+
 bool IsMimironPathMineSafe(Player* bot, std::vector<Position> const& mines, Position const& dest)
 {
     if (!bot || mines.empty())
@@ -930,13 +951,14 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     Position const from = bot->GetPosition();
     bool const directFireSafe = IsMimironLegFireSafe(from, hazards, goal);
     bool const directMineSafe = IsMimironLegMineSafe(from, markers.mines, goal);
-    if (directFireSafe && directMineSafe)
+    bool const directBombSafe = IsMimironLegBombSafe(from, hazards, goal);
+    if (directFireSafe && directMineSafe && directBombSafe)
     {
         approaches.push_back({goal, how, 0.0f});
         return approaches;
     }
 
-    if (!directFireSafe && directMineSafe &&
+    if (!directFireSafe && directMineSafe && directBombSafe &&
         bot->GetHealthPct() >= ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT)
     {
         MimironLegBurn const burn = MeasureMimironLegBurn(from, hazards, goal);
@@ -945,7 +967,10 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     }
 
     auto const legSafe = [&](Position const& start, Position const& end)
-    { return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers.mines, end); };
+    {
+        return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers.mines, end) &&
+               IsMimironLegBombSafe(start, hazards, end);
+    };
 
     float const distance = from.GetExactDist2d(goal.GetPositionX(), goal.GetPositionY());
     float const bearing = from.GetAngle(goal.GetPositionX(), goal.GetPositionY());
@@ -968,7 +993,7 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         }
     }
 
-    if (directFireSafe)
+    if (directFireSafe && directBombSafe)
     {
         if (bot->GetHealthPct() >= ULDUAR_MIMIRON_MINE_CROSS_HEALTH_PCT &&
             CountMimironLegHazards(from, markers.mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, goal) <= 1)
@@ -976,19 +1001,22 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         else if (approaches.empty() && RaidObs::Active())
             RaidObs::NoteDerived(bot, "mimiron.approach", "none mines");
     }
+    else if (!directBombSafe && approaches.empty() && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "mimiron.approach", "none bomb");
 
     if (!approaches.empty() || distance <= ULDUAR_MIMIRON_SLOT_STRANDED_DISTANCE ||
         bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_CROSS_HEALTH_PCT || MimironPhase1Active(botAI))
         return approaches;
 
     std::optional<MimironApproach> leastBurn;
-    if (directMineSafe)
+    if (directMineSafe && directBombSafe)
         leastBurn = MimironApproach{goal, "stranded", 0.0f, MeasureMimironLegBurn(from, hazards, goal).yards};
 
     for (auto const& [waypoint, turn] : waypoints)
     {
         if (!IsMimironLegMineSafe(from, markers.mines, waypoint) ||
-            !IsMimironLegMineSafe(waypoint, markers.mines, goal))
+            !IsMimironLegMineSafe(waypoint, markers.mines, goal) ||
+            !IsMimironLegBombSafe(from, hazards, waypoint) || !IsMimironLegBombSafe(waypoint, hazards, goal))
             continue;
 
         float const yards = MeasureMimironLegBurn(from, hazards, waypoint).yards +
