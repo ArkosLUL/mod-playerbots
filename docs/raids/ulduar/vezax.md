@@ -74,12 +74,13 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   its slot, and its strafe with it, pulled along the line to the Animus to two slot tolerances inside
   that ceiling (its `GetRange("spell")` plus both live reaches), stopping at row 0's radius from Vezax so
   the Mark floor holds; with the Animus straight behind him from the camp, as at its spawn, that stop can
-  leave the slot past it. Healers keep their slots, and reach spell holds for a healer targeting the
-  Animus (`vezax healer animus reach hold`): it walked healers off row 0 and the position node walked
-  them back, up to 28 times each in one phase.
+  leave the slot past it. Healers keep their slots and their reach spell walks onto it, up to 28 a phase
+  each with the position node walking them back: in a north settle (below) those walks carry the main
+  tank's heals, and holding them cut his healing there from 3.6k/s to 2.4k/s; he died 8 s before the
+  collapse.
 
 **Healers fill row 0, because moving the rows out costs them the main tank.** The tank holds the anchor,
-and Vezax settles 7-12 yd north of it, between tank and camp, having met the tank on its way in from the
+and Vezax settles 7.7-14 yd north of it, between tank and camp, having met the tank on its way in from the
 north, or 9.9 yd south with the tank between him and the camp, nearer the healers.
 `PartyMemberToHeal` scores anyone past `HealDistance` 38.5 plus both reaches (41.5 yd 2D) as 30
 points healthier, so a healer there picks the tank only when he is ~30 points lower than everyone else,
@@ -420,11 +421,16 @@ it:
   cast in flight and lets a tank retake it at 110%. Not the main tank's: both tanks switch at once, so an
   off-tank can land the first hit while the redirects feed the main tank. Capped on his threat, ranged hit
   the cap from +9 s, a demonology warlock passed the bear holding it at +11 s, and it walked through
-  the camp for 25 s.
+  the camp for 25 s. DoTs already on it keep ticking past the cap: a shadow priest held at +9 s passed
+  130% of a warrior main tank at +15 s on 16.5k/s of DoT damage in a field, and held it 22 s.
 - **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor, since
   chasing drags Vezax off it, so whoever the Animus is hitting walks to within 3 yd of him, which leaves
   the Animus following it in his melee range, and the position node stands down for that bot; it had
   walked him back 5 times from the chase. This walk and the melee spot are forced, like the soak.
+  Reach melee, charges and Intervene hold for the main tank while the Animus stands farther from the
+  anchor than his melee range plus his 3 yd slot tolerance (`vezax main tank anchor hold`): a warrior
+  main tank ran and charged 21-37 yd after a loose one, and walking back past Vezax left him 15.7 yd
+  north for the rest of the phase; Intervene on its victim took one 36 yd out.
 - **Melee stay inside his crash limit** (`vezax animus melee spot`), the 17.1 yd skip, measured 3D
   (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
   tank, 6 of 16 after. The Animus (reach 8 then, 7 now) takes his spot by the tank, he steps 8-9 yd
@@ -479,11 +485,11 @@ the raid collapses. At 153-165k/s it dies in 74-80 s; at 118-138k/s it is left a
 cuts damage taken, so Vezax regains 5-10% from Mark heal-back meanwhile, and the rest of him has to die
 under 40+ stacks.
 
-**When he settles 10+ yd north of the anchor, the Animus sits behind him from the camp.** It stands
-between him and the main tank, so at a 14.1 yd settle it was 9.6 yd behind him: the slot pull stops at
-row 0's radius, 40 yd from it, ranged dps spent 73-91% of its phase past its ceiling flipping between
-reach spell and their slots, and it was left at 3.4%. Row 0 is then also 44-48 yd from the main tank,
-in a healer's reach 2-5% of the time. Both need ranged or the main tank somewhere new.
+**When he settles 10+ yd north of the anchor (a north settle), the Animus sits behind him from the
+camp.** It stands between him and the main tank, so at a 14.1 yd settle it was 9.6 yd behind him: the
+slot pull stops at row 0's radius, 40 yd from it, ranged dps spent 73-91% of its phase past its ceiling
+flipping between reach spell and their slots, and it was left at 3.4%. Row 0 is then also 44-48 yd from
+the main tank, in a healer's reach 2-5% of the time. Both need ranged or the main tank somewhere new.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the
