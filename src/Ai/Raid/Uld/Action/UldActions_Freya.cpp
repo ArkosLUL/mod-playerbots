@@ -240,6 +240,16 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     float const reach = freya ? bot->GetMeleeRange(freya) - 1.0f : 0.0f;
     auto const inReach = [&freyaAt, reach](float x, float y) { return freyaAt.GetExactDist2d(x, y) <= reach; };
 
+    Position const from = bot->GetPosition();
+    std::vector<Position> const walkBombs =
+        GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS + ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
+    auto const walkClear = [&from, &walkBombs](float x, float y)
+    {
+        return !FreyaWalkCrossesNatureBomb(from, Position(x, y, from.GetPositionZ(), 0.0f), walkBombs,
+                                           ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
+    };
+    auto const inReachWalkClear = [&inReach, &walkClear](float x, float y) { return inReach(x, y) && walkClear(x, y); };
+
     if (!covered(bot->GetPosition()))
     {
         if (latched && PlayerbotAI::IsMelee(bot) && stillClear(bombSpot) && covered(bombOrigin))
@@ -254,7 +264,7 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
                 HazardSweepCache sweep;
                 Position const spot = FindNearestPositionClearOfHazards(
                     bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, ULDUAR_FREYA_SWEEP_STEP,
-                    ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt, inReach, &sweep);
+                    ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt, inReachWalkClear, &sweep);
                 if (spot != Position() &&
                     MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false,
                            false, false, true, MovementPriority::MOVEMENT_FORCED, true, false))
@@ -277,6 +287,16 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
 
     Position safe;
     if (freya)
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt,
+                                                 inReachWalkClear, &sweep);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                 ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, nullptr,
+                                                 walkClear, &sweep);
+
+    if (safe == Position() && freya)
         safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
                                                  ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP, &freyaAt,
                                                  inReach, &sweep);
@@ -353,8 +373,10 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
     };
 
     uint32 const now = getMSTime();
+    LastMovement const& last = AI_VALUE(LastMovement&, "last movement");
 
     if (kiteSpotMs && getMSTimeDiff(kiteSpotMs, now) < ULDUAR_FREYA_TANK_BOMB_LATCH_MS && stillClear(kiteSpot) &&
+        kiteSpot.GetExactDist2d(last.lastMoveToX, last.lastMoveToY) <= CONTACT_DISTANCE &&
         !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(kiteSpot.GetPositionX(), kiteSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;

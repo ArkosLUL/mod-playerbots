@@ -1460,3 +1460,154 @@ externals off the add tank at any health, so uld2 10's paladin kept Hand of Sacr
 3-32%. His own buttons have the 25% last resort; the externals have none. Options: (a) leave it, one layer at a time
 (Q2 (c)); (b) below `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` an external may go on top of a running own
 button. Recommendation: (b), alongside Q13.
+
+## Round 13 (build 99188e0f1: round 12 built)
+
+**Data:** window 19, `report --boss freya --raid uld --head 99188e0f1 --pulls 10`, one valid 25-man pull per pool, no DC
+veto inside a pull: `tr-20261123-170632-12` (uld1, DK add tank), `-170109-10` (uld2, bear), `-170511-11` (uld3, bear);
+traces `env/dist/logs/botobs/603_{12,10,11}_elder-stonebark_{1795453633,1795453311,1795453552}.ndjson`. Window 17 is the
+baseline. Ad hoc scripts: `scratchpad/freya-r13/` (`handoff.py` layer gaps on the add tank, `bomb_cross.py` and
+`bomb_walks.py` walks into live bombs over windows 8-19, `burn.py`), plus `freya-r12/addtank_tl.py`, `wave_hold.py`,
+`spawn_on_back.py`, `submerge_moves.py`, `freya-r9/healpos.py`.
+
+**Hard mode.** All three pulls 3 of 3 Elders from their essence channels; both kills cast chest 62952.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795453633 | **kill 6:51, 3** | Nature Bomb 2 (two warriors, 6:21.66, a Charge and an Intercept into three live bombs); Freya melee 1 (the main tank, 5:44.9, after six Nature Bomb hits took him 100% → 11% on `freya tank hold freya`'s walk onto the anchor's bombs) |
+| uld2 | 1795453311 | wipe 6:42, 30 | Flame Lash 1 (melee 0:19.9); Snaplasher 2 (the bear add tank in trio 2, 1:55 after trio 1: 4:14.4 bare, 4:16.8 after his soulstone); the 4:35 lasher wave with no add tank alive and the back line on the submerged pack: 27 (Flame Lash 9, lasher melee 8, Freya melee 6, Unstable Energy 2, Sunbeam 1, own Iron Roots 1) |
+| uld3 | 1795453552 | **kill 6:23, 4** | Snaplasher 2 (the bear add tank in both trio waves, 0:44.6 and 4:58.3, under Survival Instincts); lasher melee 1 (melee 2:51); Unstable Energy 1 (healer 3:16) |
+
+**Stop rules:** kills on uld1 (3 deaths, at the line) and uld3 (4, one over), uld2 wiped: not polished, one pool short and
+one death over. No failure picked three rounds running (rounds 9 and 12 the add tank, round 11 the Gift walk; this round
+Nature Bombs).
+
+**Round 12 verdict: held.** `--tanks` cover `both` 0.0s in all six trio waves (window 17: 7.7, 5.2, 4.2s). No own button
+cast while an external was on him; `freya.adddef` noted `covered` while one ran (uld1 2:23.03, uld2 4:05.54). Untested in
+part: no own button came off cooldown under an external this window (uld1's Icebound Fortitude and Vampiric Blood, uld2's
+Barkskin, were cooling down). No add tank died after an external and his own button ended together. Layer handoffs
+(`handoff.py`, windows 15-19): 0.0-0.6s, twice 1.2-1.7s, and uld2's below.
+
+Add-tank deaths, 4 (window 17: 1), none the round 12 overlap:
+
+- uld2 trio 2 (3:39.9, 1:55 after trio 1, so Frenzied Regeneration and Survival Instincts still cooling): Barkskin
+  3:42.9-3:54.9, Guardian Spirit 3:55.1-4:05.1, Pain Suppression 4:05.4-4:13.35, then bare; a 42.1k swing at 58.7% killed
+  him at 4:14.41. Hand of Sacrifice was in hand, but its paladin Uldyac began a Holy Light on him at 4:13.21, 0.14s
+  before Pain Suppression ran out, and a bot mid-cast runs no trigger (`PlayerbotAI.cpp:335-417` waits out a preparing
+  cast); it went out at 4:15.74 on him risen from his soulstone, who died again at 4:16.83.
+- uld3 trio 1 (0:10, the pull's first wave) and trio 2 (4:26.5): died under Survival Instincts, cover external 0.0s in
+  both, every healer noting `covered` (his own button running) with Pain Suppression and Guardian Spirit in hand. Trio 1:
+  30.4k at 100%, 33.9k at 70.5%, 36.5k at 42.6%; all four healers stood on the DC drop (2362, -78) 39-43 yd from him for
+  the whole wave, nothing moving them (the camp runs in lasher waves only), healed him back to 100% twice. Trio 2: Barkskin,
+  Frenzied Regeneration, Survival Instincts under 25% (the class node's last resort), then 40.6k at 100% and 44.8k at 61.2%. The pending 25%
+  line (round 12 review question) would have caught neither death.
+
+**Rounds 1-11 still hold.** No tank Roar or Shout; Righteous Defense only on pets (uld1 0:05.2, uld3 0:08.1). Freya on the
+main tank 98.4/94.3/99.8%. Beam dodges from past 8 yd 0-16% by role. `--ghouls` no lasher in reach 0-9%, on Freya 0-8%.
+`--blasts` 2-14% of melee approach orders into a low blast, no melee Detonate death. `--lows` lashers 8s+ on a player 0-3
+a wave. Gifts living 12s+: 3 of 26 (uld1 1:16 and 4:17, uld2 2:47 in a Conservator wave with at most 2 ranged on it;
+window 17: 6 of 23); `freya.giftcut` notes present. Q10: a melee on a Gift with 5+ ranged alive once (uld3 2:45, 9
+ranged and 1 melee). Q12 baseline (`wave_hold.py`, back-line lasher damage over the first 30s after the wake): uld1 19k
+and 19k, uld2 46k and 273k, uld3 16k and 28k.
+
+**Ranking** (37 deaths). (1) uld2's 4:35 lasher wave, 27: the back line on the submerged pack (median 7.2 yd at the spawn,
+3.2 at the wake, 13 of 14 within 10 yd; `submerge_moves.py`: 23 `freya ranged camp` orders in the submerge, 15 ending
+nearer a lasher, 6.6 → 2.8 yd), the Army on time with 8 ghouls but holding 48% of lasher time against 57-89% in the other
+five waves, the back line 39%, 273k back-line lasher damage, and no add tank alive for the pickup. That is Q12, with the
+user. uld1's two waves also woke on the back line (3.5 yd) and took 19k each, held 71-76% by ghouls. (2) Add-tank deaths,
+4: uld3's two are the externals-under-a-health-button question (round 12 review), uld2's the back-to-back trio (Q8) plus
+the mid-cast handoff. (3) Bots walking or charging into live Nature Bombs: 3, all of uld1's deaths. (4) Singles: Unstable
+Energy 3, Flame Lash 1, lasher melee 1. (1) and (2) are with the user; picked (3), the top bug, which also decides the
+stop rule: every uld1 death, and the extra deaths of past kills.
+
+**Failure picked: Freya's own movement walks bots into live Nature Bombs.** `bomb_cross.py` over the 36 25-man pulls
+of windows 8-19: of 20 Nature Bomb deaths, 10 were melee that `freya move away nature bomb` walked from a clear spot
+13-17 yd out straight back through the bombs, 2 the warriors' charges above, 8 stood in one (rooted or channelling ranged,
+escapes 0.4-0.8s before the blast). `bomb_walks.py`, windows 14-19 (18 pulls), orders from outside every live bomb's 11
+yd that pass inside one: `freya move away nature bomb` (melee) 96 of 287, 36 then hit by it; `freya tank hold freya` 25
+of 38, 8 hit; charges 9 of 26, 2 hit; `reach melee` (melee) 23 of 158, 3 hit.
+
+- The escape's melee re-sweep (`UldActions_Freya.cpp:243-268` at `99188e0f1`): latched, out of Freya's reach, it sweeps
+  for an in-reach spot clear of hazards and walks there at `MOVEMENT_FORCED`, never asking what the walk crosses; with
+  the bombs between the bot and Freya the nearest such spot is past them. w15 uld3 Uldzag 6:31.89: 13.7 yd east of three
+  bombs, sent to (2355.9, -49.4) 15 yd west of them, died 3.4s later on the way, 8.3 yd from them. w17 uld3 Uldzaw
+  7:28.12, 0.6s before the blast, same.
+- The tank hold (`UldTriggers_Freya.cpp:368-378`): fires on Freya past the 20 yd leash alone; the tank escape only fires
+  inside 11 yd. uld1 5:40.11: the main tank, clear at (2343, -69), walked home to the anchor with six live bombs within
+  2.4-9 yd of it (landed 5:37.97), was 0.9s from them when the escape fired, and they blew at 5:43.93.
+- Charges: once the escape's latch had dropped (Uldxay's re-derive got `MoveTo` refused, zeroing `bombSpotMs`; Uldxax's
+  spot was taken by a beam), `isUseful` went false and Intercept (6:20.66) and Charge (6:21.03, both `Family::Charge`)
+  landed them 6.5 and 5.0 yd from three bombs that blew at 6:21.66. Nothing guards a charge or `reach melee` against bombs
+  (`freya nature bomb melee guard` blocks `set behind` only).
+
+**Classification: bug.** The escape and the tank's bomb handling exist to keep bots out of live bombs, and the doc's hold
+("`reach melee` would walk it back through the blast") already says melee must not walk back in.
+
+**Fix** (Freya files only, any size or difficulty, no player branch):
+
+- `FreyaWalkCrossesNatureBomb` (bombs whose `_AVOID_RADIUS` circle already holds the walker excepted).
+- `freya move away nature bomb`: the melee re-sweep takes only a spot whose straight walk stays `_AVOID_RADIUS` (11) from
+  every live bomb, else holds; the first escape tries in reach and walk clear, then walk clear, before the old sweeps.
+- `freya tank hold freya`: waits while a live bomb lies within `_CLEAR_RADIUS` (13) of the anchor or `_AVOID_RADIUS` of the
+  tank's walk to it (a fuse is at most 6s).
+- `freya nature bomb reach guard` (Role::Melee, non-tank): zeroes `reach melee` and `Family::Charge` whose stop on the
+  bot's side of its target lies, or whose straight walk passes, within `_AVOID_RADIUS` of a live bomb.
+- Reader: `freya.py --bombs` (orders and charges into a live bomb per action and role, those then hit, how each bomb death
+  got in), tested.
+
+**Cost to watch:** melee wait out a bomb (at most 6s) instead of walking through it. Baseline, Freya's burn after the last
+wave in the ten kills of windows 14-19: 74-107s, melee 46.5-62.5k/s (`burn.py`).
+
+**Next window should show** (`freya.py --bombs`, `--tanks`; `postmortem.py --vetoes`):
+
+- `--bombs`: `freya move away nature bomb` (melee), `freya tank hold freya` and charges (Charge, Intercept, Feral Charge -
+  Cat) into a live bomb near 0 (window 19 uld1: 14 of 28, 2 of 2, 3 of 3); no bomb death "walked in" by any of them;
+  vetoes under `freya nature bomb reach guard`.
+- Nature Bomb deaths well under windows 14-19's 11 in 18 pulls; no main tank death after bomb hits on his walk home.
+- Melee damage over the burn no more than ~10% under 46.5-62.5k/s; burn time no longer than 74-107s.
+- Round 12's checks as written there; rounds 1-11 still holding.
+
+**Not picked:** uld3 trio 1's healers on the drop 39-43 yd from the add tank (no node places healers in a pull-opening trio
+wave; a position question if it repeats); ranged Nature Bomb deaths standing in one (late or blocked escapes, 8 of 20);
+`freya lasher about to blow` walking melee into a live bomb (uld2: 2 of 13, both hit).
+
+**Questions** (all pending with the user; window 19's numbers):
+
+8. Two trio waves close together: uld2's came 1:55 apart and the bear died in the second with Barkskin and two externals
+   spent and Frenzied Regeneration and Survival Instincts cooling. Recommendation unchanged: (a), accept it.
+12. A back-line walk-out from a submerged pack: uld2's 4:35 wave (above) is the case, 27 deaths, the gather walking the
+    back line from 6.6 to 2.8 yd of the pack during the submerge. Recommendation unchanged: (b) as a trial.
+14. (round 12 review, an external on top of the tank's own running button below 25%) Both uld3 deaths came above 25% (42.6%
+    and 61.2% before the killing swing), under Survival Instincts, with Pain Suppression and Guardian Spirit held all wave.
+    Options: (a) leave it; (b) as put: below 25% an external may go on top of a running own button; (c) a running
+    health-only button (Survival Instincts, Frenzied Regeneration, Vampiric Blood, Last Stand) no longer holds the
+    externals, only one that cuts damage taken (Barkskin, Icebound Fortitude, Shield Wall, Divine Protection) does, so a
+    healer layers Pain Suppression or Guardian Spirit over Survival Instincts at once. Recommendation: (c), which covers
+    three of the last five add-tank deaths (window 16 uld3 too); (b) covers none of window 19's.
+15. The next external waits on a healer mid-cast (uld2: Hand of Sacrifice 2.4s late, the bear dead 1.06s after Pain
+    Suppression). Options: (a) leave it; (b) the next external may go out once the running one has 1.5s left (a cast
+    time), so two externals overlap up to 1.5s. Recommendation: (b).
+11. and 13. pending as written in rounds 11 and 12.
+
+**Shared code:** none changed; `SegmentCrossesCircle` (`EncounterHelpers`) is read, not edited.
+
+**Review:** the pick holds and the fix addresses it, on one code path (no size, mode or player branch), Freya files only.
+Reproduced: uld1's Intercept 6:20.656 and Charge 6:21.029 into three bombs; the re-sweep walks behind w15 uld3 Uldzag
+6:31.893 and w17 uld3 Uldzaw 7:28.122; uld1's hold walk 5:40.114 with bombs 2.5-12.0 yd from the anchor and its walk 0.5-3.5
+yd from them. The reach guard's stop or walk test catches all 8 charges that landed inside 11 yd of a bomb in windows 15-17
+and 19, two Feral Charge - Cat (which leaps behind the target) among them.
+
+- Corrected: the tank escape did not wait for 11 yd. Its trigger was live from 5:41.21 (10.6 yd), 2.7s before the blast,
+  but its 3s latch on the 5:39.891 kite spot returned true without moving him, the hold's `MoveTo` having replaced that walk,
+  until 5:42.89; its next move came at 5:43.002. Fixed: the latch also needs his last `MoveTo` to be the kite spot.
+- Fixed: `--bombs` counted each charge twice (the triggered Intercept stun 20253, Charge 34846 and Feral Charge - Cat 61138
+  carry the same name); now once per cast, pinned by the test. The uld1 baseline above is corrected (3 of 3, not 4 of 4).
+- Left, no payoff seen: the first escape's walk-clear preference. In windows 15-17 and 19 first escapes (from inside a
+  bomb's avoid radius) crossed another live bomb in melee 40 of 319 and ranged and healers 2 of 451, none then hit by it;
+  melee may now land out of reach instead, so read it with the burn check.
+- Left: the hold yields only before a walk. A volley landing on a walk in flight leaves the spline running; the escape
+  catches it at 11 yd, now on time. Volleys are 18s apart, so rare.
+- Left, a question for a later round: no bomb node covers a tank other than the main tank (`freya near nature bomb`
+  skips tanks, `freya tank nature bomb` is main tank only, "assist tank 0 is excluded" for the Conservator's spore, which
+  phase 2 has none of). uld1's off tank Uldxam stood 8.7 yd from the anchor's bombs on `reach melee` and took four hits at
+  5:43.93.

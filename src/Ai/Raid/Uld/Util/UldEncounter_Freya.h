@@ -268,6 +268,9 @@ bool IsFreyaGiftFiller(PlayerbotAI* botAI, Unit* gift);
 
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 
+bool FreyaWalkCrossesNatureBomb(Position const& from, Position const& to, std::vector<Position> const& bombs,
+                                float clearance);
+
 std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchRadius);
 
 std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius);

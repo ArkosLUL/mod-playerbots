@@ -12,6 +12,8 @@
     freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
                              hitting a player shot (the Gift, while one was up), and the back line's bails from
                              one hitting them
+    freya.py <file> --bombs  Nature Bomb walks and charges into a live bomb per action, and how each bot a bomb
+                             killed got there
 
 What the generic views miss here:
 
@@ -49,6 +51,11 @@ What the generic views miss here:
 - **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
   order whose point lies inside the blast edge of a lasher under the bail line in the snapshot before it. Tanks
   are left out: they never bail.
+- **A bomb is live for its fuse from the snapshot that first shows it.** `--bombs` counts an order given from
+  outside every live bomb's avoid radius whose straight walk passes inside one, and a charge whose landing (the
+  snapshot `CHARGE_LAND_MS` after the cast) is inside one, once per cast: the triggered stun or leap carries the
+  charge's name too and is skipped; "then hit" is a Nature Bomb hit from such a bomb on that
+  bot within the fuse. A bomb death "walked in" when such an order or charge reached a bomb that hit it.
 """
 from __future__ import annotations
 
@@ -97,6 +104,11 @@ DODGE_ACTION = "freya dodge unstable sun beam"
 DODGE_EPISODE_MS = 1500
 # Playerbots.HealDistance, the range a healer walks to before it casts.
 HEAL_RANGE_YD = 38.5
+NPC_NATURE_BOMB = 34129
+NATURE_BOMB = (64587, 64650)
+BOMB_FUSE_MS = 6000
+CHARGES = ("Charge", "Intercept", "Feral Charge - Bear", "Feral Charge - Cat")
+CHARGE_LAND_MS = 700
 # Fewer healers than this on the add tank and one capped Snaplasher swing outruns the heals.
 HEALERS_WANTED = 2
 KITE_ACTION = "freya kite snaplasher"
@@ -668,6 +680,84 @@ def show_lows(trace: Trace) -> None:
         print("  no lasher wave")
 
 
+def segment_gap(start, end, point) -> float:
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length = dx * dx + dy * dy
+    u = 0.0 if not length else max(0.0, min(1.0, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length))
+    return dist2((start[0] + u * dx, start[1] + u * dy), point)
+
+
+def bomb_counts(trace: Trace) -> dict:
+    avoid = radius("ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS")
+    bombs = [(guid, rec["first"], at(trace, guid, rec["first"]))
+             for guid, rec in sightings(trace, (NPC_NATURE_BOMB,)).items()]
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") in NATURE_BOMB]
+
+    def live(when: int) -> list:
+        return [(guid, spot) for guid, first, spot in bombs if spot and first <= when < first + BOMB_FUSE_MS]
+
+    def hit_after(guid: int, when: int, which: set) -> bool:
+        return any(hit["d"] == guid and hit.get("s") in which and when <= hit["t"] <= when + BOMB_FUSE_MS
+                   for hit in hits)
+
+    orders: collections.Counter = collections.Counter()
+    into: collections.Counter = collections.Counter()
+    then_hit: collections.Counter = collections.Counter()
+    entries: dict[int, list] = {}
+
+    def count(guid: int, when: int, key: tuple, crossed: set) -> None:
+        orders[key] += 1
+        if crossed:
+            into[key] += 1
+            then_hit[key] += hit_after(guid, when, crossed)
+            entries.setdefault(guid, []).append((when, key[0], crossed))
+
+    for rec in trace.of("move"):
+        lit = live(rec["t"]) if rec.get("ok") else []
+        here = at(trace, rec.get("g"), rec["t"]) if lit else None
+        if here is None or any(dist2(here, spot) < avoid for _, spot in lit):
+            continue
+        dest = (rec.get("x", 0.0), rec.get("y", 0.0))
+        count(rec["g"], rec["t"], (rec.get("by"), trace.role(rec["g"])),
+              {guid for guid, spot in lit if segment_gap(here, dest, spot) < avoid})
+    for rec in trace.of("cast"):
+        name = trace.spells.get(rec.get("sp"))
+        lit = live(rec["t"]) if name in CHARGES and not rec.get("tr") else []
+        landed = at(trace, rec.get("s"), rec["t"] + CHARGE_LAND_MS) if lit else None
+        if landed is None:
+            continue
+        count(rec["s"], rec["t"], (name.lower(), trace.role(rec["s"])),
+              {guid for guid, spot in lit if dist2(landed, spot) < avoid})
+
+    deaths = []
+    for death in combat_deaths(trace):
+        killers = {row[1] for row in death.get("rewind") or [] if row[2] in NATURE_BOMB}
+        if not killers or (sorted(death["rewind"], key=lambda row: row[0])[-1][2] not in NATURE_BOMB):
+            continue
+        how = [(when, by) for when, by, crossed in entries.get(death["g"], [])
+               if crossed & killers and death["t"] - BOMB_FUSE_MS <= when <= death["t"]]
+        deaths.append((death, max(how) if how else None))
+    return {"bombs": len(bombs), "hits": len(hits), "orders": orders, "into": into, "hit": then_hit,
+            "deaths": deaths}
+
+
+def show_bombs(trace: Trace) -> None:
+    print("BOMBS")
+    if not mine(trace):
+        return
+    c = bomb_counts(trace)
+    if not c["bombs"]:
+        print("  no Nature Bomb")
+        return
+    print(f"  {c['bombs']} Nature Bomb(s), {c['hits']} hit(s) on the raid, {len(c['deaths'])} death(s) to one")
+    for key in sorted(c["into"], key=lambda key: (-c["into"][key], key)):
+        print(f"  {key[0]} ({key[1]}): {c['into'][key]} of {c['orders'][key]} into a live bomb, "
+              f"{c['hit'][key]} then hit by it")
+    for death, how in c["deaths"]:
+        line = f"  {clock(death['t'])} {holder_label(trace, death['g'])} died to one: "
+        print(line + (f"walked in, {how[1]} at {clock(how[0])}" if how else "stood in it"))
+
+
 def mechanic(trace: Trace, death: dict) -> str:
     own = own_blow_spell(death)
     if own:
@@ -699,6 +789,8 @@ SECTIONS = (
      show_blasts),
     ("lows", "per lasher wave, lashers left under the bail line, what the ranged in reach shot, back-line bails",
      show_lows),
+    ("bombs", "Nature Bomb walks and charges into a live bomb per action, and how each bomb death got there",
+     show_bombs),
     ("deaths", "deaths by killer and spell", show_deaths),
 )
 

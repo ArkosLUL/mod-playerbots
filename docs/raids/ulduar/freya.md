@@ -246,6 +246,11 @@ a median escape latency of **0.65s**.
   action returning true), so ranged and healers never hold, nor any blanket hold shell: with a bomb up,
   bots sit 10-14 yd from one **34%** of the time. The old unconditional hold kept 1 of 9 melee in
   reach for 7s with Freya 12 yd clear; phase 2 melee reach share was 37-60%. Not yet verified in a pull.
+- **No walk crosses a live bomb.** The re-sweep takes only a spot whose straight walk stays `_AVOID_RADIUS`
+  from every live bomb; none means hold. Unchecked, it picked the in-reach spot past the bombs: 10 of 20
+  25-man bomb deaths in 36 pulls were melee it walked back through from 13-17 yd, the fuse running out
+  mid-walk. The first escape prefers such a walk too (bombs already covering the bot excepted), in reach,
+  then anywhere, before the crossing sweeps (not yet verified in a pull).
 - **Fallbacks.** Where overlapping bombs leave nothing clearing the full margin it takes AVOID + 1
   (without it: false on 164 of 394 attempts, 77% with 4+ bombs in range). Below that it clears the
   blast itself (`_BLAST_RADIUS`, 10), then walks straight out of the circles covering the bot, on the
@@ -274,9 +279,11 @@ damage halved, 136k/s before the first volley against 68k after. A tank that ate
 Conservator off its spore. The spot uses `FindNearestPositionClearOfHazards`'s `preferNear`, aimed at
 the far side of Freya from `GetFreyaRangedCampAnchor`: it only reorders spots the same walk away, so the
 tank never takes a longer trip or drags her toward the back line. Melee re-close on the generic `reach
-melee`; nothing zeroes it. The reposition latches for at most `ULDUAR_FREYA_TANK_BOMB_LATCH_MS` (3 s):
-enough to walk the clearance at 7 yd/s, short enough that a tank stopped on the way doesn't hold Freya
-still for a whole volley.
+melee`, except into a live bomb ([movement guards](#movement-guards)). The reposition latches for at most
+`ULDUAR_FREYA_TANK_BOMB_LATCH_MS` (3 s): enough to walk the clearance at 7 yd/s, short enough that a tank
+stopped on the way doesn't hold Freya still for a whole volley. It holds only while his last `MoveTo` is
+that spot (not yet verified in a pull): once the hold's walk home replaced it, the escape sat idle 1.8s
+with him inside `_AVOID_RADIUS` of six bombs.
 
 **The drag clears Freya, not only the tank** (not yet verified in a pull). She stops in reach 6-7 yd
 in front of him, so clearing him alone left her **5.9-8.2 yd from a bomb** in 3 of 4 volleys, her
@@ -291,10 +298,13 @@ bombs are searched out to `_HAZARD_SEARCH_RADIUS` plus her gap plus `_CLEAR_RADI
 her in one direction all pull: she once finished **100 yd** east, at Z 419.9 down the slope toward the
 water, the melee ring and half the raid strung out behind her. Past `ULDUAR_FREYA_TANK_LEASH` (20 yd)
 from `ULDUAR_FREYA_TANK_ANCHOR` the `preferNear` flips to the anchor, and `freya tank hold freya`
-(`ACTION_RAID + 1`, under the escape, which must still be able to leave the leash) walks her home when
-no bomb is pressing, only for the bot she is hitting. It walks onto the anchor itself, since she stops
-a boss length short in his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched
-for at most `_TANK_HOLD_LATCH_MS` (3 s) because a re-issued `MoveTo` clears the walk it repeats. The
+(`ACTION_RAID + 1`, under the escape, which must still be able to leave the leash) walks her home,
+only for the bot she is hitting, and waits while a live bomb lies within `_CLEAR_RADIUS` of the anchor or
+`_AVOID_RADIUS` of the walk (not yet verified in a pull): the walk home once took the main tank onto the
+anchor's bombs, the escape idle on that stale latch until 0.9s before they blew, 100% to 11%, and
+Freya's next swing killed him. It walks onto the anchor itself, since she stops a boss length short in
+his reach anyway, at `MOVEMENT_COMBAT` so a volley still outranks it, latched for at most
+`_TANK_HOLD_LATCH_MS` (3 s) because a re-issued `MoveTo` clears the walk it repeats. The
 anchor **(2360.0847, -43.1235, 425.333)** is navprobe-verified on `--nav 0x09`: 0.52 yd from the
 nearest poly, `UpdateAllowedPositionZ` 425.333, and a 12 yd ring around it 8/8 on mesh.
 
@@ -331,9 +341,9 @@ when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear sp
 
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
 time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one,
-and any running external (not yet verified in a pull): a button off cooldown, or back from the rune gap an
-external was spent in, landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s
-after both ran out.
+and any running external: a button off cooldown, or back from the rune gap an external was spent in,
+landed on one in 3 of 11 trio waves (4.2-7.7s doubled), and a DK died bare 0.8s after both ran out. Since,
+0.0s doubled in six trio waves, though no button came ready under an external.
 `freya add tank external` has a healer cast the first of Pain Suppression, Guardian Spirit or Hand of
 Sacrifice it can reach, only while none of the three is up and he has no own button running, or ready and
 affordable now (`RunningTankDefensive`, `ReadyTankDefensive`: a human add tank's unpressed buttons hold them
@@ -341,6 +351,11 @@ too). Reach is spell range plus LOS, checked first: `CanCastSpell` passes an out
 paladin healing from 40 yd tried a 30 yd Hand of Sacrifice 20 times. Notes `freya.adddef`,
 `freya.addext`: the button cast, else `covered` (a layer up, or his own ready) or `none`, so the trace's
 repeat filter keeps a later cast of the same button.
+**Known-open:** a running Survival Instincts or Frenzied Regeneration counts as a layer though it cuts no
+swing, so a bear died under Survival Instincts twice in one pull, one swing from 61% and from 43%, with Pain
+Suppression and Guardian Spirit held as `covered` all wave. A healer mid-cast cannot start the next layer
+(the engine waits out a cast): Hand of Sacrifice's paladin had begun a Holy Light 0.1s before Pain
+Suppression ran out, and the bear died bare 1.1s later.
 
 **At 10-man two healers run dry by 3:30-4:30** (six of six pulls; 25-man's four keep 25-60%), so the second
 trio wave's add tank dies on his last button, Frenzied Regeneration, with an external still in hand, and a
@@ -657,7 +672,12 @@ every Freya node and swaps a 15 yd escape for a 5 yd hop of its own; it took the
 dodge 1.9s before that bot died. Freya's nodes read every hazard at once, so it has nothing to add.
 `freya nature bomb melee guard` blocks `set behind` for non-tank melee with a bomb within
 `_HAZARD_SEARCH_RADIUS`: Freya faces her tank, away from the bombs, so "behind" walks a bot from its
-in-reach spot toward them. **Movement only**: nothing here zeroes `ReachTargetAction`.
+in-reach spot toward them. `freya nature bomb reach guard` blocks a non-tank melee bot's `reach melee` and
+charges (`Family::Charge`) whose stop on its side of the target lies within `_AVOID_RADIUS` of a live bomb,
+or whose straight walk passes within it of one not already covering the bot: once the escape's latch dropped
+(a beam over its spot, a refused `MoveTo`), a Charge and an Intercept landed two warriors in three bombs
+under a second before they blew. It holds only until the bomb blows or the tank drags Freya clear (not yet
+verified in a pull).
 
 ## Hard mode
 
@@ -782,4 +802,7 @@ Snaplasher's holder;
 wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
 blast, and their samples inside one; `--lows` per lasher wave, its lashers under the bail line, those there
 8s or more and hitting a player, what the ranged in reach of one hitting a player shot (with a Gift up, the
-share on it), and the back line's bails from one hitting them; `--deaths` by killer and spell.
+share on it), and the back line's bails from one hitting them; `--bombs` per action and role, the orders from
+outside every live bomb's avoid radius whose straight walk passes inside one and the charges landing inside
+one, those then hit by it, and how each bomb death got in (a bomb is live 6s from its first snapshot);
+`--deaths` by killer and spell.

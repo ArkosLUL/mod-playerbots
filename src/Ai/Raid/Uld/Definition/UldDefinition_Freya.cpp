@@ -133,6 +133,30 @@ bool FreyaMeleeBehindIntoKite(PlayerbotAI* botAI)
     return FreyaMeleeApproachEndsIn(botAI, true, FreyaKitedSnaplasherReach(botAI));
 }
 
+bool FreyaMeleeReachIntoBomb(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (PlayerbotAI::IsTank(bot))
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    if (!target)
+        return false;
+
+    float const reach = sPlayerbotAIConfig.MeleeDistance + bot->GetCombatReach() + target->GetCombatReach();
+    float const angle = target->GetAngle(bot);
+    Position const end(target->GetPositionX() + reach * std::cos(angle),
+                       target->GetPositionY() + reach * std::sin(angle), target->GetPositionZ(), 0.0f);
+
+    std::vector<Position> const bombs =
+        GetFreyaNatureBombPositions(bot, bot->GetExactDist2d(&end) + ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
+    for (Position const& bomb : bombs)
+        if (bomb.GetExactDist2d(&end) < ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS)
+            return true;
+
+    return FreyaWalkCrossesNatureBomb(bot->GetPosition(), end, bombs, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS);
+}
+
 void DefineFreya(EncounterBuilder& e)
 {
     e.Node<FreyaNearNatureBombTrigger, FreyaMoveAwayNatureBombAction>(ACTION_RAID + 4);
@@ -202,6 +226,7 @@ void DefineFreya(EncounterBuilder& e)
     e.Multiplier<FreyaAddTankExternalHoldMultiplier>(Family::Spell);
 
     e.Block("freya nature bomb melee guard", Role::Melee, FreyaMeleeNearBomb, 0, {"set behind"});
+    e.Block("freya nature bomb reach guard", Role::Melee, FreyaMeleeReachIntoBomb, Family::Charge, {"reach melee"});
 
     e.Block("freya lasher blast reach guard", Role::Melee, FreyaMeleeReachIntoBlast, Family::Charge, {"reach melee"});
     e.Block("freya lasher blast behind guard", Role::Melee, FreyaMeleeBehindIntoBlast, Family::SetBehind);

@@ -13,7 +13,8 @@ melee bot walking back into a low lasher's blast and dying to its Detonate. A fo
 chasing a ranged bot for 9 s while another ranged bot in reach shoots a ghoul-held lasher and bails
 from it once, and a fifth two low lashers, each shot by the other one's victim. A sixth pins a low lasher on a
 ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, then the lasher. A seventh pins a
-melee bot joining a ranged one on a Gift after its walk away from it was cut. The shared v14 fixture shows every
+melee bot joining a ranged one on a Gift after its walk away from it was cut. An eighth pins a melee bot walking
+through a live Nature Bomb and dying to it, while another charges into it. The shared v14 fixture shows every
 section reads empty elsewhere.
 """
 from __future__ import annotations
@@ -318,6 +319,47 @@ def gift_fill_pull() -> list[dict]:
     ]
 
 
+BOMB = (1 << 32) | 50
+CHARGER = 7708
+
+
+def bomb_snap(t: int, melee_x: float, charger_x: float) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 60, 0, MAIN],
+        [BOMB, 2350.0, -50.0, 425.3, 0, 100, 0, 0],
+        [MELEE, melee_x, -50.0, 425.3, 0, 100, 100, FREYA],
+        [CHARGER, charger_x, -50.0, 425.3, 0, 100, 100, FREYA],
+    ]}
+
+
+def bomb_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": MELEE, "n": "Blade", "r": "melee", "c": 4, "h": 0},
+                    {"g": CHARGER, "n": "Rush", "r": "melee", "c": 1, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        {"t": 0, "e": "unit", "g": BOMB, "en": 34129, "n": "Nature Bomb"},
+        {"t": 0, "e": "spell", "sp": 11578, "n": "Charge"},
+        {"t": 0, "e": "spell", "sp": 34846, "n": "Charge"},
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        bomb_snap(300000, 2365.0, 2380.0),
+        melee_move(300500, 2335.0, "freya move away nature bomb"),
+        melee_move(300600, 2370.0),
+        {**cast(301000, CHARGER, 34846), "tr": 1},
+        cast(301000, CHARGER, 11578, FREYA),
+        bomb_snap(301700, 2350.0, 2353.0),
+        {"t": 306000, "e": "dmg", "s": BOMB, "d": CHARGER, "sp": 64650, "a": 9000, "ok": 0, "sc": 8, "ab": 0,
+         "rs": 0, "hp": 100.0},
+        {"t": 306000, "e": "dmg", "s": BOMB, "d": MELEE, "sp": 64650, "a": 9000, "ok": 0, "sc": 8, "ab": 0,
+         "rs": 0, "hp": 20.0},
+        {"t": 306001, "e": "death", "g": MELEE, "killer": BOMB, "x": 2350.0, "y": -50.0, "z": 425.3,
+         "rewind": [[306000, BOMB, 64650, 9000]]},
+        {"t": 307000, "e": "end", "out": "wipe"},
+    ]
+
+
 def load(records: list[dict]) -> Trace:
     with tempfile.TemporaryDirectory() as folder:
         path = pathlib.Path(folder) / "603_38_elder-stonebark_1795343672.ndjson"
@@ -462,6 +504,19 @@ class Lows(unittest.TestCase):
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_lows, load(pull())), "LOWS\n  no lasher wave\n")
+
+
+class Bombs(unittest.TestCase):
+    def test_a_walk_and_a_charge_into_a_live_bomb(self):
+        self.assertEqual(printed(fr.show_bombs, load(bomb_pull())), (
+            "BOMBS\n"
+            "  1 Nature Bomb(s), 2 hit(s) on the raid, 1 death(s) to one\n"
+            "  charge (melee): 1 of 1 into a live bomb, 1 then hit by it\n"
+            "  freya move away nature bomb (melee): 1 of 1 into a live bomb, 1 then hit by it\n"
+            "  5:06.001 Blade/melee died to one: walked in, freya move away nature bomb at 5:00.500\n"))
+
+    def test_trio_pull_has_no_bomb(self):
+        self.assertEqual(printed(fr.show_bombs, load(pull())), "BOMBS\n  no Nature Bomb\n")
 
 
 class Deaths(unittest.TestCase):
