@@ -732,3 +732,78 @@ as before.
   yd off, so not the 30 yd edge); cause not traced, harmless while the same bot retakes it. A chased melee holder can't
   reach its totem either, the kite hold zeroing `reach melee`: window 12 toc2 Tocyag (Rogue), Maz'dinah's victim 16-17
   yd off, held a Windfury 11.0 and 8.0 s. Not seen in windows 13-15; watch `--adds` for long holds by bots off ice duty.
+
+**User answers (2026-11-23) to round 8's questions.** Q3: yes. Q2: no, the ice order stays as it is.
+
+## Round 9 (2026-11-23, window 15a on build c350347ff; builds Q3)
+
+**Data.** Window 15a, `raidtest.py report --boss faction-champions --raid toc --head c350347ff --pulls 10`, round 7 built,
+round 8 not: toc1 `tr-20261123-112654-4` kill 6:54, 3 deaths (`649_4_caiphus-the-stern_1795433344`), toc2
+`tr-20261123-112654-5` kill 6:54, 2 (`649_5_thrakgar_1795433339`), toc3 `tr-20261123-112654-6` wipe 7:20, 30
+(`649_6_thrakgar_1795433335`). Window 14 (round 8's traces) reread for the Hunter baseline. Scripts in the round's
+scratchpad `fc9/` (gone with it); the reader's new `--peel` Hunter line covers the key one.
+
+**Stop rules, ranking.** Skipped: window 15 is pulling round 8.
+
+**Lineups.** toc1 window 14 toc1's (Broln, Narrhok, Maz'dinah, Gorgrim; three DKs ice Maz'dinah, Gorgrim, Broln; Narrhok
+from 3:50). toc2 and toc3: Malithas for Broln, two DKs on Malithas and Maz'dinah; toc2 iced Gorgrim from 3:24 and Narrhok
+from 3:58, toc3 Gorgrim from 4:30 and Narrhok never.
+
+**Deaths by killing blow.**
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 3 | iced Broln 2 (melee 1:32, Lava Lash 5:20), Ruj'kah 1 |
+| toc2 kill | 2 | Narrhok (free) 1, Ruj'kah 1 |
+| toc3 wipe | 30 | Narrhok (never iced) 8, Gorgrim 8 (6 before his ice duty), Malithas 4 (3 after his ice DK Toczai died at 5:04), Harkzog 4, Ruj'kah 2, Maz'dinah 2, Ginselle 1, Zhaagrym 1 |
+
+**Verdict on round 7 (iced Tauren disarm): works where it lands, too rare to matter.** `--peel`: iced Broln (toc1) took 2
+(first 1:05.9), his disarm-gated casts 0 within 10 s after one, 56 otherwise (window 14: 36 and 27, window 13: 48), and
+still killed 2 of the 3. Iced Narrhok 1 (toc1) and 2 (toc2), all from 5:20, 0 after, 8 otherwise each. The two rogues'
+Dismantles (60 s cooldown) came to 10, 9 and 8 a pull, 7, 5 and 4 of them on Narrhok.
+
+**Q3 checked before building.**
+
+- Both Hunter champions, Ruj'kah 34448 and Alyssia Moonstalker 34467 (difficulty entries 35724-35726, 35662-35664), run
+  `npc_toc_hunter` with `CreatureImmunitiesId` -12, -13 on heroic (charm; heroic adds taunt and Attack Me), and
+  `CREATURE_FLAG_EXTRA_ALL_DIMINISH`, so both are taken.
+- `npc_toc_hunterAI::myCanCast` (`boss_faction_champions.cpp:1242-1245`) is false under `UNIT_FLAG2_DISARM_RANGED`,
+  checked before every event (`:1261`) and gating the Shoot after it (`:1333`); he never melees. Disarm 676 and Dismantle
+  51722 both carry aura 278; the cast check wants a weapon in a disarmed slot (`SpellInfo.cpp:1763-1783`), he has main
+  hand 47156 and ranged 48711.
+- Deterrence 65871 (5 s, under 25%, every 90 s): parry and deflect +100%, pacify. Pacify stops his casts but not the
+  triggered Shoot (`TRIGGERED_FULL_MASK` ignores caster auras), and `Unit::MeleeSpellHitResult` parries a disarm from his
+  front only.
+
+**Baseline** (`--peel` Hunter line, then the round's script). Window 15a: disarms on Ruj'kah 0, 1 (the prot tank's class
+Disarm, 2:08.5, kill target), 0; his casts 115, 83, 97 and damage 463k, 364k, 419k with none within 10 s of one (toc2: 1
+cast, 3k). Kill target 45.6, 43.0, 52.9 s, a rogue within 5.5 yd of him 86%, 86%, 90% of it; off the latch a rogue or
+warrior that close 29%, 14%, 13%. Killing blows 1, 1, 2, as kill target 0, 1, 1. Window 14: disarms 0, 1, 0; casts 122,
+73, 116; kill target 108.6, 45.3, 82.8 s, a rogue that close 29%, 92%, 18%; killing blows 5, 2, 7, as kill target 3, 0,
+5.
+
+**Fix** (`ToCHelpers_FactionChampionsDefence.cpp`). The peel takes the Hunter champion, not CC'd, guarded or ranged-disarmed
+(`DisarmedFor` reads his ranged flag), whatever his victim, and gives him only `ReadyDisarm`: a rogue's Dismantle or a
+Defensive Stance warrior's Disarm, in melee. While his Deterrence is up, only a peeler behind him. DR, immunity, LOS and
+guard checks as before. Kill target or not it's one rule: the peel never walks, so on the latch the rogues already standing
+on him take it and off it only a bot already in reach.
+
+Ordering against the iced Tauren: each refresh serves the entries in rank order, each taking the nearest untaken peeler
+with a ready spell, and the Hunter ranks after every melee champion, free or iced. A rogue in reach of both spends that
+refresh's Dismantle on the Tauren. Nothing reserves a cooldown for a need that comes later.
+
+Reader `--peel`: per Hunter champion the raid's Disarms and Dismantles, those on the kill target, and his casts and damage
+within 10 s after one or not (`hunter_disarms`).
+
+**Next window should show.** `--peel` Hunter line: disarms above 0 on every pool, mostly on the kill target (window 15a 0,
+1, 0); his casts and damage "within 10 s after one" up against "otherwise" (0, 1, 0 casts; 0k, 3k, 0k); fewer Ruj'kah kills
+as kill target (window 14: 3, 0, 5). Narrhok's and the iced Tauren's disarms not far below this window's (Narrhok 7, 5, 4;
+iced Broln 2), since the Hunter's Dismantle spends the same 60 s cooldown. A small gain at most: about one Dismantle per
+rogue in a 45-55 s kill-target hold.
+
+**Seen, not picked.** The prot warrior tank's class Disarm lands on casters with nothing to gate, one each: Harkzog and
+Thrakgar here, Birana, Harkzog, Liandra and Thrakgar in window 14.
+
+**Questions for the user.** None.
+
+**Shared code.** None; the change is in this fight's helper and its reader.

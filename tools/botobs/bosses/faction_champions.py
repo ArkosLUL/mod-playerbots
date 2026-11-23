@@ -23,7 +23,8 @@
                                            regrips; fc.wall holds
     faction_champions.py <file> --peel     snares and peels on melee champions, trinket poppers on iced ones, the
                                            full-speed chases a snare reached, Disarm against Bladestorm, disarms
-                                           on the iced Tauren against the casts they gate,
+                                           on the iced Tauren against the casts they gate, on the Hunter against
+                                           his casts and damage,
                                            externals (Lay on Hands too), the DK champion's Chains of Ice on the raid
                                            and the Hands of Freedom on it, battle res and repeat deaths, taunts
     faction_champions.py <file> --damage   damage to the raid per champion, and how the melee were controlled
@@ -547,9 +548,12 @@ HOLD_ONLY_PEELS = ("Death Grip", "Frost Nova", "Freezing Arrow")
 DISARMS = frozenset((676, 51722, 64044))
 SPELL_BLADESTORM = 65947
 WARRIOR_CHAMPIONS = (34475, 34453)
-ICED_DISARMS = frozenset((676, 51722))
+PEEL_DISARMS = frozenset((676, 51722))
 DISARM_GATED = {34453: frozenset((65926, 68782, 68783, 68784, 65924, 65936, 65940, 65932, SPELL_BLADESTORM)),
                 34455: frozenset((65970, 65974))}
+HUNTER_CHAMPIONS = (34448, 34467)
+RANGED_DISARM_GATED = frozenset((65883, 67977, 67978, 67979, 65871, 65866, 67983, 67984, 67985, 65880, 65868, 67988,
+                                 67989, 67990, 65867, 66207, 65877))
 DISARM_MS = 10000
 EXTERNALS = {**dict.fromkeys((1022, 5599, 10278), "Hand of Protection"), 33206: "Pain Suppression",
              47788: "Guardian Spirit", 6940: "Hand of Sacrifice",
@@ -2375,7 +2379,7 @@ def iced_disarms(trace: Trace) -> list[dict]:
         if gated is None:
             continue
         disarms = [rec["t"] for rec in casts
-                   if rec.get("tgt") == guid and rec.get("sp") in ICED_DISARMS and rec.get("s") in roster
+                   if rec.get("tgt") == guid and rec.get("sp") in PEEL_DISARMS and rec.get("s") in roster
                    and not rec.get("tr") and iced_at(duties, guid, rec["t"])]
         after = other = 0
         for rec in casts:
@@ -2386,6 +2390,38 @@ def iced_disarms(trace: Trace) -> list[dict]:
             else:
                 other += 1
         out.append({"guid": guid, "disarms": disarms, "after": after, "other": other})
+    return out
+
+
+def hunter_disarms(trace: Trace) -> list[dict]:
+    """Per Hunter champion: `guid`, the raid's Disarm and Dismantle casts on it (`disarms`, times), how many came
+    while it held `fc.kill` (`kill`), its casts its script skips under a ranged disarm (all of them but the pet
+    call) and its own damage to the raid, within DISARM_MS after one of those disarms (`after`, `damage_after`) or
+    not (`other`, `damage_other`)."""
+    roster = roster_guids(trace)
+    casts = trace.of("cast")
+    killed = kill_spans(trace)
+    out = []
+    for guid, entry in sorted(champions(trace).items()):
+        if entry not in HUNTER_CHAMPIONS:
+            continue
+        disarms = [rec["t"] for rec in casts
+                   if rec.get("tgt") == guid and rec.get("sp") in PEEL_DISARMS and rec.get("s") in roster
+                   and not rec.get("tr")]
+
+        def disarmed(when: int) -> bool:
+            return any(0 <= when - start < DISARM_MS for start in disarms)
+
+        row = {"guid": guid, "disarms": disarms,
+               "kill": sum(held_at(killed, when) == guid for when in disarms),
+               "after": 0, "other": 0, "damage_after": 0, "damage_other": 0}
+        for rec in casts:
+            if rec.get("s") == guid and rec.get("sp") in RANGED_DISARM_GATED:
+                row["after" if disarmed(rec["t"]) else "other"] += 1
+        for rec in trace.of("dmg"):
+            if rec.get("s") == guid and rec.get("d") in roster:
+                row["damage_after" if disarmed(rec["t"]) else "damage_other"] += rec.get("a", 0)
+        out.append(row)
     return out
 
 
@@ -2496,6 +2532,13 @@ def show_peel(trace: Trace) -> None:
               + (f" (first {clock(disarms[0])})" if disarms else "")
               + f"; its disarm-gated casts while iced: {row['after']} within {DISARM_MS // 1000} s after one,"
               f" {row['other']} otherwise")
+    for row in hunter_disarms(trace):
+        disarms = row["disarms"]
+        print(f"  {trace.name(row['guid'])} (Hunter): Disarm or Dismantle {len(disarms)}"
+              + (f" (first {clock(disarms[0])}), {row['kill']} on the kill target" if disarms else "")
+              + f"; his casts: {row['after']} within {DISARM_MS // 1000} s after one, {row['other']} otherwise;"
+              f" his damage {row['damage_after'] / 1000:.0f}k within {DISARM_MS // 1000} s after one,"
+              f" {row['damage_other'] / 1000:.0f}k otherwise")
 
     externals = external_casts(trace)
     if externals:

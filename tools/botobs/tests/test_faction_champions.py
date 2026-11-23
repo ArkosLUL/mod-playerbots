@@ -1489,6 +1489,60 @@ class IcedTaurenDisarm(unittest.TestCase):
                       " iced: 0 within 10 s after one, 0 otherwise", text)
 
 
+RUJKAH_C = CREATURE | 22
+
+
+def hunter_pull() -> list[dict]:
+    roster = [{"g": WARRIOR, "n": "Shield", "r": "tank", "c": 1, "h": 0},
+              {"g": ROGUE, "n": "Shadow", "r": "melee", "c": 4, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0}]
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": RUJKAH_C, "en": 34448, "n": "Ruj'kah", "b": 1},
+        cast(500, RUJKAH_C, 18350, RUJKAH_C, triggered=True),
+        cast(1000, RUJKAH_C, 67990, MAGE, triggered=True),
+        dmg(1100, RUJKAH_C, MAGE, 67990),
+        note(2000, ROGUE, fc.KILL, RUJKAH_C),
+        cast(3000, ROGUE, 51722, RUJKAH_C),
+        cast(5000, RUJKAH_C, 67979, MAGE),
+        dmg(5200, RUJKAH_C, MAGE, 67979),
+        cast(20000, WARRIOR, 676, RUJKAH_C),
+        note(25000, ROGUE, fc.KILL, 0),
+        cast(35000, RUJKAH_C, 67985, MAGE),
+        dmg(35100, RUJKAH_C, MAGE, 67985),
+        dmg(36000, RUJKAH_C, TANK, 67985),
+        {"t": 40000, "e": "end", "out": "wipe"},
+    ]
+
+
+class HunterDisarm(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in hunter_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_disarm_reads_his_casts_and_damage_after_it_and_the_rest(self):
+        self.assertEqual(fc.hunter_disarms(self.trace), [
+            {"guid": RUJKAH_C, "disarms": [3000, 20000], "kill": 2, "after": 1, "other": 2, "damage_after": 1000,
+             "damage_other": 2000}])
+
+    def test_the_section_renders(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_peel(self.trace)
+        self.assertIn("Ruj'kah (Hunter): Disarm or Dismantle 2 (first 0:03.000), 2 on the kill target; his casts: 1"
+                      " within 10 s after one, 2 otherwise; his damage 1k within 10 s after one, 2k otherwise",
+                      out.getvalue())
+
+
 def run_snap(when: int) -> dict:
     # the warrior champion runs 8 yd/s 5 yd behind the mage to 3.5 s, 4 under Concussive Shot to 6 s, then flees;
     # the iced rogue champion runs 8 yd/s at the mage too, the DK champion at the tank

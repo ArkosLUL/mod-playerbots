@@ -116,6 +116,7 @@ constexpr float ROOT_AOE_CLEAR = 12.0f;
 constexpr uint32 SPELL_DISARM = 676;
 constexpr uint32 SPELL_DISMANTLE = 51722;
 constexpr uint32 SPELL_PSYCHIC_HORROR = 64044;
+constexpr uint32 SPELL_CHAMPION_DETERRENCE = 65871;
 constexpr std::array<uint32, 6> FROST_NOVA_RANKS = {42917, 27088, 10230, 6131, 865, 122};
 constexpr std::array<uint32, 8> ENTANGLING_ROOTS_RANKS = {53308, 26989, 9853, 9852, 5196, 5195, 1062, 339};
 constexpr std::array<uint32, 4> HAMMER_OF_JUSTICE_RANKS = {10308, 5589, 5588, 853};
@@ -756,6 +757,12 @@ bool IsTauren(uint32 entry)
            entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_SHAMAN_ENHANCEMENT);
 }
 
+bool IsHunter(uint32 entry)
+{
+    return entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_HUNTER) ||
+           entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_HUNTER);
+}
+
 std::vector<uint32> const& ScanEntries()
 {
     static std::vector<uint32> const entries = {
@@ -1046,11 +1053,7 @@ std::vector<Member>::const_iterator FindMember(std::vector<Member> const& member
                         [guid](Member const& member) { return member.player->GetGUID() == guid; });
 }
 
-bool IsPhysicalChampion(uint32 entry)
-{
-    return IsFactionChampionMelee(entry) || entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_HUNTER) ||
-           entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_HUNTER);
-}
+bool IsPhysicalChampion(uint32 entry) { return IsFactionChampionMelee(entry) || IsHunter(entry); }
 
 bool GripLands(Unit* target)
 {
@@ -1699,12 +1702,22 @@ bool ClearOfOurHits(std::vector<Member> const& members, Unit* champion)
     return !FactionChampionsCarriesGroupDot(champion);
 }
 
+bool DisarmedFor(Unit* champion)
+{
+    uint32 const entry = champion->GetEntry();
+    if (IsEnhancement(entry))
+        return champion->HasUnitFlag2(UNIT_FLAG2_DISARM_OFFHAND);
+
+    if (IsHunter(entry))
+        return champion->HasUnitFlag2(UNIT_FLAG2_DISARM_RANGED);
+
+    return champion->HasUnitFlag(UNIT_FLAG_DISARMED);
+}
+
 uint32 ReadyDisarm(Player* peeler, Unit* champion)
 {
     bool const enhancement = IsEnhancement(champion->GetEntry());
-    bool const disarmed = enhancement ? champion->HasUnitFlag2(UNIT_FLAG2_DISARM_OFFHAND)
-                                      : champion->HasUnitFlag(UNIT_FLAG_DISARMED);
-    if (!peeler->IsWithinMeleeRange(champion) || disarmed)
+    if (!peeler->IsWithinMeleeRange(champion) || DisarmedFor(champion))
         return 0;
 
     if (peeler->getClass() == CLASS_ROGUE)
@@ -1791,6 +1804,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         Unit* champion;
         bool danger;
         bool iced;
+        bool hunter;
         bool warrior;
         bool healerVictim;
         float victimHealth;
@@ -1800,9 +1814,19 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
     std::vector<Needy> needy;
     for (Unit* champion : champions)
     {
-        if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-            champion->HasAuraType(SPELL_AURA_MOD_ROOT) ||
+        if (champion->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
             std::find(state.guarded.begin(), state.guarded.end(), champion->GetGUID()) != state.guarded.end())
+            continue;
+
+        if (IsHunter(champion->GetEntry()))
+        {
+            if (!DisarmedFor(champion))
+                needy.push_back({champion, false, false, true, false, false, 100.0f});
+
+            continue;
+        }
+
+        if (!IsFactionChampionMelee(champion->GetEntry()) || champion->HasAuraType(SPELL_AURA_MOD_ROOT))
             continue;
 
         bool const iced = FactionChampionsIced(botAI, champion);
@@ -1821,13 +1845,16 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         if (!onRaid && !crowded && !isDanger)
             continue;
 
-        needy.push_back({champion, isDanger, iced, warrior, onRaid && member->healer,
+        needy.push_back({champion, isDanger, iced, false, warrior, onRaid && member->healer,
                          onRaid ? victim->GetHealthPct() : 100.0f});
     }
 
     std::sort(needy.begin(), needy.end(),
               [](Needy const& a, Needy const& b)
               {
+                  if (a.hunter != b.hunter)
+                      return b.hunter;
+
                   if (a.danger != b.danger)
                       return a.danger;
 
@@ -1866,6 +1893,7 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
                                                          member.player->GetExactDist2d(champion) < ROOT_AOE_CLEAR;
                                               });
 
+        bool const deterred = entry.hunter && champion->HasAura(SPELL_CHAMPION_DETERRENCE);
         std::vector<std::pair<float, size_t>> byDistance;
         for (size_t i = 0; i < peelers.size(); ++i)
             if (!taken[i])
@@ -1876,8 +1904,11 @@ void UpdatePeel(FactionChampionsDefenceState& state, PlayerbotAI* botAI, std::ve
         {
             size_t const i = nearest.second;
             Player* peeler = peelers[i];
-            uint32 const spellId =
-                entry.iced ? ReadyDisarm(peeler, champion) : ReadyPeel(peeler, champion, nearPackTank, entry.danger);
+            if (deterred && champion->HasInArc(static_cast<float>(M_PI), peeler))
+                continue;
+
+            uint32 const spellId = entry.iced || entry.hunter ? ReadyDisarm(peeler, champion)
+                                                              : ReadyPeel(peeler, champion, nearPackTank, entry.danger);
             SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
             SpellInfo const* landing = spellId ? sSpellMgr->GetSpellInfo(PeelLanding(spellId)) : nullptr;
             if (!info || !landing || champion->IsImmunedToSpell(landing) || !peeler->IsWithinLOSInMap(champion))
