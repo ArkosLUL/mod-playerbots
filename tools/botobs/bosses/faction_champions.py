@@ -34,8 +34,10 @@
                                            melee champions' share, the pins, a kite before), healthstones over 70%,
                                            the escapes, Sprint and Dash casts and kites, how far the chasers were
                                            at an escape and after, whether they dropped the bot and it lived, the
-                                           kites each melee champion caught, iced or not, the re-hops a kite's own
-                                           walk refused and how long they waited
+                                           Blinks and circle teleports landing within 12 yd of a melee champion, the
+                                           kites each melee champion caught, iced or not, its iced ones inside its
+                                           strike reach or past it, the re-hops a kite's own walk refused and how
+                                           long they waited
     faction_champions.py <file> --focus    4+ champions on one raid member: episodes, the externals and
                                            immunities in them, fc.nextfocus against each fc.repick
     faction_champions.py <file> --ice      each DK's ice duty: Chains of Ice uptime and gaps, Frost spenders, how
@@ -429,6 +431,10 @@ SPEED_SPELLS = {2983: "Sprint", 8696: "Sprint", 11305: "Sprint", 1850: "Dash", 9
 ESCAPE_WATCH_MS = 10000
 # a 2.25-reach champion's swings reach 7.7 yd, so only the Tauren two (6.075) hit a bot from past this
 ESCAPE_FAR_YD = 8.0
+LANDING_SPELLS = ("Blink", "Demonic Circle: Teleport")
+LANDING_CLEAR = 12.0
+LANDING_MOVED = 8.0
+LANDING_LOOK_MS = 1000
 # a bot's hop off the melee champions on it, `<chasers> melee, <nearest> yd`
 KITE = "fc.kite"
 # hops this close together by one bot are one kite
@@ -439,6 +445,13 @@ KITE_HEAL_REACH = 30.0
 KITE_HEAL_AFTER_MS = 2000
 # a kite whose nearest chaser still hits the bot this soon after its first hop started inside its reach
 KITE_CATCH_MS = 2000
+TAUREN_ENTRIES = frozenset((34453, 34455))
+TAUREN_REACH = 6.075
+CHAMPION_REACH = 2.25
+PLAYER_REACH = 1.5
+STRIKE_PAST_REACHES = 4.0 / 3.0 + 2.66 + 5.0 - 2.0
+WEAPON_SPECIALS = frozenset(("Mortal Strike", "Overpower", "Stormstrike", "Lava Lash", "Frost Strike",
+                             "Crusader Strike", "Eviscerate", "Hemorrhage"))
 # the action walking each kite hop; a re-hop it refused that issues later than this was dropped
 KITE_ACTION = "faction champions kite"
 KITE_WAIT_MAX_MS = 6000
@@ -3533,6 +3546,37 @@ def escape_rows(trace: Trace) -> list[dict]:
              **chase_after(trace, rec.get("g"), rec["t"])} for rec in notes(trace, ESCAPE)]
 
 
+def landing_clearances(trace: Trace, escapes: list[dict] | None = None) -> dict[str, list[int]]:
+    """Per LANDING_SPELLS spell, `[landed, near]` over its escapes: landed one whose bot's first sample in the
+    LANDING_LOOK_MS after has it LANDING_MOVED+ yd off where it stood at the note, near one with a living melee
+    champion, on the bot or not, within LANDING_CLEAR of it in that sample."""
+    escapes = escape_rows(trace) if escapes is None else escapes
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    stamps = snap_stamps(trace)
+    snaps = frames(trace)
+    out: dict[str, list[int]] = {}
+    for row in escapes:
+        if row["spell"] not in LANDING_SPELLS:
+            continue
+        before = snap_at(trace, row["t"])
+        start = next((unit for unit in before.get("u", []) if unit[0] == row["bot"]), None) if before else None
+        if not start:
+            continue
+        for snap in snaps[bisect.bisect_right(stamps, row["t"]):]:
+            if snap["t"] > row["t"] + LANDING_LOOK_MS:
+                break
+            units = snap.get("u", [])
+            me = next((unit for unit in units if unit[0] == row["bot"]), None)
+            if not me or math.dist(me[1:3], start[1:3]) < LANDING_MOVED:
+                continue
+            cell = out.setdefault(row["spell"], [0, 0])
+            cell[0] += 1
+            cell[1] += any(unit[0] in melee and unit[5] > 0 and math.dist(unit[1:3], me[1:3]) < LANDING_CLEAR
+                           for unit in units)
+            break
+    return out
+
+
 def speed_rows(trace: Trace) -> list[dict]:
     """Every raid Sprint or Dash cast in the pull: `t`, `bot`, `spell`, and the `chase_after` fields at it."""
     if encounter_of(trace) != ENCOUNTER:
@@ -3594,6 +3638,46 @@ def kite_catches(trace: Trace, kites: list[dict] | None = None) -> dict[int, lis
         cell[1] += caught
         cell[2] += iced
         cell[3] += iced and caught
+    return out
+
+
+def strike_reach(trace: Trace, champion: int) -> float:
+    """How far a champion's melee-range special reaches a bot while both move, centre to centre: its melee range
+    plus the leeway plus the spell's 5 yd less MIN_MELEE_REACH (`Spell::CheckRange`), 14.6 yd for the Tauren
+    two and 10.7 for the rest."""
+    reach = TAUREN_REACH if trace.entries.get(champion) in TAUREN_ENTRIES else CHAMPION_REACH
+    return reach + PLAYER_REACH + STRIKE_PAST_REACHES
+
+
+def iced_kite_starts(trace: Trace, kites: list[dict] | None = None) -> dict[int, list[int]]:
+    """Per melee champion, `[inside, inside caught, past, past caught]` over the kites it was the nearest living
+    melee champion with the bot as target at the first hop of (as `kite_catches`) while an ice duty held it in
+    Chains of Ice: inside is a first hop within its `strike_reach`, caught a white swing or WEAPON_SPECIALS hit
+    of it on the bot within KITE_CATCH_MS."""
+    kites = kite_rows(trace) if kites is None else kites
+    melee = {guid for guid in champions(trace) if spec(trace, guid) in MELEE_SPECS}
+    duties = ice_duties(trace)
+    hits: dict[tuple[int, int], list[int]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("s") in melee and (not rec.get("sp") or trace.spells.get(rec["sp"]) in WEAPON_SPECIALS):
+            hits[(rec["s"], rec.get("d"))].append(rec["t"])
+    out: dict[int, list[int]] = {}
+    for kite in kites:
+        snap = snap_at(trace, kite["t"])
+        rows = snap.get("u", []) if snap else []
+        me = next((row for row in rows if row[0] == kite["bot"]), None)
+        on = [row for row in rows if row[0] in melee and row[5] > 0 and len(row) > 7 and row[7] == kite["bot"]]
+        if not me or not on:
+            continue
+        nearest = min(on, key=lambda row: (math.dist(row[1:3], me[1:3]), row[0]))
+        chaser = nearest[0]
+        if not iced_at(duties, chaser, kite["t"]):
+            continue
+        inside = math.dist(nearest[1:3], me[1:3]) <= strike_reach(trace, chaser)
+        caught = any(kite["t"] <= when <= kite["t"] + KITE_CATCH_MS for when in hits[(chaser, kite["bot"])])
+        cell = out.setdefault(chaser, [0, 0, 0, 0])
+        cell[0 if inside else 2] += 1
+        cell[1 if inside else 3] += caught
     return out
 
 
@@ -3757,6 +3841,10 @@ def show_personal(trace: Trace) -> None:
                                   if row["at"] is not None and row["at"] > ESCAPE_FAR_YD)
         print(f"  with the nearest melee champion past {ESCAPE_FAR_YD:.0f} yd: {sum(far.values())}"
               + "".join(f", {name} {count}" for name, count in far.most_common()))
+        landings = landing_clearances(trace, escapes)
+        if landings:
+            print(f"  landed within {LANDING_CLEAR:.0f} yd of a melee champion, at the first sample after the jump: "
+                  + ", ".join(f"{spell} {near} of {landed}" for spell, (landed, near) in sorted(landings.items())))
     else:
         print("\n  fc.escape: none")
     speeds = speed_rows(trace)
@@ -3785,6 +3873,13 @@ def show_personal(trace: Trace) -> None:
                   + ", ".join(f"{trace.name(guid)} {caught} of {starts} (iced {iced_caught} of {iced})"
                               for guid, (starts, caught, iced, iced_caught)
                               in sorted(catches.items(), key=lambda item: -item[1][0])))
+        starts = iced_kite_starts(trace, kites)
+        if starts:
+            print(f"  iced kites started inside the chaser's strike reach or past it, weapon hits within"
+                  f" {KITE_CATCH_MS // 1000} s: "
+                  + ", ".join(f"{trace.name(guid)} inside {inside_caught} of {inside}, past {past_caught} of {past}"
+                              for guid, (inside, inside_caught, past, past_caught)
+                              in sorted(starts.items(), key=lambda item: -(item[1][0] + item[1][2]))))
         waits = kite_waits(trace)
         held = waits["waits"]
         median = f"{statistics.median(held) / 1000:.1f} s" if held else "-"
@@ -3802,7 +3897,9 @@ def show_personal(trace: Trace) -> None:
           f" after its last hop; a death's melee is the melee champions' share of the champion"
           f" damage on it in the {DEATH_DAMAGE_MS // 1000} s before, kited a {KITE} or {NITRO} note on it in the"
           f" {DEATH_KITE_MS // 1000} s before, pinned by the champion roots, stuns and slows landing on it in the"
-          f" {DEATH_PIN_MS // 1000} s before")
+          f" {DEATH_PIN_MS // 1000} s before; a champion's strike reach is how far its weapon specials reach a"
+          f" bot while both move, the Tauren two {TAUREN_REACH + PLAYER_REACH + STRIKE_PAST_REACHES:.1f} yd, the"
+          f" rest {CHAMPION_REACH + PLAYER_REACH + STRIKE_PAST_REACHES:.1f}")
 
 
 def focus_counts(snap: dict, targets, roster) -> collections.Counter:

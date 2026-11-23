@@ -83,7 +83,7 @@ constexpr uint32 SPELL_DEMONIC_CIRCLE_IN_RANGE = 62388;
 constexpr int32 CIRCLE_REFRESH_MS = 60000;
 constexpr uint32 NITRO_MELEE_FOCUS = 2;
 constexpr float BLINK_FLEE_RADIUS = 15.0f;
-constexpr float BLINK_MIN_CLEAR = 12.0f;
+constexpr float LANDING_MIN_CLEAR = 12.0f;
 constexpr uint32 SPELL_DISENGAGE = 781;
 constexpr uint32 SPELL_FROST_TRAP = 13809;
 constexpr float FROST_TRAP_SLICK = 10.0f;
@@ -362,7 +362,7 @@ float CrawlReach(Unit* champion, Player* bot)
     uint32 const entry = champion->GetEntry();
     bool const ret = entry == static_cast<uint32>(ToCFactionChampions::NPC_ALLIANCE_PALADIN_RETRIBUTION) ||
                      entry == static_cast<uint32>(ToCFactionChampions::NPC_HORDE_PALADIN_RETRIBUTION);
-    float const reach = FactionChampionsSwingReach(champion, bot) + KITE_CRAWL_MARGIN;
+    float const reach = FactionChampionsStrikeReach(champion, bot) + KITE_CRAWL_MARGIN;
     return ret ? std::max(reach, KITE_CRAWL_REACH_RET) : reach;
 }
 
@@ -532,7 +532,7 @@ void BreakChasedCasts(BallState& state, PlayerbotAI* botAI, std::vector<Player*>
         bool const caught = std::any_of(chasers.begin(), chasers.end(), [member, leftSec](Unit* chaser)
                                         {
                                             return member->GetExactDist2d(chaser) -
-                                                       FactionChampionsSwingReach(chaser, member) <=
+                                                       FactionChampionsStrikeReach(chaser, member) <=
                                                    chaser->GetSpeed(MOVE_RUN) * leftSec;
                                         });
         if (!caught || !KiteFree(state, botAI, member))
@@ -922,7 +922,7 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
                 Vec const from =
                     flee ? Unit2(bot->GetPositionX() - fleeX / flee, bot->GetPositionY() - fleeY / flee) : away;
                 std::vector<EncounterHelpers::HazardCircle> const hazards = FactionChampionsAoeClearances(botAI);
-                float bestClear = BLINK_MIN_CLEAR;
+                float bestClear = LANDING_MIN_CLEAR;
                 bool found = false;
                 Vec best = from;
                 for (float turn : {0.0f, 30.0f, -30.0f, 60.0f, -60.0f, 90.0f, -90.0f})
@@ -969,6 +969,7 @@ bool FactionChampionsEscape(PlayerbotAI* botAI, FactionChampionsEscapeCast& cast
             if (circle && bot->HasAura(SPELL_DEMONIC_CIRCLE_IN_RANGE) &&
                 KnownReady(bot, SPELL_DEMONIC_CIRCLE_TELEPORT) &&
                 circle->GetExactDist2d(&mean) >= bot->GetExactDist2d(&mean) + ESCAPE_MIN_GAIN &&
+                MeleeClearance(botAI, circle->GetPosition()) >= LANDING_MIN_CLEAR &&
                 Clear(circle->GetPosition(), FactionChampionsAoeClearances(botAI)))
             {
                 cast.spellId = SPELL_DEMONIC_CIRCLE_TELEPORT;

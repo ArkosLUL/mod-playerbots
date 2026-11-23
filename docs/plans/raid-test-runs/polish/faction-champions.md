@@ -1075,3 +1075,132 @@ size, mode or player branch.
 - Review fix: Call of the Elements dropped the bar's Magma Totem past the multiplier, 20 in windows 14-18, all from
   Enhancement bots (`AiFactory` gives them `magma`). The multiplier zeroes it while the fire slot holds Magma or Searing
   Totem, and `--aoe`'s raid splash counts the totems it drops (window 18: Magma Totem 0, 2, 0); next window 0.
+
+## Round 12 (2026-11-23, window 20 on build 5d9e7320d)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head 5d9e7320d --pulls 10`, round 11 in it: toc1
+`tr-20261123-174440-1` kill 6:21 (DC 6:57), 2 deaths (`649_1_thrakgar_1795455979`), toc2 `tr-20261123-174440-2` kill
+6:32 (7:09), 5 (`649_2_erin-misthoof_1795455977`), toc3 `tr-20261123-174440-3` kill 5:52 (6:27), 0
+(`649_3_erin-misthoof_1795455980`). Window 18 (round 10's three) reread for the comparison, windows 14-20 (18 pulls) for
+the kite starts and circle teleports. Scripts in the round's scratchpad `fc12/` (gone with it); the reader's new
+`--personal` line covers the key one.
+
+**Stop rules.** Kills on all three pools, toc1 and toc3 within 3 deaths, toc2 at 5: not polished, one pool short again
+(window 18: toc1 at 10).
+
+**Lineups.** toc1 window 18 toc2's (Liandra, Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog, Vivienne,
+Ginselle), three DKs ice Gorgrim, Narrhok and Maz'dinah. toc2 and toc3: Liandra, Caiphus, Erin; Maz'dinah, Narrhok,
+Ruj'kah, Broln, Gorgrim, Harkzog, Ginselle; two DKs ice Broln and Maz'dinah, then Gorgrim and Narrhok as the kill order
+frees them (toc2 Narrhok from 4:33, toc3 from 4:09). Broln's first lineup since window 15.
+
+**Deaths by top damage dealer** (its share in the 10 s before). Iced: its duty's Chains in the 10 s before.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc2 kill | 5 | iced Broln 3: Tocyah (mage) 2:27.7, 100%, Broln walking at Tocyae passed her 3-5 yd off as she stood casting, the recount at ~2:26.8 made her his pick, Stormstrike 10.9k + 10.5k from 5.1 yd and a 5.0k swing, full to dead in 0.5 s; Tocyap (warlock) 2:51.1, 59% (Narrhok not yet iced 38%), Broln took him 11-12 yd off mid-Chaos Bolt (a 9.0k swing from 12.2 yd), Shadowfury, Narrhok's Mortal Strike, then his Demonic Circle: Teleport landed 9 yd from Broln, Lava Lash 13.0k and a 10.2k swing; Tocyao (shadow priest) 5:48.0, 81%, Broln on him from 5:37, kites started 13.0-13.6 yd off hit by Stormstrike from 12.5 yd and swings from 11.7-11.8, Dazed twice by Zhaagrym, iced Narrhok's Charge. Ruj'kah (kill target) 1: Tocyad (disc priest) 2:30.4, 100%, standing in his Frost Trap. Narrhok before his ice duty 1: Tocyal (warlock) 4:07.8, 74%, kiting, Dazed and Charge Stun |
+| toc1 kill | 2 | iced Narrhok 2: Tocxak (warlock) 1:14.4, 76% (Ruj'kah's Shoot the blow), Narrhok on him from 0:36 with three Charges (0:35.5, 0:50.6, 1:00.7), then 1:02.2-1:06.2 with no kite hop open at the wall (every turn off the floor or within 10 yd of a healer) and a 17.8k swing, Dazed at 1:09.5 halving his kite; Tocxas (warlock) 1:49.5, 54% (iced Gorgrim 42%), Mortal Strike from 13.3 yd, swing from 11.3, Charge Stun and Gorgrim's Chains of Ice on him |
+| toc3 kill | 0 | - |
+
+**Verdict on round 11 (own splash suppressed, wall walk fits the Chains): held, and cost no kill time.**
+
+- `--vetoes` `faction champions suppress aoe multiplier`: starfall 36, 34, - (roster C has no Balance bot), bladestorm 51,
+  63, 47, cleave 31, 51, 29, sweeping strikes 32, 42, 33, blade flurry 73, 75, 63, swipe (cat) 15, -, 14 (roster B has no
+  cat), multi-shot 62, 51, 52, searing totem 37, 34, 35, call of the elements 7, 9, 7, magma totem 33, 31, 32.
+- `--aoe` raid splash: none on all three (window 18: Cleave 1143, 1309, 808, Multi-Shot 49, 41, 58 and the rest; Magma
+  Totem 0, 2, 0).
+- `--cc` raid hits on our held CC: Starfall, Searing Totem's Attack, Blade Flurry, Sweeping Strikes, Deep Wounds, Trauma
+  and Blood Frenzy 0 on all three (window 18: Starfall 12, 6, 0; Attack 0, 13, 7; the warrior procs 6, 7, 17). Left:
+  Infected Wounds 0, 3, 10 (0, 3, 8 ending it), Mirror Image bolts 0, 0, 5 (5), interrupts and dispels.
+- Off the kill target, Polymorph held a median 5.0, 9.7, 5.0 s (window 18: 2.2, 2.5, 1.9), Fear 5.1, 6.0, 5.0 s (3.7,
+  4.4, 3.6), Cyclone 5.1, 6.0, - (5.7, 5.8, -).
+- Caster kills by top damage 1 of 7 (window 18: 8 of 15), Ruj'kah as kill target.
+- `--ice` on the three-DK pool (toc1): longest gaps 16.3, 8.2, 9.0 s (window 18: 4.2, 7.3, 11.8, 10.1), the first two the
+  opening's first Chains, the third mid-fight with no wall hold before it; uptime 95, 98, 97% (97, 95, 95, 93); grips 7,
+  8, 7 (6, 7, 9, 1). No gap over 5 s followed a wall walk on any pool, and no death to a lapsed champion (window 18: 2).
+- Kill time: toc1 ran window 18 toc2's and toc3's lineup in 6:20.6 (6:20.6, 6:12.2), kill holds Maz'dinah 41.0 s (36.6,
+  36.8), Gorgrim 34.2 (29.2, 33.7), Narrhok 28.3 (32.4, 33.0), Vivienne 41.0 (43.8, 37.7), the healers 36.4-42.9
+  (34.6-43.2). toc3's 5:52 is the log's fastest kill. No measurable cost from losing Cleave and Bladestorm.
+
+**Failure ranking (7 deaths).**
+
+1. Iced Tauren 5: Broln 3 (toc2), Narrhok 2 (toc1).
+2. Narrhok before his ice duty 1, Ruj'kah as kill target 1.
+
+**Picked: the kite starts inside the Tauren's strike reach (bug).**
+
+- The champions' weapon specials are melee-range spells (range index 2, 5 yd). `Spell::CheckRange` tests them at
+  `IsWithinMeleeRange(target, 5 − MIN_MELEE_REACH)` with the leeway, `5 − 2 × MIN_MELEE_REACH` without
+  (`Spell.cpp:7396-7407`), so while both move they reach 3 yd past the swing reach: 10.7 yd, the Tauren two 14.6. Mortal
+  Strike (`me->GetVictim()`) gets all of it; Overpower and Sunder wait for `GetDistance2d < 5` and Stormstrike and Lava
+  Lash for `SelectTarget(MaxThreat, 0, 5.0f)`, 12.6 yd, which picks any raider in it (`boss_faction_champions.cpp:2082-2106`).
+  Hits on moving bots, eight pulls: Mortal Strike p90 14.0 yd (max 14.9), Overpower 12.3 (14.9), Stormstrike 12.3 (12.6),
+  Lava Lash 11.6 (13.0), white swings 12.0.
+- The kite counts a crawling chaser only within its swing reach + 2.25 yd (13.8 for the Tauren;
+  `ToCHelpers_FactionChampionsBall.cpp:360-367` before the fix), and the cast break measures the gap against the swing
+  reach (`:531-537`), so a kite from an iced Tauren starts inside his weapon specials.
+- Windows 14-20, iced chasers' kites by start, a weapon hit within 2 s (the reader's new line): Tauren inside their strike
+  reach 106 of 328 (32%), past it 5 of 81 (6%); the other melee champions 164 of 664 (25%) and 38 of 435 (9%). Window 20:
+  Broln inside 10 of 31 and 6 of 27, past 1 of 9 and 0 of 11; Narrhok (toc1) inside 16 of 31, past 0 of 12.
+- toc2 5:37.6-5:38.1: Tocyao broke Mind Blast and kited at 13.6 yd; Dazed (3.5 yd/s) against Broln's 3.6-4.4 yd/s, Broln's
+  Stormstrike landed 0.5 s later from 12.5 yd. toc1 1:46.5: Narrhok's Mortal Strike on kiting Tocxas from 13.3 yd.
+- Not all of it: 191 of the 256 iced Tauren kites that began inside 13.8 yd began with the Tauren picking a bot already that
+  close (72 hit within 2 s), which no gate moves (Q6).
+
+**Fixed too (bug, small, independent): a Demonic Circle teleport lands next to another melee champion.** The escape's
+circle had to be 12+ yd farther from the mean of the chasers in swing reach only (`ToCHelpers_FactionChampionsBall.cpp:970-972`
+before the fix), where Blink also wants 12+ yd off every melee champion. Windows 14-20: 14 of 82 teleports landed within a
+melee champion's swing reach + 2.25 yd, 106k of melee damage in the next 4 s and Tocyap's death (Broln, also on him, 14.5
+yd off when he teleported and 9.0 from the circle).
+
+**Fix** (`ToCHelpers_FactionChampions.{h,cpp}`, `ToCHelpers_FactionChampionsBall.cpp`). `FactionChampionsStrikeReach` =
+swing reach + `NOMINAL_MELEE_RANGE` − `MIN_MELEE_REACH` (10.7, 14.6). The kite counts a crawler within it + 2.25 yd (13.0,
+the Tauren 16.8, the Ret's 17 floor kept), and the cast break measures the gap against it. The circle teleport also wants
+12+ yd off every melee champion (`LANDING_MIN_CLEAR`, Blink's 12). Reader `--personal`: per melee champion its iced kites
+started inside its strike reach or past it, and those a white swing or weapon special hit within 2 s (`iced_kite_starts`).
+Boss doc: reach paragraph, Kite and Escapes rows, two Known gaps, `--personal`. Every size and difficulty; a player's own
+moves untouched.
+
+**Next window should show.** `--personal` "iced kites started inside the chaser's strike reach or past it": Broln and
+Narrhok far more past than inside (window 20: Broln inside 31 and 27, past 9 and 11; Narrhok toc1 inside 31, past 12) and
+their weapon hits inside down from 10, 6 and 16. `fc.castbreak` notes up some (16, 32, 15), kites per pull up a little
+(272, 282, 304 hops). `--personal` "landed within 12 yd of a melee champion": Demonic Circle: Teleport 0 (window 20: 0
+of 3, 2 of 8, 1 of 9; windows 14-20 17 of 82), Blink still about 0 (1 of 122). Fewer deaths to an iced Tauren (window 20: 5 of 7). Kill time no longer (6:21,
+6:32, 5:52).
+
+**Seen, not picked.**
+
+- Iced Broln put 46-57% of his damage on raiders other than his victim (window 20 toc2 561k of 1206k, toc3 442k of 772k,
+  window 15 toc2 489k of 992k), Stormstrike and Lava Lash on his top threat within 12.6 yd: the ranged he passes and his
+  own ice DK (134k, 145k, 156k), which hits him by the user's call. Q6.
+- A kite finds no hop at the wall when every turn leaves the floor or lands within 10 yd of another healer; the bot then
+  stands (Tocxak 1:02-1:06 above). 2% of chased samples over windows 14-20, 207k of melee damage, 2 deaths within 5 s.
+- Dazed from a hit in the back halves a kiter's speed for 4 s, and an iced Tauren at 3.6-5.2 yd/s late in its Chains then
+  keeps up (Tocxak, Tocyao). Iced Narrhok charged Tocxak three times in 25 s.
+- toc3's ice DK on Maz'dinah cast its first Chains at 0:30.0 (toc1 Gorgrim 0:16.3, Narrhok 0:08.2): the opening's Chains
+  come late. toc3 lost nobody.
+- toc3 landed CC at 1.62 per 10 s (2.31, 2.42) and still killed with 0 deaths.
+
+**Questions for the user.**
+
+- Q6 (new, plan): healers step off a melee champion within its reach; ranged stay put. Should a ranged bot, not casting,
+  step 10 yd off a Tauren champion (Broln, Narrhok) that isn't on it once it comes within his strike reach, as healers do?
+  His Stormstrike and Lava Lash take whoever tops his threat within 12.6 yd and every recount takes a near one: 191 of 256
+  close iced Tauren kites in windows 14-20 began with him picking a bot already within 13.8 yd, and iced Broln put 46-57%
+  of his damage off his victim. Recommended: yes, the Tauren two only, one window as a trial, judged on their deaths and the
+  raid's kill time.
+- Q4 and Q5 still wait; not built.
+
+**Shared code.** None: the strike reach is this fight's helper, the reach facts went into its boss doc, and the reader is
+its own.
+
+**Review.** Both causes hold: `--personal` on window 20 gives the iced kite splits above, toc2 5:37.6 Tocyao's hop and
+Broln's Stormstrike pair from 12.5 yd 0.5 s later, and 2:50.5 Tocyap's teleport with Broln's Lava Lash and swing from 9.0
+yd 0.6 s later. `Spell::CheckRange` gives the 3 yd past the swing reach as written. No size, mode or player branch: the
+reach is read live, the cast break skips players, and a player's moves are untouched.
+
+- Review fix: the next-window check for the circle read the escape table's +2 s column, which only follows the melee
+  champions already on the bot, so it couldn't show a landing next to another one. `--personal` now prints the Blinks
+  and circle teleports whose first sample 8+ yd off lands within 12 yd of any living melee champion
+  (`landing_clearances`); windows 14-20: circle 17 of 82, Blink 1 of 122 (Blink's own 12 yd gate, so ~1 is sample lag).
+- Left: the circle's 12 yd floor is Blink's, inside the Tauren's 12.6 yd Stormstrike and Lava Lash pick, but he hits
+  there only a bot topping his threat that he isn't on, a 0.6 yd band.

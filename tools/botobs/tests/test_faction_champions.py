@@ -2122,6 +2122,29 @@ class FocusAndRepick(unittest.TestCase):
         self.assertEqual((priest["near"], priest["dropped"]), ([None, None], None))
         self.assertRegex(self.render(fc.show_personal), r"0:01\.000 Frost +Blink +2\+2 +\d+% +20 +20 +yes  yes")
 
+    def test_a_blink_landing_counts_once_the_bot_moved_and_reads_every_melee_champion_there(self):
+        def pull(spot: tuple[float, float] | None) -> Trace:
+            folder = tempfile.TemporaryDirectory()
+            self.addCleanup(folder.cleanup)
+            path = pathlib.Path(folder.name) / "649_1_velanaa_1789500000.ndjson"
+            jumped = focus_snap(1500)
+            if spot:
+                jumped["u"] = [placed(MAGE, *spot, 60.0, PALADIN) if unit[0] == MAGE else unit
+                               for unit in jumped["u"]]
+            records = [jumped if rec.get("e") == "snap" and rec["t"] == 1500 else rec for rec in focus_pull()]
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            return Trace(path)
+
+        self.assertEqual(fc.landing_clearances(pull(None)), {})
+        self.assertEqual(fc.landing_clearances(pull((40.0, 0.0))), {"Blink": [1, 0]})
+        trace = pull((8.0, 0.0))
+        self.assertEqual(fc.landing_clearances(trace), {"Blink": [1, 1]})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_personal(trace)
+        self.assertIn("landed within 12 yd of a melee champion, at the first sample after the jump: Blink 1 of 1",
+                      out.getvalue())
+
     def test_sprint_and_dash_read_the_champions_on_their_bot(self):
         rows = fc.speed_rows(self.trace)
         self.assertEqual([(row["t"], row["bot"], row["spell"], row["melee"], row["others"]) for row in rows],
@@ -2158,6 +2181,36 @@ class FocusAndRepick(unittest.TestCase):
         # an ice duty's Chains of Ice on the rogue 1.1 s before the hop counts the kite iced
         iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
         self.assertEqual(catches(late + iced + [dmg(3000, ROGUE_C, MAGE, 0)]), {ROGUE_C: [1, 1, 1, 1]})
+
+    def test_an_iced_kite_splits_on_its_chasers_strike_reach_and_counts_weapon_hits_only(self):
+        def pull(extra: list[dict]) -> Trace:
+            folder = tempfile.TemporaryDirectory()
+            self.addCleanup(folder.cleanup)
+            path = pathlib.Path(folder.name) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in focus_pull() + extra) + "\n", encoding="utf-8")
+            return Trace(path)
+
+        tauren = CREATURE | 19
+        trace = pull([{"t": 1, "e": "unit", "g": tauren, "en": 34453, "n": "Steelbreaker", "b": 1}])
+        self.assertEqual(round(fc.strike_reach(trace, ROGUE_C), 2), 10.74)
+        self.assertEqual(round(fc.strike_reach(trace, tauren), 2), 14.57)
+
+        iced = [note(0, TANK, fc.ICE, ROGUE_C), cast(0, TANK, fc.SPELL_CHAINS_OF_ICE, ROGUE_C)]
+        swing = dmg(2000, ROGUE_C, MAGE, 0)
+        coil = [{"t": 1, "e": "spell", "sp": 66019, "n": "Death Coil"}, dmg(2000, ROGUE_C, MAGE, 66019)]
+        self.assertEqual(fc.iced_kite_starts(pull([swing])), {})
+        self.assertEqual(fc.iced_kite_starts(pull(iced + [swing])), {ROGUE_C: [0, 0, 1, 1]})
+        self.assertEqual(fc.iced_kite_starts(pull(iced + coil)), {ROGUE_C: [0, 0, 1, 0]})
+
+        near = focus_snap(1050)
+        near["u"] = [placed(ROGUE_C, 12.0, 0.0, 100.0, MAGE) if unit[0] == ROGUE_C else unit for unit in near["u"]]
+        trace = pull(iced + [swing, near])
+        self.assertEqual(fc.iced_kite_starts(trace), {ROGUE_C: [1, 1, 0, 0]})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_personal(trace)
+        self.assertIn("iced kites started inside the chaser's strike reach or past it, weapon hits within 2 s:"
+                      " Irieth inside 1 of 1, past 0 of 0", out.getvalue())
 
     def test_a_kite_re_hop_refused_by_its_own_walk_waits_until_the_next_hop_issues(self):
         def waits(extra: list[dict]) -> dict:

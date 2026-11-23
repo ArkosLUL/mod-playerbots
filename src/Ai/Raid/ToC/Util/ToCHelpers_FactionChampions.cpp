@@ -1337,6 +1337,11 @@ float FactionChampionsSwingReach(Unit* champion, Unit* victim)
     return champion->GetMeleeRange(victim) + LEEWAY_BONUS_RANGE;
 }
 
+float FactionChampionsStrikeReach(Unit* champion, Unit* victim)
+{
+    return FactionChampionsSwingReach(champion, victim) + NOMINAL_MELEE_RANGE - MIN_MELEE_REACH;
+}
+
 bool IsFactionChampion(uint32 entry) { return KillRank(entry) != NOT_A_CHAMPION; }
 
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI)
