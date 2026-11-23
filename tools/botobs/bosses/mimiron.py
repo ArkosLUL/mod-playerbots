@@ -1459,8 +1459,6 @@ def show_p3(trace: Trace) -> None:
               f" ({rate:.2f} %/s){tail}")
 
 
-# -------------------------------------------------------------------------------------------- unreach
-
 def unreach_rows(trace: Trace) -> dict:
     samples = Samples(trace)
     end = pull_end(trace)

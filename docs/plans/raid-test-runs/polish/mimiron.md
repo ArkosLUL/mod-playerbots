@@ -664,3 +664,15 @@ ones are off mesh, the fan falls to the next bearing, then `shock fire`, then `s
   one window the ACU takes damage (grounded 0.87-1.30%/s, airborne 0.11-0.12%/s). uld3 lost its third
   landing to it and waited 51 s for a fourth; uld2 lost the end of its fourth. Recommendation: yes, sweep only
   while the ACU is airborne (or once it lifts), keeping "killed before phase 4".
+
+**Review.**
+
+- uld1's reset is not the leash: Mimiron was 74.8 yd from his spawn (2742.53, 2560.99, 364.40) at
+  3:23.552 and gaining ~2 yd/s, the MK II still chasing the tank, so 80 yd was out of reach by the
+  3:23.772 close. Nor is the leash the only evade: the MK II's own `EnterEvadeMode` takes Mimiron with
+  it, and the core calls it from `Creature::SelectVictim` when it finds no acceptable victim. Cause
+  open; the holder screen still keeps the holder out of the corridor it happened in.
+- The first west escape holds in 19 of 20 traces; `603_14_…_1795365875` (normal mode) tanks at the centre.
+- One other rise exists: `603_15_…_1795373410`, P4 45.3 → 78.6 at 10:01.6, the wipe. The flag reaches
+  phase 4, where the step action also runs.
+- The flag's two spans ran 24-25 s each (0:40.6-1:04.3, 1:46.6-2:11.6).

@@ -127,18 +127,18 @@ When a raid creature's chase path to its victim fails, the core sets its cannot-
 and 5 s later it **heals a third of its health per 2 s** (`NpcRegenHPIfTargetIsUnreachable`, on).
 In a raid it never evades; the timer just restarts. The flag clears only on a chase move that
 succeeds or when the MK II stops to cast, so a tank standing in its reach with sight keeps it: twice
-in one pull, 22-24 s each until the next Shock Blast, the MK II went 69 → 100% and 58 → 100% and
+in one pull, 24-25 s each until the next Shock Blast, the MK II went 69 → 100% and 58 → 100% and
 phase 1 ran 190 s.
 
 Both times the main tank's Shock Blast escape had run west into the door box and he walked back to
-his spot through the MK II. That escape runs west at the first cast in every pull traced, straight
-away from an MK II east of the spot. So in phase 1 every flee fan refuses the MK II's victim a spot
-farther from the room centre than the tank spot plus `ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK` (7, so
-60.1 yd) or than he already stands (`IsMimironSpotHolderSafe`); 7 keeps the escape's bearings at
-±90° (56 yd). It also holds Mimiron, who rides the MK II after its victim, inside his 80 yd leash:
-one escape ran both tanks up the west corridor, 80.2 yd from his spawn, and the encounter reset
-4.9 s later with 24 of 25 alive (the leash is the script's only evade; the last sample, 220 ms
-before, had him at 74.9 yd and closing).
+his spot through the MK II. That escape runs west at the first cast in every Firefighter pull traced,
+straight away from an MK II east of the spot. So in phase 1 every flee fan refuses the MK II's victim
+a spot farther from the room centre than the tank spot plus `ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK` (7,
+so 60.1 yd) or than he already stands (`IsMimironSpotHolderSafe`); 7 keeps the escape's bearings at
+±90° (56 yd). It also keeps the holder out of the west corridor: one escape ran both tanks up it,
+80.2 yd from Mimiron's spawn, and the encounter reset 4.9 s later with 24 of 25 alive. Why is open:
+his 80 yd leash does not fit (the last sample, 220 ms before, had him at 74.9 yd, gaining ~2 yd/s),
+and the MK II's own evade (`Creature::SelectVictim` with no acceptable victim) takes him with it.
 
 A flag naming a bot anyway sends it out of the MK II's chase range, both reaches plus
 `ULDUAR_MIMIRON_UNREACH_STEP_MARGIN` (4), toward the room centre (`mimiron unreachable step
