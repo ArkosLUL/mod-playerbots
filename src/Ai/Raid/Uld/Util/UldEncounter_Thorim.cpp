@@ -2167,6 +2167,16 @@ ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot)
     return itr == state->squads.end() ? ThorimSquad::Arena : static_cast<ThorimSquad>(itr->second);
 }
 
+bool ThorimGauntletSquadOnClock(PlayerbotAI* botAI, Player* bot)
+{
+    return ThorimSplitActive(botAI) && GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet;
+}
+
+bool ThorimCorridorFleeHeld(PlayerbotAI* botAI, Player* bot)
+{
+    return PastThorimPortcullis(bot) && ThorimGauntletSquadOnClock(botAI, bot);
+}
+
 bool ThorimInArenaBox(WorldObject const* who)
 {
     if (!who)

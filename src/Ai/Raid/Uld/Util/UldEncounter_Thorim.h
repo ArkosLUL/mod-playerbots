@@ -459,6 +459,9 @@ bool ThorimSplitActive(PlayerbotAI* botAI);
 
 ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot);
 
+bool ThorimGauntletSquadOnClock(PlayerbotAI* botAI, Player* bot);
+bool ThorimCorridorFleeHeld(PlayerbotAI* botAI, Player* bot);
+
 bool ThorimInArenaBox(WorldObject const* who);
 
 bool NearThorimEncounter(Player const* bot);
