@@ -2779,22 +2779,35 @@ void CommitBulkSpeed(AlgalonEncounterState& state, uint32 now)
     state.bulkFrom = ObjectGuid::Empty;
 }
 
-int32 UnderHideExtraMs(AlgalonEncounterState const& state, int32 remaining, uint32 now)
+int32 CastStarDeathMs(AlgalonEncounterState const& state, int32 remaining, uint32 now)
 {
-    if (!state.bigBangCasting || state.underStars.empty())
-        return 0;
+    int32 earliest = std::numeric_limits<int32>::max();
+    if (!state.bigBangCasting)
+        return earliest;
 
     int32 const age = state.lastTickMs ? static_cast<int32>(getMSTimeDiff(state.lastTickMs, now)) : 0;
-    int32 earliest = std::numeric_limits<int32>::max();
     for (AlgalonScanUnit const& star : state.stars)
-        if (star.under && star.tickHp)
-            earliest = std::min(earliest, DrainDeathMs(star) - age);
+    {
+        if (!star.tickHp)
+            continue;
 
-    int32 extra = ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS;
-    if (earliest != std::numeric_limits<int32>::max())
-        extra = std::max(extra, remaining - earliest + ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS -
-                                    ULDUAR_ALGALON_HIDE_MARGIN_MS);
+        int32 const death = DrainDeathMs(star) - age;
+        if (star.under || death <= remaining + ULDUAR_ALGALON_UNDER_TAIL_MS)
+            earliest = std::min(earliest, death);
+    }
 
+    return earliest;
+}
+
+int32 UnderHideExtraMs(AlgalonEncounterState const& state, int32 remaining, uint32 now)
+{
+    int32 const earliest = CastStarDeathMs(state, remaining, now);
+    if (earliest == std::numeric_limits<int32>::max())
+        return state.bigBangCasting && !state.underStars.empty() ? ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS : 0;
+
+    int32 const extra =
+        std::max(ULDUAR_ALGALON_UNDER_HIDE_EXTRA_MS,
+                 remaining - earliest + ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS - ULDUAR_ALGALON_HIDE_MARGIN_MS);
     return std::min(extra, ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS);
 }
 }
@@ -4102,7 +4115,15 @@ int32 AlgalonHideSlackMs(Player* bot)
         for (AlgalonScanUnit const* across = smash; across; across = crossed(late))
             late = SmashImpactMs(*state, *across, now) + ULDUAR_ALGALON_COSMIC_SMASH_IMPACT_SPREAD_MS;
 
-        if (late + straightMs + ULDUAR_ALGALON_LAST_IN_MARGIN_MS <= remaining)
+        int32 const waitIn = late + straightMs;
+        int32 const go = std::max(0, routeSlack);
+        int32 const starDeath = last ? std::numeric_limits<int32>::max() : CastStarDeathMs(*state, remaining, now);
+        bool const outUnderStar = waitIn + ULDUAR_ALGALON_LAST_IN_MARGIN_MS > starDeath;
+        bool const inFirst =
+            round ? go + walkMs < waitIn
+                  : go + walkMs + ULDUAR_ALGALON_FIELD_PULSE_MS <= starDeath &&
+                        !SmashAcrossPath(*state, bot->GetPosition(), to, straight, go, walkMs, 0, now);
+        if (waitIn + ULDUAR_ALGALON_LAST_IN_MARGIN_MS <= remaining && !(outUnderStar && inFirst))
             return late;
     }
 
