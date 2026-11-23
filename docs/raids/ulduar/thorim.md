@@ -250,6 +250,11 @@ bots keep off the centre line the whole approach. The Colossus is 131 yd from th
 waypoints, past the 100 yd `Playerbots.SightDistance` cap, so the telegraph is read through a targeted
 150 yd creature lookup rather than the usual target values.
 
+**That lookup keeps him once found, and only a bot within 150 yd of his spawn scans**
+(`GetThorimRunicColossus`). Every bot runs `TickRunicSmash` and arena bots stand 158-175 yd out: their
+misses cleared the shared latch 13-22 times a pull, leaving it off 27-52% of the approach, and 81 of 93
+corridor smash hits over six pulls landed in a cast during which it had dropped.
+
 Only the corridor squad answers it: `ThorimResolveGauntletIndex` falls back to the leader's waypoint,
 so an arena bot would walk 110 yd down the corridor and never come back. The second waypoint is walked
 at combat priority without the shortened delay in both lanes, as it's where the squad rounds into the
@@ -988,9 +993,14 @@ player was on the instance left the corridor standing while he stayed in the are
   phase 2 spots and walk the balcony holds back down the corridor. The corridor formation
   (`ThorimGauntletPositioningTrigger`/`Action`, `ThorimResolveGauntletIndex`, so the Runic Smash lane swap
   too) keys on the leader. The `ThorimFallFromFloor` teleport still targets the group leader.
-- **Lever:** `ThorimGauntletLeverTrigger` is true for a bot leader once the lever (GO 194264,
-  (2173.3, −252.9)) has lost `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths) and is still `GO_STATE_READY`;
-  the action walks up to it and sends `CMSG_GAMEOBJ_USE`. A real player leading pulls it himself.
+- **Lever:** a bot leader walks to the lever (GO 194264, (2173.3, −252.9)) at the pull, once no start-pack
+  mob attacks him, and waits there while the main tank holds the pack (`thorim lever wait` holds his pickers,
+  taunts, charges (no mover to the rules) and every mover but the lever walk); the moment it loses
+  `GO_FLAG_NOT_SELECTABLE` (six start-pack deaths), still `GO_STATE_READY`, he sends `CMSG_GAMEOBJ_USE`.
+  Walking there after the sixth death cost 4.5-7.7 s of Sif's clock a pull. A real player leading pulls it
+  himself. Followers gather on a leader at the gate, except a non-healer whose target is a live start-pack
+  mob within 50 yd (`ThorimFightingStartPack`), which also skips the 25 yd tether while he walks there: it
+  finishes the pack, or it would shuttle between pack and gate.
   **Walk to touching distance:** `IsAtInteractDistance` is the Opening spell's (68398) 5 yd around the
   model box (display 295, scale 3), only 5.4-5.8 yd from its centre west and sideways, while `MoveTo`'s
   distance nets out both sizes (2.7 yd). Stopping at the interaction distance less a yard left all nine bot
@@ -1008,18 +1018,21 @@ player was on the instance left the corridor standing while he stayed in the are
   walk while he fights (`ThorimGauntletLeaderFighting`: his target is a gauntlet mob in combat within 50 yd,
   or one attacks him): every corridor step of nine 25-man pulls came mid-fight, leaving the first pack's
   guards on ranged, and the right lane's fifth waypoint, 20.0 yd from the second pack's west guard, pulls
-  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to
-  30 yd from the Colossus, which the squad's own targeting then engages. Once the Colossus is dead he walks
-  on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick range: in
-  all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the orb. Gated
-  on the first doors (GO 194557, (2227.7, −413.3)) standing open, which the Colossus' death does in both
-  sizes. The Giant's `UNIT_FLAG_IMMUNE_TO_PC` is on the 10-man template only
+  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to 30 yd from the
+  Colossus and, once no Iron Ring Guard or corridor Acolyte lives within 50 yd, attacks him
+  (`ThorimGauntletColossusPull`, through the encounter picker) and walks on into him until he is in combat,
+  which also ends the Runic Smash; no trace shows his proximity aggro, as nobody got within 32 yd of him
+  idle. Waiting there instead for a follower's 50 yd pick cost 1-10 s a pull, the smash dodge holding the
+  squad at the last waypoints 55-65 yd out. Once the Colossus is dead he
+  walks on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick
+  range: in all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the
+  orb. Gated on the first doors (GO 194557, (2227.7, −413.3)) standing open, which the Colossus' death does
+  in both sizes. The Giant's `UNIT_FLAG_IMMUNE_TO_PC` is on the 10-man template only
   ([pitfalls](../../engine/pitfalls.md#detection-that-never-fires)): gated on it, all three 25-man
   leaders walked past an untouched Colossus, shut doors and all, into the Iron Honor Guards and the Giant
-  (24 deaths in the two pulls that wiped). The cached Colossus lookup can't gate it either: arena melee
-  scan it from out of range, so it can read empty while he lives. That miss is shared for 500 ms: the
-  walk to the Colossus skips a tick (orders stayed at most 2.6 s apart), and `TickRunicSmash`, which
-  arena bots run too, drops the Runic Smash latch on it. Also gated on the leader past the
+  (24 deaths in the two pulls that wiped). The Colossus lookup can't gate it either: it reads empty until a
+  bot within 150 yd of him has found him
+  ([Runic Colossus](#runic-colossus-32872-spawned-at-22275--396179-412176)). Also gated on the leader past the
   portcullis and within 150 yd of the Giant's spawn, since a scan from farther out (the arena, the left
   lane's end at ~165 yd) misses and that cached miss reads "Giant dead" to the balcony walk. Pathed to his
   own spot (a point on the straight line can land off the mesh) and all the way in, until he is in combat:
@@ -1031,13 +1044,13 @@ player was on the instance left the corridor standing while he stayed in the are
   quarters of it on the Honor Guards and Giant. The gate walk re-adds follow-master only when the leader is
   the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
-  roughly 20 s of running at 7 yd/s plus the lever walk (about 6 s), against the ~28 s opening wait a human
-  led squad accepts. The corridor fights set the clock. Measured on 25-man (six bot-led pulls): the lever
-  pulled 5-8 s after the sixth start-pack death, leaving 163-165 s to Sif's 62565; from it, the walk to the
-  trash 12-17 s, the trash 33-44 s, on to the Colossus 3.5-17 s, the Colossus 18-35 s, the ramp 5-10 s
-  (the walk to the Giant starts 0.4-0.8 s after the Colossus dies), Honor Guards, Acolyte and Giant
-  51-62 s, his death to the balcony hit 16-20 s. Phase 2 came 156-183 s after the lever: hard mode in three
-  pulls, 8.6-18.6 s late in the other three.
+  roughly 20 s of running at 7 yd/s, against the ~28 s opening wait a human led squad accepts. The corridor
+  fights set the clock. Measured on 25-man (fifteen bot-led pulls, before the lever wait and the Colossus
+  pull): the lever pulled 4.5-7.7 s after the sixth start-pack death, leaving 163-165 s to Sif's 62565; from
+  it, the walk to the trash 12-17 s, the trash 33-52 s, on to the Colossus 2-17 s, the Colossus 18-40 s, the
+  ramp 5-10 s (the walk to the Giant starts 0.4-0.8 s after the Colossus dies), Honor Guards, Acolyte and
+  Giant 43-63 s, his death to the balcony hit 15-20 s. Phase 2 came 156-204 s after the lever: hard mode in
+  five pulls, 4.9-39.7 s late in the other ten.
 
 **The last 67 yd of the lower corridor are unwaypointed**: waypoints stop at y −329 while the Runic
 Colossus is at y −396, so `ThorimRunicSmashAction` cannot resolve a lane index on the final approach,

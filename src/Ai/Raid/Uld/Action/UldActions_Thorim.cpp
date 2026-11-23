@@ -202,19 +202,20 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     if (!leader || leader == bot)
         return false;
 
-    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS &&
-        bot->GetDistance2d(leader) > ULDUAR_THORIM_GATE_FOLLOW_DISTANCE)
+    if (leader->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < ULDUAR_THORIM_GATE_RADIUS)
     {
-        if (MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
-                   false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
-        {
-            if (leader == botAI->GetMaster() &&
-                !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-                botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
-                                      BotState::BOT_STATE_NON_COMBAT);
+        if (bot->GetDistance2d(leader) <= ULDUAR_THORIM_GATE_FOLLOW_DISTANCE || ThorimFightingStartPack(botAI, bot))
+            return false;
 
-            return true;
-        }
+        if (!MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(), false,
+                    false, false, true, MovementPriority::MOVEMENT_NORMAL, true))
+            return false;
+
+        if (leader == botAI->GetMaster() &&
+            !botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
+            botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
+
+        return true;
     }
 
     uint8 index = 0;
@@ -244,7 +245,8 @@ bool ThorimGauntletLeverAction::isUseful()
 bool ThorimGauntletLeverAction::Execute(Event /*event*/)
 {
     ObjectGuid leverGuid;
-    if (!ThorimLeverUsable(bot, leverGuid))
+    bool const usable = ThorimLeverUsable(bot, leverGuid);
+    if (!usable && !ThorimLeverWaiting(botAI, bot, leverGuid))
         return false;
 
     GameObject* lever = botAI->GetGameObject(leverGuid);
@@ -253,6 +255,9 @@ bool ThorimGauntletLeverAction::Execute(Event /*event*/)
 
     if (!lever->IsAtInteractDistance(bot))
         return MoveTo(lever, 0.0f);
+
+    if (!usable)
+        return false;
 
     WorldPacket data(CMSG_GAMEOBJ_USE);
     data << lever->GetGUID();
@@ -275,7 +280,13 @@ bool ThorimGauntletLeadAction::Execute(Event /*event*/)
                       false, true, MovementPriority::MOVEMENT_COMBAT, true);
 
     if (Unit* colossus = ThorimGauntletLeadColossus(botAI, bot))
-        return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
+    {
+        if (bot->GetDistance(colossus) > ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE)
+            return MoveTo(colossus, ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE, MovementPriority::MOVEMENT_COMBAT);
+
+        return MoveTo(colossus->GetMapId(), colossus->GetPositionX(), colossus->GetPositionY(),
+                      colossus->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    }
 
     if (Unit* giant = ThorimGauntletLeadRuneGiant(botAI, bot))
         return MoveTo(giant->GetMapId(), giant->GetPositionX(), giant->GetPositionY(), giant->GetPositionZ(), false,
