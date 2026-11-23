@@ -20,7 +20,6 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
-#include "RaidCombatHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -66,61 +65,6 @@ float FreyaTrioSyncMultiplier::GetValue(Action* action)
     GatherFreyaWaveState(botAI, state);
 
     return FreyaTrioSyncSuppress(state, target) ? 0.0f : 1.0f;
-}
-
-float FreyaSnaplasherHoldMultiplier::GetValue(Action* action)
-{
-    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
-        return 1.0f;
-
-    uint32 const now = getMSTime();
-    if (now != cachedAtMs || !cachedAtMs)
-    {
-        cachedAtMs = now;
-        Unit* held = GetFreyaHeldSnaplasher(botAI);
-        cachedHeld = held ? held->GetGUID() : ObjectGuid::Empty;
-        cachedFree = held && IsFreyaHeldSnaplasherFree(botAI);
-    }
-
-    if (cachedHeld.IsEmpty())
-        return 1.0f;
-
-    if (dynamic_cast<FreyaSetDpsPriorityAction*>(action) || dynamic_cast<FreyaTankAddsAction*>(action))
-        return 1.0f;
-
-    Unit* snaplasher = botAI->GetUnit(cachedHeld);
-    if (!snaplasher)
-        return 1.0f;
-
-    Unit* target = action->GetTarget();
-    Unit* current = AI_VALUE(Unit*, "current target");
-    if (target == snaplasher || (!target && current == snaplasher))
-        return cachedFree && PlayerbotAI::IsTank(bot) ? 1.0f : 0.0f;
-
-    Unit* aim = target ? target : current;
-    auto const reaches = [this, aim, snaplasher](float reach)
-    {
-        return bot->GetExactDist2d(snaplasher) <= reach || (aim && aim->GetExactDist2d(snaplasher) <= reach);
-    };
-
-    SpellInfo const* spellInfo = DamageSpell(action);
-    if (splash.Of(action).summon || IsFreyaLingeringAreaDamage(spellInfo))
-        return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH) ? 0.0f : 1.0f;
-
-    if (!IsRaidAreaDamage(botAI, action, splash) && !IsFreyaChainDamage(spellInfo))
-        return 1.0f;
-
-    return reaches(ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH) ? 0.0f : 1.0f;
-}
-
-SpellInfo const* FreyaSnaplasherHoldMultiplier::DamageSpell(Action* action)
-{
-    RaidSplashCache::Facts& facts = splash.Of(action);
-    if (!facts.cast || facts.heal)
-        return nullptr;
-
-    uint32 const spellId = facts.spellId.Get(botAI, facts.cast);
-    return spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
 }
 
 float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)

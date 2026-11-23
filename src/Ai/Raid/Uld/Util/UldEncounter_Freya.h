@@ -17,7 +17,6 @@
 class GameObject;
 class Player;
 class PlayerbotAI;
-class SpellInfo;
 class Unit;
 
 enum UlduarFreyaIds
@@ -164,11 +163,10 @@ inline constexpr float ULDUAR_FREYA_SNAPLASHER_THREAT_RETURN_PCT = 60.0f;
 
 inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_TANK_LEAD_MS = 5000;
 
-inline constexpr float ULDUAR_FREYA_SNAPLASHER_HOLD_AREA_REACH = 15.0f;
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_KITE_MARGIN = 5.0f;
+inline constexpr float ULDUAR_FREYA_SNAPLASHER_KITE_CLEAR = 10.0f;
 
-inline constexpr float ULDUAR_FREYA_SNAPLASHER_HOLD_LINGER_REACH = 30.0f;
-
-inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_RELEASE_RETRY_MS = 1000;
+inline constexpr uint32 ULDUAR_FREYA_SNAPLASHER_KITE_LATCH_MS = 1000;
 
 inline constexpr float ULDUAR_FREYA_HELD_PACK_REACH_MARGIN = 3.0f;
 
@@ -232,17 +230,9 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state);
 
 Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget);
 
-void TickFreya(PlayerbotAI* botAI);
+Unit* GetFreyaSnaplasherToKite(PlayerbotAI* botAI);
 
-Unit* GetFreyaHeldSnaplasher(PlayerbotAI* botAI);
-
-bool IsFreyaHeldSnaplasherFree(PlayerbotAI* botAI);
-
-bool IsFreyaLingeringAreaDamage(SpellInfo const* spellInfo);
-
-bool IsFreyaChainDamage(SpellInfo const* spellInfo);
-
-bool FreyaStopHittingHeldSnaplasher(PlayerbotAI* botAI, Unit* held, bool stop);
+float GetFreyaSnaplasherKiteReach(Unit* snaplasher, Player* bot, float margin);
 
 Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range);
 

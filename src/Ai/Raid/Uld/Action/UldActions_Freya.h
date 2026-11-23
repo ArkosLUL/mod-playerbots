@@ -93,17 +93,18 @@ public:
     bool isUseful() override;
 };
 
-class FreyaReleaseHeldSnaplasherAction : public Action
+class FreyaKiteSnaplasherAction : public MovementAction
 {
 public:
-    static constexpr char const* Name = "freya release held snaplasher";
+    static constexpr char const* Name = "freya kite snaplasher";
 
-    FreyaReleaseHeldSnaplasherAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    FreyaKiteSnaplasherAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
 private:
-    uint32 releasedMs = 0;
+    Position kiteSpot;
+    uint32 kiteSpotMs = 0;
 };
 
 class FreyaAddTankDefensiveAction : public Action

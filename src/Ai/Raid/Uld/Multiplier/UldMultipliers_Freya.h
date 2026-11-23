@@ -9,25 +9,6 @@
 
 #include "Define.h"
 #include "Multiplier.h"
-#include "ObjectGuid.h"
-#include "RaidSplash.h"
-
-class SpellInfo;
-
-class FreyaSnaplasherHoldMultiplier : public Multiplier
-{
-public:
-    FreyaSnaplasherHoldMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "freya snaplasher hold") {}
-    float GetValue(Action* action) override;
-
-private:
-    SpellInfo const* DamageSpell(Action* action);
-
-    uint32 cachedAtMs = 0;
-    ObjectGuid cachedHeld;
-    bool cachedFree = false;
-    RaidSplashCache splash;
-};
 
 class FreyaTrioSyncMultiplier : public Multiplier
 {

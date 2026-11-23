@@ -3,7 +3,7 @@
 
     freya.py <file>          every section
     freya.py <file> --tanks  who Freya and each Snaplasher were on, every area taunt or Righteous
-                             Defense a tank cast, and the Snaplasher hold
+                             Defense a tank cast, and each stretch a Snaplasher spent loose on a non-tank
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
@@ -27,10 +27,11 @@ What the generic views miss here:
   add tank, so `--tanks` names the holder.
 - **A dodge is a move, not a hit.** `--moves` lists every re-issued order of a walk; `--beams` counts the
   first of each, measures it from the nearest beam at that moment, and says which side of Freya it took.
-- **The Snaplasher hold is a note.** `freya.snaphold` goes to 1 when the Snaplasher is loose with no add tank
-  alive, 2 once its bark has run out (a tank may take it), and back to 0 once a tank holds it; `--tanks` lists
-  each change. Its bark runs out 4 s after the last hit, so each "on" line counts the hits that kept it up
-  (Hardened Bark stack casts) and the deaths to a Snaplasher until the next change.
+- **A loose Snaplasher is read off the snapshots.** A stretch runs while its target is a raid member who is not a
+  tank, and ends at the first snapshot it is on a tank or gone. Each line counts the deaths to it, the hits on its
+  bark (Hardened Bark stack casts), the `freya kite snaplasher` orders, and the `freya.kite` notes: the chased
+  bot writes "<Snaplasher run speed> vs <own run speed>" whenever either changes, and kites only when the first
+  is lower. Traces from before the kite (rounds 3-7 ran a hold instead) show the stretches without kite rows.
 - **"Held by ghouls" is the pack focus.** The lasher with the most others within 8 yd (lowest guid on ties), held
   while its target is an Army ghoul or a ghoul's target is it. The finish's lowest-lasher focus is not modelled.
 - **A low lasher is a stretch under the bail line.** `--lows` ends a stretch when a heal lifts the lasher back over it,
@@ -88,8 +89,8 @@ DODGE_EPISODE_MS = 1500
 HEAL_RANGE_YD = 38.5
 # Fewer healers than this on the add tank and one capped Snaplasher swing outruns the heals.
 HEALERS_WANTED = 2
-HOLD_NOTE = "freya.snaphold"
-HOLD_STATES = {"0": "off", "1": "on", "2": "on, bark gone"}
+KITE_ACTION = "freya kite snaplasher"
+KITE_NOTE = "freya.kite"
 COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
 # not casts, the probes write these so the same button cast again next wave still gets its own row
 COOLDOWN_NO_PICK = {"covered", "none"}
@@ -238,33 +239,62 @@ def show_tanks(trace: Trace) -> None:
     for rec in trace.of("note"):
         if rec.get("k") in COOLDOWN_NOTES and rec.get("txt") not in COOLDOWN_NO_PICK:
             print(f"  {clock(rec['t'])} {trace.name(rec.get('g'))} {COOLDOWN_NOTES[rec['k']]}: {rec.get('txt')}")
-    for change in hold_changes(trace):
-        state = change["state"]
-        line = f"  {clock(change['t'])} Snaplasher hold {HOLD_STATES.get(state, state)}"
-        if state == "1":
-            line += (f" for {(change['until'] - change['t']) / 1000:.1f}s: {change['bark']} hit(s) on its bark, "
-                     f"{change['deaths']} death(s) to it")
+    for stretch in loose_stretches(trace):
+        victims = ", ".join(holder_label(trace, guid) for guid in stretch["victims"])
+        line = (f"  {clock(stretch['t'])} .. {clock(stretch['until'])} Snaplasher of {clock(stretch['spawn'])} loose "
+                f"{(stretch['until'] - stretch['t']) / 1000:.1f}s, {stretch['from']:.0f}% to {stretch['to']:.0f}%, "
+                f"on {victims}: {stretch['deaths']} death(s) to it, {stretch['bark']} hit(s) on its bark, "
+                f"{stretch['kites']} kite order(s)")
+        if stretch["reads"]:
+            line += f", slower than its victim in {stretch['slower']} of {stretch['reads']} speed read(s)"
         print(line)
 
 
-def hold_changes(trace: Trace) -> list[dict]:
-    """Each change of the Snaplasher hold note, with when the next one came (the last snapshot for the last),
-    and the bark procs and deaths to a Snaplasher in between."""
-    changes: list[dict] = []
-    state = "0"
-    for rec in trace.of("note"):
-        if rec.get("k") == HOLD_NOTE and rec.get("txt") != state:
-            state = rec.get("txt")
-            changes.append({"t": rec["t"], "state": state})
-    snaplashers = {guid for guid, entry in trace.entries.items() if entry == NPC_SNAPLASHER}
-    bark = [rec["t"] for rec in trace.of("cast") if rec.get("sp") in BARK_STACKS and rec.get("s") in snaplashers]
-    deaths = [death["t"] for death in combat_deaths(trace) if death.get("killer") in snaplashers]
-    end = last_snapshot(trace)
-    for index, change in enumerate(changes):
-        change["until"] = changes[index + 1]["t"] if index + 1 < len(changes) else max(end, change["t"])
-        change["bark"] = sum(1 for t in bark if change["t"] <= t < change["until"])
-        change["deaths"] = sum(1 for t in deaths if change["t"] <= t < change["until"])
-    return changes
+def slower(text: str) -> bool:
+    try:
+        chaser, own = (float(part) for part in text.split(" vs "))
+    except ValueError:
+        return False
+    return chaser < own
+
+
+def loose_stretches(trace: Trace) -> list[dict]:
+    health: dict[tuple[int, int], float] = {}
+    for snap in frames(trace):
+        for row in snap.get("u", []):
+            if trace.entries.get(row[0]) == NPC_SNAPLASHER:
+                health[(snap["t"], row[0])] = row[5]
+    out: list[dict] = []
+    for rec in sorted(sightings(trace, (NPC_SNAPLASHER,)).values(), key=lambda r: r["first"]):
+        stretch = None
+        for t0, t1, target in rec["spans"]:
+            if trace.role(target) in ("tank", "?"):
+                if stretch is not None:
+                    stretch["until"] = t0
+                stretch = None
+                continue
+            if stretch is None:
+                stretch = {"g": rec["g"], "spawn": rec["first"], "t": t0, "last": t1, "until": t1, "victims": []}
+                out.append(stretch)
+            stretch["last"] = stretch["until"] = t1
+            if target not in stretch["victims"]:
+                stretch["victims"].append(target)
+    bark = [rec for rec in trace.of("cast") if rec.get("sp") in BARK_STACKS]
+    deaths = combat_deaths(trace)
+    kites = [rec for rec in trace.of("move") if rec.get("by") == KITE_ACTION and rec.get("ok")]
+    reads = [rec for rec in trace.of("note") if rec.get("k") == KITE_NOTE and rec.get("txt")]
+    for stretch in out:
+        t0, t1, guid, victims = stretch["t"], stretch["until"], stretch["g"], stretch["victims"]
+        stretch["from"] = health.get((t0, guid), 0.0)
+        stretch["to"] = health.get((stretch["last"], guid), 0.0)
+        stretch["deaths"] = sum(1 for d in deaths if d.get("killer") == guid and t0 < d["t"] <= t1)
+        stretch["bark"] = sum(1 for c in bark if c.get("s") == guid and t0 <= c["t"] <= t1)
+        stretch["kites"] = sum(1 for m in kites if m.get("g") in victims and t0 <= m["t"] <= t1)
+        mine_ = [n for n in reads if n.get("g") in victims and t0 <= n["t"] <= t1]
+        stretch["reads"] = len(mine_)
+        stretch["slower"] = sum(1 for n in mine_ if slower(n["txt"]))
+    return sorted((s for s in out if s["until"] - s["t"] >= HOLD_MIN_MS or s["deaths"] or s["kites"]),
+                  key=lambda s: (s["t"], s["spawn"]))
 
 
 def dodge_trigger_yd() -> float | None:
@@ -566,7 +596,7 @@ def show_deaths(trace: Trace) -> None:
 
 SECTIONS = (
     ("waves", "each add wave and Eonar's Gift: when it came, when it ended, raid deaths meanwhile", show_waves),
-    ("tanks", "who held Freya and each Snaplasher, every area taunt or Righteous Defense, the Snaplasher hold",
+    ("tanks", "who held Freya and each Snaplasher, every area taunt or Righteous Defense, each loose Snaplasher",
      show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),

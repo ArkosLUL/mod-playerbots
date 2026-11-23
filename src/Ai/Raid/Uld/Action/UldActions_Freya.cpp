@@ -521,6 +521,9 @@ Unit* FreyaSetDpsPriorityAction::ShedSnaplasherThreat(FreyaWaveState const& stat
             sibling = member;
     }
 
+    if (PlayerbotAI::IsMelee(bot) && GetFreyaSnaplasherToKite(botAI) == assigned)
+        return sibling;
+
     if (!sibling)
         return assigned;
 
@@ -628,11 +631,6 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
-    Unit* held = GetFreyaHeldSnaplasher(botAI);
-    if (PlayerbotAI::IsMainTank(bot) && held && IsFreyaHeldSnaplasherFree(botAI) && !GetGroupAssistTank(bot, 0) &&
-        CastClassTaunt(botAI, held))
-        return true;
-
     Unit* storm = state.stormLasher;
     if (PlayerbotAI::IsMainTank(bot) && storm && storm->IsAlive() && storm->GetVictim() != bot &&
         CastClassTaunt(botAI, storm))
@@ -695,21 +693,81 @@ bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
                   MovementPriority::MOVEMENT_COMBAT);
 }
 
-bool FreyaReleaseHeldSnaplasherAction::isUseful()
+bool FreyaKiteSnaplasherAction::isUseful()
 {
-    if (releasedMs && getMSTimeDiff(releasedMs, getMSTime()) < ULDUAR_FREYA_SNAPLASHER_RELEASE_RETRY_MS)
-        return false;
-
-    FreyaReleaseHeldSnaplasherTrigger trigger(botAI);
+    FreyaKiteSnaplasherTrigger trigger(botAI);
     return trigger.IsActive();
 }
 
-bool FreyaReleaseHeldSnaplasherAction::Execute(Event /*event*/)
+bool FreyaKiteSnaplasherAction::Execute(Event /*event*/)
 {
-    if (!FreyaStopHittingHeldSnaplasher(botAI, GetFreyaHeldSnaplasher(botAI), true))
+    if (FreyaBotCannotWalk(bot))
+    {
+        kiteSpotMs = 0;
+        return false;
+    }
+
+    Unit* snaplasher = GetFreyaSnaplasherToKite(botAI);
+    if (!snaplasher)
+    {
+        kiteSpotMs = 0;
+        return false;
+    }
+
+    Position const snaplasherAt = snaplasher->GetPosition();
+    float const margin = GetFreyaSnaplasherKiteReach(snaplasher, bot, ULDUAR_FREYA_SNAPLASHER_KITE_MARGIN);
+    float const clear = GetFreyaSnaplasherKiteReach(snaplasher, bot, ULDUAR_FREYA_SNAPLASHER_KITE_CLEAR);
+
+    std::vector<HazardCircle> hazards = GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    auto const stillClear = [&hazards, &snaplasherAt, margin](Position const& spot)
+    {
+        if (snaplasherAt.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < margin)
+            return false;
+
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < hazard.second)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+    if (kiteSpotMs && getMSTimeDiff(kiteSpotMs, now) < ULDUAR_FREYA_SNAPLASHER_KITE_LATCH_MS && stillClear(kiteSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(kiteSpot.GetPositionX(), kiteSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    kiteSpotMs = 0;
+
+    Position const from = bot->GetPosition();
+    float const gap = from.GetExactDist2d(snaplasherAt.GetPositionX(), snaplasherAt.GetPositionY());
+    float const away = gap > CONTACT_DISTANCE ? snaplasherAt.GetAngle(&from) : bot->GetOrientation() + float(M_PI);
+    Position const ahead(from.GetPositionX() + clear * std::cos(away), from.GetPositionY() + clear * std::sin(away),
+                         from.GetPositionZ(), 0.0f);
+
+    HazardCircle const swing(snaplasherAt, std::min(gap, snaplasher->GetMeleeRange(bot)) - CONTACT_DISTANCE);
+    auto const keepsClear = [&from, &swing](float x, float y)
+    { return !SegmentCrossesCircle(from, Position(x, y, from.GetPositionZ(), 0.0f), swing); };
+
+    hazards.emplace_back(snaplasherAt, clear);
+
+    HazardSweepCache sweep;
+    Position const spot = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                                            ULDUAR_FREYA_SWEEP_STEP, ULDUAR_FREYA_SWEEP_ANGLE_STEP,
+                                                            &ahead, keepsClear, &sweep);
+    if (spot == Position())
         return false;
 
-    releasedMs = getMSTime();
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    kiteSpot = spot;
+    kiteSpotMs = now;
+
     return true;
 }
 
@@ -770,9 +828,6 @@ Player* FreyaRedirectThreatAction::GetRedirectTank(Unit*& dumpTarget)
                 break;
         }
     }
-
-    if (snaplasher && snaplasher == GetFreyaHeldSnaplasher(botAI))
-        snaplasher = nullptr;
 
     if (snaplasher || conservator)
     {
