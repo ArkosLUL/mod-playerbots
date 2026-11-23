@@ -1224,3 +1224,27 @@ which is what ends a pull's phase 2.
   running).
 - The brain hold again could not finish a late start: uld3 held from 36.1% at 10.7 s left, survived at 30.0%, and
   phase 3 came 3 s after the end anyway.
+
+**Review.** Both fixes hold. uld2 10:18.7-10:45.3 reread: Uldyag stood at (2118.4, −24.3, 242.7), 15.0 yd from
+Uldyad at (2133.3, −26.3, 242.0), at 40% for 12 s while Uldyad, at 100% health and 9-16% mana, put PW:S, Prayer of
+Mending and Renew on mates at 74-89%; `PartyMemberToHeal::Check` tests only map, charm, twice heal distance and sight,
+so sight is the one test left, as the log says. That is inferred, not navprobed, and the findings doc now says so;
+Uldyag stood level with the healer (uld1's Uldxaf at z 239.7 was below). A grabbed bot rides the Constrictor's seat,
+where `CanMove` is false (`IsInVehicle(true)`), so the cut never touches it; the hold ends once the room's tentacles
+are dead, so the sight regroup never pulls a bot back off the brain walk. No size, mode or player branch: a human
+room healer is walked to like a bot one, and only bots' casts are cut.
+
+- Review fix: `--crush` read uld2's two grabbed ray deaths (Uldyax's 0.5 s Slam at 10:05.9, Uldyae's Chain Heal at
+  10:22.6) as `casting`, four in all against this log's 2; a victim inside a Squeeze aura now reads `grabbed`, and
+  uld2 reads 2. Its `Death Ray 5` counts Uldyae twice (death rows at 10:22.57 and 10:23.07), not a rez.
+- Review fix: `regroup walks` counted `yogg.regroup` notes, which as a derived note are written only when a bot's
+  value changes; it now counts bots per reason.
+- Review fix: the reader's new constants and the tests' fixtures carried description comments; removed, with
+  `REGROUP_SIGHT_STOP` (only a label used it). `REPRISAL_RESUME_PCT` keeps a one-line note to change it with the
+  module's.
+- Left: a cut bot whose dodge finds no spot casts again and is cut again every 250 ms while the ray stays within
+  9 yd; the dodge's fallback spots make that rare, and no window has run the cut yet.
+- Left: a sight regroup is one move, so the bot walks the whole way to 4 yd even when sight comes back sooner, and a
+  melee bot walks back once at 70%.
+- Left, older than this round: the reader's `SPELL_SQUEEZE` is the 25-man 64126, so at 10-man `--phase2`'s grabs
+  and `--crush`'s `grabbed` read nothing (10-man's aura is 64125).

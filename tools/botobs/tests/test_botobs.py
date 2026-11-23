@@ -1839,7 +1839,6 @@ class YoggPhases(unittest.TestCase):
     def test_a_heal_passes_over_a_held_mate_only_when_it_is_lower_held_and_in_heal_distance(self):
         healer = (0.0, 0.0, 0.0)
         self.assertTrue(yogg_saron.held_passed_over(healer, 80.0, [(15.0, 0.0, 0.0, 40.0)]))
-        # the target itself is lower, the mate is back over the resume line, or it stands past heal distance
         self.assertFalse(yogg_saron.held_passed_over(healer, 30.0, [(15.0, 0.0, 0.0, 40.0)]))
         self.assertFalse(yogg_saron.held_passed_over(healer, 90.0, [(15.0, 0.0, 0.0, 75.0)]))
         self.assertFalse(yogg_saron.held_passed_over(healer, 80.0, [(30.0, 30.0, 0.0, 40.0)]))
@@ -1849,7 +1848,6 @@ class YoggPhases(unittest.TestCase):
         casts = [(1000, 1500, 686), (5000, 8800, 982)]
         self.assertEqual(yogg_saron.cast_pinning(casts, [], 11000, 1500), (982, False))
         self.assertEqual(yogg_saron.cast_pinning(casts, [9000], 11000, 1500), (982, True))
-        # the shot ended 2.5 s before the hit, and nothing had begun by 900
         self.assertIsNone(yogg_saron.cast_pinning(casts[:1], [], 5000, 1500))
         self.assertIsNone(yogg_saron.cast_pinning(casts, [], 900, 1500))
 

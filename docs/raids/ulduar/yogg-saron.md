@@ -1291,9 +1291,10 @@ target, cutting only a cast aimed at the tentacle so a self-heal still lands, `y
 blocks the other pickers, melee and charges, the room state reads `reprisal` so the walk-in leaves it alone,
 and `yogg-saron reprisal regroup` walks it to 15 yd of the healer past 25, since most of those deaths had
 the healer 37-50 yd away, and to 4 yd at any distance the healer cannot see it (`yogg.regroup` `range` /
-`sight`): every heal pick, the reprisal heal's and `PartyMemberToHeal`'s, skips a mate out of sight, and the
-Chamber's healer station on its last tentacles, (2133.3, −26.3, 242) on the raised floor's ramp, cannot see
-the low floor 15 yd toward the room's middle, where held bots waited 3-12 s while higher mates got heals.
+`sight`): every heal pick, the reprisal heal's and `PartyMemberToHeal`'s, skips a mate out of sight. From the
+Chamber's healer station on its last tentacles, (2133.3, −26.3, 242) on the raised floor's ramp, both picks
+passed over held bots 15 yd toward the room's middle for 3-12 s while healing higher mates, with every test but
+sight passing: inferred from the trace, not navprobed.
 
 **The room's healer heals a held bot first, by the user's choice**: a held bot deals nothing until 70%,
 yet the healer's casts went mostly to mates at 28-90%, 0-3 of them to the held bot, and one room lost two
@@ -2046,8 +2047,10 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - A heal row carries no room: `--brain`'s `heals in a hold` places the healer and the held bot by their
   `yogg.room` spans and counts only heals on a room mate. Nor does sight show: its `passed over` counts heal
   casts in a hold that went past a lower held mate within heal distance, mostly one out of sight.
+  `yogg.regroup` is derived, written only when its value changes, so `regroup walks` counts bots per reason.
 - `--crush`'s Death Ray hits name the cast-time spell running in the 1.5 s before (`cut` once
-  `yogg.castcut` cut it, since a cut cast still logs its full cast time).
+  `yogg.castcut` cut it, since a cut cast still logs its full cast time), or `grabbed`: a bot in a
+  Constrictor's grab rides its seat, `CanMove` is false, and neither the cut nor the dodge acts on it.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
   (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
   against the Brain's reach of 27.

@@ -287,10 +287,8 @@ BRAIN_LEVEL_Z = 300.0
 # or half health to dead in one to three seconds, so five covers the run without the room before it.
 REPRISAL_DEATH_WINDOW_MS = 5000
 
-# ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT and …_REGROUP_SIGHT_STOP: a held bot fights again at 70%, and one out of
-# the room healer's sight walks to 4 yd of it.
+# same as ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT in the module, change both together
 REPRISAL_RESUME_PCT = 70.0
-REGROUP_SIGHT_STOP = 4.0
 
 # The brain level's floor runs 236 to 244. Anything well above it is in the air, where the Brain's own
 # model hangs at 265 and a gap-closer aimed at it leaves the bot with nothing to walk on.
@@ -477,7 +475,6 @@ STUN_CRUSH_WATCH_MS = 5000
 SPELL_DEATH_RAY_DAMAGE = (63884, 63883)
 DEATH_RAY_LOOK_MS = 3000
 DEATH_RAY_DODGERS = ("yogg-saron phase 2 spacing action", "avoid aoe")
-# A ray covers its 9 yd dodge trigger in ~1.6 s: a cast-time spell running that long before a hit pinned the bot.
 DEATH_RAY_CAST_LOOK_MS = 1500
 
 # The phase 3 tank swap: how far apart the Guardians on each tank are read after a swap starts, and how
@@ -2295,10 +2292,12 @@ def show_reprisal(trace: Trace) -> None:
         casts, passed = heals_passing_over_held(trace, holds, holder_spans(trace, "yogg.room", end))
         print(f"  passed over      : {passed} of {casts} heal casts in a hold went past a lower held mate in heal"
               f" distance (out of the healer's sight, mostly)")
-        regroup = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.regroup"))
+        regroup: dict[str, set] = collections.defaultdict(set)
+        for rec in notes(trace, "yogg.regroup"):
+            regroup[str(rec.get("txt", ""))].add(rec.get("g"))
         if regroup:
-            print(f"  regroup walks    : {dict(regroup)}  (sight = out of the healer's sight, walked to"
-                  f" {REGROUP_SIGHT_STOP:.0f} yd)")
+            print(f"  regroup walks    : bots per reason {({reason: len(bots) for reason, bots in regroup.items()})}"
+                  f"  (sight = out of the healer's sight, walked to 4 yd of it)")
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -3048,6 +3047,9 @@ def show_death_rays(trace: Trace) -> None:
     cuts: dict[int, list[int]] = collections.defaultdict(list)
     for rec in notes(trace, "yogg.castcut"):
         cuts[rec.get("g", 0)].append(rec["t"])
+    grabs: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, start, stop in aura_windows(trace, SPELL_SQUEEZE):
+        grabs[guid].append((start, stop))
     print(f"\n  Death Ray hits     : {len(hits)}")
     last: dict[int, int] = {}
     for when, victim in hits:
@@ -3059,8 +3061,12 @@ def show_death_rays(trace: Trace) -> None:
         dodges = ", ".join(f"{action} {'walked' if ok else 'refused'}" for action, ok in tried.items()) or "no dodge"
         dead = any(when <= then <= when + DEATH_RAY_LOOK_MS for then in died[victim])
         pinned = cast_pinning(casts[victim], cuts[victim], when, DEATH_RAY_CAST_LOOK_MS)
-        cast = (f"; {'cut' if pinned[1] else 'casting'} {trace.spells.get(pinned[0], pinned[0])}"
-                if pinned else "")
+        if any(start <= when <= stop for start, stop in grabs[victim]):
+            cast = "; grabbed"
+        elif pinned:
+            cast = f"; {'cut' if pinned[1] else 'casting'} {trace.spells.get(pinned[0], pinned[0])}"
+        else:
+            cast = ""
         print(f"    {clock(when)}  {trace.name(victim):14} {trace.role(victim):6} last walk {mover}; {dodges}"
               f"{cast}{'; died' if dead else ''}")
     cut = collections.Counter(trace.spells.get(int(rec.get("txt", 0) or 0), rec.get("txt"))
