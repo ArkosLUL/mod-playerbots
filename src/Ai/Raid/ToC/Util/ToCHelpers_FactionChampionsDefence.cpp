@@ -413,18 +413,18 @@ Position BladestormWalk(Unit* warrior, Unit* victim, Aura const* storm)
                     warrior->GetPositionZ());
 }
 
-float WalkGap(HazardSource const& source, Position const& at)
+float WalkGap(HazardSource const& source, Player* bot)
 {
     float const dx = source.walk.GetPositionX() - source.pos.GetPositionX();
     float const dy = source.walk.GetPositionY() - source.pos.GetPositionY();
     float const length = dx * dx + dy * dy;
     float along = 0.0f;
-    if (length > 0.0f)
-        along = std::clamp(((at.GetPositionX() - source.pos.GetPositionX()) * dx +
-                            (at.GetPositionY() - source.pos.GetPositionY()) * dy) / length,
+    if (length > 0.0f && source.victim != bot->GetGUID())
+        along = std::clamp(((bot->GetPositionX() - source.pos.GetPositionX()) * dx +
+                            (bot->GetPositionY() - source.pos.GetPositionY()) * dy) / length,
                            0.0f, 1.0f);
 
-    return at.GetExactDist2d(source.pos.GetPositionX() + dx * along, source.pos.GetPositionY() + dy * along);
+    return bot->GetExactDist2d(source.pos.GetPositionX() + dx * along, source.pos.GetPositionY() + dy * along);
 }
 
 void AddClearance(std::vector<EncounterHelpers::HazardCircle>& out, HazardSource const& source, Player* bot)
@@ -449,6 +449,11 @@ void AddClearance(std::vector<EncounterHelpers::HazardCircle>& out, HazardSource
 bool InControl(Player* player)
 {
     return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasUnitFlag(UNIT_FLAG_SILENCED);
+}
+
+bool CanLeave(Player* player)
+{
+    return !player->HasUnitState(UNIT_STATE_LOST_CONTROL) && !player->HasAuraType(SPELL_AURA_MOD_ROOT);
 }
 
 bool MidCast(Player* player) { return player->IsNonMeleeSpellCast(false, false, true); }
@@ -2824,8 +2829,7 @@ bool IgnoredBy(HazardSource const& source, Player* bot) { return source.kicker =
 
 bool LeftToKite(HazardSource const& source, Player* bot)
 {
-    if (source.spellId != SPELL_BLADESTORM || bot->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-        bot->HasAuraType(SPELL_AURA_MOD_ROOT))
+    if (source.spellId != SPELL_BLADESTORM || !CanLeave(bot))
         return false;
 
     Unit* warrior = ObjectAccessor::GetUnit(*bot, source.guid);
@@ -2836,7 +2840,7 @@ bool DodgeSkips(HazardSource const& source, Player* bot) { return IgnoredBy(sour
 
 bool InAoeOf(HazardSource const& source, Player* bot)
 {
-    return !DodgeSkips(source, bot) && WalkGap(source, bot->GetPosition()) <= source.radius + IN_AOE_MARGIN;
+    return CanLeave(bot) && !DodgeSkips(source, bot) && WalkGap(source, bot) <= source.radius + IN_AOE_MARGIN;
 }
 
 void BreakCastsInAoe(FactionChampionsDefenceState& state, std::vector<Member> const& members, uint32 now)
@@ -2850,8 +2854,7 @@ void BreakCastsInAoe(FactionChampionsDefenceState& state, std::vector<Member> co
         PlayerbotAI* memberAI = GET_PLAYERBOT_AI(player);
         Spell* cast = player->GetCurrentSpell(CURRENT_GENERIC_SPELL);
         if (!memberAI || !cast || cast->getState() != SPELL_STATE_PREPARING || !player->IsMovementPreventedByCasting() ||
-            cast->GetCastTimeRemaining() <= AOE_BREAK_MIN_LEFT_MS || player->HasUnitState(UNIT_STATE_LOST_CONTROL) ||
-            player->HasAuraType(SPELL_AURA_MOD_ROOT))
+            cast->GetCastTimeRemaining() <= AOE_BREAK_MIN_LEFT_MS)
             continue;
 
         auto const asked = state.aoeBreaks.find(player->GetGUID());

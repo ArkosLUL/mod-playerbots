@@ -1483,3 +1483,21 @@ time a pull by the replay.
 **Questions for the user.** None new. Q6 answered above (keep as is).
 
 **Shared code.** None: the hazards, trigger, clearances and cast break are this fight's, the reader its own.
+
+**Review.** The cause holds. Narrhok walks at his target through Bladestorm: window 23 and three earlier pulls, 426
+moving 200 ms samples, median 0.6° off his target, p90 3.5°, 5.0 yd/s (p90 5.6). toc3 0:57.45: Toczar's Immolate began
+with Narrhok 11.4 yd off, about 4 yd from the end of his 1.5 s walk, so the break would have fired then. The reader's
+`--aoe` lines match the table above. No size, mode or player branch: a player's casts are never broken, and a player
+victim bends the bots' clearances like a bot one.
+
+- Review fix: the trigger read the walk for his victim too, while the victim's clearance stayed round him. A victim that
+  doesn't kite (a tank off ice duty) fired the dodge from 9 to 17.4 yd off, already clear of the 12 yd circle, so each
+  leg took a spot on the 2 yd ring and broke its casts until he came within 12 yd. `WalkGap` now measures his victim
+  from where he stands, as before the round. No tank was his target at any of 142 Bladestorm ticks in those six pulls.
+- Review fix, older than the round: a rooted bot inside a source fired the dodge, which broke its channel (Penance,
+  Drain Life) and then couldn't move; the walk widened that zone up to 1.6x. `InAoeOf` now counts no rooted or
+  out-of-control bot (`CanLeave`, shared with the kite skip and the cast break), so it neither dodges nor breaks.
+- Left: the break doesn't weigh the cast's time left against the storm's arrival, as the chased break does; the 1.5 s
+  walk bounds it, and a cast finished just before he arrives leaves no time to walk out.
+- Left: the Chains of Ice stand and the wall-grip stand test the round clearance only, not the walk; outside the
+  picked failure.
