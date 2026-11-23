@@ -776,7 +776,11 @@ twice by the time they arrive), then anywhere, so a bot with nothing near still 
 nearest the arena centre, which puts them all on one unit. Within a tier the current target holds unless
 another is `ULDUAR_THORIM_TARGET_SWITCH_MARGIN` (8 yd) closer, or the pick flips between equidistant adds
 mid-cast. The corridor squad takes Acolytes, Iron Ring and Iron Honor Guards, walk-in trash, then the
-Colossus, then the Rune Giant.
+Colossus, then the Rune Giant, **one pack at a time**: while any of those is in combat in its 50 yd sweep,
+the idle ones drop out (`DropIdleGauntletMobsWhileFighting`). Tiers alone handed DPS the second corridor
+pack's Acolyte 39-50 yd out the moment the first pack's died, so the second pack joined the first's guards
+in all nine 25-man pulls traced, and four Iron Ring Guards against one tank killed ranged with Impale and
+Whirling Trip. Each loss carries through the gauntlet: two dead ranged made a Colossus 40 s against 24 s.
 
 **`thorim disable automatic targeting` holds the generic pickers for every non-tank in phase 1**, or
 they alternate with `ThorimDpsPriorityAction` instead of losing to it: the row goes quiet once the bot
@@ -997,7 +1001,11 @@ player was on the instance left the corridor standing while he stayed in the are
   right lane, or the one the last Runic Smash telegraph left safe), at combat priority. Past the portcullis
   it skips any waypoint north of him, since the lanes run south: a bot taking over mid-corridor from a human
   walks on rather than back to the first. He holds while a squad non-healer is more than 30 yd behind, but
-  at most 15 s per step, so a stuck bot cannot eat the 150 s clock. Past the last waypoint he walks on to
+  at most 15 s per step, so a stuck bot cannot eat the 150 s clock. He also holds the step and the Colossus
+  walk while he fights (`ThorimGauntletLeaderFighting`: his target is a gauntlet mob in combat within 50 yd,
+  or one attacks him): every corridor step of nine 25-man pulls came mid-fight, leaving the first pack's
+  guards on ranged, and the right lane's fifth waypoint, 20.0 yd from the second pack's west guard, pulls
+  that pack. The Giant walk never holds (below). Past the last waypoint he walks on to
   30 yd from the Colossus, which the squad's own targeting then engages. Once the Colossus is dead he walks
   on to the Rune Giant (`ThorimGauntletLeadRuneGiant`), ~100 yd up a ramp and past the 50 yd pick range: in
   all nine bot-led pulls of 2026-11-22 the squad otherwise stood at the dead Colossus until the orb. Gated
