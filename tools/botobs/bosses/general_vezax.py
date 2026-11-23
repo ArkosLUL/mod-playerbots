@@ -902,7 +902,6 @@ def animus_casters(trace: Trace, samples: Samples | None = None) -> dict | None:
 
 
 def reach_states(trace: Trace, spawn: int) -> dict[str, set[int]]:
-    """Per `vezax.reach` value written from the spawn on, the bots that wrote it."""
     out: dict[str, set[int]] = collections.defaultdict(set)
     for rec in notes(trace, "vezax.reach"):
         if rec["t"] >= spawn:
