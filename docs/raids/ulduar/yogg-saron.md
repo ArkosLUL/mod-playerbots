@@ -212,6 +212,7 @@ and stacked Vampiric Blood or Icebound Fortitude on it.
 - Due at 4, not 5: a 5 s button cast on the stamping tick reads a few ms short after its first aura
   update, and the next goes on top. Above 5, Anti-Magic Shell and Cloak of Shadows go only once 5 s are
   left.
+- Overdue at 1 ms, not 0: a 0 `needMs` means no nova in reach and stands the button down.
 
 Three tiers, in relevance order, since one cast covering 25 raiders beats any single bot's own:
 

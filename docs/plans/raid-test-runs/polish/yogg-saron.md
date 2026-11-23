@@ -426,9 +426,12 @@ shared code. Reader: `--novas` prints `ladder row put up over another still runn
 (`ladder_stacks`, tested).
 
 **Next window should show:** window 14 (round 5 plus the shared fix, before this one) a DK's Anti-Magic Shell
-followed within a second by Vampiric Blood or Icebound Fortitude, so that `--novas` line above 0. On this fix that
-line at 0, `yogg.novadef` `covered` while Anti-Magic Shell runs, phase 1 ladder casts no more than 17 a pull, and
-nova deaths no higher than 1-9 a pull.
+followed within a second by Vampiric Blood or Icebound Fortitude, so that `--novas` line above 0. On this fix no
+row on that line within a second of the one it lands on; a row over one with under 4 s left at the next Guardian's
+10% read (7 s for a health row) is the countdown working. Phase 1 ladder casts no more than 17 a pull, and nova
+deaths no higher than 1-9 a pull.
 
-**Seen, not picked.** The reader's `NOVA_DEFENSIVES` keys Last Stand by its cast 12975, not its aura 12976, so
-`--novas` covers and the new line miss a running Last Stand.
+**Review fixes.** The reader reads Last Stand by its aura 12976 (`NOVA_DEFENSIVE_AURAS`; the cast id 12975 never
+shows as an aura), so `--novas` covers, the stack line and `--phase3` covers see a running Last Stand, and the stack
+line leaves humans out. Re-read over the nine pulls, the line stays 0. `yogg.novadef` `covered` dropped from the
+checks: the trigger stands down while a row covers, so the action seldom runs to note it.
