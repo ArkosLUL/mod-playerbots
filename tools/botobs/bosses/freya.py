@@ -31,7 +31,9 @@ What the generic views miss here:
 - **Cover is read off auras, not the cooldown notes.** A healer notes `freya.addext` before its cast, so a cast that
   fails (out of range) still writes the name. The cover line takes the first tank a Snaplasher went to and measures
   his own buttons' auras and the externals' auras from then to his death or its last sample: `both` is overlap,
-  time two layers spent on one stretch, `none` the time he held it bare.
+  time two layers spent on one stretch, `none` the time he held it bare. The trace logs the auras a death strips
+  1-2 ms before the death row itself, so "died under" also counts an aura that ended up to `DEATH_AURA_SLACK_MS`
+  before the death.
 - **A loose Snaplasher is read off the snapshots.** A stretch runs while its target is a raid member who is not a
   tank, and ends at the first snapshot it is on a tank or gone. Each line counts the deaths to it, the hits on its
   bark (Hardened Bark stack casts), the `freya kite snaplasher` orders, and the `freya.kite` notes: the chased
@@ -99,10 +101,10 @@ KITE_NOTE = "freya.kite"
 COOLDOWN_NOTES = {"freya.adddef": "defensive under the Snaplasher", "freya.addext": "external on the Snaplasher's tank"}
 # not casts, the probes write these so the same button cast again next wave still gets its own row
 COOLDOWN_NO_PICK = {"covered", "none"}
-# The add tank's own buttons by the aura each puts up (Last Stand's cast 12975 puts up 12976).
 OWN_DEFENSIVES = {22812: "Barkskin", 22842: "Frenzied Regeneration", 61336: "Survival Instincts",
-                  48792: "Icebound Fortitude", 55233: "Vampiric Blood", 871: "Shield Wall", 12976: "Last Stand",
-                  498: "Divine Protection"}
+                  48792: "Icebound Fortitude", 55233: "Vampiric Blood", 871: "Shield Wall", 498: "Divine Protection",
+                  12976: "Last Stand"}  # Last Stand's buff, its cast 12975 never shows up as an aura
+DEATH_AURA_SLACK_MS = 50
 EXTERNALS = {33206: "Pain Suppression", 47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
 BARK_STACKS = (62663, 64190)
@@ -268,7 +270,6 @@ def show_tanks(trace: Trace) -> None:
 
 
 def aura_spans(trace: Trace, guid, spells: dict) -> list[tuple[int, int, int]]:
-    """(start, end, spell) of each of these auras on the unit; one still up at the end runs to the last record."""
     up: dict[int, int] = {}
     out: list[tuple[int, int, int]] = []
     for rec in trace.of("aura"):
@@ -296,8 +297,6 @@ def covered_ms(spans: list[tuple[int, int, int]], t0: int, t1: int) -> int:
 
 
 def snaplasher_cover(trace: Trace) -> list[dict]:
-    """Per Snaplasher, the first tank it went to: how long its own buttons and the healers' externals were up on
-    him while he held it, from its first sample on him to his death or its last sample."""
     deaths = combat_deaths(trace)
     out: list[dict] = []
     for snap in sorted(sightings(trace, (NPC_SNAPLASHER,)).values(), key=lambda r: r["first"]):
@@ -309,8 +308,8 @@ def snaplasher_cover(trace: Trace) -> list[dict]:
         t1 = died if died is not None else snap["last"]
         own, ext = aura_spans(trace, tank, OWN_DEFENSIVES), aura_spans(trace, tank, EXTERNALS)
         own_ms, ext_ms, any_ms = covered_ms(own, t0, t1), covered_ms(ext, t0, t1), covered_ms(own + ext, t0, t1)
-        under = [{**OWN_DEFENSIVES, **EXTERNALS}[spell] for s, e, spell in sorted(own + ext) if s <= died <= e] \
-            if died is not None else []
+        under = [{**OWN_DEFENSIVES, **EXTERNALS}[spell] for s, e, spell in sorted(own + ext)
+                 if s <= died <= e + DEATH_AURA_SLACK_MS] if died is not None else []
         out.append({"spawn": snap["first"], "tank": tank, "t": t0, "until": t1, "own": own_ms, "ext": ext_ms,
                     "both": own_ms + ext_ms - any_ms, "none": t1 - t0 - any_ms, "died": died, "under": under})
     return out

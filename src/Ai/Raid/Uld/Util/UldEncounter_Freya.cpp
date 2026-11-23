@@ -309,7 +309,10 @@ Unit* GetFreyaForHold(PlayerbotAI* botAI)
     if (!freya)
         freya = GetFreyaBossByEntry(botAI);
 
-    return freya && freya->IsAlive() ? freya : nullptr;
+    if (!freya || !freya->IsAlive() || !freya->IsInCombat() || !freya->HasAura(SPELL_ATTUNED_TO_NATURE))
+        return nullptr;
+
+    return freya;
 }
 
 struct FreyaTankExternal

@@ -975,9 +975,10 @@ in hand. uld3's first trio gets Pain Suppression and Guardian Spirit after Frenz
 (its 20s bare), but its second still gets Barkskin alone (question 8). uld1 unchanged but for no Hand of
 Sacrifice tries and Pain Suppression after Vampiric Blood instead of on Icebound Fortitude.
 
-**Cost to watch:** healers' Pain Suppression, Guardian Spirit and Hand of Sacrifice no longer go to DPS or
-healers while an add tank lives (window 14: 7 such casts, 2 of them in uld1's kill on a healer who lived),
-and a disc priest's own critical-health Pain Suppression shares the held name.
+**Cost to watch:** healers' Pain Suppression, Guardian Spirit and Hand of Sacrifice no longer go to DPS,
+healers or the main tank while an add tank lives (window 14: 7 such casts, none on a main tank, 2 of them in
+uld1's kill on a healer who lived), and a disc priest's own critical-health Pain Suppression shares the
+held name.
 
 **Next window should show** (`freya.py --tanks`, `extcasts.py`, `postmortem.py --vetoes`):
 
@@ -987,6 +988,7 @@ and a disc priest's own critical-health Pain Suppression shares the held name.
   add tank lives; vetoes under `freya add tank external hold`.
 - No `freya.addext` name without the aura landing (no out-of-range tries); `covered` notes in trio waves.
 - A risen add tank: vetoes under `freya add tank defensive hold` within a second of rising, no button above 25%.
+- No veto under either hold before Freya's engage or after the sixth wave.
 - Add-tank deaths to the Snaplasher under 1 a pull; any left should be the second of back-to-back trio waves.
 - Round 8's checks as written there; rounds 1-7 still holding.
 
@@ -1005,6 +1007,26 @@ bot runs generic taunts and targeting until Freya has him on her threat list.
    Snaplasher damage, in a hold with no tank, kept the trio from dying together); (c) the main tank takes the
    second wave's Snaplasher while the add tank's buttons are down. Recommendation: read window 15 first; if
    the only add-tank deaths left are second waves, (b).
+9. (reviewer) The external hold keeps Pain Suppression, Guardian Spirit and Hand of Sacrifice off the main
+   tank for the whole add phase, since one spent on him is not back for the next trio; Q2 (c) named the add
+   tank only. Options: (a) keep it; (b) let the class code cover the main tank under Freya alone. Window 14
+   sent none to a main tank, whose only deaths came in collapses. Recommendation: (a).
 6. and 7. (still open, not built) as written in rounds 7 and 8.
 
 **Shared code:** none changed; `RunningTankDefensive` and `ReadyTankDefensive` are read, not edited.
+
+**Review:** the traces bear the causes out (uld2's risen bear cast Barkskin and Survival Instincts at
+0:20.9-0:21.4 with no veto; uld1's paladin stood 35-42 yd from the add tank through both trio waves; the
+cover lines reproduce), on one code path (no size, mode or player branch), no shared code. Fixed:
+
+- The entry fallback finds Freya before the pull too, and hold rules run whenever the gate is open, so
+  within 100 yd of her both holds ran on trash; the external hold also ran on after the sixth wave with no
+  Snaplasher left (uld1's last 1.5 minutes). Both now need Freya in combat with Attuned to Nature up.
+- `--tanks`' "died under" missed the auras a death strips: the trace logs their removal 1-2 ms before the
+  death row (windows 13-14). It takes 50 ms of slack, tested.
+- The reader's new docstrings and constant comment went (comments rule); the Last Stand id keeps a hazard
+  line.
+
+Left: externals also wait on an own button that is off cooldown but unaffordable (a DK's Vampiric Blood
+with no blood rune, up to one rune cooldown), since `ReadyTankDefensive` reads the cooldown only; changing
+it is shared code.

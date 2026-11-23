@@ -306,12 +306,13 @@ their own pickup ([below](#detonating-lasher-waves)).
 **The add tank's cooldowns and the healers' externals wait for a stacked Snaplasher** (user's choice; not
 yet verified in a pull), since every add-tank death came with them spent earlier or on someone else
 ([Hardened Bark](#the-trio-wave)). `freya add tank defensive hold` blocks the class nodes' tank cooldowns
-(`HeldTankDefensiveNames`) for assist tank 0 while Freya lives and is not on him, above
+(`HeldTankDefensiveNames`) for assist tank 0 while Freya is not on him, above
 `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%). `freya add tank external hold` blocks healers'
 class Pain Suppression (a disc priest's own critical-health one shares the name), Guardian Spirit and Hand
-of Sacrifice while Freya lives and an add tank does who is not holding her; Lay on Hands stays free. Both
-find Freya by entry when `find target` misses her ([per-tick scan](#per-tick-scan)): a risen bear spent
-Survival Instincts at 43% that way.
+of Sacrifice, on the main tank too, while an add tank lives who is not holding her; Lay on Hands stays
+free. Both run only in the add phase, Freya in combat with Attuned to Nature up: the entry fallback sees
+her before the pull too, and no trio comes once it drops. Both find Freya by entry when `find target`
+misses her ([per-tick scan](#per-tick-scan)): a risen bear spent Survival Instincts at 43% that way.
 
 Once a Snaplasher with `_ADD_TANK_DEFENSIVE_STACKS` (25, about 4s in) is on any tank, one layer runs at a
 time. `freya add tank defensive` casts his `NextTankDefensive` (physical), which waits out a running one.
