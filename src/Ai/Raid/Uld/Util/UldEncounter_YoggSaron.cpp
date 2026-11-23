@@ -158,6 +158,7 @@ struct YoggSaronEncounterState
     struct IllusionShare
     {
         std::vector<ObjectGuid> allowed;
+        bool staged = false;
     };
     std::unordered_map<ObjectGuid, IllusionShare> illusionShare;
     std::array<int8, 3> brainSpotSight{-1, -1, -1};
@@ -539,6 +540,8 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
             Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
             if (target && target->IsAlive() && bot->IsWithinLOSInMap(target))
                 state = YOGG_SARON_ROOM_STATE_FIGHTING;
+            else if (YoggSaronIllusionStaged(botAI))
+                state = YOGG_SARON_ROOM_STATE_STAGED;
             else
                 state = YOGG_SARON_ROOM_STATE_WALKING_IN;
             break;
@@ -549,7 +552,8 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
     {
-        char const* names[] = {"none", "walkingin", "fighting", "doorshut", "tobrain", "atbrain", "reprisal"};
+        char const* names[] = {"none",   "walkingin", "fighting", "doorshut",
+                               "tobrain", "atbrain",  "reprisal", "staged"};
         RaidObs::NoteDerived(bot, "yogg.roomstate", names[state]);
     }
 
@@ -4392,6 +4396,69 @@ Player* YoggSaronRoomHealer(PlayerbotAI* botAI)
     return nearest;
 }
 
+Player* YoggSaronReprisalHealTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    Group* group = bot->GetGroup();
+    if (!group || !bot->IsAlive() || !PlayerbotAI::IsHeal(bot) ||
+        bot->GetHealthPct() < ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT ||
+        (room != YOGG_SARON_ROOM_STORMWIND && room != YOGG_SARON_ROOM_ICECROWN && room != YOGG_SARON_ROOM_CHAMBER))
+        return nullptr;
+
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    if (state.reprisalHold.empty())
+        return nullptr;
+
+    Player* lowest = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || !state.reprisalHold.count(member->GetGUID()) ||
+            member->GetHealthPct() >= ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT || YoggSaronRoomOf(member) != room ||
+            !bot->IsWithinDistInMap(member, sPlayerbotAIConfig.HealDistance) || !bot->IsWithinLOSInMap(member))
+            continue;
+
+        if (!lowest || member->GetHealthPct() < lowest->GetHealthPct())
+            lowest = member;
+    }
+
+    return lowest;
+}
+
+char const* YoggSaronReprisalHealSpell(PlayerbotAI* botAI, Player* target)
+{
+    Player* bot = botAI->GetBot();
+    std::vector<char const*> heals;
+    switch (bot->getClass())
+    {
+        case CLASS_PRIEST:
+            heals = {"penance", "flash heal"};
+            if (!botAI->HasAura("renew", target, false, true))
+                heals.push_back("renew");
+            break;
+        case CLASS_SHAMAN:
+            heals = {"riptide", "healing wave", "lesser healing wave"};
+            break;
+        case CLASS_PALADIN:
+            heals = {"holy shock", "holy light", "flash of light"};
+            break;
+        case CLASS_DRUID:
+            if (!botAI->HasAura("rejuvenation", target, false, true))
+                heals.push_back("rejuvenation");
+            heals.insert(heals.end(), {"swiftmend", "nourish"});
+            break;
+        default:
+            break;
+    }
+
+    for (char const* heal : heals)
+        if (botAI->CanCastSpell(heal, target))
+            return heal;
+
+    return nullptr;
+}
+
 uint32 YoggSaronInduceMadnessLeftMs(PlayerbotAI* botAI)
 {
     Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
@@ -4647,11 +4714,15 @@ Unit* YoggSaronTentacleToJoin(PlayerbotAI* botAI, std::vector<Unit*> const& mobs
     Player* bot = botAI->GetBot();
     Position stage;
     if (!YoggSaronIllusionStageSpot(bot, stage))
-        stage = bot->GetPosition();
+        return nullptr;
+
+    std::vector<Unit*> nearStage;
+    std::copy_if(mobs.begin(), mobs.end(), std::back_inserter(nearStage), [&stage](Unit* mob)
+                 { return mob->GetExactDist2d(stage) <= ULDUAR_YOGG_SARON_STAGE_JOIN_RADIUS; });
 
     Unit* best = nullptr;
     std::pair<uint32, float> bestKey;
-    for (Unit* mob : mobs)
+    for (Unit* mob : nearStage)
     {
         std::pair<uint32, float> const key{YoggSaronTentacleAttackers(bot, mob, room), mob->GetExactDist2d(stage)};
         if (!best || key < bestKey)
@@ -4662,7 +4733,7 @@ Unit* YoggSaronTentacleToJoin(PlayerbotAI* botAI, std::vector<Unit*> const& mobs
     }
 
     Unit* current = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
-    if (current && std::find(mobs.begin(), mobs.end(), current) != mobs.end() &&
+    if (best && current && std::find(nearStage.begin(), nearStage.end(), current) != nearStage.end() &&
         (YoggSaronTentacleAttackers(bot, current, room) <= bestKey.first ||
          !YoggSaronTentacleAttackers(bot, current, room, true)))
         return current;
@@ -4774,10 +4845,19 @@ void YoggSaronTickIllusionShare(PlayerbotAI* botAI)
         std::find(share.allowed.begin(), share.allowed.end(), marked->GetGUID()) == share.allowed.end())
         allow(marked);
 
+    share.staged = false;
     if (!mobs.empty() && share.allowed.empty())
     {
-        allow(YoggSaronTentacleToJoin(botAI, mobs, room));
-        label = "joined";
+        if (Unit* join = YoggSaronTentacleToJoin(botAI, mobs, room))
+        {
+            allow(join);
+            label = "joined";
+        }
+        else
+        {
+            share.staged = true;
+            label = "staged";
+        }
     }
 
     if (RaidObs::Active())
@@ -5096,6 +5176,15 @@ bool YoggSaronIllusionTentacleAllowed(PlayerbotAI* botAI, Unit* tentacle)
 
     std::vector<ObjectGuid> const& allowed = it->second.allowed;
     return std::find(allowed.begin(), allowed.end(), tentacle->GetGUID()) != allowed.end();
+}
+
+bool YoggSaronIllusionStaged(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const it = state.illusionShare.find(bot->GetGUID());
+
+    return it != state.illusionShare.end() && it->second.staged;
 }
 
 bool YoggSaronIllusionStageSpot(Player* bot, Position& spot)

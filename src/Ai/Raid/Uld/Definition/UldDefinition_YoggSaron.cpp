@@ -122,6 +122,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronWarlockPetTrigger, YoggSaronWarlockPetAction>(ACTION_RAID - 0.5f);
     e.Node<YoggSaronIllusionHealerStationTrigger, YoggSaronIllusionHealerStationAction>(ACTION_RAID);
     e.Node<YoggSaronReprisalRegroupTrigger, YoggSaronReprisalRegroupAction>(ACTION_RAID);
+    e.Node<YoggSaronReprisalHealTrigger, YoggSaronReprisalHealAction>(ACTION_RAID - 1);
     e.Node<YoggSaronBrainSpotTrigger, YoggSaronBrainSpotAction>(ACTION_RAID);
     e.Node<YoggSaronNitroBoostsTrigger, YoggSaronNitroBoostsAction>(ACTION_RAID + 0.5f);
     e.Node<YoggSaronBrainDashTrigger, YoggSaronBrainDashAction>(ACTION_RAID + 0.5f);
@@ -142,6 +143,10 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Block("yogg-saron reprisal hold", Role::Any, YoggSaronReprisalHold,
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
                 Family::AttackLeastHp | Family::AttackRti | Family::DebuffOnAttacker | Family::Charge);
+
+    e.Block("yogg-saron illusion stage hold", Role::Any, YoggSaronIllusionStaged,
+            Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
+                Family::AttackLeastHp | Family::DebuffOnAttacker | Family::Charge);
 
     e.Block("yogg-saron brain hold", Role::Any, YoggSaronBrainHeld,
             Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |

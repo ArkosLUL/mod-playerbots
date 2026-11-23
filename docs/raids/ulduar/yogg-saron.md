@@ -1266,14 +1266,18 @@ latches per bot per tick what it may take, and `YoggSaronIllusionTentacleAllowed
   (25 s) of Induce Madness, since the slowest clear left ~29 s and an uncleared room charms everyone.
   Healers, the Chamber and bots off the brain level have no limit.
 
-**A bot with nothing left allowed joins the live tentacle with the fewest attackers, by the user's
-choice** (share `joined`): waiting at a stage spot left the last 1-3 tentacles to one bot each while 3-6
-of 9 damage dealers stood, ~10 s a wave. Ties go to the one nearest `…_ICECROWN_STAGE_SPOT` /
-`…_STORMWIND_STAGE_SPOT` (on the navmesh path from landing to Brain, 6 / 3 yd past the landing, since
-both doors are inside the brain room's 50 yd circle and a bot at one reads as already in the brain room),
-and it keeps its current tentacle while no other has fewer attackers or, as in the spread (which a
-one-tentacle share overrides), no lower GUID is also on it. The Chamber keeps plain spread, where nobody
-waits.
+**A bot with nothing left allowed joins a live tentacle within `…_STAGE_JOIN_RADIUS` (40 yd) of its
+room's stage spot, else waits on that spot, by the user's choice** (share `joined` / `staged`): waiting
+always left the last near tentacles to one bot each, but joining any tentacle ended the clear at the far
+ones, 53-85 yd from the door, and Stormwind and Icecrown cycles fell from 17.3% of the Brain to 11.2%. It
+takes the one with the fewest attackers, ties to the one nearest the spot, and keeps its current one while
+no other has fewer attackers or, as in the spread (which a one-tentacle share overrides), no lower GUID is
+also on it. The spots, `…_ICECROWN_STAGE_SPOT` / `…_STORMWIND_STAGE_SPOT`, sit on the navmesh path from
+landing to Brain, 6 / 3 yd past the landing, because both doors are inside the brain room's 50 yd circle
+and a bot at one reads as already in the brain room; arrival is 1.5 yd, each spot ~3 yd inside either
+circle. Waiting, the state reads `staged`, the illusion room node walks the bot to the spot, and
+`yogg-saron illusion stage hold` blocks the reprisal hold's target pickers except `AttackRti`. The Chamber
+keeps plain spread, where nobody waits.
 
 **Grim Reprisal is what kills the brain team, and only a hit triggers it.**
 `spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;
@@ -1286,6 +1290,13 @@ target, cutting only a cast aimed at the tentacle so a self-heal still lands, `y
 blocks the other pickers, melee and charges, the room state reads `reprisal` so the walk-in leaves it alone,
 and `yogg-saron reprisal regroup` walks it to 15 yd of the healer past 25, since most of those deaths had
 the healer 37-50 yd away.
+
+**The room's healer heals a held bot first, by the user's choice**: a held bot deals nothing until 70%,
+yet the healer's casts went mostly to mates at 28-90%, 0-3 of them to the held bot, and one room lost two
+of eight damage dealers for 26-28 s of a 46 s clear. `yogg-saron reprisal heal` (`ACTION_RAID − 1`: under
+the station walk, over every class heal band and Nature's Swiftness) casts a direct heal
+(`YoggSaronReprisalHealSpell`) on the lowest held room mate under 70% in heal range and sight, while the
+healer itself is at 40% or more.
 
 **Each tentacle a hit lands on reflects separately**, so a cleave on three returns 180% and killed a
 warrior from full in 2 s, faster than any hold. `yogg-saron illusion multi target hold multiplier` zeroes,
@@ -1994,7 +2005,7 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**71 `yogg.` probe keys**, by topic:
+**72 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
@@ -2002,7 +2013,7 @@ hand.
 | Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1pull` (`pull` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
-| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `lifted`), `reprisal`, `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
+| Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
 | Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
@@ -2020,6 +2031,8 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   0.3 s old (a Constrictor's Lunge at the open reads as a near bot moved).
 - Induce Madness leaves no damage or aura row, so the Insane aura is its only record and `SANITY_COSTS`
   leaves it out.
+- A heal row carries no room: `--brain`'s `heals in a hold` places the healer and the held bot by their
+  `yogg.room` spans.
 - The trace has no DmgClass, so a ranged bot's melee hits on a Crusher are matched by name
   (`MELEE_CLASS_NAMES`), and `--brain`'s `melee at the Brain` reads a swing's reach off the 3D distance
   against the Brain's reach of 27.
