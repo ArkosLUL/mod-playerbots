@@ -203,12 +203,15 @@ strafe may end only 10.2 yd clear. The dodge itself yields once the bot is clear
 back into the field the missile leaves and class interrupts get the ticks between.
 
 **While the missile flies, no other walk goes toward it** (`VezaxWalkMeetsShadowCrash`): one ending
-within 11 yd of the impact, or passing within 11 nearer than it starts, waits for the landing. Position,
-soak and the mark walk decline it; reach spell is held for it (`vezax shadow crash walk hold`), measured
-to where reach spell would stop. Without it a dodged bot walks straight back with the missile inbound and
-never casts (as on Algalon), or dies: the blast takes a player within exactly 10 yd 3D of its centre (no
-reach added for a creature caster), and reach spell toward the Animus, a mark walk across the impact and
-a position walk through it killed 7 from the Animus spawn on in windows 11-19, every death of three kills.
+within 11 yd of the impact, or passing within 11 nearer than it starts, waits for the landing. Position
+and soak decline it; reach spell is held for it (`vezax shadow crash walk hold`), measured to where
+reach spell would stop. Without it a dodged bot walks straight back with the missile inbound and never
+casts (as on Algalon), or dies: the blast takes a player within exactly 10 yd 3D of its centre (no reach
+added for a creature caster), and reach spell toward the Animus, a mark walk across the impact and a
+position walk through it killed 7 from the Animus spawn on in windows 11-19, every death of three kills.
+A marked bot whose mark walk meets it stands, moved only by the dodge (`vezax mark walk wait`): a
+declined walk hands it to the next mover, which in 5 of 9 such waits in those windows would have walked
+it 15-27 yd back toward its group.
 
 **Key the dodge off the cast, never the field.** The boss is **never** in `UNIT_STATE_CASTING` for this
 one, so a trigger must not gate on that; crashes come every 10s, so one stored impact is enough. The

@@ -427,8 +427,6 @@ def show_mark(trace: Trace) -> None:
 
 
 def walk_meets_impact(impact, start, dest) -> bool:
-    """The strategy's own test for a walk while a crash flies: it ends within the walk clearance of
-    the impact, or passes within it nearer than it starts."""
     if dist2(dest, impact) <= WALK_CLEARANCE:
         return True
     dx, dy = dest[0] - start[0], dest[1] - start[1]
@@ -442,8 +440,7 @@ def walk_meets_impact(impact, start, dest) -> bool:
 
 def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Every Shadow Crash. `masked` is what else he cast while the missile flew: on a build that read
-    the impact off his current spell, that cast took the slot and the crash landed unseen. `walk_ins`
-    are accepted moves other than the dodge, issued while it flew, that walk toward the impact."""
+    the impact off his current spell, that cast took the slot and the crash landed unseen."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     block = blocks(trace)

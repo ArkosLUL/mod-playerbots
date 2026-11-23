@@ -667,6 +667,21 @@ bool VezaxReachSpellMeetsShadowCrash(PlayerbotAI* botAI)
     return VezaxWalkMeetsShadowCrash(botAI, stop);
 }
 
+bool VezaxMarkWalkMeetsShadowCrash(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
+        return false;
+
+    Position impact;
+    Unit* vezax = GetVezax(botAI);
+    if (!vezax || !vezax->IsInCombat() || vezax->GetVictim() == bot || !TryGetVezaxShadowCrashImpact(botAI, impact))
+        return false;
+
+    Position spot;
+    return TryGetVezaxMarkSpot(bot, spot) && VezaxWalkMeetsShadowCrash(botAI, spot);
+}
+
 bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI)
 {
     return botAI->GetBot()->HasAura(SPELL_VEZAX_PROFOUND_DARKNESS);

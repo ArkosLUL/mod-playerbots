@@ -922,3 +922,30 @@ the DK and the bear (198 threat vetoes in the phase against 13 and 1).
 north settle of five lost: uld2, 12.8 yd from the opener, the Animus at 12.3%, ranged 51-81% past its
 ceiling, healers 42 yd from the main tank. Until it is answered a window passes only when all three pools
 happen to settle normally.
+
+**Review.** Both causes hold. w19 uld1 (`vezax-r8/crash.py`): Uldxaq's and Uldxaj's strafes ended 10.7 and
+10.2 yd from the 3:47.49 impact, reach spell moves at 3:46.84-3:47.41 took them to 8.7 and 8.2, and the
+samples around the hit put them 9.6-10.0 yd 2D from it; Uldxas's dodge ran 3:54.47-3:56.31 through repeated `wait`s to 9.9 yd, then mark
+moves at 3:56.35, 3:56.83 and 3:57.42 alternated with dodges at the 10 yd edge until he died at 9.9. The
+core's DEST check (`Spell.cpp:9507-9524`) is 3D with no reach for a creature caster, and players carry
+63420 (aura records, 180 s) with the 32409 backlash shadow. No size, mode or player branch. `pb-check`
+passes.
+
+- Review fix: a declined walk is not a wait. A failed action hands the tick to the next one
+  (`Engine.cpp:299-319`), so a marked bot whose mark walk met the crash took the next mover instead:
+  position, soak, the Animus melee spot or reach. Replayed on windows 11-19
+  (`vezax-r8-review/held_mark_fallthrough.py`), 9 mark walks are held; in 5 the slot walk passes the
+  test and would have walked the marked bot 15-27 yd back toward its group's slot with 1.7-2.0 s of
+  flight left, 2 were melee or a tank with no slot. Rule `vezax mark walk wait` (`OwnMovement`, attacks
+  kept, the dodge the only mover passed, predicate `VezaxMarkWalkMeetsShadowCrash`) now holds every
+  walk of a marked bot that is not his victim while its mark walk meets the crash; the mark action's
+  own decline went with it. Next window: its vetoes only on marked bots inside crash flights, no
+  position, soak, melee spot or reach move from a marked bot inside one.
+- Review fix: the new reader docstring, the docstring addition on `crashes` and the fixture comment in
+  the test went (comment rule).
+- Left: the strafe still counts as clear at 10 yd (`TryGetVezaxDodgeSpot`), so a pulled slot ends
+  10.2-10.7 yd out with no margin; the hold keeps such a bot there, and a stricter test sends more of
+  the camp to the scattered search. A walk already under way when a crash is cast keeps going; only the
+  dodge at 10 yd stops it. Pre-existing: the position node walks a marked bot back toward its slot each
+  time it stands within 3 yd of its mark spot (10-13 position moves from marked bots per w19 pull), cut
+  off by the mark node after ~3 yd.

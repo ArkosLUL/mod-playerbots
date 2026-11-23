@@ -154,6 +154,7 @@ bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact);
 void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
 bool VezaxWalkMeetsShadowCrash(PlayerbotAI* botAI, Position const& destination);
 bool VezaxReachSpellMeetsShadowCrash(PlayerbotAI* botAI);
+bool VezaxMarkWalkMeetsShadowCrash(PlayerbotAI* botAI);
 bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI);
 
 bool VezaxHardModePending(PlayerbotAI* botAI);

@@ -90,8 +90,6 @@ def vezax_pull() -> list[dict]:
          "ok": 1, "r": "", "by": gv.DODGE},
         {"t": 5600, "e": "move", "g": TREE, "k": "point", "x": 0.0, "y": 45.0, "z": 0.0,
          "ok": 1, "r": "", "by": gv.DODGE},
-        # While it flies Tree walks to 9.4 yd of the impact, Agony walks straight away from it, and
-        # Bulwark's walk never comes near it.
         {"t": 6500, "e": "move", "g": TREE, "k": "point", "x": 22.0, "y": 5.0, "z": 0.0,
          "ok": 1, "r": "", "by": gv.REACH_SPELL},
         {"t": 7000, "e": "move", "g": AGONY, "k": "point", "x": 50.0, "y": 0.0, "z": 0.0,

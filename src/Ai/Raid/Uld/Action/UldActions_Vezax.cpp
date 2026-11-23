@@ -52,7 +52,7 @@ bool VezaxResetEncounterStateAction::Execute(Event /*event*/)
 bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
 {
     Position spot;
-    if (!TryGetVezaxMarkSpot(bot, spot) || VezaxWalkMeetsShadowCrash(botAI, spot))
+    if (!TryGetVezaxMarkSpot(bot, spot))
         return false;
 
     Position impact;
