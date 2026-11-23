@@ -2024,7 +2024,8 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 
 - A portal taken shows only as the bot's own Illusion Room cast (63988): the portal is never sampled. A
   click on a spent portal leaves only its 51347 cast; `--portals` counts those per wave, with the entries
-  over 2 s after the open.
+  over 2 s after the open. One plan rebuild's `yogg.portalslot` rows can straddle a millisecond, so it
+  reads rows within 50 ms as one plan; split, they named bots on their own spot as off the plan.
 - Leaving a portal spot leaves no row either: `--portals` reads it off `yogg.portal` turning from `holding`
   before the open and names the walks accepted in between, counts body detour walks under `holding`,
   and lists bots the open's rebuild sent from within 8 yd of their spot to a farther one, by a snapshot up to

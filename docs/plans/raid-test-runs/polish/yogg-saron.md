@@ -1005,3 +1005,95 @@ given up) stood in for a `reach melee` whose line passed 13.2 and 14.4 yd from t
 before), at the 13.3 yd knockback's edge. The 30 holding detours stay gated. `left_held_spot` no longer raises when a hold and the next intent share a millisecond.
 Nearest pair re-run on this window's positions at each open keeps 4 of the 6 near bots; Uldxac and Uldzam lose their
 spot to a nearer bot either way, so `moved off a near spot` falls only as far as the gate keeps bots on their spot.
+
+**User answers (2026-11-23) to the two open questions.** (1) Yes: an illusion room's healer heals a bot held by
+Grim Reprisal first. (2) Yes: a brain team bot that finished its share goes back to the stage wait unless a live
+tentacle is within 40 yd of the stage spot, and joins only a tentacle inside that 40 yd (narrows round 9's join).
+Round 12 builds both. The exit lead question (1.5× to 1.2×) stays open and is not built.
+
+## Round 12 (2026-11-23, window 21 build 90400b39c + DC 66174c7: round 11 built, the Faceless Horrors despawned)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 90400b39c --pulls 10`: one valid pull per pool, 0
+humans, Freya's 62670 on the raid, no DC veto inside a pull. Read with the full `yogg_saron.py` and scratch scripts
+(`scratchpad/yogg-r12/`: portal entries per role, Horror and Void Beast units, rezzes) over `cast`, `note` and
+snapshot rows. Window 19's report (`scratchpad/window19/window19-yogg-saron.md`) is the baseline.
+
+| Pool | Run | Trace | Out | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|
+| uld1 | `tr-20261123-190822-14` | `603_14_yogg-saron_1795460948` | wipe 11:39, 32 deaths | 5: I 20.6, S 11.7, C 12.9, I 11.8, S 13.0 (held from 36.2% at 12.2 s left, phase 3 0.5 s after the end) | from 9:44.8 with 6 tentacles (4.18M; Crushers 7.0, 6.4, 95.4%), 128 s, Yogg 30 → 25.7% |
+| uld2 | `tr-20261123-191123-15` | `603_15_yogg-saron_1795461129` | wipe 14:25, 30 | 7: I 15.7, S 12.8, C 8.8, I 13.9, S 11.5, C 4.2, I 1.8 (held from 33.1% at 16.7 s left with 26 tentacles up, survived at 31.3%); wave 8's six bots never opened a door | never |
+| uld3 | `tr-20261123-190742-13` | `603_13_yogg-saron_1795460907` | wipe 13:38, 32 | 5: I 21.9, S 11.7, C 8.3, I 15.1, S 12.9 (held from 36.1% at 14.0 s left, phase 3 4.4 s before the end) | from 9:39.1 with 3 (1.44M; one Crusher at 12.3%, dead at +7.1 s), 253 s, Yogg 30 → 7.5% |
+
+**Cycles to 30%:** five, none (seven cycles, Brain at 31.3%) and five; window 19 six, seven and five. Phase 3 opened
+with 6 / – / 3 tentacles (window 19: 11 / 15 / 7). uld3 met the user's goal of at most one Crusher, and its phase 3
+took Yogg to 7.5%, the lowest yet (11.3% in window 15); uld1 opened with three, two of them under 7.1%. Brain per
+cycle, held cycles left out: Stormwind / Icecrown median 13.4% (window 19 14.2%), Chamber 8.6% (7.2%). Room clears
+Stormwind 26.1 s, Icecrown 25.1, Chamber 28.1 (24.6 / 23.1 / 31.4). From Stormwind and Icecrown the first Brain hit
+came a median 8.5 s after the door and melee were on the Brain at 14.0 s (8.8 / 13.8), with 5-7 joiners a wave.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 3 (Uldxai, the enhancement shaman, three times: Reincarnation stood him up on the stack
+  0.2 s after the 2:04.5 nova, and he was back up 1.5 s and 3.2 s after the next two); phase 2 Crush 1 (Uldxat,
+  2:37.6); phase 3 Immortal Guardian 28 (first at +47.3 s, both tanks by +80 s).
+- uld2: phase 1 Shadow Nova 4 (one nova at 1:16.5, two melee and two ranged); phase 2, all from 11:32 (cycle 7 on,
+  26 tentacles up): Corruptor 13 (Curse of Doom 8, Draining Poison 5), Squeeze 6, Crush 1, Psychosis 1, Induce
+  Madness script kills 5.
+- uld3: phase 3 Immortal Guardian 32 (two finished by Drain Life; first at +78.3 s, both tanks at 13:01-13:02). No
+  death in phases 1-2.
+
+**Verdict on round 11 (body detour held on a held portal spot, nearest-pair spots): fixed.** `body detour walks while
+holding a portal spot` 0 / 0 / 0 (window 19: 9 / 13 / 8), and no `left a held spot` line names the detour (8 / 12 / 8
+bot-waves): what is left is the phase 2 spacing dodge (meant), Malady and the portal walk. `moved off a near spot by
+the open's rebuild` 0 in all 18 waves (1 / 3 / 3). Entries over 2 s after the open 15 / 20 / 18 of 50 / 72 / 50 (21 /
+38 / 24 of 60 / 70 / 50), median entry 0.2-0.3 s (0.2 / 2.4 / 1.8). Healers: over 5 s late in 4 waves (6), median
+entry 0.2 s (1.75 s). Brain per cycle did not rise: round 9's join is still in this build.
+
+**Verdict on the Horror despawn (DC `66174c7`): fixed.** No Faceless Horror (33772) or Void Beast (33806) unit in any
+of the three traces, and no death to either (window 19: Faceless Horror 4, Void Beast 2).
+
+**Reader fix.** `--portals` read one plan rebuild whose `yogg.portalslot` rows straddled a millisecond as two plans,
+and named bots on their own spot as `taken by a bot off the plan` (uld1 wave 2: six, uld3 wave 5: three). It now folds
+rows within 50 ms into one plan (`plan_rounds`, tested); re-read, every wave has 10 assigned and none off the plan.
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked. This round builds the user's two answers.
+
+**Ranking** across pools: phase 3 Immortal Guardians 60 (stuck); uld2's phase 2 collapse 26; Shadow Nova 7; Crush 1.
+
+**Built: the user's two answers** (`UldEncounter_YoggSaron.h/.cpp`, `UldTriggers_YoggSaron.h/.cpp`,
+`UldActions_YoggSaron.h/.cpp`, `UldDefinition_YoggSaron.cpp`):
+
+1. **Stage wait, join only near the stage.** `YoggSaronTentacleToJoin` takes only live tentacles within
+   `…_STAGE_JOIN_RADIUS` (40 yd) of the room's stage spot, by the same key as round 9 (fewest attackers, then nearest
+   the spot, current one kept). With none, the share latches `staged`: the room state reads `staged`, the illusion
+   room node's stage walk (`StageRequired` / `WalkToStage`, arrival `…_STAGE_ARRIVED_RADIUS` 1.5 yd) and `yogg-saron
+   illusion stage hold` come back as round 9 removed them. For the measure: in window 17 all 30 joins that took a
+   tentacle took one 53-85 yd from the stage, and window 16 (staged) had melee on the Brain at 9.8 s and Stormwind /
+   Icecrown cycles at 17.3%.
+2. **Reprisal heal first.** `yogg-saron reprisal heal` (`ACTION_RAID − 1`, under the healer station walk, above every
+   class heal band and Nature's Swiftness): a bot healer in an illusion room casts a direct heal on the lowest held
+   room mate under 70% in heal range and sight (`YoggSaronReprisalHealTarget`), while its own health is 40% or more.
+   Spells by class (`YoggSaronReprisalHealSpell`): Penance, Flash Heal, Renew if missing; Riptide, Healing Wave,
+   Lesser Healing Wave; Holy Shock, Holy Light, Flash of Light; Rejuvenation if missing, Swiftmend, Nourish. Probe
+   `yogg.reprisalheal` (spell). Baseline here: `--brain` `heals in a hold` (new, tested) 14 / 16 / 12 heals on a held
+   bot against 23 / 24 / 17 on others in its room (window 19: 41 / 54, 35 / 77, 7 / 28); holds 11 / 10 / 9, median 6.6
+   / 3.8 / 3.5 s.
+
+Same rooms at 10 and 25, normal and hard mode. With a player: his target counts as an attacker in the join, and he
+is never held (the hold latches in each bot's own tick), so a bot healer puts only held bots first; a human healer
+heals as he chooses. No shared code.
+
+**Next window should show:** `--brain` door lines in Stormwind and Icecrown with `staged` above 0 and fewer than 5-7
+`joined a tentacle`; `room shares` and `room states` with `staged`; melee on the Brain sooner than 14.0 s and the
+first hit sooner than 8.5 s after the door; Stormwind / Icecrown Brain per cycle above 13.4%. `heals in a hold` mostly
+on the held bot, `reprisal heal` rows by spell, hold medians under 6.6 / 3.8 / 3.5 s. Round 11's entry numbers no
+worse.
+
+**Seen, not picked.**
+
+- uld2's collapse: cycle 6 (Chamber) took 4.2% and cycle 7 started its hold from 33.1% with 16.7 s left and 26
+  tentacles up, survived at 31.3%, and the next team never opened a door; the brain hold cannot finish a slow cycle
+  (round 11's note again).
+- Healers still entered over 5 s late in 4 waves (uld1 6.1 and 12.2 s, uld2 8.2, uld3 6.8); not traced yet.
+- Uldxai's Reincarnation stood him up inside the phase 1 stack 0.2 s after a nova, and he died to the next one: three
+  deaths in uld1, the same bot as window 16's and window 19's two.

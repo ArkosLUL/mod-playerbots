@@ -252,6 +252,7 @@ PORTAL_DESPAWN_MS = 25000
 SPELL_PORTAL_CLICK_VISUAL = 51347
 SPENT_CLICK_WINDOW_MS = 300
 PORTAL_LATE_ENTRY_MS = 2000
+PLAN_ROUND_MS = 50
 PORTAL_NEAR_SPOT_YD = 8.0
 BODY_DETOUR_NODE = "yogg-saron body detour action"
 
@@ -1758,17 +1759,29 @@ def portal_walk_rows(trace: Trace) -> tuple[dict[int, list[tuple[int, str]]], di
     return intents, moves
 
 
+def plan_rounds(rows: list[tuple[int, int, int]], gap_ms: int = PLAN_ROUND_MS) -> dict[int, dict[int, int]]:
+    """`(t, guid, slot)` slot rows folded into plan rebuilds keyed by their first row, a row within `gap_ms` of the
+    rebuild's first joining it."""
+    rounds: dict[int, dict[int, int]] = {}
+    first = None
+    for when, guid, slot in sorted(rows):
+        if first is None or when - first > gap_ms:
+            first = when
+        rounds.setdefault(first, {})[guid] = slot
+    return rounds
+
+
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
     """Portals taken against bots told to take one. AddPortals spawns RAID_MODE(4, 10) per wave, one use each, so the
     gap is bots that walked to a used spot or, when the node never ran, never walked."""
     if not waves:
         return
 
-    assignments: dict[int, dict[int, int]] = {}
+    slot_rows = [(rec["t"], rec.get("g", 0), int(rec.get("txt", 0))) for rec in notes(trace, "yogg.portalslot")]
+    assignments = plan_rounds(slot_rows)
     slots: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
-    for rec in notes(trace, "yogg.portalslot"):
-        assignments.setdefault(rec["t"], {})[rec.get("g", 0)] = int(rec.get("txt", 0))
-        slots[rec.get("g", 0)].append((rec["t"], int(rec.get("txt", 0))))
+    for when, guid, slot in slot_rows:
+        slots[guid].append((when, slot))
     intents, moves = portal_walk_rows(trace)
 
     detours = sum(walks_while_holding(intents[guid], moves.get(guid, []), BODY_DETOUR_NODE) for guid in intents)

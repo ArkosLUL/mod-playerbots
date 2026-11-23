@@ -1822,6 +1822,10 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.exit_losses(verdicts, walks, casting, 60000), (10.0, 1, 8.0, 4.0))
         self.assertEqual(yogg_saron.exit_losses([(50000, "safe")], walks, casting, 60000), (None, 0, 0.0, 0.0))
 
+    def test_plan_rounds_fold_a_rebuild_that_crosses_a_millisecond(self):
+        rows = [(1000, 1, 0), (1000, 2, 1), (1001, 3, 2), (21000, 1, 3)]
+        self.assertEqual(yogg_saron.plan_rounds(rows), {1000: {1: 0, 2: 1, 3: 2}, 21000: {1: 3}})
+
     def test_heals_during_holds_count_only_the_held_bots_room(self):
         holds = {1: [(1000, 5000)]}
         rooms = {1: [("icecrown", 0, 9000)], 2: [("icecrown", 0, 9000)], 3: [("icecrown", 0, 9000)],
