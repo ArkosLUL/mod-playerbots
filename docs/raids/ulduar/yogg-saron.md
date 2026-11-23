@@ -551,12 +551,12 @@ tank's, since that one is about where the *Guardian* dies, which follows threat.
 **A Guardian's combat reach is 4** (display 28465, 0 before core `2026_11_06_01`), which moved it off both
 the stack test and the tank:
 
-- **Read a Guardian by its centre** (`GetExactDist2d`). `GetDistance2d` takes the 4 off, so the stack,
-  Sara-count and taunt tests read Guardians up to 10.5 yd out as on the stack and the raid killed them
-  there: over 12 pulls 7 of 10 deaths 8-10 yd out caught the back line, 2 of 73 inside 5.5. On the
-  station's side 6.5 leaves the spot 15.0 yd off, the nova's centre-to-centre reach there: every death
-  inside 15 yd of it hit the back line (11), none at 15.1-15.9 (8). The phase 1 AoE hold keeps the edge
-  read, since a player's area spell adds the target's reach.
+- **Read a Guardian by its centre** (`GetExactDist2d`). `GetDistance2d` takes the 4 off, so the stack
+  and taunt tests read Guardians up to 10.5 yd out as on the stack, the Sara count up to 19 as inside
+  15, and the raid killed them there: over 12 pulls 7 of 10 deaths 8-10 yd out caught the back line, 2
+  of 73 inside 5.5. On the station's side 6.5 leaves the spot 15.0 yd off, the nova's centre-to-centre
+  reach there: every death inside 15 yd of it hit the back line (11), none at 15.1-15.9 (8). The phase
+  1 AoE hold keeps the edge read, since a player's area spell adds the target's reach.
 - **A standing Guardian waits 2-6.2 yd off its tank** (median 3.7-4.7) on the side it came from, so a
   tank inside its 6.5 yd leash held Guardians out to ~12 yd. A bot tank holding one off the stack walks
   `…_P1_TANK_PULL_OFFSET` (1.5 yd) past the middle, opposite the lowest such Guardian, to within
@@ -695,9 +695,9 @@ so the two cannot disagree. `yogg.p1focus` records each change: `picked`, `parke
   too), and there is no `dps target` fallback. The taunt takes the lowest-health Guardian outside the
   leash, the parked one, or its bot tank pulls it ([Stations](#stations)), and inside 6.5 yd it is
   killable again. The floor covers the ~12 s fetch (taunt cooldown, the walk, a taunted Guardian
-  standing 2 s) against the ~1.7-3%/s an untargeted Guardian near the station loses to splash. Without a living bot tank nothing fetches, so the floor is off. The focus
-  is given up past **15 yd** for a killable one inside **6.5**, a gap that stops a boundary Guardian
-  flipping it.
+  standing 2 s) against the ~1.7-3%/s an untargeted Guardian near the station loses to splash. Without
+  a living bot tank nothing fetches, so the floor is off. The focus is given up past **15 yd** for a
+  killable one inside **6.5**, a gap that stops a boundary Guardian flipping it.
 - **The handover has no fetch, so no floor.** The tanks drag every Guardian off the stack to the anchor,
   where each would park at 35% with nothing to bring it back, and pulls killed 0-1 in the 18 s. So while
   `YoggSaronHandoverState(botAI).active` the floor is off and the focus is lowest first, the stack test
