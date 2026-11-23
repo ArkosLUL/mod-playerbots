@@ -1187,3 +1187,135 @@ drops the target (`AttackersValue::IsValidTarget` needs LOS) while `GetThorimDps
 25 yd trail walks them up (uld2: four ranged 2:18.9-2:23.5). Generic LOS handling, shared.
 
 **Questions for the user:** none new. The lane waypoint near y −360 stays pending and unbuilt.
+
+## Round 13 (window 19: build 99188e0f1 with round 12)
+
+**Data:** window 19, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-164646-6` (uld1),
+`tr-20261123-164525-4` (uld2), `tr-20261123-164546-5` (uld3); traces `env/dist/logs/botobs/603_{6,4,5}_thorim_{1795452448,1795452367,1795452388}.ndjson`,
+read through `raidtest.py report --boss thorim --raid uld --head 99188e0f1 --pulls 10` (its `thorim.py` lines), `thorim.py --phase2`,
+`postmortem.py`, round 7 and 12 scripts (`budget.py`, `seg.py`, `ev.py`, `botrow.py`, `colpos.py`) and new ones in session scratchpad
+`thorim_r13/` (`r12checks.py`, `leadstall.py`, `cohesion.py`, `chain.py`, `chainstats.py`, `ringat.py`, `thorimtrack.py`, `anchordrift.py`,
+`anchorgeo.py`, `relatch_geo.py`, `at.py`) over `snap`, `move`, `act`, `cast`, `aura`, `dmg` (64390) and `note` rows (`thorim.ringspot`,
+`thorim.leverpulled`, `thorim.p2start`, `thorim.sifjoined`). Windows 14-18 (15 pulls) re-read for the chains and the ring anchor.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795452448 | kill 5:52, normal (62565 3:15.4, phase 2 3:26.0) | phase 1: Rune Giant Stomp on a melee at the hold spot after a Rune Detonation (2:39.5) |
+| uld2 | 1795452367 | kill 6:17, normal (62565 3:21.0, phase 2 3:57.7) | phase 1: Dark Rune Champion Mortal Strike on an arena healer (1:59.1) |
+| uld3 | 1795452388 | wipe 5:28, **hard mode** (phase 2 3:15.1, deadline 62507 + 150 s = 3:23.1) | one Chain Lightning cast at 4:12.2 (P2 +57 s): both tanks and two melee (3 by its blow, the holder by the next swing); the tanks' second lives: Unbalancing Strike 1 (4:22.8), Thorim melee 1 (5:03.6); then Thorim melee on non-tanks 24, Unbalancing Strike on a healer 1, Lightning Charge 1 |
+
+**Round 12 verdict: both fixes held.**
+- **Hold walk:** the first hold move was accepted −0.27 / +0.09 / −0.26 s from the Giant's engage (w18 refused 2.7-3.0 s); no `wait` aimed at the
+  hold spot until the leader stood on it (uld1's one, 2:30.7, came behind a `reach melee` booking after he arrived); westmost leader position
+  after the engage x 2158.2 / 2156.5 / 2159.0 (w18 2134.7-2140); leader on the spot +4.3 / +7.7 / +10.7 s (w18 12.2-15.1); his lowest health
+  67 / 38 / 43% (w18 22-29%). Honor Guards + Acolyte + Giant 51.2 / 55.8 / 53.2 s (w18 59.7 / 55.5 / 53.0): shorter only in uld1.
+- **Colossus stop:** the lead move to his own position 0.3 s after the leader reached his stop (36.5-37.1 yd exact) in uld1 and uld3; in uld2 the
+  leader arrived as the trash died and went straight in; no `dup` row. "To Colossus" 9.5 / 1.5 / 5.8 s (w18 12.1 / 7.2 / 13.0).
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 169.9 / 169.8 / 169.9 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w19 uld1 | 0.2 | 17.2 | 45.7 | 9.5 | 30.5 | 4.8 | 51.2 | 21.5 | 180.5 | +10.6 |
+| w19 uld2 | 0.2 | 17.0 | 61.5 | 1.5 | 36.5 | 10.9 | 55.8 | 23.2 | 206.5 | +36.7 |
+| w19 uld3 | 0.1 | 12.3 | 40.2 | 5.8 | 24.0 | 5.6 | 53.2 | 20.8 | 161.9 | made by 8.0 |
+| w18 uld1 / 2 / 3 | 1.6 / 0.5 / 0.05 | 13.0-15.0 | 39.0 / 49.2 / 48.7 | 12.1 / 7.2 / 13.0 | 32.7 / 30.0 / 21.3 | 5.1-7.5 | 59.7 / 55.5 / 53.0 | 22.8 / 21.9 / 20.5 | 185.6 / 183.9 / 178.6 | +17.1 / +14.4 / +8.5 |
+| w16 uld1 / 2 / 3 | 0.1-0.2 | 14.6-15.2 | 46.8 / 34.5 / 41.0 | 9.5 / 9.3 / 7.3 | 35.7 / 31.4 / 32.6 | 3.8-8.5 | 53.5 / 59.3 / 54.3 | 18.7 / 16.8 / 16.5 | 182.6 / 171.8 / 174.8 | +12.7 / +1.9 / +4.9 |
+
+uld3 is the fastest lever-to-phase-2 since window 12 (156.2 s) and the first hard mode since window 15.
+
+**Why uld2's phase 2 came at 3:58** (+44.6 s against uld3, budget missed by 36.7 s):
+- **Corridor +21.3 s.** Pack 1 died ~1:12.9 and pack 2 engaged at 1:33.0. The leader stepped to the right lane's waypoints 2 (1:14.4) and 3
+  (1:17.6); the squad stood on waypoints 0 (five ranged) and 1 (four melee), 31-43 yd behind, with no move order from 1:20.8 to 1:27.1, while his
+  lead step held on the 30 yd cohesion check (`ThorimGauntletLeadStep`, `UldEncounter_Thorim.cpp:1760` after this round) for up to its 15 s
+  stall. A Runic Smash dodge at 1:27.1 moved everyone to the left lane and broke it. Cause: `ThorimGauntletPositioningTrigger`
+  (`UldTriggers_Thorim.cpp:53`) moved only bots standing off the lane to the leader's waypoint; a bot standing at an earlier waypoint of the lane
+  never moved, and waypoints 2-5 have overlapping radii, so a leader walking 2 → 3 never left the lane for the trail branch. `leadstall.py`
+  (leader idle on a lane waypoint, no engaged corridor mob, a squad non-healer past 30 yd, followers in the lane behind him): 7.5 / 2.7 / 1.0 s in
+  window 19, 1.3 s in w18 uld2, 1.0 s in w15 uld3. Plus 5.9 s at waypoint 0 waiting for the squad from the gate (0:41.7-0:47.7).
+- **Colossus +12.5 s.** He lost only 4% in the first 9 s after the pull (the squad walks in from the last waypoints, the pending lane waypoint
+  question), then charged north at 2:11 and was finished at y −363..−370, so the ramp walk started 40 yd north of his spawn: **ramp +5.3 s**.
+- Honor Guards + Acolyte + Giant +2.6 s, balcony +2.4 s, walk to trash +4.7 s.
+
+**uld3's hard-mode wipe: not the windows 14-15 pattern.** The aftermath is the same (24 non-tanks to Thorim's melee once no tank stood), but the
+tanks did not fall to the race: at 4:11.8 both tanks stood at 93-100% health, healers at full health with 41-60% mana, Thorim at 75.8%. One
+Chain Lightning (cast 4:11.71 on a melee) hit 8 players at ×1.35-1.6 per hop (`EffectChainAmplitude`, boss doc): three slot-1 melee stacked at
+(2114.5, −260.5), then a 7.6 yd hop (likely through Uldzal's pet, 2.6 yd from the last melee) to slot 2's Uldzam and Uldzat, then Uldzax 4.3 yd on, then the holder
+4.0 yd on (61.5k) and the waiting tank 3.5 yd on (92.4k). Windows 14-15's first tank death came at +82-103 s with healers at 47% mana or a
+healer down to Blizzard.
+
+**Root cause: the ring anchor was stale.** `SolveRingBearings` latches `ringAnchor` once, at Thorim's landing (144° to the tank spot), and never
+again. At 4:01.8 the waiting tank taunted from the west off-tank spot; Thorim walked to him and, once the taunter walked back east to the tank
+spot, rested 1.6 then (4:07.6) 4.5 yd south-west of it, where the bearing to the tank spot is 44°. Slot 2's solved bearing 54° then put its point
+4.4 yd from the holder: the slot stood behind the tanks. The round 8 move of the off-tank spot west is what lets a taunt re-seat him on that
+side; before it (windows 12-14) he rested south-east in 100% of settled snapshots:
+
+| Pulls | Thorim south-west of the tank spot | latched slot point within 8 yd of a tank spot (replay) | reader: holder within 8 yd of a ring body |
+|---|---|---|---|
+| w18 uld1, w16 uld2, w16 uld3, w15a uld2 | 89 / 94 / 90 / 61% of settled snapshots | 89 / 94 / 90 / 61% | 80.2 / 12.8 / 67.6 / 47.8% |
+| w19 uld3, w15 uld1 | 13 / 1% | 24 / 96% | 47.0 / 71.4% |
+| the other nine post-round-8 pulls | 0% | 0% in six; 100 / 100 / 90% in w16 uld1, w15a uld1, w15a uld3 | 8.9-36.3%; 92.7 / 88.0 / 36.3% |
+
+The long chains of windows 15-19 run through such a slot or across a pet: w16 uld3 (8 hops, tanks 7th and 8th at 49k and 64k, one death),
+w15a uld1 (8, two deaths), w15 uld1 (7, four deaths). Each of these crossed a 9-12 yd gap no player hop can make (8 yd with both reaches), so
+pets bridge slots too; uld3's 7.6 yd hop had Uldzal's pet 2.6 yd from the last melee.
+
+**Classification: bug.** The ring's slots are meant at +90 / +180 / +270° from the tank side, leaving it clear (boss doc); a latch taken on the
+other side of the tank spot puts a slot on it.
+
+**Stop rules:** not polished (one hard-mode pull, a wipe). Not stuck: rounds 3-13 picked eleven different causes; round 12's both held.
+
+**Failure ranking:** the uld3 phase 2 wipe, 32 deaths, triggered by the chain through the stale-anchored slot (4 deaths in the cast, the rest
+Thorim loose); then one phase 1 death each in uld1 (Stomp at the hold) and uld2 (arena Champion). On Sif's clock: uld2's corridor stall (7.5 s,
+independent and small, fixed as the second), the Colossus walk-in (the pending question), uld2's charged Colossus.
+
+**Fix** (Thorim files only, no size, mode or player branch):
+1. **Ring anchor.** `RingAnchorBearing` (`UldEncounter_Thorim.cpp:546`) aims at the midpoint of the tank and off-tank spots, so the tank side is
+   the pair. `RelatchRingAnchor` (`:843`, from `SolveRingBearings` every 500 ms solve, `:927`): with Thorim not moving and a tank (bot or human)
+   holding him, when a latched slot point (8.8 yd round his live position) lies within 8 yd (`ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` + 2 ×
+   `DEFAULT_COMBAT_REACH`) of either tank spot and the live anchor's ring clears the spots by at least `ULDUAR_THORIM_RING_ANCHOR_GAIN` (0.5 yd)
+   more, it re-latches: each slot takes the new +90 / +180 / +270 bearing of the permutation whose largest turn from its composed bearing is
+   smallest (ties: least total), and the arrival latches drop (erased one by one, so `thorim.ringarrived` records it). Replay over 18 pulls
+   (`relatch_geo.py`): latched slot point within 8 yd of a tank spot 42.3% of settled snapshots → 2.0%, 0-3 re-latches a pull, none in eight
+   of the nine pulls already clear (w18 uld3: two in the opening). Rejected: a bearing threshold (25°: 16%, 35°: 29%; at 4-6 yd, 20° of drift
+   already brings a slot within the jump) and
+   the tank spot alone as anchor (the waiting tank 6.4-7.0 yd from a slot whenever he sits south-west; the midpoint 8.2-9.0, 7.7 at his deepest).
+   In uld3 it would have re-latched at 4:07.6 (slot 2's three melee turning 100°, ~13.5 yd), 4.1 s before the chain.
+2. **Lane followers.** `ThorimGauntletPositioningTrigger` (`UldTriggers_Thorim.cpp:81`) also fires for a squad bot standing in the lane at an
+   earlier waypoint than the leader's, unless it is fighting (`ThorimGauntletFighting`: its target a gauntlet mob in combat within 50 yd); the
+   action already walks it to the leader's waypoint. The boss doc's intent: followers take the leader's waypoint.
+
+**Next window should show:**
+- Ring: `thorim.ringspot` `bearing` (the latched one) changing for all slots at once only where Thorim settled with a latched slot point within
+  8 yd of a tank spot: none in a pull where he rests south-east, 1-3 where he settles south-west. Latched slot point within 8 yd of a tank spot
+  (from the notes' `bearing` and his position) in under ~5% of settled snapshots (42% before; 61-94% in the four south-west pulls). Reader:
+  holder within 8 yd of a ring body at or under ~35% in every pull (47-93% in the drifted pulls); no Chain Lightning with both tanks in it after
+  four or more ring bodies. Watch: melee on Thorim to +100 s still ~100%, moves per ring bot a minute (2.6-3.5, 8.1 in w19 uld3) up by at most
+  one walk per re-latch; a re-latch while he is being dragged (it should never fire with him moving).
+- Corridor: `leadstall.py`'s in-lane-behind spans gone (7.5 / 2.7 / 1.0 s), a `thorim gauntlet positioning action` move to the leader's
+  waypoint from a follower standing behind him in the lane within ~1 s of his waypoint index advancing; the corridor trash no longer 61.5 s
+  from a stall. Watch: a follower walking into pack 2 ahead of the leader's engage, or pulled off a live corridor mob (the fighting gate).
+- Hard mode still only on the faster pulls; the Colossus walk-in (pending question) and pet bridges remain.
+
+**Seen, not picked:**
+- **Pets bridge ring slots.** The 7-8 hop chains of windows 15-16 each crossed a 9-12 yd gap between slots that only a pet can make (the
+  recorder logs no pet damage). Pets are chased onto their slot bearing at range 0 (~6.5-7 yd from him) within 22.5°, so two adjacent slots' pets can sit
+  ~5.4 yd apart. Next-round candidate if the re-latch does not stop the long chains.
+- uld2's Colossus charged north at 2:11 (49%) and was finished at y −363..−370; the leader then started the ramp walk 40 yd north of the spawn.
+
+**Questions for the user:** none new. The lane waypoint near y −360 stays pending and unbuilt.
+
+**Review (round 13).** The anchor cause holds: in uld3 Thorim stood 4.54 yd from the tank spot at bearing 44° from 4:07.6 to the cast,
+slot 2 latched at 54° (`thorim.ringspot`), its point 4.4 yd from the holder, Uldzax on it and 4.0 yd from him; the 64390 cast at
+4:11.71 hit 8 and killed Uldzat, Uldzax and Uldzaa, then Uldzab on the next swing. `relatch_geo3.py` (the code's rule: no distance
+gate, 0.5 yd gain) rerun on the 18 pulls gives 42.3% → 2.0% at 0-3 re-latches a pull; with the midpoint anchor at landing too
+(scratchpad `thorim_r13_review/relatch_midland.py`) 1.2%, 19 re-latches. The snapshot's moving flag is the `isMoving()` the code
+reads, so the replay's settle test is the code's. Corridor: in uld2 the leader stood on right lane waypoint 3 from 1:19.7 to 1:27.2
+with five ranged on waypoint 0 and four melee on 1, and both healers stopped on waypoint 2 once inside it (no positioning move after
+1:20.8), which is the in-lane gap. Both are bugs against the doc's intent (tank side clear, followers on the leader's waypoint); no
+size, mode or player branch (a real tank or gauntlet leader takes the same path); Thorim files only; no comments. `pb-check` passes.
+Fixed: the findings doc still said the ring "cannot rotate as the boss shuffles", above the re-latch paragraph.
+
+Left: the re-latch has no settle time, so a stop mid-drag can fire it (in the replay's 0-3 a pull; w18 uld3 two in the opening). In
+uld3's re-latch slot 2 turns 100° and its straight walk passes ~2.6 yd from the off-tank spot for ~2 s: watch chains during re-latch
+walks next window.

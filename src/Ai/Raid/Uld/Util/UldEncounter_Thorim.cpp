@@ -545,8 +545,11 @@ bool MeleeSlotOf(Player* bot, uint8& slot)
 
 float RingAnchorBearing(Unit* boss)
 {
-    return std::atan2(ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionY() - boss->GetPositionY(),
-                      ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionX() - boss->GetPositionX());
+    float const x =
+        (ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionX() + ULDUAR_THORIM_PHASE2_OFFTANK_SPOT.GetPositionX()) / 2.0f;
+    float const y =
+        (ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionY() + ULDUAR_THORIM_PHASE2_OFFTANK_SPOT.GetPositionY()) / 2.0f;
+    return std::atan2(y - boss->GetPositionY(), x - boss->GetPositionX());
 }
 
 float SlotBearing(float anchor, uint8 slot)
@@ -829,6 +832,72 @@ bool RingBearingSeparated(float candidate, uint8 slot,
     return true;
 }
 
+float RingPointTankClearance(Unit* boss, float bearing)
+{
+    float const x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
+    float const y = boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
+    return std::min(ULDUAR_THORIM_PHASE2_TANK_SPOT.GetExactDist2d(x, y),
+                    ULDUAR_THORIM_PHASE2_OFFTANK_SPOT.GetExactDist2d(x, y));
+}
+
+void RelatchRingAnchor(ThorimEncounterState& state, Unit* boss)
+{
+    Unit* const victim = boss->GetVictim();
+    Player* const holder = victim ? victim->ToPlayer() : nullptr;
+    if (boss->isMoving() || !holder || !PlayerbotAI::IsTank(holder))
+        return;
+
+    float const tankClearance = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + 2.0f * DEFAULT_COMBAT_REACH;
+    float const anchor = RingAnchorBearing(boss);
+    float held = std::numeric_limits<float>::max();
+    float fresh = std::numeric_limits<float>::max();
+    for (uint8 slot = 0; slot < ULDUAR_THORIM_MELEE_SLOTS; ++slot)
+    {
+        held = std::min(held, RingPointTankClearance(boss, state.ringSlots[slot].latched));
+        fresh = std::min(fresh, RingPointTankClearance(boss, SlotBearing(anchor, slot)));
+    }
+
+    if (held >= tankClearance || fresh < held + ULDUAR_THORIM_RING_ANCHOR_GAIN)
+        return;
+
+    std::array<uint8, ULDUAR_THORIM_MELEE_SLOTS> order{};
+    for (uint8 slot = 0; slot < ULDUAR_THORIM_MELEE_SLOTS; ++slot)
+        order[slot] = slot;
+
+    std::array<uint8, ULDUAR_THORIM_MELEE_SLOTS> best = order;
+    float bestWorst = std::numeric_limits<float>::max();
+    float bestTotal = std::numeric_limits<float>::max();
+    do
+    {
+        float worst = 0.0f;
+        float total = 0.0f;
+        for (uint8 slot = 0; slot < ULDUAR_THORIM_MELEE_SLOTS; ++slot)
+        {
+            float const turn = AbsAngleDelta(state.ringSlots[slot].composed, SlotBearing(anchor, order[slot]));
+            worst = std::max(worst, turn);
+            total += turn;
+        }
+
+        if (worst < bestWorst || (worst <= bestWorst && total < bestTotal))
+        {
+            best = order;
+            bestWorst = worst;
+            bestTotal = total;
+        }
+    } while (std::next_permutation(order.begin(), order.end()));
+
+    state.ringAnchor = anchor;
+    for (uint8 slot = 0; slot < ULDUAR_THORIM_MELEE_SLOTS; ++slot)
+    {
+        state.ringSlots[slot].latched = SlotBearing(anchor, best[slot]);
+        state.ringSlots[slot].composed = state.ringSlots[slot].latched;
+    }
+
+    std::vector<ObjectGuid> const arrived(state.ringArrived.begin(), state.ringArrived.end());
+    for (ObjectGuid const& guid : arrived)
+        state.ringArrived.erase(guid);
+}
+
 void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -854,6 +923,8 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 
     state.ringOrb = orbGuid;
     state.ringSolveMs = getMSTime();
+
+    RelatchRingAnchor(state, boss);
 
     float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
     std::vector<Position> const& zones = ThorimBlizzardSpots(bot);
