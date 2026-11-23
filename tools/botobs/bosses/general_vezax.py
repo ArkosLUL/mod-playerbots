@@ -67,6 +67,7 @@ BAND_CEILING = 28.5 + COMBAT_REACH + 1.5
 ANIMUS_COMBAT_REACH = 7.0
 ANIMUS_REACH_CEILING = 28.5 + ANIMUS_COMBAT_REACH + 1.5
 REACH_SPELL = "reach spell"
+RUN_SPEED = 7.0
 
 # ULDUAR_VEZAX_GROUP_SLOTS, a product of two uint8 constants the float parser cannot read: slots
 # [0,10) are group L and [10,20) group R.
@@ -449,6 +450,22 @@ def walk_meets_impact(impact, start, dest) -> bool:
     return nearest <= WALK_CLEARANCE and nearest < dist2(start, impact)
 
 
+def blast_exit_walk(start, dest, impact) -> float:
+    dx, dy = dest[0] - start[0], dest[1] - start[1]
+    length = math.hypot(dx, dy)
+    if not length:
+        return math.inf if dist2(start, impact) < IMPACT_RADIUS else 0.0
+    fx, fy = start[0] - impact[0], start[1] - impact[1]
+    along = (fx * dx + fy * dy) / length
+    disc = along * along - (fx * fx + fy * fy - IMPACT_RADIUS * IMPACT_RADIUS)
+    if disc <= 0:
+        return 0.0
+    enter, leave = -along - math.sqrt(disc), -along + math.sqrt(disc)
+    if leave <= 0 or enter >= length:
+        return 0.0
+    return math.inf if leave > length else leave
+
+
 def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     """Every Shadow Crash. `masked` is what else he cast while the missile flew: on a build that read
     the impact off his current spell, that cast took the slot and the crash landed unseen."""
@@ -487,6 +504,15 @@ def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             if here and walk_meets_impact((x, y), here[1:3], (rec["x"], rec["y"])):
                 walk_ins.append(rec)
 
+        late = []
+        for rec in dodges:
+            if not (cast <= rec["t"] <= impact and rec.get("ok") and not rec.get("r") and rec.get("x") is not None):
+                continue
+            here = samples.row(rec["g"], rec["t"])
+            if here and (blast_exit_walk(here[1:3], (rec["x"], rec["y"]), (x, y)) / RUN_SPEED
+                         > (impact - rec["t"]) / 1000.0):
+                late.append(rec)
+
         out.append({
             "cast": cast,
             "impact": impact,
@@ -496,6 +522,7 @@ def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             "hits": [rec for rec in hits if impact - 500 <= rec["t"] <= impact + 1500],
             "masked": [spell for when, spell in his if cast < when < impact],
             "walk_ins": walk_ins,
+            "late": late,
         })
     return out
 
@@ -526,13 +553,14 @@ def show_crash(trace: Trace) -> None:
 
     size = {name: sum(1 for block in blocks(trace).values() if block == name) for name in ("L", "R")}
     print(f"  {'impact':>9} {'target':14} {'blk':4} {'L dodged':>9} {'R dodged':>9} {'his cast in flight':22}"
-          f" {'in':>3} {'hits':>5}")
+          f" {'in':>3} {'late':>4} {'hits':>5}")
     for row in rows:
         victims = ", ".join(trace.name(rec.get("d")) for rec in row["hits"])
         masked = ", ".join(trace.spell(spell).rsplit(" ", 1)[0] for spell in row["masked"]) or "-"
         print(f"  {clock(row['impact']):>9} {trace.name(row['target'])[:14]:14} {row['block']:4}"
               f" {len(row['dodged']['L']):4} of {size['L']:<2} {len(row['dodged']['R']):4} of {size['R']:<2}"
-              f" {masked[:22]:22} {len({rec['g'] for rec in row['walk_ins']}):3} {len(row['hits']):5}  {victims}")
+              f" {masked[:22]:22} {len({rec['g'] for rec in row['walk_ins']}):3}"
+              f" {len({rec['g'] for rec in row['late']}):4} {len(row['hits']):5}  {victims}")
 
     both = sum(1 for row in rows if row["dodged"]["L"] and row["dodged"]["R"])
     mean = statistics.mean(len(row["dodged"]["L"]) + len(row["dodged"]["R"]) for row in rows)
@@ -548,6 +576,10 @@ def show_crash(trace: Trace) -> None:
     print(f"  {sum(movers.values())} walk(s) toward a landing impact by: "
           + (", ".join(f"{by} {count}" for by, count in movers.most_common()) or "-")
           + f"; {walked_hit} of {sum(len(row['hits']) for row in rows)} hit(s) on a bot that took one")
+    late = [(row, {rec["g"] for rec in row["late"]}) for row in rows]
+    print(f"  {sum(len(bots) for _, bots in late)} bot(s) whose dodge could not leave the blast by the landing at"
+          f" {RUN_SPEED:.0f} yd/s, {sum(1 for row, bots in late for rec in row['hits'] if rec.get('d') in bots)}"
+          " of them hit")
     issued, left = evictions(trace, samples)
     if issued:
         print(f"  {left} of {issued} dodges issued from inside a field were aimed outside every field")

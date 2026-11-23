@@ -660,6 +660,46 @@ float VezaxDistanceToWalk(Position const& point, Position const& from, Position 
 
     return point.GetExactDist2d(from.GetPositionX() + dx * along, from.GetPositionY() + dy * along);
 }
+
+float VezaxBlastExitWalk(Position const& from, Position const& to, Position const& impact)
+{
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    float const length = std::hypot(dx, dy);
+    float const radius = ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS;
+    if (length <= 0.0f)
+        return from.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) < radius
+                   ? std::numeric_limits<float>::max()
+                   : 0.0f;
+
+    float const fx = from.GetPositionX() - impact.GetPositionX();
+    float const fy = from.GetPositionY() - impact.GetPositionY();
+    float const along = (fx * dx + fy * dy) / length;
+    float const discriminant = along * along - (fx * fx + fy * fy - radius * radius);
+    if (discriminant <= 0.0f)
+        return 0.0f;
+
+    float const root = std::sqrt(discriminant);
+    float const enter = -along - root;
+    float const leave = -along + root;
+    if (leave <= 0.0f || enter >= length)
+        return 0.0f;
+
+    return leave > length ? std::numeric_limits<float>::max() : leave;
+}
+
+bool VezaxDodgeClearsInTime(Player* bot, Position const& impact, Position const& spot)
+{
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(bot->GetInstanceId());
+    if (!state || !state->crashWindowMs)
+        return true;
+
+    uint32 const flightMs = state->crashWindowMs - ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS;
+    uint32 const elapsedMs = getMSTimeDiff(state->crashCastMs, getMSTime());
+    float const leftSeconds = elapsedMs < flightMs ? static_cast<float>(flightMs - elapsedMs) / 1000.0f : 0.0f;
+
+    return VezaxBlastExitWalk(bot->GetPosition(), spot, impact) <= bot->GetSpeed(MOVE_RUN) * leftSeconds;
+}
 }
 
 bool VezaxWalkMeetsShadowCrash(PlayerbotAI* botAI, Position const& destination)
@@ -978,6 +1018,8 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 
     uint8 slotIndex = 0;
     Position slot;
+    Position late;
+    char const* lateKind = nullptr;
     if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex) && TryGetVezaxSlotPosition(bot, slotIndex, slot))
     {
         PullVezaxSlotIntoAnimusReach(bot, vezax, slot);
@@ -986,19 +1028,36 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
                                                               : -ULDUAR_VEZAX_CAMP_STRAFE;
         Position strafed = VezaxCampPosition(slot, 0.0f, strafe);
 
-        if (TryGetVezaxStrafeInAnimusReach(bot, strafed, impact, spot))
+        Position pulled;
+        if (TryGetVezaxStrafeInAnimusReach(bot, strafed, impact, pulled))
         {
-            RaidObs::NoteDerived(bot, "vezax.dodge", "pulled");
-            return true;
+            if (VezaxDodgeClearsInTime(bot, impact, pulled))
+            {
+                RaidObs::NoteDerived(bot, "vezax.dodge", "pulled");
+                spot = pulled;
+                return true;
+            }
+
+            late = pulled;
+            lateKind = "pulled";
         }
 
         if (VezaxPlaceOnFloor(bot, strafed) &&
             strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=
                 ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
         {
-            RaidObs::NoteDerived(bot, "vezax.dodge", "strafe");
-            spot = strafed;
-            return true;
+            if (VezaxDodgeClearsInTime(bot, impact, strafed))
+            {
+                RaidObs::NoteDerived(bot, "vezax.dodge", "strafe");
+                spot = strafed;
+                return true;
+            }
+
+            if (!lateKind)
+            {
+                late = strafed;
+                lateKind = "strafe";
+            }
         }
     }
 
@@ -1009,11 +1068,15 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 
     if (candidate == Position())
     {
-        RaidObs::NoteDerived(bot, "vezax.dodge", "none");
-        return false;
+        RaidObs::NoteDerived(bot, "vezax.dodge", lateKind ? lateKind : "none");
+        if (!lateKind)
+            return false;
+
+        spot = late;
+        return true;
     }
 
-    RaidObs::NoteDerived(bot, "vezax.dodge", "search");
+    RaidObs::NoteDerived(bot, "vezax.dodge", lateKind ? "late" : "search");
     spot = candidate;
     return true;
 }

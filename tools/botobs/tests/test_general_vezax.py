@@ -178,6 +178,13 @@ class SyntheticPull(unittest.TestCase):
         self.assertFalse(gv.walk_meets_impact((30.0, 0.0), (15.0, 15.0), (45.0, 15.0)))
         self.assertFalse(gv.walk_meets_impact((30.0, 0.0), (25.0, 5.0), (15.0, 15.0)))
 
+    def test_a_late_dodge_leaves_the_blast_only_after_the_landing(self):
+        self.assertEqual(gv.crashes(self.trace)[0]["late"], [])
+        self.assertAlmostEqual(gv.blast_exit_walk((21.0, 0.0), (45.0, 0.0), (30.0, 0.0)), 19.0)
+        self.assertAlmostEqual(gv.blast_exit_walk((21.0, 0.0), (5.0, 0.0), (30.0, 0.0)), 1.0)
+        self.assertEqual(gv.blast_exit_walk((45.0, 0.0), (60.0, 0.0), (30.0, 0.0)), 0.0)
+        self.assertEqual(gv.blast_exit_walk((21.0, 0.0), (35.0, 0.0), (30.0, 0.0)), float("inf"))
+
     def test_a_star_on_a_vapor_is_counted_though_nobody_targeted_it(self):
         self.assertEqual(gv.vapor_hits(self.trace), {(TREE, 53190): [9500]})
 
