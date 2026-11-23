@@ -427,10 +427,10 @@ it:
   chasing drags Vezax off it, so whoever the Animus is hitting walks to within 3 yd of him, which leaves
   the Animus following it in his melee range, and the position node stands down for that bot; it had
   walked him back 5 times from the chase. This walk and the melee spot are forced, like the soak.
-  Reach melee and charges hold for the main tank while the Animus stands farther from the anchor than
-  his melee range plus his 3 yd slot tolerance (`vezax main tank anchor hold`): a warrior main tank ran
-  and charged 21-37 yd after a loose one, and walking back past Vezax left him 15.7 yd north for the
-  rest of the phase.
+  Reach melee, charges and Intervene hold for the main tank while the Animus stands farther from the
+  anchor than his melee range plus his 3 yd slot tolerance (`vezax main tank anchor hold`): a warrior
+  main tank ran and charged 21-37 yd after a loose one, and walking back past Vezax left him 15.7 yd
+  north for the rest of the phase; Intervene on its victim took one 36 yd out.
 - **Melee stay inside his crash limit** (`vezax animus melee spot`), the 17.1 yd skip, measured 3D
   (`EVENT_SPELL_VEZAX_SHADOW_CRASH`'s `SelectTarget`): no crash in 34 before the spawn went to melee or a
   tank, 6 of 16 after. The Animus (reach 8 then, 7 now) takes his spot by the tank, he steps 8-9 yd

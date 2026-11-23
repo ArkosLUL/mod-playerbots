@@ -789,3 +789,21 @@ warrior main tank) has lost the Animus early, in windows 15 and 17.
 three pulls had one, two from the opener (12.6 and 14.0 yd), against one in window 15. With the healer
 walks back, healers cross the Mark floor in a north settle as before round 6; Q1 (b) (main tank ~10 yd
 north of the anchor) would end both the ranged and the healer reach problem.
+
+**Review.** Both causes hold. w17 uld2 (`603_2_general-vezax_1795444791`, `vezax-r7-review/chase.py`,
+`vezaxdrift.py`): Uldyaa passed 1.9 yd from Vezax's centre going out (3:25.8) and 2.4 coming back
+(3:32.8), his victim throughout; Vezax moved only after the second, 9.9 → 15.7 yd north over 3:32.7-3:39.2.
+Under the hold only the first reach steps fire (the Animus 7.8-12 yd from the anchor), ending 3-7 yd north
+of it, and the returned Animus stood 8.4 yd from him (w15 uld2: 8.1), inside his 9.8 yd melee range.
+`mtheals.py` re-run: main tank healed 3576/s (w15 uld3, 132 heals) against 2368/s (w17 uld3, 74) over
+69 s. No size, mode or player branch: a real player runs no rule, and one the Animus hits walks it in
+as the bot victims do. `pb-check` passes.
+
+- Review fix: Intervene escaped the hold. It is a `CastProtectSpellAction` (`protect party member` at
+  `ACTION_EMERGENCY`: a non-tank under 30% whose attacker is within 30 yd of it), not `Family::Charge`;
+  in window 14 uld2 (`603_18_general-vezax_1795429556`, `vezax-r7-review/intervene.py`) Uldyaa
+  intervened onto the Animus's victim Uldyav at 4:33.6, from 14.7 to 36.1 yd off the anchor, right
+  after a charge. `intervene` joins the hold's names; findings doc updated.
+- Left: the hold measures the Animus from the anchor, not from the main tank, who may park up to 6 yd
+  off it (twice his tolerance), so a returned Animus just out of his melee range on his far side from the
+  anchor gets no step from him. Not seen: returns stood 8.1-8.4 yd from him with him on the anchor.
