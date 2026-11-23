@@ -23,6 +23,15 @@ public:
     bool IsActive() override;
 };
 
+class MimironUnreachableTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "mimiron unreachable trigger";
+
+    MimironUnreachableTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class MimironPhase1PositioningTrigger : public Trigger
 {
 public:

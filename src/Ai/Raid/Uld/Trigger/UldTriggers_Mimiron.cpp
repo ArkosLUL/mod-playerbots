@@ -55,6 +55,8 @@ bool MimironShockBlastTrigger::IsActive()
     return bot->GetExactDist2d(boss) < ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
 }
 
+bool MimironUnreachableTrigger::IsActive() { return GetMimironUnreachableMech(botAI, bot) != nullptr; }
+
 bool MimironPhase1PositioningTrigger::IsActive()
 {
     if (!PlayerbotAI::IsRanged(bot))

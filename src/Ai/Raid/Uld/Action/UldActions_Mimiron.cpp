@@ -93,6 +93,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedShock = 0;
     uint32 refusedSpray = 0;
     uint32 refusedMove = 0;
+    uint32 refusedHold = 0;
 
     if (interrupt)
         bot->CastStop();
@@ -100,9 +101,11 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     UpdateMovementState();
     if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
     {
-        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0);
         return false;
     }
+
+    float const holderRadius = GetMimironHolderRadius(botAI, bot);
 
     float const speed = bot->GetSpeed(MOVE_RUN);
     float const away = from.GetAngle(bot->GetPositionX(), bot->GetPositionY());
@@ -239,6 +242,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                     continue;
                 }
 
+                if (!IsMimironSpotHolderSafe(holderRadius, dest))
+                {
+                    ++refusedHold;
+                    continue;
+                }
+
                 if (!IsMimironSpotFireBotSafe(bot, hazards, dest,
                                               sirenScreen ? ULDUAR_MIMIRON_FIREBOT_SIREN_STAND : 0.0f,
                                               ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
@@ -258,7 +267,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 {
                     NoteFleeOutcome(what, "ok", &offAway, refusedBack, refusedMine, refusedCone, refusedFire,
                                     refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray,
-                                    refusedMove);
+                                    refusedMove, refusedHold);
                     return true;
                 }
 
@@ -274,7 +283,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                        refusedHold);
         return false;
     }
 
@@ -285,15 +295,18 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         !IsMimironSpotBombSafe(hazards, straightAway) ||
         !IsMimironSpotRocketSafe(botAI, straightAway) ||
         !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel) ||
-        IsMimironSpotInFireBotSpray(hazards, straightAway, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
+        IsMimironSpotInFireBotSpray(hazards, straightAway, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH) ||
+        !IsMimironSpotHolderSafe(holderRadius, straightAway))
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                        refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                        refusedHold);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                    refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove);
+                    refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
+                    refusedHold);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -307,7 +320,7 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
                                         uint32 refusedFire, uint32 refusedBomb, uint32 refusedRocket,
                                         uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,
-                                        uint32 refusedMove)
+                                        uint32 refusedMove, uint32 refusedHold)
 {
     if (!RaidObs::Active())
         return;
@@ -318,9 +331,9 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
 
     char line[192];
     snprintf(line, sizeof(line),
-             "%s %s%s (back%u mine%u cone%u fire%u bomb%u rocket%u burst%u shock%u spray%u move%u)", what,
-             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb, refusedRocket,
-             refusedBurst, refusedShock, refusedSpray, refusedMove);
+             "%s %s%s (back%u mine%u cone%u fire%u bomb%u rocket%u burst%u shock%u spray%u move%u hold%u)",
+             what, outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
+             refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove, refusedHold);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -365,6 +378,33 @@ bool MimironShockBlastAction::isUseful()
 {
     MimironShockBlastTrigger mimironShockBlastTrigger(botAI);
     return mimironShockBlastTrigger.IsActive();
+}
+
+bool MimironUnreachableStepAction::Execute(Event /*event*/)
+{
+    Unit* mech = GetMimironUnreachableMech(botAI, bot);
+    if (!mech)
+        return false;
+
+    float const centreX = ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX();
+    float const centreY = ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY();
+    float const reach = mech->GetCombatReach() + bot->GetCombatReach() + ULDUAR_MIMIRON_UNREACH_STEP_MARGIN;
+    float const bearing =
+        mech->GetExactDist2d(centreX, centreY) > reach ? mech->GetAngle(centreX, centreY) : mech->GetAngle(bot);
+
+    Position const dest(mech->GetPositionX() + reach * std::cos(bearing),
+                        mech->GetPositionY() + reach * std::sin(bearing), bot->GetPositionZ());
+    if (bot->GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) <= ULDUAR_MIMIRON_UNREACH_ARRIVED)
+        return false;
+
+    return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, false, false, "unreach") ||
+           MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, false, false, "unreach fire", true);
+}
+
+bool MimironUnreachableStepAction::isUseful()
+{
+    MimironUnreachableTrigger mimironUnreachableTrigger(botAI);
+    return mimironUnreachableTrigger.IsActive();
 }
 
 bool MimironResetEncounterStateAction::Execute(Event /*event*/)

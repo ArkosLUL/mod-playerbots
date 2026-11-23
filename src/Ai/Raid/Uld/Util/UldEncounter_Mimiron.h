@@ -97,6 +97,11 @@ inline constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
 inline constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
 inline constexpr float ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN = 2.0f;
 
+inline constexpr float ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK = 7.0f;
+
+inline constexpr float ULDUAR_MIMIRON_UNREACH_STEP_MARGIN = 4.0f;
+inline constexpr float ULDUAR_MIMIRON_UNREACH_ARRIVED = 2.0f;
+
 inline constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
 inline constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
 
@@ -235,6 +240,11 @@ std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot);
 bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot);
 
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
+
+float GetMimironHolderRadius(PlayerbotAI* botAI, Player* bot);
+bool IsMimironSpotHolderSafe(float holderRadius, Position const& dest);
+
+Unit* GetMimironUnreachableMech(PlayerbotAI* botAI, Player* bot);
 
 bool IsMimironSpotRocketSafe(PlayerbotAI* botAI, Position const& dest);
 

@@ -284,6 +284,34 @@ bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
            ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
 }
 
+float GetMimironHolderRadius(PlayerbotAI* botAI, Player* bot)
+{
+    Unit* leviathanMkII = botAI && bot ? GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;
+    if (!leviathanMkII || leviathanMkII->GetVictim() != bot || !MimironPhase1Active(botAI))
+        return 0.0f;
+
+    float const spot = ULDUAR_MIMIRON_ROOM_CENTER.GetExactDist2d(ULDUAR_MIMIRON_PHASE1_TANK_SPOT) +
+                       ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK;
+    return std::max(spot, bot->GetExactDist2d(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX(),
+                                              ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY()));
+}
+
+bool IsMimironSpotHolderSafe(float holderRadius, Position const& dest)
+{
+    return holderRadius <= 0.0f ||
+           ULDUAR_MIMIRON_ROOM_CENTER.GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) <= holderRadius;
+}
+
+Unit* GetMimironUnreachableMech(PlayerbotAI* botAI, Player* bot)
+{
+    Unit* leviathanMkII = botAI && bot ? GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;
+    Creature* chaser = leviathanMkII ? leviathanMkII->ToCreature() : nullptr;
+    if (!chaser || chaser->GetCannotReachTarget() != bot->GetGUID())
+        return nullptr;
+
+    return leviathanMkII;
+}
+
 namespace
 {
 struct MimironMarkers
@@ -983,6 +1011,8 @@ struct MimironObsState
 
     RaidObs::ObsValue<ObjectGuid> coreCarrier{"mimiron.carrier"};
 
+    RaidObs::ObsValue<ObjectGuid> unreachable{"mimiron.unreach"};
+
     uint32 scanMs = 0;
 };
 
@@ -1181,6 +1211,7 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
         state.phase = GetMimironStagingFocus(bot) ? MIMIRON_TRACE_HANDOVER : MIMIRON_TRACE_NONE;
         state.acuGrounded = false;
         state.coreCarrier = ObjectGuid::Empty;
+        state.unreachable = ObjectGuid::Empty;
         ResetMimironFightState(bot);
         UpdateMimironHandover(botAI, bot);
         return;
@@ -1204,6 +1235,9 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 
     Player* carrier = GetMimironCoreCarrier(botAI);
     state.coreCarrier = carrier ? carrier->GetGUID() : ObjectGuid::Empty;
+
+    Creature* chaser = leviathanMkII ? leviathanMkII->ToCreature() : nullptr;
+    state.unreachable = chaser ? chaser->GetCannotReachTarget() : ObjectGuid::Empty;
 
     if (!vx001)
         return;

@@ -147,6 +147,7 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironRedirectThreatTrigger, MimironRedirectThreatAction>(ACTION_RAID + 1);
     e.Node<MimironSetDpsPriorityTrigger, MimironSetDpsPriorityAction>(ACTION_RAID);
     e.Node<MimironProximityMineTrigger, MimironProximityMineAction>(ACTION_RAID - 1);
+    e.Node<MimironUnreachableTrigger, MimironUnreachableStepAction>(ACTION_RAID + 2);
     e.Node<MimironBombBotTrigger, MimironBombBotAction>(ACTION_RAID + 2);
     e.Node<MimironSlowBombBotTrigger, MimironSlowBombBotAction>(ACTION_RAID + 2);
     e.Node<MimironPetControlTrigger, MimironPetControlAction>(ACTION_RAID);
