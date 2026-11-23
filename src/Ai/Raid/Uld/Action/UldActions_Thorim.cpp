@@ -464,6 +464,24 @@ bool ThorimPhase2PositioningAction::isUseful()
     return thorimPhase2PositioningTrigger.IsActive();
 }
 
+bool ThorimUnreachableStepAction::Execute(Event /*event*/)
+{
+    Unit* boss = ThorimUnreachableBy(botAI, bot);
+    Position step;
+    if (!boss || !ThorimUnreachableStep(bot, boss, step))
+        return false;
+
+    bool const backward = std::cos(bot->GetAbsoluteAngle(&step) - bot->GetAbsoluteAngle(boss)) < 0.0f;
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, backward);
+}
+
+bool ThorimUnreachableStepAction::isUseful()
+{
+    ThorimUnreachableTrigger thorimUnreachableTrigger(botAI);
+    return thorimUnreachableTrigger.IsActive();
+}
+
 bool ThorimSifBlizzardAction::Execute(Event event)
 {
     if (!ThorimPhase2Active(botAI) || GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::Ranged)

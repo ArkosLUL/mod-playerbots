@@ -3110,6 +3110,79 @@ bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot)
            bot->GetDistance(spot) <= ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
 }
 
+Unit* ThorimUnreachableBy(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || !ThorimPhase2Active(botAI))
+        return nullptr;
+
+    Unit* boss = GetThorim(botAI);
+    Creature* thorim = boss && boss->IsAlive() && boss->IsInCombat() ? boss->ToCreature() : nullptr;
+    if (!thorim)
+        return nullptr;
+
+    ObjectGuid const flagged = thorim->GetCannotReachTarget();
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    if (flagged != state.unreachable.Get())
+        state.unreachableSinceMs = getMSTime();
+    state.unreachable = flagged;
+
+    if (!flagged || flagged != bot->GetGUID() || bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return nullptr;
+
+    if (GetMSTimeDiffToNow(state.unreachableSinceMs) < ULDUAR_THORIM_UNREACH_GRACE_MS)
+        return nullptr;
+
+    return thorim;
+}
+
+bool ThorimUnreachableStep(Player* bot, Unit* boss, Position& out)
+{
+    if (!bot || !boss)
+        return false;
+
+    float const step = boss->GetCombatReach() + bot->GetCombatReach() + ULDUAR_THORIM_UNREACH_STEP_MARGIN;
+    float const clear = step - ULDUAR_THORIM_UNREACH_ARRIVED;
+    if (boss->GetExactDist2d(bot) >= clear)
+        return false;
+
+    float const away = boss->GetAngle(bot);
+    float const turn = static_cast<float>(M_PI) / 6.0f;
+    Position const& centre = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+    bool found = false;
+    for (int const k : {0, 1, -1, 2, -2, 3, -3, 4, -4})
+    {
+        float const bearing = away + turn * static_cast<float>(k);
+        float x = boss->GetPositionX() + step * std::cos(bearing);
+        float y = boss->GetPositionY() + step * std::sin(bearing);
+        if (centre.GetExactDist2d(x, y) > ULDUAR_THORIM_UNREACH_ARENA_RADIUS)
+            continue;
+
+        float z = bot->GetMapWaterOrGroundLevel(x, y, bot->GetPositionZ());
+        if (z <= INVALID_HEIGHT)
+            z = bot->GetPositionZ();
+
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                            bot->GetPositionZ(), x, y, z, false) ||
+            boss->GetExactDist2d(x, y) < clear)
+            continue;
+
+        Position const spot(x, y, z);
+        if (!found)
+        {
+            out = spot;
+            found = true;
+        }
+
+        if (!ThorimSpotUnderBlizzard(bot, spot))
+        {
+            out = spot;
+            return true;
+        }
+    }
+
+    return found;
+}
+
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -3272,4 +3345,6 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->marksCleared = false;
     state->phase2StartMs = 0;
     state->openingReleased.clear();
+    state->unreachable = ObjectGuid::Empty;
+    state->unreachableSinceMs = 0;
 }

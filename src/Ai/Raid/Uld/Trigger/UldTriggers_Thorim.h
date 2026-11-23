@@ -95,6 +95,15 @@ public:
     bool IsActive() override;
 };
 
+class ThorimUnreachableTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "thorim unreachable trigger";
+
+    ThorimUnreachableTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class ThorimRunicSmashTrigger : public Trigger
 {
 public:

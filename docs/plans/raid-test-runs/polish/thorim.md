@@ -1443,3 +1443,150 @@ waypoints.
 Left: the answer's "navprobed" is still open (no Docker in a lane or review): both points and the three paths above before the merge.
 The leader alone still walks the 16-18 yd between the last two lane discs (y ~−340 to −357) with no lane index, so with no smash dodge,
 as on the old walk to his stop; followers cross it on his index once he stands on the new point.
+
+## Round 15 (window 23: build e440e6f17 with round 14)
+
+**Data:** window 23, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261123-205728-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795467529,1795467529,1795467538}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head e440e6f17 --pulls 10` (its `thorim.py` lines), `postmortem.py`, round 7-14 scripts
+(`budget.py`, `dps.py`, `pack2.py`, `leadstall.py`, `smashcost.py`, `smashhits.py`, `corridor.py`, `walkin.py`, `leadstop.py`, `p2heal.py`)
+and new ones in session scratchpad `thorim_r15/` (`r14checks.py`, `sifclock.py`, `barrier.py`, `p2rank.py`, `tankdeaths.py`, `p2open.py`,
+`opening.py`, `hpfine.py`, `victim.py`, `immune.py`, `dealt.py`, `bosscasts.py`, `swap.py`, `flat.py`, `ringbliz.py`, `meleebliz.py`) over
+`snap`, `move`, `act`, `cast`, `aura`, `dmg`, `heal` and `note` rows. Hard-mode phase 2s compared: w14 uld1
+(`603_3_thorim_1795427707`), w15 uld1 (`603_8_thorim_1795436805`), w19 uld3 (`603_5_thorim_1795452388`), w21 uld3
+(`603_4_thorim_1795459237`); all 31 Thorim phase 2s on disk for the untouchable scan.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795467529 | wipe 6:13, **hard mode** (62507 0:51.0, no 62565, `thorim.sifjoined`; phase 2 3:00.0 against 3:21.0) | phase 2: Thorim melee on a non-tank 15, Blizzard 4, Chain Lightning 3, Thorim melee on a tank 3, Sif Frostbolt 2, Frostbolt Volley 2, Unbalancing Strike 2, Lightning Charge 1 |
+| uld2 | 1795467529 | kill 6:21, normal (62565 3:20.3, phase 2 3:55.8) | phase 1: Iron Ring Guard Impale 1 (ranged Uldyau, 0:56.8), Runic Smash 2 (ranged Uldyas 1:02.6, Uldyau's second life 1:18.7) |
+| uld3 | 1795467538 | kill 5:48, normal (62565 3:17.4, phase 2 3:31.7) | none |
+
+**Round 14 verdict: the pull line held, the Colossus now runs on Runic Barrier.**
+- Gather: at the leader's walk-in move (1.1-1.2 s after he stood on the new right point: 1:28.3 / 1:44.7 / 1:39.5) every squad
+  non-healer stood 15.6-22.1 yd exact from him (inside the 20 yd `GetDistance` test), healers 15.1-17.0.
+- No follower opened the Colossus: nobody but the leader targeted him before his first health drop; his first swing went to the
+  leader in all three.
+- Walk-in: the squad stood 37-45 / 48-54 / 47-55 yd from him at his first health drop (w21 uld1/uld2: 67-69) and he lost 12.0 / 7.7 /
+  7.9% in the first 6 s (w21 1.5 / 2.1 / 9.8%).
+- "To Colossus" 11.2 / 10.5 / 7.0 s (w21 14.0 / 8.5 / 7.5); the Colossus 20.2 / 37.8 / 33.3 s (w21 35.5 / 36.7 / 24.3): shorter only in
+  uld1. What decides it is Runic Barrier (62338, −51% damage taken, 20 s): it landed at +11.7 / +12.0 s with him at 67 / 60% in uld2 /
+  uld3 (w21 at +11.2-17.7 s, 21-81%), and the rest took 21-26 s; uld1 killed him in 20.2 s before any barrier, the only Colossus of six
+  without one.
+- Falls: no player under z 409 within 20 yd of either new point; the only corridor players under z 400 were uld2's two healers at the
+  ramp foot (2217.3, −422.5) at 2:37.9, the known flee sink.
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 169.9 / 169.7 / 169.8 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w23 uld1 | 0.12 | 12.6 | 36.2 | 11.2 | 20.2 | 3.5 | 44.5 | 20.6 | 148.9 | made by 21.0 |
+| w23 uld2 | 0.25 | 14.2 | 51.2 | 10.5 | 37.8 | 5.2 | 62.0 | 24.4 | 205.3 | +35.6 |
+| w23 uld3 | 0.23 | 14.1 | 52.5 | 7.0 | 33.3 | 5.2 | 51.0 | 21.0 | 184.2 | +14.4 |
+| w21 uld1 / 2 / 3 | 0.05-0.58 | 13.6-17.0 | 40.7 / 43.3 / 45.5 | 14.0 / 8.5 / 7.5 | 35.5 / 36.7 / 24.3 | 3.5-7.3 | 48.0 / 56.2 / 47.0 | 20.8 / 24.0 / 22.9 | 183.0 / 189.6 / 165.6 | +13.1 / +19.6 / made by 3.8 |
+
+uld1 is the fastest lever-to-phase-2 on record (156.2 s before, w12 uld3). Against it:
+- **uld2 +56.4 s:** corridor +15.0 (pack 2 opened 28.8 s after pack 1, uld1 18.7: Impale killed a ranged at 0:56.8 and Runic Smash
+  another at 1:02.6; 12 smash hits, and 16 of uld2/uld3's 25 landed at y −300..−310 in the right lane, where pack 1 is fought), the
+  Colossus +17.6 (barrier at +11.7 s, two ranged dead: 27k against 52k), adds and Giant +17.5 (62.0 s, two DPS down), balcony +3.8.
+- **uld3 +35.3 s:** corridor +16.3 (pack 2's Acolyte took 22 s with eight DPS on it at 2-8k/s while the squad crossed lanes under the
+  smash, and healed itself 63 → 77%; 13 smash hits), the Colossus +13.1 (barrier at +12.0 s), adds and Giant +6.5.
+- uld1 took one smash hit, no corridor death and no barrier. The latch held through every cast (`smashcost.py`: 26 of 26 hits).
+Not picked: the corridor under Runic Smash and Runic Barrier luck; the orchestrator asked for the hard-mode phase 2 this round.
+
+**Hard-mode phase 2, third wipe in a row** (five pulls since window 14; tank intake and mana from `p2rank.py`, `p2heal.py`):
+
+| Pull | first tank death | Thorim then | healer mana then | non-tank deaths before it | Thorim %/s 0-30 s / 30-60 / 60-90 / 90-120 |
+|---|---|---|---|---|---|
+| w14 uld1 | +82.4 s, melee | 65.4% | 47% | Chain Lightning 2, Blizzard 1 | 0.20 / 0.59 / 0.49 / 0.53 |
+| w15 uld1 | +103.1 s, melee | 53.5% | 38% | Lightning Charge 2 | 0.29 / 0.55 / 0.48 / 0.45 |
+| w19 uld3 | +57.1 s, one Chain Lightning (round 13 fixed it) | 75.7% | 55% | Chain Lightning 2 | 0.31 / 0.54 / 0.44 / 0.35 |
+| w21 uld3 | +101.7 s, melee | 56.8% | 42% | Volley 2, Blizzard 2, Chain Lightning 1, Frostbolt 1 | 0.28 / 0.53 / 0.45 / 0.41 |
+| w23 uld1 | +131.0 s, melee | 58.4% | 26% (one healer dead) | Frostbolt 2, Blizzard 2, Chain Lightning 1, Volley 1, Lightning Charge 1 | **0.00** / 0.28 / 0.44 / 0.48 |
+
+What kills the tanks (20 tank deaths): Thorim's melee 13, Unbalancing Strike 4, Chain Lightning 1, Volley 1, Blizzard 1. His swings on a
+tank grow with the Lightning Charge stacks, median 6.6-9.2k over the first 30 s to 11.5-14.2k by +90-150 s (max 16.8-30.4k), and a tank
+dies 3.7-16 s into a hold, 100% → dead in 2-3 swings. Tank intake from phase 2 to the first tank death: Thorim melee 36-51%, Blizzard
+18-27%, Unbalancing Strike 6-13%, Volley 6-9%. What kills the raid before the tanks: Chain Lightning 6, Blizzard 5, Lightning Charge 3,
+Volley 3, Frostbolt 3; after them Thorim loose on 15-24 a pull.
+
+Ranked:
+1. **The damage race.** Thorim stands at 53-76% when the first tank falls. The raid deals 130-145k/s on him from +30 s (0.44-0.59%/s),
+   half that in the first 30 s while the corridor squad comes off the balcony (0-25k/s from its nine DPS until +20 s, by design) and the
+   camp clears Evokers; at that pace he needs ~200 s of floor against tanks falling at +82-131 s. Not a bug.
+2. **w23 uld1: Thorim untouchable for 25 s (bug, fixed below).** The raid dealt 56-68k/s to +15 s, then 0.4-5.7k/s from +17 to
+   +41.5 s and 130k/s after; he went 97.8% → 100.0% at +23.3 s and held there.
+3. **The melee ring under Blizzard** (round 14's watch, now in a second hard-mode pull): w23 uld1 melee took 55 Blizzard ticks for 248k
+   with 3 melee deaths (w21 uld3: 21 for 102k, 2 deaths; w14-w19 0-13). Each time slot 0's solved bearing swung 207 → 183 → 159 → 281°
+   (4:11.0-4:12.5) and 193 → 169 → 283° (5:27.7-5:28.8) inside 1.5 s; off the arrived latch, generic `avoid aoe` walked them in 3-5 yd hops
+   through two overlapping zones (double ticks, 10.3k a second). Tactic: question 1.
+4. **Blizzard on the tanks**, 236-298k a pull since round 8's spot (w21, w23; holder 28-83k, waiting tank 74-197k before the first tank
+   death). The waiting tank still takes Thorim at 79-100% health, so it taxes healing, not the hold. Not picked.
+5. **Sif's Volley and Frostbolt**: 50-57% and 14-22% of non-tank intake before the first tank death; the Volley is uninterruptible and Sif
+   unselectable, so nothing kicks either. Nothing to do.
+6. **Healer mana**: 26-55% at the first tank death in all five; not the binding limit here (window 12's two pulls were).
+
+**Failure picked: Thorim's cannot-reach latch (w23 uld1).**
+- Trace: the corridor tank Uldxam came down from the balcony (Thorim's victim from +9.4 s, mid-jump at z 430) and dragged him onto the
+  tank spot; at +16.5-16.7 s Thorim stopped 2.4 yd from him while he was still walking in, and from then until +41.7 s Thorim's health
+  did not fall with 9 melee, 8 ranged and both tanks on him, Uldxam standing still on (2110.75, −252.65) the whole time. Uldxaa's swap
+  taunts at +26.95, +33.16 and +39.16 (`thorim unbalancing strike swap action` OK, then FAILED, victim unchanged) did nothing, so Uldxam
+  held him 38 s through a landed Unbalancing Strike. Thorim's Chain Lightning, due at +26.4 s, never cast; the next, at +41.57 s (cast time
+  500 ms), ended it, and damage resumed within 0.2 s. Cost: ~25 s at zero plus 2.2% regenerated, about 29 s of the race (at the first tank
+  death he would have stood near 44%, not 58%: still a wipe).
+- Core: `ChaseMovementGenerator` flags the victim unreachable when a chase path fails (`TargetedMovementGenerator.cpp:177`), and
+  `Creature::IsEvadingAttacks` (`Creature.h:138`) is then true, so every hit and taunt evades; 5 s on, `IsEvadeRegen`
+  (`CombatManager.h:128`) regenerates him. The flag clears only on a dispatched chase move (`TargetedMovementGenerator.cpp:194`), a finalised one, a lost target or a cast
+  that stops him; with the victim standing still inside his reach (8.25 yd exact: contact 0.5 plus 6.25 and 1.5), `PositionOkay` holds
+  and nothing re-paths. Mimiron's MK II has the same latch, fixed bot-side (`mimiron unreachable step action`).
+- Rare: 1 of the 31 phase 2s on disk shows a held stretch of 3 s or more (`flat.py`, and the reader's new line over every trace).
+
+**Classification: bug.** The strategy holds Thorim on the tank spot for the raid to burn; a latched flag voids the hits and the swap.
+
+**Fix** (Thorim files only, no size, mode or player branch):
+- `ThorimUnreachableBy` (`UldEncounter_Thorim.cpp:3113`): phase 2, Thorim alive and in combat; reads `GetCannotReachTarget()` into the new
+  probe `thorim.unreach` (stamped when it changes) and returns him when the flag has named this bot for
+  `ULDUAR_THORIM_UNREACH_GRACE_MS` (1 s) and the bot is below the floor line (a balcony bot's answer is its jump).
+- `ThorimUnreachableStep` (`:3138`): a point his `GetCombatReach()` plus the bot's plus `ULDUAR_THORIM_UNREACH_STEP_MARGIN` (4) from his
+  centre (11.75 yd), straight away from him, else turned in 30° steps up to 120° until it lies within `ULDUAR_THORIM_UNREACH_ARENA_RADIUS`
+  (30) of the arena centre (the off-tank spot sits at 29.65), preferring one clear of Blizzard; nothing once the bot stands 2 yd short of
+  it or farther. (Review: each point is also pulled back onto the navmesh and must still stand 9.75 yd from him.)
+- `ThorimUnreachableTrigger` / `ThorimUnreachableStepAction` (`UldTriggers_Thorim.cpp:189`, `UldActions_Thorim.cpp:467`) at ACTION_RAID + 3,
+  `MOVEMENT_FORCED` (a combat-priority positioning booking cannot refuse it), backing out while facing him; both `thorim movement guard` and
+  `thorim tank anchor guard` pass it. The chase re-paths as soon as the bot leaves 8.25 yd, which clears the flag; the positioning row then
+  walks it back. A human the flag names is not moved, as with any job a human does.
+- Reader: `thorim.py --phase2` prints `untouchable`: the flag's spans, whom they named, step moves, and stretches of 3 s or more a tank
+  held him without his health falling (works on old traces; w23 uld1 reads "+16.5..+41.7 s 97.8% to max 100.0%").
+
+`pb-check` passes (syntax over 41 TUs, pblint, codestyle, botobs tests).
+
+**Next window should show:**
+- `thorim.unreach` in every phase 2 (a "0" note at least); any span naming a floor bot past 1 s followed within ~0.5 s by a
+  `thorim unreachable step action` move from it and the flag back to 0 within ~2 s of the step; the reader's held-without-losing-health
+  stretches at 0 (w23 uld1: 25.2 s).
+- Watch: step moves by a holder more than a few a pull (a flag that flickers, then raise the grace); Thorim dragged off the tank spot
+  by a step and the ring re-latching behind it; a step walking a holder into a Blizzard zone or the off-tank spot.
+- Gauntlet: hard mode only on a fast pull with no barrier luck; the corridor (Runic Smash hits 12-13 against 1) is next round's candidate.
+
+**Seen, not picked:** the blood DK holder channelled Army of the Dead for 4 s on Thorim (w23 uld1 +22.7-26.7 s, during the latch), shared DK
+class code.
+
+**Questions for the user** (tactic, not built):
+1. **The melee ring under Blizzard.** When Sif's Blizzard covers a melee slot, the solver gives up the slot's spacing and swings it onto
+   another slot or the tank side within 1.5 s, and generic `avoid aoe` then walks the melee in short hops through the zones: 248k and 3
+   melee deaths in w23 uld1, 102k and 2 in w21 uld3. May a covered slot's melee instead step straight out past the ring to the nearest point
+   11 yd clear of every zone (about 3-6 yd farther from Thorim, out of his melee reach for up to the zone's 10 s) and walk back once it
+   fades, with `avoid aoe` held off ring melee in phase 2? Recommended: yes; the uptime it costs (a covered slot sits out up to ~10 s of a
+   36-41 s Blizzard cycle) is less than the melee lost to it now.
+
+**Review (round 15).** The cause holds. In w23 uld1 Thorim's health stops at 97.79% at +16.7 s, the holder stands on the tank spot from
++17.0 s with Thorim 3.6 then 4.8 yd off him, health jumps 97.77 → 100.00% at +23.0-23.3 s (the 5 s regen delay plus a 2 s regen tick after
+a flag set near +16.6 s), all three swap taunts land OK then FAILED with the victim unchanged, and his +41.6 s Chain Lightning (500 ms cast)
+ends it; only a set cannot-reach flag gives all of that. Not explained: at +20.4-20.7 s he moved 1.2 yd under his chase (moving 1, move
+generator 5) without the flag clearing, since the regen still came on the first timer; the new probe will show such moves. The reader
+over the 31 phase 2s on disk finds the one held stretch and no other. No size, mode or player branch; Thorim files only; no comments.
+Fixed: the step trusted the 30 yd disc as floor. Thorim lands 2.7-6.4 yd from the centre on the balcony side (bearing ~260°) and the
+corridor tank lands ~15 yd out there, while across 49 traces no player stood on the floor past 22.5-26.6 yd at bearings 255-315°, so the
+first case the step answers could aim into the wall under the balcony. Each point now takes the ground height and
+`CheckCollisionAndGetValidCoords`, as `RingPoint` does, and must still stand 9.75 yd from him; the constant is renamed
+`ULDUAR_THORIM_UNREACH_ARENA_RADIUS`, and the fix line above no longer says his reach doubled. `pb-check` passes.

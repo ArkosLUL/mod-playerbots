@@ -225,6 +225,17 @@ public:
     bool isUseful() override;
 };
 
+class ThorimUnreachableStepAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "thorim unreachable step action";
+
+    ThorimUnreachableStepAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class ThorimSifBlizzardAction : public MoveAwayFromCreatureAction
 {
 public:

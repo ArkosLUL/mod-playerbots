@@ -123,6 +123,7 @@ void DefineThorim(EncounterBuilder& e)
     e.Node<ThorimFallFromFloorTrigger, ThorimFallFromFloorAction>(ACTION_RAID + 1);
     e.Node<ThorimPhase2PositioningTrigger, ThorimPhase2PositioningAction>(ACTION_RAID);
     e.Node<ThorimSifBlizzardTrigger, ThorimSifBlizzardAction>(ACTION_RAID + 3);
+    e.Node<ThorimUnreachableTrigger, ThorimUnreachableStepAction>(ACTION_RAID + 3);
 
     e.Node<ThorimChargedOrbTrigger, ThorimChargedOrbAction>(ACTION_RAID + 4);
 
@@ -145,11 +146,12 @@ void DefineThorim(EncounterBuilder& e)
     e.OwnMovement("thorim movement guard", Role::Any, ThorimRingSettled,
                   Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
                   {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name,
-                   ThorimSifBlizzardAction::Name});
+                   ThorimSifBlizzardAction::Name, ThorimUnreachableStepAction::Name});
 
     e.OwnMovement("thorim tank anchor guard", Role::Tank, ThorimTankAnchored,
                   Family::Attack | Family::Reach | Family::ReachHeal,
-                  {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name});
+                  {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name,
+                   ThorimUnreachableStepAction::Name});
 
     e.Exclusive("thorim arena leash", Role::Any, ThorimLeashBreached, Family::AvoidAoe | PICKERS,
                 {ThorimArenaLeashAction::Name, ThorimArenaPositioningAction::Name, ThorimChargedOrbAction::Name,

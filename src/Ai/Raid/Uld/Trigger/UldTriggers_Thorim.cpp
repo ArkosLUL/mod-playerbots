@@ -186,6 +186,13 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     return true;
 }
 
+bool ThorimUnreachableTrigger::IsActive()
+{
+    Unit* boss = ThorimUnreachableBy(botAI, bot);
+    Position step;
+    return boss && ThorimUnreachableStep(bot, boss, step);
+}
+
 bool ThorimRunicSmashTrigger::IsActive()
 {
     bool safeLane = false;

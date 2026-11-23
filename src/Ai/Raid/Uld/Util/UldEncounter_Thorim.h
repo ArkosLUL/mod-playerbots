@@ -128,6 +128,11 @@ inline constexpr float ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 inline constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
 
+inline constexpr float ULDUAR_THORIM_UNREACH_STEP_MARGIN = 4.0f;
+inline constexpr float ULDUAR_THORIM_UNREACH_ARRIVED = 2.0f;
+inline constexpr float ULDUAR_THORIM_UNREACH_ARENA_RADIUS = 30.0f;
+inline constexpr uint32 ULDUAR_THORIM_UNREACH_GRACE_MS = 1000;
+
 inline constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;
 
 inline constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
@@ -289,6 +294,9 @@ struct ThorimEncounterState
 
     RaidObs::ObsValue<ObjectGuid> anchorTank{"thorim.anchortank"};
     uint32 anchorTankScanMs = 0;
+
+    RaidObs::ObsValue<ObjectGuid> unreachable{"thorim.unreach"};
+    uint32 unreachableSinceMs = 0;
 
     RaidObs::ObsValue<bool> sifJoined{"thorim.sifjoined"};
 
@@ -503,6 +511,10 @@ void ThorimRingClearArrived(Player* bot);
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot);
+
+Unit* ThorimUnreachableBy(PlayerbotAI* botAI, Player* bot);
+
+bool ThorimUnreachableStep(Player* bot, Unit* boss, Position& out);
 
 bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot);
 

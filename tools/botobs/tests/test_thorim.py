@@ -138,6 +138,24 @@ class Phase2(unittest.TestCase):
                       "Frost Nova 0 (0k) / 0 (0k)", self.text)
         self.assertIn("100.0% to 61.0%, 1.00 %/s", self.text)
 
+    def test_untouchable_without_the_probe(self):
+        self.assertIn("untouchable       no thorim.unreach probe (a build before it); "
+                      "held without losing health 0x, 0.0 s", self.text)
+
+    def test_untouchable_flag_and_held_stretch(self):
+        records = pull()
+        for rec in records:
+            if rec.get("e") == "snap" and 5000 <= rec["t"] <= 9000:
+                rec["u"][0][5] = 96.0
+        records += [
+            {"t": 5000, "e": "note", "k": "thorim.unreach", "txt": str(TANK_A)},
+            {"t": 6500, "e": "move", "g": TANK_A, "k": "point", "ok": 1, "by": "thorim unreachable step action"},
+            {"t": 9000, "e": "note", "k": "thorim.unreach", "txt": "0"},
+        ]
+        text = printed(thorim.show_phase2, load(records))
+        self.assertIn("untouchable       cannot-reach flag 1x, 4.0 s, longest 4.0 s (Anvil 1); step moves 1; "
+                      "held without losing health 1x, 4.0 s; +4.0..+8.0 s 96.0% to max 96.0%", text)
+
     def test_no_phase_2(self):
         records = [rec for rec in pull() if rec.get("k") != "thorim.p2start"]
         self.assertIn("phase 2 never started", printed(thorim.show_phase2, load(records)))
