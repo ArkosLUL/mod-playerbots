@@ -179,12 +179,14 @@ extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2;
 extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_2_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_2_YARDS_1;
 extern const Position ULDUAR_THORIM_BALCONY_1;
 extern const Position ULDUAR_THORIM_BALCONY_2;
 extern const Position ULDUAR_THORIM_BALCONY_3;
@@ -369,7 +371,7 @@ bool ThorimHasDpsTarget(PlayerbotAI* botAI, Player* bot);
 
 void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot);
 
-inline constexpr uint8 ULDUAR_THORIM_GAUNTLET_WAYPOINTS = 6;
+inline constexpr uint8 ULDUAR_THORIM_GAUNTLET_WAYPOINTS = 7;
 
 Position const& GetThorimGauntletWaypoint(bool leftLane, uint8 index);
 
@@ -381,6 +383,7 @@ inline constexpr uint32 ULDUAR_THORIM_LEAD_STALL_MS = 15000;
 
 inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_DISTANCE = 30.0f;
 inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_STOP_MARGIN = 1.0f;
+inline constexpr float ULDUAR_THORIM_LEAD_COLOSSUS_GATHER_DISTANCE = 20.0f;
 
 inline constexpr float ULDUAR_THORIM_LEAD_FOLLOW_DISTANCE = 25.0f;
 
