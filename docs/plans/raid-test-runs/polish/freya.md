@@ -1033,6 +1033,17 @@ it is shared code.
 
 **Shared fix (`rt/shared-ready-defensive`):** `ReadyTankDefensive` now skips a button the tank can't pay for now.
 
+**Shared fix review:** window 15 (round 9 built) bears it out. In `603_11_elder-stonebark_1795437270` the DK add
+tank's Icebound Fortitude fell at 71.16 s (`freya.adddef` `none` 71.35 s), Heart Strike read `IMPOSSIBLE` or
+`FAILED` to 74.38 s (no Blood rune) and his first Vampiric Blood went at 74.61 s, while every healer's
+`freya.addext` stayed `covered` from 59.4 s to 84.7 s: 3.5 s bare with the externals held (again 215.24-216.07
+s). Fixed: the cost check ignored `withinMs`, so the look-aheads (Algalon's `DefensiveHandoverDue` 5-20 s out,
+`SoakCovered`, the soak note, the prep check; Yogg-Saron's 30 s Wrath hold) read a rune or runic power spent
+this tick as no button then, and a DK holder (two of three Algalon pools) would be handed over for nothing. A
+rune now counts once its cooldown ends within `withinMs`; other costs are judged only at 0. Watch: the add
+tank's own button doesn't wait out a running external, so an external spent in a rune gap gets Vampiric Blood
+on top once the rune is back.
+
 **User answers (2026-11-23):** Q6 yes, as put to the user: a ranged DPS bot with a low lasher hitting the
 back line in reach shoots it before the Gift. Q7 yes: the loose Snaplasher stays in the normal damage split (as built). Q9 no: do not keep
 the healers' externals off the main tank during the add phase. Q8 waits for window 15.

@@ -365,7 +365,8 @@ fights" hides the fallback. The call carries any spell id, so it can ask a human
 - **`NextTankDefensive` / `NextMagicDefensive` / `NextPhysicalDefensive`** skip a row the bot can't
   pay for now (runes, runic power, rage, energy, mana: `CanCastSpell` checks none), so the next row
   goes. So do `ReadyTankDefensive` / `ReadyTankDefensiveSpell`, whose `withinMs` looks ahead on the
-  cooldown and Forbearance, never the cost. A row covers only if it outlasts the hit (`needMs`), and
+  cooldown, Forbearance and runes (one off cooldown by then counts) and skips every other cost, which
+  a tank's own casts swing tick to tick. A row covers only if it outlasts the hit (`needMs`), and
   a row that adds health (cut 0: Last Stand, Survival Instincts, Vampiric Blood, Frenzied
   Regeneration) only 3 s past it: Last Stand's fade takes its health back, down to 1 hp. One that
   doesn't cover isn't cast and, running, blocks nothing. `needMs` must count down: against a fixed
