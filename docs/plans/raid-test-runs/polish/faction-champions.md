@@ -1386,3 +1386,100 @@ warrior counts, only bots are asked.
   Disarm's 60 s cooldown bound it; no swap ran this window to measure.
 - Left: in the tick after its swap the warrior, now in Defensive Stance, can be taken by an earlier needy melee
   champion in its melee range and Disarm that one instead; still a peel the row allows.
+
+**User answer (2026-11-23) to Q6:** keep as is for now: ranged bots don't step off a Tauren that isn't on them.
+
+## Round 15 (2026-11-23, window 23 on build e440e6f17)
+
+**Data.** `raidtest.py report --boss faction-champions --raid toc --head e440e6f17 --pulls 10`, rounds 12-14 in it: toc1
+`tr-20261123-205728-4` kill 6:34 (trace 5:58), 0 deaths (`649_4_erin-misthoof_1795467576`), toc2 `tr-20261123-205728-5`
+kill 7:30 (6:55), 4 (`649_5_erin-misthoof_1795467577`), toc3 `tr-20261123-205728-6` kill 8:08 (7:31), 4
+(`649_6_erin-misthoof_1795467572`). Window 22a reread for the comparison, windows 14-23 (24 pulls) for the Bladestorm
+counts. Scripts in the round's scratchpad `fc15/` (gone with it); the reader's new `--aoe` lines cover the key one.
+
+**Stop rules.** Kills on all three pools for the fourth window running (18, 20, 22a, 23: 10/2/3, 2/5/0, 4/7/0, 0/4/4),
+toc2 and toc3 one death over: not polished.
+
+**Lineups.** toc1 (roster A): Caiphus, Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Malithas, Harkzog,
+Ginselle; three DKs ice Maz'dinah, Malithas and Gorgrim, Narrhok from 3:36. toc2 (roster B): the same lineup; two DKs
+ice Malithas and Maz'dinah, Gorgrim from 4:08, Narrhok from 4:48. toc3 (roster C): window 22a toc3's (Liandra,
+Thrakgar, Erin; Maz'dinah, Narrhok, Ruj'kah, Gorgrim, Harkzog, Vivienne, Ginselle); two DKs ice Maz'dinah and Gorgrim,
+Narrhok from 5:30.
+
+**Deaths by top damage dealer** (its share in the 10 s before). Iced: its duty's Chains in the 10 s before; free: no
+ice duty yet.
+
+| Pull | Deaths | By |
+|---|---|---|
+| toc1 kill | 0 | - |
+| toc2 kill | 4 | free Narrhok 2: Tocyao (shadow priest) 2:10.7, 81%, Narrhok out of Cyclone (2:00.6) took him at 14.2 yd mid Mind Flay, Mortal Strike from 12.9 yd, Dazed, then Bladestorm (2:04.6) on him, Psychic Scream spent on a fear-immune Bladestormer; Tocyat (mage) 4:07.2, 75%, stood 4.5 s 7.1 yd from a rooted Narrhok who had charged Tocyah, the recount took him at 4:06.9 and Mortal Strike plus a 16.8k swing killed him from 100% in one tick. Iced Maz'dinah 42% with iced Malithas 41%: Tocyap (warlock) 0:55.2, Dazed by Zhaagrym. Ruj'kah as kill target 67%: Tocyal (warlock) 2:40.2, between DR-cut disarms (2:11.9, 2:25.7, 2:43.4) |
+| toc3 kill | 4 | Ruj'kah 2: Toczat (rogue) 0:47.2, 81%, off the latch; Toczaq (mage) 3:04.7, 77%, as kill target, 24.3k in 0.2 s from full, the one rogue's Dismantle spent at 2:38.0. Free Narrhok 100%: Toczar (warlock) 1:03.5 (below). Iced Gorgrim 69%: Toczal (warlock) 2:14.2, kiting, Dazed |
+
+**Verdict on round 14 (Q5 stance swap, cornered kiters).**
+
+- Cornered kiters: held. `--personal` `fc.castbreak` 30, 27, 19 (window 22a: 63, 29, 24), with no hop by the bot within
+  1.5 s 0, 0, 0 (45, 0, 1); half-step hops 2 of 353, 3 of 346, 3 of 349 (0 before). No bot stood at the wall.
+- Q5: unjudged again. "Hunter kill target with no rogue and no tank warrior alive" 0.0 s on all three, swaps 0, so no
+  stray swap either. toc3 came closest: Ruj'kah kill target 2:28.8-3:22.9 with one rogue left (Toczat died at 0:47).
+- Kill time: toc3 7:31 against 6:05 on window 22a's same lineup, every hold 5-20 s longer, raid DPS 103k against 127k:
+  two DPS dead by 1:04 and four by 3:05. Round 14 fired 3 half-step hops and no swap there, so it isn't the cause.
+
+**Failure ranking (8 deaths).**
+
+1. Narrhok before his ice duty 3 (Tocyao, Tocyat, Toczar): each began with him taking a ranged bot standing inside
+   his strike reach (his recount, or his pick out of Cyclone), the Q6 case kept as is. Inside it sits the Bladestorm
+   walk (picked below).
+2. Ruj'kah 3, two as kill target: DR- and cooldown-bound, no bot fault found.
+3. Iced melee 2 (Maz'dinah with Malithas, Gorgrim): kite catches.
+
+**Picked: a Bladestorm walking at its victim catches the casters it passes (bug, round 14's named candidate).**
+
+- The dodge read the storm where the warrior stood (`FactionChampionsInAoe`, radius + 1 = 9 yd;
+  `ToCHelpers_FactionChampionsDefence.cpp:2868-2879` before the fix) and kept its spot 12 yd off that point only
+  (`FactionChampionsAoeClearances`, `FactionChampionsAoeDodgeSpot`), but he walks at his victim at 5.6 yd/s: 24 pulls,
+  median 5° off his target, p90 21°. So the dodge fired one tick before his reach, and a spot clear at the pick stopped
+  being clear as he walked on (window 22a's Tocyal).
+- A bot mid cast-time spell runs no trigger: `PlayerbotAI::UpdateAIInternal` waits a preparing cast out
+  (`src/Bot/PlayerbotAI.cpp:336-411`), and only `BreakChasedCasts` breaks one, for a bot a melee champion chases
+  (`ToCHelpers_FactionChampionsBall.cpp:569-599`). toc3 0:57.45: Toczar began Immolate (1.2 s) with Narrhok
+  Bladestorming 11.4 yd off on his way to Toczag; 8.7 yd at 0:58.23, 8.0 at 0:58.44, no `faction champions avoid aoe`
+  row; the recount took Toczar at 0:58.6 and a 9.6k swing landed at 0:58.64, the chase break 6 ms later; then Dazed,
+  Mortal Strike and 3 Bladestorm ticks, dead at 1:03.5, Narrhok 100%.
+- Windows 14-23 (24 pulls), Bladestorm ticks on raiders but tanks (the reader's new `--aoe` line): his victim 111
+  (300k); others 238 (614k): within 9 yd under 0.5 s before the tick 26 (72k), casting since he came within 9 yd and no
+  dodge 41 (119k, 40 on ranged), dodged and still hit 118 (313k; melee 71, ranged 44), other 53 (110k). Window 23:
+  victim 6, 17, 13 ticks; others 12, 12, 30 (24k, 35k, 60k): casting 4, 6, 2, dodged 6, 2, 21.
+- Replay with the walk (1.5 s at 5.6 yd/s toward his target): of the 67 bystander ticks with the bot inside 9 yd under
+  0.5 s before, 16 had it on the walk 1 s or more ahead; ranged samples newly inside the trigger 719 in 24 pulls, 294
+  of them casting.
+
+**Fix** (`ToCHelpers_FactionChampionsDefence.cpp`). A Bladestorm source carries its warrior's walk: from him toward his
+victim as far as his run speed takes him in 1.5 s (`BLADESTORM_WALK_S`), stopping at the victim or the aura's end. The
+trigger tests the distance to that segment (`WalkGap`), and the clearances put a 12 yd circle every 3 yd along it
+(`AddClearance`) for every bot but his victim, whose kite keeps judging his current position; dodge spots, kite hops,
+Blink and circle landings and the other stands that read the clearances keep off his walk. `BreakCastsInAoe`, run with
+the hazards each refresh: a bot mid cast-time spell with over 300 ms left, neither rooted nor out of control, inside a
+source it doesn't skip (Hellfire too), gets `RequestSpellInterrupt`, at most once a second, and the note
+`fc.aoebreak <spell>`. Reader `--aoe`: Bladestorm ticks on raiders but tanks by how they came in reach
+(`storm_hits`) and `fc.aoebreak` by spell (`aoe_breaks`), optional in the banner. Boss doc: Champion AoE row, Known
+gaps, the trace table and `--aoe`. Every size and difficulty; a player's own casts and moves untouched.
+
+**Next window should show.** `--aoe`: `fc.aoebreak` above 0 wherever a Bladestorm or Hellfire went out among casters;
+Bladestorm "casting and no dodge" near 0 (window 23: 4, 6, 2), "dodged and still hit" down (6, 2, 21) and the others'
+tick damage down (24k, 35k, 60k); "his victim" unchanged (the kite's). No death to a Bladestormer walking past a
+caster (window 23: Toczar). Kill time not longer on a like lineup: the extra dodges cost ranged samples, ~6 s of bot
+time a pull by the replay.
+
+**Seen, not picked.**
+
+- The three free-Narrhok deaths are Q6's evidence if it comes back: Tocyao at 14.2 yd, Tocyat 7.1 yd from a rooted
+  Narrhok for 4.5 s, Toczar at 8 yd, each picked while standing.
+- The Bladestorm victim's 111 ticks and 4 deaths in 24 pulls: immune to snares, roots, stuns and fears, so only the
+  kite answers; Dazed halves it. Tocyao's escape spent Psychic Scream on a Bladestormer (fear-immune) and a trinketed
+  rogue (`FactionChampionsEscape` skips no immune chaser). Boss doc Known gaps.
+- toc3's Ruj'kah kill-target hold ran 54 s with one rogue: its Dismantle at 2:38.0, the two DPS warriors on him not
+  asked (Q5 wants no rogue alive).
+
+**Questions for the user.** None new. Q6 answered above (keep as is).
+
+**Shared code.** None: the hazards, trigger, clearances and cast break are this fight's, the reader its own.

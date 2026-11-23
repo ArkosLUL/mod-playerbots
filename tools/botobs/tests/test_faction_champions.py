@@ -1716,6 +1716,56 @@ class StrandedBreaks(unittest.TestCase):
                       f" after those 1k; half-step hops 1 of {hops}", out.getvalue())
 
 
+def storm_pull() -> list[dict]:
+    roster = [{"g": TANK, "n": "Bulwark", "r": "tank", "c": 1, "h": 0},
+              {"g": MAGE, "n": "Frost", "r": "ranged", "c": 8, "h": 0},
+              {"g": LOCK, "n": "Agony", "r": "ranged", "c": 9, "h": 0},
+              {"g": ROGUE, "n": "Shiv", "r": "melee", "c": 4, "h": 0},
+              {"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0},
+              {"g": SHAMAN, "n": "Tide", "r": "heal", "c": 7, "h": 0}]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": roster},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": NARRHOK_C, "en": 34453, "n": "Narrhok Steelbreaker", "b": 1},
+        cast(2000, LOCK, 47809, ROGUE_C, ct=2500),
+        {"t": 1200, "e": "act", "g": ROGUE, "a": fc.AVOID_AOE_ACTION, "rel": 96.0, "vd": "OK"},
+        note(2600, LOCK, fc.AOE_BREAK, "Shadow Bolt"),
+        note(2700, MAGE, fc.AOE_BREAK, "Frostbolt"),
+    ]
+    for when, victim in ((1500, MAGE), (2000, TANK), (3000, ROGUE), (4000, LOCK), (5000, SHAMAN), (6200, PRIEST)):
+        records.append(dmg(when, NARRHOK_C, victim, fc.SPELL_BLADESTORM_TICK))
+    for when in range(0, 10001, 500):
+        units = [placed(NARRHOK_C, 0.0, 0.0, 100.0, MAGE), placed(MAGE, 3.0, 0.0, 100.0, NARRHOK_C),
+                 placed(TANK, 1.0, 0.0, 100.0, NARRHOK_C),
+                 placed(LOCK, 20.0 if when < 2500 else 8.0, 0.0, 100.0, ROGUE_C),
+                 placed(ROGUE, 30.0 if when < 1000 else 6.0, 0.0, 100.0, ROGUE_C),
+                 placed(PRIEST, 30.0 if when < 6000 else 5.0, 0.0, 100.0, 0),
+                 placed(SHAMAN, 7.0, 0.0, 100.0, 0)]
+        records.append({"t": when, "e": "snap", "u": units})
+    records.append({"t": 10000, "e": "end", "out": "wipe"})
+    return records
+
+
+class StormHits(unittest.TestCase):
+    def test_each_tick_off_the_tanks_reads_how_its_raider_came_in_reach(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "649_1_velanaa_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in storm_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            self.assertEqual([(hit["t"], hit["guid"], hit["kind"]) for hit in fc.storm_hits(trace)],
+                             [(1500, MAGE, "victim"), (3000, ROGUE, "dodged"), (4000, LOCK, "casting"),
+                              (5000, SHAMAN, "other"), (6200, PRIEST, "late")])
+            self.assertEqual(fc.aoe_breaks(trace), collections.Counter({"Shadow Bolt": 1, "Frostbolt": 1}))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                fc.show_aoe(trace)
+        self.assertIn("Bladestorm ticks on raiders, tanks apart: his victim 1 (1k); others 4 (4k): within 9 yd under"
+                      " 0.5 s 1 (1k), casting and no dodge 1 (1k), dodged and still hit 1 (1k), other 1 (1k)",
+                      out.getvalue())
+        self.assertIn("fc.aoebreak: 2 (Shadow Bolt 1, Frostbolt 1)", out.getvalue())
+
+
 class DisarmWindows(unittest.TestCase):
     def test_each_dr_step_halves_the_hold_until_immune_and_15_s_clear_resets_it(self):
         self.assertEqual(fc.disarm_windows([19500, 0, 12000, 17000, 34501]),
