@@ -550,3 +550,117 @@ formation slot, a laser barrage and the frost bomb, rocket and fire holds; their
 - Bomb Bots 3, Flames 6.
 
 **Questions for the user:** none.
+
+## Round 7 (build 1fa3c332c, round 6 and the shared PickDefensive fix built)
+
+**Data:** window 14, `raidtest.py report --boss mimiron --raid uld --head 1fa3c332c --pulls 10`: one valid
+pull per pool, no DC veto inside any. Scripts in the lane scratchpad (`mim7/`: `regen.py`, `flat.py`,
+`leash.py`, `track.py`, `shockesc.py`, `holder.py`, `landtgt.py`; round 6's `mim6/p1.py`, `p1melee.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261123-103146-19` | `603_19_…_1795429957` | **reset** 3:23.8 in P1, MK II at 31.5% | 4: Napalm Shell 1 (ranged 1:45); Flames 2 (off-tank 2:41, rezzed, 2:43); Proximity Mine 1 (melee 3:01) |
+| uld2 | `tr-20261123-103207-21` | `603_21_…_1795429968` | wipe 10:39 at Berserk, P4 opened 10:28.7 | 31: P1 mines 2 (melee 0:45), Flames 1, Plasma Blast on the main tank 1 (1:15); P2 Heat Wave 3 and Rapid Burst 3 (ranged 3:08-3:53, melee 4:50-4:52), Frost Bomb 1 (melee 4:45); P3 Bomb Bot 1; Berserk 19 |
+| uld3 | `tr-20261123-103146-20` | `603_20_…_1795429958` | wipe 10:29 at Berserk | 31: P2 Heat Wave 1, Rapid Burst 4 (3:35-3:57), Flames 2 (4:03, 4:10); P3 Bomb Bot 2; P4 Shock Blast 1 (9:21); Berserk 21 (from 10:03) |
+
+66 deaths: Berserk 40, P2 Heat Wave/Rapid Burst 11, Flames 5, Bomb Bot 3, mines 3, Plasma Blast, Napalm
+Shell, Frost Bomb and Shock Blast 1 each. Water Spray hit 5 and 4 times, no death.
+
+**Stop rules:** no kill: not polished. No failure picked three times.
+
+**uld1's reset was the fight, not the harness.** RaidObs closes `reset` when the boss state goes back to
+NOT_STARTED, which only Mimiron's evade does (`BossAI::_Reset`); 24 of 25 were alive and out of combat at
+teardown, DC logged no stall (`stallAtEnd` empty) and files every pull that ends without a kill as a wipe.
+At 3:18.9 both tanks' Shock Blast escapes ran west up the corridor past the closed door ((2662.4, 2558.6, 368.7)
+and (2650.6, 2577.3, 372.4), the main tank 80.2 yd from Mimiron's spawn (2742.53, 2560.99)), the MK II
+chased the main tank into the doorway after its cast, and the encounter reset 4.9 s after the escape. The
+one evade in the script is Mimiron's 80 yd from his spawn (`boss_mimiron::UpdateAI`); the last sample,
+220 ms before the close, had him at 74.9 yd and closing, farther than in any of the other 19 Mimiron
+traces (56.8-66.6). The core never evades a raid creature on an unreachable target (below), so the leash
+is the only fit, but the crossing itself is not sampled.
+
+**Verdict on round 6 (melee walk back into sight): held.** Melee aim at the MK II in phase 1 97% and 85%
+in uld2 and uld3 (window 13: 48/53/40%), melee phase 1 damage 5.28M and 5.25M (3.45-3.59M),
+`mimiron.close sight` 4, 10 and 7 a pull. Phase 1 93.5 s (uld3) and 104.2 s (uld2) against 115-137 s;
+uld1's 190 s is the bug below. Left: uld3 melee had no target 51-67% of 1:00-1:20, after the second Shock
+Blast. Phase 4 still came late, now from phase 3.
+
+**The clock** (Berserk at 10:00; window 10's kill: P1 86, P2 92, P3 143, P4 at 7:18):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | before Berserk |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 190.3, reset | | | | | | | |
+| uld2 | 104.2 | 48.3 | **128.9** | 24.3 | **277.6** | 32.1 | 10:28.7 | -29 |
+| uld3 | 93.5 | 48.0 | 97.7 | 24.1 | **198.5** | 31.9 | 8:27.2 | 93 |
+
+uld2 entered phase 3 with 6 ranged and 5 melee (11 dead in P1 and P2) and needed five landings of 9-19
+points. uld3's two first landings took 30 and 35 points; at 13.7% in the third the 15% fire bot sweep
+took the ranged (5 of 5 on fire bots from 7:09.8, ACU 20.5 → 7.8), and the last 6.5 points waited 51 s
+for a fourth landing. uld2's fourth landing lost its last ~2 s the same way at 14.3%.
+
+**Failure picked: the MK II flags its tank unreachable, so it is immune and heals.** Berserk is the
+biggest bucket and uld1 never got past phase 1. Its MK II went 69.4 → 100% at 0:47.6 and 57.6 → 90.8 →
+100% at 1:53.6-1:55.5 (`--unreach`), +33.3 points per step, and its health stood still under the raid's
+fire 0:40.6-1:04 and 1:46.6-2:11.
+
+- Core (`Creature.cpp`, `Combat/CombatManager`, `UnitAI::EvadeTimerExpired`): a failed chase path sets
+  `SetCannotReachTarget(victim)`; `IsEvadingAttacks` then evades every hit (`SPELL_MISS_EVADE`,
+  `MELEE_HIT_EVADE`), and 5 s into the 10 s timer `NpcRegenHPIfTargetIsUnreachable` (1, no override)
+  heals max/3 each 2 s regen tick; in a raid the timer restarts instead of evading. It clears only on a
+  chase spline that dispatches, a chase that arrives, or the creature stopping to cast: both spans ended
+  at the MK II's next Shock Blast (1:04.3, 2:11.6).
+- Both opened as the main tank walked back to his spot (2691.6, 2568.5) through the MK II after a west
+  escape into the door box ((2678.1, 2572.1) at 0:34.5, (2680.5, 2558.1) at 1:41.7): at 0:40.6 he stood
+  0.4 yd from it, at 1:46.6 3 yd. Back on the spot within its reach and sight, the chase had nothing to
+  re-path, so the flag held.
+- That west escape is every pull's: the holder's first Shock Blast escape goes west (straight away from
+  an MK II east of him) in all 20 Mimiron traces, r 61-68 yd from the room centre; the flag followed in
+  2 of uld1's 4, none elsewhere. No other trace shows a rise or a frozen MK II.
+
+**Classification:** bug. The strategy holds the MK II on the tank spot for the raid to kill; its own escape
+geometry hands the MK II an unreachable tank, and once a leash-crossing reset.
+
+**Fix** (Mimiron files only, every size and mode, with or without a player):
+
+- **Holder screen.** In phase 1 (`MimironPhase1Active`) every flee fan refuses the MK II's victim a spot
+  farther from the room centre than the tank spot + `ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK` (7: 60.1 yd) or
+  than it stands (`GetMimironHolderRadius`, `IsMimironSpotHolderSafe`; the unfiltered fallback too),
+  counted as `hold` in `mimiron.flee`. 7 keeps the shock escape's ±90° bearings (56 yd); replayed on the
+  20 traces it refuses 1-7 holder legs a pull (uld1 13), every one into the alcove. It also keeps Mimiron
+  within ~69 yd of his spawn.
+- **Step out.** `mimiron unreachable trigger` / `mimiron unreachable step action` (`ACTION_RAID + 2`):
+  while the MK II's flag names the bot (`GetMimironUnreachableMech`, the AQ40 Twin Emperors precedent), it
+  walks to both reaches + `ULDUAR_MIMIRON_UNREACH_STEP_MARGIN` (4) off the MK II toward the room centre
+  (toward the bot if the MK II stands within that of the centre), fire screened then not (`unreach`, `unreach
+  fire`), so the chase re-paths; the formation walks it back. Only the flagged bot moves; a real player
+  flagged is left alone.
+- **Probe and reader.** `mimiron.unreach` (whom the flag names, per instance); `mimiron.py --unreach` lists
+  its spans with the MK II's health and every rise over 3 points off the Self Repair floor, with tests.
+  Findings doc: "An MK II that cannot reach its tank is immune and heals".
+
+navprobe not run (no Docker in this lane). The orchestrator may check the ±90-112° escape points from the
+spot, e.g. (2691.6, 2549.4), (2691.6, 2587.6), (2699.8, 2548.6), (2699.8, 2588.4): if the north and south
+ones are off mesh, the fan falls to the next bearing, then `shock fire`, then `shock anchor`.
+
+**Next window should show:**
+
+- No MK II health rise in phase 1 (`--unreach`; window 14: 3 in uld1), any `mimiron.unreach` span on the
+  holder ≤ ~3 s with `unreach ok` steps, and no `reset`.
+- The holder's Shock Blast escapes ≤ 60.1 yd from the room centre, north or south (`hold` counts in
+  `shock` notes; `holder.py` 0 legs past it), and `shock anchor` rare.
+- Mimiron ≤ ~70 yd from his spawn (`leash.py`; window 14 max 74.9).
+- Phase 1 84-104 s in every pull; melee sight losses after the first Shock Blast no more than now.
+
+**Not picked.**
+
+- The 15% fire bot sweep firing mid-landing (Q3), a target order change.
+- Phase 2 Heat Wave and Rapid Burst (11, both full pulls; uld2's P2 129 s): next round's candidate.
+- Flames 5, Bomb Bots 3, mines 3.
+
+**Questions for the user.**
+
+- **Q3 (plan change): hold the 15% fire bot sweep while the ACU is on the floor.** At 15% every kept fire
+  bot joins the ranged kill list above the ACU; when that line falls inside a landing the ranged leave the
+  one window the ACU takes damage (grounded 0.87-1.30%/s, airborne 0.11-0.12%/s). uld3 lost its third
+  landing to it and waited 51 s for a fourth; uld2 lost the end of its fourth. Recommendation: yes, sweep only
+  while the ACU is airborne (or once it lifts), keeping "killed before phase 4".

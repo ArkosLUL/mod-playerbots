@@ -638,6 +638,79 @@ class LaterPhases(unittest.TestCase):
         self.assertEqual(landing["cores"], 1)
 
 
+MKII = 4294970400
+
+
+def unreach_snap(when: int) -> dict:
+    if when < 4000:
+        health = 70.0 - when / 1000.0
+    elif when < 6000:
+        health = 66.0
+    elif when < 9000:
+        health = 99.0
+    elif when < 20000:
+        health = 0.5
+    else:
+        health = 50.0
+    rows = [[MKII, 0.0, 0.0, 364.0, 0.0, health, 0.0, BULWARK, 0, 5, 0, 0, 0, 0.0]]
+    rows += [[guid, x, y, 364.0, 0.0, 100.0, 80.0, MKII, 0, 0, 0, 0, 0, 0.0] for guid, (x, y) in HOME.items()]
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def unreach_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 6, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": MKII, "en": mm.NPC_LEVIATHAN_MKII, "n": "Leviathan Mk II", "b": 1},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "1"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.unreach", "txt": "0"},
+        {"t": 4000, "e": "note", "g": AGONY, "k": "mimiron.unreach", "txt": str(BULWARK)},
+        {"t": 4100, "e": "note", "g": BULWARK, "k": "mimiron.flee",
+         "txt": "unreach ok +0 (back0 mine0 cone0 fire0 bomb0 rocket0 burst0 shock0 spray0 move0 hold0)"},
+        {"t": 4400, "e": "note", "g": BULWARK, "k": "mimiron.flee",
+         "txt": "unreach locked (back0 mine0 cone0 fire0 bomb0 rocket0 burst0 shock0 spray0 move1 hold0)"},
+        {"t": 7000, "e": "note", "g": AGONY, "k": "mimiron.unreach", "txt": "0"},
+        {"t": 25000, "e": "end", "out": "wipe"},
+    ]
+    records += [unreach_snap(when) for when in range(0, 25000, 250)]
+    return records
+
+
+class UnreachPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_6_mimiron_1789700004.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in unreach_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_latch_spans_until_it_names_nobody_and_counts_its_victim_steps(self):
+        rows = mm.unreach_rows(self.trace)
+        self.assertTrue(rows["probed"])
+        self.assertEqual(len(rows["latched"]), 1)
+        span = rows["latched"][0]
+        self.assertEqual(span["span"], (4000, 7000))
+        self.assertEqual(span["victim"], BULWARK)
+        self.assertEqual(span["health"], (66.0, 99.0, 99.0))
+        self.assertEqual((span["ok"], span["steps"]), (1, 2))
+
+    def test_a_rise_off_the_repair_floor_counts_and_self_repair_does_not(self):
+        rises = mm.unreach_rows(self.trace)["rises"]
+        self.assertEqual([(rise["t"], rise["from"], rise["to"]) for rise in rises], [(6000, 66.0, 99.0)])
+
+    def test_the_view_names_the_victim(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_unreach(self.trace)
+        self.assertIn("Bulwark", out.getvalue())
+        self.assertIn("rises off the repair floor: 1", out.getvalue())
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)

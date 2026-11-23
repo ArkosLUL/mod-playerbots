@@ -19,6 +19,7 @@ from raidobs.geometry import anchor, dist2, frames, guids_of_entry, radius  # no
 from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, roster_guids  # noqa: E402
 
+NPC_LEVIATHAN_MKII = 33432
 NPC_VX001 = 33651
 NPC_FROST_BOMB = 34149
 NPC_AERIAL_COMMAND_UNIT = 33670
@@ -114,6 +115,9 @@ MINE_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_CLEARANCE")
 MINE_MOVER_MS = 4000
 STANDING = "standing"
 OLDER_LEG = "an older leg"
+
+REGEN_RISE = 3.0
+REPAIR_FLOOR = 1.0
 
 SLOT = re.compile(r"(\S+) (\d+)/(\d+) (-?\d+),(-?\d+),(-?\d+)")
 
@@ -1455,6 +1459,62 @@ def show_p3(trace: Trace) -> None:
               f" ({rate:.2f} %/s){tail}")
 
 
+# -------------------------------------------------------------------------------------------- unreach
+
+def unreach_rows(trace: Trace) -> dict:
+    samples = Samples(trace)
+    end = pull_end(trace)
+    spans = phases(trace)
+    mkii = guids_of_entry(trace, NPC_LEVIATHAN_MKII)
+    steps = [rec for rec in notes(trace, "mimiron.flee") if rec.get("txt", "").startswith("unreach")]
+
+    marks = sorted(notes(trace, "mimiron.unreach"), key=lambda rec: rec["t"])
+    latched = []
+    for index, rec in enumerate(marks):
+        victim = int(rec.get("txt") or 0)
+        if not victim:
+            continue
+        stop = marks[index + 1]["t"] if index + 1 < len(marks) else end
+        health = [row[5] for units in samples.window(rec["t"], stop + 1)
+                  for guid, row in units.items() if guid in mkii]
+        mine = [step for step in steps if step.get("g") == victim and rec["t"] <= step["t"] <= stop]
+        latched.append({"span": (rec["t"], stop), "phase": phase_at(spans, rec["t"]), "victim": victim,
+                        "health": (health[0], max(health), health[-1]) if health else None,
+                        "steps": len(mine), "ok": sum(1 for step in mine if " ok " in f"{step['txt']} ")})
+
+    rises = []
+    last: dict[int, float] = {}
+    for index, snap in enumerate(samples.snaps):
+        for guid, row in samples.rows(index).items():
+            if guid not in mkii:
+                continue
+            before = last.get(guid)
+            if before is not None and before >= REPAIR_FLOOR and row[5] - before > REGEN_RISE:
+                rises.append({"t": snap["t"], "phase": phase_at(spans, snap["t"]), "from": before, "to": row[5]})
+            last[guid] = row[5]
+
+    return {"probed": bool(marks), "latched": latched, "rises": rises}
+
+
+def show_unreach(trace: Trace) -> None:
+    print("UNREACH")
+    rows = unreach_rows(trace)
+    if not rows["probed"]:
+        print("  no mimiron.unreach latch: a build before it")
+    elif not rows["latched"]:
+        print("  the MK II never flagged anyone unreachable")
+    for span in rows["latched"]:
+        begin, stop = span["span"]
+        health = span["health"]
+        hp = f"MK II {health[0]:.1f} -> max {health[1]:.1f} -> {health[2]:.1f}" if health else "MK II unsampled"
+        print(f"  {clock(begin)} .. {clock(stop)}  {(stop - begin) / 1000:5.1f} s  {span['phase']:4}"
+              f" {trace.name(span['victim'])[:14]:14} {hp}; unreach steps {span['ok']} ok of {span['steps']}")
+
+    print(f"  MK II health rises off the repair floor: {len(rows['rises'])}")
+    for rise in rows["rises"]:
+        print(f"      {clock(rise['t'])}  {rise['phase']:4} {rise['from']:5.1f} -> {rise['to']:5.1f}")
+
+
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
     ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
@@ -1472,6 +1532,8 @@ SECTIONS = (
      show_mines),
     ("p3", "phase 3 fire bots, Water Spray, the Junk Bot pile and what each core landing was worth",
      show_p3),
+    ("unreach", "the MK II's cannot-reach flag: whom it named, for how long, and its health rising under it",
+     show_unreach),
 )
 
 

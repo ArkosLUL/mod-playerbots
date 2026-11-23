@@ -120,6 +120,30 @@ Napalm Shell is why it is slots and not a point
 ([Napalm Shell wants one bot per shell](#napalm-shell-wants-one-bot-per-shell)). All of this is
 Firefighter-only; normal mode has no fire and keeps the room centre, the ring and 5.5 yd.
 
+### An MK II that cannot reach its tank is immune and heals
+
+When a raid creature's chase path to its victim fails, the core sets its cannot-reach flag
+(`Creature::GetCannotReachTarget`): from that tick every hit on it **evades** (`IsEvadingAttacks`),
+and 5 s later it **heals a third of its health per 2 s** (`NpcRegenHPIfTargetIsUnreachable`, on).
+In a raid it never evades; the timer just restarts. The flag clears only on a chase move that
+succeeds or when the MK II stops to cast, so a tank standing in its reach with sight keeps it: twice
+in one pull, 22-24 s each until the next Shock Blast, the MK II went 69 → 100% and 58 → 100% and
+phase 1 ran 190 s.
+
+Both times the main tank's Shock Blast escape had run west into the door box and he walked back to
+his spot through the MK II. That escape runs west at the first cast in every pull traced, straight
+away from an MK II east of the spot. So in phase 1 every flee fan refuses the MK II's victim a spot
+farther from the room centre than the tank spot plus `ULDUAR_MIMIRON_HOLDER_RADIUS_SLACK` (7, so
+60.1 yd) or than he already stands (`IsMimironSpotHolderSafe`); 7 keeps the escape's bearings at
+±90° (56 yd). It also holds Mimiron, who rides the MK II after its victim, inside his 80 yd leash:
+one escape ran both tanks up the west corridor, 80.2 yd from his spawn, and the encounter reset
+4.9 s later with 24 of 25 alive (the leash is the script's only evade; the last sample, 220 ms
+before, had him at 74.9 yd and closing).
+
+A flag naming a bot anyway sends it out of the MK II's chase range, both reaches plus
+`ULDUAR_MIMIRON_UNREACH_STEP_MARGIN` (4), toward the room centre (`mimiron unreachable step
+action`), so the chase re-paths and clears it; the formation then walks it back.
+
 ## The Frost Bomb is 30 yd, and it lands in your own fire
 
 VX-001 casts 64623 at `SPELLVALUE_MAX_TARGETS 1` from 1 s into phases 2 and 4, repeating every 45 s.
@@ -1406,6 +1430,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `phase` | 0 none, 1-4 the phase, 5 a handover. 0 also covers the 1→2 handover until VX-001 is summoned ~17 s in (`GetMimironStagingFocus` sees only VX-001 and the Aerial Command Unit), so `mimiron.py` prints it as a `Z` span, then `H`. Per instance |
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core, a real player included. Per instance |
+| `unreach` | Whom the MK II's cannot-reach flag names, `0` when clear. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point. `none` is noted too: without it a bot the formation skips by design (melee) and one its shape refused, a bug, read as the same silence |
 | `handover` | The Firefighter 1→2 handover's step: 0 none, 1 hold, 2 late (VX-001 summoned), 3 walk in. Per instance |
@@ -1415,7 +1440,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot), `detour ±N` (degrees off the direct bearing) or `cross N` (yd of burn walked through); `none mines` when only a walk past mines was left |
 | `close` | A melee approach steered round the fire instead of straight at the target |
@@ -1430,7 +1455,9 @@ chase; `--handover` counts a bot on its phase 2 slot only by a slot handed out i
 leaves humans out of positions and mana; `--p3` measures each landing off the unit's own Z rather than the core latch; `--fire` calls a
 dodge burned only with a Flames tick on the bot in the 2 s before it; `--mines` charges a mine hit to
 the bot's last leg under 4 s old while it moves, else `standing`, and judges legs on their straight
-line, not the navmesh walk; and a phase that
+line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
+every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
+older traces show too; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated
