@@ -20,6 +20,8 @@
     thorim.py <file> --ringcone  each Lightning Charge against the melee ring: who it hit and what they were
                                  doing (unable to move, walking, held out of it, standing, past melee reach),
                                  and how many ring walks were held for crossing the lit cone
+    thorim.py <file> --colossus  each Runic Colossus Smash against the gauntlet healers: how far off his facing
+                                 and his target each stood, the move that put it there, who it hit or killed
 """
 from __future__ import annotations
 
@@ -95,6 +97,11 @@ SHELTER_ARRIVED = 2.0
 SLOW_LOOK_MS = 4000
 RING_CONE_HOLD = "thorim.ringconehold"
 RING_HIT_KINDS = ("blocked", "walking", "held", "standing")
+NPC_RUNIC_COLOSSUS = 32872
+COLOSSUS_SMASH = 62339
+SMASH_LAND_MS = 3500
+SMASH_LOOK = 20.0
+SMASH_ON_TARGET = 6.0
 
 
 def mine(trace: Trace) -> bool:
@@ -1140,6 +1147,68 @@ def show_ringcone(trace: Trace) -> None:
           f"before the first tank death hit {total['early hit']}, dead {total['early dead']}")
 
 
+def rows_before(trace: Trace, when: int) -> dict:
+    last = None
+    for snap in frames(trace):
+        if snap["t"] > when:
+            break
+        last = snap
+    return {row[0]: row for row in last.get("u", [])} if last else {}
+
+
+def smash_healer_text(trace: Trace, guid, read: dict) -> str:
+    landed = ", dead" if read["dead"] else (f", hit {read['hit'] / 1000:.0f}k" if read["hit"] else "")
+    return (f"{trace.name(guid)} {yd(read['away'])} yd {read['off']:.0f} deg, {yd(read['from_target'])} yd off his "
+            f"target{landed} ({read['mover']})")
+
+
+def show_colossus(trace: Trace) -> None:
+    print("COLOSSUS SMASH")
+    if not mine(trace):
+        return
+    colossi = {guid for guid, entry in trace.entries.items() if entry == NPC_RUNIC_COLOSSUS}
+    casts = [rec for rec in trace.of("cast") if rec.get("sp") == COLOSSUS_SMASH and rec.get("s") in colossi]
+    if not casts:
+        print("  no Smash cast")
+        return
+    healers = {guid for guid, role in trace.roles.items() if role == "heal"}
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") == COLOSSUS_SMASH]
+    deaths = [death for death in combat_deaths(trace) if blow_spell(death) == COLOSSUS_SMASH]
+    moves = [rec for rec in trace.of("move") if rec.get("g") in healers and rec.get("ok")]
+    total = collections.Counter()
+    for cast in casts:
+        rows = rows_before(trace, cast["t"])
+        colossus = rows.get(cast["s"])
+        if not colossus:
+            continue
+        target = colossus[7] if len(colossus) > 7 else 0
+        target_row = rows.get(target)
+        landed = {rec["d"]: rec["a"] for rec in hits if cast["t"] <= rec["t"] <= cast["t"] + SMASH_LAND_MS}
+        dead = {death["g"] for death in deaths if cast["t"] <= death["t"] <= cast["t"] + SMASH_LAND_MS}
+        reads = {}
+        for guid in sorted(healers):
+            row = rows.get(guid)
+            if not row or row[5] <= 0 or dist2(row[1:3], colossus[1:3]) > SMASH_LOOK:
+                continue
+            last = [rec for rec in moves if rec["g"] == guid and rec["t"] <= cast["t"]]
+            reads[guid] = {"away": dist2(row[1:3], colossus[1:3]),
+                           "off": angle_off(bearing(colossus[1:3], row[1:3]), colossus[4]),
+                           "from_target": dist2(row[1:3], target_row[1:3]) if target_row else None,
+                           "hit": landed.get(guid), "dead": guid in dead,
+                           "mover": (last[-1].get("by") or "-") if last else "-"}
+        total["casts"] += 1
+        total["near"] += len(reads)
+        total["on target"] += sum(1 for read in reads.values()
+                                  if read["from_target"] is not None and read["from_target"] <= SMASH_ON_TARGET)
+        total["hit"] += sum(1 for read in reads.values() if read["hit"])
+        total["dead"] += sum(read["dead"] for read in reads.values())
+        on = f"on {trace.name(target)} ({trace.role(target)})" if target else "on nobody"
+        print(f"  {clock(cast['t'])} {on}: " + ("; ".join(smash_healer_text(trace, guid, read)
+                                                         for guid, read in reads.items()) or "no healer in reach"))
+    print(f"  all: casts {total['casts']}, healers within {SMASH_LOOK:.0f} yd {total['near']}, within "
+          f"{SMASH_ON_TARGET:.0f} yd of his target {total['on target']}, hit {total['hit']}, dead {total['dead']}")
+
+
 SECTIONS = (
     ("deaths", "deaths by mechanic, phase 1 and phase 2 apart", show_deaths),
     ("phase2", "the phase 2 measures the tank spots are judged on", show_phase2),
@@ -1151,6 +1220,8 @@ SECTIONS = (
      "there, who the cone hit and what slowed them", show_shelters),
     ("ringcone", "each Lightning Charge against the melee ring: who it hit and what they were doing, and the ring "
      "walks held for crossing the lit cone", show_ringcone),
+    ("colossus", "each Runic Colossus Smash against the gauntlet healers: how far off his facing and his target "
+     "each stood, the move that put it there, who it hit", show_colossus),
 )
 SUMMARY = ("deaths", "phase2")
 

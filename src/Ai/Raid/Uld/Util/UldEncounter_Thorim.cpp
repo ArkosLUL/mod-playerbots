@@ -14,6 +14,7 @@
 #include "LastMovementValue.h"
 #include "Map.h"
 #include "MotionMaster.h"
+#include "PathGenerator.h"
 #include "PetDefines.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -1768,6 +1769,23 @@ bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader)
         return false;
 
     return healer || (!ThorimGauntletFighting(botAI, bot) && !ThorimFightingStartPack(botAI, bot));
+}
+
+Position ThorimGauntletTrailSpot(Player* bot, Player* leader)
+{
+    Position const spot = leader->GetPosition();
+    if (!PlayerbotAI::IsHeal(bot))
+        return spot;
+
+    PathGenerator path(bot);
+    path.CalculatePath(spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false);
+    if (!(path.GetPathType() & PATHFIND_NORMAL) || path.GetPath().size() < 2)
+        return spot;
+
+    path.ShortenPathUntilDist(G3D::Vector3(spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ()),
+                              ULDUAR_THORIM_GAUNTLET_HEALER_STANDOFF);
+    G3D::Vector3 const& end = path.GetPath().back();
+    return Position(end.x, end.y, end.z);
 }
 
 bool ThorimFightingStartPack(PlayerbotAI* botAI, Player* bot)

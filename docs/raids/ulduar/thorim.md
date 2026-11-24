@@ -242,6 +242,7 @@ the arena centre.
 | Runic Smash, right hand | 62058 | Same, the "Left Hand" bunnies (33141) at x 2198-2222, the right lane |
 | Runic Smash damage | 62465 | 10 yd per bunny, **the whole row at once as the cast lands** (core `1702c28b7`; same millisecond in the 2026-10-11 log) |
 | Runic Barrier | 62338 | -51% damage taken **and a 2000 arcane damage shield per melee swing**; 20s, first cast 6-15s (10-man) / 10-24s (25-man) after the engage, recast every 45s |
+| Smash | 62339 | 3s cast at his target, first 12-35s after the engage, then every 15-22s: 37k physical in a 10 yd frontal cone (healers hit 11 yd out, 12° off his facing), and on anyone within ~2 yd of him whatever the facing |
 
 `EVENT_RC_RUNIC_SMASH` is scheduled in `Reset()` and **cancelled in `JustEngagedWith`**, so the corridor
 smash only happens on the approach and stops the moment the Colossus is tanked. The Ancient Rune Giant
@@ -282,6 +283,15 @@ abilities keep landing.
 
 It also sets the Colossus' clock. Bot-led, it landed 11-18 s after the engage in five of six pulls,
 with him at 21-81%, and the rest took 7-26 s; the one Colossus dead in 20 s never got one.
+
+**Gauntlet healers trail to 15 yd short of the leader, never onto him** (`ThorimGauntletTrailSpot`: the
+path to the leader cut at `ULDUAR_THORIM_GAUNTLET_HEALER_STANDOFF`, under the 20 yd tether so the trail
+doesn't re-fire; the leader's own spot when no normal path is found). The leader walks into the Colossus
+and tanks him from ~4.4 yd south, inside the Smash cone, and healers tethered from the y −360 pull line
+stood on the leader: in 10 of 53 pulls with a Smash both were hit, 12 healers dead, while healers 7-13 yd
+behind the Colossus were never hit. In the six at hard mode the first phase 2 tank death came at
++45-137 s (p50 77, against 119 without): a gauntlet healer lost costs the race. Replayed over those ten,
+each stop lands 10.6 yd behind the Colossus.
 
 ## Phase 2
 
@@ -1253,11 +1263,11 @@ player was on the instance left the corridor standing while he stayed in the are
   a bot or a real player alike, take the leader's waypoint, also from an earlier waypoint of the lane
   unless fighting: placing only bots off the lane left a squad on waypoints 0-1 31-43 yd behind a leader
   on 3, whose 30 yd hold stood 7.5 s until a Runic Smash dodge moved everyone. Between waypoints they walk
-  to him once more than 25 yd (healers 20 yd) behind, except a non-healer fighting, which means targeting
-  a gauntlet mob in combat within the 50 yd pick range (`ThorimGauntletFighting`): that tether fought
-  `reach melee` whenever he walked on mid-fight, 116-185 DPS bot-seconds a pull of moving without damage,
-  three quarters of it on the Honor Guards and Giant. The gate walk re-adds follow-master only when the
-  leader is the bot's master.
+  to him once more than 25 yd (healers 20 yd, and only to 15 yd of him) behind, except a non-healer
+  fighting, which means targeting a gauntlet mob in combat within the 50 yd pick range
+  (`ThorimGauntletFighting`): that tether fought `reach melee` whenever he walked on mid-fight, 116-185 DPS
+  bot-seconds a pull of moving without damage, three quarters of it on the Honor Guards and Giant. The
+  gate walk re-adds follow-master only when the leader is the bot's master.
 - **Clock:** the walk is about 57 yd from the portcullis to the first waypoint and 65 yd to the last, so
   roughly 20 s of running at 7 yd/s, against the ~28 s opening wait a human led squad accepts. The corridor
   fights set the clock. Measured on 25-man (fifteen bot-led pulls, before the lever wait and the Colossus
@@ -1292,7 +1302,8 @@ waypoint radius**, so once he walks past the chain the row goes quiet for everyo
 reached **183-191 yd** out while the two healers stalled at **148 and 129**, one of them with **no move
 order at all** across 22 s, leaving the human 68.8 and 101.1 yd behind against the 40 yd heal range and
 his last outside heal 21 s before he died. `ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE` (20 yd) now walks a
-trailing healer to the leader once the lane index fails; non-healers trail as in **Walk** above.
+trailing healer to 15 yd of the leader once the lane index fails
+([Runic Colossus](#runic-colossus-32872-spawned-at-22275--396179-412176)); non-healers trail as in **Walk** above.
 
 **The fall rescue still stops at 110 yd.** `ThorimFallFromFloorTrigger` bails past
 `ULDUAR_THORIM_FLOOR_RANGE` (110 yd) from the arena centre, short of the left lane's last four
@@ -1339,9 +1350,10 @@ free-roam onto the camp and **32-39% of phase 1 add damage lands on ranged**. Ch
 lives, deliberately out of scope. Nothing taunts an add off whoever it rolled, and nothing recovers the
 fight once the arena squad is dead; the 5 second scan leaves no room to walk anyone back.
 
-Documented, not implemented: the in-combat `SPELL_SMASH` 62339 frontal cone (60 degrees, 3s cast, a
-different spell from the corridor Runic Smash), Rune Detonation 62526, Stomp 62411, and Runic
-Fortification 62942. Heals on a freshly swapped-in tank are also thin (one took no heal at all in the
+Documented, not implemented: a dodge of the in-combat `SPELL_SMASH` 62339 frontal cone (60 degrees, 3s
+cast, a different spell from the corridor Runic Smash; healers stand clear by their trail,
+[Runic Colossus](#runic-colossus-32872-spawned-at-22275--396179-412176)), Rune Detonation 62526, Stomp
+62411, and Runic Fortification 62942. Heals on a freshly swapped-in tank are also thin (one took no heal at all in the
 2.9 s he died over), but that is generic heal AI, not this strategy.
 
 **The squad split counts human tanks.** `AssignThorimSquads` counts tanks with a bare
@@ -1414,6 +1426,9 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   unable to move (a `blocked` move), walking (an accepted move since the lit, naming the last mover),
   held or standing; past 12 yd of him; death; the walks held; then totals and those before the first
   tank death. Traces without `thorim.ringconehold` read all but the holds.
+- `--colossus`: per Runic Colossus Smash, each healer within 20 yd of him: yards from him and off his
+  facing, yards from his target, its last accepted move's mover, hit or death; then totals, with those
+  within 6 yd of his target.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and
