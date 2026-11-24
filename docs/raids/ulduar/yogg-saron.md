@@ -941,13 +941,14 @@ floor of 324.89-325.19, so it is a **13.26 yd horizontal ring that never goes aw
 as a `haz` circle and `yogg.knockback`. Measured, launches started 7.8-12.9 yd out; read the last grounded
 sample, since the first airborne one is a third of a second into the flight and 6 yd too far.
 
-**It costs melee nothing; crossing it is what costs.** Yogg's `CombatReach` is **30** (display 28817,
-`BoundingRadius` 0), so melee range on him is ≈ **34 yd**, and the P3 melee spot is 18.4 yd out. But 42%
-of portal walks routed within 12 yd of the body. So P2 and P3 spacing carry the ring as a standing hazard
-circle, the trigger reads it, and the spacing walk and walks to a fixed spot filter the route; a bot
-already inside is exempt, since every short step out passes close to the middle. A blocked crossing gets
-one waypoint at `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter arc: each leg
-halves the next turn, so one is enough, and a half-turn passes 24 × cos 45° = 17.0 yd from the middle.
+**It costs melee nothing; crossing it is what costs.** Yogg's `CombatReach` is **20** (display 28817,
+`BoundingRadius` 0; 30 before core `2026_11_06_01`), so melee range on him is ≈ **22.8 yd**, and the P3 melee
+spot is 18.4 yd out. But 42% of portal walks routed within 12 yd of the body. So P2 and P3 spacing carry the
+ring as a standing hazard circle, the trigger reads it, and the spacing walk and walks to a fixed spot filter
+the route; a bot already inside is exempt, since every short step out passes close to the middle. A blocked
+crossing gets one waypoint at `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter
+arc: each leg halves the next turn, so one is enough, and a half-turn passes 24 × cos 45° = 17.0 yd from the
+middle.
 
 **The walk at a target across Yogg ends on top of him.** A reach leg stops half way
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)); half the way across the room is
@@ -1588,8 +1589,12 @@ a 15 yd radius — reachable by 4.4 yd, and **nothing else in the room is**: a l
 fenced off every bot handed it, and the raid's damage that minute fell to a fifth. So the spot is a
 **station**: `PhaseThreeStationReaches` claims a bot only while standing there costs it nothing and
 releases it otherwise. Naming no entries is deliberate — a rule written as a list goes stale the first time
-a new add appears. Tanks keep a 30 yd leash instead, because `yogg-saron guardian control` outranks this
-node and brings them back whenever a Guardian is loose; the leash is only the way home once nothing is.
+a new add appears. A melee bot's reach is `reach melee`'s, `MeleeDistance` plus both combat reaches: on
+`MeleeDistance` alone Yogg (reach 20) read out of reach of the melee spot 18.4 yd from him, so melee hit him
+from wherever they arrived, 45-97% of the time over 30 yd from the spot on his west side, out of the tanks'
+taunts and beside the Guardian spawn ring. Tanks keep a 30 yd leash instead, because `yogg-saron guardian
+control` outranks this node and brings them back whenever a Guardian is loose; the leash is only the way home
+once nothing is.
 
 **Healers take the melee spot and no target.** A target is what the station releases a bot for, and
 healers chased tentacles to 40+ yd from the tank. The resolver gives a phase 3 healer none, dropped without
@@ -1878,7 +1883,7 @@ first.
 hits on ranged or healers. The ceiling there: Yogg lost 2.5% a minute, ~13 minutes for his last 30%.
 
 **The bot tank has to hit the Guardians, not only taunt them.** `FindTankTargetSmartStrategy` ranks by not
-attacking the tank, then nearest by `GetDistance`, which takes off Yogg's 30 yd combat reach: he always
+attacking the tank, then nearest by `GetDistance`, which takes off Yogg's 20 yd combat reach: he always
 reads nearest and never attacks anyone, so a bot tank held Yogg all phase and each taunt wore off with
 nothing behind it. So in phase 3 `yogg-saron guardian control` (`ACTION_RAID + 3`), in order:
 
@@ -1904,10 +1909,15 @@ on a tank beat Guardians loose among the casters even where none of them can die
 **One pile, swapped on danger, by the user's choice** (two piles rejected). Both tanks share the melee spot,
 so Consecration kept the pile on whoever led threat. When the holder drops under 50% (`…_TANK_SWAP_PCT`)
 with 3+ Guardians, more than the other tank has, a tank at 70%+ not dragging takes the pile
-(`YoggSaronTankSwapTake`): Righteous Defense on the holder, then a taunt on its highest Guardian, before the
-loose loop. For 8 s (`…_TANK_SWAP_MS`, one cooldown) the holder sheds: consecration, hammer of the
-righteous, avenger's shield, hand of reckoning and righteous defense blocked (`yogg-saron tank swap hold`),
-loose loop skipped; Holy Shield and Shield of Righteousness stay. It ends early on the holder's death or the
+(`YoggSaronTankSwapHolder`): Righteous Defense on the holder, then a taunt on its highest Guardian, before the
+loose loop. **A Guardian on a raider goes first, by the user's choice**: while the holder is over 35%
+(`…_TANK_SWAP_DEFER_PCT`) the taker taunts one hitting a non-tank player, never a drag return or a Distracting
+Shot hold, before it takes (`yogg.swapdefer`: holder and health), since a full-power Guardian one-shots a
+healer and a holder at 35-50% usually outlives the taunt's cooldown. The swap starts on its first take that
+lands (`YoggSaronTankSwapTake`), so the holder never sheds while the taker's taunt cools. For 8 s
+(`…_TANK_SWAP_MS`, one cooldown) the holder sheds: consecration, hammer of the righteous, avenger's shield,
+hand of reckoning and righteous defense blocked (`yogg-saron tank swap hold`), loose loop skipped; Holy
+Shield and Shield of Righteousness stay. It ends early on the holder's death or the
 taker under 50%. A tank under 50% also leaves loose Guardians to a tank at 70%+ (`YoggSaronTankLowHold`), or
 a soulstoned tank taunts straight back in and dies again. It moves the whole pile, so it buys a fresh bar
 and the holder's cooldown, not a lighter load. `yogg.tankswap` (`take`), `yogg.tankshed`, `yogg.tankhold`
@@ -2060,7 +2070,7 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**75 `yogg.` probe keys**, by topic:
+**76 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
@@ -2069,7 +2079,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
@@ -2115,6 +2125,11 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
 - A taunt's fade has no row: `--phase3`'s `taunts run out short of the tank` puts it 3 s after the cast row,
   counts those with the Guardian over 10 yd from its taunter 0.3 s before, and the non-tank it swung at within
   2 s.
+- A Guardian's victims are its snapshots' target column. Up to the first tank death, `--phase3`'s `fresh on
+  a raider` sums each one's time on a non-tank player before a tank first held it, and `raiders killed by a
+  fresh Guardian` counts deaths to one no tank had held yet; `swaps deferred` ties a tank death to a
+  `yogg.swapdefer` naming it within 10 s. `melee on Yogg` bands melee samples on Yogg from 15 s in by distance
+  from the melee spot: within the 15 yd station, to the tanks' 30 yd taunts, beyond.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
 - `--portals` telling a bot that walked for a portal and lost the race from one whose node never ran is
   the only way the room-tag leak shows.

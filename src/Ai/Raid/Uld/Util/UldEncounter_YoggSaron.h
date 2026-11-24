@@ -380,6 +380,7 @@ inline constexpr float ULDUAR_YOGG_SARON_DRAIN_LIFE_HEALTH_PCT = 85.0f;
 
 inline constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_PCT = 50.0f;
 inline constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_TAKER_PCT = 70.0f;
+inline constexpr float ULDUAR_YOGG_SARON_TANK_SWAP_DEFER_PCT = 35.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MIN_GUARDIANS = 3;
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
 
@@ -725,7 +726,8 @@ char const* YoggSaronWarlockSummon(PlayerbotAI* botAI);
 
 char const* YoggSaronPhase3YoggDot(PlayerbotAI* botAI, Unit*& yogg);
 
-Player* YoggSaronTankSwapTake(PlayerbotAI* botAI);
+Player* YoggSaronTankSwapHolder(PlayerbotAI* botAI);
+void YoggSaronTankSwapTake(PlayerbotAI* botAI, Player* holder);
 
 bool YoggSaronTankShedding(PlayerbotAI* botAI);
 

@@ -369,6 +369,8 @@ PHASE_3_MELEE_SPOT = (1998.5377, -22.90317, 324.8895)
 PHASE_3_MELEE_GUARDIAN_RANGE = 20.0
 PHASE_3_RANGED_SPOT = (2018.7628, -18.896868, 327.07245)
 PHASE_3_STATION_RADIUS = 15.0
+PHASE_3_TANK_TAUNT_REACH = 30.0
+MELEE_SPOT_SETTLE_MS = 15000
 # ULDUAR_YOGG_SARON_PHASE_3_RANGED_STANDBY_SPOTS in the module's order, the ranged spot turned -15, +15,
 # -30 and +30 degrees round Yogg, and the clearance from a live Crusher that sends the ranged there.
 PHASE_3_RANGED_STANDBY_SPOTS = (("-15", (2019.18, -29.08, 327.154)), ("+15", (2015.72, -9.16, 327.155)),
@@ -380,7 +382,7 @@ LUST_POSITION_SHARE = 0.8
 SPELL_DISTANCE = 28.5
 PLAYER_COMBAT_REACH = 1.5
 MELEE_REACH = 5.0
-COMBAT_REACH = {NPC_YOGG_SARON: 30.0, NPC_CRUSHER_TENTACLE: 8.0}
+COMBAT_REACH = {NPC_YOGG_SARON: 20.0, NPC_CRUSHER_TENTACLE: 8.0}
 SPELL_LUSTS = {32182: "Heroism", 2825: "Bloodlust"}
 # An Immortal Guardian's 5 s channel, 10 and 25. A kick that lands inside the first 1.5 s keeps most of
 # its 166,650 heal off.
@@ -491,6 +493,7 @@ TAUNT_FADE_LOOK_MS = 300
 TAUNT_SHORT_YD = 10.0
 TAUNT_FADE_HIT_MS = 2000
 DEATH_AFTER_HIT_MS = 1500
+SWAP_DEFER_LOOK_MS = 10000
 HOLD_BURST = "hold burst until tank engaged"
 SPELL_MISDIRECTION = 34477
 # A tank's own buttons and the externals it gives or takes, by spell id.
@@ -4455,6 +4458,35 @@ def taunts_run_short(taunts: list[tuple[int, int, int]], rows: dict[int, list[li
     return short, chained, swung, died
 
 
+def fresh_on_raider(rows: list[list], tanks: set, raiders: set, stop: int) -> tuple[int, bool]:
+    on = 0
+    for row, after in zip(rows, rows[1:] + [None]):
+        if row[0] >= stop:
+            break
+        if row[8] in tanks:
+            return on, True
+        if row[8] in raiders and after:
+            on += min(after[0], stop) - row[0]
+    return on, False
+
+
+def killed_by_fresh(deaths: list[tuple[int, int, int]], rows: dict[int, list[list]], tanks: set,
+                    stop: int) -> list[tuple[int, int, int]]:
+    return [(when, victim, killer) for when, victim, killer in deaths
+            if when <= stop and victim not in tanks and killer in rows
+            and not any(row[8] in tanks for row in rows[killer] if row[0] <= when)]
+
+
+def deferred_tank_deaths(defers: list[tuple[int, str, int]], tank_deaths: list[tuple[int, str]],
+                         look_ms: int = SWAP_DEFER_LOOK_MS) -> list[tuple[int, str, int, int]]:
+    out = []
+    for when, name in tank_deaths:
+        last = [(at, pct) for at, holder, pct in defers if holder == name and 0 <= when - at <= look_ms]
+        if last:
+            out.append((when, name, *last[-1]))
+    return out
+
+
 def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
     """Whether the last of these sorted cast times before `when` is still inside the cooldown."""
     index = bisect.bisect_right(casts, when)
@@ -4680,6 +4712,29 @@ def show_phase3_arrival(trace: Trace, start: int, rows: dict[int, list[list]], r
         print(f"    yogg.nitro       : {dict(picks)}")
 
 
+def spot_bands(distances: list[float]) -> tuple[float, float, float]:
+    if not distances:
+        return 0.0, 0.0, 0.0
+    near = sum(1 for yd in distances if yd <= PHASE_3_STATION_RADIUS) / len(distances)
+    far = sum(1 for yd in distances if yd > PHASE_3_TANK_TAUNT_REACH) / len(distances)
+    return near, 1.0 - near - far, far
+
+
+def show_phase3_melee_spot(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set,
+                           yogg: int | None) -> None:
+    tanks = {guid for guid in roster if trace.role(guid) == "tank"}
+    until = min((rec["t"] for rec in death_records(trace) if rec.get("g") in tanks and start <= rec["t"] <= stop),
+                default=stop)
+    distances = [math.dist(row[2:4], PHASE_3_MELEE_SPOT[:2])
+                 for guid in roster if trace.role(guid) == "melee" and guid not in trace.humans
+                 for row in rows.get(guid, [])
+                 if start + MELEE_SPOT_SETTLE_MS <= row[0] <= until and row[6] > 0 and row[8] == yogg]
+    near, mid, far = spot_bands(distances)
+    print(f"  melee on Yogg      : {len(distances)} samples to the first tank death, from the melee spot"
+          f" {near:.0%} within {PHASE_3_STATION_RADIUS:.0f} yd, {mid:.0%} to {PHASE_3_TANK_TAUNT_REACH:.0f},"
+          f" {far:.0%} beyond (out of the tanks' taunts)")
+
+
 def show_phase3_area(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set,
                      tanks: set, guardians: set, yogg: int | None) -> None:
     """Phase 3 area casts by the bot non-tanks, by how many units round the caster's target were worth
@@ -4852,6 +4907,7 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
     print(f"    taunts run out short of the tank (over {TAUNT_SHORT_YD:.0f} yd off it at the fade): {short},"
           f" chained by another tank before the fade {chained}, a non-tank swung at within"
           f" {TAUNT_FADE_HIT_MS // 1000} s of the fade {swung} ({died} died)")
+    show_phase3_fresh(trace, start, stop, rows, guardians, tanks, roster)
     held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
                                if rec.get("m") == PHASE_3_TAUNT_HOLD and start <= rec["t"] <= stop)
     if held:
@@ -4873,6 +4929,35 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
             aim = rec.get("tgt") or rec.get("s")
             print(f"    Lay on Hands {clock(rec['t'])} {trace.name(rec.get('s'))} on {trace.name(aim)}"
                   f" ({trace.role(aim)})")
+
+
+def show_phase3_fresh(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], guardians: set,
+                      tanks: set, roster: set) -> None:
+    deaths = [rec for rec in death_records(trace) if start <= rec["t"] <= stop]
+    tank_deaths = [(rec["t"], trace.name(rec.get("g"))) for rec in deaths if rec.get("g") in tanks]
+    first_tank_death = min((when for when, _ in tank_deaths), default=stop)
+    spans = [fresh_on_raider(rows[guid], tanks, roster - tanks, first_tank_death) for guid in guardians
+             if rows.get(guid) and rows[guid][0][0] < first_tank_death]
+    loose = [ms / 1000 for ms, _ in spans if ms]
+    timing = (f", median {statistics.median(loose):.1f} s, max {max(loose):.1f} s, {sum(loose):.1f} s in all"
+              if loose else "")
+    print(f"    fresh on a raider : {len(loose)} of {len(spans)} Guardians before a tank first held them{timing},"
+          f" never held {sum(1 for _, held in spans if not held)}  (up to the first tank death)")
+    killed = killed_by_fresh([(rec["t"], rec.get("g"), rec.get("killer")) for rec in deaths], rows, tanks,
+                             first_tank_death)
+    print(f"    raiders killed by a fresh Guardian before the first tank death: {len(killed)}"
+          + "".join(f", {trace.name(victim)} {clock(when)}" for when, victim, _ in killed))
+    defers = []
+    for rec in notes(trace, "yogg.swapdefer"):
+        holder, _, pct = str(rec.get("txt", "")).rpartition(" ")
+        if start <= rec["t"] <= stop and pct.isdigit():
+            defers.append((rec["t"], holder, int(pct)))
+    deferred = deferred_tank_deaths(defers, tank_deaths)
+    print(f"    swaps deferred for a Guardian on a raider: {len(defers)}"
+          + (f" (holder at {', '.join(f'{pct}%' for _, _, pct in defers)})" if defers else "")
+          + f"; tank deaths within {SWAP_DEFER_LOOK_MS // 1000} s of one on them: {len(deferred)}"
+          + "".join(f", {name} {clock(when)} {(when - at) / 1000:.1f} s after it at {pct}%"
+                    for when, name, at, pct in deferred))
 
 
 def show_phase3_burst(trace: Trace, start: int, stop: int, roster: set) -> None:
@@ -4990,6 +5075,7 @@ def show_phase3(trace: Trace) -> None:
     if station_notes:
         print(f"    yogg.station     : {dict(station_notes)}")
     show_phase3_arrival(trace, start, rows, roster)
+    show_phase3_melee_spot(trace, start, stop, rows, roster, yogg)
 
     if yogg and rows.get(yogg):
         line = []

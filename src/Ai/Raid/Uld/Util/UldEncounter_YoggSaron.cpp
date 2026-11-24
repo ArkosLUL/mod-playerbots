@@ -2185,7 +2185,7 @@ bool YoggSaronTankSwapLive(Player* bot, YoggSaronEncounterState& state)
 }
 }
 
-Player* YoggSaronTankSwapTake(PlayerbotAI* botAI)
+Player* YoggSaronTankSwapHolder(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
@@ -2215,14 +2215,20 @@ Player* YoggSaronTankSwapTake(PlayerbotAI* botAI)
         }
     }
 
-    if (!holder)
-        return nullptr;
+    return holder;
+}
+
+void YoggSaronTankSwapTake(PlayerbotAI* botAI, Player* holder)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    if (!holder || YoggSaronTankSwapLive(bot, state))
+        return;
 
     state.tankSwap = {holder->GetGUID(), bot->GetGUID(), getMSTime()};
     if (RaidObs::Active())
-        RaidObs::Note(bot, "yogg.tankswap", "take " + holder->GetName() + " " + std::to_string(holderCount));
-
-    return holder;
+        RaidObs::Note(bot, "yogg.tankswap",
+                      "take " + holder->GetName() + " " + std::to_string(YoggSaronGuardiansOn(holder)));
 }
 
 bool YoggSaronTankShedding(PlayerbotAI* botAI)
