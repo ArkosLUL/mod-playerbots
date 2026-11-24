@@ -1656,6 +1656,23 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.ranged_past_free_low([(low, 5.0), (fresh, 0.0)], [fresh, fresh, fresh], False), 0)
         self.assertEqual(yogg_saron.ranged_past_free_low([], [fresh], False), 0)
 
+    def test_unparked_rows_drop_a_low_guardian_off_the_stack(self):
+        low, parked, fresh = 1, 2, 3
+        rows = [(low, 2.2, 3.1), (parked, 20.0, 12.0), (fresh, 38.9, 2.1)]
+        self.assertEqual(yogg_saron.unparked_rows(rows), [(low, 2.2), (fresh, 38.9)])
+        self.assertEqual(yogg_saron.ranged_past_free_low(yogg_saron.unparked_rows(rows), [fresh] * 8, False), 8)
+        self.assertEqual(yogg_saron.unparked_rows([(fresh, 30.0, 40.0)]), [(fresh, 30.0)])
+        self.assertEqual(yogg_saron.unparked_rows([(low, 29.9, 6.6)]), [])
+        self.assertEqual(yogg_saron.unparked_rows([(low, 29.9, 6.5)]), [(low, 29.9)])
+
+    def test_runs_into_pairs_counts_runs_a_pair_began_in_or_soon_after(self):
+        runs = [(112202, 116949), (122932, 123943), (40949, 47401)]
+        self.assertEqual(yogg_saron.runs_into_pairs(runs, [124800]), 1)
+        self.assertEqual(yogg_saron.runs_into_pairs(runs, [130000]), 0)
+        self.assertEqual(yogg_saron.runs_into_pairs(runs, [112202]), 1)
+        self.assertEqual(yogg_saron.runs_into_pairs(runs, []), 0)
+        self.assertEqual(yogg_saron.runs_into_pairs([], [124800]), 0)
+
     def test_moving_at_needs_two_samples_and_more_than_a_shuffle(self):
         # 1791373666's 0:49.185 cloud: four of the five melee on it had stepped 1.5-2.6 yd.
         self.assertTrue(yogg_saron.moving_at((1980.0, -22.0), (1978.0, -22.0), 0.3))

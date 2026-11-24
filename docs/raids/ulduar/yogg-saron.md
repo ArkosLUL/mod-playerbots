@@ -722,10 +722,14 @@ so the two cannot disagree. `yogg.p1focus` records each change: `picked`, `parke
   where each would park at 35% with nothing to bring it back, and pulls killed 0-1 in the 18 s. So while
   `YoggSaronHandoverState(botAI).active` the floor is off and the focus is lowest first, the stack test
   meaning nothing once no kill counts for Sara. They stand 18-21 yd out at bearing 104-117°, 21-26 yd
-  from the station, so a kill there reaches melee and tanks only. The raid still works the next Guardian
-  while a low one waits out its gap, by the user's choice, but `YoggSaronLowGuardianTakesOver` —
-  killable, under 30% and lower — gives it the focus back (`lower`); only under 30%, so two fresh ones
-  trading places under splash never flip it.
+  from the station, so a kill there reaches melee and tanks only.
+- **A free low Guardian takes the focus back, all phase 1.** The raid still works the next Guardian while
+  a low one waits out its gap, by the user's choice, but `YoggSaronLowGuardianTakesOver` — killable,
+  under 30% and lower — gives it the focus back (`lower`); only under 30%, so two fresh ones trading
+  places under splash never flip it. Kept to the handover, the held focus stayed on a healthier Guardian
+  6-24 s a pull while a free one on the stack bled out to splash on no schedule, and 12 such stretches over
+  18 pulls ended in a pair under the gap, of 13 pairs in all: one went off beside its 2.5% neighbour, two
+  novas in one tick, five melee dead.
 
 **One focus does not space the novas**: an untargeted Guardian on the stack still lost 5.6%/s to splash
 and ground AoE against the focus's 13.0. So:
@@ -767,8 +771,10 @@ and ground AoE against the focus's 13.0. So:
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks were
 on it a second before, and lists pairs under the gap and deaths with another Guardian under 30% inside
 18 yd; `low Guardians in the gap` gives their loss rate inside it, the share of samples a tank was on one,
-and the area actions that ran. `--threat` counts Guardians within 10 yd of the middle turning off a tank,
-by the new target's class (a pet under its owner's).
+and the area actions that ran; `focus past a free low one on the stack` the seconds before the handover
+with half the bot non-tanks on a healthier Guardian, and how many such runs a pair under the gap
+followed. `--threat` counts Guardians within 10 yd of the middle turning off a tank, by the new target's
+class (a pet under its owner's).
 
 ## Crush is a ±5° cone that tracks its victim
 

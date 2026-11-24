@@ -2058,3 +2058,75 @@ deaths no worse than window 29's 9; Guardians alive at the ring 1-3.
 - Fervor holders still walking out on the spacing node took a doubled nova (37.9-40.8k): 4 (window 29: 1).
 - uld1's DK tank aimed Dark Command at back-line Guardians 36-45 yd away: 24 of 31 taunts failed.
 - Yogg reached 3.9% (uld4) and 5.9% (uld2), the lowest yet.
+
+## Round 22 (2026-11-24, window 33 build 9ad197722: round 21)
+
+**Data.** Window report `scratchpad/window33/window33/window33-yogg-saron.md`: six valid pulls, one per pool, 0
+humans. Traces `603_1_yogg-saron_1795545779`, `603_2_…1795545789`, `603_3_…1795545789`, `603_4_…1795545789`,
+`603_5_…1795545794`, `603_6_…1795545780` (uld1-uld6), read with `--threat --clouds --novas --crush --brain
+--tentacles --phase3`; a scratch count of `yogg-saron phase 1 aoe hold multiplier` vetoes by role.
+
+Deaths by mechanic (phase 1 / 2 / 3), all six wiped in phase 3:
+
+- uld1 (A): — / Curse of Doom 3, Draining Poison 1, Squeeze 2, Death Ray 1 / Immortal Guardian 20, Draining Poison 2,
+  Roar 1; Yogg 27.9%.
+- uld2 (B): — / Death Ray 2 / Immortal Guardian 29; Yogg 22.6%.
+- uld3 (C): nova 4 (a chain at 2:02.7 / 2:06.6 / 2:08.65 killed three, the later two Guardians at 9.3% and 9.6%; a
+  Fervor-doubled 40.0k at 2:17.4) / Death Ray 1 / Immortal Guardian 25, Roar 1, Gaze 1; Yogg 26.0%.
+- uld4 (A): nova 2 (the shaman Ulduai) / skull Gaze 1, Death Ray 1 / Immortal Guardian 27, Drain Life 1, Gaze 1;
+  Yogg 11.7%.
+- uld5 (B): — / Brain Link 1 / Immortal Guardian 30; Yogg 25.5%.
+- uld6 (C): nova 3 (the shaman Uldwaj, rezzed twice) / Death Ray 1, Curse of Doom 1 / Immortal Guardian 24, Draining
+  Poison 1, Gaze 2; Yogg 24.9%.
+
+**Verdict on round 21 (tanks keep their area threat): fixed**, per composition. Turns off a tank within 10 yd of the
+middle: A 3 / 1, B 12 / 10, C 5 / 6, 2.5 a minute in all (window 31: 5.7; windows 19-28: 2.7). No hold veto on a tank:
+1078 vetoes, all ranged and melee. Gap loss 2.2-3.1%/s with Maul, Swipe, Consecration and Thunder Clap back in `area
+run`. Pair nova deaths: one chain in uld3 (3), as round 21's uld3 pair, its later Guardians under 10% and beyond any
+gap. Guardians alive at the ring 4 / 3 / 1 / 2 / 1 / 3. Dark Volley 0 (21). B's turns stay above 3.4 a minute (a
+lead).
+
+**Stop rules.** No kill. Phase 3 stays stuck: every Guardian leaves its tank at stasis end (+4.0 s), known since
+rounds 7 and 17; no new root cause. Yogg's end tracks the phase 2 leftover stock (uld4: 3 tentacles, 1.8M, 11.7%;
+the rest 5-10, 4.7-8.3M, 22.6-27.9%), which the phase 2 cycle rate sets.
+
+**Picked: the user's answers Q1 (step 1) and Q2.**
+
+**Q1 step 1, the reader on the measured orbits.** `CLOUD_ORBITS` 15.3 / 20.9 / 27.4 / 41.4 / 48.4 / 54.1 with
+`CLOUD_SPEED` 2.0 (`yogg_saron.py:122-123`). Every spawn now gets an orbit (uld1 had 12 of 17 `no cloud`); `--clouds`
+labels phase 1 samples from snapshots, not the code's `yogg.cloudreach`; `PILE_LEASH` reads 6.8; Sara's-timer
+orbits are those under 20 yd net of 2.5 reach (orbits 1 and 2); `P1_ROOM_RADIUS` stays the code's 69.3. New `the
+station's cost by orbit` (passes of a cloud within 8.5 yd of a back-line bot within 5 yd of the station spot,
+Guardians it woke with one at the mark, cloud dodges by bots there). Window 33:
+
+| Pull | orbit 1 woke / passes | orbit 2 | orbit 3 | station of all | cloud steps there |
+|---|---|---|---|---|---|
+| uld1 | 2 / 3 | 2 / 2 | 1 / 1 | 5 of 17 | 12 (11 orbit 1) |
+| uld2 | 2 / 3 | 2 / 3 | 1 / 1 | 5 of 16 | 14 (orbit 2) |
+| uld3 | 2 / 3 | 2 / 2 | 1 / 1 | 5 of 14 | 15 (13 orbit 2) |
+| uld4 | 2 / 3 | 2 / 2 | 1 / 1 | 5 of 15 | 14 (orbit 2) |
+| uld5 | 2 / 4 | 2 / 2 | 1 / 1 | 5 of 14 | 17 (14 orbit 2) |
+| uld6 | 2 / 3 | 1 / 3 | 1 / 1 | 4 of 16 | 3 |
+
+So the station's three orbits each wake about one Guardian a pass, orbit 3 included; one pass a pull sends the whole
+back line stepping. Next round (Q1 step 2) makes the first navprobed position change, the melee core first.
+
+**Q2, the break per carrier.** `YoggSaronPowerBreakClaim` (`UldEncounter_YoggSaron.cpp:3026-3036`) no longer calls
+`YoggSaronBrainTeamDown` (deleted): a Crusher channelling with its `64145` carried under Illusion Room is claimable
+at once. Baseline from the new `--crush` column `carried below N s before` (`carrier_wait`): 27 claims, medians per
+pull 7.6 / 2.0 / 1.7 / 9.5 / 0.3 / 10.4 s, 11 of 27 waited 9.5-16.9 s (stragglers); Crushes on a breaking tank 0.
+`--brain` carried below where carried: medians 0.5-26.5 s, damage dealers ×0.73-1.00 to the door. Same code at 10 and
+25, normal and hard mode; breakers stay bot tanks, carriers any group member, so a real player in the team changes
+nothing. No shared code.
+
+**Next window should show:** `--clouds` station cost 4-5 a pull again, no `no cloud` spawn. `--crush` every claim
+`carried below` under ~1 s; `--brain` carried medians mostly under ~10 s; more claims per wave where a straggler
+takes the re-cast down; Crushes on a breaking tank 0 and no Crush death within 10 s of a break; Brain per cycle up
+and fewer tentacles at phase 3. Back out if breaking tanks take Crushes or die, or claims pull a tank off its job
+more than ~3 times a wave.
+
+**Seen, not picked.**
+
+- Some claims walk 13-26 s and the channel drops only at the stun (uld2 8:54.1 +18.9 s, uld6 7:31.7 +26.0 s).
+- uld3's chain: the later two Guardians were under 10% when the first died, as round 21's pair.
+- The enhancement shaman died to one nova from full 5 times (uld4, uld6).
