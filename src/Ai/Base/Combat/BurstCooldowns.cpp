@@ -52,6 +52,8 @@ namespace
     // NullCreatureAI. Neither had a victim in ~2,000 samples of one pull.
     std::unordered_set<uint32> const noVictimBosses = {33651, 33288, 33890};
 
+    std::unordered_set<uint32> const burstAdds = {33988, 36064, 33966, 33985, 33983};
+
     // Trial of the Crusader's Faction Champions, both rosters. Their script resets every player's
     // threat on the pull, 2 s later, then every ~9 s, weighted by distance, health and armour.
     std::unordered_set<uint32> const unstableVictimBosses = {
@@ -74,6 +76,11 @@ bool BossTakesNoVictim(Unit const* boss)
 bool BossHasNoStableVictim(Unit const* boss)
 {
     return boss && unstableVictimBosses.find(boss->GetEntry()) != unstableVictimBosses.end();
+}
+
+bool BurstAllowedOnAdd(Unit const* unit)
+{
+    return unit && burstAdds.find(unit->GetEntry()) != burstAdds.end();
 }
 
 bool IsManaReturnCooldown(Player* bot, std::string const& actionName)
