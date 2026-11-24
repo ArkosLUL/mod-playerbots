@@ -1932,7 +1932,8 @@ takes it (`ThreatManager::ReselectVictim`) and the ready first swing one-shots h
 has 1 s or less left (`…_TAUNT_CHAIN_LEAD_MS`) while it is still outside the holder's melee range and the
 bot no farther from it than the holder + 5 yd (`YoggSaronTauntFadesShort`, in the trigger and the loose
 loop, `yogg.tankhold` `chain taunt`); the latest taunt wins (`ThreatManager::TauntUpdate`). Taunt only:
-Righteous Defense on the holder takes its pile. `--phase3`: `taunts run out short of the tank`.
+Righteous Defense on the holder takes its pile. Never a beacon dragger: its drag needs that taunt.
+`--phase3`: `taunts run out short of the tank`.
 
 **Lay on Hands is kept for the tanks, by the user's choice**: pulls spent all four on dps in phase 1 and had
 none for phase 3, where tank deaths ended them. Blocked (`yogg-saron lay on hands hold`): `lay on hands on

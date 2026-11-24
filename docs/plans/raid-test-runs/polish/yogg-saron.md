@@ -1659,3 +1659,8 @@ deaths at 35-50% are the risk to watch.
   him the victim and he died in place (window 21's Uldyam death has the same shape). The hold gates casts only.
 - Uldxai, the enhancement shaman, died to a phase 1 nova again with nothing up, as in windows 16-22.
 - Brain team portal entries over 2 s after the open 19 / 16 / 11 a pull, and uld1 wave 5's Uldxay never got a portal.
+
+**Review.** A tank claimed for a beacon drag no longer chains (`YoggSaronTauntFadesShort`): when its drag taunt fails,
+guardian control runs, and a chain would spend the taunt the drag needs. A chain lands only inside taunt range (30 yd):
+of the 10 short taunts here the other tank was within 30 yd of the Guardian (centre to centre) in 5 at 1 s before the
+fade, 8 at 0.5 s and 9 at 0.25 s, so expect most chained, not all.

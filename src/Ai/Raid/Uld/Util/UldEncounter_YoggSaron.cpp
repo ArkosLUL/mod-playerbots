@@ -1538,7 +1538,7 @@ bool YoggSaronGuardianLoose(PlayerbotAI* botAI, GuidVector const& guardians)
 
 bool YoggSaronTauntFadesShort(Player* bot, Unit* guardian)
 {
-    if (!IsYoggSaronHoldableGuardian(guardian))
+    if (!IsYoggSaronHoldableGuardian(guardian) || YoggSaronBeaconDragging(bot))
         return false;
 
     Player* holder = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
