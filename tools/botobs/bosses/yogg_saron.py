@@ -772,6 +772,8 @@ def show_phases(trace: Trace) -> None:
 
         if p1_end is not None:
             show_nova_gap(trace, dead, p1_end, guardians)
+            down = first_seen(trace, guids_of_entry(trace, NPC_YOGG_SARON))
+            show_free_low(trace, dead, pairs, min(down, p1_end) if down is not None else p1_end, guardians)
 
     if p1_end is not None:
         show_room_gate(trace, p1_end)
@@ -885,6 +887,29 @@ def show_nova_gap(trace: Trace, dead: list[tuple[int, int]], p1_end: int, guardi
     top = ", ".join(f"{name} {n}" for name, n in ran.most_common(4)) or "none"
     print(f"    low Guardians in the gap: {count} windows, {rate:.1f}%/s over {seconds:.1f} s, a tank on one "
           f"{share:.0%}; area run: {top}")
+
+
+def show_free_low(trace: Trace, dead: list[tuple[int, int]], pairs: list[tuple], until: int, guardians: set) -> None:
+    """Before the handover: half the bot non-tanks on a healthier Guardian while a low one on the stack was out of
+    its gap and lowest, so splash, not the raid, picked when it died."""
+    died = sorted(when for when, _ in dead)
+    bots = {guid for guid in roster_guids(trace) if guid not in trace.humans and trace.role(guid) != "tank"}
+    snaps = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= until]
+    stamps = []
+    seconds = 0.0
+    for snap, following in zip(snaps, snaps[1:]):
+        index = bisect.bisect_left(died, snap["t"])
+        gap_running = index > 0 and snap["t"] - died[index - 1] < NOVA_GAP_MS
+        rows = unparked_rows([(row[0], row[5], math.dist((row[1], row[2]), BODY))
+                              for row in snap.get("u", []) if row[0] in guardians])
+        targets = [row[7] if len(row) > 7 else 0 for row in snap.get("u", []) if row[0] in bots and row[5] > 0]
+        if targets and ranged_past_free_low(rows, targets, gap_running) * 2 >= len(targets):
+            stamps.append(snap["t"])
+            seconds += (following["t"] - snap["t"]) / 1000.0
+    runs = group_runs(stamps, GAP_SAMPLE_MAX_MS, 0)
+    paired = runs_into_pairs(runs, [first[0] for first, _ in pairs])
+    print(f"    focus past a free low one on the stack: {seconds:.1f} s in {len(runs)} runs, "
+          f"{paired} followed by a pair under the gap")
 
 
 def show_room_gate(trace: Trace, p1_end: int) -> None:
@@ -1405,6 +1430,17 @@ def ranged_past_free_low(rows, targets, gap_running: bool) -> int:
     floor, lowest = min(low)
 
     return sum(1 for target in targets if target != lowest and living.get(target, 0) > floor)
+
+
+def unparked_rows(rows: list[tuple[int, float, float]], leash: float = P1_LEASH) -> list[tuple[int, float]]:
+    """(guid, hp) of the Guardians the phase 1 focus could take, rows as (guid, hp, distance from the middle):
+    one under the gap floor off the stack is parked, so it is no free low one."""
+    return [(guid, hp) for guid, hp, far in rows if hp >= NOVA_GAP_HEALTH_PCT or far <= leash]
+
+
+def runs_into_pairs(runs: list[tuple[int, int]], pair_starts: list[int], window_ms: int = NOVA_GAP_MS) -> int:
+    """How many (first, last) runs a pair under the gap began in or within `window_ms` after."""
+    return sum(1 for first, last in runs if any(first <= when <= last + window_ms for when in pair_starts))
 
 
 def moving_at(spot, before, still_yd: float) -> bool:

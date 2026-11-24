@@ -3841,9 +3841,9 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
             best = guardian;
     }
 
-    bool const lower = handover && heldKillable && best && best != held && YoggSaronLowGuardianTakesOver(best, held);
+    bool const lower = heldKillable && best && best != held && YoggSaronLowGuardianTakesOver(best, held);
     bool const abandon =
-        heldKillable && (handover ? lower : !YoggSaronGuardianCountsForSara(held) && killableOnStack);
+        heldKillable && (lower || (!handover && !YoggSaronGuardianCountsForSara(held) && killableOnStack));
     if (heldKillable && !abandon)
         return held;
 
