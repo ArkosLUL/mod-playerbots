@@ -625,7 +625,6 @@ class Tanks(unittest.TestCase):
                       "damage cut), two externals 1.5s, no damage cut 1.5s, none 1.0s; died 0:22.000 under nothing\n",
                       printed(fr.show_tanks, load(pull() + auras)))
 
-
     def test_the_add_tank_under_a_lasher_pile_his_held_and_pressed_buttons(self):
         text = printed(fr.show_tanks, load(pile_pull()))
         self.assertIn("  1:00.000 .. 1:01.500 Bruin/tank under lashers 1.5s, up to 3 on him, 90% to 30%: held barkskin "

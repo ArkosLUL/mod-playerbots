@@ -325,7 +325,7 @@ def holder_label(trace: Trace, guid) -> str:
     return f"{trace.name(guid)}/{role}" if role != "?" else trace.name(guid)
 
 
-def main_tank(trace: Trace):
+def main_tank(trace: Trace) -> int | None:
     held: collections.Counter = collections.Counter()
     for freya in sightings(trace, (NPC_FREYA,)).values():
         for t0, t1, target in freya["spans"]:
