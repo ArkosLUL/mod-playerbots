@@ -257,8 +257,8 @@ class Chains(unittest.TestCase):
 
     def test_deaths_by_crossing(self):
         self.assertIn("all: casts 2, hits 6, deaths 1, 1 before the first tank death (after slot to slot 1; "
-                      "through a stepped slot 1); crossings tank to slot 1, camp to slot 1, slot to slot 1; "
-                      "slot to slot through a stepped slot 1", self.text)
+                      "through a stepped slot: slot to slot 1); crossings tank to slot 1, camp to slot 1, slot to slot "
+                      "1; through a stepped slot: camp to slot 1, slot to slot 1", self.text)
 
     def test_walking_back_still_counts_as_stepped(self):
         records = chain_pull()

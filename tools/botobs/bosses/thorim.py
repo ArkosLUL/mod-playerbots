@@ -861,9 +861,9 @@ def show_chains(trace: Trace) -> None:
     first_tank = next((death["t"] for death in combat_deaths(trace)
                        if death["t"] >= start and death["g"] in bridges.tanks), None)
     crossings = collections.Counter()
-    stepped_crossings = 0
+    stepped_crossings = collections.Counter()
     deaths = collections.Counter()
-    stepped_deaths = 0
+    stepped_deaths = collections.Counter()
     early = 0
     for cast in bridges.casts:
         segments = bridges.read(cast)
@@ -875,17 +875,19 @@ def show_chains(trace: Trace) -> None:
         deaths["in the seed's group"] += segments[0]["dead"]
         for index in range(1, len(segments)):
             kind = crossing_kind(segments, index)
-            through_step = segments[index]["stepped"] or segments[index - 1]["stepped"]
             crossings[kind] += 1
-            stepped_crossings += kind == "slot to slot" and through_step
             deaths[f"after {kind}"] += segments[index]["dead"]
-            stepped_deaths += (kind == "slot to slot" and through_step) * segments[index]["dead"]
+            if segments[index]["stepped"] or segments[index - 1]["stepped"]:
+                stepped_crossings[kind] += 1
+                stepped_deaths[kind] += segments[index]["dead"]
     hits = sum(len(cast) for cast in bridges.casts)
-    death_text = ", ".join(f"{name} {n}" for name, n in deaths.most_common() if n) or "none"
-    crossing_text = ", ".join(f"{name} {n}" for name, n in crossings.most_common()) or "none"
+
+    def counted(counter: collections.Counter) -> str:
+        return ", ".join(f"{name} {n}" for name, n in counter.most_common() if n) or "none"
+
     print(f"  all: casts {len(bridges.casts)}, hits {hits}, deaths {sum(deaths.values())}, {early} before the first "
-          f"tank death ({death_text}; through a stepped slot {stepped_deaths}); crossings {crossing_text}; "
-          f"slot to slot through a stepped slot {stepped_crossings}")
+          f"tank death ({counted(deaths)}; through a stepped slot: {counted(stepped_deaths)}); crossings "
+          f"{counted(crossings)}; through a stepped slot: {counted(stepped_crossings)}")
 
 
 SECTIONS = (

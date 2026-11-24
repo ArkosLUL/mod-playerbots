@@ -32,7 +32,8 @@ reached in 4 of 6; no hard-mode kill, so not polished.
 **Open failures, ranked** (window 29, 162 deaths):
 1. The hard-mode race: Thorim melee 65, nearly all after the first tank death. Not a bug; question 1.
 2. Chain Lightning 21, 8 before the first tank death. By crossing over the ten hard-mode wipes since round 17
-   (`--chains`): through a slot stepped out of Blizzard 16 of 44 (round 21's fix); a lit-orb cone dropping the 60°
+   (`--chains`): slot to slot through a slot stepped out of Blizzard 11 of 44, tank or camp into one 4 (round 21's
+   fix); a lit-orb cone dropping the 60°
    separation (w26 uld3 2, w29 uld6 1); camp RANGE4 (2132.5, −257.5) 8.8 yd from slot 1 under Heroism (w29 uld1
    +27 s, 3); the opening into slot 2 beside the holder (w29 uld1 +12 s, 2); stacked camp spots as the seed.
 3. Sif's Volley and Frostbolt on healers before the first tank death (w29 uld1 4, uld6 1). Nothing to kick.
@@ -65,7 +66,8 @@ reached in 4 of 6; no hard-mode kill, so not polished.
 - R19: class taunts from past 8 yd held while he's on a non-tank or nobody, anchor exempt — held.
 - R20: the anchor with its taunt cooling gets no spot while he's loose, so it closes on him — held (his melee on
   non-tanks before a tank had him 0-8k a pull, was 348k over 37 pulls).
-- R21: the Blizzard step's first pass stays out of the jump of the other slots — pending (window 30).
+- R21: the Blizzard step's lead passes stay out of the jump of the camp and the other slots, then the other slots
+  alone — pending (window 30).
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -74,7 +76,6 @@ reached in 4 of 6; no hard-mode kill, so not polished.
 - The solver trading bearings for Blizzard: removed in R17 (swung slots onto each other).
 - A bearing threshold for the ring re-latch: left 16-29% (R13).
 - Moving the tank anchor east: breaks 11 of 18 camp points (boss doc).
-- The Blizzard step also clear of camp bodies: no point for half the steps in a replay (R21).
 
 **User answers in force:**
 - 2026-11-22: hold the arena group at the drop until Thorim is in combat; keep polishing on the 226 rosters with the
@@ -130,8 +131,9 @@ step); first trades from 7.9-9.4 yd, Thorim within 8.5 yd of the spot; no ring B
   +42.0 s cast ran camp ×3 → 8.5 yd (Heroism) → slot 0 ×3 → 1.9 yd → slot 1 ×2, killing Uldvam (32.7k), Uldvax and
   Uldvag (36.8k, 66.0k); the first tank fell 5 s later. uld6 +83.2 s slot 2 stepped within 4.8 yd of slot 1; the +87.2 s
   cast killed two slot 1 melee. uld1 +162.6 s the same through a stepped slot 2 (2). Round 20 saw it in w27 uld1 (6).
-- Over the ten hard-mode wipes since round 17 (`--chains`): 16 of 44 Chain Lightning deaths came through a slot on its
-  step point or within 3 s of leaving it. Replayed at each of the 452 step moves (`stepbodies.py`/`stepring.py`: zones
+- Over the ten hard-mode wipes since round 17 (`--chains`): 11 of 44 Chain Lightning deaths crossed slot to slot
+  through a slot on its step point or within 3 s of leaving it (4 more tank or camp into one). Replayed at each of the
+  452 step moves (`stepbodies.py`/`stepring.py`: zones
   from `hz` rows and the bunny, floor approximated, no navmesh), 125 destinations lay within 5.5 yd plus both reaches
   of another slot's bot or point.
 - Code: `ThorimRingBlizzardStep` (`UldEncounter_Thorim.cpp:3131`) took the nearest point 11 yd clear of every zone,
@@ -142,18 +144,21 @@ step); first trades from 7.9-9.4 yd, Thorim within 8.5 yd of the spot; no ring B
 **Fix** (`UldEncounter_Thorim.cpp`, Thorim only, no size, mode or player branch): `RingStepChainBodies` (`:646`) lists
 every living floor ring bot of another slot where it stands and that slot's point (its `composed` bearing at r 8.8 round
 Thorim), each with a clearance of `ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` + `ULDUAR_THORIM_RING_CHAIN_MARGIN` + both live
-combat reaches (8.5 yd, 9.4 under Heroism). The step tries a new first pass that also clears all of them, within the
-same 15 yd, before the three old passes, which stay as the fallback. Camp bodies are not counted: counting them left no
-point for 223 of 452 steps in the replay, against 157 for the slots alone. Where the replay found a point, the walk
-there was p50 0 / p90 4 yd longer and the point 11.4 yd off Thorim at p50 against 9.7 (both out of melee reach). A
-human melee holds no slot, so like a camp body it is not counted; the bots step the same with or without one. Reader:
-`--chains`, tested in `test_thorim.py`; boss doc: the pass order, the evidence, `--chains`.
+combat reaches (8.5 yd, 9.4 under Heroism). The step tries a new pass that also clears all of them, within the same 15
+yd, before the three old passes, which stay as the fallback. Where the replay found a point, the walk there was p50 0 /
+p90 4 yd longer and the point 11.4 yd off Thorim at p50 against 9.7 (both out of melee reach), but in a camp body's
+jump for 118 of those 295 steps against 59 for the old points. Review added a lead pass also clear of the camp (the
+same list takes every other floor body but the tanks, a human melee included, so one code path): clear of both 229 of
+452 steps, camp-bridged 66 of the 295, walk p90 6 yd longer than the old, Thorim 12.4 yd off at p50. Reader:
+`--chains`, tested in `test_thorim.py`, its totals count each crossing kind into or out of a stepped slot; boss doc:
+the pass order, the evidence, `--chains`.
 
 `pb-check` passes (syntax, pblint, codestyle, botobs tests).
 
 **Next window should show** (hard-mode pulls, `--chains`, `--blizzard`):
-- "slot to slot through a stepped slot" 0 and deaths through a stepped slot 0 in every pull (w29: 2 / 0 / 2 / 2 deaths in
-  uld1 / uld4 / uld5 / uld6); no `thorim sif blizzard action` destination within ~8.5 yd of another slot's bodies.
+- "through a stepped slot: slot to slot" 0 in crossings and deaths in every pull (w29 deaths: 2 / 0 / 2 / 2 in uld1 /
+  uld4 / uld5 / uld6), camp to slot through one no higher (w29 crossings 1 / 0 / 1 / 0); no `thorim sif blizzard action`
+  destination within ~8.5 yd of another slot's bodies.
 - Steps per pull about the same (17-56), walk back p50 within ~0.5 s of today's 0.2-1.4 s, no ring Blizzard death before
   the first tank death; melee on Thorim to +100 s still ~100%.
 - Watch: a stepped bot standing past melee reach longer; chains still crossing slots by the cone relax or the camp
