@@ -107,13 +107,11 @@ death +44.8 s (both gauntlet healers dead to Smash) / +123.1 s. On the window 35
 - 2026-11-24: keep polishing Thorim on the 226 rosters with no end condition; the stop rules stay waived for him, as
   for Algalon, and he is not closed on mechanics.
 - Bot tanks spend defensives from their class triggers only.
+- 2026-11-25, Q1 (a) of round 24: a camp bot whose shelter walk for orb 1 or 2 passes within the 8 yd jump of
+  another slot's body waits to set off until Thorim's Chain Lightning has landed (cast bar 0.5-0.6 s), taking R23's
+  cone step when the late start leaves the row out of reach; replayed before it ships. Build in round 26.
 
-**Open questions:**
-1. Camp shelter walks bridge Chain Lightning (round 24). Choice: (a) a camp bot whose shelter walk passes
-   within the 8 yd jump of another slot's body waits to set off until Thorim's Chain Lightning has landed (its cast
-   bar shows, 0.5-0.6 s), taking R23's cone step when the late start leaves the row out of reach; (b) re-solve the
-   orb 1 and orb 2 shelter rows with navprobe so no two walks pass within 8 yd; (c) leave it. Recommended: (a), no
-   new positions and R23's step covers late walkers; replayed before it ships.
+**Open questions:** none.
 
 ## Round 25 (window 37: build ce636f992 with round 24)
 
