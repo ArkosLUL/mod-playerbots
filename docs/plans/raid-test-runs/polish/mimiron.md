@@ -36,7 +36,7 @@ then P4 Hand Pulse once healers drop out.
 2. P2 storm 13: Rapid Burst 8, Heat Wave 2, a main tank twice to the barrage, Frost Bomb 1.
 3. P4 mines 10, two in each of five pulls, mixed movers (barrage legs 3, `combat formation move` 2).
 4. ACU Plasma Ball 6 (late P4).
-5. Water Spray 3 (window 30: 5); Bomb Bots 2 (window 30: 12; Q10 open).
+5. Water Spray 3 (window 30: 5); Bomb Bots 2 (window 30: 12; Q10 answered, round 22).
 6. P4 Laser Barrage over a live Frost Bomb: none this window (3 of 21 pulls in windows 22-30).
 
 **Fixes in place** (round: what; verdict).
@@ -86,9 +86,10 @@ then P4 Hand Pulse once healers drop out.
 - Q6 (a) with Q9 (a): once the beams stop, the P2 wedge takes the fewest-fire 120° arc within 90° of the
   re-aim.
 - Q7 (a): P4 healers on the wedge's front row; Q8: that row stays at 18 yd.
+- Q10 (a) (2026-11-24): the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb
+  Bot and takes the blast; build in round 22.
 
-**Open questions.** Q10 (round 20): who takes the Bomb Bots in phase 3. Q11 (round 21): phase 4 healer
-mana. Hand Pulse was picked in rounds 15 and 21 (round 17 fixed a feeder); a third pick without Q11
+**Open questions.** Q11 (round 21): phase 4 healer mana. Hand Pulse was picked in rounds 15 and 21 (round 17 fixed a feeder); a third pick without Q11
 answered is stuck.
 
 **Watch.** Siren legs across a spray lane (`FleeFan` screens the destination only). Detour waypoints off
