@@ -3723,17 +3723,26 @@ Unit* YoggSaronPhase1StackTarget(PlayerbotAI* botAI)
     std::list<Creature*> guardians;
     bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_P1_TAUNT_RANGE);
 
-    Unit* lowest = nullptr;
+    Unit* pick = nullptr;
+    bool pickKillable = false;
     for (Creature* guardian : guardians)
     {
         if (!guardian->IsAlive() || !bot->IsWithinMeleeRange(guardian))
             continue;
 
-        if (!lowest || guardian->GetHealth() < lowest->GetHealth())
-            lowest = guardian;
+        bool const killable = YoggSaronPhase1GuardianKillable(botAI, guardian);
+        bool better = !pick || (killable && !pickKillable);
+        if (pick && killable == pickKillable)
+            better = killable ? guardian->GetHealth() < pick->GetHealth() : guardian->GetHealth() > pick->GetHealth();
+
+        if (better)
+        {
+            pick = guardian;
+            pickKillable = killable;
+        }
     }
 
-    return lowest;
+    return pick;
 }
 
 bool YoggSaronBotTankAlive(PlayerbotAI* botAI)

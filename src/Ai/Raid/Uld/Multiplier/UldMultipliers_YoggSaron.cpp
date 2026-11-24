@@ -60,6 +60,21 @@ bool PeriodicTriggerHitsEnemies(SpellInfo const* spellInfo)
 
     return false;
 }
+
+bool HitsNeighbours(PlayerbotAI* botAI, Action* action, RaidSplashCache& splash)
+{
+    static std::set<std::string> const neighbourHit = {"maul", "hammer of the righteous", "heart strike",
+                                                       "avenger's shield"};
+
+    RaidSplashCache::Facts& facts = splash.Of(action);
+    if (facts.heal || (!neighbourHit.count(action->getName()) && !IsRaidAreaDamage(botAI, action, splash)))
+        return false;
+
+    SpellInfo const* spellInfo =
+        facts.cast ? sSpellMgr->GetSpellInfo(facts.spellId.Get(botAI, facts.cast)) : nullptr;
+    return !spellInfo || !spellInfo->IsPositive() || facts.multiTarget || facts.summon ||
+           PeriodicTriggerHitsEnemies(spellInfo);
+}
 }
 
 float YoggSaronMovementGuardMultiplier::FleeGuard()
@@ -170,13 +185,7 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 
 float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
 {
-    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
-        return 1.0f;
-
-    if (dynamic_cast<CastHealingSpellAction*>(action))
-        return 1.0f;
-
-    if (YoggSaronOnBrainLevel(bot))
+    if (!action || YoggSaronOnBrainLevel(bot) || !HitsNeighbours(botAI, action, _splash))
         return 1.0f;
 
     bool const hold = YoggSaronInPhase1(botAI) ? YoggSaronPhase1AoeHold(botAI) : YoggSaronLeftoverAoeHold(botAI);
@@ -347,22 +356,9 @@ float YoggSaronPhase3AreaMultiplier::GetValue(Action* action)
 
 float YoggSaronCrusherAreaHoldMultiplier::GetValue(Action* action)
 {
-    static std::set<std::string> const neighbourHit = {"maul", "hammer of the righteous", "heart strike",
-                                                       "avenger's shield"};
-    if (!action)
-        return 1.0f;
-
-    RaidSplashCache::Facts& facts = _splash.Of(action);
-    if (facts.heal || (!neighbourHit.count(action->getName()) && !IsRaidAreaDamage(botAI, action, _splash)))
-        return 1.0f;
-
-    if (bot->GetMapId() != ULDUAR_MAP_ID ||
-        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
-        return 1.0f;
-
-    SpellInfo const* spellInfo =
-        facts.cast ? sSpellMgr->GetSpellInfo(facts.spellId.Get(botAI, facts.cast)) : nullptr;
-    if (spellInfo && spellInfo->IsPositive() && !facts.multiTarget && !PeriodicTriggerHitsEnemies(spellInfo))
+    if (!action || bot->GetMapId() != ULDUAR_MAP_ID ||
+        bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT ||
+        !HitsNeighbours(botAI, action, _splash))
         return 1.0f;
 
     uint32 const phase = YoggSaronPhase(botAI);

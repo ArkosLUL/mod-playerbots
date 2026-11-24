@@ -149,6 +149,15 @@ NOVA_GAP_MS = 6000
 # Guardian within 15 yd, so one dying beside another that low kills both at once.
 NOVA_GAP_HEALTH_PCT = 30.0
 NOVA_CHAIN_RADIUS = 18.0
+P1_AOE_HOLD_RADIUS = 10.0
+GAP_SAMPLE_MAX_MS = 600
+P1_AREA_ACTIONS = frozenset({
+    "bladestorm", "sweeping strikes", "cleave", "whirlwind", "thunder clap", "shockwave", "divine storm",
+    "howling blast", "blood boil", "fan of knives", "blade flurry", "swipe (cat)", "multi-shot", "fire nova",
+    "chain lightning", "maul", "hammer of the righteous", "heart strike", "avenger's shield", "consecration",
+    "death and decay", "pestilence", "swipe (bear)", "magma totem", "explosive trap", "volley", "blizzard",
+    "hurricane", "rain of fire", "mind sear", "seed of corruption", "seed of corruption on attacker",
+    "flamestrike", "cone of cold", "blast wave", "dragon's breath", "typhoon", "immolation aura", "holy wrath"})
 
 # Sara's Fervor doubles the nova, so its holder leaves on the widest warning: a Guardian under
 # FERVOR_NOVA_HEALTH_PCT within 17 yd. A walk back within 6 s of the aura dropping is still the run's.
@@ -758,6 +767,9 @@ def show_phases(trace: Trace) -> None:
             gone = f"it died {after:.3f} s later" if after is not None else "it outlived phase 1"
             print(f"      {clock(when):>9}  {hp:4.1f}% at {far:4.1f} yd, {gone}")
 
+        if p1_end is not None:
+            show_nova_gap(trace, dead, p1_end, guardians)
+
     if p1_end is not None:
         show_room_gate(trace, p1_end)
 
@@ -808,6 +820,68 @@ def chain_deaths(trace: Trace, dead: list[tuple[int, int]],
             after = died.get(other)
             rows.append((when, hp, far, (after - when) / 1000 if after is not None else None))
     return rows
+
+
+def gap_leak(samples: list[tuple[int, int, int, float, bool]],
+             step_ms: int = GAP_SAMPLE_MAX_MS) -> tuple[int, float, float, float]:
+    by: dict[tuple[int, int], list[tuple[int, float]]] = collections.defaultdict(list)
+    tanked = 0
+    for window, guid, when, hp, tank_on in samples:
+        by[(window, guid)].append((when, hp))
+        tanked += int(tank_on)
+    lost = seconds = 0.0
+    for points in by.values():
+        points.sort()
+        for (t_a, hp_a), (t_b, hp_b) in zip(points, points[1:]):
+            if t_b - t_a > step_ms or hp_b > hp_a:
+                continue
+            lost += hp_a - hp_b
+            seconds += (t_b - t_a) / 1000
+    windows = len({window for window, _ in by})
+    rate = lost / seconds if seconds else 0.0
+    share = tanked / len(samples) if samples else 0.0
+    return windows, rate, seconds, share
+
+
+def actions_in_windows(acts: list[tuple[int, str]], windows: list[tuple[int, int]]) -> collections.Counter:
+    return collections.Counter(name for when, name in acts if any(start < when <= stop for start, stop in windows))
+
+
+def nova_gap_samples(trace: Trace, dead: list[tuple[int, int]], p1_end: int,
+                     guardians: set) -> tuple[list[tuple[int, int, int, float, bool]], list[tuple[int, int]]]:
+    snaps = trace.of("snap")
+    stamps = [snap["t"] for snap in snaps]
+    tanks = {guid for guid in roster_guids(trace) if trace.role(guid) == "tank"}
+    samples = []
+    windows = []
+    for when, dying in sorted(dead):
+        stop = min(when + NOVA_GAP_MS, p1_end)
+        found = False
+        for snap in snaps[bisect.bisect_right(stamps, when):bisect.bisect_right(stamps, stop)]:
+            rows = snap.get("u", [])
+            low = {row[0] for row in rows
+                   if row[0] in guardians and row[0] != dying and 0 < row[5] < NOVA_GAP_HEALTH_PCT
+                   and math.dist((row[1], row[2]), BODY) <= P1_AOE_HOLD_RADIUS}
+            if not low:
+                continue
+            found = True
+            on = {row[7] for row in rows if row[0] in tanks and row[5] > 0 and len(row) > 7}
+            samples.extend((when, guid, snap["t"], next(row[5] for row in rows if row[0] == guid), guid in on)
+                           for guid in low)
+        if found:
+            windows.append((when, stop))
+    return samples, windows
+
+
+def show_nova_gap(trace: Trace, dead: list[tuple[int, int]], p1_end: int, guardians: set) -> None:
+    samples, windows = nova_gap_samples(trace, dead, p1_end, guardians)
+    count, rate, seconds, share = gap_leak(samples)
+    acts = [(rec["t"], rec.get("a")) for rec in trace.of("act")
+            if rec.get("vd") == "OK" and rec.get("a") in P1_AREA_ACTIONS]
+    ran = actions_in_windows(acts, windows)
+    top = ", ".join(f"{name} {n}" for name, n in ran.most_common(4)) or "none"
+    print(f"    low Guardians in the gap: {count} windows, {rate:.1f}%/s over {seconds:.1f} s, a tank on one "
+          f"{share:.0%}; area run: {top}")
 
 
 def show_room_gate(trace: Trace, p1_end: int) -> None:

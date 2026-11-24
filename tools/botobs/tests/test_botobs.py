@@ -1246,6 +1246,25 @@ class YoggPhases(unittest.TestCase):
                           (12000, 9, "barkskin", "frenzied regeneration")])
         self.assertEqual(yogg_saron.ladder_stacks(spans, 1100), [])
 
+    def test_gap_leak_rates_loss_over_close_falling_samples_per_window_and_guardian(self):
+        samples = [
+            (1000, 7, 1200, 20.0, True), (1000, 7, 1500, 19.0, True), (1000, 7, 1700, 18.0, False),
+            (1000, 7, 3000, 10.0, False),
+            (1000, 8, 1300, 25.0, False), (1000, 8, 1600, 26.0, False),
+            (9000, 7, 9100, 5.0, True), (9000, 7, 9600, 4.0, True),
+        ]
+        windows, rate, seconds, share = yogg_saron.gap_leak(samples)
+        self.assertEqual(windows, 2)
+        self.assertAlmostEqual(seconds, 1.0)
+        self.assertAlmostEqual(rate, 3.0)
+        self.assertAlmostEqual(share, 4 / 8)
+        self.assertEqual(yogg_saron.gap_leak([]), (0, 0.0, 0.0, 0.0))
+
+    def test_actions_in_windows_counts_only_inside_an_open_window(self):
+        acts = [(1000, "maul"), (1500, "maul"), (2500, "consecration"), (7000, "whirlwind"), (9000, "maul")]
+        ran = yogg_saron.actions_in_windows(acts, [(1000, 3000), (8000, 9000)])
+        self.assertEqual(ran, collections.Counter({"maul": 2, "consecration": 1}))
+
     def test_spent_clicks_keeps_each_bots_first_click_that_teleported_nobody(self):
         clicks = [(100, 1), (300, 2), (500, 2), (900, 3), (1200, 3), (400, 4)]
         entries = [(110, 1), (4800, 2), (1210, 3)]

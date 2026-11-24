@@ -691,10 +691,13 @@ the wall: one pull aimed 12 of 15 taunts at 45-57 yd, dealt nothing for 93 s and
 while a candidate inside 30 yd existed on 79% of ticks. The trigger, a pet holding a Guardian far out, is
 intermittent: judge it over pulls.
 
-**So the control node ends on an attack**, as phase 3's does: nothing to fetch or the taunt on cooldown,
-the tank hits the lowest-health Guardian already inside `IsWithinMeleeRange`
+**So the control node ends on an attack**, as phase 3's does: when the taunt fails, the tank hits the
+lowest killable Guardian already inside `IsWithinMeleeRange`, else the healthiest there
 (`YoggSaronPhase1StackTarget`), holding where none is — in reach only, so holding the pile is never a walk
-off the middle (`yogg.tankhold` `attack`).
+off the middle (`yogg.tankhold` `attack`). The node runs only while a Guardian waits to be fetched: of the
+gap samples with a tank on a gap-held Guardian (64-100%), it put him there in 13% over 30 pulls; the rest
+is the generic picker (`tank assist`: aggro, melee reach, lowest threat) or a target kept from before the
+gap.
 
 **A taunt only pays if the raid waits for the walk**, which per-bot kill orders cannot: per-bot locks
 preferring a Guardian inside the leash **split** the raid (melee busy in the spacing node kept a Guardian
@@ -728,16 +731,19 @@ and ground AoE against the focus's 13.0. So:
 
 - **Nova gap.** For `ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS` (6 s) after any Guardian dies, one below **30%**
   (`…_NOVA_GAP_HEALTH_PCT`) is not killable: dropped like a parked one (`spaced`). It buys ~3 s in
-  practice, since held Guardians on the stack still lose 4-8%/s to the bot tank (Hammer of Wrath, Seal
-  of Vengeance: tanks keep the generic picker), humans, running DoTs and cleaves not typed `Aoe`. The
-  clock is `YoggSaronGuardianDeathListenerScript` on 65719, which only a Guardian's `JustDied` casts; it
-  holds without a bot tank and through the handover, where the phase still reads 1. It cannot cover a
-  simultaneous pair: two deaths 0.000 s apart killed four melee from full.
-- **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes non-heal `Aoe` actions, tanks included,
-  while a Guardian other than the focus is below 30% within 10 yd of the middle or of the focus (Death
-  and Decay and Explosive Trap reach 10, Blizzard and Consecration 8). Its lead
-  is only 2.6-5.3 s, so the resolver also cancels an area channel already running: Blizzard, Hurricane,
-  Volley, Rain of Fire. Mind Sear fails `IsAffectingArea` (a single-target aura that triggers the area
+  practice: a low Guardian on the stack lost 3.0-3.9%/s inside the gap over 27 pulls, so one under ~20%
+  at the first death still dies in it. About a quarter is aimed (casts finishing on it, the tank), the
+  rest splash: area damage, ground AoE already placed, procs (Wandering Plague, Deep Wounds), pets and
+  humans. The clock is `YoggSaronGuardianDeathListenerScript` on 65719, which only a Guardian's
+  `JustDied` casts; it holds without a bot tank and through the handover, where the phase still reads 1.
+  It cannot cover a simultaneous pair: two deaths 0.000 s apart killed four melee from full.
+- **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes area damage by the Crusher area hold's
+  test (`HitsNeighbours`, below), tanks included, while a Guardian other than the focus is below 30%
+  within 10 yd of the middle or of the focus (Death and Decay and Explosive Trap reach 10, Blizzard and
+  Consecration 8). Keyed on the `Aoe` threat type it held Seed, Volley and Blizzard but ran Maul, Swipe,
+  Consecration, Divine Storm and Whirlwind, about six a gap window. Its lead is only 2.6-5.3 s, so the
+  resolver also cancels an area channel already running: Blizzard, Hurricane, Volley, Rain of Fire.
+  Mind Sear fails `IsAffectingArea` (a single-target aura that triggers the area
   spell), and ground AoE already placed keeps ticking.
 - **Nova chain.** 65209's second effect hits every other Guardian within 15 yd for 25,000-27,501 (a
   `conditions` row on 33136), ~2.7% of 967,182: a neighbour at ≤3.5% died in the same tick 3 of 3, one
@@ -755,7 +761,8 @@ and ground AoE against the focus's 13.0. So:
 
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks were
 on it a second before, and lists pairs under the gap and deaths with another Guardian under 30% inside
-18 yd.
+18 yd; `low Guardians in the gap` gives their loss rate inside it, the share of samples a tank was on one,
+and the area actions that ran.
 
 ## Crush is a ±5° cone that tracks its victim
 
@@ -806,8 +813,9 @@ each Diminish Power cast zeroes the threat list, so area threat from a bot besid
 and a melee-class hit (Swipe, Maul, Whirlwind) breaks the channel, so it swings at once. A bear's Swipe on
 a Corruptor 5 yd from a channelling Crusher did both, and Crush coned the three melee and the warrior tank
 stacked on that Corruptor dead in 4 s; a fury warrior's Whirlwind did the same, and he died in place. So
-`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action
-(a named multi-target buff or one whose periodic trigger hits enemies is harmful: read as buffs, Bladestorm,
+`yogg-saron crusher area hold multiplier` zeroes a harmful (not heal, not buff) `IsRaidAreaDamage` action,
+the test `HitsNeighbours` (a named multi-target buff, a summon such as Magma Totem, or one whose periodic
+trigger hits enemies is harmful: read as buffs, Bladestorm,
 Sweeping Strikes and Blade Flurry were never held for their casters, and one Bladestorm 7.7 yd from a
 channelling Crusher took its threat and the cone killed two melee),
 plus Maul (glyphed), Hammer of the Righteous, Heart Strike and Avenger's Shield, which also hit enemies
