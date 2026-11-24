@@ -158,8 +158,8 @@ longer phases 3 (211-265 s with 2-3 leftovers) end on the same throughput race; 
 Q1 step 2 does not rank first: no death mechanic traces to the melee core's position.
 
 **Picked: a free low Guardian bleeds out while the focus works a healthier one** (the nova, 17, top outside phase 3;
-the double nova cost uld5 its pull). uld5 1:52.2-1:56.9: the gap after 1:46.2 was over and G8948 sat free at 6.0-2.2%
-on the stack, while the held focus kept every non-tank on G8962 from 38.9% to 27.2%. G8948 died to splash at 1:56.75,
+the double nova cost uld5 its pull). uld5 1:52.2-1:56.9: the gap after 1:46.2 was over and G8948 sat free at 6.0-0.1%
+on the stack, while the held focus kept every non-tank on G8962 from 75.0% to 27.2%. G8948 died to splash at 1:56.85,
 leaving G8962 (27.2%) and G8956 (15.7%) both held in the gap; the warrior tank's Cleave and Revenge, area damage and
 a pet took them to 3.8% and 3.5%, and the kill of G8956 at 2:04.800 took G8962 with it: two novas in one tick, five
 melee dead, the platform at 23-33k/s after. Root cause: `YoggSaronPhase1Focus` (`UldEncounter_YoggSaron.cpp:3844-3846`)

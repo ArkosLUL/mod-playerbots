@@ -890,8 +890,6 @@ def show_nova_gap(trace: Trace, dead: list[tuple[int, int]], p1_end: int, guardi
 
 
 def show_free_low(trace: Trace, dead: list[tuple[int, int]], pairs: list[tuple], until: int, guardians: set) -> None:
-    """Before the handover: half the bot non-tanks on a healthier Guardian while a low one on the stack was out of
-    its gap and lowest, so splash, not the raid, picked when it died."""
     died = sorted(when for when, _ in dead)
     bots = {guid for guid in roster_guids(trace) if guid not in trace.humans and trace.role(guid) != "tank"}
     snaps = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= until]
@@ -1433,13 +1431,10 @@ def ranged_past_free_low(rows, targets, gap_running: bool) -> int:
 
 
 def unparked_rows(rows: list[tuple[int, float, float]], leash: float = P1_LEASH) -> list[tuple[int, float]]:
-    """(guid, hp) of the Guardians the phase 1 focus could take, rows as (guid, hp, distance from the middle):
-    one under the gap floor off the stack is parked, so it is no free low one."""
     return [(guid, hp) for guid, hp, far in rows if hp >= NOVA_GAP_HEALTH_PCT or far <= leash]
 
 
 def runs_into_pairs(runs: list[tuple[int, int]], pair_starts: list[int], window_ms: int = NOVA_GAP_MS) -> int:
-    """How many (first, last) runs a pair under the gap began in or within `window_ms` after."""
     return sum(1 for first, last in runs if any(first <= when <= last + window_ms for when in pair_starts))
 
 

@@ -1658,18 +1658,14 @@ class YoggPhases(unittest.TestCase):
 
     def test_unparked_rows_drop_a_low_guardian_off_the_stack(self):
         low, parked, fresh = 1, 2, 3
-        # 1795550337 1:55: the low one 3.1 yd out is free to kill; one at 20% 12 yd out is parked, not free.
         rows = [(low, 2.2, 3.1), (parked, 20.0, 12.0), (fresh, 38.9, 2.1)]
         self.assertEqual(yogg_saron.unparked_rows(rows), [(low, 2.2), (fresh, 38.9)])
         self.assertEqual(yogg_saron.ranged_past_free_low(yogg_saron.unparked_rows(rows), [fresh] * 8, False), 8)
-        # Off the stack but over the floor still counts as the healthier one the raid is on.
         self.assertEqual(yogg_saron.unparked_rows([(fresh, 30.0, 40.0)]), [(fresh, 30.0)])
         self.assertEqual(yogg_saron.unparked_rows([(low, 29.9, 6.6)]), [])
         self.assertEqual(yogg_saron.unparked_rows([(low, 29.9, 6.5)]), [(low, 29.9)])
 
     def test_runs_into_pairs_counts_runs_a_pair_began_in_or_soon_after(self):
-        # 1795550337: the raid stayed on a 39% Guardian over a free 6% one at 1:52.2-1:56.9 and again at
-        # 2:02.9-2:03.9, and two went off at 2:04.800, 7.9 s after the first run.
         runs = [(112202, 116949), (122932, 123943), (40949, 47401)]
         self.assertEqual(yogg_saron.runs_into_pairs(runs, [124800]), 1)
         self.assertEqual(yogg_saron.runs_into_pairs(runs, [130000]), 0)

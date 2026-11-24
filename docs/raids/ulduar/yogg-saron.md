@@ -772,8 +772,9 @@ and ground AoE against the focus's 13.0. So:
 on it a second before, and lists pairs under the gap and deaths with another Guardian under 30% inside
 18 yd; `low Guardians in the gap` gives their loss rate inside it, the share of samples a tank was on one,
 and the area actions that ran; `focus past a free low one on the stack` the seconds before the handover
-with half the bot non-tanks on a healthier Guardian, and how many such runs a pair under the gap followed. `--threat` counts Guardians within 10 yd of the middle turning off a tank,
-by the new target's class (a pet under its owner's).
+with half the bot non-tanks on a healthier Guardian, and how many such runs a pair under the gap
+followed. `--threat` counts Guardians within 10 yd of the middle turning off a tank, by the new target's
+class (a pet under its owner's).
 
 ## Crush is a ±5° cone that tracks its victim
 
