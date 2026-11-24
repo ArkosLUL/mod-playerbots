@@ -12,7 +12,7 @@ The jobs file is a JSON list of objects:
     boss      RaidObs trace slug (required)
     scenario  DC scenario token (required)
     raid      uld or toc (required)
-    pools     list of roster pools, default <raid>1, <raid>2, <raid>3
+    pools     list of roster pools, default uld1-uld6 or toc1-toc3
     diff      10n, 10h, 25n or 25h, default 25n for uld and 25h for toc
     pulls     valid pulls wanted per pool, default 1
     cap       most pulls per pool, default 2
@@ -35,7 +35,7 @@ from report import State
 from server import Stop
 
 FIELDS = ("boss", "scenario", "raid", "pools", "diff", "pulls", "cap", "head", "label")
-POLL_S = 20.0
+POLL_S = 10.0
 # SOAP silent this long while runs are going reads as a crash
 DOWN_AFTER_S = 180.0
 # DC writes the record as the run leaves status; past this the run is taken as lost
@@ -62,6 +62,7 @@ class Job:
     state: State | None = None
     pulled: dict[str, int] = field(default_factory=dict)
     failed: str | None = None
+    reported: bool = False
 
     @property
     def name(self) -> str:
@@ -156,7 +157,8 @@ class Window:
     """Runs the jobs to the end. Each job needs its corpus, ledger, state, head and pulled filled in."""
 
     def __init__(self, jobs: list[Job], max_raids: int, deps, read_records: Callable[[], list[dict]],
-                 crashed: Callable[[], bool], settle_s: float, poll_s: float = POLL_S):
+                 crashed: Callable[[], bool], settle_s: float, poll_s: float = POLL_S,
+                 job_done: Callable[[Job], None] | None = None):
         self.jobs = jobs
         self.max_raids = max_raids
         self.deps = deps
@@ -164,6 +166,7 @@ class Window:
         self.crashed = crashed
         self.settle_s = settle_s
         self.poll_s = poll_s
+        self.job_done = job_done
         self.flights: dict[str, Flight] = {}
         self.most_in_flight = 0
         self.notes: list[str] = []
@@ -184,6 +187,7 @@ class Window:
             self.refresh(self.read_records())
             while True:
                 self.start_free_pools()
+                self.report_finished()
                 if not self.flights:
                     return
                 self.poll()
@@ -197,17 +201,31 @@ class Window:
         for job in self.jobs:
             job.ledger.load(records)
 
+    def finished(self, job: Job) -> bool:
+        if any(flight.job is job for flight in self.flights.values()):
+            return False
+        return bool(job.failed) or not any(job.wants(pool) for pool in job.pools)
+
+    def report_finished(self) -> None:
+        for job in self.jobs:
+            if not job.reported and self.finished(job):
+                job.reported = True
+                if self.job_done:
+                    self.job_done(job)
+
     def plan(self) -> list[tuple[Job, str, int]]:
         """(job, pool, pulls) to start now: each free pool to the earliest job that wants it, jobs in
-        order, until the raid cap is reached. A pool whose run ended but isn't read yet is not free."""
-        taken = {flight.pool for flight in self.flights.values()}
+        order, until the raid cap is reached. A pool is free once its run has left status; the job that
+        ran it waits until that run is read, the other jobs don't."""
+        taken = {flight.pool for flight in self.going()}
+        unread = {(id(flight.job), flight.pool) for flight in self.flights.values() if flight.ended_at is not None}
         room = self.max_raids - len(self.going())
         starts: list[tuple[Job, str, int]] = []
         for job in self.jobs:
             for pool in job.pools:
                 if len(starts) >= room:
                     return starts
-                if pool in taken:
+                if pool in taken or (id(job), pool) in unread:
                     continue
                 count = job.wants(pool)
                 if count:
@@ -312,8 +330,18 @@ class Window:
         # any job whose head is newer than this build would just burn a round per pool finding the same
         oldest = min(built)
         for other in self.jobs:
-            if other.head_time > oldest:
+            if other.head_time > oldest and other.failed is None:
                 self.fail(other, f"the running build predates {other.head_sha}, so none of its pulls can count")
+                for going in self.going():
+                    if going.job is other:
+                        self.stop(going)
+
+    def stop(self, flight: Flight) -> None:
+        try:
+            self.deps.call(dc.stop_command(flight.run_id))
+            self.say(f"{flight.job.name}: stopped {flight.run_id} on {flight.pool}")
+        except Exception as exc:
+            self.say(f"{flight.job.name}: could not stop {flight.run_id} on {flight.pool}: {exc}")
 
     def stop_all(self) -> None:
         """Stop every run still going and wait for them to leave status, so the lock is released on a quiet
@@ -321,11 +349,7 @@ class Window:
         try:
             going = self.going()
             for flight in going:
-                try:
-                    self.deps.call(dc.stop_command(flight.run_id))
-                    self.say(f"{flight.job.name}: stopped {flight.run_id} on {flight.pool}")
-                except Exception as exc:
-                    self.say(f"{flight.job.name}: could not stop {flight.run_id} on {flight.pool}: {exc}")
+                self.stop(flight)
             deadline = self.deps.clock() + STOP_WAIT_S
             unread = ""
             while going:

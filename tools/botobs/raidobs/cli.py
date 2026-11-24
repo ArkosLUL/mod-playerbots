@@ -16,11 +16,14 @@ def open_trace(path: pathlib.Path) -> Trace | None:
     return Trace(path)
 
 
-def run_sections(doc: str, sections, banner=None) -> int:
+def run_sections(doc: str, sections, banner=None, summary: tuple[str, ...] = ()) -> int:
     """A boss reader's whole main(). `sections` holds `(flag, help, show)` rows. No flag runs every
-    row in table order, and a blank line goes between sections and after the banner."""
+    row in table order, --summary the banner and the `summary` rows, and a blank line goes between
+    sections and after the banner."""
     parser = argparse.ArgumentParser(description=doc.splitlines()[0])
     parser.add_argument("file", type=pathlib.Path)
+    parser.add_argument("--summary", action="store_true",
+                        help="the banner and " + (", ".join(summary) if summary else "no section"))
     for flag, text, _ in sections:
         parser.add_argument(f"--{flag}", action="store_true", help=text)
     args = parser.parse_args()
@@ -29,8 +32,9 @@ def run_sections(doc: str, sections, banner=None) -> int:
     if trace is None:
         return 1
 
-    picked = [getattr(args, flag) for flag, _, _ in sections]
-    every = not any(picked)
+    picked = [getattr(args, flag.replace("-", "_")) or (args.summary and flag in summary)
+              for flag, _, _ in sections]
+    every = not any(picked) and not args.summary
     printed = banner is not None
     if banner is not None:
         banner(trace)

@@ -15,9 +15,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import dc  # noqa: E402
-from pools import Ledger, pool_names, rows_for_run  # noqa: E402
+from pools import Ledger, composition, pool_names, rows_for_run  # noqa: E402
 from pulls import Corpus  # noqa: E402
-from test_pulls import HEAD, ms, write_trace  # noqa: E402
+from test_pulls import HEAD, isolate_cache, ms, write_trace  # noqa: E402
 
 
 def at(minutes: float) -> datetime.datetime:
@@ -38,9 +38,15 @@ def record(run_id: str, pool: str, instance: int, start: float, end: float, pull
 
 
 class PoolNamesTest(unittest.TestCase):
-    def test_three_per_raid(self):
-        self.assertEqual(pool_names("uld"), ["uld1", "uld2", "uld3"])
+    def test_six_ulduar_pools_three_toc(self):
+        self.assertEqual(pool_names("uld"), ["uld1", "uld2", "uld3", "uld4", "uld5", "uld6"])
         self.assertEqual(pool_names("toc"), ["toc1", "toc2", "toc3"])
+        self.assertEqual(pool_names("uld", 2), ["uld1", "uld2"])
+
+    def test_pool_n_copies_design_n_minus_one_mod_three(self):
+        self.assertEqual([composition(pool) for pool in pool_names("uld")], list("ABCABC"))
+        self.assertEqual([composition(pool) for pool in pool_names("toc")], list("ABC"))
+        self.assertEqual((composition("uld0"), composition("lab"), composition("x9")), ("", "", "C"))
 
 
 class TraceDir(unittest.TestCase):
@@ -48,6 +54,7 @@ class TraceDir(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.dir = pathlib.Path(folder.name)
+        isolate_cache(self)
         self.corpus = Corpus("xt-002", [self.dir])
 
     def trace(self, minutes: float, inst: int, built: float = 20, **extra) -> pathlib.Path:

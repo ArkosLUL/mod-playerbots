@@ -758,10 +758,11 @@ SECTIONS = (
     ("blizzard", "each Sif Blizzard against the melee ring: who stood in it, ticks, steps, the walk back",
      show_blizzard),
 )
+SUMMARY = ("deaths", "phase2")
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS, show_banner)
+    return run_sections(__doc__, SECTIONS, show_banner, SUMMARY)
 
 
 if __name__ == "__main__":

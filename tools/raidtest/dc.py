@@ -23,6 +23,7 @@ POOL_NAME = re.compile(r"[a-z][a-z0-9]{0,5}")
 STARTED = "Test run started"
 # The driver's not-ready replies all end "retry in a few seconds"
 PENDING_MARKERS = ("retry in a few seconds", "is logging in", "still being written to the database")
+BUSY_MARKERS = ("is logged in", "is already in another live test run")
 RUN_ID = re.compile(r"\btr-\d{8}-\d{6}(?:-\d+)?\b")
 
 # Where a run record lists its boss pulls, and what each entry calls its fields. `pulls` comes last
@@ -71,7 +72,7 @@ def stop_command(run_id: str) -> str:
 
 
 def parse_start_reply(text: str) -> tuple[str, str]:
-    """("started", run id), ("pending", reply) or ("refused", reply)."""
+    """("started", run id), ("pending", reply), ("busy", reply) or ("refused", reply)."""
     lowered = text.lower()
     match = RUN_ID.search(text)
     if match and "started" in lowered and "not started" not in lowered:
@@ -83,6 +84,8 @@ def parse_start_reply(text: str) -> tuple[str, str]:
         return "refused", text
     if any(marker in lowered for marker in PENDING_MARKERS):
         return "pending", text
+    if any(marker in lowered for marker in BUSY_MARKERS):
+        return "busy", text
     return "refused", text
 
 
@@ -230,9 +233,11 @@ Call = Callable[[str], str]
 
 def start_run(call: Call, command: str, clock: Callable[[], float], sleep: Callable[[float], None],
               unavailable: tuple[type[BaseException], ...] = (), window_s: float = 120.0,
-              every_s: float = 5.0) -> str:
-    """Start a run and return its id, retrying while the driver logs in or SOAP isn't up yet."""
-    deadline = clock() + window_s
+              every_s: float = 5.0, busy_s: float = 60.0) -> str:
+    """Start a run and return its id, retrying while the driver logs in or SOAP isn't up yet, and for
+    busy_s while a member is still held by a run that just ended."""
+    start = clock()
+    deadline = start + window_s
     last = ""
     while True:
         try:
@@ -241,7 +246,7 @@ def start_run(call: Call, command: str, clock: Callable[[], float], sleep: Calla
             kind, value = "pending", str(exc)
         if kind == "started":
             return value
-        if kind == "refused":
+        if kind == "refused" or (kind == "busy" and clock() - start >= busy_s):
             raise StartRefused(value.strip())
         last = value.strip()
         if clock() >= deadline:

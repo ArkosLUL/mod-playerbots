@@ -12,19 +12,28 @@ from before DC's schema 18 don't say how a pull started, so those count as befor
 from __future__ import annotations
 
 import datetime
+import re
 from dataclasses import dataclass
 
 import dc
 from pulls import DIFF_IDS, Corpus, TraceFacts, match_traces
 
-POOLS_PER_RAID = 3
+POOLS_PER_RAID = {"uld": 6, "toc": 3}
 # Ulduar's hard modes come from the server's toggles, so its default is 25n
 DEFAULT_DIFF = {"uld": "25n", "toc": "25h"}
 SLACK_MS = 60_000
+COMPOSITIONS = "ABC"
 
 
-def pool_names(raid: str, count: int = POOLS_PER_RAID) -> list[str]:
-    return [f"{raid}{number}" for number in range(1, count + 1)]
+def pool_names(raid: str, count: int | None = None) -> list[str]:
+    return [f"{raid}{number}" for number in range(1, (count or POOLS_PER_RAID[raid]) + 1)]
+
+
+def composition(pool: str) -> str:
+    match = re.fullmatch(r"[a-z]+(\d+)", pool)
+    if not match or int(match.group(1)) < 1:
+        return ""
+    return COMPOSITIONS[(int(match.group(1)) - 1) % len(COMPOSITIONS)]
 
 
 @dataclass
@@ -75,6 +84,11 @@ class Ledger:
         self.corpus.rescan()
         self.rows = [row for run in dc.pool_runs(records, self.pools)
                      for row in rows_for_run("", run, self.corpus)]
+        self.corpus.flush()
+
+    def history(self) -> list[tuple[str, TraceFacts]]:
+        pairs = [(pool, facts) for pool in self.pools for facts in self._valid(pool)]
+        return sorted(pairs, key=lambda pair: pair[1].start_ms or 0, reverse=True)
 
     def _valid(self, pool: str) -> list[TraceFacts]:
         seen, out = set(), []

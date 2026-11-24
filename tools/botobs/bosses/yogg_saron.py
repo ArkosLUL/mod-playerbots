@@ -5919,10 +5919,11 @@ SECTIONS = (
     ("crush", "Crush and who took it, knockback, Death Rays and the last walk before each", show_crush),
     ("sanity", "Sanity minima, trips below, the bench, Rebirths into Insane", show_sanity),
 )
+SUMMARY = ("phases",)
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS, show_banner)
+    return run_sections(__doc__, SECTIONS, show_banner, SUMMARY)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 import dc as dcmod  # noqa: E402
+import pools  # noqa: E402
 import pulls  # noqa: E402
 import raidtest  # noqa: E402
 import report  # noqa: E402
@@ -56,6 +57,9 @@ class FakeCorpus:
         self.traces: list[TraceFacts] = []
 
     def rescan(self) -> None:
+        pass
+
+    def flush(self) -> None:
         pass
 
     def facts(self, path):
@@ -187,7 +191,8 @@ class WindowTest(unittest.TestCase):
         self.rendered = []
         patches = [
             mock.patch.object(raidtest, "resolve_since", side_effect=lambda repo, since: HEADS.get(since)),
-            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out: self.rendered.append(state)),
+            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
             mock.patch.object(server, "dirty_trees", return_value=[]),
             mock.patch.object(server, "build", return_value=0),
             mock.patch.object(server, "restart", return_value=(0, "2026-11-21T13:00:00Z", True)),
@@ -201,6 +206,13 @@ class WindowTest(unittest.TestCase):
         self.server = FakeServer(self.corpora)
         self.clock = FakeClock()
         self.sleep = self.clock.sleep
+        self.spawned: list[tuple[list[str], int]] = []
+
+    def spawn(self, command, **kwargs):
+        self.spawned.append((command, len(self.server.commands)))
+        process = mock.Mock()
+        process.wait.return_value = 0
+        return process
 
     def window(self, jobs, *extra: str) -> int:
         path = self.dir / "jobs.json"
@@ -209,7 +221,8 @@ class WindowTest(unittest.TestCase):
             args = raidtest.parse_args(["window", "--jobs", str(path), "--lock", str(self.lock), *extra])
         self.out, self.log = io.StringIO(), io.StringIO()
         deps = raidtest.Deps(call=lambda command: self.server.call(command), clock=self.clock,
-                             sleep=lambda seconds: self.sleep(seconds), out=self.out, log=self.log)
+                             sleep=lambda seconds: self.sleep(seconds), out=self.out, log=self.log,
+                             spawn=self.spawn)
         with mock.patch.object(raidtest, "Corpus", side_effect=lambda boss: self.corpora[boss]), \
                 mock.patch.object(dcmod, "read_log", side_effect=lambda path: self.server.read()):
             return raidtest.run_window(args, deps)
@@ -244,11 +257,46 @@ class WindowTest(unittest.TestCase):
         self.assertFalse(self.lock.exists())
         server.build.assert_called_once()
 
-    def test_a_freed_pool_goes_to_the_earliest_job_that_wants_it(self):
+    def test_a_pool_is_free_for_other_jobs_once_its_run_leaves_status(self):
         self.server.bad = {(XT, "uld1"): 1}
         self.assertEqual(self.window([job(XT, pools=["uld1"]), job(IGNIS)]), 0)
         self.assertEqual(self.started(), [(XT, "uld1"), (IGNIS, "uld2"), (IGNIS, "uld3"),
-                                          (XT, "uld1"), (IGNIS, "uld1")])
+                                          (IGNIS, "uld1"), (XT, "uld1")])
+        status_calls = [i for i, c in enumerate(self.server.commands) if c == dcmod.STATUS_COMMAND]
+        ignis_uld1 = self.server.commands.index(".dc test start uld-ignis roster=uld1 diff=25n pulls=1")
+        self.assertEqual(ignis_uld1, status_calls[0] + 1)
+
+    def test_a_job_waits_for_its_own_run_to_be_read(self):
+        self.server.bad = {(XT, "uld1"): 1}
+        self.assertEqual(self.window([job(XT, pools=["uld1"])]), 0)
+        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld1")])
+        second = [i for i, c in enumerate(self.server.commands) if c.startswith(".dc test start")][1]
+        self.assertGreaterEqual(self.clock.now, raidtest.SETTLE_S)
+        self.assertEqual(self.server.overlap, [])
+        self.assertGreater(second, self.server.commands.index(dcmod.STATUS_COMMAND))
+
+    def test_a_member_still_held_by_the_last_run_is_waited_for(self):
+        replies = iter(["Test run not started: pool member 'Uldxaa' is logged in"])
+        original = self.server.call
+
+        def held(command):
+            if command.startswith(".dc test start"):
+                reply = next(replies, None)
+                if reply:
+                    self.server.commands.append(command)
+                    return reply
+            return original(command)
+
+        self.server.call = held
+        self.assertEqual(self.window([job(XT, pools=["uld1"])]), 0)
+        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld1")])
+        self.assertEqual(len(self.server.runs), 1)
+
+    def test_a_member_held_past_the_busy_wait_fails_the_job(self):
+        self.server.refuse = {(XT, "uld1"): "Test run not started: pool member 'Uldxaa' is logged in"}
+        self.assertEqual(self.window([job(XT, pools=["uld1"])]), 3)
+        self.assertIn("is logged in", self.state(1).stopped)
+        self.assertGreaterEqual(self.clock.now, 60)
 
     def test_a_pull_whose_boss_engaged_first_is_pulled_again(self):
         self.server.engaged = {(XT, "uld1"): 1}
@@ -402,9 +450,12 @@ class WindowTest(unittest.TestCase):
 
     def test_a_build_before_a_head_fails_every_job_with_that_head_at_once(self):
         self.server.built = BETWEEN
+        self.server.length = {IGNIS: 30}
         self.assertEqual(self.window([job(XT), job(IGNIS), job(BEASTS, head="old1234")]), 3)
-        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld2"), (XT, "uld3"),
-                                          (BEASTS, "toc1"), (BEASTS, "toc2"), (BEASTS, "toc3")])
+        ignis = [run_id for (run_id, _), (scenario, _) in zip(self.server.runs, self.started()) if scenario == IGNIS]
+        self.assertEqual(self.started()[:6], [(XT, "uld1"), (XT, "uld2"), (XT, "uld3"),
+                                              (BEASTS, "toc1"), (BEASTS, "toc2"), (BEASTS, "toc3")])
+        self.assertEqual(sorted(self.stops()), sorted(ignis))
         self.assertIn("the running build predates abc1234", self.state(2).stopped)
         self.assertIsNone(self.state(3).stopped)
         self.assertEqual(self.counted(3), {"toc1": 1, "toc2": 1, "toc3": 1})
@@ -474,6 +525,69 @@ class WindowTest(unittest.TestCase):
         self.assertEqual(self.window([job(XT, head="nosuch")]), 2)
         self.assertIn("cannot resolve nosuch (job 1", self.log.getvalue())
 
+    def test_each_job_report_starts_as_soon_as_the_job_is_finished(self):
+        self.server.length = {IGNIS: 30}
+        folder = self.dir / "window28"
+        self.assertEqual(self.window([job(XT, label="polish"), job(IGNIS, pools=["uld1"]),
+                                      job(XT, diff="10n", pools=["uld2"])], "--report-dir", str(folder)), 0)
+        self.assertEqual(self.rendered, [])
+        (xt, at_xt), (xt10, _), (ignis, at_ignis) = self.spawned
+        self.assertLess(at_xt, len(self.server.commands) - 1)
+        self.assertLess(at_xt, at_ignis)
+        self.assertEqual(xt[2:6], ["report", "--boss", "xt-002", "--raid"])
+        self.assertIn("--runs", xt)
+        self.assertEqual(xt[xt.index("--pools") + 1], "uld1,uld2,uld3")
+        self.assertEqual(xt[xt.index("--head") + 1], "abc1234")
+        self.assertEqual(xt[xt.index("--out") + 1], str(folder / "window28-xt-002-25n-job1.md"))
+        self.assertEqual(xt10[xt10.index("--out") + 1], str(folder / "window28-xt-002-10n-job3.md"))
+        self.assertEqual(ignis[ignis.index("--out") + 1], str(folder / "window28-ignis.md"))
+        text = self.out.getvalue()
+        self.assertIn("\n# Job reports\n", text)
+        self.assertIn(f"- job 2 (ignis 25n): `{folder / 'window28-ignis.md'}`", text)
+        self.assertLess(text.index("# Job reports"), text.index("# Window load"))
+
+    def test_a_failed_job_still_gets_its_report(self):
+        self.server.refuse = {(XT, "uld2"): "Test run not started: no roster pool 'uld2'"}
+        self.assertEqual(self.window([job(XT)], "--report-dir", str(self.dir / "w")), 3)
+        (command, _), = self.spawned
+        notes = [command[i + 1] for i, part in enumerate(command) if part == "--note"]
+        self.assertTrue(any(note.startswith("The job failed: DC refused") for note in notes))
+
+    def test_a_report_carries_the_cap_note(self):
+        self.server.bad = {(XT, "uld2"): 5}
+        self.assertEqual(self.window([job(XT)], "--report-dir", str(self.dir / "w")), 1)
+        (command, _), = self.spawned
+        self.assertIn("uld2: the cap of 2 pulls ran out with 0 valid.",
+                      [command[i + 1] for i, part in enumerate(command) if part == "--note"])
+
+    def test_reports_are_awaited_after_the_lock_is_released(self):
+        held = []
+
+        def spawn(command, **kwargs):
+            process = mock.Mock()
+            process.wait.side_effect = lambda timeout: held.append(self.lock.exists()) or 0
+            return process
+
+        self.spawn = spawn
+        self.assertEqual(self.window([job(XT)], "--report-dir", str(self.dir / "w")), 0)
+        self.assertEqual(held, [False])
+
+    def test_a_report_folder_with_old_reports_refuses_before_the_lock(self):
+        folder = self.dir / "w"
+        folder.mkdir()
+        (folder / "w-xt-002.md").write_text("old", encoding="utf-8")
+        self.assertEqual(self.window([job(XT)], "--report-dir", str(folder)), 2)
+        self.assertIn("already holds reports", self.log.getvalue())
+        self.assertEqual(self.server.commands, [])
+        self.assertFalse(self.lock.parent.exists())
+
+    def test_an_unusable_report_folder_refuses_before_the_lock(self):
+        blocker = self.dir / "w"
+        blocker.write_text("a file, not a folder", encoding="utf-8")
+        self.assertEqual(self.window([job(XT)], "--report-dir", str(blocker / "sub")), 2)
+        self.assertIn("can't use --report-dir", self.log.getvalue())
+        self.assertFalse(self.lock.parent.exists())
+
     def test_header_and_load_line(self):
         self.server.gaps = [250] * 17 + [260, 300, 450]
         self.assertEqual(self.window([job(XT, label="polish")]), 0)
@@ -499,7 +613,7 @@ class JobsTest(unittest.TestCase):
     def test_defaults(self):
         uld, toc = self.parse(job(XT), job(BEASTS))
         self.assertEqual((uld.number, uld.pools, uld.diff, uld.pulls, uld.cap, uld.head, uld.label),
-                         (1, ["uld1", "uld2", "uld3"], "25n", 1, 2, "HEAD", ""))
+                         (1, [f"uld{n}" for n in range(1, 7)], "25n", 1, 2, "HEAD", ""))
         self.assertEqual((toc.number, toc.pools, toc.diff), (2, ["toc1", "toc2", "toc3"], "25h"))
 
     def test_overrides(self):

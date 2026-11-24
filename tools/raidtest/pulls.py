@@ -8,8 +8,13 @@ so is a pull DC started without its pre-pull refresh, since only DC's record say
 from __future__ import annotations
 
 import datetime
+import hashlib
+import json
+import os
 import pathlib
 import sys
+import tempfile
+import time
 from dataclasses import dataclass, field
 
 BOTOBS = pathlib.Path(__file__).resolve().parents[1] / "botobs"
@@ -28,6 +33,16 @@ DC_MULTIPLIERS = ("dungeon clear", "dungeon clear combat")
 # Far above any load gap seen (under 1 s with six raids at once). A longer one is the whole world
 # thread stopped, usually another raid's run being set up, and the frozen fight then catches up in bursts.
 FREEZE_MS = 2000
+CACHE_ROOT = pathlib.Path(tempfile.gettempdir()) / "raidtest" / "facts"
+CACHE_KEEP_S = 14 * 86400
+
+
+@dataclass
+class DeathRow:
+    t_ms: int
+    name: str
+    role: str
+    mechanic: str
 
 
 @dataclass
@@ -56,6 +71,7 @@ class TraceFacts:
     map_id: int | None = None
     instance: int | None = None
     snap_gaps: list[int] = field(default_factory=list)
+    death_rows: list[DeathRow] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -101,6 +117,23 @@ def death_cause(trace: Trace, death: dict) -> str:
     return line
 
 
+def death_mechanic(trace: Trace, death: dict) -> str:
+    cause = death.get("cause")
+    if cause == "reset":
+        return "the wipe command"
+    if cause == "self":
+        return "a script kill"
+    if own_blow(death):
+        spell = own_blow_spell(death)
+        return f"its own {trace.spell(spell)}" if spell else "its own blow"
+    rewind = sorted(death.get("rewind") or [], key=lambda row: row[0])
+    if rewind:
+        _, source, spell = rewind[-1][:3]
+        name = trace.spell(spell)
+        return f"melee from {trace.name(source)}" if name == "melee" else name
+    return f"killed by {trace.name(death.get('killer'))}"
+
+
 def snapshot_gaps(trace: Trace) -> list[int]:
     """Milliseconds between consecutive snapshots from the pull on (t >= 0), in file order. The recorder
     aims at 250 ms, so the gaps read how far the world thread falls behind under load."""
@@ -116,10 +149,13 @@ def read_facts(path: pathlib.Path) -> TraceFacts:
     start = header.get("ts")
     ends = trace.of("end")
     last_t = ends[-1]["t"] if ends else (trace.records[-1].get("t", 0) if trace.records else 0)
+    fought = combat_deaths(trace)
     deaths = [
         f"{trace.name(d['g'])} ({trace.role(d['g'])}) at {clock(d['t'])}: {death_cause(trace, d)}"
-        for d in combat_deaths(trace)
+        for d in fought
     ]
+    death_rows = [DeathRow(int(d["t"]), trace.name(d["g"]), trace.role(d["g"]), death_mechanic(trace, d))
+                  for d in fought]
     vetoes = [
         Veto(int(start) + int(rec.get("t", 0)), trace.name(rec.get("g")), rec.get("m", ""), rec.get("a", ""))
         for rec in trace.of("veto")
@@ -142,11 +178,124 @@ def read_facts(path: pathlib.Path) -> TraceFacts:
         map_id=_int_or_none(header.get("map")),
         instance=_int_or_none(header.get("inst")),
         snap_gaps=snapshot_gaps(trace),
+        death_rows=death_rows,
     )
 
 
 def _int_or_none(value) -> int | None:
     return int(value) if isinstance(value, (int, float)) else None
+
+
+def facts_to_json(facts: TraceFacts) -> dict:
+    return {
+        "path": str(facts.path), "encounter": facts.encounter,
+        "built": facts.built.isoformat() if facts.built else None, "diff": facts.diff,
+        "warnings": [list(pair) for pair in facts.warnings], "hardmode": facts.hardmode,
+        "start_ms": facts.start_ms, "end_ms": facts.end_ms, "outcome": facts.outcome, "closed": facts.closed,
+        "deaths": facts.deaths, "wipe_commands": facts.wipe_commands,
+        "vetoes": [[v.at_ms, v.bot, v.multiplier, v.action] for v in facts.vetoes],
+        "map_id": facts.map_id, "instance": facts.instance, "snap_gaps": facts.snap_gaps,
+        "death_rows": [[d.t_ms, d.name, d.role, d.mechanic] for d in facts.death_rows],
+    }
+
+
+def facts_from_json(data: dict) -> TraceFacts:
+    return TraceFacts(
+        path=pathlib.Path(data["path"]), encounter=data["encounter"],
+        built=datetime.datetime.fromisoformat(data["built"]) if data["built"] else None, diff=data["diff"],
+        warnings=[tuple(pair) for pair in data["warnings"]], hardmode=data["hardmode"],
+        start_ms=data["start_ms"], end_ms=data["end_ms"], outcome=data["outcome"], closed=data["closed"],
+        deaths=list(data["deaths"]), wipe_commands=data["wipe_commands"],
+        vetoes=[Veto(*row) for row in data["vetoes"]], map_id=data["map_id"], instance=data["instance"],
+        snap_gaps=list(data["snap_gaps"]), death_rows=[DeathRow(*row) for row in data["death_rows"]],
+    )
+
+
+def code_stamp() -> str:
+    digest = hashlib.sha1()
+    for source in [pathlib.Path(__file__), *sorted((BOTOBS / "raidobs").glob("*.py"))]:
+        digest.update(source.name.encode())
+        digest.update(source.read_bytes())
+    return digest.hexdigest()[:16]
+
+
+class FactsCache:
+    def __init__(self, boss: str, root: pathlib.Path):
+        self.root = root
+        self.folder = root / code_stamp()
+        self.path = self.folder / f"{boss}.json"
+        self.entries: dict[str, dict] | None = None
+        self.dirty = False
+
+    @staticmethod
+    def key(path: pathlib.Path) -> str | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        return f"{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}"
+
+    def _read(self) -> dict[str, dict]:
+        for attempt in range(5):
+            try:
+                data = json.loads(self.path.read_text(encoding="utf-8"))
+                return data if isinstance(data, dict) else {}
+            except PermissionError:
+                time.sleep(0.2 * (attempt + 1))
+            except (OSError, ValueError):
+                return {}
+        return {}
+
+    def _load(self) -> dict[str, dict]:
+        if self.entries is None:
+            self.entries = self._read()
+        return self.entries
+
+    def get(self, path: pathlib.Path) -> TraceFacts | None:
+        key = self.key(path)
+        data = self._load().get(key) if key else None
+        if data is None:
+            return None
+        try:
+            facts = facts_from_json(data)
+        except (KeyError, TypeError, ValueError):
+            return None
+        facts.path = path
+        return facts
+
+    def put(self, path: pathlib.Path, facts: TraceFacts) -> None:
+        key = self.key(path)
+        if key:
+            self._load()[key] = facts_to_json(facts)
+            self.dirty = True
+
+    def flush(self) -> None:
+        if not self.dirty:
+            return
+        spare = self.path.with_name(f"{self.path.name}.{os.getpid()}.tmp")
+        try:
+            self.folder.mkdir(parents=True, exist_ok=True)
+            self.entries = {**self._read(), **self._load()}
+            spare.write_text(json.dumps(self.entries), encoding="utf-8")
+            os.replace(spare, self.path)
+            self.dirty = False
+            self._prune()
+        except OSError:
+            try:
+                spare.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    def _prune(self) -> None:
+        cutoff = time.time() - CACHE_KEEP_S
+        for folder in self.root.iterdir():
+            try:
+                if folder != self.folder and folder.is_dir() and folder.stat().st_mtime < cutoff:
+                    for item in folder.iterdir():
+                        item.unlink()
+                    folder.rmdir()
+            except OSError:
+                continue
 
 
 def name_parts(path: pathlib.Path) -> tuple[int, int, int] | None:
@@ -161,20 +310,29 @@ class Corpus:
     """One boss's traces, read once each. An open trace is read again next time, since its validity can
     still change."""
 
-    def __init__(self, boss: str, roots: list[pathlib.Path] | None = None):
+    def __init__(self, boss: str, roots: list[pathlib.Path] | None = None,
+                 cache_root: pathlib.Path | None = None):
         self.boss = canonical_boss(boss)
         self.roots = roots or [LOG_ROOT]
         self._cache: dict[pathlib.Path, TraceFacts] = {}
         self._by_instance: dict[int, list[tuple[int, int, pathlib.Path]]] | None = None
+        self._disk = FactsCache(self.boss, cache_root or CACHE_ROOT)
 
     def facts(self, path: pathlib.Path) -> TraceFacts:
         cached = self._cache.get(path)
         if cached:
             return cached
-        facts = read_facts(path)
+        facts = self._disk.get(path)
+        if facts is None:
+            facts = read_facts(path)
+            if facts.closed:
+                self._disk.put(path, facts)
         if facts.closed:
             self._cache[path] = facts
         return facts
+
+    def flush(self) -> None:
+        self._disk.flush()
 
     def paths(self) -> list[pathlib.Path]:
         return find_traces(self.roots, self.boss)

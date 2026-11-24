@@ -20,5 +20,5 @@ docker logs ac-worldserver 2>&1 | grep -E "ready|Segmentation|core dumped" | tai
 rm "$LOCK/owner" && rmdir "$LOCK" || exit 1
 cd /g/DevStuff/GitHub/azerothcore-wotlk-pb/modules/mod-playerbots || exit 1
 python tools/raidtest/raidtest.py window --jobs "$JOBS" --head "$HEAD" --max-raids 6 --skip-rebuild \
-  --owner "raid polish loop orchestrator: $LABEL" > "$OUT/$LABEL.out" 2>&1
+  --report-dir "$OUT/$LABEL" --owner "raid polish loop orchestrator: $LABEL" > "$OUT/$LABEL.out" 2>&1
 echo "window exit $?"

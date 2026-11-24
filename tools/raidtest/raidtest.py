@@ -3,20 +3,24 @@
 
     raidtest.py cycle --boss xt-002 --scenario <dc scenario> --raid uld [--pools uld1,uld2,uld3]
                       [--diff 25n] [--pulls 1] [--cap 2] [--skip-baseline] [--skip-rebuild]
-    raidtest.py window --jobs <file.json> [--head HEAD] [--max-raids 6] [--skip-rebuild]
+    raidtest.py window --jobs <file.json> [--head HEAD] [--max-raids 6] [--skip-rebuild] [--report-dir DIR]
     raidtest.py report --boss xt-002 --raid uld [--pools ...] [--diff 25n] [--pulls 1] [--runs tr-...,tr-...]
+                       [--full] [--out FILE]
 
 A cycle takes the server lock, gets baseline pulls on the live build for every pool with fewer than
 --pulls valid ones from before HEAD, rebuilds and restarts the worldserver, then pulls the boss until
 every pool has --pulls valid pulls built after HEAD or ran --cap pulls. Each round starts one DC run per
 pool still short, all at once, and waits for all of them. A pool's pulls are only counted for, and
-compared with, that pool. --pools defaults to <raid>1,<raid>2,<raid>3 and --diff to 25h for toc and 25n
+compared with, that pool. --pools defaults to uld1-uld6 or toc1-toc3 and --diff to 25h for toc and 25n
 for uld, whose hard modes come from the server's toggles. The markdown report goes to stdout, progress
-to stderr.
+to stderr. Reports are digests (pulls, the done rule per composition, deaths by mechanic, the trend over
+recent builds, each boss reader's --summary); --full prints every pool's sections and readers in full.
 
 A window runs a list of jobs (window.py has the file format) on one build under one lock: the same
 dirty-tree check, rebuild and restart once at the start, no baseline phase, then every pool pulls the
-earliest job that still wants it, at most --max-raids runs at once.
+earliest job that still wants it, at most --max-raids runs at once. With --report-dir each job's report
+is written to <dir>/<dir name>-<boss>.md as soon as the job is finished, and stdout carries only the
+window's header, the report files and the load line.
 
 Exit codes: 0 every pool got enough valid pulls (in a window, every job's), 1 a cap ran out first, 2
 refused before touching the server, 3 stopped on a failure (build, restart, driver, crash, a refused
@@ -26,6 +30,8 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import io
+import os
 import pathlib
 import subprocess
 import sys
@@ -53,6 +59,7 @@ MODULE_REPO = CORE / "modules" / "mod-playerbots"
 DC_RUNS_FILE = CORE / "env" / "dist" / "logs" / "dc" / "dc_testruns.jsonl"
 # A trace closes up to Obs.IdleCloseSeconds (30 s) after its pull, so wait that out before reading
 SETTLE_S = 45.0
+REPORT_WAIT_S = 900.0
 
 
 @dataclass
@@ -64,6 +71,7 @@ class Deps:
     sleep: Callable[[float], None] = time.sleep
     out: TextIO = sys.stdout
     log: TextIO = sys.stderr
+    spawn: Callable[..., subprocess.Popen] = subprocess.Popen
 
 
 def say(deps: Deps, text: str) -> None:
@@ -199,6 +207,7 @@ def finish(state: State, corpus: Corpus, ledger: Ledger, records: list[dict]) ->
     ledger.load(records)
     state.counted = {pool: ledger.counted(pool, state.head_time) for pool in state.pools}
     state.baseline = {pool: ledger.baseline(pool, state.head_time, state.wanted) for pool in state.pools}
+    state.history = ledger.history()
 
 
 def resolve_head(repo: pathlib.Path, head: str) -> tuple[str, datetime.datetime] | None:
@@ -278,7 +287,46 @@ def cycle(args, deps: Deps) -> int:
     return 0 if all(len(state.counted[pool]) >= args.pulls for pool in state.pools) else 1
 
 
+def write_whole(target: pathlib.Path, text: str, sleep: Callable[[float], None] = time.sleep) -> None:
+    spare = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+    spare.write_text(text, encoding="utf-8")
+    for attempt in range(10):
+        try:
+            os.replace(spare, target)
+            return
+        except PermissionError:
+            if attempt == 9:
+                spare.unlink(missing_ok=True)
+                raise
+            sleep(0.5)
+
+
+def rerun_command(args) -> str:
+    command = (f"python tools/raidtest/raidtest.py report --boss {args.boss} --raid {args.raid} "
+               f"--pools {','.join(args.pools)} --diff {args.diff} --pulls {args.pulls} --head {args.head}")
+    return command + (f" --runs {','.join(args.runs)}" if args.runs else "")
+
+
 def report_only(args, deps: Deps) -> int:
+    if not args.out:
+        return build_report(args, deps, deps.out)
+    text = io.StringIO()
+    try:
+        code = build_report(args, deps, text)
+    except Exception as exc:
+        traceback.print_exc(file=deps.log)
+        text, code = io.StringIO(), 3
+        print(f"The report failed: {type(exc).__name__}: {exc}", file=text)
+    if code:
+        failed = text.getvalue().strip() or f"The report could not be built (exit {code}), see the window log."
+        title = f"# Raid test: {args.boss} {args.diff}" + (f" ({args.label})" if args.label else "")
+        text = io.StringIO()
+        print(f"{title}\n\n**{failed}**\n\nRerun: `{rerun_command(args)}`", file=text)
+    write_whole(pathlib.Path(args.out), text.getvalue(), deps.sleep)
+    return code
+
+
+def build_report(args, deps: Deps, out: TextIO) -> int:
     head = head_of(args)
     if not head:
         print(f"cannot resolve {args.head} in {args.repo}", file=deps.log)
@@ -290,7 +338,7 @@ def report_only(args, deps: Deps) -> int:
         return 2
     corpus = Corpus(args.boss)
     state = State(boss=corpus.boss, diff=args.diff, head_sha=head[0], head_time=head[1], wanted=args.pulls,
-                  pools=list(args.pools))
+                  pools=list(args.pools), label=args.label, notes=list(args.note))
     if args.runs:
         for run_id in args.runs:
             run = dc.find_run(records, run_id)
@@ -312,8 +360,75 @@ def report_only(args, deps: Deps) -> int:
                 row.phase = "test"
                 state.rows.append(row)
     finish(state, corpus, ledger, records)
-    render(state, deps.run, deps.out)
+    render(state, deps.run, out, full=args.full)
     return 0
+
+
+class JobReports:
+    def __init__(self, folder: pathlib.Path, args, deps: Deps):
+        self.folder = folder
+        self.args = args
+        self.deps = deps
+        self.spawned: list[tuple[window.Job, pathlib.Path, subprocess.Popen | None]] = []
+
+    def path_for(self, job: window.Job, jobs: list[window.Job]) -> pathlib.Path:
+        shared = sum(1 for other in jobs if other.boss == job.boss) > 1
+        suffix = f"-{job.diff}-job{job.number}" if shared else ""
+        return self.folder / f"{self.folder.name}-{job.boss}{suffix}.md"
+
+    @staticmethod
+    def notes(job: window.Job, stopped: str | None) -> list[str]:
+        notes = list(job.state.notes)
+        for pool in job.pools:
+            valid = job.valid(pool)
+            line = f"{pool}: the cap of {job.cap} pulls ran out with {valid} valid."
+            if valid < job.pulls and job.pulled.get(pool, 0) >= job.cap and line not in notes:
+                notes.append(line)
+        if job.failed:
+            notes.append(f"The job failed: {job.failed}")
+        elif stopped:
+            notes.append(f"The window stopped: {stopped}")
+        return notes
+
+    def command(self, job: window.Job, target: pathlib.Path, stopped: str | None = None) -> list[str]:
+        command = [sys.executable, str(pathlib.Path(__file__).resolve()), "report", "--boss", job.boss,
+                   "--raid", job.raid, "--pools", ",".join(job.pools), "--diff", job.diff,
+                   "--pulls", str(job.pulls), "--head", job.head_sha, "--repo", str(self.args.repo),
+                   "--dc-runs-file", str(self.args.dc_runs_file), "--label", job.state.label,
+                   "--out", str(target)]
+        runs = [run.run_id for _, run in job.state.runs if run.run_id]
+        if runs:
+            command += ["--runs", ",".join(runs)]
+        for note in self.notes(job, stopped):
+            command += ["--note", note]
+        return command
+
+    def start(self, job: window.Job, jobs: list[window.Job], stopped: str | None = None) -> None:
+        target = self.path_for(job, jobs)
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+        try:
+            process = self.deps.spawn(self.command(job, target, stopped), env=env)
+        except OSError as exc:
+            say(self.deps, f"{job.name} done; its report could not start: {exc}")
+            process = None
+        else:
+            say(self.deps, f"{job.name} done; report goes to {target}")
+        self.spawned.append((job, target, process))
+
+    def wait(self) -> list[str]:
+        lines = []
+        deadline = self.deps.clock() + REPORT_WAIT_S
+        for job, target, process in self.spawned:
+            if process is None:
+                lines.append(f"- {job.name}: the report did not start")
+                continue
+            try:
+                code = process.wait(timeout=max(1.0, deadline - self.deps.clock()))
+            except subprocess.TimeoutExpired:
+                lines.append(f"- {job.name}: `{target}` still being written after {REPORT_WAIT_S:.0f} s")
+                continue
+            lines.append(f"- {job.name}: `{target}`" + (f" (report exit {code})" if code else ""))
+        return lines
 
 
 def job_verdict(job: window.Job, stopped: str | None) -> str:
@@ -355,6 +470,21 @@ def run_window(args, deps: Deps) -> int:
                           build_note="not rebuilt (--skip-rebuild), the jobs ran on the build already up",
                           max_raids=args.max_raids)
 
+    reports = None
+    if args.report_dir:
+        folder = pathlib.Path(args.report_dir)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            old = sorted(folder.glob("*.md"))
+        except OSError as exc:
+            print(f"refused: can't use --report-dir {folder}: {exc}", file=deps.log)
+            return 2
+        if old:
+            print(f"refused: {folder} already holds reports ({old[0].name}); give the window a new label",
+                  file=deps.log)
+            return 2
+        reports = JobReports(folder, args, deps)
+
     owner = "raidtest window: " + "; ".join(job.name for job in jobs) + (f": {args.owner}" if args.owner else "")
     lock = server.ServerLock(pathlib.Path(args.lock), server.owner_text(owner))
     try:
@@ -379,8 +509,10 @@ def run_window(args, deps: Deps) -> int:
                 rebuild(args, deps, summary.notes)
                 summary.build_note = "rebuilt for this window"
             container = server.container_id(deps.run)
+            job_done = (lambda job: reports.start(job, jobs)) if reports else None
             runner = window.Window(jobs, args.max_raids, deps, lambda: read_records(args),
-                                   lambda: not container or server.container_id(deps.run) != container, SETTLE_S)
+                                   lambda: not container or server.container_id(deps.run) != container, SETTLE_S,
+                                   job_done=job_done)
             runner.run()
         except (Exception, KeyboardInterrupt) as exc:
             summary.stopped = stop_reason(exc, deps)
@@ -408,13 +540,22 @@ def run_window(args, deps: Deps) -> int:
             traces.update((row.trace.path, row.trace) for row in job.state.rows if row.trace)
         summary.traces = list(traces.values())
         render_window_header(summary, deps.out)
-        for job in jobs:
-            print(file=deps.out)
-            render(job.state, deps.run, deps.out)
-        render_window_load(summary, deps.out)
+        if reports:
+            for job in jobs:
+                if not job.reported:
+                    job.reported = True
+                    reports.start(job, jobs, job.state.stopped)
+        else:
+            for job in jobs:
+                print(file=deps.out)
+                render(job.state, deps.run, deps.out)
     finally:
         lock.release()
 
+    if reports:
+        print("\n# Job reports\n", file=deps.out)
+        print("\n".join(reports.wait()), file=deps.out)
+    render_window_load(summary, deps.out)
     if summary.stopped or any(job.failed for job in jobs):
         return 3
     return 0 if all(line.verdict == "done" for line in summary.jobs) else 1
@@ -451,7 +592,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     def common(sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--boss", required=True, help="RaidObs trace slug, e.g. xt-002 or northrend-beasts")
         sub.add_argument("--raid", required=True, choices=dc.RAIDS, help="the raid whose roster pools to use")
-        sub.add_argument("--pools", type=pool_list, help="roster pools (default <raid>1,<raid>2,<raid>3)")
+        sub.add_argument("--pools", type=pool_list, help="roster pools (default uld1-uld6 or toc1-toc3)")
         sub.add_argument("--diff", choices=sorted(DIFF_IDS), help="default 25h for toc, 25n for uld")
         sub.add_argument("--pulls", type=int, default=1, help="valid pulls wanted per pool (default 1)")
         sources(sub, "commit-ish the build must be newer than")
@@ -474,6 +615,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     win = commands.add_parser("window", help="a list of jobs on one build: rebuild, pulls, report")
     win.add_argument("--jobs", required=True, help="JSON list of jobs, format in window.py")
     win.add_argument("--max-raids", type=int, default=6, help="most DC runs in flight at once (default 6)")
+    win.add_argument("--report-dir", help="write each job's report here as soon as the job is finished")
     sources(win, "commit-ish whose later builds count, for a job that names no head")
     live(win)
 
@@ -481,6 +623,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     common(rep)
     rep.add_argument("--runs", type=lambda text: [part for part in text.split(",") if part],
                      help="DC run ids to report pull by pull")
+    rep.add_argument("--full", action="store_true", help="every pool's sections and boss readers in full")
+    rep.add_argument("--out", help="write the report to this file, all at once, instead of stdout")
+    rep.add_argument("--label", default="", help="text for the report's title")
+    rep.add_argument("--note", action="append", default=[], help="a line to put under the title")
 
     args = parser.parse_args(argv)
     if args.command == "window":
