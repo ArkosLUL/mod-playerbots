@@ -81,8 +81,7 @@ NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 P1_LEASH = 6.5
 
-# Inside this no orbit reaches: the only ground a melee bot can stand on without farming a Guardian.
-# The tank is held here and the melee dodge aims here.
+# the code's leash on the old orbits, not the clear circle any more: that's PILE_LEASH
 P1_CLOUD_FREE_RADIUS = 2.8
 
 # Back line band tolerance and stack radius around the station. The band keeps a bot off the inner
@@ -116,11 +115,14 @@ DODGE_FOLLOWUP_MS = 20000
 NPC_SARA = 33134
 SARA_NOVA_DAMAGE = 25000
 
-# Six clouds, one per orbit, at 3.0 yd/s. One summons on a player within 8.5 yd (its 6 plus both reaches).
+# Six clouds, one per orbit. One summons on a player within 8.5 yd (its 6 plus both reaches).
 # The Guardian lands 10 s later (63031 is a 10 s aura). Sara's timer skips clouds within 20 yd of her.
 NPC_OMINOUS_CLOUD = 33292
-CLOUD_ORBITS = (11.6, 21.4, 31.2, 41.0, 50.9, 60.8)
+CLOUD_ORBITS = (15.3, 20.9, 27.4, 41.4, 48.4, 54.1)
+CLOUD_SPEED = 2.0
+CLOUD_ORBIT_TOLERANCE = 1.5
 CLOUD_SUMMON_REACH = 8.5
+BACK_LINE_ROLES = ("ranged", "heal")
 CLOUD_SUMMON_DELAY_MS = 10000
 # Stand inside this and the inner orbit is out of summoning reach, so a melee foot past it is what wakes
 # a Guardian from the pile.
@@ -131,11 +133,10 @@ REZ_WINDOW_MS = 5000
 # lived through what killed it, and the next death is its own story.
 REZ_AGAIN_MS = 60000
 INFORM_CLOUD_MIN_RANGE = 20.0
+INFORM_CLOUD_REACH = 2.5
 
-# Past the outer orbit's reach no cloud touches a bot, and the dodge and control movers wait until a bot is
-# inside, so one of theirs starting further out means the gate failed, or an old build. The station and the
-# leash walk the raid in from Sara's 90 yd start radius.
-P1_ROOM_RADIUS = CLOUD_ORBITS[-1] + CLOUD_SUMMON_REACH
+# the movers' room gate, still on the code's old orbits: don't derive it from CLOUD_ORBITS
+P1_ROOM_RADIUS = 69.3
 # The gate reads GetDistance2d(x, y), which takes the bot's own 1.5 yd combat reach off, and the move
 # lands up to a bot tick after that read: another ~1 yd at run speed.
 ROOM_GATE_SLACK = 2.5
@@ -1312,6 +1313,28 @@ def summon_bands(distance: float) -> tuple[int, ...]:
                  if abs(distance - ring) < CLOUD_SUMMON_REACH)
 
 
+def orbit_label(distance: float) -> str:
+    return "+".join(f"orbit{index}" for index in summon_bands(distance)) or "clear"
+
+
+def orbit_of(radius: float) -> int:
+    return next((index for index, ring in enumerate(CLOUD_ORBITS, 1)
+                 if abs(radius - ring) < CLOUD_ORBIT_TOLERANCE), 0)
+
+
+def orbit_lap_s(index: int) -> float:
+    return 2.0 * math.pi * CLOUD_ORBITS[index - 1] / CLOUD_SPEED
+
+
+def inner_orbits() -> list[int]:
+    return [index for index, ring in enumerate(CLOUD_ORBITS, 1)
+            if ring - INFORM_CLOUD_REACH < INFORM_CLOUD_MIN_RANGE]
+
+
+def entries(flags: list[bool]) -> int:
+    return sum(1 for index, flag in enumerate(flags) if flag and (index == 0 or not flags[index - 1]))
+
+
 def dodge_followups(rows: list[tuple[int, str]], window_ms: int) -> tuple[int, int]:
     """Cloud dodges, and how many followed a nova or fervor one inside the window, over (t, reason).
     Stepping out of a blast lands the bot where an orbit reaches and the pile it left does not."""
@@ -1429,8 +1452,8 @@ def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
 
 def dodge_zone(distance: float) -> str:
     """Which of phase 1's three bands a spot this far from the middle sits in: cloud-free circle, inner orbit's own
-    reach, or past it on the back line's ring. "An orbit reaches" cannot tell, the station always has one."""
-    if distance <= P1_CLOUD_FREE_RADIUS:
+    reach, or past it. "An orbit reaches" cannot tell, the station always has one."""
+    if distance <= PILE_LEASH:
         return "core"
 
     return "inner orbit" if distance <= CLOUD_ORBITS[0] + CLOUD_SUMMON_REACH else "beyond"
@@ -1451,31 +1474,34 @@ def crossings(distances: list[float], near: float, far: float) -> int:
     return count
 
 
+def cloud_exposure(trace: Trace, until: int) -> dict[str, collections.Counter]:
+    roster = roster_guids(trace)
+    out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for snap in trace.of("snap"):
+        if not 0 <= snap["t"] <= until:
+            continue
+        for row in snap.get("u", []):
+            if row[0] not in roster or len(row) <= 5 or row[5] <= 0:
+                continue
+            distance = math.dist(row[1:3], BODY)
+            if distance <= P1_ROOM_RADIUS:
+                out[trace.role(row[0])][orbit_label(distance)] += 1
+    return out
+
+
 def show_clouds(trace: Trace) -> None:
     print("CLOUD ORBITS")
-    rows = notes(trace, "yogg.cloudreach")
-    if not rows:
-        print("  no yogg.cloudreach rows")
+    p1_end = phase1_end(phase_spans(trace))
+    exposure = cloud_exposure(trace, p1_end) if p1_end is not None else {}
+    if not exposure:
+        print("  no phase 1 samples inside the room")
         return
 
-    # The stream is change-only, so a bot's reading holds until its next row. Weighting by the span
-    # it held for is the only honest way to turn it into a share of the phase.
-    held: dict[int, tuple[int, str]] = {}
-    time_in: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
-    end = trace.records[-1].get("t", 0) if trace.records else 0
-    for rec in sorted(rows, key=lambda r: r["t"]):
-        guid, now, value = rec.get("g", 0), rec["t"], str(rec.get("txt", ""))
-        if guid in held:
-            was_t, was = held[guid]
-            time_in[trace.role(guid)][was] += now - was_t
-        held[guid] = (now, value)
-    for guid, (was_t, was) in held.items():
-        time_in[trace.role(guid)][was] += max(0, end - was_t)
-
-    for role in sorted(time_in):
-        total = sum(time_in[role].values()) or 1
-        parts = sorted(time_in[role].items(), key=lambda kv: -kv[1])[:4]
-        shares = "  ".join(f"{value}: {span * 100.0 / total:4.1f}%" for value, span in parts)
+    print(f"  phase 1 samples by the orbits that reach them ({' / '.join(f'{ring:.1f}' for ring in CLOUD_ORBITS)} yd,"
+          f" {CLOUD_SPEED:.1f} yd/s)")
+    for role in sorted(exposure):
+        total = sum(exposure[role].values())
+        shares = "  ".join(f"{value}: {count * 100.0 / total:4.1f}%" for value, count in exposure[role].most_common(4))
         print(f"  {role:7} {shares}")
 
     dodges = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p1dodge"))
@@ -1664,12 +1690,6 @@ def show_cloud_spawns(trace: Trace) -> None:
 
         return why, (when - t) / 1000.0
 
-    def orbit_of(radius: float) -> int:
-        for index, ring in enumerate(CLOUD_ORBITS, 1):
-            if abs(radius - ring) < 1.5:
-                return index
-        return 0
-
     def frame_at(when: int):
         return min(frames, key=lambda frame: abs(frame[0] - when))
 
@@ -1689,6 +1709,7 @@ def show_cloud_spawns(trace: Trace) -> None:
     print("\nCLOUD SPAWNS")
     per_orbit = collections.Counter()
     contact = collections.Counter()
+    station_woke = collections.Counter()
     detail = []
     for guid, (when, where) in sorted(born.items(), key=lambda kv: kv[1][0]):
         _, positions = frame_at(when)
@@ -1707,13 +1728,16 @@ def show_cloud_spawns(trace: Trace) -> None:
         _, before = frame_at(mark - 1000)
         who = []
         if cloud in marked:
+            inside = [guid2 for guid2 in roster
+                      if guid2 in marked and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH]
             who = sorted((round(math.dist(marked[guid2], marked[cloud]), 1), trace.name(guid2),
                           trace.role(guid2), moved_by(guid2, mark),
                           (moving_at(marked.get(guid2), before.get(guid2), WALK_STILL_YD),
                            round(math.dist(marked[guid2], BODY), 1)))
-                         for guid2 in roster
-                         if guid2 in marked
-                         and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH)
+                         for guid2 in inside)
+            station_woke[orbit] += any(trace.role(guid2) in BACK_LINE_ROLES
+                                       and math.dist(marked[guid2], RANGED_SPOT) <= RANGED_STACK_RADIUS
+                                       for guid2 in inside)
         if who:
             contact[orbit] += 1
         detail.append((when, orbit, who))
@@ -1725,9 +1749,9 @@ def show_cloud_spawns(trace: Trace) -> None:
         ring = f"orbit{orbit}" if orbit else "no cloud"
         print(f"  {clock(when):>9}  {ring:<9}  {names}")
 
-    # The innermost orbit is the load-bearing one: InformCloud skips every cloud within 20 yd of Sara,
-    # so Sara's timer can never pick it and every Guardian off it was summoned by a player.
-    inner = [index for index, ring in enumerate(CLOUD_ORBITS, 1) if ring < INFORM_CLOUD_MIN_RANGE]
+    # The inner orbits are the load-bearing ones: InformCloud skips every cloud within 20 yd of Sara,
+    # so Sara's timer can never pick them and every Guardian off them was summoned by a player.
+    inner = inner_orbits()
     ours = sum(count for orbit, count in per_orbit.items() if orbit in inner)
     ours += sum(count for orbit, count in contact.items() if orbit not in inner)
     total = sum(per_orbit.values())
@@ -1752,6 +1776,60 @@ def show_cloud_spawns(trace: Trace) -> None:
         past = sum(1 for one in out if one > PILE_LEASH)
         print(f"    those melee stood a median {statistics.median(out):.1f} yd out, {past} of {len(out)}"
               f" past the {PILE_LEASH:.1f} yd the inner orbit cannot reach")
+
+    show_station_cost(trace, {cloud: orbit for cloud, orbit in cloud_orbit.items() if orbit}, station_woke, total)
+
+
+def station_reach(cloud: tuple[float, float], back_line: list[tuple[float, float]]) -> bool:
+    return any(math.dist(spot, RANGED_SPOT) <= RANGED_STACK_RADIUS and math.dist(cloud, spot) <= CLOUD_SUMMON_REACH
+               for spot in back_line)
+
+
+def show_station_cost(trace: Trace, cloud_orbit: dict[int, int], woke: collections.Counter, total: int) -> None:
+    p1_end = phase1_end(phase_spans(trace))
+    if p1_end is None or not cloud_orbit:
+        return
+
+    back_line = {guid for guid in roster_guids(trace) if trace.role(guid) in BACK_LINE_ROLES}
+    flags: dict[int, list[bool]] = collections.defaultdict(list)
+    stamps: list[int] = []
+    clouds_at: list[dict[int, tuple[float, float]]] = []
+    for snap in trace.of("snap"):
+        if not 0 <= snap["t"] <= p1_end:
+            continue
+        rows = snap.get("u", [])
+        spots = [(row[1], row[2]) for row in rows if row[0] in back_line and len(row) > 5 and row[5] > 0]
+        here = {row[0]: (row[1], row[2]) for row in rows if row[0] in cloud_orbit}
+        stamps.append(snap["t"])
+        clouds_at.append(here)
+        for cloud, spot in here.items():
+            flags[cloud].append(station_reach(spot, spots))
+
+    passes = collections.Counter()
+    for cloud, seen in flags.items():
+        passes[cloud_orbit[cloud]] += entries(seen)
+
+    steps = collections.Counter()
+    for rec in notes(trace, "yogg.p1dodge"):
+        guid = rec.get("g", 0)
+        if str(rec.get("txt", "")) != "cloud" or guid not in back_line or not 0 <= rec["t"] <= p1_end:
+            continue
+        index = bisect.bisect_right(stamps, rec["t"]) - 1
+        spot = at(trace, guid, rec["t"])
+        if index < 0 or not spot or math.dist(spot[:2], RANGED_SPOT) > RANGED_STACK_RADIUS:
+            continue
+        nearest = min(clouds_at[index].items(), key=lambda item: math.dist(item[1], spot[:2]), default=None)
+        if nearest:
+            steps[cloud_orbit[nearest[0]]] += 1
+
+    print(f"\n  the station's cost by orbit, phase 1 (a back-line bot within {RANGED_STACK_RADIUS:.0f} yd of the"
+          f" {RANGED_STATION:.1f} yd spot in a cloud's {CLOUD_SUMMON_REACH} yd)")
+    print("    orbit  radius  lap s  passes  woke  cloud steps there")
+    for index in range(1, len(CLOUD_ORBITS) + 1):
+        if passes[index] or woke[index] or steps[index]:
+            print(f"    {index:5}  {CLOUD_ORBITS[index - 1]:6.1f}  {orbit_lap_s(index):5.0f}  {passes[index]:6}"
+                  f"  {woke[index]:4}  {steps[index]:5}")
+    print(f"    the station woke {sum(woke.values())} of {total} Guardians on a cloud")
 
 
 def show_portals(trace: Trace) -> None:
@@ -4038,6 +4116,17 @@ def inside_any(windows: list[tuple[int, int]], when: int) -> bool:
     return any(start <= when < stop for start, stop in windows)
 
 
+def carrier_wait(below: dict[int, list[tuple[int, int]]], stacks: dict[int, list[tuple[int, int]]],
+                 when: int) -> int | None:
+    began = []
+    for guid, windows in stacks.items():
+        stack = next((start for start, stop in windows if start <= when < stop), None)
+        room = next((start for start, stop in below.get(guid, []) if start <= when < stop), None)
+        if stack is not None and room is not None:
+            began.append(max(stack, room))
+    return when - min(began) if began else None
+
+
 def show_power_breaks(trace: Trace) -> None:
     end = trace.records[-1].get("t", 0) if trace.records else 0
     episodes = power_break_episodes(holder_spans(trace, "yogg.powerbreak", end))
@@ -4051,8 +4140,12 @@ def show_power_breaks(trace: Trace) -> None:
     power = sorted((rec for rec in trace.of("aura") if rec.get("sp") == SPELL_DIMINISH_POWER), key=lambda r: r["t"])
     crushes = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_CRUSH_CONE]
 
-    lines, taken, broke_after, caught = [], [], [], 0
+    lines, taken, broke_after, caught, waits = [], [], [], 0, []
     for tank, crusher, start, stop, stages in episodes:
+        wait = carrier_wait(below, source_windows([rec for rec in power if rec.get("s") == crusher],
+                                                  SPELL_DIMINISH_POWER, end), start)
+        if wait is not None:
+            waits.append(wait / 1000)
         drop = next((rec["t"] for rec in power if rec.get("r") and rec.get("s") == crusher
                      and start <= rec["t"] <= stop and inside_any(below.get(rec.get("d"), []), rec["t"])), None)
         hits = [rec for rec in crushes if rec.get("s") == crusher and rec.get("d") == tank
@@ -4065,13 +4158,17 @@ def show_power_breaks(trace: Trace) -> None:
             broke_after.append((drop - start) / 1000)
         seen = "/".join(stage for stage in ("walk", "hit", "out") if stage in stages)
         broke = f"broke +{(drop - start) / 1000:4.1f} s" if drop is not None else "never broke "
-        lines.append(f"    {clock(start):>10}  {trace.name(tank):14} Crusher {crusher % 100000:<6} {seen:13} {broke}"
-                     f"  Crushes on the tank {len(hits)} ({sum(rec.get('a', 0) for rec in hits):,})"
+        waited = f"carried below {wait / 1000:4.1f} s before" if wait is not None else "no carrier below   "
+        lines.append(f"    {clock(start):>10}  {trace.name(tank):14} Crusher {crusher % 100000:<6} {seen:13} {waited}"
+                     f"  {broke}  Crushes on the tank {len(hits)} ({sum(rec.get('a', 0) for rec in hits):,})"
                      f"  caught below again {len(back)}")
 
     tanks = collections.Counter(trace.name(tank) for tank, *_ in episodes)
     print(f"  Diminish Power breaks: {len(episodes)} claims ({dict(tanks)}), {len(broke_after)} dropped the channel"
           f" off the team a median {statistics.median(broke_after) if broke_after else 0:.1f} s after the claim")
+    if waits:
+        print(f"    the first carrier below went down a median {statistics.median(waits):.1f} s before the claim,"
+              f" max {max(waits):.1f}")
     print(f"    Crushes on the breaking tank per Crusher: median {statistics.median(taken):.0f}, max {max(taken)},"
           f" total {sum(taken)}; the re-cast caught someone below in {caught} of {len(episodes)}")
     for line in lines:

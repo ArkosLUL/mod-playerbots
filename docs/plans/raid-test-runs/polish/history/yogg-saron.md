@@ -1994,3 +1994,67 @@ Guardians start swinging at non-tanks in phase 1 (the tanks lose area threat dur
 - Ranged finish cast-time spells on a Guardian gone unkillable (the AI yields while casting), 5.1k/s of the gap
   loss, and 1.35 pets a sample sat on low Guardians.
 - uld5's healer Uldvae rode one Constrictor for 54 s (6:44-7:38) and died to Squeeze.
+
+## Round 21 (2026-11-24, window 31 build 9f0c9a4c7: round 20)
+
+**Data.** Window report `scratchpad/window31/window31/window31-yogg-saron.md`: six valid pulls, one per pool, 0
+humans, Freya on the raid. Traces `603_{1,2,3,4,5,6}_yogg-saron_17955415{23,33,19,29,34,40}` (uld1-uld6), read with
+`yogg_saron.py --phases --threat --clouds --fervor --novas --phase3 --brain` and `postmortem.py`; scratch scripts
+(`scratchpad/yogg-r21/`) over the 48 traces of windows 19-31: Guardian targets on the stack, tank hold vetoes,
+swings on non-tanks inside and outside the gap, spawns, each nova death with the victim's bar.
+
+Deaths by mechanic:
+
+- uld1 (A): nova 7 (Uldxai 0:51 and 1:34, Uldxar 1:24, four at 2:12.6 in the handover at 37-63% after Dark Volleys),
+  Dark Volley 21 (2:04, then 2:23-2:45), Sara's Blessing 1; wiped 24 s into phase 2.
+- uld2 (B): nova 3 (Fervor Uldyar 1:40, the shaman Uldyak 2:01 and 2:17), Sara's Blessing 1; phase 3 Immortal
+  Guardian 27, Yogg 5.9%.
+- uld3 (C): nova 8 (Fervor Uldzat 0:44 and Uldzay 1:24, a pair at 0:58.3 / 0:59.6 five, Uldzaj 1:16); phase 2 from
+  8:16 Curse of Doom 7, Draining Poison 5, Squeeze 4, Induce Madness 3, Psychosis 2, Death Ray 1; Brain 51.7%.
+- uld4 (A): nova 4 (the shaman Ulduai 0:44 and 1:24, two at 2:29.8 in the handover); phase 3 Immortal Guardian 29,
+  Yogg 3.9%.
+- uld5 (B): nova 4 (Fervor Uldvak 1:08, Uldvak 1:52, two on a leftover at 2:39.8), Squeeze 5, Curse of Doom 8,
+  Induce Madness 8, Draining Poison 4, Wandering Plague 1; phase 2 over 607 s, Brain 30.9%.
+- uld6 (C): nova 2 (the shaman Uldwaj 0:25 and 0:52); phase 3 Immortal Guardian 30, Drain Life 1, Yogg 12.0%.
+
+**Verdict on round 20.** Its target, the second nova of a pair inside the gap: fixed. A: no pair death (uld1 one
+pair 4.7 s apart, uld4 two, no deaths). B: no pair. C: uld3 lost five to a pair 1.28 s apart whose second Guardian
+was at 4.5% when the first died, out of any gap's reach; uld6 one pair, no deaths. Gap loss 2.1-2.6%/s (3.0-3.9), a
+tank on a held one 29-85% (64-100%), each area action 2-6 a pull in the gap (Maul 16-22). Back-out condition: phase
+1 ran 141.6-157.3 s, under 165, but **Guardians turned on non-tanks**: within 10 yd of the middle, a Guardian left a
+tank for a non-tank 17 / 19 / 17 / 8 / 19 / 5 times (uld1-uld6), 5.7 a minute, against 2.7 over windows 19-28 (36
+pulls, none over 13) and 3.4 in window 29; warlocks took 37 of 85 (7 of 49). The turns follow the tanks' holds: 8.0
+a minute in the 5 s after a tank's hold veto, 4.0 otherwise. Tanks were held 43-100 s of phase 1 (no tank veto in
+window 29): Consecration, Death and Decay, Blood Boil, Pestilence, Swipe, Maul, Thunder Clap.
+
+**Stop rules.** No kill. Phase 3 stays stuck. Not stuck: this round backs out round 20's tank side.
+
+**Picked: round 20's hold on tanks turns Guardians off the stack**, the cause of uld1's wipe with Q1's cloud
+touches. The warlock Uldxak took stack Guardians off the tanks 11 times (Guardian 68869 at 1:36 and 1:46, 68872 at
+1:52 and 2:00, 68874 at 1:58 and 2:05); each walked to the 21.5 yd station and parked there (not killable off the
+stack under 35%). With six more spawned by cloud touches at the station (0:46 twice, 1:34 twice, 1:46, 1:56; the
+raid's own feet 12 of 20, 5-9 in the other pulls), phase 1 ended with 8 Guardians alive, one leftover died in 24 s,
+and Dark Volley (each Guardian every 8 s, `boss_yoggsaron.cpp:1113-1116`) killed 21; Uldxak died at the station at
+2:23 under two Guardians. `YoggSaronPhase1AoeHoldMultiplier::GetValue` (`UldMultipliers_YoggSaron.cpp:186-193`),
+keyed on `HitsNeighbours`, held the tanks' area threat whenever a non-focus Guardian under 30% stood within 10 yd of
+the middle or the focus (`YoggSaronPhase1AoeHold`, `UldEncounter_YoggSaron.cpp:3897-3922`), far longer than the
+6 s gap, and the warlocks' DoTs on attackers out-threatened the tanks on the Guardians nobody aims at.
+
+**Fix (round 20 backed out for tanks).** The multiplier returns 1 for `PlayerbotAI::IsTank(bot)`, so tanks run as
+before round 20: none of their area actions is `Aoe`-typed, and window 29 has no tank veto. Non-tanks keep the
+`HitsNeighbours` hold (leftover hold too), and the tank's stack attack stays killable first. Same at 10 and 25,
+normal and hard mode; a human tank's area spells were always his own. No shared code. Reader: `--threat`
+`Guardians within 10 yd of the middle turning off a tank` (`stack_turns`, tested), by the new target's class.
+
+**Next window should show:** turns off a tank at or under ~3.4 a minute and no phase 1 hold veto on a tank; gap
+loss between 2.1-2.6 and 3.0-3.9%/s with Maul, Swipe, Consecration and Thunder Clap back in `area run`; pair nova
+deaths no worse than window 29's 9; Guardians alive at the ring 1-3.
+
+**Seen, not picked.**
+
+- The enhancement shaman died to one nova from full 10 times (window 29: 6 shaman nova deaths): bar 20.6-23.0k
+  against unresisted 20.9-23.8k. uld1's melee started 1.7k short (no Blood Pact at the pull), uld2's 2.3k
+  (Commanding Shout up at 11 s); a buff gap at the pull, not round 20.
+- Fervor holders still walking out on the spacing node took a doubled nova (37.9-40.8k): 4 (window 29: 1).
+- uld1's DK tank aimed Dark Command at back-line Guardians 36-45 yd away: 24 of 31 taunts failed.
+- Yogg reached 3.9% (uld4) and 5.9% (uld2), the lowest yet.

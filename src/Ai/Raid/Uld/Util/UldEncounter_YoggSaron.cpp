@@ -2920,24 +2920,6 @@ bool YoggSaronPowerBreaker(Player* member, Player* bot)
            !member->HasUnitState(UNIT_STATE_STUNNED | UNIT_STATE_FLEEING | UNIT_STATE_CONFUSED);
 }
 
-bool YoggSaronBrainTeamDown(Player* bot)
-{
-    std::list<Creature*> portals;
-    bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS);
-    if (std::none_of(portals.begin(), portals.end(), [](Creature* portal) { return YoggSaronPortalOpen(portal); }))
-        return true;
-
-    for (ObjectGuid const& guid : YoggSaronStateFor(bot).brainTeam)
-    {
-        Player* member = ObjectAccessor::GetPlayer(*bot, guid);
-        if (member && member->IsAlive() && member->GetMap() == bot->GetMap() && !member->IsCharmed() &&
-            !member->HasAura(SPELL_ILLUSION_ROOM))
-            return false;
-    }
-
-    return true;
-}
-
 bool YoggSaronPowerCarriedBelow(Player* bot, Unit* crusher)
 {
     Group* group = bot->GetGroup();
@@ -3051,7 +3033,7 @@ Creature* YoggSaronPowerBreakClaim(Player* bot, YoggSaronEncounterState& state)
             return !crusher->IsAlive() || !YoggSaronPowerChannelling(crusher) ||
                    !YoggSaronPowerCarriedBelow(bot, crusher);
         });
-    if (crushers.empty() || !YoggSaronBrainTeamDown(bot))
+    if (crushers.empty())
         return nullptr;
 
     std::vector<Player*> unclaimed{bot};

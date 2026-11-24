@@ -346,13 +346,13 @@ Sara by `GetDistance`, net of her 1.5 and the cloud's 1.0 reach, so orbit 2 (21.
 **the two inner orbits fire only from player contact**: window 27's 15 summons on them each had a raider
 within 8.7 yd, while orbit 3 also fired with nobody near.
 
-**The orbit constants are stale.** `ULDUAR_YOGG_SARON_CLOUD_ORBITS` and the reader's `CLOUD_ORBITS` hold
-the older script's 11.6 / 21.4 / 31.2 / 41.0 / 50.9 / 60.8 at 3.0 yd/s (`8 + i*7` on the diagonal), and
-everything below derived from them is too: the 2.8 yd cloud-free circle, the 3.1 yd pile leash, the
-69.3 yd room, the station's single-orbit band, `--clouds` orbit labels (`no cloud` for most spawns). By
-the measured radii nothing reaches inside **6.8 yd**, only orbit 1 at 6.8-12.4 and only orbit 3 at
-29.4-32.9, and the 21.5 yd station sits in reach of orbits 1, 2 and 3. Re-deriving them moves positions,
-so it is the user's call.
+**The code's orbit constants are stale.** `ULDUAR_YOGG_SARON_CLOUD_ORBITS` holds the older script's
+11.6 / 21.4 / 31.2 / 41.0 / 50.9 / 60.8 at 3.0 yd/s (`8 + i*7` on the diagonal), and everything below
+derived from it is too: the 2.8 yd cloud-free circle, the 3.1 yd pile leash, the 69.3 yd room, the
+station's single-orbit band, the `yogg.cloudreach` labels. The reader's `CLOUD_ORBITS` holds the measured
+radii, so `--clouds` labels by them. By those nothing reaches inside **6.8 yd**, only orbit 1 at 6.8-12.4
+and only orbit 3 at 29.4-32.9, and the 21.5 yd station sits in reach of orbits 1, 2 and 3. Positions move
+to the measured orbits one navprobed change at a time, the melee core first (the user's call).
 
 **A cloud summons on any player within exactly 8.5 yd, not the script's 6.**
 `boss_yoggsaron_cloud::UpdateAI` calls `SelectNearbyTarget`, which adds both `GetObjectSize()` values
@@ -368,9 +368,10 @@ reads as an instant one-shot; the delay and the repeat are DBC-only. Avoiding th
 raid stands.
 
 **Attribution is a measurement**: every Guardian spawns on its cloud, so match the spawn to a cloud and
-rewind 10 s for who was within 8.5 yd (`yogg_saron.py --clouds`). One pull's 23 by orbit: **1: 8 · 2: 4
-· 3: 1 · 4: 1 · 5: 2 · 6: 7**, 11 of them the raid's own feet. Orbit 2's four are the station's designed
-cost, 4.2 laps, one each. **Not a defect; do not re-audit.**
+rewind 10 s for who was within 8.5 yd (`yogg_saron.py --clouds`). A phase 1 spawns 14-17, 6-9 of them
+the raid's own feet. The station costs 4-5 of those, about one per pass of orbits 1-3 over the back line
+(`the station's cost by orbit`: passes, Guardians woken, cloud steps there). **Not a defect; do not
+re-audit.**
 
 **Nobody dodges a cloud: no radius past the core is clear of every orbit.** Orbits sit 5.6-14 yd apart
 against the 17 yd a cloud sweeps (`…_CLOUD_SUMMON_REACH` 8.5 either side), so every radius past the core
@@ -937,20 +938,21 @@ stacks below for its whole room clear, 20-40 s.
 **So a bot tank breaks each channel the team carried down, once, and steps out**: the re-cast skips the
 team, the platform stays debuffed. `yogg-saron diminish power break` (`ACTION_RAID + 1.75`: under the pet
 guard, which never claims the tick and must still pull the tank's pet off that Crusher; over Brain Link)
-fires in phase 2 once the team is down (no portal open, or every live, uncharmed planned member
-under Illusion Room) for each channelling Crusher whose `64145` someone under Illusion Room carries; a late
-entrant who caught the re-cast makes it fire again. The nearest unclaimed bot tank claims it (ties by GUID):
-on the platform, alive, unseated, uncharmed, not stunned, feared or confused. It walks to `GetMeleeRange`
-− 2.5 yd from the Crusher on whichever of 16 bearings has the fewest raiders in the Crush cone (±14°,
-25 yd), then the shortest walk, spot and exit 15-55 yd from the middle. There it swings and casts one
-instant melee-class strike (Shield Slam / Revenge / Devastate, Shield of Righteousness, Plague / Death /
-Blood Strike, Mangle / Lacerate). Once the stack is off the team it stops attacking, drops the target and
-walks to 14.5 yd on its own bearing (turned up to 90° to stay in 15-55 yd), for at most 5 s. A white hit
-makes it the victim (`DamageTaken`), a Crush or two; a strike alone leaves the victim to threat, usually a
-ranged out of reach, so the tentacle re-casts at once. The claim ends early if the Crusher dies, the stun
-lands or phase 2 ends. With no bot tank nobody breaks it. `--crush`'s `Diminish Power breaks` gives each
-claim's tank, steps, the drop off the team, the Crushes that Crusher landed on the tank (to 3 s after) and
-anyone below its re-cast caught (to 10 s after).
+fires in phase 2 for each channelling Crusher whose `64145` someone under Illusion Room carries, without
+waiting for the rest of the team (the user's call): a straggler still on the platform catches the re-cast
+and carries it down, and his arrival makes it fire again. The nearest unclaimed bot tank claims it (ties
+by GUID): on the platform, alive, unseated, uncharmed, not stunned, feared or confused. It walks to
+`GetMeleeRange` − 2.5 yd from the Crusher on whichever of 16 bearings has the fewest raiders in the Crush
+cone (±14°, 25 yd), then the shortest walk, spot and exit 15-55 yd from the middle. There it swings and
+casts one instant melee-class strike (Shield Slam / Revenge / Devastate, Shield of Righteousness, Plague /
+Death / Blood Strike, Mangle / Lacerate). Once the stack is off the team it stops attacking, drops the
+target and walks to 14.5 yd on its own bearing (turned up to 90° to stay in 15-55 yd), for at most 5 s. A
+white hit makes it the victim (`DamageTaken`), a Crush or two; a strike alone leaves the victim to threat,
+usually a ranged out of reach, so the tentacle re-casts at once. The claim ends early if the Crusher dies,
+the stun lands or phase 2 ends. With no bot tank nobody breaks it. `--crush`'s `Diminish Power breaks`
+gives each claim's tank, steps, how long its first carrier had been below, the drop off the team, the
+Crushes that Crusher landed on the tank (to 3 s after) and anyone below its re-cast caught (to 10 s
+after).
 
 **Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only once
 its victim is out of melee range, and otherwise swings, so a break followed by Crushes leaves no cast
