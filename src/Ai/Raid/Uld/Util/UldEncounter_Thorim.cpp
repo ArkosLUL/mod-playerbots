@@ -643,6 +643,44 @@ bool RingBodyBridgesChain(Player* bot, Position const& spot)
     return bridged;
 }
 
+std::vector<HazardCircle> RingStepChainBodies(Player* bot, Unit* boss)
+{
+    std::vector<HazardCircle> bodies;
+    Group* group = bot->GetGroup();
+    ThorimEncounterState const* state = FindState(bot);
+    uint8 ownSlot = 0;
+    if (!group || !state || !state->ringLatched || !MeleeSlotOf(bot, ownSlot))
+        return bodies;
+
+    float const jump = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + ULDUAR_THORIM_RING_CHAIN_MARGIN + bot->GetCombatReach();
+    std::array<bool, ULDUAR_THORIM_MELEE_SLOTS> pointAdded{};
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !MemberCounts(member, bot->GetInstanceId()) || !member->IsInWorld() ||
+            member->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            continue;
+
+        uint8 slot = 0;
+        if (!MeleeSlotOf(member, slot) || slot == ownSlot)
+            continue;
+
+        float const clearance = jump + member->GetCombatReach();
+        bodies.emplace_back(member->GetPosition(), clearance);
+        if (pointAdded[slot])
+            continue;
+
+        pointAdded[slot] = true;
+        float const bearing = state->ringSlots[slot].composed;
+        bodies.emplace_back(Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
+                                     boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
+                                     boss->GetPositionZ()),
+                            clearance);
+    }
+
+    return bodies;
+}
+
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     bool spotInCone = false;
@@ -3118,20 +3156,26 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
 
     float const tankClearance = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + 2.0f * DEFAULT_COMBAT_REACH;
+    std::vector<HazardCircle> const otherSlots = RingStepChainBodies(bot, boss);
 
     struct StepPass
     {
         float radius;
         bool pastRing;
         bool clearOfTanks;
+        bool clearOfSlots;
     };
 
     HazardSweepCache cache;
-    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false}})
+    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, true},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false, false}})
     {
-        auto const accept = [boss, pass, tankClearance, &outOfCone](float x, float y)
+        if (pass.clearOfSlots && otherSlots.empty())
+            continue;
+
+        auto const accept = [boss, pass, tankClearance, &outOfCone, &otherSlots](float x, float y)
         {
             if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
                 y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y))
@@ -3139,6 +3183,11 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
 
             if (pass.pastRing && boss->GetExactDist2d(x, y) < ULDUAR_THORIM_MELEE_RING_RADIUS)
                 return false;
+
+            if (pass.clearOfSlots)
+                for (HazardCircle const& body : otherSlots)
+                    if (body.first.GetExactDist2d(x, y) <= body.second)
+                        return false;
 
             return !pass.clearOfTanks ||
                    (ULDUAR_THORIM_PHASE2_TANK_SPOT.GetExactDist2d(x, y) >= tankClearance &&

@@ -10,6 +10,9 @@
                                ring and camp spacing, hazards on each tank
     thorim.py <file> --blizzard  each Sif Blizzard against the melee ring: slot points it covered, who
                                  stood in it and how long, ticks taken, step-outs and the walk back
+    thorim.py <file> --chains    each Chain Lightning hop by hop: which groups (tank, camp, a ring slot, a
+                                 slot stepped out of Blizzard or walking back from it) it crossed between
+                                 and how far, who died after which crossing
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import anchor, dist2, frames, radius  # noqa: E402
+from raidobs.geometry import NEAREST, anchor, at, dist2, frames, radius  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "thorim"
@@ -67,6 +70,11 @@ BLIZZARD_REACH = 9.8
 BLIZZARD_ZONE_MS = 10000
 RING_RADIUS = radius("ULDUAR_THORIM_MELEE_RING_RADIUS")
 RING_BLIZZARD_CLEARANCE = radius("ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE")
+LUST = (2825, 32182)
+LUST_MS = 40000
+CHAIN_DEATH_MS = 1500
+CHAIN_POSITION_MS = 1000
+CHAIN_STEP_BACK_MS = 3000
 
 
 def mine(trace: Trace) -> bool:
@@ -164,6 +172,18 @@ def yd(value) -> str:
 
 def share(hits: int, total: int) -> str:
     return f"{100.0 * hits / total:.1f}%" if total else "-"
+
+
+def chain_casts(trace: Trace, start: int, players: set) -> list[list[dict]]:
+    rows = [rec for rec in trace.of("dmg")
+            if rec.get("sp") in CHAIN_LIGHTNING and rec["t"] >= start and rec.get("d") in players]
+    casts: list[list[dict]] = []
+    for rec in rows:
+        if casts and rec["t"] - casts[-1][-1]["t"] <= CAST_GAP_MS:
+            casts[-1].append(rec)
+        else:
+            casts.append([rec])
+    return casts
 
 
 class Phase2:
@@ -355,15 +375,7 @@ class Phase2:
         return moves / len(ring) / minutes
 
     def chain_casts(self) -> list[list[dict]]:
-        rows = [rec for rec in self.trace.of("dmg")
-                if rec.get("sp") in CHAIN_LIGHTNING and rec["t"] >= self.start and rec.get("d") in self.players]
-        casts: list[list[dict]] = []
-        for rec in rows:
-            if casts and rec["t"] - casts[-1][-1]["t"] <= CAST_GAP_MS:
-                casts[-1].append(rec)
-            else:
-                casts.append([rec])
-        return casts
+        return chain_casts(self.trace, self.start, self.players)
 
     def stalls(self) -> list[tuple[int, int, float, float]]:
         held = [(t, hp) for (t, hp), (_, victim, _) in zip(self.boss_hp, self.victims) if victim in self.tanks]
@@ -752,11 +764,137 @@ def show_blizzard(trace: Trace) -> None:
              if blizzard.probed else ""))
 
 
+class ChainBridges:
+    def __init__(self, trace: Trace, start: int):
+        self.trace = trace
+        self.start = start
+        self.tanks = tanks_of(trace)
+        self.casts = chain_casts(trace, start, set(trace.roles))
+        self.slots = collections.defaultdict(list)
+        for note in notes(trace, "thorim.ringspot"):
+            if found := RINGSPOT.match(str(note.get("txt"))):
+                self.slots[note.get("g")].append((note["t"], int(found.group(1))))
+        self.steps = collections.defaultdict(list)
+        for note in notes(trace, "thorim.ringstep"):
+            self.steps[note.get("g")].append((note["t"], str(note.get("txt")) == "1"))
+        self.lust = collections.defaultdict(list)
+        for rec in trace.of("aura"):
+            if rec.get("sp") not in LUST:
+                continue
+            spans = self.lust[rec.get("d")]
+            if not rec.get("r"):
+                spans.append((rec["t"], rec["t"] + (rec.get("dur") or LUST_MS)))
+            elif spans and spans[-1][1] > rec["t"]:
+                spans[-1] = (spans[-1][0], rec["t"])
+        self.died = collections.defaultdict(list)
+        for death in combat_deaths(trace):
+            if blow_spell(death) in CHAIN_LIGHTNING:
+                self.died[death["g"]].append(death["t"])
+
+    def group(self, guid, when: int) -> tuple[str, bool]:
+        if guid in self.tanks:
+            return "tank", False
+        slot = RingBlizzard._latest(self.slots.get(guid, []), when)
+        if slot is None:
+            return "camp", False
+        step = RingBlizzard._latest(self.steps.get(guid, []), when)
+        return f"slot {slot[1]}", bool(step and (step[1] or when - step[0] <= CHAIN_STEP_BACK_MS))
+
+    def lusted(self, guid, when: int) -> bool:
+        return any(begin <= when <= end for begin, end in self.lust.get(guid, []))
+
+    def gap(self, first, second, when: int):
+        a = at(self.trace, first, when, NEAREST, CHAIN_POSITION_MS)
+        b = at(self.trace, second, when, NEAREST, CHAIN_POSITION_MS)
+        return dist2(a, b) if a and b else None
+
+    def read(self, cast: list[dict]) -> list[dict]:
+        segments: list[dict] = []
+        for rec in cast:
+            guid, when = rec["d"], rec["t"]
+            group, stepped = self.group(guid, when)
+            dead = any(when <= t <= when + CHAIN_DEATH_MS for t in self.died.get(guid, []))
+            if not segments or segments[-1]["group"] != group:
+                previous = segments[-1] if segments else None
+                segments.append({
+                    "group": group, "hits": 0, "stepped": False, "dead": 0,
+                    "from": previous["group"] if previous else None,
+                    "gap": self.gap(previous["last"], guid, when) if previous else None,
+                    "lust": bool(previous) and self.lusted(previous["last"], when) and self.lusted(guid, when)})
+            segment = segments[-1]
+            segment["hits"] += 1
+            segment["stepped"] |= stepped
+            segment["dead"] += dead
+            segment["last"] = guid
+        return segments
+
+
+def group_kind(group: str) -> str:
+    return "slot" if group.startswith("slot") else group
+
+
+def crossing_kind(segments: list[dict], index: int) -> str:
+    return f"{group_kind(segments[index]['from'])} to {group_kind(segments[index]['group'])}"
+
+
+def segment_text(segment: dict) -> str:
+    name = segment["group"] + (" stepped" if segment["stepped"] else "")
+    text = f"{name} x{segment['hits']}" + (f" {segment['dead']} dead" if segment["dead"] else "")
+    if segment["from"] is None:
+        return text
+    gap = "?" if segment["gap"] is None else f"{segment['gap']:.1f}"
+    return f"{gap} yd{' (lust)' if segment['lust'] else ''} to {text}"
+
+
+def show_chains(trace: Trace) -> None:
+    print("CHAIN LIGHTNING")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    bridges = ChainBridges(trace, start)
+    if not bridges.casts:
+        print("  no Chain Lightning on a player")
+        return
+    first_tank = next((death["t"] for death in combat_deaths(trace)
+                       if death["t"] >= start and death["g"] in bridges.tanks), None)
+    crossings = collections.Counter()
+    stepped_crossings = 0
+    deaths = collections.Counter()
+    stepped_deaths = 0
+    early = 0
+    for cast in bridges.casts:
+        segments = bridges.read(cast)
+        dead = sum(segment["dead"] for segment in segments)
+        early += dead if first_tank is None or cast[0]["t"] < first_tank else 0
+        print(f"  +{(cast[0]['t'] - start) / 1000.0:.1f} s: {len(cast)} hit{'' if len(cast) == 1 else 's'}, "
+              f"{dead} dead; "
+              + ", ".join(segment_text(segment) for segment in segments))
+        deaths["in the seed's group"] += segments[0]["dead"]
+        for index in range(1, len(segments)):
+            kind = crossing_kind(segments, index)
+            through_step = segments[index]["stepped"] or segments[index - 1]["stepped"]
+            crossings[kind] += 1
+            stepped_crossings += kind == "slot to slot" and through_step
+            deaths[f"after {kind}"] += segments[index]["dead"]
+            stepped_deaths += (kind == "slot to slot" and through_step) * segments[index]["dead"]
+    hits = sum(len(cast) for cast in bridges.casts)
+    death_text = ", ".join(f"{name} {n}" for name, n in deaths.most_common() if n) or "none"
+    crossing_text = ", ".join(f"{name} {n}" for name, n in crossings.most_common()) or "none"
+    print(f"  all: casts {len(bridges.casts)}, hits {hits}, deaths {sum(deaths.values())}, {early} before the first "
+          f"tank death ({death_text}; through a stepped slot {stepped_deaths}); crossings {crossing_text}; "
+          f"slot to slot through a stepped slot {stepped_crossings}")
+
+
 SECTIONS = (
     ("deaths", "deaths by mechanic, phase 1 and phase 2 apart", show_deaths),
     ("phase2", "the phase 2 measures the tank spots are judged on", show_phase2),
     ("blizzard", "each Sif Blizzard against the melee ring: who stood in it, ticks, steps, the walk back",
      show_blizzard),
+    ("chains", "each Chain Lightning hop by hop: the groups it crossed, how far, who died after which crossing",
+     show_chains),
 )
 SUMMARY = ("deaths", "phase2")
 
