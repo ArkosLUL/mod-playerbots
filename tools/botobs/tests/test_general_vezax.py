@@ -158,7 +158,25 @@ class SyntheticPull(unittest.TestCase):
     def test_far_counts_the_living_past_the_mark_floor_from_him(self):
         # Agony and Tree stand 30 yd out, past 29.1; Bulwark is on him and Fel never sampled.
         self.assertEqual(gv.mark_windows(self.trace)[0]["far"], 2)
+        self.assertFalse(gv.mark_windows(self.trace)[0]["surge"])
         self.assertEqual(gv.far_pool_minimum(self.trace), 9)
+
+    def surge_window(self, cast_ms: int) -> dict:
+        records = vezax_pull() + [{"t": 500, "e": "cast", "s": BOSS, "sp": gv.SPELL_SURGE_OF_DARKNESS,
+                                   "tgt": 0, "ct": cast_ms}]
+        path = pathlib.Path(self.folder.name) / f"603_5_general-vezax_178950{cast_ms:04d}.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+        return gv.mark_windows(Trace(path))[0]
+
+    def test_a_mark_inside_surge_of_darkness_counts_far_past_the_grown_floor(self):
+        window = self.surge_window(0)
+        self.assertTrue(window["surge"])
+        self.assertEqual(window["far"], 0)
+
+    def test_a_mark_before_the_surge_cast_ends_keeps_the_normal_floor(self):
+        window = self.surge_window(3000)
+        self.assertFalse(window["surge"])
+        self.assertEqual(window["far"], 2)
 
     def test_a_crash_names_its_target_and_both_blocks_that_moved(self):
         rows = gv.crashes(self.trace)

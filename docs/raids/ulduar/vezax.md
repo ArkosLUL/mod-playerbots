@@ -10,7 +10,7 @@ where they disagree, and they do disagree.**
 | Shadow Crash (impact) | 62659 | 11,310 **plus `KNOCK_BACK_DEST`**, **10 yd**. The 2.7-3.6s of missile flight (4.8s at ~48 yd, the longest traced) is the whole reaction window |
 | Shadow Crash (field) | 63277 + 65269 | **8 yd, 20s.** +100% magic and +75% shadow damage done, +100% cast speed, −70% mana cost, **−75% healing done**. `SPELL_EFFECT_PERSISTENT_AREA_AURA`, so it exists as a `DynamicObject`. 63277 pulls 65269 in via `spell_linked_spell` type 2, so a bot inside carries **both** — **63277's own DBC row is only the damage and healing halves**, and reading it alone says the field does nothing for mana |
 | Searing Flames | 62661 | On the tank, **radius 100 yd** = the whole raid. 13,875-16,125 fire, −75% armour 10s, every **8s (25m) / 15s (10m)**. **2000 ms cast, `PreventionType = 1`** — genuinely interruptible |
-| Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, 10s — the slow is **on Vezax**, not the raid. Delays the Searing Flames group 10s |
+| Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, **+35% scale**, 10s — the slow is **on Vezax**, not the raid, and the scale grows his combat reach to 17.0 (Mark floor below). Delays the Searing Flames group 10s |
 | Mark of the Faceless | 63276 → 63278 | 20s from pull, repeats 40s. **10 ticks at 1/s**; each casts 63278 at the marked bot, leeching 5,000 from everyone else in range and healing him ~10× that. See below — it is the fight |
 | Saronite Vapors (NPC 33488) | summon 63081 | Every 30s at a **random point 45 yd out** (`TARGET_DEST_CASTER_RADIUS`, radius index 11), but `MovePositionToFirstCollision` lands it on the first navmesh edge in the way, or on him when that raycast fails: **one can land in the melee**. `NullCreatureAI` + `MoveRandom(4.0f)`, no addon auras: **the living cloud is harmless, never chases, and cannot be pulled**. Its puddle (63323 → 63322, 8 yd, `100 · 2^stacks` every 2s for half back as mana) drops **only from `JustDied`**, never from the script's own despawn |
 | Saronite Animus | NPC 33524 | Hard mode. At vapor #6 (3:00) with none killed, every vapor charges the anchor and merges; it spawns 8s later. **Taunt-immune**: immunity set -287 blocks `ATTACK_ME` and `MOD_TAUNT` |
@@ -63,7 +63,11 @@ which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both fold in
   windows 7-10 went to melee or the main tank, and 24 of 29 10-man marks in window 12 found under 4 far
   (15 went to melee or a tank); replayed on the window 11-12 traces the far pool reads 10-14 (25-man)
   and 3-5 (10-man) as the camp stood, 13-14 and 4-5 on its slots. Row 0 clears the floor by 1.4 yd,
-  under the 2.4 yd arrival deadband, so a front-row bot parked short can still be near.
+  under the 2.4 yd arrival deadband, so a front-row bot parked short can still be near. **Surge of
+  Darkness moves the floor to 33.5** (`15 + 12.6 × 1.35 + 1.5`) for its 10 s, past rows 0-1, so
+  ~6-8 stand far and the mark goes to anyone inside, melee and tanks too. Hard mode's sixth vapor
+  delays both timers 12 s, so its 4:32 and 6:32 marks land in a surge (normal mode: 4:20, 6:20);
+  24 of 30 such marks in windows 11-25 went inside 33.5, 11 to melee.
 - **Ceiling 42.6 yd.** `ReachTargetAction` tests `IsWithinCombatRange(target, spellDistance)`, adding the
   same two reaches to `Playerbots.SpellDistance` (28.5). Past it "reach spell" fires at `ACTION_HIGH`
   against this formation at `ACTION_RAID` and the two deadlock. Only row 4's strafed slots pass it (to
@@ -207,6 +211,13 @@ back.
 melee break off it as off anyone. Its spot is measured from him and he follows it, so it runs ahead: a
 marked DK main tank walked him from y 89 to y 17 in 10 s, past the berserk line at y 20, and the raid
 was dead a minute later.
+
+**A walk out of the leech or a blast holds the healthstone** (`vezax escape healthstone hold`: moving
+while marked, breaking off a marked ally or within a crash's 11 yd), and the mark, break and dodge
+actions re-send a walk stalled 500 ms past its last move.
+[`UseItem` stops a moving bot for a healthstone](../../engine/pitfalls.md#movement-that-silently-no-ops)
+and its AI then idles a global cooldown: a marked melee at 24% stopped 1.6 yd into its walk, in the
+ball, for the rest of the debuff, its walk refused as a repeat, and its second tick killed two melee.
 
 ## Shadow Crash
 
@@ -436,8 +447,9 @@ formation gate is a rule predicate that runs only when the cheaper checks pass, 
 come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
 the instance lookup came back empty and every formation gate is shut, which nothing else in the trace
 says. `vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura;
-its `far` counts the living past the floor at each mark, against the 9 or 4 the core wants. A kicked
-Searing Flames leaves no damage row, so `--boss` counts casts that landed, never hits per cast.
+its `far` counts the living past the floor at each mark, against the 9 or 4 the core wants, past 33.5
+for a mark inside Surge of Darkness (`surge`). A kicked Searing Flames leaves no damage row, so
+`--boss` counts casts that landed, never hits per cast.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world object
 until it lands. Take the destination from `spell->m_targets`, never `GetUniqueTargetInfo()`: 62660's
@@ -585,11 +597,17 @@ main tank, in a healer's reach 2-5% of the time, and healers keep their slots. T
 race before the crossing: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
 walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
 
+**Nothing moves the camp past the Surge of Darkness floor**, so a mark in a surge can land on a melee
+in the ball; only the melee break and the escape walk answer it. Stepping the rows 4.4 yd out would
+take row 0 out of heal reach of the main tank while he hits twice as hard.
+
 **Outside the Animus phase a crash inside a mark still walks the marked bot's block along its arc**
 (the turn above is the Animus phase's only). Before the spawn the crash comes 2.3-8.9 s into the
 mark, mostly once its bot is clear: in windows 11-24 the 9 such marks whose bot dodged it leeched a
 median 24 ticks against 13 for the other 98, and one aimed at the marked bot itself took 53, 38 on
-its own block.
+its own block. From the cast on, though, the block took little: in windows 11-25 a mean 1.6 ticks in
+130 such marks, and 9 in the other 15, where the 0:20 mark's crash (+2.3-2.6 s) hit the marked bot
+or its block, against a median 24 in the Animus phase's 16 unturned ones.
 
 **65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the

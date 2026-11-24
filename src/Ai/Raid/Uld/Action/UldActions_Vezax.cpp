@@ -42,10 +42,10 @@ void ReleaseOtherWalk(PlayerbotAI* botAI, Position const& spot)
         last.clear();
 }
 
-void ReleaseStalledDodge(PlayerbotAI* botAI, Player* bot)
+void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
 {
     LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
-    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_VEZAX_DODGE_STALL_MS)
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_VEZAX_WALK_STALL_MS)
         last.clear();
 }
 }
@@ -61,6 +61,8 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
     Position spot;
     if (!TryGetVezaxMarkSpot(bot, spot))
         return false;
+
+    ReleaseStalledWalk(botAI, bot);
 
     Position impact;
     if (!TryGetVezaxShadowCrashImpact(botAI, impact) ||
@@ -82,6 +84,7 @@ bool VezaxMarkOfTheFacelessBreakAction::Execute(Event /*event*/)
     if (!TryGetVezaxMarkBreakSpot(bot, marked, spot))
         return false;
 
+    ReleaseStalledWalk(botAI, bot);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -100,7 +103,7 @@ bool VezaxShadowCrashDodgeAction::Execute(Event /*event*/)
         ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
         return false;
 
-    ReleaseStalledDodge(botAI, bot);
+    ReleaseStalledWalk(botAI, bot);
     ReleaseOtherWalk(botAI, spot);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);

@@ -77,6 +77,8 @@ void DefineVezax(EncounterBuilder& e)
     e.OwnMovement("vezax mark walk wait", Role::Any, VezaxMarkWalkMeetsShadowCrash, Family::Attack,
                   {VezaxShadowCrashDodgeAction::Name});
 
+    e.Block("vezax escape healthstone hold", Role::Any, VezaxEscapeUnderway, 0, {"healthstone"});
+
     e.Block("vezax shadow word: death hold", Role::Any, VezaxCarriesProfoundDarkness, 0, {"shadow word: death"});
 
     e.Multiplier<VezaxSuppressLifeTapMultiplier>(Family::Spell);
