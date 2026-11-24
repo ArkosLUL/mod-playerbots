@@ -33,20 +33,7 @@ bool FlameLeviathanOnVehicleTrigger::IsActive()
     return false;
 }
 
-bool FlameLeviathanVehicleNearTrigger::IsActive()
-{
-    if (bot->GetVehicle())
-        return false;
-
-    Player* master = botAI->GetMaster();
-    if (!master)
-        return false;
-
-    if (!master->GetVehicle())
-        return false;
-
-    return true;
-}
+bool FlameLeviathanVehicleNearTrigger::IsActive() { return FlameLeviathanVehicleToBoard(botAI) != nullptr; }
 
 bool FlameLeviathanFlameVentsTrigger::IsActive()
 {

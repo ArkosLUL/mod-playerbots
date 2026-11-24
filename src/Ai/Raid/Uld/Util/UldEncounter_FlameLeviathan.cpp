@@ -15,6 +15,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidDifficulty.h"
 #include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Timer.h"
@@ -27,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -310,6 +312,113 @@ bool FlameLeviathanIsDriver(Player* bot)
     uint32 const entry = base->GetEntry();
     return entry == NPC_SALVAGED_SIEGE_ENGINE || entry == NPC_VEHICLE_CHOPPER ||
            entry == NPC_SALVAGED_DEMOLISHER;
+}
+
+namespace
+{
+bool FlameLeviathanDriverSeatsTaken(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    uint32 demolishers = 0;
+    uint32 siegeEngines = 0;
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        Unit* base = member ? member->GetVehicleBase() : nullptr;
+        if (!base)
+            continue;
+
+        if (base->GetEntry() == NPC_SALVAGED_DEMOLISHER)
+            ++demolishers;
+        else if (base->GetEntry() == NPC_SALVAGED_SIEGE_ENGINE)
+            ++siegeEngines;
+    }
+
+    uint32 const perKind = IsRaid25Man(bot) ? 5 : 2;
+    return demolishers >= perKind && siegeEngines >= perKind;
+}
+
+bool FlameLeviathanSeatOpenFor(Player* bot, Unit* hull, bool driverSeatsTaken)
+{
+    Vehicle* kit = hull->GetVehicleKit();
+    if (!kit)
+        return false;
+
+    uint32 const entry = hull->GetEntry();
+    bool const inUse = kit->IsVehicleInUse();
+    if (!inUse && !hull->HasNpcFlag(UNIT_NPC_FLAG_SPELLCLICK))
+        return false;
+
+    if (!driverSeatsTaken)
+    {
+        if (inUse)
+            return false;
+
+        if (entry == NPC_SALVAGED_DEMOLISHER)
+            return !PlayerbotAI::IsMelee(bot);
+
+        if (entry == NPC_SALVAGED_SIEGE_ENGINE)
+            return PlayerbotAI::IsMelee(bot);
+
+        return false;
+    }
+
+    if (!kit->GetAvailableSeatCount())
+        return false;
+
+    if (entry == NPC_SALVAGED_SIEGE_ENGINE)
+    {
+        Unit* turret = kit->GetPassenger(7);
+        Vehicle* turretKit = turret ? turret->GetVehicleKit() : nullptr;
+        return turretKit && !turretKit->IsVehicleInUse();
+    }
+
+    if (entry == NPC_SALVAGED_DEMOLISHER)
+    {
+        if (!kit->GetPassenger(0))
+            return true;
+
+        Unit* seat = kit->GetPassenger(1);
+        Vehicle* seatKit = seat ? seat->GetVehicleKit() : nullptr;
+        return seatKit && !seatKit->GetPassenger(0);
+    }
+
+    return kit->GetAvailableSeatCount() > 1;
+}
+}
+
+Unit* FlameLeviathanVehicleToBoard(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot || bot->GetMapId() != ULDUAR_MAP_ID || !bot->IsAlive() || bot->GetVehicle())
+        return nullptr;
+
+    std::optional<bool> driverSeatsTaken;
+    Unit* nearest = nullptr;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest vehicles far")->Get())
+    {
+        Unit* hull = botAI->GetUnit(guid);
+        if (!hull || !hull->IsAlive() || hull->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            continue;
+
+        uint32 const entry = hull->GetEntry();
+        if (entry != NPC_SALVAGED_DEMOLISHER && entry != NPC_SALVAGED_SIEGE_ENGINE && entry != NPC_VEHICLE_CHOPPER)
+            continue;
+
+        if (!driverSeatsTaken)
+            driverSeatsTaken = FlameLeviathanDriverSeatsTaken(bot);
+
+        if (!FlameLeviathanSeatOpenFor(bot, hull, *driverSeatsTaken))
+            continue;
+
+        if (!nearest || bot->GetExactDist(hull) < bot->GetExactDist(nearest))
+            nearest = hull;
+    }
+
+    return nearest;
 }
 
 bool FlameLeviathanIsPursued(Player* bot)

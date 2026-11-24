@@ -41,8 +41,8 @@ protected:
 class NearestVehiclesValue : public NearestUnitsValue
 {
 public:
-    NearestVehiclesValue(PlayerbotAI* botAI, float range = sPlayerbotAIConfig.SightDistance)
-        : NearestUnitsValue(botAI, "nearest vehicles", range)
+    NearestVehiclesValue(PlayerbotAI* botAI, float range = sPlayerbotAIConfig.SightDistance, uint32 checkInterval = 1)
+        : NearestUnitsValue(botAI, "nearest vehicles", range, false, checkInterval)
     {
     }
 

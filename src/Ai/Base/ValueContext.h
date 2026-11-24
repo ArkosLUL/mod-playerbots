@@ -439,7 +439,10 @@ private:
     static UntypedValue* nearest_hostile_npcs(PlayerbotAI* botAI) { return new NearestHostileNpcsValue(botAI); }
     static UntypedValue* nearest_totems(PlayerbotAI* botAI) { return new NearestTotemsValue(botAI); }
     static UntypedValue* nearest_vehicles(PlayerbotAI* botAI) { return new NearestVehiclesValue(botAI); }
-    static UntypedValue* nearest_vehicles_far(PlayerbotAI* botAI) { return new NearestVehiclesValue(botAI, 200.0f); }
+    static UntypedValue* nearest_vehicles_far(PlayerbotAI* botAI)
+    {
+        return new NearestVehiclesValue(botAI, 200.0f, 1 * IN_MILLISECONDS);
+    }
     static UntypedValue* nearest_friendly_players(PlayerbotAI* botAI) { return new NearestFriendlyPlayersValue(botAI); }
     static UntypedValue* closest_friendly_players(PlayerbotAI* botAI)
     {

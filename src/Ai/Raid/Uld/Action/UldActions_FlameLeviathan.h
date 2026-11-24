@@ -57,11 +57,6 @@ public:
 
     FlameLeviathanEnterVehicleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
-
-protected:
-    bool EnterVehicle(Unit* vehicleBase, bool moveIfFar);
-    bool ShouldEnter(Unit* vehicleBase);
-    bool AllMainVehiclesOnUse();
 };
 
 class FlameLeviathanInterruptVentsAction : public Action
