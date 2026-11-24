@@ -1506,21 +1506,51 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.move_tug([(0, "a"), (1000, "a"), (2000, "a")]), [])
 
     def test_summon_bands_names_the_orbits_that_can_reach_a_radius(self):
-        # The melee pile: the inner orbit starts reaching at 11.6 - 8.5 = 3.1, so the 2.8 yd circle
-        # clears it by 0.3 and nothing else is near enough to matter.
         self.assertEqual(yogg_saron.summon_bands(0.0), ())
         self.assertEqual(yogg_saron.summon_bands(2.8), ())
-        self.assertEqual(yogg_saron.summon_bands(3.2), (1,))
-        # Where a nova step-out lands by default. Two orbits reach it at once, which is why the bots
-        # that stepped out dodged a cloud within 20 s almost every time.
-        self.assertEqual(yogg_saron.summon_bands(19.0), (1, 2))
-        # The station. The only band one orbit alone reaches, and the whole 20.5-22.5 tolerance is
-        # inside it, which is what makes it a destination rather than just somewhere further out.
-        self.assertEqual(yogg_saron.summon_bands(yogg_saron.RANGED_STATION), (2,))
-        self.assertEqual(yogg_saron.summon_bands(20.5), (2,))
-        self.assertEqual(yogg_saron.summon_bands(22.5), (2,))
-        # Past the outer orbit's reach nothing touches a bot at all.
+        self.assertEqual(yogg_saron.summon_bands(6.7), ())
+        self.assertEqual(yogg_saron.summon_bands(6.9), (1,))
+        self.assertEqual(yogg_saron.summon_bands(12.5), (1, 2))
+        self.assertEqual(yogg_saron.summon_bands(yogg_saron.RANGED_STATION), (1, 2, 3))
+        self.assertEqual(yogg_saron.summon_bands(20.5), (1, 2, 3))
+        self.assertEqual(yogg_saron.summon_bands(22.5), (1, 2, 3))
+        self.assertEqual(yogg_saron.summon_bands(31.0), (3,))
+        self.assertEqual(yogg_saron.summon_bands(62.5), (6,))
         self.assertEqual(yogg_saron.summon_bands(yogg_saron.P1_ROOM_RADIUS + 1.0), ())
+
+    def test_orbit_labels_follow_the_measured_radii(self):
+        self.assertEqual(yogg_saron.orbit_label(3.0), "clear")
+        self.assertEqual(yogg_saron.orbit_label(21.5), "orbit1+orbit2+orbit3")
+        self.assertEqual(yogg_saron.orbit_label(31.0), "orbit3")
+        self.assertEqual(yogg_saron.orbit_of(15.6), 1)
+        self.assertEqual(yogg_saron.orbit_of(54.0), 6)
+        self.assertEqual(yogg_saron.orbit_of(60.8), 0)
+        self.assertEqual(yogg_saron.orbit_of(11.6), 0)
+        self.assertEqual(yogg_saron.inner_orbits(), [1, 2])
+        self.assertAlmostEqual(yogg_saron.orbit_lap_s(1), 48.1, places=1)
+        self.assertAlmostEqual(yogg_saron.orbit_lap_s(6), 170.0, places=0)
+
+    def test_entries_counts_each_pass_once(self):
+        self.assertEqual(yogg_saron.entries([]), 0)
+        self.assertEqual(yogg_saron.entries([False, False]), 0)
+        self.assertEqual(yogg_saron.entries([True, True, False]), 1)
+        self.assertEqual(yogg_saron.entries([False, True, True, False, True]), 2)
+
+    def test_station_reach_needs_a_back_line_bot_at_the_spot(self):
+        spot = yogg_saron.RANGED_SPOT
+        self.assertTrue(yogg_saron.station_reach((spot[0] + 8.0, spot[1]), [spot]))
+        self.assertFalse(yogg_saron.station_reach((spot[0] + 9.0, spot[1]), [spot]))
+        away = (spot[0], spot[1] + 6.0)
+        self.assertFalse(yogg_saron.station_reach(away, [away]))
+        self.assertFalse(yogg_saron.station_reach(spot, []))
+
+    def test_carrier_wait_reads_the_first_carrier_still_below(self):
+        below = {1: [(1000, 30000)], 2: [(5000, 30000)], 3: [(0, 2000)]}
+        stacks = {1: [(0, 20000)], 2: [(0, 20000)], 3: [(0, 20000)]}
+        self.assertEqual(yogg_saron.carrier_wait(below, stacks, 9000), 8000)
+        self.assertEqual(yogg_saron.carrier_wait(below, {2: [(7000, 20000)]}, 9000), 2000)
+        self.assertIsNone(yogg_saron.carrier_wait(below, stacks, 25000))
+        self.assertIsNone(yogg_saron.carrier_wait({}, stacks, 9000))
 
     def test_dodge_followups_counts_clouds_woken_by_the_bot_own_step_out(self):
         # 1790966646: Shadow stepped out 11 times and 9 of its 10 cloud dodges came within 20 s of one.
@@ -1559,14 +1589,12 @@ class YoggPhases(unittest.TestCase):
         self.assertIsNone(yogg_saron.cooldown_gap([], 120000, 134229))
 
     def test_dodge_zone_splits_the_room_by_what_can_summon_there(self):
-        # Of 124 melee cloud dodges over seven pulls 56 landed in the core, 30 in the inner orbit's
-        # reach and 38 past it, which is what the preference is there to move.
         self.assertEqual(yogg_saron.dodge_zone(1.0), "core")
+        self.assertEqual(yogg_saron.dodge_zone(6.7), "core")
         self.assertEqual(yogg_saron.dodge_zone(12.0), "inner orbit")
-        self.assertEqual(yogg_saron.dodge_zone(21.5), "beyond")
-        # Both boundaries belong to the tighter band, the way the game's <= tests read them.
-        self.assertEqual(yogg_saron.dodge_zone(2.8), "core")
-        self.assertEqual(yogg_saron.dodge_zone(20.1), "inner orbit")
+        self.assertEqual(yogg_saron.dodge_zone(21.5), "inner orbit")
+        self.assertEqual(yogg_saron.dodge_zone(23.7), "inner orbit")
+        self.assertEqual(yogg_saron.dodge_zone(23.9), "beyond")
 
     def test_crossings_counts_a_walk_once_and_a_tick_trade_every_time(self):
         # Walking to the anchor and staying there is one crossing.
