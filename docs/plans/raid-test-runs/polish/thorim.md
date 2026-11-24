@@ -1720,3 +1720,90 @@ while holding Thorim, the second pull running (shared DK class code); roster B's
 the hold leaves to the harness fix.
 
 **Questions for the user:** none new. The Blizzard question stays queued with the recommendation yes.
+
+**User answer (2026-11-24) to the Blizzard question (round 15, re-asked in round 16):** yes. Melee covered by Sif's Blizzard
+step straight out past the ring to a point 11 yd clear of every zone and walk back when it fades, and the generic dodge (`avoid
+aoe`) is kept off ring melee in phase 2. Round 17 builds it.
+
+## Round 17 (builds the user's Blizzard answer; round 16 merged, no pulls yet)
+
+**Data:** window 24 (build baf47824b with round 15), read in round 16: `tr-20261123-220519-{1,2,3}`, traces
+`env/dist/logs/botobs/603_{1,2,3}_thorim_{1795471607,1795471611,1795471614}.ndjson`; report `raidtest.py report --boss thorim
+--raid uld --head baf47824b --pulls 10`. Stop rules, verdict and ranking skipped: round 16 has no pulls yet. For the Blizzard, the six
+hard-mode phase 2s on disk: w14 uld1 `603_3_thorim_1795427707`, w15 uld1 `603_8_thorim_1795436805`, w19 uld3 `603_5_thorim_1795452388`,
+w21 uld3 `603_4_thorim_1795459237`, w23 uld1 `603_1_thorim_1795467529`, w24 uld1 `603_1_thorim_1795471607`, through the new
+`thorim.py --blizzard` and a per-slot replay in session scratchpad `thorim_r17/` (`stepsim2.py`: one body per slot at 7 yd/s, zones
+from the snapshots' `hz` rows plus the bunny, floor from traced player positions, `westfloor.py`).
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795471607 | wipe 4:58, **hard mode** (phase 2 3:08.4) | phase 2: Thorim melee on a non-tank 10, Chain Lightning 7, Blizzard 6, Thorim melee on a tank 3, Frostbolt Volley 2, Lightning Charge 2, Frostbolt 1, Unbalancing Strike 1 |
+| uld2 | 1795471611 | kill 6:10, normal (62565 3:30.0) | phase 2: Chain Lightning 1 |
+| uld3 | 1795471614 | kill 6:04, normal (62565 3:18.1) | phase 2: Chain Lightning 2 |
+
+**Ring melee under Blizzard before the change** (`--blizzard` "all" line; ring bot-seconds within the 9.8 yd damage reach, longest
+stay, ticks, Blizzard deaths):
+
+| Pull | in a zone | longest stay | ticks | deaths |
+|---|---|---|---|---|
+| w14 uld1 | 7.6 bot-s | 1.2 s | 0 | 0 |
+| w15 uld1 | 19.9 | 5.6 | 13 (46k) | 0 |
+| w19 uld3 | 17.9 | 3.3 | 6 (29k) | 0 |
+| w21 uld3 | 19.7 | 6.0 | 21 (102k) | 2 |
+| w23 uld1 | 50.5 | 10.0 | 55 (248k) | 3 |
+| w24 uld1 | 32.3 | 8.7 | 40 (185k) | 3 |
+
+**Change (the user's answer;** Thorim files only, no size, mode or player branch: a real player's melee is never moved, and the step
+counts nobody's body):
+- `SolveRingBearings` (`UldEncounter_Thorim.cpp`) no longer weighs Blizzard: relax 0 is cone plus 60° separation, relax 1 the cone
+  only (`RingBearingClearOfBlizzard` deleted). That relax was the swing onto another slot or the tank side.
+- `ThorimRingBlizzardCovered`: the slot point within 11 yd (`ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE`) of a zone or the bunny, or, for
+  a bot standing clear more than 3 yd off it, the straight walk there passing one. Each change flips the new probe `thorim.ringstep`
+  (`ObsGuidSet`) and drops `ringArrived`, so the walk back takes the 3 yd tolerance (with the 5 yd one a bot 3-6 yd out would stay
+  out of reach). The positioning trigger and action stand down for a ring bot while it holds.
+- `ThorimRingBlizzardStep`, run by `ThorimSifBlizzardTrigger` / `ThorimSifBlizzardAction` for ring melee at `MOVEMENT_FORCED`: nothing
+  while the bot stands clear of every zone and the lit cone (it holds there); else the nearest point 11 yd clear of every zone, out of
+  the cone (ring margin), in the arena box, ties to the one nearest the slot point, from
+  `FindNearestPositionClearOfHazards` (navmesh-checked): past the ring and 8 yd off both tank spots within 15 yd
+  (`ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS`), else past the ring within 15, else anywhere within 20
+  (`ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS`).
+- Rules (`UldDefinition_Thorim.cpp`): `thorim ring aoe hold` blocks `AvoidAoe` for ring melee on the floor in phase 2 (the user's
+  "generic dodge kept off"); `thorim ring blizzard step` blocks `Reach` and `Charge` while stepped (else `reach melee` walks the bot
+  back into the zone); `thorim movement guard` counts a stepped bot as settled and no longer passes `AvoidAoe`.
+- Reader: `thorim.py --blizzard` (and in every report), per Blizzard: each slot point's covered seconds; ring bots within the 9.8 yd
+  reach with seconds, stays, longest stay, ticks and damage; deaths; step moves, stepped bot-seconds and those past 9.0 yd of him; the
+  walk back from each step's end to within 9.0 yd and ticks on the way. Test `RingBlizzard` in `test_thorim.py`.
+
+**Why the fallbacks.** The literal rule (past the ring and clear of the tank side) found no point for 14-79% of the covered time in the
+replay: slot 0 sits south-west of him between the west wall (x ~2100, `westfloor.py`), the tank spots and the trail's corner, and
+that replay left melee in zones 18-87 bot-s a pull against 7.6-50.5 as fought. Dropping the tank clearance, then the ring, closes
+it. Replay of the built rule, per pull as the table above: in a zone 4 / 2 / 0 / 0 / 6 / 3 bot-s; melee in reach of him 86.1 /
+81.0 / 81.3 / 85.6 / 90.5 / 81.6% against 87.5 / 88.3 / 84.4 / 88.3 / 92.2 / 80.1% as fought (up to 7 points less: the uptime the
+question priced); walk back p50 0.7-2.5 s, max 4.5 s; 16-50 step orders a pull.
+
+`pb-check` passes (syntax over 16 TUs, pblint, codestyle, botobs tests).
+
+**Next window should show** (hard-mode pulls only; `--blizzard`, `--phase2`):
+- `thorim.ringstep` flips for the ring bots of a covered slot within ~0.5 s of the cover, `thorim sif blizzard action` moves by ring
+  melee, no `avoid aoe` move by a ring bot in phase 2 (`thorim ring aoe hold` vetoes instead).
+- Ring melee in a zone well under 7.6-50.5 bot-s a pull (replay 0-6), longest stay ≤ ~2 s, Blizzard ticks on ring melee from 0-55 toward
+  a handful, no ring melee Blizzard death (2-3 in the last three hard-mode wipes).
+- Walk back p50 ~1-2.5 s, max ≤ ~5 s, ~0 ticks on the way; stepped bot-seconds past 9.0 yd about the slot's covered seconds.
+- Damage: `melee ring` "on Thorim to +100 s" still ~100%, his health lost per second in hard mode no lower than 0.24-0.48 %/s.
+- Watch: Chain Lightning on a stepped bot near a tank (the second and third passes drop the tank clearance); a stepped bot held past
+  reach after its slot clears (the walk-under test); pets on a covered slot dying (not in the trace: Revive Pet casts in phase 2).
+- Normal-mode pulls: no `thorim.ringstep` row, `--blizzard` reads "no Sif Blizzard in phase 2", the ring unchanged.
+
+**Questions for the user:** none new.
+
+**Review (round 17).** The cause holds. In w24 uld1 slot 0's solved bearing went 203 → 177 → 153 → 281° from 3:38.7 to 3:40.4;
+from 3:40.5 every positioning walk of Uldxai and Uldxaf came back `wait` behind `avoid aoe` combat bookings while both took 5.0-5.3k
+ticks, and Uldxai died at 3:45.3. `--blizzard` gives the before table and a rerun of `stepsim2.py` the built replay figures. The
+replay's steps by pass: past the ring and off the tanks 17-44 bot-s a pull, past the ring 1.5-6.9, anywhere 0-1.6. The answer's
+wording alone (the first two passes) leaves 10 and 21 bot-s in zones in w21 uld3 and w23 uld1, so the third pass is the one step
+beyond the user's yes; it is logged under "Why the fallbacks". No size, mode or player branch; Thorim files only; no comments. Left:
+a ring bot holding Thorim takes no step and no longer has `avoid aoe`, but ring melee held him inside a zone 0-0.2 bot-s over the
+six pulls. Fixed: the Blizzard trigger ran `TryGetThorimPhase2Spot` (the slot pass over the group, the `thorim.ringspot` note, a
+`RingPoint` raycast) every tick for every ring bot in phase 2, normal mode included, where it used to return at once.
+`ThorimRingBlizzardStep` now asks whether the bot stands in a zone or the lit cone first; while it holds, the positioning trigger,
+which reads the slot every tick anyway, keeps `thorim.ringstep` current. `pb-check` passes.
