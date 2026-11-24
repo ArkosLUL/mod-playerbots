@@ -282,9 +282,9 @@ in `mimiron.flee`. Its traps:
   true at the grid height, Z 803.11 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)),
   and the exact leg flies the bot as high as ~450 for up to 25 s: 13 legs in 40 pulls, two of one
   phase 4's healers at once. A checked point more than `ULDUAR_MIMIRON_FLOOR_TOLERANCE` (3) off the
-  room centre's Z is refused as `move`, in the fan and the least-burn fallback; an unchecked one keeps
-  the bot's Z and its path search. The unit flee's last resort, the generic `MoveAway`, still takes the
-  check's answer.
+  room centre's Z is refused, in the fan (as `move`), the least-burn fallback and the unit flee's
+  `MoveAway` sweep; an unchecked one keeps the bot's Z and its path search. A bot whose every path
+  search fails has only exact legs, so the generic `MoveAway` flies it up once the fan refuses them.
 - **Count the mover's refusals apart from the hazards'.** The lock is tested once before the fan
   (`locked`), and a mover refusal inside it is `move`; reading either as a hazard refusal hid the dead
   flames dodge.

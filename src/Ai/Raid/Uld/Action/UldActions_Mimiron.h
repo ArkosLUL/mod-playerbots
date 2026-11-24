@@ -54,6 +54,8 @@ private:
                  bool allowFire = false, bool sectorScreen = false,
                  std::optional<float> toward = std::nullopt, bool sirenScreen = true);
 
+    bool MoveAwayOnFloor(Unit* from, float distance);
+
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
                          uint32 refusedRocket, uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,

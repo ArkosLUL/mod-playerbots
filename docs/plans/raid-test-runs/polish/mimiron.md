@@ -61,7 +61,7 @@ then P4 Hand Pulse once healers drop out.
 - r17: mine trigger and step at 3 yd ground distance; held.
 - r19: settle turns at most 90° (Q9); held in window 30.
 - r20: a spray step starts the 2.5 s fire hold; held (walk-backs 0-1 a pull).
-- r21: the flee fan refuses a destination off the floor (Z 803.11); pending.
+- r21: the flee fan and its `MoveAway` fallback refuse a destination off the floor (Z 803.11); pending.
 
 **Tried and rejected.**
 
@@ -94,9 +94,9 @@ answered is stuck.
 **Watch.** Siren legs across a spray lane (`FleeFan` screens the destination only). Detour waypoints off
 the room: uld3's druid walked a `detour +65` leg (waypoint 105 yd off centre) onto a ledge at Z 372.4,
 90-100 yd west, for 28 s (round 15: uld2, two healers 20 s). P4 `combat formation move` (disperse 4.0)
-runs unscreened off-slot: 48 walk-ins into live bombs, 12 mine hits (3 kills) in window 32. The generic
-`MoveAway` fallback of a unit flee still takes an off-floor answer. `mimiron.phase` flickers (uld3: H3
-0.3 s, P2b 0.25 s), splitting reader spans. Shared code, not raised: healer mana (priests overheal P3
+runs unscreened off-slot: 48 walk-ins into live bombs, 12 mine hits (3 kills) in window 32. A bot
+stuck off the navmesh (every path search `nopath`) now has no flee leg at all. `mimiron.phase`
+flickers (uld3: H3 0.3 s, P2b 0.25 s), splitting reader spans. Shared code, not raised: healer mana (priests overheal P3
 at 55-87%), Reincarnation into the killing lane, Ice Block ending inside a Frost Bomb fuse. DC side:
 auras carried over a logout, Boomer XP-500 trash west of the room.
 
@@ -148,11 +148,14 @@ three ways.
   spline. Z 803 legs, all from the flee actions: 13 in windows 22-32's 40 pulls, 8 in window 32.
 
 **Fix** (Mimiron only, every size and mode, with or without a player): `IsMimironSpotOnFloor` refuses a
-point more than `ULDUAR_MIMIRON_FLOOR_TOLERANCE` (3) off the room centre's Z (364.32; every standing
-sample is 364.3); the fan and the least-burn fallback skip an exact candidate failing it as `move`. A
-failed check keeps the bot's Z and the path search, as before. Reader `--floor` (moves sent off the
-floor, bot-seconds above it, each stretch over 3 s with the move before it) and `--pulse`'s two-healers-
-out time with the Hand Pulse deaths after it; tests for both. Findings doc: the fan's floor trap and
+point more than `ULDUAR_MIMIRON_FLOOR_TOLERANCE` (3) off the room centre's Z (364.32; standing samples
+364.3, up to 366.3 at 75 yd west); the fan and the least-burn fallback skip an exact candidate failing it as `move`. A
+failed check keeps the bot's Z and the path search, as before. Review: the unit flee's last resort
+swapped the generic `MoveAway` for a copy that skips such a point too. uld3's Uldzap (7:57.254) and
+Uldzab (8:01.544) took `frostbomb ok -90` to Z 803 after `frostbomb fallback (move22)`, every path
+`nopath`; with the fan refusing it, `MoveAway`'s own -90 bearing would have flown them up. Reader
+`--floor` (moves sent off the floor, bot-seconds above it, each stretch over 3 s with the move before
+it) and `--pulse`'s two-healers-out time with the Hand Pulse deaths after it; tests for both. Findings doc: the fan's floor trap and
 the P4 mana race; `pitfalls.md`: the off-mesh check can also rise to the grid height.
 
 **Next window should show** (`--floor`, `--pulse`):
