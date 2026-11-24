@@ -922,11 +922,11 @@ bool MimironProximityMineAction::isUseful()
 
 bool MimironProximityMineAction::Execute(Event /*event*/)
 {
-    Creature* nearest = bot->FindNearestCreature(NPC_PROXIMITY_MINE, ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS);
-    if (!nearest)
+    Position nearest;
+    if (!GetMimironCloseMine(botAI, bot, nearest))
         return false;
 
-    float const nearestDist = bot->GetExactDist2d(nearest);
+    float const nearestDist = bot->GetExactDist2d(nearest.GetPositionX(), nearest.GetPositionY());
 
     float const step = std::min(ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f - nearestDist,
                                 ULDUAR_MIMIRON_MINE_MAX_STEP);

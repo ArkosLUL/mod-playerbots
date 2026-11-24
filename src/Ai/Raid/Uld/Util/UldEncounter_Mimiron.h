@@ -283,6 +283,8 @@ bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards
 
 std::vector<Position> GetMimironMines(PlayerbotAI* botAI);
 
+bool GetMimironCloseMine(PlayerbotAI* botAI, Player* bot, Position& mine);
+
 bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest);
 
 bool IsMimironLegBombSafe(Position const& from, MimironFirefighterHazards const& hazards, Position const& dest);

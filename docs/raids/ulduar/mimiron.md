@@ -655,7 +655,8 @@ bot, so it cannot keep a bot on one it was already hitting.
 ## The two adds need opposite answers
 
 **Proximity Mine (34362)** carries `unit_flags = 2` (`UNIT_FLAG_NON_ATTACKABLE`), so nothing removes one.
-It arms 2.5 s after landing, polls every 500 ms for a player inside **1.9 yd**, blasts 3 yd (66351), and
+It arms 2.5 s after landing, polls every 500 ms for a player inside **1.9 yd** (3D, centre to centre),
+blasts 3 yd (66351; a creature's AoE adds no reach, so every standing hit sat within 3 yd), and
 self-detonates at 35 s. Ten land exactly 15 yd from the MK II at random bearings (65347,
 `TARGET_DEST_CASTER_RADIUS`, radius idx 18) 8 s after every Shock Blast. Non-selectable, so never in
 `"possible targets"` and invisible to pathing; `IsMimironSpotMineSafe`
@@ -677,6 +678,13 @@ different answer every tick. No unfiltered fallback: one mine for another isn't 
 one blast is healable. `ACTION_RAID - 1`, below every other Mimiron node: Shock Blast is 100000 in
 15 yd and a mine a healable 3 yd, so a mine must never cost a dodge, a taunt or a core delivery. Some
 mine hits are the intended price.
+
+**Trigger, step and screen read one distance**: ground distance to the nearest live mine of the marker
+read (`GetMimironCloseMine`). `FindNearestCreature` adds both combat reaches (the bot's 1.5, the mine's
+1.0 from model 6271), so its 3.0 fired out to 5.5 yd, on spots the 3.5 yd screen passes: the formation
+walked a bot back and the step pushed it out every 250-500 ms, 365 of a window's 402 mine steps began
+3 yd or more out, and phase 4's front-row healers spent ~5% of their time on it. A bot 3 yd off is
+outside both the detonation and the blast, so the narrower trigger costs no hit.
 
 **Melee do not dodge mines, and nobody does during a barrage.** Mines land where melee have to stand, so
 the node fired continuously; 10 mines of 3 yd in a 707 yd² circle is ~40% coverage, ~0.4 hits a cycle,
@@ -778,7 +786,10 @@ reaches every escape point (38 yd at most). So `MimironPhase4WedgeIndex` gives t
 group order slots ⌊(i + ½)·n / k⌋ of that row's n, evenly across it (four in a 25-man row of 7-8 sit
 34-40° apart, so a pulse hits at most two), and ranged DPS the rest in group order, the row's gaps
 first; the slots themselves are unchanged. Phase 2 keeps plain group order: its melee never escape and
-stand within 33 yd of the outer row.
+stand within 33 yd of the outer row. Measured on the row: 221 of 272 pairs of escaped melee and healer
+with mana in reach, no escape unreached (88). Healers inside the MK II's 18 yd flee its Shock Blast,
+about one a cast, casting as much inside the cast as outside it; a 20 yd row would cut those flights by
+a quarter (healers stand 13-29 yd off the MK II) and lose a tenth of the reach.
 
 **The ring survives the correction.** Six fixed phase-2 spots stacked the raid into three clumps, the
 worst shape against any cone; a radius-22 ring with one index-derived slot per ranged bot is not. The
@@ -1589,8 +1600,9 @@ leaves humans out of positions and mana; `--p3` measures each landing off the un
 dodge burned only with a Flames tick on the bot in the 2 s before it, a fallback leg burning when it ends
 within 3.5 yd of a live Flames (Spread), and counts `castcut` notes 1 s apart as one cut; `--acutank`
 takes whoever got a `p4tank` slot as the main tank and every other roster tank as the off-tank;
-`--mines` charges a mine hit to the bot's last leg under 4 s old while it moves, else `standing`, and
-judges legs on their straight line, not the navmesh walk; `--unreach` gives each `unreach` span with the MK II's health and also
+`--mines` charges a mine hit to the bot's last leg under 4 s old while it moves, else `standing`,
+judges legs on their straight line, not the navmesh walk, and counts the mine steps begun 3 yd or more
+from the nearest live mine in the snapshot before; `--unreach` gives each `unreach` span with the MK II's health and also
 every rise in it over 3 points between two samples not starting on Self Repair's 0% floor, which
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's

@@ -1836,3 +1836,141 @@ counting.
   now inherit that. The escape ends 20 yd out, at most 40 yd from any melee escape point, so reach holds; the cost is
   healer casts lost in the cast window. Next window: healer `shock` legs per cast. If they climb and Hand Pulse on
   escaped melee does not fall, the question is a 20 yd phase 4 front row (plan change).
+
+## Round 17 (build 3ce456519, rounds 14 and 16 built)
+
+**Data:** window 25, `raidtest.py report --boss mimiron --raid uld --head 3ce456519 --pulls 10`: one valid pull per pool,
+no DC veto inside any. Baselines: window 24a (`603_1/2/3_…_17954698xx`) and windows 21-22 for phase 4. Scripts in the lane
+scratchpad (`mim17/`: `pets.py`, `petend.py`, `shockheal.py`, `row20.py`, `p4time.py`, `p4roles.py`, `p4heal.py`,
+`p4mines.py`, `arclegs.py`, `microlegs.py`, `minepingpong.py`, `minedist.py`, `minestand.py`, `minecost.py`,
+`minehitdist.py`, `healwin.py`, `mtrack.py`, `movers.py`, `acutgt.py`, `drinks.py`; round 14's `revcasts.py`, `alive.py`,
+`clock.py`; round 15's `p4deaths.py`, `mana.py`; round 9's `bombaim.py`; round 10's `spraybar.py`; round 13's `hm.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261124-104504-15` | `603_15_…_1795517146` | **kill** 9:49.9, hard mode, no Berserk cast | 5: P1 Napalm Shell 1; P3 Bomb Bot 1 (chased ranged); P4 Hand Pulse 2 (a healer at 9% mana on a flames leg, a ranged after its own Shock Blast escape), Flames 1 |
+| uld2 | `tr-20261124-104203-13` | `603_13_…_1795516964` | **kill** 9:21.7, hard mode, no Berserk cast | 7: H3 Water Spray 1 (melee); P4 mine 1 (a healer on a barrage leg), Frost Bomb 1, Hand Pulse 3 (three melee in one pulse at 8:54.1); P3b Hand Pulse 1 (healer) |
+| uld3 | `tr-20261124-104223-14` | `603_14_…_1795516984` | wipe 10:05.3 in P4 at Berserk (10:00.3), parts 14/15/18% | 31: P3 Bomb Bot 2 (chased ranged), Water Spray 2 (the resto shaman, twice); P4 Hand Pulse 15, ACU Plasma Ball 3 (a ranged; the off-tank twice with no healer left), mines 3, Flames 2; Berserk 4 |
+
+43 deaths, 39 before Berserk: Hand Pulse 21, mines 4, ACU Plasma Ball 3, Bomb Bot 3, Water Spray 3, Flames 3, Frost Bomb 1,
+Napalm Shell 1. Hard mode in all three: Summon Flames (Initial) at 7.1-7.2 s, Flames from 18-25 s, Emergency Mode at phase 2.
+Phase 2 lost nobody in any pull, a first.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 86.8 | 48.2 | 97.5 | 24.2 | 142.6 | 32.1 | 7:24.7 | 130.8 s at 113k/s, 25 alive; kill 9:49.9 |
+| uld2 | 89.3 | 48.2 | 85.8 | 24.3 | 114.7 | 32.1 | 6:47.6 | 133.9 s at 109k/s, 25 alive; kill 9:21.7 |
+| uld3 | 86.3 | 48.0 | 82.5 | 24.3 | 142.5 | 31.9 | 7:08.9 | 171 s to Berserk at **59k/s**, 24 alive, three healers |
+
+**Stop rules:** two kills of three (5 and 7 deaths): not polished. No failure picked three times (the mine trigger is new).
+
+**Verdict on round 14 (Revive Pet held all fight): held.** No `revive pet` cast in any pull, Z and H spans included (window
+24a: 9 starts). The hold vetoed it 0/4/7 times, every one after a pet died mid-fight: uld2 Uldyaj's Wolf gone at 8:42.5 at
+35% (P4, P3b, H4), uld3 Uldzak's Spider gone with him at 4:51.6 (one veto at 4:59.2, 0.2 s after his Call Pet brought a new
+one) and that one gone at 7:47.3 at 12% (six in P4).
+
+**The hunter pet fix (InitPet): held.** All six hunters had a pet in the first, pre-pull snapshot and kept it until it died:
+Uldxaj Raptor, Uldxau Serpent, Uldyaj and Uldyau Wolves, Uldzak Spider, Uldzau Cat. Roster B's had none in windows 18-24a.
+
+**Verdict on round 16.**
+
+- **Q6, the phase 2 wedge off fire: held.** Each pull's first barrage settled `fire` (348 → 90, 11>0; 322 → 60, 9>0; 351 →
+  60, 4>1); uld1's second barrage ran into phase 2's end, so no settle. Live Flames under the taken wedge at the settle and
+  10 s later 0 → 1, 0 → 0, 1 → 6. In the 25 s after the beams ranged/healer cone-mates 3.6/4.6, 4.4, 4.5 (window 24a uld1
+  6.3), Flames on them 10k, 30k, 27k (112k, 63k, 42k), none dead (6, 0, 1); phase 2 deaths 0/0/0 (17/2/2). Cost of the walk:
+  in the 15 s after the first barrage healers moved 54/43/21% (25/29/48%) and the formation walked 407/682/165 yd (323/151/114)
+  for the same raid health (94 → 65, 58, 85 against 89 → 52, 91 → 68, 95 → 68). P2 `arc spread <-> dodge flames` 16/29/67
+  (51/44/25); no `reach party member to heal` A-B-A.
+- **Q7, healers on the phase 4 front row: held for reach.** Healers off VX-001 median 20.1/20.6/21.7 yd (24.4-24.8); an
+  escaped melee's nearest healer with mana 12.0/27.6/33.3 yd (34.3-36.7), in heal reach 2.80/2.91 of 3.49 and 1.17 of 1.56
+  (1.09, 1.91), none unreached in 88 escapes (11 of 44, 1 of 34); pulses hitting 3+ healers 3 of 33, 7 of 34, 1 of 32
+  (window 24a 7 and 11). Melee Hand Pulse deaths after their own escape 0/0/2, uld3's with one healer left with mana.
+- **The 20 yd question** (`shockheal.py`, `row20.py`). Front-row healers do flee Shock Blast: 15 of 43 healer-casts stood
+  inside 18 yd of the MK II and 14 fled, one leg each (windows 22-24a: 2 of 75 inside, 3 fled). They lose no casting:
+  healers cast 24/25/26% inside the 5 s cast against 28/22/27% outside, and healed 14.6/17.3/10.9k/s inside against
+  16.2/12.6/9.2k/s out (before the row: inside ran ~5 points above outside). A 20 yd row would cut the flights by about a
+  quarter only (inside 16 yd now: 11 of 43; healers stand 13-29 yd off the MK II at the casts, quartiles), and cost a tenth of
+  the reach: healer-with-mana and escaped-melee pairs in reach 221 → 198 of 272, one escape unreached. Recommendation: keep
+  18 yd (Q8).
+
+**Why uld3 wiped.**
+
+1. **Bomb Bots** (4:37.5, 4:51.6): both chased ranged DPS, which stand and shoot by design, one-shot by the 24.5k blast at
+   100% and 86%. The bombs reached them at 44% and 29% after 6 and 5 s (uld1's reached 13/11/1% before dying); on the first,
+   28% of the ranged samples aimed at it came from past 30 yd and 24% were idle (`bombaim.py`). Both were battle-rezzed.
+2. **Water Spray** (6:14.7, 6:15.3), the resto shaman Uldzad: six fire bots alive 9.5-20.7 yd off (4.1 alive on average in
+   phase 3, kept by plan), `spray none` with all 11 bearings refused at 6:12.0, then `flames+5 ok` with 4 spray refusals at
+   70%; the spray caught him on that leg for 19.8k. Reincarnation (21169, 6:15.0) stood him up in the same lane and the next
+   spray killed him at 6:15.3. The raid entered phase 4 with 24 alive and three healers.
+3. **Phase 4 ran on one healer.** Mana at its open: disc 42%, holy priest 29%, druid 65%; the holy priest touched 2% at 7:39
+   and both priests sat under 10% from ~8:20 (Hymn and Shadowfiend spent in phases 2-3), so from then the druid healed alone
+   (`p4time.py`, `mana.py`). No healer tried a drink in any H span (`drinks.py`). Raid damage ran 47-80k/s from 7:59 to 8:59
+   with 19-21 alive: three ranged lost at 7:36-7:40 (Plasma Ball, Flames, a mine), melee moving 53-70% of
+   7:48-8:28 (arc spread 28-35%, the 7:54.8 Frost Bomb's escape 16-22%, flames 29% at 8:18). The ACU sat on a ranged for
+   11 s twice (8:00-8:11, 8:23-8:34; the bear's Growl at 8:03.8 did not take it).
+4. **9:00-9:06**: after the 8:53.9 Frost Bomb and the 8:59.8 Shock Blast, six melee and the holy priest on frost bomb legs at
+   39-62% took 2-4 pulses each with the druid (63%) 11-20 yd off and the priests at 1-8%: 8 dead in 6 s (`p4deaths.py`). The
+   last 13 dealt 25-35k/s and Berserk found the parts at 14-18%.
+
+**Ranking.** Hand Pulse (21) is the killer, and the pulse does what its script says (a uniform pick, a 60° cone); what feeds
+it is healing in phase 4. Healers there cast 27/22/27% of the time and moved 47/46/42% (six earlier phase 4s: 25-32% and
+31-39%, `p4heal.py`), the walking split across many movers (`arclegs.py`). The one that rose with the front row is a bug.
+
+**Failure picked: the mine step fires 5.5 yd from a mine while every spot screen clears 3.5, so healers ping-pong.**
+
+- Healer legs in phase 4 rose to 25.2 and 24.5 a bot-minute in uld1/uld2 (16.5-19.3 before), 66 and 74 of them under 3 yd
+  (18-26), 45 and 41 of those `mimiron proximity mine action`; `arc spread <-> proximity mine` switches within 1.5 s 34 and
+  51 (0-8 before) (`microlegs.py`). Mine steps and the arc spread legs right after them took 5.5% and 5.8% of healer phase 4
+  time (`minecost.py`).
+- uld2 Uldyac, holy paladin, 7:51.1-7:55.2 (`minepingpong.py`): the arc spread walks it to its `substitute r8` 4.9-5.3 yd from
+  a mine, the mine step pushes it 1-2 yd out, the arc spread walks it back, every 250-500 ms. At 8:47-8:54 the same healer cast
+  one heal in 7 s at 82% mana (`flash of light`/`holy light on party` IMPOSSIBLE while moving, `PlayerbotAI.cpp:3548`) and the
+  shaman moved six times in 2 s (arc spread, frost bomb, mine, arc spread); one pulse at 8:54.1 then killed three melee.
+- Cause: `MimironProximityMineTrigger` (`UldTriggers_Mimiron.cpp:198` at `3ce456519`) used `TooCloseToCreature`, and
+  `MimironProximityMineAction` `FindNearestCreature`, with `ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS` (3.0). That search is
+  `IsWithinDist` (`GridNotifiers.h:1362`), 3D with both combat reaches added: the bot's 1.5 and the mine's 1.0 (model 6271,
+  `creature_model_info`), so 5.5 yd. The destination screens (`IsMimironSpotStandable`, `IsMimironSpotMineSafe`) clear 3.5 yd
+  of ground distance, so a slot or substitute 3.5-5.5 yd from a mine is both standable and a mine step. The step size, `3.5 + 1
+  - distance` floored at `_MIN_STEP` (2), confirms the intent: a bot already past 4.5 yd gets the 2 yd floor.
+- Measured (`minedist.py`, `minestand.py`, `--mines`): 365 of window 25's 402 mine steps began 3 yd or more from the nearest
+  live mine (window 24a 264 of 292); of the 261 begun standing still in both windows, 188 began at 3.5-5.5 yd. Every phase and
+  every ranged role, not only phase 4.
+- Safe to narrow (`minehitdist.py`, nine traces): the mine fires on a player inside 1.9 yd, 3D centre to centre
+  (`SelectTargetFromPlayerList(1.9f)`, `IsWithinDistInMap(.., false, false)`), and its blast is a creature's AoE, so no reach is
+  added (`Spell.cpp:9511-9523`); all 46 standing mine hits sat within 3 yd of the mine.
+
+**Classification:** bug. The findings doc says "trigger at 3.0 yd, clear to 3.5"; the trigger read 5.5.
+
+**Fix** (Mimiron files and reader only, every size and mode, with or without a player): `GetMimironCloseMine` returns the
+nearest live mine within `ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS` of ground distance from the marker read the screens use
+(`GetMimironMarkers`, cached per trigger pass); trigger and step both use it, the step flees that position. Reader `--mines`
+adds per phase the mine steps and how many began 3 yd or more from the nearest live mine (test). Findings doc: the detonation
+and blast distances and "Trigger, step and screen read one distance" under the adds; the front-row measurements under the 60°
+cones.
+
+**Next window should show** (`--mines`, `--flips`, `mim17/p4heal.py`, `microlegs.py`, `minecost.py`):
+
+- Mine steps from 3 yd or farther near 0 (P4 98/75/37 of 102/78/40, P1 57/6/45 of 72/7/53) and far fewer mine steps.
+- `arc spread <-> proximity mine` A-B-A near 0 (P4 68/66 in uld1/uld2), and P1's `combat formation move <-> proximity mine`
+  (15 in uld1) gone.
+- Mine hits no higher (P4 9/18/15, P1 11/19/11) and no standing hit 3 yd or more from its mine.
+- Phase 4 healers: mine time ~0 (2.8/2.4/0.8%), moving toward the earlier 31-39% (47/46/42%), casting up (27/22/27%).
+- Rounds 14 and 16 still: no `revive pet`, phase 2 deaths near 0, a settle note per phase 2 barrage, ~3 healers in reach.
+
+**Not picked.**
+
+- Healer mana in phase 4 (both priests dry in uld3, the holy priest at 29% on arrival): shared class code.
+- Reincarnation into the lane that just killed the shaman (also rounds 5 and 10): the self-resurrection is shared code.
+- Bomb Bots on chased ranged (3, all one-shot at 86-100%): a kill-speed question; the step and kite rules held.
+- The bear off-tank losing the ACU to a ranged for 11 s twice (uld3), as roster B's bear in round 13.
+- uld3's phase 4 melee time on the move (53-70% for 40 s) after a Frost Bomb landed among them.
+
+**Questions for the user.**
+
+- **Q8 (plan change): move the phase 4 healer row from 18 to 20 yd?** Front-row healers flee Shock Blast about once a cast but
+  cast as much in the cast window as outside it; 20 yd would spare about a quarter of those flights and cost a tenth of the
+  healer reach on escaped melee (221 → 198 of 272 pairs, one escape unreached). Recommendation: no, keep 18 yd.
+
+**Shared code:** none (Mimiron encounter, trigger and action, findings doc, reader and its test, this log).

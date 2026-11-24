@@ -204,9 +204,8 @@ bool MimironProximityMineTrigger::IsActive()
     if (barrage.IsActive())
         return false;
 
-    TooCloseToCreatureTrigger tooCloseToProximityMine(botAI);
-    return tooCloseToProximityMine.TooCloseToCreature(NPC_PROXIMITY_MINE,
-                                                     ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS);
+    Position mine;
+    return GetMimironCloseMine(botAI, bot, mine);
 }
 
 bool MimironBombBotTrigger::IsActive()
