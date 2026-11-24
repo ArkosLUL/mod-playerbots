@@ -188,8 +188,7 @@ def segment_gap(point, start, end) -> float:
 
 
 def path_ahead_gap(point, bunny) -> float:
-    """How close `point` lies to the rest of the Blizzard bunny's walk, from where the bunny is now."""
-    legs = list(zip(SIF_BLIZZARD_PATH, SIF_BLIZZARD_PATH[1:]))
+    legs =list(zip(SIF_BLIZZARD_PATH, SIF_BLIZZARD_PATH[1:]))
     leg = min(range(len(legs)), key=lambda index: segment_gap(bunny, *legs[index]))
     ahead = [(bunny, legs[leg][1])] + legs[leg + 1:]
     return min(segment_gap(point, start, end) for start, end in ahead)
