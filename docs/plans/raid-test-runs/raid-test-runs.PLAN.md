@@ -8,14 +8,17 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (r23 merged) and Thorim (r24 merged); group 2 = Algalon (r12 merged). Mimiron polished at 25n in window 36 (10-man check in window 37). Vezax is done. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (r24 merged) and Thorim (r25 merged), both in window 39; group 2 = Algalon (r13 merged, window 38 done), Anub'arak joins it once his scenario works. Mimiron polished at 25n (window 36); his 10n check is blocked (below). Flame Leviathan joins a group after its one-pull check.
 
-**Window 37** (no rebuild, the window 36 build of `ce636f992`, started 2026-11-24 ~23:33): Algalon extra pulls on uld3 and uld6 (C, the only composition short on this build), Yogg-Saron r23, Thorim r24, Mimiron 10n check. Log `scratchpad/window37/window37.out`, reports `scratchpad/window37/window37/window37-<boss>.md`. Windows 29-36 and fillers: `windows.md`.
+**Session ended 2026-11-25 ~01:20 (the user's PC off).** Window 39 (rebuild of `6694fb83e` with DC `3083130`, Thorim then Yogg-Saron) ran from 00:40; reports `scratchpad/window39/window39/window39-<boss>.md`, log `scratchpad/window39/window39.out` (the scratchpad may be gone: then rerun the window). Window 38 (Algalon r13, `scratchpad/window38/window38/window38-algalon.md`): C killed (uld3, 2 deaths), A and B wiped. Windows 29-39: `windows.md`.
 
-**Next:**
-- As each window 37 report lands: Algalon done if a C pool killed with at most 5 deaths, else launch Algalon r13 from `window36-algalon.md` plus the C report; launch Yogg-Saron r24 and Thorim r25; Mimiron done if each composition killed 10n hard mode with at most 5 deaths, else a Mimiron round for 10n.
-- Merge lanes as they finish (never while a rebuild reads the source tree); rebuild once a group's lanes have all merged. DC lanes X and Z merge into DC's `local/wrath-raid-tests` after review (both touch the registry: merge one, then the other, resolving by keeping both rows); lane Y into Custom.
-- Answered 2026-11-25 (yes to all): Yogg-Saron Q3, once Yogg is under 12% in phase 3 the ranged leave the Guardians and burn him, one window: build in r25 and write it into `polish/yogg-saron.md` after r24 merges; Thorim Q1 (a), a camp shelter walk for orbs 1 and 2 that passes within 8 yd of other slots waits until the Chain Lightning lands: build in r26 and write it into `polish/thorim.md` after r25 merges; Mimiron Q11 dropped (written in `polish/mimiron.md`).
+**Next (first thing):**
+- Launch Thorim r26 (builds the user's Q1 (a), in `polish/thorim.md`) and Yogg-Saron r25 (builds Q3, the burn under 12%, in `polish/yogg-saron.md`) from window 39's reports, Algalon r14 from window 38's.
+- DC lane X (Anub'arak, `x-dc-anubarak.PLAN.md`) is merged into DC `local/wrath-raid-tests` as `ab1bab7` but **not compiled**: the next rebuild compiles it. Then navprobe the chamber drop (745.0, 135.0, 142.6) on map 649 and run the one-pull check `{"boss": "anub-arak", "scenario": "totc-anubarak", "raid": "toc", "pulls": 2, "cap": 2}` to see a re-pull bring him back. The row waits out the Lich King scene (no Barrett gossip, ~114 s to his summon, first pull at 140 s); after a wipe DC replays the instance's `OnPlayerEnter` for one member. If that fails live, the fallback is the user's manual way: one member leaves the instance and comes back, which resummons him.
+- Flame Leviathan: lane Y merged (`b34909581`, bots board without a leader); DC lane Z (`z-dc-flame-leviathan.PLAN.md`, `rt/dc-z` in `build-toc-wt/rt-dc-w5`) state is in `windows.md`'s last entry. After both are in: rebuild, navprobe the drop, staging line and boss home it reports, then a one-pull check.
+- Mimiron 10n check blocked: in window 37 all 12 runs used the button (194739) and ended `no_progress` at 600 s with nobody in combat, the raid 26 yd from Mimiron; 25n starts fine. The core's `go_ulduar_do_not_push_this_button::OnGossipHello` (`boss_mimiron.cpp` ~2237) calls `SetData(0, 7)` and `AttackStart(player)` only while Mimiron is `NOT_STARTED`. Brief a DC lane to find why 10n never engages.
+- Merges: `merge-lane.sh` refuses DC branches for argument-name and edited comments, DC's own style: merge DC lanes by hand (`git merge-tree`, then `git merge --no-ff -F`) after reading the added comment lines. During a window the server lock's owner is the window, which `merge-lane.sh` allows.
+- Next question batch: Yogg-Saron Q4 (round 24), a hunter Misdirects each fresh Immortal Guardian onto a tank.
 
 **Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 (step 1 built in r22; step 2, one navprobed position change per round, melee core first) and Q2 (r22); Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Mimiron Q11 dropped (Mimiron met the done rule first); Algalon under the normal done rule (each of A, B, C a kill with at most 5 deaths, no hard mode to check), the earlier "no kill expected, stop rule waived" ends; Iron Assembly stays as it is (self Lay on Hands closed); tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score now that the rosters have Engineering.
 
@@ -42,12 +45,12 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 23 in window 37; first kills in filler 35b (uld1 A 4 deaths, uld6 33) |
-| Thorim | group 1, round 24 in window 37; hard-mode kills for A (window 35) and C (16 and 7 deaths), none for B; the user: keep polishing, no end condition, stop rules waived |
-| Mimiron | polished at 25n: hard-mode kills with 2/2/3 deaths (window 36, r22); 10n check in window 37 |
+| Yogg-Saron | group 1, round 24 in window 39 (r25 builds the phase 3 burn); A kills with 4 and 5 deaths (fillers 35b, window 37), B and C none yet |
+| Thorim | group 1, round 25 in window 39 (r26 builds the shelter-walk hold); hard-mode kills for A (4, 3) and C (16, 7), none for B; the user: keep polishing, no end condition, stop rules waived |
+| Mimiron | polished at 25n: hard-mode kills with 2/2/3 deaths (window 36, r22); 10n check blocked: the button never starts the 10n fight (window 37, see Resume) |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
-| Algalon | group 2, round 12 in windows 36-37: kills for A (4) and B (3), C short; under the normal done rule since the user's answer of 2026-11-24 |
-| Anub'arak | DC lane X (`x-dc-anubarak.PLAN.md`, `rt/dc-x` in `build-toc-wt/rt-dc-w4`) running: scenario `totc-anubarak` and his return after a wipe; then a one-pull check and group 2 |
+| Algalon | group 2, round 13 in window 38: C killed (uld3, 2 deaths), A and B wiped; window 36-37 on r12 had A (4) and B (3); under the normal done rule since 2026-11-24 |
+| Anub'arak | DC lane X merged (DC `ab1bab7`, scenario `totc-anubarak`), not yet compiled: rebuild, navprobe, one-pull check, then group 2 |
 | Flame Leviathan | unparked by the user 2026-11-25, hard mode with all four towers: lane Y (`y-fl-boarding.PLAN.md`, bots board without a real player, `rt/fl-boarding`) and DC lane Z (`z-dc-flame-leviathan.PLAN.md`, scenario `uld-leviathan`, DC teleports the seated vehicles into the arena, `rt/dc-z` in `build-toc-wt/rt-dc-w5`) running; then navprobe, a one-pull check and a group |
 
 ## Status
