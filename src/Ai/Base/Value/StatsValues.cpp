@@ -52,7 +52,9 @@ bool PetIsDeadValue::Calculate()
     if (!bot->GetPet())
     {
         uint32 ownerid = bot->GetGUID().GetCounter();
-        QueryResult result = CharacterDatabase.Query("SELECT id FROM character_pet WHERE owner = {}", ownerid);
+        QueryResult result =
+            CharacterDatabase.Query("SELECT id FROM character_pet WHERE owner = {} AND (slot = {} OR slot > {})",
+                                    ownerid, uint32(PET_SAVE_AS_CURRENT), uint32(PET_SAVE_LAST_STABLE_SLOT));
         if (!result)
             return false;
 
