@@ -2136,3 +2136,163 @@ or without one in the raid. Shared code: none.
 
 **Questions.** None new. Beyond the wording, every priest holds its external, not one, so with a disc
 and a holy priest both Pain Suppression and Guardian Spirit go on the main tank at the late surge.
+
+## Round 17 (2026-11-24, branch from `f1bea7b1c`)
+
+**User's idea, agreed 2026-11-24 (Vezax DPS cooldowns).** At Vezax only Heroism, Bloodlust and Starfall
+are held until the Animus in hard mode (`vezax hard mode hold`); every other DPS burst cooldown fires
+freely after the generic tank dwell, and the Animus counts as a boss (`type_flags` 108 carries
+`BOSS_MOB`), so the shared gate allows burst on it. Build: before the Animus spawns in hard mode (~3:08),
+a DPS bot uses a burst cooldown only if it will be ready again by the spawn, else holds it for the
+Animus. A 3-minute cooldown used at the pull stays allowed, a 2-minute one loses its second use before
+the spawn, 5 minutes and longer wait for the Animus. Each cooldown's real duration comes from the bot's
+spell cooldown, not a table. Heroism, Bloodlust and Starfall keep their hold; normal mode unchanged.
+First measure from windows 25-27 which cooldowns are down at the spawn today, to show the gain.
+
+**Data.** No new pull: round 16 merged (`f1bea7b1c`) after window 27, so no stop rule, verdict or
+ranking this round (the orchestrator's call). Measured on windows 25-27's nine hard-mode pulls, the
+Animus at 3:08.3-3:08.6 in all (`raidtest.py report --boss vezax --raid uld --head 0687fa6a4 --pulls 10`;
+saved window reports in the session scratchpad's `window25/` to `window27/`). Deaths by mechanic:
+rounds 14-16's tables stand.
+
+| Window | uld1 | uld2 | uld3 |
+|---|---|---|---|
+| 25 (`3ce456519`) | `603_9_general-vezax_1795515840`, kill | `603_7_general-vezax_1795515738`, kill | `603_8_general-vezax_1795515779`, wipe |
+| 26 (`e834a2708`) | `603_5_general-vezax_1795522069`, kill | `603_4_general-vezax_1795522049`, kill | `603_6_general-vezax_1795522109`, wipe |
+| 27 (`0687fa6a4`) | `603_4_general-vezax_1795527532`, wipe | `603_6_general-vezax_1795527545`, wipe | `603_5_general-vezax_1795527535`, wipe |
+
+Analysis scripts: session scratchpad `vezax-r17/` (`burst.py` per bot and cooldown, `summary.py` the
+tables below, `opening.py` the burst around the spawn, `vapors.py` the spawn clock, `holdtime.py`,
+`threat.py`). A cooldown's real duration is its shortest re-use gap in the nine pulls (gaps across a
+Readiness or Cold Snap left out), else its DBC value; the rule's column replays each from its first
+traced use, re-used as soon as it is back, allowed only if back by the spawn plus 5 s (below).
+
+**Before the spawn today: 19 dps bots a pull, 41-43 burst cooldowns between them, 0-4 back by the
+spawn.**
+
+| Cooldown (who) | Real cd s | Used before the spawn | At the spawn (9 pulls) | Under the rule |
+|---|---|---|---|---|
+| Potion of Speed / Wild Magic (every dps) | fight | 0:05-0:12 | down 171 of 171 | held |
+| Army of the Dead (frost, unholy DK) | 600 | 0:06-0:16 | down 18 of 18 | held |
+| Fire Elemental Totem (enhancement, elemental) | 600 | 0:06-0:11 | down 18 of 18 | held |
+| Rapid Fire (survival, beast mastery hunter) | 300 | 0:05 | back +117 s | held |
+| Rapid Fire, Readiness, Rapid Fire (marksman) | 180, 180 | 0:05, 0:21-0:22 | back +13-14 s | first kept, Readiness held |
+| Mirror Image (arcane, fire, frost mage) | 180 | 0:06, 3:06-3:07 | down 17 of 18 | second held |
+| Summon Gargoyle (unholy DK) | 180 | 0:15-0:16 | back +7 s | held |
+| Force of Nature (balance) | 180 | 0:20-0:22 | back +12 s | held |
+| Adrenaline Rush (combat rogue) | 180 | 0:11-0:15 | back +5-7 s | kept in 3 pulls, else held |
+| Berserk (cat) | 180 | 0:06-0:08, twice 3:05-3:06 | ready 4 of 6 | second held |
+| Elemental Mastery (elemental) | 180 | 0:06-0:08 | ready 8 of 9 | kept |
+| Icy Veins (arcane, frost) | 144 | 0:06, 2:32 | back +108 s | second held |
+| Metamorphosis (demonology) | 126 | 0:06, 2:12 | back +70 s | second held |
+| Avenging Wrath (retribution) | 120 | 0:05, 2:05 | back +57 s | second held |
+| Blade Flurry, Combustion, on-use trinket (2 bots) | 120 | 0:05-0:13, 2:05-2:33 | back +57-80 s | second held |
+| Presence of Mind, Arcane Power (arcane) | 86-93 | 0:05-0:25, 1:47-1:52 | back +6-10 s | PoM both kept in 7 of 9, AP second held |
+| Killing Spree (combat) | 75 | 0:07-0:11, 1:21-1:26, 2:38-2:42 | back +45-48 s | third held |
+| Bestial Wrath (beast mastery) | 64 | 0:05, 1:09, 2:14 | back +10 s | third held |
+
+| Pull | Back by the spawn today | Uses before it today / under the rule | Animus first 30 s | Burst casts in them on it / on Vezax | Threat-cap vetoes in them |
+|---|---|---|---|---|---|
+| w25 uld1 | 1 of 41 | 55 / 16 | 1.12 %/s, 137k/s | 7 / 0 | 0 |
+| w25 uld2 | 0 of 42 | 56 / 16 | 1.33, 163k | 8 / 1 | 21 |
+| w25 uld3 | 4 of 43 | 55 / 19 | 1.19, 146k | 9 / 2 | 11 |
+| w26 uld1 | 1 of 41 | 54 / 16 | 1.20, 147k | 6 / 1 | 4 |
+| w26 uld2 | 2 of 42 | 56 / 17 | 1.35, 165k | 8 / 0 | 7 |
+| w26 uld3 | 2 of 43 | 58 / 18 | 1.31, 161k | 8 / 1 | 11 |
+| w27 uld1 | 2 of 41 | 54 / 17 | 1.13, 138k | 8 / 0 | 0 |
+| w27 uld2 | 1 of 42 | 56 / 16 | 1.13, 139k | 7 / 1 | 12 |
+| w27 uld3 | 2 of 43 | 59 / 19 | 1.08, 132k | 7 / 0 | 0 |
+
+Burst casts count the shared table's class and potion spells (`raidobs/cooldowns.py`), trinkets
+aside; the 30 s run from the Animus's first snapshot. Under the rule every cooldown is back by the
+spawn plus 5 s, so all 41-43 are ready for the Animus, and 36-40 uses before the spawn go (19 of them
+potions).
+
+**At the spawn today** (`opening.py`). The tank had the Animus at +1.0-2.1 s and the first burst on it
+came at +6.1-7.7 s, the shared gate's 5 s dwell on it; dps switched at +0.0-5.3 s. 23 cooldowns went from
+3 s before the spawn to 2.3 s after it, onto Vezax as the Barrier came up (−99% damage taken): 15 before
+(Mirror Image 12, Berserk 2, Icy Veins 1) and 8 at +0.0-2.3 s (Mirror Image 5, Berserk 2, Icy Veins
+1) in 7 of 9 pulls, all on Vezax but w26 uld2's three, which had no target sampled. Vezax stood at 14.8-25.0% at the spawn; only w26 uld2 reached the 15%
+stop line, 7.9 s before it (`holdtime.py`).
+
+**Spawn clock** (`vapors.py`, windows 11-27). Vezax summons a vapor every 30 s from the engage; the
+sixth, with hard mode still available, schedules the swirl 6 s later and the summon 2 s after that
+(`boss_general_vezax.cpp:266-311`). The last vapor plus the vapors left times 30 s plus 8 s ran 0.1-0.6
+s early in all 36 Animus pulls, the engage plus 188 s 0.2-0.6 s early.
+
+**Built: the user's idea** (Vezax files only):
+
+- `VezaxBurstForAnimusMultiplier` (`UldMultipliers_Vezax.cpp`, registered right after `vezax hard mode
+  hold`, `UldDefinition_Vezax.cpp:94`, family `AnyAction` so items count): for a dps bot, every shared
+  burst name (`BurstCooldowns.cpp`) but Heroism, Bloodlust and the priest's Shadowfiend.
+- `VezaxBurstForAnimus` (`UldEncounter_Vezax.cpp`): while hard mode is pending (config on, Vezax in
+  combat, no vapor killed, no summon) a ready cooldown is `use` if it comes back by the expected spawn
+  plus `ULDUAR_VEZAX_BURST_ANIMUS_GRACE_MS` (5 s), else `hold`; from the summon, while the Barrier
+  stands, `wait` until the bot's target is the live Animus, then `animus` (free; the shared gate's
+  dwell then runs on it). A cooldown already running, an unknown spell or a used potion is left alone.
+- Expected spawn (`TryGetVezaxAnimusDueIn`): `vaporSummonMs` (new, stamped by `VezaxNoteVaporSummon`) plus
+  the vapors left times 30 s plus 8 s, before the first vapor `engageMs` (new, stamped by `TickVezax`
+  the first tick he is in combat) plus 188 s; both cleared with the rest by the tracker's reset.
+- Real duration (`VezaxCooldownIfCastNow`): what `Player::AddSpellAndCategoryCooldowns` would set,
+  computed, not applied: the item template's spell cooldowns, else the DBC's, through
+  `ApplySpellMod(SPELLMOD_COOLDOWN)` (with no spell, so no charge is spent: `ApplyModToSpell` returns on
+  a null spell) and `SPELL_AURA_MOD_COOLDOWN`. A potion, or an item whose cooldown starts on an event,
+  only comes back out of combat (`Spell::SendSpellCooldown`; `Spell.cpp:5914` refuses a second potion
+  while `GetLastPotionId` is set), so it waits. `use trinket` takes the longest of its ready on-use
+  trinkets, `use tinker` `GetTinkerCooldownMs` of its ready tinkers, `offensive potion` the first potion
+  the action would take.
+- Probe `vezax.burst` (`RaidObs::Note`, written by the multiplier when its call on a cooldown changes,
+  reset per engage): `<action> <use|hold|wait|animus> <cooldown s|fight>`.
+
+Beyond the user's wording, each for the user to veto:
+
+- **"Ready again by the spawn" is read as by the spawn plus 5 s**, the shared gate's tank dwell on the
+  Animus, before which no burst reached it in nine pulls. A cooldown back inside those 5 s loses no
+  Animus use and keeps a pre-spawn one: a 3-minute cooldown is allowed up to 0:13, not 0:08, which keeps
+  Adrenaline Rush at 0:11-0:13 (3 of 9 pulls); Summon Gargoyle (0:15) and Force of Nature (0:20) are
+  still held.
+- **From the summon the hold lasts until the bot is on the Animus.** Lifted at the summon, every saved
+  cooldown would fire on Vezax behind the Barrier, as 22 did around the spawn in windows 25-27.
+- **Potions wait for the Animus**: the core gives one per fight, so by the rule's own test it is never
+  back before the spawn.
+
+Reader: `general_vezax.py --burst` (`burst_decisions`, `animus_opening`, `burst_rows`, `show_burst`;
+tests added): the Animus's first 30 s (health, k/s at its maximum health, the dps burst casts by
+target, the threat cap's vetoes), Vezax at the spawn, then per dps bot alive at the spawn and cooldown
+with a `vezax.burst` row: the read cooldown, uses before the spawn, back by it or when, the first hold
+row, and the first use from the spawn and on what; the multiplier's veto rows before and after the
+spawn. On windows 25-27 it prints the table above's last three columns. Docs:
+`docs/raids/ulduar/vezax.md` (hard-mode rule, trace key and view, the pre-spawn cost as a known gap).
+
+10/25 and normal/hard: the vapor clock has no size branch; the rule needs hard mode pending or the
+Barrier, so normal mode and a lost hard mode change nothing. Real players run no multiplier, and a bot
+decides on its own cooldowns and target and the boss's clock, so the same with or without one. Shared
+code: none (it reads `BurstCooldowns`, `GenericBuffUtils` and `TinkerUtils` helpers unchanged).
+
+**Next window should show** (`--burst`, `--animus`).
+
+- `vezax.burst` rows from every dps bot, 41-43 cooldowns a pull back by the spawn (windows 25-27: 0-4);
+  the read cooldowns as the table's (Arcane Power ~84-86 s, Icy Veins 144, marksman Rapid Fire 180,
+  potions `fight`): a DBC value where talents cut it means the read is wrong.
+- In the Animus's first 30 s: dps burst casts on it up from 6-9 to about 30 (19 potions and most class
+  cooldowns), none on Vezax around the spawn, and its pace above 1.08-1.35 %/s (132-165k/s); the Animus
+  dead before windows 25-27's +71-94 s.
+- Costs to watch: Vezax higher at the spawn than 14.8-25.0%, and at the Animus's death; threat-cap
+  vetoes in its first 30 s above 0-21, or a non-tank Animus victim after +2 s; a held cooldown never
+  used on the Animus.
+
+**Questions.** None new; the three readings above go to the user with the window report.
+
+**Review.** The measurements hold: `vapors.py` re-run on windows 25-27 puts each vapor's estimate 0.1-0.5
+s before the spawn, `opening.py` re-run gives the first burst on the Animus at +6.1-7.7 s, and
+`--burst` on w25 uld2 and w27 uld2 prints the table's 1.33 %/s, 163k, 8 / 1, 21 and 1.13, 139k, 7 / 1,
+12. The cooldown read matches `Player::AddSpellAndCategoryCooldowns` for every burst spell in the
+shared list (`vezax-r17-review/burstdbc.py`: none carries a category cooldown above its own, Rapid Fire
+and Elemental Mastery have only a category one), and the potion branch is for items only, as in
+`Spell::SendSpellCooldown`. No size, mode or player branch, no shared code, no comments. `pb-check`
+passes.
+
+- Review fix: the spawn count was 23 cooldowns, 15 of them before it (Mirror Image 12), not 22 and 14.
+- Review fix: `docs/raids/ulduar/vezax.md` gave 39-41 down at the spawn (39-42) and 16-24 uses under
+  the hold (16-19), and both texts said a spell whose cooldown starts on an event comes back only out
+  of combat: the core does that only for a cast item.

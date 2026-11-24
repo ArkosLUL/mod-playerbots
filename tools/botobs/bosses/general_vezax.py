@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
+from raidobs.cooldowns import BURST_SPELLS  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
@@ -51,6 +52,11 @@ TANK_COOLDOWNS = {871: "SW", 12976: "LS", 48792: "IBF", 55233: "VB", 61336: "SI"
 LATE_SURGE = 2
 LATE_SURGE_HOLD = "vezax late surge externals hold"
 LATE_SURGE_EXTERNAL = "vezax late surge external action"
+BURST_NOTE = "vezax.burst"
+BURST_HOLD = "vezax burst for the animus multiplier"
+THREAT_CAP = "vezax threat multiplier"
+ANIMUS_OPENING_MS = 30000
+DPS_ROLES = ("melee", "ranged")
 
 DODGE = "vezax shadow crash dodge action"
 SOAK = "vezax shadow crash soak action"
@@ -1428,6 +1434,147 @@ def show_surge(trace: Trace) -> None:
                                           or "never ran"))
 
 
+def burst_decisions(trace: Trace) -> dict[tuple[int, str], list[tuple[int, str, int | None]]]:
+    """Per bot and burst action, its `vezax.burst` rows in order as `(t, call, cooldown ms)`; the
+    cooldown is None for one that only comes back out of combat, a potion."""
+    out: dict[tuple[int, str], list[tuple[int, str, int | None]]] = collections.defaultdict(list)
+    for rec in notes(trace, BURST_NOTE):
+        parts = str(rec.get("txt", "")).rsplit(" ", 2)
+        if len(parts) != 3:
+            continue
+        action, call, cooldown = parts
+        out[(rec["g"], action)].append((rec["t"], call, int(cooldown) * 1000 if cooldown.isdigit() else None))
+    return dict(out)
+
+
+def animus_opening(trace: Trace, samples: Samples, animus: int, spawn: int, boss: int | None) -> dict:
+    """The Animus's first 30 s: its health over them, the damage per second that took at its maximum
+    health, the dps burst casts started in them by what the caster was hitting, and the threat cap's
+    veto rows in them."""
+    start = samples.row(animus, spawn)
+    end = samples.row(animus, spawn + ANIMUS_OPENING_MS)
+    drop = start[5] - end[5] if start and end else None
+    seconds = ANIMUS_OPENING_MS / 1000.0
+    maxhp = trace.maxhp.get(animus)
+    casts: collections.Counter = collections.Counter()
+    for rec in trace.of("cast"):
+        guid = rec.get("s")
+        if (rec.get("tr") or rec.get("sp") not in BURST_SPELLS or trace.role(guid) not in DPS_ROLES
+                or not spawn <= rec["t"] <= spawn + ANIMUS_OPENING_MS):
+            continue
+        row = samples.row(guid, rec["t"])
+        target = row[7] if row and len(row) > 7 else 0
+        casts["animus" if target == animus else "vezax" if target == boss else "other"] += 1
+    return {
+        "health": (start[5] if start else None, end[5] if end else None),
+        "rate": drop / seconds if drop is not None else None,
+        "dps": drop / 100.0 * maxhp / seconds if drop is not None and maxhp else None,
+        "casts": casts,
+        "capped": sum(1 for rec in trace.of("veto")
+                      if rec.get("m") == THREAT_CAP and spawn <= rec["t"] <= spawn + ANIMUS_OPENING_MS),
+    }
+
+
+def burst_rows(trace: Trace, samples: Samples | None = None) -> dict | None:
+    """Per dps bot alive at the spawn and burst cooldown the hold decided on: the cooldown it read, its
+    uses before the spawn, whether it was back by then, the hold's first row on it, and its first use
+    from the spawn and on what; with the Animus's first 30 s. None when the Animus never spawned."""
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    if spawn is None:
+        return None
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    decisions = burst_decisions(trace)
+    uses: dict[tuple[int, str], list[int]] = collections.defaultdict(list)
+    for rec in trace.of("act"):
+        key = (rec.get("g"), rec.get("a"))
+        if rec.get("vd") == "OK" and key in decisions:
+            uses[key].append(rec["t"])
+
+    rows = []
+    for (guid, action), calls in sorted(decisions.items(), key=lambda item: (trace.name(item[0][0]), item[0][1])):
+        living = samples.row(guid, spawn)
+        if trace.role(guid) not in DPS_ROLES or not living or living[5] <= 0:
+            continue
+        cooldown = calls[-1][2]
+        before = [when for when in uses.get((guid, action), []) if when < spawn]
+        after = [when for when in uses.get((guid, action), []) if when >= spawn]
+        back = before[-1] + cooldown if before and cooldown is not None else None
+        first = after[0] if after else None
+        row = samples.row(guid, first) if first is not None else None
+        target = row[7] if row and len(row) > 7 else 0
+        rows.append({
+            "guid": guid,
+            "action": action,
+            "cooldown": cooldown,
+            "before": before,
+            "ready": not before or (back is not None and back <= spawn),
+            "back": back,
+            "held": next((when for when, call, _ in calls if call == "hold"), None),
+            "first": first,
+            "on": None if first is None else "animus" if target == animus else "vezax" if target == boss else "other",
+        })
+
+    vetoes = collections.Counter("before" if rec["t"] < spawn else "after"
+                                 for rec in trace.of("veto") if rec.get("m") == BURST_HOLD)
+    lead = samples.row(boss, spawn) if boss else None
+    return {
+        "spawn": spawn,
+        "vezax": lead[5] if lead else None,
+        "opening": animus_opening(trace, samples, animus, spawn, boss),
+        "rows": rows,
+        "vetoes": vetoes,
+    }
+
+
+def show_burst(trace: Trace) -> None:
+    print("BURST FOR THE ANIMUS")
+    burst = burst_rows(trace)
+    if not burst:
+        print("  the Animus never spawned")
+        return
+
+    spawn = burst["spawn"]
+    vezax = "-" if burst["vezax"] is None else f"{burst['vezax']:.1f}%"
+    opening = burst["opening"]
+    start, end = opening["health"]
+    if opening["rate"] is None:
+        print(f"  spawned {clock(spawn)} with Vezax at {vezax}; no sample {ANIMUS_OPENING_MS // 1000} s in")
+    else:
+        dps = "" if opening["dps"] is None else f", {opening['dps'] / 1000:.0f}k/s"
+        print(f"  spawned {clock(spawn)} with Vezax at {vezax}; its first {ANIMUS_OPENING_MS // 1000} s:"
+              f" {start:.1f}% to {end:.1f}%, {opening['rate']:.2f} %/s{dps}")
+    casts = opening["casts"]
+    print(f"  dps burst casts in them: {casts['animus']} on it, {casts['vezax']} on Vezax, {casts['other']} on"
+          f" anything else; {THREAT_CAP} veto rows {opening['capped']}")
+
+    rows = burst["rows"]
+    if not rows:
+        print(f"  no {BURST_NOTE} rows from a dps bot alive at the spawn")
+        return
+    ready = sum(1 for row in rows if row["ready"])
+    held = sum(1 for row in rows if row["held"] is not None)
+    vetoes = burst["vetoes"]
+    print(f"  {len(rows)} burst cooldowns on {len({row['guid'] for row in rows})} dps bots: {ready} back by the"
+          f" spawn, {held} held; {BURST_HOLD} veto rows {vetoes['before']} before it, {vetoes['after']} after")
+
+    print(f"\n    {'bot':14} {'role':6} {'cooldown':20} {'cd s':>5}  {'before the spawn':30} {'at it':>7}"
+          f" {'held':>8} {'first after':>13}")
+    for row in rows:
+        cooldown = "fight" if row["cooldown"] is None else str(row["cooldown"] // 1000)
+        before = " ".join(clock(when)[:7] for when in row["before"]) or "-"
+        state = ("ready" if row["ready"] else "down" if row["back"] is None
+                 else f"+{(row['back'] - spawn) / 1000:.0f} s")
+        held_at = "-" if row["held"] is None else clock(row["held"])[:7]
+        first = "-" if row["first"] is None else f"{(row['first'] - spawn) / 1000:+.1f} {row['on']}"
+        print(f"    {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['action'][:20]:20}"
+              f" {cooldown:>5}  {before[:30]:30} {state:>7} {held_at:>8} {first:>13}")
+    print("\n    cd s is the cooldown the bot read when the spell was ready, fight one back only out of combat;"
+          " at it is ready, down, or when it came back after the spawn; held the hold's first row on it;"
+          " first after its first use from the spawn and what the bot was hitting")
+
+
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
     samples = samples or Samples(trace)
     boss = boss_guid(trace)
@@ -1511,6 +1658,8 @@ SECTIONS = (
     ("tank", "where Beacon of Light and Sacred Shield sat against his main tank", show_tank),
     ("surge", "the main tank's health, cooldowns and externals at each Surge of Darkness; who got Pain"
      " Suppression and Guardian Spirit", show_surge),
+    ("burst", "dps burst cooldowns held for the Animus: which were back by the spawn, first use after it,"
+     " the Animus's first 30 s", show_burst),
     ("band", "each camp member's distance from the boss", show_band),
 )
 

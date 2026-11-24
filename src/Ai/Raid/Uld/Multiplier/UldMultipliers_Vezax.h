@@ -9,7 +9,10 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "RaidCombatHelpers.h"
+#include "UldEncounter_Vezax.h"
 
+#include <string>
 #include <unordered_map>
 
 class VezaxSuppressLifeTapMultiplier : public Multiplier
@@ -48,6 +51,21 @@ public:
     VezaxTricksOnTankMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax tricks on tank multiplier") {}
 
     float GetValue(Action* action) override;
+};
+
+class VezaxBurstForAnimusMultiplier : public Multiplier
+{
+public:
+    VezaxBurstForAnimusMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax burst for the animus multiplier") {}
+
+    float GetValue(Action* action) override;
+
+private:
+    void NoteDecision(std::string const& name, VezaxBurstDecision const& decision);
+
+    RaidActionCache<std::string> burstNames;
+    std::unordered_map<std::string, VezaxBurstCall> noted;
+    uint32 notedPull = 0;
 };
 
 class VezaxDamageHoldMultiplier : public Multiplier

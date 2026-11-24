@@ -51,6 +51,11 @@ inline constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
 inline constexpr uint32 ULDUAR_VEZAX_WALK_STALL_MS = 500;
 inline constexpr uint8 ULDUAR_VEZAX_LATE_SURGE = 2;
 
+inline constexpr uint32 ULDUAR_VEZAX_VAPOR_INTERVAL_MS = 30000;
+inline constexpr uint8 ULDUAR_VEZAX_ANIMUS_VAPORS = 6;
+inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_AFTER_VAPOR_MS = 8000;
+inline constexpr uint32 ULDUAR_VEZAX_BURST_ANIMUS_GRACE_MS = 5000;
+
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
 inline constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
@@ -125,8 +130,26 @@ struct VezaxEncounterState
     bool vaporKilled = false;
     bool animusSummoned = false;
     uint32 animusSummonMs = 0;
+    uint32 engageMs = 0;
+    uint32 vaporSummonMs = 0;
     uint8 vaporSummons = 0;
     uint8 animusSurges = 0;
+};
+
+enum class VezaxBurstCall : uint8
+{
+    None,
+    Use,
+    Hold,
+    Wait,
+    Animus
+};
+
+struct VezaxBurstDecision
+{
+    VezaxBurstCall call = VezaxBurstCall::None;
+    uint32 cooldownMs = 0;
+    uint32 pullMs = 0;
 };
 
 Unit* GetVezax(PlayerbotAI* botAI);
@@ -184,6 +207,7 @@ void VezaxNoteVaporSummon(Unit* vezax);
 
 bool VezaxAnimusDue(PlayerbotAI* botAI);
 bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs);
+VezaxBurstDecision VezaxBurstForAnimus(PlayerbotAI* botAI, std::string const& action);
 char const* VezaxAnimusRedirectSpell(Player* bot);
 bool IsVezaxAnimusOnBot(Player* bot);
 bool VezaxAnimusPhaseActive(PlayerbotAI* botAI);

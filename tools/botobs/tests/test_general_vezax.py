@@ -597,6 +597,86 @@ class MarkCrash(unittest.TestCase):
         self.assertEqual(gv.crash_phase(samples, None, None, 2500), "pre")
 
 
+ARCANE = 9001
+ROGUE = 9002
+MENDER = 9003
+BURST_ANIMUS = 4294969600
+
+
+def burst_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 7, "diff": 1,
+         "boss": "general-vezax", "roster": [
+             {"g": ARCANE, "n": "Arcane", "r": "ranged", "c": "mage", "h": 0},
+             {"g": ROGUE, "n": "Rogue", "r": "melee", "c": "rogue", "h": 0},
+             {"g": MENDER, "n": "Mender", "r": "heal", "c": "priest", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
+        {"t": 1, "e": "unit", "g": BURST_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus",
+         "mhp": 1000000},
+        {"t": 500, "e": "note", "g": ARCANE, "k": gv.BURST_NOTE, "txt": "icy veins use 144"},
+        {"t": 500, "e": "act", "g": ARCANE, "a": "icy veins", "rel": 1, "vd": "OK"},
+        {"t": 1500, "e": "note", "g": ARCANE, "k": gv.BURST_NOTE, "txt": "offensive potion hold fight"},
+        {"t": 2000, "e": "note", "g": ARCANE, "k": gv.BURST_NOTE, "txt": "mirror image hold 180"},
+        {"t": 3000, "e": "veto", "g": ARCANE, "m": gv.BURST_HOLD, "a": "mirror image"},
+        {"t": 3000, "e": "note", "g": ROGUE, "k": gv.BURST_NOTE, "txt": "adrenaline rush hold 180"},
+        {"t": 10000, "e": "note", "g": ARCANE, "k": gv.BURST_NOTE, "txt": "mirror image wait 180"},
+        {"t": 10500, "e": "veto", "g": ARCANE, "m": gv.BURST_HOLD, "a": "mirror image"},
+        {"t": 10500, "e": "cast", "s": ARCANE, "sp": 12042, "tgt": BOSS, "ct": 0},
+        {"t": 11000, "e": "act", "g": ARCANE, "a": "offensive potion", "rel": 1, "vd": "OK"},
+        {"t": 11000, "e": "cast", "s": ARCANE, "sp": 53908, "tgt": ARCANE, "ct": 0},
+        {"t": 12000, "e": "note", "g": ARCANE, "k": gv.BURST_NOTE, "txt": "mirror image animus 180"},
+        {"t": 13000, "e": "act", "g": ARCANE, "a": "mirror image", "rel": 1, "vd": "OK"},
+        {"t": 13000, "e": "cast", "s": ARCANE, "sp": 55342, "tgt": ARCANE, "ct": 0},
+        {"t": 13500, "e": "cast", "s": MENDER, "sp": 10060, "tgt": ARCANE, "ct": 0},
+        {"t": 20000, "e": "veto", "g": ARCANE, "m": gv.THREAT_CAP, "a": "arcane blast"},
+        {"t": 41000, "e": "veto", "g": ARCANE, "m": gv.THREAT_CAP, "a": "arcane blast"},
+        {"t": 41000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 42000, 1000):
+        units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 30.0, 0.0, 0, 0, 0, 0, 0],
+                 [ARCANE, 0.0, 35.0, 0.0, 0.0, 100.0, 50.0, BOSS if when < 11000 else BURST_ANIMUS, 0, 0, 0, 0],
+                 [ROGUE, 0.0, 5.0, 0.0, 0.0, 100.0 if when < 8000 else 0.0, 0.0, BOSS, 0, 0, 0, 0],
+                 [MENDER, 0.0, 30.0, 0.0, 0.0, 100.0, 50.0, 0, 0, 0, 0, 0]]
+        if when >= 10000:
+            units.append([BURST_ANIMUS, 1.0, 1.0, 0.0, 0.0, 100.0 - (when - 10000) * 0.0012, 0.0, 0,
+                          0, 0, 0, 0])
+        records.append({"t": when, "e": "snap", "u": units})
+    return records
+
+
+class BurstView(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "603_7_general-vezax_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in burst_pull()) + "\n", encoding="utf-8")
+        self.trace = Trace(path)
+
+    def test_a_cooldown_back_only_out_of_combat_reads_none(self):
+        decisions = gv.burst_decisions(self.trace)
+        self.assertEqual(decisions[(ARCANE, "offensive potion")], [(1500, "hold", None)])
+        self.assertEqual([call for _, call, _ in decisions[(ARCANE, "mirror image")]], ["hold", "wait", "animus"])
+
+    def test_rows_skip_a_bot_dead_at_the_spawn_and_read_readiness_from_the_cooldown(self):
+        rows = {row["action"]: row for row in gv.burst_rows(self.trace)["rows"]}
+        self.assertEqual(sorted(rows), ["icy veins", "mirror image", "offensive potion"])
+        self.assertEqual((rows["icy veins"]["ready"], rows["icy veins"]["back"]), (False, 144500))
+        self.assertEqual((rows["mirror image"]["ready"], rows["mirror image"]["held"]), (True, 2000))
+        self.assertEqual((rows["mirror image"]["first"], rows["mirror image"]["on"]), (13000, "animus"))
+        self.assertEqual((rows["offensive potion"]["first"], rows["offensive potion"]["on"]), (11000, "animus"))
+
+    def test_the_opening_is_the_animus_health_over_30_s_and_dps_casts_by_target(self):
+        burst = gv.burst_rows(self.trace)
+        opening = burst["opening"]
+        self.assertAlmostEqual(opening["rate"], 1.2)
+        self.assertAlmostEqual(opening["dps"], 12000.0)
+        self.assertEqual(dict(opening["casts"]), {"vezax": 1, "animus": 2})
+        self.assertEqual(opening["capped"], 1)
+        self.assertEqual(dict(burst["vetoes"]), {"before": 1, "after": 1})
+        self.assertEqual(burst["vezax"], 30.0)
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
