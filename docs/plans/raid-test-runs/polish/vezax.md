@@ -1830,3 +1830,165 @@ no comments. `pb-check` passes.
 - Left: `mana sapphire` (relevance 90 on `high mana`, no cooldown test in `UseManaGemAction`) stops a
   walking mage the same way, but in those traces it never left a mark or dodge walk short (17 with
   the mage still after it, all on its spot); not held.
+
+**User answers (2026-11-24):** Q3: (c), the crash turn stays Animus-phase only. Q4: (c), the camp stays
+as is for Surge of Darkness. Neither is built.
+
+## Round 15 (2026-11-24, build e834a2708)
+
+**Data.** Window 26 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head e834a2708
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.4-3:08.5, no vapor
+hit), against window 25 (`--head 3ce456519`) and windows 11-25 for the surge and interrupt tallies.
+Analysis scripts: session scratchpad `vezax-r15/` (`timeline.py`, `mtdeath.py`, `healers.py`, `after.py`,
+`acts.py`, `ondamage.py`, `kicks.py`, `surges.py`, `bigcds.py`, `replay.py`, `sfkicks.py`, `kickfails.py`,
+`walkstall.py`, `stonestop.py`, `markstall.py`, `vetoes.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261124-120707-5` | `603_5_general-vezax_1795522069` | kill 5:39, 0 deaths, the Animus dead in 79.2 s |
+| uld2 | `tr-20261124-120647-4` | `603_4_general-vezax_1795522049` | kill 5:00, 0 deaths, the Animus dead in 72.4 s |
+| uld3 | `tr-20261124-120748-6` | `603_6_general-vezax_1795522109` | wipe 6:13, 31 deaths, the Animus dead in 79.2 s and the main tank 5 s later |
+
+**Stop rules.** Not polished: uld3 wiped. Round 14's pick did not recur and this round's are new, so no
+repeat count.
+
+**Roster note.** uld3's main tank Uldzaz is class 6, a blood DK (Rune Tap, Vampiric Blood, Icebound
+Fortitude, a ghoul), not the bear rounds 3 and 12-14 named; roster C's off-tank is the protection
+paladin Uldzaa (class 2), as roster A's is.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Deaths |
+|---|---|
+| uld1 | none |
+| uld2 | none |
+| uld3 | all from the main tank's death at 4:32.7: 19 Vezax melee (the main tank in the late surge, then 7 ranged, 9 melee and the off-tank twice as he went down the threat list), 10 Searing Flames (one cast, 5:09.65), 1 Shadow Crash (the soulstoned main tank, 4:39.9), 1 Mark leech (a healer, 4:43.4) |
+
+**Animus and Vezax per pull** (`timeline.py`; settle is Vezax from the anchor before the spawn).
+
+| Pull | Settle | Vezax at spawn | Animus +30 / +45 / +60 / +75 s | Animus | Raid / ranged / melee k/s | Vezax at its death | End |
+|---|---|---|---|---|---|---|---|
+| uld1 (DK) | 9.9 | 21.3% | 63.9 / 45.3 / 27.3 / 8.7 | dead +79.2 s, 1.26 %/s | 155 / 87 / 65 | 25.8% | Vezax dead 5:39.0 |
+| uld2 (warrior) | 9.9 | 14.8% | 59.4 / 38.6 / 17.9 / - | dead +72.4 s, 1.38 %/s | 169 / 93 / 70 | 18.3% | Vezax dead 5:00.0 |
+| uld3 (DK) | 9.9 | 21.5% | 60.6 / 40.8 / 22.4 / 6.1 | dead +79.2 s, 1.26 %/s | 156 / 78 / 74 | 24.5% | wipe 6:13.3, Vezax 23.15% |
+
+All three settled normally and won the race; uld3 lost after it.
+
+**Verdict on round 14 (healthstone held on Mark, break and dodge walks; a stalled walk re-sent): it
+worked.**
+
+- `walkstall.py` (round 14 review's): 1,251 escape walks (1,042 dodge, 133 break, 76 mark), none
+  stopped by a healthstone or mana gem (4 in round 14's 45 traces). The 13 it flags as standing short
+  are dodges that yielded clear of the blast at 4:27-4:30 and one mark in uld3's last seconds.
+- `markstall.py`: 24 marks, none with its walk standing over 0.5 s short of the spot (windows 11-25: 10
+  of 223), median 12 ticks.
+- `stonestop.py`: 2 healthstones tried on walking bots, both outside an escape (reach melee, soak) in
+  uld3's collapse; `vezax escape healthstone hold` vetoed nothing, since none came up during an escape.
+- The 4:32 surge marks: uld1 on melee Uldxal (south, far 6/9), 15 ticks, no death (window 25 uld1: 4
+  melee dead); uld2 on healer Uldyad, 5 ticks; uld3 on melee Uldzao just after its main tank died, 40
+  ticks (12 in the first 4 s) with Vezax loose.
+- Rounds 12 and 13 hold: Beacon on the main tank 99-100% before and after the spawn (uld1, uld2; uld3
+  has no holy paladin); the 3:52 crash turned the marked bot's block away in all three (with/away 0/6,
+  0/6, 0/5), 12-17 ticks.
+
+**Why uld3 wiped: the main tank died in the late Surge of Darkness, 5 s after the Animus.** The DK
+Uldzaz (42,004 health) held Vezax and the Animus on the anchor from +1.0 s. The Animus died at 4:27.79
+with Vezax at 24.5%, and the surge cast at 4:24.25 doubled Vezax's melee over 4:27.2-4:37.2.
+
+- *Damage taken* (`mtdeath.py`), 4:13.5 to his death at 4:32.74: 83.1k, Vezax melee 45.3k (16.4k at
+  4:29.1 and 14.2k at 4:32.7 in the surge, 7-8k a hit before it), Animus melee 20.6k, Profound Darkness
+  17.2k (39 stacks at his death).
+- *Healing*: 49.7k in that span, 45.3k his own (Death Strike, Rune Tap, Vampiric Blood, healthstone,
+  potion). Roster C has no holy paladin: from 4:08 the four healers healed 292k and put 13.1k on him,
+  standing a median 40-44 yd off (`healers.py`). uld1's holy paladin alone put 49.1k on its DK over the
+  same span, Beacon on him.
+- *Mana*: healers at the spawn 58 / 49 / 48 / 31% (uld1 48 / 74 / 68 / 46), at 4:28.5 6 / 21 / 2 / 0;
+  the resto druid dry from 4:03.
+- *Cooldowns*: Icebound Fortitude at 3:24.2 by the surge node on the phase's first surge, at 100%
+  health, so on cooldown until 5:24; Rune Tap 3:56.1 and 4:31.4; Vampiric Blood, healthstone and potion
+  at 4:19.0-4:20.2 with him at 14-28% under the Animus; the surge node FAILED at 4:27.4 with nothing
+  left. Pain Suppression (4:16.6) and Guardian Spirit (4:17.0) both went on the disc priest Uldzac.
+
+**Across windows 11-26** (`surges.py`, `bigcds.py`, `replay.py`). Hard mode's surges come at +13 and
++76 s of the Animus. Every DK and warrior main tank spent Icebound Fortitude or Shield Wall (2 min) on
+the first, at 51-100% health, or on a class low-health node at +3 to +11 s (5 pulls), and met the late
+one without it: 8 of the 24 that reached it died inside it (DK w15 uld3, w17 uld1, w23 uld3, w25 uld3,
+w26 uld3; warrior w14, w15, w17 uld2), the rest bottomed at 17-71%. Replaying the first surge without
+the cooldown (damage taken divided by its cut, heals as landed) puts his low at a median ~34%, 10 of 32
+under 25% and 4 under 0. Which surge gets it is a trade, not a broken intent: a plan question (Q5).
+
+**Who should have picked Vezax up: nobody could.** He is taunt-immune here (immunity set −427, −287's
+`ATTACK_ME` and `MOD_TAUNT` plus spell haste, `2026_07_05_00.sql`), so only threat moves him, and
+`VezaxThreatMultiplier` (`UldMultipliers_Vezax.cpp:88-97`) drops its cap once the main tank is dead
+(`GetGroupMainTank` returns null), so the dps were uncapped. The off-tank Uldzaa, at 2-4% mana since 0:23,
+stood in melee (13.2 yd) at 4:32, but the 4:32.65 mark went to melee Uldzao (the surge floor, Q4's
+accepted cost) and its break walked Uldzaa to 22-32 yd; back in reach it cast Righteous Defense at
+4:36.4 and every 8 s after, 7 casts to no effect. Its damage on Vezax over the pull was 114.5k against
+1.06-2.07M for every dps (`ondamage.py`, `dealt` while targeting him). The main tank came back on a
+soulstone at 4:33.1 at 14% with no threat; his Death Grip did nothing, his slot walked him toward the
+anchor while Vezax chased ranged north, a crash aimed at the off-tank killed him at 4:39.9, and Rebirth
+brought him back at 17-18%, 15-52 yd from Vezax, until Searing Flames. No change proposed: the main
+tank has to live.
+
+**What followed** (`after.py`). Vezax took the top-threat ranged and walked 9.9 → 47 yd from the anchor
+by 4:39, killing Uldzap 4:34.7, Uldzal 4:36.5, Uldzaq 4:40.9 and Uldzar 4:42.8; the 4:32 mark's leech
+among the melee killed healer Uldzad at 4:43.4 and put him from 23.7 to 29.3%; the melee went one by one
+from 4:44.6. The Searing Flames cast at 5:07.63 landed on 15 and killed 10 (below). The off-tank held him
+from 5:38 to its death at 5:58.8, second Heroism at 5:40.6, wipe 6:13.3 with Vezax at 23.15%.
+
+**Searing Flames with the duty on a bot that could not kick (bug, 10 deaths).** `vezax.interrupter` sat
+on Uldzad (resto shaman, the lowest GUID with a kick) from 0:10. Reincarnated at 4:43.7 with 0 mana, it
+still read ready, so at 5:07.72 the duty was its: Wind Shear (8% base mana) FAILED 31 yd from him, and
+no other bot kicked though five melee with Kick, Pummel or Mind Freeze stood 4-8 yd from him.
+`VezaxReadyInterrupt` (`UldEncounter_Vezax.cpp:1235` before) asked `CanCastSpell` alone, which probes
+with `TRIGGERED_IGNORE_POWER_AND_REAGENT_COST` and passes `SPELL_FAILED_OUT_OF_RANGE` and
+`NOT_SHAPESHIFT`; [casting](../../../engine/action-selection.md#casting) already says a duty pick must
+test cost and form itself. Windows 11-26 (`kickfails.py`): 9 duty kicks FAILED, 5 by shamans at 0-1%
+mana, 2 by rogues short of Kick's 25 energy (4% and 20%), 1 by an elemental shaman 61 yd off, 1
+unexplained; 4 casts landed in all, the other 3 in w25 uld3 with no kicker alive in reach.
+
+**Ranking** (31 deaths, all uld3).
+
+1. *The main tank's death in the late surge and the loose Vezax after it: 31*, 10 of them the Searing
+   Flames below. Causes: no long cooldown left for the late surge (Q5), roster C's healers dry and 40-44
+   yd off (gear, waived), and nobody able to take a taunt-immune Vezax back (no change proposed).
+2. *The Searing Flames duty on a bot that could not kick: 10 of those 31.* Bug, small, independent.
+
+**Picked: the interrupt duty (bug); the late surge goes to the user (Q5).**
+
+**Fix** (`UldEncounter_Vezax.cpp` only): `VezaxKickInReach` (`:1237`) counts a kick as ready only when
+it is off cooldown, the bot's stance allows it (`CheckShapeshift`), the bot can pay its cost and Vezax is
+in its range (melee range for a melee kick, else combat range at the spell's own); `CanCastSpell` still
+follows. `VezaxReadyInterrupt` (`:1255`) uses it for the bot's own kick and for the GUID-ranked duty
+pick, so a dry, short or distant bot passes the duty on, and an arms warrior's Pummel outside Berserker
+Stance no longer wins it. Docs: `docs/raids/ulduar/vezax.md` (duty paragraph; known gaps for the late
+surge and a main tank death).
+
+10/25 and normal/hard: Searing Flames comes in every mode (every 8 s at 25, 15 s at 10, never under the
+Barrier) and nothing keys on size or the Animus. A real player is never picked (no bot AI), as before.
+Shared code: none.
+
+**Next window should show.**
+
+- `--boss`: Searing Flames landing only with no kicker alive in reach; `kickfails.py`: no
+  `vezax searing flames interrupt action` FAILED with the bot dry, short of energy or out of range.
+- `vezax.interrupter` moving off a shaman healer once it runs dry (a melee kicker holding it late in a
+  long pull).
+- Round 14's checks still holding: no escape walk stopped by an item, no mark walk standing short.
+- Until Q5 is answered, the late surge unchanged: the main tank without Icebound Fortitude or Shield
+  Wall at +79 s (`bigcds.py`).
+
+**Questions (user).**
+
+- *Q5. Hard mode's late Surge of Darkness (+76 s of the Animus, healers at 0-35% mana, ~38 Profound
+  Darkness stacks) found every DK and warrior main tank without Icebound Fortitude or Shield Wall: both
+  come back after 2 min and went on the first surge at +13 s. 8 of 24 died in it, uld3's wipe among
+  them. Which surge gets the cooldown?* (a) The late one: hold it, surge node and class nodes alike, from
+  the spawn until the late surge, except under 25% health; replayed, the first surge then takes him to a
+  median ~34%, 10 of 32 under 25%, where the hold lets go and the late one is bare again. (b) Keep it on
+  the first, and add a 1-minute button to every surge (Vampiric Blood for a DK, which the surge node
+  lacks) plus a priest's Pain Suppression or Guardian Spirit on him for the late one, held for it: in
+  uld3 both went on a disc priest 10 s before his death. (c) Keep: the late surge follows the healers'
+  mana, and uld1's DK lived through it on a holy paladin's healing. *Recommended: (b)*: without its
+  cooldown the first surge is about as deadly as the late one, and the external cooldown is what dry
+  healers can still give at the late one.
