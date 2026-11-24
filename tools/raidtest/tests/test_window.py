@@ -588,6 +588,39 @@ class WindowTest(unittest.TestCase):
         self.assertIn("can't use --report-dir", self.log.getvalue())
         self.assertFalse(self.lock.parent.exists())
 
+    def test_a_stop_file_starts_no_new_runs_and_lets_the_going_ones_finish(self):
+        stop = self.dir / "window.stop"
+        original = self.server.call
+
+        def call(command):
+            if command == dcmod.STATUS_COMMAND:
+                stop.touch()
+            return original(command)
+
+        self.server.call = call
+        self.server.length = {XT: 3}
+        folder = self.dir / "w"
+        self.assertEqual(self.window([job(XT), job(IGNIS)], "--stop-file", str(stop), "--report-dir", str(folder)), 1)
+        self.assertEqual(self.started(), [(XT, "uld1"), (XT, "uld2"), (XT, "uld3")])
+        self.assertEqual(self.stops(), [])
+        self.assertIn("| done | uld1 1/1, uld2 1/1, uld3 1/1 |", self.header_row(1))
+        self.assertIn("| cut short | uld1 0/0, uld2 0/0, uld3 0/0 |", self.header_row(2))
+        self.assertIn(f"{stop} appeared: starting no new runs, 3 going finish", self.log.getvalue())
+        self.assertIn(f"The window started no new runs once `{stop}` appeared.", self.out.getvalue())
+        (ignis, _), (xt, _) = self.spawned
+        notes = {command[command.index("--boss") + 1]: [command[i + 1] for i, part in enumerate(command)
+                                                        if part == "--note"] for command in (ignis, xt)}
+        self.assertTrue(any(note.startswith("No new run started once") for note in notes["ignis"]))
+        self.assertFalse(any(note.startswith("No new run started once") for note in notes["xt-002"]))
+
+    def test_a_stop_file_that_exists_already_refuses_before_the_lock(self):
+        stop = self.dir / "window.stop"
+        stop.touch()
+        self.assertEqual(self.window([job(XT)], "--stop-file", str(stop)), 2)
+        self.assertIn("exists already", self.log.getvalue())
+        self.assertEqual(self.server.commands, [])
+        self.assertFalse(self.lock.parent.exists())
+
     def test_header_and_load_line(self):
         self.server.gaps = [250] * 17 + [260, 300, 450]
         self.assertEqual(self.window([job(XT, label="polish")]), 0)

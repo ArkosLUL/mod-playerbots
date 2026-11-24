@@ -31,6 +31,15 @@ effort unchanged** for leads and reviewers (revisit after the re-measurement).
 Expected: per-boss round ~75 min instead of 98, with 6 pulls instead of 3 plus filler pulls (~2.6x
 pulls per hour per boss); late-round lead cache reads down ~30-40%; notifications no longer cut.
 
+Re-measured 2026-11-24 over windows 29-35 and 14 lanes (before → after): pulls per hour ~8 → 30; run
+end to the pool's next start 71 → 13 s; a boss's round every ~100 → 63-97 min, the server pulling ~86%
+of the time; lead median cache reads 44M → 32M (28.5M without the four log-migration rounds), peak
+context 502K → 421K, polish log read 161K → ~20K chars; lane result 14K (cut) → 2.4K chars; the
+orchestrator 2.8M → 5.7M cache reads per lane. Unchanged: lead wall time ~24 min, ~90% of it writing
+~132K output tokens; the reviewer at 10 min, with a real code fix in 4 of 14 rounds. Missed: digests
+15-32 KB (Yogg-Saron's six phase summaries are 20 KB of 31), ~6 scratch scripts per lead. Lanes are the
+bottleneck: a group waits for its slowest lane, and filler 35c ran 15 min past the last merge.
+
 ## A. Runner — worktree `build-toc-wt/rt-loop-speedup`, branch `rt/loop-speedup` from Custom
 
 1. **Pools.** `pools.py:20` → per-raid count (`uld` 6, `toc` 3); composition of a pool = A/B/C by
@@ -78,11 +87,10 @@ pulls per hour per boss); late-round lead cache reads down ~30-40%; notification
 
 **Built (2026-11-24):** A on branch `rt/loop-speedup`. B as
 `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.next.js` (swapped in at the
-switch; it takes an optional `args.agentType`). B.4's type is `~/.claude/agents/raid-lane.md`; a session
-loads agent types only at its start, so it is measured at the switch: in a session started after the
-file existed, one `Agent` call with `subagent_type: "raid-lane"` asking it to list its tools, quote the
-first bullet of the module `CLAUDE.md` and say whether the `raid-boss-strategy-recipe` skill is listed;
-compare the first API call's input + cache tokens in its transcript with ~46K. Offline digests on
+switch; it takes an optional `args.agentType`). B.4's type is `~/.claude/agents/raid-lane.md`, measured
+2026-11-24: its first call is 29.5K tokens against a lead's 46K, with the `CLAUDE.md` files, the user's
+rules and the skills all loaded, so lanes pass it; a session sees only agent types that existed at its
+start. Offline digests on
 window 27's pulls (3 per boss, build `0687fa6a4`): Yogg-Saron 15.7 KB (window report 182 KB),
 Mimiron 8.6 (116), Thorim 9.7 (35), Vezax 5.8 (90); Yogg-Saron's `phases` summary is ~3.5 KB of a pull's
 share. Trace-facts cache: cold report 56 s, warm 6 s, ~0.5-1 MB per boss under
@@ -96,7 +104,7 @@ fails still leaves its file, naming the error and the rerun command; the lock is
 window waits for its report processes. The done rule reads only the newest build's pulls.
 
 **For the raid-test-runs close-out** (`docs/systems/`): the reader `--summary` flag and `SUMMARY`
-tuple, the digest's sections, the facts cache and its code stamp.
+tuple, the digest's sections, the facts cache and its code stamp, `window --stop-file`.
 
 ## C. Lane brief — rewrite `docs/plans/raid-test-runs/g-polish.PLAN.md` (through `prepare-prompt`)
 
@@ -123,14 +131,18 @@ First step after approval: save this plan as `docs/plans/raid-test-runs/u-loop-s
   boss is done. Cycle: group 1's window runs on build *n* (6 pulls per boss on `uld1-6`) while group 2's
   lanes code; once all of group 2's lanes have merged: one rebuild, group 2's window, while group 1's
   lanes code; and so on. A boss whose lane changed nothing stays in its group's window (more data).
+  In a group window the boss whose lanes run longer goes first (on 11-24 Algalon before Mimiron,
+  Thorim before Yogg-Saron), so the group's last lane ends sooner; pulls no lane waits on (10-man
+  checks, extra pulls) go after the group's jobs.
 - **Lanes start per job**: as each boss's report file appears, launch its lane; don't wait for the
   window's end. `window.sh` passes `--report-dir <out>/<label>`; the window's log prints
-  `job N (...) done; report goes to <file>` and the file appears whole once written, so a Monitor
-  until-loop on the file's existence is the trigger. `split_window.py` is no longer needed.
+  `job N (...) done; report goes to <file>` and the file appears whole once written, so
+  `watch-reports.sh` under Monitor is the trigger. `split_window.py` is no longer needed.
 - **Filler while the server waits** for the other group's lanes: first pending 10-man checks, then
   done bosses whose shared code changed, then extra pulls of the group that just ran on the same build.
-  Running filler pulls finish before the rebuild; no new filler starts once the other group's lanes
-  have all merged. Never rebuild with runs in flight. Max 6 raids in flight.
+  Running filler pulls finish before the rebuild; no new filler pull starts once the other group's
+  lanes have all merged: a filler window runs with `--stop-file`, touched at that last merge. Never
+  rebuild with runs in flight. Max 6 raids in flight.
 - Questions to the user: one numbered batch per full cycle (after both groups reported), never per
   lane.
 - Read lane summaries only; open a polish-log round only when a question needs it (`lane_tail.py`
@@ -160,7 +172,6 @@ window running, loop session not merging):
 - The trend table compares this build with the previous 3 builds.
 - Lanes get the digest; the full reader is run by the lead, section by section, only for the failure
   it picked.
-- The tool-allowlist agent type is adopted only if the measurement in B.4 holds.
 - ToC gets `toc4`-`toc6` too (user, 2026-11-24: Anub'arak is not polished yet), copies of
   `toc1`-`toc3` at ilvl 245 with name prefixes Tocu/Tocv/Tocw; Ulduar's copies use Uldu/Uldv/Uldw.
 

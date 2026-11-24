@@ -388,6 +388,8 @@ class JobReports:
             notes.append(f"The job failed: {job.failed}")
         elif stopped:
             notes.append(f"The window stopped: {stopped}")
+        elif job.cut:
+            notes.append(job.cut)
         return notes
 
     def command(self, job: window.Job, target: pathlib.Path, stopped: str | None = None) -> list[str]:
@@ -436,7 +438,9 @@ def job_verdict(job: window.Job, stopped: str | None) -> str:
         return f"failed: {job.failed}"
     if all(len(job.state.counted.get(pool, [])) >= job.pulls for pool in job.pools):
         return "done"
-    return "stopped" if stopped else "cap ran out"
+    if stopped:
+        return "stopped"
+    return "cut short" if job.cut else "cap ran out"
 
 
 def run_window(args, deps: Deps) -> int:
@@ -484,6 +488,10 @@ def run_window(args, deps: Deps) -> int:
                   file=deps.log)
             return 2
         reports = JobReports(folder, args, deps)
+    stop_file = pathlib.Path(args.stop_file) if args.stop_file else None
+    if stop_file and stop_file.exists():
+        print(f"refused: the stop file {stop_file} exists already; delete it or name a new one", file=deps.log)
+        return 2
 
     owner = "raidtest window: " + "; ".join(job.name for job in jobs) + (f": {args.owner}" if args.owner else "")
     lock = server.ServerLock(pathlib.Path(args.lock), server.owner_text(owner))
@@ -512,7 +520,7 @@ def run_window(args, deps: Deps) -> int:
             job_done = (lambda job: reports.start(job, jobs)) if reports else None
             runner = window.Window(jobs, args.max_raids, deps, lambda: read_records(args),
                                    lambda: not container or server.container_id(deps.run) != container, SETTLE_S,
-                                   job_done=job_done)
+                                   job_done=job_done, stop_file=stop_file)
             runner.run()
         except (Exception, KeyboardInterrupt) as exc:
             summary.stopped = stop_reason(exc, deps)
@@ -616,6 +624,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     win.add_argument("--jobs", required=True, help="JSON list of jobs, format in window.py")
     win.add_argument("--max-raids", type=int, default=6, help="most DC runs in flight at once (default 6)")
     win.add_argument("--report-dir", help="write each job's report here as soon as the job is finished")
+    win.add_argument("--stop-file", help="once this file exists, start no new runs: the runs going finish, then "
+                                         "the window ends (refused if the file exists already)")
     sources(win, "commit-ish whose later builds count, for a job that names no head")
     live(win)
 

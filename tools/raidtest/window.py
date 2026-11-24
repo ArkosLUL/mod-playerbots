@@ -62,6 +62,7 @@ class Job:
     state: State | None = None
     pulled: dict[str, int] = field(default_factory=dict)
     failed: str | None = None
+    cut: str | None = None
     reported: bool = False
 
     @property
@@ -158,7 +159,7 @@ class Window:
 
     def __init__(self, jobs: list[Job], max_raids: int, deps, read_records: Callable[[], list[dict]],
                  crashed: Callable[[], bool], settle_s: float, poll_s: float = POLL_S,
-                 job_done: Callable[[Job], None] | None = None):
+                 job_done: Callable[[Job], None] | None = None, stop_file: pathlib.Path | None = None):
         self.jobs = jobs
         self.max_raids = max_raids
         self.deps = deps
@@ -167,6 +168,8 @@ class Window:
         self.settle_s = settle_s
         self.poll_s = poll_s
         self.job_done = job_done
+        self.stop_file = stop_file
+        self.stop_seen: str | None = None
         self.flights: dict[str, Flight] = {}
         self.most_in_flight = 0
         self.notes: list[str] = []
@@ -201,15 +204,25 @@ class Window:
         for job in self.jobs:
             job.ledger.load(records)
 
+    def stopping(self) -> bool:
+        if self.stop_seen is None and self.stop_file is not None and self.stop_file.exists():
+            self.stop_seen = f"No new run started once `{self.stop_file}` appeared, so this job got fewer pulls " \
+                             "than it asked for."
+            self.say(f"{self.stop_file} appeared: starting no new runs, {len(self.going())} going finish")
+            self.notes.append(f"The window started no new runs once `{self.stop_file}` appeared.")
+        return self.stop_seen is not None
+
     def finished(self, job: Job) -> bool:
         if any(flight.job is job for flight in self.flights.values()):
             return False
-        return bool(job.failed) or not any(job.wants(pool) for pool in job.pools)
+        return bool(job.failed) or not any(job.wants(pool) for pool in job.pools) or self.stop_seen is not None
 
     def report_finished(self) -> None:
         for job in self.jobs:
             if not job.reported and self.finished(job):
                 job.reported = True
+                if self.stop_seen and any(job.wants(pool) for pool in job.pools):
+                    job.cut = self.stop_seen
                 if self.job_done:
                     self.job_done(job)
 
@@ -217,6 +230,8 @@ class Window:
         """(job, pool, pulls) to start now: each free pool to the earliest job that wants it, jobs in
         order, until the raid cap is reached. A pool is free once its run has left status; the job that
         ran it waits until that run is read, the other jobs don't."""
+        if self.stopping():
+            return []
         taken = {flight.pool for flight in self.going()}
         unread = {(id(flight.job), flight.pool) for flight in self.flights.values() if flight.ended_at is not None}
         room = self.max_raids - len(self.going())
