@@ -1804,7 +1804,8 @@ first.
   exempt): the "on attacker" DoTs skip the resolver, and a held fresh Guardian DoTed by warlocks one-shot
   both with the tanks 56+ yd away.
 - **The bot tank skips a Guardian already carrying another tank's taunt, or its own** not yet turned, as
-  under Drain Life (`SPELL_AURA_MOD_TAUNT`), or both tanks taunt the same fresh one together.
+  under Drain Life (`SPELL_AURA_MOD_TAUNT`), or both tanks taunt the same fresh one together; a chain
+  ([below](#the-tanks-in-phase-3)) is the exception.
 - **Area spells need three units worth hitting, by the user's choice** (`YoggSaronPhase3AreaMultiplier`).
   `AoeTrigger` counts any attacker within 8 yd of the target, distance minus the unit's size, so Yogg counts
   from 38 yd, and a lone Guardian got Seed of Corruption and Volley that hit each target for less than a
@@ -1865,6 +1866,11 @@ first.
   The same branch lets phase 2 burst go only while the bot's `current target` is the Brain: one spent on a
   tentacle or illusion add is down for the next portal. `--brain`'s `phase 2 burst` counts casts below and
   on the platform.
+- **Phase 3 burst goes on the adds.** The branch opens every burst cooldown in phase 3, but the shared
+  gate holds them off a non-boss target (`BurstOnBossOnly`), and ranged spend the phase on Guardians and
+  leftover tentacles: no ranged bot cast one in three phase 3s, not even under Heroism. `BurstAllowedOnAdd`
+  (`BurstCooldowns.cpp`) releases that gate for DPS bots on Immortal Guardians and the platform tentacles;
+  phase 2 stays held by the branch. `--phase3`: `burst cooldowns` (casts and the gate's veto rows by role).
 
 ### The tanks in phase 3
 
@@ -1917,6 +1923,16 @@ one, each costing the 8 s cooldown the next spawn needed. `--phase3`: `tank taun
 **A fresh Guardian leaves stasis on zero threat**: at 4 s or its first hit, `DoZoneInCombat` adds every player at 0
 and the first in the map's player list becomes its victim (`--phase3` `first victim`: one fixed melee at +4.0 s), so
 the first heal anywhere takes it.
+
+**A taunt from the pile runs out before the Guardian arrives.** They spawn 41-63 yd from the melee spot
+and walk ~11 yd/s, so a stasis-end taunt's 3 s leaves them 15-27 yd short. The taunt only matched the top
+threat, ~0 on a fresh one, so at the fade any raider in its melee range above 110% of the taunter's threat
+takes it (`ThreatManager::ReselectVictim`) and the ready first swing one-shots him: three melee at
++7.0-7.1 s in one window. So the other bot tank **chains**: it taunts a Guardian whose holder's own taunt
+has 1 s or less left (`…_TAUNT_CHAIN_LEAD_MS`) while it is still outside the holder's melee range and the
+bot no farther from it than the holder + 5 yd (`YoggSaronTauntFadesShort`, in the trigger and the loose
+loop, `yogg.tankhold` `chain taunt`); the latest taunt wins (`ThreatManager::TauntUpdate`). Taunt only:
+Righteous Defense on the holder takes its pile. `--phase3`: `taunts run out short of the tank`.
 
 **Lay on Hands is kept for the tanks, by the user's choice**: pulls spent all four on dps in phase 1 and had
 none for phase 3, where tank deaths ended them. Blocked (`yogg-saron lay on hands hold`): `lay on hands on
@@ -2052,7 +2068,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack
@@ -2095,6 +2111,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   it comes off.
 - A failed taunt never reaches a cast row, so taunts are read as attempts off the action rows — the failures
   are the ones that cost phase 1.
+- A taunt's fade has no row: `--phase3`'s `taunts run out short of the tank` puts it 3 s after the cast row,
+  counts those with the Guardian over 10 yd from its taunter 0.3 s before, and the non-tank it swung at within
+  2 s.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
 - `--portals` telling a bot that walked for a portal and lost the race from one whose node never ran is
   the only way the room-tag leak shows.

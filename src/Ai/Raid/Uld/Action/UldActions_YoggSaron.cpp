@@ -1891,6 +1891,7 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
         uint8 tier;
         float distance;
         Unit* guardian;
+        bool chain;
     };
     std::vector<LooseGuardian> loose;
     std::vector<Unit*> inReach;
@@ -1903,7 +1904,9 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
 
         Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
         if (!victim || !PlayerbotAI::IsTank(victim))
-            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit});
+            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit, false});
+        else if (YoggSaronTauntFadesShort(bot, unit))
+            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit, true});
 
         if (bot->IsWithinMeleeRange(unit))
             inReach.push_back(unit);
@@ -1928,25 +1931,28 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
                   return std::make_tuple(left.tier, -left.guardian->GetHealthPct(), left.distance) <
                          std::make_tuple(right.tier, -right.guardian->GetHealthPct(), right.distance);
               });
-    for (auto const& [tier, distance, guardian] : loose)
+    for (auto const& [tier, distance, guardian, chain] : loose)
     {
         auto const& taunts = guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
-        if (std::any_of(taunts.begin(), taunts.end(),
-                        [this](AuraEffect const* taunt)
-                        {
-                            Unit* caster = taunt->GetCaster();
-                            Player* tank = caster ? caster->ToPlayer() : nullptr;
-                            return tank && (tank == bot || PlayerbotAI::IsTank(tank));
-                        }))
+        if (!chain && std::any_of(taunts.begin(), taunts.end(),
+                                  [this](AuraEffect const* taunt)
+                                  {
+                                      Unit* caster = taunt->GetCaster();
+                                      Player* tank = caster ? caster->ToPlayer() : nullptr;
+                                      return tank && (tank == bot || PlayerbotAI::IsTank(tank));
+                                  }))
             continue;
 
         if (Taunt(guardian))
         {
             if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "yogg.tankhold", tier ? "taunt" : "return taunt");
+                RaidObs::NoteDerived(bot, "yogg.tankhold", chain ? "chain taunt" : (tier ? "taunt" : "return taunt"));
 
             return true;
         }
+
+        if (chain)
+            continue;
 
         if (Defend(guardian))
         {

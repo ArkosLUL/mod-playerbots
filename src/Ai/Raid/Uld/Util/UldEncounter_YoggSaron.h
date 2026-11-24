@@ -315,6 +315,7 @@ inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE = 0.8f;
 inline constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_KEEP_SHARE = 0.95f;
 
 inline constexpr float ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD = 1.5f;
+inline constexpr int32 ULDUAR_YOGG_SARON_TAUNT_CHAIN_LEAD_MS = 1000;
 
 inline constexpr float ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION = 1.1345f;
 
@@ -769,6 +770,7 @@ GuidVector GetYoggSaronGuardiansInSight(PlayerbotAI* botAI);
 
 bool YoggSaronGuardianLoose(PlayerbotAI* botAI);
 bool YoggSaronGuardianLoose(PlayerbotAI* botAI, GuidVector const& guardians);
+bool YoggSaronTauntFadesShort(Player* bot, Unit* guardian);
 
 bool YoggSaronGuardianThreatAllows(Player* bot, Unit* guardian, bool holding);
 
