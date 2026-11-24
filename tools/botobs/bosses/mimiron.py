@@ -2209,10 +2209,11 @@ SECTIONS = (
      " the wedge before and after, and in the 25 s after the ranged and healers' cones, healers moving, healing"
      " and deaths", show_wedge),
 )
+SUMMARY = ("phases",)
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS, show_banner)
+    return run_sections(__doc__, SECTIONS, show_banner, SUMMARY)
 
 
 if __name__ == "__main__":

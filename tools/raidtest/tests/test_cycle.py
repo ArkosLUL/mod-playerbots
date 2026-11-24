@@ -17,6 +17,7 @@ from unittest import mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 import dc as dcmod  # noqa: E402
+import pools  # noqa: E402
 import raidtest  # noqa: E402
 import server  # noqa: E402
 import soap  # noqa: E402
@@ -28,6 +29,7 @@ BEFORE = HEAD - datetime.timedelta(hours=2)
 AFTER = HEAD + datetime.timedelta(hours=1)
 T0 = int(HEAD.timestamp() * 1000) + 3_600_000
 POOLS = ["uld1", "uld2", "uld3"]
+ULD_POOLS = [f"uld{n}" for n in range(1, 7)]
 
 
 class FakeCorpus:
@@ -46,6 +48,9 @@ class FakeCorpus:
         self.traces.append(trace)
 
     def rescan(self) -> None:
+        pass
+
+    def flush(self) -> None:
         pass
 
     def facts(self, path):
@@ -132,7 +137,8 @@ class CycleTest(unittest.TestCase):
         self.rendered = []
         patches = [
             mock.patch.object(raidtest, "resolve_since", return_value=("abc1234", HEAD)),
-            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out: self.rendered.append(state)),
+            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
             mock.patch.object(server, "dirty_trees", return_value=[]),
             mock.patch.object(server, "build", return_value=0),
             mock.patch.object(server, "restart", return_value=(0, "2026-11-21T13:00:00Z", True)),
@@ -406,7 +412,8 @@ class ReportOnlyTest(unittest.TestCase):
         self.rendered = []
         patches = [
             mock.patch.object(raidtest, "resolve_since", return_value=("abc1234", HEAD)),
-            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out: self.rendered.append(state)),
+            mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
         ]
         for patch in patches:
             patch.start()
@@ -455,6 +462,32 @@ class ReportOnlyTest(unittest.TestCase):
         self.assertEqual((state.pools, state.runs, state.rows), (POOLS, [], []))
         self.assertIn(f"{loose['runId']} has no pool: DC fielded it without roster=.", state.notes)
 
+    def test_out_writes_the_report_whole_with_label_and_notes(self):
+        self.dc.write_run("uld1", 1, AFTER)
+        raidtest.render.side_effect = lambda state, run, out, **_: print(f"{state.label}|{state.notes}", file=out)
+        with tempfile.TemporaryDirectory() as folder:
+            target = pathlib.Path(folder) / "w-xt-002.md"
+            self.assertEqual(self.report("--out", str(target), "--label", "job 1", "--note", "a note"), 0)
+            self.assertEqual(target.read_text(encoding="utf-8"), "job 1|['a note']\n")
+            self.assertEqual(list(pathlib.Path(folder).iterdir()), [target])
+
+    def test_out_leaves_a_stub_naming_the_failure(self):
+        raidtest.render.side_effect = RuntimeError("reader blew up")
+        with tempfile.TemporaryDirectory() as folder:
+            target = pathlib.Path(folder) / "w-xt-002.md"
+            self.assertEqual(self.report("--out", str(target), "--label", "job 1"), 3)
+            text = target.read_text(encoding="utf-8")
+        self.assertIn("# Raid test: xt-002 25n (job 1)", text)
+        self.assertIn("**The report failed: RuntimeError: reader blew up**", text)
+        self.assertIn("Rerun: `python tools/raidtest/raidtest.py report --boss xt-002 --raid uld", text)
+
+    def test_out_leaves_a_stub_when_the_head_is_unknown(self):
+        raidtest.resolve_since.return_value = None
+        with tempfile.TemporaryDirectory() as folder:
+            target = pathlib.Path(folder) / "w-xt-002.md"
+            self.assertEqual(self.report("--out", str(target)), 2)
+            self.assertIn("could not be built (exit 2)", target.read_text(encoding="utf-8"))
+
 
 class ArgsTest(unittest.TestCase):
     def parse(self, *argv: str):
@@ -467,7 +500,7 @@ class ArgsTest(unittest.TestCase):
 
     def test_uld_defaults(self):
         args = self.parse("cycle", "--boss", "xt-002", "--scenario", "uld-xt002", "--raid", "uld")
-        self.assertEqual((args.diff, args.pulls, args.cap, args.pools), ("25n", 1, 2, POOLS))
+        self.assertEqual((args.diff, args.pulls, args.cap, args.pools), ("25n", 1, 2, ULD_POOLS))
         self.assertEqual(args.dc_runs_file, "G:/srv/dc_testruns.jsonl")
         self.assertFalse(args.skip_baseline or args.skip_rebuild)
 
@@ -492,7 +525,8 @@ class ArgsTest(unittest.TestCase):
 
     def test_report_runs(self):
         args = self.parse("report", "--boss", "xt-002", "--raid", "uld", "--runs", "tr-1,tr-2")
-        self.assertEqual((args.runs, args.pools), (["tr-1", "tr-2"], POOLS))
+        self.assertEqual((args.runs, args.pools), (["tr-1", "tr-2"], ULD_POOLS))
+        self.assertEqual((args.full, args.out, args.label, args.note), (False, None, "", []))
 
     def test_cap_below_pulls(self):
         self.refused("cycle", "--boss", "x", "--scenario", "s", "--raid", "uld", "--pulls", "3")

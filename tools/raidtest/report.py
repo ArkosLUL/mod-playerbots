@@ -7,13 +7,14 @@ import collections
 import datetime
 import math
 import pathlib
+import statistics
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from typing import Callable, TextIO
 
 import dc
-from pools import PullRow
+from pools import COMPOSITIONS, PullRow, composition
 from pulls import BOTOBS, DIFF_IDS, TraceFacts, vetoes_inside
 from raidobs.encounter import canonical_boss
 
@@ -21,7 +22,11 @@ Run = Callable[..., subprocess.CompletedProcess]
 
 VETO_ROWS_SHOWN = 10
 LOAD_LIMIT_MS = 400
-LOAD_REFERENCE = "one to three parallel 25-man fights read p95 about 320 ms, max under 450"
+LOAD_REFERENCE = "one to six parallel 25-man fights read p95 about 307 ms, max under 460"
+DONE_DEATHS = 5
+DEATHS_IN_FULL = 8
+MECHANICS_SHOWN = 12
+TREND_BUILDS = 4
 
 
 @dataclass
@@ -40,6 +45,7 @@ class State:
     counted: dict[str, list[TraceFacts]] = field(default_factory=dict)
     baseline: dict[str, list[TraceFacts]] = field(default_factory=dict)
     label: str = ""
+    history: list[tuple[str, TraceFacts]] = field(default_factory=list)
 
 
 @dataclass
@@ -273,7 +279,193 @@ def section_overall(state: State, run: Run, out: TextIO) -> None:
             print(f"\nNo boss reader for {state.boss} under `bosses/`.", file=out)
 
 
-def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) -> None:
+def pool_label(pool: str) -> str:
+    comp = composition(pool)
+    return f"{pool} ({comp})" if comp else pool
+
+
+def mechanic_counts(facts: TraceFacts) -> collections.Counter:
+    return collections.Counter(death.mechanic for death in facts.death_rows)
+
+
+def section_digest_pulls(rows: list[PullRow], state: State, out: TextIO) -> None:
+    print("\n## Pulls\n", file=out)
+    if not rows:
+        print("No pulls.", file=out)
+        return
+    print("| # | pool | run | outcome | duration | hard mode | deaths | counts | trace |", file=out)
+    print("|---|---|---|---|---|---|---|---|---|", file=out)
+    for index, row in enumerate(rows, 1):
+        facts = row.trace
+        duration = row.window[1] - row.window[0] if row.window else (facts.duration_ms if facts else None)
+        outcome = facts.outcome if facts else (row.dc_outcome or "-")
+        print(f"| {index} | {pool_label(row.pool)} | {row.run_id or '-'} | {outcome} | {minutes(duration)} "
+              f"| {hardmode(facts)} | {len(facts.deaths) if facts else '-'} "
+              f"| {verdict(row, state.diff, state.head_time)} | {facts.name if facts else '-'} |", file=out)
+    flagged = [(index, row) for index, row in enumerate(rows, 1) if row.trace and row.trace.warnings]
+    for index, row in flagged:
+        for _, text in row.trace.warnings:
+            print(f"\n- pull {index} doesn't count: {text}", file=out)
+
+
+def section_done_rule(state: State, out: TextIO) -> None:
+    print("\n## Done rule\n", file=out)
+    print(f"On one build, each of {', '.join(COMPOSITIONS)} needs a kill with at most {DONE_DEATHS} deaths; an "
+          "Ulduar kill counts only if the boss reader shows hard mode triggered.\n", file=out)
+    pulls = [(pool, facts) for pool in state.pools for facts in counted_of(state, pool) if facts.built]
+    if not pulls:
+        print("No valid pull after HEAD.", file=out)
+        return
+    newest = max(facts.built for _, facts in pulls)
+    pulls = [(pool, facts) for pool, facts in pulls if facts.built == newest]
+    print(f"Pulls of the newest build, built {newest.astimezone().strftime('%m-%d %H:%M')}:\n", file=out)
+    passed, missing = [], []
+    for comp in COMPOSITIONS:
+        pools = [pool for pool in state.pools if composition(pool) == comp]
+        if not pools:
+            missing.append(comp)
+            print(f"- {comp}: no pool of it in this report", file=out)
+            continue
+        mine = [(pool, facts) for pool, facts in pulls if pool in pools]
+        good = [(pool, facts) for pool, facts in mine if facts.outcome == "kill" and len(facts.deaths) <= DONE_DEATHS]
+        if good:
+            pool, facts = min(good, key=lambda pair: len(pair[1].deaths))
+            passed.append(comp)
+            line = f"kill with {len(facts.deaths)} deaths on {pool} (`{facts.name}`)"
+        elif mine:
+            line = "no: " + ", ".join(f"{pool} {facts.outcome} {len(facts.deaths)}" for pool, facts in mine)
+        else:
+            line = "no valid pull on this build"
+        print(f"- {comp} ({', '.join(pools)}): {line}", file=out)
+    if missing:
+        verdict_text = f"can't be judged here: no pool of {', '.join(missing)}"
+    elif len(passed) == len(COMPOSITIONS):
+        verdict_text = "passes, if the boss reader shows hard mode triggered in each of those kills"
+    else:
+        verdict_text = "not yet: " + ", ".join(comp for comp in COMPOSITIONS if comp not in passed)
+    print(f"\nThis build {verdict_text}.", file=out)
+
+
+def section_mechanics(rows: list[PullRow], out: TextIO) -> None:
+    print("\n## Deaths by mechanic\n", file=out)
+    pulls = [row.trace for row in rows if row.trace]
+    totals: collections.Counter = collections.Counter()
+    seen_in: collections.Counter = collections.Counter()
+    first: dict[str, list[int]] = collections.defaultdict(list)
+    for facts in pulls:
+        counts = mechanic_counts(facts)
+        totals.update(counts)
+        seen_in.update(counts.keys())
+        for mechanic in counts:
+            first[mechanic].append(min(d.t_ms for d in facts.death_rows if d.mechanic == mechanic))
+    if not totals:
+        print("No deaths.", file=out)
+        return
+    print("| mechanic | deaths | pulls with it | first death (median) |", file=out)
+    print("|---|---|---|---|", file=out)
+    ranked = totals.most_common()
+    for mechanic, total in ranked[:MECHANICS_SHOWN]:
+        print(f"| {cell(mechanic)} | {total} | {seen_in[mechanic]}/{len(pulls)} "
+              f"| {minutes(int(statistics.median(first[mechanic])))} |", file=out)
+    rest = ranked[MECHANICS_SHOWN:]
+    if rest:
+        print(f"\n{len(rest)} more mechanics, {sum(total for _, total in rest)} deaths.", file=out)
+
+
+def section_pull_deaths(rows: list[PullRow], out: TextIO) -> None:
+    print("\n## Deaths per pull\n", file=out)
+    blocks = []
+    for index, row in enumerate(rows, 1):
+        facts = row.trace
+        if facts is None:
+            continue
+        deaths = sorted(facts.death_rows, key=lambda death: death.t_ms)
+        extra = f", plus {facts.wipe_commands} to the wipe command" if facts.wipe_commands else ""
+        block = (f"**Pull {index}** {pool_label(row.pool)}, {facts.outcome} at {minutes(facts.duration_ms)}: "
+                 f"{len(deaths)} death{'' if len(deaths) == 1 else 's'}{extra}")
+        lines = [f"- {minutes(death.t_ms)} {death.name} ({death.role}): {death.mechanic}"
+                 for death in deaths[:DEATHS_IN_FULL]]
+        rest = deaths[DEATHS_IN_FULL:]
+        if rest:
+            tally = collections.Counter(death.mechanic for death in rest)
+            spread = ", ".join(f"{mechanic} x{count}" for mechanic, count in tally.most_common())
+            lines.append(f"- then {len(rest)} more from {minutes(rest[0].t_ms)} to {minutes(rest[-1].t_ms)}: {spread}")
+        blocks.append(block + ("\n\n" + "\n".join(lines) if lines else ""))
+    print("\n\n".join(blocks) if blocks else "No trace to read deaths from.", file=out)
+
+
+def section_trend(state: State, out: TextIO) -> None:
+    print(f"\n## Trend over the last {TREND_BUILDS} builds\n", file=out)
+    builds: dict[datetime.datetime, list[tuple[str, TraceFacts]]] = collections.defaultdict(list)
+    for pool, facts in state.history:
+        if facts.built:
+            builds[facts.built].append((pool, facts))
+    if not builds:
+        print("No valid pulls of these pools yet.", file=out)
+        return
+    print("| build | pulls | kills per composition | median deaths | median duration | top deaths per pull |",
+          file=out)
+    print("|---|---|---|---|---|---|", file=out)
+    for built in sorted(builds, reverse=True)[:TREND_BUILDS]:
+        pulls = builds[built]
+        stamp = built.astimezone().strftime("%m-%d %H:%M")
+        mark = " (after HEAD)" if built > state.head_time else ""
+        kills = []
+        for comp in COMPOSITIONS:
+            mine = [facts for pool, facts in pulls if composition(pool) == comp]
+            if mine:
+                kills.append(f"{comp} {sum(1 for facts in mine if facts.outcome == 'kill')}/{len(mine)}")
+        tally: collections.Counter = collections.Counter()
+        for _, facts in pulls:
+            tally.update(mechanic_counts(facts))
+        top = ", ".join(f"{cell(mechanic)} {count / len(pulls):.1f}" for mechanic, count in tally.most_common(3))
+        deaths = statistics.median(len(facts.deaths) for _, facts in pulls)
+        durations = [facts.duration_ms for _, facts in pulls if facts.duration_ms is not None]
+        duration = minutes(int(statistics.median(durations))) if durations else "-"
+        print(f"| {stamp}{mark} | {len(pulls)} | {', '.join(kills) or '-'} | {deaths:g} | {duration} "
+              f"| {top or '-'} |", file=out)
+
+
+def section_vetoes_digest(rows: list[PullRow], out: TextIO) -> None:
+    lines = []
+    for index, row in enumerate(rows, 1):
+        window = window_of(row)
+        if row.trace is None or window is None:
+            continue
+        vetoes = vetoes_inside(row.trace, *window)
+        if vetoes:
+            tally = collections.Counter((veto.multiplier, veto.action) for veto in vetoes)
+            lines.append(f"- pull {index}: " + ", ".join(f"{m} zeroed {a} x{n}" for (m, a), n in tally.most_common()))
+    if lines:
+        print("\n## DC multiplier vetoes inside a pull\n", file=out)
+        print("\n".join(lines), file=out)
+
+
+def section_reader_summaries(state: State, run: Run, out: TextIO) -> None:
+    reader = boss_reader(state.boss)
+    if not reader:
+        print(f"\nNo boss reader for {state.boss} under `bosses/`.", file=out)
+        return
+    print("\n## Boss reader summaries\n", file=out)
+    print(f"Each valid pull's `--summary`; run `bosses/{reader.name} <trace> --<section>` for more.", file=out)
+    for pool in state.pools:
+        for facts in counted_of(state, pool):
+            tool_output(f"{pool_label(pool)}: {facts.name}", [sys.executable, str(reader), str(facts.path),
+                                                               "--summary"], run, out)
+
+
+def render_digest(state: State, run: Run, out: TextIO) -> None:
+    rows = state.rows
+    section_digest_pulls(rows, state, out)
+    section_done_rule(state, out)
+    section_mechanics(rows, out)
+    section_pull_deaths(rows, out)
+    section_trend(state, out)
+    section_vetoes_digest(rows, out)
+    section_reader_summaries(state, run, out)
+
+
+def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout, full: bool = False) -> None:
     label = f" ({state.label})" if state.label else ""
     print(f"# Raid test: {state.boss} {state.diff}{label}\n", file=out)
     print(headline(state), file=out)
@@ -285,6 +477,9 @@ def render(state: State, run: Run = subprocess.run, out: TextIO = sys.stdout) ->
     for note in state.notes:
         print(f"\n{note}", file=out)
     section_runs(state, out)
+    if not full:
+        render_digest(state, run, out)
+        return
     for pool in state.pools:
         section_pool(pool, state, run, out)
     section_overall(state, run, out)

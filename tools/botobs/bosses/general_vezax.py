@@ -1662,10 +1662,11 @@ SECTIONS = (
      " the Animus's first 30 s", show_burst),
     ("band", "each camp member's distance from the boss", show_band),
 )
+SUMMARY = ("boss", "vapors")
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS, show_banner)
+    return run_sections(__doc__, SECTIONS, show_banner, SUMMARY)
 
 
 if __name__ == "__main__":

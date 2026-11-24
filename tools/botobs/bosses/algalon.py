@@ -5707,10 +5707,11 @@ SECTIONS = (
     ("darkmatter", "phase 2 Unleashed Dark Matter: loose seconds, handler damage, kills", show_darkmatter),
     ("verdict", "one line per detected failure, in time order", show_verdict),
 )
+SUMMARY = ("phases",)
 
 
 def main() -> int:
-    return run_sections(__doc__, SECTIONS, show_banner)
+    return run_sections(__doc__, SECTIONS, show_banner, SUMMARY)
 
 
 if __name__ == "__main__":

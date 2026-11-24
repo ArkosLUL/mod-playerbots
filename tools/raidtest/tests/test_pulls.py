@@ -50,11 +50,21 @@ def write_trace(folder: pathlib.Path, pulled: datetime.datetime, built: datetime
     return path
 
 
+def isolate_cache(test: unittest.TestCase) -> pathlib.Path:
+    folder = tempfile.TemporaryDirectory()
+    test.addCleanup(folder.cleanup)
+    patch = mock.patch.object(pulls, "CACHE_ROOT", pathlib.Path(folder.name))
+    patch.start()
+    test.addCleanup(patch.stop)
+    return pathlib.Path(folder.name)
+
+
 class CorpusTest(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.dir = pathlib.Path(folder.name)
+        self.cache = isolate_cache(self)
 
     def corpus(self) -> Corpus:
         return Corpus("xt-002", [self.dir])
@@ -151,6 +161,41 @@ class CorpusTest(unittest.TestCase):
                          [("dungeon clear", "follow"), ("dungeon clear combat", "attack anything")])
         start = ms(self.at(30))
         self.assertEqual(len(vetoes_inside(facts, start + 2200, start + 9000)), 1)
+        self.assertEqual(facts.death_rows, [pulls.DeathRow(4000, "Mendy", "heal", "spell 62016")])
+
+    def test_a_closed_trace_is_read_once_across_corpora(self):
+        path = write_trace(self.dir, self.at(30), self.at(20), records=[
+            {"e": "death", "t": 4000, "g": HEALER, "killer": 4294967296 + 5, "cause": None,
+             "blow": [4294967296 + 5, 9000], "rewind": [[3000, 4294967296 + 5, 0, 9000]]}])
+        first = self.corpus()
+        fresh = first.facts(path)
+        first.flush()
+        with mock.patch.object(pulls, "read_facts", wraps=pulls.read_facts) as read:
+            cached = self.corpus().facts(path)
+        read.assert_not_called()
+        self.assertEqual(cached, fresh)
+        self.assertEqual(cached.death_rows[0].mechanic, "melee from #1:5")
+
+    def test_a_rewritten_trace_or_changed_code_is_read_again(self):
+        path = write_trace(self.dir, self.at(30), self.at(20))
+        corpus = self.corpus()
+        corpus.facts(path)
+        corpus.flush()
+        write_trace(self.dir, self.at(30), self.at(20), length_ms=900000)
+        with mock.patch.object(pulls, "read_facts", wraps=pulls.read_facts) as read:
+            self.assertEqual(self.corpus().facts(path).end_ms - ms(self.at(30)), 900000)
+        self.assertEqual(read.call_count, 1)
+        with mock.patch.object(pulls, "code_stamp", return_value="other"), \
+                mock.patch.object(pulls, "read_facts", wraps=pulls.read_facts) as read:
+            self.corpus().facts(path)
+        self.assertEqual(read.call_count, 1)
+
+    def test_an_open_trace_is_not_cached(self):
+        path = write_trace(self.dir, self.at(30), self.at(20), closed=False)
+        corpus = self.corpus()
+        corpus.facts(path)
+        corpus.flush()
+        self.assertEqual(list(self.cache.rglob("*.json")), [])
 
 
 class MatchTest(unittest.TestCase):
@@ -224,6 +269,26 @@ class CauseTest(unittest.TestCase):
         self.assertEqual(pulls.death_cause(trace, biting_cold), "its own Biting Cold 62188")
         fall = {"g": 1, "killer": 1, "blow": [1, 30000], "rewind": [[181924, 1, 62188, 1087]]}
         self.assertEqual(pulls.death_cause(trace, fall), "its own blow: a fall, lava or .die")
+
+    def test_mechanics(self):
+        class FakeTrace:
+            def name(self, guid):
+                return {1: "Bot", 2: "Boss"}.get(guid, "-")
+
+            def spell(self, spell):
+                return "melee" if not spell else {62188: "Biting Cold 62188"}.get(spell, f"spell {spell}")
+
+        trace = FakeTrace()
+        self.assertEqual(pulls.death_mechanic(trace, {"g": 1, "cause": "reset"}), "the wipe command")
+        self.assertEqual(pulls.death_mechanic(trace, {"g": 1, "cause": "self"}), "a script kill")
+        self.assertEqual(pulls.death_mechanic(trace, {"g": 1, "blow": [1, 500]}), "its own blow")
+        self.assertEqual(pulls.death_mechanic(trace, {"g": 1, "killer": 2, "blow": [2, 500]}), "killed by Boss")
+        biting_cold = {"g": 1, "killer": 1, "blow": [1, 1087], "rewind": [[181924, 1, 62188, 1087]]}
+        self.assertEqual(pulls.death_mechanic(trace, biting_cold), "its own Biting Cold 62188")
+        swing = {"g": 1, "killer": 2, "blow": [2, 9000], "rewind": [[1, 2, 62188, 10], [2, 2, 0, 9000]]}
+        self.assertEqual(pulls.death_mechanic(trace, swing), "melee from Boss")
+        spell = {"g": 1, "killer": 2, "blow": [2, 9000], "rewind": [[2, 2, 62999, 9000]]}
+        self.assertEqual(pulls.death_mechanic(trace, spell), "spell 62999")
 
 
 if __name__ == "__main__":
