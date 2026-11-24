@@ -1,6 +1,6 @@
 # Mimiron polish history
 
-Rounds 1-20 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
+Rounds 1-21 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
 
 ## Round 1 (build 02925e260, DC 5443dbc)
 
@@ -2325,3 +2325,88 @@ small). P4 Hand Pulse (10) with 1-3 healers. The bear off-tank losing the ACU (B
   kill adds away from the main tank, which I would ask about only if spawn blasts stay after (a).
 
 **Shared code:** none (Mimiron action, findings doc, reader and its test, this log).
+
+## Round 21 (build 36d7f19b9, round 20 built)
+
+**Data:** window 32 (`window32-mimiron.md`, `--head 36d7f19b9 --pulls 1`), one pull per pool, no DC
+veto. Traces `603_<inst>_mimiron_<epoch>`: uld4 `4_…412`, uld1 `1_…416`, uld2 `2_…420`, uld5 `5_…419`,
+uld3 `3_…415`, uld6 `6_…396` (epochs 17955443xx-44xx); window 30 (`16-21_…17955393xx`) to compare;
+windows 22-32 (40 traces) for the floor scan. Scratch `mim21/`.
+
+| Pool | Out | P4 at | Deaths before Berserk | Two healers out |
+|---|---|---|---|---|
+| uld4 A | **kill** 8:37 | 6:40 | 2: P4 mines (barrage legs) | never |
+| uld1 A | wipe | 7:14 | 13: P2 Rapid Burst; P3 Water Spray; P4 mines 2, Hand Pulse 9 (9:07-9:35) | 8:31 |
+| uld2 B | wipe | 7:36 | 13: P2 Rapid Burst 3, Frost Bomb; P3 Water Spray; P4 Hand Pulse 8 | 8:53 |
+| uld5 B | **kill** 10:12 | 7:09 | 7: P2 Heat Wave 2, Rapid Burst; P3 Bomb Bot; P4 mines 2, Plasma Ball | 8:29 |
+| uld3 C | wipe | 7:06 | 22: P2 barrage 2 (main tank twice); P3 Water Spray; P4 Hand Pulse 13, Plasma Ball 3, mines 2, Frost Bomb | 8:21 |
+| uld6 C | **kill** 9:58 | 7:04 | 21: P2 Rapid Burst 3; P3 Bomb Bot; P4 Hand Pulse 13 (8:58-9:36), mines 2, Plasma Ball 2 | 8:08 |
+
+**Stop rules:** A met the done rule (uld4, 2 deaths, hard mode); B (uld5, 8) and C (uld6, 21) not. Not
+polished. Not stuck (above).
+
+**Verdict on round 20 (a spray step starts the 2.5 s fire hold): held in A, B and C.** `--firebots`:
+walk-backs after a spray step 0-1 a pull (126-861), spray hits after one 0 (19 of 32); Water Spray 3
+deaths (5), none after a walk-back; melee P3 moving 28-38% (43-52%), `fire bot <-> reach melee` A-B-A
+28-66 (328/887/396); P3 117-148 s (115-150).
+
+**Failure picked: P4 Hand Pulse (43 of 78).** It kills once healing runs out, and the healers went out
+three ways.
+
+- `--pulse` (new line): 36 of 43 came after the second of four healers was dead or under 10% mana
+  (window 30: 6 of 10, that point at 7:55-10:02 or never). uld5 crossed it at 8:29 and lost nobody to
+  Hand Pulse, so it sets the odds, not the outcome.
+- Dry priests (uld1, uld2, uld6): Shadowfiend at ~1:05-1:30 and ~6:05-6:35, Hymn of Hope at 3:34-4:11 in
+  every pull, so neither reaches P4; P3's 6.1-6.4k/s healed at 55-87% overheal. uld6's disc and holy
+  priests sat at 2-7% from ~8:00-8:45. uld4, the one pull never short, cast its second Shadowfiend at 7:21
+  and Mana Tide at 7:52. Plan change: Q11.
+- Dead healers: uld1 Uldxae, a mine on a Frost Bomb leg (8:06.7); uld2 Uldyaf, P2 Rapid Burst; uld6
+  Uldwaf, a mine (9:03.9). Mixed movers, not picked.
+- **Off the floor (uld3, bug).** At 7:54.906 Uldzac's `frostbomb ok` leg went to (2700.9, 2610.4,
+  **803.11**); he rose to Z 451 for 24 s and died walking back (8:20.6). Uldzaf, the druid with 56-60%
+  mana, walked a `detour +65` leg off the room at 7:56.8 (Watch), then a rocket flee at 8:30.6 to Z
+  803.11 flew him to 441 until 8:52. With Uldzae dry (8%), uld3 healed on the shaman alone 8:02-8:20 and
+  lost 9 in 8:15-8:31. The off-tank Uldzab's bomb leg to Z 803.11 (8:01.5) never moved him; the blast
+  killed him (8:04.8). Also uld3 Uldzar 20 s, uld5 Uldvau 23 s, uld6 Uldwac 3 s.
+- Code: `FleeFan` (`UldActions_Mimiron.cpp:172`, `:357`) takes `Map::CheckCollisionAndGetValidCoords`'
+  answer as an exact leg. Past the room's edge a player's check finds no vmap ground and returns true at
+  `GetGridHeight`, 803.11, the terrain above the instance; the exact `MoveTo` then flies a straight
+  spline. Z 803 legs, all from the flee actions: 13 in windows 22-32's 40 pulls, 8 in window 32.
+
+**Fix** (Mimiron only, every size and mode, with or without a player): `IsMimironSpotOnFloor` refuses a
+point more than `ULDUAR_MIMIRON_FLOOR_TOLERANCE` (3) off the room centre's Z (364.32; standing samples
+364.3, up to 366.3 at 75 yd west); the fan and the least-burn fallback skip an exact candidate failing it as `move`. A
+failed check keeps the bot's Z and the path search, as before. Review: the unit flee's last resort
+swapped the generic `MoveAway` for a copy that skips such a point too. uld3's Uldzap (7:57.254) and
+Uldzab (8:01.544) took `frostbomb ok -90` to Z 803 after `frostbomb fallback (move22)`, every path
+`nopath`; with the fan refusing it, `MoveAway`'s own -90 bearing would have flown them up. Reader
+`--floor` (moves sent off the floor, bot-seconds above it, each stretch over 3 s with the move before
+it) and `--pulse`'s two-healers-out time with the Hand Pulse deaths after it; tests for both. Findings doc: the fan's floor trap and
+the P4 mana race; `pitfalls.md`: the off-mesh check can also rise to the grid height.
+
+**Next window should show** (`--floor`, `--pulse`):
+
+- No accepted move at Z 803 (`moves sent off the floor` only knockback follow-ons at 368-379) and no
+  stretch above the floor longer than a knockback, except a walk off the room (uld3: 20-50 s, uld5 23 s).
+- Hand Pulse unchanged until Q11 is built; the two-healers-out time and deaths after it are the baseline
+  (36 of 43). Round 20's walk-backs still ~0.
+
+**Not picked.** P2 storm 13 (no single mover). P4 mines 10 (mixed movers). The off-room detour and the
+P4 disperse (Watch). ACU Plasma Ball 6.
+
+**Questions for the user.**
+
+- **Q11 (plan change): phase 4 runs out of healer mana.** Hand Pulse hits the raid for 11-18k a second
+  through phase 4's 100-160 s, and once two of the four healers are dead or under 10% mana it kills: 36
+  of window 32's 43 Hand Pulse deaths (of 78 before Berserk) came after that point, which fell at
+  8:08-8:53 in five of six pulls. The priests run dry first: they cast Shadowfiend at ~1:10 and ~6:15
+  and Hymn of Hope at ~3:50, so phase 4 gets neither. Options: (a) under Firefighter, bot priests hold
+  Hymn of Hope and their second Shadowfiend (back at ~6:05-6:35) until phase 4 opens (6:40-7:35): about
+  two fifths of a priest's mana each in phase 4, no DPS lost (uld4, the only pull never short, had its
+  second Shadowfiend at 7:21); (b) the scenario takes a fifth healer at 25 (the roster drafts allow 5):
+  a quarter more healing in phases 2 and 4, one DPS fewer, ~6% of phase 4's output, ~9 s on a clock B
+  and C already lose by seconds; (c) keep. Recommendation: (a), then (b) if two healers still drop out
+  before ~9:15.
+
+**Shared code:** none (Mimiron flee fan and spot helper, findings doc, the `pitfalls.md` entry, reader and
+its test, this log).

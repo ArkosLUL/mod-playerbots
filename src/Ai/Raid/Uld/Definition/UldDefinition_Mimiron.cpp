@@ -138,6 +138,8 @@ bool MimironPhase4MainTank(PlayerbotAI* botAI) { return IsMimironPhase4(botAI->G
 
 bool MimironPhase4AcuTank(PlayerbotAI* botAI) { return IsMimironPhase4AcuTank(botAI->GetBot()); }
 
+bool MimironBombTank(PlayerbotAI* botAI) { return IsMimironBombTank(botAI, botAI->GetBot()); }
+
 void CutMimironCastsInFire(PlayerbotAI* botAI)
 {
     if (!IsMimironHardModeActive(botAI))
@@ -206,6 +208,8 @@ void DefineMimiron(EncounterBuilder& e)
     e.Node<MimironProximityMineTrigger, MimironProximityMineAction>(ACTION_RAID - 1);
     e.Node<MimironUnreachableTrigger, MimironUnreachableStepAction>(ACTION_RAID + 2);
     e.Node<MimironBombBotTrigger, MimironBombBotAction>(ACTION_RAID + 2);
+    e.Node<MimironBombBotTauntTrigger, MimironBombBotTauntAction>(ACTION_RAID + 5);
+    e.Node<MimironBombTankHoldTrigger, MimironBombTankHoldAction>(ACTION_RAID);
     e.Node<MimironSlowBombBotTrigger, MimironSlowBombBotAction>(ACTION_RAID + 2);
     e.Node<MimironPetControlTrigger, MimironPetControlAction>(ACTION_RAID);
     e.Node<MimironDodgeFlamesTrigger, MimironDodgeFlamesAction>(ACTION_RAID + 4);
@@ -219,6 +223,14 @@ void DefineMimiron(EncounterBuilder& e)
     e.OwnTargeting("mimiron phase 4 tank target guard", Role::MainTank, MimironPhase4MainTank);
 
     e.OwnTargeting("mimiron phase 4 acu tank target guard", Role::Tank, MimironPhase4AcuTank);
+
+    e.OwnTargeting("mimiron bomb tank target guard", Role::Tank, MimironBombTank,
+                   Family::DpsAssist | Family::TankAssist | Family::DpsAoe | Family::AggressiveTarget |
+                       Family::AttackAnything | Family::AttackLeastHp | Family::AttackRti);
+
+    e.Block("mimiron bomb tank hold", Role::Tank, MimironBombTank,
+            Family::Reach | Family::Charge | Family::TankFace | Family::SetBehind | Family::Follow |
+                Family::CombatFormationMove | Family::Taunt);
 
     e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge,
             {"reach melee", "killing spree"});

@@ -712,12 +712,12 @@ it hardest, three bots in 3 s once.
 
 **The chase target decides who shoots it.** A ranged DPS it chases cannot leave, so keeps shooting at any
 range; a chased healer, melee or tank kites `ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE` (30) through the
-bearing fan once it is within `_RADIUS` (8); until then, and a ranged one always, it steps out of other
-bombs' blasts like anyone. The trigger reads the chase from `GetMimironBombBotBlast`, the
-priority list from `GetMimironBombBotChasing`; split on distance instead, each deferred to the other and a
-ranged bot inside 8 yd neither shot nor moved. Bomb Bots out of `SpellDistance` stay out of
-`BuildPriorityList`: chasing one abandons the mech and lands in the `reach spell` against `ACTION_RAID`
-deadlock.
+bearing fan once it is within `_RADIUS` (8), except the bomb tank (below), who stands; until then, and a
+ranged one always, it steps out of other bombs' blasts like anyone. The trigger reads the chase from
+`GetMimironBombBotBlast`, the priority list from `GetMimironBombBotChasing`; split on distance instead,
+each deferred to the other and a ranged bot inside 8 yd neither shot nor moved. Bomb Bots out of
+`SpellDistance` stay out of `BuildPriorityList`: chasing one abandons the mech and lands in the
+`reach spell` against `ACTION_RAID` deadlock.
 
 **The blast goes off round the bomb, a few yards short of its victim.** 63801 is 5 yd round its caster
 (`TARGET_SRC_CASTER` + `TARGET_UNIT_SRC_AREA_ENEMY`, ~6.5 with a player's combat reach), cast once the
@@ -736,13 +736,27 @@ with the chase and died with it at the end: 7 of 21 collateral hits, a healer an
 The step leaves the chased bot alone, and that is most of the dying: 15 of 22 Bomb Bot deaths in windows
 14-16 were the victim's own (11 of 29 chased ranged DPS, 3 of 3 chased healers).
 
-**Open: the step cannot reach the two blasts that kill.** Over 109 bombs in 21 pulls, a chased ranged
-DPS died in 21 of 33 chases, a chased tank in 2 of 13 (a tank outlives the blast). And a bomb spawns
-with its victim already picked, so one picking a bot within 5.5 yd of the spawn blew within 0.4 s, 7
-times for 25 hits and 6 dead, once 11 hits and 4 dead on the melee killing a Junk Bot at the room
-centre. The generic tank `lose aggro` taunt took 23 bombs onto a tank (Dark Command falling back to
-Death Grip, Growl, Feral Charge); the tank lived each time, and only a tank standing in the melee pile
-had his blast hit others (3 dead).
+**The step cannot reach the two blasts that kill.** Over 109 bombs in 21 pulls, a chased ranged DPS died
+in 21 of 33 chases, a chased tank in 2 of 13 (a tank outlives the blast). And a bomb spawns with its
+victim already picked, so one picking a bot within 5.5 yd of the spawn blew within 0.4 s, 7 times for 25
+hits and 6 dead, once 11 hits and 4 dead on the melee killing a Junk Bot at the room centre. Nothing
+answers that spawn blast. The generic tank `lose aggro` taunt took 23 bombs onto a tank (Dark Command
+falling back to Death Grip, Growl, Feral Charge); the tank lived each time, and only a tank standing in
+the melee pile had his blast hit others (3 dead).
+
+**So the off-tank takes every Bomb Bot** (the user's choice). In phase 3 the first living assist tank is
+the bomb tank (`IsMimironBombTank`): his slot, `p3bomb`, sits `ULDUAR_MIMIRON_BOMB_TANK_DISTANCE` (12)
+off the unit's ground point, where bombs spawn, at `_BEARING` (120°) off the wedge's centreline, midway
+between the +60° and 180° add arms. `mimiron bomb bot taunt` puts the class taunt on each live bomb not
+already on him within 30 yd, the most urgent first (nearest its victim); every class taunt is 30 yd, 8 s
+and off the global cooldown, against a bomb every 15 s, and Growl switched a bomb's chase within 250 ms
+7 times of 7. He then stands in the blast while ranged keep shooting. 12, not 10: the bomb blows ~2.6 yd
+short of him toward the spawn and hits ~6.5 yd round itself, which then stops short of the pile under the
+unit. The spot must stay clear of melee, so he holds it: `mimiron bomb tank hold` zeroes his reach,
+charges, tank face, set behind, follow, disperse and every generic taunt, his target guard zeroes the
+pickers, and the hold action drops any target but a bomb, so no ranged threat (Faerie Fire, Avenger's
+Shield) pulls an add and its melee onto him. The cost: he no longer picks up phase 3 adds, which had dealt
+him 10-30k of their 100-410k a phase.
 
 **It is the one Mimiron add that takes a snare.** Its immunity set **−263** leaves `SNARE`, `ROOT`, `STUN`,
 `FREEZE`, `GRIP` and `KNOCKOUT` off, all of which the Assault Bot's **−285** carries; at 8.0 yd/s a
@@ -941,12 +955,14 @@ stages in the **east wedge**, the one direction nothing walks down, centred on t
 `ULDUAR_MIMIRON_PHASE3_STAGE` (2762.65, 2569.46, 364.31; navprobe 16/16 on mesh in a 12 yd fan). Ranged
 and healers fill outward from 18 yd.
 
-**Melee and tanks get no slot.** Inner rows at 8 and 14 yd deadlocked like the ranged ring one band down:
-`mimiron set dps priority` hands melee an add walking in from a pad, `reach melee` chases at
-`ACTION_HIGH` and the formation drags it back at `ACTION_RAID`, so no swing lands. Melee stand on
-whatever they are hitting. No phase 3 `disperse distance` either: the slots do the spacing, the unstacker
-shoving bots off slots the formation pulls them back onto is pure thrash, it would be one more node
-fighting the melee chase, and Bomb Bots, the only phase 3 mechanic punishing stacking, have their own node.
+**Melee get no slot**, and of the tanks only `p3tank` and the bomb tank
+([Bomb Bot](#the-two-adds-need-opposite-answers)), both with their chase vetoed. Inner rows at 8 and 14
+yd deadlocked like the ranged ring one band down: `mimiron set dps priority` hands melee an add walking
+in from a pad, `reach melee` chases at `ACTION_HIGH` and the formation drags it back at `ACTION_RAID`, so
+no swing lands. Melee stand on whatever they are hitting. No phase 3 `disperse distance` either: the
+slots do the spacing, the unstacker shoving bots off slots the formation pulls them back onto is pure
+thrash, it would be one more node fighting the melee chase, and Bomb Bots, the only phase 3 mechanic
+punishing stacking, have their own node.
 
 **The wedge is built to fit casting range**, not grown until it stops fitting: rows step 6 yd (one more
 than a Bomb Bot blast) and stop at `SpellDistance` minus the margin, and once full the remaining rows pack
@@ -1610,7 +1626,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `carrier` | Who is fetching the core, a real player included. Per instance |
 | `unreach` | Whom the MK II's cannot-reach flag names, `0` when clear. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) `hold-expiring` (the held one was about to) or `hold-bot-up` (the next Assault Bot is up) |
-| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point. `none` is noted too: without it a bot the formation skips by design (melee) and one its shape refused, a bug, read as the same silence |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p3bomb`, `p1tank`, `p1stack`, `hmhold`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point. `none` is noted too: without it a bot the formation skips by design (melee) and one its shape refused, a bug, read as the same silence |
 | `handover` | The Firefighter 1→2 handover's step: 0 none, 1 hold, 2 late (VX-001 summoned), 3 walk in. Per instance |
 | `hold` | The hold band's bearing off the room centre and the burning nodes within 20 yd of its middle, once per handover |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
@@ -1646,8 +1662,10 @@ cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no
 before, and the hits within 3 s of a walk-back (a fire hold mover's accepted leg within 2.5 s of the
 bot's own spray step: an accepted fire bot leg whose last `mimiron.flee` note reads `spray ok` or
 `spray fallback`, since `NoteDerived` skips a note equal to the last); `--bombbots` calls a blast
-victim chased when the bomb targeted it in the snapshot 300 ms before; `--bomb` counts as a walk-in
-any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
+victim chased when the bomb targeted it in the snapshot 300 ms before, times each bomb's first roster
+taunt from its first snapshot, and takes whoever held a `p3bomb` slot as the bomb tank, measured off
+the unit through phase 3 and, at each blast on him, off the bomb's first snapshot; `--bomb` counts as a
+walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
 `--wedge` counts every living Flames (Spread) under a footprint, where the `wedge` note counts burning
 ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal, and
 `--pulse` calls a healer out when dead or under 10% mana; `--floor` counts a move more than 3 yd off the

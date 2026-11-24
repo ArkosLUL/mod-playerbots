@@ -223,6 +223,10 @@ inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_KITE_DISTANCE = 30.0f;
 
 inline constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
 
+inline constexpr float ULDUAR_MIMIRON_BOMB_TANK_DISTANCE = 12.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_TANK_BEARING = 120.0f * static_cast<float>(M_PI) / 180.0f;
+inline constexpr float ULDUAR_MIMIRON_BOMB_TANK_TAUNT_RANGE = 30.0f;
+
 inline constexpr float ULDUAR_MIMIRON_ROOM_SEARCH_RANGE = 100.0f;
 
 inline constexpr float ULDUAR_MIMIRON_PHASE4_DISPERSE_DISTANCE = 4.0f;
@@ -356,6 +360,9 @@ std::string GetMimironBombBotSnare(Player* bot);
 float GetMimironBombBotApproach(Player* bot, Unit* bombBot);
 
 Unit* GetMimironBombBotChasing(PlayerbotAI* botAI, Player* bot);
+
+bool IsMimironBombTank(PlayerbotAI* botAI, Player* bot);
+Unit* GetMimironBombBotToTaunt(PlayerbotAI* botAI, Player* bot);
 
 Unit* GetMimironRingFocus(PlayerbotAI* botAI);
 

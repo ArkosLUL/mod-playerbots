@@ -735,7 +735,8 @@ MimironBombBotBlast GetMimironBombBotBlast(PlayerbotAI* botAI, Player* bot, floa
         if (bombBot.victim == bot->GetGUID())
         {
             if (PlayerbotAI::IsRangedDps(bot) ||
-                bot->GetExactDist2d(bombBot.blast.bomb) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS)
+                bot->GetExactDist2d(bombBot.blast.bomb) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS ||
+                IsMimironBombTank(botAI, bot))
                 continue;
 
             blast = bombBot.blast;
@@ -1120,6 +1121,38 @@ float GetMimironBombBotApproach(Player* bot, Unit* bombBot)
         return bombBot->GetExactDist2d(victim);
 
     return bombBot->GetExactDist2d(bot);
+}
+
+bool IsMimironBombTank(PlayerbotAI* botAI, Player* bot)
+{
+    return botAI && bot && PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) && IsMimironPhase3(botAI) &&
+           !IsMimironPhase4(bot);
+}
+
+Unit* GetMimironBombBotToTaunt(PlayerbotAI* botAI, Player* bot)
+{
+    if (!IsMimironBombTank(botAI, bot))
+        return nullptr;
+
+    Unit* pick = nullptr;
+    float pickApproach = 0.0f;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_BOMB_BOT ||
+            ServerFacade::instance().GetChaseTarget(unit) == bot ||
+            !bot->IsWithinDistInMap(unit, ULDUAR_MIMIRON_BOMB_TANK_TAUNT_RANGE))
+            continue;
+
+        float const approach = GetMimironBombBotApproach(bot, unit);
+        if (!pick || approach < pickApproach)
+        {
+            pick = unit;
+            pickApproach = approach;
+        }
+    }
+
+    return pick;
 }
 
 bool IsMimironAcuGrounded(PlayerbotAI* botAI)
@@ -2221,6 +2254,18 @@ Position ClampMimironAnchorToRoom(Position anchor)
     return anchor;
 }
 
+Position MimironBombTankSpot(Unit* aerialCommandUnit)
+{
+    float const bearing = Position::NormalizeOrientation(
+        ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(),
+                                            ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY()) +
+        ULDUAR_MIMIRON_BOMB_TANK_BEARING);
+    return ClampMimironAnchorToRoom(
+        Position(aerialCommandUnit->GetPositionX() + ULDUAR_MIMIRON_BOMB_TANK_DISTANCE * std::cos(bearing),
+                 aerialCommandUnit->GetPositionY() + ULDUAR_MIMIRON_BOMB_TANK_DISTANCE * std::sin(bearing),
+                 ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
+}
+
 uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count, float halfAngle, float spacing)
 {
     uint32 held = 0;
@@ -2890,6 +2935,13 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     {
         branch = "p3tank";
         out = ULDUAR_MIMIRON_ROOM_CENTER;
+        return true;
+    }
+
+    if (focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT && IsMimironBombTank(botAI, bot))
+    {
+        branch = "p3bomb";
+        out = MimironBombTankSpot(focus);
         return true;
     }
 
