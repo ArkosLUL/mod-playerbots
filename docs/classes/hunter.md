@@ -66,7 +66,10 @@ order for Explosive Trap (shares Black Arrow's 30 s category, so Black Arrow is 
 - **`maintenance` keeps an unslotted pet.** A pet whose corpse despawned or fell out of range sits in
   `UnslottedPets`, not `CurrentPet`; `InitPet` once tamed a random creature over it, and
   `SavePetToDB(PET_SAVE_AS_CURRENT)` deleted the old one. `pet dead` is true whenever no pet is out
-  but a `character_pet` row exists, so the bot revives or calls it.
+  but a `character_pet` row exists, so the bot revives or calls it. A pet the bot can't summon (exotic,
+  once its talents lose Beast Mastery, 53270) fails `Pet::LoadPetFromDB`, so Revive Pet lands with no
+  pet and `pet dead` recasts it all fight: `InitPet` stables it in a free slot, else deletes it, and
+  tames a new one.
 - **Pets above 20 talent points**: premade links (`Playerbots.PremadeHunterPetLink.<spec>.<points>`)
   stop at 20 (`ParsedHunterPetLinkOrder[3][21]`), and mod-spell-tweaks here raises Beast Mastery
   (53270) from +4 to +6 pet points, a 22-point cap at 80. `InitPetTalents` applies the 20-point link

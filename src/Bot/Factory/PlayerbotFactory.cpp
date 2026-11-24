@@ -1692,6 +1692,53 @@ void PlayerbotFactory::InitPet()
 {
     Pet* pet = bot->GetPet();
 
+    PetStable* stable = bot->GetPetStable();
+    if (!pet && stable)
+    {
+        auto const unsummonable = [this](PetStable::PetInfo const& info)
+        {
+            CreatureTemplate const* proto = sObjectMgr->GetCreatureTemplate(info.CreatureId);
+            return info.Type == HUNTER_PET && (!proto || !proto->IsTameable(bot->CanTameExoticPets()));
+        };
+
+        auto const putAway = [this, stable](PetStable::PetInfo& info)
+        {
+            for (uint32 slot = 0; slot < stable->MaxStabledPets && slot < stable->StabledPets.size(); ++slot)
+            {
+                if (stable->StabledPets[slot])
+                    continue;
+
+                CharacterDatabasePreparedStatement* stmt =
+                    CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_PET_SLOT_BY_ID);
+                stmt->SetData(0, PetSaveMode(PET_SAVE_FIRST_STABLE_SLOT + slot));
+                stmt->SetData(1, bot->GetGUID().GetCounter());
+                stmt->SetData(2, info.PetNumber);
+                CharacterDatabase.Execute(stmt);
+                stable->StabledPets[slot] = std::move(info);
+                return;
+            }
+
+            Pet::DeleteFromDB(info.PetNumber);
+        };
+
+        if (stable->CurrentPet && unsummonable(*stable->CurrentPet))
+        {
+            putAway(*stable->CurrentPet);
+            stable->CurrentPet.reset();
+        }
+
+        for (auto itr = stable->UnslottedPets.begin(); itr != stable->UnslottedPets.end();)
+        {
+            if (unsummonable(*itr))
+            {
+                putAway(*itr);
+                itr = stable->UnslottedPets.erase(itr);
+            }
+            else
+                ++itr;
+        }
+    }
+
     // a dead or out-of-range pet goes unslotted but is still theirs, the bot revives or calls it
     if (!pet && bot->GetPetStable() &&
         (bot->GetPetStable()->CurrentPet || bot->GetPetStable()->GetUnslottedHunterPet()))
