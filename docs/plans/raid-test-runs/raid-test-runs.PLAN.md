@@ -8,15 +8,15 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (r22 running) and Thorim (r23 running); group 2 = Mimiron (r21 running) and Algalon (r11 running). Vezax is done. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (r22 merged, r23 next) and Thorim (r23 running); group 2 = Mimiron (r21 merged, r22 next) and Algalon (r11 merged, r12 next). Vezax is done. Rebalance when a boss is done.
 
-**Window 33** (rebuild of `9ad197722`, ended 2026-11-24 ~21:05): group 1, reports `scratchpad/window33/window33/window33-<boss>.md`. **Filler 33c** (one more Thorim and Yogg-Saron pull per pool on the same build) is running: log `scratchpad/window33c.out`, reports `scratchpad/window33c/`. Windows 29-33: `windows.md`.
+**Window 34** (rebuild of `6464b824a` with DC `3083130`, started 2026-11-24 ~21:55, the first window on the professions rosters): group 2, log `scratchpad/window34/window34.out`, reports `scratchpad/window34/window34/window34-<boss>.md`. Windows 29-33, filler 33c and the professions step: `windows.md`.
 
 **Next:**
-- Merge Mimiron r21 and Algalon r11 as they finish. Review DC lane V's report (roster professions, `v-dc-roster-professions.PLAN.md`, worktree `build-toc-wt/rt-dc-w4`, branch `rt/dc-v`) and merge it `--no-ff` into DC's `local/wrath-raid-tests`.
-- Once all three have merged and filler 33c has ended: rebuild; before window 34's pulls run lane V's console command over SOAP on all twelve pools and check from the database: `character_skills` at 450, the perk spells in `character_spell`, enchant 3606 on engineers' boots once maintenance or the enchant step ran. Mark the step in `windows.md`: trends across it compare unlike rosters. Then window 34 = group 2 while group 1's lanes code.
-- Mimiron r22 builds the user's answer 4: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast.
-- Report each window in chat; one numbered question batch after window 34 (the cycle's end).
+- Launch Mimiron r22 and Algalon r12 as their window 34 reports appear. Mimiron r22 builds the user's answer 4: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast.
+- Merge Thorim r23 when it finishes (never while a rebuild reads the source tree). Once Mimiron r22 and Algalon r12 have merged too: rebuild, window 35 = group 1 (Yogg-Saron r22, Thorim r23); Yogg-Saron r23 starts from its report.
+- Run `scratchpad/professions.sh toc1 toc2 toc3 toc4 toc5 toc6` in an idle gap (no raid running).
+- After window 34: one numbered question batch for the cycle (Mimiron Q11, phase 4 healer mana, is waiting).
 
 **Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 step 1 and Q2 in r22; Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Algalon Q4 (b) in r11; tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score once lane V gives the rosters Engineering.
 
@@ -45,11 +45,11 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 22 running; window 33: every pool reached phase 3 |
+| Yogg-Saron | group 1, round 22 merged, waits for window 35; window 33: every pool reached phase 3 |
 | Thorim | group 1, round 23 running; the user: keep polishing, no end condition, stop rules waived |
-| Mimiron | group 2, round 21 running; A met the done rule in window 32 (uld4, 2 deaths) |
+| Mimiron | group 2, round 21 merged, in window 34; A met the done rule in window 32 (uld4, 2 deaths) |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
-| Algalon | group 2, round 11 running (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Algalon | group 2, round 11 merged, in window 34 (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
