@@ -41,6 +41,9 @@ public:
     }
 
     float GetValue(Action* action) override;
+
+private:
+    RaidSplashCache _splash;
 };
 
 class YoggSaronIllusionMultiTargetHoldMultiplier : public Multiplier
