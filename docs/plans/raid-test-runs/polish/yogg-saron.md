@@ -1792,3 +1792,131 @@ a swap fell due 2 met a fresh Guardian on a raider and 3 a slipped one, and over
 raiders about as often as fresh ones (177 against 161 snapshot rows), so the build defers about twice as often as the
 answer asked. **Recommended: keep it for this window**: the reason given, a full-power Guardian one-shots a healer,
 holds for a slipped one too, and `tank deaths within 10 s of one on them` counts the cost either way.
+
+## Round 19 (2026-11-24, window 27 build 0687fa6a4: round 18)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 0687fa6a4 --pulls 10` (window report
+`scratchpad/window27/window27-yogg-saron.md`): one valid pull per pool, 0 humans, Freya's 62670 on the raid, no DC veto
+inside a pull. Read with the full `yogg_saron.py` and scratch scripts (`scratchpad/yogg-r19/`: the uld1 handover's
+Guardians, raid and back-line moves every snapshot, each back-line phase 1 dodge's destination against the low Guardians
+on the stack over all 21 pulls of windows 19-27, cloud radii and speed per pull, the uld2 Death Ray hit) over `snap`,
+`move`, `note`, `dmg` and `death` rows. Windows 25-26 are the baseline.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261124-134846-9` | `603_9_yogg-saron_1795528172` | wipe 8:42, 33 deaths | 141.2 s, 12 deaths | 380.7 s, 4: C 2.3, I 0.9, S 0.0, C never cleared; Brain at 96.8% | never |
+| uld2 | `tr-20261124-134826-8` | `603_8_yogg-saron_1795528151` | wipe 12:42, 30 | 130.9 s | 602.0 s, 6: C 13.3, I 21.8, S 16.2, C 3.4, I 10.5, S 2.9 (held from 34.6% at 13.2 s left, survived at 31.8%); wave 7's team never opened its door | never |
+| uld3 | `tr-20261124-134704-7` | `603_7_yogg-saron_1795528070` | wipe 11:55, 32 | 141.4 s | 434.0 s, 5: I 25.8, S 18.3, C 11.6, I 6.3, S 8.0 (held from 36.2% at 18.9 s left, phase 3 7.6 s before the end) | from 9:35.4 with 6 tentacles (7.79M; Crushers 41.9, 83.2, 95.1%), 140 s, Yogg 30 → 25.9% |
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 12 (1:00.8 two melee; **2:06.0 eight**: three melee, two ranged, three healers; 2:15.8 two
+  melee); phase 2 Insane and script kills 6, Squeeze 5, Corruptor 4, Psychosis 2, Laughing Skull 2, Brain Link 1, a
+  charmed raider's Living Bomb 1. A brain team of 15 took the Brain 3.2% in four cycles.
+- uld2: phase 1 Shadow Nova 3 (melee, one each); phase 2 Squeeze 7, Corruptor 6, Death Ray 4 (**8:00.9 three ranged**,
+  11:18 one grabbed), Insane and script kills 4, Grim Reprisal 3, Laughing Skull 2, a charmed raider's Malady 1.
+- uld3: phase 1 Shadow Nova 4 (1:52.5 two melee, one through Hand of Sacrifice; 2:12.3 a melee and a Fervor holder);
+  phase 2 Laughing Skull, Squeeze, Grim Reprisal, Death Ray (grabbed) 1 each; phase 3 Immortal Guardian 20 (the first
+  tank at 10:30.6, +55.2 s), Lunatic Gaze 3 (ranged), Corruptor 1.
+
+**Rounds 17 and 18 did not cause the 2:06 multi-kill or the long phase 2s: their code runs in phase 3 only.**
+`git diff e834a2708 0687fa6a4` touches Yogg in `ControlPhaseThree` and `PhaseThreeStationReaches` (called only by the
+phase 3 station, positioning and target pick), and round 17's `BurstAllowedOnAdd` passes the base gate on tentacles
+while the Ulduar window still holds phase 2 burst to the Brain (`phase 2 burst` on the platform 0 / 0 / 0). The 2:06
+multi-kill is an older bug, picked below. uld2's 602 s phase 2 is chance plus known mechanisms: the random illusion
+order gave it two Chamber cycles in its first five (window 26's uld2 one), Diminish Power was carried below a median 26.0
+/ 31.5 / 40.2 s in cycles 4-6 (×0.85 / ×0.64 / ×0.51 to the door) because the breaks waited for portal entries at +18.8 /
++23.3 / +19.4 s (question below), and the 8:00.9 Death Ray took three ranged (seen, below); it missed phase 3 by 1.8%.
+uld1's phase 2 is downstream of its phase 1.
+
+**Verdict on round 18, swap deferral: not exercised.** `swaps deferred for a Guardian on a raider` 0, `yogg.swapdefer`
+never written: only uld3 reached phase 3, and before its first tank death no tank held 3 Guardians, the swap's floor
+(one swap, 10:41.4, after it). `tank deaths within 10 s of one on them` 0. Kept, per the user's answer for this window.
+
+**Verdict on round 18, phase 3 melee at the spot: fixed on its own check.** uld3 `melee on Yogg` within 15 yd of the
+spot 90%, beyond 30 yd 2% (window 26: 6 / 12 / 25% and 87 / 87 / 45%); `first off a tank` to melee 2 of 11 (window
+26 `first victim` melee 5 / 4 / 0 of 11 / 10 / 11). Melee damage on Yogg 20.9k/s (61% of 34.2k/s; window 26 29.5 / 26.4 /
+33.5k/s): melee near the tanks now take healed and gaze-safe Guardians (30% of their damage), and five of the ten brain
+team melee never reached the station. One pull; read again. Round 17's chain taunt did not fire here (2 short taunts, 0
+chained, one non-tank swung at and killed).
+
+**Stop rules.** No kill. Phase 3 stays stuck (rounds 3-5) and is not picked. The phase 1 nova was picked in round 7
+(Guardians dying off the stack); this is a different root cause, the back line's own walk into the stack.
+
+**Ranking** across pools: phase 2 collapse 47 (uld1 21 after its phase 1, uld2 27 from 8:00), downstream of uld1's
+phase 1 and uld2's slow cycles; Shadow Nova 19 (12 in uld1); phase 3 Immortal Guardians 20 (stuck); Death Ray 5;
+Lunatic Gaze 3.
+
+**Picked: the back line dodges into the stack.** uld1 2:01.99-2:02.14: nine ranged and healers at the station, 21.5 yd
+west, stepped off an orbit-1 cloud (15.3 yd out, passing 6.2 yd inside them) with `yogg-saron phase 1 spacing action`
+to (12.8 yd, bearing 163°), 11.3 yd from G869 at 9% on the stack. From 2:02.66 they dodged G867 (8%, dragged off the
+stack to 25 yd by the Fervor tank Uldxam) through the middle: destinations 2.0-4.9 yd out, accepted at 2:03.5. G869
+died at 2:02.97 (15 raiders, 8 of the back line), G867 at 2:06.03 at 10.4 yd (14 raiders, 6 of the back line, eight
+dead). Root cause: `GetYoggSaronNovaThreats` leaves out low Guardians on the stack for ranged and healers, rightly for
+the trigger since the station is outside their blast, so the action's hazard set does not have them either, and
+`FindNearestPositionClearOfHazards` with its middle bias lands the dodge inward (`UldActions_YoggSaron.cpp`,
+`YoggSaronPhase1SpacingAction::Collect`, no `clear` for the back line). Over windows 19-27 (21 pulls), 1003 of 2025
+back-line phase 1 dodges ended inside 20.5 yd (887 cloud steps), and 40 of 83 back-line nova hits, 7 of 12 back-line
+nova deaths, fell on a bot still standing where one left it (`scratchpad/yogg-r19/inside.py`). Noted as seen in rounds
+10 and 11 (window 17 uld1 1:10.9, window 19 uld1 1:10.6), never picked.
+
+Bug: the doc's back line stands outside the stack's blast. Fix (`UldEncounter_YoggSaron.h`, `UldActions_YoggSaron.cpp`):
+`ULDUAR_YOGG_SARON_P1_BACK_LINE_INNER_EDGE` (the band's inner edge, 21.5 − 1.0) as `set.clear` and `set.fallbackClear`
+for ranged and healers, so a phase 1 dodge, cloud or nova, never lands closer to the middle; a bot already inside is
+moved out when the node fires. The trigger is unchanged; the station node walks a bot back from inside the band as
+before. Same room and station at 10 and 25, normal and hard mode, with or without a player (bots' dodges only). No
+shared code. Reader: `--novas` `back-line phase 1 dodges landing inside the band` and `nova hits on one still standing
+there` (`inside_dodge_hits`, tested); here 36 of 83, 12 (3 died) / 35 of 190, 1 / 33 of 52, 1; windows 25-26: 22-76 a
+pull, 0-1 hits.
+
+**Found on the way, a stale model: the cloud orbits.** Every trace on disk (windows 6-27) measures the clouds at 15.3 /
+20.9 / 27.4 / 41.4 / 48.4 / 54.1 yd from `ULDUAR_YOGG_SARON_MIDDLE` at 2.0 yd/s (Sara's `creature_summon_groups` group 0,
+core DB `2026_09_30_00`), while `ULDUAR_YOGG_SARON_CLOUD_ORBITS`, the reader and the findings doc hold the old script's
+11.6 / 21.4 / 31.2 / 41.0 / 50.9 / 60.8 at 3.0. So the 21.5 yd station sits in reach of orbits 1, 2 and 3, the
+cloud-free core is 6.8 yd (the code uses 2.8, the pile leash 3.1), and `--clouds` labels most spawns `no cloud`. The
+findings doc now says so; the constants are a question (positions).
+
+**Next window should show:** `--novas` `back-line phase 1 dodges landing inside the band` 0 and `nova hits on one still
+standing there` 0 (here 36 / 35 / 33 and 12 / 1 / 1); `back line caught by a nova in phase 1` under 9 / 1 / 2 bots;
+phase 1 nova deaths under 12 / 3 / 4 and no back-line death to one; `CLOUD SPAWNS` `the raid's own feet` no higher than
+6 / 5 / 5 (the dodge now steps along the band or out); phase 1 no longer than 131-141 s. Round 18's deferral again
+wherever a swap meets a Guardian on a raider, judged by tank deaths within 10 s of one.
+
+**Questions for the user** (plan changes, not built):
+
+- **Q1, the cloud orbits.** The phase 1 positions were derived from cloud orbits the core no longer uses (above): the
+  station is reached by three orbits, not one, and melee could stand out to ~6.8 yd without waking orbit 1. Should a
+  round re-derive the phase 1 cloud geometry from the measured orbits? **Recommended: yes, in two steps**: first the
+  reader's orbit labels and a measurement of what each orbit costs at the station (back-line wakes and steps per pass),
+  then one position change at a time with navprobed spots, the melee core first; the only single-orbit band near the
+  back line, 29.4-32.9 yd, is past spell range from the stack, as the doc judged for 31.2.
+- **Q2, the Diminish Power break waits for the last portal.** Round 16's break fires once every team member is below
+  (the user's (b): after the brain team clicks), so a straggler holds it: uld2 cycles 4-6 claimed at +19.1 / +25.2 /
+  +19.4 s, and the team below carried ×0.85 / ×0.64 / ×0.51 for 26-40 s. Should the break fire once the members
+  carrying that Crusher's stack are below, a straggler still on the platform taking the re-cast down with him?
+  **Recommended: yes, for one window**: it frees the rest ~15-20 s sooner, and the straggler carries what he would
+  have carried anyway.
+
+**Seen, not picked.**
+
+- uld2 8:00.4: a Death Ray hit seven ranged and healers, three died. Four were on a `yogg-saron body detour action`
+  walk and issued no dodge for ~1 s while the ray closed from 13.5 to 3.3 yd (Uldyap: `yogg.deathray` `inside` at
+  7:59.41, its next move a spacing walk at 8:00.46, after the first hit); no action row in the gap, cause not found.
+  Next candidate.
+- uld1 1:48.4: the tank Uldxam took Sara's Fervor holding G867 (26-39%) and ran to 34 yd, dragging it off the stack to
+  the handover anchor, where it turned on a ranged at 2:00.5: a Fervor tank's run drags its Guardians.
+- The station trigger's band test reads `GetDistance2d` (centre − 1.5), so a bot on the spot reads 20.0, off the 21.5 ±
+  1.0 band: `p1station` re-issues `band` at the spot (`ok=0 there`) and `parked` never latches.
+- `YoggSaronCloudLead` projects at `GetSpeed(MOVE_RUN)`; the clouds move at 2.0 yd/s, so if their run speed is higher
+  the lead overshoots (not checked).
+- uld3's phase 3 opened with three Crushers; ranged 96% on tentacles all phase, Yogg 0.04%/s.
+
+**Review.** The root cause holds: uld1's nine dodges to 12.8 yd at 2:01.99-2:02.14 and the walks to 2.0-7.1 yd
+through the middle, accepted at 2:03.43-2:03.55, are in the `move` rows; `inside.py` reproduces 1003 of 2025 (887
+cloud), 40 of 83 and 7 of 12; every window 27 cloud measures 15.3-54.1 yd at 2.00 yd/s. The fix also takes a cloud
+step's inward option, which the middle bias chose 887 times: where nothing past 20.5 yd clears a cloud and its lead
+within the 25 yd search, the bot now stays for the station walk, so `the raid's own feet` (6 / 5 / 5 here) judges
+that cost. Doc corrected: `InformCloud` reads `GetDistance`, net of Sara's 1.5 and the cloud's 1.0 reach, so orbit 2
+(21.4 yd 3D, 18.9) is contact-only too: window 27's 15 summons on orbits 1-2 each had a raider within 8.7 yd, while
+orbit 3 fired twice with nobody near. The reader's `--clouds` `inner` list (`CLOUD_ORBITS` under 20) still holds
+orbit 1 alone; that is Q1's reader step.

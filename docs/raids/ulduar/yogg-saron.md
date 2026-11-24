@@ -160,6 +160,13 @@ yard, so the back line ignores a low Guardian **the tank still holds there**
 (`YoggSaronGuardianOnTheStack`) and dodges one that has left it, whoever either is hitting. A low
 Guardian on the stack stays 16.2-17.0 yd off the back line; at the handover one came to 2.2 yd.
 
+**So a back-line dodge never lands inside the band's inner edge** (`…_P1_BACK_LINE_INNER_EDGE`, 20.5 yd,
+as `set.clear` and `set.fallbackClear` for ranged and healers): ignoring the stack is safe only from there.
+Unbounded, the dodge's middle bias put half of all back-line phase 1 dodges over windows 19-27 inside it
+(1003 of 2025, 887 of them cloud steps), and 40 of 83 back-line nova hits, 7 of 12 deaths, fell on a bot
+still standing where one left it. One pull's back line stepped off an orbit-1 cloud to 12.8 yd, then
+dodged a low Guardian through the middle, and two stack novas 3 s apart killed eight.
+
 ### The nova cooldown ladder
 
 A flat cut of 20% saves 14 of the 25 deaths, 30% 19, 40% 23, 50% all. Cuts **multiply**
@@ -331,10 +338,21 @@ back line and lost eleven raiders in three seconds.
 
 ## Ominous Clouds
 
-Six clouds, one per orbit, circle Sara at a constant **3.0 yd/s** (`SpawnClouds`, `8 + i*7` on the
-diagonal). The radii never drift: **11.39-11.86 / 21.25-21.52 / 31.13-31.31 / 40.93-41.07 / 50.81-50.92
-/ 60.74-60.84 yd**, laps **24 / 45 / 65 / 86 / 106 / 127 s**. `InformCloud` skips clouds closer than
-20 yd to Sara, so **the innermost orbit only ever fires from player contact**.
+Six clouds, one per orbit, circle Sara at a constant **2.0 yd/s**, spawned from her
+`creature_summon_groups` group 0 (core DB `2026_09_30_00`). Every test pull's trace (windows 6-27)
+measures the radii at **15.3 / 20.9 / 27.4 / 41.4 / 48.4 / 54.1 yd** from `ULDUAR_YOGG_SARON_MIDDLE`,
+never drifting, laps **48 / 66 / 86 / 130 / 152 / 170 s**. `InformCloud` skips clouds under 20 yd from
+Sara by `GetDistance`, net of her 1.5 and the cloud's 1.0 reach, so orbit 2 (21.4 yd 3D) reads 18.9 and
+**the two inner orbits fire only from player contact**: window 27's 15 summons on them each had a raider
+within 8.7 yd, while orbit 3 also fired with nobody near.
+
+**The orbit constants are stale.** `ULDUAR_YOGG_SARON_CLOUD_ORBITS` and the reader's `CLOUD_ORBITS` hold
+the older script's 11.6 / 21.4 / 31.2 / 41.0 / 50.9 / 60.8 at 3.0 yd/s (`8 + i*7` on the diagonal), and
+everything below derived from them is too: the 2.8 yd cloud-free circle, the 3.1 yd pile leash, the
+69.3 yd room, the station's single-orbit band, `--clouds` orbit labels (`no cloud` for most spawns). By
+the measured radii nothing reaches inside **6.8 yd**, only orbit 1 at 6.8-12.4 and only orbit 3 at
+29.4-32.9, and the 21.5 yd station sits in reach of orbits 1, 2 and 3. Re-deriving them moves positions,
+so it is the user's call.
 
 **A cloud summons on any player within exactly 8.5 yd, not the script's 6.**
 `boss_yoggsaron_cloud::UpdateAI` calls `SelectNearbyTarget`, which adds both `GetObjectSize()` values
@@ -354,17 +372,12 @@ rewind 10 s for who was within 8.5 yd (`yogg_saron.py --clouds`). One pull's 23 
 · 3: 1 · 4: 1 · 5: 2 · 6: 7**, 11 of them the raid's own feet. Orbit 2's four are the station's designed
 cost, 4.2 laps, one each. **Not a defect; do not re-audit.**
 
-**Nobody dodges a cloud: no radius past the core is clear of every orbit.** Against the 8.5 yd reach the
-orbits leave two places:
-
-- inside **2.89 yd** of Sara (11.39 − 8.5) nothing reaches, which is where melee stand
-- between **20.36 and 22.63 yd** (11.86 + 8.5 up to 31.13 − 8.5) only the second orbit reaches
-
-Orbits sit ~9.8 yd apart against the 17 yd a cloud sweeps (`…_CLOUD_SUMMON_REACH` 8.5 either side), so every
-other radius is inside some orbit's reach, moving a station cannot help, and a spot clear now is under a
-cloud seconds later. **Dodging anyway cost a phase**: with the trigger widened to 18 yd, nearly every phase
-1 move cited a cloud, ranged walked for no net change in distance and smeared over a 109° arc, melee
-orbiting Sara lost 43% of their damage and the tank 91%, and raid dps fell from 97.5k to 74.0k.
+**Nobody dodges a cloud: no radius past the core is clear of every orbit.** Orbits sit 5.6-14 yd apart
+against the 17 yd a cloud sweeps (`…_CLOUD_SUMMON_REACH` 8.5 either side), so every radius past the core
+is inside some orbit's reach, and a spot clear now is under a cloud seconds later. **Dodging anyway cost a
+phase**: with the trigger widened to 18 yd, nearly every phase 1 move cited a cloud, ranged walked for no
+net change in distance and smeared over a 109° arc, melee orbiting Sara lost 43% of their damage and the
+tank 91%, and raid dps fell from 97.5k to 74.0k.
 
 **So the cloud circle is a filter, not a dodge.** `ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS` (9.5, the reach
 plus a yard) does three jobs: the trigger reads it as "I am standing in one", never to be dropped because
@@ -522,10 +535,12 @@ the spot: orbit 2 over the stack is its designed cost.
 standing nova hazard for anyone who need not be in it; a 20 yd standoff alone took ranged and healer
 exposure to 0%. The station is `ULDUAR_YOGG_SARON_P1_RANGED_SPOT` **(1958.78, −25.587, 324.889)**, due
 west where the raid stages, navprobe-clean on the WMO floor, as is the whole 21.5 yd ring (24/24
-headings). 21.5 is the midpoint of the single-orbit band, hence orbit 2 itself: standing *on* a ring buys
-the most room from its neighbours, 1.13 yd either way, all `ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE`
-(1.0) can give. Orbit 3 would cost less (a Guardian per 65 s against 45) but sits 31.2 yd out against a
-28.5 yd `SpellDistance`, so a bot there walks itself back in.
+headings). 21.5 is the midpoint of the stale orbits' single-orbit band, hence orbit 2 itself: standing
+*on* a ring buys the most room from its neighbours, 1.13 yd either way, all
+`ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE` (1.0) can give. Orbit 3 would cost less (a Guardian per 65 s
+against 45) but sits 31.2 yd out against a 28.5 yd `SpellDistance`, so a bot there walks itself back in.
+All of this is by the stale radii ([Ominous Clouds](#ominous-clouds)): measured, orbits 1-3 reach the
+station.
 
 They **stack** on it, inverting the usual raid rule, which holds only because the nova cannot reach the
 station. A cloud is in contact for `(8.5 + blob + 8.5) / 3` seconds and re-arms 10 s after each summon, so
@@ -543,10 +558,11 @@ out catches everyone rather than the pile (novas at 2.2-4.0 yd hit 9-10 players,
 The cost is a narrower band against `reach melee`; `yogg.p1leash` counts the flips.
 
 **A melee bot that is neither tanking nor healing gets a tighter leash, because the pile wakes the inner
-orbit by standing still.** Orbit 1 is 11.6 yd out and wakes inside 8.5, so a foot past
-`…_P1_PILE_LEASH` (**3.1 yd**, the difference) summons a Guardian: 10 of 10 melee-foot wakes in one pull
-had the melee past it. `…_P1_PILE_RELEASE` (2.0) is its hysteresis. The wide 6.5/2.8 pair stays the
-tank's, since that one is about where the *Guardian* dies, which follows threat.
+orbit by standing still.** Orbit 1 was taken as 11.6 yd out (15.3 measured, [Ominous
+Clouds](#ominous-clouds)) and wakes inside 8.5, so a foot past `…_P1_PILE_LEASH` (**3.1 yd**, the
+difference) summons a Guardian: 10 of 10 melee-foot wakes in one pull had the melee past it.
+`…_P1_PILE_RELEASE` (2.0) is its hysteresis. The wide 6.5/2.8 pair stays the tank's, since that one is
+about where the *Guardian* dies, which follows threat.
 
 **A Guardian's combat reach is 4** (display 28465, 0 before core `2026_11_06_01`), which moved it off both
 the stack test and the tank:
@@ -2131,6 +2147,9 @@ count, so skip `r:1` rows when taking a minimum or every bot reads as Insane.
   `yogg.swapdefer` naming it within 10 s. `melee on Yogg` bands melee samples on Yogg from 15 s in by distance
   from the melee spot: within the 15 yd station, to the tanks' 30 yd taunts, beyond.
 - A step-out that wakes the next Guardian leaves no other trace: the note says only why it moved.
+- `yogg.p1dodge` is derived, so `--novas` reads back-line dodges off the moves instead: `dodges landing
+  inside the band` counts accepted phase 1 spacing moves by ranged and healers ending inside 20.5 yd, and the
+  nova hits on one standing inside it whose last accepted move was such a dodge.
 - `--portals` telling a bot that walked for a portal and lost the race from one whose node never ran is
   the only way the room-tag leak shows.
 - The damage split is by each bot's target, so a melee bot on Yogg cleaving the pile reads as all Yogg (38%

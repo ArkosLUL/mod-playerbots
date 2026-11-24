@@ -1289,6 +1289,14 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.station_catches(deaths, yogg_saron.RANGED_SPOT, 15.0), 2)
         self.assertEqual(yogg_saron.station_catches([], yogg_saron.RANGED_SPOT, 15.0), 0)
 
+    def test_inside_dodge_hits_counts_novas_on_a_bot_its_dodge_left_inside_the_band(self):
+        moves = [(1000, 1, True, 12.8), (1000, 2, True, 23.0), (1000, 3, True, 14.0), (2000, 3, False, 21.5),
+                 (1000, 4, False, 15.0)]
+        hits = [(1500, 1, 13.0, True), (1500, 2, 22.8, False), (2500, 3, 18.0, False), (1500, 4, 15.0, False),
+                (3000, 1, 21.0, False)]
+        self.assertEqual(yogg_saron.inside_dodge_hits(moves, hits, 20.5), (2, 1, 1))
+        self.assertEqual(yogg_saron.inside_dodge_hits([], hits, 20.5), (0, 0, 0))
+
     def test_roar_verdict_needs_a_press_and_no_silence(self):
         self.assertEqual(yogg_saron.roar_verdict(False, 0), "uncovered")
         self.assertEqual(yogg_saron.roar_verdict(True, 0), "covered")

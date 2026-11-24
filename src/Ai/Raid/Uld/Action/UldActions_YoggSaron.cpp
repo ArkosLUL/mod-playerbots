@@ -300,6 +300,15 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
         };
     }
 
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
+    {
+        set.clear = [](float x, float y)
+        {
+            return ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(x, y) >= ULDUAR_YOGG_SARON_P1_BACK_LINE_INNER_EDGE;
+        };
+        set.fallbackClear = set.clear;
+    }
+
     return !set.hazards.empty();
 }
 
