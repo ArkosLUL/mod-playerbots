@@ -10,7 +10,6 @@
 #include "CharmInfo.h"
 #include "DBCEnums.h"
 #include "GameObject.h"
-#include "Group.h"
 #include "LastMovementValue.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
@@ -18,7 +17,6 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "EncounterHelpers.h"
-#include "RaidDifficulty.h"
 #include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -1087,139 +1085,20 @@ bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<
 
 bool FlameLeviathanEnterVehicleAction::Execute(Event /*event*/)
 {
-    if (bot->GetVehicle())
-        return false;
-    Unit* vehicleToEnter = nullptr;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest vehicles far");
-    for (ObjectGuid const& guid : npcs)
-    {
-        Unit* vehicleBase = botAI->GetUnit(guid);
-        if (!vehicleBase)
-            continue;
-
-        if (vehicleBase->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
-            continue;
-
-        if (!ShouldEnter(vehicleBase))
-            continue;
-
-        if (!vehicleToEnter || bot->GetExactDist(vehicleToEnter) > bot->GetExactDist(vehicleBase))
-            vehicleToEnter = vehicleBase;
-    }
-
-    if (!vehicleToEnter)
+    Unit* vehicleBase = FlameLeviathanVehicleToBoard(botAI);
+    if (!vehicleBase)
         return false;
 
-    if (EnterVehicle(vehicleToEnter, true))
-        return true;
-
-    return false;
-}
-
-bool FlameLeviathanEnterVehicleAction::EnterVehicle(Unit* vehicleBase, bool moveIfFar)
-{
-    float dist = bot->GetDistance(vehicleBase);
-
-    if (dist > INTERACTION_DISTANCE && !moveIfFar)
-        return false;
-
-    if (dist > INTERACTION_DISTANCE)
+    if (bot->GetDistance(vehicleBase) > INTERACTION_DISTANCE)
         return MoveTo(vehicleBase);
 
     botAI->RemoveShapeshift();
     vehicleBase->HandleSpellClick(bot);
 
-    if (!bot->IsOnVehicle(vehicleBase))
+    if (!bot->GetVehicle())
         return false;
 
     WorldPacket emptyPacket;
     bot->GetSession()->HandleCancelMountAuraOpcode(emptyPacket);
     return true;
-}
-
-bool FlameLeviathanEnterVehicleAction::ShouldEnter(Unit* target)
-{
-    Vehicle* vehicleKit = target->GetVehicleKit();
-    if (!vehicleKit)
-        return false;
-
-    bool isMelee = PlayerbotAI::IsMelee(bot);
-    bool allMain = AllMainVehiclesOnUse();
-    bool inUse = vehicleKit->IsVehicleInUse();
-    int32 entry = target->GetEntry();
-    if (entry != NPC_SALVAGED_DEMOLISHER && entry != NPC_SALVAGED_SIEGE_ENGINE && entry != NPC_VEHICLE_CHOPPER)
-        return false;
-    if (!allMain)
-    {
-        if (inUse)
-            return false;
-        if (entry != NPC_SALVAGED_DEMOLISHER && entry != NPC_SALVAGED_SIEGE_ENGINE)
-            return false;
-        if (entry == NPC_SALVAGED_DEMOLISHER && isMelee)
-            return false;
-        if (entry == NPC_SALVAGED_SIEGE_ENGINE && !isMelee)
-            return false;
-        return true;
-    }
-
-    if (!vehicleKit->GetAvailableSeatCount())
-        return false;
-
-    if (entry == NPC_SALVAGED_SIEGE_ENGINE)
-    {
-        Unit* turret = vehicleKit->GetPassenger(7);
-        if (!turret)
-            return false;
-        Vehicle* turretVehicle = turret->GetVehicleKit();
-        if (!turretVehicle)
-            return false;
-        if (turretVehicle->IsVehicleInUse())
-            return false;
-        return true;
-    }
-
-    if (entry == NPC_SALVAGED_DEMOLISHER)
-    {
-        if (vehicleKit->GetPassenger(0))
-        {
-            Unit* target2 = vehicleKit->GetPassenger(1);
-            if (!target2)
-                return false;
-            Vehicle* vehicle2 = target2->GetVehicleKit();
-            if (!vehicle2)
-                return false;
-            if (vehicle2->GetPassenger(0))
-                return false;
-        }
-        return true;
-    }
-
-    if (entry == NPC_VEHICLE_CHOPPER && vehicleKit->GetAvailableSeatCount() <= 1)
-        return false;
-
-    return true;
-}
-
-bool FlameLeviathanEnterVehicleAction::AllMainVehiclesOnUse()
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-    int demolisher = 0;
-    int siege = 0;
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* player = gref->GetSource();
-        if (!player)
-            continue;
-        Unit* vehicleBase = player->GetVehicleBase();
-        if (!vehicleBase)
-            continue;
-        if (vehicleBase->GetEntry() == NPC_SALVAGED_DEMOLISHER)
-            ++demolisher;
-        else if (vehicleBase->GetEntry() == NPC_SALVAGED_SIEGE_ENGINE)
-            ++siege;
-    }
-    int maxC = IsRaid25Man(bot) ? 5 : 2;
-    return demolisher >= maxC && siege >= maxC;
 }

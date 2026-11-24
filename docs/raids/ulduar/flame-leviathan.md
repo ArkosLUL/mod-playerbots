@@ -36,7 +36,15 @@ that turret, at the hull's position but not its size, so size tests go through
 the arena: exactly 10 / 25 usable slots, **zero slack**. Boarding uses `HandleSpellClick`, not
 `Unit::EnterVehicle`, so the Ulduar vehicle scripts run, then cancels the mount a bot boarded on. It
 fills every driver seat first (melee on siege engines, the rest on demolishers), then gunner seats
-or an empty chopper, never a siege engine's flagless seats.
+or an empty chopper, never a siege engine's flagless seats. Nothing past the driver seats opens
+until all are manned, so a raid short of 5 (10-man: 2) melee or ranged leaves the rest on foot.
+
+**Boarding needs no leader.** Every bot on foot boards the nearest seat its rules allow within
+200 yd and in line of sight (`FlameLeviathanVehicleToBoard`), whether or not a real player masters
+it; a real player boards whatever he likes, and the seat counts include him. An empty hull must
+carry the spell click: the base-camp set has it withheld until Brann's intro, and
+`HandleSpellClick`, called directly, does not check it. The trigger runs for every bot on foot in
+Ulduar until he dies, so `nearest vehicles far` is cached for a second.
 
 ## The demolisher runs on pyrite, not energy
 
@@ -279,7 +287,8 @@ The `flame leviathan vehicle movement` rule (`Exclusive`) zeroes every other `Mo
 a bot is on an FL vehicle, exempting only the drive action, boarding and `leave vehicle` (without
 them a hull-less bot never boards again and nobody gets out after the kill) — and it stays **inert
 until he is engaged**, or the raid could never drive into the arena. Once it is live, a silently
-failing drive action means vehicles stand still all fight.
+failing drive action means vehicles stand still all fight. The drive waits for the engage too, so
+nothing here moves a seated vehicle before the pull: a fleet placed inside the arena holds there.
 
 **"Engaged" is his combat, not the rider's** (`FlameLeviathanEngaged`, boss first, rider as the
 fallback for the approach; [pitfalls](../../engine/pitfalls.md#before-the-pull-and-out-of-combat)):
@@ -544,10 +553,6 @@ so the next silent election failure is visible.
   `Throw Passenger 62324`, kills the turret it wakes, and clicks the Overload Control Device; the seats
   are immune to Vents, Missile Barrage, Ram, Fury and Inferno. Crewless bots or chopper crews could be
   the passengers.
-- **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
-  `master->GetVehicle()` — the Oculus `GroupFlyingTrigger` defect
-  ([vehicles](../../engine/raid-mechanics-lessons.md#vehicles-and-flight)). It once fired 1,091 / 597
-  times in two pulls and never ran, so crews whose hull died stayed on foot.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **A crewless bot walks into the arena and dies**, still running the last drive goal while Missile
   Barrage and Flame Vents (500 yd) hit a player-sized pool, a median 17.7-22.2 s after losing its hull.

@@ -203,6 +203,8 @@ Unit* FlameLeviathanRiddenVehicle(Player* bot);
 
 bool FlameLeviathanIsDriver(Player* bot);
 
+Unit* FlameLeviathanVehicleToBoard(PlayerbotAI* botAI);
+
 bool FlameLeviathanIsPursued(Player* bot);
 
 bool FlameLeviathanIsVentChanneling(Unit* boss);
