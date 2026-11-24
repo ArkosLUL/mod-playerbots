@@ -2795,6 +2795,10 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         Unit* const victim = boss ? boss->GetVictim() : nullptr;
         Player* const holder = victim ? victim->ToPlayer() : nullptr;
         bool const tankHolds = holder && PlayerbotAI::IsTank(holder);
+        if (role == ThorimPhase2Role::MainTank && boss && victim != bot && !tankHolds && !ClassTauntReady(botAI) &&
+            !bot->HasAura(SPELL_UNBALANCING_STRIKE))
+            return false;
+
         position = (victim == bot || (role == ThorimPhase2Role::MainTank && !tankHolds))
                        ? ULDUAR_THORIM_PHASE2_TANK_SPOT
                        : ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;

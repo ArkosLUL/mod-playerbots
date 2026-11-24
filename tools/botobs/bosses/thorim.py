@@ -4,7 +4,8 @@
     thorim.py <file>           every section
     thorim.py <file> --deaths  deaths by mechanic, phase 1 and phase 2 apart
     thorim.py <file> --phase2  Chain Lightning, tank deaths, his cannot-reach flag and stretches held without
-                               losing health, the opening trade and how far it dragged him, Thorim's
+                               losing health, how long he ran loose before a tank first held him, the
+                               opening trade and how far it dragged him, Thorim's
                                spot and facing, tank trades, the waiting tank, chain bridges, melee
                                ring and camp spacing, hazards on each tank
     thorim.py <file> --blizzard  each Sif Blizzard against the melee ring: slot points it covered, who
@@ -335,6 +336,14 @@ class Phase2:
             rate = (early[0][1] - early[-1][1]) / ((early[-1][0] - early[0][0]) / 1000.0)
         return ((first, taker_off) if first is not None else None), dragged, rate
 
+    def pickup(self) -> tuple[int | None, int, int]:
+        taken = next((when for when, victim, _ in self.victims if victim in self.tanks), None)
+        until = taken if taken is not None else self.end
+        swings = [rec for rec in self.trace.of("dmg")
+                  if self.start <= rec["t"] <= until and rec.get("s") == self.boss and not rec.get("sp")
+                  and rec.get("d") in self.players and rec.get("d") not in self.tanks]
+        return taken, len(swings), sum(rec.get("a", 0) for rec in swings)
+
     def ring_moves_per_minute(self) -> float | None:
         ring = {guid for _, guid, _ in self.slot_events}
         minutes = (self.end - self.start - SETTLED_MS) / 60000.0
@@ -475,6 +484,13 @@ def opening_line(phase: Phase2) -> str:
     return f"{trade_text}; {rate_text} %/s over the first {OPENING_MS // 1000} s"
 
 
+def pickup_line(phase: Phase2) -> str:
+    taken, swings, damage = phase.pickup()
+    taken_text = "no tank on him" if taken is None else f"a tank on him at +{(taken - phase.start) / 1000.0:.1f} s"
+    return (f"{taken_text}; before it Thorim's melee on non-tanks {damage // 1000}k from {swings} "
+            f"swing{'' if swings == 1 else 's'}")
+
+
 def show_phase2(trace: Trace) -> None:
     print("PHASE 2")
     if not mine(trace):
@@ -490,6 +506,7 @@ def show_phase2(trace: Trace) -> None:
     print(f"  chain lightning   {chain_line(phase)}")
     print(f"  tank deaths       {tank_death_line(phase)}")
     print(f"  untouchable       {untouchable_line(phase)}")
+    print(f"  pickup            {pickup_line(phase)}")
     print(f"  opening           {opening_line(phase)}")
     print(f"  thorim spot       off the tank spot p50 {yd(quantile(lists['boss_off_spot'], .5))} "
           f"p90 {yd(quantile(lists['boss_off_spot'], .9))} yd; facing off the tank-spot axis "
