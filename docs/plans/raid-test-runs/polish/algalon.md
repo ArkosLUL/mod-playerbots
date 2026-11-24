@@ -91,7 +91,7 @@ Leads, not picked:
 - r12: one finisher takes an under-star's last 5 ticks to its line while the team moves on (`algalon.finishstar`,
   `algalon.finisher`) — held (below band at the cast 9 of 31 → 7 of 49; early under-star deaths in a cast 22 → 1).
 - r13: the tick breaks a personal-node Ice Block once its star is dead and none explodes on the bot within 4.5 s
-  (`algalon.unblock`); class Deterrence held for unphased bots in P1 — pending window 38.
+  (`algalon.unblock`); class Deterrence held for unphased bots in P1 he is not hitting — pending window 38.
 
 **Tried and rejected:**
 
@@ -166,8 +166,8 @@ the three team members stop attacking at that explosion.
 - `BreakSpentIceBlocks` in the tick: a personal-node Ice Block (`personalBlocks`) comes off once its star has left
   the scan, no star explodes on the bot within 4.5 s (the press lead plus the stacking span), outside the Big Bang
   cast (the hide run already strips it) and unphased; probe `algalon.unblock`.
-- `algalon deterrence hold` blocks the class `deterrence` node for unphased bots in phase 1; phased (Dark Matter)
-  and phase 2 keep it.
+- `algalon deterrence hold` blocks the class `deterrence` node for unphased bots in phase 1 he is not hitting
+  (its parry stops his melee; none in w36-37 was on his victim); phased (Dark Matter) and phase 2 keep it.
 - Reader: `--defensives` lists each Ice Block and Deterrence a bot raised on itself unphased in P1, the star team's
   share and the broken ones; verdict for a team member held over 2 s. Test `IdleButtons`.
 - Doc: `docs/raids/ulduar/algalon.md` (Cooldowns: personal buttons; The trace).

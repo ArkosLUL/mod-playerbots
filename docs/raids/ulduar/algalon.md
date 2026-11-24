@@ -675,9 +675,9 @@ shaman its mana.
 An Ice Block the node pressed is broken once its star is dead and none explodes on the bot within 4.5 s,
 unphased and outside the cast (`algalon.unblock`): no heal lands through it, and held its 10 s it took the
 star team's mage off the wave-3 under-stars from the explosion 12 s before Big Bang 2's cast (5 of 8 node
-Ice Blocks in 8 pulls were the team mage's). The class Deterrence node is held for unphased bots in phase 1:
-it fires on low health after the hit, never ahead of one, and each press is 5 s without attacks (39 in 8
-pulls, 20 on star team hunters).
+Ice Blocks in 8 pulls were the team mage's). The class Deterrence node is held for unphased bots in phase 1,
+except one he is hitting (its parry stops his melee): it fires on low health after the hit, never ahead of
+one, and each press is 5 s without attacks (39 in 8 pulls, 20 on star team hunters).
 
 ## Node order
 

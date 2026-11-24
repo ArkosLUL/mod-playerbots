@@ -36,7 +36,12 @@ bool AlgalonExplosionButtonsHeld(PlayerbotAI* botAI)
 
 bool AlgalonDeterrenceHeld(PlayerbotAI* botAI)
 {
-    return AlgalonInPhaseOne(botAI) && !IsAlgalonPhased(botAI->GetBot());
+    Player* bot = botAI->GetBot();
+    if (!AlgalonInPhaseOne(botAI) || IsAlgalonPhased(bot))
+        return false;
+
+    Unit* boss = GetAlgalon(botAI);
+    return !boss || boss->GetVictim() != bot;
 }
 
 bool AlgalonHidingNow(PlayerbotAI* botAI) { return AlgalonShouldRunForShelter(botAI->GetBot()); }
