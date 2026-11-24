@@ -59,6 +59,11 @@ FLAMES_DODGE = "mimiron dodge flames action"
 FIREBOT_STEP = "mimiron fire bot action"
 FIREBOT_AOE_GUARD = "mimiron fire bot aoe guard"
 BOMB_BOT_STEP = "mimiron bomb bot action"
+BOMB_TANK_HOLD = "mimiron bomb tank hold action"
+BOMB_TANK_SLOT = "p3bomb"
+TAUNT_SPELLS = {355: "taunt", 6795: "growl", 56222: "dark command", 62124: "hand of reckoning",
+                49576: "death grip", 31790: "righteous defense"}
+BOMB_TANK_DISTANCE = radius("ULDUAR_MIMIRON_BOMB_TANK_DISTANCE")
 SHOCK_ESCAPE = "mimiron shock blast action"
 BOMB_BOT_REFUSED = re.compile(r"bombbot(\d+)")
 BOMB_BOT_AIM_LEAD_MS = 300
@@ -1846,7 +1851,41 @@ def bombbot_rows(trace: Trace) -> dict:
             screened += int(refused.group(1)) if refused else 0
 
     return {"lives": lives, "victims": victims, "legs": legs, "steps": steps, "outcomes": outcomes,
-            "screened": screened}
+            "screened": screened, **bomb_tank_rows(trace, samples, lives)}
+
+
+def bomb_tank_rows(trace: Trace, samples: Samples, lives: dict[int, dict]) -> dict:
+    roster = roster_guids(trace)
+    tanks = {rec["g"] for rec in notes(trace, "mimiron.slot") if str(rec.get("txt", "")).startswith(BOMB_TANK_SLOT)}
+
+    taunts: dict[int, dict] = {}
+    for rec in trace.of("cast"):
+        guid = rec.get("tgt")
+        if rec.get("sp") in TAUNT_SPELLS and guid in lives and rec.get("s") in roster and guid not in taunts:
+            taunts[guid] = {"by": rec["s"], "spell": TAUNT_SPELLS[rec["sp"]], "after": rec["t"] - lives[guid]["first"]}
+
+    gaps = []
+    for guid, cell in lives.items():
+        if cell.get("chased") not in tanks:
+            continue
+        units = samples.before(cell["first"])
+        tank = samples.before(cell["last"]).get(cell["chased"])
+        if guid in units and tank:
+            gaps.append(math.dist((units[guid][1], units[guid][2]), (tank[1], tank[2])))
+
+    spacing = []
+    span = span_of(phases(trace), "P3")
+    acu = guids_of_entry(trace, NPC_AERIAL_COMMAND_UNIT)
+    if span and tanks:
+        for units in samples.window(*span):
+            unit = next((units[guid] for guid in acu if guid in units), None)
+            for guid in tanks:
+                if unit and guid in units and living(units[guid]):
+                    spacing.append(math.dist((units[guid][1], units[guid][2]), (unit[1], unit[2])))
+
+    holds = sum(1 for rec in trace.of("act")
+                if rec.get("a") == BOMB_TANK_HOLD and rec.get("vd") == "OK" and rec.get("g") in tanks)
+    return {"tanks": tanks, "taunts": taunts, "gaps": gaps, "spacing": spacing, "holds": holds}
 
 
 def show_bombbots(trace: Trace) -> None:
@@ -1874,8 +1913,24 @@ def show_bombbots(trace: Trace) -> None:
     if rows["outcomes"]:
         print("  flee notes: " + ", ".join(f"{key} {n}" for key, n in sorted(rows["outcomes"].items())))
     print(f"  other dodges refused a spot in a blast {rows['screened']} times")
+
+    taunts = rows["taunts"]
+    by_tank = [cell for cell in taunts.values() if cell["by"] in rows["tanks"]]
+    after = f", median {statistics.median(c['after'] for c in by_tank):.0f} ms after first seen" if by_tank else ""
+    print(f"  taunted {len(taunts)} of {len(lives)} ({len(by_tank)} by the bomb tank{after}); blew up on the bomb tank"
+          f" {sum(1 for cell in lives.values() if cell.get('chased') in rows['tanks'])} of {exploded}")
+    for name, count in collections.Counter(f"{trace.name(c['by'])[:10]} {c['spell']}" for c in taunts.values()).items():
+        print(f"      {name} x{count}")
+    if rows["tanks"]:
+        spacing = rows["spacing"]
+        near = sum(1 for d in spacing if BOMB_TANK_DISTANCE - 2 <= d <= BOMB_TANK_DISTANCE + 2)
+        gaps = ", ".join(f"{gap:.0f}" for gap in rows["gaps"]) or "-"
+        print(f"  bomb tank {', '.join(trace.name(g)[:10] for g in rows['tanks'])}: from the ACU median"
+              f" {statistics.median(spacing) if spacing else 0:.1f} yd, within 2 yd of {BOMB_TANK_DISTANCE:.0f}"
+              f" {near / len(spacing) * 100 if spacing else 0:.0f}% of phase 3; spawn to him at his blasts {gaps} yd;"
+              f" target drops {rows['holds']}")
     print("\n  'chased' is the bomb's target in the snapshot before the blast; a step-out is chased when the nearest"
-          " bomb was after the bot itself")
+          " bomb was after the bot itself; the bomb tank is whoever held a p3bomb slot")
 
 
 def acutank_rows(trace: Trace) -> list[dict]:

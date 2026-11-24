@@ -213,6 +213,17 @@ bool MimironBombBotTrigger::IsActive()
     return GetMimironBombBotBlast(botAI, bot, ULDUAR_MIMIRON_BOMB_BOT_BLAST_CLEARANCE).valid;
 }
 
+bool MimironBombBotTauntTrigger::IsActive()
+{
+    return ClassTauntReady(botAI) && GetMimironBombBotToTaunt(botAI, bot) != nullptr;
+}
+
+bool MimironBombTankHoldTrigger::IsActive()
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->GetEntry() != NPC_BOMB_BOT && IsMimironBombTank(botAI, bot);
+}
+
 bool MimironApproachTargetTrigger::IsActive()
 {
     if (!IsMimironHardModeActive(botAI) || !IsMimironEngaged(botAI))

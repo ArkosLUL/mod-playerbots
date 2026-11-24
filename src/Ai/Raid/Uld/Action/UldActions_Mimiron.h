@@ -6,6 +6,7 @@
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
+#include "RaidDirectTargeting.h"
 #include "RaidRedirectThreat.h"
 #include "Playerbots.h"
 #include "UldEncounter_Mimiron.h"
@@ -257,6 +258,26 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+class MimironBombBotTauntAction : public RaidDirectAttackAction
+{
+public:
+    static constexpr char const* Name = "mimiron bomb bot taunt action";
+
+    MimironBombBotTauntAction(PlayerbotAI* botAI) : RaidDirectAttackAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+class MimironBombTankHoldAction : public Action
+{
+public:
+    static constexpr char const* Name = "mimiron bomb tank hold action";
+
+    MimironBombTankHoldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
 };
 
 class MimironPetControlAction : public Action

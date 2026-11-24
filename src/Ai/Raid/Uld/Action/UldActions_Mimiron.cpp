@@ -993,6 +993,23 @@ bool MimironBombBotAction::Execute(Event /*event*/)
                                 MovementPriority::MOVEMENT_COMBAT, true, false, "bombbot", escape);
 }
 
+bool MimironBombBotTauntAction::Execute(Event /*event*/)
+{
+    Unit* bombBot = GetMimironBombBotToTaunt(botAI, bot);
+    if (!bombBot || !CastClassTaunt(botAI, bombBot))
+        return false;
+
+    AttackDirect(bombBot);
+    return true;
+}
+
+bool MimironBombTankHoldAction::Execute(Event /*event*/)
+{
+    context->GetValue<Unit*>("current target")->Set(nullptr);
+    bot->AttackStop();
+    return true;
+}
+
 bool MimironPetControlAction::isUseful()
 {
     MimironPetControlTrigger mimironPetControlTrigger(botAI);

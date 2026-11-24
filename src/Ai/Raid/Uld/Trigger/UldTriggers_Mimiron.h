@@ -141,6 +141,24 @@ public:
     bool IsActive() override;
 };
 
+class MimironBombBotTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "mimiron bomb bot taunt trigger";
+
+    MimironBombBotTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
+class MimironBombTankHoldTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "mimiron bomb tank hold trigger";
+
+    MimironBombTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class MimironPetControlTrigger : public Trigger
 {
 public:

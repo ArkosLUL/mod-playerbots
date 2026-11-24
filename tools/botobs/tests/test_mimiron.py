@@ -1063,6 +1063,84 @@ class BombBotPull(unittest.TestCase):
         self.assertIn("collateral 1 (1 dead)", out.getvalue())
         self.assertIn("median 9.0 yd", out.getvalue())
 
+    def test_no_bomb_tank_without_a_p3bomb_slot(self):
+        self.assertEqual((self.rows["tanks"], self.rows["taunts"], self.rows["spacing"]), (set(), {}, []))
+
+
+TANK_ACU = 4294970800
+TANKED_BOMB = 4294970801
+GUARD = 5006
+
+BOMB_TANK_ROSTER = ROSTER + [{"g": GUARD, "n": "Guard", "r": "tank", "c": "druid", "h": 0}]
+
+
+def bombtank_snap(when: int) -> dict:
+    rows = [[TANK_ACU, 0.0, 0.0, 379.0, 0.0, 90.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
+    for guid, (x, y) in {**HOME, GUARD: (12.0, 0.0)}.items():
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 80.0, 0, 0, 0, 0, 0, 0, 0.0])
+    if 1000 <= when <= 2500:
+        chase = AGONY if when < 1500 else GUARD
+        rows.append([TANKED_BOMB, max(0.0, (when - 1500) / 1000.0 * 6.0), 0.0, 364.0, 0.0, 100.0, 0.0, chase, 1,
+                     0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def bombtank_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": BOMB_TANK_ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": TANK_ACU, "en": mm.NPC_AERIAL_COMMAND_UNIT, "n": "Aerial Command Unit"},
+        {"t": 1, "e": "unit", "g": TANKED_BOMB, "en": mm.NPC_BOMB_BOT, "n": "Bomb Bot"},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "3"},
+        {"t": 0, "e": "note", "g": GUARD, "k": "mimiron.slot", "txt": "p3bomb 12,0,364"},
+        {"t": 0, "e": "note", "g": BULWARK, "k": "mimiron.slot", "txt": "p3tank 0,0,364"},
+        {"t": 300, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_HOLD, "rel": 99.0, "vd": "OK"},
+        {"t": 400, "e": "act", "g": GUARD, "a": mm.BOMB_TANK_HOLD, "rel": 99.0, "vd": "USELESS"},
+        {"t": 1200, "e": "cast", "s": GUARD, "sp": 6795, "tgt": TANKED_BOMB, "ct": 0},
+        {"t": 1700, "e": "cast", "s": BULWARK, "sp": 355, "tgt": TANKED_BOMB, "ct": 0},
+        {"t": 2600, "e": "dmg", "s": TANKED_BOMB, "d": GUARD, "sp": mm.SPELL_BOMB_BOT_BLAST, "a": 22000},
+        {"t": 6000, "e": "end", "out": "wipe"},
+    ]
+    records += [bombtank_snap(when) for when in range(0, 6000, 250)]
+    return records
+
+
+class BombTankPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700008.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in bombtank_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.bombbot_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_the_bomb_tank_is_whoever_held_a_p3bomb_slot(self):
+        self.assertEqual(self.rows["tanks"], {GUARD})
+
+    def test_only_the_first_taunt_on_a_bomb_counts_timed_from_first_seen(self):
+        self.assertEqual(self.rows["taunts"], {TANKED_BOMB: {"by": GUARD, "spell": "growl", "after": 200}})
+
+    def test_a_blast_on_the_bomb_tank_measures_its_spawn_to_him(self):
+        self.assertEqual(self.rows["lives"][TANKED_BOMB]["chased"], GUARD)
+        self.assertEqual(self.rows["gaps"], [12.0])
+
+    def test_spacing_reads_the_acu_ground_point_and_only_ok_holds_count(self):
+        self.assertEqual(set(self.rows["spacing"]), {12.0})
+        self.assertEqual(self.rows["holds"], 1)
+
+    def test_the_view_prints_the_taunts_and_the_bomb_tank(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_bombbots(self.trace)
+        self.assertIn("taunted 1 of 1 (1 by the bomb tank, median 200 ms after first seen); blew up on the bomb"
+                      " tank 1 of 1", out.getvalue())
+        self.assertIn("within 2 yd of 12 100% of phase 3", out.getvalue())
+
 
 ACU = 4294970700
 ACU_MKII = 4294970701
