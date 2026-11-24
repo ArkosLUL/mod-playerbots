@@ -572,14 +572,14 @@ hard-mode pulls, of 146 shelter walks before the first tank death (the opening l
 24 were hit and 13 died, 11 of those on slot 5's rows for orbs 0 and 1 (25.6 and 21.8 yd, across the
 Blizzard track), walked at 2.4-3.5 yd/s or begun 1-3 s late; an Evocation held one 4.4 s.
 `ThorimCampShelterInTime` sets the row's distance against run speed times the time left (lit plus 4.8 s
-less one scan), cut to 0.35 when the straight walk crosses a zone not yet slowing the bot. Short, and not
-rooted, `ThorimCampConeStep` searches once per orb for the nearest point in that reach (at most 20 yd)
-**45°** off the cone (7.5° past its edge: hits decode to 43.8°), 12-32 yd from Thorim, 11 yd clear of
-every zone, its walk clear of zones unless the bot already stands in one, ties to the row; the note reads
-`slot N orb M step`. It needs no body clearance: Chain Lightning lands 0.4-1.4 s after the orb lights,
-before any walker arrives. The positioning action breaks a channel while the camp bot stands in the lit
-cone. Replayed on those walks, the step took 11 of 25 hit walkers out of the cone and 6 of 16 dying ones
-(deaths within 1.5 s); a rooted or late bot it cannot save.
+less one scan), cut to 0.35 when the straight walk crosses a zone not yet slowing the bot. Short,
+unrooted and in the lit cone, `ThorimCampConeStep` searches once per orb for the nearest point in the
+uncut reach (at most 20 yd) **45°** off the cone (7.5° past its edge: hits decode to 43.8°), 12-32 yd
+from Thorim, 11 yd clear of every zone, its walk clear of zones unless the bot already stands in one,
+ties to the row; the note reads `slot N orb M step`. It needs no body clearance: Chain Lightning lands
+0.4-1.4 s after the orb lights, before any walker arrives. The positioning action breaks a channel while
+the camp bot stands in the lit cone. Replayed on those walks, the step took 11 of 25 hit walkers out of
+the cone and 6 of 16 dying ones (deaths within 1.5 s); a rooted or late bot it cannot save.
 
 `ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
 home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. It is far
