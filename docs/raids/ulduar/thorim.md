@@ -365,8 +365,9 @@ bridges it.
 
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
-holds the generic movers, scoped to a **settled** ring holder and exempting `AttackAction`,
-`ReachTargetAction` and `AvoidAoeAction`: a permanent movement freeze is the Void Reaver failure.
+holds the generic movers, scoped to a **settled** or [stepped-out](#a-covered-slot-steps-out) ring holder
+and exempting `AttackAction` and `ReachTargetAction`: a permanent movement freeze is the Void Reaver
+failure.
 `ThorimMeleeRingSettled` refuses a bot above the floor line: a stale ring latch on the balcony froze two
 bots on the hallway for three minutes.
 
@@ -394,7 +395,7 @@ bearings spanned **166°** and reached its neighbour's median. `SolveRingBearing
 once for the instance — everyone in a slot reads the same point, and no candidate is taken within
 `ULDUAR_THORIM_RING_SLOT_SEPARATION` (60°, **8.8 yd at r 8.8**) of another slot or of the tank anchor.
 Nor can it be wider: a lit cone forbids 105°, and three slots plus the anchor need 240 of the 255 left.
-A slot tries the side it answered on last time first, so one new zone cannot flip it across the ring.
+A slot tries the side it answered on last time first, so one new cone cannot flip it across the ring.
 The note reads `slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain
 Lightning reads; one latched bearing per slot replaced the 3-33° smear.
 
@@ -417,17 +418,41 @@ catches the floor hole south of y −288. With no ring point, a melee bot takes 
 DPS is worse than unspread. An r 8 ring round the tank spot is walkable all the way, its west arc on rim
 polys.
 
-**Zones outrank separation when the arc will not hold everything**, the cone never (~20k in one
-instant). A bot holds its bearing while a zone sits on it, so giving zones up cost 6-14 consecutive ticks
-at 4.3-4.9k, against 40-90k once for a hop. **The anchor term is still angle-only** — the tank sits at
-r 5.5, so 60° off him is **7.1 yd** of ground and a chain still bridges the pair. Unfixed. Nor does it
-count the waiting tank, whose [spot](#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it) is
-placed off the ring instead; only the anchor re-latch measures yards to both spots.
+**Separation gives way when the arc will not hold it, the cone never** (~20k in one instant). **The
+anchor term is still angle-only** — the tank sits at r 5.5, so 60° off him is **7.1 yd** of ground and a
+chain still bridges the pair. Unfixed. Nor does it count the waiting tank, whose
+[spot](#somebody-has-to-hold-the-boss-and-a-taunt-will-not-do-it) is placed off the ring instead; only
+the anchor re-latch measures yards to both spots.
 
-**A rotation does not always exist.** With a median **4 zones up at once (max 6)**, the 11 yd
-clearance leaves under 105° of ring free — too little for three slots plus the anchor — in
-**14.5-31.1%** of a wipe's Blizzard snapshots, and the whole ring in **5%** (0% in the kill). Where one
-exists the arc to the nearest clear bearing is a median 3-7 yd, p90 6-10, max 15.1.
+### A covered slot steps out
+
+**The solver never trades a bearing for Blizzard.** When it did, a covered slot swung onto another slot
+or the tank side as the trail moved (203 → 177 → 153 → 281° in 1.7 s), and generic `avoid aoe` hopped
+its melee 3-5 yd at a time through overlapping zones, its combat-priority bookings refusing the ring's
+own walk for ~5 s: **55 ticks, 248k, 3 deaths** and **40, 185k, 3** in two hard-mode wipes. No rotation
+fixes it: a median **4 zones up (max 6)** leaves under 105° of ring 11 yd clear, too little for three
+slots plus the anchor, in **14.5-31.1%** of a wipe's Blizzard snapshots, and none in 5% (0% in the kill).
+
+**Covered melee step out past the ring and walk back when it fades.** `ThorimRingBlizzardCovered`: the
+slot point within `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE` of a zone or the bunny, or, for a bot standing
+clear more than 3 yd off it, the straight walk there passing one. Each change flips `thorim.ringstep`
+and drops the arrival latch, so the walk back takes the 3 yd tolerance, not the 5 that would leave it out
+of reach. While covered the positioning row stands down: a bot clear of every zone and the lit cone holds
+where it stands, one in either takes `ThorimRingBlizzardStep` through the Blizzard node at
+`MOVEMENT_FORCED`, to the nearest point 11 yd clear of every zone, outside the cone, in the arena box,
+ties to the one nearest its slot point. In order: past the ring and 8 yd (the jump plus both reaches) off
+both tank spots within 15 yd, past the ring within 15, anywhere within 20. Slot 0 sits south-west of him
+between the west wall (x ~2100), the tank spots and the trail, so a hard tank clearance found no point for
+14-79% of the covered time in a six-pull replay.
+
+**Two holds keep it.** `thorim ring blizzard step` blocks `Reach` and `Charge` while stepped, or `reach
+melee` walks the bot straight back in, and the movement guard counts a stepped bot as settled.
+`thorim ring aoe hold` blocks `AvoidAoe` for ring melee on the floor all phase 2: its hops were the damage.
+
+**The cost is uptime.** Replayed per slot on six hard-mode pulls at 7 yd/s: ring bot-seconds within the
+9.8 yd damage reach 8-51 → 0-6 a pull, melee in reach up to 7 points less than the ring as fought (a covered
+slot sits out up to a zone's 10 s), walk back p50 0.7-2.5 s, max 4.5. Pets hold their slot bearing under
+it: [pets dodge nothing](#pets).
 
 ### The opening
 
@@ -666,16 +691,15 @@ damage running 4,695 → 47,024, out of the melee ring and into the ranged camp,
 survival is where the chain *ends*.
 
 **The generic movers fight the positioning row over a tank.** `ThorimMeleeRingSettled` is false for
-every role but `MeleeRing`, so the `thorim movement guard` never gates a tank, and `AvoidAoe` sits in
-its pass mask regardless: `avoid aoe` aimed **70-74** orders a pull at the bot tank and `tank face`
-**15-30**, alternating with the positioning row **153-176** times over a median **7.6-7.9 yd** gap
-between their destinations. `thorim tank anchor guard` closes it, holding a tank that is within 3 yd of
-its own spot and keeping `AvoidAoe` **out** of the pass mask. That only enforces what
-`ThorimSifBlizzardTrigger` already decides, since it refuses both tank roles in phase 2 on the grounds
-that a tank's 30 yd flee tows the boss into the ranged camp. One oscillating tank took its
-destinations from 1 distinct point to 10 and towed the ring into itself (minimum pairwise slot gap
-p10 60° → 10°), and Chain Lightning's worst cast from 6 victims for 119,057 to 8 for **190,060**,
-whose 69,788 top hit killed two melee.
+every role but `MeleeRing`, so the `thorim movement guard` never gates a tank: `avoid aoe` aimed **70-74**
+orders a pull at the bot tank and `tank face` **15-30**, alternating with the positioning row
+**153-176** times over a median **7.6-7.9 yd** gap between their destinations. `thorim tank anchor guard`
+closes it, holding a tank that is within 3 yd of its own spot and keeping `AvoidAoe` **out** of the pass
+mask. That only enforces what `ThorimSifBlizzardTrigger` already decides, since it refuses both tank roles
+in phase 2 on the grounds that a tank's 30 yd flee tows the boss into the ranged camp. One oscillating
+tank took its destinations from 1 distinct point to 10 and towed the ring into itself (minimum pairwise
+slot gap p10 60° → 10°), and Chain Lightning's worst cast from 6 victims for 119,057 to 8 for
+**190,060**, whose 69,788 top hit killed two melee.
 
 ## The Charge Orb field is a 32.3 yd circle, not a 35 yd sphere
 
@@ -770,15 +794,14 @@ loop by 12.9 yd or more.
 generic dodge's **trigger** radius, not a damage radius; at 12 the flee stopped while the bot still stood
 in the zone. The damage-side constant is `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0`, the 9.8 yd
 reach measured over 161 ticks (corrected DBC 8 plus both combat reaches through `IsWithinDistInMap`)
-plus a yard. 15 instead grows the ring's slide from a median 3-7 yd of arc to 9-12 and buys nothing.
+plus a yard. 15 instead grew the ring's old slide from a median 3-7 yd of arc to 9-12 and bought nothing.
 `ThorimPhase2PositioningTrigger` stands down while `ThorimSifBlizzardTrigger` is active, as the arena
 anchor does: without it the anchor walked bots back into the zone they had left, and the four ranged who
 took the most Blizzard were the four who ran furthest.
 
-**That dodge excludes the melee ring outright**, which makes the ring solver melee's only answer to a
-Blizzard; with the solver free to give the zone test up, the Blizzard action's verdicts named only
-ranged and healers. Ticks are **4,300-4,900 median, 6,187 max**, and melee stood **6-14 consecutive**
-of them, one bot 14 ticks for **72,853** over 11 s. That cost melee **320k and 457k** in two wipes, more
+**That dodge excludes the melee ring outright**: the same node steps ring melee out
+([how](#a-covered-slot-steps-out)). Ticks are **4,300-4,900 median, 6,187 max**; melee left standing in
+zones took **6-14 consecutive**, one bot 14 for **72,853** over 11 s, **320k and 457k** in two wipes, more
 than Chain Lightning's whole 188k in one of them. The kill never exceeded **4 ticks**, the cleanest
 single difference between it and the wipes.
 
@@ -804,8 +827,8 @@ compass rays out to 30 yd and takes the **furthest**, so every accepted melee fl
 30 yd, landed 33-53 yd from the boss, still took another Blizzard tick **23-58%** of the time (the
 circuit is a ring, so running outward lands on another arc), and blocked every other move for the walk
 (31.7 s and 15.0 s stalls). **34 / 56 / 58% of melee Blizzard damage was taken away from the ring.** Of
-199 and 246 attempts, 161 and 204 were refused by the movement gate anyway. Melee slide around the
-trail instead, and tanks are exempt **by role**, since a holder check alone drops out for the half
+199 and 246 attempts, 161 and 204 were refused by the movement gate anyway. Melee take the nearest
+clear point instead, and tanks are exempt **by role**, since a holder check alone drops out for the half
 second after a human tank's taunt.
 
 **Detector: Sif (33196) alive AND `GetPositionZ() < 429.6`**: she spawns at the throne and only
@@ -1257,7 +1280,8 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 ## What a trace answers
 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
-`thorim.ringspot` (each ring bot's slot) and `thorim.unreach` (whom his cannot-reach flag names):
+`thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard) and
+`thorim.unreach` (whom his cannot-reach flag names):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
@@ -1268,6 +1292,11 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   moves; who stands within 8 yd of each tank; ring spacing, front-arc share, uptime and moves; camp
   spacing; Blizzard, Lightning Charge and Frost Nova on holder and waiting tank; his health lost per
   second.
+- `--blizzard`: per Sif Blizzard (its bunny's first snapshot to its last plus a zone's 10 s, cut at the
+  next bunny), each slot point's covered seconds; ring bots within the 9.8 yd damage reach (seconds,
+  stays, longest, ticks, damage); deaths; step moves, stepped bot-seconds and those past 9.0 yd of him;
+  the walk back from a step's end to within 9.0 yd, ticks on the way. Traces without `thorim.ringstep`
+  read all but the steps.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Hop order is damage order (each hop does 1.5 times the last), and pets'

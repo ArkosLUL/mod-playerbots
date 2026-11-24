@@ -63,6 +63,8 @@ inline constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 inline constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
+inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS = 15.0f;
+inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS = 20.0f;
 
 inline constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 70.0f;
 
@@ -321,6 +323,8 @@ struct ThorimEncounterState
 
     RaidObs::ObsGuidSet ringArrived{"thorim.ringarrived"};
 
+    RaidObs::ObsGuidSet ringStepped{"thorim.ringstep"};
+
     bool gauntletTraced = false;
 
     RaidObs::ObsValue<bool> leverPulled{"thorim.leverpulled"};
@@ -512,6 +516,12 @@ void ThorimRingMarkArrived(Player* bot);
 void ThorimRingClearArrived(Player* bot);
 
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
+
+bool ThorimRingMeleeOnFloor(PlayerbotAI* botAI, Player* bot);
+
+bool ThorimRingBlizzardCovered(Player* bot, Position const& ringPoint);
+bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out);
+bool ThorimRingSteppedOut(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimTankOnAnchor(PlayerbotAI* botAI, Player* bot);
 

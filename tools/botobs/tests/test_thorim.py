@@ -3,8 +3,8 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic phase 2 pins one tank trade, a Chain Lightning cast from both tanks into slot 2, the waiting tank
-on the off-tank spot and the hazards on each tank. The shared v14 fixture shows every section reads empty
-elsewhere.
+on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section. The
+shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -159,6 +159,50 @@ class Phase2(unittest.TestCase):
     def test_no_phase_2(self):
         records = [rec for rec in pull() if rec.get("k") != "thorim.p2start"]
         self.assertIn("phase 2 never started", printed(thorim.show_phase2, load(records)))
+
+
+BUNNY = (1 << 32) | 3
+ZONE = (2125.0, -245.0)
+
+
+def blizzard_pull() -> list[dict]:
+    records = pull()
+    for rec in records:
+        if rec.get("e") != "snap":
+            continue
+        if 20000 <= rec["t"] <= 25000:
+            rec["u"].append([BUNNY, 2130.0, -240.0, 419.5, 0, 100, 0, 0])
+        if 20000 <= rec["t"] <= 27000:
+            rec["hz"] = [[62602, ZONE[0], ZONE[1], 419.5, 8.0, 1]]
+        if rec["t"] >= 28000:
+            rec["u"][3][1:3] = [2120.0, -250.0]
+    records += [
+        {"t": 0, "e": "unit", "g": BUNNY, "en": 32879, "n": "Thorim Controller"},
+        {"t": 20500, "e": "note", "g": MELEE, "k": "thorim.ringstep", "txt": "1"},
+        {"t": 20600, "e": "move", "g": MELEE, "k": "point", "ok": 1, "by": "thorim sif blizzard action"},
+        {"t": 27500, "e": "note", "g": MELEE, "k": "thorim.ringstep", "txt": "0"},
+    ]
+    records += [{"t": t, "e": "dmg", "s": THORIM, "d": MELEE, "sp": 62602, "a": 4500, "ok": 0, "hp": 90.0}
+                for t in (21000, 22000, 23000)]
+    return sorted(records, key=lambda rec: rec.get("t", 0))
+
+
+class RingBlizzard(unittest.TestCase):
+    def test_one_blizzard_on_slot_2(self):
+        text = printed(thorim.show_blizzard, load(blizzard_pull()))
+        self.assertIn("blizzard 1 +19.0..+34.0 s: slot points covered 2 7.0 s; in it Cleaver 7.0 s (1x, longest "
+                      "7.0 s, 3 ticks 13k); deaths 0; steps 1, stepped 7.0 bot-s, out of reach 7.0 of them; walk back "
+                      "p50 0.5 max 0.5 s, 0 ticks on the way", text)
+        self.assertIn("all: ring melee in a zone 7.0 bot-s, stays p50 7.0 max 7.0 s, 3 ticks 13k, deaths 0; steps 1, "
+                      "stepped 7.0 bot-s, out of reach 7.0; walk back p50 0.5 max 0.5 s, 0 ticks on the way", text)
+
+    def test_without_the_probe(self):
+        records = [rec for rec in blizzard_pull() if rec.get("k") != "thorim.ringstep"]
+        self.assertIn("deaths 0; no thorim.ringstep probe (a build before it)",
+                      printed(thorim.show_blizzard, load(records)))
+
+    def test_normal_mode(self):
+        self.assertIn("no Sif Blizzard in phase 2", printed(thorim.show_blizzard, load(pull())))
 
 
 class Deaths(unittest.TestCase):

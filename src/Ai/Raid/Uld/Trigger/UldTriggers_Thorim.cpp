@@ -154,13 +154,16 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     if (!ThorimPhase2Active(botAI))
         return false;
 
-    ThorimSifBlizzardTrigger blizzard(botAI);
-    if (blizzard.IsActive())
-        return false;
-
     ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
     if (role == ThorimPhase2Role::None)
         return false;
+
+    if (role != ThorimPhase2Role::MeleeRing)
+    {
+        ThorimSifBlizzardTrigger blizzard(botAI);
+        if (blizzard.IsActive())
+            return false;
+    }
 
     Position spot;
     if (!TryGetThorimPhase2Spot(botAI, bot, role, spot))
@@ -176,6 +179,9 @@ bool ThorimPhase2PositioningTrigger::IsActive()
 
         return !ThorimWalkUnderBlizzard(bot, *bot, spot) || ThorimCampSpotInLitCone(botAI, *bot);
     }
+
+    if (ThorimRingBlizzardCovered(bot, spot))
+        return false;
 
     if (!ThorimRingWantsMove(botAI, bot, spot))
     {
@@ -343,7 +349,10 @@ bool ThorimSifBlizzardTrigger::IsActive()
             return false;
 
         if (role == ThorimPhase2Role::MeleeRing)
-            return false;
+        {
+            Position step;
+            return ThorimRingBlizzardStep(botAI, bot, step);
+        }
 
         if (role == ThorimPhase2Role::Ranged)
             return bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && ThorimSpotUnderBlizzard(bot, *bot) &&

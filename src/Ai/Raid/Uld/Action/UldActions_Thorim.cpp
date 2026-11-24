@@ -432,6 +432,9 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 
     if (ringSlot)
     {
+        if (ThorimRingBlizzardCovered(bot, targetPosition))
+            return false;
+
         if (!ThorimRingWantsMove(botAI, bot, targetPosition))
         {
             ThorimRingMarkArrived(bot);
@@ -484,11 +487,17 @@ bool ThorimUnreachableStepAction::isUseful()
 
 bool ThorimSifBlizzardAction::Execute(Event event)
 {
-    if (!ThorimPhase2Active(botAI) || GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::Ranged)
-        return MoveAwayFromCreatureAction::Execute(event);
+    ThorimPhase2Role const role = ThorimPhase2Active(botAI) ? GetThorimPhase2Role(botAI, bot) : ThorimPhase2Role::None;
 
     Position escape;
-    if (!ThorimCampBlizzardEscape(botAI, bot, escape))
+    if (role == ThorimPhase2Role::MeleeRing)
+    {
+        if (!ThorimRingBlizzardStep(botAI, bot, escape))
+            return false;
+    }
+    else if (role != ThorimPhase2Role::Ranged)
+        return MoveAwayFromCreatureAction::Execute(event);
+    else if (!ThorimCampBlizzardEscape(botAI, bot, escape))
         return false;
 
     return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,

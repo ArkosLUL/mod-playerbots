@@ -6,6 +6,8 @@
     thorim.py <file> --phase2  Chain Lightning, tank deaths, his cannot-reach flag and stretches held without
                                losing health, Thorim's spot and facing, tank trades, the waiting
                                tank, chain bridges, melee ring and camp spacing, hazards on each tank
+    thorim.py <file> --blizzard  each Sif Blizzard against the melee ring: slot points it covered, who
+                                 stood in it and how long, ticks taken, step-outs and the walk back
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import anchor, dist2, frames  # noqa: E402
+from raidobs.geometry import anchor, dist2, frames, radius  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes  # noqa: E402
 
 ENCOUNTER = "thorim"
@@ -53,7 +55,14 @@ STALL_GAP_MS = 1000
 STALL_HP = 0.03
 RING_MOVER = "thorim phase 2 positioning action"
 UNREACH_MOVER = "thorim unreachable step action"
+BLIZZARD_MOVER = "thorim sif blizzard action"
 RINGSPOT = re.compile(r"slot (\d+)")
+RINGSPOT_SOLVED = re.compile(r"slot (\d+) bearing (-?\d+) solved (-?\d+)")
+NPC_SIF_BLIZZARD = 32879
+BLIZZARD_REACH = 9.8
+BLIZZARD_ZONE_MS = 10000
+RING_RADIUS = radius("ULDUAR_THORIM_MELEE_RING_RADIUS")
+RING_BLIZZARD_CLEARANCE = radius("ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE")
 
 
 def mine(trace: Trace) -> bool:
@@ -489,9 +498,206 @@ def show_phase2(trace: Trace) -> None:
         print(f"  thorim health     {hp0:.1f}% to {hp1:.1f}%, {rate:.2f} %/s")
 
 
+class RingBlizzard:
+    def __init__(self, trace: Trace, start: int):
+        self.trace = trace
+        self.start = start
+        self.boss = thorim_guid(trace)
+        self.ring = collections.defaultdict(list)
+        for note in notes(trace, "thorim.ringspot"):
+            if found := RINGSPOT_SOLVED.match(str(note.get("txt"))):
+                self.ring[note.get("g")].append(
+                    (note["t"], int(found.group(1)), math.radians(int(found.group(3)))))
+        self.steps = collections.defaultdict(list)
+        for note in notes(trace, "thorim.ringstep"):
+            self.steps[note.get("g")].append((note["t"], str(note.get("txt")) == "1"))
+        self.probed = bool(self.steps)
+        self.hits = [rec for rec in trace.of("dmg") if rec.get("sp") in BLIZZARD and rec.get("d") in self.ring]
+        self.casts = self._casts()
+
+    def _casts(self) -> list[dict]:
+        bunnies = {guid for guid, entry in self.trace.entries.items() if entry == NPC_SIF_BLIZZARD}
+        seen: dict = {}
+        for snap in frames(self.trace):
+            if snap["t"] < self.start:
+                continue
+            for row in snap.get("u", []):
+                if row[0] in bunnies:
+                    first, _ = seen.get(row[0], (snap["t"], snap["t"]))
+                    seen[row[0]] = (first, snap["t"])
+        spans = sorted(seen.values())
+        casts = []
+        for index, (first, last) in enumerate(spans):
+            end = last + BLIZZARD_ZONE_MS
+            if index + 1 < len(spans):
+                end = min(end, spans[index + 1][0])
+            casts.append({"begin": first, "end": end})
+        return casts
+
+    @staticmethod
+    def _latest(events: list, when: int):
+        found = None
+        for event in events:
+            if event[0] > when:
+                break
+            found = event
+        return found
+
+    def stepped(self, guid, when: int) -> bool:
+        event = self._latest(self.steps.get(guid, []), when)
+        return bool(event and event[1])
+
+    def read(self, cast: dict) -> dict:
+        begin, end = cast["begin"], cast["end"]
+        covered = collections.Counter()
+        in_zone = collections.Counter()
+        stays = collections.defaultdict(list)
+        inside_since: dict = {}
+        stepped_ms = 0
+        out_ms = 0
+        previous = None
+        snaps = [snap for snap in frames(self.trace) if begin <= snap["t"] < end]
+        for snap in snaps:
+            when = snap["t"]
+            dt = min(when - previous, 1000) if previous is not None else 0
+            previous = when
+            rows = {row[0]: row for row in snap.get("u", [])}
+            boss = rows.get(self.boss)
+            if not boss or boss[5] <= 0 or boss[3] > FLOOR_Z:
+                continue
+            spot = (boss[1], boss[2])
+            zones = [(zone[1], zone[2]) for zone in snap.get("hz", []) if zone[0] in BLIZZARD]
+            marks = zones + [(row[1], row[2]) for guid, row in rows.items()
+                             if self.trace.entries.get(guid) == NPC_SIF_BLIZZARD]
+            points = {}
+            for guid, events in self.ring.items():
+                event = self._latest(events, when)
+                if event:
+                    points[event[1]] = (spot[0] + RING_RADIUS * math.cos(event[2]),
+                                        spot[1] + RING_RADIUS * math.sin(event[2]))
+            for slot, point in points.items():
+                if any(dist2(point, mark) < RING_BLIZZARD_CLEARANCE for mark in marks):
+                    covered[slot] += dt
+            for guid in self.ring:
+                row = rows.get(guid)
+                alive = row is not None and row[5] > 0 and row[3] <= FLOOR_Z
+                inside = alive and any(dist2(row[1:3], zone) <= BLIZZARD_REACH for zone in zones)
+                if inside:
+                    in_zone[guid] += dt
+                    inside_since[guid] = inside_since.get(guid, 0) + dt
+                elif guid in inside_since:
+                    stays[guid].append(inside_since.pop(guid))
+                if alive and self.stepped(guid, when):
+                    stepped_ms += dt
+                    out_ms += dt if dist2(row[1:3], spot) > MELEE_EDGE else 0
+        for guid, stay in inside_since.items():
+            stays[guid].append(stay)
+
+        ticks = collections.Counter()
+        damage = collections.Counter()
+        for rec in self.hits:
+            if begin <= rec["t"] < end:
+                ticks[rec["d"]] += 1
+                damage[rec["d"]] += rec.get("a", 0)
+        steps = sum(1 for rec in self.trace.of("move")
+                    if begin <= rec["t"] < end and rec.get("ok") and rec.get("by") == BLIZZARD_MOVER
+                    and rec.get("g") in self.ring)
+        deaths = sum(1 for death in combat_deaths(self.trace)
+                     if begin <= death["t"] < end and death["g"] in self.ring
+                     and blow_spell(death) in BLIZZARD)
+        walks = []
+        walk_ticks = 0
+        for guid, events in self.steps.items():
+            for when, on in events:
+                if on or not begin <= when < end or guid not in self.ring:
+                    continue
+                back = self._back_in_reach(guid, when)
+                if back is None:
+                    continue
+                walks.append((back - when) / 1000.0)
+                walk_ticks += sum(1 for rec in self.hits if rec["d"] == guid and when <= rec["t"] <= back)
+        return {"covered": covered, "in_zone": in_zone, "stays": stays, "ticks": ticks, "damage": damage,
+                "steps": steps, "deaths": deaths, "stepped_ms": stepped_ms, "out_ms": out_ms, "walks": walks,
+                "walk_ticks": walk_ticks}
+
+    def _back_in_reach(self, guid, when: int):
+        for snap in frames(self.trace):
+            if snap["t"] < when:
+                continue
+            rows = {row[0]: row for row in snap.get("u", [])}
+            boss, row = rows.get(self.boss), rows.get(guid)
+            if not boss or not row or row[5] <= 0:
+                return None
+            if dist2(row[1:3], boss[1:3]) <= MELEE_EDGE:
+                return snap["t"]
+        return None
+
+
+def ring_blizzard_line(blizzard: RingBlizzard, label: str, read: dict) -> str:
+    trace = blizzard.trace
+    covered = ", ".join(f"{slot} {ms / 1000.0:.1f} s" for slot, ms in sorted(read["covered"].items())) or "none"
+    who = []
+    for guid, ms in sorted(read["in_zone"].items(), key=lambda item: -item[1]):
+        stays = read["stays"].get(guid, [])
+        who.append(f"{trace.name(guid)} {ms / 1000.0:.1f} s ({len(stays)}x, longest "
+                   f"{max(stays, default=0) / 1000.0:.1f} s, {read['ticks'][guid]} ticks "
+                   f"{read['damage'][guid] // 1000}k)")
+    hit_only = [guid for guid in read["ticks"] if guid not in read["in_zone"]]
+    who += [f"{trace.name(guid)} 0.0 s ({read['ticks'][guid]} ticks {read['damage'][guid] // 1000}k)"
+            for guid in hit_only]
+    if blizzard.probed:
+        walks = read["walks"]
+        steps = (f"steps {read['steps']}, stepped {read['stepped_ms'] / 1000.0:.1f} bot-s, out of reach "
+                 f"{read['out_ms'] / 1000.0:.1f} of them; walk back p50 {yd(quantile(walks, .5))} "
+                 f"max {yd(max(walks) if walks else None)} s, {read['walk_ticks']} ticks on the way")
+    else:
+        steps = "no thorim.ringstep probe (a build before it)"
+    return (f"{label}: slot points covered {covered}; in it {', '.join(who) or 'nobody'}; "
+            f"deaths {read['deaths']}; {steps}")
+
+
+def show_blizzard(trace: Trace) -> None:
+    print("RING BLIZZARD")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    blizzard = RingBlizzard(trace, start)
+    if not blizzard.casts:
+        print("  no Sif Blizzard in phase 2")
+        return
+    total = {"covered": collections.Counter(), "in_zone": collections.Counter(),
+             "stays": collections.defaultdict(list), "ticks": collections.Counter(),
+             "damage": collections.Counter(), "steps": 0, "deaths": 0, "stepped_ms": 0, "out_ms": 0,
+             "walks": [], "walk_ticks": 0}
+    for index, cast in enumerate(blizzard.casts, 1):
+        read = blizzard.read(cast)
+        label = (f"blizzard {index} +{(cast['begin'] - start) / 1000.0:.1f}..+{(cast['end'] - start) / 1000.0:.1f} s")
+        print(f"  {ring_blizzard_line(blizzard, label, read)}")
+        for key in ("covered", "in_zone", "ticks", "damage"):
+            total[key].update(read[key])
+        for guid, stays in read["stays"].items():
+            total["stays"][guid] += stays
+        for key in ("steps", "deaths", "stepped_ms", "out_ms", "walk_ticks"):
+            total[key] += read[key]
+        total["walks"] += read["walks"]
+    stays = [stay / 1000.0 for values in total["stays"].values() for stay in values]
+    print(f"  all: ring melee in a zone {sum(total['in_zone'].values()) / 1000.0:.1f} bot-s, stays p50 "
+          f"{yd(quantile(stays, .5))} max {yd(max(stays) if stays else None)} s, "
+          f"{sum(total['ticks'].values())} ticks {sum(total['damage'].values()) // 1000}k, deaths {total['deaths']}"
+          + (f"; steps {total['steps']}, stepped {total['stepped_ms'] / 1000.0:.1f} bot-s, out of reach "
+             f"{total['out_ms'] / 1000.0:.1f}; walk back p50 {yd(quantile(total['walks'], .5))} max "
+             f"{yd(max(total['walks']) if total['walks'] else None)} s, {total['walk_ticks']} ticks on the way"
+             if blizzard.probed else ""))
+
+
 SECTIONS = (
     ("deaths", "deaths by mechanic, phase 1 and phase 2 apart", show_deaths),
     ("phase2", "the phase 2 measures the tank spots are judged on", show_phase2),
+    ("blizzard", "each Sif Blizzard against the melee ring: who stood in it, ticks, steps, the walk back",
+     show_blizzard),
 )
 
 

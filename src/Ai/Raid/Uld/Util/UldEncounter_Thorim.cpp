@@ -603,18 +603,6 @@ std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
     return state.blizzardSpots;
 }
 
-bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position> const& zones)
-{
-    float const x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
-    float const y = boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
-
-    for (Position const& zone : zones)
-        if (zone.GetExactDist2d(x, y) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
-            return false;
-
-    return true;
-}
-
 float RingSlotPointsApart(ThorimEncounterState const& state, uint8 first, uint8 second)
 {
     float const delta = AbsAngleDelta(state.ringSlots[first].composed, state.ringSlots[second].composed);
@@ -931,7 +919,6 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
     RelatchRingAnchor(state, boss);
 
     float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
-    std::vector<Position> const& zones = ThorimBlizzardSpots(bot);
 
     std::array<float, ULDUAR_THORIM_MELEE_SLOTS> taken{};
     for (uint8 slot = 0; slot < ULDUAR_THORIM_MELEE_SLOTS; ++slot)
@@ -947,7 +934,7 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
 
         float answer = base;
         bool found = false;
-        for (uint8 relax = 0; relax < 3 && !found; ++relax)
+        for (uint8 relax = 0; relax < 2 && !found; ++relax)
         {
             for (uint8 tick = 0; tick <= 90 && !found; ++tick)
             {
@@ -957,8 +944,6 @@ void SolveRingBearings(PlayerbotAI* botAI, Player* bot, Unit* boss)
                         base + static_cast<float>((turn ? -firstWay : firstWay) * tick) * step);
 
                     bool ok = !orb || !InLightningChargeCone(candidate, coneBearing);
-                    if (ok && relax < 2)
-                        ok = RingBearingClearOfBlizzard(boss, candidate, zones);
                     if (ok && relax < 1)
                         ok = RingBearingSeparated(candidate, slot, taken, state.ringAnchor);
 
@@ -3064,7 +3049,108 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
         return false;
 
     ThorimEncounterState const* state = FindState(bot);
-    return state && state->ringArrived.count(bot->GetGUID()) > 0;
+    return state && (state->ringArrived.count(bot->GetGUID()) || state->ringStepped.count(bot->GetGUID()));
+}
+
+bool ThorimRingMeleeOnFloor(PlayerbotAI* botAI, Player* bot)
+{
+    return bot && bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && ThorimPhase2Active(botAI) &&
+           GetThorimPhase2Role(botAI, bot) == ThorimPhase2Role::MeleeRing;
+}
+
+bool ThorimRingBlizzardCovered(Player* bot, Position const& ringPoint)
+{
+    if (!bot)
+        return false;
+
+    bool const covered = ThorimSpotUnderBlizzard(bot, ringPoint) ||
+                         (bot->GetExactDist2d(&ringPoint) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE &&
+                          !ThorimSpotUnderBlizzard(bot, *bot) && ThorimWalkUnderBlizzard(bot, *bot, ringPoint));
+
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    if (covered != (state.ringStepped.count(bot->GetGUID()) > 0))
+    {
+        if (covered)
+            state.ringStepped.insert(bot->GetGUID());
+        else
+            state.ringStepped.erase(bot->GetGUID());
+
+        state.ringArrived.erase(bot->GetGUID());
+    }
+
+    return covered;
+}
+
+bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!ThorimRingMeleeOnFloor(botAI, bot))
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    Position ring;
+    if (!boss || !TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, ring) ||
+        !ThorimRingBlizzardCovered(bot, ring))
+        return false;
+
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
+    auto const outOfCone = [boss, orb, coneBearing](float x, float y)
+    { return !orb || !InLightningChargeCone(BearingFromBoss(boss, x, y), coneBearing); };
+
+    if (!ThorimSpotUnderBlizzard(bot, *bot) && outOfCone(bot->GetPositionX(), bot->GetPositionY()))
+        return false;
+
+    std::vector<Position> const zones = ThorimBlizzardSpots(bot);
+    std::vector<HazardCircle> circles;
+    circles.reserve(zones.size());
+    for (Position const& zone : zones)
+        circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
+
+    float const tankClearance = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + 2.0f * DEFAULT_COMBAT_REACH;
+
+    struct StepPass
+    {
+        float radius;
+        bool pastRing;
+        bool clearOfTanks;
+    };
+
+    HazardSweepCache cache;
+    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false}})
+    {
+        auto const accept = [boss, pass, tankClearance, &outOfCone](float x, float y)
+        {
+            if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
+                y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y))
+                return false;
+
+            if (pass.pastRing && boss->GetExactDist2d(x, y) < ULDUAR_THORIM_MELEE_RING_RADIUS)
+                return false;
+
+            return !pass.clearOfTanks ||
+                   (ULDUAR_THORIM_PHASE2_TANK_SPOT.GetExactDist2d(x, y) >= tankClearance &&
+                    ULDUAR_THORIM_PHASE2_OFFTANK_SPOT.GetExactDist2d(x, y) >= tankClearance);
+        };
+
+        Position const spot = FindNearestPositionClearOfHazards(bot, circles, pass.radius, ULDUAR_THORIM_SWEEP_STEP,
+                                                                ULDUAR_THORIM_SWEEP_ANGLE_STEP, &ring, accept, &cache);
+        if (spot != Position())
+        {
+            out = spot;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ThorimRingSteppedOut(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimEncounterState const* state = bot ? FindState(bot) : nullptr;
+    return state && state->ringStepped.count(bot->GetGUID()) &&
+           bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && ThorimPhase2Active(botAI);
 }
 
 bool GetThorimLightningChargeHit(PlayerbotAI* botAI, RaidPredictedHit& hit)
@@ -3275,8 +3361,8 @@ bool ThorimBotHasEncounterState(Player* bot)
 
     // Has to cover everything the reset below drops, or a bot holding only the missing latch keeps it next pull.
     return state->meleeSlots.count(bot->GetGUID()) || state->ringArrived.count(bot->GetGUID()) ||
-           state->barrierBailing.count(bot->GetGUID()) || state->squads.count(bot->GetGUID()) ||
-           state->followMasterStripped.count(bot->GetGUID()) ||
+           state->ringStepped.count(bot->GetGUID()) || state->barrierBailing.count(bot->GetGUID()) ||
+           state->squads.count(bot->GetGUID()) || state->followMasterStripped.count(bot->GetGUID()) ||
            state->arenaAnchorArrived.count(bot->GetGUID()) || state->balconyStep.count(bot->GetGUID()) ||
            state->orbEscapes.count(bot->GetGUID()) || state->dpsTargets.count(bot->GetGUID()) ||
            state->petRecalls.count(bot->GetGUID()) || state->openingSlots.count(bot->GetGUID()) ||
@@ -3301,6 +3387,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
 
     state->meleeSlots.erase(bot->GetGUID());
     state->ringArrived.erase(bot->GetGUID());
+    state->ringStepped.erase(bot->GetGUID());
     state->barrierBailing.erase(bot->GetGUID());
     state->followMasterStripped.erase(bot->GetGUID());
     state->arenaAnchorArrived.erase(bot->GetGUID());

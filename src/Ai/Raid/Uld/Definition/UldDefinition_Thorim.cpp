@@ -37,6 +37,10 @@ bool ThorimArenaSettled(PlayerbotAI* botAI) { return ThorimArenaAnchorSettled(bo
 
 bool ThorimRingSettled(PlayerbotAI* botAI) { return ThorimMeleeRingSettled(botAI, botAI->GetBot()); }
 
+bool ThorimRingMelee(PlayerbotAI* botAI) { return ThorimRingMeleeOnFloor(botAI, botAI->GetBot()); }
+
+bool ThorimRingStepped(PlayerbotAI* botAI) { return ThorimRingSteppedOut(botAI, botAI->GetBot()); }
+
 bool ThorimPickingFor(PlayerbotAI* botAI)
 {
     return botAI->GetState() == BOT_STATE_COMBAT && !PlayerbotAI::IsHeal(botAI->GetBot());
@@ -148,9 +152,11 @@ void DefineThorim(EncounterBuilder& e)
     e.OwnTargeting("thorim disable automatic targeting", Role::NonTank, ThorimPhase2DpsPicked, Family::TankAssist);
 
     e.OwnMovement("thorim movement guard", Role::Any, ThorimRingSettled,
-                  Family::Attack | Family::Reach | Family::ReachHeal | Family::AvoidAoe,
+                  Family::Attack | Family::Reach | Family::ReachHeal,
                   {ThorimPhase2PositioningAction::Name, ThorimBalconyAdvanceAction::Name,
                    ThorimSifBlizzardAction::Name, ThorimUnreachableStepAction::Name});
+    e.Block("thorim ring aoe hold", Role::Any, ThorimRingMelee, Family::AvoidAoe);
+    e.Block("thorim ring blizzard step", Role::Any, ThorimRingStepped, Family::Reach | Family::Charge);
 
     e.OwnMovement("thorim tank anchor guard", Role::Tank, ThorimTankAnchored,
                   Family::Attack | Family::Reach | Family::ReachHeal,
