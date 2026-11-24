@@ -120,5 +120,4 @@ Runner fix before the first window: `4d0520fc1`, a pull stopped with `.dc test s
 
 **Window 38** (`008c167b4`, rebuilt, Algalon r13, load p95 308 ms, max 341): kill on uld3 (C, 2 deaths), five wipes; A and B (killed on r12) wiped. DC lane X (Anub'arak) merged into DC as `ab1bab7` after window 39's build, uncompiled. The user: when leading manually, leaving the instance and teleporting back onto a bot resummons Anub'arak (the core's `OnPlayerEnter`), the fallback if DC's replay of that hook fails.
 
-**Window 39** (`6694fb83e` with DC `3083130`, rebuilt at 00:39, Thorim r25 then Yogg-Saron r24): running at the session's end (the user's PC off ~01:35); read its reports next session or rerun it.
-
+**Window 39** (`6694fb83e` with DC `3083130`, rebuilt at 00:39, Thorim r25 then Yogg-Saron r24): running at the session's end (the user's PC off ~01:35); read its reports next session or rerun it. DC lane Z (Flame Leviathan) merged into DC as `5c68bd4` on top of lane X, uncompiled.
