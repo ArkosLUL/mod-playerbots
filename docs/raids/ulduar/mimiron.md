@@ -630,12 +630,6 @@ outranks the fire dodge; that gets the tick only when nothing is clean. Still op
 between beams and fire die with every flee bearing refused (`cone9 fire2`); in those windows fire took
 74-292k against 18-20k in clean pulls.
 
-**Open: a burning re-aimed wedge piles the ranged.** When its slots and the 12 yd round them burn, or every
-leg there crosses fire, ranged and healers get no approach and stand where the dodge left them, all on the
-first clean bearing past the band edge, and each later dodge (bomb, fire) moves the pile as one. Once 10-12
-of 14 stood in one 60° cone for 20 s after the first barrage, two Rapid Bursts hit 12 and 11 of them
-(100k each), and the raid lost phase 2.
-
 ## Raid nodes resolve bosses by entry, not by threat
 
 `"find target"` walks only the bot's own threat list
@@ -772,15 +766,19 @@ melee opposite the wedge 4.45 (−19%); ranged over 240° as well 3.31. Widening
 of the raid in every barrage's ~240° band, so only the melee move (`p4melee`, below); it then measured
 28-33% of the living raid a cast, the floor this layout gives.
 
-**Open: a phase 4 Shock Blast escape takes melee out of heal reach.** `hmwedge` fills in group order,
-which in the test pools has seated every healer in its outer row (24-26 yd off VX-001) in a ~70° arc, so
-a pulse that hits one healer hits 1.85. The escape walks melee straight out to 20 yd on the far side,
-35-47 yd from them centre to centre. Heal reach is `Playerbots.HealDistance` (38.5) between the two bots'
-edges (`GetDistance2d`), 41.5 yd centre to centre; past it `PartyMemberToHeal` scores a member 30 points
+**In phase 4 healers take the wedge's front row, spread across it.** In group order, `hmwedge` seated
+every test-pool healer in its outer row (24-26 yd off VX-001) in a ~70° arc, so a pulse that hit one
+healer hit 1.85. The Shock Blast escape walks melee straight out to 20 yd on the far side, 35-47 yd from
+them centre to centre. Heal reach is `Playerbots.HealDistance` (38.5) between the two bots' edges
+(`GetDistance2d`), 41.5 yd centre to centre; past it `PartyMemberToHeal` scores a member 30 points
 healthier, while the arc spread (`ACTION_RAID`) keeps healers within 5 yd of their slots. Over 541
 escapes 1.50 of 3.19 healers with mana stood in reach and 105 escapes had none; 15 of 37 melee Hand
 Pulse deaths before Berserk came within 6 s of the victim's own escape. From the 18 yd row a healer
-reaches every escape point (38 yd at most).
+reaches every escape point (38 yd at most). So `MimironPhase4WedgeIndex` gives the first k healers in
+group order slots ⌊(i + ½)·n / k⌋ of that row's n, evenly across it (four in a 25-man row of 7-8 sit
+34-40° apart, so a pulse hits at most two), and ranged DPS the rest in group order, the row's gaps
+first; the slots themselves are unchanged. Phase 2 keeps plain group order: its melee never escape and
+stand within 33 yd of the outer row.
 
 **The ring survives the correction.** Six fixed phase-2 spots stacked the raid into three clumps, the
 worst shape against any cone; a radius-22 ring with one index-derived slot per ranged bot is not. The
@@ -791,11 +789,11 @@ burst aimed at that group: 21-39% of phase 2 Rapid Burst damage crossed between 
 643k against a ~400k healing deficit. VX-001 never swings (`AttackStart` empty, no
 `DoMeleeAttackIfReady`) and turns to each Burst Target and the barrage arc, so "behind" moved every
 3.6 s. `p2melee` gives melee and tanks slots on the barrage melee ring (9.0) over
-`ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE` (±45°) opposite the wedge centreline, following its barrage
-re-aim. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90° where wedge plus cone ends.
-Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns the melee.
-A melee substitute stays 5.0-10.0 yd from VX-001 (reach + `ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN` 2,
-inside the 10.25 where `reach melee` fires and walks it at the boss off its sector) and off the wedge's
+`ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE` (±45°) opposite the wedge centreline, following its re-aim and
+its move off fire. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90° where wedge plus
+cone ends. Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns
+the melee. A melee substitute stays 5.0-10.0 yd from VX-001
+(reach + `ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN` 2, inside the 10.25 where `reach melee` fires and walks it at the boss off its sector) and off the wedge's
 line, and skips the Napalm spacing test. `mimiron vx001 facing guard` zeroes `set behind` and `tank
 face` there. Hard-mode phase 4 hands out the same sector as `p4melee`, round VX-001 on the chassis,
 without the main tank, who holds the MK II; melee sent to the ACU (reach 5, so 7.83 yd) close the last
@@ -965,6 +963,20 @@ up**: once lit, `lead` and `sweep` describe what is left, so the bisector moves 
 `p3wedge` keeps the fixed east bearing: phase 3 has add pads on the other arms and no barrage. Everything
 reading a slot follows the wedge: `mimiron approach target action` skips bots the formation places,
 `combat formation move` is muted within tolerance, and `FleeShockToAnchor` runs to it.
+
+**Once the beams stop, a phase 2 re-aim leaves fire.** The re-aim fits the band, not the fire, and
+usually lands on the phase 1 field west. When the slots and the 12 yd round them burn, or every leg there
+crosses fire, ranged and healers get no approach and stand where the dodge left them, on the first clean
+bearing past the band edge, and each later dodge (bomb, fire) moves the pile as one: once 10-12 of 14
+stood in one 60° cone for 20 s after the first barrage, two Rapid Bursts hit 12 and 11 of them (100k
+each), and the raid lost phase 2. So the first
+call at least 10 s after a re-aim with the beams off (`SettleMimironWedgeOffFire`, once per re-aim,
+latched raid-wide) counts the burning nodes within the 5 yd fire screen of the wedge's footprint (its rows
+off VX-001, ±60°) at 24 bearings and takes the fewest, ties nearest the current centreline, when the
+current holds more than `ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT` (3) and the pick at least `_MARGIN` (2) fewer.
+The 10 s keeps any gap between Spinning Up's channel and the barrage aura from reading as beams off.
+Phase 2 only. Replayed over 39 phase 2 barrages it moved 29, up to 168°: the whole back line walks in the
+post-barrage storm, and the next barrage re-aims anyway.
 
 ### Disperse distance
 
@@ -1558,7 +1570,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams; wh
 | `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°, since at whole degrees it changes every tick and one kill wrote 2,300 rows. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
-| `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
+| `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it; once its beams stop, `fire N a>b` (moved off fire to N) or `keep N a>b` (stayed at N), `a` and `b` the burning nodes in the footprint at the old centreline and at the best bearing. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `rocket`, `burst`, `shock`, `spray`, `move`, `hold`: past the holder radius, `bombbot`: a Bomb Bot blast). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, `bombbot` and `bombbot kite`, `unreach` and `unreach fire`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, a rocket, the barrage cone or a spray lane. A least-burn `fallback` carries its bearing like `ok`, and one with none issued no leg. A `spray` `none` is the near side failing; the far side's outcome follows |
 | `castcut` | The spell id of a cast the encounter tick cut for the flames dodge; a cut can write two notes 250 ms apart |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
@@ -1585,7 +1597,9 @@ so episodes rather than ticks, and splits off the Water Spray hits inside a barr
 cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
 before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
 before; `--bomb` counts as a walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of
-the bomb than the bot stood; and a phase that
+the bomb than the bot stood; `--wedge` counts every living Flames (Spread) under a footprint, where the
+`wedge` note counts burning ones, and anchors it on VX-001 unclamped; `--pulse` counts healing net of
+overheal; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated

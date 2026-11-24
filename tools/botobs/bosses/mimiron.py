@@ -145,6 +145,18 @@ ESCAPE_SETTLE_MS = 3000
 ESCAPE_LOOKBACK_MS = 6000
 DRY_MANA_PCT = 10.0
 
+WEDGE_FIRST_ROW = radius("ULDUAR_MIMIRON_PHASE3_MIN_RADIUS")
+WEDGE_SPACING = radius("ULDUAR_MIMIRON_PHASE3_SPACING")
+FLAMES_RADIUS = radius("ULDUAR_MIMIRON_FLAMES_RADIUS")
+SPREAD_RANGE_MARGIN = radius("ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN")
+SPELL_DISTANCE = 28.5
+WEDGE_HALF_ANGLE = math.radians(60.0)
+WEDGE_SETTLE_LOOK_MS = 3000
+WEDGE_LATER_MS = 10000
+WEDGE_AFTER_MS = 25000
+CONE_MATE_SAMPLE_MS = 1000
+WEDGE_NOTE = re.compile(r"(reaim|fire|keep) (-?\d+)(?: (\d+)>(\d+))?")
+
 SLOT = re.compile(r"(\S+) (\d+)/(\d+) (-?\d+),(-?\d+),(-?\d+)")
 
 
@@ -1887,6 +1899,8 @@ def pulse_rows(trace: Trace) -> list[dict]:
     heals = [guid for guid in roster if trace.role(guid) == "heal"]
     samples = Samples(trace)
     mkii = guids_of_entry(trace, NPC_LEVIATHAN_MKII)
+    vx = guids_of_entry(trace, NPC_VX001)
+    heals_in = [rec for rec in trace.of("heal") if rec.get("d") in roster]
     escapes_by = collections.defaultdict(list)
     for rec in trace.of("move"):
         if rec.get("ok") == 1 and rec.get("by") == SHOCK_ESCAPE and rec.get("g") in roster:
@@ -1915,6 +1929,9 @@ def pulse_rows(trace: Trace) -> list[dict]:
         casts = sorted(rec["t"] for rec in trace.of("cast")
                        if rec.get("sp") == SPELL_SHOCK_BLAST and rec.get("s") in mkii and low <= rec["t"] < high)
         escaped = with_mana = in_reach = unreached = 0
+        nearest: list[float] = []
+        gaps: list[float] = []
+        escape_pulse = escape_healed = 0
         for cast in casts:
             read = cast + ESCAPE_SETTLE_MS
             units = samples.before(read)
@@ -1925,11 +1942,19 @@ def pulse_rows(trace: Trace) -> list[dict]:
                 if (trace.role(guid) != "melee" or not unit or not living(unit) or
                         not any(cast <= when <= read for when in escapes_by.get(guid, []))):
                     continue
-                reach = sum(1 for healer in healers if math.dist(healer[1:3], unit[1:3]) <= HEAL_REACH)
+                apart = [math.dist(healer[1:3], unit[1:3]) for healer in healers]
+                reach = sum(1 for gap in apart if gap <= HEAL_REACH)
                 escaped += 1
                 with_mana += len(healers)
                 in_reach += reach
                 unreached += reach == 0
+                if apart:
+                    nearest.append(min(apart))
+                    gaps += apart
+                stop = cast + ESCAPE_LOOKBACK_MS
+                escape_pulse += sum(rec.get("a", 0) for rec in hits if rec["d"] == guid and cast <= rec["t"] < stop)
+                escape_healed += sum(rec.get("a", 0) - rec.get("oh", 0) for rec in heals_in
+                                     if rec["d"] == guid and cast <= rec["t"] < stop)
 
         deaths = collections.Counter()
         for rec in combat_deaths(trace):
@@ -1939,9 +1964,22 @@ def pulse_rows(trace: Trace) -> list[dict]:
             after = any(0 <= rec["t"] - when <= ESCAPE_LOOKBACK_MS for when in escapes_by.get(rec["g"], []))
             deaths[(trace.role(rec["g"]), after)] += 1
 
+        healer_radius: list[float] = []
+        for units in samples.window(low, high):
+            boss = next((units[guid] for guid in vx if guid in units), None)
+            if boss:
+                healer_radius += [math.dist(units[guid][1:3], boss[1:3]) for guid in heals
+                                  if guid in units and living(units[guid])]
+
         rows.append({"label": label, "span": (low, high), "pulses": len(pulses), "healer_hits": healer_hits,
                      "casts": len(casts), "escaped": escaped, "with_mana": with_mana, "in_reach": in_reach,
-                     "unreached": unreached, "deaths": deaths})
+                     "unreached": unreached, "deaths": deaths,
+                     "nearest": statistics.median(nearest) if nearest else None,
+                     "gap": statistics.mean(gaps) if gaps else None,
+                     "healer_radius": statistics.median(healer_radius) if healer_radius else None,
+                     "pulse_taken": sum(rec.get("a", 0) for rec in hits if low <= rec["t"] < high),
+                     "healed": sum(rec.get("a", 0) - rec.get("oh", 0) for rec in heals_in if low <= rec["t"] < high),
+                     "escape_pulse": escape_pulse, "escape_healed": escape_healed})
     return rows
 
 
@@ -1955,12 +1993,19 @@ def show_pulse(trace: Trace) -> None:
     for row in rows:
         low, high = row["span"]
         struck = ", ".join(f"{count} x{pulses}" for count, pulses in sorted(row["healer_hits"].items()))
+        radius_text = "-" if row["healer_radius"] is None else f"{row['healer_radius']:.1f} yd"
         print(f"  {row['label']:4} {clock(low)} .. {clock(high)}  Hand Pulse {row['pulses']}; healers hit by one that"
-              f" hit a healer: {struck or 'none'}")
+              f" hit a healer: {struck or 'none'}; healers off VX-001 median {radius_text}")
+        print(f"       Hand Pulse on the raid {row['pulse_taken'] // 1000}k against {row['healed'] // 1000}k healed")
         if row["escaped"]:
             n = row["escaped"]
             print(f"       Shock Blast {row['casts']}, melee escapes {n}: healers with mana {row['with_mana'] / n:.2f},"
                   f" in heal reach {row['in_reach'] / n:.2f}, none in reach {row['unreached']}")
+            nearest = "-" if row["nearest"] is None else f"{row['nearest']:.1f}"
+            gap = "-" if row["gap"] is None else f"{row['gap']:.1f}"
+            print(f"       escaped melee to healers with mana: nearest median {nearest} yd, mean {gap} yd;"
+                  f" Hand Pulse on them {row['escape_pulse'] // 1000}k against {row['escape_healed'] // 1000}k healed"
+                  f" in the {ESCAPE_LOOKBACK_MS // 1000} s from the cast")
         else:
             print(f"       Shock Blast {row['casts']}, no melee escape")
         dead = ", ".join(f"{role} {count}{' after its escape' if after else ''}"
@@ -1969,7 +2014,149 @@ def show_pulse(trace: Trace) -> None:
     print(f"\n  an escape is an accepted `{SHOCK_ESCAPE}` leg by a melee bot within {ESCAPE_SETTLE_MS // 1000} s of"
           f" the cast, healers read then at {DRY_MANA_PCT:.0f}% mana or more; heal reach is HealDistance"
           f" {HEAL_DISTANCE} between the two bots' edges, {HEAL_REACH} yd centre to centre; a death is after its"
-          f" escape when the bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it")
+          f" escape when the bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it; healed is effective"
+          " healing (overheal off) landed on the same bots")
+
+
+def wedge_row_count(count: int) -> int:
+    most = 1 + int(max(SPELL_DISTANCE - SPREAD_RANGE_MARGIN - WEDGE_FIRST_ROW, 0.0) / WEDGE_SPACING)
+    held = 0
+    for rows in range(1, most + 1):
+        held += int(2.0 * WEDGE_HALF_ANGLE * (WEDGE_FIRST_ROW + (rows - 1) * WEDGE_SPACING) / WEDGE_SPACING)
+        if held >= count:
+            return rows
+    return most
+
+
+def wedge_fire(anchor, flames, centre: float, rows: int) -> int:
+    outer = WEDGE_FIRST_ROW + (rows - 1) * WEDGE_SPACING
+    fire = 0
+    for x, y in flames:
+        gap = math.hypot(x - anchor[0], y - anchor[1])
+        if gap < WEDGE_FIRST_ROW - FLAMES_RADIUS or gap > outer + FLAMES_RADIUS:
+            continue
+        off = abs((math.atan2(y - anchor[1], x - anchor[0]) - centre + math.pi) % (2 * math.pi) - math.pi)
+        if off <= WEDGE_HALF_ANGLE + math.asin(min(1.0, FLAMES_RADIUS / max(gap, FLAMES_RADIUS))):
+            fire += 1
+    return fire
+
+
+def wedge_marks(trace: Trace) -> list[dict]:
+    out = []
+    for rec in sorted(notes(trace, "mimiron.wedge"), key=lambda rec: rec["t"]):
+        match = WEDGE_NOTE.match(str(rec.get("txt", "")))
+        if match:
+            out.append({"t": rec["t"], "kind": match.group(1), "bearing": int(match.group(2)) % 360,
+                        "before": int(match.group(3)) if match.group(3) else None,
+                        "after": int(match.group(4)) if match.group(4) else None})
+    return out
+
+
+def wedge_rows(trace: Trace) -> list[dict]:
+    span = span_of(phases(trace), "P2")
+    if not span:
+        return []
+    low, high = span
+
+    roster = roster_guids(trace)
+    back = {guid for guid in roster if trace.role(guid) in ("ranged", "heal")}
+    samples = Samples(trace)
+    vx = guids_of_entry(trace, NPC_VX001)
+    flame_guids = guids_of_entry(trace, NPC_FLAMES_SPREAD)
+    marks = wedge_marks(trace)
+    sweeps = sorted(rec["t"] for rec in trace.of("haz") if rec.get("shape") == "sweep")
+
+    def fire_at(when: int, centre: float):
+        units = samples.before(when)
+        boss = next((units[guid] for guid in vx if guid in units), None)
+        if not boss:
+            return None
+        flames = [(units[guid][1], units[guid][2]) for guid in flame_guids if guid in units and living(units[guid])]
+        count = sum(1 for guid in back if guid in units and living(units[guid]))
+        return wedge_fire((boss[1], boss[2]), flames, centre, wedge_row_count(max(count, 1)))
+
+    rows = []
+    for cast in trace.of("cast"):
+        if cast.get("sp") != SPELL_SPINNING_UP or not low <= cast["t"] < high:
+            continue
+        start = cast["t"]
+        swept = [when for when in sweeps if start <= when < start + SPIN_WINDOW_MS]
+        stop = swept[-1] + 1 if swept else start + SPIN_WINDOW_MS
+
+        prior = [mark for mark in marks if mark["t"] < start]
+        reaim = next((mark for mark in marks if start <= mark["t"] < stop and mark["kind"] == "reaim"), None)
+        settle = next((mark for mark in marks if start <= mark["t"] < stop + WEDGE_SETTLE_LOOK_MS
+                       and mark["kind"] in ("fire", "keep")), None)
+        aimed = reaim["bearing"] if reaim else (prior[-1]["bearing"] if prior else 0)
+        taken = settle["bearing"] if settle and settle["kind"] == "fire" else aimed
+        read = settle["t"] if settle else stop
+        later = min(read + WEDGE_LATER_MS, high)
+
+        mates: list[float] = []
+        last = None
+        for index, when in enumerate(samples.stamps):
+            if not stop <= when < min(stop + WEDGE_AFTER_MS, high):
+                continue
+            if last is not None and when - last < CONE_MATE_SAMPLE_MS:
+                continue
+            last = when
+            units = samples.rows(index)
+            boss = next((units[guid] for guid in vx if guid in units), None)
+            if not boss:
+                continue
+            bearings = [math.atan2(units[guid][2] - boss[2], units[guid][1] - boss[1])
+                        for guid in back if guid in units and living(units[guid])]
+            if len(bearings) > 1:
+                mates.append(statistics.mean(
+                    sum(1 for other in bearings
+                        if abs((other - mine + math.pi) % (2 * math.pi) - math.pi) < BURST_HALF_ANGLE) - 1
+                    for mine in bearings))
+
+        after_high = min(stop + WEDGE_AFTER_MS, high)
+        flames_taken = sum(rec.get("a", 0) for rec in trace.of("dmg")
+                           if rec.get("sp") == SPELL_FLAMES and rec.get("d") in back and stop <= rec["t"] < after_high)
+        dead = sum(1 for rec in combat_deaths(trace) if rec["g"] in back and stop <= rec["t"] < after_high)
+
+        turn = abs((taken - aimed + 180) % 360 - 180)
+        rows.append({
+            "t": start, "stop": stop, "reaim": reaim["bearing"] if reaim else None, "settle": settle,
+            "aimed": aimed, "taken": taken, "turn": turn,
+            "fire_left": (fire_at(read, math.radians(aimed)), fire_at(later, math.radians(aimed))),
+            "fire_taken": (fire_at(read, math.radians(taken)), fire_at(later, math.radians(taken))),
+            "mates": statistics.mean(mates) if mates else None,
+            "flames": flames_taken, "dead": dead,
+        })
+    return rows
+
+
+def show_wedge(trace: Trace) -> None:
+    print("WEDGE")
+    rows = wedge_rows(trace)
+    if not rows:
+        print("  no phase 2 barrage in this pull")
+        return
+
+    def pair(values) -> str:
+        return " -> ".join("-" if value is None else str(value) for value in values)
+
+    for row in rows:
+        settle = row["settle"]
+        if settle is None:
+            decided = "no settle note (beams ran past phase 2, or a build without it)"
+        else:
+            decided = (f"{settle['kind']} {settle['bearing']} at {clock(settle['t'])}"
+                       f" ({settle['before']}>{settle['after']} burning in its footprint)")
+        reaim = "no re-aim" if row["reaim"] is None else f"reaim {row['reaim']}"
+        print(f"  {clock(row['t'])} barrage, beams off {clock(row['stop'])}: {reaim}; {decided}; turn {row['turn']}")
+        print(f"       live Flames under {row['aimed']} {pair(row['fire_left'])}"
+              + ("" if row["taken"] == row["aimed"] else f", under {row['taken']} {pair(row['fire_taken'])}")
+              + f" (at the settle, {WEDGE_LATER_MS // 1000} s later)")
+        mates = "-" if row["mates"] is None else f"{row['mates']:.1f}"
+        print(f"       the {WEDGE_AFTER_MS // 1000} s after the beams: ranged/healer cone-mates {mates},"
+              f" Flames on them {row['flames'] // 1000}k, {row['dead']} of them dead")
+    print("\n  footprint: the hmwedge rows off VX-001 at +-60 deg, grown by the 5 yd fire screen; the settle note"
+          " counts burning nodes, the live counts every living Flames (Spread); cone-mates are the other ranged"
+          " and healers inside one's 60 deg Rapid Burst cone off VX-001, 1 s samples")
 
 
 SECTIONS = (
@@ -1998,7 +2185,9 @@ SECTIONS = (
     ("acutank", "phase 4: whom the ACU targeted and hit with Plasma Ball, and what the off-tank aimed at",
      show_acutank),
     ("pulse", "phase 4 Hand Pulse: healers hit per pulse, healers in reach of melee after a Shock Blast"
-     " escape, and Hand Pulse deaths after one", show_pulse),
+     " escape and how far, Hand Pulse damage against healing, and Hand Pulse deaths after one", show_pulse),
+    ("wedge", "phase 2 barrages: the re-aim, the move off fire once the beams stop, Flames under the wedge"
+     " before and after, and the ranged and healers in the 25 s after", show_wedge),
 )
 
 

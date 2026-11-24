@@ -1742,3 +1742,97 @@ unreached, and a healer-hitting pulse hitting at most 2.
   1.50 in reach, none 208 → 105; window 24a uld2 0.77 → 1.09 (none 18 → 11), uld3 1.35 → 1.91 (none 9 → 1);
   `p4pulse.py` at 41.5: 1.57 in a Shock Blast window against 2.55 outside. Smaller than the round read, still a
   fifth of escapes with none; the inner row replay stays 3.19 of 3.19.
+
+**User answers (2026-11-24).**
+
+- **Q6: yes, (a).** When the Laser Barrage moves the phase 2 wedge onto fire, move the wedge once the beams stop to
+  the 120° arc with the fewest fire nodes.
+- **Q7: yes, (a), phase 4 only.** Healers take the front row (18 yd) of the phase 4 wedge, so they reach melee after a
+  Shock Blast escape.
+
+## Round 16 (Custom 6486414fc, rounds 14 and 15 merged)
+
+**Data:** nothing new. Rounds 14 (Revive Pet held in the handovers) and 15 (reader `--pulse` only) are merged but no
+window has pulled them; the newest Mimiron traces are still window 24a's (`603_1/2/3_…_17954698xx`, build `02de71ee6`:
+uld2 kill 10:16 with 5 deaths, uld3 kill 9:35 with 5, uld1 wipe 6:23 with 32). Stop rules, verdict and ranking skipped;
+this round builds the user's Q6 and Q7. Scripts in the lane scratchpad (`mim16/`: `wedgepick.py`, `pickcount.py`,
+`p4index.py`).
+
+**Built: Q6, the phase 2 wedge leaves fire once the beams stop.**
+
+- `SettleMimironWedgeOffFire` (`UldEncounter_Mimiron.cpp`), from `GetMimironWedgeCentreline` while no barrage window
+  is up: once per re-aim (`wedgeSettledAimMs` against `wedgeAimedMs`, per instance, so raid-wide), at least
+  `ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS` (10 s) after it, so a gap between Spinning Up's channel and the barrage aura
+  cannot pass for beams off, and only in phase 2 (`IsMimironPhase2`). Phase 4's wedge keeps the barrage re-aim alone.
+- It counts burning nodes (`hazards.flames`) within `ULDUAR_MIMIRON_FLAMES_RADIUS` (5) of the hmwedge footprint (rows
+  18 yd to the outer row off VX-001, ±60°) at 24 bearings and the current one; fewest wins, ties nearest the current
+  centreline. The wedge moves when the current holds more than `ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT` (3) and the pick at
+  least `ULDUAR_MIMIRON_WEDGE_FIRE_MARGIN` (2) fewer: the user's "onto fire", without a whole-back-line walk for one
+  or two nodes. The `p2melee` sector and the Rapid Burst group sectors follow the centreline as before.
+- `mimiron.wedge` notes `fire N a>b` (moved to N) or `keep N a>b`, `a` the old centreline's burning nodes, `b` the best.
+- Replay (`wedgepick.py`, every living node counted, windows 13-24a): every phase 2 barrage re-aimed (39); the re-aimed
+  wedge held 0-23 nodes, and the rule moves 29 of 39, median turn 102°, max 168°. Window 24a: uld1 176° 14 → 285° 1
+  (turn 109) and 260° 23 → 30° 0; uld2 174° 9 → 135° 2 (39) and 258° 16 → 0° 0 (beams ended with phase 2); uld3 159°
+  4 → 315° 0 (156), 247° 1 kept.
+
+**Built: Q7, healers on the phase 4 wedge's front row.** `MimironPhase4WedgeIndex`, in `DeriveMimironSpreadSlot`'s
+`hmwedge` branch in phase 4 only: the first k living healers in group order take front-row slots ⌊(i + ½)·n / k⌋ of
+its n, ranged DPS the rest in group order, front-row gaps first. Slot positions are unchanged, so the wedge's shape,
+range and substitutes are as before; only who stands where moves. Checked over 2-17 members and 1-6 healers
+(`p4index.py`): always a permutation, healers all at 18 yd; 25-man four healers 40° apart with 14 in the wedge, 34°
+with 15-16; 10-man two healers 60-72° apart (5-6 in the wedge). A real healer keeps his slot index, empty wherever he stands. Phase 2 and
+normal mode keep plain group order. The rows formula moved into `MimironRangedWedgeRows`, shared by `p3wedge` and
+`hmwedge` unchanged.
+
+**Reader.** `--wedge` (new): per phase 2 barrage the re-aim, the settle note, live Flames under the wedge it left and the
+one it took at the settle and 10 s later, and ranged/healer cone-mates, Flames and deaths in the 25 s after the beams.
+`--pulse` adds healers' median distance off VX-001, escaped melee's nearest and mean distance to healers with mana, and
+Hand Pulse damage against effective healing, phase-wide and on escaped melee in the 6 s from the cast. Tests for both.
+Window 24a reads:
+
+| Pull | `--wedge` (re-aim: live Flames at the beams' end → +10 s; cone-mates; rh Flames; rh dead) | `--pulse` (healers off VX-001; nearest healer of an escaped melee; in reach; none; pulse on them / healed) |
+|---|---|---|
+| uld1 | 176: 14 → 17, 6.3, 112k, 6; 260: 23 → 26, 3.4, 14k, 1 | no phase 4 |
+| uld2 | 174: 9 → 13, 5.0, 63k, 0; 258: 16, 2.6, 0, 0 | 24.8 yd; 34.3 yd; 1.09; 11 of 44; 132k / 169k |
+| uld3 | 159: 4 → 10, 4.2, 42k, 1; 247: 1, 3.7, 0, 0 | 24.4 yd; 36.7 yd; 1.91; 1 of 34; 245k / 215k |
+
+Findings doc: both open items became rules ("Once the beams stop, a phase 2 re-aim leaves fire" under "Phase 3 wants a
+wedge", "In phase 4 healers take the wedge's front row" under the 60° cones), the `wedge` note values and the reader's
+counting.
+
+**Next window should show** (`--wedge`, `--pulse`, `--spin`, `--flips`):
+
+- Q6: a `fire` or `keep` note 10-15 s after each phase 2 Spinning Up, about three in four of them `fire`; live Flames
+  under the taken wedge at the settle near 0-3 (re-aimed 4-23); ranged/healer cone-mates in the 25 s after under ~4
+  (uld1 6.3) and no pile like uld1's (6 dead). The cost to watch: the walk in the post-barrage storm, so Flames on
+  ranged/healers and their deaths in those 25 s, and `--spin`'s 15 s after (healed against taken, healers moving), no
+  worse than window 24a; no new `arc spread` A-B-A with the fire dodge or `reach party member to heal`.
+- Q7: healers off VX-001 median ~18-20 yd in phase 4 (24.4-24.8); an escaped melee's nearest healer with mana well under
+  41.5 (34.3-36.7), ~3 in heal reach (1.09/1.91) and none unreached near 0 (11 of 44, 1 of 34); a healer-hitting pulse
+  hitting at most 2 healers in most pulses (3 in 7 and 11 now); Hand Pulse on escaped melee below the healing they get,
+  and no melee Hand Pulse death after its own escape (uld3: 2). Watch healer mine hits in phase 4: the front row lies 3
+  yd outside the 15 yd mine circle.
+- Round 14's checks still (no `revive pet` from roster B's hunters at any point of the pull).
+
+**Questions for the user:** none.
+
+**Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).
+
+**Review.**
+
+- Checked and holding: a 24-bearing replay at each window 24a beams' end reproduces every pick above. The settle runs
+  once per re-aim per instance, with the beams off and 10 s after the aim, in phase 2 and hard mode only (no wedge or
+  Flames otherwise); 10 and 25 share the footprint (one 18 yd row up to 6 members). Only bot engines call it, so a real
+  player changes nothing. `MimironPhase4WedgeIndex` always yields a permutation (healer slots n/k ≥ 1 apart); `IsHeal`
+  reads a real player's spec, so a real healer keeps a front-row slot nobody fills. The rows refactor is identical; no
+  comments.
+- Fixed: `DeriveMimironSpreadSlot`'s ranged count uses `IsMimironWedgeMember`, the predicate
+  `MimironPhase4WedgeIndex` recounts with, so the two cannot drift apart.
+- Watch: uld3's 159° re-aim held 4 nodes and the rule turns it 156° to 315° (0), though 150° held 3: it takes the
+  fewest, not the nearest bearing under the limit, as the answer reads.
+- Watch: the phase 4 front row sits at `ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST` (18) off VX-001 and a bot holds its slot
+  within 5 yd, so front-row members flee Shock Blast. Window 24a: 12 and 16 ranged DPS inside 18 yd of the MK II at
+  the casts (uld2 5 casts, uld3 4) and 19 and 18 ranged escape legs, against 1 and 1 healers and 2 and 1 legs. Healers
+  now inherit that. The escape ends 20 yd out, at most 40 yd from any melee escape point, so reach holds; the cost is
+  healer casts lost in the cast window. Next window: healer `shock` legs per cast. If they climb and Hand Pulse on
+  escaped melee does not fall, the question is a 20 yd phase 4 front row (plan change).

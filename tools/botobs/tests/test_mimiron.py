@@ -1140,6 +1140,7 @@ def pulse_pull(escape: tuple[float, float]) -> list[dict]:
         move(2100, SHADOW, mm.SHOCK_ESCAPE, *escape),
         {**move(2200, AGONY, mm.SHOCK_ESCAPE, 22.0, 4.0), "ok": 0},
         {"t": 4000, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64536, "a": 8000},
+        {"t": 4500, "e": "heal", "s": TREE, "d": SHADOW, "sp": 48441, "a": 3000, "oh": 500},
         {"t": 5750, "e": "dmg", "s": VX, "d": SHADOW, "sp": 64537, "a": 8000},
         {"t": 5750, "e": "dmg", "s": VX, "d": TREE, "sp": 64537, "a": 8000},
         {"t": 5760, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 8000], "x": escape[0], "y": escape[1]},
@@ -1184,6 +1185,97 @@ class PulsePull(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             row = mm.pulse_rows(pulse_trace(folder, (0.0, -18.5)))[0]
         self.assertEqual((row["in_reach"], row["unreached"]), (1, 0))
+
+    def test_escaped_melee_reads_its_healer_distance_and_pulse_against_healing(self):
+        row = self.rows[0]
+        self.assertEqual((row["nearest"], row["gap"], row["healer_radius"]), (42.0, 42.0, 22.0))
+        self.assertEqual((row["escape_pulse"], row["escape_healed"]), (16000, 2500))
+        self.assertEqual((row["pulse_taken"], row["healed"]), (33000, 2500))
+
+    def test_the_view_prints_distances_and_healing(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_pulse(self.trace)
+        self.assertIn("healers off VX-001 median 22.0 yd", out.getvalue())
+        self.assertIn("Hand Pulse on the raid 33k against 2k healed", out.getvalue())
+        self.assertIn("nearest median 42.0 yd, mean 42.0 yd; Hand Pulse on them 16k against 2k healed", out.getvalue())
+
+
+WEDGE_FLAMES = {4294971001: (-20.0, 0.0), 4294971002: (-20.0, 3.0), 4294971003: (-20.0, -3.0),
+                4294971004: (-22.0, 0.0), 4294971005: (40.0, 0.0)}
+WEDGE_HOME = {AGONY: (22.0, 0.0), TREE: (22.0, 5.0), SHADOW: (-9.0, 0.0), BULWARK: (-9.0, 1.0)}
+
+
+def wedge_snap(when: int) -> dict:
+    rows = [[VX, 0.0, 0.0, 364.0, 0.0, 70.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0]]
+    for guid, (x, y) in WEDGE_FLAMES.items():
+        rows.append([guid, x, y, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+    for guid, (x, y) in WEDGE_HOME.items():
+        dead = guid == TREE and when >= 30000
+        rows.append([guid, x, y, 364.0, 0.0, 0.0 if dead else 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def wedge_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        *({"t": 1, "e": "unit", "g": guid, "en": mm.NPC_FLAMES_SPREAD, "n": "Flames (Spread)"}
+          for guid in WEDGE_FLAMES),
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 1000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "2"},
+        {"t": 10000, "e": "cast", "s": VX, "sp": mm.SPELL_SPINNING_UP, "tgt": 0, "ct": 4000},
+        {"t": 10100, "e": "note", "g": AGONY, "k": "mimiron.wedge", "txt": "reaim 180"},
+        *({"t": when, "e": "haz", "sp": 63274, "shape": "sweep", "x": 0.0, "y": 0.0, "z": 364.0, "ttl": 250}
+          for when in range(14000, 24000, 250)),
+        {"t": 24100, "e": "note", "g": TREE, "k": "mimiron.wedge", "txt": "fire 0 4>0"},
+        {"t": 25000, "e": "dmg", "s": 4294971001, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3000},
+        {"t": 30000, "e": "death", "g": TREE, "killer": VX, "blow": [VX, 2000], "x": 22.0, "y": 5.0},
+        {"t": 60000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 61000, "e": "end", "out": "wipe"},
+    ]
+    records += [wedge_snap(when) for when in range(0, 61000, 250)]
+    return records
+
+
+class WedgePull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700011.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in wedge_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.wedge_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_one_row_per_phase_2_barrage_ending_at_its_last_sweep(self):
+        self.assertEqual([(row["t"], row["stop"]) for row in self.rows], [(10000, 23751)])
+
+    def test_the_settle_note_moves_the_wedge_off_the_reaim(self):
+        row = self.rows[0]
+        self.assertEqual((row["reaim"], row["settle"]["kind"], row["aimed"], row["taken"], row["turn"]),
+                         (180, "fire", 180, 0, 180))
+        self.assertEqual((row["settle"]["before"], row["settle"]["after"]), (4, 0))
+
+    def test_live_flames_count_inside_the_footprint_only(self):
+        row = self.rows[0]
+        self.assertEqual((row["fire_left"], row["fire_taken"]), ((4, 4), (0, 0)))
+
+    def test_the_25_s_after_the_beams(self):
+        row = self.rows[0]
+        self.assertEqual((row["mates"], row["flames"], row["dead"]), (1.0, 3000, 1))
+
+    def test_the_view_prints_the_move_and_the_fire_under_both(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_wedge(self.trace)
+        self.assertIn("reaim 180; fire 0 at 0:24.100 (4>0 burning in its footprint); turn 180", out.getvalue())
+        self.assertIn("live Flames under 180 4 -> 4, under 0 0 -> 0", out.getvalue())
 
 
 class EveryView(unittest.TestCase):
