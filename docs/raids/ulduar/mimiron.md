@@ -989,6 +989,14 @@ The 10 s keeps any gap between Spinning Up's channel and the barrage aura from r
 Phase 2 only. Replayed over 39 phase 2 barrages it moved 29, up to 168°: the whole back line walks in the
 post-barrage storm, and the next barrage re-aims anyway.
 
+**Open: what the settle's walk costs.** In the 15 s after the settle, healers moved 23-55% and healed
+332-488k at turns of 69-102° (nobody died in the 25 s after), 54-80% and 302-305k at 131-140° (2 and 12
+dead), against 4% and 505k when it kept; a 94° settle on 13 alive moved them 63% for 191k and lost 7. Past
+~75° the new wedge overlaps the old melee sector, so the back line and the melee swap sides through VX-001,
+and the storm's Frost Bomb can land on the walk. Replayed on live Flames, not only burning ones, the
+fewest-fire pick turns past 90° in 30 of 50 moves, past 120° in 17; capped at 90°, 28 of those 30 still
+move, a median 77°, leaving a median 4 Flames under the wedge instead of 0 and 18 of the 30 over the limit.
+
 ### Disperse distance
 
 `rangedDepth` is `SpellDistance(28.5) − margin(4) − 18 = 6.5`, so `MimironWedgeRows` gets two rows: 14
