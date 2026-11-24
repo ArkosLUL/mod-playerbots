@@ -13,12 +13,11 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 **Window 35** (rebuild of `ce2ffa6be`, ended 2026-11-24 ~22:30): group 1, reports `scratchpad/window35/window35/window35-<boss>.md`. Then `scratchpad/professions.sh` on toc1-toc6 (the Ulduar pools got theirs before window 34). Windows 29-35, filler 33c, the professions step and the batch sent after window 34: `windows.md`.
 
 **Next:**
-- Check the toc1-toc6 professions results (27/27 a pool, no member with a problem). Then filler while group 2's lanes code: `"pulls": 2` jobs for Yogg-Saron and Thorim on the window 35 build; no new filler once Mimiron r22 and Algalon r12 have merged.
-- Merge Mimiron r22 and Algalon r12 when they finish (never while a rebuild reads the source tree). Once both have merged and the filler has ended: rebuild, window 36 = group 2; Mimiron r23 and Algalon r13 start from its reports.
+- Filler 35b (one more Thorim and Yogg-Saron pull per pool on the window 35 build) is running: log `scratchpad/window35b.out`, reports `scratchpad/window35b/`. All twelve pools have their professions. No new filler once Mimiron r22 and Algalon r12 have merged.
+- Merge Mimiron r22 and Algalon r12 when they finish (never while a rebuild reads the source tree). After each merge, write the user's new answer into that boss's polish log (`User answers in force`, close the open question): not before, the running lane edits the same section. Once both have merged and the filler has ended: rebuild, window 36 = group 2; Mimiron r23 (builds Q11 (a)) and Algalon r13 (under the done rule) start from its reports.
 - Merge Yogg-Saron r23 and Thorim r24 during window 36.
-- Questions sent after window 34, unanswered (`windows.md`): Mimiron Q11 phase 4 healer mana; Algalon under the normal done rule; Iron Assembly self Lay on Hands dropped. Build nothing from them until answered.
 
-**Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 (step 1 built in r22; step 2, one navprobed position change per round, melee core first) and Q2 (r22); Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Algalon Q4 (b) in r11; tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score now that the rosters have Engineering.
+**Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 (step 1 built in r22; step 2, one navprobed position change per round, melee core first) and Q2 (r22); Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Mimiron Q11 (a) in r23: under Firefighter bot priests hold Hymn of Hope and their second Shadowfiend until phase 4 opens, then (b) a fifth healer at 25 if two healers still drop out before ~9:15; Algalon under the normal done rule (each of A, B, C a kill with at most 5 deaths, no hard mode to check), the earlier "no kill expected, stop rule waived" ends; Iron Assembly stays as it is (self Lay on Hands closed); tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score now that the rosters have Engineering.
 
 **Mechanics:**
 - Lanes: create the branch (`git -C build-toc-wt/rt-polish-<slug> switch -q -c rt/polish-<slug>-r<n> Custom`), then `Workflow({scriptPath: "G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.js", args: {kind: "polish", tag, wt, branch, boss, slug, raid, round, reports: [<report file>], note}})` with no `agentType` (`~/.claude/agents/raid-lane.md` is untested). The note ends: "<Boss> only; every change must run the same with or without a real player in the raid. Raid code comments were stripped on Custom (c163ec11a): write no code comments." A lane returns `{status, commits, summary, review: {commits, summary}}`. Other kinds (`dc`, `strategy`, `research`, `runner`) take a `brief`; the old script is `raid-polish-lane.prev.js`.
@@ -47,7 +46,7 @@ Earlier per-boss detail: the old table in `windows.md`.
 | Thorim | group 1, round 24 running; first hard-mode kill in window 35 (uld4, A, 4 deaths); the user: keep polishing, no end condition, stop rules waived |
 | Mimiron | group 2, round 22 running; window 34: A and B met the done rule, C killed with 6 deaths |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
-| Algalon | group 2, round 12 running; first kills in window 34 (uld4 20 deaths, uld2 10); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Algalon | group 2, round 12 running; first kills in window 34 (uld4 20 deaths, uld2 10); under the normal done rule since the user's answer of 2026-11-24 |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
