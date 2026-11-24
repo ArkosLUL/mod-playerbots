@@ -1913,3 +1913,84 @@ that cost. Doc corrected: `InformCloud` reads `GetDistance`, net of Sara's 1.5 a
 (21.4 yd 3D, 18.9) is contact-only too: window 27's 15 summons on orbits 1-2 each had a raider within 8.7 yd, while
 orbit 3 fired twice with nobody near. The reader's `--clouds` `inner` list (`CLOUD_ORBITS` under 20) still holds
 orbit 1 alone; that is Q1's reader step.
+
+## Round 20 (2026-11-24, window 29 build 897faf0d8: rounds 17-19)
+
+**Data.** Window report `scratchpad/window29/window29/window29-yogg-saron.md` (`raidtest.py report --boss yogg-saron
+--raid uld --head 897faf0d8`): six valid pulls, one per pool, 0 humans, Freya on the raid. Traces
+`603_{4,5,6,7,8,9}_yogg-saron_17955377{74,59,54,64,70,70}` (uld1, uld2, uld3, uld4, uld5, uld6), read with
+`yogg_saron.py --novas --phases --brain --portals --tentacles --phase2 --phase3 --crush --clouds`, `postmortem.py`
+and scratch scripts (`scratchpad/yogg-r20/`: each phase 1 Guardian pair under 6 s with who targeted and cast on
+the second, and over the 27 pulls of windows 19-29 every gap window's loss, aimed damage and area actions).
+
+Deaths by mechanic:
+
+- uld1 (A): nova 3 (Uldxai 1:35 and 2:17, Uldxat 2:09); phase 3 Immortal Guardian 29, Yogg 23.6%.
+- uld2 (B): Sara's Blessing 1, nova 1 (2:11); phase 3 Immortal Guardian 29, Yogg 10.8%.
+- uld3 (C): nova 9 (0:58.3 five melee, a pair 2.2 s apart; Uldzaj 0:42 and 1:22; 2:28 two); phase 2 from 6:32
+  Corruptor 8, Squeeze 5, Induce Madness 7, Death Ray, Crush, Brain Link 1 each.
+- uld4 (A): nova 2 (2:12), Death Ray 1; phase 3 Immortal Guardian 30, Yogg 10.6%.
+- uld5 (B): nova 4 (1:09; 2:12 two, a 2.2 s pair; 2:17); healer to a Death Ray 3:08; phase 2 Corruptor 13, Squeeze 7,
+  Induce Madness 4, Death Ray 1, Sara 1 (17:01).
+- uld6 (C): nova 1, Lunatic Gaze 1; phase 3 Immortal Guardian 30, Yogg 13.5%.
+
+**Verdict on round 19 (back-line dodges stay outside the band): fixed.** Dodges inside 20.5 yd 0 of 93 / 83 / 107 /
+133 / 159 / 93 (window 27: 36 / 35 / 33), hits on one standing there 0 (12 / 1 / 1), back line caught in phase 1 0 in
+all six (9 / 1 / 2), every nova death a melee. `the raid's own feet` 5-8 (6 / 5 / 5), phase 1 137-158 s (131-141; uld3's
+158 s lost seven melee). Round 18: swaps deferred 1 / 2 / 0 / 0, no tank death within 10 s; phase 3 melee within 15 yd
+of the spot 82 / 88 / 86 / 86%. Round 17's chain: 10 of 20 short taunts chained, 3 non-tanks swung at (uld4).
+
+**Stop rules.** No kill. Phase 3 stays stuck. Phase 1 novas were picked in rounds 6, 7 and 19 for other root causes,
+each fixed on its own check (ladder stacks, Guardians off the stack, back-line walks); this one is the gap leak.
+
+**Ranking.** Phase 3 118 (stuck); phase 2 collapse 49, both behind phase 1 melee losses; phase 1 nova 20; Death Ray
+2 outside the collapses.
+
+**Picked: the second Guardian of a pair dies inside the nova gap.** uld3 0:56.140: a Guardian died 5.3 yd out and its
+nova chain took 8862 (1.8 yd out, 3.5 yd from it) from 11.3% to 4.8%; 8862 lost the last 50.6k in 2.0 s with no
+non-tank targeting it.
+Both tanks had it as their target (Uldzaa's Judgement of Vengeance and Vindication on it), Uldzay's Whirlwind at
+0:56.179 put Deep Wounds on it, Uldzam's Death and Decay ticked on it; its nova at 0:58.347 killed Uldzao, Uldzax,
+Uldzay, Uldzaw and Uldzai. uld5 2:10.106: the second sat at 7.5% → 3.6% with Uldvaa (Cleave, Heroic Strike, Shield
+Slam) and Uldvab on it, and died 2.2 s later on Uldvax and Uldvay.
+
+Over windows 19-29 (27 pulls, 202 gap windows, the new `--phases` line): a low Guardian within 10 yd of the middle
+lost 3.0-3.9%/s inside the gap, 34k/s, so one under ~20% at the first death never outlasts it. Bots aimed 9.6k/s at
+it (ranged still on it 5.1k, tanks 3.8k, melee 0.6k), the rest was splash. Two causes in the strategy's own
+guards:
+
+1. `YoggSaronPhase1StackTarget` (`UldEncounter_YoggSaron.cpp:3719-3737` before the fix, called from
+   `ControlPhaseOne`, `UldActions_YoggSaron.cpp:2063`) gave the tank the lowest Guardian in melee reach, which inside
+   a gap is the one held back: a tank on it in 64-100% of gap samples, 1.23 tanks a sample. Review: the node
+   runs only while a Guardian waits to be fetched, and over 30 pulls (windows 19-29) it made the switch in
+   13% of those tank samples (the switch traced to `yogg-saron guardian control action`); 36% were targets
+   kept from before the gap, 24% `tank assist` (the generic picker: aggro, melee reach, lowest threat), the
+   rest other switches. This fix covers the 13% only.
+2. `YoggSaronPhase1AoeHoldMultiplier` (`UldMultipliers_YoggSaron.cpp:171-184` before) held only `Aoe`-typed
+   actions, so in the same windows it vetoed Seed, Chain Lightning, Volley and Blizzard while Maul 334, Swipe (Bear)
+   208, Consecration 169, Multi-Shot 139, Divine Storm 85, Whirlwind 71, Thunder Clap 46, Hammer of the Righteous
+   37 and Magma Totem 31 ran. The doc names Consecration and Explosive Trap among its reaches; neither is typed `Aoe`.
+
+Bug: the gap and the hold exist to keep that Guardian alive for 6 s. Fix (`UldMultipliers_YoggSaron.h/.cpp`,
+`UldEncounter_YoggSaron.cpp`): `HitsNeighbours`, the Crusher hold's test made shared in the file (`IsRaidAreaDamage`
+plus Maul, Hammer of the Righteous, Heart Strike, Avenger's Shield; heals and a positive spell exempt unless it is a
+named multi-target action, a summon or periodically triggers on enemies), now keys the phase 1 and leftover AoE
+hold too; summons were missing from the Crusher hold's exemption test, so Magma Totem and Explosive Trap now count
+there as well. The tank's stack attack takes the lowest killable Guardian in reach, else the healthiest. Same at 10
+and 25, normal and hard mode, with or without a player (a human's area spells and target are his own). No shared
+code changed (`IsRaidAreaDamage` and `RaidSplashCache` only read). Reader: `--phases` `low Guardians in the gap`
+(`gap_leak`, `actions_in_windows`, tested).
+
+**Next window should show:** `low Guardians in the gap` under 3.0-3.9%/s, `a tank on one` down by at most the
+control node's share (about an eighth of 64-100%: the generic picker is untouched), `area run` without Maul,
+Swipe, Consecration, Divine Storm, Whirlwind, Thunder Clap or Multi-Shot; fewer pairs under the 6 s gap than 1-3
+a pull and fewer nova deaths on a pair than 9 (uld3 5, uld5 3, uld1 1). Back it out if phase 1 runs past ~165 s or
+Guardians start swinging at non-tanks in phase 1 (the tanks lose area threat during holds).
+
+**Seen, not picked.**
+
+- The handover's first seconds took 11 of the 20 nova deaths, mostly single novas on melee walking to the anchor;
+  the doc's open item (the pile is one blast).
+- Ranged finish cast-time spells on a Guardian gone unkillable (the AI yields while casting), 5.1k/s of the gap
+  loss, and 1.35 pets a sample sat on low Guardians.
+- uld5's healer Uldvae rode one Constrictor for 54 s (6:44-7:38) and died to Squeeze.

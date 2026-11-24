@@ -441,6 +441,8 @@ DRAG_WATCH_MS = 20000
 # Roster class ids. A paladin's, DK's or druid's taunt matches top threat for good, so only a tank's taunt
 # takes a healed Guardian off them. A hunter's shot wears off by itself.
 CLASS_HUNTER = 3
+CLASS_NAMES = {1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest", 6: "death knight", 7: "shaman",
+               8: "mage", 9: "warlock", 11: "druid"}
 TAUNT_DRAGGER_CLASSES = {2, 6, 11}
 HANDBACK_KINDS = ("taunt dragger", "hunter", "tank", "other")
 # When the module reads a drag taunt as taken or not, by when any taunt has landed, and how stale the
@@ -4341,6 +4343,8 @@ def show_threat(trace: Trace) -> None:
         print(f"  bot non-tanks on one Guardian: {split[0]:4.1f}%   on two or more: {split[1]:4.1f}%"
               f"   (of the time any of them was on one)")
 
+    show_stack_turns(trace, guardians, roster, tanks, p1_end)
+
     show_tank_engagement(trace, p1_end, tanks)
     show_taunt_attempts(trace, p1_end, tanks)
 
@@ -4380,6 +4384,38 @@ def show_threat(trace: Trace) -> None:
         print(f"    {clock(rec['t']):>9}  {TAUNT_SPELLS[rec['sp']]:<18}"
               f" rank {rank or '?'}/{len(live):<2}  target {radius} yd out")
     print(f"    landed on the focus Guardian: {on_focus} of {len(taunts)}")
+
+
+def stack_turns(rows: list[tuple[int, int, int, float]], tanks: set, reach: float) -> list[tuple[int, int, int]]:
+    """(t, guardian, new target) each time a Guardian within `reach` of the middle went from a tank to a non-tank, over
+    time-ordered (t, guardian, target, yards from the middle) rows. A row with no target changes nothing."""
+    last: dict[int, int] = {}
+    turns = []
+    for when, guardian, target, far in rows:
+        if not target:
+            continue
+        if last.get(guardian) in tanks and target not in tanks and far <= reach:
+            turns.append((when, guardian, target))
+        last[guardian] = target
+    return turns
+
+
+def show_stack_turns(trace: Trace, guardians: set, roster: set, tanks: set, p1_end: int) -> None:
+    """Guardians on the stack leaving a tank for a non-tank: what the tanks' area threat holds back, and what a
+    multiplier taking it away shows first. Pets count under their owner's class."""
+    rows = [(snap["t"], row[0], row[7], math.dist((row[1], row[2]), BODY))
+            for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end
+            for row in snap.get("u", []) if row[0] in guardians and len(row) > 7 and row[5] > 0]
+    turns = stack_turns(rows, tanks, P1_AOE_HOLD_RADIUS)
+    classes = {member["g"]: member.get("c") for member in trace.header.get("roster", [])}
+    by = collections.Counter()
+    for _, _, target in turns:
+        owner = target if target in roster else trace.owners.get(target)
+        pet = "" if target in roster else " pet"
+        by[f"{CLASS_NAMES.get(classes.get(owner), '?')}{pet}"] += 1
+    minutes = p1_end / 60000 or 1
+    print(f"  Guardians within {P1_AOE_HOLD_RADIUS:.0f} yd of the middle turning off a tank: {len(turns)}"
+          f" ({len(turns) / minutes:.1f}/min)" + (f"  {dict(by.most_common(5))}" if by else ""))
 
 
 def stalled_damage(samples: list[tuple[int, int, int]]) -> tuple[int, int]:

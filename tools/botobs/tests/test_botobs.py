@@ -1260,6 +1260,17 @@ class YoggPhases(unittest.TestCase):
         self.assertAlmostEqual(share, 4 / 8)
         self.assertEqual(yogg_saron.gap_leak([]), (0, 0.0, 0.0, 0.0))
 
+    def test_stack_turns_counts_a_guardian_leaving_a_tank_for_a_non_tank_on_the_stack(self):
+        tanks = {1, 2}
+        rows = [
+            (100, 7, 1, 3.0), (200, 7, 0, 3.0), (300, 7, 9, 4.0), (400, 7, 9, 4.0), (500, 7, 2, 3.0),
+            (100, 8, 1, 3.0), (200, 8, 2, 3.0), (300, 8, 9, 14.0),
+            (100, 6, 9, 3.0), (200, 6, 9, 3.0),
+        ]
+        rows.sort()
+        self.assertEqual(yogg_saron.stack_turns(rows, tanks, 10.0), [(300, 7, 9)])
+        self.assertEqual(yogg_saron.stack_turns([], tanks, 10.0), [])
+
     def test_actions_in_windows_counts_only_inside_an_open_window(self):
         acts = [(1000, "maul"), (1500, "maul"), (2500, "consecration"), (7000, "whirlwind"), (9000, "maul")]
         ran = yogg_saron.actions_in_windows(acts, [(1000, 3000), (8000, 9000)])
