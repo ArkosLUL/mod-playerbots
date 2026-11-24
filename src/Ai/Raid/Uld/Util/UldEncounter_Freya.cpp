@@ -276,13 +276,10 @@ Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float 
     return best;
 }
 
-bool IsFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state, Unit* lasher)
+bool IsFreyaLowLasherChasing(Player* bot, Unit* lasher)
 {
-    if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= ULDUAR_FREYA_LASHER_BAIL_PCT ||
-        lasher->GetVictim() != bot || lasher->HasUnitState(UNIT_STATE_NOT_MOVE))
-        return false;
-
-    return state.LivingTrio().empty() && !(state.conservator && state.conservator->IsAlive());
+    return lasher && lasher->IsAlive() && lasher->GetHealthPct() < ULDUAR_FREYA_LASHER_BAIL_PCT &&
+           lasher->GetVictim() == bot && !lasher->HasUnitState(UNIT_STATE_NOT_MOVE);
 }
 
 Unit* GetFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state)
@@ -290,7 +287,7 @@ Unit* GetFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state)
     Unit* best = nullptr;
     for (Unit* lasher : state.detonatingLashers)
     {
-        if (!IsFreyaLowLasherChasing(bot, state, lasher))
+        if (!IsFreyaLowLasherChasing(bot, lasher))
             continue;
 
         if (!best || lasher->GetHealth() < best->GetHealth() ||
@@ -374,13 +371,26 @@ bool HasFreyaTankDamageCut(Player* tank)
 
     return false;
 }
+
+bool IsFreyaLasherOn(Player* player)
+{
+    for (Unit* attacker : player->getAttackers())
+        if (attacker && attacker->IsAlive() && attacker->GetEntry() == NPC_DETONATING_LASHER)
+            return true;
+
+    return false;
+}
 }  // namespace
 
 bool IsFreyaAddTankDefensiveHeld(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true) ||
-        bot->GetHealthPct() < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT)
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
+        return false;
+
+    float const health = bot->GetHealthPct();
+    if (health < ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT ||
+        (health < ULDUAR_FREYA_ADD_TANK_LASHER_LAST_RESORT_PCT && IsFreyaLasherOn(bot)))
         return false;
 
     Unit* freya = GetFreyaForHold(botAI);
@@ -1066,7 +1076,7 @@ std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveSt
         if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= maxPct)
             continue;
 
-        if (spareChasers && IsFreyaLowLasherChasing(bot, state, lasher))
+        if (spareChasers && IsFreyaLowLasherChasing(bot, lasher))
             continue;
 
         if (bot->GetExactDist2d(lasher) <= radius)

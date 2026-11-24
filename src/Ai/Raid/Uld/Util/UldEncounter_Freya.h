@@ -70,6 +70,7 @@ enum UlduarFreyaIds
 inline constexpr uint32 ULDUAR_FREYA_ADD_TANK_DEFENSIVE_STACKS = 25;
 
 inline constexpr float ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT = 25.0f;
+inline constexpr float ULDUAR_FREYA_ADD_TANK_LASHER_LAST_RESORT_PCT = 50.0f;
 
 inline constexpr uint32 ULDUAR_FREYA_ADD_TANK_EXTERNAL_LEAD_MS = 1500;
 
@@ -254,7 +255,7 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 
 Unit* GetFreyaLowLasherOnPlayer(Player* bot, FreyaWaveState const& state, float range, bool backLineOnly = false);
 
-bool IsFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state, Unit* lasher);
+bool IsFreyaLowLasherChasing(Player* bot, Unit* lasher);
 
 Unit* GetFreyaLowLasherChasing(Player* bot, FreyaWaveState const& state);
 

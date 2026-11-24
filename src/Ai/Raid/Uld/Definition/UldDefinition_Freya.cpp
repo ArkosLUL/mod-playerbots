@@ -104,7 +104,7 @@ std::vector<EncounterHelpers::HazardCircle> FreyaLowLasherBlasts(PlayerbotAI* bo
     std::vector<EncounterHelpers::HazardCircle> blasts;
     for (Unit* lasher : state.detonatingLashers)
         if (lasher->IsAlive() && lasher->GetHealthPct() < ULDUAR_FREYA_LASHER_BAIL_PCT &&
-            !IsFreyaLowLasherChasing(botAI->GetBot(), state, lasher))
+            !IsFreyaLowLasherChasing(botAI->GetBot(), lasher))
             blasts.emplace_back(lasher->GetPosition(), ULDUAR_FREYA_DETONATE_RADIUS + 1.0f);
 
     return blasts;

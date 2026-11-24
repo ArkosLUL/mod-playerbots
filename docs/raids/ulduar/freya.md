@@ -354,9 +354,10 @@ since every add-tank death came with them spent earlier or on someone else
 ([Hardened Bark](#the-trio-wave)). Verified, one layer at a time: he stood bare 1-12s a
 trio wave (9-30s before), and one add tank died to the Snaplasher in six pulls (1-2 a pull before). `freya
 add tank defensive hold` blocks the class nodes' tank cooldowns (`HeldTankDefensiveNames`) for assist tank 0 while
-Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%); **known-open:** under a lasher
-pile too, which killed bears from 66-100% in 1.7-5s with Barkskin, Frenzied Regeneration and Survival Instincts
-held, the last resort coming at most 0.3s before the killing Flame Lashes. `freya add tank
+Freya is not on him, above `ULDUAR_FREYA_ADD_TANK_DEFENSIVE_LAST_RESORT_PCT` (25%), or
+`_ADD_TANK_LASHER_LAST_RESORT_PCT` (50%) while a lasher attacks him (user's choice; not yet verified in a pull):
+at 25% under a lasher pile it killed bears from 66-100% in 1.7-6s with Barkskin, Frenzied Regeneration and
+Survival Instincts held, the last resort coming at most 0.3s before the killing Flame Lashes. `freya add tank
 external hold` zeroes healers' class Pain Suppression (a disc priest's own critical-health one shares the
 name), Guardian Spirit and Hand of Sacrifice aimed at anyone but the main tank (user's choice) while an add
 tank lives who is not holding her; Lay on Hands stays free. Both run only in the add phase, Freya in combat with Attuned to Nature up:
@@ -536,18 +537,18 @@ camp move orders against 270), and ranged damage halve, **109.5k/s → 51.2k/s**
 **21%** of moving ticks against **78%** standing. Eonar's Gift then lived **14.5s** rather than 4-8 and
 took the five surviving lashers from 7-17% back to **60-68%**.
 
-**The back line walks off a submerged pack** (user's trial). The gather walked it
+**Walking the back line off a submerged pack was tried and dropped** (user's choice). The gather walks it
 on: in 10 of 30 waves at least half of the camp's orders in the 5s submerge ended nearer a lasher, at a median
 2.2-6.2 yd from one. Over the first 30s after the wake, six waves kept the back line a median 4-6 yd from a
 lasher and it took 116-514k lasher damage; the other 23 with the raid intact, at 10-24 yd, took 0-203k, 21 of
 them under 90k. Distance at the wake alone does not decide: clean waves stood 2-7 yd off then too, and the
-worst lost its Army at 5 ghouls to a Ground Tremor cast 0.5s into the channel. A lasher is submerged while
-alive and `REACT_PASSIVE`, its first 5s (`IsFreyaLasherSubmerged`); meanwhile a ranged DPS or healer within
-`_LASHER_CAMP_STANDOFF` (18 yd) of one takes the bail's walk (below) clear of every submerged and low lasher,
-and the gather waits for the wake. Judge it by the back line's lasher damage over the 30s after the wake.
-Over three windows it cleared the back line (0-7 of 14 within 18 yd at the wake, 10-14 before) but left it 23-37
-yd from the Army's DK, out of the ghouls' reach (below): ghouls took 12 of the 33 lashers that woke onto it (64 of
-105 before), and its damage held level, a median 34k and 3 of 12 waves at 100k+ (30k and 9 of 32 before).
+worst lost its Army at 5 ghouls to a Ground Tremor cast 0.5s into the channel. The trial walked a ranged DPS or
+healer within `_LASHER_CAMP_STANDOFF` (18 yd) of a submerged lasher (alive and `REACT_PASSIVE`, its first 5s:
+`IsFreyaLasherSubmerged`) to 18 yd from every one and held the gather until the wake. Over three windows it
+cleared the back line (0-7 of 14 within 18 yd at the wake, 10-14 before) but left it a median 28 yd from the
+Army's DK (21 before), out of the ghouls' reach (below): ghouls took 12 of the 36 lashers that woke onto it
+(72 of 118 before), and its lasher damage did not drop (median 28k, 4 of 17 waves at 100k+; 20k, 9 of 42
+before).
 
 **Melee bail per lasher.** `freya lasher about to blow` (`ACTION_RAID + 3`) steps melee out of the blast
 of the lashers that are nearly dead, the only warning this wave gives. A lasher under
@@ -569,15 +570,15 @@ its target, or either of set behind's flank points (3/5 π off its facing). The 
 lasher blows. Since: 2-11% of melee approach orders a wave end in a low blast (37-57%), 1-13 melee Detonate
 hits a wave (40-65), none fatal, and melee damage over a wave's first 40s held (72-101k/s, 50-99k before).
 
-**A melee bot doesn't bail from a low lasher chasing it** while no trio member or Conservator lives
-(`IsFreyaLowLasherChasing`: its victim, not rooted or stunned; not yet verified in a pull). A bail in front of it
-never clears the blast, since each spot is 16 yd from where the lasher stood and it follows: the victim hops 2 yd
-at a time, melee beside it bail along, the guards keep the rest off and the ranged lose reach, so nothing finishes
-it. One at 13-7% lived 47s and dragged two DKs 90 yd off, where Iron Roots killed the one whose Army the next
-lasher wave needed, out of heal range. Over 30 pulls 405 melee bails ran from the bot's own chaser, 271 with only
-lashers up. Now its victim kills it first, ahead of a Gift he fills (`GetFreyaLowLasherChasing`), and the blast
-guards leave it out for him, so he eats one Detonate; bystanders bail as before. With a trio or Conservator up
-the bail still runs: the victim's pick is that add, and walking to it would drag the lasher into the stack.
+**A melee bot doesn't bail from a low lasher chasing it** (`IsFreyaLowLasherChasing`: its victim, not rooted or
+stunned; not yet verified in a pull). A bail in front of it never clears the blast, since each spot is 16 yd from
+where the lasher stood and it follows: the victim hops 2 yd at a time, melee beside it bail along, the guards keep
+the rest off and the ranged lose reach, so nothing finishes it. One at 13-7% lived 47s and dragged two DKs 90 yd
+off, where Iron Roots killed the one whose Army the next lasher wave needed, out of heal range. Over 30 pulls 405
+melee bails ran from the bot's own chaser, 134 of them with a trio member or the Conservator up, where a chase
+also drags the lasher into that add's melee stack. Now its victim kills it first, ahead of every other add
+(`GetFreyaLowLasherChasing`; with a trio or Conservator up too, user's choice), and the blast guards leave it out
+for him, so he eats one Detonate; bystanders bail as before.
 
 **The back line has its own bail, per bot**, since 15 of 22 deaths in those waves were ranged or
 healers. Inside `_DETONATE_RADIUS` of a low lasher, `freya ranged camp` (`ACTION_RAID`) walks a ranged
@@ -594,7 +595,7 @@ six), and the back line drifted to a median 57 yd from Freya; hence the ranged f
 ([ranged focus](#detonating-lasher-waves)).
 
 **Otherwise the back line gathers**, except while any lasher within `_HAZARD_SEARCH_RADIUS` is low (the
-walk to the ball crosses its blast) or any is submerged: then a bot outside them stays put. The camp is
+walk to the ball crosses its blast): then a bot outside them stays put. The camp is
 `GetFreyaRangedCampAnchor`, the lowest-GUID living ranged DPS, so every bot picks the same one with no
 shared state and a live bot is always on the mesh; anchored on each bot itself, the camp sat
 23.8-35.7 yd from Freya and moved 27.5 yd between waves. It re-picks from the living, so it jumps as
@@ -704,8 +705,9 @@ lashers at 76% summed went to 228%, three at 15% to 130%.
 
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment
 it runs past, which is the leash: a lasher that retargets cannot tow a bot across the room. A melee DPS bot's
-own low chaser comes first, ahead of a Gift, and has no leash ([melee bail](#detonating-lasher-waves)). They switch
-only to a lasher 10 yd closer than the one held, so two at similar range don't trade the bot every tick.
+own low chaser comes first, ahead of every other add, and has no leash
+([melee bail](#detonating-lasher-waves)). They switch only to a lasher 10 yd closer than the one held, so two
+at similar range don't trade the bot every tick.
 The add tank works its normal ladder through a lasher wave.
 
 ## Movement guards
@@ -850,19 +852,24 @@ Righteous Defense, each stretch a Snaplasher spent on a non-tank with its deaths
 and speed reads, each cooldown a tank or healer spent under a stacked Snaplasher (a healer's note precedes a
 cast that can still fail), and per Snaplasher the seconds its longest-holding tank held it under his own
 buttons, externals, both (and of that on his damage cut), two externals, no damage cut (neither his nor an
-external) and none, read off auras, up to his death or its last sample; `--beams` Unstable Sun
+external) and none, read off auras, up to his death or its last sample, and each lasher pile on a tank other than
+Freya's in which he fell under 50%, a button was held or pressed, or he died, with his health at each `freya add
+tank defensive hold` veto and own button; `--beams` Unstable Sun
 Beam dodges per role
 (fired from past the trigger, walk, ended farther from Freya) and healers within 38.5 yd of each
 Snaplasher's holder;
 `--ghouls` per lasher wave, while ghouls hold the pack focus, the ranged DPS samples with no lasher within
 28.5 yd, on Freya, or inside 18 yd of one, and the `freya reach held pack` orders; `--blasts` per lasher
 wave, Detonate hits and deaths on the melee, their reach and set-behind orders ending inside a low lasher's
-blast, their samples inside one, and their bails from a low lasher chasing them (those with no trio or
-Conservator up apart); `--lows` per lasher wave, its lashers under the bail line, those there
-8s or more and hitting a player, what the ranged in reach of one hitting a player shot (with a Gift up, the
-share on it), and the back line's bails from one hitting them; `--submerge` per lasher wave, the ranged and
+blast, their samples inside one, their bails from a low lasher chasing them (those with no trio or
+Conservator up apart), and the chases (one low lasher keeping one melee bot its target: those of 5s+, with a
+trio or Conservator up, and the victim's longest walk); `--lows` per lasher wave, its lashers under the bail
+line, those there 8s or more and hitting a player, what the ranged in reach of one hitting a player shot (with a
+Gift up, the share on it), and the back line's bails from one hitting them; `--submerge` per lasher wave, the ranged and
 healers within 18 yd of a lasher at its spawn and its wake 5s later, the camp's orders meanwhile and those
-ending 18 yd clear, and the lashers' melee and Flame Lash on them over the 30s after the wake; `--bombs` per
+ending 18 yd clear, the lashers whose first target after the wake was one of them, the Army's cast against the
+spawn, its caster's median distance from them at the wake and how many of those lashers ghouls held once out,
+and the lashers' melee and Flame Lash on them over the 30s after the wake; `--bombs` per
 action and role, the orders from outside every live bomb's avoid radius whose straight walk passes inside one
 and the charges landing inside one, those then hit by it, how soon each non-tank a bomb landed on (1.5 yd)
 ordered its escape (from 4.5s on: the plant's collision outlasted), and how each bomb death got in (a bomb is

@@ -1362,13 +1362,10 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    std::vector<Position> keepOff =
+    std::vector<Position> const blasts =
         GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    std::vector<Position> const submerged =
-        GetFreyaSubmergedLasherPositions(botAI, state, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    keepOff.insert(keepOff.end(), submerged.begin(), submerged.end());
-    if (!keepOff.empty())
-        return StepOutOfBlasts(keepOff, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
+    if (!blasts.empty())
+        return StepOutOfBlasts(blasts, ULDUAR_FREYA_LASHER_CAMP_STANDOFF);
 
     Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())

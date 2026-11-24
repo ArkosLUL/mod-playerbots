@@ -17,10 +17,11 @@ ranged bot while Eonar's Gift is up and the other ranged bot shoots the Gift, th
 melee bot joining a ranged one on a Gift after its walk away from it was cut, while the ranged one walks to it round
 the lashers and spreads a DoT off it once and once onto it. An eighth pins a melee bot walking through a live
 Nature Bomb and dying to it, while another charges into it, and a ninth a bomb landing at two bots' feet, one ordering its escape at once and one 5.2 s later. A tenth
-pins the back line near a submerged lasher pack, one walking clear in the submerge, and the lasher damage on it
-after the wake, and an eleventh a low lasher chasing a melee bot that bails from it twice, once with the
-Snaplasher up, while a melee bot beside it bails once. The shared v14 fixture shows every section reads empty
-elsewhere.
+pins the back line near a submerged lasher pack, one walking clear in the submerge, the lasher damage on it
+after the wake and an Army's ghoul on one of two lashers that woke onto it, an eleventh a low lasher chasing a
+melee bot that bails from it twice, once with the Snaplasher up, while a melee bot beside it bails once, and a
+twelfth three lashers piling onto the add tank, his cooldowns held then one pressed before he dies. The shared
+v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -180,6 +181,40 @@ def lasher_pull() -> list[dict]:
     ]
 
 
+def pile_snap(t: int, on_add: int, add_hp: float) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
+        [MAIN, 2360.0, -43.0, 425.3, 0, 100, 100, FREYA],
+        [ADD, 2340.0, -50.0, 425.3, 0, add_hp, 100, LASHERS[0]],
+        *([lasher, 2342.0, -50.0, 425.3, 0, 90, 0, ADD if i < on_add else MAIN] for i, lasher in enumerate(LASHERS)),
+    ]}
+
+
+def pile_pull() -> list[dict]:
+    return [
+        {"e": "hdr", "v": 14, "ts": 1795343672000, "map": 603, "inst": 38, "diff": 1, "boss": "elder-stonebark",
+         "bin": 1795338959000, "cfg": {"cheats": "food,taxi,raid", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": [{"g": MAIN, "n": "Bulwark", "r": "tank", "c": 2, "h": 0},
+                    {"g": ADD, "n": "Bruin", "r": "tank", "c": 11, "h": 0}]},
+        {"t": 0, "e": "unit", "g": FREYA, "en": 32906, "n": "Freya", "b": 1},
+        *({"t": 0, "e": "unit", "g": g, "en": 32918, "n": "Detonating Lasher"} for g in LASHERS),
+        {"t": 0, "e": "pull", "boss": "elder-stonebark", "src": "engage"},
+        pile_snap(60000, 1, 90),
+        pile_snap(60500, 2, 60),
+        pile_snap(61000, 3, 40),
+        pile_snap(61500, 3, 30),
+        pile_snap(65000, 1, 100),
+        pile_snap(65500, 0, 100),
+        {"t": 60100, "e": "veto", "g": ADD, "m": fr.DEFENSIVE_HOLD, "a": "barkskin"},
+        {"t": 60900, "e": "veto", "g": ADD, "m": fr.DEFENSIVE_HOLD, "a": "survival instincts"},
+        {"t": 61100, "e": "veto", "g": ADD, "m": fr.DEFENSIVE_HOLD, "a": "barkskin"},
+        {"t": 61400, "e": "aura", "d": ADD, "s": ADD, "sp": 22842, "r": 0, "st": 1, "dur": 10000, "p": 1},
+        {"t": 61800, "e": "death", "g": ADD, "killer": LASHERS[0], "x": 2340.0, "y": -50.0, "z": 425.3,
+         "rewind": [[61700, LASHERS[0], 62608, 15000]]},
+        {"t": 66000, "e": "end", "out": "wipe"},
+    ]
+
+
 MELEE = 7707
 
 
@@ -222,11 +257,11 @@ def blast_pull() -> list[dict]:
 BYSTANDER = 7708
 
 
-def chase_snap(t: int, low_hp: float, trio: bool = False) -> dict:
+def chase_snap(t: int, low_hp: float, trio: bool = False, melee_x: float = 2350.0, victim: int = MELEE) -> dict:
     units = [
         [FREYA, 2362.0, -43.0, 425.3, 0, 100, 0, MAIN],
-        [LASHERS[0], 2340.0, -50.0, 425.3, 0, low_hp, 0, MELEE],
-        [MELEE, 2350.0, -50.0, 425.3, 0, 100, 100, LASHERS[0]],
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, low_hp, 0, victim],
+        [MELEE, melee_x, -50.0, 425.3, 0, 100, 100, LASHERS[0]],
         [BYSTANDER, 2346.0, -50.0, 425.3, 0, 100, 100, FREYA],
     ]
     if trio:
@@ -454,6 +489,18 @@ def submerge_snap(t: int, near_x: float, healer_spot: tuple) -> dict:
     ]}
 
 
+def woke_snap(t: int, first_on: int, second_on: int) -> dict:
+    return {"t": t, "e": "snap", "u": [
+        [LASHERS[0], 2340.0, -50.0, 425.3, 0, 100, 0, first_on],
+        [LASHERS[1], 2344.0, -50.0, 425.3, 0, 100, 0, second_on],
+        [MAIN, 2360.0, -43.0, 425.3, 0, 100, 100, FREYA],
+        [FAR, 2380.0, -50.0, 425.3, 0, 100, 100, FREYA],
+        [NEAR, 2368.0, -50.0, 425.3, 0, 100, 100, FREYA],
+        [HEALER_TWO, 2352.0, -55.0, 425.3, 0, 100, 100, 0],
+        [GHOUL, 2342.0, -50.0, 425.3, 0, 100, 0, LASHERS[0]],
+    ]}
+
+
 def submerge_pull() -> list[dict]:
     lasher_hit = {"e": "dmg", "s": LASHERS[0], "d": HEALER_TWO, "ok": 0, "sc": 1, "ab": 0, "rs": 0, "hp": 80.0}
     return [
@@ -579,6 +626,13 @@ class Tanks(unittest.TestCase):
                       printed(fr.show_tanks, load(pull() + auras)))
 
 
+    def test_the_add_tank_under_a_lasher_pile_his_held_and_pressed_buttons(self):
+        text = printed(fr.show_tanks, load(pile_pull()))
+        self.assertIn("  1:00.000 .. 1:01.500 Bruin/tank under lashers 1.5s, up to 3 on him, 90% to 30%: held barkskin "
+                      "at 90%, survival instincts at 40%; pressed Frenzied Regeneration at 30%; died 1:01.800\n", text)
+        self.assertNotIn("1:05.000", text)
+
+
 class Beams(unittest.TestCase):
     def test_dodges_per_role_and_healers_on_the_holder(self):
         trigger = fr.dodge_trigger_yd()
@@ -608,14 +662,22 @@ class Blasts(unittest.TestCase):
             "BLASTS\n"
             "  1:00.000 lashers: melee took 1 Detonate hit(s), 1 death(s); 1 of 2 approach order(s) into a low "
             "lasher's blast; melee inside one 33% of samples; 1 of 1 melee bail order(s) away from a low lasher "
-            "chasing that bot, 1 with no trio or Conservator up\n"))
+            "chasing that bot, 1 with no trio or Conservator up; 1 chase(s) of a melee bot by a low lasher, 0 of "
+            "them 5s+ (0 with a trio or Conservator up), its victim walking up to 10 yd\n"))
 
     def test_bails_from_a_low_lasher_chasing_the_bailing_bot(self):
         self.assertEqual(printed(fr.show_blasts, load(chase_pull())), (
             "BLASTS\n"
             "  1:00.000 lashers: melee took 0 Detonate hit(s), 0 death(s); 0 of 0 approach order(s) into a low "
             "lasher's blast; melee inside one 67% of samples; 2 of 3 melee bail order(s) away from a low lasher "
-            "chasing that bot, 1 with no trio or Conservator up\n"))
+            "chasing that bot, 1 with no trio or Conservator up; 1 chase(s) of a melee bot by a low lasher, 0 of "
+            "them 5s+ (0 with a trio or Conservator up), its victim walking up to 0 yd\n"))
+
+    def test_a_long_chase_with_the_snaplasher_up_ends_a_new_one_on_another_victim(self):
+        records = chase_pull() + [chase_snap(66000, 10, True, melee_x=2366.0),
+                                  chase_snap(66500, 10, True, victim=BYSTANDER)]
+        self.assertIn("; 2 chase(s) of a melee bot by a low lasher, 1 of them 5s+ (1 with a trio or Conservator "
+                      "up), its victim walking up to 16 yd\n", printed(fr.show_blasts, load(records)))
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_blasts, load(pull())), "BLASTS\n  no lasher wave\n")
@@ -672,7 +734,19 @@ class Submerge(unittest.TestCase):
             "SUBMERGE\n"
             "  1:00.000 lashers: back line within 18 yd of a lasher 2 of 3 at the spawn, 1 of 3 at the wake "
             "(nearest, median 6.0 then 24.0 yd); 2 'freya ranged camp' order(s) in the submerge, 1 ending 18 yd "
-            "clear; 15k lasher melee and Flame Lash on the back line in the 30s after the wake\n"))
+            "clear; 0 of 0 woke onto the back line; no Army; 15k lasher melee and Flame Lash on the back line in the "
+            "30s after the wake\n"))
+
+    def test_the_armys_ghouls_on_the_lashers_that_woke_onto_the_back_line(self):
+        records = submerge_pull() + [
+            {"t": 0, "e": "unit", "g": GHOUL, "en": 24207, "n": "Army of the Dead Ghoul"},
+            cast(59500, MAIN, fr.ARMY_OF_THE_DEAD),
+            woke_snap(66000, HEALER_TWO, NEAR),
+            woke_snap(69500, GHOUL, NEAR),
+        ]
+        self.assertIn("; 2 of 2 woke onto the back line; Army -0.5s, the back line a median 14 yd from its caster "
+                      "at the wake, ghouls on 1 of the 2 still up once they were out; ",
+                      printed(fr.show_submerge, load(records)))
 
     def test_trio_pull_has_no_lasher_wave(self):
         self.assertEqual(printed(fr.show_submerge, load(pull())), "SUBMERGE\n  no lasher wave\n")
