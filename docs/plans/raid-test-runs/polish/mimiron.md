@@ -40,7 +40,7 @@ Frost Bomb, P3 Bomb Bots.
 1. P4 mines 8, in every pull; mixed movers (Watch: the P4 disperse).
 2. P2 storm 7: uld3's melee sector lost 5 bots in 5 s after barrage 1; uld4 Heat Wave 1.
 3. Water Spray 4 (uld6 P3 2, uld3 P4 2); Frost Bomb 4 (uld2, one bomb at 9:53).
-4. P4 Hand Pulse 3 (window 32: 43 on the old rosters). Plan question Q11.
+4. P4 Hand Pulse 3 (window 32: 43 on the old rosters). Q11 (a) answered, round 23.
 5. Plasma Ball 2; Bomb Bot 1 (Q10 built round 22); Flames, Shock Blast, Assault Bot 1 each.
 
 **Fixes in place** (round: what; verdict).
@@ -96,9 +96,11 @@ Frost Bomb, P3 Bomb Bots.
 - Q7 (a): P4 healers on the wedge's front row; Q8: that row stays at 18 yd.
 - Q10 (a) (2026-11-24): the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb
   Bot and takes the blast; built in round 22.
+- Q11 (a) (2026-11-24): under Firefighter, bot priests hold Hymn of Hope and their second Shadowfiend until
+  phase 4 opens; then (b), a fifth healer at 25, if two healers still drop out before ~9:15. Build in round
+  23.
 
-**Open questions.** Q11 (round 21): phase 4 healer mana. Hand Pulse was picked in rounds 15 and 21 (round
-17 fixed a feeder); a third pick without Q11 answered is stuck.
+**Open questions.** None.
 
 **Watch.** The P4 `combat formation move` (generic disperse 4.0, shared code) runs unscreened off-slot:
 walk-ins into live bombs and mine hits (window 32: 48 walk-ins, 12 mine hits), and the one Z 803.11 leg
