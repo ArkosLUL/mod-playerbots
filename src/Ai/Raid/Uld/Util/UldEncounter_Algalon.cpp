@@ -4644,6 +4644,68 @@ Unit* GetAlgalonHandlerConstellation(Player* bot)
 
 namespace
 {
+bool OffTankTauntSafe(AlgalonEncounterState const& state, PlayerbotAI* botAI, Player* bot, uint32 now)
+{
+    if (!BigBangDueWithin(state, ULDUAR_ALGALON_OFFTANK_TAUNT_SECONDS, now) || !ClassTauntReady(botAI) ||
+        AlgalonStaysOut(bot) || AlgalonTakesBossNow(bot))
+        return false;
+
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (!holder || holder == bot || !state.swapPair.count(holder->GetGUID()) || IsAlgalonPhased(holder) ||
+        holder->GetHealthPct() < ULDUAR_ALGALON_HOLDER_URGENT_PCT ||
+        GetAlgalonPhasePunchStacks(holder) + 1 >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
+        return false;
+
+    return !state.disperser.Get().IsEmpty() ||
+           !BigBangDueWithin(state, ULDUAR_ALGALON_EARLY_SWAP_SECONDS, now + ULDUAR_ALGALON_TAUNT_COOLDOWN_MS);
+}
+
+bool ConstellationPathClear(AlgalonEncounterState const& state, Unit const* constellation, Player* bot)
+{
+    Position const from = constellation->GetPosition();
+    return std::none_of(state.holes.begin(), state.holes.end(),
+                        [&](AlgalonScanUnit const& hole)
+                        {
+                            return SegmentDistance(from, bot->GetPositionX(), bot->GetPositionY(), hole.position) <
+                                   ULDUAR_ALGALON_HOLE_PATH_CLEARANCE;
+                        });
+}
+}
+
+Unit* GetAlgalonOffTankConstellation(Player* bot)
+{
+    AlgalonEncounterState const* state = FindState(bot);
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    if (!state || !botAI || !state->engaged || state->constellations.empty() ||
+        !state->swapPair.count(bot->GetGUID()) || state->handler.Get() == bot->GetGUID() || IsAlgalonPhased(bot) ||
+        !OffTankTauntSafe(*state, botAI, bot, getMSTime()))
+        return nullptr;
+
+    Player* handler = FindGroupMember(bot->GetGroup(), state->handler.Get());
+    ObjectGuid const handlerPick = handler ? handler->GetTarget() : ObjectGuid::Empty;
+    Creature* chosen = nullptr;
+    float nearest = ULDUAR_ALGALON_TAUNT_REACH;
+    for (AlgalonScanUnit const& constellation : state->constellations)
+    {
+        Creature* unit =
+            constellation.active && constellation.guid != handlerPick ? Resolve(bot, constellation.guid) : nullptr;
+        Player* victim = unit && unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
+        if (!victim || !PlayerbotAI::IsHeal(victim))
+            continue;
+
+        float const distance = bot->GetExactDist(unit);
+        if (distance <= nearest && ConstellationPathClear(*state, unit, bot))
+        {
+            chosen = unit;
+            nearest = distance;
+        }
+    }
+
+    return chosen;
+}
+
+namespace
+{
 bool KiteSpotNear(AlgalonEncounterState const& state, AlgalonScanUnit const& hole, float angle, float offset,
                   Position& spot)
 {

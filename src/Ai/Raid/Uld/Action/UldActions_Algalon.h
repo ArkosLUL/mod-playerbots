@@ -198,6 +198,15 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonOffTankTauntAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon off tank taunt action";
+
+    AlgalonOffTankTauntAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonDarkMatterTankAction : public AttackAction
 {
 public:

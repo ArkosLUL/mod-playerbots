@@ -135,6 +135,7 @@ SHELTER_WINDOW_MS = 30000
 KITE_RESERVE_MS = 60000
 KITE_RESERVED_HOLES = 2
 GATHER_LEAD_MS = 10000
+OFFTANK_TAUNT_MS = 30000
 # every class taunt the handler can be (Taunt, Hand of Reckoning, Growl, Dark Command)
 TAUNT_COOLDOWN_MS = 8000
 KITE_BLOCKED_MS = 5000
@@ -3873,6 +3874,23 @@ def loose_at_bang(trace: Trace) -> list[dict]:
     return out
 
 
+def healer_holds_before_bang(trace: Trace) -> list[dict]:
+    """Per Big Bang, `{n, start, healer_ms, at_cast, taunts}`: constellation time on healers in the OFFTANK_TAUNT_MS
+    before its cast, how many were on a healer as it began, and each `algalon.offtaunt` in between as
+    `(t, caster, healer)`, the swap tank outside the handler role taking one off a healer."""
+    constellations = guids_of_entry(trace, NPC_LIVING_CONSTELLATION)
+    loose = loose_at_bang(trace)
+    taunts = [(rec["t"], rec.get("g", 0), as_guid(rec.get("txt"))) for rec in notes(trace, "algalon.offtaunt")]
+    out = []
+    for cast in big_bang_casts(trace):
+        low, start = cast["start"] - OFFTANK_TAUNT_MS, cast["start"]
+        held, _ = threat_share(trace, constellations, lambda when, a=low, b=start: a <= when < b)
+        out.append({"n": cast["n"], "start": start, "healer_ms": held.get("heal", 0),
+                    "at_cast": sum(1 for row in loose if row["n"] == cast["n"] and trace.role(row["victim"]) == "heal"),
+                    "taunts": [taunt for taunt in taunts if low <= taunt[0] < start]})
+    return out
+
+
 def kite_label(trace: Trace, run: dict) -> str:
     stages = " > ".join(f"{value} {clock(start)}" for value, start, _ in run["stages"])
     ate = (f"eaten {len(run['eaten'])} at " + ", ".join(clock(row["removed"]) for row in run["eaten"])
@@ -3925,6 +3943,16 @@ def show_constellations(trace: Trace) -> None:
               + ", ".join(f"{value} {held / 1000:.1f} s" for value, held in totals.most_common()))
         print("    by bot, outside none: " + ", ".join(f"{trace.name(guid)} {held / 1000:.1f} s"
                                                      for guid, held in busy.most_common()))
+    before = healer_holds_before_bang(trace)
+    if before:
+        print(f"  the {OFFTANK_TAUNT_MS // 1000} s before each Big Bang: constellation time on healers, on a healer at"
+              " the cast, the swap tank's taunts off healers (algalon.offtaunt)")
+        for row in before:
+            casters = collections.Counter(caster for _, caster, _ in row["taunts"])
+            by = (" (" + ", ".join(f"{trace.name(guid)} {n}" for guid, n in casters.most_common()) + ")"
+                  if casters else "")
+            print(f"    Big Bang {row['n']} {clock(row['start'])}: {row['healer_ms'] / 1000:.1f} s, {row['at_cast']} at"
+                  f" the cast, {len(row['taunts'])} taunt(s){by}")
     blocked = kite_blocked(trace)
     if sum(blocked.values()):
         print(f"  kite blocked {sum(blocked.values()) / 1000:.1f} s, taunting with one held, a hole spare and no Big"
@@ -5714,7 +5742,8 @@ SECTIONS = (
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
     ("constellations", "activations, victims, one stuck in the air, the handler's kite stages, what each kite ate,"
-                       " seconds the kite was blocked, parked stretches, removals", show_constellations),
+                       " healer time and the swap tank's taunts before each Big Bang, seconds the kite was blocked,"
+                       " parked stretches, removals", show_constellations),
     ("smash", "every Cosmic Smash wave: who stood near it, the dodge, distance at the impact", show_smash),
     ("tanks", "Phase Punch stacks, swaps, non-tank pickups, Quantum Strike", show_tanks),
     ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"

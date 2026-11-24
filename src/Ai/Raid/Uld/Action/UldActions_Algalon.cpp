@@ -400,6 +400,19 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     return false;
 }
 
+bool AlgalonOffTankTauntAction::Execute(Event /*event*/)
+{
+    Unit* constellation = GetAlgalonOffTankConstellation(bot);
+    Unit* victim = constellation ? constellation->GetVictim() : nullptr;
+    if (!victim || !CastClassTaunt(botAI, constellation))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "algalon.offtaunt", RaidObs::DescribeAssignment(victim->GetGUID()));
+
+    return true;
+}
+
 bool AlgalonDarkMatterTankAction::Execute(Event /*event*/)
 {
     Unit* darkMatter = GetAlgalonLooseDarkMatter(bot);
