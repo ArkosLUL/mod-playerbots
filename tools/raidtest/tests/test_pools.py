@@ -158,6 +158,15 @@ class LedgerTest(TraceDir):
         self.assertEqual({row.trace.path for row in ledger.rows if row.trace},
                          {refreshed, unrefreshed, unsaid, base})
 
+    def test_a_pull_stopped_by_dc_test_stop_counts_nowhere(self):
+        finished, stopped = self.trace(31, 7), self.trace(36, 8)
+        records = [record("tr-1", "uld1", 7, 30, 35, [(31, 32, "kill")]),
+                   record("tr-2", "uld1", 8, 35.5, 40, [(36, 39, "aborted")])]
+        ledger = self.ledger(records)
+        self.assertEqual([f.path for f in ledger.counted("uld1", HEAD)], [finished])
+        self.assertEqual([row.aborted for row in ledger.rows], [False, True])
+        self.assertIn(stopped, [row.trace.path for row in ledger.rows if row.trace])
+
     def test_a_trace_outside_every_pool_run_counts_for_none(self):
         self.trace(31, 7)
         self.assertEqual(self.ledger([]).counted("uld1", HEAD), [])

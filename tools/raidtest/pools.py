@@ -7,7 +7,8 @@ time window keeps apart two runs that got the same instance id at different time
 
 A pull whose boss engaged before DC's start step never counts, whatever its trace says: DC drops the
 pre-pull refresh then, so the raid goes in on the last pull's mana, cooldowns and Exhaustion. Records
-from before DC's schema 18 don't say how a pull started, so those count as before.
+from before DC's schema 18 don't say how a pull started, so those count as before. A pull cut off by
+`.dc test stop` never counts either: its trace ends in a reset that reads like a finished pull.
 """
 from __future__ import annotations
 
@@ -47,8 +48,13 @@ class PullRow:
     trace: TraceFacts | None
     engaged_first: bool = False
 
+    @property
+    def aborted(self) -> bool:
+        return self.dc_outcome == "aborted"
+
     def valid(self, diff_id: int) -> bool:
-        return self.trace is not None and self.trace.valid(diff_id) and not self.engaged_first
+        return (self.trace is not None and self.trace.valid(diff_id) and not self.engaged_first
+                and not self.aborted)
 
 
 def rows_for_run(phase: str, run: dc.Run, corpus: Corpus) -> list[PullRow]:

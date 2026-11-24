@@ -88,6 +88,8 @@ def verdict(row: PullRow, diff: str, head_time: datetime.datetime) -> str:
         return f"no: difficulty {facts.diff}"
     if row.engaged_first:
         return "no: the boss engaged before the start step, no refresh"
+    if row.aborted:
+        return "no: stopped by .dc test stop"
     if facts.warnings:
         return "no: " + ", ".join(kind for kind, _ in facts.warnings)
     if facts.built is None:
