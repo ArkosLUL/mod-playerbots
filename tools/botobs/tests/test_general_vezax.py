@@ -442,6 +442,75 @@ class TankBuffs(unittest.TestCase):
         self.assertEqual((buffs["beacons"], buffs["holds"]), (2, 1))
 
 
+SURGE_TANK = 7101
+PRIEST = 7102
+SHOOTER = 7103
+SURGE_ANIMUS = 4294969500
+
+
+def surge_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 7, "diff": 1,
+         "boss": "general-vezax", "roster": [
+             {"g": SURGE_TANK, "n": "Blood", "r": "tank", "c": "death knight", "h": 0},
+             {"g": PRIEST, "n": "Pious", "r": "heal", "c": "priest", "h": 0},
+             {"g": SHOOTER, "n": "Shooter", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
+        {"t": 1, "e": "unit", "g": SURGE_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
+        {"t": 1000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SURGE_OF_DARKNESS, "tgt": BOSS, "ct": 3000},
+        {"t": 12000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SURGE_OF_DARKNESS, "tgt": BOSS, "ct": 3000},
+        {"t": 30000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SURGE_OF_DARKNESS, "tgt": BOSS, "ct": 3000},
+        {"t": 15100, "e": "aura", "d": SURGE_TANK, "s": SURGE_TANK, "sp": 48792, "r": 0},
+        {"t": 27100, "e": "aura", "d": SURGE_TANK, "s": SURGE_TANK, "sp": 48792, "r": 1},
+        {"t": 20000, "e": "aura", "d": SHOOTER, "s": PRIEST, "sp": 47788, "r": 0},
+        {"t": 30000, "e": "aura", "d": SHOOTER, "s": PRIEST, "sp": 47788, "r": 1},
+        {"t": 32000, "e": "aura", "d": SURGE_TANK, "s": SURGE_TANK, "sp": 55233, "r": 0},
+        {"t": 42000, "e": "aura", "d": SURGE_TANK, "s": SURGE_TANK, "sp": 55233, "r": 1},
+        {"t": 33500, "e": "aura", "d": SURGE_TANK, "s": PRIEST, "sp": 33206, "r": 0},
+        {"t": 41500, "e": "aura", "d": SURGE_TANK, "s": PRIEST, "sp": 33206, "r": 1},
+        {"t": 25000, "e": "veto", "g": PRIEST, "m": gv.LATE_SURGE_HOLD, "a": "pain suppression on party"},
+        {"t": 33500, "e": "act", "g": PRIEST, "a": gv.LATE_SURGE_EXTERNAL, "rel": 1, "vd": "OK"},
+        {"t": 45000, "e": "end", "out": "kill"},
+    ]
+    for when in range(0, 46000, 1000):
+        units = [[BOSS, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, SURGE_TANK, 0, 0, 0, 0],
+                 [SURGE_TANK, 1.0, 0.0, 0.0, 0.0, 40.0 if 34000 <= when <= 36000 else 100.0, 0.0, BOSS,
+                  0, 0, 0, 0],
+                 [PRIEST, 30.0, 0.0, 0.0, 0.0, 100.0, 60.0 - when / 1000.0, 0, 0, 0, 0, 0],
+                 [SHOOTER, 0.0, 30.0, 0.0, 0.0, 100.0, 0.0, BOSS, 0, 0, 0, 0]]
+        if when >= 10000:
+            units.append([SURGE_ANIMUS, 1.0, 1.0, 0.0, 0.0, 100.0, 0.0, SURGE_TANK, 0, 0, 0, 0])
+        records.append({"t": when, "e": "snap", "u": units})
+    return records
+
+
+class SurgeView(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "603_7_general-vezax_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in surge_pull()) + "\n", encoding="utf-8")
+        self.trace = Trace(path)
+
+    def test_the_late_surge_is_the_second_after_the_spawn(self):
+        rows = gv.surge_rows(self.trace)
+        self.assertEqual([(row["start"], row["phase"]) for row in rows],
+                         [(4000, "pre"), (15000, "animus"), (33000, "late")])
+
+    def test_cooldowns_and_externals_count_from_the_surge_start(self):
+        late = gv.surge_rows(self.trace)[2]
+        self.assertEqual(late["cooldowns"], [("VB", -1000)])
+        self.assertEqual(late["externals"], [("PS", PRIEST, 500)])
+        self.assertEqual((late["health"], late["low"], late["died"]), (100.0, 40.0, False))
+        self.assertEqual(gv.surge_rows(self.trace)[1]["cooldowns"], [("IBF", 100)])
+
+    def test_every_external_names_its_target_and_phase(self):
+        casts = gv.external_casts(self.trace)
+        self.assertEqual([(cast["spell"], cast["target"], cast["main tank"], cast["phase"]) for cast in casts],
+                         [("GS", SHOOTER, False, "animus"), ("PS", SURGE_TANK, True, "late")])
+
+
 MARKED = 8001
 MATE = 8002
 LEFTIE = 8003

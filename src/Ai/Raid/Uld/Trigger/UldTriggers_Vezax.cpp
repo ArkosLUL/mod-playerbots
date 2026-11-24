@@ -111,6 +111,12 @@ bool VezaxSurgeOfDarknessTrigger::IsActive()
     return boss->GetVictim() == bot;
 }
 
+bool VezaxLateSurgeExternalTrigger::IsActive()
+{
+    Player* holder = nullptr;
+    return VezaxLateSurgeExternal(botAI, holder) != nullptr;
+}
+
 bool VezaxSaroniteAnimusTrigger::IsActive()
 {
     Unit* animus = nullptr;

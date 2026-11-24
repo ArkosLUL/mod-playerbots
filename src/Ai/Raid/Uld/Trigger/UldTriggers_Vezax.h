@@ -67,6 +67,15 @@ public:
     bool IsActive() override;
 };
 
+class VezaxLateSurgeExternalTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "vezax late surge external";
+
+    VezaxLateSurgeExternalTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class VezaxSaroniteAnimusTrigger : public Trigger
 {
 public:

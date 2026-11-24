@@ -45,6 +45,12 @@ SPELL_BEACON = 53563
 BEACON_COPIES = (53652, 53653, 53654)
 SPELL_SACRED_SHIELD = 53601
 TANK_BUFFS_HOLD = "vezax tank buffs on the holder"
+EXTERNALS = {33206: "PS", 47788: "GS"}
+TANK_COOLDOWNS = {871: "SW", 12976: "LS", 48792: "IBF", 55233: "VB", 61336: "SI", 22812: "BS", 22842: "FR",
+                  498: "DP", 48707: "AMS", 2565: "SB"}
+LATE_SURGE = 2
+LATE_SURGE_HOLD = "vezax late surge externals hold"
+LATE_SURGE_EXTERNAL = "vezax late surge external action"
 
 DODGE = "vezax shadow crash dodge action"
 SOAK = "vezax shadow crash soak action"
@@ -1306,6 +1312,122 @@ def show_tank(trace: Trace) -> None:
     print(f"  {TANK_BUFFS_HOLD} vetoes {buffs['holds']}")
 
 
+def surge_phase(starts: list[int], spawn: int | None, when: int) -> str:
+    if spawn is None or when < spawn:
+        return "pre"
+    after = [start for start in starts if start >= spawn]
+    if len(after) < LATE_SURGE or when < after[LATE_SURGE - 1]:
+        return "animus"
+    return "late" if when <= after[LATE_SURGE - 1] + SURGE_MS else "after"
+
+
+def surge_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    tank = main_tank(trace, samples)
+    if boss is None or tank is None:
+        return []
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    healers = [guid for guid in roster_guids(trace) if trace.role(guid) == "heal"]
+    deaths = [rec["t"] for rec in combat_deaths(trace) if rec.get("g") == tank]
+    starts = surge_starts(trace, boss)
+    watched = {**TANK_COOLDOWNS, **EXTERNALS}
+    ups = [(rec["t"], rec["sp"], rec.get("s")) for rec in trace.of("aura")
+           if rec.get("d") == tank and not rec.get("r") and rec.get("sp") in watched]
+    spans = {spell: aura_spans(trace, spell).get(tank, []) for spell in watched}
+    rows = []
+    for start in starts:
+        stop = start + SURGE_MS
+        at = samples.row(tank, start)
+        living = [row[5] for row in samples.between(tank, start, stop)]
+        mana = [row[6] for row in (samples.row(guid, start) for guid in healers) if row and row[5] > 0]
+        cooldowns, externals = [], []
+        for up, spell, caster in ups:
+            end = next((close for open_, close in spans[spell] if open_ == up), up)
+            if up > stop or end < start:
+                continue
+            if spell in EXTERNALS:
+                externals.append((EXTERNALS[spell], caster, up - start))
+            else:
+                cooldowns.append((TANK_COOLDOWNS[spell], up - start))
+        rows.append({
+            "start": start,
+            "phase": surge_phase(starts, spawn, start),
+            "health": at[5] if at else None,
+            "low": min(living) if living else None,
+            "died": any(start <= death <= stop for death in deaths),
+            "cooldowns": cooldowns,
+            "externals": externals,
+            "mana": statistics.median(mana) if mana else None,
+        })
+    return rows
+
+
+def external_casts(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    tank = main_tank(trace, samples)
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    starts = surge_starts(trace, boss)
+    out = []
+    for rec in trace.of("aura"):
+        if rec.get("sp") not in EXTERNALS or rec.get("r"):
+            continue
+        row = samples.row(rec.get("d"), rec["t"])
+        out.append({
+            "t": rec["t"],
+            "spell": EXTERNALS[rec["sp"]],
+            "caster": rec.get("s"),
+            "target": rec.get("d"),
+            "main tank": rec.get("d") == tank,
+            "health": row[5] if row else None,
+            "phase": surge_phase(starts, spawn, rec["t"]),
+        })
+    return out
+
+
+def show_surge(trace: Trace) -> None:
+    print("SURGE OF DARKNESS")
+    samples = Samples(trace)
+    rows = surge_rows(trace, samples)
+    if not rows:
+        print("  no surge with a main tank to read")
+        return
+
+    print(f"  main tank {trace.name(main_tank(trace, samples))}")
+    print(f"\n  {'at':>9} {'phase':6} {'hp':>4} {'low':>4} {'died':4} {'mana':>4}  cooldowns / externals")
+    for row in rows:
+        health = "-" if row["health"] is None else "dead" if row["health"] <= 0 else f"{row['health']:.0f}"
+        low = "-" if row["low"] is None else f"{row['low']:.0f}"
+        mana = "-" if row["mana"] is None else f"{row['mana']:.0f}"
+        cooldowns = " ".join(f"{name}{offset / 1000:+.1f}" for name, offset in row["cooldowns"]) or "-"
+        externals = " ".join(f"{name}:{trace.name(caster)}{offset / 1000:+.1f}"
+                             for name, caster, offset in row["externals"]) or "-"
+        print(f"  {clock(row['start']):>9} {row['phase']:6} {health:>4} {low:>4} {'yes' if row['died'] else '-':4}"
+              f" {mana:>4}  {cooldowns} / {externals}")
+    print(f"\n  at is the cast's end, when his {SURGE_MS // 1000} s of doubled melee start; late is the second"
+          " after the Animus spawned; hp and low the main tank's at the start and lowest in it, mana the"
+          " healers' median; cooldowns his own and externals on him up during it, at when each went up")
+
+    casts = external_casts(trace, samples)
+    print("\n  Pain Suppression and Guardian Spirit")
+    for cast in casts:
+        target = "main tank" if cast["main tank"] else trace.role(cast["target"])
+        health = "-" if cast["health"] is None else f"{cast['health']:.0f}"
+        print(f"    {clock(cast['t']):>9} {cast['spell']} {trace.name(cast['caster'])[:14]:14} on"
+              f" {trace.name(cast['target'])[:14]:14} {target:9} hp {health:>3}  {cast['phase']}")
+    if not casts:
+        print("    none")
+    holds = collections.Counter(rec.get("a") for rec in trace.of("veto") if rec.get("m") == LATE_SURGE_HOLD)
+    acts = collections.Counter(rec.get("vd") for rec in trace.of("act") if rec.get("a") == LATE_SURGE_EXTERNAL)
+    print(f"  {LATE_SURGE_HOLD} vetoes: " + (", ".join(f"{name} {count}" for name, count in holds.most_common())
+                                              or "none"))
+    print(f"  {LATE_SURGE_EXTERNAL}: " + (", ".join(f"{verdict} {count}" for verdict, count in acts.most_common())
+                                          or "never ran"))
+
+
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
     samples = samples or Samples(trace)
     boss = boss_guid(trace)
@@ -1387,6 +1509,8 @@ SECTIONS = (
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),
     ("animus", "who held the Animus, redirects, lust, its pace and casters, deaths", show_animus),
     ("tank", "where Beacon of Light and Sacred Shield sat against his main tank", show_tank),
+    ("surge", "the main tank's health, cooldowns and externals at each Surge of Darkness; who got Pain"
+     " Suppression and Guardian Spirit", show_surge),
     ("band", "each camp member's distance from the boss", show_band),
 )
 
