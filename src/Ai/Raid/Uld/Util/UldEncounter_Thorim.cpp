@@ -3045,9 +3045,12 @@ static bool RingWalkCrossesLitCone(PlayerbotAI* botAI, Player* bot, Position con
         return false;
 
     float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
-    if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()), coneBearing))
+    float const bearing = BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY());
+    float const stepEdge = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CONE_STEP_MARGIN;
+    if (AbsAngleDelta(bearing, coneBearing) <= stepEdge)
         return false;
 
+    bool const insideRingLine = InLightningChargeCone(bearing, coneBearing);
     float const dx = spot.GetPositionX() - bot->GetPositionX();
     float const dy = spot.GetPositionY() - bot->GetPositionY();
     uint32 const samples =
@@ -3055,8 +3058,10 @@ static bool RingWalkCrossesLitCone(PlayerbotAI* botAI, Player* bot, Position con
     for (uint32 i = 1; i <= samples; ++i)
     {
         float const t = static_cast<float>(i) / static_cast<float>(samples);
-        if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX() + dx * t, bot->GetPositionY() + dy * t),
-                                  coneBearing))
+        float const sample = BearingFromBoss(boss, bot->GetPositionX() + dx * t, bot->GetPositionY() + dy * t);
+        bool const entered = insideRingLine ? AbsAngleDelta(sample, coneBearing) <= stepEdge
+                                            : InLightningChargeCone(sample, coneBearing);
+        if (entered)
             return true;
     }
 

@@ -80,8 +80,8 @@ and C have no kill.
 - R23: a camp bot short of time for its shelter row takes a cone step 45° off the cone; a camp bot in the lit cone
   breaks its channel — held (w35 cone deaths on walks before the first tank death 2 against w33's 8, hits 4 against
   11, 19 steps).
-- R24: a ring walk that would cross the lit cone holds; a stepped ring bot in the lit cone with no zone-clear point
-  steps past 45° anyway — pending (window 36).
+- R24: a ring walk that would cross the lit cone holds (from 45-52.5° off, one coming within 45°); a stepped ring bot
+  in the lit cone with no zone-clear point steps past 45° anyway — pending (window 36).
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -166,6 +166,11 @@ stay while the orb is lit, the bot stands outside the ring's cone and its straig
 cone (`ULDUAR_THORIM_CONE_STEP_MARGIN`, renamed from the camp's): nearest point past 45° within 20 yd in the arena box,
 first clear of the zones' 9.8 yd reach (`ULDUAR_THORIM_BLIZZARD_ZONE_REACH`), else inside one. Reader `--ringcone`,
 tested in `test_thorim.py`; boss doc: both rules and the section. `pb-check` passes.
+
+**Review fix:** the hold let any bot inside the ring's 52.5° line walk, so one 45-52.5° off, where the new step
+leaves it, still walked straight through the cone: over 42 hard-mode pulls 14 of 20 such walks into 45° were hit, 7
+dead (1 before the first tank death), while at the cast no bot 45-52.5° off was hit in any pull on disk (0 of 350).
+There a walk now holds when it comes within 45°; only a bot within 45° always walks.
 
 **Next window should show** (hard-mode pulls, `--ringcone`):
 - ring cone deaths before the first tank death ≤ 1 (w35: 5, 1 rooted); no stepped bot hit "standing, past reach"; ring

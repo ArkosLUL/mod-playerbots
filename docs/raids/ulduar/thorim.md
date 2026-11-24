@@ -366,11 +366,13 @@ bridges it.
 **A walk across the lit cone waits for it.** Walking back from a Blizzard step, or to a point past the
 cone, a ring bot was still in it when it landed: over 37 hard-mode pulls 26 of 60 such walks were hit,
 10 dying, 4 before the first tank death. `ThorimRingWantsMove` answers stay while the orb is lit, the
-bot stands outside the ring's cone and its straight walk to the point enters it; a bot inside always
-walks. The stay sets the arrival latch, so the movement guard holds the generic movers while
-`reach melee`, straight at him along one bearing, stays free. A bot in a Blizzard zone holds too: at
-its 2.4 yd/s the crossing outlasts the warning. Replayed, a held walk waits up to 5 s, about 4 bot-s a
-pull.
+bot stands outside the ring's cone and its straight walk to the point enters it. Inside the ring's
+line but past 45°, where the cone step leaves a bot, it stays only when the walk comes within 45°: at
+the cast nobody 45-52.5° off the cone was hit (0 of 350), yet 14 of 20 walks from there into 45° were,
+7 dying. A bot within 45° always walks. The stay sets the arrival latch, so the movement guard holds
+the generic movers while `reach melee`, straight at him along one bearing, stays free. A bot in a
+Blizzard zone holds too: at its 2.4 yd/s the crossing outlasts the warning. Replayed, a held walk waits
+up to 5 s, about 4 bot-s a pull.
 
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
