@@ -642,8 +642,12 @@ re-taunt cadence is still open.
 fires every ~2 s at `rel 27.0`, so a bot paladin rips the boss off a human tank: **34 and 45 victim
 changes a phase** against 16 Dark Commands. The `thorim taunt guard` rule silences them, a `Block` on
 the `Taunt` family gated on the bot's **current target** being Thorim, so taunting an add off a healer
-still works. **`righteous defense` must be in any name-match list**: it is half the taunts in the
-trace.
+still works. It holds every taunt while another tank has him, and **one from past
+`ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` of the tank spot (`ThorimAtTankSpots`) while a non-tank does**: in
+5 of 40 phase 2s the corridor tank's `lose aggro` Dark Command or Growl answered his opening flick onto a
+non-tank from the balcony or mid-jump, 38-45 yd out, and dragged him 14-41 yd off the spot. The pickup
+and the swap taunt through `DoSpecificAction`, which no `Block` stops. **`righteous defense` must be in
+any name-match list**: it is half the taunts in the trace.
 
 **Both tank spots are absolute**, because an anchor measured off the thing you are dragging has no
 fixed point: an off-tank spot off the boss's live position walked the pair **256 and 92 yd** in phase
@@ -659,7 +663,11 @@ them tank deaths, and the bridge escape can't clear it (slot 2's point isn't cle
 
 - **Sif's Blizzard**: 1.0 yd off the bunny's path (leg (2104.3, −256.3) → (2109.3, −246.4)), against 4.1
   for the tank spot and 7.2 for the old one; replayed zone drops give it the tank spot's 36-61 ticks a
-  hard-mode pull, the old spot 30-50.
+  hard-mode pull, the old spot 30-50. Every sweep covers it for ~12.4 s, and **the waiting tank holds it
+  anyway: no step out stays clear of Chain Lightning.** At the 7 casts landing under a sweep (four
+  hard-mode phase 2s), the nearest point 11 yd clear lay 8.5-9 yd east, toward Thorim, 2.5-6.4 yd from a
+  pet, the holder or ring melee; a point also beyond the 8 yd hop from every body lay 15.5-18.8 yd out,
+  and in only 3 of 13 sweeps did one fixed point stay both for the whole sweep (1 at Heroism's 8.9 yd).
 - **Melee reach**: 7.1-10.2 yd from his centre, past the 9.0 yd where `reach melee` fires in most
   snapshots of two pulls of six. Reach is exempt from the tank anchor guard, so the waiting tank steps in;
   the positioning row walks him back only past 2.5 yd (its 1 yd is net of his 1.5 reach).

@@ -64,12 +64,16 @@ bool ThorimTauntWouldSteal(PlayerbotAI* botAI)
     if (!boss || botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get() != boss)
         return false;
 
+    Player* bot = botAI->GetBot();
     Unit* victim = boss->GetVictim();
-    if (!victim || victim == botAI->GetBot())
+    if (victim == bot)
         return false;
 
-    Player* holder = victim->ToPlayer();
-    return holder && PlayerbotAI::IsTank(holder);
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (holder && PlayerbotAI::IsTank(holder))
+        return true;
+
+    return !ThorimAtTankSpots(bot);
 }
 
 bool ThorimBalconyWalk(PlayerbotAI* botAI)
