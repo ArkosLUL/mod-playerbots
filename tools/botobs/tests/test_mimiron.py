@@ -499,13 +499,12 @@ def mine_pull() -> list[dict]:
         # ends beside a mine; then a walk off the mine the bot stands by, which counts for neither
         move(6000, SHADOW, mm.FORMATION, 9.0, 2.0),
         move(7000, BULWARK, mm.FORMATION, -3.0, 10.0),
-        move(8000, BULWARK, mm.MINE_STEP, -3.0, -4.0),
-        move(12000, SHADOW, mm.MINE_STEP, 3.0, -4.0),
         # under a yard, so no leg at all; then a hit 5 s after it while walking
         move(9000, AGONY, "mimiron shock blast action", 22.5, 0.0),
         {"t": 14000, "e": "dmg", "s": MINE_B, "d": AGONY, "sp": mm.SPELL_MINE_EXPLOSIONS[0], "a": 5000},
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
+    records += [move(8000, BULWARK, mm.MINE_STEP, -3.0, -4.0), move(12000, SHADOW, mm.MINE_STEP, 3.0, -4.0)]
     records += [mine_snap(when) for when in range(0, 20000, 250)]
     return records
 
