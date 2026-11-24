@@ -468,6 +468,12 @@ pulls (no navmesh, the floor cut at x 2100 and y −288), points a zone covered 
 body's jump 35 → 120, which a 15 yd round would have left at 173. It is the whole walk, not a lookahead:
 30 yd of it scored the same, 20 yd left 52 points covered, 10 yd 230.
 
+**The walk to the point is still unchecked, and slowed.** Under a zone's or Frostbolt's 65% slow a step
+runs at 2.4 yd/s, so the first round's longer points cost 4-7 s in the zones, and the straight walk can
+cross the bunny's next leg. In the five hard-mode wipes after it no step point lay on the path ahead, yet
+ring melee spent 15-36 bot-s a pull in zones, stays up to 6.8 s, and six died before the first tank death.
+Unfixed.
+
 **Two holds keep it.** `thorim ring blizzard step` blocks `Reach` and `Charge` while stepped, or `reach
 melee` walks the bot straight back in, and the movement guard counts a stepped bot as settled.
 `thorim ring aoe hold` blocks `AvoidAoe` for ring melee on the floor all phase 2: its hops were the damage.
@@ -540,8 +546,8 @@ instead of holding a bad index for the 15 s. While the orb is lit and the bot st
 tick, so a boss drifting onto the slot mid-warning still sends it; it only ever flips to sheltered.
 
 `ULDUAR_THORIM_SHELTER_SPOTS` has no rows for orb indices 4 and 5 ((2092.95, −263.00) and
-(2104.94, −233.44)), whose cones point away from the camp. Its longest run, 25.6 yd, is ~3.7 s against
-the 4.9 s worst warning, and a bot commits from wherever it stands, so walking home the moment the orb
+(2104.94, −233.44)), whose cones point away from the camp. Its longest run, 25.6 yd, is ~3.7 s at full speed
+against the 4.9 s worst warning, and a bot commits from wherever it stands, so walking home the moment the orb
 goes dark costs an extra run only when two orbs in a row cover one slot. Four of orb 2's five rows sit
 7.6-8.2 yd from the Blizzard track, inside the 9.8 yd reach, because the pocket off that cone and 11 yd
 clear of the track is ~97 sq yd and four points 9 yd apart do not fit
@@ -558,6 +564,22 @@ the cone centre, 34.5 yd off the tank spot, 29.6-32.0 from the boss, 9+ from eve
 the Blizzard track against the shipped table's worst of 7.15. Its **29.35 yd** walk is the table's
 longest, ~4.3 s against the 4.6-4.9 s warning. No replacement home clears all seven cones (the best is
 covered by one and sits 42 yd away), so moving the camp spot was rejected too.
+
+**Sif's slows break that budget, so a walker short of time takes a cone step.** Her Blizzard zone slows
+**65%** (62602/62576, aura 33), as does her Frostbolt; the Volley slows 50% and Frost Nova roots; a bot
+mid-cast sets off only when the cast ends, and a channel holds it in place through its move. Over 19
+hard-mode pulls, of 146 shelter walks before the first tank death (the opening left out) 51 ended short,
+24 were hit and 13 died, 11 of those on slot 5's rows for orbs 0 and 1 (25.6 and 21.8 yd, across the
+Blizzard track), walked at 2.4-3.5 yd/s or begun 1-3 s late; an Evocation held one 4.4 s.
+`ThorimCampShelterInTime` sets the row's distance against run speed times the time left (lit plus 4.8 s
+less one scan), cut to 0.35 when the straight walk crosses a zone not yet slowing the bot. Short,
+unrooted and in the lit cone, `ThorimCampConeStep` searches once per orb for the nearest point in the
+uncut reach (at most 20 yd) **45°** off the cone (7.5° past its edge: hits decode to 43.8°), 12-32 yd
+from Thorim, 11 yd clear of every zone, its walk clear of zones unless the bot already stands in one,
+ties to the row; the note reads `slot N orb M step`. It needs no body clearance: Chain Lightning lands
+0.4-1.4 s after the orb lights, before any walker arrives. The positioning action breaks a channel while
+the camp bot stands in the lit cone. Replayed on those walks, the step took 11 of 25 hit walkers out of
+the cone and 6 of 16 dying ones (deaths within 1.5 s); a rooted or late bot it cannot save.
 
 `ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN` (2.5°) is deliberately untouched: it already read that
 home as covered, at 36° inside the 40° half-width, so the absent row was the whole defect. It is far
@@ -1338,8 +1360,9 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 ## What a trace answers
 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
-`thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard) and
-`thorim.unreach` (whom his cannot-reach flag names):
+`thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard),
+`thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb),
+`thorim.rangedslot` (the camp) and `thorim.shelter` (a camp bot's home, row or cone step):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
@@ -1363,6 +1386,10 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   Heroism or Bloodlust (8.9 yd jump), deaths per group; then deaths by the crossing that reached them,
   those before the first tank death, and crossings by kind, each kind also counted where it entered or
   left a stepped slot.
+- `--shelters`: per lit orb with a cone 3-7 s later, the camp bots that walked to a row or a cone step,
+  how many got within 2 yd of their last move's point, and each one the cone hit: walk, yards short,
+  Sif's slows on it from 4 s before the lit, death; camp bots hit off a walk; then totals and those
+  before the first tank death.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and

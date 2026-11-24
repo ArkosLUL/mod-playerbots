@@ -444,6 +444,10 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
         ThorimRingClearArrived(bot);
     }
 
+    if (role == ThorimPhase2Role::Ranged && bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) &&
+        ThorimCampSpotInLitCone(botAI, *bot))
+        bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
+
     Unit* const boss = GetThorim(botAI);
     bool const tank = role == ThorimPhase2Role::MainTank || role == ThorimPhase2Role::OffTank;
     bool const backward = tank && boss && boss->GetVictim() == bot &&

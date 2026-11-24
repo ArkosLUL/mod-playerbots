@@ -4,8 +4,9 @@
 
 A synthetic phase 2 pins one tank trade, a Chain Lightning cast from both tanks into slot 2, the waiting tank
 on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section; a
-second cast from the camp through a stepped slot 0 into slot 2 pins the chains section. The shared v14 fixture
-shows every section reads empty elsewhere.
+second cast from the camp through a stepped slot 0 into slot 2 pins the chains section; one lit orb with a slowed
+camp bot dying short of its row and another on a cone step pins the shelters section. The shared v14 fixture shows
+every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -283,6 +284,47 @@ class Chains(unittest.TestCase):
     def test_no_phase_2(self):
         records = [rec for rec in chain_pull() if rec.get("k") != "thorim.p2start"]
         self.assertIn("phase 2 never started", printed(thorim.show_chains, load(records)))
+
+
+CASTER = 8807
+ORB = (1 << 32) | 4
+
+
+def shelter_pull() -> list[dict]:
+    records = pull()
+    records[0]["roster"].append({"g": CASTER, "n": "Flicker", "r": "ranged", "c": 8, "h": 0})
+    for rec in records:
+        if rec.get("e") == "snap":
+            rec["u"].append([CASTER, 2140.0, -255.0, 419.7, 0, 100, 80, THORIM])
+    records += [
+        {"t": 1000, "e": "note", "g": RANGED, "k": "thorim.rangedslot", "txt": "5"},
+        {"t": 1000, "e": "note", "g": CASTER, "k": "thorim.rangedslot", "txt": "4"},
+        {"t": 5000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(ORB)},
+        {"t": 5100, "e": "note", "g": RANGED, "k": "thorim.shelter", "txt": "slot 5 orb 0"},
+        {"t": 5100, "e": "move", "g": RANGED, "k": "point", "ok": 1, "x": 2125.0, "y": -250.0,
+         "by": "thorim phase 2 positioning action"},
+        {"t": 5200, "e": "note", "g": CASTER, "k": "thorim.shelter", "txt": "slot 4 orb 0 step"},
+        {"t": 5200, "e": "move", "g": CASTER, "k": "point", "ok": 1, "x": 2140.0, "y": -255.0,
+         "by": "thorim phase 2 positioning action"},
+        {"t": 6000, "e": "aura", "d": RANGED, "s": THORIM, "sp": 62604, "r": 0, "st": 1, "dur": 4000, "p": 0},
+        {"t": 10000, "e": "dmg", "s": THORIM, "d": RANGED, "sp": 62466, "a": 24000, "ok": 2000, "hp": 100.0},
+        {"t": 10000, "e": "death", "g": RANGED, "killer": THORIM, "x": 2135.0, "y": -265.0, "z": 419.8,
+         "blow": [THORIM, 24000], "rewind": [[10000, THORIM, 62466, 24000]]},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class Shelters(unittest.TestCase):
+    def test_a_slowed_walk_short_of_its_row_and_a_step_there(self):
+        text = printed(thorim.show_shelters, load(shelter_pull()))
+        self.assertIn("+4.0 s: walks 2 (steps 1), there 1, hit 1, dead 1; camp hit off a walk 0; Darter row 18.0 yd "
+                      "short 18.0 slowed Volley dead", text)
+        self.assertIn("all: walks 2 (steps 1), there 1, hit 1 (1 slowed), dead 1; camp hit off a walk 0, dead 0; "
+                      "before the first tank death walks 2 (steps 1), hit 1, dead 1", text)
+
+    def test_without_the_probe(self):
+        self.assertIn("no thorim.lightningorb probe or no lit orb in phase 2",
+                      printed(thorim.show_shelters, load(pull())))
 
 
 class Deaths(unittest.TestCase):
