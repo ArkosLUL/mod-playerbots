@@ -8,19 +8,17 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (r22 merged, r23 next) and Thorim (r23 running); group 2 = Mimiron (r21 merged, r22 next) and Algalon (r11 merged, r12 next). Vezax is done. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (r23 running) and Thorim (r24 running); group 2 = Mimiron (r22 running, builds Q10) and Algalon (r12 running). Vezax is done. Rebalance when a boss is done.
 
-**Window 34** (rebuild of `6464b824a` with DC `3083130`, started 2026-11-24 ~21:55, the first window on the professions rosters): group 2, log `scratchpad/window34/window34.out`, reports `scratchpad/window34/window34/window34-<boss>.md`. Windows 29-33, filler 33c and the professions step: `windows.md`.
+**Window 35** (rebuild of `ce2ffa6be`, ended 2026-11-24 ~22:30): group 1, reports `scratchpad/window35/window35/window35-<boss>.md`. Then `scratchpad/professions.sh` on toc1-toc6 (the Ulduar pools got theirs before window 34). Windows 29-35, filler 33c, the professions step and the batch sent after window 34: `windows.md`.
 
 **Next:**
-- Launch Mimiron r22 and Algalon r12 as their window 34 reports appear. Mimiron r22 builds the user's answer 4: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast.
-- Merge Thorim r23 when it finishes (never while a rebuild reads the source tree). Once Mimiron r22 and Algalon r12 have merged too: rebuild, window 35 = group 1 (Yogg-Saron r22, Thorim r23); Yogg-Saron r23 starts from its report.
-- Run `scratchpad/professions.sh toc1 toc2 toc3 toc4 toc5 toc6` in an idle gap (no raid running).
-- After window 34: one numbered question batch for the cycle (Mimiron Q11, phase 4 healer mana, is waiting).
+- Check the toc1-toc6 professions results (27/27 a pool, no member with a problem). Then filler while group 2's lanes code: `"pulls": 2` jobs for Yogg-Saron and Thorim on the window 35 build; no new filler once Mimiron r22 and Algalon r12 have merged.
+- Merge Mimiron r22 and Algalon r12 when they finish (never while a rebuild reads the source tree). Once both have merged and the filler has ended: rebuild, window 36 = group 2; Mimiron r23 and Algalon r13 start from its reports.
+- Merge Yogg-Saron r23 and Thorim r24 during window 36.
+- Questions sent after window 34, unanswered (`windows.md`): Mimiron Q11 phase 4 healer mana; Algalon under the normal done rule; Iron Assembly self Lay on Hands dropped. Build nothing from them until answered.
 
-**Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 step 1 and Q2 in r22; Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Algalon Q4 (b) in r11; tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score once lane V gives the rosters Engineering.
-
-**Not asked yet:** Iron Assembly self Lay on Hands.
+**Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 (step 1 built in r22; step 2, one navprobed position change per round, melee core first) and Q2 (r22); Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Algalon Q4 (b) in r11; tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score now that the rosters have Engineering.
 
 **Mechanics:**
 - Lanes: create the branch (`git -C build-toc-wt/rt-polish-<slug> switch -q -c rt/polish-<slug>-r<n> Custom`), then `Workflow({scriptPath: "G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.js", args: {kind: "polish", tag, wt, branch, boss, slug, raid, round, reports: [<report file>], note}})` with no `agentType` (`~/.claude/agents/raid-lane.md` is untested). The note ends: "<Boss> only; every change must run the same with or without a real player in the raid. Raid code comments were stripped on Custom (c163ec11a): write no code comments." A lane returns `{status, commits, summary, review: {commits, summary}}`. Other kinds (`dc`, `strategy`, `research`, `runner`) take a `brief`; the old script is `raid-polish-lane.prev.js`.
@@ -45,11 +43,11 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 22 merged, waits for window 35; window 33: every pool reached phase 3 |
-| Thorim | group 1, round 23 running; the user: keep polishing, no end condition, stop rules waived |
-| Mimiron | group 2, round 21 merged, in window 34; A met the done rule in window 32 (uld4, 2 deaths) |
+| Yogg-Saron | group 1, round 23 running; window 35: phase 3 from 8:13-8:33 in five pulls, no kill |
+| Thorim | group 1, round 24 running; first hard-mode kill in window 35 (uld4, A, 4 deaths); the user: keep polishing, no end condition, stop rules waived |
+| Mimiron | group 2, round 22 running; window 34: A and B met the done rule, C killed with 6 deaths |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
-| Algalon | group 2, round 11 merged, in window 34 (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Algalon | group 2, round 12 running; first kills in window 34 (uld4 20 deaths, uld2 10); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
