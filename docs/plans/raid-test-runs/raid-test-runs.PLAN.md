@@ -17,13 +17,15 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 - Merge Yogg-Saron r21 and Thorim r22 as they finish; once window 32 has ended and both have merged: rebuild, window 33 = group 1 while group 2's lanes code; filler pulls while the server waits (section D): done bosses whose shared code changed, e.g. the other ToC and Ulduar done bosses.
 - Report each window in chat; one numbered question batch per full cycle, after both groups reported.
 
-**Open batch** (sent 2026-11-24 ~20:20 after windows 29-30, unanswered; build nothing from it before the answers; recommendation in brackets; full wording in `windows.md`):
-1. Yogg-Saron: rebuild the phase 1 positions from the measured cloud orbits (15.3/20.9/27.4/41.4/48.4/54.1 yd, 2.0 yd/s), in two steps (yes).
-2. Yogg-Saron: break Diminish Power once the bots carrying that Crusher's stacks are below, not the whole team, one window (yes).
-3. Thorim: close on mechanics like Hodir, polished once hard-mode phase 2s lose nobody to a mechanic before the first tank death and normal-mode pulls are kills with at most 5 deaths, then the 10-man check (yes).
-4. Mimiron Q10: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast (yes).
-5. Algalon Q4 (b): in the 30 s before each Big Bang the tank not holding Algalon taunts constellations off healers (yes).
-6. Algalon Q5: tank druids stay in bear form in every boss fight, shared druid code, every boss with a druid tank pulled again (yes).
+**Answered 2026-11-24 ~20:45 (the batch sent after windows 29-30):**
+1. Yogg-Saron phase 1 positions from the measured cloud orbits, two steps: yes. Build step 1 (the reader's orbit labels and a per-orbit cost at the station) in Yogg-Saron r22, then one navprobed position change per round, melee core first.
+2. Yogg-Saron Diminish Power break once the bots carrying that Crusher's stacks are below: yes, one window; build in r22.
+3. Thorim: **keep polishing**, no end condition (the stop rules stay waived for him, as for Algalon); not closed on mechanics.
+4. Mimiron Q10, the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast: yes; build in Mimiron r22 (r21 was already running).
+5. Algalon Q4 (b), in the 30 s before each Big Bang the tank not holding Algalon taunts constellations off healers: yes; build in Algalon r11.
+6. Algalon Q5, tank druids in bear form in every boss fight: **keep as is for now** (Algalon's own hold stays).
+
+**Roster professions (user, 2026-11-24):** the user asked whether the test rosters have professions, since some give options (Nitro Boosts) and passive perks, and to make sure the bots have the perks. Found: all 324 roster characters hold every profession at 1 of 75 (nothing learned); random bots get two (`PlayerbotFactory::InitTradeSkills` returns early for any non-random bot, `PlayerbotFactory.cpp:3301`); the user's own level-80 characters hold almost all eleven at 450 (`AC_MAX_PRIMARY_TRADE_SKILL=11`, `mod-shared-professions` installed). Profession enchants (tinkers, ring enchants, sockets, embroidery, fur lining) pass a gate on the bot's own skill, so rosters get none; maintenance's `InitSkills` leaves primary professions alone. Plan: a DC lane gives every roster member all primary professions at 450 with their perks, like the user's characters; the orchestrator runs it on all twelve pools between windows. Pulls after it are a step up in roster power: trends across that build compare unlike rosters.
 
 **Not asked yet:** Iron Assembly self Lay on Hands.
 
