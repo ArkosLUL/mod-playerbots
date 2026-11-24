@@ -1910,3 +1910,13 @@ wherever a swap meets a Guardian on a raider, judged by tank deaths within 10 s 
 - `YoggSaronCloudLead` projects at `GetSpeed(MOVE_RUN)`; the clouds move at 2.0 yd/s, so if their run speed is higher
   the lead overshoots (not checked).
 - uld3's phase 3 opened with three Crushers; ranged 96% on tentacles all phase, Yogg 0.04%/s.
+
+**Review.** The root cause holds: uld1's nine dodges to 12.8 yd at 2:01.99-2:02.14 and the walks to 2.0-7.1 yd
+through the middle, accepted at 2:03.43-2:03.55, are in the `move` rows; `inside.py` reproduces 1003 of 2025 (887
+cloud), 40 of 83 and 7 of 12; every window 27 cloud measures 15.3-54.1 yd at 2.00 yd/s. The fix also takes a cloud
+step's inward option, which the middle bias chose 887 times: where nothing past 20.5 yd clears a cloud and its lead
+within the 25 yd search, the bot now stays for the station walk, so `the raid's own feet` (6 / 5 / 5 here) judges
+that cost. Doc corrected: `InformCloud` reads `GetDistance`, net of Sara's 1.5 and the cloud's 1.0 reach, so orbit 2
+(21.4 yd 3D, 18.9) is contact-only too: window 27's 15 summons on orbits 1-2 each had a raider within 8.7 yd, while
+orbit 3 fired twice with nobody near. The reader's `--clouds` `inner` list (`CLOUD_ORBITS` under 20) still holds
+orbit 1 alone; that is Q1's reader step.

@@ -160,8 +160,8 @@ yard, so the back line ignores a low Guardian **the tank still holds there**
 (`YoggSaronGuardianOnTheStack`) and dodges one that has left it, whoever either is hitting. A low
 Guardian on the stack stays 16.2-17.0 yd off the back line; at the handover one came to 2.2 yd.
 
-**So a back-line dodge never lands inside the band** (`…_P1_BACK_LINE_INNER_EDGE`, 20.5 yd, as
-`set.clear` and `set.fallbackClear` for ranged and healers): ignoring the stack is safe only from there.
+**So a back-line dodge never lands inside the band's inner edge** (`…_P1_BACK_LINE_INNER_EDGE`, 20.5 yd,
+as `set.clear` and `set.fallbackClear` for ranged and healers): ignoring the stack is safe only from there.
 Unbounded, the dodge's middle bias put half of all back-line phase 1 dodges over windows 19-27 inside it
 (1003 of 2025, 887 of them cloud steps), and 40 of 83 back-line nova hits, 7 of 12 deaths, fell on a bot
 still standing where one left it. One pull's back line stepped off an orbit-1 cloud to 12.8 yd, then
@@ -341,8 +341,10 @@ back line and lost eleven raiders in three seconds.
 Six clouds, one per orbit, circle Sara at a constant **2.0 yd/s**, spawned from her
 `creature_summon_groups` group 0 (core DB `2026_09_30_00`). Every test pull's trace (windows 6-27)
 measures the radii at **15.3 / 20.9 / 27.4 / 41.4 / 48.4 / 54.1 yd** from `ULDUAR_YOGG_SARON_MIDDLE`,
-never drifting, laps **48 / 66 / 86 / 130 / 152 / 170 s**. `InformCloud` skips clouds closer than 20 yd to
-Sara, so **the innermost orbit only ever fires from player contact**.
+never drifting, laps **48 / 66 / 86 / 130 / 152 / 170 s**. `InformCloud` skips clouds under 20 yd from
+Sara by `GetDistance`, net of her 1.5 and the cloud's 1.0 reach, so orbit 2 (21.4 yd 3D) reads 18.9 and
+**the two inner orbits fire only from player contact**: window 27's 15 summons on them each had a raider
+within 8.7 yd, while orbit 3 also fired with nobody near.
 
 **The orbit constants are stale.** `ULDUAR_YOGG_SARON_CLOUD_ORBITS` and the reader's `CLOUD_ORBITS` hold
 the older script's 11.6 / 21.4 / 31.2 / 41.0 / 50.9 / 60.8 at 3.0 yd/s (`8 + i*7` on the diagonal), and
