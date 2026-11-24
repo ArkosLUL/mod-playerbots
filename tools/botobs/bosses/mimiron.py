@@ -94,7 +94,7 @@ SPRAY_NOTE_MS = 3000
 WALK_BACK_MS = 2500
 WALK_BACK_MOVERS = ("reach melee", "set behind", "mimiron approach target action", "reach spell",
                     "reach party member to heal", "follow")
-SPRAY_KILL_MS = 300
+FLEE_NOTE_LAG_MS = 50
 # Unit::GetMeleeRange against VX-001: its combat reach of 8, a player's 1.5, plus 4/3.
 MELEE_RANGE = 10.83
 FUSE_MS = 10000
@@ -1611,18 +1611,25 @@ def firebot_rows(trace: Trace) -> list[dict]:
         swept = [when for when in sweeps if rec["t"] <= when < stop]
         windows.append((rec["t"], swept[-1] + 1 if swept else stop))
     spray_notes: dict[int, list[int]] = collections.defaultdict(list)
-    spray_steps: dict[int, list[int]] = collections.defaultdict(list)
+    flee_times: dict[int, list[int]] = collections.defaultdict(list)
+    flee_texts: dict[int, list[str]] = collections.defaultdict(list)
     for rec in notes(trace, "mimiron.flee"):
         text = str(rec.get("txt", ""))
+        flee_times[rec["g"]].append(rec["t"])
+        flee_texts[rec["g"]].append(text)
         if text.startswith("spray"):
             spray_notes[rec["g"]].append(rec["t"])
-            if " ok " in f"{text} ":
-                spray_steps[rec["g"]].append(rec["t"])
+
+    def spray_step(guid: int, when: int) -> bool:
+        index = bisect.bisect_right(flee_times[guid], when + FLEE_NOTE_LAG_MS) - 1
+        return index >= 0 and flee_texts[guid][index].split()[:2] in (["spray", "ok"], ["spray", "fallback"])
+
     walkbacks: dict[int, list[int]] = collections.defaultdict(list)
     for guid, recs in moves.items():
+        spray_steps = [rec["t"] for rec in recs if rec.get("by") == FIREBOT_STEP and spray_step(guid, rec["t"])]
         for rec in recs:
             if rec.get("by") in WALK_BACK_MOVERS and any(
-                    0 < rec["t"] - when <= WALK_BACK_MS for when in spray_steps[guid]):
+                    0 < rec["t"] - when <= WALK_BACK_MS for when in spray_steps):
                 walkbacks[guid].append(rec["t"])
 
     def in_barrage(when: int) -> bool:
@@ -1631,11 +1638,8 @@ def firebot_rows(trace: Trace) -> list[dict]:
     def silent(hit: dict) -> bool:
         return not any(hit["t"] - SPRAY_NOTE_MS <= when <= hit["t"] for when in spray_notes[hit["d"]])
 
-    def walked_back(hit: dict) -> bool:
-        return any(0 <= hit["t"] - when <= SPRAY_NOTE_MS for when in walkbacks[hit["d"]])
-
-    def killed(hit: dict) -> bool:
-        return any(guid == hit["d"] and abs(when - hit["t"]) <= SPRAY_KILL_MS for guid, when in spray_killed)
+    def walked_back(guid: int, at: int) -> bool:
+        return any(0 <= at - when <= SPRAY_NOTE_MS for when in walkbacks[guid])
 
     rows = []
     for low, high, label in spans[first:]:
@@ -1655,7 +1659,7 @@ def firebot_rows(trace: Trace) -> list[dict]:
         flames = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_FLAMES]
         spray = [rec.get("a", 0) for rec in inside if rec["sp"] == SPELL_WATER_SPRAY]
         barrage_hits = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and in_barrage(rec["t"])]
-        walked = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and walked_back(rec)]
+        walked = [rec for rec in inside if rec["sp"] == SPELL_WATER_SPRAY and walked_back(rec["d"], rec["t"])]
         rows.append({
             "label": label, "span": (low, high),
             "open": counts[0] if counts else 0, "close": counts[-1] if counts else 0,
@@ -1676,7 +1680,8 @@ def firebot_rows(trace: Trace) -> list[dict]:
             "barrage_steps": sum(1 for when in steps if low <= when < high and in_barrage(when)),
             "walkbacks": sum(1 for times in walkbacks.values() for when in times if low <= when < high),
             "walkback_spray_hits": len(walked),
-            "walkback_spray_deaths": sum(1 for rec in walked if killed(rec)),
+            "walkback_spray_deaths": sum(1 for guid, when in spray_killed
+                                         if low <= when < high and walked_back(guid, when)),
         })
     return rows
 
@@ -1710,8 +1715,9 @@ def show_firebots(trace: Trace) -> None:
           " Up's cast to the cone's last sweep row (or"
           f" {SPIN_WINDOW_MS / 1000:.1f} s without them), and 'no spray note' means the victim wrote none in"
           f" the {SPRAY_NOTE_MS / 1000:.0f} s before the hit; a walk-back is an accepted {', '.join(WALK_BACK_MOVERS)}"
-          f" leg within {WALK_BACK_MS / 1000:.1f} s of the same bot's spray step ('spray ok' note), and a hit"
-          f" after one lands within {SPRAY_NOTE_MS / 1000:.0f} s of it")
+          f" leg within {WALK_BACK_MS / 1000:.1f} s of the same bot's spray step (an accepted fire bot leg whose"
+          f" last flee note reads 'spray ok' or 'spray fallback'), and a hit after one lands within"
+          f" {SPRAY_NOTE_MS / 1000:.0f} s of it")
 
 
 def unreach_rows(trace: Trace) -> dict:

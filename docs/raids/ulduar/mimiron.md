@@ -956,9 +956,10 @@ recomputes it `SLACK` inside the limit. The phase 1 camp keeps the plain shift: 
 its middle row inside Napalm's 24.5 yd floor.
 
 **No standoff shields the wedge from Bomb Bots.** They spawn on the unit's ground point
-(`SPELL_SUMMON_BOMB_BOT` is cast on self, z set to the floor), and the unit's 30 yd chase is 3D from a
-~16 yd hover, so it parks over its own victim: in 73 of 109 bombs the main tank `p3tank` pins to the
-room centre. The range shift then leaves the first ranged row ~10-20 yd from the spawn, 1-2.5 s at 8.0
+(`SPELL_SUMMON_BOMB_BOT` is cast on self, z set to the floor). Its 30 yd chase is 3D from a ~15 yd
+hover, so it may drift ~26 yd (2D) off its victim, yet it sat a median 7-9 yd off in five of window
+30's six pulls: near the main tank, whom `p3tank` pins to the room centre, in 73 of 109 bombs. The
+range shift then leaves the first ranged row ~10-20 yd from the spawn, 1-2.5 s at 8.0
 yd/s for a 66-72k HP add. Pushing `ULDUAR_MIMIRON_PHASE3_MIN_RADIUS` past 18 buys nothing either.
 
 **The unit does attack.** Its events are only the four summons, but `UpdateAI` ends in
@@ -1213,7 +1214,7 @@ the siren's 17 yd and the bot stood in the line (`spray unsafe`: 6 of 11 spray d
 `mimiron fire hold guard` zeroes its movers while the bot stands in a line (a `reach melee` 3.5 s earlier
 had walked the victims in) and for 2.5 s after its spray step, which lands 5.0 off the line, outside
 that test: half the `reach melee`, `set behind` and target-approach legs in those 2.5 s ended back in a
-lane (18% of the rest), 110-595 of them a phase 3, and 14 of one window's 32 phase 3 hits came within
+lane (18% of the rest), 126-861 of them a phase 3, and 19 of one window's 32 phase 3 hits came within
 3 s of one.
 
 **The spray has to be predicted.** The script faces the nearest `NPC_FLAMES_SPREAD` every 15 s, or 5 s
@@ -1629,12 +1630,14 @@ older traces show too; `--firebots` counts the splash guard by its `veto` rows, 
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's
 cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
 before, and the hits within 3 s of a walk-back (a fire hold mover's accepted leg within 2.5 s of the
-bot's own `spray ok` step); `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
-before; `--bomb` counts as a walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of
-the bomb than the bot stood; `--wedge` counts every living Flames (Spread) under a footprint, where the
-`wedge` note counts burning ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count
-healing net of overheal; and a phase that
-comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
+bot's own spray step: an accepted fire bot leg whose last `mimiron.flee` note reads `spray ok` or
+`spray fallback`, since `NoteDerived` skips a note equal to the last); `--bombbots` calls a blast
+victim chased when the bomb targeted it in the snapshot 300 ms before; `--bomb` counts as a walk-in
+any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
+`--wedge` counts every living Flames (Spread) under a footprint, where the `wedge` note counts burning
+ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal; and a
+phase that comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both
+spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated
 on VX-001, which in phase 4 is the chassis, so a drifting apex shows; two spell ids tell Spinning Up

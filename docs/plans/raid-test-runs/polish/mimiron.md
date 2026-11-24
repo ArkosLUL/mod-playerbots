@@ -36,7 +36,7 @@ Bomb), P3 Bomb Bots and Water Spray, then P4 Hand Pulse once healers fall.
 4. P4 Laser Barrage over a live Frost Bomb (3 of 21 pulls since window 22, all ~9:44-9:52): the barrage
    step walked 22-24 legs into the bomb's radius, then cone and fire refused every escape (`frostbomb
    unsafe`): uld3 4 and uld6 3 dead to the blast, uld6 5 more pinned in Flames.
-5. Water Spray 5 (3 after a walk-back, fixed in round 20).
+5. Water Spray 5 (4 after a walk-back, fixed in round 20).
 6. Mines 4; ACU Plasma Ball 2 (the bear losing the ACU).
 
 **Fixes in place** (round: what; verdict).
@@ -137,19 +137,21 @@ inside its 30 yd; the storm, not the turn.
   target approach 2.5 s after a flames dodge, but after a spray step only while the bot is inside a lane
   (3.5 yd); the step lands it 5.0 off (`MimironFireBotAction::Execute` never called
   `NoteMimironFireDodge`), so the next tick's mover walks it back.
-- Window 30: 1,963 walk-backs within 2.5 s of the bot's own spray step in P3 and H3, 46% ending in a lane
-  (other reach legs 18%); P3 `fire bot <-> reach melee` A-B-A 328/887/396 (uld1/uld5/uld6). 14 of 32 P3
-  spray hits and 3 of 5 spray deaths came within 3 s of one (uld1 Uldxai, uld5 Uldvay and Uldvag);
-  windows 22-30: 8 of 16 spray deaths.
+- Window 30: 3,327 walk-backs within 2.5 s of the bot's own spray step in P3 and H3, 46% ending in a lane
+  (other reach legs 18%); P3 `fire bot <-> reach melee` A-B-A 328/887/396 (uld1/uld5/uld6). 19 of 32 P3
+  spray hits and 4 of 5 spray deaths came within 3 s of one (uld1 Uldxay and Uldxai, uld5 Uldvay and
+  Uldvag); windows 22-30: 10 of 21 P3 and H3 spray deaths.
 - Fix (Mimiron only, every size and mode, with or without a player): a spray step that issues calls
   `NoteMimironFireDodge`. Cost: that hold would have covered 13-24% of melee P3 time in window 30.
-- Reader `--firebots`: walk-backs after a spray step and the spray hits within 3 s of one (test). Findings
-  doc: the hold, the Bomb Bot spawn geometry and its open item.
+- Reader `--firebots`: walk-backs after a spray step and the spray hits within 3 s of one (test). A step
+  is an accepted fire bot leg whose last flee note reads `spray ok` or `spray fallback`: `NoteDerived`
+  skips a repeated note, so the notes alone missed 41% of them (review). Findings doc: the hold, the
+  Bomb Bot spawn geometry (ACU a median 7-9 yd off its victim in five pulls) and its open item.
 
 **Next window should show** (`--firebots`, `--flips`, `--walk`, `--bombbots`):
 
-- P3 walk-backs after a spray step near 0 (110-595 a pull now), `fire bot <-> reach melee`/`set behind`/
-  target approach A-B-A far under 328/887/396, spray hits after a walk-back near 0 (14 of 32).
+- P3 walk-backs after a spray step near 0 (126-861 a pull now), `fire bot <-> reach melee`/`set behind`/
+  target approach A-B-A far under 328/887/396, spray hits after a walk-back near 0 (19 of 32).
 - Water Spray deaths under 5; melee P3 moving share under 43-52% and P3 length no longer (115-150 s with
   no early losses). If melee output on adds falls, shorten the hold for spray steps.
 - Bomb Bots unchanged until Q10 is answered; round 19's settle checks as above.

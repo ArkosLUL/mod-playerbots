@@ -908,10 +908,12 @@ class FireBotPull(unittest.TestCase):
 
     def test_a_walk_back_after_a_spray_step_and_the_spray_that_followed(self):
         records = firebot_pull() + [
+            move(15000, SHADOW, mm.FIREBOT_STEP, 3.0, 4.0),
             {"t": 15000, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray ok -45 (back0)"},
-            {"t": 15000, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "spray none (spray11)"},
+            {"t": 16950, "e": "dmg", "s": KEPT_A, "d": SHADOW, "sp": mm.SPELL_WATER_SPRAY, "a": 9000},
+            {"t": 17500, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "siren ok +0 (back0)"},
             move(15400, SHADOW, "set behind", 3.0, 0.0),
-            move(15600, TREE, "reach spell", 0.0, 20.0),
+            move(17800, TREE, "reach spell", 0.0, 20.0),
             move(17600, SHADOW, "reach melee", 3.0, 0.0),
         ]
         with tempfile.TemporaryDirectory() as folder:
@@ -919,7 +921,20 @@ class FireBotPull(unittest.TestCase):
             path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
             rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
         p4 = rows["P4"]
-        self.assertEqual((p4["walkbacks"], p4["walkback_spray_hits"], p4["walkback_spray_deaths"]), (1, 1, 1))
+        self.assertEqual((p4["walkbacks"], p4["walkback_spray_hits"], p4["walkback_spray_deaths"]), (1, 2, 1))
+
+    def test_a_repeated_spray_step_with_no_note_of_its_own_and_a_fallback_step(self):
+        records = firebot_pull() + [
+            {"t": 14200, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "spray fallback (back0 spray11)"},
+            move(14200, TREE, mm.FIREBOT_STEP, 4.0, 22.0),
+            move(15000, TREE, mm.FIREBOT_STEP, 5.0, 22.0),
+            move(17000, TREE, "reach spell", 0.0, 20.0),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_7_mimiron_1789700009.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
+        self.assertEqual(rows["P4"]["walkbacks"], 1)
 
     def test_the_view_prints_each_phase(self):
         out = io.StringIO()
