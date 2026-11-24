@@ -504,6 +504,7 @@ def mine_pull() -> list[dict]:
         {"t": 14000, "e": "dmg", "s": MINE_B, "d": AGONY, "sp": mm.SPELL_MINE_EXPLOSIONS[0], "a": 5000},
         {"t": 20000, "e": "end", "out": "wipe"},
     ]
+    records += [move(8000, BULWARK, mm.MINE_STEP, -3.0, -4.0), move(12000, SHADOW, mm.MINE_STEP, 3.0, -4.0)]
     records += [mine_snap(when) for when in range(0, 20000, 250)]
     return records
 
@@ -533,11 +534,15 @@ class MinePull(unittest.TestCase):
         self.assertEqual(legs["mimiron shock blast action"], [1, 1, 1, 0])
         self.assertEqual(legs[mm.FORMATION], [2, 1, 0, 1])
 
+    def test_mine_steps_count_those_begun_at_the_trigger_radius_or_farther(self):
+        self.assertEqual(mm.mine_rows(self.trace)["P4"]["steps"], [2, 1])
+
     def test_the_view_prints_per_phase(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             mm.show_mines(self.trace)
         self.assertIn("P4   hits 3 for 24k, killing blows 1", out.getvalue())
+        self.assertIn("mine steps 2, 1 of them from 3.0 yd or farther", out.getvalue())
 
 
 class SyntheticPull(unittest.TestCase):

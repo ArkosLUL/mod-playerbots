@@ -566,6 +566,27 @@ std::vector<Position> GetMimironMines(PlayerbotAI* botAI)
     return botAI ? GetMimironMarkers(botAI).mines : std::vector<Position>();
 }
 
+bool GetMimironCloseMine(PlayerbotAI* botAI, Player* bot, Position& mine)
+{
+    if (!botAI || !bot)
+        return false;
+
+    float nearest = ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS;
+    bool found = false;
+    for (Position const& candidate : GetMimironMarkers(botAI).mines)
+    {
+        float const dist = bot->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY());
+        if (dist < nearest)
+        {
+            nearest = dist;
+            mine = candidate;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
 bool IsMimironLegMineSafe(Position const& from, std::vector<Position> const& mines, Position const& dest)
 {
     return IsMimironLegClearOf(from, mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);

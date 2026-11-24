@@ -126,6 +126,8 @@ HANDOVER_STEPS = {"1": "hold", "2": "late", "3": "walk in"}
 WALK_IN_LEAD_MS = 12750
 
 NPC_PROXIMITY_MINE = 34362
+MINE_STEP = "mimiron proximity mine action"
+MINE_TRIGGER = radius("ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS")
 MINE_LEG_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_LEG_CLEARANCE")
 MINE_CLEARANCE = radius("ULDUAR_MIMIRON_MINE_CLEARANCE")
 # A mine hit on a moving bot goes to its last accepted leg when that leg is this recent.
@@ -1214,8 +1216,9 @@ def mine_mover(recs: list[dict], stamps: list[int], when: int, row) -> str:
 
 
 def mine_rows(trace: Trace) -> dict[str, dict]:
-    """Per phase: Proximity Mine hits, damage and kills by what was moving the bot, and per mover the
-    accepted legs whose straight line passed a live mine, passed two or more, or ended beside one. The
+    """Per phase: Proximity Mine hits, damage and kills by what was moving the bot, per mover the
+    accepted legs whose straight line passed a live mine, passed two or more, or ended beside one, and
+    the mine steps with how many began at the trigger radius or farther from the nearest live mine. The
     line is what the bots screen; the walk follows the navmesh and can stray off it."""
     roster = roster_guids(trace)
     spans = phases(trace)
@@ -1226,7 +1229,7 @@ def mine_rows(trace: Trace) -> dict[str, dict]:
 
     def blank() -> dict:
         return {"hits": collections.Counter(), "damage": collections.Counter(), "kills": collections.Counter(),
-                "legs": collections.defaultdict(lambda: [0, 0, 0, 0])}
+                "legs": collections.defaultdict(lambda: [0, 0, 0, 0]), "steps": [0, 0]}
 
     rows: dict[str, dict] = collections.defaultdict(blank)
 
@@ -1251,9 +1254,13 @@ def mine_rows(trace: Trace) -> dict[str, dict]:
             if not me or not living(me):
                 continue
             start, end = (me[1], me[2]), (rec["x"], rec["y"])
+            mines = [(row[1], row[2]) for key, row in units.items() if key in mine_guids and living(row)]
+            if rec.get("by") == MINE_STEP and mines:
+                steps = rows[phase_at(spans, rec["t"])]["steps"]
+                steps[0] += 1
+                steps[1] += int(min(dist2(start, m) for m in mines) >= MINE_TRIGGER)
             if dist2(start, end) < 1.0:
                 continue
-            mines = [(row[1], row[2]) for key, row in units.items() if key in mine_guids and living(row)]
             # Mines the bot already stands by are left out, as the bots' own leg test does.
             passed = [m for m in mines if dist2(start, m) >= MINE_LEG_CLEARANCE
                       and off_segment(start, end, m) < MINE_LEG_CLEARANCE]
@@ -1273,12 +1280,13 @@ def show_mines(trace: Trace) -> None:
     for label in order:
         row = rows[label]
         legs = {by: tally for by, tally in row["legs"].items() if tally[1] or tally[3]}
-        if not row["hits"] and not legs:
+        if not row["hits"] and not legs and not row["steps"][0]:
             continue
         shown = True
         total = sum(row["damage"].values())
         print(f"  {label:4} hits {sum(row['hits'].values())} for {total // 1000}k,"
-              f" killing blows {sum(row['kills'].values())}")
+              f" killing blows {sum(row['kills'].values())}; mine steps {row['steps'][0]},"
+              f" {row['steps'][1]} of them from {MINE_TRIGGER:.1f} yd or farther")
         for by, count in row["hits"].most_common():
             kills = f", {row['kills'][by]} killed" if row["kills"][by] else ""
             print(f"       {by:44} {count:3} hits {row['damage'][by] // 1000:4}k{kills}")
@@ -1290,7 +1298,8 @@ def show_mines(trace: Trace) -> None:
         return
     print(f"\n  'passed' is the straight line within {MINE_LEG_CLEARANCE:.1f} yd of a live mine the bot did not"
           f" start beside; 'beside' is within {MINE_CLEARANCE:.1f} yd; a hit belongs to the bot's last leg"
-          f" when it is moving and the leg is under {MINE_MOVER_MS / 1000:.0f} s old")
+          f" when it is moving and the leg is under {MINE_MOVER_MS / 1000:.0f} s old; a mine step's distance is"
+          f" ground distance to the nearest live mine in the snapshot before it")
 
 
 # ------------------------------------------------------------------------------------------------- p3
