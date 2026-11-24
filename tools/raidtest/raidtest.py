@@ -11,7 +11,7 @@ A cycle takes the server lock, gets baseline pulls on the live build for every p
 --pulls valid ones from before HEAD, rebuilds and restarts the worldserver, then pulls the boss until
 every pool has --pulls valid pulls built after HEAD or ran --cap pulls. Each round starts one DC run per
 pool still short, all at once, and waits for all of them. A pool's pulls are only counted for, and
-compared with, that pool. --pools defaults to uld1-uld6 or toc1-toc3 and --diff to 25h for toc and 25n
+compared with, that pool. --pools defaults to <raid>1-<raid>6 and --diff to 25h for toc and 25n
 for uld, whose hard modes come from the server's toggles. The markdown report goes to stdout, progress
 to stderr. Reports are digests (pulls, the done rule per composition, deaths by mechanic, the trend over
 recent builds, each boss reader's --summary); --full prints every pool's sections and readers in full.
@@ -592,7 +592,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     def common(sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--boss", required=True, help="RaidObs trace slug, e.g. xt-002 or northrend-beasts")
         sub.add_argument("--raid", required=True, choices=dc.RAIDS, help="the raid whose roster pools to use")
-        sub.add_argument("--pools", type=pool_list, help="roster pools (default uld1-uld6 or toc1-toc3)")
+        sub.add_argument("--pools", type=pool_list, help="roster pools (default <raid>1-<raid>6)")
         sub.add_argument("--diff", choices=sorted(DIFF_IDS), help="default 25h for toc, 25n for uld")
         sub.add_argument("--pulls", type=int, default=1, help="valid pulls wanted per pool (default 1)")
         sources(sub, "commit-ish the build must be newer than")

@@ -192,7 +192,7 @@ class WindowTest(unittest.TestCase):
         patches = [
             mock.patch.object(raidtest, "resolve_since", side_effect=lambda repo, since: HEADS.get(since)),
             mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
-            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3, "toc": 3}),
             mock.patch.object(server, "dirty_trees", return_value=[]),
             mock.patch.object(server, "build", return_value=0),
             mock.patch.object(server, "restart", return_value=(0, "2026-11-21T13:00:00Z", True)),
@@ -614,7 +614,7 @@ class JobsTest(unittest.TestCase):
         uld, toc = self.parse(job(XT), job(BEASTS))
         self.assertEqual((uld.number, uld.pools, uld.diff, uld.pulls, uld.cap, uld.head, uld.label),
                          (1, [f"uld{n}" for n in range(1, 7)], "25n", 1, 2, "HEAD", ""))
-        self.assertEqual((toc.number, toc.pools, toc.diff), (2, ["toc1", "toc2", "toc3"], "25h"))
+        self.assertEqual((toc.number, toc.pools, toc.diff), (2, [f"toc{n}" for n in range(1, 7)], "25h"))
 
     def test_overrides(self):
         (parsed,) = self.parse(job(BEASTS, pools=["toc2"], diff="10h", pulls=2, cap=4, head="abc", label="check-10"))

@@ -138,7 +138,7 @@ class CycleTest(unittest.TestCase):
         patches = [
             mock.patch.object(raidtest, "resolve_since", return_value=("abc1234", HEAD)),
             mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
-            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3, "toc": 3}),
             mock.patch.object(server, "dirty_trees", return_value=[]),
             mock.patch.object(server, "build", return_value=0),
             mock.patch.object(server, "restart", return_value=(0, "2026-11-21T13:00:00Z", True)),
@@ -413,7 +413,7 @@ class ReportOnlyTest(unittest.TestCase):
         patches = [
             mock.patch.object(raidtest, "resolve_since", return_value=("abc1234", HEAD)),
             mock.patch.object(raidtest, "render", side_effect=lambda state, run, out, **_: self.rendered.append(state)),
-            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3}),
+            mock.patch.dict(pools.POOLS_PER_RAID, {"uld": 3, "toc": 3}),
         ]
         for patch in patches:
             patch.start()
@@ -506,7 +506,7 @@ class ArgsTest(unittest.TestCase):
 
     def test_toc_defaults_to_heroic(self):
         args = self.parse("cycle", "--boss", "northrend-beasts", "--scenario", "toc-beasts", "--raid", "toc")
-        self.assertEqual((args.diff, args.pools), ("25h", ["toc1", "toc2", "toc3"]))
+        self.assertEqual((args.diff, args.pools), ("25h", [f"toc{n}" for n in range(1, 7)]))
 
     def test_overrides(self):
         args = self.parse("cycle", "--boss", "x", "--scenario", "s", "--raid", "toc", "--diff", "25n",

@@ -161,7 +161,8 @@ window running, loop session not merging):
 - Lanes get the digest; the full reader is run by the lead, section by section, only for the failure
   it picked.
 - The tool-allowlist agent type is adopted only if the measurement in B.4 holds.
-- ToC pools stay at ilvl 245, untouched.
+- ToC gets `toc4`-`toc6` too (user, 2026-11-24: Anub'arak is not polished yet), copies of
+  `toc1`-`toc3` at ilvl 245 with name prefixes Tocu/Tocv/Tocw; Ulduar's copies use Uldu/Uldv/Uldw.
 
 ## Verification
 

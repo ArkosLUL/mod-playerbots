@@ -12,7 +12,7 @@ The jobs file is a JSON list of objects:
     boss      RaidObs trace slug (required)
     scenario  DC scenario token (required)
     raid      uld or toc (required)
-    pools     list of roster pools, default uld1-uld6 or toc1-toc3
+    pools     list of roster pools, default <raid>1-<raid>6
     diff      10n, 10h, 25n or 25h, default 25n for uld and 25h for toc
     pulls     valid pulls wanted per pool, default 1
     cap       most pulls per pool, default 2
