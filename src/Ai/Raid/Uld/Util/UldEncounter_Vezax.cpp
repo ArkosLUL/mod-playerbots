@@ -633,6 +633,29 @@ bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact)
     return true;
 }
 
+namespace
+{
+ObjectGuid VezaxMarkedCamper(Unit* vezax, VezaxEncounterState const& state)
+{
+    if (!vezax->HasAura(SPELL_VEZAX_SARONITE_BARRIER))
+        return ObjectGuid::Empty;
+
+    Map::PlayerList const& players = vezax->GetMap()->GetPlayers();
+    for (Map::PlayerList::const_iterator itr = players.begin(); itr != players.end(); ++itr)
+    {
+        Player* player = itr->GetSource();
+        if (!player || !player->IsAlive() || !player->HasAura(SPELL_MARK_OF_THE_FACELESS) ||
+            vezax->GetVictim() == player)
+            continue;
+
+        if (state.slotAssignments.find(player->GetGUID()) != state.slotAssignments.end())
+            return player->GetGUID();
+    }
+
+    return ObjectGuid::Empty;
+}
+}
+
 void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs)
 {
     if (!vezax)
@@ -642,6 +665,7 @@ void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs)
     state.crashImpact = impact;
     state.crashCastMs = getMSTime();
     state.crashWindowMs = flightMs + ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS;
+    state.crashMarked = VezaxMarkedCamper(vezax, state);
 }
 
 namespace
@@ -1048,6 +1072,35 @@ bool TryGetVezaxAnimusMeleeSpot(Player* bot, Unit* animus, Position& spot)
 
 bool VezaxDodgesShadowCrash(Player* bot) { return bot && !PlayerbotAI::IsMainTank(bot); }
 
+namespace
+{
+bool TryGetVezaxMarkedDodgeSpot(Player* bot, VezaxEncounterState const& state, Position const& impact, Position& spot)
+{
+    if (state.crashMarked != bot->GetGUID() || !bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
+        return false;
+
+    Position markSpot;
+    if (!TryGetVezaxMarkSpot(bot, markSpot) ||
+        markSpot.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <
+            ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE ||
+        !VezaxDodgeClearsInTime(bot, impact, markSpot))
+        return false;
+
+    spot = markSpot;
+    return true;
+}
+
+bool VezaxStrafesAwayFromMark(Player* bot, VezaxEncounterState const& state, uint8 slotIndex)
+{
+    if (state.crashMarked.IsEmpty() || state.crashMarked == bot->GetGUID())
+        return false;
+
+    auto const marked = state.slotAssignments.find(state.crashMarked);
+    return marked != state.slotAssignments.end() &&
+           VezaxSlotIsRightGroup(marked->second) == VezaxSlotIsRightGroup(slotIndex);
+}
+}
+
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 {
     if (!bot)
@@ -1055,17 +1108,30 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 
     PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
     Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(bot->GetInstanceId());
 
     uint8 slotIndex = 0;
     Position slot;
     Position late;
     char const* lateKind = nullptr;
-    if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex) && TryGetVezaxSlotPosition(bot, slotIndex, slot))
+    if (vezax && state && TryGetVezaxDodgeSlot(bot, slotIndex) && TryGetVezaxSlotPosition(bot, slotIndex, slot))
     {
+        if (TryGetVezaxMarkedDodgeSpot(bot, *state, impact, spot))
+        {
+            RaidObs::NoteDerived(bot, "vezax.dodge", "mark");
+            return true;
+        }
+
+        bool const away = VezaxStrafesAwayFromMark(bot, *state, slotIndex);
+        char const* const pulledKind = away ? "pulled away" : "pulled";
+        char const* const strafeKind = away ? "away" : "strafe";
+        float const clearance =
+            away ? ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE : ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS;
+
         PullVezaxSlotIntoAnimusReach(bot, vezax, slot);
 
-        float const strafe = VezaxSlotIsRightGroup(slotIndex) ? ULDUAR_VEZAX_CAMP_STRAFE
-                                                              : -ULDUAR_VEZAX_CAMP_STRAFE;
+        float const strafe = VezaxSlotIsRightGroup(slotIndex) != away ? ULDUAR_VEZAX_CAMP_STRAFE
+                                                                       : -ULDUAR_VEZAX_CAMP_STRAFE;
         Position strafed = VezaxCampPosition(slot, 0.0f, strafe);
 
         Position pulled;
@@ -1073,22 +1139,21 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
         {
             if (VezaxDodgeClearsInTime(bot, impact, pulled))
             {
-                RaidObs::NoteDerived(bot, "vezax.dodge", "pulled");
+                RaidObs::NoteDerived(bot, "vezax.dodge", pulledKind);
                 spot = pulled;
                 return true;
             }
 
             late = pulled;
-            lateKind = "pulled";
+            lateKind = pulledKind;
         }
 
         if (VezaxPlaceOnFloor(bot, strafed) &&
-            strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=
-                ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+            strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >= clearance)
         {
             if (VezaxDodgeClearsInTime(bot, impact, strafed))
             {
-                RaidObs::NoteDerived(bot, "vezax.dodge", "strafe");
+                RaidObs::NoteDerived(bot, "vezax.dodge", strafeKind);
                 spot = strafed;
                 return true;
             }
@@ -1096,7 +1161,7 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
             if (!lateKind)
             {
                 late = strafed;
-                lateKind = "strafe";
+                lateKind = strafeKind;
             }
         }
     }

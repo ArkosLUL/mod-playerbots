@@ -41,6 +41,13 @@ void ReleaseOtherWalk(PlayerbotAI* botAI, Position const& spot)
         ULDUAR_VEZAX_MARK_SPOT_TOLERANCE)
         last.clear();
 }
+
+void ReleaseStalledDodge(PlayerbotAI* botAI, Player* bot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_VEZAX_DODGE_STALL_MS)
+        last.clear();
+}
 }
 
 bool VezaxResetEncounterStateAction::Execute(Event /*event*/)
@@ -93,6 +100,7 @@ bool VezaxShadowCrashDodgeAction::Execute(Event /*event*/)
         ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
         return false;
 
+    ReleaseStalledDodge(botAI, bot);
     ReleaseOtherWalk(botAI, spot);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);

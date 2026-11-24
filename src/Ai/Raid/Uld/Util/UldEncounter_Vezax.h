@@ -46,6 +46,7 @@ inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE = 11.0f;
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
 inline constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
+inline constexpr uint32 ULDUAR_VEZAX_DODGE_STALL_MS = 500;
 
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
@@ -116,6 +117,7 @@ struct VezaxEncounterState
     Position crashImpact;
     uint32 crashCastMs = 0;
     uint32 crashWindowMs = 0;
+    ObjectGuid crashMarked;
 
     bool vaporKilled = false;
     bool animusSummoned = false;
