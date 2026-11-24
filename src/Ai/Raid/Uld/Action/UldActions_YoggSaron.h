@@ -622,6 +622,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class YoggSaronVigilanceAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron vigilance action";
+
+    YoggSaronVigilanceAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronHealerCombatEngineAction : public Action
 {
 public:

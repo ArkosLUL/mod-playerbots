@@ -2130,3 +2130,68 @@ more than ~3 times a wave.
 - Some claims walk 13-26 s and the channel drops only at the stun (uld2 8:54.1 +18.9 s, uld6 7:31.7 +26.0 s).
 - uld3's chain: the later two Guardians were under 10% when the first died, as round 21's pair.
 - The enhancement shaman died to one nova from full 5 times (uld4, uld6).
+
+## Round 23 (2026-11-24, window 35 build ce2ffa6be: round 22)
+
+**Data.** Window report `scratchpad/window35/window35/window35-yogg-saron.md`: six valid pulls, one per pool, 0
+humans, the first on the professions rosters; baseline window 33 plus filler 33c (12 pulls of 9ad197722). Traces
+`603_1_yogg-saron_1795550325`, `603_2_…1795550330`, `603_3_…1795550321`, `603_4_…1795550332`, `603_5_…1795550337`,
+`603_6_…1795550338` (uld1-uld6), read with `--crush --brain --tentacles --phase3 --novas --clouds`; scratch counts of
+nova deaths by bar and of gap-held Guardians' loss by who was on them; the new `--phases` line over windows 33-35.
+
+Deaths by mechanic (phase 1 / 2 / 3), all six wiped in phase 3:
+
+- uld1 (A): nova 1 (shaman, 21.5k bar, from full) / Death Ray 3, Brain Link 2, script kill 1, Squeeze 1 / Immortal
+  Guardian 22, Gaze 2, Draining Poison 1; Yogg 26.6%, 6 tentacles at phase 3.
+- uld2 (B): Sara's Blessing 1 / leftover nova 1 / Immortal Guardian 26, Drain Life 3; Yogg 11.0%, 2.
+- uld3 (C): nova 4 (shaman from full twice, again at 37% after Reincarnation; a warrior at 62%) / — / Immortal
+  Guardian 28; Yogg 16.9%, 2.
+- uld4 (A): nova 4 (shaman twice, rogues 23.1k and 23.9k, all from full) / Death Ray 2 / Immortal Guardian 27; Yogg
+  13.1%, 3.
+- uld5 (B): nova 6 (five at 2:04.80 in one tick; the shaman again at 2:22) / Death Ray 2, Reprisal 1 / Immortal
+  Guardian 16, Gaze 2, Draining Poison 2, Curse of Doom 2; Yogg 27.1%, 10.
+- uld6 (C): nova 1 / — / Immortal Guardian 31; Yogg 6.5%, 2.
+
+**Verdict on round 22 (Q2, break per carrier): kept**, on its own targets. First carrier below a median 0.2 / 0.1 s
+before the claim in A (uld1 15 claims, max 0.2; uld4 6, max 3.0), 0.1 / 0.1 in B (uld2 6, max 2.7; uld5 10, max
+8.6), 0.0 / 0.2 in C (uld3 4, max 0.2; uld6 4, max 2.1); the channel left the team a median 2.1-12.2 s after the
+claim (the walk). Carried below, per wave median 1.0-24.0 s, 10 of 18 under 10 s (window 33 0.5-26.5). Crushes on a
+breaking tank: uld1 2 on Uldxam (24.8k, no death), 0 elsewhere; no Crush death. Claims stay ~3 a wave (uld1 4 on one
+Crusher's re-casts twice). Brain per Stormwind / Icecrown cycle 15.0-24.9%, Chamber 2.2-22.5%; tentacles at phase 3
+6 / 2 / 2 / 3 / 10 / 2 (window 33 10 / 5 / 7 / 3 / 6 / 7, unlike rosters). Q1 step 1's reader holds: the station woke
+4 / 5 / 5 / 5 / 5 / 6 Guardians, no `no cloud` spawn.
+
+**Stop rules.** No kill. Phase 3 stays stuck: every Guardian still leaves its tank at stasis end (+4.0 s), and the
+longer phases 3 (211-265 s with 2-3 leftovers) end on the same throughput race; no new root cause, a question (Q3).
+Q1 step 2 does not rank first: no death mechanic traces to the melee core's position.
+
+**Picked: a free low Guardian bleeds out while the focus works a healthier one** (the nova, 17, top outside phase 3;
+the double nova cost uld5 its pull). uld5 1:52.2-1:56.9: the gap after 1:46.2 was over and G8948 sat free at 6.0-0.1%
+on the stack, while the held focus kept every non-tank on G8962 from 75.0% to 27.2%. G8948 died to splash at 1:56.85,
+leaving G8962 (27.2%) and G8956 (15.7%) both held in the gap; the warrior tank's Cleave and Revenge, area damage and
+a pet took them to 3.8% and 3.5%, and the kill of G8956 at 2:04.800 took G8962 with it: two novas in one tick, five
+melee dead, the platform at 23-33k/s after. Root cause: `YoggSaronPhase1Focus` (`UldEncounter_YoggSaron.cpp:3844-3846`)
+keeps a killable held focus outside the handover unless it stops counting for Sara; `YoggSaronLowGuardianTakesOver`
+gave a free low one the focus back in the handover only. New `--phases` line `focus past a free low one on the stack` (half the bot non-tanks on a healthier
+Guardian while the lowest under 30% on the stack is out of its gap, before the handover): 12.5-19.6 s a pull here,
+6.2-23.8 over windows 33 / 33c, and 12 runs over 18 pulls ended in a pair under the gap, against 13 pairs in all
+(window 33's uld3 chain of three, 33c's 2:02.18 pair included).
+
+Bug: the strategy kills the lowest killable Guardian first and spaces deaths on its own schedule. Fix
+(`UldEncounter_YoggSaron.cpp:3844-3846`): `lower` no longer needs the handover, so a killable Guardian under 30% and
+lower than the held one takes the focus in all of phase 1 (`yogg.p1focus` `lower`). Gap and chain rules unchanged, so
+the raid still works the next Guardian while a low one waits out its gap. Same code at 10 and 25, normal and hard mode;
+the focus is the bots', a real player only adds splash. No shared code. Reader: `unparked_rows`, `runs_into_pairs`
+and `show_free_low`, tested.
+
+**Next window should show:** `focus past a free low one on the stack` near 0 s (12.5-19.6 here), `yogg.p1focus`
+`lower` before the handover; `under the 6 s gap` under 5 in six pulls and no nova killing three or more in one tick;
+phase 1 nova deaths from pairs 0 (5 here); phase 1 no longer than 133-152 s and `counting for Sara` still enough.
+Back out if phase 1 runs longer or the focus flips between two Guardians more than once a death.
+
+**Seen, not picked.**
+
+- 7 nova deaths from full on 21.5-23.9k bars: the ladder fired (Shamanistic Rage, Cloak of Shadows) and the cooldowns
+  ran out; uld4's first nova went from 10% to dead in 0.2 s, before any button.
+- Death Ray: 5 of 7 victims were on a `phase 2 spacing action` walk when it hit.
+- uld1's phase 2 lost seven (Death Ray 3, Brain Link 2) and reached phase 3 at 9:30 with 6 tentacles.

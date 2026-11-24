@@ -92,6 +92,7 @@ enum UlduarYoggSaronIds
     SPELL_DEAFENING_ROAR = 64189,
     SPELL_DISTRACTING_SHOT = 20736,
     SPELL_WARRIOR_TAUNT = 355,
+    SPELL_WARRIOR_VIGILANCE = 50720,
     SPELL_PALADIN_HAND_OF_RECKONING = 62124,
     SPELL_DEATH_KNIGHT_DARK_COMMAND = 56222,
     SPELL_DRUID_GROWL = 6795,
@@ -389,6 +390,7 @@ inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
 inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_PCT = 20.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS = 3000;
 inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_RANGE = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_VIGILANCE_RANGE = 30.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
 
@@ -741,6 +743,8 @@ bool YoggSaronBeforePhase3(PlayerbotAI* botAI);
 
 Player* YoggSaronTankLayOnHandsTarget(PlayerbotAI* botAI);
 bool ClaimYoggSaronTankLayOnHands(PlayerbotAI* botAI, Player* tank);
+
+Player* YoggSaronVigilanceTarget(PlayerbotAI* botAI);
 
 bool YoggSaronHealerTargetless(PlayerbotAI* botAI);
 

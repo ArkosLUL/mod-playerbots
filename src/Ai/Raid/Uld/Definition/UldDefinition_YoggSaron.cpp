@@ -92,6 +92,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronLaughingSkullTrigger, YoggSaronLaughingSkullAction>(ACTION_EMERGENCY);
     e.Node<YoggSaronPhase3PositioningTrigger, YoggSaronPhase3PositioningAction>(ACTION_RAID);
     e.Node<YoggSaronGuardianControlTrigger, YoggSaronGuardianControlAction>(ACTION_RAID + 3);
+    e.Node<YoggSaronVigilanceTrigger, YoggSaronVigilanceAction>(ACTION_RAID + 2.5f);
     e.Node<YoggSaronBeaconDragTrigger, YoggSaronBeaconDragAction>(ACTION_RAID + 4);
     e.Node<YoggSaronBeaconStageTrigger, YoggSaronBeaconStageAction>(ACTION_RAID + 3.5f);
     e.Node<YoggSaronBeaconBearFormTrigger, YoggSaronBeaconBearFormAction>(ACTION_RAID + 4.5f);

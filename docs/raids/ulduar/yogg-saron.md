@@ -1967,6 +1967,16 @@ Righteous Defense on that tank taking up to three outside the swap rule) or on t
 one, each costing the 8 s cooldown the next spawn needed. `--phase3`: `tank taunts by aim` (`tentacle` / `own` /
 `another tank` / `loose`), `class taunts held`.
 
+**A warrior tank keeps Vigilance on the other tank in phase 3** (`yogg-saron vigilance`, `ACTION_RAID + 2.5`,
+`yogg.vigilance`): every hit on its target resets Taunt (50725), and the generic picker puts it on the highest-gear
+dps, whom Guardians rarely swing at. Taunt and Growl are 30 yd single-target taunts with nothing longer behind them,
+so design B's prot warrior and bear had every taunt cooling at 25-50% of Guardian swings on non-tanks before the
+first tank death (A 21-36% on Dark Command, Hand of Reckoning and Righteous Defense), and fresh Guardians sat on a
+raider a median 1.1-2.7 s (A 0.3-1.8). It takes the tank within 30 yd with the most attackers, never one carrying
+another warrior's, and so draws 10% of that tank's threat (59665, 15% glyphed). `--phase3`: each bot tank's `every
+taunt it has cooling`, `no bot tank with a taunt ready` (Vigilance resets counted; a death knight's kit includes
+Death Grip, which the control never casts).
+
 **A fresh Guardian leaves stasis on zero threat**: at 4 s or its first hit, `DoZoneInCombat` adds every player at 0
 and the first in the map's player list becomes its victim (`--phase3` `first victim`: one fixed melee at +4.0 s), so
 the first heal anywhere takes it.
@@ -2116,7 +2126,7 @@ hand.
 | Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
-| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
+| Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `chain taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `swapdefer` (holder and health), `tankshed`, `tankloh`, `vigilance` (tank), `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |
 
 **Do not add a Sanity level probe.** 63050 is already in the aura stream, with 63752 low-sanity and 63120
 Insane beside it, as are Grim Reprisal 64039 and Lunatic Gaze 64168 in `dmg`. A removal row carries no stack

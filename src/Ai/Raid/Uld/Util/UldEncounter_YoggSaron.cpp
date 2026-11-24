@@ -2319,6 +2319,37 @@ bool ClaimYoggSaronTankLayOnHands(PlayerbotAI* botAI, Player* tank)
     return true;
 }
 
+Player* YoggSaronVigilanceTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group || bot->getClass() != CLASS_WARRIOR || !PlayerbotAI::IsTank(bot) ||
+        !bot->HasSpell(SPELL_WARRIOR_VIGILANCE) || !YoggSaronInPhase3(botAI))
+        return nullptr;
+
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMap() != bot->GetMap() ||
+            !PlayerbotAI::IsTank(member))
+            continue;
+
+        if (member->HasAura(SPELL_WARRIOR_VIGILANCE, bot->GetGUID()))
+            return nullptr;
+
+        if (member->HasAura(SPELL_WARRIOR_VIGILANCE) ||
+            !bot->IsWithinDistInMap(member, ULDUAR_YOGG_SARON_VIGILANCE_RANGE) ||
+            !botAI->CanCastSpell("vigilance", member))
+            continue;
+
+        if (!best || member->getAttackers().size() > best->getAttackers().size())
+            best = member;
+    }
+
+    return best;
+}
+
 bool YoggSaronHealerTargetless(PlayerbotAI* botAI)
 {
     return botAI->GetBot()->IsInCombat() &&

@@ -2263,10 +2263,27 @@ class YoggPhases(unittest.TestCase):
 
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
-        self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))
-        self.assertTrue(yogg_saron.on_cooldown(casts, 8999, 8000))
-        self.assertFalse(yogg_saron.on_cooldown(casts, 9000, 8000))
-        self.assertTrue(yogg_saron.on_cooldown(casts, 20000, 8000))
+        self.assertFalse(yogg_saron.cooling_since(casts, [], 500, 8000))
+        self.assertTrue(yogg_saron.cooling_since(casts, [], 8999, 8000))
+        self.assertFalse(yogg_saron.cooling_since(casts, [], 9000, 8000))
+        self.assertTrue(yogg_saron.cooling_since(casts, [], 20000, 8000))
+
+    def test_a_tank_is_out_of_taunts_only_when_its_whole_kit_cools(self):
+        paladin = yogg_saron.TANK_TAUNT_KITS[2]
+        casts = {62124: [1000], 31789: [5000]}
+        self.assertFalse(yogg_saron.taunts_cooling(casts, paladin, 500))
+        self.assertTrue(yogg_saron.taunts_cooling(casts, paladin, 6000))
+        self.assertFalse(yogg_saron.taunts_cooling(casts, paladin, 9500))
+        self.assertTrue(yogg_saron.taunts_cooling({355: [1000]}, yogg_saron.TANK_TAUNT_KITS[1], 8000))
+        self.assertFalse(yogg_saron.taunts_cooling({56222: [1000]}, yogg_saron.TANK_TAUNT_KITS[6], 2000))
+        self.assertFalse(yogg_saron.taunts_cooling({}, {}, 2000))
+
+    def test_a_vigilance_reset_frees_the_warriors_taunt(self):
+        warrior = yogg_saron.TANK_TAUNT_KITS[1]
+        casts = {355: [1000]}
+        self.assertTrue(yogg_saron.taunts_cooling(casts, warrior, 3000, {355: [500]}))
+        self.assertFalse(yogg_saron.taunts_cooling(casts, warrior, 3000, {355: [2000]}))
+        self.assertTrue(yogg_saron.taunts_cooling(casts, warrior, 3000, {355: [4000]}))
 
     def test_phase_one_ends_where_phase_two_starts(self):
         spans = [(1, 0, 157629), (2, 157629, 644303), (1, 644303, 648355)]
