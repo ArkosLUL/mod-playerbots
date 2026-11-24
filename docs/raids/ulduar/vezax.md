@@ -452,7 +452,10 @@ at each return: a probe mid-helper plus one at the return would read as a flap e
 formation gate is a rule predicate that runs only when the cheaper checks pass, and the hard-mode flags
 come from spell hooks nothing else traces. `outside` before the raid walks in is expected; `noboss` means
 the instance lookup came back empty and every formation gate is shut, which nothing else in the trace
-says. `vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura;
+says. `vezax.burst` is an event, `<action> <call> <cooldown s, or fight>`, written by the burst
+multiplier when its call on that dps bot's cooldown changes: `use`/`hold` before the summon,
+`wait`/`animus` after. It rules only on a ready cooldown, so `hold` and `wait` mean one kept ready.
+`vezax.mark` is a per-bot change-only latch, so `--mark` takes its windows from the 63276 aura;
 its `far` counts the living past the floor at each mark, against the 9 or 4 the core wants, past 33.5
 for a mark inside Surge of Darkness (`surge`). A kicked Searing Flames leaves no damage row, so
 `--boss` counts casts that landed, never hits per cast.
@@ -494,7 +497,11 @@ Animus and after it and the copies landing on him; Sacred Shield casts by target
 each Surge of Darkness from its cast's end, `late` the second after the spawn: that main tank's health
 at its start and lowest in it, his own cooldowns and the externals on him up during it, each with when
 it went up, and the healers' median mana; then every Pain Suppression and Guardian Spirit with caster,
-target and phase, the hold's vetoes and the late external node's verdicts.
+target and phase, the hold's vetoes and the late external node's verdicts. `--burst` reads the
+Animus's first 30 s (health drop, that at its maximum health per second, the dps burst casts from the
+shared spell table, trinkets aside, by what the caster hit, and the threat cap's vetoes), then per dps
+bot alive at the spawn and cooldown with a `vezax.burst` row: its cooldown, uses before the spawn,
+whether it was back by then, the hold's first row on it, and its first use from the spawn and on what.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -587,6 +594,27 @@ death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught
   sees, and killed a vapor. Held for the whole window, not only with one in range: a star hit a vapor
   0.13s after it spawned.
 
+**Other dps burst cooldowns wait for the Animus unless back before it** (`vezax burst for the animus
+multiplier`, the user's rule; the shared burst names, lust and a priest's Shadowfiend aside). Left
+free, 39-41 of a pull's 41-43 were down at the spawn in windows 25-27.
+
+- **Before the summon** a dps bot fires one only if it comes back by the expected spawn plus 5 s, the
+  shared gate's tank dwell: no burst reached the Animus sooner than +6.1 s in those pulls. So a
+  3-minute one used in the first ~13 s stays allowed, a 2-minute one loses its second use, and 5
+  minutes or longer, or a potion, waits.
+- **The spawn is the script's clock**: a vapor every 30 s from the engage, the Animus 8 s after the
+  sixth. `VezaxHazardListenerScript` stamps each vapor and the encounter tick the engage; the
+  estimate ran 0.1-0.6 s early in all 36 Animus pulls of windows 11-27.
+- **The duration is what the core would set now**: item or DBC recovery with the bot's
+  `SPELLMOD_COOLDOWN` mods and `SPELL_AURA_MOD_COOLDOWN`, since talents cut many (Arcane Power came
+  back in 86 s against the DBC's 120, Icy Veins in 144 against 180); a potion, or a spell whose
+  cooldown starts on an event, comes back only out of combat. `use trinket` takes the longest of its
+  ready on-use trinkets, `use tinker` the tinker's own. A cooldown already running is left alone.
+- **From the summon, while the Barrier stands, it holds until the bot targets the Animus**, then the
+  shared gate's dwell applies there. Left free, Mirror Image, Icy Veins and Berserk went on Vezax
+  behind the Barrier at +0 to +2.3 s in 6 of 9 pulls, where lifting the hold at the summon would send
+  every saved one.
+
 **Damage stops at the stop line** (`vezax damage hold`), since a strong raid kills him before the sixth
 summon. While hard mode is pending, non-tanks stop at 15% and tanks at 2% (threat doesn't decay, so they
 keep him), until the summon, the Barrier or a vapor death:
@@ -599,8 +627,8 @@ keep him), until the summon, the Barrier or a vapor death:
   sent in by command keeps attacking on passive alone. Their stances sit in a per-instance store apart
   from the encounter state, so any engine gives them back after the Animus, a wipe or a resummon.
 
-Personal cooldowns still fire. `--vapors` prints `vezax.hold` with his health at each change and at the
-Animus spawn.
+It leaves personal cooldowns alone. `--vapors` prints `vezax.hold` with his health at each change and
+at the Animus spawn.
 
 Before the stop line, area damage holds only near a vapor (`vezax vapor area hold`): while hard mode is
 pending, the area spells by name, for a bot with a live vapor within 15 yd of it or its target (most area
@@ -624,6 +652,11 @@ Ranged dps slots cross the Mark floor to reach it (camp section), but row 0 is t
 main tank, in a healer's reach 2-5% of the time, and healers keep their slots. The settle decided the
 race before the crossing: all five north settles in windows 15-19 (12.6-15.7 yd, four from the opener
 walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
+
+**The burst hold costs damage on Vezax before the spawn.** Left free, dps bots made 54-59 burst uses a
+pull before it in windows 25-27, 19 of them potions; under the hold 16-24 and no potion. Only 1 of
+those 9 pulls reached the 15% stop line, so he enters the Animus phase higher and more of him is left
+under 40+ stacks after it.
 
 **Nothing moves the camp past the Surge of Darkness floor**, so a mark in a surge can land on a melee
 in the ball; only the melee break and the escape walk answer it. Stepping the rows 4.4 yd out would

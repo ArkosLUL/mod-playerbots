@@ -91,6 +91,7 @@ void DefineVezax(EncounterBuilder& e)
                    Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
 
     e.Block("vezax hard mode hold", Role::Any, VezaxHardModePending, 0, {"heroism", "bloodlust", "starfall"});
+    e.Multiplier<VezaxBurstForAnimusMultiplier>(Family::AnyAction);
 
     e.Block("vezax vapor area hold", Role::Any, VezaxVaporInAreaReach, 0,
             {"avenger's shield", "blade flurry", "bladestorm", "blast wave", "blizzard", "blood boil",

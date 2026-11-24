@@ -8,8 +8,10 @@
 
 #include "Creature.h"
 #include "EncounterHelpers.h"
+#include "GenericBuffUtils.h"
 #include "Group.h"
 #include "InstanceScript.h"
+#include "Item.h"
 #include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -19,6 +21,7 @@
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "Timer.h"
+#include "TinkerUtils.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -294,6 +297,13 @@ bool VezaxFormationActive(PlayerbotAI* botAI)
 
 void TickVezax(PlayerbotAI* botAI)
 {
+    if (VezaxEncounterActive(botAI))
+    {
+        VezaxEncounterState& state = vezaxEncounterStates.For(botAI->GetBot()->GetInstanceId());
+        if (!state.engageMs)
+            state.engageMs = getMSTime();
+    }
+
     if (!RaidObs::Active())
         return;
 
@@ -953,8 +963,12 @@ void VezaxNoteAnimusSummoned(Unit* vapor)
 
 void VezaxNoteVaporSummon(Unit* vezax)
 {
-    if (vezax)
-        ++vezaxEncounterStates.For(vezax->GetInstanceId()).vaporSummons;
+    if (!vezax)
+        return;
+
+    VezaxEncounterState& state = vezaxEncounterStates.For(vezax->GetInstanceId());
+    ++state.vaporSummons;
+    state.vaporSummonMs = getMSTime();
 }
 
 bool VezaxAnimusDue(PlayerbotAI* botAI)
@@ -974,6 +988,152 @@ bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs)
 
     ageMs = getMSTimeDiff(state->animusSummonMs, getMSTime());
     return true;
+}
+
+namespace
+{
+uint32 VezaxCooldownIfCastNow(Player* bot, SpellInfo const* info, ItemTemplate const* proto)
+{
+    int32 recovery = -1;
+    int32 category = -1;
+    if (proto)
+    {
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        {
+            if (static_cast<uint32>(proto->Spells[i].SpellId) != info->Id)
+                continue;
+
+            recovery = proto->Spells[i].SpellCooldown;
+            category = proto->Spells[i].SpellCategoryCooldown;
+            break;
+        }
+    }
+
+    if (recovery < 0 && category < 0)
+    {
+        recovery = static_cast<int32>(info->RecoveryTime);
+        category = static_cast<int32>(info->CategoryRecoveryTime);
+    }
+
+    if (recovery > 0)
+        bot->ApplySpellMod(info->Id, SPELLMOD_COOLDOWN, recovery);
+
+    if (category > 0 && !info->HasAttribute(SPELL_ATTR6_NO_CATEGORY_COOLDOWN_MODS))
+        bot->ApplySpellMod(info->Id, SPELLMOD_COOLDOWN, category);
+
+    if (int32 const flat = bot->GetTotalAuraModifier(SPELL_AURA_MOD_COOLDOWN); flat && bot->HasSpell(info->Id))
+        recovery += flat * IN_MILLISECONDS;
+
+    return static_cast<uint32>(std::max({recovery, category, 0}));
+}
+
+bool VezaxBurstReadyCooldown(PlayerbotAI* botAI, std::string const& action, uint32& cooldownMs)
+{
+    Player* bot = botAI->GetBot();
+    AiObjectContext* context = botAI->GetAiObjectContext();
+    bool ready = false;
+    cooldownMs = 0;
+
+    auto const take = [&](uint32 spellId, ItemTemplate const* proto)
+    {
+        SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+        if (!info || ai::spell::HasSpellOrCategoryCooldown(bot, spellId))
+            return;
+
+        ready = true;
+        cooldownMs = std::max(cooldownMs, proto && (proto->IsPotion() || info->IsCooldownStartedOnEvent())
+                                              ? std::numeric_limits<uint32>::max()
+                                              : VezaxCooldownIfCastNow(bot, info, proto));
+    };
+
+    auto const takeOnUse = [&](ItemTemplate const* proto)
+    {
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+            if (proto->Spells[i].SpellId > 0 && proto->Spells[i].SpellTrigger == ITEM_SPELLTRIGGER_ON_USE)
+                take(static_cast<uint32>(proto->Spells[i].SpellId), proto);
+    };
+
+    if (action == "use trinket")
+    {
+        for (uint8 slot : {EQUIPMENT_SLOT_TRINKET1, EQUIPMENT_SLOT_TRINKET2})
+        {
+            Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+            if (item && bot->CanUseItem(item) == EQUIP_ERR_OK)
+                takeOnUse(item->GetTemplate());
+        }
+    }
+    else if (action == "use tinker")
+    {
+        for (uint8 slot : {EQUIPMENT_SLOT_HANDS, EQUIPMENT_SLOT_WAIST, EQUIPMENT_SLOT_FEET, EQUIPMENT_SLOT_HEAD,
+                           EQUIPMENT_SLOT_BACK})
+        {
+            Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+            uint32 const spellId = item ? ai::tinker::GetUsableTinkerSpell(item) : 0;
+            if (!spellId || ai::spell::HasSpellOrCategoryCooldown(bot, spellId))
+                continue;
+
+            ready = true;
+            cooldownMs = std::max(cooldownMs, ai::tinker::GetTinkerCooldownMs(spellId));
+        }
+    }
+    else if (action == "offensive potion")
+    {
+        std::vector<Item*> const items = context->GetValue<std::vector<Item*>>("inventory items", action)->Get();
+        if (!bot->GetLastPotionId() && !items.empty())
+            takeOnUse(items.front()->GetTemplate());
+    }
+    else
+        take(context->GetValue<uint32>("spell id", action)->Get(), nullptr);
+
+    return ready;
+}
+
+bool TryGetVezaxAnimusDueIn(VezaxEncounterState const& state, uint32 now, int64& leftMs)
+{
+    uint32 since = 0;
+    uint8 vaporsLeft = ULDUAR_VEZAX_ANIMUS_VAPORS;
+    if (state.vaporSummons)
+    {
+        since = getMSTimeDiff(state.vaporSummonMs, now);
+        vaporsLeft = state.vaporSummons >= ULDUAR_VEZAX_ANIMUS_VAPORS ? 0 : ULDUAR_VEZAX_ANIMUS_VAPORS - state.vaporSummons;
+    }
+    else if (state.engageMs)
+        since = getMSTimeDiff(state.engageMs, now);
+    else
+        return false;
+
+    leftMs = static_cast<int64>(vaporsLeft) * ULDUAR_VEZAX_VAPOR_INTERVAL_MS + ULDUAR_VEZAX_ANIMUS_AFTER_VAPOR_MS -
+             static_cast<int64>(since);
+    return true;
+}
+}
+
+VezaxBurstDecision VezaxBurstForAnimus(PlayerbotAI* botAI, std::string const& action)
+{
+    VezaxBurstDecision decision;
+    if (!IsVezaxHardModeActive(botAI) || !VezaxEncounterActive(botAI))
+        return decision;
+
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    if (!state || state->vaporKilled || (state->animusSummoned && !VezaxAnimusPhaseActive(botAI)))
+        return decision;
+
+    decision.pullMs = state->engageMs;
+    int64 leftMs = 0;
+    if (!state->animusSummoned && !TryGetVezaxAnimusDueIn(*state, getMSTime(), leftMs))
+        return decision;
+
+    if (!VezaxBurstReadyCooldown(botAI, action, decision.cooldownMs))
+        return decision;
+
+    if (state->animusSummoned)
+        decision.call = VezaxTargetingAnimus(botAI) ? VezaxBurstCall::Animus : VezaxBurstCall::Wait;
+    else
+        decision.call = static_cast<int64>(decision.cooldownMs) <= leftMs + ULDUAR_VEZAX_BURST_ANIMUS_GRACE_MS
+                            ? VezaxBurstCall::Use
+                            : VezaxBurstCall::Hold;
+
+    return decision;
 }
 
 char const* VezaxAnimusRedirectSpell(Player* bot)

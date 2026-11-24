@@ -34,6 +34,7 @@
 #include "WarlockActions.h"
 #include "VehicleActions.h"
 
+#include <limits>
 #include <string>
 
 using namespace EncounterHelpers;
@@ -108,6 +109,71 @@ float VezaxTricksOnTankMultiplier::GetValue(Action* action)
     Unit* target = AI_VALUE(Unit*, "tricks of the trade target");
     Player* player = target ? target->ToPlayer() : nullptr;
     return player && PlayerbotAI::IsTank(player) ? 1.0f : 0.0f;
+}
+
+float VezaxBurstForAnimusMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const& name = burstNames.Get(action, [this, action]
+    {
+        std::string const actionName = action->getName();
+        bool const held = IsBurstCooldownAction(actionName) && actionName != "bloodlust" && actionName != "heroism" &&
+                          !IsManaReturnCooldown(bot, actionName);
+        return held ? actionName : std::string();
+    });
+
+    if (name.empty() || !PlayerbotAI::IsDps(bot))
+        return 1.0f;
+
+    VezaxBurstDecision const decision = VezaxBurstForAnimus(botAI, name);
+    if (decision.call == VezaxBurstCall::None)
+        return 1.0f;
+
+    NoteDecision(name, decision);
+    return decision.call == VezaxBurstCall::Hold || decision.call == VezaxBurstCall::Wait ? 0.0f : 1.0f;
+}
+
+void VezaxBurstForAnimusMultiplier::NoteDecision(std::string const& name, VezaxBurstDecision const& decision)
+{
+    if (decision.pullMs != notedPull)
+    {
+        noted.clear();
+        notedPull = decision.pullMs;
+    }
+
+    auto const [it, fresh] = noted.try_emplace(name, decision.call);
+    if (!fresh && it->second == decision.call)
+        return;
+
+    it->second = decision.call;
+    if (!RaidObs::Active())
+        return;
+
+    char const* call = "none";
+    switch (decision.call)
+    {
+        case VezaxBurstCall::Use:
+            call = "use";
+            break;
+        case VezaxBurstCall::Hold:
+            call = "hold";
+            break;
+        case VezaxBurstCall::Wait:
+            call = "wait";
+            break;
+        case VezaxBurstCall::Animus:
+            call = "animus";
+            break;
+        case VezaxBurstCall::None:
+            break;
+    }
+
+    std::string const cooldown = decision.cooldownMs == std::numeric_limits<uint32>::max()
+                                     ? "fight"
+                                     : std::to_string(decision.cooldownMs / IN_MILLISECONDS);
+    RaidObs::Note(bot, "vezax.burst", name + ' ' + call + ' ' + cooldown);
 }
 
 float VezaxDamageHoldMultiplier::GetValue(Action* action)
