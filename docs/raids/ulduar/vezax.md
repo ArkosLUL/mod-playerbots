@@ -596,7 +596,7 @@ death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught
 
 **Other dps burst cooldowns wait for the Animus unless back before it** (`vezax burst for the animus
 multiplier`, the user's rule; the shared burst names, lust and a priest's Shadowfiend aside). Left
-free, 39-41 of a pull's 41-43 were down at the spawn in windows 25-27.
+free, 39-42 of a pull's 41-43 were down at the spawn in windows 25-27.
 
 - **Before the summon** a dps bot fires one only if it comes back by the expected spawn plus 5 s, the
   shared gate's tank dwell: no burst reached the Animus sooner than +6.1 s in those pulls. So a
@@ -607,7 +607,7 @@ free, 39-41 of a pull's 41-43 were down at the spawn in windows 25-27.
   estimate ran 0.1-0.6 s early in all 36 Animus pulls of windows 11-27.
 - **The duration is what the core would set now**: item or DBC recovery with the bot's
   `SPELLMOD_COOLDOWN` mods and `SPELL_AURA_MOD_COOLDOWN`, since talents cut many (Arcane Power came
-  back in 86 s against the DBC's 120, Icy Veins in 144 against 180); a potion, or a spell whose
+  back in 86 s against the DBC's 120, Icy Veins in 144 against 180); a potion, or an item whose
   cooldown starts on an event, comes back only out of combat. `use trinket` takes the longest of its
   ready on-use trinkets, `use tinker` the tinker's own. A cooldown already running is left alone.
 - **From the summon, while the Barrier stands, it holds until the bot targets the Animus**, then the
@@ -654,7 +654,7 @@ race before the crossing: all five north settles in windows 15-19 (12.6-15.7 yd,
 walk) lost it, all three normal ones with the main tank holding the Animus killed it in 76-80 s.
 
 **The burst hold costs damage on Vezax before the spawn.** Left free, dps bots made 54-59 burst uses a
-pull before it in windows 25-27, 19 of them potions; under the hold 16-24 and no potion. Only 1 of
+pull before it in windows 25-27, 19 of them potions; under the hold 16-19 and no potion. Only 1 of
 those 9 pulls reached the 15% stop line, so he enters the Animus phase higher and more of him is left
 under 40+ stacks after it.
 

@@ -2209,10 +2209,10 @@ spawn plus 5 s, so all 41-43 are ready for the Animus, and 36-40 uses before the
 potions).
 
 **At the spawn today** (`opening.py`). The tank had the Animus at +1.0-2.1 s and the first burst on it
-came at +6.1-7.7 s, the shared gate's 5 s dwell on it; dps switched at +0.0-5.3 s. 22 cooldowns went from
-3 s before the spawn to 2.3 s after it, onto Vezax as the Barrier came up (−99% damage taken): 14 before
-(Mirror Image 11, Berserk 2, Icy Veins 1) and 8 at +0.0-2.3 s (Mirror Image 5, Berserk 2, Icy Veins
-1) in 7 of 9 pulls, one of them with no target sampled. Vezax stood at 14.8-25.0% at the spawn; only w26 uld2 reached the 15%
+came at +6.1-7.7 s, the shared gate's 5 s dwell on it; dps switched at +0.0-5.3 s. 23 cooldowns went from
+3 s before the spawn to 2.3 s after it, onto Vezax as the Barrier came up (−99% damage taken): 15 before
+(Mirror Image 12, Berserk 2, Icy Veins 1) and 8 at +0.0-2.3 s (Mirror Image 5, Berserk 2, Icy Veins
+1) in 7 of 9 pulls, all on Vezax but w26 uld2's three, which had no target sampled. Vezax stood at 14.8-25.0% at the spawn; only w26 uld2 reached the 15%
 stop line, 7.9 s before it (`holdtime.py`).
 
 **Spawn clock** (`vapors.py`, windows 11-27). Vezax summons a vapor every 30 s from the engage; the
@@ -2236,7 +2236,7 @@ s early in all 36 Animus pulls, the engage plus 188 s 0.2-0.6 s early.
 - Real duration (`VezaxCooldownIfCastNow`): what `Player::AddSpellAndCategoryCooldowns` would set,
   computed, not applied: the item template's spell cooldowns, else the DBC's, through
   `ApplySpellMod(SPELLMOD_COOLDOWN)` (with no spell, so no charge is spent: `ApplyModToSpell` returns on
-  a null spell) and `SPELL_AURA_MOD_COOLDOWN`. A potion, or a spell whose cooldown starts on an event,
+  a null spell) and `SPELL_AURA_MOD_COOLDOWN`. A potion, or an item whose cooldown starts on an event,
   only comes back out of combat (`Spell::SendSpellCooldown`; `Spell.cpp:5914` refuses a second potion
   while `GetLastPotionId` is set), so it waits. `use trinket` takes the longest of its ready on-use
   trinkets, `use tinker` `GetTinkerCooldownMs` of its ready tinkers, `offensive potion` the first potion
@@ -2282,3 +2282,17 @@ code: none (it reads `BurstCooldowns`, `GenericBuffUtils` and `TinkerUtils` help
   used on the Animus.
 
 **Questions.** None new; the three readings above go to the user with the window report.
+
+**Review.** The measurements hold: `vapors.py` re-run on windows 25-27 puts each vapor's estimate 0.1-0.5
+s before the spawn, `opening.py` re-run gives the first burst on the Animus at +6.1-7.7 s, and
+`--burst` on w25 uld2 and w27 uld2 prints the table's 1.33 %/s, 163k, 8 / 1, 21 and 1.13, 139k, 7 / 1,
+12. The cooldown read matches `Player::AddSpellAndCategoryCooldowns` for every burst spell in the
+shared list (`vezax-r17-review/burstdbc.py`: none carries a category cooldown above its own, Rapid Fire
+and Elemental Mastery have only a category one), and the potion branch is for items only, as in
+`Spell::SendSpellCooldown`. No size, mode or player branch, no shared code, no comments. `pb-check`
+passes.
+
+- Review fix: the spawn count was 23 cooldowns, 15 of them before it (Mirror Image 12), not 22 and 14.
+- Review fix: `docs/raids/ulduar/vezax.md` gave 39-41 down at the spawn (39-42) and 16-24 uses under
+  the hold (16-19), and both texts said a spell whose cooldown starts on an event comes back only out
+  of combat: the core does that only for a cast item.
