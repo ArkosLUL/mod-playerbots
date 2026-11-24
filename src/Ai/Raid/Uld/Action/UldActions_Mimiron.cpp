@@ -182,8 +182,9 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 Position const dest(dx, dy, dz);
                 float const travel = speed > 0.0f ? hop / speed : 0.0f;
 
-                if (dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
-                    hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
+                if ((exact && !IsMimironSpotOnFloor(dest)) ||
+                    dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+                        hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
                 {
                     ++refusedMove;
                     continue;
@@ -323,7 +324,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                         refusedHold, refusedBombBot);
 
         if (fallbackFrom)
-            return MoveAway(fallbackFrom, distance);
+            return MoveAwayOnFloor(fallbackFrom, distance);
 
         return MoveTo(bot->GetMapId(), straightAway.GetPositionX(), straightAway.GetPositionY(),
                       straightAway.GetPositionZ(), false, false, true, false, priority);
@@ -364,7 +365,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
             }
 
             spot.dest = Position(dx, dy, dz);
-            if (spot.dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+            if ((spot.exact && !IsMimironSpotOnFloor(spot.dest)) ||
+                spot.dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
                     distance * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT ||
                 spot.dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started ||
                 !fallbackSafe(spot.dest))
@@ -423,6 +425,41 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                     refusedBomb, refusedRocket, refusedBurst, refusedShock, refusedSpray, refusedMove,
                     refusedHold, refusedBombBot);
+    return false;
+}
+
+bool MimironFleeAction::MoveAwayOnFloor(Unit* from, float distance)
+{
+    float const away = from->GetAngle(bot);
+    float const step = static_cast<float>(M_PI) / 8.0f;
+    for (float delta = 0.0f; delta <= static_cast<float>(M_PI) / 2.0f + 0.001f; delta += step)
+    {
+        for (float sign : {1.0f, -1.0f})
+        {
+            if (delta == 0.0f && sign < 0.0f)
+                continue;
+
+            float const angle = away + sign * delta;
+            float dx = bot->GetPositionX() + cos(angle) * distance;
+            float dy = bot->GetPositionY() + sin(angle) * distance;
+            float dz = bot->GetPositionZ();
+            bool exact = true;
+            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                               bot->GetPositionZ(), dx, dy, dz))
+            {
+                dx = bot->GetPositionX() + cos(angle) * distance;
+                dy = bot->GetPositionY() + sin(angle) * distance;
+                dz = bot->GetPositionZ();
+                exact = false;
+            }
+            else if (!IsMimironSpotOnFloor(Position(dx, dy, dz)))
+                continue;
+
+            if (MoveTo(from->GetMapId(), dx, dy, dz, false, false, true, exact, MovementPriority::MOVEMENT_COMBAT))
+                return true;
+        }
+    }
+
     return false;
 }
 

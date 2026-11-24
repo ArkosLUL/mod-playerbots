@@ -151,6 +151,11 @@ ESCAPE_SETTLE_MS = 3000
 ESCAPE_LOOKBACK_MS = 6000
 DRY_MANA_PCT = 10.0
 
+FLOOR_Z = anchor("ULDUAR_MIMIRON_ROOM_CENTER")[2]
+FLOOR_TOLERANCE = radius("ULDUAR_MIMIRON_FLOOR_TOLERANCE")
+ABOVE_RISE = 5.0
+ABOVE_MS = 3000
+
 WEDGE_FIRST_ROW = radius("ULDUAR_MIMIRON_PHASE3_MIN_RADIUS")
 WEDGE_SPACING = radius("ULDUAR_MIMIRON_PHASE3_SPACING")
 FLAMES_RADIUS = radius("ULDUAR_MIMIRON_FLAMES_RADIUS")
@@ -2010,11 +2015,18 @@ def pulse_rows(trace: Trace) -> list[dict]:
             deaths[(trace.role(rec["g"]), after)] += 1
 
         healer_radius: list[float] = []
-        for units in samples.window(low, high):
+        short = None
+        for index in range(bisect.bisect_left(samples.stamps, low), bisect.bisect_left(samples.stamps, high)):
+            units = samples.rows(index)
             boss = next((units[guid] for guid in vx if guid in units), None)
             if boss:
                 healer_radius += [math.dist(units[guid][1:3], boss[1:3]) for guid in heals
                                   if guid in units and living(units[guid])]
+            wet = sum(1 for guid in heals if guid in units and living(units[guid]) and units[guid][6] >= DRY_MANA_PCT)
+            if short is None and len(heals) >= 2 and wet <= len(heals) - 2:
+                short = samples.stamps[index]
+        pulse_deaths = [rec["t"] for rec in combat_deaths(trace) if low <= rec["t"] < high and any(
+            hit["d"] == rec["g"] and 0 <= rec["t"] - hit["t"] <= PULSE_KILL_MS for hit in hits)]
 
         rows.append({"label": label, "span": (low, high), "pulses": len(pulses), "healer_hits": healer_hits,
                      "casts": len(casts), "escaped": escaped, "with_mana": with_mana, "in_reach": in_reach,
@@ -2022,6 +2034,8 @@ def pulse_rows(trace: Trace) -> list[dict]:
                      "nearest": statistics.median(nearest) if nearest else None,
                      "gap": statistics.mean(gaps) if gaps else None,
                      "healer_radius": statistics.median(healer_radius) if healer_radius else None,
+                     "healers": len(heals), "short": short, "pulse_dead": len(pulse_deaths),
+                     "short_dead": sum(1 for when in pulse_deaths if short is not None and when >= short),
                      "pulse_taken": sum(rec.get("a", 0) for rec in hits if low <= rec["t"] < high),
                      "healed": sum(rec.get("a", 0) - rec.get("oh", 0) for rec in heals_in if low <= rec["t"] < high),
                      "escape_pulse": escape_pulse, "escape_healed": escape_healed})
@@ -2056,11 +2070,72 @@ def show_pulse(trace: Trace) -> None:
         dead = ", ".join(f"{role} {count}{' after its escape' if after else ''}"
                          for (role, after), count in sorted(row["deaths"].items()))
         print(f"       Hand Pulse deaths: {dead or 'none'}")
+        if row["short"] is None:
+            print(f"       never two of {row['healers']} healers out")
+        else:
+            print(f"       two of {row['healers']} healers out from {clock(row['short'])}; Hand Pulse deaths after it"
+                  f" {row['short_dead']} of {row['pulse_dead']}")
     print(f"\n  an escape is an accepted `{SHOCK_ESCAPE}` leg by a melee bot within {ESCAPE_SETTLE_MS // 1000} s of"
           f" the cast, healers read then at {DRY_MANA_PCT:.0f}% mana or more; heal reach is HealDistance"
           f" {HEAL_DISTANCE} between the two bots' edges, {HEAL_REACH} yd centre to centre; a death is after its"
           f" escape when the bot took one in the {ESCAPE_LOOKBACK_MS // 1000} s before it; healed is effective"
-          " healing (overheal off) landed on the same bots")
+          f" healing (overheal off) landed on the same bots; a healer is out when dead or under"
+          f" {DRY_MANA_PCT:.0f}% mana")
+
+
+def floor_rows(trace: Trace) -> dict:
+    roster = roster_guids(trace)
+    spans = phases(trace)
+    moves = accepted_moves(trace)
+    off = collections.Counter(rec.get("by", "?") for recs in moves.values() for rec in recs
+                              if rec.get("z") is not None and abs(rec["z"] - FLOOR_Z) > FLOOR_TOLERANCE)
+    above: collections.Counter = collections.Counter()
+    stretches = []
+    runs: dict[int, list] = {}
+
+    def close(guid: int) -> None:
+        start, stop, top = runs.pop(guid)
+        if stop - start < ABOVE_MS:
+            return
+        sent = [rec for rec in moves.get(guid, []) if rec["t"] <= start]
+        stretches.append({"t": start, "ms": stop - start, "g": guid, "top": top, "phase": phase_at(spans, start),
+                          "by": sent[-1].get("by", "?") if sent else None,
+                          "to": sent[-1].get("z") if sent else None})
+
+    for snap, ms in weights(frames(trace)):
+        seen = set()
+        for row in snap.get("u", []):
+            guid = row[0]
+            if guid not in roster or not living(row) or row[3] <= FLOOR_Z + ABOVE_RISE:
+                continue
+            seen.add(guid)
+            above[trace.role(guid)] += ms
+            if guid in runs:
+                runs[guid][1] = snap["t"] + ms
+                runs[guid][2] = max(runs[guid][2], row[3])
+            else:
+                runs[guid] = [snap["t"], snap["t"] + ms, row[3]]
+        for guid in [guid for guid in runs if guid not in seen]:
+            close(guid)
+    for guid in list(runs):
+        close(guid)
+    return {"off": off, "above": above, "stretches": sorted(stretches, key=lambda row: row["t"])}
+
+
+def show_floor(trace: Trace) -> None:
+    print("FLOOR")
+    rows = floor_rows(trace)
+    off = ", ".join(f"{by} {count}" for by, count in rows["off"].most_common())
+    print(f"  moves sent off the floor: {off or 'none'}")
+    above = ", ".join(f"{role} {ms / 1000:.1f}" for role, ms in rows["above"].most_common())
+    print(f"  bot-seconds above the floor: {above or 'none'}")
+    for row in rows["stretches"]:
+        sent = "no move before it" if row["by"] is None else f"after {row['by']} to z {row['to']:.1f}"
+        print(f"  {clock(row['t'])} {row['phase']:4} {trace.name(row['g']):12} {trace.role(row['g']):6}"
+              f" {row['ms'] / 1000:5.1f} s, up to z {row['top']:.1f}, {sent}")
+    print(f"\n  off the floor is an accepted move more than {FLOOR_TOLERANCE:g} yd above or below z {FLOOR_Z:g};"
+          f" above it is a living bot more than {ABOVE_RISE:g} yd up, and a stretch {ABOVE_MS // 1000} s or more"
+          " of it, longer than a knockback, with the last accepted move before it")
 
 
 def wedge_row_count(count: int) -> int:
@@ -2240,7 +2315,10 @@ SECTIONS = (
     ("acutank", "phase 4: whom the ACU targeted and hit with Plasma Ball, and what the off-tank aimed at",
      show_acutank),
     ("pulse", "phase 4 Hand Pulse: healers hit per pulse, healers in reach of melee after a Shock Blast"
-     " escape and how far, Hand Pulse damage against healing, and Hand Pulse deaths after one", show_pulse),
+     " escape and how far, Hand Pulse damage against healing, Hand Pulse deaths after one, and when two"
+     " healers were out", show_pulse),
+    ("floor", "moves sent off the room's floor, bot-seconds above it, and each stretch with the move before it",
+     show_floor),
     ("wedge", "phase 2 barrages: the re-aim, the move off fire once the beams stop and its turn, Flames under"
      " the wedge before and after, and in the 25 s after the ranged and healers' cones, healers moving, healing"
      " and deaths", show_wedge),
