@@ -391,8 +391,9 @@ in. Two answers, because the hazard has two shapes:
 
 - `mimiron fire hold guard` zeroes the five names the Frost Bomb guard lists (`reach melee`, `reach
   spell`, `reach party member to heal`, `set behind`, `follow`) for `ULDUAR_MIMIRON_FLAMES_HOLD_MS`
-  (2500) after this bot's last accepted dodge, and while it stands in a spray line. A **hold**, not a
-  veto: fire covers a third of the floor in phase 3, so gating on fire being near would strand the raid.
+  (2500) after this bot's last accepted flames dodge or spray step, and while it stands in a spray
+  line. A **hold**, not a veto: fire covers a third of the floor in phase 3, so gating on fire being
+  near would strand the raid.
   It suppresses `follow` for most of a handover, free while nothing is attackable, but bots lag a master
   who walks the raid then. The stamps live outside `MimironFightState`, which `TickMimironObs` resets on
   every scan while nothing is attackable; inside it the hold never reached a handover. That reset keys
@@ -728,6 +729,14 @@ with the chase and died with it at the end: 7 of 21 collateral hits, a healer an
 The step leaves the chased bot alone, and that is most of the dying: 15 of 22 Bomb Bot deaths in windows
 14-16 were the victim's own (11 of 29 chased ranged DPS, 3 of 3 chased healers).
 
+**Open: the step cannot reach the two blasts that kill.** Over 109 bombs in 21 pulls, a chased ranged
+DPS died in 21 of 33 chases, a chased tank in 2 of 13 (a tank outlives the blast). And a bomb spawns
+with its victim already picked, so one picking a bot within 5.5 yd of the spawn blew within 0.4 s, 7
+times for 25 hits and 6 dead, once 11 hits and 4 dead on the melee killing a Junk Bot at the room
+centre. The generic tank `lose aggro` taunt took 23 bombs onto a tank (Dark Command falling back to
+Death Grip, Growl, Feral Charge); the tank lived each time, and only a tank standing in the melee pile
+had his blast hit others (3 dead).
+
 **It is the one Mimiron add that takes a snare.** Its immunity set **−263** leaves `SNARE`, `ROOT`, `STUN`,
 `FREEZE`, `GRIP` and `KNOCKOUT` off, all of which the Assault Bot's **−285** carries; at 8.0 yd/s a
 second of extra approach is most of a cast. `mimiron slow bomb
@@ -946,10 +955,11 @@ in reach and the fresh one is within `ULDUAR_MIMIRON_SHIFT_SLACK` (4, under the 
 recomputes it `SLACK` inside the limit. The phase 1 camp keeps the plain shift: that inset would pull
 its middle row inside Napalm's 24.5 yd floor.
 
-**Holding still is also the Bomb Bot fix.** They spawn on the unit (`SPELL_SUMMON_BOMB_BOT` is cast on
-self), so the unit's own 30 yd standoff is what a Bomb Bot crosses: **~3.7 s** of free fire on a 20,000 HP
-add at 8.0 yd/s. Pushing `ULDUAR_MIMIRON_PHASE3_MIN_RADIUS` past 18 buys nothing; the unit keeps 30 yd
-from its victim wherever it stands.
+**No standoff shields the wedge from Bomb Bots.** They spawn on the unit's ground point
+(`SPELL_SUMMON_BOMB_BOT` is cast on self, z set to the floor), and the unit's 30 yd chase is 3D from a
+~16 yd hover, so it parks over its own victim: in 73 of 109 bombs the main tank `p3tank` pins to the
+room centre. The range shift then leaves the first ranged row ~10-20 yd from the spawn, 1-2.5 s at 8.0
+yd/s for a 66-72k HP add. Pushing `ULDUAR_MIMIRON_PHASE3_MIN_RADIUS` past 18 buys nothing either.
 
 **The unit does attack.** Its events are only the four summons, but `UpdateAI` ends in
 `DoSpellAttackIfReady(SPELL_PLASMA_BALL_P1)` on its victim every swing: 462k into the tank in one phase 3.
@@ -1201,7 +1211,10 @@ against the whole pool, and a fan refusing all eleven bearings for fire fell bac
 siren's (a silence costs a cast), since where lanes cross every near-side spot lies in another lane or
 the siren's 17 yd and the bot stood in the line (`spray unsafe`: 6 of 11 spray deaths in one window); and
 `mimiron fire hold guard` zeroes its movers while the bot stands in a line (a `reach melee` 3.5 s earlier
-had walked the victims in).
+had walked the victims in) and for 2.5 s after its spray step, which lands 5.0 off the line, outside
+that test: half the `reach melee`, `set behind` and target-approach legs in those 2.5 s ended back in a
+lane (18% of the rest), 110-595 of them a phase 3, and 14 of one window's 32 phase 3 hits came within
+3 s of one.
 
 **The spray has to be predicted.** The script faces the nearest `NPC_FLAMES_SPREAD` every 15 s, or 5 s
 after a spray, and sprays at once if it is within 5 yd, else walks to 5 yd short and sprays on arrival
@@ -1615,7 +1628,8 @@ every rise in it over 3 points between two samples not starting on Self Repair's
 older traces show too; `--firebots` counts the splash guard by its `veto` rows, which latch per action,
 so episodes rather than ticks, and splits off the Water Spray hits inside a barrage window (Spinning Up's
 cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no `spray` note in the 3 s
-before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
+before, and the hits within 3 s of a walk-back (a fire hold mover's accepted leg within 2.5 s of the
+bot's own `spray ok` step); `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
 before; `--bomb` counts as a walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of
 the bomb than the bot stood; `--wedge` counts every living Flames (Spread) under a footprint, where the
 `wedge` note counts burning ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count

@@ -902,12 +902,32 @@ class FireBotPull(unittest.TestCase):
         self.assertEqual((p4["barrage_spray_hits"], p4["barrage_spray_deaths"]), (1, 1))
         self.assertEqual(p4["barrage_steps"], 0)
 
+    def test_no_walk_back_without_a_spray_step_before_it(self):
+        self.assertEqual([self.rows[label]["walkbacks"] for label in ("P3", "H1", "P4")], [0, 0, 0])
+        self.assertEqual(self.rows["P4"]["walkback_spray_hits"], 0)
+
+    def test_a_walk_back_after_a_spray_step_and_the_spray_that_followed(self):
+        records = firebot_pull() + [
+            {"t": 15000, "e": "note", "g": SHADOW, "k": "mimiron.flee", "txt": "spray ok -45 (back0)"},
+            {"t": 15000, "e": "note", "g": TREE, "k": "mimiron.flee", "txt": "spray none (spray11)"},
+            move(15400, SHADOW, "set behind", 3.0, 0.0),
+            move(15600, TREE, "reach spell", 0.0, 20.0),
+            move(17600, SHADOW, "reach melee", 3.0, 0.0),
+        ]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_7_mimiron_1789700008.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+            rows = {row["label"]: row for row in mm.firebot_rows(Trace(path))}
+        p4 = rows["P4"]
+        self.assertEqual((p4["walkbacks"], p4["walkback_spray_hits"], p4["walkback_spray_deaths"]), (1, 1, 1))
+
     def test_the_view_prints_each_phase(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             mm.show_firebots(self.trace)
         self.assertIn("P4", out.getvalue())
         self.assertIn("fire bots open 1", out.getvalue())
+        self.assertIn("walk-backs after a spray step 0; Water Spray hits after one 0, 0 dead", out.getvalue())
         self.assertIn("in barrage windows (4 s): Water Spray 1 hits, 1 dead, 1 with no spray note", out.getvalue())
 
 

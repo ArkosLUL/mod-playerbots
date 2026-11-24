@@ -1129,7 +1129,10 @@ bool MimironFireBotAction::Execute(Event /*event*/)
 
             if (MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, across < 0.0f, true, "spray",
                                        true, false))
+            {
+                NoteMimironFireDodge(bot);
                 return true;
+            }
         }
 
         return false;
