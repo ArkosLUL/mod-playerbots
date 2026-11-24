@@ -1462,7 +1462,8 @@ team's last entry) are the baseline.
 
 **Built: the user's answer** (`UldEncounter_YoggSaron.h/.cpp`, `UldTriggers_YoggSaron.h/.cpp`,
 `UldActions_YoggSaron.h/.cpp`, `UldDefinition_YoggSaron.cpp`). `yogg-saron diminish power break` at `ACTION_RAID +
-2.5` (over the resolver and Brain Link, under phase 2 spacing), all through `YoggSaronPowerBreakPlan`:
+1.75` (over the resolver and Brain Link, under the pet guard and phase 2 spacing; review moved it from 2.5), all
+through `YoggSaronPowerBreakPlan`:
 
 - **When:** phase 2, the team down (no portal still open, or every live, uncharmed member of `brainTeam` under
   Illusion Room 63988, the aura the re-cast skips), and a Crusher channelling 64145 (`SPELL_STATE_CASTING`) whose
@@ -1511,3 +1512,18 @@ by role` with melee rows, no Crush death after a Bladestorm) land in the same wi
 
 **Left:** the judgement node still costs a holy paladin a GCD on a channelling Crusher for nothing (round 15); a prot
 paladin's seal hit still breaks the channel, harmlessly now.
+
+**Review.** The root cause holds: window 24 reread with the new `--brain` line gives the baseline above wave for wave,
+every carried stack dropping only at the room clear (`leaving` 0) or never (uld2 wave 4). The fix builds the user's
+(b) as asked, with no size, mode or player branch: a human tank only never claims, and anyone below counts, bot or
+not. Other phases and bosses untouched; `GetYoggSaronChannellingCrushers` reads the same.
+
+- Review fix: the node sat at `ACTION_RAID + 2.5`, over `yogg-saron pet guard` (+2), which returns false so the next
+  action still runs. A claiming tank's tick never reached it, so a DK tank's Risen Ghoul or Army ghouls would follow
+  it onto the Crusher unhushed, take the victim with a white swing and aim the Crushes at whoever stands behind them.
+  Now `ACTION_RAID + 1.75`: the guard runs first every tick, the break still wins over Brain Link and the resolver.
+  Window 24's blood DK tank (uld1) raised his ghoul only in phase 3, so no pull showed it.
+- Review fix: the claim scan tested who carries a stack below only after the portal grid search, which ran every
+  tick per tank whenever a Crusher channelled (52-78% of phase 2); the carried test now filters first.
+- Left: a claim has no timeout, so a claimant whose walk keeps stalling holds the Crusher from the other tank until
+  `YoggSaronWalkMakingProgress` retries (6 s give up, 4 s retry).

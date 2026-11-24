@@ -116,7 +116,7 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Node<YoggSaronRoarAuraTrigger, YoggSaronRoarAuraAction>(ACTION_RAID + 1);
     e.Node<YoggSaronIllusionFacingTrigger, YoggSaronIllusionFacingAction>(ACTION_RAID + 3);
     e.Node<YoggSaronPetGuardTrigger, YoggSaronPetGuardAction>(ACTION_RAID + 2);
-    e.Node<YoggSaronDiminishPowerBreakTrigger, YoggSaronDiminishPowerBreakAction>(ACTION_RAID + 2.5f);
+    e.Node<YoggSaronDiminishPowerBreakTrigger, YoggSaronDiminishPowerBreakAction>(ACTION_RAID + 1.75f);
     e.Node<YoggSaronBodyDetourTrigger, YoggSaronBodyDetourAction>(ACTION_RAID - 1);
     e.Node<YoggSaronDiminishPowerJudgementTrigger, YoggSaronDiminishPowerJudgementAction>(ACTION_RAID - 0.5f);
     e.Node<YoggSaronMortalStrikeTrigger, YoggSaronMortalStrikeAction>(ACTION_RAID - 0.5f);

@@ -906,8 +906,9 @@ broke it outside the stun: the channel ran 52-78% of Crusher-alive time, and a b
 stacks below for its whole room clear, 20-40 s.
 
 **So a bot tank breaks each channel the team carried down, once, and steps out**: the re-cast skips the
-team, the platform stays debuffed. `yogg-saron diminish power break` (`ACTION_RAID + 2.5`, under phase 2
-spacing) fires in phase 2 once the team is down (no portal open, or every live, uncharmed planned member
+team, the platform stays debuffed. `yogg-saron diminish power break` (`ACTION_RAID + 1.75`: under the pet
+guard, which never claims the tick and must still pull the tank's pet off that Crusher; over Brain Link)
+fires in phase 2 once the team is down (no portal open, or every live, uncharmed planned member
 under Illusion Room) for each channelling Crusher whose `64145` someone under Illusion Room carries; a late
 entrant who caught the re-cast makes it fire again. The nearest unclaimed bot tank claims it (ties by GUID):
 on the platform, alive, unseated, uncharmed, not stunned, feared or confused. It walks to `GetMeleeRange`

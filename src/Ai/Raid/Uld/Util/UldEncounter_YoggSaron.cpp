@@ -3018,7 +3018,12 @@ Creature* YoggSaronPowerBreakClaim(Player* bot, YoggSaronEncounterState& state)
 {
     std::list<Creature*> crushers;
     bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_POWER_BREAK_SEARCH_RADIUS);
-    crushers.remove_if([](Creature* crusher) { return !crusher->IsAlive() || !YoggSaronPowerChannelling(crusher); });
+    crushers.remove_if(
+        [bot](Creature* crusher)
+        {
+            return !crusher->IsAlive() || !YoggSaronPowerChannelling(crusher) ||
+                   !YoggSaronPowerCarriedBelow(bot, crusher);
+        });
     if (crushers.empty() || !YoggSaronBrainTeamDown(bot))
         return nullptr;
 
@@ -3052,7 +3057,7 @@ Creature* YoggSaronPowerBreakClaim(Player* bot, YoggSaronEncounterState& state)
     Creature* pick = nullptr;
     for (Creature* crusher : crushers)
     {
-        if (taken(crusher) || !YoggSaronPowerCarriedBelow(bot, crusher))
+        if (taken(crusher))
             continue;
 
         Player* nearest = nullptr;
