@@ -2127,3 +2127,118 @@ the fire hands out: a settle past ~120° with healers moving 50-80% and ~300k he
   and blows 10 s later, so a settle held until the blast walks outside the storm at the price of ~17 s more on fire, the
   pile Q6 removed.
 - pb-check: nothing to check (docs only).
+
+**User answer (2026-11-24).** Q9: (a), yes. When the beams stop, the phase 2 wedge takes the fewest-fire arc within
+90° of where the barrage left it.
+
+## Round 19 (build 0687fa6a4, no Mimiron code change since round 17)
+
+**Data:** window 27, `raidtest.py report --boss mimiron --raid uld --head 0687fa6a4 --pulls 10`: one valid pull per pool,
+no DC veto inside any. Baselines: windows 25-26 (`603_13/14/15_…_17955169xx`, `…_1795517146`; `603_10/11/12_…_17955232xx`,
+`…_1795523365`) and window 24a for the settle. Scripts in the lane scratchpad (`mim19/`: `sprayscene.py`, `sirenlegs.py`;
+round 18's `settlewalk.py`, `wedgepick2.py`, `botlog.py`; round 17's `p4time.py`; round 15's `mana.py`; round 14's
+`revcasts.py`, `alive.py`, `clock.py`; round 13's `hm.py`; round 12's `barrage_mines.py`, `mine_scene.py`; round 10's
+`parts.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261124-135907-10` | `603_10_…_1795528789` | **kill** 10:14.0, hard mode, parts down 9:53.3 / 9:57.5 / 10:01.8 across Berserk (10:00.2), nobody dead to it | 5: P3 Bomb Bot 2 (a melee, the bomb blowing 0.2 s after it was first seen; a chased ranged), Flames 1 (a melee 0.2 s after that blast); P4 mine 1 (melee on a barrage leg), Laser Barrage 1 (a ranged 30 yd out, the step flipping cw/ccw) |
+| uld2 | `tr-20261124-140310-12` | `603_12_…_1795529031` | **kill** 9:55.1, hard mode, no Berserk cast | 6: P1 Plasma Blast 1 (main tank 1:39.1); P3 Water Spray 2 (a melee pinned `spray none`/`unsafe` 2.5 s, a ranged on a siren leg across a lane), Bomb Bot 2 (two melee in one blast, 5:31.4); P4 mine 1 (melee on a `reach melee` leg) |
+| uld3 | `tr-20261124-140049-11` | `603_11_…_1795528890` | wipe 10:09.7 in P4 at Berserk (10:00.3), parts 15/16/19% | 32: P1 Plasma Blast 1 (main tank 1:14.3); P2 one melee three times (Rapid Burst 2, Flames 1, 3:24-3:33); P3 Bomb Bot 1 (chased ranged), Water Spray 2 (the disc priest, a ranged); H3 Water Spray 1 (the holy priest); P4 Hand Pulse 10, mines 4, ACU Plasma Ball 4, Flames 3; Berserk 3 |
+
+43 deaths, 40 before Berserk: Hand Pulse 10, mines 6, Water Spray 5, Bomb Bot 5, Flames 5, ACU Plasma Ball 4, Rapid Burst 2,
+Plasma Blast 2, Laser Barrage 1. Hard mode in all three: Summon Flames (Initial) at 7.1-7.2 s, Flames from 13.2-14.2 s,
+Emergency Mode at phase 2.
+
+**Stop rules:** two kills of three (5 and 6 deaths): not polished. No failure picked three times (round 18's settle walk was
+a plan change, built now).
+
+**Verdict:** round 18 changed no code. Round 17's mine trigger holds: mine steps begun 3 yd or more from a live mine 2 of 23
+(window 25: 365 of 402). Round 14's: no `revive pet` cast. Round 16's: a settle note for every phase 2 barrage; escaped melee
+with a healer in reach 2.54 of 3.14, 1.96 of 2.62 (4 of 26 with none), 1.37 of 1.78.
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 91.5 | 48.0 | 88.3 | 24.3 | 139.3 | 32.0 | 7:16.5 | 158.2 s at 93k/s, 24 alive; last part 1.8 s past Berserk |
+| uld2 | 88.1 | 48.3 | 87.5 | 24.3 | 143.0 | 31.8 | 7:16.2 | 145.3 s at 102k/s, 23 alive; kill 9:55.1 |
+| uld3 | 89.6 | 48.1 | 91.9 | 24.1 | 139.5 | 31.9 | 7:18.6 | 171 s to Berserk at **60k/s**, 22 alive, two healers |
+
+**The settle's turn against what followed** (new `--wedge` line: the 25 s after the beams):
+
+| Pull | Note | Turn | Healers moving | Healed | Raid dead |
+|---|---|---|---|---|---|
+| w25 uld1 | `fire 90 11>0` | 102° | 40% | 703k | 0 |
+| w25 uld2 | `fire 60 9>0` | 98° | 28% | 998k | 0 |
+| w25 uld3 | `fire 60 4>1` | 69° | 17% | 803k | 0 |
+| w26 uld1 | `fire 90 18>3` | 140° | 68% | 540k | 12 |
+| w26 uld1, 2nd | `fire 15 14>5` | 94° | 61% | 349k (13 alive) | 7 |
+| w26 uld2 | `fire 225 13>4` | 131° | 43% | 700k | 2 |
+| w26 uld3 | `keep 309 0>0` | 0° | 4% | 917k | 1 |
+| w27 uld1 | `fire 180 7>0` | 126° | 49% | 868k | 0 |
+| w27 uld2 | `fire 285 10>4` | 52° | 19% | 851k | 0 |
+| w27 uld3 | `fire 90 17>0` | 129° | 36% | 776k | 3 (one melee) |
+
+Turns of 52-102° on a full raid cost nobody; 126-140° cost 0-12 at 36-68% moving. Window 27's two turns past 120° were milder than window
+26's: 868k and 776k healed against 540k and 700k. Capped at 90°, uld1 would have taken 30° (84°, 2 live Flames against 0)
+and uld3 45° (84°, 4 against 0); uld2 is unchanged.
+
+- uld3's three deaths are one melee, the enhancement shaman Uldzaj (`botlog.py`). The settle (3:15.4, 321 → 90) moved his
+  `p2melee` slot ~9 yd; a flames dodge, then a `flames+10 fallback` (11 bearings refused for fire) locked his next move as
+  the storm's Frost Bomb landed 3.8 yd off him (3:21.6, `frostbomb locked`); the escape (3:23.0, `frostbomb ok -90`, 8
+  bearings refused for the burst) crossed two burning nodes under a Rapid Burst: dead at 3:24.4, Reincarnation in the
+  same fire, dead at 3:25.4, revived at the rezzer's spot 28 yd off VX-001 at 39% and dead to Heat Wave and Rapid Burst at
+  3:33.0. The ranged and healers lost nobody (cone-mates 3.2, Flames on them 10k). The turn moved him 9 yd; the bomb
+  landing while a fallback leg locked him, and the escape through fire, killed him.
+
+**Why uld3 wiped: Water Spray took both priests before phase 4.**
+
+1. 5:35.6, the disc priest Uldzac (`sprayscene.py`): a `spray ok` step, then a 16.7 yd `siren ok -90` leg that crossed a
+   lane; the spray hit him on it (10.7k) and knocked him back, the next spray killed him (19.5k) while the leg still
+   locked his dodge (`spray locked`).
+2. 6:51.9 in H3, the holy priest Uldzae, at 1-14% mana from 5:30: `reach spell` walked him into a lane twice
+   (6:50.0, 6:50.7), the dodge stepped out each time, the last 8.3 yd step left him in a lane and one spray killed him
+   from 100% (23.3k).
+3. Phase 4 opened with 22 alive and two healers (shaman 67%, druid 56%), the off-tank losing the ACU to ranged 26% of the
+   phase. By 7:51 five more were dead: Flames, Hand Pulse, an ACU Plasma Ball, and two on barrage legs over mines in the
+   first barrage. The druid died to a mine at 8:54.4, and the shaman healed alone from there. Hand Pulse took 10 at 1-2
+   healers, raid damage ran 60k/s over the phase, parts 15/16/19% at Berserk.
+
+**Ranking.** Hand Pulse (10, all uld3) follows the healer loss. Then mines 6 (four on phase 4 barrage legs: uld3 3, uld1
+1), Water Spray 5 (both uld3 priests), Bomb Bots 5, Flames 5.
+
+**Built: Q9, the phase 2 settle turns at most 90°.** `SettleMimironWedgeOffFire` skips every bearing more than
+`ULDUAR_MIMIRON_WEDGE_MAX_TURN` (90°) off the re-aimed centreline; fewest burning nodes, ties nearest, and the move gate
+(more than 3, at least 2 fewer) are as before. Every size and mode: normal mode has no Flames, so the current wedge always
+reads 0 and keeps; only bot engines call it, so a real player changes nothing. Reader `--wedge` adds, for the 25 s after
+the beams, healers moving, effective healing on the raid and raid deaths by role (test). Findings doc: the rule and its
+measurements replace the open item.
+
+**Next window should show** (`--wedge`, `--spin`, `--flips`, `mim18/settlewalk.py`):
+
+- Every `fire` settle 90° or less (windows 25-27: 7 of 9 moves past 90°, so most land at 75-90° now), with more live
+  Flames under the taken wedge at the settle than the 0-4 today (the replay: a median 4).
+- In the 25 s after the beams: healers moving about 17-40% and healed about 700k or more, as at 52-102°, and raid deaths
+  near 0 (126-140°: 36-68%, 540-868k, 0-12 dead).
+- The cost: Flames on ranged and healers in those 25 s (10-64k now), fire dodges on the new wedge (P2 `arc spread <->
+  dodge flames` A-B-A, window 27: 39 in uld3), and no rise in phase 2 Flames deaths.
+- Round 17's checks still: mine steps begun 3 yd or more from a live mine near 0.
+
+**Not picked.**
+
+- Siren legs across a spray lane (2 deaths, both window 27). Over windows 25-27, 42 of 575 accepted siren legs crossed a
+  lane they began outside (`sirenlegs.py`, lanes as the reader builds them); 3 of the 42 took a spray on the leg, 2 died;
+  none of the other 533 was hit. `FleeFan` screens a spray lane at the destination only. A leg test would be the third
+  Water Spray pick (rounds 5 and 10), so it waits for the next round with this evidence.
+- Barrage legs over phase 4 mines (4 kills): two from bots about 30 yd out that the ring step pulls in to its radius
+  (uld3 Uldzak r30.8 → 24 past a 7:41 mine 1.9 yd off, Uldzax melee r30.4 → 8, 0.4 yd); two on the ring (Uldzaq r18
+  with a mine 1.4 yd off, uld1 melee r1.4 → 8, 1.1 yd). uld1's beam death is the same far-out case (30.6 yd, `inside cw
+  30` then `inside ccw 30` within 200 ms).
+- Water Spray pins (uld2 melee, uld3 ranged: all 11 bearings refused for spray) and `reach spell`/`reach melee` walking
+  bots into a lane (uld3's holy priest, uld3's P3 `fire bot <-> reach melee` 173): round 5's lane timing note.
+- Bomb Bots 5, main tank Plasma Blast in phase 1 2, Hand Pulse with two healers (uld3).
+
+**Questions for the user:** none.
+
+**Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).

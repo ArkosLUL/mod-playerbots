@@ -983,19 +983,19 @@ stood in one 60° cone for 20 s after the first barrage, two Rapid Bursts hit 12
 each), and the raid lost phase 2. So the first
 call at least 10 s after a re-aim with the beams off (`SettleMimironWedgeOffFire`, once per re-aim,
 latched raid-wide) counts the burning nodes within the 5 yd fire screen of the wedge's footprint (its rows
-off VX-001, ±60°) at 24 bearings and takes the fewest, ties nearest the current centreline, when the
-current holds more than `ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT` (3) and the pick at least `_MARGIN` (2) fewer.
-The 10 s keeps any gap between Spinning Up's channel and the barrage aura from reading as beams off.
-Phase 2 only. Replayed over 39 phase 2 barrages it moved 29, up to 168°: the whole back line walks in the
-post-barrage storm, and the next barrage re-aims anyway.
+off VX-001, ±60°) at each of 24 bearings within `ULDUAR_MIMIRON_WEDGE_MAX_TURN` (90°) of the re-aim and
+takes the fewest, ties nearest the current centreline, when the current holds more than
+`ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT` (3) and the pick at least `_MARGIN` (2) fewer. The 10 s keeps any gap
+between Spinning Up's channel and the barrage aura from reading as beams off. Phase 2 only; the next
+barrage re-aims anyway.
 
-**Open: what the settle's walk costs.** In the 15 s after the settle, healers moved 23-55% and healed
-332-488k at turns of 69-102° (nobody died in the 25 s after), 54-80% and 302-305k at 131-140° (2 and 12
-dead), against 4% and 505k when it kept; a 94° settle on 13 alive moved them 63% for 191k and lost 7. Past
-~75° the new wedge overlaps the old melee sector, so the back line and the melee swap sides through VX-001,
-and the storm's Frost Bomb can land on the walk. Replayed on live Flames, not only burning ones, the
-fewest-fire pick turns past 90° in 30 of 50 moves, past 120° in 17; capped at 90°, 28 of those 30 still
-move, a median 77°, leaving a median 4 Flames under the wedge instead of 0 and 18 of the 30 over the limit.
+**The 90° cap: the whole back line walks in the post-barrage storm.** Past ~75° the new wedge overlaps the
+old melee sector, so the back line and the melee swap sides through VX-001, and the storm's Frost Bomb can
+land on the walk. Uncapped, in the 25 s after the beams, healers moved 17-40% and healed 703-998k at turns
+of 52-102° with nobody dead, against 36-68%, 540-868k and 0-12 dead at 126-140° and 4% and 917k when it
+kept; a 94° settle on 13 alive moved them 61% for 349k and lost 7. Replayed on live Flames, not only burning ones, the uncapped pick
+turned past 90° in 30 of 50 moves; capped, 28 of those 30 still move, a median 77°, leaving a median 4
+Flames under the wedge instead of 0, 18 of the 30 over the limit.
 
 ### Disperse distance
 
@@ -1618,8 +1618,8 @@ cast to the cone's last `sweep` row, else plus 14.5 s), counting victims with no
 before; `--bombbots` calls a blast victim chased when the bomb targeted it in the snapshot 300 ms
 before; `--bomb` counts as a walk-in any accepted leg but the bomb escape that ran deeper inside 32 yd of
 the bomb than the bot stood; `--wedge` counts every living Flames (Spread) under a footprint, where the
-`wedge` note counts burning ones, and anchors it on VX-001 unclamped; `--pulse` counts healing net of
-overheal; and a phase that
+`wedge` note counts burning ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count
+healing net of overheal; and a phase that
 comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms (`lead`, `sweep`, `rate`, `live`), originated

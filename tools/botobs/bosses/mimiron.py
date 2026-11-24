@@ -2124,7 +2124,9 @@ def wedge_rows(trace: Trace) -> list[dict]:
         after_high = min(stop + WEDGE_AFTER_MS, high)
         flames_taken = sum(rec.get("a", 0) for rec in trace.of("dmg")
                            if rec.get("sp") == SPELL_FLAMES and rec.get("d") in back and stop <= rec["t"] < after_high)
-        dead = sum(1 for rec in combat_deaths(trace) if rec["g"] in back and stop <= rec["t"] < after_high)
+        deaths = [rec["g"] for rec in combat_deaths(trace) if stop <= rec["t"] < after_high]
+        healed = sum(rec.get("a", 0) - rec.get("oh", 0) for rec in trace.of("heal")
+                     if rec.get("d") in roster and stop <= rec["t"] < after_high)
 
         turn = abs((taken - aimed + 180) % 360 - 180)
         rows.append({
@@ -2133,7 +2135,10 @@ def wedge_rows(trace: Trace) -> list[dict]:
             "fire_left": (fire_at(read, math.radians(aimed)), fire_at(later, math.radians(aimed))),
             "fire_taken": (fire_at(read, math.radians(taken)), fire_at(later, math.radians(taken))),
             "mates": statistics.mean(mates) if mates else None,
-            "flames": flames_taken, "dead": dead,
+            "flames": flames_taken, "dead": sum(1 for guid in deaths if guid in back),
+            "heal_moving": role_shares(trace, stop, after_high).get("heal", {}).get("moving"),
+            "healed": healed,
+            "raid_dead": collections.Counter(trace.role(guid) for guid in deaths if guid in roster),
         })
     return rows
 
@@ -2163,9 +2168,14 @@ def show_wedge(trace: Trace) -> None:
         mates = "-" if row["mates"] is None else f"{row['mates']:.1f}"
         print(f"       the {WEDGE_AFTER_MS // 1000} s after the beams: ranged/healer cone-mates {mates},"
               f" Flames on them {row['flames'] // 1000}k, {row['dead']} of them dead")
+        moved = "-" if row["heal_moving"] is None else f"{row['heal_moving'] * 100:.0f}%"
+        dead = ", ".join(f"{role} {count}" for role, count in sorted(row["raid_dead"].items()))
+        print(f"       healers moving {moved}, healed {row['healed'] // 1000}k,"
+              f" raid dead {sum(row['raid_dead'].values())}" + (f" ({dead})" if dead else ""))
     print("\n  footprint: the hmwedge rows off VX-001 at +-60 deg, grown by the 5 yd fire screen; the settle note"
           " counts burning nodes, the live counts every living Flames (Spread); cone-mates are the other ranged"
-          " and healers inside one's 60 deg Rapid Burst cone off VX-001, 1 s samples")
+          " and healers inside one's 60 deg Rapid Burst cone off VX-001, 1 s samples; healed is effective healing"
+          " (overheal off) landed on the raid")
 
 
 SECTIONS = (
@@ -2195,8 +2205,9 @@ SECTIONS = (
      show_acutank),
     ("pulse", "phase 4 Hand Pulse: healers hit per pulse, healers in reach of melee after a Shock Blast"
      " escape and how far, Hand Pulse damage against healing, and Hand Pulse deaths after one", show_pulse),
-    ("wedge", "phase 2 barrages: the re-aim, the move off fire once the beams stop, Flames under the wedge"
-     " before and after, and the ranged and healers in the 25 s after", show_wedge),
+    ("wedge", "phase 2 barrages: the re-aim, the move off fire once the beams stop and its turn, Flames under"
+     " the wedge before and after, and in the 25 s after the ranged and healers' cones, healers moving, healing"
+     " and deaths", show_wedge),
 )
 
 

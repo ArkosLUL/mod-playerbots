@@ -2623,12 +2623,15 @@ float SettleMimironWedgeOffFire(PlayerbotAI* botAI, Player* bot, Unit* vx001, Mi
     {
         float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
                               static_cast<float>(ULDUAR_MIMIRON_WEDGE_FIRE_BEARINGS);
-        uint32 const fire = MimironWedgeFire(hazards, anchor, bearing, outerRow);
 
         float turn = Position::NormalizeOrientation(bearing - current);
         if (turn > static_cast<float>(M_PI))
             turn = 2.0f * static_cast<float>(M_PI) - turn;
 
+        if (turn > ULDUAR_MIMIRON_WEDGE_MAX_TURN)
+            continue;
+
+        uint32 const fire = MimironWedgeFire(hazards, anchor, bearing, outerRow);
         if (fire < bestFire || (fire == bestFire && turn < bestTurn))
         {
             best = bearing;

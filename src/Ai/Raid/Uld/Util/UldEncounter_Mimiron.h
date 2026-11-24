@@ -96,6 +96,7 @@ inline constexpr uint32 ULDUAR_MIMIRON_WEDGE_REAIM_MS = 20000;
 inline constexpr uint32 ULDUAR_MIMIRON_WEDGE_FIRE_BEARINGS = 24;
 inline constexpr uint32 ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT = 3;
 inline constexpr uint32 ULDUAR_MIMIRON_WEDGE_FIRE_MARGIN = 2;
+inline constexpr float ULDUAR_MIMIRON_WEDGE_MAX_TURN = 90.0f * static_cast<float>(M_PI) / 180.0f;
 
 inline constexpr float ULDUAR_MIMIRON_SHIFT_SLACK = 4.0f;
 
