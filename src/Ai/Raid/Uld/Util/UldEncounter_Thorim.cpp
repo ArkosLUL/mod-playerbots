@@ -643,6 +643,49 @@ bool RingBodyBridgesChain(Player* bot, Position const& spot)
     return bridged;
 }
 
+void RingStepChainBodies(Player* bot, Unit* boss, std::vector<HazardCircle>& slots, std::vector<HazardCircle>& camp)
+{
+    Group* group = bot->GetGroup();
+    ThorimEncounterState const* state = FindState(bot);
+    uint8 ownSlot = 0;
+    if (!group || !state || !state->ringLatched || !MeleeSlotOf(bot, ownSlot))
+        return;
+
+    float const jump = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + ULDUAR_THORIM_RING_CHAIN_MARGIN + bot->GetCombatReach();
+    std::array<bool, ULDUAR_THORIM_MELEE_SLOTS> pointAdded{};
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member == bot || !MemberCounts(member, bot->GetInstanceId()) || !member->IsInWorld() ||
+            member->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            continue;
+
+        float const clearance = jump + member->GetCombatReach();
+        uint8 slot = 0;
+        if (!MeleeSlotOf(member, slot))
+        {
+            if (!PlayerbotAI::IsTank(member))
+                camp.emplace_back(member->GetPosition(), clearance);
+
+            continue;
+        }
+
+        if (slot == ownSlot)
+            continue;
+
+        slots.emplace_back(member->GetPosition(), clearance);
+        if (pointAdded[slot])
+            continue;
+
+        pointAdded[slot] = true;
+        float const bearing = state->ringSlots[slot].composed;
+        slots.emplace_back(Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
+                                    boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS,
+                                    boss->GetPositionZ()),
+                           clearance);
+    }
+}
+
 bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     bool spotInCone = false;
@@ -3118,26 +3161,48 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
 
     float const tankClearance = ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP + 2.0f * DEFAULT_COMBAT_REACH;
+    std::vector<HazardCircle> otherSlots;
+    std::vector<HazardCircle> camp;
+    RingStepChainBodies(bot, boss, otherSlots, camp);
 
     struct StepPass
     {
         float radius;
         bool pastRing;
         bool clearOfTanks;
+        bool clearOfSlots;
+        bool clearOfCamp;
+    };
+
+    auto const clearOf = [](std::vector<HazardCircle> const& bodies, float x, float y)
+    {
+        for (HazardCircle const& body : bodies)
+            if (body.first.GetExactDist2d(x, y) <= body.second)
+                return false;
+
+        return true;
     };
 
     HazardSweepCache cache;
-    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false}})
+    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, true, true},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, true, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, false, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false, false, false},
+                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false, false, false}})
     {
-        auto const accept = [boss, pass, tankClearance, &outOfCone](float x, float y)
+        if ((pass.clearOfCamp && camp.empty()) || (pass.clearOfSlots && !pass.clearOfCamp && otherSlots.empty()))
+            continue;
+
+        auto const accept = [boss, pass, tankClearance, &outOfCone, &clearOf, &otherSlots, &camp](float x, float y)
         {
             if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
                 y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y))
                 return false;
 
             if (pass.pastRing && boss->GetExactDist2d(x, y) < ULDUAR_THORIM_MELEE_RING_RADIUS)
+                return false;
+
+            if ((pass.clearOfSlots && !clearOf(otherSlots, x, y)) || (pass.clearOfCamp && !clearOf(camp, x, y)))
                 return false;
 
             return !pass.clearOfTanks ||

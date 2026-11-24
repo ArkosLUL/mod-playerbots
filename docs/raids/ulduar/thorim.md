@@ -440,10 +440,21 @@ and drops the arrival latch, so the walk back takes the 3 yd tolerance, not the 
 of reach. While covered the positioning row stands down: a bot clear of every zone and the lit cone holds
 where it stands, one in either takes `ThorimRingBlizzardStep` through the Blizzard node at
 `MOVEMENT_FORCED`, to the nearest point 11 yd clear of every zone, outside the cone, in the arena box,
-ties to the one nearest its slot point. In order: past the ring and 8 yd (the jump plus both reaches) off
-both tank spots within 15 yd, past the ring within 15, anywhere within 20. Slot 0 sits south-west of him
-between the west wall (x ~2100), the tank spots and the trail, so a hard tank clearance found no point for
-14-79% of the covered time in a six-pull replay.
+ties to the one nearest its slot point. In order, within 15 yd: past the ring, 8 yd (the jump plus both
+reaches) off both tank spots and out of the jump (5.5 yd plus both reaches) of every floor body but the
+tanks and its own slot, each other slot also at its point; the same clear of the slots but not the camp;
+of neither; past the ring alone; then anywhere within 20. Slot 0 sits south-west of him between the west
+wall (x ~2100), the tank spots and the trail, so a hard tank clearance found no point for 14-79% of the
+covered time in a six-pull replay.
+
+**Blind to the other bodies, the step was a bridge.** Over ten hard-mode wipes 125 of 452 step points
+landed in another slot's jump, and 11 of their 44 Chain Lightning deaths crossed slot to slot through a
+slot on its step point or walking back from it, slot 0 once 1.9 yd from slot 1. Another slot counts where
+its bots stand and at its point, since they walk back to it. The camp is every other floor body but the
+tanks, a human melee included, and leads only the first pass: clear of both, a replay found no point for
+half the steps, against a third for the slots alone. Without that pass the slots-clear points stood in a
+camp body's jump twice as often as the old ones (118 against 59 of 295 steps); with it 66, for a walk 6
+yd longer than the old at p90, against 4 without.
 
 **Two holds keep it.** `thorim ring blizzard step` blocks `Reach` and `Charge` while stepped, or `reach
 melee` walks the bot straight back in, and the movement guard counts a stepped bot as settled.
@@ -1332,7 +1343,12 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   stays, longest, ticks, damage); deaths; step moves, stepped bot-seconds and those past 9.0 yd of him;
   the walk back from a step's end to within 9.0 yd, ticks on the way. Traces without `thorim.ringstep`
   read all but the steps.
+- `--chains`: each Chain Lightning hop by hop as groups (tank, camp, a ring slot, marked stepped on its
+  step point or within 3 s of leaving it), the yards between groups, `(lust)` when both bodies carried
+  Heroism or Bloodlust (8.9 yd jump), deaths per group; then deaths by the crossing that reached them,
+  those before the first tank death, and crossings by kind, each kind also counted where it entered or
+  left a stepped slot.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
-counts from 15 s after the drop. Hop order is damage order (each hop does 1.5 times the last), and pets'
-hops are not in the trace.
+counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and
+pets' hops are not in the trace: a gap past the jump is a pet or snapshot lag.

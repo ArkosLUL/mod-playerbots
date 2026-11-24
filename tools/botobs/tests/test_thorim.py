@@ -3,8 +3,9 @@
     python -m unittest discover -s tools/botobs/tests
 
 A synthetic phase 2 pins one tank trade, a Chain Lightning cast from both tanks into slot 2, the waiting tank
-on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section. The
-shared v14 fixture shows every section reads empty elsewhere.
+on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section; a
+second cast from the camp through a stepped slot 0 into slot 2 pins the chains section. The shared v14 fixture
+shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -222,6 +223,52 @@ class RingBlizzard(unittest.TestCase):
 
     def test_normal_mode(self):
         self.assertIn("no Sif Blizzard in phase 2", printed(thorim.show_blizzard, load(pull())))
+
+
+MELEE_B = 8806
+
+
+def chain_pull() -> list[dict]:
+    records = pull()
+    records[0]["roster"].append({"g": MELEE_B, "n": "Edge", "r": "melee", "c": 4, "h": 0})
+    for rec in records:
+        if rec.get("e") == "snap":
+            rec["u"].append([MELEE_B, 2128.0, -258.0, 419.6, 0, 100, 0, THORIM])
+    records += [
+        {"t": 1000, "e": "note", "g": MELEE_B, "k": "thorim.ringspot", "txt": "slot 0 bearing 200 solved 200"},
+        {"t": 26000, "e": "aura", "d": RANGED, "s": RANGED, "sp": 32182, "r": 0, "st": 1, "dur": 40000, "p": 1},
+        {"t": 26000, "e": "aura", "d": MELEE_B, "s": RANGED, "sp": 32182, "r": 0, "st": 1, "dur": 40000, "p": 1},
+        {"t": 28000, "e": "note", "g": MELEE_B, "k": "thorim.ringstep", "txt": "1"},
+        {"t": 29000, "e": "dmg", "s": THORIM, "d": RANGED, "sp": 64390, "a": 4000, "ok": 0, "hp": 100.0},
+        {"t": 29001, "e": "dmg", "s": THORIM, "d": MELEE_B, "sp": 64390, "a": 6000, "ok": 0, "hp": 100.0},
+        {"t": 29002, "e": "dmg", "s": THORIM, "d": MELEE, "sp": 64390, "a": 9000, "ok": 0, "hp": 100.0},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class Chains(unittest.TestCase):
+    def setUp(self):
+        self.text = printed(thorim.show_chains, load(chain_pull()))
+
+    def test_each_cast_hop_by_hop(self):
+        self.assertIn("+17.0 s: 3 hits, 0 dead; tank x2, 14.2 yd to slot 2 x1", self.text)
+        self.assertIn("+28.0 s: 3 hits, 1 dead; camp x1, 9.9 yd (lust) to slot 0 stepped x1, 11.4 yd to slot 2 x1 "
+                      "1 dead", self.text)
+
+    def test_deaths_by_crossing(self):
+        self.assertIn("all: casts 2, hits 6, deaths 1, 1 before the first tank death (after slot to slot 1; "
+                      "through a stepped slot: slot to slot 1); crossings tank to slot 1, camp to slot 1, slot to slot "
+                      "1; through a stepped slot: camp to slot 1, slot to slot 1", self.text)
+
+    def test_walking_back_still_counts_as_stepped(self):
+        records = chain_pull()
+        records.append({"t": 28500, "e": "note", "g": MELEE_B, "k": "thorim.ringstep", "txt": "0"})
+        text = printed(thorim.show_chains, load(sorted(records, key=lambda rec: rec.get("t", -1))))
+        self.assertIn("to slot 0 stepped x1", text)
+
+    def test_no_phase_2(self):
+        records = [rec for rec in chain_pull() if rec.get("k") != "thorim.p2start"]
+        self.assertIn("phase 2 never started", printed(thorim.show_chains, load(records)))
 
 
 class Deaths(unittest.TestCase):
