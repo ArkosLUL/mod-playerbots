@@ -303,6 +303,11 @@ bool IsMimironSpotHolderSafe(float holderRadius, Position const& dest)
            ULDUAR_MIMIRON_ROOM_CENTER.GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) <= holderRadius;
 }
 
+bool IsMimironSpotOnFloor(Position const& dest)
+{
+    return std::fabs(dest.GetPositionZ() - ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()) <= ULDUAR_MIMIRON_FLOOR_TOLERANCE;
+}
+
 Unit* GetMimironUnreachableMech(PlayerbotAI* botAI, Player* bot)
 {
     Unit* leviathanMkII = botAI && bot ? GetUldUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;

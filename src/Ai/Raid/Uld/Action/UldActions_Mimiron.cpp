@@ -182,8 +182,9 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 Position const dest(dx, dy, dz);
                 float const travel = speed > 0.0f ? hop / speed : 0.0f;
 
-                if (dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
-                    hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
+                if ((exact && !IsMimironSpotOnFloor(dest)) ||
+                    dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+                        hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
                 {
                     ++refusedMove;
                     continue;
@@ -364,7 +365,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
             }
 
             spot.dest = Position(dx, dy, dz);
-            if (spot.dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+            if ((spot.exact && !IsMimironSpotOnFloor(spot.dest)) ||
+                spot.dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
                     distance * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT ||
                 spot.dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started ||
                 !fallbackSafe(spot.dest))

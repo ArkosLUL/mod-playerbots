@@ -103,6 +103,7 @@ inline constexpr float ULDUAR_MIMIRON_SHIFT_SLACK = 4.0f;
 inline constexpr float ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN = 4.0f;
 
 inline constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
+inline constexpr float ULDUAR_MIMIRON_FLOOR_TOLERANCE = 3.0f;
 
 inline constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
 inline constexpr float ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN = 2.0f;
@@ -259,6 +260,8 @@ bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
 
 float GetMimironHolderRadius(PlayerbotAI* botAI, Player* bot);
 bool IsMimironSpotHolderSafe(float holderRadius, Position const& dest);
+
+bool IsMimironSpotOnFloor(Position const& dest);
 
 Unit* GetMimironUnreachableMech(PlayerbotAI* botAI, Player* bot);
 

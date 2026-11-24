@@ -1,6 +1,6 @@
 # Mimiron polish history
 
-Rounds 1-19 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
+Rounds 1-20 of the Mimiron polish loop, oldest first; [the log](../mimiron.md) holds State and the newest round.
 
 ## Round 1 (build 02925e260, DC 5443dbc)
 
@@ -2239,3 +2239,89 @@ measurements replace the open item.
 **Questions for the user:** none.
 
 **Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).
+
+## Round 20 (build 897faf0d8, round 19 built)
+
+**Data:** window 30 (`window30-mimiron.md`, `--head 897faf0d8 --pulls 1`), one pull per pool, no DC
+veto. Traces `603_<inst>_mimiron_<epoch>`: uld4 `20_…381`, uld1 `16_…397`, uld2 `17_…401`, uld5
+`19_…384`, uld3 `18_…396`, uld6 `21_…390` (epochs 17955393xx); windows 22-30 (21 traces) for the Bomb Bot
+and spray rates. Scratch `mim20/`.
+
+| Pool | Out | P1/P2/P3 s | P4 | Deaths before Berserk |
+|---|---|---|---|---|
+| uld4 A | **kill** 9:11 | 85/85/117 | 6:44, 89k/s, 25 alive | 3: mine, Heat Wave, Bomb Bot |
+| uld1 A | **kill** 9:48 | 86/85/145 | 7:13, 85k/s | 5: Bomb Bot (gripped), Water Spray 2, Hand Pulse 2 |
+| uld2 B | wipe | 83/96/150 | 7:27, 70k/s, 19.5, parts 5-7% | 14: P2 Rapid Burst 3; P3 ACU 1, Bomb Bot 1; P4 Hand Pulse 5 (9:49-9:53), Frost Bomb, Flames, mine, ACU |
+| uld5 B | wipe | 82/83/**264** | 9:06, 15 alive | 11: P1 Napalm; P2-H2 3; P3 Bomb Bot 3, Water Spray 2, Assault Bot; H3 Water Spray |
+| uld3 C | wipe | 83/90/145 | 7:16, 69k/s, 21.7, parts 2-5% | 10: P2 3; P3 Bomb Bot; P4 Hand Pulse, Flames, Frost Bomb 4 (9:57) |
+| uld6 C | wipe | 83/86/149 | 7:14, 59k/s, 20.1, parts 9-12% | 21: P1 Flames; P3 Bomb Bot 5 (a spawn blast 4); P4 mines 2, Hand Pulse 2, Rocket, Flames 7, Frost Bomb 3 (9:46-9:56) |
+
+**Stop rules:** A met the done rule (uld4, 3 deaths, hard mode); B and C have no kill. Not polished. Not
+stuck: Bomb Bots were picked once (round 9, the step-out), and this round asks rather than repeats.
+
+**Verdict on round 19 (settle turn capped at 90°): held.** Every settle 90° or less: `fire` 75° (uld4),
+35° (uld1), 80° (uld2), 84° (uld3), 68° (uld6), `keep` (uld5); window 27 turned 126° and 129°. In the 25 s
+after the beams healers moved 15-35% and healed 688-933k, raid deaths 1/0/3/0/1/0 (126-140° turns: 0-12).
+uld2's three died to Rapid Burst on the escape from the Frost Bomb that landed 3.8 s after its settle, 21
+inside its 30 yd; the storm, not the turn.
+
+**Failure picked: Bomb Bots (12, all six pulls). Plan change.**
+
+- Bombs spawn on the ACU's ground point (z 364.34) with a victim already picked (uld6 4:45.730: victim
+  Uldwax 4.2 yd off, blast 208 ms later). The ACU hovers ~16 yd up with a 3D 30 yd chase, so it parks over
+  its victim: the main tank, pinned to the room centre by `p3tank`, in 73 of 109 bombs (windows 22-30).
+  The findings doc's "30 yd standoff, 3.7 s of free fire" never held: chased ranged began 9-22 yd off.
+- The 109 bombs: 50 killed; 52 chases, a chased ranged DPS dead in 21 of 33, a tank in 2 of 13; 7 spawn
+  blasts (victim within 5.5 yd), 25 hits, 6 dead. uld6's hit ten melee and a ranged on a Junk Bot beside
+  the main tank: 4 dead, and P4 opened with 23 at 59k/s.
+- The tank `lose aggro` taunt took 23 bombs (Dark Command, else Death Grip; Growl; Feral Charge); the tank
+  always lived, and others were hit only where he stood in the pile (uld1 4:34.4, Uldxam's Death Grip, a
+  melee dead; 3 dead in 21 pulls).
+- Classification: every rule does what it intends (ranged stand and shoot; no step answers a 0.2 s blast);
+  a fix is a new assignment or position: Q10.
+
+**Second, independent and small: the spray step is walked straight back (bug, fixed).**
+
+- `mimiron fire hold guard` holds `reach melee`, `reach spell`, heal reach, `set behind`, `follow` and the
+  target approach 2.5 s after a flames dodge, but after a spray step only while the bot is inside a lane
+  (3.5 yd); the step lands it 5.0 off (`MimironFireBotAction::Execute` never called
+  `NoteMimironFireDodge`), so the next tick's mover walks it back.
+- Window 30: 3,327 walk-backs within 2.5 s of the bot's own spray step in P3 and H3, 46% ending in a lane
+  (other reach legs 18%); P3 `fire bot <-> reach melee` A-B-A 328/887/396 (uld1/uld5/uld6). 19 of 32 P3
+  spray hits and 4 of 5 spray deaths came within 3 s of one (uld1 Uldxay and Uldxai, uld5 Uldvay and
+  Uldvag); windows 22-30: 10 of 21 P3 and H3 spray deaths.
+- Fix (Mimiron only, every size and mode, with or without a player): a spray step that issues calls
+  `NoteMimironFireDodge`. Cost: that hold would have covered 13-24% of melee P3 time in window 30.
+- Reader `--firebots`: walk-backs after a spray step and the spray hits within 3 s of one (test). A step
+  is an accepted fire bot leg whose last flee note reads `spray ok` or `spray fallback`: `NoteDerived`
+  skips a repeated note, so the notes alone missed 41% of them (review). Findings doc: the hold, the
+  Bomb Bot spawn geometry (ACU a median 7-9 yd off its victim in five pulls) and its open item.
+
+**Next window should show** (`--firebots`, `--flips`, `--walk`, `--bombbots`):
+
+- P3 walk-backs after a spray step near 0 (126-861 a pull now), `fire bot <-> reach melee`/`set behind`/
+  target approach A-B-A far under 328/887/396, spray hits after a walk-back near 0 (19 of 32).
+- Water Spray deaths under 5; melee P3 moving share under 43-52% and P3 length no longer (115-150 s with
+  no early losses). If melee output on adds falls, shorten the hold for spray steps.
+- Bomb Bots unchanged until Q10 is answered; round 19's settle checks as above.
+
+**Not picked.** P2 storm (10): no single mover. The late P4 barrage over a live Frost Bomb (12 dead in two
+pulls at ~9:44-9:57; the parts were 2-12% at Berserk either way; choosing between beam and bomb is not
+small). P4 Hand Pulse (10) with 1-3 healers. The bear off-tank losing the ACU (B, C).
+
+**Questions for the user.**
+
+- **Q10 (plan change): who takes the Bomb Bots in phase 3.** A Bomb Bot spawns under the ACU, which
+  hovers over the main tank at the room centre, and runs at whoever it picks at 8 yd/s; its blast
+  (19.7-25.5k) one-shots a caster, not a tank. Ranged stand and shoot by design and die in 21 of 33 chases;
+  a tank dies in 2 of 13; and a bomb that picks someone standing at the centre blows at once on everyone
+  there (uld6: 11 hit, 4 dead). It was the top killer in window 30 (12) and costs B and C the bodies that
+  set their P4 clock. Options: (a) the off-tank takes every Bomb Bot: he stands 10-12 yd off the ACU's
+  ground point, clear of the melee and the wedge, taunts each bomb as it spawns (Growl, Dark Command,
+  Righteous Defense, Hand of Reckoning or Taunt, all 8 s against one bomb every 15 s or more) and takes the
+  blast alone while ranged keep shooting it; (b) a chased ranged uses its own immunity or defensive (Ice
+  Block, Dispersion, Divine Shield, Barkskin), which covers 3-4 of ~10 ranged; (c) keep. Recommendation:
+  (a). Neither option stops a spawn blast on the centre pile (6 dead in 21 pulls); that needs melee to
+  kill adds away from the main tank, which I would ask about only if spawn blasts stay after (a).
+
+**Shared code:** none (Mimiron action, findings doc, reader and its test, this log).

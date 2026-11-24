@@ -1240,6 +1240,106 @@ class PulsePull(unittest.TestCase):
         self.assertIn("Hand Pulse on the raid 33k against 2k healed", out.getvalue())
         self.assertIn("nearest median 42.0 yd, mean 42.0 yd; Hand Pulse on them 16k against 2k healed", out.getvalue())
 
+    def test_one_healer_never_reads_as_two_out(self):
+        row = self.rows[0]
+        self.assertEqual((row["healers"], row["short"], row["pulse_dead"], row["short_dead"]), (1, None, 2, 0))
+
+
+SHORT_PRIEST = 5005
+
+
+def short_pull() -> list[dict]:
+    roster = ROSTER + [{"g": SHORT_PRIEST, "n": "Prayer", "r": "heal", "c": "priest", "h": 0}]
+    records = [rec for rec in pulse_pull(FAR_ESCAPE) if rec.get("e") not in ("hdr", "snap")]
+    records.insert(0, {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1,
+                       "boss": "mimiron", "roster": roster})
+    for when in range(0, 11000, 250):
+        frame = pulse_snap(when, FAR_ESCAPE)
+        for row in frame["u"]:
+            if row[0] == TREE and when >= 5000:
+                row[6] = 8.0
+        frame["u"].append([SHORT_PRIEST, 0.0, 25.0, 364.0, 0.0, 0.0 if when >= 7000 else 100.0, 40.0, VX,
+                           0, 0, 0, 0, 0, 0.0])
+        records.append(frame)
+    return records
+
+
+class ShortPull(unittest.TestCase):
+    def test_two_healers_out_from_the_second_one_dry_or_dead_and_the_pulse_deaths_after_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_9_mimiron_1789700012.ndjson"
+            path.write_text("\n".join(json.dumps(rec) for rec in short_pull()) + "\n", encoding="utf-8")
+            trace = Trace(path)
+            row = mm.pulse_rows(trace)[0]
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                mm.show_pulse(trace)
+        self.assertEqual((row["healers"], row["short"], row["pulse_dead"], row["short_dead"]), (2, 7000, 2, 1))
+        self.assertIn("two of 2 healers out from 0:07.000; Hand Pulse deaths after it 1 of 2", out.getvalue())
+
+
+FLOOR_HIGH = 803.11
+
+
+def floor_snap(when: int) -> dict:
+    rows = [[VX, 0.0, 0.0, 364.31, 0.0, 70.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0]]
+    for guid, (x, y) in HOME.items():
+        z = 364.31
+        if guid == TREE and 4000 <= when < 12000:
+            z = 380.0
+        if guid == SHADOW and 20000 <= when < 21000:
+            z = 375.0
+        rows.append([guid, x, y, z, 0.0, 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def floor_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1789700000000, "map": 603, "inst": 9, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+        {**move(3000, TREE, mm.BOMB_DODGE, 0.0, 60.0), "z": FLOOR_HIGH},
+        {**move(3500, AGONY, mm.FORMATION, 22.0, 4.0), "z": 364.32},
+        {**move(19000, SHADOW, mm.SHOCK_ESCAPE, 3.0, 20.0), "z": 364.31},
+        {**move(19500, BULWARK, mm.BOMB_DODGE, -3.0, 40.0), "z": FLOOR_HIGH, "ok": 0},
+        {"t": 30000, "e": "end", "out": "wipe"},
+    ]
+    records += [floor_snap(when) for when in range(0, 30000, 250)]
+    return records
+
+
+class FloorPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_9_mimiron_1789700013.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in floor_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+        cls.rows = mm.floor_rows(cls.trace)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_only_an_accepted_move_off_the_floor_counts(self):
+        self.assertEqual(dict(self.rows["off"]), {mm.BOMB_DODGE: 1})
+
+    def test_time_above_the_floor_counts_by_role_and_a_knockback_is_no_stretch(self):
+        self.assertEqual(dict(self.rows["above"]), {"heal": 8000, "melee": 1000})
+        self.assertEqual([(row["g"], row["t"], row["ms"], row["by"], row["to"]) for row in self.rows["stretches"]],
+                         [(TREE, 4000, 8000, mm.BOMB_DODGE, FLOOR_HIGH)])
+
+    def test_the_view_names_the_move_behind_each_stretch(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            mm.show_floor(self.trace)
+        self.assertIn(f"moves sent off the floor: {mm.BOMB_DODGE} 1", out.getvalue())
+        self.assertIn("bot-seconds above the floor: heal 8.0, melee 1.0", out.getvalue())
+        self.assertIn(f"0:04.000 P4   Tree         heal     8.0 s, up to z 380.0, after {mm.BOMB_DODGE} to z 803.1",
+                      out.getvalue())
+
 
 WEDGE_FLAMES = {4294971001: (-20.0, 0.0), 4294971002: (-20.0, 3.0), 4294971003: (-20.0, -3.0),
                 4294971004: (-22.0, 0.0), 4294971005: (40.0, 0.0)}

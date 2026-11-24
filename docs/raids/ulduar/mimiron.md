@@ -278,6 +278,13 @@ in `mimiron.flee`. Its traps:
   own feet ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)): three melee logged `shock ok`, moved
   0.3 yd, and died together to one Shock Blast. A candidate must cover
   `ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT` (0.5) of the hop it asked for, counted as `move`.
+- **A destination must stand on the floor.** Past the room's edge the check finds no ground and returns
+  true at the grid height, Z 803.11 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)),
+  and the exact leg flies the bot as high as ~450 for up to 25 s: 13 legs in 40 pulls, two of one
+  phase 4's healers at once. A checked point more than `ULDUAR_MIMIRON_FLOOR_TOLERANCE` (3) off the
+  room centre's Z is refused as `move`, in the fan and the least-burn fallback; an unchecked one keeps
+  the bot's Z and its path search. The unit flee's last resort, the generic `MoveAway`, still takes the
+  check's answer.
 - **Count the mover's refusals apart from the hazards'.** The lock is tested once before the fan
   (`locked`), and a mover refusal inside it is `move`; reading either as a hazard refusal hid the dead
   flames dodge.
@@ -799,6 +806,13 @@ stand within 33 yd of the outer row. Measured on the row: 221 of 272 pairs of es
 with mana in reach, no escape unreached (88). Healers inside the MK II's 18 yd flee its Shock Blast,
 about one a cast, casting as much inside the cast as outside it; a 20 yd row would cut those flights by
 a quarter (healers stand 13-29 yd off the MK II) and lose a tenth of the reach.
+
+**Phase 4 then runs out of healer mana.** Hand Pulse takes 11-18k a second off the raid for 100-160 s,
+and once two of four healers are out (dead or under 10% mana) it kills: 36 of one window's 43 Hand Pulse
+deaths before Berserk came after that point, reached at 8:08-8:53 in five of six pulls. The priests run
+dry first: they spend phase 3's 6k a second of intake on shields and renews, cast Shadowfiend at
+~1:10 and ~6:15 and Hymn of Hope at ~3:50, so phase 4 gets neither back. Open: holding those for phase 4
+or a fifth healer is a plan choice.
 
 **The ring survives the correction.** Six fixed phase-2 spots stacked the raid into three clumps, the
 worst shape against any cone; a radius-22 ring with one index-derived slot per ranged bot is not. The
@@ -1635,7 +1649,10 @@ bot's own spray step: an accepted fire bot leg whose last `mimiron.flee` note re
 victim chased when the bomb targeted it in the snapshot 300 ms before; `--bomb` counts as a walk-in
 any accepted leg but the bomb escape that ran deeper inside 32 yd of the bomb than the bot stood;
 `--wedge` counts every living Flames (Spread) under a footprint, where the `wedge` note counts burning
-ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal; and a
+ones, and anchors it on VX-001 unclamped; `--pulse` and `--wedge` count healing net of overheal, and
+`--pulse` calls a healer out when dead or under 10% mana; `--floor` counts a move more than 3 yd off the
+room centre's Z, and a stretch above the floor as 3 s or more over 5 yd up, longer than a knockback,
+charged to the last accepted move before it; and a
 phase that comes round twice (P4, H4, P4) gets a letter, `P4b`, or its deaths and yards count under both
 spans.
 
