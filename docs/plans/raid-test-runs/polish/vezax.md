@@ -1992,3 +1992,17 @@ Shared code: none.
   mana, and uld1's DK lived through it on a holy paladin's healing. *Recommended: (b)*: without its
   cooldown the first surge is about as deadly as the late one, and the external cooldown is what dry
   healers can still give at the late one.
+
+**Review.** The cause holds (`603_6_general-vezax_1795522109`): `vezax.interrupter` read 1 on Uldzad from
+0:09.98 and never changed, its interrupt action FAILED at 5:07.72 with the snapshot at 0% mana 31.1 yd
+from him, and the cast's 10 deaths came at 5:09.65, while Uldzai and Uldzam (Mind Freeze, 48-55% runic
+power), Uldzat (Kick, full energy) and Uldzaj (Wind Shear, 93% mana) stood 4.2-8.2 yd from him. Every kick
+in the list is off the global cooldown (`StartRecoveryCategory` 0), so the `CanCastSpell` tail does not
+flip the pick each GCD. No size, mode or player branch, no shared code, no comments. `pb-check` passes.
+
+- Review fix: a melee kick's range read `IsWithinMeleeRange` with no extra, but `Spell::CheckRange` adds
+  the kick's 5 yd less two `MIN_MELEE_REACH` (less one while both units move): 1 yd short standing, 3 yd
+  short with leeway, so a melee chasing him after a main tank death read out of reach with its kick in
+  range. It now mirrors the core.
+- Review fix: the duty paragraph in `docs/raids/ulduar/vezax.md` named only cost and range as what
+  `CanCastSpell` skips (stance too), and stated the test rosters' GUID order as general.

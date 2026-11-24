@@ -361,10 +361,11 @@ that tick, and Searing Flames is the one cast in Ulduar that genuinely rewards i
 GUID-ranked among bots that are both *capable and ready*, recomputed per cast so cooldowns rotate it: one
 kick per cast, or three bots spend theirs on one and miss the next. Ready means the kick's cost, stance,
 cooldown and range pass, tested directly since
-[`CanCastSpell` skips cost and range](../../engine/action-selection.md#casting): healers rank first by
-GUID, and a resto shaman reincarnated at 0 mana held the duty, failed its Wind Shear and let a cast land
-with five melee kickers in reach, killing 10. The trigger keys on Searing Flames' own id, since Shadow Crash
-and Surge of Darkness aren't worth a kick, and stuns are left out: he is immune.
+[`CanCastSpell` skips cost, stance and range](../../engine/action-selection.md#casting): the test
+rosters' healers rank first by GUID, and a resto shaman reincarnated at 0 mana held the duty, failed its
+Wind Shear and let a cast land with five melee kickers in reach, killing 10. The trigger keys on Searing
+Flames' own id, since Shadow Crash and Surge of Darkness aren't worth a kick, and stuns are left out: he
+is immune.
 
 **Life Tap is suppressed outright**, by a Vezax-local multiplier rather than the warlock rotation, and not
 above a mana threshold: its mana half is 31818, a bare `SPELL_EFFECT_ENERGIZE`, so no amount of missing

@@ -1245,10 +1245,14 @@ bool VezaxKickInReach(PlayerbotAI* botAI, Player* bot, char const* interrupt, Un
         info->CalcPowerCost(bot, info->GetSchoolMask()) > static_cast<int32>(bot->GetPower(Powers(info->PowerType))))
         return false;
 
+    float const maxRange = bot->GetSpellMaxRangeForTarget(target, info);
     if (info->RangeEntry && (info->RangeEntry->Flags & SPELL_RANGE_MELEE))
-        return bot->IsWithinMeleeRange(target);
+    {
+        float const reach = bot->GetLeewayBonusRange(target) > 0.0f ? MIN_MELEE_REACH : 2.0f * MIN_MELEE_REACH;
+        return bot->IsWithinMeleeRange(target, std::max(maxRange - reach, 0.0f));
+    }
 
-    return bot->IsWithinCombatRange(target, bot->GetSpellMaxRangeForTarget(target, info));
+    return bot->IsWithinCombatRange(target, maxRange);
 }
 }
 
