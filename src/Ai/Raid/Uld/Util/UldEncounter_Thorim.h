@@ -62,6 +62,7 @@ inline constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
 inline constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 
+inline constexpr float ULDUAR_THORIM_BLIZZARD_ZONE_REACH = 9.8f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS = 15.0f;
 inline constexpr float ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS = 20.0f;
@@ -73,7 +74,7 @@ inline constexpr float ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE = 32.0f;
 
 inline constexpr float ULDUAR_THORIM_BLIZZARD_SPEED_FACTOR = 0.35f;
 inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_RADIUS = 20.0f;
-inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_MARGIN = 0.1309f;
+inline constexpr float ULDUAR_THORIM_CONE_STEP_MARGIN = 0.1309f;
 inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_MIN_BOSS_RANGE = 12.0f;
 
 inline constexpr float ULDUAR_THORIM_SWEEP_STEP = 2.0f;
@@ -150,6 +151,7 @@ inline constexpr float ULDUAR_THORIM_MELEE_TARGET_REACH = 15.0f;
 inline constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;
 inline constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN = 0.2618f;
 inline constexpr float ULDUAR_THORIM_RING_CONE_CLEARANCE = 0.0873f;
+inline constexpr float ULDUAR_THORIM_RING_CONE_WALK_SAMPLE = 1.0f;
 inline constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE = 150.0f;
 
 inline constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN = 0.0436f;

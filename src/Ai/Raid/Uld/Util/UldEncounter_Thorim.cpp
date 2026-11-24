@@ -845,7 +845,7 @@ static bool ThorimCampConeStep(Player* bot, Unit* boss, Unit* orb, Position cons
         circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
 
     float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
-    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CAMP_CONE_STEP_MARGIN;
+    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CONE_STEP_MARGIN;
     bool const inZone = ThorimSpotUnderBlizzard(bot, *bot);
     auto const accept = [bot, boss, coneBearing, halfWidth, inZone](float x, float y)
     {
@@ -3037,9 +3037,40 @@ void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet)
                                       ChaseAngle(relative, ULDUAR_THORIM_PET_SLOT_TOLERANCE));
 }
 
+static bool RingWalkCrossesLitCone(PlayerbotAI* botAI, Player* bot, Position const& spot)
+{
+    Unit* boss = GetThorim(botAI);
+    Unit* orb = boss ? ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL) : nullptr;
+    if (!orb)
+        return false;
+
+    float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+    if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()), coneBearing))
+        return false;
+
+    float const dx = spot.GetPositionX() - bot->GetPositionX();
+    float const dy = spot.GetPositionY() - bot->GetPositionY();
+    uint32 const samples =
+        static_cast<uint32>(std::sqrt(dx * dx + dy * dy) / ULDUAR_THORIM_RING_CONE_WALK_SAMPLE) + 1;
+    for (uint32 i = 1; i <= samples; ++i)
+    {
+        float const t = static_cast<float>(i) / static_cast<float>(samples);
+        if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX() + dx * t, bot->GetPositionY() + dy * t),
+                                  coneBearing))
+            return true;
+    }
+
+    return false;
+}
+
 bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     if (!bot)
+        return false;
+
+    bool const coneHold = RingWalkCrossesLitCone(botAI, bot, spot);
+    RaidObs::NoteDerived(bot, "thorim.ringconehold", coneHold ? "hold" : "none");
+    if (coneHold)
         return false;
 
     ThorimEncounterState const* state = FindState(bot);
@@ -3341,6 +3372,36 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
 
         Position const spot = FindNearestPositionClearOfHazards(bot, circles, pass.radius, ULDUAR_THORIM_SWEEP_STEP,
                                                                 ULDUAR_THORIM_SWEEP_ANGLE_STEP, &ring, accept, &cache);
+        if (spot != Position())
+        {
+            out = spot;
+            return true;
+        }
+    }
+
+    if (!orb)
+        return false;
+
+    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CONE_STEP_MARGIN;
+    auto const clearOfLitCone = [boss, coneBearing, halfWidth](float x, float y)
+    { return AbsAngleDelta(BearingFromBoss(boss, x, y), coneBearing) > halfWidth; };
+
+    if (clearOfLitCone(bot->GetPositionX(), bot->GetPositionY()))
+        return false;
+
+    auto const coneExit = [&clearOfLitCone](float x, float y)
+    {
+        return x >= ULDUAR_THORIM_ARENA_BOX_MIN_X && x <= ULDUAR_THORIM_ARENA_BOX_MAX_X &&
+               y >= ULDUAR_THORIM_ARENA_BOX_MIN_Y && y <= ULDUAR_THORIM_ARENA_BOX_MAX_Y && clearOfLitCone(x, y);
+    };
+
+    for (float const zoneClearance : {ULDUAR_THORIM_BLIZZARD_ZONE_REACH, 0.0f})
+    {
+        for (HazardCircle& circle : circles)
+            circle.second = zoneClearance;
+
+        Position const spot = FindNearestPositionClearOfHazards(bot, circles, lastRadius, ULDUAR_THORIM_SWEEP_STEP,
+                                                                ULDUAR_THORIM_SWEEP_ANGLE_STEP, &ring, coneExit, &cache);
         if (spot != Position())
         {
             out = spot;

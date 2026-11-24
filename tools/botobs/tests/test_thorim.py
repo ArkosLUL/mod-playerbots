@@ -5,8 +5,9 @@
 A synthetic phase 2 pins one tank trade, a Chain Lightning cast from both tanks into slot 2, the waiting tank
 on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section; a
 second cast from the camp through a stepped slot 0 into slot 2 pins the chains section; one lit orb with a slowed
-camp bot dying short of its row and another on a cone step pins the shelters section. The shared v14 fixture shows
-every section reads empty elsewhere.
+camp bot dying short of its row and another on a cone step pins the shelters section; the same orb over a held
+ring walk and a ring walker dying past reach pins the ring cone section. The shared v14 fixture shows every section
+reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -325,6 +326,35 @@ class Shelters(unittest.TestCase):
     def test_without_the_probe(self):
         self.assertIn("no thorim.lightningorb probe or no lit orb in phase 2",
                       printed(thorim.show_shelters, load(pull())))
+
+
+def ring_cone_pull() -> list[dict]:
+    records = chain_pull()
+    records += [
+        {"t": 5000, "e": "note", "g": RANGED, "k": "thorim.lightningorb", "txt": str(ORB)},
+        {"t": 5200, "e": "note", "g": MELEE, "k": "thorim.ringconehold", "txt": "hold"},
+        {"t": 6000, "e": "move", "g": MELEE_B, "k": "point", "ok": 1, "x": 2131.0, "y": -258.0,
+         "by": "thorim sif blizzard action"},
+        {"t": 9500, "e": "note", "g": MELEE, "k": "thorim.ringconehold", "txt": "none"},
+        {"t": 10000, "e": "dmg", "s": THORIM, "d": MELEE_B, "sp": 62466, "a": 26000, "ok": 4000, "hp": 100.0},
+        {"t": 10000, "e": "death", "g": MELEE_B, "killer": THORIM, "x": 2128.0, "y": -258.0, "z": 419.6,
+         "blow": [THORIM, 26000], "rewind": [[10000, THORIM, 62466, 26000]]},
+    ]
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class RingCone(unittest.TestCase):
+    def test_a_walker_past_reach_dies_and_a_held_walk_stays_clear(self):
+        text = printed(thorim.show_ringcone, load(ring_cone_pull()))
+        self.assertIn("+4.0 s: ring hit 1, dead 1; held 1 (0 hit); Edge walking (thorim sif blizzard action), "
+                      "past reach, dead", text)
+        self.assertIn("all: ring hit 1 (blocked 0, walking 1, held 0, standing 0; past reach 1), dead 1; held walks "
+                      "1, 0 hit; before the first tank death hit 1, dead 1", text)
+
+    def test_without_the_hold_probe(self):
+        records = [rec for rec in ring_cone_pull() if rec.get("k") != "thorim.ringconehold"]
+        self.assertIn("dead 1; no thorim.ringconehold probe (a build before it)",
+                      printed(thorim.show_ringcone, load(records)))
 
 
 class Deaths(unittest.TestCase):
