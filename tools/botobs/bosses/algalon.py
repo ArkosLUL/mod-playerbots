@@ -3949,7 +3949,8 @@ def show_constellations(trace: Trace) -> None:
               " the cast, the swap tank's taunts off healers (algalon.offtaunt)")
         for row in before:
             casters = collections.Counter(caster for _, caster, _ in row["taunts"])
-            by = " (" + ", ".join(f"{trace.name(guid)} {n}" for guid, n in casters.most_common()) + ")" if casters else ""
+            by = (" (" + ", ".join(f"{trace.name(guid)} {n}" for guid, n in casters.most_common()) + ")"
+                  if casters else "")
             print(f"    Big Bang {row['n']} {clock(row['start'])}: {row['healer_ms'] / 1000:.1f} s, {row['at_cast']} at"
                   f" the cast, {len(row['taunts'])} taunt(s){by}")
     blocked = kite_blocked(trace)
@@ -5741,7 +5742,8 @@ SECTIONS = (
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
     ("constellations", "activations, victims, one stuck in the air, the handler's kite stages, what each kite ate,"
-                       " seconds the kite was blocked, parked stretches, removals", show_constellations),
+                       " healer time and the swap tank's taunts before each Big Bang, seconds the kite was blocked,"
+                       " parked stretches, removals", show_constellations),
     ("smash", "every Cosmic Smash wave: who stood near it, the dodge, distance at the impact", show_smash),
     ("tanks", "Phase Punch stacks, swaps, non-tank pickups, Quantum Strike", show_tanks),
     ("tankheal", "tank healers, each healer's share on the pair, Beacon, healing against damage before every tank"
