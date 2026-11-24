@@ -615,6 +615,14 @@ unlatches the ring the way the old 7.07 yd off-tank spot did. **That includes th
 waits**: keyed on its role, it kept the anchor and stood on the holder for 40-58% of the waiting time in
 nine 25-man pulls. It keeps the anchor only while no tank holds him, for the pickup.
 
+**Only while its class taunt is ready.** The anchor spends it on arena adds, and in 37 of 43 phase 2s it
+was still cooling at the landing: the pickup's `taunt spell` failed and the spot walked the anchor 26 yd
+off a loose Thorim. A tank took him at a median 1.7 s, 2.2-5.6 s in 16 of the 37 with the anchor 14-39 yd
+off him: 366k of his melee on non-tanks and 3 deaths (taunt ready: 6 pulls, all within 0.74 s, no such
+melee). So with its taunt cooling (`ClassTauntReady`) and him on a non-tank or nobody, the anchor gets no
+spot unless it carries Unbalancing Strike: it closes on him and builds threat, and the spot comes back
+with the taunt or once he hits it.
+
 **The tank he hits has arrived only within 1 yd exact** (`ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE`,
 `ThorimTankSpotNeedsMove`). The tanks' 1 yd `GetDistance` test nets the bot's combat reach, 1.5 yd times its
 model scale, so it passes at 2.5 yd exact, and at 2.95 under Heroism or Bloodlust (32182 / 2825, +30%
@@ -1048,6 +1056,12 @@ spot. Healers entered at 43-100% mana; in two pulls they ran dry by +100-120 s a
 and the third reached the ceiling at +190 s with Thorim at 15%. The traces read his `mhp` as **27.19 M**,
 not 25.101 M.
 
+**On those rosters the race is lost every time**: all 15 hard-mode phase 2s traced wiped. From +30 s the
+raid takes him **0.46-0.55 %/s**, and the first tank falls at **+82-196 s** with him at **26-76%**, to dry
+healers or to swings the stacks lift from a median 7-9k to 17-18k by +120-150 s, three landing in 1.8 s.
+The cleanest, all 19 DPS alive to +120 s and every strike swapped in 0.1-0.3 s, still had him at **35.2%**
+when the first tank fell at +134.9 s: a kill by then needs ~0.74 %/s, about 1.5x.
+
 **A human tank holding him in phase 2 is called**
 ([calls to human tanks](../README.md#calls-to-human-tanks)): once per hold turn from 6 Lightning Charge
 stacks (62279 on Thorim, ~95 s in, swings about doubled), and under 50% at any stack count, never while
@@ -1303,7 +1317,8 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
   slot, tank-to-ring hops and deaths; tank deaths; his cannot-reach spans and step moves, and stretches
-  of 3 s or more a tank held him without his health falling (old traces too); the opening (first trade,
+  of 3 s or more a tank held him without his health falling (old traces too); the pickup (when a tank
+  first held him, his melee on non-tanks before it); the opening (first trade,
   the taker's distance off the tank spot, his farthest from it over the next 8 s, health lost per second
   over the first 30 s); Thorim's distance off the tank spot and facing off its axis; trades (his move
   across one, strike to swap, his time on a non-tank); the waiting tank's offset, time on the holder,

@@ -2140,3 +2140,141 @@ anchor was inside 8 yd (+4.4 s); anchors walk in at ~4.4 yd/s (26.4 → 7.7 yd i
 last 3-5 s. The anchor is a bot on the floor and keeps the role while eligible, so the five balcony casters (corridor tanks, never anchor
 there) stay held; replayed on the 40 phase 2s the rule now holds those five and nothing else. One code path for every size, mode and raid.
 Next window: no `thorim taunt guard` veto row from the anchor tank. `pb-check` passes.
+
+## Round 20 (window 27: build 0687fa6a4 with round 19)
+
+**Data:** window 27, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261124-133001-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795527054,1795527062,1795527064}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head 0687fa6a4 --pulls 10` (its `thorim.py` lines), `postmortem.py --death`/`--bot`/`--probes`,
+round 7-19 scripts (`budget.py`, `sifclock.py`, `barrier.py`, `p2rank.py`, `mana.py`, `healcasts.py`, `strikes.py`, `stacks.py`, `chain.py`,
+`taunts.py`, `vetoes.py`, `leadtl.py`, `colpos.py`) and new ones in session scratchpad `thorim_r20/` (`hmall.py`, `opening.py`, `pickup.py`,
+`landing.py`, `botacts.py`, `tguard.py`, `guardveto.py`, `lastheals.py`, `tankbuffs.py`, `tankcds.py`, `stepchain.py`, `bridgecause.py`,
+`stepsim3.py`) over `snap`, `act`, `move`, `veto`, `cast`, `aura`, `dmg`, `heal` and `note` rows. For the race: all 15 hard-mode phase 2s on
+disk (windows 12-27); for the landing pickup: all 43 phase 2s.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795527054 | wipe 5:46, **hard mode** (62507 0:54.8, `thorim.sifjoined`; phase 2 3:16.0 against 3:24.8) | phase 2: Thorim melee on a non-tank 14, Chain Lightning 6, Frostbolt Volley 3, Lightning Charge 3, Blizzard 2, Thorim melee on a tank 2, Unbalancing Strike 2, Frost Nova 1 |
+| uld2 | 1795527062 | wipe 6:04, **hard mode** (62507 0:44.9, `thorim.sifjoined`; phase 2 3:03.0 against 3:14.9) | phase 2: Thorim melee on a non-tank 17, Lightning Charge 6, Thorim melee on a tank 4, Frostbolt Volley 2, Chain Lightning 1, Unbalancing Strike 1 |
+| uld3 | 1795527064 | kill 5:41, normal (62565 3:20.0, phase 2 3:27.1) | none |
+
+**Round 19 verdict (a class taunt from past 8 yd of the tank spot held while he is on a non-tank or nobody, anchor exempt): held, and
+nothing tried it.** No class taunt on Thorim from a tank past 8 yd in any pull (`taunts.py`; past 8 yd only the swap action from 8.3-8.9 yd,
+snapshot lag on a walking taker, and uld3's pickup Hand of Reckoning from 20.6 yd). `opening`: first trade +15.5 / +12.6 / +12.5 s, Thorim no
+farther than 4.1 / 8.1 / 8.2 yd off the tank spot over the next 8 s (w26 uld1 24.8). All 34 `thorim taunt guard` veto rows came from the
+older branch (another tank holds him, or the swap in the same snapshot, `guardveto.py`); none from the new one and none from a corridor tank:
+no flick onto a non-tank happened during the jump. Thorim on a non-tank with a tank up 4.2 / 2.1 / 1.0 s, nearly all of it the landing (below).
+Health lost over the first 30 s 0.31 / 0.37 %/s hard mode (w26 0.26 / 0.37), 0.55 normal. Rounds 15-18: `thorim.unreach` 0 spans; corridor
+flee vetoes 17 / 14 / 15, one accepted flee by an arena bot; no `avoid aoe` by ring melee in phase 2; no ring melee Blizzard death (6.3 / 20.7
+bot-s in a zone, 5 / 14 ticks).
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 169.9 s in all three):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w27 uld1 | 0.06 | 12.9 | 39.4 | 11.3 | 19.8 | 3.7 | 51.8 | 22.2 | 161.1 | made by 8.9 |
+| w27 uld2 | 0.09 | 14.4 | 33.5 | 17.3 | 21.5 | 3.2 | 45.5 | 22.6 | 158.0 | made by 11.9 |
+| w27 uld3 | 0.14 | 18.4 | 41.2 | 10.0 | 32.3 | 7.5 | 47.0 | 20.6 | 177.0 | +7.2 |
+| w26 uld1 / 2 / 3 | 0.03-0.49 | 14.2-15.6 | 38.7 / 42.3 / 42.8 | 8.0 / 13.7 / 11.5 | 20.5 / 32.7 / 21.4 | 3.2-6.6 | 47.2 / 48.3 / 43.5 | 21.9-24.5 | 157.4 / 181.1 / 160.0 | made by 12.4 / +11.1 / made by 9.5 |
+
+**Why uld3 missed hard mode by 7.2 s:** Runic Barrier at +10.3 s with the Colossus at 60% (`barrier.py`; uld2's at +21.3 s at 1%, uld1 none),
+so he took 32.3 s against 19.8 / 21.5 (+11-12 s); he was finished at (2234.1, −372.4), 24 yd north of his spawn, so the ramp took 7.5 s against
+3.2-3.7 (+4 s); and the bear leader Uldzab, in caster form after the lever (0:30.07), cast Rejuvenation and Wild Growth on the party and made his
+first lead move at 0:33.90 (walk to trash +4-5.5 s). The barrier alone decided it, the luck rounds 15-19 named; without it ~4-5 s early.
+
+**Why both hard-mode phase 2s were lost: the race, again** (`p2rank.py`, `strikes.py`, `stacks.py`, `mana.py`, `lastheals.py`):
+
+| Pull | first tank death | Thorim then | healer mana at P2 / then (mean) | non-tank deaths before it | Thorim %/s 0-30 / 30-60 / 60-90 / 90-120 / 120-150 s | DPS alive +0 / +60 / +120 |
+|---|---|---|---|---|---|---|
+| uld1 | +107.3 s, blood DK Uldxam, Unbalancing Strike 25.3k at 55% | 54.9% | 58 / 20 (a healer dead) | 5: Thorim's landing swing 1, Lightning Charge 1, Sif Frostbolts + Volley 1, Blizzard 2 | 0.30 / 0.47 / 0.45 / 0.41 / 0.21 | 19 / 17 / 11 |
+| uld2 | +134.9 s, bear Uldyab, Thorim melee | 35.2% | 53 / 22 | 1: Chain Lightning 3 s before | 0.37 / 0.57 / 0.46 / 0.50 / 0.51 | 19 / 19 / 19 |
+
+- **uld2 is the cleanest hard-mode phase 2 on record and still lost by 35%.** All 19 DPS and 4 healers alive to +131 s, every Unbalancing
+  Strike swapped in 0.1-0.3 s with the struck tank on the tank spot and the taker on the off-tank spot, Thorim 0.46-0.57 %/s from +30 s. The bear
+  took him at the +128.2 s swap and died at +134.9 s: Thorim's swings 9.7k, 9.5k, then 19.3k, 17.4k, 16.9k in 1.8 s from 76%, 22k healed on it
+  in those 6.7 s while the healers topped up the struck warrior (61-89%). Swings on the tanks grew with the Lightning Charge stacks from a median
+  7.1-8.9k (+0-30 s) to 17.4-17.7k (+120-150 s), max 37.6-39.3k. Tank intake to the first death 0.76 / 1.19 M: Thorim melee 46-47%, Blizzard
+  26-27%, Unbalancing Strike 12-14%, Volley 7-9%. Healers at 20-22% mean mana then, one priest at 1-5% (w25 0-8%, w26 27-37%).
+- **Every hard-mode phase 2 on disk (15, windows 12-27) wiped** (`hmall.py`): from +30 s the raid takes him 0.46-0.55 %/s (the same output
+  that kills the normal-mode Thorim, whose health 62565 cuts by 30%, at 0.62-0.86 %/s), and the first tank falls at +82-196 s with him at
+  26-76%. To kill him by +135 s the raid needs 0.74 %/s from the landing, ~1.5x today's damage; at today's damage the tanks would have to live
+  ~200-215 s. No round since 6 moved either number. **Not a bug**: the hard-mode race at ilvl 226 (rounds 6, 9, 14-16, 18, 19; the user's Q1,
+  stop rule waived). Plan options below.
+- Defensives were spent mid-fight, not at the late holds: uld2's warrior Shield Wall and Last Stand at +84 s, the bear's Survival Instincts at
+  +59 s, Pain Suppression and Hand of Sacrifice only at +156 s after the bear died; uld1's DK Icebound Fortitude +63 s, Vampiric Blood +93 s
+  (`tankcds.py`). Bot tanks have only their class triggers here, by the user's choice (boss doc).
+
+**Phase 2 timelines.**
+- uld1 (from 3:15.97): the anchor Uldxaa reaches Thorim at the landing (2.7 yd) with Hand of Reckoning on cooldown (cast on an arena add
+  1.9 s before) and Righteous Defense too (4.7 s before); its pickup `Attack`s, its taunt fails, and the positioning row walks it 26 yd to the
+  tank spot. Thorim takes the mage Uldxag (dead at +2.1 s, 21.8k at 95%), the shadow priest and the ret paladin Uldxan (46%) until Righteous
+  Defense from the tank spot at +4.0 s. +16.0 s hunter Uldxaj (a Dark Rune Champion's melee and Lightning Charge, walking to its camp spot);
+  +24.3 s holy paladin Uldxab (two Sif Frostbolts and a Volley, 31k in 4 s), Rebirth at once; +44.7 / +44.8 s she and fire mage Uldxaq on a
+  shelter walk through two Blizzard zones with a Volley. Swaps every ~20 s. +107.3 s Uldxam (Thorim 54.9%), its soulstone +117.1 s to Blizzard on
+  the off-tank spot; +116.6 s a Chain Lightning ran 8 hits from slot 0, stepped out of a Blizzard to (2116, −264), 7.1 yd into slot 1, then on
+  into slot 2 walking back from its own step: 6 melee dead. Uldxaa +132.4 s and +133.6 s (soulstone); the raid by 5:46, Thorim 44.3%.
+- uld2 (from 3:03.04): a tank on him at +1.7 s (Uldyaa's Taunt cast 4.3 s before the landing; it took him by threat while walking off);
+  first swap +12.6 s from 8.8 yd; no death until +131.6 s; the bear's death above at +134.9 s, its soulstone +136.4 s; Uldyaa holds to +148.3 s
+  and +156.6 s (soulstone); one Lightning Charge kills three healers and a ranged at +166.0 s; the raid by 6:04, Thorim 19.6%.
+- uld3 (normal, from 3:27.12): a tank on him at +1.3 s, first swap +12.5 s from 8.3 yd, no death, kill at 0.75 %/s.
+
+**Stop rules:** not polished (no hard-mode kill; uld3's kill is normal mode). Not stuck by the letter: rounds 18-19's opening drag held, and
+the bug picked below is new. In substance the race has topped the ranking since window 21 and no fix moved it; the user waived the stop rule
+for it (round 7, Q1), so mechanics polish goes on and the options below are the user's to take.
+
+**Failure ranking** (64 deaths, all in the two hard-mode phase 2s):
+1. **The hard-mode race**, 2 wipes, 58 deaths after the first tank death. Not a bug.
+2. **Chain Lightning through a Blizzard-stepped slot**, 6 (uld1 +116.6 s, after the first tank death). Measured below, not built.
+3. **Thorim loose at the landing**, 1 death (uld1 +2.1 s) and a melee to 46%. Bug, fixed below; the one recurring leak (16 of 37 landings).
+4. Blizzard on a camp shelter walk 2 (uld1; w24 uld1 2 too), Sif Frostbolts on a healer 1, a Champion and Lightning Charge on a walking ranged 1,
+   a Lightning Charge through three healers and a ranged after both tanks fell 4.
+
+**Bug picked: the anchor tank walks off a loose Thorim when its taunt is on cooldown.**
+- Trace (`pickup.py`, all 43 phase 2s): the anchor spends its class taunt on arena adds, and in 37 the taunt was still cooling at the landing.
+  Then the pickup (`ThorimTankPickupAction`) `Attack`s, its `taunt spell` fails, and `TryGetThorimPhase2Spot` hands the anchor the tank spot,
+  26 yd from where he lands: a tank on him at a median 1.7 s, 2.2-5.6 s in 16 of the 37 with the anchor 14-39 yd off him, 366k of his melee on
+  non-tanks and 3 deaths (w18 uld2 a warlock, w25 uld2 a hunter, w27 uld1 a mage). With the taunt ready (6 pulls): all within 0.74 s, no such
+  melee. The fast ones with the taunt down are mostly the anchor taking him by threat before it had walked far.
+- Code: `TryGetThorimPhase2Spot` (`UldEncounter_Thorim.cpp`) gives the anchor (`MainTank` role) the tank spot whenever no tank holds him; the
+  positioning row (60) runs as soon as the pickup (62) fails, and Thorim's melee goes to whoever has threat while the anchor deals none.
+- **Classification: bug.** The pickup exists so the anchor takes him at the landing; walking away from him with no taunt to bring him undoes it.
+
+**Fix** (Thorim files only, no size, mode or player branch): in `TryGetThorimPhase2Spot`, the anchor gets no spot while Thorim is on a non-tank
+or nobody, its class taunt is cooling (`ClassTauntReady`, shared, unchanged) and it carries no Unbalancing Strike. The positioning row and the
+tank anchor guard then stand down for it, so `reach melee` closes on him and its rotation builds threat; the spot comes back with the taunt (the
+pickup taunts first, at 62) or once he hits it, and the holder branch walks him in. A struck anchor keeps the old walk, so it never pulls him by
+threat under the strike. A human holder counts as a tank as before; no human is moved. Reader: `thorim.py --phase2` prints a `pickup` line (when a
+tank first held him, his melee on non-tanks before it); w27: +4.0 s 36k / +1.7 s 0k / +1.3 s 0k. Tests in `test_thorim.py`.
+
+`pb-check` passes (syntax, pblint, codestyle, botobs tests).
+
+**Next window should show:**
+- `pickup`: a tank on him within ~1.5 s of the landing in every pull, also where the anchor's taunt was cooling (today 2.2-5.6 s in 16 of 37);
+  his melee on non-tanks before it near 0 (0-52k a pull); no anchor positioning move to (2110.75, −252.65) while he is on a non-tank and its taunt
+  is cooling, `reach melee` toward him instead.
+- Watch: Thorim taken by threat where he lands and walked in after, so `opening` (his distance off the tank spot) and the ranged opening wait
+  (ends by 12.5 s once he is within 8 yd of the spot) may run a few seconds later; mid-phase flicks onto a non-tank with the anchor's taunt
+  cooling now draw the anchor off its spot toward him (waiting-tank `reach melee` moves).
+- Rounds 15-19's checks again (`thorim.unreach`, flee and Blizzard vetoes, `--blizzard`, class taunts past 8 yd).
+
+**Measured, not built: the Blizzard step bridging ring slots.** uld1's 6-death chain ran from slot 0, stepped out of a Blizzard to a point
+7.1 yd from slot 1's bodies. `ThorimRingBlizzardStep`'s first pass keeps 8 yd off both tank spots but not off the other slots. Two slots' bodies
+within 8 yd: 8.6-45.0% of settled hard-mode snapshots to the first tank death in the six pulls since round 17, 0-22.0% of them with a stepped
+slot (w27 22.0 / 17.7%; `bridgecause.py`); 1 of the 5 slot-crossing casts in those pulls came through a stepped slot. Replayed (`stepsim3.py`, one
+body per slot), a first pass also 8 yd off the other slots' bodies cuts stepped bridges from 62-143 to 0-21 bot-s a pull, but costs ring melee
+0.8-5.6 points of time in melee reach (80.6-93.1% → 79.8-87.5%): about as much damage as one such chain a window costs. Not worth building on this
+evidence; reread if stepped-slot chains recur.
+
+**Seen, not picked:** a bear gauntlet leader healing in caster form after the lever (uld3, 3.8 s); healers on the struck tank while the holder
+dies at the late stacks (uld2 +128-135 s; class healing code, shared); the camp's shelter walk through Blizzard (w24 uld1, w27 uld1: 2 deaths
+each); Divine Hymn on the start pack (rounds 18-19).
+
+**Questions for the user** (plan options for the hard-mode race, none built; my estimates, not measured):
+1. **How should Thorim finish at ilvl 226?** (a) Close him on mechanics: polished once a window's hard-mode phase 2s lose nobody to a mechanic
+   before the first tank death and its normal-mode pulls are kills with at most 3 deaths, then the 10-man check (as Hodir closed without the
+   cache). (b) Pull Thorim on better-geared rosters (near 239-245) to chase the kill: it needs ~1.5x today's damage at today's tank survival, a
+   harness gear decision, not strategy. (c) A 5th healer and/or a timed tank cooldown chain at the late holds (externals and long cooldowns from
+   the 6th stack): perhaps 20-40 s more tank life, worth 10-20% of Thorim, short of the 35% gap alone; the cooldown chain reverses your earlier
+   choice of class triggers only. (d) Keep polishing mechanics with no end condition (today). Recommended: (a).
+
+**Shared code touched:** none (Thorim files and the Thorim reader; `ClassTauntReady` is called, not changed).

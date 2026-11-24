@@ -122,6 +122,21 @@ class Phase2(unittest.TestCase):
         self.assertIn("1 tank-to-tank, Thorim moved p50 0.0 p90 0.0 yd across one; strike to swap p50 1.0 max 1.0 s, "
                       "0 unanswered; on a non-tank with a tank up 0.0 s", self.text)
 
+    def test_pickup_at_the_landing(self):
+        self.assertIn("pickup            a tank on him at +0.0 s; before it Thorim's melee on non-tanks 0k from 0 swings",
+                      self.text)
+
+    def test_pickup_after_a_loose_landing(self):
+        records = pull()
+        for rec in records:
+            if rec.get("e") == "snap" and rec["t"] <= 3000:
+                rec["u"][0][7] = RANGED
+        records.append({"t": 2500, "e": "dmg", "s": THORIM, "d": RANGED, "a": 21000, "ok": 0, "hp": 5.0})
+        records.sort(key=lambda rec: rec.get("t", -1))
+        text = printed(thorim.show_phase2, load(records))
+        self.assertIn("pickup            a tank on him at +3.0 s; before it Thorim's melee on non-tanks 21k from 1 swing",
+                      text)
+
     def test_opening_trade_from_the_off_tank_spot(self):
         self.assertIn("opening           first trade +19.0 s, the taker 3.5 yd off the tank spot, Thorim up to 6.1 yd "
                       "off it in the next 8 s; 1.00 %/s over the first 30 s", self.text)
