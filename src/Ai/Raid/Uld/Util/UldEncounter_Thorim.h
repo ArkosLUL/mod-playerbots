@@ -71,6 +71,11 @@ inline constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 70.0f;
 inline constexpr float ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS = 15.0f;
 inline constexpr float ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE = 32.0f;
 
+inline constexpr float ULDUAR_THORIM_BLIZZARD_SPEED_FACTOR = 0.35f;
+inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_RADIUS = 20.0f;
+inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_MARGIN = 0.1309f;
+inline constexpr float ULDUAR_THORIM_CAMP_CONE_STEP_MIN_BOSS_RANGE = 12.0f;
+
 inline constexpr float ULDUAR_THORIM_SWEEP_STEP = 2.0f;
 inline constexpr float ULDUAR_THORIM_SWEEP_ANGLE_STEP = static_cast<float>(M_PI) / 8.0f;
 
@@ -259,6 +264,9 @@ struct ThorimEncounterState
         ObjectGuid orb;
         uint8 orbIndex = 0;
         bool sheltered = false;
+        bool stepSought = false;
+        bool stepped = false;
+        Position step;
     };
 
     std::unordered_map<ObjectGuid, RangedShelter> rangedShelters;

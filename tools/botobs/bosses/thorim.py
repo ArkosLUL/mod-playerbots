@@ -14,6 +14,9 @@
     thorim.py <file> --chains    each Chain Lightning hop by hop: which groups (tank, camp, a ring slot, a
                                  slot stepped out of Blizzard or walking back from it) it crossed between
                                  and how far, who died after which crossing
+    thorim.py <file> --shelters  each Lightning Charge against the camp: who walked to a shelter row or a
+                                 cone step, how far, who got there, who the cone hit (walking or not) and
+                                 which of Sif's slows were on them
 """
 from __future__ import annotations
 
@@ -80,6 +83,13 @@ LUST_MS = 40000
 CHAIN_DEATH_MS = 1500
 CHAIN_POSITION_MS = 1000
 CHAIN_STEP_BACK_MS = 3000
+SLOWS = {62580: "Volley", 62604: "Volley", 62583: "Frostbolt", 62601: "Frostbolt", 62576: "Blizzard",
+         62602: "Blizzard", 62597: "Frost Nova", 62605: "Frost Nova"}
+LIT_GAP_MS = 3000
+CONE_LEAD_MS = (3000, 7000)
+SHELTER_LEAD_MS = 200
+SHELTER_ARRIVED = 2.0
+SLOW_LOOK_MS = 4000
 
 
 def mine(trace: Trace) -> bool:
@@ -936,6 +946,108 @@ def show_chains(trace: Trace) -> None:
           f"{counted(crossings)}; through a stepped slot: {counted(stepped_crossings)}")
 
 
+def cone_casts(trace: Trace, start: int) -> list[int]:
+    casts: list[int] = []
+    for rec in trace.of("dmg"):
+        if rec.get("sp") == LIGHTNING_CHARGE and rec["t"] >= start and (not casts or rec["t"] - casts[-1] > CAST_GAP_MS):
+            casts.append(rec["t"])
+    return casts
+
+
+def lit_orbs(trace: Trace, start: int) -> list[int]:
+    lit: list[int] = []
+    for note in notes(trace, "thorim.lightningorb"):
+        if note["t"] >= start and str(note.get("txt")) not in ("", "0") and (not lit or note["t"] - lit[-1] > LIT_GAP_MS):
+            lit.append(note["t"])
+    return lit
+
+
+class ShelterWalks:
+    def __init__(self, trace: Trace, start: int):
+        self.trace = trace
+        self.start = start
+        self.camp = {note.get("g") for note in notes(trace, "thorim.rangedslot")}
+        self.shelters = [note for note in notes(trace, "thorim.shelter") if " orb " in str(note.get("txt"))]
+        self.moves = [rec for rec in trace.of("move") if rec.get("by") == RING_MOVER and "x" in rec]
+        self.hits = [rec for rec in trace.of("dmg") if rec.get("sp") == LIGHTNING_CHARGE]
+        self.slows = [rec for rec in trace.of("aura") if rec.get("sp") in SLOWS and not rec.get("r")]
+        self.deaths = [death for death in combat_deaths(trace) if blow_spell(death) == LIGHTNING_CHARGE]
+
+    def read(self, lit: int, cast: int) -> dict:
+        walkers: dict = {}
+        for note in self.shelters:
+            if lit - SHELTER_LEAD_MS <= note["t"] <= cast:
+                walker = walkers.setdefault(note.get("g"), {"step": False})
+                walker["step"] |= str(note.get("txt")).endswith(" step")
+        hit = {rec["d"] for rec in self.hits if abs(rec["t"] - cast) <= CAST_GAP_MS}
+        dead = {death["g"] for death in self.deaths if abs(death["t"] - cast) <= CHAIN_DEATH_MS}
+        for guid, walker in walkers.items():
+            heading = [rec for rec in self.moves if rec.get("g") == guid and lit - SHELTER_LEAD_MS <= rec["t"] <= cast]
+            begin = at(self.trace, guid, lit, NEAREST, CHAIN_POSITION_MS)
+            end = at(self.trace, guid, cast, NEAREST, CHAIN_POSITION_MS)
+            target = (heading[-1]["x"], heading[-1]["y"]) if heading else None
+            walker["walk"] = dist2(begin, target) if begin and target else None
+            walker["left"] = dist2(end, target) if end and target else None
+            walker["hit"] = guid in hit
+            walker["dead"] = guid in dead
+            walker["slowed"] = sorted({SLOWS[rec["sp"]] for rec in self.slows
+                                       if rec.get("d") == guid and lit - SLOW_LOOK_MS <= rec["t"] <= cast})
+        return {"walkers": walkers, "off_walk": sorted(guid for guid in hit if guid in self.camp and guid not in walkers),
+                "dead_off_walk": sum(1 for guid in dead if guid in self.camp and guid not in walkers)}
+
+
+def shelter_walk_text(trace: Trace, guid, walker: dict) -> str:
+    there = walker["left"] is not None and walker["left"] <= SHELTER_ARRIVED
+    where = "there" if there else f"short {yd(walker['left'])}"
+    return (f"{trace.name(guid)} {'step' if walker['step'] else 'row'} {yd(walker['walk'])} yd {where}"
+            + (f" slowed {', '.join(walker['slowed'])}" if walker["slowed"] else "")
+            + (" dead" if walker["dead"] else ""))
+
+
+def show_shelters(trace: Trace) -> None:
+    print("CAMP SHELTERS")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    casts = cone_casts(trace, start)
+    lit = lit_orbs(trace, start)
+    if not lit:
+        print("  no thorim.lightningorb probe or no lit orb in phase 2")
+        return
+    walks = ShelterWalks(trace, start)
+    first_tank = next((death["t"] for death in combat_deaths(trace)
+                       if death["t"] >= start and death["g"] in tanks_of(trace)), None)
+    total = collections.Counter()
+    for when in lit:
+        cast = next((t for t in casts if CONE_LEAD_MS[0] <= t - when <= CONE_LEAD_MS[1]), None)
+        if cast is None:
+            continue
+        read = walks.read(when, cast)
+        walkers = read["walkers"]
+        there = sum(1 for walker in walkers.values()
+                    if walker["left"] is not None and walker["left"] <= SHELTER_ARRIVED)
+        hit = [guid for guid, walker in walkers.items() if walker["hit"]]
+        early = first_tank is None or cast < first_tank
+        counts = {"walks": len(walkers), "steps": sum(walker["step"] for walker in walkers.values()), "there": there,
+                  "hit": len(hit), "dead": sum(walker["dead"] for walker in walkers.values()),
+                  "slowed hit": sum(1 for guid in hit if walkers[guid]["slowed"]),
+                  "off a walk": len(read["off_walk"]), "dead off a walk": read["dead_off_walk"]}
+        for key, n in counts.items():
+            total[key] += n
+            if early:
+                total["early " + key] += n
+        print(f"  +{(when - start) / 1000.0:.1f} s: walks {counts['walks']} (steps {counts['steps']}), there "
+              f"{there}, hit {counts['hit']}, dead {counts['dead']}; camp hit off a walk {counts['off a walk']}"
+              + "".join(f"; {shelter_walk_text(trace, guid, walkers[guid])}" for guid in hit))
+    print(f"  all: walks {total['walks']} (steps {total['steps']}), there {total['there']}, hit {total['hit']} "
+          f"({total['slowed hit']} slowed), dead {total['dead']}; camp hit off a walk {total['off a walk']}, dead "
+          f"{total['dead off a walk']}; before the first tank death walks {total['early walks']} (steps "
+          f"{total['early steps']}), hit {total['early hit']}, dead {total['early dead']}")
+
+
 SECTIONS = (
     ("deaths", "deaths by mechanic, phase 1 and phase 2 apart", show_deaths),
     ("phase2", "the phase 2 measures the tank spots are judged on", show_phase2),
@@ -943,6 +1055,8 @@ SECTIONS = (
      show_blizzard),
     ("chains", "each Chain Lightning hop by hop: the groups it crossed, how far, who died after which crossing",
      show_chains),
+    ("shelters", "each Lightning Charge against the camp: who walked to a shelter row or a cone step, who got "
+     "there, who the cone hit and what slowed them", show_shelters),
 )
 SUMMARY = ("deaths", "phase2")
 

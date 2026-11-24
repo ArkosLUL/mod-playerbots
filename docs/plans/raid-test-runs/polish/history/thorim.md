@@ -2368,3 +2368,73 @@ ghouls, a warlock pet and a Shadowfiend), so pets can still bridge what the step
 **Questions for the user:** none new; question 1 in State stands, recommended (a).
 
 **Shared code touched:** none (Thorim files and the Thorim reader).
+
+## Round 22 (window 31: build 9f0c9a4c7 with round 21)
+
+**Data:** `window31-thorim.md` (session scratchpad), one valid pull per pool; traces
+`603_{7,9,10,11,13,12}_thorim_{1795541779,1795542231,1795542272,1795542293,1795542387,1795542378}` (uld1, uld2, uld4,
+uld3, uld5, uld6), read with `thorim.py --blizzard/--chains` and session scratchpad `thorim_r22/` scripts (a timeline,
+a bunny-path check and a step replay over the fourteen hard-mode pulls since round 17, w25-w31).
+
+| Pool | Out | Deaths by mechanic |
+|---|---|---|
+| uld1 (A) | wipe, hard (P2 3:25.8), 44.2% | CL 4 (+72 s, 8 camp hits), Volley 1, Blizzard 3 (slot 2 at +78-81 s), then tanks +112 s, Thorim melee 17, Volley 4, CL 1 |
+| uld4 (A) | wipe, hard (P2 3:06.9), 43.3% | phase 1 Honor Guard 1; Blizzard 2 (camp at +44 s), Lightning Charge 1, Volley 1, Frost Nova 1, then tanks +119 s, Thorim melee 17, CL 5 |
+| uld2 (B) | kill, normal | phase 1 Rune Giant melee 1; CL 1 |
+| uld5 (B) | wipe, hard (P2 3:16.0), 55.5% | CL 1 (opening +12 s), tank +79.7 s, Blizzard 3 (slot 2, +80 s), Thorim melee 23 |
+| uld3 (C) | kill, normal | phase 1 Impale 1 |
+| uld6 (C) | wipe, hard (P2 3:01.2), 37.1% | Blizzard 1 (healer +82 s), Lightning Charge 1, tanks +106 s, Thorim melee 15, Lightning Charge 6, Volley 3 |
+
+**Hard mode in the kills: none.** uld2 and uld3 read normal mode; the four hard-mode pulls wiped.
+
+**Stop rules:** not polished (no hard-mode kill in A, B or C). Not stuck: ring Blizzard deaths were picked in R17 and
+now R22 (two rounds), R21's chain crossings are a different failure. Question 1 stays open; no stop rule applied.
+
+**Round 21 verdict (step points clear of the camp and the other slots): held in A, B and C.** `--chains` through a
+stepped slot: 0 crossings and 0 deaths in uld1, uld4, uld5, uld6 (w29 deaths 2 / 0 / 2 / 2; camp into one 0, w29
+1 / 0 / 1 / 0); Chain Lightning deaths 21 → 12. Steps per pull 37 / 55 / 40 / 44 (w29 17-56). Its "no ring Blizzard
+death before the first tank death" failed in uld1 (3): not its clearance but the step running ahead of the bunny,
+which predates it (below).
+
+**Failure picked: ring melee stepping out of Blizzard onto the bunny's path ahead.** Blizzard is the top mechanic at
+or before the first tank death (9 against Chain Lightning's 5), and its ring deaths came back (0-1 a window since
+R17, 6 in w31).
+- Trace: uld1 +74.8 s, the bunny at (2109.2, −246.6) heading for (2117.9, −238.6); slot 2's three melee on
+  (2117.2, −246.0) stepped to (2124.3, −238.9), 3.5 yd off its next leg; it caught them at +77.6 s and each later
+  step went further along its way ((2131.4, −236.1), (2135.3, −234.3)): all three died +78.7-81.7 s, 2.9-5.8 s in
+  zones. uld5 +74.8 s the same slot the same way (steps (2118.6, −245.0) → (2129.7, −233.8)), three dead at +80.0 s;
+  in its first Blizzard (+33.8 s) Uldvay stood 10.1 s in zones running with it to 20.7 yd off Thorim.
+- `--blizzard` (new counts): steps onto the bunny's path ahead 26/37, 37/55, 31/40, 18/44 in w31 (w29 29/46, 33/49,
+  11/17, 35/56), under a zone within 8 s 16 / 18 / 25 / 11; ring melee in zones 46.9 / 11.1 / 42.0 / 21.3 bot-s
+  (w29 2.7-35.2), longest stays 8.8 and 10.1 s.
+- Code: `ThorimRingBlizzardStep` (`UldEncounter_Thorim.cpp:3171`) cleared the live zones and the bunny where it
+  stands (`ThorimBlizzardSpots`), nothing of where it goes; the bunny walks the core's fixed path
+  (`boss_thorim.cpp:968`) at a run's pace, so the nearest clear point is usually ahead of it.
+- **Classification: bug.** The strategy intends the step to leave the Blizzard; its points walked into the next zones.
+
+**Fix** (`UldEncounter_Thorim.cpp/.h`, Thorim only, no size, mode or player branch): the scan keeps the bunnies
+apart (`blizzardBunnies`); `ThorimBlizzardPathAhead` builds the bunny's walk from where it stands to the end of
+`ULDUAR_THORIM_SIF_BLIZZARD_PATH` (the core's spawn and eight waypoints). The step's four passes run first within 20 yd
+and 11 yd clear of that walk, then as before within 15 yd, then anywhere within 20. With no bunny (normal mode) the
+first round is skipped. Replay of 641 steps over fourteen hard-mode pulls (no navmesh, floor cut at x 2100 and
+y −288): points a zone covered within 8 s 305 → 32, every step found a point, walk p50 6 → 12 yd, p90 14 → 20,
+points in a camp body's jump 35 → 120 (173 at 15 yd), in another slot's 39 → 48. Reader: `--blizzard` counts step
+points onto the path ahead and under a zone within 8 s, tested in `test_thorim.py`; boss doc: the bunny's walk, the
+pass order, the evidence.
+
+`pb-check` passes (compile, pblint, codestyle, botobs tests).
+
+**Next window should show** (hard-mode pulls, `--blizzard`):
+- steps onto the bunny's path ahead near 0 (w31 26 / 37 / 31 / 18), under a zone within 8 s near 0 (16 / 18 / 25 /
+  11); ring melee in zones well under w31's 11-47 bot-s, longest stay ≤ ~3 s; no ring Blizzard death before the first
+  tank death.
+- Walk back p50 within ~1 s of w31's 0.3-2.6 s; `--chains` through a stepped slot still 0, camp into one at most 1 a
+  pull; melee on Thorim to +100 s still ~100%.
+
+**Seen, not picked:** camp bots walking to a cone shelter through the trail (uld4 2, rank 2); a stacked camp seeding
+8 hits (uld1 +72 s, rank 3); the Colossus' Smash (rank 7); the waiting tank's Blizzard 22-49 ticks a pull (user: it
+does not step).
+
+**Questions for the user:** none new; question 1 in State stands, recommended (a).
+
+**Shared code touched:** none (Thorim files and the Thorim reader).

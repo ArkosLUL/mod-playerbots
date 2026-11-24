@@ -809,9 +809,69 @@ bool InLightningChargeConeRanged(float bearing, float coneBearing)
     return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
 }
 
-bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, Position& out, uint8& orbIndex)
+static float ThorimCampConeReach(Player* bot)
+{
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state || !state->lightningOrbLitMs)
+        return 0.0f;
+
+    uint32 const warningMs = ULDUAR_THORIM_LIGHTNING_CHARGE_WARNING_MS - ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS;
+    uint32 const elapsedMs = GetMSTimeDiffToNow(state->lightningOrbLitMs);
+    if (elapsedMs >= warningMs)
+        return 0.0f;
+
+    return bot->GetSpeed(MOVE_RUN) * static_cast<float>(warningMs - elapsedMs) / 1000.0f;
+}
+
+static bool ThorimCampShelterInTime(Player* bot, Position const& shelter)
+{
+    float reach = ThorimCampConeReach(bot);
+    if (!bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_10) && !bot->HasAura(SPELL_SIF_BLIZZARD_ZONE_25) &&
+        ThorimWalkUnderBlizzard(bot, *bot, shelter))
+        reach *= ULDUAR_THORIM_BLIZZARD_SPEED_FACTOR;
+
+    return bot->GetExactDist2d(&shelter) <= reach;
+}
+
+static bool ThorimCampConeStep(Player* bot, Unit* boss, Unit* orb, Position const& shelter, Position& out)
+{
+    float const reach = std::min(ULDUAR_THORIM_CAMP_CONE_STEP_RADIUS, ThorimCampConeReach(bot));
+    if (reach < ULDUAR_THORIM_SWEEP_STEP)
+        return false;
+
+    std::vector<HazardCircle> circles;
+    circles.emplace_back(boss->GetPosition(), ULDUAR_THORIM_CAMP_CONE_STEP_MIN_BOSS_RANGE);
+    for (Position const& zone : ThorimBlizzardSpots(bot))
+        circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
+
+    float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_CAMP_CONE_STEP_MARGIN;
+    bool const inZone = ThorimSpotUnderBlizzard(bot, *bot);
+    auto const accept = [bot, boss, coneBearing, halfWidth, inZone](float x, float y)
+    {
+        if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
+            y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y ||
+            boss->GetExactDist2d(x, y) > ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE ||
+            AbsAngleDelta(BearingFromBoss(boss, x, y), coneBearing) <= halfWidth)
+            return false;
+
+        return inZone || !ThorimWalkUnderBlizzard(bot, *bot, Position(x, y, bot->GetPositionZ()));
+    };
+
+    Position const spot = FindNearestPositionClearOfHazards(bot, circles, reach, ULDUAR_THORIM_SWEEP_STEP,
+                                                            ULDUAR_THORIM_SWEEP_ANGLE_STEP, &shelter, accept);
+    if (spot == Position())
+        return false;
+
+    out = spot;
+    return true;
+}
+
+bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, Position& out, uint8& orbIndex,
+                      bool& stepped)
 {
     out = RangedSpot(slot);
+    stepped = false;
 
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
 
@@ -827,6 +887,8 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
     {
         held.orb = orb->GetGUID();
         held.sheltered = false;
+        held.stepSought = false;
+        held.stepped = false;
 
         if (!ThorimThunderOrbIndex(orb, held.orbIndex))
             held.orb.Clear();
@@ -851,8 +913,17 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
         return false;
     }
 
-    out = shelter;
+    if (!held.stepSought && !bot->HasUnitState(UNIT_STATE_ROOT) &&
+        bot->GetExactDist2d(&shelter) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE && ThorimCampSpotInLitCone(botAI, *bot) &&
+        !ThorimCampShelterInTime(bot, shelter))
+    {
+        held.stepSought = true;
+        held.stepped = ThorimCampConeStep(bot, boss, orb, shelter, held.step);
+    }
+
+    out = held.stepped ? held.step : shelter;
     orbIndex = held.orbIndex;
+    stepped = held.stepped;
     return true;
 }
 
@@ -2827,11 +2898,13 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         }
 
         uint8 orbIndex = 0;
-        bool const sheltered = ThorimRangedSpot(botAI, bot, boss, slot, position, orbIndex);
+        bool stepped = false;
+        bool const sheltered = ThorimRangedSpot(botAI, bot, boss, slot, position, orbIndex, stepped);
 
         RaidObs::NoteDerived(bot, "thorim.shelter",
                              "slot " + std::to_string(uint32(slot)) +
-                                 (sheltered ? " orb " + std::to_string(uint32(orbIndex)) : " home"));
+                                 (sheltered ? " orb " + std::to_string(uint32(orbIndex)) + (stepped ? " step" : "")
+                                            : " home"));
         return true;
     }
 
