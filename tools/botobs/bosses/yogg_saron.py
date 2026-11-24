@@ -768,6 +768,26 @@ def station_catches(spots: list[tuple[float, float]], station: tuple[float, floa
     return sum(1 for spot in spots if math.dist(spot, station) < reach)
 
 
+def inside_dodge_hits(moves: list[tuple[int, int, bool, float]], hits: list[tuple[int, int, float, bool]],
+                      line: float) -> tuple[int, int, int]:
+    last: dict[int, tuple[bool, float]] = {}
+    events = sorted([(when, 0, guid, dodge, far) for when, guid, dodge, far in moves] +
+                    [(when, 1, guid, died, far) for when, guid, far, died in hits])
+    dodges_inside = sum(1 for _, _, dodge, far in moves if dodge and far < line)
+    caught = dead = 0
+    for _, kind, guid, flag, far in events:
+        if kind == 0:
+            last[guid] = (flag, far)
+            continue
+
+        dodge = last.get(guid)
+        if dodge and dodge[0] and dodge[1] < line and far < line:
+            caught += 1
+            dead += int(flag)
+
+    return dodges_inside, caught, dead
+
+
 def chain_deaths(trace: Trace, dead: list[tuple[int, int]],
                  guardians: set) -> list[tuple[int, float, float, float | None]]:
     """(t, hp, distance, seconds until that one died) for each (t, guid) death with another Guardian under
@@ -5750,6 +5770,24 @@ def show_novas(trace: Trace) -> None:
                if inside(rec["t"]) and trace.role(rec.get("d")) in ("ranged", "heal")}
         verdict = ", ".join(sorted(trace.name(guid) for guid in hit)) if hit else "none"
         print(f"  back line caught by a nova {label}: {len(hit)} - {verdict}")
+
+    back = {guid for guid in roster if trace.role(guid) in ("ranged", "heal")}
+    line = RANGED_STATION - RANGED_BAND_TOLERANCE
+    moves = [(rec["t"], rec.get("g"), rec.get("by") == P1_SPACING,
+              math.dist((rec.get("x", 0.0), rec.get("y", 0.0)), BODY))
+             for rec in trace.of("move")
+             if rec["t"] <= p1_end and rec.get("ok") and rec.get("g") in back]
+    back_hits = []
+    for rows in hits.values():
+        for rec in rows:
+            guid = rec.get("d")
+            spot = at(trace, guid, rec["t"]) if rec["t"] <= p1_end and guid in back else None
+            if spot:
+                back_hits.append((rec["t"], guid, math.dist(spot[:2], BODY),
+                                  any(0 <= t - rec["t"] <= 1500 for t in died[guid])))
+    inside, caught, dead = inside_dodge_hits(moves, back_hits, line)
+    print(f"  back-line phase 1 dodges landing inside the band ({line:.1f} yd from the middle): {inside} of "
+          f"{sum(1 for move in moves if move[2])}; nova hits on one still standing there: {caught}, {dead} died")
 
     # The raid-wide button shows only as a cast: the aura lands on all 25 whoever pressed. Divine Sacrifice is
     # the press and Divine Guardian the 20% its talent procs alongside, so counting the cast counts once.
