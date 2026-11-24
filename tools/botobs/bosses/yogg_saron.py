@@ -486,6 +486,12 @@ DEATH_RAY_CAST_LOOK_MS = 1500
 # long after a taunt its Guardian sitting on the other tank counts as bounced back.
 TANK_SWAP_LOOKS_MS = (0, 4000, 8000)
 TAUNT_BOUNCE_MS = 4000
+TAUNT_FADE_MS = 3000
+TAUNT_FADE_LOOK_MS = 300
+TAUNT_SHORT_YD = 10.0
+TAUNT_FADE_HIT_MS = 2000
+DEATH_AFTER_HIT_MS = 1500
+HOLD_BURST = "hold burst until tank engaged"
 SPELL_MISDIRECTION = 34477
 # A tank's own buttons and the externals it gives or takes, by spell id.
 TANK_BUTTONS = {31884: "Avenging Wrath", 498: "Divine Protection", 642: "Divine Shield", 6940: "Hand of Sacrifice",
@@ -4426,6 +4432,29 @@ def first_off_tank(rows: list[list], tanks: set) -> list | None:
     return next((row for row in rows if row[8] and row[8] not in tanks), None)
 
 
+def taunts_run_short(taunts: list[tuple[int, int, int]], rows: dict[int, list[list]], tanks: set,
+                     hits: list[tuple[int, int, int]], deaths: list[tuple[int, int]]) -> tuple[int, int, int, int]:
+    short = chained = swung = died = 0
+    for when, caster, aim in taunts:
+        fade = when + TAUNT_FADE_MS
+        guardian = row_before(rows.get(aim, []), fade - TAUNT_FADE_LOOK_MS)
+        tank = row_before(rows.get(caster, []), fade - TAUNT_FADE_LOOK_MS)
+        if not guardian or not tank or guardian[0] <= when or guardian[8] not in tanks:
+            continue
+        if math.dist(guardian[2:4], tank[2:4]) <= TAUNT_SHORT_YD:
+            continue
+        short += 1
+        chained += any(other != caster and other in tanks and target == aim and when < at <= fade
+                       for at, other, target in taunts)
+        hit = next(((at, victim) for at, source, victim in hits
+                    if source == aim and fade - TAUNT_FADE_LOOK_MS <= at <= fade + TAUNT_FADE_HIT_MS
+                    and victim not in tanks), None)
+        if hit:
+            swung += 1
+            died += any(guid == hit[1] and 0 <= at - hit[0] <= DEATH_AFTER_HIT_MS for at, guid in deaths)
+    return short, chained, swung, died
+
+
 def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
     """Whether the last of these sorted cast times before `when` is still inside the cooldown."""
     index = bisect.bisect_right(casts, when)
@@ -4813,6 +4842,16 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
             aims[phase3_taunt_aim(rec["s"], target_kind(aim, trace.entries.get(aim)), row[8] if row else None, tanks)] += 1
     if aims:
         print(f"    tank taunts by aim: {dict(aims)}")
+    landed = [(rec["t"], rec.get("s"), rec.get("tgt")) for rec in trace.of("cast")
+              if rec.get("s") in tanks and rec.get("sp") in TANK_TAUNT_SPELLS and rec.get("tgt") in guardians
+              and start <= rec["t"] <= stop]
+    hits = [(rec["t"], rec.get("s"), rec.get("d")) for rec in trace.of("dmg")
+            if rec.get("s") in guardians and rec.get("sp") == 0 and start <= rec["t"] <= stop + TAUNT_FADE_HIT_MS]
+    deaths = [(rec["t"], rec.get("g")) for rec in death_records(trace) if start <= rec["t"]]
+    short, chained, swung, died = taunts_run_short(landed, rows, tanks, hits, deaths)
+    print(f"    taunts run out short of the tank (over {TAUNT_SHORT_YD:.0f} yd off it at the fade): {short},"
+          f" chained by another tank before the fade {chained}, a non-tank swung at within"
+          f" {TAUNT_FADE_HIT_MS // 1000} s of the fade {swung} ({died} died)")
     held = collections.Counter(str(rec.get("a", "")) for rec in trace.of("veto")
                                if rec.get("m") == PHASE_3_TAUNT_HOLD and start <= rec["t"] <= stop)
     if held:
@@ -4834,6 +4873,15 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
             aim = rec.get("tgt") or rec.get("s")
             print(f"    Lay on Hands {clock(rec['t'])} {trace.name(rec.get('s'))} on {trace.name(aim)}"
                   f" ({trace.role(aim)})")
+
+
+def show_phase3_burst(trace: Trace, start: int, stop: int, roster: set) -> None:
+    cast = collections.Counter(trace.role(rec.get("s")) for rec in trace.of("cast")
+                               if rec.get("sp") in BURST_SPELLS and rec.get("s") in roster and not rec.get("tr")
+                               and start <= rec["t"] <= stop)
+    held = collections.Counter(trace.role(rec.get("g")) for rec in trace.of("veto")
+                               if rec.get("m") == HOLD_BURST and rec.get("g") in roster and start <= rec["t"] <= stop)
+    print(f"\n  burst cooldowns    : cast by role {dict(cast)}; held by the boss-only gate, veto rows {dict(held)}")
 
 
 def show_phase3_healers(trace: Trace, start: int, stop: int, rows: dict[int, list[list]], roster: set) -> None:
@@ -5352,6 +5400,7 @@ def show_phase3(trace: Trace) -> None:
                 print(f"    {role:6}           : {sum(bands[role].values()) / seconds / 1000:.1f}k/s  {split(bands[role])}")
     show_phase3_area(trace, start, alive_end, rows, roster, tanks, guardians, yogg)
     show_phase3_yogg_dots(trace, start, alive_end, rows, roster, yogg)
+    show_phase3_burst(trace, start, alive_end, roster)
 
     healers = [guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans]
     if healers and yogg_spot:

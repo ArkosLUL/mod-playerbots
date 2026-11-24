@@ -1527,3 +1527,140 @@ not. Other phases and bosses untouched; `GetYoggSaronChannellingCrushers` reads 
   tick per tank whenever a Crusher channelled (52-78% of phase 2); the carried test now filters first.
 - Left: a claim has no timeout, so a claimant whose walk keeps stalling holds the Crusher from the other tank until
   `YoggSaronWalkMakingProgress` retries (6 s give up, 4 s retry).
+
+## Round 17 (2026-11-24, window 25 build 3ce456519: rounds 15 and 16)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head 3ce456519 --pulls 10` (window report
+`scratchpad/window25/window25-yogg-saron.md`): one valid pull per pool, 0 humans, Freya's 62670 on the raid, no DC veto
+inside a pull. Read with the full `yogg_saron.py` and scratch scripts (`scratchpad/yogg-r17/`: per Guardian its victims,
+taunts and hits from spawn, ranged and tank targets every 5-10 s with the tentacles' lanes, burst casts and vetoes in
+phase 3, tank intake against heals, the Crush deaths' last 10 s) over `snap`, `cast`, `act`, `veto`, `dmg` and `note`
+rows. Window 24 is the baseline.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261124-103120-12` | `603_12_yogg-saron_1795516326` | wipe 11:57, 33 deaths | 139.2 s | 435.0 s, 5: C 13.0, S 18.6, I 19.2, C 10.8, S 8.5 (held from 36.0% at 18.6 s left, phase 3 6.0 s before the end) | from 9:34.2 with 5 tentacles (5.86M; Crushers 59.5, 95.9%; Corruptors 30.3, 88.6, 89.7%), 143 s, Yogg 29.7 → 21.7% |
+| uld2 | `tr-20261124-102839-10` | `603_10_yogg-saron_1795516165` | wipe 11:32, 31 | 143.6 s | 440.1 s, 5: I 21.0, C 6.2, S 20.3, I 21.4, C 1.2 (held from 31.2% at 14.9 s left, phase 3 3.7 s before the end) | from 9:43.7 with 9 (8.95M; Crushers 31.2, 88.9, 90.7%; six Corruptors), 109 s, 30 → 28.4% |
+| uld3 | `tr-20261124-102939-11` | `603_11_yogg-saron_1795516225` | wipe 10:54, 32 | 134.1 s | 355.5 s, 4: S 17.2, I 24.5, C 12.0, S 16.2 (held from 36.0% at 12.6 s left, phase 3 5.3 s before the end) | from 8:09.6 with 3 (1.47M; one Crusher at 13.6%, dead at +6.9 s; Corruptors 37.1, 100%), 165 s, 30 → 18.7% |
+
+**Cycles to 30%:** five, five and four, all three reaching phase 3 (window 24: five, none, six). Phase 3 opened with
+two, three and one Crusher: the user's goal (at most one) met in uld3 only.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 1 (Uldxai, the enhancement shaman, 2:09.3, nothing up); phase 2 Crush 2 (5:42.6, Uldxal and
+  the hunter Uldxau, a cone aimed at Uldxau's pet, below), Death Ray 1 (Uldxab, healer, 6:00.2); phase 3 Immortal
+  Guardian 28 (first +18.3 s, the tanks at +93 / +95 s), Lunatic Gaze 1.
+- uld2: phase 1 Shadow Nova 4 (1:01.8 Uldyak; 1:08.1 Uldyay and Uldyar in one nova; 2:13.4 Uldyak again); phase 2
+  Laughing Skull 1, Crush 1 (Uldyam 8:51.4, below); phase 3 Lunatic Gaze 1, Curse of Doom 3 (leftover Corruptors,
+  10:14-10:31), Immortal Guardian 21 (the tanks at 10:37.5, 10:42.9 rezzed, and 10:44.7, around the 10:38.8 beacon
+  heal).
+- uld3: phase 1 Shadow Nova 1, Sara's Blessing 1; phase 2 Death Ray 1 (Uldzae, healer, 6:19.1, no dodge); phase 3
+  Immortal Guardian 29 (first +7.1 s, the tanks at +105 / +110 s after the 9:52.4 beacon heal).
+
+**Verdict on round 15 (Bladestorm, Sweeping Strikes, Blade Flurry held as area damage): not exercised.** Melee cast the
+three 33 times; one within a Crusher's hold reach, uld2 8:20.0 Uldyax's Bladestorm 2.8 yd from a stunned one with 7.3 s
+of stun left, which the hold rightly passes. `area buffs held by role`: uld2's prot warrior only. No Crush death after a
+Bladestorm (window 24: 2); this window's three Crush deaths are other mechanisms (below). Kept.
+
+**Verdict on round 16 (a bot tank breaks Diminish Power once the team is below): keep it.** Claims 3 / 5 / 1, Crushes on
+a claiming tank 0 in all nine, no tank death to Crush, no Crush death within 10 s of a break, `caught someone below` 0.
+The channel left the team a median 5.8 / 8.4 / 2.5 s after the claim, but the tank's own strike broke it in three claims
+(uld1 3:36.4, uld2 ~9:19.9, uld3 3:24.05 Shield of Righteousness, which `--crush` lists as `walk/out`, no `hit` row);
+most others ended at the room-clear stun. Waves carrying a stack below 7 of 14 (window 24: 14 of 15, chance: Crushers
+channelling at the opens), carried a median 13.8 s over those (window 24: 23.8), damage dealers ×0.80-0.98 to the door
+(×0.41-1.00). The long carries are late claims: the break waits for the whole team, so uld2 wave 5's claim came
+at +19.0 s with its last entrant (+18.9 s) and uld1 wave 5's at +25.2 s, Uldxay never getting a portal; uld2's Uldyaa
+sat in a Constrictor until 9:12.0.
+
+**Stop rules.** No kill. Phase 3 was picked in rounds 3-5 and stays stuck as the throughput race; this round's pick is a
+new root cause inside it (as round 7's nova was), not a retry of those.
+
+**Ranking** across pools: phase 3 Immortal Guardians 78 (non-tanks dead before the first tank death 3 / 1 / 7: nine to
+fresh Guardians, 3 / 0 / 6, and two beacon draggers); Shadow Nova 6; Crush 3; Curse of Doom 3 (phase 3 leftovers); Death Ray 2; Lunatic Gaze 2;
+Laughing Skull 1; Sara's Blessing 1.
+
+**Why the three phase 3s were lost.** The same race as rounds 3-7: nothing kills a Guardian without Thorim, one spawns
+every 10 s, and the tanks fall once the pile is 6-8 at high health or a beacon heal lands on it. What decided each:
+
+- uld1: ranged spent 95% of 57.9k/s on the five leftovers all phase: the 59.5% Crusher (tier 0, dead +33.5 s, 66 yd from
+  the ranged spot), then Corruptor 284, 3 yd from the north-east drag spot and so tier 0 as a beacon-heal reach, at 9.2%
+  when the 10:31 mark dragged to that lane healed it back to 40% (dead +85.7 s), then the 95.9% Crusher. Guardians
+  stayed at 90%+ 44% of samples, seven on the tanks at 43-89% by 11:04; Yogg 0.08%/s on melee.
+- uld2: nine leftovers, three Crushers channelling (Diminish Power on the average raider 59% of phase 3): ranged 96% on
+  tentacles at 1-7k/s each, Guardians at 90%+ 90% of samples, Curse of Doom took three ranged, the bear Uldyab kept a
+  leftover Corruptor as its target for the first ~20 s, and the 10:38.8 beacon's three marks ended on Uldyab undragged.
+- uld3, the goal met: ranged on Guardians over 30% 86% from +10 s, four reached Weakened, Yogg 0.09%/s, the window's
+  best. Lost to six non-tanks killed by fresh Guardians (below) and the 9:52.4 beacon: its healed Guardians ended at
+  99-100% and both tanks died within 7 s.
+
+**Why tentacles were still up at phase 3.** The platform dealt 41-43k/s live and 51-75k/s stunned against a stock that
+grows every cycle (`AddPortals` speeds spawns 0.1 a wave): the last cycle's stock went 7.28 → 5.86M (uld1), 9.59 → 8.95M
+(uld2: 30.3k/s, both tanks grabbed in turn, three Crushers channelling) and 3.84 → 1.47M (uld3). The brain hold finishes
+at 8 s left whatever the platform holds, so phase 3 opens mid-stun with what is up: all five of uld1's leftovers and
+seven of uld2's nine spawned in the last two cycles, and Corruptors, ranked last on the platform, are what remains
+(uld1's three spawned 7:41.7, 8:34.2, 8:58.4).
+
+**Picked: a taunt from the pile runs out short of the tank.** At stasis end (+4.0 s) the holding tank taunts the fresh
+Guardian from 43-62 yd (mostly Righteous Defense, which reaches it). Guardians walk ~11 yd/s, so at the 3 s fade they
+are still 15-27 yd off; the taunt only matched the top threat, ~0 on a fresh Guardian, so
+`ThreatManager::ReselectVictim` hands it to the first raider in its melee range above 110% of that, and its first swing
+is ready: uld1 9:52.55 Uldxaf (41.9k, Guardian spawned 9:45.47, RD +4.1 s at 54 yd, hit +7.08 s), 10:13.85 Uldxan (RD
++4.2 s at 57 yd, hit +7.15 s), uld3 8:16.68 Uldzay (RD +4.0 s at 54 yd, hit +6.99 s), all dead on the hit. The other
+tank taunts it 0.1-0.3 s after the fade (uld3 Growl at +7.2 / +7.3 s on the next two spawns), one swing late. `--phase3`
+(new line): taunts run out over 10 yd short 4 / 1 / 5, chained by the other tank before the fade 1 / 0 / 2 (by chance:
+uld1 10:47 Dark Command during the RD), a non-tank swung at within 2 s of the fade 2 / 0 / 1, all died. Root cause:
+`ControlPhaseThree` skips any Guardian whose victim is a tank, and any carrying a tank's taunt
+(`UldActions_YoggSaron.cpp:1905-1941` before the fix), so nobody may re-taunt until the fade has already handed it on.
+
+Bug: the strategy means the stasis-end taunt to bring the Guardian to the tank. Fix (`UldEncounter_YoggSaron.h/.cpp`,
+`UldTriggers_YoggSaron.cpp`, `UldActions_YoggSaron.cpp`): `YoggSaronTauntFadesShort` is true for a holdable Guardian
+whose victim is another tank, held by that tank's own taunt with `…_TAUNT_CHAIN_LEAD_MS` (1000) or less left, still
+outside its melee range, the bot no farther from it than the holder + 5 yd. Such a Guardian fires guardian control and
+joins the loose loop as a chain: taunt only (Righteous Defense on the holder would take its pile), past the taunt skip;
+probe `yogg.tankhold` `chain taunt`. The latest taunt wins (`ThreatManager::TauntUpdate`), so it walks on to the second
+tank, both at the melee spot. The budget is the same taunt the other tank spends today 0.1-0.3 s after the fade. Same at
+10 and 25, normal and hard mode; a human holder is chained the same way, only bot tanks chain.
+
+**Picked second, independent and small: no ranged burst cooldown in any phase 3.** `UlduarBurstWindowMultiplier`'s Yogg
+branch opens every burst cooldown in phase 3, but the shared `hold burst until tank engaged` zeroes one whose target is
+not boss-flagged (`BurstOnBossOnly`), and phase 3 ranged are on Guardians and tentacles all phase: no ranged cast in
+any of the three but Shadowfiend, the gate's veto rows on ranged 327 / 154 / 251 (Icy Veins, Mirror Image, Arcane Power,
+Combustion, Metamorphosis, Elemental Mastery, Fire Elemental Totem, Force of Nature, Rapid Fire, Bestial Wrath,
+Readiness, trinkets, tinkers), not even under the lust node's Heroism. Fix, **shared code** (`BurstCooldowns.h/.cpp`,
+`BurstWindowStrategy.cpp`), the entry-keyed release `docs/systems/consumables-and-burst.md` prescribes:
+`BurstAllowedOnAdd` lists 33988, 36064 (Immortal Guardians) and 33966, 33985, 33983 (platform tentacles), and the base
+gate passes a DPS bot's burst on one. Those entries exist only in this fight, and the Ulduar window still holds phase 2
+to the Brain, so no other boss and no other phase changes. Tanks and healers keep the gate (a DK tank's Army of the Dead
+is a 4 s channel). Reader: `--phase3` `burst cooldowns` (casts and the gate's veto rows by role).
+
+**Next window should show:** `--phase3` `taunts run out short of the tank` with nearly all chained and `a non-tank swung
+at within 2 s of the fade` 0 (here 2 / 0 / 1, all dead); `yogg.tankhold` `chain taunt` rows; non-tanks killed by fresh
+Guardians before the first tank death under 3 / 0 / 6 (the swap-starved ones, question below, stay). `burst cooldowns`
+with ranged casts in phase 3 and the gate's ranged veto rows near 0 (here 327 / 154 / 251). Round 16 again with 0
+Crushes on a claiming tank. Yogg's phase 3 rate is too noisy for one window.
+
+**Question for the user (the swap spends the taunts fresh Guardians need).** uld3 swapped the pile six times in 64 s
+(8:46.7-9:50.7, each a Righteous Defense or taunt at under 50%), and the spawns at 9:15.7 and 9:25.7 went 16-17 s
+without a taunt and killed four (Uldzad, Uldzak, Uldzax, Uldzaf); uld1's 10:54.2 spawn, untaunted until +10.9 s, killed
+its healer Uldxad at +7.1 s between swaps at 10:49.4 and 10:56.7. Should a fresh Guardian on a non-tank be taunted before
+the swap while the holder is still over 35%? **Recommended: yes, for one window**: a full-power Guardian one-shots a
+healer or a ranged, while a holder at 35-50% under a pile usually lives the 8 s until the swap's next chance; tank
+deaths at 35-50% are the risk to watch.
+
+**Seen, not picked.**
+
+- uld1 5:42.6, two Crush deaths: wave 2's stun was ending, the pet guard pulled Uldxau's Serpent off the Crusher at
+  5:37.05 and `YoggSaronPetFallbackTarget` sent it to the nearest add, a Corruptor 5.7 yd from that Crusher, still
+  inside its reach, so the Crusher kept the pet as victim and coned Uldxal and the hunter himself 24 yd behind it when
+  the stun lifted. The fallback takes the nearest add without testing a swinging Crusher's reach (the phase 3 leftover
+  pick skips any within 25 yd). Small, Yogg-only: next candidate.
+- uld2 8:51.4: Uldyam's Death and Decay went down at 8:40.06 and a Crusher spawned inside it at 8:40.25; its ticks made
+  him the victim and he died in place (window 21's Uldyam death has the same shape). The hold gates casts only.
+- Uldxai, the enhancement shaman, died to a phase 1 nova again with nothing up, as in windows 16-22.
+- Brain team portal entries over 2 s after the open 19 / 16 / 11 a pull, and uld1 wave 5's Uldxay never got a portal.
+
+**Review.** A tank claimed for a beacon drag no longer chains (`YoggSaronTauntFadesShort`): when its drag taunt fails,
+guardian control runs, and a chain would spend the taunt the drag needs. A chain lands only inside taunt range (30 yd):
+of the 10 short taunts here the other tank was within 30 yd of the Guardian (centre to centre) in 5 at 1 s before the
+fade, 8 at 0.5 s and 9 at 0.25 s, so expect most chained, not all.

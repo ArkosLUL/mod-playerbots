@@ -1536,6 +1536,27 @@ bool YoggSaronGuardianLoose(PlayerbotAI* botAI, GuidVector const& guardians)
     return false;
 }
 
+bool YoggSaronTauntFadesShort(Player* bot, Unit* guardian)
+{
+    if (!IsYoggSaronHoldableGuardian(guardian) || YoggSaronBeaconDragging(bot))
+        return false;
+
+    Player* holder = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+    if (!holder || holder == bot || !PlayerbotAI::IsTank(holder) || guardian->IsWithinMeleeRange(holder))
+        return false;
+
+    if (bot->GetExactDist2d(guardian) >
+        holder->GetExactDist2d(guardian) + ULDUAR_YOGG_SARON_PHASE_3_STACK_RADIUS)
+        return false;
+
+    int32 left = -1;
+    for (AuraEffect const* taunt : guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT))
+        if (taunt->GetCasterGUID() == holder->GetGUID())
+            left = std::max(left, taunt->GetBase()->GetDuration());
+
+    return left >= 0 && left <= ULDUAR_YOGG_SARON_TAUNT_CHAIN_LEAD_MS;
+}
+
 namespace
 {
 uint32 YoggSaronTauntSpellId(Player* player)

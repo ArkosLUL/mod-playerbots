@@ -59,4 +59,6 @@ bool BossTakesNoVictim(Unit const* boss);
 // script and nothing on the unit shows it.
 bool BossHasNoStableVictim(Unit const* boss);
 
+bool BurstAllowedOnAdd(Unit const* unit);
+
 #endif

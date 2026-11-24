@@ -2074,6 +2074,20 @@ class YoggPhases(unittest.TestCase):
         self.assertFalse(yogg_saron.taunt_bounced([[1000, 9, 0, 0, 0, 0, 90.0, 0, 7]], 6, 500, tanks))
         self.assertFalse(yogg_saron.taunt_bounced(rows, 6, 6000, tanks))
 
+    def test_taunts_run_short_counts_a_fade_far_off_the_tank_and_who_paid(self):
+        tanks = {5, 6}
+        rows = {9: [[1000, 9, 0.0, 0.0, 0, 0, 90.0, 0, 7], [3500, 9, 20.0, 0.0, 0, 0, 90.0, 0, 5]],
+                8: [[1000, 8, 0.0, 0.0, 0, 0, 90.0, 0, 7], [3500, 8, 36.0, 0.0, 0, 0, 90.0, 0, 5]],
+                5: [[1000, 5, 40.0, 0.0, 0, 0, 90.0, 0, 9]], 6: [[1000, 6, 40.0, 0.0, 0, 0, 90.0, 0, 8]]}
+        taunts = [(1000, 5, 9), (1000, 5, 8)]
+        hits = [(3900, 9, 7), (4100, 8, 6)]
+        self.assertEqual(yogg_saron.taunts_run_short(taunts, rows, tanks, hits, [(3950, 7)]), (1, 0, 1, 1))
+        chained = taunts + [(3200, 6, 9)]
+        walked = {**rows, 9: rows[9] + [[5800, 9, 40.0, 0.0, 0, 0, 90.0, 0, 6]]}
+        self.assertEqual(yogg_saron.taunts_run_short(chained, walked, tanks, [], []), (1, 1, 0, 0))
+        loose = {**rows, 9: [[1000, 9, 0.0, 0.0, 0, 0, 90.0, 0, 7], [3500, 9, 20.0, 0.0, 0, 0, 90.0, 0, 7]]}
+        self.assertEqual(yogg_saron.taunts_run_short(taunts, loose, tanks, hits, []), (0, 0, 0, 0))
+
     def test_ray_hit_movers_names_the_last_walk_and_the_dodgers_that_tried(self):
         moves = [(500, "yogg-saron body detour action", True), (1500, "avoid aoe", False),
                  (2500, "yogg-saron phase 2 spacing action", False), (2600, "avoid aoe", True),

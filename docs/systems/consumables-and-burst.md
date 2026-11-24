@@ -39,7 +39,9 @@ the raid damage, not the pull; `shadowfiend` doubles as a mana return, so it sta
 **A per-boss `RaidBurstWindow` can only hold, never release.** A kill-race add that is not
 boss-flagged (the Gunship freeze mage, `type_flags` 72) gets no personal burst from the base gate
 under `BurstOnBossOnly`, and releasing it needs an entry-keyed exemption in `BurstCooldowns.cpp` or
-`BurstWindowStrategy.cpp`.
+`BurstWindowStrategy.cpp`. `BurstAllowedOnAdd` is that list, read for DPS bots only: Yogg-Saron's Immortal
+Guardians and platform tentacles, whose phase 2 the Ulduar window still holds
+([Yogg-Saron](../raids/ulduar/yogg-saron.md#phase-3-cooldowns-and-casts)).
 
 **The Ulduar PR branches carry neither `BurstWindowStrategy` nor `BurstOnBossOnly`**, so an encounter
 window there must hold non-boss targets itself: Yogg-Saron phase 2 spent every cooldown on tentacles
@@ -57,7 +59,7 @@ Shadowfiend still waits out its dwell there.
 | Case | Result |
 |---|---|
 | Not a burst cooldown | `1.0f` — leaves rotation, mitigation and mana casts untouched |
-| Non-boss target, grouped, `BurstOnBossOnly` on | `0.0f` — save it for the boss |
+| Non-boss target, grouped, `BurstOnBossOnly` on | `0.0f` — save it for the boss; `1.0f` for a DPS bot on a `BurstAllowedOnAdd` entry |
 | Non-boss target, solo or config off | `1.0f` — solo bots still burst tough elites |
 | Boss target, bot is the main tank (not for `hysteria`) or ungrouped | `1.0f` — never gated on itself |
 | Boss target on a vehicle, `BossTakesNoVictim` or `BossHasNoStableVictim` | `1.0f` — no tank can hold it (below) |

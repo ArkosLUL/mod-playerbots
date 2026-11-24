@@ -864,6 +864,9 @@ bool YoggSaronGuardianControlTrigger::IsActive()
         if (!IsYoggSaronHoldableGuardian(unit))
             continue;
 
+        if (YoggSaronTauntFadesShort(bot, unit))
+            return true;
+
         if (unit != current && unit->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
                                    ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)
             return true;
