@@ -40,11 +40,11 @@ or an empty chopper, never a siege engine's flagless seats. Nothing past the dri
 until all are manned, so a raid short of 5 (10-man: 2) melee or ranged leaves the rest on foot.
 
 **Boarding needs no leader.** Every bot on foot boards the nearest seat its rules allow within
-200 yd (`FlameLeviathanVehicleToBoard`), whether or not a real player masters it; a real player
-boards whatever he likes, and the seat counts include him. An empty hull must carry the spell
-click: the base-camp set has it withheld until Brann's intro, and `HandleSpellClick`, called
-directly, does not check it. The trigger runs for every bot on foot in Ulduar until he dies, so
-`nearest vehicles far` is cached for a second.
+200 yd and in line of sight (`FlameLeviathanVehicleToBoard`), whether or not a real player masters
+it; a real player boards whatever he likes, and the seat counts include him. An empty hull must
+carry the spell click: the base-camp set has it withheld until Brann's intro, and
+`HandleSpellClick`, called directly, does not check it. The trigger runs for every bot on foot in
+Ulduar until he dies, so `nearest vehicles far` is cached for a second.
 
 ## The demolisher runs on pyrite, not energy
 
