@@ -17,6 +17,9 @@
     thorim.py <file> --shelters  each Lightning Charge against the camp: who walked to a shelter row or a
                                  cone step, how far, who got there, who the cone hit (walking or not) and
                                  which of Sif's slows were on them
+    thorim.py <file> --ringcone  each Lightning Charge against the melee ring: who it hit and what they were
+                                 doing (unable to move, walking, held out of it, standing, past melee reach),
+                                 and how many ring walks were held for crossing the lit cone
 """
 from __future__ import annotations
 
@@ -90,6 +93,8 @@ CONE_LEAD_MS = (3000, 7000)
 SHELTER_LEAD_MS = 200
 SHELTER_ARRIVED = 2.0
 SLOW_LOOK_MS = 4000
+RING_CONE_HOLD = "thorim.ringconehold"
+RING_HIT_KINDS = ("blocked", "walking", "held", "standing")
 
 
 def mine(trace: Trace) -> bool:
@@ -1004,6 +1009,21 @@ def shelter_walk_text(trace: Trace, guid, walker: dict) -> str:
             + (" dead" if walker["dead"] else ""))
 
 
+def cone_windows(trace: Trace, start: int) -> list[tuple[int, int]]:
+    casts = cone_casts(trace, start)
+    windows: list[tuple[int, int]] = []
+    for when in lit_orbs(trace, start):
+        cast = next((t for t in casts if CONE_LEAD_MS[0] <= t - when <= CONE_LEAD_MS[1]), None)
+        if cast is not None:
+            windows.append((when, cast))
+    return windows
+
+
+def first_tank_death(trace: Trace, start: int) -> int | None:
+    return next((death["t"] for death in combat_deaths(trace)
+                 if death["t"] >= start and death["g"] in tanks_of(trace)), None)
+
+
 def show_shelters(trace: Trace) -> None:
     print("CAMP SHELTERS")
     if not mine(trace):
@@ -1012,19 +1032,13 @@ def show_shelters(trace: Trace) -> None:
     if start is None:
         print("  phase 2 never started")
         return
-    casts = cone_casts(trace, start)
-    lit = lit_orbs(trace, start)
-    if not lit:
+    if not lit_orbs(trace, start):
         print("  no thorim.lightningorb probe or no lit orb in phase 2")
         return
     walks = ShelterWalks(trace, start)
-    first_tank = next((death["t"] for death in combat_deaths(trace)
-                       if death["t"] >= start and death["g"] in tanks_of(trace)), None)
+    first_tank = first_tank_death(trace, start)
     total = collections.Counter()
-    for when in lit:
-        cast = next((t for t in casts if CONE_LEAD_MS[0] <= t - when <= CONE_LEAD_MS[1]), None)
-        if cast is None:
-            continue
+    for when, cast in cone_windows(trace, start):
         read = walks.read(when, cast)
         walkers = read["walkers"]
         there = sum(1 for walker in walkers.values()
@@ -1048,6 +1062,84 @@ def show_shelters(trace: Trace) -> None:
           f"{total['early steps']}), hit {total['early hit']}, dead {total['early dead']}")
 
 
+class RingCone:
+    def __init__(self, trace: Trace):
+        self.trace = trace
+        self.boss = thorim_guid(trace)
+        self.ring = {note.get("g") for note in notes(trace, "thorim.ringspot")}
+        probes = notes(trace, RING_CONE_HOLD)
+        self.probed = bool(probes)
+        self.holds = [note for note in probes if str(note.get("txt")) == "hold"]
+        self.moves = [rec for rec in trace.of("move") if rec.get("g") in self.ring]
+        self.hits = [rec for rec in trace.of("dmg") if rec.get("sp") == LIGHTNING_CHARGE and rec.get("d") in self.ring]
+        self.deaths = {death["g"]: death["t"] for death in combat_deaths(trace)
+                       if blow_spell(death) == LIGHTNING_CHARGE}
+
+    def read(self, lit: int, cast: int) -> dict:
+        held = {note.get("g") for note in self.holds if lit - SHELTER_LEAD_MS <= note["t"] <= cast}
+        boss = at(self.trace, self.boss, cast, NEAREST, CHAIN_POSITION_MS)
+        hits: dict = {}
+        for guid in sorted({rec["d"] for rec in self.hits if abs(rec["t"] - cast) <= CAST_GAP_MS}):
+            window = [rec for rec in self.moves if rec.get("g") == guid and lit - SHELTER_LEAD_MS <= rec["t"] <= cast]
+            walks = [rec for rec in window if rec.get("ok")]
+            if any(rec.get("r") == "blocked" for rec in window):
+                kind = "blocked"
+            elif walks:
+                kind = "walking"
+            elif guid in held:
+                kind = "held"
+            else:
+                kind = "standing"
+            where = at(self.trace, guid, cast, NEAREST, CHAIN_POSITION_MS)
+            hits[guid] = {"kind": kind, "mover": walks[-1].get("by") if walks else None,
+                          "far": bool(where and boss and dist2(where, boss) > RING_REACH),
+                          "dead": abs(self.deaths.get(guid, -CHAIN_DEATH_MS * 10) - cast) <= CHAIN_DEATH_MS}
+        return {"held": held, "hits": hits}
+
+
+def ring_hit_text(trace: Trace, guid, hit: dict) -> str:
+    return (f"{trace.name(guid)} {hit['kind']}" + (f" ({hit['mover']})" if hit["mover"] else "")
+            + (", past reach" if hit["far"] else "") + (", dead" if hit["dead"] else ""))
+
+
+def show_ringcone(trace: Trace) -> None:
+    print("RING CONE")
+    if not mine(trace):
+        return
+    start = phase2_start(trace)
+    if start is None:
+        print("  phase 2 never started")
+        return
+    if not lit_orbs(trace, start):
+        print("  no thorim.lightningorb probe or no lit orb in phase 2")
+        return
+    cone = RingCone(trace)
+    first_tank = first_tank_death(trace, start)
+    total = collections.Counter()
+    for when, cast in cone_windows(trace, start):
+        read = cone.read(when, cast)
+        hits, held = read["hits"], read["held"]
+        dead = sum(hit["dead"] for hit in hits.values())
+        held_hit = sum(1 for guid in held if guid in hits)
+        early = first_tank is None or cast < first_tank
+        for key, n in (("hit", len(hits)), ("dead", dead), ("held walks", len(held)), ("held walks hit", held_hit),
+                       ("far", sum(hit["far"] for hit in hits.values())),
+                       *((kind, sum(hit["kind"] == kind for hit in hits.values())) for kind in RING_HIT_KINDS)):
+            total[key] += n
+            if early:
+                total["early " + key] += n
+        if not hits and not held:
+            continue
+        held_text = f"held {len(held)} ({held_hit} hit)" if cone.probed else "held -"
+        print(f"  +{(when - start) / 1000:.1f} s: ring hit {len(hits)}, dead {dead}; {held_text}"
+              + "".join(f"; {ring_hit_text(trace, guid, hit)}" for guid, hit in hits.items()))
+    kinds = ", ".join(f"{kind} {total[kind]}" for kind in RING_HIT_KINDS)
+    held_text = (f"held walks {total['held walks']}, {total['held walks hit']} hit" if cone.probed
+                 else "no thorim.ringconehold probe (a build before it)")
+    print(f"  all: ring hit {total['hit']} ({kinds}; past reach {total['far']}), dead {total['dead']}; {held_text}; "
+          f"before the first tank death hit {total['early hit']}, dead {total['early dead']}")
+
+
 SECTIONS = (
     ("deaths", "deaths by mechanic, phase 1 and phase 2 apart", show_deaths),
     ("phase2", "the phase 2 measures the tank spots are judged on", show_phase2),
@@ -1057,6 +1149,8 @@ SECTIONS = (
      show_chains),
     ("shelters", "each Lightning Charge against the camp: who walked to a shelter row or a cone step, who got "
      "there, who the cone hit and what slowed them", show_shelters),
+    ("ringcone", "each Lightning Charge against the melee ring: who it hit and what they were doing, and the ring "
+     "walks held for crossing the lit cone", show_ringcone),
 )
 SUMMARY = ("deaths", "phase2")
 

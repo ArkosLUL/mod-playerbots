@@ -2438,3 +2438,75 @@ does not step).
 **Questions for the user:** none new; question 1 in State stands, recommended (a).
 
 **Shared code touched:** none (Thorim files and the Thorim reader).
+
+## Round 23 (window 33: build 9ad197722 with round 22)
+
+**Data:** `window33-thorim.md` (session scratchpad), one valid pull per pool; traces
+`603_{7,9,11,10,8,12}_thorim_{1795546500,1795546545,1795546567,1795546559,1795546520,1795546576}` (uld1, uld2, uld5,
+uld3, uld6, uld4), read with `thorim.py --blizzard/--chains/--shelters`, session scratchpad `thorim_r23/` scripts (a
+walk timeline, a ring zone-entry read, a cone-step replay over 19 hard-mode pulls since w23).
+
+| Pool | Out | Deaths by mechanic |
+|---|---|---|
+| uld1 (A) | wipe, hard (P2 3:13.5), 36.5% | LC 2 (slot 5 walk +46 s), Blizzard 3 (Uldxap after a self-res, ring Uldxai +76 s twice), then tanks +119 s, Thorim melee 19, LC 5, CL 2, US 1 |
+| uld4 (A) | wipe, hard (P2 2:57.5), 18.0% | pickup swing 1, CL 3 (+87, +132 s), Blizzard 1 (healer), LC 2 (slot 5 +121 s, row (2, 2) +136 s), then tanks +148 s, Thorim melee 19, Volley 3, US 2, LC 1, Nova 1 |
+| uld2 (B) | wipe, hard (P2 2:56.4), 42.3% | LC 1 (slot 5, Evocation, +76 s), Volley 1 and Blizzard 1 (ring, self-res), tank +82 s (Blizzard), Thorim melee 23, US 2, LC 1 |
+| uld5 (B) | wipe, hard (P2 3:08.9), 45.2% | phase 1 Smash 1; Frost Nova 1, Volley 1, Blizzard 1 (camp), tank +87 s (US), then Thorim melee 13, LC 3, US 2, CL 2, Frostbolt 2, Volley 1, Blizzard 1 |
+| uld3 (C) | wipe, hard (P2 3:05.4), 33.1% | Frostbolt 1 (healer +17 s), LC 3 (slot 5 +61, +121 s ×2), Volley 1, Blizzard 3 (ring +78-81 s), CL 1, tanks +157 s, then Thorim melee 19, LC 1, Volley 1, US 1 |
+| uld6 (C) | kill, normal | CL 1 |
+
+**Hard mode in the kills: none** (uld6 read normal mode). **Stop rules:** waived for Thorim by the user's 2026-11-24
+answer; not polished in any case (no hard-mode kill).
+
+**Round 22 verdict (step points clear of the bunny's walk ahead): held on its points in A, B and C, not on the
+deaths.** `--blizzard`: steps onto the path ahead 0/25, 0/35 (A), 0/28, 0/12 (B), 0/36 (C) against w31's 18-37 a
+pull; under a zone within 8 s 0 everywhere (w31 11-25). Ring melee in zones 14.9 / 16.5 (A, w31 46.9 / 42.0), 29.1 /
+29.3 (B, w31 uld5 21.3), 36.3 bot-s (C); longest stays 4.8-6.8 s against the hoped ≤ ~3; ring Blizzard deaths before
+the first tank death 2 / 0, 1 / 0, 3 (w31 6 in all). Walk back p50 0.6-1.9 s (w31 0.3-2.6); `--chains` through a
+stepped slot 1 crossing (uld4); melee on Thorim to +100 s 100%. Cause of what is left: 35 of 37 ring zone entries came
+while stepped, walking at 2.4 yd/s (Blizzard or Frostbolt −65%) across the trail: uld3 Uldzay +30.6 s stepped 19.7 yd
+west to (2092.6, −269.7) across the bunny's next leg, Frostbolt-slowed from the start, 4.5 s in zones; Uldzax +75.2 s
+18 yd north to (2110.3, −229.4) back over the fresh trail, dead at +78.2 s. Rank 3 now.
+
+**Failure picked: Lightning Charge on camp bots short of their shelter row** (8 of the 19, all before the first tank
+death, against the ring's 6 Blizzard deaths).
+- `--shelters`, w33 hard pulls: 62 walks before the first tank death, 11 hit, 8 dead (uld1 2, uld2 1, uld3 3, uld4 2);
+  7 on slot 5 (rows (0, 5) (2113.0, −227.35) 25.6 yd, (1, 5) (2119.5, −226.85) 21.8 yd), 1 on row (2, 2) 23.6 yd.
+- Trace: uld1 +41.1 s orb 1, Uldxau rooted by Frost Nova to +41.8 s, walks at 7.0 yd/s, enters a zone at +42.7 s and
+  drops to 2.4 yd/s, 11.0 yd short at the cone (+46.1 s), dead with Uldxap (14.8 short). uld1 +131.1 s orb 0: Volley
+  at +132.4 s, 3.5 yd/s, 7.3 / 11.7 yd short. uld2 +71.2 s: Uldyah channels Evocation; its move is accepted at +71.4 s
+  but it stands until +75.8 s, dead at +75.9 s.
+- 19 hard-mode pulls since w23: 146 walks before the first tank death (the opening left out), 51 short, 24 hit, 13
+  dead, 11 of the 13 on slot 5's two rows. DBC: 62602 / 62576 aura 33 −65%, 62601 −65%, 62604 −50%, 62605 root.
+- Code: `ThorimRangedSpot` (`UldEncounter_Thorim.cpp:870`) hands the row from `ULDUAR_THORIM_SHELTER_SPOTS`, whose
+  budget (25.6 yd ≈ 3.7 s against 4.9 s, boss doc) assumed full speed and a prompt start.
+- **Classification: bug.** The strategy intends the camp out of the cone before it lands; slowed or late, the long
+  rows can't be reached.
+
+**Fix** (`UldEncounter_Thorim.cpp/.h`, `UldActions_Thorim.cpp`, Thorim only, no size, mode or player branch):
+`ThorimCampShelterInTime` compares the row's distance with run speed × time left (lit + 4.8 s − one scan), × 0.35 if
+the walk crosses a zone not yet slowing the bot. Short and not rooted, `ThorimCampConeStep` (once per orb, latched in
+`RangedShelter`) takes the nearest point within that reach (≤ 20 yd) 45° off the cone, 12-32 yd from him, 11 yd clear
+of zones, its walk clear of them unless the bot stands in one, ties to the row; note `slot N orb M step`. The
+positioning action breaks a ranged bot's channel while it stands in the lit cone. Replay over the 146 walks (no
+navmesh, the floor cut at x 2100 and y −288, speed from the bot's slows, success = the bot moved the step's distance
+by the cast, deaths within 1.5 s of it): 11 of 25 hit walkers and 6 of 16 dying ones out of the cone, of w33's 8
+deaths 3 (+ the Evocation by the channel break); 5 currently safe walks modelled worse (2 bots that never moved, 2 a
+yard or two short, 1 in the opening). Reader: `--shelters`,
+tested in `test_thorim.py`; boss doc: Sif's slows, the step, the ring step's slowed walk, the section.
+
+`pb-check` passes (compile, pblint, codestyle, botobs tests).
+
+**Next window should show** (hard-mode pulls, `--shelters`):
+- steps ≥ 1 a pull, nearly all "there"; camp cone deaths on walks before the first tank death well under w33's 8
+  (≤ 4), hits on walks under 11; no walker standing through the warning on a channel.
+- camp hit off a walk no higher than w33 (only in the opening's first two cones); `--chains` camp crossings no
+  higher (w33: camp to slot 3, slot to camp 2).
+
+**Seen, not picked:** the ring step's slowed walk across the trail (rank 3, next); casts delaying the walk 1-2.3 s (8
+of 24 hits; the AI yields through a cast's preparing phase, so only a server spell script could interrupt it);
+self-res back into the zone (rank 6, shared code); cones after the tanks fall with Thorim loose off the tank spot.
+
+**Questions for the user:** none new; question 1 is answered (keep polishing, no end condition).
+
+**Shared code touched:** none (Thorim files and the Thorim reader).

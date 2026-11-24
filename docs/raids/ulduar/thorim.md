@@ -363,6 +363,17 @@ replay of three pulls left such a bridge unbroken in 14-36% of phase 2 snapshots
 points). The 1 yd floor stops a bot on its point reissuing the move while a body that won't leave
 bridges it.
 
+**A walk across the lit cone waits for it.** Walking back from a Blizzard step, or to a point past the
+cone, a ring bot was still in it when it landed: over 37 hard-mode pulls 26 of 60 such walks were hit,
+10 dying, 4 before the first tank death. `ThorimRingWantsMove` answers stay while the orb is lit, the
+bot stands outside the ring's cone and its straight walk to the point enters it. Inside the ring's
+line but past 45°, where the cone step leaves a bot, it stays only when the walk comes within 45°: at
+the cast nobody 45-52.5° off the cone was hit (0 of 350), yet 14 of 20 walks from there into 45° were,
+7 dying. A bot within 45° always walks. The stay sets the arrival latch, so the movement guard holds
+the generic movers while `reach melee`, straight at him along one bearing, stays free. A bot in a
+Blizzard zone holds too: at its 2.4 yd/s the crossing outlasts the warning. Replayed, a held walk waits
+up to 5 s, about 4 bot-s a pull.
+
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
 three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
 holds the generic movers, scoped to a **settled** or [stepped-out](#a-covered-slot-steps-out) ring holder
@@ -467,6 +478,14 @@ pulls (no navmesh, the floor cut at x 2100 and y −288), points a zone covered 
 32 and every step still found one; the walk grew p50 6 → 12 yd, p90 14 → 20, and points in a camp
 body's jump 35 → 120, which a 15 yd round would have left at 173. It is the whole walk, not a lookahead:
 30 yd of it scored the same, 20 yd left 52 points covered, 10 yd 230.
+
+**In the lit cone with no clear point, the step leaves the cone anyway.** Every pass wants 11 yd off
+every zone and 52.5° off the cone, so far out a bot can find nothing: slot 2, stepped to the north wall
+20-27 yd from him, had wall and zones west and orb 6's cone east, and stood in the cone 3-5 s, two of
+three dying. Then a bot within 45° of the lit cone, as the camp's cone step reads it, takes the nearest
+point past 45° within 20 yd, in the arena box, ties to its slot point: clear of every zone's 9.8 yd
+reach if any is, else inside one, since a tick is 4.3-4.9k and the cone 10-36k. Past 45° it stands, or
+it would re-step every tick against the ring's wider line.
 
 **The walk to the point is still unchecked, and slowed.** Under a zone's or Frostbolt's 65% slow a step
 runs at 2.4 yd/s, so the first round's longer points cost 4-7 s in the zones, and the straight walk can
@@ -1362,7 +1381,8 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 `tools/botobs/bosses/thorim.py <trace>`, reading `thorim.p2start`, `thorim.sifjoined` (hard mode),
 `thorim.ringspot` (each ring bot's slot), `thorim.ringstep` (a ring bot stepped out of Blizzard),
 `thorim.unreach` (whom his cannot-reach flag names), `thorim.lightningorb` (the lit orb),
-`thorim.rangedslot` (the camp) and `thorim.shelter` (a camp bot's home, row or cone step):
+`thorim.rangedslot` (the camp), `thorim.shelter` (a camp bot's home, row or cone step) and
+`thorim.ringconehold` (a ring walk held for crossing the lit cone):
 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
@@ -1390,6 +1410,10 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
   how many got within 2 yd of their last move's point, and each one the cone hit: walk, yards short,
   Sif's slows on it from 4 s before the lit, death; camp bots hit off a walk; then totals and those
   before the first tank death.
+- `--ringcone`: per lit orb with a cone 3-7 s later, each ring bot the cone hit and what it was doing:
+  unable to move (a `blocked` move), walking (an accepted move since the lit, naming the last mover),
+  held or standing; past 12 yd of him; death; the walks held; then totals and those before the first
+  tank death. Traces without `thorim.ringconehold` read all but the holds.
 
 Per snapshot the holder is the tank he hits and every other living tank on the floor waits; spacing
 counts from 15 s after the drop. Damage rows come in hop order (each hop does 1.5 times the last), and
