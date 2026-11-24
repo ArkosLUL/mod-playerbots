@@ -691,11 +691,13 @@ the wall: one pull aimed 12 of 15 taunts at 45-57 yd, dealt nothing for 93 s and
 while a candidate inside 30 yd existed on 79% of ticks. The trigger, a pet holding a Guardian far out, is
 intermittent: judge it over pulls.
 
-**So the control node ends on an attack**, as phase 3's does: nothing to fetch or the taunt on cooldown,
-the tank hits the lowest killable Guardian already inside `IsWithinMeleeRange`, else the healthiest there
+**So the control node ends on an attack**, as phase 3's does: when the taunt fails, the tank hits the
+lowest killable Guardian already inside `IsWithinMeleeRange`, else the healthiest there
 (`YoggSaronPhase1StackTarget`), holding where none is — in reach only, so holding the pile is never a walk
-off the middle (`yogg.tankhold` `attack`). Lowest-first put a tank on a gap-held Guardian in 64-100% of
-gap samples.
+off the middle (`yogg.tankhold` `attack`). The node runs only while a Guardian waits to be fetched: of the
+gap samples with a tank on a gap-held Guardian (64-100%), it put him there in 13% over 30 pulls; the rest
+is the generic picker (`tank assist`: aggro, melee reach, lowest threat) or a target kept from before the
+gap.
 
 **A taunt only pays if the raid waits for the walk**, which per-bot kill orders cannot: per-bot locks
 preferring a Guardian inside the leash **split** the raid (melee busy in the spacing node kept a Guardian

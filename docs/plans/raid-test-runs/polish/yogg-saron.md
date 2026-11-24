@@ -50,7 +50,9 @@ Guardians off the stack (round 19); `p1station`'s band test reads `GetDistance2d
 (round 19); `YoggSaronCloudLead` projects at run speed against 2.0 yd/s clouds (round 19, unchecked); Crusher reach
 4.5 since `2026_11_06_01`, the reader and doc say 8 (round 18); Army of the Dead ghouls wake phase 3 Guardians in
 the spawn ring; a Diminish Power claim has no timeout; the judgement node spends a holy paladin's GCD for nothing;
-casts finishing on a Guardian gone unkillable and pets left on it (round 20).
+casts finishing on a Guardian gone unkillable and pets left on it (round 20); tanks on a gap-held Guardian come
+87% from `tank assist` (lowest threat in melee) or a target kept from before the gap, not the control node
+(round 20 review), and `::TankTarget` stays out of the Yogg exclusions on purpose, so a tank-side fix is a question.
 
 **Fixes in place.**
 
@@ -151,7 +153,11 @@ guards:
 
 1. `YoggSaronPhase1StackTarget` (`UldEncounter_YoggSaron.cpp:3719-3737` before the fix, called from
    `ControlPhaseOne`, `UldActions_YoggSaron.cpp:2063`) gave the tank the lowest Guardian in melee reach, which inside
-   a gap is the one held back: a tank on it in 64-100% of gap samples, 1.23 tanks a sample.
+   a gap is the one held back: a tank on it in 64-100% of gap samples, 1.23 tanks a sample. Review: the node
+   runs only while a Guardian waits to be fetched, and over 30 pulls (windows 19-29) it made the switch in
+   13% of those tank samples (the switch traced to `yogg-saron guardian control action`); 36% were targets
+   kept from before the gap, 24% `tank assist` (the generic picker: aggro, melee reach, lowest threat), the
+   rest other switches. This fix covers the 13% only.
 2. `YoggSaronPhase1AoeHoldMultiplier` (`UldMultipliers_YoggSaron.cpp:171-184` before) held only `Aoe`-typed
    actions, so in the same windows it vetoed Seed, Chain Lightning, Volley and Blizzard while Maul 334, Swipe (Bear)
    208, Consecration 169, Multi-Shot 139, Divine Storm 85, Whirlwind 71, Thunder Clap 46, Hammer of the Righteous
@@ -167,10 +173,11 @@ and 25, normal and hard mode, with or without a player (a human's area spells an
 code changed (`IsRaidAreaDamage` and `RaidSplashCache` only read). Reader: `--phases` `low Guardians in the gap`
 (`gap_leak`, `actions_in_windows`, tested).
 
-**Next window should show:** `low Guardians in the gap` under 3.0-3.9%/s, `a tank on one` near 0% (64-100%), `area
-run` without Maul, Swipe, Consecration, Divine Storm, Whirlwind, Thunder Clap or Multi-Shot; fewer pairs under the
-6 s gap than 1-3 a pull and fewer nova deaths on a pair than 9 (uld3 5, uld5 3, uld1 1). Back it out if phase 1 runs
-past ~165 s or Guardians start swinging at non-tanks in phase 1 (the tanks lose area threat during holds).
+**Next window should show:** `low Guardians in the gap` under 3.0-3.9%/s, `a tank on one` down by at most the
+control node's share (about an eighth of 64-100%: the generic picker is untouched), `area run` without Maul,
+Swipe, Consecration, Divine Storm, Whirlwind, Thunder Clap or Multi-Shot; fewer pairs under the 6 s gap than 1-3
+a pull and fewer nova deaths on a pair than 9 (uld3 5, uld5 3, uld1 1). Back it out if phase 1 runs past ~165 s or
+Guardians start swinging at non-tanks in phase 1 (the tanks lose area threat during holds).
 
 **Seen, not picked.**
 
