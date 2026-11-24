@@ -88,8 +88,9 @@ Leads, not picked:
 
 **User answers in force:**
 
-- 2026-11-22: keep polishing on the ilvl 226 rosters; a kill isn't expected, so the stop rules (polished,
-  stuck) don't apply.
+- 2026-11-24 (replaces 2026-11-22's "a kill isn't expected, stop rules waived" after window 34's first kills):
+  Algalon runs under the normal done rule, each of A, B, C a kill with at most 5 deaths on one build (no hard
+  mode to check), and the stop rules (polished, stuck) apply again.
 - Q2 (r1): no 5th healer at 25.
 - Q4 (a) (r4): two holes out of the kite from 60 s before each Big Bang.
 - Q4 (b) (2026-11-24): in the 30 s before each Big Bang the swap tank not holding him taunts constellations off
