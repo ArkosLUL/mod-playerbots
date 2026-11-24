@@ -1646,3 +1646,170 @@ record needs the Barrier and takes a real player in a slot like a bot; no shared
 - Review fix: the doc called the recorded member a camp bot; a real player in a slot is recorded too.
 - Review fix: next-window line, own-block blockmates `away` but not all (7 of 71 searched).
 - Left: the mark action's own walk has the same 5 s stall; older than this round.
+
+## Round 14 (2026-11-24, build 3ce456519)
+
+**Data.** Window 25 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 3ce456519
+--pulls 10`), one valid pull per pool, hard mode held in all three (`animus` at 3:08.3-3:08.5, no vapor
+hit), against window 24 (`--head baf47824b`). Analysis scripts: session scratchpad `vezax-r14/`
+(`cmp3.py`, `surge.py`, `animusbins.py`, `vezline.py`, `window.py`, `rows.py`, `campat.py`,
+`leechwho.py`, `far.py`, `markpick.py`, `surgemark.py`, `markstall.py`, `stonestop.py`, `markdelay.py`,
+`meleemarks.py`, `afterarrive.py`, `q3.py`; pull list in `pulls.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261124-102318-9` | `603_9_general-vezax_1795515840` | kill 6:07, 4 deaths, the Animus dead in 84.3 s |
+| uld2 | `tr-20261124-102137-7` | `603_7_general-vezax_1795515738` | kill 5:17, 0 deaths, the Animus dead in 71.0 s |
+| uld3 | `tr-20261124-102217-8` | `603_8_general-vezax_1795515779` | wipe 5:18, 30 deaths, the Animus dead at +87.3 s, after the collapse |
+
+**Stop rules.** Not polished: uld3 wiped and uld1's kill had 4 deaths. The pick below is new (round 13's
+review left it as a note), so no repeat count.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice).
+
+| Pull | Deaths |
+|---|---|
+| uld1 | 4 Mark leech on melee at 4:34.0-4:35.1 (the 4:32.5 mark on frost DK Uldxah): Uldxat, Uldxai, Uldxai again after Reincarnation, Uldxax |
+| uld2 | none |
+| uld3 | collapse from 4:28.4 (+80.0 s): 13 Profound Darkness to 4:34.4, 9 Vezax melee (bear main tank 4:34.5, then 8 as he roamed after ranged), 7 Searing Flames (5:01.6), 1 Shadow Crash (the last tank, 5:18.3) |
+
+**Animus and Vezax per pull** (`cmp3.py`, `surge.py`, `vezline.py`; settle is Vezax from the anchor).
+
+| Pull | Settle | Vezax at spawn | Animus +30 / +45 / +60 / +80 s | Animus | Raid / ranged / melee k/s | Vezax at its death | End |
+|---|---|---|---|---|---|---|---|
+| uld1 (DK) | 12.9 (north) | 19.8% | 66.3 / 48.2 / 31.2 / 5.8 | dead +84.3 s, 1.19 %/s | 147 / 75 / 68 | 23.4%, 25 alive | Vezax dead 6:07.6 |
+| uld2 (warrior) | 9.9 | 19.2% | 60.1 / 41.2 / 19.8 / - | dead +71.0 s, 1.41 %/s | 172 / 100 / 65 | 25.3%, 25 alive | Vezax dead 5:16.7 |
+| uld3 (bear) | 9.9 | 20.7% | 64.2 / 45.0 / 29.3 / 5.7 | dead +87.3 s, 1.17 %/s to the collapse | 146 / 69 / 72 | 24.3%, 15 alive | wipe 5:18.3, Vezax 22.9% |
+
+Tanks held the Animus from +1.0 s (96.9-98.8%), Heroism at +0.0-0.4 s, Surge of Darkness at +13 and
++76 s in all three. uld1 is window 25's one north settle and still killed it.
+
+**Verdict on round 12 (Beacon of Light and Sacred Shield on the main tank): it worked.** `--tank`: Beacon
+on him 100% before the spawn and 96% (uld1) / 100% (uld2) after, copies 159k and 50k landed on him,
+Sacred Shield on him only (5, 6), 4 Beacon casts a pull; `vezax tank buffs on the holder` vetoed only
+the holy paladin's class `beacon of light on tank` and `sacred shield on tank` (69, 10). Both main tanks
+lived through the phase, healed 3.0 and 2.6k/s against 2.9 and 2.7k/s taken (window 24 uld2: Beacon 0%
+on him, dead at +53 s). uld3 has no holy paladin.
+
+**Verdict on round 13 (a crash after the Animus-phase mark turns the block): it worked, short of the
+target in uld2.** `--markcrash` 3:52 marks:
+
+| Pull | Marked | Crash | Ticks / on its block / after the cast | Marked walk | Blockmates with / away | Vezax %/s | Window 24 |
+|---|---|---|---|---|---|---|---|
+| uld1 | Uldxad (heal R) | R, +1.5 s | 15 / 9 / 9 | spot | 0 / 6 | +0.41 | 49 / 34, +1.20 |
+| uld2 | Uldyae (heal R) | R, +1.6 s | 24 / 12 / 12 | spot | 0 / 6 | +0.64 | 40 / 27, +0.86 |
+| uld3 | Uldzas (melee) | - | 16 | south | - | +0.43 | 22, a healer |
+
+`vezax.dodge = mark` 1 bot and `pulled away`/`away` 6 in each; no crash hit in either phase, so the
+turned block cost nothing. uld2's 24 (`leechwho.py`, `campat.py`): the marked healer finished a Chain
+Heal and walked only at +0.84 s, with all seven R members stacked on one field centre, so the ticks at
++2.3 s (13 bots, both blocks) and +3.2 s (R's six strafing away, 15.5-18.7 yd) came before it was
+16.5 yd clear. Marks starting a walk over 0.4 s late (`markdelay.py`, windows 11-25): 26 of 210, early
+ticks median 12-17 against 11-15; not chased.
+
+**Why uld3 lost the race (`animusbins.py`).** The same roster killed it in 79 s in window 24 at 1.27 %/s
+(156k: 76 ranged, 75 melee); here 1.17 %/s (146k: 69, 72), and the Animus died at +87.3 s, 7 s after
+the first Profound Darkness deaths. Every dps targeted it 93-100% of the phase. The ranged gap (−7.7k/s)
+sits in block R: fire mage Uldzaq 4.3k/s against 8.5 (dry at 4:12.5), elemental Uldzan 6.5 against 8.4,
+hunters Uldzak 3.5 / 5.1 and Uldzau 3.3 / 3.8 (pets not counted); R's ranged stood in a field 42-56% of
+the phase against 62-70% for L, and 5 of the 7 phase crashes landed on L, so R had fewer fields of its
+own. Melee lost 3.4k/s, the cat druid
+Uldzas most (4.8 against 7.1, marked at 3:52 with far 7-9 as crossed and pulled R slots stood inside
+the floor: Q1 (a)'s accepted cost). Healers (no holy paladin in roster C) hit bottom first: Uldzaf
+under 5% at 4:09, Uldzae 0 at 4:26.5. **Searing Flames missed no kick in the race**: 19 kicked before
+3:00, none cast while the Barrier stood; after the Animus died at 4:35.7 Vezax (24.3%, tankless from
+4:34.5) roamed north after ranged, and of five casts two were kicked, then Uldzaj's Wind Shear failed
+15 yd from him and the kickers were dead for the last two: they landed at 4:59.6, 5:07.6 and 5:15.6,
+the first killing 7. The waived gear race, lost by ~7 s; not changed.
+
+**Why the uld1 melee died at 4:34 (`window.py`, `rows.py`, `far.py`, `surgemark.py`).**
+
+1. *Surge of Darkness opened the mark to melee.* 62662 carries `MOD_SCALE` +35%
+   (`spell.reference.csv`: auras 33, 79, 61), so his combat reach grows to 17.0 and the floor to 33.5
+   yd for 10 s. At the 4:32.30 pick 14 stood past 29.1 but 8 past 33.5, so the core drew from everyone
+   inside it (`boss_general_vezax.cpp:239-261`) and took frost DK Uldxah, 12.4 yd from him. Hard mode
+   delays the mark and surge timers 12 s at the sixth vapor, so the 4:32 mark lands in the 4:24 surge
+   in every pull (normal mode: 4:20 and 6:20): 24 of 30 such marks in windows 11-25 went inside 33.5,
+   11 to melee, 3 to a tank, against 3 of 200 outside a surge, each with 9-10 far by the snapshot.
+2. *The first tick was unavoidable.* Under 42 Profound Darkness stacks the melee beside Uldxah were at
+   9-32% when it landed; the break sent them east and west at 4:32.6-4:32.7, but the tick cast at
+   4:33.51 (landing 4:34.03) caught three 5-7 yd out (7-10 had Uldxah walked) and killed Uldxat and
+   Uldxai.
+3. *The marked walk stalled (bug).* Uldxah's mark walk south (to (1846.2, 67.0), 32.6 yd) went out at
+   4:32.522; at 4:32.745 its own `healthstone` (FAILED) and `healing potion` ran, and
+   `UseItemAction::UseItem` (`UseItemAction.cpp:337-342`) stops a moving bot for anything but a potion
+   and idles its AI a global cooldown. It stood at (1860.0, 94.8) from 4:33.0, 1.6 yd out, and every
+   mark walk to 4:37.5 read `dup` (30 of them): `MoveTo` refuses an exact repeat for 5 s
+   ([pitfalls](../../../engine/pitfalls.md#movement-that-silently-no-ops)). The 4:34.51 tick killed
+   Uldxax (15.6%, 13.7 yd east) and Uldxai after Reincarnation (standing on its stale break booking,
+   `wait`). Walked at 7 yd/s, Uldxah stands 22.8 and 19.9 yd from them at that tick: 2 of the 4
+   deaths.
+
+`markstall.py` (windows 11-25): 10 of 223 marks with a walk stalled over 0.5 s short of the spot, those
+leeching a median 29.5 ticks against 13; `stonestop.py`: 70 healthstones tried on a walking bot, 58
+stopped it, nearly all in collapses (soak 20, melee spot 9, bring-back 9, reach 13, position 5, mark
+1, dodge 1).
+
+**Ranking.** 1. uld3's collapse, 30 (the waived race, above). 2. uld1's leech, 4: the surge floor (a
+position question, Q4) and the stalled walk (bug, 2 of them). Nothing else died.
+
+**Picked: the stalled escape walk (bug).** The strategy sends a marked bot to its spot, a breaking melee
+clear of it and a dodger out of the blast; a healthstone stopped the walk and the repeat guard kept it
+stopped.
+
+**Fix** (Vezax files only):
+
+- Rule `vezax escape healthstone hold` (`UldDefinition_Vezax.cpp:80`, predicate `VezaxEscapeUnderway`,
+  `UldEncounter_Vezax.cpp:780`): `healthstone` holds while the bot is moving and is marked (not his
+  victim), breaking off a marked ally (the break trigger's own test) or within 11 yd of a pending crash
+  impact. Potions are usable on the move and stay.
+- `VezaxMarkOfTheFacelessAction` and `VezaxMarkOfTheFacelessBreakAction` call `ReleaseStalledWalk`
+  (the dodge's `ReleaseStalledDodge`, renamed; `ULDUAR_VEZAX_WALK_STALL_MS` 500): a bot standing still
+  500 ms past its last move gets `last movement` cleared, so the walk is re-sent instead of `dup` or
+  `wait`.
+- Reader: `--mark` counts `far` past 33.5 for a mark inside Surge of Darkness and prints `surge`
+  (`surge_casts`, `in_surge`; test added); uld1's 4:32 mark now reads 8/9 `yes`.
+
+Docs: `docs/raids/ulduar/vezax.md` (Surge row, floor bullet, escape paragraph, trace keys, two known
+gaps). 10/25 and normal/hard: the mark, break and crash run in every mode and nothing keys on size or
+the Animus. Bots only (a real player runs no rule or action), so the same with or without one. Shared
+code: none.
+
+**Next window should show.**
+
+- No `healthstone` act on a bot moving marked, breaking or inside a crash's 11 yd (`stonestop.py`: 0
+  for mark, break and dodge walks); `vezax escape healthstone hold` vetoes only there.
+- `markstall.py`: no marked bot standing still over 0.5 s short of its spot with `dup` re-issues; a
+  marked melee at 4:32 reaches its south spot in ~4-5 s and the leech after its first 2 s spares the
+  melee.
+- `--mark`: the 4:32 mark `surge yes` with far under 9 in most pulls (unchanged; Q4).
+- Round 12 and 13's checks hold: Beacon on the main tank, the 3:52 turn `spot` / `away`.
+
+**Q3 judged on window 25 (`q3.py`).** Ticks on the marked bot's block from the crash's cast on:
+
+| Window 25 | Cases | After-cast ticks on the block |
+|---|---|---|
+| pre-spawn | 12 (crash +2.5-8.8 s) | 14: uld1 0/0/0/0, uld2 7/0/6/0, uld3 1/0/0/0 |
+| post-kill | 3 (+4.5-7.7 s) | 0 |
+| Animus phase, turned | 2 (+1.5-1.6 s) | 9, 12 |
+
+uld2's 7 came from a crash on the other block (the marked block never dodged, the walk-out time) and
+its 6 from one aimed at the marked bot at +5.7 s; (b)'s subset (own block or the marked bot inside
+~4 s) held 2 cases, 0 and 1. Windows 11-25: (b)'s subset is the 0:20 mark (crash +2.3-2.6 s), 15
+cases, mean 9 (w24 uld1's 32 the top); the other 130 pre-spawn and post-kill cases a mean 1.6; the 16
+unturned Animus-phase ones a median 24. *Recommended: (c)*, keep the turn to the Animus phase.
+
+**Questions (user).**
+
+- *Q3 (from round 13).* Turn the block for a crash after a mark outside the Animus phase too? (a) any
+  crash inside a mark; (b) only crashes aimed at the marked bot or its block in the first ~4 s; (c)
+  keep it to the Animus phase. *Recommended: (c)*: outside it the block took 0-7 ticks from the cast on
+  in window 25 (14 over 15 cases), against 9-12 with the turn and a median 24 without it in the Animus
+  phase.
+- *Q4. Surge of Darkness moves the Mark floor from 29.1 to 33.5 yd for 10 s, and hard mode's 4:32 mark
+  always falls in one: rows 0-1 are inside, so the mark draws from the whole raid (24 of 30 such marks
+  in windows 11-25, 11 on melee; uld1's 4 deaths). Change the camp for it?* (a) Ranged dps step 4.4 yd
+  out from their slots for the surge, healers stay: only outside the Animus phase, since crossed slots
+  must stay inside the Animus's 37 yd ceiling, so it misses most 4:32 marks. (b) The whole camp steps
+  out: row 0 then stands 44+ yd from the main tank while Surge doubles his melee. (c) Keep: with this
+  round's fix a melee mark costs the first tick on the melee next to it. *Recommended: (c).*

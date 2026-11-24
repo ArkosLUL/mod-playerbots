@@ -777,6 +777,28 @@ bool VezaxMarkWalkMeetsShadowCrash(PlayerbotAI* botAI)
     return TryGetVezaxMarkSpot(bot, spot) && VezaxWalkMeetsShadowCrash(botAI, spot);
 }
 
+bool VezaxEscapeUnderway(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot->isMoving())
+        return false;
+
+    Unit* vezax = GetVezax(botAI);
+    if (!vezax || !vezax->IsInCombat())
+        return false;
+
+    if (bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
+        return vezax->GetVictim() != bot;
+
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsMainTank(bot) && GetVezaxMarkedAlly(bot))
+        return true;
+
+    Position impact;
+    return VezaxDodgesShadowCrash(bot) && TryGetVezaxShadowCrashImpact(botAI, impact) &&
+           bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
+               ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE;
+}
+
 bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI)
 {
     return botAI->GetBot()->HasAura(SPELL_VEZAX_PROFOUND_DARKNESS);

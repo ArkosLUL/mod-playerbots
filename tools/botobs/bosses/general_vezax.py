@@ -71,6 +71,9 @@ ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 COMBAT_REACH = 12.6
 BAND_FLOOR = 15.0 + COMBAT_REACH + 1.5
 BAND_CEILING = 28.5 + COMBAT_REACH + 1.5
+SURGE_MS = 10000
+SURGE_SCALE = 1.35
+SURGE_FLOOR = 15.0 + COMBAT_REACH * SURGE_SCALE + 1.5
 ANIMUS_COMBAT_REACH = 7.0
 ANIMUS_REACH_CEILING = 28.5 + ANIMUS_COMBAT_REACH + 1.5
 REACH_SPELL = "reach spell"
@@ -333,13 +336,22 @@ def far_pool_minimum(trace: Trace) -> int:
     return 9 if trace.header.get("diff") in (1, 3) else 4
 
 
-def far_at(samples: Samples, roster, boss: int, when: int) -> int | None:
-    """Living roster members past BAND_FLOOR from him, measured 3D like his GetDistance."""
+def far_at(samples: Samples, roster, boss: int, when: int, floor: float = BAND_FLOOR) -> int | None:
+    """Living roster members past the floor from him, measured 3D like his GetDistance."""
     centre = samples.row(boss, when)
     if not centre:
         return None
     rows = (samples.row(guid, when) for guid in roster)
-    return sum(1 for row in rows if row and row[5] > 0 and math.dist(row[1:4], centre[1:4]) > BAND_FLOOR)
+    return sum(1 for row in rows if row and row[5] > 0 and math.dist(row[1:4], centre[1:4]) > floor)
+
+
+def surge_casts(trace: Trace, boss: int | None) -> list[int]:
+    return sorted(rec["t"] for rec in trace.of("cast")
+                  if boss is not None and rec.get("s") == boss and rec.get("sp") == SPELL_SURGE_OF_DARKNESS)
+
+
+def in_surge(surges: list[int], when: int) -> bool:
+    return any(cast <= when <= cast + SURGE_MS for cast in surges)
 
 
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
@@ -350,11 +362,13 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     marks = notes(trace, "vezax.mark")
     dodges = [rec for rec in trace.of("move") if rec.get("by") == DODGE]
     leech = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_MARK_LEECH]
+    surges = surge_casts(trace, boss)
 
     windows = []
     for guid, spans in sorted(aura_spans(trace, SPELL_MARK_OF_THE_FACELESS).items()):
         for start, stop in spans:
             stop = min(stop, start + MARK_WINDOW_MS)
+            surge = in_surge(surges, start)
             ticks = [rec for rec in leech if start <= rec["t"] <= stop + LEECH_SLACK_MS]
             branch = [str(rec.get("txt")) for rec in marks
                       if rec.get("g") == guid and start <= rec["t"] <= stop]
@@ -376,7 +390,8 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
                 "block": block.get(guid, "-"),
                 "branch": branch[-1] if branch else None,
                 # The aura lands ~0.2 s after his pick, so this can be one off at the edge.
-                "far": far_at(samples, roster, boss, start) if boss else None,
+                "far": far_at(samples, roster, boss, start, SURGE_FLOOR if surge else BAND_FLOOR) if boss else None,
+                "surge": surge,
                 "ticks": len(ticks),
                 "damage": sum(rec.get("a", 0) for rec in ticks),
                 "early": sum(1 for rec in ticks if rec["t"] - start < EARLY_MS),
@@ -398,16 +413,17 @@ def show_mark(trace: Trace) -> None:
         return
 
     need = far_pool_minimum(trace)
-    print(f"  {'at':>9} {'marked':14} {'role':6} {'blk':4} {'branch':9} {'far':>5} {'ticks':>5} {'damage':>9}"
-          f" {'0-4s':>5} {'near min/med':>13} {'dodgers':>7} {'boss %/s':>8}")
+    print(f"  {'at':>9} {'marked':14} {'role':6} {'blk':4} {'branch':9} {'far':>5} {'surge':>5} {'ticks':>5}"
+          f" {'damage':>9} {'0-4s':>5} {'near min/med':>13} {'dodgers':>7} {'boss %/s':>8}")
     for window in windows:
         near = ("-" if window["nearest_min"] is None
                 else f"{window['nearest_min']:.1f}/{window['nearest_median']:.1f}")
         rate = "-" if window["rate"] is None else f"{window['rate']:+.3f}"
         far = "-" if window["far"] is None else f"{window['far']}/{need}"
+        surge = "yes" if window["surge"] else "-"
         print(f"  {clock(window['start']):>9} {trace.name(window['guid'])[:14]:14}"
               f" {trace.role(window['guid']):6} {window['block']:4} {window['branch'] or 'unchanged':9}"
-              f" {far:>5} {window['ticks']:5} {window['damage']:9,} {window['early']:5} {near:>13}"
+              f" {far:>5} {surge:>5} {window['ticks']:5} {window['damage']:9,} {window['early']:5} {near:>13}"
               f" {window['dodgers']:7} {rate:>8}")
 
     ticks = sum(window["ticks"] for window in windows)
