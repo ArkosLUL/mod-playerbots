@@ -353,6 +353,7 @@ struct AlgalonEncounterState
     ObjectGuid coverStar;
     uint32 coverClaimMs = 0;
     std::unordered_map<ObjectGuid, ObjectGuid> personalStars;
+    std::unordered_map<ObjectGuid, ObjectGuid> personalBlocks;
     std::unordered_set<ObjectGuid> nitroRunners;
     std::unordered_set<ObjectGuid> underStars;
     uint32 underFromMs = 0;

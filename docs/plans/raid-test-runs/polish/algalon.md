@@ -1,8 +1,8 @@
 # Polish log: Algalon the Observer (25-man, no hard mode)
 
 Reader `tools/botobs/bosses/algalon.py` (`--verdict` first, then `--deaths`, `--stars`, `--collateral`,
-`--bigbang`, `--holes`, `--constellations`), tests in `tools/botobs/tests/test_algalon.py`. Rounds 1-11:
-`history/algalon.md`.
+`--bigbang`, `--holes`, `--constellations`, `--defensives`), tests in `tools/botobs/tests/test_algalon.py`.
+Rounds 1-12: `history/algalon.md`.
 
 ## State
 
@@ -16,45 +16,60 @@ Big Bang every 90.5 s (casts at P1 + 90, 180.5, 271, 361.5; 8 s), soaked by a Di
 in holes. Meteors every 25.5 s from P1 + 30.9: Big Bang 1 and 3 have one 8-10 s before the cast, Big Bang 2 one
 inside it. Star waves of 4 / 1 / 4 / 4 every 60 s from P1 + 16.5 drain 1 %/s. The planner puts most stars under
 Big Bang (the bulk takes each into a 4-5 tick band that dies in hit − 4 .. hit + 0.6, while the raid is phased;
-since r12 one finisher takes each star's last 5 ticks) and paces the rest one at a time, 8 s apart, clear of
-meteors, casts and their aftermaths. The handler (the third tank) kites constellations into spare holes; the swap
-tank not holding him taunts constellations off healers in the 30 s before each cast. Holes are the raid's shelter.
-What kills raids: tank burst (holders take 66-161 k in 6 s with both tank healers alive), then him loose; stars
-going off on the unphased raid (under-stars below their band in a cast, two at once, on a drained raid); a Big
-Bang with no hole in reach; Berserk once phase 2 runs past 360 s. Phase 1 takes 303-329 s of the 360 s even on a
-good pull (w34), phase 2 another 68-82 s.
+one finisher takes each star's last 5 ticks) and paces the rest one at a time, 8 s apart, clear of meteors, casts
+and their aftermaths. The handler (the third tank) kites constellations into spare holes; the swap tank not holding
+him taunts constellations off healers in the 30 s before each cast. Holes are the raid's shelter.
+What kills raids: tank burst (holders take 66-161 k in 6 s with both tank healers alive), then him loose; a star
+going off on the unphased raid while it is drained (the void's DoT after a hit, the wave-2 deadline kill at
+~P1 + 168 s); a Big Bang with no hole in reach; Berserk once phase 2 runs past 360 s. Phase 1 takes 296-338 s of
+the 360 s even on a good pull, phase 2 another 54-60 s on a kill.
 
-**Compositions on 6464b824a (window 34, one pull per pool, the first kills of the loop).**
+Every pull has an explosion at ~3:14 (the wave-2 star's deadline kill, 20 s before Big Bang 2's hit). Wave 3's
+two under-stars must then reach Big Bang 2's cast in band: one above it dies 5-10 s after the hit, on a raid the
+void left drained.
+
+**Compositions on ce636f992 (windows 36-37, round 12; A and B one pull per pool, C two).**
 
 | Design | Pools | Outcome |
 |---|---|---|
-| A | uld1, uld4 | uld1 wipe 5:09 in P1 (Uldxaz hit unphased at Big Bang 1, the pair dead 2:08-2:18); uld4 **kill** 6:47, 20 dead (15 after Berserk) |
-| B | uld2, uld5 | uld2 **kill** 6:45, 10 dead (5 after Berserk); uld5 P2 at 5:54, wipe 7:16 to Berserk (30 of 33 dead after 6:26) |
-| C | uld3, uld6 | uld3 wipe 4:23: two under-stars below their band went off 2.1-3.0 s into Big Bang 2's cast (15 dead); uld6 wipe 6:08 in P1 (stars, the pair 5:37-5:42) |
+| A | uld1, uld4 | uld1 **kill** 6:29, 4 dead (3 tanks in P2) — meets the done rule; uld4 wipe 7:05, Berserk (P1 338 s, 30 of 32 after 6:26) |
+| B | uld2, uld5 | uld5 **kill** 6:17, 3 dead (tanks) — meets the done rule; uld2 wipe 7:14, Berserk (P1 323 s, 28 after 6:26) |
+| C | uld3, uld6 | 4 wipes: uld3 5:32 and 6:53, uld6 6:02 collapse in P1; uld6 7:19 Berserk (P1 321 s, 30 after 6:26) |
 
-Best pull on disk: window 34 uld2, a kill with 5 dead before Berserk.
+Best pull on disk: window 36 uld5, a kill with 3 dead. A and B met the done rule on ce636f992; every pool must kill
+again on the next build.
 
-**Open failures, ranked (window 34, 158 deaths).**
+**C against A and B.** Tanks: pair prot paladin + blood DK (A: prot paladin + prot warrior, B: prot warrior + prot
+paladin), handler the bear (as B). Healers: disc, resto shaman, holy priest, resto druid, no holy paladin (A, B
+both have one), so the tank healers are disc + resto druid. A and B's holy paladin puts ~27% of 2.2 M on the raid,
+C's resto druid 3-20%. In P1's first 200 s A and B healed all the raid took (10.4-14.7 k/s); C fell 0.9-1.5 k/s
+behind in its three collapses (healed 11.3-14.2 against 12.6-15.7) and kept pace only in uld6 window 36, the one
+that reached P2 on time. So stars catch more of C under the line (15-19 against at most 8), Arcane Barrage kills
+only in C (16 of 16), and the star team's mage goes into Ice Block at the 3:14 explosion (2 of 4 C pulls, 0 in A
+or B). Constellations stay awake longer in C (1028-1375 s against 887-1048). The blood DK was the first pair death
+in all three collapses.
 
-1. Berserk 50 (uld4 15, uld2 5, uld5 30): phase 1 runs 303-329 s, the kills ended 19-22 s past it. A damage and
-   time limit, not a bug.
-2. Him loose and on tank before Berserk 41: uld1 after Big Bang 1's `noshelter` hit, uld3 after Big Bang 2's
-   collapse, uld6 5:37-5:42 (healed 50-58 k of 105-107 k in 6 s). Q2 stands.
-3. Star explosions 40: under-stars below their band going off in a cast 22 (uld3 15, uld6 4, uld1 2, uld2 1),
-   picked r12; `deadline` kills on a drained raid ~13 (uld6 4:33.6 and 5:32.5, 7; uld3 4:07.6, 4).
-4. Barrage 13, Cosmic Smash 10, Big Bang 3 (the P2 soaker at Big Bang 4, after Berserk).
+**Open failures, ranked (windows 36-37, 200 deaths in 8 pulls).**
+
+1. Berserk 96 (uld4 30, uld2 28, uld6 w36 30, uld3 w37 8): P1 ran 321-338 s. A damage and time limit.
+2. C's P1 collapse 90 (uld3 w36 32, uld6 w37 33, uld3 w37 25 before Berserk): a wave-3 under-star above its band
+   (17.9-18.7%) or released `late` at Big Bang 2's cast went off 5-9 s after the hit on 15/19/7 under (3 of 4 C
+   pulls, 0 of 4 A/B), with tank and healer deaths around it. Picked r13.
+3. Arcane Barrage 16 (all C), mostly double Barrages on bots a star left low.
+4. Tank deaths on the kills (uld1 3, uld5 3), Quantum Strike / Phase Punch 21 mostly after Berserk.
 
 Leads, not picked:
 
-- Pair tanks hit unphased at Big Bang (`noshelter`, 5 in w34): uld1 Uldxaz 50-58 yd from every hole at Big Bang 1
-  and 2, uld2 Uldyaa 43.9 yd; uld3 Uldzaa and uld6 Uldwaa on `hold` at Big Bang 2 with a constellation they got by
-  threat, not a taunt, left 4.0-6.4 s before the hit and were still out. Tanks have no Nitro Boosts (r12).
-- The second of two explosions is a star the team chewed while on another (r11); `StarWindow` returns `gap`
-  before the due branch (r10); wave 2's star in the 16-20 s before Big Bang 2, `SerialDue` leaves the 10 s
-  `smashrecovery` out of its budget (r9).
-- Splash on idle under-stars: Wandering Plague, Fire Nova, Magma Totem, Living Bomb, Consecration, Death and
-  Decay, the team's own Piercing Shots ticks (r10-r12).
-- Personal buttons ready and unpressed at explosion deaths, every window (r2, r7).
+- A finisher that never touches its star: uld3 w37 star 8, the elemental shaman who joined the team after the
+  hunter died walked between `star` and `reach spell` spots, dodged a meteor and dropped totems for 15 s
+  (2:54.7-3:09.7, +0.3 %/s beyond the drain); the star was then released `late` and went off after Big Bang 2's
+  hit (2 dead). Other finishes run +0.2-3.4 %/s.
+- Under-star release reads a stale bulk speed: `CommitBulkSpeed` commits only when the focus leaves a star, so a
+  team stalled on its last under-star (+0.1-0.9 %/s after the 3:14 explosion) still plans at the earlier span's
+  speed and misses the `late` window (cast − 15 .. − 8 s).
+- A class Ice Block at critical health (uld3 w36, uld6 w37) still runs 10 s; r13 breaks only the node's.
+- Pair tanks hit unphased at Big Bang (`noshelter`); the second of two explosions is a star the team chewed while
+  on another (r11); wave 2's star in the 16-20 s before Big Bang 2 (r9); splash on idle under-stars (r10-r12).
 
 **Fixes in place** (round: fix — verdict):
 
@@ -72,9 +87,11 @@ Leads, not picked:
   Explosive Shot ticks count in `pendingHp` — held.
 - r10: Revenge held near stars; bots' pets' area and chain autocasts off near stars (`algalon.petsplash`) — held.
 - r11: the swap tank not holding him taunts constellations off healers in the 30 s before each cast
-  (`algalon.offtaunt`, user Q4 (b)) — held (w34: on a healer at the cast 10/16 → 3/17).
+  (`algalon.offtaunt`, user Q4 (b)) — held.
 - r12: one finisher takes an under-star's last 5 ticks to its line while the team moves on (`algalon.finishstar`,
-  `algalon.finisher`) — pending window 35.
+  `algalon.finisher`) — held (below band at the cast 9 of 31 → 7 of 49; early under-star deaths in a cast 22 → 1).
+- r13: the tick breaks a personal-node Ice Block once its star is dead and none explodes on the bot within 4.5 s
+  (`algalon.unblock`); class Deterrence held for unphased bots in P1 — pending window 38.
 
 **Tried and rejected:**
 
@@ -101,70 +118,68 @@ Leads, not picked:
 **Open questions:**
 
 - Q6 (r8): a fourth ranged on the 25-man star team from wave 3's spawn to Big Bang 2's cast, only if two wave-3
-  leftovers after Big Bang 2 become the rule (w34: one wave-3 under-star released `late` at 57-70% in 4 of 6 pulls).
+  leftovers after Big Bang 2 become the rule (w36-37: one leftover in 4 of 8 pulls, never two).
 
-## Round 12 (2026-11-24, window 34 build 6464b824a: round 11, rosters with professions)
+## Round 13 (2026-11-25, windows 36-37 build ce636f992: round 12)
 
-**Data.** `window34-algalon.md`, one valid pull per pool; every pull's `--deaths`, `--verdict`, `--bigbang`,
-`--stars`, `--collateral`, `--constellations`; window 32's six traces for the band count. Scratch `alg12/`:
-`line.py` (each bulk leave against the exact band from the star's drain clock, the hits landing after it with
-their cast start, the star at the cast), `finish.py`, `starhp.py`.
+**Data.** `window36-algalon.md` (six pools), `window37-algalon.md` (two more C pulls); every pull's `--verdict`,
+`--deaths`, `--stars`, `--constellations`, `--tankheal`, `--defensives` (uld3 w36/w37, uld6 w37), `--bigbang`
+(uld3 w37). Scratch `alg13/`: `tanks.py` (pair intake and healing per second held), `raidheal.py` (raid damage
+against raid healing, P1's first 200 s), `barrage.py`, `bdeaths.py`, `team.py` (star team casts in a span),
+`blocks.py` (Ice Block and Deterrence spans, now `--defensives`).
 
 | Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
 |---|---|---|---|
-| uld1 | `603_7_…_1795549549` | wipe 5:09 | 32: loose 15, star 8, Barrage 5, on tank 4 |
-| uld4 | `603_8_…_1795549549` | kill 6:47 | 20: loose 8, on tank 6, star 3, Barrage, Smash, Big Bang 1 each (15 after Berserk) |
-| uld2 | `603_11_…_1795549613` | kill 6:45 | 10: star 3, Smash 2, on tank 2, loose 2, Big Bang 1 (5 after Berserk) |
-| uld5 | `603_9_…_1795549550` | wipe 7:16 | 33: loose 21, on tank 7, Smash 2, star, DoT, Big Bang 1 each (30 after Berserk) |
-| uld3 | `603_12_…_1795549613` | wipe 4:23 | 32: star 14, loose 8, Smash 4, on tank 4, Barrage 2 |
-| uld6 | `603_10_…_1795549592` | wipe 6:08 | 31: star 11, loose 9, Barrage 5, on tank 5, Smash 1 |
+| uld1 A | `603_12_…_1795555471` | kill 6:29 | 4: on tank 3, star 1 |
+| uld4 A | `603_7_…_1795555345` | wipe 7:05 | 32: loose 22, on tank 6, star 2, Big Bang, Smash (30 after Berserk) |
+| uld5 B | `603_11_…_1795555409` | kill 6:17 | 3: on tank 3 |
+| uld2 B | `603_9_…_1795555376` | wipe 7:14 | 31: loose 21, on tank 6, star, Dark Matter, Big Bang, Smash (28 after Berserk) |
+| uld3 C | `603_10_…_1795555409` | wipe 5:32 | 32 in P1: loose 18, Barrage 6, on tank 5, star, Big Bang, Dark Matter |
+| uld3 C | `603_13_…_1795556082` | wipe 6:53 | 33: loose 15, on tank 6, Barrage 4, star 4, Black Hole DoT 3, Big Bang |
+| uld6 C | `603_8_…_1795555346` | wipe 7:19 | 32: loose 21, on tank 6, 5 others (30 after Berserk) |
+| uld6 C | `603_14_…_1795556082` | wipe 6:02 | 33 in P1: loose 13, star 6, on tank 5, Barrage 4, Dark Matter 3, 2 others |
 
-**Stop rules.** Waived (user, 2026-11-22). The kills (uld4 20 dead, uld2 10) are over the 5-death bar anyway.
+**Stop rules.** Not polished: A (uld1, 4 dead) and B (uld5, 3) killed on ce636f992, C did not. Not stuck: C's
+collapse is picked for the first time.
 
-**Verdict on round 11: held** in A, B and C. 15 `algalon.offtaunt` taunts in 17 casts (uld1 1, uld4 2, uld2 5,
-uld5 2, uld3 2, uld6 3); constellations on a healer when a cast began 3 in 17 (w32: 10 in 16): uld2 Big Bang 1 and
-3, uld6 Big Bang 2. Healer time in the 30 s before a cast: median 28.9 s (w32: 34.5), uld1 Big Bang 3 167.8 s with
-the pair dead. No offtaunter was caught out at a cast; the two pair tanks hit unphased while holding a
-constellation got theirs by threat.
+**Verdict on round 12: held** in A, B and C. Under-stars below their band at the cast 7 of 49 (w34: 9 of 31): A 1,
+B 2, C 4 (uld6 w36); one went off early in a cast with a death (uld6 w36 5:00.6, 1 dead; w34 22). Finishes ran in
+every pull. Above their band: 2 (w34: 0), both C's wave-3 star 7 at Big Bang 2 (uld3 w36 17.9%, uld6 w37 18.7%),
+8-9 ticks over, never reached by a finish. A finisher that never touched its star: uld3 w37 (lead above).
 
-**Picked: under-stars reaching the cast below their band** (`--stars` "at the cast": w34 9 of 31, 22 dead; w32 5).
-Bug: the bulk stops at half a tick under the band's top (`StopLineHp`, `UldEncounter_Algalon.cpp:2561`) on the doc's premise that a spell landing after the stop is 1-2%, but the whole team's crossing volley landed 4-7%,
-against 3.5-4.5 ticks of band under the line. `line.py` over the 32 bulk leaves: 30 were that volley (hits cast
-before the star crossed), 2 a nibble inside the top half tick; 9 ended below the band, 8 of them volleys.
+**Picked: C's wave-3 under-star going off after Big Bang 2's hit.** uld3 w36 3:43.7 (hit + 9.1 s, 15 under, the
+disc died to a Barrage 0.9 s later and the DK holder 2.5 s later: the collapse), uld3 w37 3:39.6 (hit + 5.0, 19
+under, 2 dead), uld6 w37 3:40.6 (hit + 6.1, 7 under, 3 dead). In each the bulk stalled after the 3:14 deadline
+explosion: star 7 +1.5 then +0.3 %/s (uld3 w36), +0.9 then +0.1 (uld6 w37), against +2-3.4 before it. Bug: two of
+the three team members stop attacking at that explosion.
 
-- uld6 1601: Arcane Blast 4.5% took it from 49.1% across its line to 44.6% (band 41..46], then a Shadow Bolt in
-  flight 2.1% and an Auto Shot 1.9%: 3.6% at the cast. 1602: 1.0 s inside its top half tick, a hunter's Aimed Shot
-  cast after the crossing plus an Auto Shot 4.8%: 3.1%. Both went off together 0.45 s before their window at
-  1:59.6, killing the Dispersion soaker before its button and two runners.
-- uld3 1863: a 5.1% Shadow Bolt crossed to 35.8% (band 35..40], Steady Shot and Piercing Shots: 3.6% at the cast,
-  off 0.1 s before its window (3:29.6, 6 dead). 1862: a 5.0% Shadow Bolt to 22.7% (band 22..27], Death and Decay
-  and Piercing Shots: released `early` at 13% (3:15.2), drained into the cast at 3:28.7 (9 dead).
-- Bigger hits since the professions rosters: Shadow Bolt 5-6% crits.
+- uld6 w37: the arcane mage Uldwah, 91.9% of a ~20 k pool, under the 21.5 k top roll, so the personal node pressed
+  Ice Block at 3:14.46 (`algalon.personal`); it sat the full 10 s to 3:24.46, no heal landing (`team.py`). The MM
+  hunter Uldwak's class Deterrence (`low health`, 3.5 s after the hit) stopped its shots 3:17.99-3:22.99.
+- uld3 w37: Uldzah Ice Block 3:14.42-3:24.43 the same way; uld3 w36: Uldzak Deterrence 3:16.4-3:21.4.
+- Across the 8 pulls: 39 Deterrences (20 on team hunters), every one after the hit, never ahead of one; 8 node Ice
+  Blocks, 5 the team mage's, each held 10 s. `ClaimAlgalonExplosionPersonal` (`UldEncounter_Algalon.cpp`) never
+  cancels the immunity, and no rule holds the class Deterrence node.
 
 **Fix** (Algalon files only):
 
-- `HandOverFinish`, `ElectFinisher`, `ValidateUnderFinish` in `UnderBulkStar`: with 5 ticks or less above its line
-  (`ULDUAR_ALGALON_UNDER_FINISH_TICKS`) the bulk star goes to one finisher, the team bot with the smallest hits
-  (hunter, priest, shaman, druid, warlock, mage, the rest), while no finish runs and two members are able; the
-  team takes the next under-star (the bulk gate stays open, it was running). The finish ends at the line, on a
-  release, at the cast or with the finisher lost; a paced kill takes the finisher along and the finish resumes.
-- `StarFocusOf`: each bot's own star for the team action, trigger and `OwnTargeting`, the target guard, the
-  exclusions, `starhold` and `StopCastsAtLine` (the others' casts on the finish star cut at once, the
-  finisher's at the line). Probes `algalon.finishstar`, `algalon.finisher`.
-- Reader: `--stars` lists the finishes (finisher, health, what the rest of the team landed, the cast against the
-  band) and counts under-stars below, in and above their band at the cast; the finisher on its finish star counts
-  as on the focus in `--collateral`, the star groups and the team share. Tests added.
-- Doc: `docs/raids/ulduar/algalon.md` (Stars, Bulk; The trace).
+- `BreakSpentIceBlocks` in the tick: a personal-node Ice Block (`personalBlocks`) comes off once its star has left
+  the scan, no star explodes on the bot within 4.5 s (the press lead plus the stacking span), outside the Big Bang
+  cast (the hide run already strips it) and unphased; probe `algalon.unblock`.
+- `algalon deterrence hold` blocks the class `deterrence` node for unphased bots in phase 1; phased (Dark Matter)
+  and phase 2 keep it.
+- Reader: `--defensives` lists each Ice Block and Deterrence a bot raised on itself unphased in P1, the star team's
+  share and the broken ones; verdict for a team member held over 2 s. Test `IdleButtons`.
+- Doc: `docs/raids/ulduar/algalon.md` (Cooldowns: personal buttons; The trace).
 
-10 and 25-man alike (a team of 2 or 3); the team is bots only, so a human changes nothing. Replay by hand: uld6's
-1601 is 4.6 ticks above its line at 1:18.2, so the mage's Arcane Blast landing at 1:18.5 is cut and the hunter's
-1-2.9% shots finish it inside the band. Cost: one cut cast per other member per under-star, and the finisher's last
-≤ 5% alone (3-5 s) beside the team's next star.
+10 and 25-man alike; a human's Ice Block and Deterrence are untouched (the map holds only the node's presses, the
+block is a bot rule). Cost: a mage out of its block is exposed to a Barrage it would have ignored, at the same
+health it would leave the block with; a low hunter loses a deflect it has never pressed in time.
 
 **Questions for the user.** None.
 
-**Next window should show** (`algalon.py --stars`, `--verdict`): "bulk finishes" rows with a hunter finisher in
-every pull; "at the cast, released early or not at all: N below their band" well under w34's 9 of 31; no
-under-star going off in a cast before hit − 4 s (w34: uld3 Big Bang 2 15 dead, uld6 Big Bang 1 4). Watch: wave-3
-`late` releases (w34: 4 of 6, left out of that count), under-stars `above` their band at the cast (w34: 0), a
-finisher that never reaches its star, the bulk's median speed.
+**Next window should show** (`--defensives`, `--stars`, `--verdict`): "Ice Block and Deterrence … in P1, unphased"
+with no Deterrence and every node Ice Block `broken by algalon.unblock` within ~1 s of its star (w36-37: 5-20 s of
+team time per pull); Big Bang 2's wave-3 under-stars in their band at the cast, and no explosion within 16 s after
+Big Bang 2's hit (w36-37: 3 of 4 C pulls); C a kill with at most 5 dead, A and B again. Watch: a mage dying to a
+Barrage right after its block breaks, the finisher that never touches its star, P1 length against Berserk.

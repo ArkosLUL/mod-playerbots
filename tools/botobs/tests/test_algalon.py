@@ -2738,6 +2738,44 @@ class OlderPresses(unittest.TestCase):
         self.assertIn("personal presses (algalon.personal): 0\n  explosion covers (algalon.cover): 0\n", text)
 
 
+class IdleButtons(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        records = presses_pull()
+        end = records.pop()
+        records += [note(1000, PX_MAGE, "algalon.starteam", 1), note(1000, PX_RET, "algalon.starteam", 1),
+                    *worn(PX_MAGE, al.SPELL_ICE_BLOCK, PX_MAGE, 21000, 21800),
+                    note(21800, PX_MAGE, "algalon.unblock", "Ice Block"),
+                    *worn(PX_RET, al.SPELL_DETERRENCE, PX_RET, 25000, 30000),
+                    *worn(PX_ROGUE, al.SPELL_DETERRENCE, PX_ROGUE, 25000, 30000),
+                    *worn(PX_FROST, al.SPELL_ICE_BLOCK, PX_FROST, 3000, 5000), end]
+        cls.trace = load(cls.folder.name, records)
+        cls.lines = [line for _, line in al.failures(cls.trace)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_unphased_phase_one_button_reads_its_hold_and_the_team(self):
+        rows = sorted(al.idle_buttons(self.trace), key=lambda row: (row["t"], row["guid"]))
+        self.assertEqual([(row["t"], row["guid"], row["spell"], row["held"], row["team"], row["broken"])
+                          for row in rows],
+                         [(21000, PX_MAGE, "Ice Block", 800, True, True),
+                          (25000, PX_RET, "Deterrence", 5000, True, False),
+                          (25000, PX_ROGUE, "Deterrence", 5000, False, False)])
+
+    def test_only_a_star_team_member_held_past_the_limit_is_a_failure(self):
+        self.assertIn("Ret on the star team in Deterrence 5.0 s @ 25.0s", self.lines)
+        self.assertEqual(sum("on the star team in" in line for line in self.lines), 1)
+
+    def test_the_section_totals_the_time_and_marks_the_broken_block(self):
+        text = render(self.trace, "defensives")
+        self.assertIn("Ice Block and Deterrence a bot raised on itself in P1, unphased: 3, 10.8 s unable to attack,"
+                      " 5.8 s of it on the star team\n     0:21.000 Mage Ice Block 0.8 s, star team, broken by"
+                      " algalon.unblock\n", text)
+
+
 KB_HELD = CREATURE | 81
 KB_STUCK = CREATURE | 82
 KB_LOOSE = CREATURE | 83

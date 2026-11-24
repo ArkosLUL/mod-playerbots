@@ -1046,3 +1046,69 @@ and "on a healer at the cast" near 0 (w32: 10 in 16 casts); fewer "a constellati
 handler" verdicts. Watch: swaps late or a 5th Phase Punch (`--swaps`), pickups with the off-tank's taunt cooling
 (`--loose`), a swap tank `noshelter` or hit at a cast while holding a constellation (`--bigbang`), holes lost in
 the 30 s before casts (`--holes`).
+
+## Round 12 (2026-11-24, window 34 build 6464b824a: round 11, rosters with professions)
+
+**Data.** `window34-algalon.md`, one valid pull per pool; every pull's `--deaths`, `--verdict`, `--bigbang`,
+`--stars`, `--collateral`, `--constellations`; window 32's six traces for the band count. Scratch `alg12/`:
+`line.py` (each bulk leave against the exact band from the star's drain clock, the hits landing after it with
+their cast start, the star at the cast), `finish.py`, `starhp.py`.
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | `603_7_…_1795549549` | wipe 5:09 | 32: loose 15, star 8, Barrage 5, on tank 4 |
+| uld4 | `603_8_…_1795549549` | kill 6:47 | 20: loose 8, on tank 6, star 3, Barrage, Smash, Big Bang 1 each (15 after Berserk) |
+| uld2 | `603_11_…_1795549613` | kill 6:45 | 10: star 3, Smash 2, on tank 2, loose 2, Big Bang 1 (5 after Berserk) |
+| uld5 | `603_9_…_1795549550` | wipe 7:16 | 33: loose 21, on tank 7, Smash 2, star, DoT, Big Bang 1 each (30 after Berserk) |
+| uld3 | `603_12_…_1795549613` | wipe 4:23 | 32: star 14, loose 8, Smash 4, on tank 4, Barrage 2 |
+| uld6 | `603_10_…_1795549592` | wipe 6:08 | 31: star 11, loose 9, Barrage 5, on tank 5, Smash 1 |
+
+**Stop rules.** Waived (user, 2026-11-22). The kills (uld4 20 dead, uld2 10) are over the 5-death bar anyway.
+
+**Verdict on round 11: held** in A, B and C. 15 `algalon.offtaunt` taunts in 17 casts (uld1 1, uld4 2, uld2 5,
+uld5 2, uld3 2, uld6 3); constellations on a healer when a cast began 3 in 17 (w32: 10 in 16): uld2 Big Bang 1 and
+3, uld6 Big Bang 2. Healer time in the 30 s before a cast: median 28.9 s (w32: 34.5), uld1 Big Bang 3 167.8 s with
+the pair dead. No offtaunter was caught out at a cast; the two pair tanks hit unphased while holding a
+constellation got theirs by threat.
+
+**Picked: under-stars reaching the cast below their band** (`--stars` "at the cast": w34 9 of 31, 22 dead; w32 5).
+Bug: the bulk stops at half a tick under the band's top (`StopLineHp`, `UldEncounter_Algalon.cpp:2561`) on the doc's premise that a spell landing after the stop is 1-2%, but the whole team's crossing volley landed 4-7%,
+against 3.5-4.5 ticks of band under the line. `line.py` over the 32 bulk leaves: 30 were that volley (hits cast
+before the star crossed), 2 a nibble inside the top half tick; 9 ended below the band, 8 of them volleys.
+
+- uld6 1601: Arcane Blast 4.5% took it from 49.1% across its line to 44.6% (band 41..46], then a Shadow Bolt in
+  flight 2.1% and an Auto Shot 1.9%: 3.6% at the cast. 1602: 1.0 s inside its top half tick, a hunter's Aimed Shot
+  cast after the crossing plus an Auto Shot 4.8%: 3.1%. Both went off together 0.45 s before their window at
+  1:59.6, killing the Dispersion soaker before its button and two runners.
+- uld3 1863: a 5.1% Shadow Bolt crossed to 35.8% (band 35..40], Steady Shot and Piercing Shots: 3.6% at the cast,
+  off 0.1 s before its window (3:29.6, 6 dead). 1862: a 5.0% Shadow Bolt to 22.7% (band 22..27], Death and Decay
+  and Piercing Shots: released `early` at 13% (3:15.2), drained into the cast at 3:28.7 (9 dead).
+- Bigger hits since the professions rosters: Shadow Bolt 5-6% crits.
+
+**Fix** (Algalon files only):
+
+- `HandOverFinish`, `ElectFinisher`, `ValidateUnderFinish` in `UnderBulkStar`: with 5 ticks or less above its line
+  (`ULDUAR_ALGALON_UNDER_FINISH_TICKS`) the bulk star goes to one finisher, the team bot with the smallest hits
+  (hunter, priest, shaman, druid, warlock, mage, the rest), while no finish runs and two members are able; the
+  team takes the next under-star (the bulk gate stays open, it was running). The finish ends at the line, on a
+  release, at the cast or with the finisher lost; a paced kill takes the finisher along and the finish resumes.
+- `StarFocusOf`: each bot's own star for the team action, trigger and `OwnTargeting`, the target guard, the
+  exclusions, `starhold` and `StopCastsAtLine` (the others' casts on the finish star cut at once, the
+  finisher's at the line). Probes `algalon.finishstar`, `algalon.finisher`.
+- Reader: `--stars` lists the finishes (finisher, health, what the rest of the team landed, the cast against the
+  band) and counts under-stars below, in and above their band at the cast; the finisher on its finish star counts
+  as on the focus in `--collateral`, the star groups and the team share. Tests added.
+- Doc: `docs/raids/ulduar/algalon.md` (Stars, Bulk; The trace).
+
+10 and 25-man alike (a team of 2 or 3); the team is bots only, so a human changes nothing. Replay by hand: uld6's
+1601 is 4.6 ticks above its line at 1:18.2, so the mage's Arcane Blast landing at 1:18.5 is cut and the hunter's
+1-2.9% shots finish it inside the band. Cost: one cut cast per other member per under-star, and the finisher's last
+≤ 5% alone (3-5 s) beside the team's next star.
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --stars`, `--verdict`): "bulk finishes" rows with a hunter finisher in
+every pull; "at the cast, released early or not at all: N below their band" well under w34's 9 of 31; no
+under-star going off in a cast before hit − 4 s (w34: uld3 Big Bang 2 15 dead, uld6 Big Bang 1 4). Watch: wave-3
+`late` releases (w34: 4 of 6, left out of that count), under-stars `above` their band at the cast (w34: 0), a
+finisher that never reaches its star, the bulk's median speed.

@@ -34,6 +34,11 @@ bool AlgalonExplosionButtonsHeld(PlayerbotAI* botAI)
            (IsAlgalonPhased(bot) || (AlgalonInPhaseOne(botAI) && !IsAlgalonSwapTank(bot)));
 }
 
+bool AlgalonDeterrenceHeld(PlayerbotAI* botAI)
+{
+    return AlgalonInPhaseOne(botAI) && !IsAlgalonPhased(botAI->GetBot());
+}
+
 bool AlgalonHidingNow(PlayerbotAI* botAI) { return AlgalonShouldRunForShelter(botAI->GetBot()); }
 
 bool AlgalonHiderCasting(PlayerbotAI* botAI) { return AlgalonHiderInCast(botAI->GetBot()); }
@@ -134,6 +139,7 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Block("algalon explosion button hold", Role::Any, AlgalonExplosionButtonsHeld, 0,
             {"barkskin", "shadow ward", "icebound fortitude", "shamanistic rage", "divine protection"});
     e.Block("algalon explosion cover hold", Role::Any, AlgalonInPhaseOne, 0, {"divine sacrifice"});
+    e.Block("algalon deterrence hold", Role::Any, AlgalonDeterrenceHeld, 0, {"deterrence"});
     e.Block("algalon food guard", Role::Any, AlgalonEngaged, 0, {"eat", "drink"});
     e.Block("algalon aura mastery hold", Role::Any, AlgalonEngaged, 0, {"aura mastery"});
     e.Block("algalon shadow aura hold", Role::Any, AlgalonShadowAuraHeld, 0,
