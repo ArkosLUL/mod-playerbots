@@ -1,0 +1,17 @@
+# Lane Y: Flame Leviathan bots board without a real player
+
+Work only in the mod-playerbots worktree `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/rt-polish-flame-leviathan`, on branch `rt/fl-boarding` (already checked out from Custom). The effort is `docs/plans/raid-test-runs/raid-test-runs.PLAN.md`: mod-dungeon-clear (DC) runs Ulduar bosses unattended with all-bot rosters under a headless driver `Dcdriver`, which masters every bot but is never in the group, never on the map and never in a vehicle. Flame Leviathan is now being added (user, 2026-11-25), hard mode with all four towers standing.
+
+**Gap.** `FlameLeviathanVehicleNearTrigger::IsActive` (`src/Ai/Raid/Uld/Trigger/UldTriggers_FlameLeviathan.cpp` ~36-48) fires only while the bot's master sits in a vehicle, so under DC no bot boards. The boarding action itself is master-free (`src/Ai/Raid/Uld/Action/UldActions_FlameLeviathan.cpp` ~1230-1372: vehicles within 200 yd, melee drive siege engines, ranged drive demolishers, then turrets and choppers). Background: `docs/plans/raid-test-runs/l-wave5-research.FINDINGS.md`, section "Flame Leviathan", subsection "The strategy under the DC driver"; strategy doc `docs/raids/ulduar/flame-leviathan.md`.
+
+**How DC will run it** (lane Z, `z-dc-flame-leviathan.PLAN.md`, in parallel): every pull is a repeat pull, fresh vehicles at the arena edge with the boss attackable and no intro; the raid is revived and refreshed at a drop point near (108.0, -37.0, 409.8); DC waits until every member sits in a vehicle (`bot->GetVehicle()`), then teleports each vehicle creature, which carries its passengers, to a staging line inside the arena east of the Shield Wall, then starts the pull on the tank. So no bot needs to drive into the arena before the pull.
+
+**Task.**
+1. Bots board free vehicles near them before the engage whether or not a real player masters them: one code path, where a real player in the raid only changes which vehicle that player takes himself. Keep the seat assignment and zero spare seats as they are.
+2. Read everything else in the Flame Leviathan strategy that runs before the engage or reads the master, and make it hold under DC: nobody leaves a vehicle or drives off between seating and the pull, and the in-fight driving starts correctly from a staging line inside the arena (the vehicle movement rule is inert until he is engaged, `src/Ai/Raid/Uld/Definition/UldDefinition_FlameLeviathan.cpp` ~61-64; check what that means for a fleet already inside).
+3. After a wipe the raid is revived on foot and vehicles respawn: boarding must work again on every pull.
+Same code at 10 and 25 man and with or without hard mode. Raid code comments were stripped on Custom (`c163ec11a`): write no code comments.
+
+**Boundaries.** No Docker other than `pb-check`'s own check containers, no SOAP, no server; no changes outside mod-playerbots; no branch, merge, push, amend or rebase. Commit on `rt/fl-boarding` with messages in files `C:/Users/boss2/AppData/Local/Temp/claude/4e3815b0e3fef148/fd2ca691-4a3e-4009-ba39-dc5273ee9f0c/scratchpad/commit-msg-fl-boarding-<n>.txt` and `git commit -F`.
+
+**Report** as your final message: what changed, with commits; how boarding behaves with and without a real player; what DC can read as "seated and ready"; anything in the strategy DC must do or avoid (teleport timing, staging position, what happens on a wipe); what could not be verified without a live run.
