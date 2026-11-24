@@ -6,8 +6,8 @@ A synthetic phase 2 pins one tank trade, a Chain Lightning cast from both tanks 
 on the off-tank spot and the hazards on each tank; a Sif Blizzard over slot 2 pins the ring Blizzard section; a
 second cast from the camp through a stepped slot 0 into slot 2 pins the chains section; one lit orb with a slowed
 camp bot dying short of its row and another on a cone step pins the shelters section; the same orb over a held
-ring walk and a ring walker dying past reach pins the ring cone section. The shared v14 fixture shows every section
-reads empty elsewhere.
+ring walk and a ring walker dying past reach pins the ring cone section; a Runic Colossus Smash over a healer on his
+target and one behind him pins the colossus section. The shared v14 fixture shows every section reads empty elsewhere.
 """
 from __future__ import annotations
 
@@ -355,6 +355,57 @@ class RingCone(unittest.TestCase):
         records = [rec for rec in ring_cone_pull() if rec.get("k") != "thorim.ringconehold"]
         self.assertIn("dead 1; no thorim.ringconehold probe (a build before it)",
                       printed(thorim.show_ringcone, load(records)))
+
+
+COLOSSUS = (1 << 32) | 3
+COLOSSUS_AT = (2230.4, -385.4)
+COLOSSUS_FACING = math.radians(255)
+HEALER_B = 8806
+
+
+def colossus_pull() -> list[dict]:
+    roster = [{"g": TANK_A, "n": "Anvil", "r": "tank", "c": 1, "h": 0},
+              {"g": HEALER, "n": "Mender", "r": "heal", "c": 5, "h": 0},
+              {"g": HEALER_B, "n": "Soother", "r": "heal", "c": 11, "h": 0}]
+    front = (COLOSSUS_AT[0] + 4.4 * math.cos(COLOSSUS_FACING), COLOSSUS_AT[1] + 4.4 * math.sin(COLOSSUS_FACING))
+    behind = (COLOSSUS_AT[0] - 10.6 * math.cos(COLOSSUS_FACING), COLOSSUS_AT[1] - 10.6 * math.sin(COLOSSUS_FACING))
+    records = [
+        {"e": "hdr", "v": 14, "ts": 1795381228000, "map": 603, "inst": 4, "diff": 1, "boss": "thorim",
+         "bin": 1795380000000, "cfg": {"cheats": "", "mapthreads": 6, "hardmode": {}, "iccbuffs": 0},
+         "roster": roster},
+        {"t": 0, "e": "unit", "g": THORIM, "en": 32865, "n": "Thorim", "b": 1},
+        {"t": 0, "e": "unit", "g": COLOSSUS, "en": 32872, "n": "Runic Colossus"},
+        {"t": 0, "e": "pull", "boss": "thorim", "src": "step"},
+        {"t": 1000, "e": "move", "g": HEALER, "k": "point", "ok": 1, "x": front[0], "y": front[1],
+         "by": "thorim gauntlet positioning action"},
+        {"t": 1000, "e": "move", "g": HEALER_B, "k": "point", "ok": 1, "x": behind[0], "y": behind[1],
+         "by": "thorim gauntlet positioning action"},
+        {"t": 5000, "e": "cast", "s": COLOSSUS, "sp": 62339, "ct": 3000},
+        {"t": 8000, "e": "dmg", "s": COLOSSUS, "d": TANK_A, "sp": 62339, "a": 9000, "ok": 0, "hp": 90.0},
+        {"t": 8000, "e": "dmg", "s": COLOSSUS, "d": HEALER, "sp": 62339, "a": 26000, "ok": 3000, "hp": 100.0},
+        {"t": 8000, "e": "death", "g": HEALER, "killer": COLOSSUS, "x": front[0], "y": front[1], "z": 412.1,
+         "blow": [COLOSSUS, 26000], "rewind": [[8000, COLOSSUS, 62339, 26000]]},
+    ]
+    for t in range(2000, 9001, 1000):
+        records.append({"t": t, "e": "snap", "u": [
+            [COLOSSUS, COLOSSUS_AT[0], COLOSSUS_AT[1], 412.1, COLOSSUS_FACING, 80, 0, TANK_A],
+            [TANK_A, front[0], front[1], 412.1, 0, 90, 0, COLOSSUS],
+            [HEALER, front[0], front[1], 412.1, 0, 100 if t < 8000 else 0, 90, 0],
+            [HEALER_B, behind[0], behind[1], 412.1, 0, 100, 90, 0]]})
+    records.append({"t": 9000, "e": "end", "out": "wipe"})
+    return sorted(records, key=lambda rec: rec.get("t", -1))
+
+
+class Colossus(unittest.TestCase):
+    def test_a_healer_on_his_target_dies_and_one_behind_him_stays_clear(self):
+        text = printed(thorim.show_colossus, load(colossus_pull()))
+        self.assertIn("0:05.000 on Anvil (tank): Mender 4.4 yd 0 deg, 0.0 yd off his target, dead (thorim gauntlet "
+                      "positioning action); Soother 10.6 yd 180 deg, 15.0 yd off his target (thorim gauntlet "
+                      "positioning action)", text)
+        self.assertIn("all: casts 1, healers within 20 yd 2, within 6 yd of his target 1, hit 1, dead 1", text)
+
+    def test_no_cast(self):
+        self.assertIn("no Smash cast", printed(thorim.show_colossus, load(pull())))
 
 
 class Deaths(unittest.TestCase):

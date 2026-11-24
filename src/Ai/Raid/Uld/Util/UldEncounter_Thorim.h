@@ -86,6 +86,8 @@ inline constexpr float ULDUAR_THORIM_GATE_RADIUS = 10.0f;
 inline constexpr float ULDUAR_THORIM_GATE_FOLLOW_DISTANCE = 5.0f;
 
 inline constexpr float ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE = 20.0f;
+inline constexpr float ULDUAR_THORIM_GAUNTLET_HEALER_STANDOFF = 15.0f;
+static_assert(ULDUAR_THORIM_GAUNTLET_HEALER_STANDOFF < ULDUAR_THORIM_GAUNTLET_TETHER_DISTANCE);
 
 inline constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
 inline constexpr float ULDUAR_THORIM_WING_MAX_Z = 425.0f;
@@ -418,6 +420,7 @@ bool ThorimIsBotGauntletLeader(PlayerbotAI* botAI, Player* bot);
 bool ThorimGauntletFighting(PlayerbotAI* botAI, Player* bot);
 
 bool ThorimTrailsGauntletLeader(PlayerbotAI* botAI, Player* bot, Player* leader);
+Position ThorimGauntletTrailSpot(Player* bot, Player* leader);
 
 bool ThorimFightingStartPack(PlayerbotAI* botAI, Player* bot);
 

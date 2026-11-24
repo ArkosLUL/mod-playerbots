@@ -230,8 +230,11 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     }
 
     if (ThorimTrailsGauntletLeader(botAI, bot, leader))
-        return MoveTo(bot->GetMapId(), leader->GetPositionX(), leader->GetPositionY(), leader->GetPositionZ(),
-                      false, false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
+    {
+        Position const spot = ThorimGauntletTrailSpot(bot, leader);
+        return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_NORMAL, true);
+    }
 
     return false;
 }
