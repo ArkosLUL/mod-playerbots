@@ -6,25 +6,26 @@ Lane briefs sit beside this file as `<lane>.PLAN.md`, written when their wave is
 
 The polish loop runs on the user's standing go ("Polish loop" below), scheduled by `u-loop-speedup.PLAN.md` section D since 2026-11-24: two boss groups take turns, six pools per raid, a report file per job. Window history, merges and past question batches: `windows.md` (append a few lines per window). Each boss's state: `polish/<slug>.md` (`## State` and the newest round; older rounds in `polish/history/<slug>.md` once its first lane under the new brief migrated it).
 
-**Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya ("Bosses" below).
+**Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (round 21 next) and Thorim (r22); group 2 = Mimiron (r20 running) and Algalon (r10 running; it fell out of the loop by oversight after window 21 and came back in window 30). **Vezax polished at 25n** in window 30; its 10-man check is window 31's last job. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (r21 running) and Thorim (r22 running); group 2 = Mimiron (round 21 next) and Algalon (r11 next). Vezax is done. Rebalance when a boss is done.
 
-**Window 31** (rebuild of the commit recording this, started 2026-11-24 ~19:40): group 1 on Yogg-Saron r20 and Thorim r21, then Vezax 10n; jobs `scratchpad/window31-jobs.json`, log `scratchpad/window31/window31.out`, reports `scratchpad/window31/window31/window31-<boss>.md`. Windows 29-30 results: `windows.md`.
+**Window 32** (rebuild of the commit recording this, started 2026-11-24 ~20:25): group 2 on Mimiron r20 and Algalon r10; jobs `scratchpad/window32-jobs.json`, log `scratchpad/window32/window32.out`, reports `scratchpad/window32/window32/window32-<boss>.md`. Windows 29-31 and fillers 31b-31c (Jaraxxus, Twin Val'kyr on toc1-toc6: no regressions): `windows.md`.
 
 **Next:**
-- Launch each group 1 lane (Yogg-Saron r21, Thorim r22) as its report file appears; Vezax's 10n report decides whether Vezax is done (the same per-composition rule).
-- Merge Mimiron r20 and Algalon r10 as they finish; once window 31 has ended and both have merged: rebuild, window 32 = group 2 while group 1's lanes code; filler pulls while the server waits (section D).
+- Launch each group 2 lane (Mimiron r21, Algalon r11) as its report file appears.
+- Merge Yogg-Saron r21 and Thorim r22 as they finish; once window 32 has ended and both have merged: rebuild, window 33 = group 1 while group 2's lanes code; filler pulls while the server waits (section D): done bosses whose shared code changed, e.g. the other ToC and Ulduar done bosses.
 - Report each window in chat; one numbered question batch per full cycle, after both groups reported.
 
-**Open batch** (sent with window 28's launch, unanswered; build nothing from it before the answers; recommendation in brackets):
-1. Vezax: every healer priest holds its external for the late Surge, not one (keep).
-2. Vezax r17's three readings: the +5 s grace, the hold until the bot targets the Animus, potions wait (keep all).
-3. Yogg-Saron Q1: redo the phase 1 cloud geometry from the measured orbits (15.3/20.9/27.4/41.4/48.4/54.1 yd, 2.0 yd/s), in two steps (yes).
-4. Yogg-Saron Q2: the Diminish Power break fires once the bots carrying that Crusher's stack are below, not the whole team (yes, one window).
-5. Thorim, finishing at ilvl 226: (a) close on mechanics like Hodir, polished once hard-mode phase 2s lose nobody to a mechanic before the first tank death and normal-mode pulls are kills with at most 3 deaths, then the 10-man check ((a); asked under the old 3-death rule).
+**Open batch** (sent 2026-11-24 ~20:20 after windows 29-30, unanswered; build nothing from it before the answers; recommendation in brackets; full wording in `windows.md`):
+1. Yogg-Saron: rebuild the phase 1 positions from the measured cloud orbits (15.3/20.9/27.4/41.4/48.4/54.1 yd, 2.0 yd/s), in two steps (yes).
+2. Yogg-Saron: break Diminish Power once the bots carrying that Crusher's stacks are below, not the whole team, one window (yes).
+3. Thorim: close on mechanics like Hodir, polished once hard-mode phase 2s lose nobody to a mechanic before the first tank death and normal-mode pulls are kills with at most 5 deaths, then the 10-man check (yes).
+4. Mimiron Q10: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast (yes).
+5. Algalon Q4 (b): in the 30 s before each Big Bang the tank not holding Algalon taunts constellations off healers (yes).
+6. Algalon Q5: tank druids stay in bear form in every boss fight, shared druid code, every boss with a druid tank pulled again (yes).
 
-**Not asked yet:** Algalon second taunter (Q4 b); Iron Assembly self Lay on Hands.
+**Not asked yet:** Iron Assembly self Lay on Hands.
 
 **Mechanics:**
 - Lanes: create the branch (`git -C build-toc-wt/rt-polish-<slug> switch -q -c rt/polish-<slug>-r<n> Custom`), then `Workflow({scriptPath: "G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.js", args: {kind: "polish", tag, wt, branch, boss, slug, raid, round, reports: [<report file>], note}})` with no `agentType` (`~/.claude/agents/raid-lane.md` is untested). The note ends: "<Boss> only; every change must run the same with or without a real player in the raid. Raid code comments were stripped on Custom (c163ec11a): write no code comments." A lane returns `{status, commits, summary, review: {commits, summary}}`. Other kinds (`dc`, `strategy`, `research`, `runner`) take a `brief`; the old script is `raid-polish-lane.prev.js`.
@@ -49,11 +50,11 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 21 next |
-| Thorim | group 1, round 22 next |
-| Mimiron | group 2, round 20 running |
-| Vezax | polished at 25n (window 30 on r17: hard-mode kills with 0/0/0/0/1, one wipe); 10n check in window 31 |
-| Algalon | group 2, round 10 running (back from window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Yogg-Saron | group 1, round 21 running |
+| Thorim | group 1, round 22 running |
+| Mimiron | group 2, round 21 next |
+| Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
+| Algalon | group 2, round 11 next (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
