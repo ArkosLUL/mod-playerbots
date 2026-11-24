@@ -8,14 +8,13 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (round 20 next) and Thorim (r21); group 2 = Mimiron (r20), Vezax (r18) and Algalon (r10). Algalon fell out of the loop by oversight after window 21 (round 9 merged in its build, no lane read that window's pulls); it rejoins in window 30. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (round 21 next) and Thorim (r22); group 2 = Mimiron (r20 running) and Algalon (r10 running; it fell out of the loop by oversight after window 21 and came back in window 30). **Vezax polished at 25n** in window 30; its 10-man check is window 31's last job. Rebalance when a boss is done.
 
-**Window 29 running** (started 2026-11-24 18:28): group 1 on the live build `897faf0d8` with no rebuild (the speed-up merges touched no `src`); jobs `scratchpad/window29-jobs.json`, log `scratchpad/window29/window29.out`, reports `scratchpad/window29/window29/window29-<boss>.md`. Window 28 was stopped before any pull finished; its three Vezax runs, stopped with `.dc test stop`, no longer count since the runner fix `4d0520fc1`.
+**Window 31** (rebuild of the commit recording this, started 2026-11-24 ~19:40): group 1 on Yogg-Saron r20 and Thorim r21, then Vezax 10n; jobs `scratchpad/window31-jobs.json`, log `scratchpad/window31/window31.out`, reports `scratchpad/window31/window31/window31-<boss>.md`. Windows 29-30 results: `windows.md`.
 
 **Next:**
-- Launch each group 1 lane (Yogg-Saron r20, Thorim r21) as its report file appears.
-- When window 29 ends: window 30 = group 2 (Mimiron, Vezax, Algalon; `scratchpad/window30-jobs.json`) on the same build (`--skip-rebuild --head 897faf0d8`), since group 2 has no lanes to wait for; its lanes launch per report.
-- Once window 30 has ended and group 1's lanes have merged: rebuild, window 31 = group 1 while group 2's lanes code; then alternate per section D, with filler pulls while the server waits.
+- Launch each group 1 lane (Yogg-Saron r21, Thorim r22) as its report file appears; Vezax's 10n report decides whether Vezax is done (the same per-composition rule).
+- Merge Mimiron r20 and Algalon r10 as they finish; once window 31 has ended and both have merged: rebuild, window 32 = group 2 while group 1's lanes code; filler pulls while the server waits (section D).
 - Report each window in chat; one numbered question batch per full cycle, after both groups reported.
 
 **Open batch** (sent with window 28's launch, unanswered; build nothing from it before the answers; recommendation in brackets):
@@ -50,11 +49,11 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 20 next |
-| Thorim | group 1, round 21 next |
-| Mimiron | group 2, round 20 next |
-| Vezax | group 2, round 18 next |
-| Algalon | group 2, round 10 next (back from window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Yogg-Saron | group 1, round 21 next |
+| Thorim | group 1, round 22 next |
+| Mimiron | group 2, round 20 running |
+| Vezax | polished at 25n (window 30 on r17: hard-mode kills with 0/0/0/0/1, one wipe); 10n check in window 31 |
+| Algalon | group 2, round 10 running (back from window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
