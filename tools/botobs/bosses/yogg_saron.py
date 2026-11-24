@@ -418,6 +418,11 @@ GUARDIAN_SPAWN_TELEPORT_MS = 3000
 SPELL_WEAKENED = 64162
 SPELL_HAND_OF_RECKONING = 62124
 TAUNT_COOLDOWN_MS = 8000
+TANK_TAUNT_KITS = {1: {355: TAUNT_COOLDOWN_MS},
+                   2: {SPELL_HAND_OF_RECKONING: TAUNT_COOLDOWN_MS, 31789: TAUNT_COOLDOWN_MS},
+                   6: {56222: TAUNT_COOLDOWN_MS, 49576: 25000},
+                   11: {6795: TAUNT_COOLDOWN_MS}}
+SPELL_VIGILANCE_TAUNT_RESET = 50725
 # What a tank can turn a Guardian back with: the class taunts, Growl 6795 and Righteous Defense 31789,
 # whose cast row on the Guardian sits beside the one on the friendly target.
 GUARDIAN_TAUNTS = set(TAUNT_SPELLS) | {6795, 31789}
@@ -4747,6 +4752,20 @@ def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
     return bool(index) and when - casts[index - 1] < cooldown_ms
 
 
+def cooling_since(casts: list[int], resets: list[int], when: int, cooldown_ms: int) -> bool:
+    index = bisect.bisect_right(casts, when)
+    if not index or when - casts[index - 1] >= cooldown_ms:
+        return False
+    after = bisect.bisect_right(resets, casts[index - 1])
+    return after == len(resets) or resets[after] > when
+
+
+def taunts_cooling(casts: dict[int, list[int]], kit: dict[int, int], when: int,
+                   resets: dict[int, list[int]] | None = None) -> bool:
+    return bool(kit) and all(cooling_since(casts.get(spell, []), (resets or {}).get(spell, []), when, cooldown)
+                             for spell, cooldown in kit.items())
+
+
 def damage_band(entry: int | None, hp: float | None, in_gaze: bool) -> str:
     """Which phase 3 bucket a hit landed in, by its target's entry and health just before: Guardians over the floor,
     between Weakened and the floor (in a gaze or not), Weakened, Yogg, leftover tentacles."""
@@ -5129,7 +5148,7 @@ def show_phase3_tanks(trace: Trace, start: int, stop: int, rows: dict[int, list[
             looks = "; ".join(f"+{look // 1000} s " + "/".join(str(guardians_on(victims, tank, rec["t"] + look))
                                                                 for tank in order) for look in TANK_SWAP_LOOKS_MS)
             print(f"    swap {clock(rec['t'])} by {trace.name(rec.get('g', 0))}, {rec.get('txt', '')}: {looks}")
-    for key in ("yogg.tankshed", "yogg.tankloh"):
+    for key in ("yogg.tankshed", "yogg.tankloh", "yogg.vigilance"):
         picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, key) if start <= rec["t"] <= stop)
         if picks:
             print(f"    {key:16} : {dict(picks)}")
@@ -5466,16 +5485,40 @@ def show_phase3(trace: Trace) -> None:
 
     # A bot tank's target, and whether its taunt was even available when a Guardian swung at the raid.
     swings = [rec for rec in melee_hits if trace.role(rec.get("d")) != "tank"]
-    for guid in sorted(tanks - set(trace.humans), key=trace.name):
+    classes = {member["g"]: member.get("c") for member in trace.header.get("roster", [])}
+    bot_tanks = sorted(tanks - set(trace.humans), key=trace.name)
+    taunt_casts: dict[int, dict[int, list[int]]] = {guid: collections.defaultdict(list) for guid in bot_tanks}
+    resets: dict[int, dict[int, list[int]]] = {guid: collections.defaultdict(list) for guid in bot_tanks}
+    for rec in trace.of("cast"):
+        if rec.get("s") in taunt_casts:
+            taunt_casts[rec["s"]][rec.get("sp")].append(rec["t"])
+        if rec.get("sp") == SPELL_VIGILANCE_TAUNT_RESET and rec.get("tgt") in resets:
+            resets[rec["tgt"]][355].append(rec["t"])
+    cooling = {guid: [taunts_cooling(taunt_casts[guid], TANK_TAUNT_KITS.get(classes.get(guid), {}), rec["t"],
+                                     resets[guid])
+                      for rec in swings] for guid in bot_tanks}
+    for guid in bot_tanks:
         kinds = collections.Counter(target_kind(row[8], trace.entries.get(row[8]))
                                     for row in rows.get(guid, []) if start <= row[0] <= alive_end and row[6] > 0)
         total = sum(kinds.values()) or 1
-        taunts = sorted(rec["t"] for rec in trace.of("cast")
-                        if rec.get("s") == guid and rec.get("sp") == SPELL_HAND_OF_RECKONING)
-        down = sum(1 for rec in swings if on_cooldown(taunts, rec["t"], TAUNT_COOLDOWN_MS))
         print(f"  bot tank {trace.name(guid):14}: targets guardian {kinds['guardian'] / total:.2f}"
               f" tentacle {kinds['tentacle'] / total:.2f} yogg {kinds['yogg'] / total:.2f} none {kinds['none'] / total:.2f};"
-              f" Hand of Reckoning on cooldown at {down} of {len(swings)} swings on non-tanks")
+              f" every taunt it has cooling at {sum(cooling[guid])} of {len(swings)} swings on non-tanks")
+    if bot_tanks and swings:
+        stamps = {guid: [row[0] for row in rows.get(guid, [])] for guid in bot_tanks}
+
+        def living(guid: int, when: int) -> bool:
+            index = bisect.bisect_right(stamps[guid], when)
+            return bool(index) and rows[guid][index - 1][6] > 0
+
+        fell = min((rec["t"] for rec in death_records(trace) if rec.get("g") in tanks and rec["t"] >= start),
+                   default=stop)
+        early = [index for index, rec in enumerate(swings) if rec["t"] < fell]
+        dry = sum(1 for index in early
+                  if any(living(guid, swings[index]["t"]) for guid in bot_tanks)
+                  and all(cooling[guid][index] for guid in bot_tanks if living(guid, swings[index]["t"])))
+        print(f"    no bot tank with a taunt ready: {dry} of {len(early)} swings on non-tanks before the first"
+              f" tank death")
     held = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.tankhold"))
     if held:
         print(f"    yogg.tankhold    : {dict(held)}")

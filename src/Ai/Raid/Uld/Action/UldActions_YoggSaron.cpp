@@ -2307,6 +2307,18 @@ bool YoggSaronTankLayOnHandsAction::Execute(Event /*event*/)
     return true;
 }
 
+bool YoggSaronVigilanceAction::Execute(Event /*event*/)
+{
+    Player* tank = YoggSaronVigilanceTarget(botAI);
+    if (!tank || !botAI->CastSpell("vigilance", tank))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::Note(bot, "yogg.vigilance", tank->GetName());
+
+    return true;
+}
+
 bool YoggSaronHealerCombatEngineAction::Execute(Event /*event*/)
 {
     botAI->ChangeEngine(BOT_STATE_COMBAT);

@@ -497,6 +497,15 @@ public:
     bool IsActive() override;
 };
 
+class YoggSaronVigilanceTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron vigilance trigger";
+
+    YoggSaronVigilanceTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronHealerCombatEngineTrigger : public YoggSaronTrigger
 {
 public:
