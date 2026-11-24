@@ -4387,8 +4387,6 @@ def show_threat(trace: Trace) -> None:
 
 
 def stack_turns(rows: list[tuple[int, int, int, float]], tanks: set, reach: float) -> list[tuple[int, int, int]]:
-    """(t, guardian, new target) each time a Guardian within `reach` of the middle went from a tank to a non-tank, over
-    time-ordered (t, guardian, target, yards from the middle) rows. A row with no target changes nothing."""
     last: dict[int, int] = {}
     turns = []
     for when, guardian, target, far in rows:
@@ -4401,8 +4399,6 @@ def stack_turns(rows: list[tuple[int, int, int, float]], tanks: set, reach: floa
 
 
 def show_stack_turns(trace: Trace, guardians: set, roster: set, tanks: set, p1_end: int) -> None:
-    """Guardians on the stack leaving a tank for a non-tank: what the tanks' area threat holds back, and what a
-    multiplier taking it away shows first. Pets count under their owner's class."""
     rows = [(snap["t"], row[0], row[7], math.dist((row[1], row[2]), BODY))
             for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end
             for row in snap.get("u", []) if row[0] in guardians and len(row) > 7 and row[5] > 0]

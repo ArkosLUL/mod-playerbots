@@ -743,7 +743,7 @@ and ground AoE against the focus's 13.0. So:
   Consecration 8). Keyed on the `Aoe` threat type it held Seed, Volley and Blizzard but ran Divine Storm,
   Whirlwind and Multi-Shot. **Tanks are exempt**: their Consecration, Death and Decay, Swipe, Maul and
   Thunder Clap hold every Guardian nobody aims at. Held too, for 30-68% of phase 1, they doubled the
-  Guardians on the stack turning off a tank (2.7-3.4 a minute to 5.7, most onto a warlock's DoTs), which
+  Guardians on the stack turning off a tank (2.7-3.4 a minute to 5.7, 44% onto warlock DoTs), which
   walked to the back line and parked; so tank area damage still leaks into the gap. Its lead is only
   2.6-5.3 s, so the resolver also cancels an area channel already running: Blizzard, Hurricane, Volley,
   Rain of Fire.
