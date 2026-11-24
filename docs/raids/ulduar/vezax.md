@@ -242,11 +242,13 @@ block's strafe runs the way its own arc does, and such a mark gets its crash a m
 the block walked with its marked bot for the 3-4 s it needed to get clear: in windows 11-24 the 28
 such marks leeched a median 29 ticks, 22 on its block (pre-spawn ones 14), putting Vezax back
 +0.77 %/s over the window, killing 1-4 bots in three pulls and in a fourth draining the healers off
-a main tank who died 9 s later. So the cast records the slotted camp bot carrying the mark, his
+a main tank who died 9 s later. So the cast records the slotted camp member carrying the mark, his
 victim aside, while the Barrier is up (`VezaxNoteShadowCrash`), and for that flight:
 
 - the marked bot dodges straight to its arc spot (`vezax.dodge = mark`) when the spot is 11 yd off
-  the impact and the walk leaves the blast in time, else as before;
+  the impact and the walk leaves the blast in time, else as before. That is its mark walk's point, so
+  the move reads `dup` while it walks there; any dodger standing still 500 ms past its last move gets
+  the walk re-sent, since `MoveTo` refuses an exact repeat for 5 s even to a bot something stopped;
 - its blockmates strafe the other way (`away`, `pulled away`), kept only 11 yd off the impact and in
   time, else the search, which follows the arc for only a few yards. A crash on the other block
   sends most of them to the search, since the reversed strafe would cross its impact.
@@ -466,10 +468,10 @@ the dodge aside, toward a landing impact by the strategy's own test; its summary
 many hit bots took one. Its `late` counts bots whose accepted dodge could not leave the blast by the
 landing at 7 yd/s, the strategy's test with base run speed. `--markcrash` takes each crash cast
 inside a camp member's mark, with its phase: the leech ticks on the marked bot's block (from the
-cast on too), whether the marked bot's first dodge in the flight ended at its arc spot, and how many
-blockmates' first dodges went toward its arc side or the other way; a search can go either way, so
-read `vezax.dodge` beside it. `--tank` takes the tank he hit longest as
-the main tank: to his first death, Beacon of Light's share on him and on another tank before the
+cast on too), whether the marked bot's first dodge in the flight (a `dup` row too) ended at its
+arc spot, and how many blockmates' first dodges went toward its arc side or the other way; a search
+can go either way, so read `vezax.dodge` beside it. `--tank` takes the tank he hit longest as the
+main tank: to his first death, Beacon of Light's share on him and on another tank before the
 Animus and after it and the copies landing on him; Sacred Shield casts by target.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast

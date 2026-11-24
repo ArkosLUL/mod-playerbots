@@ -624,7 +624,8 @@ def mark_crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
     rows = crashes(trace, samples)
     leech = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_MARK_LEECH]
     dodges = [rec for rec in trace.of("move")
-              if rec.get("by") == DODGE and rec.get("ok") and not rec.get("r") and rec.get("x") is not None]
+              if rec.get("by") == DODGE and rec.get("x") is not None
+              and (rec.get("ok") and not rec.get("r") or rec.get("r") == "dup")]
 
     def first_dodge(guid: int, low: int, high: int):
         return next((rec for rec in dodges if rec["g"] == guid and low <= rec["t"] <= high), None)
@@ -692,7 +693,7 @@ def show_mark_crash(trace: Trace) -> None:
     print("\n  crash is its cast after the mark, on the block it was aimed at or `it` for the marked bot")
     print("  group is the leech ticks on the marked bot's block, after those from the cast on")
     print("  marked walk is its first dodge in the flight, `spot` when it ends within"
-          f" {2 * MARK_SPOT_TOLERANCE:.0f} yd of its arc spot")
+          f" {2 * MARK_SPOT_TOLERANCE:.0f} yd of its arc spot; a `dup` row counts, the bot already walking there")
     print("  with/away count its blockmates whose first dodge in the flight went toward its arc side or the"
           " other way")
 

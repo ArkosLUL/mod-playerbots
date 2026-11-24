@@ -1607,8 +1607,10 @@ own dodge runs for bots only, as every dodge does. Shared code: none.
 
 **Next window should show** (`--markcrash`, the 3:52 marks):
 
-- the marked bot `spot` where it dodged, `vezax.dodge = mark` on it; blockmates 0 with when the crash
-  hits its own block (`away`/`pulled away`), a few yards `with` by the search when it hits the other;
+- the marked bot `spot` where it dodged, `vezax.dodge = mark` on it, its dodge row mostly `dup` (it is
+  already walking there); blockmates `away`/`pulled away` when the crash hits its own block (the replay
+  sent 7 of 71 there to the search, which can read `with`), a few yards `with` by the search when it
+  hits the other;
 - leech on the marked bot's block from the cast on well under window 24's 34 / 27 / 15, the window
   under ~20 ticks, Vezax's heal-back under +0.5 %/s;
 - `--crash`: no hit on a blockmate that turned, `late` still 0-1 a pull;
@@ -1625,3 +1627,22 @@ own dodge runs for bots only, as every dodge does. Shared code: none.
   uld1 0:20) 53, 38 on its block. (a) Extend the turn to any crash cast inside a mark; (b) only to
   crashes aimed at the marked bot or its block in the first ~4 s; (c) keep the Animus phase only.
   *Recommended: (c) until window 25 reads the Animus-phase turn, then (b) if it works.*
+
+**Review.** The cause holds (`vezax-r13-review/follow.py`; the lane's `replay.py` and `cases.py`
+re-run: 28 Animus-phase cases, median 29 / 22 ticks, 15 of 15 marked walks and 81 of 131 reversed
+strafes clear). w24 uld1: no leech tick on group R before the 3:54.3 crash; from Uldxag's strafe it
+stood 1-8 yd from its blockmates to 3:57.8 at six ticks a second on them, 10-17 yd only at 3:58.8;
+uld2 likewise, six a second on its block to 3:57.5. The fix is the user's (a) as worded. No size, mode or player branch: the
+record needs the Barrier and takes a real player in a slot like a bot; no shared code, no comments.
+`pb-check` passes.
+
+- Review fix: the marked bot's dodge now goes to its mark walk's own point, and `MoveTo` refuses an
+  exact repeat for 5 s even to a bot something stopped (`docs/engine/pitfalls.md`), so a mark walk
+  stopped short left it in the blast where the old strafe, another point, was sent. In all 15 traced
+  marked dodges the mark walk was 0.46-1.54 s old and still moving, so the dodge reads `dup`.
+  `VezaxShadowCrashDodgeAction` now clears `last movement` for any dodger standing still 500 ms past
+  its last move (`ULDUAR_VEZAX_DODGE_STALL_MS`), as Hodir and Algalon do.
+- Review fix: `--markcrash` read that `dup` row as `no dodge`; it counts it now (test added).
+- Review fix: the doc called the recorded member a camp bot; a real player in a slot is recorded too.
+- Review fix: next-window line, own-block blockmates `away` but not all (7 of 71 searched).
+- Left: the mark action's own walk has the same 5 s stall; older than this round.

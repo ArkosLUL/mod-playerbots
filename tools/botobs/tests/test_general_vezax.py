@@ -472,11 +472,22 @@ def mark_crash_pull() -> list[dict]:
 
 class MarkCrash(unittest.TestCase):
     def setUp(self):
+        self.trace = self.write(mark_crash_pull())
+
+    def write(self, records: list[dict]) -> Trace:
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         path = pathlib.Path(folder.name) / "603_7_general-vezax_1789500000.ndjson"
-        path.write_text("\n".join(json.dumps(rec) for rec in mark_crash_pull()) + "\n", encoding="utf-8")
-        self.trace = Trace(path)
+        path.write_text("\n".join(json.dumps(rec) for rec in records) + "\n", encoding="utf-8")
+        return Trace(path)
+
+    def test_a_dodge_refused_as_dup_still_reads_the_marked_bots_walk(self):
+        records = mark_crash_pull()
+        for rec in records:
+            if rec.get("e") == "move" and rec["g"] == MARKED:
+                rec.update(ok=0, r="dup")
+        row = gv.mark_crashes(self.write(records))[0]
+        self.assertEqual(row["walk"], "spot")
 
     def test_only_a_crash_cast_inside_the_mark_is_a_case(self):
         rows = gv.mark_crashes(self.trace)
