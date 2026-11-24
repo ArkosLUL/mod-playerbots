@@ -2916,7 +2916,7 @@ void HoldPetSplash(Group* group, AlgalonEncounterState& state, bool active)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        Pet* pet = IsBot(member) ? member->GetPet() : nullptr;
+        Pet* pet = IsBot(member) && InFight(member) ? member->GetPet() : nullptr;
         if (!pet || !pet->IsAlive())
             continue;
 
@@ -2925,8 +2925,11 @@ void HoldPetSplash(Group* group, AlgalonEncounterState& state, bool active)
         {
             std::vector<uint32> splash;
             for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
-                if (PetSpellSplashes(sSpellMgr->GetSpellInfo(pet->GetPetAutoSpellOnPos(pos))))
-                    splash.push_back(pet->GetPetAutoSpellOnPos(pos));
+            {
+                uint32 const spellId = pet->GetPetAutoSpellOnPos(pos);
+                if (pet->HasSpell(spellId) && PetSpellSplashes(sSpellMgr->GetSpellInfo(spellId)))
+                    splash.push_back(spellId);
+            }
 
             for (uint32 const spellId : splash)
             {

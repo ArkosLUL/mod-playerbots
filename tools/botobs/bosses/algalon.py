@@ -3549,7 +3549,6 @@ def show_collateral(trace: Trace) -> None:
 
 
 def pet_splash_holds(trace: Trace) -> collections.Counter:
-    """`(owner, spell name)` counts of the times a bot's pet had a splash autocast switched off near a star."""
     counted: collections.Counter = collections.Counter()
     for rec in notes(trace, "algalon.petsplash"):
         state, _, spell = (rec.get("txt") or "").partition(" ")
