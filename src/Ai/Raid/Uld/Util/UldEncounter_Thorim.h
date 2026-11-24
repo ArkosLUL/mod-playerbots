@@ -126,6 +126,7 @@ inline constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 
 inline constexpr float ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE = 1.0f;
 inline constexpr float ULDUAR_THORIM_PHASE2_HOLDER_TOLERANCE = 1.0f;
+inline constexpr float ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS = 8.0f;
 
 inline constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 inline constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;

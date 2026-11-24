@@ -1807,3 +1807,170 @@ six pulls. Fixed: the Blizzard trigger ran `TryGetThorimPhase2Spot` (the slot pa
 `RingPoint` raycast) every tick for every ring bot in phase 2, normal mode included, where it used to return at once.
 `ThorimRingBlizzardStep` now asks whether the bot stands in a zone or the lit cone first; while it holds, the positioning trigger,
 which reads the slot every tick anyway, keeps `thorim.ringstep` current. `pb-check` passes.
+
+## Round 18 (window 25: build 3ce456519 with rounds 16 and 17)
+
+**Data:** window 25, one pull per pool, all valid (`start: step`, no DC veto row inside a pull): `tr-20261124-100512-1` (uld1),
+`-2` (uld2), `-3` (uld3); traces `env/dist/logs/botobs/603_{1,2,3}_thorim_{1795514775,1795514771,1795514773}.ndjson`, read through
+`raidtest.py report --boss thorim --raid uld --head 3ce456519 --pulls 10` (its `thorim.py` lines), `postmortem.py --death`, round 7-17
+scripts (`budget.py`, `corridor.py`, `leadtl.py`, `leadstop.py`, `pack2.py`, `flees.py`, `sinkport.py`, `revive.py`, `othertgt.py`,
+`p2rank.py`, `p2heal.py`, `chain.py`, `sifclock.py`) and new ones in session scratchpad `thorim_r18/` (`vetoes.py`, `steppass.py`,
+`mana.py`, `healcasts.py`, `opening.py`, `victims.py`, `swaps.py`, `drag.py`, `units.py`, `dealt.py`, `evadescan.py`) over `snap`,
+`move`, `act`, `veto`, `cast`, `aura`, `dmg`, `heal` and `note` rows. For the opening trade: all 37 Thorim phase 2s on disk with a
+tank-to-tank swap; for the corridor stall: all 39 Thorim traces with a lever.
+
+| Pool | Pull | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | 1795514775 | wipe 6:48, **hard mode** (62507 0:54.2, `thorim.sifjoined`; phase 2 3:14.2 against 3:24.2) | phase 2: Thorim melee on a non-tank 15, Lightning Charge 6, Chain Lightning 5, Thorim melee on a tank 3, Frostbolt Volley 2, Frostbolt 1, Unbalancing Strike 1 |
+| uld2 | 1795514771 | wipe 5:13, **hard mode** (62507 0:44.7, `thorim.sifjoined`; phase 2 3:04.7 against 3:14.7) | phase 2: Thorim melee on a non-tank 23, on a tank 3, Frostbolt Volley 2, Unbalancing Strike 2, Lightning Charge 1 |
+| uld3 | 1795514773 | kill 5:56, normal (62565 3:14.6, phase 2 3:41.4) | none |
+
+**Round 16 verdict (corridor flee hold, Revive Pet hold): held.** No accepted `flee` by a gauntlet-squad bot between the lever and phase 2
+(w24: 28 / 11 / 33), `thorim corridor flee hold` vetoes 25 / 13 / 23 instead; no squad bot teleported from the corridor to the arena (w24:
+2 / 4 / 5); no corridor death at all. No Revive Pet cast in any pull (the harness gave roster B its pets back), so its hold never had to
+fire. uld2's first lead move came 0.25 s after the lever (w24 6.7 s); the Colossus pull 1.8 / 1.4 / 2.2 s after the leader reached his stop;
+pack 2 moved 1.8 / 3.3 / ~3 s after pack 1's last death (w24 uld2 / uld3 9.0 / 8.8 s). Corridor squad bots targeted arena adds only on the
+balcony at the jump (uld2 3:00-3:01).
+
+**Round 17 verdict (ring melee step out of Blizzard): the deaths stopped; the fallback never fired.**
+
+| Pull | ring melee in a zone | stays p50 / max | ticks | Blizzard deaths | steps; stepped / out of reach | walk back p50 / max |
+|---|---|---|---|---|---|---|
+| w25 uld1 (5 Blizzards) | 29.3 bot-s | 2.4 / 3.7 s | 21 (97k) | 0 | 61; 250.5 / 203.1 bot-s | 1.2 / 12.5 s |
+| w25 uld2 (3) | 11.4 | 1.2 / 3.9 | 5 (22k) | 0 | 25; 76.9 / 72.7 | 2.0 / 14.0 |
+| before: w24 uld1, w23 uld1 | 32.3, 50.5 | max 8.7, 10.0 | 40 (185k), 55 (248k) | 3, 3 | - | - |
+
+- Fallback: every one of the 86 distinct step destinations (`steppass.py`, classified by the bot's and Thorim's snapshot positions) lies
+  past the ring, 8 yd or more off both tank spots and within 15 yd: the first pass. The second and third passes (past the ring near a
+  tank spot, anywhere within 20 yd) never produced a step, so they cost nothing here.
+- No accepted `avoid aoe` move by a ring melee in phase 2 (one `thorim ring aoe hold` veto, uld2). Melee on Thorim to +100 s 100%.
+- In a zone 11-29 bot-s against the replay's 0-6: each bot still stands 1-4 s in the zone a passing bunny drops on it before it is clear.
+  Ticks 5-21 a pull. The two 12.5 / 14.0 s walk backs are single outliers, not read further.
+
+**Why both hard-mode phase 2s were lost: the healers ran dry and the tanks fell; Thorim was at 26.2% / 56.2%.**
+
+| Pull | first tank death | Thorim then | healer mana then | non-tank deaths before it | Thorim %/s 0-30 / 30-60 / 60-90 / 90-120 / 120-150 s |
+|---|---|---|---|---|---|
+| uld1 | +195.9 s, Lightning Charge on the holder | 26.2% | 0 / 1 / 1 / 8 | 11: Chain Lightning 5, Lightning Charge 4, Frostbolt 1, Volley 1 | 0.20 / 0.51 / 0.45 / 0.37 / 0.39 |
+| uld2 | +96.2 s, Volley on the holder | 56.2% | dead / 1 / 4 / 43 | 2: Thorim's landing swing 1, Volley 1 (the holy paladin) | 0.28 / 0.58 / 0.48 / 0.33 / - |
+
+- **Tank deaths.** uld1: holder Uldxaa (prot paladin) went 100 → dead in 8 s under Thorim melee 35.7k, Blizzard 31.5k (9 ticks: both tank
+  spots sat in Blizzard 5) and a 22.9k Lightning Charge, healed 35k; Uldxam (blood DK, struck) 0.7 s later, melee 75.9k and Blizzard 47.1k
+  in its last 19 hits. uld2: holder Uldyab (bear) took Thorim melee 70k, Frost Nova 10k and a 7.2k Volley in its last 10 s, healed 46k;
+  struck Uldyaa took him next and died 1 s later to two swings (33.3k, 17.3k). Both soulstones died within 2 s. Before the first
+  tank death tank intake was 1.90 / 0.88 M: Thorim melee 52 / 43%, Blizzard 25 / 27%, Unbalancing Strike 11 / 12%.
+- **The waiting tank's Blizzard.** Reader: holder / waiting 39 hits (124k) / 87 (349k) in uld1, 20 (77k) / 37 (155k) in uld2 (w15-w23
+  waiting 45-49 hits, 160-197k). Before the first tank death the waiting tank took 345k / 155k of Blizzard, 82 / 65% of its intake. By
+  design: `ThorimSifBlizzardTrigger` refuses both tank roles in phase 2 and the off-tank spot sits 1.0 yd off the bunny's track (round 8,
+  the user's spot). Question 1.
+- **Mana.** Healers entered phase 2 at 66 / 55% mean (uld1 39-97, uld2 44-67) and burned ~0.35-0.45 points a second each: uld1 34% at +94 s,
+  12% at +140 s, 5% at +186 s; uld2 46% at +44 s, then the holy paladin (66% mana, 44.7% health) died at +77.7 s to Frostbolt 10.2k and a
+  Volley 11.3k, and the other three stood at 4 / 4 / 46% by +89 s. Overheal ran 10-16k/s against 20-25k/s effective in uld1. Mana Tide
+  at +2 s (uld1) and +63 s (uld2); both uld2 priests had spent Divine Hymn on the start pack (0:04.6, 0:06.8). Class healing code, shared.
+- **Thorim's health per second against the clock.** Berserk is phase 2 + 5 min; the binding clock is the mana wall, +96 s (uld2) and
+  +196 s (uld1). A kill before it needs 1.04 / 0.51 %/s on average; the raid managed 0.40 / 0.36, 0.46-0.59 at 119-154k/s of DPS output
+  once every DPS was on him (+35 s on) and 0.20-0.28 in the first 30 s. Per point of damage the hard-mode Thorim is ~1.4x tougher than the
+  normal one: uld3 lost 0.70-0.99 %/s at 128-181k/s of the same output (`opening.py`). uld1's 26.2% at the first tank death is the lowest
+  since window 12's 15% (w14-w24: 53-85%); its first 30 s and its 11 early deaths are the margin.
+
+**Why uld3 reached Thorim at 3:41: a 21 s corridor stall on two guards that evaded every hit.** Lever to phase 2 196.6 s against the
+169.7 s budget (+26.9 s); corridor trash 71.2 s (uld1 / uld2 39.3 / 43.5 s). From 1:14.0 to 1:35.4 Iron Ring Guard 5cd stood 2.3 yd from
+warlock Uldzav at (2242.1, −310.1), hitting him, at 91% then regenerating to 100% at 1:20.3, and guard 5cb on his pet regenerated 81 →
+100% at 1:28.7; the nine squad non-healers attacked 5cd (Mortal Strike and Sunder Armor rows `OK` on its guid) and dealt 0-11k per 2 s
+against 30-55k before (`dealt.py`). The Runic Smash lane dodge (`thorim runic smash action`, 1:10.5) had walked Uldzav onto the left lane's
+waypoint `ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1` (2242.12, −310.15), arriving 1:15.7, and he stood there until the next dodge at 1:34.5;
+5cd then followed and died in 14 s; his felguard Flaadhun held 5cb. That is the cannot-reach evade of round 15 on a corridor mob
+(`ChaseMovementGenerator` → `SetCannotReachTarget`, hits evade, regen 5 s later), though bots stood on that waypoint in many pulls before.
+Once in 39 traces (`evadescan.py`: no other corridor guard held 8 s or more without losing health). Not fixed; without it uld3 would still
+have been ~7 s late (to-Colossus 14.5 s, Honor Guards + Giant 50.3 s).
+
+**Gauntlet timeline** (seconds per segment from the lever; budget lever → Sif's deadline 170.0 / 169.8 / 169.7 s):
+
+| Pull | lever after pack | walk to trash | corridor trash | to Colossus | Colossus | ramp | Honor Guards + Acolyte + Giant | balcony | lever to phase 2 | vs Sif |
+|---|---|---|---|---|---|---|---|---|---|---|
+| w25 uld1 | 0.0 | 13.1 | 39.3 | 11.2 | 19.7 | 4.6 | 52.5 | 19.7 | 160.0 | made by 10.0 |
+| w25 uld2 | 0.15 | 14.6 | 43.5 | 11.4 | 22.0 | 3.0 | 42.0 | 23.2 | 159.8 | made by 10.1 |
+| w25 uld3 | 0.25 | 14.2 | 71.2 | 14.5 | 21.7 | 3.5 | 50.3 | 21.2 | 196.6 | +26.9 |
+| w24 uld1 / 2 / 3 | 0.15-0.37 | 12.5-21.6 | 41.8 / 39.3 / 62.7 | 13.0 / 29.7 / 9.8 | 18.3 / 20.2 / 32.5 | 4.3-5.6 | 47.3 / 55.7 / 54.0 | 22.4-23.9 | 160.9 / 194.0 / 201.8 | made by 8.9 / +24.2 / +32.2 |
+
+**Phase 2 timelines.**
+- uld1 (from 3:14.2): main tank Uldxaa picks him up at +0.3 s and has him on the tank spot by +5 s; the first Unbalancing Strike lands
+  ~+8 s; corridor tank Uldxam, mid-jump 41 yd out, takes him with Dark Command at +10.4 s (below); Lightning Charge kills two corridor
+  melee chasing him at the balcony foot at +15.9 s (54-59% after Sif's Frost Nova), a Frostbolt a ranged at +16.6; he is back on the
+  spot at +23 s. Volley + Frostbolt kill a ranged at +58 s; a Chain Lightning at +87 s hops 8 times and its last three hops kill three
+  melee on one slot point 8.0 yd from the holder (59k, 82k, 117k); Lightning Charge kills two ranged on a shelter walk slowed by the Volley
+  at +136 s; a chain through a healer and a ranged stacked on one camp spot kills both at +163 s; the tanks fall at +196 s.
+- uld2 (from 3:04.7): Thorim's landing swing kills ranged Uldyaj at +3.2 s; the main tank's pickup leaves him 24-27 yd off the tank spot
+  to +6 s; corridor tank Uldyab Growls him from the balcony 43 yd out at +7.0 s and he is back at +15.6 s; the holy paladin dies at
+  +77.7 s; the tanks at +96-97 s; the raid by 5:13.
+
+**Stop rules:** not polished (no hard-mode kill). Not stuck: rounds 3-18 picked sixteen different causes; rounds 16 and 17 held.
+
+**Failure ranking** (64 deaths, all in the two hard-mode phase 2s):
+1. **The hard-mode race at the mana wall**, 2 wipes (51 of the deaths after the first tank death). Not a bug as a whole (rounds 6, 9,
+   15, 16); its leaks: the waiting tank's Blizzard (question 1), the opening below, 11 early non-tank deaths in uld1.
+2. **The opening swap drag** (bug, fixed below): in every pull of this window; 2 of uld1's early deaths, and 0.20-0.28 %/s over the
+   first 30 s against 0.46-0.58 after.
+3. **Chain Lightning** 5 (uld1): a slot point 8.0 yd from the holder (the ring anchor's angle-only gap the boss doc names) and two ranged
+   on one camp spot. **Lightning Charge** on two shelter walkers under the Volley slow (the doc's uncapped shelter run). Not picked.
+4. **uld3 missed hard mode** by 26.9 s: the one-off corridor evade above.
+
+**Bug picked: the corridor tank answers the first Unbalancing Strike from the balcony and drags Thorim off the tank spot.**
+- Trace (`victims.py`, `swaps.py`, `drag.py`): in all three pulls the first tank-to-tank trade came at +7.0 / +10.4 / +8.7 s from the
+  corridor tank 41-43 yd off the tank spot at z 429-433 (on the balcony or mid-jump), and Thorim followed it to the balcony foot, 28.5-36.3 yd
+  off the tank spot, until walked back at +15.1-23.0 s. Uldxam's rows: `thorim unbalancing strike swap action` `OK` at +8.1 s (z 435,
+  `Attack`), +9.2 s and +10.4 s, the last casting Dark Command 56222 on Thorim. Over the 37 phase 2s on disk with a swap, **32** opened
+  with this trade (+6.7 to +13.8 s, the taker 37-44 yd off the tank spot; Thorim 16-36 yd off it within 8 s, back at +11-28 s), losing
+  0.10-0.39 %/s from the drop until back against 0.46-0.92 over the next 30 s (one untouchable pull aside); deaths during it: w25 uld1 2
+  (Lightning Charge on melee chasing him), w24 uld3 2 (Chain Lightning through melee strung along the drag). Since round 8, of the 168
+  other swaps 149 came from within 1 yd of the off-tank spot, 15 more from within 7.4 yd of the tank spot, and four from 13-23 yd (three
+  corridor tanks still walking in at +13-20 s, one at +111 s).
+- Code: `ThorimUnbalancingStrikeSwapTrigger::IsActive` (`UldTriggers_Thorim.cpp:254`) checked roles, the partner's strike and its own, never
+  where the bot stood; `ThorimTakeBossAction::Execute` (`UldActions_Thorim.cpp:513`) then `Attack`s and taunts from there. The pickup trigger
+  (`:293`) has the floor gate the swap lacked, and the boss doc's design is a trade between two fixed spots 3.5 yd apart that moves him
+  inside the ring's 5 yd reposition tolerance.
+- **Classification: bug.** The swap is meant to trade him at the tank spots; a taunt from the balcony is the drag the fixed spots exist to
+  prevent.
+
+**Fix** (Thorim files only, no size, mode or player branch): `ThorimUnbalancingStrikeSwapTrigger` fires only for a bot within
+`ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` (8 yd, exact 2D) of the tank spot (`UldTriggers_Thorim.cpp:284`, header `:129`). The struck holder keeps
+him until the corridor tank lands and walks in (~25-33 yd from its landing, ~4-5 s), inside the strike's 15 s; the action is unchanged. The
+radius keeps every swap since round 8 but the balcony and walk-in ones, including a main tank's taunt back toward the spots from 6.1-7.4 yd.
+A real tank holding him is answered the same way; a human waiting tank is never moved. Reader: `thorim.py --phase2` prints a new `opening`
+line: the first trade's time, the taker's distance off the tank spot, his farthest from it over the next 8 s, and health lost per second
+over the first 30 s (w25: +10.5 s, 41.3 yd, 31.5 yd, 0.20 / +7.0 s, 43.4, 36.3, 0.28 / +8.8 s, 43.1, 28.5, 0.44). Test in `test_thorim.py`.
+Not addressed: a corridor tank taking him on threat without a taunt (w24 uld1, +6.1 s, after Army of the Dead).
+
+`pb-check` passes (syntax over 14 TUs, pblint, codestyle, botobs tests).
+
+**Estimated gain:** the drag cost ~5-13 s at 0.10-0.39 %/s against ~0.45: about 2-4% of Thorim's health a hard-mode pull (5-9 s of the
+race), plus the melee it killed. Alone it would not have saved uld1 (23.1% at the wipe).
+
+**Next window should show:**
+- `opening` line: the first trade's taker within 8 yd of the tank spot in every pull (w25 41-43 yd), Thorim no farther than ~8-10 yd off
+  it in the 8 s after (28.5-36.3 yd), the first trade ~+13-18 s (+7-10.5 s now), health lost over the first 30 s up from 0.20-0.28 %/s in
+  hard mode (0.44 normal).
+- `trades`: strike to swap max up to ~8-10 s for the first strike only, 0 unanswered; no `thorim unbalancing strike swap action` row from a
+  bot above z 429.6.
+- No death in the first 25 s of phase 2 from Lightning Charge or Chain Lightning on melee chasing him.
+- Watch: the first-strike holder's health between +8 s and the swap (no tank death before +47 s on record); a corridor tank that lands and
+  never walks in (the strike then goes unanswered); a threat drag without a taunt (w24 uld1).
+- Rounds 15-17's checks again (`thorim.unreach`, flee and Blizzard vetoes, `--blizzard`).
+
+**Questions for the user** (tactic, not built):
+1. **The waiting tank steps out of Sif's Blizzard while it still carries Unbalancing Strike.** It is excused from every Blizzard dodge in
+   phase 2 and its spot sits 1.0 yd off the bunny's track, so it took 345k / 155k of Blizzard before the first tank death (82 / 65% of its
+   intake; uld1's 87 hits for 349k). A struck tank cannot take him back for the strike's 15 s and the next strike comes 20 s after the last,
+   so stepping 11 yd clear of a zone during those 15 s and walking back for the swap costs the hold nothing. Recommended: yes.
+
+**Seen, not picked:** the corridor guards' cannot-reach evade (uld3, above; a candidate if it recurs: the bot a corridor mob cannot reach
+steps so the chase re-paths, as round 15's Thorim step does); Chain Lightning through a ring slot point 8.0 yd from the holder (uld1 +87 s, 3
+deaths); two healers and two ranged stacked on single camp spots (uld1 +163 s); priests spending Divine Hymn on the start pack (shared).
+
+**Review (round 18).** The cause holds. The `opening` line reproduces the three w25 figures; Uldxam's swap action rows in uld1 are `OK` at
++8.1 / +9.2 / +10.4 s. Over the on-disk phase 2s, 33 of 37 opening trades had the taker past 8 yd (w24 uld1's threat take among them). Of the
+280 `OK` swap action rows in phase 2, 223 came from within 8 yd of the tank spot (149 on the off-tank spot) and 57 from past 10, none from
+8-10, so the radius has no near miss. The corridor tank landed at +5.6-13.2 s against the first strike at +6.4-8.0 s, leaving ~30 yd to walk
+inside the strike's 15 s. One code path for every size, mode and raid: the waiting tank stands on the fixed off-tank spot, under a human holder
+too. Fixed: the boss doc's "~1.4x less health per point of damage" in hard mode is 62565's −30% maximum health on the normal-mode Thorim
+(1/0.7 = 1.43), already under "Hard mode changes what a trace means", so the clause is dropped. `pb-check` passes.

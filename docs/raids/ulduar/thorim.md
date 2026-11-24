@@ -623,6 +623,13 @@ short of the tank spot and stayed there, the waiting tank within 2 yd of it for 
 in four of nine pulls. The waiting tank keeps the net test, room for its reach step; the holder needs
 none, since Thorim chases his victim.
 
+**A swap taunt fires only within `ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` (8 yd) of the tank spot.**
+Ungated, the corridor tank answered the first Unbalancing Strike (+7-14 s) from the balcony or mid-jump,
+37-44 yd out, in 32 of 37 phase 2s: Thorim followed it 16-36 yd off the tank spot and lost 0.10-0.39 %/s
+until walked back, against 0.46-0.92 over the next 30 s, and melee chasing him died to Lightning Charge and
+Chain Lightning. The struck holder now keeps him until the corridor tank comes in, inside the strike's 15 s.
+8 yd still covers the waiting tank's reach step and a tank taking him back toward the spots from 6-7 yd.
+
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
 phase 1, so the pickup taunt hands him straight back
 ([taunts](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)): exactly 3 s after
@@ -1286,12 +1293,13 @@ navprobes, not a nudge, and each new point needs the hazard check navprobe does 
 - `--deaths`: deaths by mechanic, phase 1 and phase 2 apart.
 - `--phase2`: what the tank spots are judged on. Chain Lightning casts, hits on the tanks and each ring
   slot, tank-to-ring hops and deaths; tank deaths; his cannot-reach spans and step moves, and stretches
-  of 3 s or more a tank held him without his health falling (old traces too); Thorim's distance off the
-  tank spot and facing off its axis; trades (his move across one, strike to swap, his time on a
-  non-tank); the waiting tank's offset, time on the holder, distance from him, share past 9.0 yd and
-  moves; who stands within 8 yd of each tank; ring spacing, front-arc share, uptime and moves; camp
-  spacing; Blizzard, Lightning Charge and Frost Nova on holder and waiting tank; his health lost per
-  second.
+  of 3 s or more a tank held him without his health falling (old traces too); the opening (first trade,
+  the taker's distance off the tank spot, his farthest from it over the next 8 s, health lost per second
+  over the first 30 s); Thorim's distance off the tank spot and facing off its axis; trades (his move
+  across one, strike to swap, his time on a non-tank); the waiting tank's offset, time on the holder,
+  distance from him, share past 9.0 yd and moves; who stands within 8 yd of each tank; ring spacing,
+  front-arc share, uptime and moves; camp spacing; Blizzard, Lightning Charge and Frost Nova on holder
+  and waiting tank; his health lost per second.
 - `--blizzard`: per Sif Blizzard (its bunny's first snapshot to its last plus a zone's 10 s, cut at the
   next bunny), each slot point's covered seconds; ring bots within the 9.8 yd damage reach (seconds,
   stays, longest, ticks, damage); deaths; step moves, stepped bot-seconds and those past 9.0 yd of him;

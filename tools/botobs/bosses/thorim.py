@@ -4,8 +4,9 @@
     thorim.py <file>           every section
     thorim.py <file> --deaths  deaths by mechanic, phase 1 and phase 2 apart
     thorim.py <file> --phase2  Chain Lightning, tank deaths, his cannot-reach flag and stretches held without
-                               losing health, Thorim's spot and facing, tank trades, the waiting
-                               tank, chain bridges, melee ring and camp spacing, hazards on each tank
+                               losing health, the opening trade and how far it dragged him, Thorim's
+                               spot and facing, tank trades, the waiting tank, chain bridges, melee
+                               ring and camp spacing, hazards on each tank
     thorim.py <file> --blizzard  each Sif Blizzard against the melee ring: slot points it covered, who
                                  stood in it and how long, ticks taken, step-outs and the walk back
 """
@@ -48,6 +49,8 @@ UPTIME_END_MS = 100000
 CAST_GAP_MS = 400
 TRADE_LOOK_MS = 3000
 SWAP_WAIT_MS = 15000
+OPENING_MS = 30000
+DRAG_LOOK_MS = 8000
 FACING_OFF_DEG = 20.0
 STACKED_YD = 2.0
 STALL_MS = 3000
@@ -305,6 +308,33 @@ class Phase2:
                 delays.append((answer - rec["t"]) / 1000.0)
         return delays, unanswered
 
+    def opening(self) -> tuple[tuple[int, float] | None, float | None, float | None]:
+        first = None
+        previous = None
+        for when, victim, _ in self.victims:
+            if previous in self.tanks and victim in self.tanks and victim != previous:
+                first = when
+                break
+            previous = victim
+        taker_off = None
+        if first is not None:
+            taker = self.victim_at(first)
+            for snap in frames(self.trace):
+                if snap["t"] >= first:
+                    break
+                row = next((row for row in snap.get("u", []) if row[0] == taker), None)
+                if row:
+                    taker_off = dist2(row[1:3], TANK_SPOT)
+        dragged = None
+        if first is not None:
+            dragged = max((dist2(spot, TANK_SPOT) for when, _, spot in self.victims
+                           if first <= when <= first + DRAG_LOOK_MS), default=None)
+        early = [(t, hp) for t, hp in self.boss_hp if t <= self.start + OPENING_MS]
+        rate = None
+        if len(early) >= 2 and early[-1][0] > early[0][0]:
+            rate = (early[0][1] - early[-1][1]) / ((early[-1][0] - early[0][0]) / 1000.0)
+        return ((first, taker_off) if first is not None else None), dragged, rate
+
     def ring_moves_per_minute(self) -> float | None:
         ring = {guid for _, guid, _ in self.slot_events}
         minutes = (self.end - self.start - SETTLED_MS) / 60000.0
@@ -434,6 +464,17 @@ def untouchable_line(phase: Phase2) -> str:
             f"step moves {steps}; {stall_text}")
 
 
+def opening_line(phase: Phase2) -> str:
+    trade, dragged, rate = phase.opening()
+    trade_text = "no tank-to-tank trade"
+    if trade:
+        first, taker_off = trade
+        trade_text = (f"first trade +{(first - phase.start) / 1000.0:.1f} s, the taker {yd(taker_off)} yd off the "
+                      f"tank spot, Thorim up to {yd(dragged)} yd off it in the next {DRAG_LOOK_MS // 1000} s")
+    rate_text = "-" if rate is None else f"{rate:.2f}"
+    return f"{trade_text}; {rate_text} %/s over the first {OPENING_MS // 1000} s"
+
+
 def show_phase2(trace: Trace) -> None:
     print("PHASE 2")
     if not mine(trace):
@@ -449,6 +490,7 @@ def show_phase2(trace: Trace) -> None:
     print(f"  chain lightning   {chain_line(phase)}")
     print(f"  tank deaths       {tank_death_line(phase)}")
     print(f"  untouchable       {untouchable_line(phase)}")
+    print(f"  opening           {opening_line(phase)}")
     print(f"  thorim spot       off the tank spot p50 {yd(quantile(lists['boss_off_spot'], .5))} "
           f"p90 {yd(quantile(lists['boss_off_spot'], .9))} yd; facing off the tank-spot axis "
           f"p50 {yd(quantile(lists['facing'], .5))} p90 {yd(quantile(lists['facing'], .9))} deg, "
