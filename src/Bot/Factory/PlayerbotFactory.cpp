@@ -93,6 +93,7 @@ constexpr uint32 SPELL_DIVINE_PURPOSE = 31872;
 constexpr uint32 SPELL_HUNTER_THICK_HIDE = 19612;
 constexpr uint32 SPELL_CONCUSSIVE_BARRAGE = 35102;
 constexpr uint32 SPELL_ENTRAPMENT = 19388;
+constexpr uint32 SPELL_BEAST_MASTERY = 53270;
 
 constexpr uint32 SPELL_DEADLY_BREW = 51626;
 constexpr uint32 SPELL_THROWING_SPECIALIZATION = 51679;
@@ -1695,19 +1696,23 @@ void PlayerbotFactory::InitPet()
     PetStable* stable = bot->GetPetStable();
     if (!pet && stable)
     {
-        auto const unsummonable = [this](PetStable::PetInfo const& info)
+        bool const exotic = bot->CanTameExoticPets() || bot->HasTalent(SPELL_BEAST_MASTERY, bot->GetActiveSpec());
+        auto const unsummonable = [exotic](PetStable::PetInfo const& info)
         {
             CreatureTemplate const* proto = sObjectMgr->GetCreatureTemplate(info.CreatureId);
-            return info.Type == HUNTER_PET && (!proto || !proto->IsTameable(bot->CanTameExoticPets()));
+            return info.Type == HUNTER_PET && (!proto || !proto->IsTameable(exotic));
         };
 
-        auto const putAway = [this, stable](PetStable::PetInfo& info)
+        bool const playerAccount = !sPlayerbotAIConfig.IsInRandomAccountList(bot->GetSession()->GetAccountId());
+        auto const putAway = [this, stable, playerAccount](PetStable::PetInfo& info)
         {
-            for (uint32 slot = 0; slot < stable->MaxStabledPets && slot < stable->StabledPets.size(); ++slot)
+            uint32 const slots = playerAccount ? uint32(MAX_PET_STABLES) : stable->MaxStabledPets;
+            for (uint32 slot = 0; slot < slots; ++slot)
             {
                 if (stable->StabledPets[slot])
                     continue;
 
+                stable->MaxStabledPets = std::max(stable->MaxStabledPets, slot + 1);
                 CharacterDatabasePreparedStatement* stmt =
                     CharacterDatabase.GetPreparedStatement(CHAR_UPD_CHAR_PET_SLOT_BY_ID);
                 stmt->SetData(0, PetSaveMode(PET_SAVE_FIRST_STABLE_SLOT + slot));
@@ -1715,25 +1720,23 @@ void PlayerbotFactory::InitPet()
                 stmt->SetData(2, info.PetNumber);
                 CharacterDatabase.Execute(stmt);
                 stable->StabledPets[slot] = std::move(info);
-                return;
+                return true;
             }
 
+            if (playerAccount)
+                return false;
+
             Pet::DeleteFromDB(info.PetNumber);
+            return true;
         };
 
-        if (stable->CurrentPet && unsummonable(*stable->CurrentPet))
-        {
-            putAway(*stable->CurrentPet);
+        if (stable->CurrentPet && unsummonable(*stable->CurrentPet) && putAway(*stable->CurrentPet))
             stable->CurrentPet.reset();
-        }
 
         for (auto itr = stable->UnslottedPets.begin(); itr != stable->UnslottedPets.end();)
         {
-            if (unsummonable(*itr))
-            {
-                putAway(*itr);
+            if (unsummonable(*itr) && putAway(*itr))
                 itr = stable->UnslottedPets.erase(itr);
-            }
             else
                 ++itr;
         }
