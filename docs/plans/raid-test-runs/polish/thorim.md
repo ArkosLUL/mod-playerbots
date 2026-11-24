@@ -1,7 +1,7 @@
 # Thorim polish log (25-man hard mode)
 
 Reader: `tools/botobs/bosses/thorim.py` (`--deaths`, `--phase2`, `--blizzard`, `--chains`; `raidtest.py report` runs
-`--summary` on every counted pull). Rounds 1-20: `history/thorim.md`.
+`--summary` on every counted pull). Rounds 1-21: `history/thorim.md`.
 
 ## State
 
@@ -16,31 +16,34 @@ the smash, and lane flips. Phase 2: tanks hold him on the tank spot (2110.75, �
 off-tank spot (2107.25, −252.65), a swap on every Unbalancing Strike; melee on a 3-slot ring (r 8.8, slots ≥60°
 apart), ranged on 6 camp spots with shelters from the Lightning Charge cone; Chain Lightning every 15 s, 8 targets at
 ×1.5 a hop, hop 8 yd (8.9 when both carry Heroism/Bloodlust); hard mode adds Sif's Frostbolt Volley, Frostbolt,
-Blizzard and Frost Nova.
+Blizzard and Frost Nova. Blizzard's bunny walks the core's fixed path once at ~7 yd/s (west, then north of the tank
+spot, then round the camp), dropping a 10 s zone every 2 s.
 
-**What kills raids.** Hard mode at ilvl 226 is a race the rosters lose: from +30 s the raid takes him 0.41-0.55 %/s
+**What kills raids.** Hard mode at ilvl 226 is a race the rosters lose: from +30 s the raid takes him 0.34-0.55 %/s
 (a kill by the first tank death needs ~0.74), and the tanks fall at +46-196 s to his melee, which grows with the
-Lightning Charge stacks, plus Blizzard (22-27% of tank intake); every hard-mode phase 2 on disk (19) wiped, most deaths
-being Thorim loose after both tanks fall. Before the first tank death: Chain Lightning bridging groups, Volley and
-Frostbolt on healers, Blizzard on camp walks, Lightning Charge. Normal mode: kills with 0-4 deaths.
+Lightning Charge stacks, plus Blizzard (22-27% of tank intake); every hard-mode phase 2 on disk (23) wiped, most deaths
+being Thorim loose after both tanks fall. Before the first tank death: Blizzard on ring melee and the camp, Chain
+Lightning bridging groups, Volley and Frostbolt on healers, Lightning Charge. Normal mode: kills with 0-4 deaths.
 
-**Compositions on build 897faf0d8 (window 29).** A (uld1, uld4): hard-mode wipes, Thorim 35.1% / 18.9%, first tank
-death +118.4 / +118.5 s. B (uld2, uld5): uld2 normal kill, 4 deaths (all phase 1); uld5 hard wipe at 56%, first tank
-death +47.4 s. C (uld3, uld6): uld3 normal kill, 1 death; uld6 hard wipe at 57%, first tank death +45.9 s. Hard mode
+**Compositions on build 9f0c9a4c7 (window 31).** A (uld1, uld4): hard-mode wipes, Thorim 44.2% / 43.3%, first tank
+death +112.2 / +119.0 s. B (uld2, uld5): uld2 normal kill, 2 deaths; uld5 hard wipe at 55.5%, first tank death
++79.7 s. C (uld3, uld6): uld3 normal kill, 1 death; uld6 hard wipe at 37.1%, first tank death +106.5 s. Hard mode
 reached in 4 of 6; no hard-mode kill, so not polished.
 
-**Open failures, ranked** (window 29, 162 deaths):
-1. The hard-mode race: Thorim melee 65, nearly all after the first tank death. Not a bug; question 1.
-2. Chain Lightning 21, 8 before the first tank death. By crossing over the ten hard-mode wipes since round 17
-   (`--chains`): slot to slot through a slot stepped out of Blizzard 11 of 44, tank or camp into one 4 (round 21's
-   fix); a lit-orb cone dropping the 60°
-   separation (w26 uld3 2, w29 uld6 1); camp RANGE4 (2132.5, −257.5) 8.8 yd from slot 1 under Heroism (w29 uld1
-   +27 s, 3); the opening into slot 2 beside the holder (w29 uld1 +12 s, 2); stacked camp spots as the seed.
-3. Sif's Volley and Frostbolt on healers before the first tank death (w29 uld1 4, uld6 1). Nothing to kick.
-4. Blizzard on camp and healers (w29 uld4 a healer twice at +80 s, uld1 one at +46 s).
-5. Early tank deaths, +46-47 s (w29 uld5, uld6): Thorim melee 46-50%, Blizzard 16-31%, Lightning Charge 11%.
-6. Phase 1: the Runic Colossus' in-combat Smash 62339 (10 yd frontal cone, documented, not handled) on gauntlet
-   healers, 4 in two windows (w26 uld2, w29 uld2, w29 uld6 two at once); Rune Detonation 2.
+**Open failures, ranked** (window 31, 127 deaths):
+1. The hard-mode race: Thorim melee 72, nearly all after the first tank death. Not a bug; question 1.
+2. Blizzard 12, 9 at or before the first tank death: ring melee stepping out ahead of the bunny (w31 uld1, uld5 3
+   each, round 22's fix); camp bots walking to a cone shelter through the trail (w31 uld4 2 at +44 s, the positioning
+   row lets a lit-cone camp bot walk under Blizzard); a healer (uld6 +82 s); tanks late.
+3. Chain Lightning 12, 5 before the first tank death: stacked camp as the seed (w31 uld1 +72 s, 8 camp hits, 4 dead);
+   the opening (w31 uld5 +12 s, slot 0 to the tank to slot 1 under Heroism; w29 uld1); camp RANGE4 8.8 yd from slot 1
+   under Heroism (w29 uld1); a lit-orb cone dropping the 60° separation (w26 uld3, w29 uld6).
+4. Sif's Volley and Frostbolt 12, before the first tank death 2 (a healer, a ranged; w29 5 on healers). Nothing to
+   kick.
+5. Lightning Charge 8 (w31 uld6 7, mostly after the tanks).
+6. Early tank deaths, +46-80 s (w29 uld5, uld6; w31 uld5): Thorim melee, Blizzard, Lightning Charge.
+7. Phase 1: the Runic Colossus' in-combat Smash 62339 (10 yd frontal cone, documented, not handled) on gauntlet
+   healers, 4 in two windows (w26 uld2, w29 uld2, uld6); Rune Detonation 2; w31: Rune Giant melee, Honor Guard, Impale.
 
 **Fixes in place** (round: fix — verdict):
 - R1: the DPS picker opens nothing before Thorim is in combat — held.
@@ -58,16 +61,18 @@ reached in 4 of 6; no hard-mode kill, so not polished.
 - R13: ring anchor at the tank spots' midpoint plus `RelatchRingAnchor`; lane followers take the leader's waypoint —
   held.
 - R14: lane waypoints near y −360 (user), squad gathered within 20 yd before the Colossus pull — held.
-- R15: cannot-reach step for a floor bot Thorim can't reach — held (fired once: w29 uld6 1.6 s, one step).
+- R15: cannot-reach step for a floor bot Thorim can't reach — held (0 spans in w31).
 - R16: corridor flee hold, Revive Pet hold on Sif's clock — held.
-- R17: covered ring melee step out of Blizzard, `avoid aoe` held off ring melee (user) — Blizzard ring deaths stopped;
-  its points bridged slots (R21).
+- R17: covered ring melee step out of Blizzard, `avoid aoe` held off ring melee (user) — held for standing in zones;
+  its points bridged slots (R21) and ran ahead of the bunny (R22).
 - R18: the swap fires only within 8 yd of the tank spot — held.
 - R19: class taunts from past 8 yd held while he's on a non-tank or nobody, anchor exempt — held.
-- R20: the anchor with its taunt cooling gets no spot while he's loose, so it closes on him — held (his melee on
-  non-tanks before a tank had him 0-8k a pull, was 348k over 37 pulls).
-- R21: the Blizzard step's lead passes stay out of the jump of the camp and the other slots, then the other slots
-  alone — pending (window 30).
+- R20: the anchor with its taunt cooling gets no spot while he's loose, so it closes on him — held (tank on him
+  +0.1-1.6 s in w31, his melee on non-tanks before it 0k).
+- R21: the Blizzard step's lead passes stay out of the jump of the camp and the other slots — held (slot to slot
+  through a stepped slot: 0 crossings and deaths in w31's four hard pulls, w29 2/0/2/2 deaths).
+- R22: the step's first round also stays 11 yd off the bunny's remaining walk, searched to 20 yd — pending
+  (window 32).
 
 **Tried and rejected:**
 - Balcony runner: the user ruled it out (phase 2 with the squad deep in the corridor).
@@ -76,6 +81,8 @@ reached in 4 of 6; no hard-mode kill, so not polished.
 - The solver trading bearings for Blizzard: removed in R17 (swung slots onto each other).
 - A bearing threshold for the ring re-latch: left 16-29% (R13).
 - Moving the tank anchor east: breaks 11 of 18 camp points (boss doc).
+- A 10-20 yd lookahead of the bunny's walk instead of all of it: 230 / 52 of 641 replayed points covered against 32
+  (R22).
 
 **User answers in force:**
 - 2026-11-22: hold the arena group at the drop until Thorim is in combat; keep polishing on the 226 rosters with the
@@ -95,78 +102,71 @@ reached in 4 of 6; no hard-mode kill, so not polished.
    the late holds (maybe 20-40 s more tank life, short of the gap alone). (d) Keep polishing with no end condition.
    Recommended: (a).
 
-## Round 21 (window 29: build 897faf0d8 with round 20)
+## Round 22 (window 31: build 9f0c9a4c7 with round 21)
 
-**Data:** window 29, one valid pull per pool; traces
-`603_{14,11,10,12,15,13}_thorim_{1795538542,1795538513,1795538450,1795538525,1795538867,1795538534}` (uld1-uld6), read
-with `thorim.py` (`--chains` new), `postmortem.py --death` and session scratchpad `thorim_r21/` scripts. Chains also
-over the ten hard-mode phase 2s since round 17 (w25 uld1/2, w26 uld1/3, w27 uld1/2, w29 uld1/4/5/6).
+**Data:** `window31-thorim.md` (session scratchpad), one valid pull per pool; traces
+`603_{7,9,10,11,13,12}_thorim_{1795541779,1795542231,1795542272,1795542293,1795542387,1795542378}` (uld1, uld2, uld4,
+uld3, uld5, uld6), read with `thorim.py --blizzard/--chains` and session scratchpad `thorim_r22/` scripts (a timeline,
+a bunny-path check and a step replay over the fourteen hard-mode pulls since round 17, w25-w31).
 
 | Pool | Out | Deaths by mechanic |
 |---|---|---|
-| uld1 (A) | wipe, hard (P2 3:11.4), 35.1% | CL 7 (+12 s 2, +27 s 3), Sif Volley/Frostbolt 4 by +46 s, then Thorim melee 18 after the tanks |
-| uld4 (A) | wipe, hard (P2 2:58.7), 18.9% | Blizzard 2 (a healer, +80 s), then the tanks +118 s, CL 5 in the collapse, Thorim melee 19 |
-| uld2 (B) | kill, normal (62565 3:14.4) | phase 1: Runic Smash, Colossus Smash, Honor Guard Cleave, Rune Detonation |
-| uld5 (B) | wipe, hard (P2 3:12.0), 56% | CL 3 (+42 s), tank +47 s (Unbalancing Strike), then Thorim melee 23 |
-| uld3 (C) | kill, normal (62565 3:22.3) | CL 1 (the opening, +12 s) |
-| uld6 (C) | wipe, hard (P2 3:05.8), 57% | phase 1: Colossus Smash 2 (both gauntlet healers, 1:51), Rune Detonation 1; P2: Champion 1 (+6 s), Volley 1, tank +46 s (Lightning Charge), then Champion 5, Frostbolt 4, CL 4, Thorim melee 6 |
+| uld1 (A) | wipe, hard (P2 3:25.8), 44.2% | CL 4 (+72 s, 8 camp hits), Volley 1, Blizzard 3 (slot 2 at +78-81 s), then tanks +112 s, Thorim melee 17, Volley 4, CL 1 |
+| uld4 (A) | wipe, hard (P2 3:06.9), 43.3% | phase 1 Honor Guard 1; Blizzard 2 (camp at +44 s), Lightning Charge 1, Volley 1, Frost Nova 1, then tanks +119 s, Thorim melee 17, CL 5 |
+| uld2 (B) | kill, normal | phase 1 Rune Giant melee 1; CL 1 |
+| uld5 (B) | wipe, hard (P2 3:16.0), 55.5% | CL 1 (opening +12 s), tank +79.7 s, Blizzard 3 (slot 2, +80 s), Thorim melee 23 |
+| uld3 (C) | kill, normal | phase 1 Impale 1 |
+| uld6 (C) | wipe, hard (P2 3:01.2), 37.1% | Blizzard 1 (healer +82 s), Lightning Charge 1, tanks +106 s, Thorim melee 15, Lightning Charge 6, Volley 3 |
 
-**Hard mode in the kills: none.** Both kills (uld2, uld3) read normal mode: Sif cast 62565 at 3:14.4 / 3:22.3, no
-`thorim.sifjoined`. The four hard-mode pulls (uld1, uld4, uld5, uld6) all wiped.
+**Hard mode in the kills: none.** uld2 and uld3 read normal mode; the four hard-mode pulls wiped.
 
-**Stop rules:** not polished (no hard-mode kill in A, B or C). Not stuck: rounds 18-21 picked four different causes,
-each fix held. Question 1 stays open; no new stop rule applied.
+**Stop rules:** not polished (no hard-mode kill in A, B or C). Not stuck: ring Blizzard deaths were picked in R17 and
+now R22 (two rounds), R21's chain crossings are a different failure. Question 1 stays open; no stop rule applied.
 
-**Round 20 verdict (the anchor closes on a loose Thorim while its taunt cools): held in A, B and C.** A tank on him at
-+0.6 / +1.8 s (A), +0.8 / +0.8 s (B), +3.7 / +3.0 s (C); his melee on non-tanks before it 0 / 7k, 8k / 0, 0 / 0 (w27
-uld1 36k; 348k over 37 cooling pulls before). In uld4, uld3 and uld6 the anchor's first moves were `reach melee` toward
-him (to x 2142-2156 in C, where he walked east after a melee) and the walk to the tank spot came only after it held
-him (+1.8 / +3.9 / +3.1 s); no landing death. Rounds 15-19's checks hold: one cannot-reach span (uld6, 1.6 s, one
-step); first trades from 7.9-9.4 yd, Thorim within 8.5 yd of the spot; no ring Blizzard death before a tank's.
+**Round 21 verdict (step points clear of the camp and the other slots): held in A, B and C.** `--chains` through a
+stepped slot: 0 crossings and 0 deaths in uld1, uld4, uld5, uld6 (w29 deaths 2 / 0 / 2 / 2; camp into one 0, w29
+1 / 0 / 1 / 0); Chain Lightning deaths 21 → 12. Steps per pull 37 / 55 / 40 / 44 (w29 17-56). Its "no ring Blizzard
+death before the first tank death" failed in uld1 (3): not its clearance but the step running ahead of the bunny,
+which predates it (below).
 
-**Failure picked: Chain Lightning crossing into another ring slot through a slot stepped out of Blizzard.** The race
-(rank 1) is no bug; Chain Lightning is the top mechanic before the first tank death.
-- Trace: uld5 +30.17 s slot 0 (Uldvan, Uldvam, Uldvar) stepped to (2117.83, −265.20), 1.9 yd from slot 1's three
-  melee on their point (2118.7, −263.5), and held there to +42.3 s; the
-  +42.0 s cast ran camp ×3 → 8.5 yd (Heroism) → slot 0 ×3 → 1.9 yd → slot 1 ×2, killing Uldvam (32.7k), Uldvax and
-  Uldvag (36.8k, 66.0k); the first tank fell 5 s later. uld6 +83.2 s slot 2 stepped within 4.8 yd of slot 1; the +87.2 s
-  cast killed two slot 1 melee. uld1 +162.6 s the same through a stepped slot 2 (2). Round 20 saw it in w27 uld1 (6).
-- Over the ten hard-mode wipes since round 17 (`--chains`): 11 of 44 Chain Lightning deaths crossed slot to slot
-  through a slot on its step point or within 3 s of leaving it (4 more tank or camp into one). Replayed at each of the
-  452 step moves (`stepbodies.py`/`stepring.py`: zones
-  from `hz` rows and the bunny, floor approximated, no navmesh), 125 destinations lay within 5.5 yd plus both reaches
-  of another slot's bot or point.
-- Code: `ThorimRingBlizzardStep` (`UldEncounter_Thorim.cpp:3131`) took the nearest point 11 yd clear of every zone,
-  out of the cone, past the ring and 8 yd off both tank spots, and counted no other slot; once there the bot holds.
-- **Classification: bug.** The ring keeps its slots out of each other's jump (solver separation, `RingBodyBridgesChain`),
-  and the step already keeps the tank side clear by the jump; its points undid that.
+**Failure picked: ring melee stepping out of Blizzard onto the bunny's path ahead.** Blizzard is the top mechanic at
+or before the first tank death (9 against Chain Lightning's 5), and its ring deaths came back (0-1 a window since
+R17, 6 in w31).
+- Trace: uld1 +74.8 s, the bunny at (2109.2, −246.6) heading for (2117.9, −238.6); slot 2's three melee on
+  (2117.2, −246.0) stepped to (2124.3, −238.9), 3.5 yd off its next leg; it caught them at +77.6 s and each later
+  step went further along its way ((2131.4, −236.1), (2135.3, −234.3)): all three died +78.7-81.7 s, 2.9-5.8 s in
+  zones. uld5 +74.8 s the same slot the same way (steps (2118.6, −245.0) → (2129.7, −233.8)), three dead at +80.0 s;
+  in its first Blizzard (+33.8 s) Uldvay stood 10.1 s in zones running with it to 20.7 yd off Thorim.
+- `--blizzard` (new counts): steps onto the bunny's path ahead 26/37, 37/55, 31/40, 18/44 in w31 (w29 29/46, 33/49,
+  11/17, 35/56), under a zone within 8 s 16 / 18 / 25 / 11; ring melee in zones 46.9 / 11.1 / 42.0 / 21.3 bot-s
+  (w29 2.7-35.2), longest stays 8.8 and 10.1 s.
+- Code: `ThorimRingBlizzardStep` (`UldEncounter_Thorim.cpp:3171`) cleared the live zones and the bunny where it
+  stands (`ThorimBlizzardSpots`), nothing of where it goes; the bunny walks the core's fixed path
+  (`boss_thorim.cpp:968`) at a run's pace, so the nearest clear point is usually ahead of it.
+- **Classification: bug.** The strategy intends the step to leave the Blizzard; its points walked into the next zones.
 
-**Fix** (`UldEncounter_Thorim.cpp`, Thorim only, no size, mode or player branch): `RingStepChainBodies` (`:646`) lists
-every living floor ring bot of another slot where it stands and that slot's point (its `composed` bearing at r 8.8 round
-Thorim), each with a clearance of `ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` + `ULDUAR_THORIM_RING_CHAIN_MARGIN` + both live
-combat reaches (8.5 yd, 9.4 under Heroism). The step tries a new pass that also clears all of them, within the same 15
-yd, before the three old passes, which stay as the fallback. Where the replay found a point, the walk there was p50 0 /
-p90 4 yd longer and the point 11.4 yd off Thorim at p50 against 9.7 (both out of melee reach), but in a camp body's
-jump for 118 of those 295 steps against 59 for the old points. Review added a lead pass also clear of the camp (the
-same list takes every other floor body but the tanks, a human melee included, so one code path): clear of both 229 of
-452 steps, camp-bridged 66 of the 295, walk p90 6 yd longer than the old, Thorim 12.4 yd off at p50. Reader:
-`--chains`, tested in `test_thorim.py`, its totals count each crossing kind into or out of a stepped slot; boss doc:
-the pass order, the evidence, `--chains`.
+**Fix** (`UldEncounter_Thorim.cpp/.h`, Thorim only, no size, mode or player branch): the scan keeps the bunnies
+apart (`blizzardBunnies`); `ThorimBlizzardPathAhead` builds the bunny's walk from where it stands to the end of
+`ULDUAR_THORIM_SIF_BLIZZARD_PATH` (the core's spawn and eight waypoints). The step's four passes run first within 20 yd
+and 11 yd clear of that walk, then as before within 15 yd, then anywhere within 20. With no bunny (normal mode) the
+first round is skipped. Replay of 641 steps over fourteen hard-mode pulls (no navmesh, floor cut at x 2100 and
+y −288): points a zone covered within 8 s 305 → 32, every step found a point, walk p50 6 → 12 yd, p90 14 → 20,
+points in a camp body's jump 35 → 120 (173 at 15 yd), in another slot's 39 → 48. Reader: `--blizzard` counts step
+points onto the path ahead and under a zone within 8 s, tested in `test_thorim.py`; boss doc: the bunny's walk, the
+pass order, the evidence.
 
-`pb-check` passes (syntax, pblint, codestyle, botobs tests).
+`pb-check` passes (compile, pblint, codestyle, botobs tests).
 
-**Next window should show** (hard-mode pulls, `--chains`, `--blizzard`):
-- "through a stepped slot: slot to slot" 0 in crossings and deaths in every pull (w29 deaths: 2 / 0 / 2 / 2 in uld1 /
-  uld4 / uld5 / uld6), camp to slot through one no higher (w29 crossings 1 / 0 / 1 / 0); no `thorim sif blizzard action`
-  destination within ~8.5 yd of another slot's bodies.
-- Steps per pull about the same (17-56), walk back p50 within ~0.5 s of today's 0.2-1.4 s, no ring Blizzard death before
-  the first tank death; melee on Thorim to +100 s still ~100%.
-- Watch: a stepped bot standing past melee reach longer; chains still crossing slots by the cone relax or the camp
-  under Heroism (ranked 2 in State, not fixed).
+**Next window should show** (hard-mode pulls, `--blizzard`):
+- steps onto the bunny's path ahead near 0 (w31 26 / 37 / 31 / 18), under a zone within 8 s near 0 (16 / 18 / 25 /
+  11); ring melee in zones well under w31's 11-47 bot-s, longest stay ≤ ~3 s; no ring Blizzard death before the first
+  tank death.
+- Walk back p50 within ~1 s of w31's 0.3-2.6 s; `--chains` through a stepped slot still 0, camp into one at most 1 a
+  pull; melee on Thorim to +100 s still ~100%.
 
-**Seen, not picked:** the Colossus' Smash 62339 on gauntlet healers (State rank 6); early tank deaths at +46-47 s (rank
-5, the race plus Blizzard and Lightning Charge on the holder); pets crowd the ring (uld5's dead melee stood among Army
-ghouls, a warlock pet and a Shadowfiend), so pets can still bridge what the step clears.
+**Seen, not picked:** camp bots walking to a cone shelter through the trail (uld4 2, rank 2); a stacked camp seeding
+8 hits (uld1 +72 s, rank 3); the Colossus' Smash (rank 7); the waiting tank's Blizzard 22-49 ticks a pull (user: it
+does not step).
 
 **Questions for the user:** none new; question 1 in State stands, recommended (a).
 

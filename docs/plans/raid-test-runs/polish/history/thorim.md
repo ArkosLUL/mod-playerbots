@@ -2291,3 +2291,80 @@ mixed those in. Code: no bug. The branch fires only for the anchor while he is o
 most); `ThorimTankOnAnchor` and the positioning trigger stand down with it, the arena anchor is off in phase 2, and the pickup (62)
 still taunts before positioning (60) once the taunt is back. One path for 10/25, both modes and a raid with a human (a human holder
 counts as a tank, a human is never anchor). `pb-check` passes.
+
+## Round 21 (window 29: build 897faf0d8 with round 20)
+
+**Data:** window 29, one valid pull per pool; traces
+`603_{14,11,10,12,15,13}_thorim_{1795538542,1795538513,1795538450,1795538525,1795538867,1795538534}` (uld1-uld6), read
+with `thorim.py` (`--chains` new), `postmortem.py --death` and session scratchpad `thorim_r21/` scripts. Chains also
+over the ten hard-mode phase 2s since round 17 (w25 uld1/2, w26 uld1/3, w27 uld1/2, w29 uld1/4/5/6).
+
+| Pool | Out | Deaths by mechanic |
+|---|---|---|
+| uld1 (A) | wipe, hard (P2 3:11.4), 35.1% | CL 7 (+12 s 2, +27 s 3), Sif Volley/Frostbolt 4 by +46 s, then Thorim melee 18 after the tanks |
+| uld4 (A) | wipe, hard (P2 2:58.7), 18.9% | Blizzard 2 (a healer, +80 s), then the tanks +118 s, CL 5 in the collapse, Thorim melee 19 |
+| uld2 (B) | kill, normal (62565 3:14.4) | phase 1: Runic Smash, Colossus Smash, Honor Guard Cleave, Rune Detonation |
+| uld5 (B) | wipe, hard (P2 3:12.0), 56% | CL 3 (+42 s), tank +47 s (Unbalancing Strike), then Thorim melee 23 |
+| uld3 (C) | kill, normal (62565 3:22.3) | CL 1 (the opening, +12 s) |
+| uld6 (C) | wipe, hard (P2 3:05.8), 57% | phase 1: Colossus Smash 2 (both gauntlet healers, 1:51), Rune Detonation 1; P2: Champion 1 (+6 s), Volley 1, tank +46 s (Lightning Charge), then Champion 5, Frostbolt 4, CL 4, Thorim melee 6 |
+
+**Hard mode in the kills: none.** Both kills (uld2, uld3) read normal mode: Sif cast 62565 at 3:14.4 / 3:22.3, no
+`thorim.sifjoined`. The four hard-mode pulls (uld1, uld4, uld5, uld6) all wiped.
+
+**Stop rules:** not polished (no hard-mode kill in A, B or C). Not stuck: rounds 18-21 picked four different causes,
+each fix held. Question 1 stays open; no new stop rule applied.
+
+**Round 20 verdict (the anchor closes on a loose Thorim while its taunt cools): held in A, B and C.** A tank on him at
++0.6 / +1.8 s (A), +0.8 / +0.8 s (B), +3.7 / +3.0 s (C); his melee on non-tanks before it 0 / 7k, 8k / 0, 0 / 0 (w27
+uld1 36k; 348k over 37 cooling pulls before). In uld4, uld3 and uld6 the anchor's first moves were `reach melee` toward
+him (to x 2142-2156 in C, where he walked east after a melee) and the walk to the tank spot came only after it held
+him (+1.8 / +3.9 / +3.1 s); no landing death. Rounds 15-19's checks hold: one cannot-reach span (uld6, 1.6 s, one
+step); first trades from 7.9-9.4 yd, Thorim within 8.5 yd of the spot; no ring Blizzard death before a tank's.
+
+**Failure picked: Chain Lightning crossing into another ring slot through a slot stepped out of Blizzard.** The race
+(rank 1) is no bug; Chain Lightning is the top mechanic before the first tank death.
+- Trace: uld5 +30.17 s slot 0 (Uldvan, Uldvam, Uldvar) stepped to (2117.83, −265.20), 1.9 yd from slot 1's three
+  melee on their point (2118.7, −263.5), and held there to +42.3 s; the
+  +42.0 s cast ran camp ×3 → 8.5 yd (Heroism) → slot 0 ×3 → 1.9 yd → slot 1 ×2, killing Uldvam (32.7k), Uldvax and
+  Uldvag (36.8k, 66.0k); the first tank fell 5 s later. uld6 +83.2 s slot 2 stepped within 4.8 yd of slot 1; the +87.2 s
+  cast killed two slot 1 melee. uld1 +162.6 s the same through a stepped slot 2 (2). Round 20 saw it in w27 uld1 (6).
+- Over the ten hard-mode wipes since round 17 (`--chains`): 11 of 44 Chain Lightning deaths crossed slot to slot
+  through a slot on its step point or within 3 s of leaving it (4 more tank or camp into one). Replayed at each of the
+  452 step moves (`stepbodies.py`/`stepring.py`: zones
+  from `hz` rows and the bunny, floor approximated, no navmesh), 125 destinations lay within 5.5 yd plus both reaches
+  of another slot's bot or point.
+- Code: `ThorimRingBlizzardStep` (`UldEncounter_Thorim.cpp:3131`) took the nearest point 11 yd clear of every zone,
+  out of the cone, past the ring and 8 yd off both tank spots, and counted no other slot; once there the bot holds.
+- **Classification: bug.** The ring keeps its slots out of each other's jump (solver separation, `RingBodyBridgesChain`),
+  and the step already keeps the tank side clear by the jump; its points undid that.
+
+**Fix** (`UldEncounter_Thorim.cpp`, Thorim only, no size, mode or player branch): `RingStepChainBodies` (`:646`) lists
+every living floor ring bot of another slot where it stands and that slot's point (its `composed` bearing at r 8.8 round
+Thorim), each with a clearance of `ULDUAR_THORIM_CHAIN_LIGHTNING_JUMP` + `ULDUAR_THORIM_RING_CHAIN_MARGIN` + both live
+combat reaches (8.5 yd, 9.4 under Heroism). The step tries a new pass that also clears all of them, within the same 15
+yd, before the three old passes, which stay as the fallback. Where the replay found a point, the walk there was p50 0 /
+p90 4 yd longer and the point 11.4 yd off Thorim at p50 against 9.7 (both out of melee reach), but in a camp body's
+jump for 118 of those 295 steps against 59 for the old points. Review added a lead pass also clear of the camp (the
+same list takes every other floor body but the tanks, a human melee included, so one code path): clear of both 229 of
+452 steps, camp-bridged 66 of the 295, walk p90 6 yd longer than the old, Thorim 12.4 yd off at p50. Reader:
+`--chains`, tested in `test_thorim.py`, its totals count each crossing kind into or out of a stepped slot; boss doc:
+the pass order, the evidence, `--chains`.
+
+`pb-check` passes (syntax, pblint, codestyle, botobs tests).
+
+**Next window should show** (hard-mode pulls, `--chains`, `--blizzard`):
+- "through a stepped slot: slot to slot" 0 in crossings and deaths in every pull (w29 deaths: 2 / 0 / 2 / 2 in uld1 /
+  uld4 / uld5 / uld6), camp to slot through one no higher (w29 crossings 1 / 0 / 1 / 0); no `thorim sif blizzard action`
+  destination within ~8.5 yd of another slot's bodies.
+- Steps per pull about the same (17-56), walk back p50 within ~0.5 s of today's 0.2-1.4 s, no ring Blizzard death before
+  the first tank death; melee on Thorim to +100 s still ~100%.
+- Watch: a stepped bot standing past melee reach longer; chains still crossing slots by the cone relax or the camp
+  under Heroism (ranked 2 in State, not fixed).
+
+**Seen, not picked:** the Colossus' Smash 62339 on gauntlet healers (State rank 6); early tank deaths at +46-47 s (rank
+5, the race plus Blizzard and Lightning Charge on the holder); pets crowd the ring (uld5's dead melee stood among Army
+ghouls, a warlock pet and a Shadowfiend), so pets can still bridge what the step clears.
+
+**Questions for the user:** none new; question 1 in State stands, recommended (a).
+
+**Shared code touched:** none (Thorim files and the Thorim reader).
