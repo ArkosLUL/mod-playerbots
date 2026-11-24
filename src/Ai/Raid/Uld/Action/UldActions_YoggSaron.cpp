@@ -1892,6 +1892,7 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
         float distance;
         Unit* guardian;
         bool chain;
+        bool onRaider;
     };
     std::vector<LooseGuardian> loose;
     std::vector<Unit*> inReach;
@@ -1904,9 +1905,12 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
 
         Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
         if (!victim || !PlayerbotAI::IsTank(victim))
-            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit, false});
+        {
+            uint8 const tier = YoggSaronLooseGuardianTier(bot, unit);
+            loose.push_back({tier, bot->GetDistance(unit), unit, false, victim && tier == 1});
+        }
         else if (YoggSaronTauntFadesShort(bot, unit))
-            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit, true});
+            loose.push_back({YoggSaronLooseGuardianTier(bot, unit), bot->GetDistance(unit), unit, true, false});
 
         if (bot->IsWithinMeleeRange(unit))
             inReach.push_back(unit);
@@ -1914,54 +1918,77 @@ bool YoggSaronGuardianControlAction::ControlPhaseThree()
             atSpot.push_back(unit);
     }
 
-    if (Player* holder = YoggSaronTankSwapTake(botAI))
-        if (TakeFrom(holder))
-            return true;
-
-    bool const shedding = YoggSaronTankShedding(botAI);
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.tankshed", shedding ? "shed" : "hold");
-
-    if (shedding || YoggSaronTankLowHold(bot))
-        loose.clear();
-
     std::sort(loose.begin(), loose.end(),
               [](LooseGuardian const& left, LooseGuardian const& right)
               {
                   return std::make_tuple(left.tier, -left.guardian->GetHealthPct(), left.distance) <
                          std::make_tuple(right.tier, -right.guardian->GetHealthPct(), right.distance);
               });
-    for (auto const& [tier, distance, guardian, chain] : loose)
+
+    auto const tauntLoose = [&](bool raidersOnly)
     {
-        auto const& taunts = guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
-        if (!chain && std::any_of(taunts.begin(), taunts.end(),
-                                  [this](AuraEffect const* taunt)
-                                  {
-                                      Unit* caster = taunt->GetCaster();
-                                      Player* tank = caster ? caster->ToPlayer() : nullptr;
-                                      return tank && (tank == bot || PlayerbotAI::IsTank(tank));
-                                  }))
-            continue;
-
-        if (Taunt(guardian))
+        for (auto const& [tier, distance, guardian, chain, onRaider] : loose)
         {
-            if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "yogg.tankhold", chain ? "chain taunt" : (tier ? "taunt" : "return taunt"));
+            if (raidersOnly && !onRaider)
+                continue;
 
-            return true;
+            auto const& taunts = guardian->GetAuraEffectsByType(SPELL_AURA_MOD_TAUNT);
+            if (!chain && std::any_of(taunts.begin(), taunts.end(),
+                                      [this](AuraEffect const* taunt)
+                                      {
+                                          Unit* caster = taunt->GetCaster();
+                                          Player* tank = caster ? caster->ToPlayer() : nullptr;
+                                          return tank && (tank == bot || PlayerbotAI::IsTank(tank));
+                                      }))
+                continue;
+
+            if (Taunt(guardian))
+            {
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "yogg.tankhold",
+                                         chain ? "chain taunt" : (tier ? "taunt" : "return taunt"));
+
+                return true;
+            }
+
+            if (chain)
+                continue;
+
+            if (Defend(guardian))
+            {
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "yogg.tankhold", tier ? "defense" : "return defense");
+
+                return true;
+            }
         }
 
-        if (chain)
-            continue;
+        return false;
+    };
 
-        if (Defend(guardian))
-        {
-            if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "yogg.tankhold", tier ? "defense" : "return defense");
+    Player* const holder = YoggSaronTankSwapHolder(botAI);
+    if (holder && holder->GetHealthPct() > ULDUAR_YOGG_SARON_TANK_SWAP_DEFER_PCT && tauntLoose(true))
+    {
+        if (RaidObs::Active())
+            RaidObs::Note(bot, "yogg.swapdefer",
+                          holder->GetName() + " " + std::to_string(static_cast<uint32>(holder->GetHealthPct())));
 
-            return true;
-        }
+        return true;
     }
+
+    if (holder && TakeFrom(holder))
+    {
+        YoggSaronTankSwapTake(botAI, holder);
+
+        return true;
+    }
+
+    bool const shedding = YoggSaronTankShedding(botAI);
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.tankshed", shedding ? "shed" : "hold");
+
+    if (!shedding && !YoggSaronTankLowHold(bot) && tauntLoose(false))
+        return true;
 
     if (bot->GetDistance(spot) > ULDUAR_YOGG_SARON_PHASE_3_STACK_RADIUS)
     {

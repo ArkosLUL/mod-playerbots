@@ -1664,3 +1664,115 @@ deaths at 35-50% are the risk to watch.
 guardian control runs, and a chain would spend the taunt the drag needs. A chain lands only inside taunt range (30 yd):
 of the 10 short taunts here the other tank was within 30 yd of the Guardian (centre to centre) in 5 at 1 s before the
 fade, 8 at 0.5 s and 9 at 0.25 s, so expect most chained, not all.
+
+**User answer (2026-11-24) to round 17's question (the swap spends the taunts fresh Guardians need):** yes, for one
+window: a bot tank taunts a fresh Immortal Guardian that is hitting a non-tank before doing a tank swap, as long as the
+holding tank is above 35% health (round 18 builds it).
+
+## Round 18 (2026-11-24, window 26 build e834a2708: round 17)
+
+**Data.** `raidtest.py report --boss yogg-saron --raid uld --head e834a2708 --pulls 10` (window report
+`scratchpad/window26/window26-yogg-saron.md`): one valid pull per pool, 0 humans, Freya's 62670 on the raid, no DC veto
+inside a pull. Read with the full `yogg_saron.py` and scratch scripts (`scratchpad/yogg-r18/`: each phase 3 death with
+its killer's age, time loose and distance to each tank and their taunt cooldowns, the tanks' notes and casts, who woke
+each Guardian, where the melee and ranged stood) over `snap`, `cast`, `dmg`, `note`, `move` and `death` rows. Window 25
+(round 16's build) is the baseline, reread with the new `--phase3` lines.
+
+| Pool | Run | Trace | Out | Phase 1 | Phase 2: Brain lost per cycle | Phase 3 |
+|---|---|---|---|---|---|---|
+| uld1 | `tr-20261124-121450-8` | `603_8_yogg-saron_1795522535` | wipe 11:55, 33 deaths | 135.2 s | 436.4 s, 5: S 19.5, C 8.0, I 18.8, S 19.0, C 4.7 | from 9:31.7 with 4 tentacles (Crushers 47.0, 85.0%; Corruptors 46.2, 75.1%), 144 s, Yogg 29.8 → 22.5% |
+| uld2 | `tr-20261124-121349-7` | `603_7_yogg-saron_1795522475` | wipe 11:40, 31 | 139.5 s | 433.3 s, 5: S 15.5, I 22.3, C 4.5, S 16.6, I 11.1 | from 9:32.8 with 5 (Crushers 22.3, 85.8%; Corruptors 10.0, 95.5, 100%), 127 s, 30 → 26.1% |
+| uld3 | `tr-20261124-121550-9` | `603_9_yogg-saron_1795522596` | wipe 10:57, 32 | 142.9 s | 378.7 s, 4: S 21.4, I 18.5, C 10.9, S 19.3 | from 8:41.6 with 5 (Crushers 16.4, 99.5%; Corruptors 61.4, 83.6, 100%), 136 s, 30 → 21.8% |
+
+**Cycles to 30%:** five, five and four, all three in phase 3 again (window 25: five, five, four). Phase 3 opened with
+two Crushers in every pull: the user's goal (at most one) not met.
+
+Deaths by mechanic (a rezzed bot dying again counts twice):
+
+- uld1: phase 1 Shadow Nova 2 (Uldxai, the enhancement shaman, 1:24.4 and 1:48.4); phase 2 Death Ray 2 (Uldxag 3:16.5,
+  Uldxai 4:33.3, both walking for a portal), Laughing Skull 1 (Uldxai 8:52.5); phase 3 Immortal Guardian 28 (first +57.5
+  s, the tanks at +72.0 s, 16 s after the 10:27.7 beacon heal, and +95.3 s).
+- uld2: phase 1 Shadow Nova 1 (Uldyan 1:45.4); phase 2 none; phase 3 Immortal Guardian 29 (first +7.3 s, the first tank
+  at +42.0 s), Lunatic Gaze 1 (Uldyas 10:52.4).
+- uld3: phase 1 Sara's Blessing 2 (Uldzax 1:29.6, Uldzat 1:58.5), Shadow Nova 1 (Uldzai 2:14.3); phase 2 none; phase 3
+  Immortal Guardian 29 (first +52.7 s, a beacon dragger; the tanks at +68.8 / +73.5 s, 11.4 / 16.2 s after the 9:38.95
+  beacon heal).
+
+**Verdict on round 17, chain taunt: fixed on its own check.** `--phase3` `taunts run out short of the tank` 1 / 0 / 3
+(window 25: 4 / 1 / 5), chained by the other tank before the fade 1 / 0 / 1 (1 / 0 / 2), a non-tank swung at within 2 s
+of the fade 0 / 0 / 0 (2 / 0 / 1, all died); `yogg.tankhold` `chain taunt` 0 / 2 / 3 rows.
+
+**Verdict on round 17, burst on phase 3 adds (shared `BurstCooldowns`): fixed on its own check.** `burst cooldowns`:
+ranged casts 12 / 13 / 7 (window 25: none but Shadowfiend), the gate's ranged veto rows 0 / 0 / 0 (327 / 154 / 251);
+healer and tank rows stay, as built. Not readable on Yogg: ranged put 92 / 96 / 96% of 54.4 / 35.0 / 45.7k/s into the
+leftovers all phase.
+
+**Stop rules.** No kill. Phase 3 was picked in rounds 3-5 and stays stuck as the throughput race; this round builds the
+user's answer to round 17's question, and the second pick is a new root cause inside it (as rounds 7 and 17 were), not a
+retry.
+
+**Ranking** across pools: phase 3 Immortal Guardians 86 (raiders killed by a fresh Guardian before the first tank death 2
+/ 5 / 0, every one out of the tanks' reach; then the pile and the beacon heals); Shadow Nova 4; Death Ray 2; Sara's
+Blessing 2; Lunatic Gaze 2. Phase 2 cost 3 / 0 / 0, the lowest yet.
+
+**Baseline for the user's answer** (new `--phase3` lines, up to the first tank death; fresh means no tank has held it
+yet). `fresh on a raider`: 5 of 7 Guardians, median 4.7 s, max 12.7 s, 30.3 s in all / 4 of 4, 4.8, 7.7, 18.3 s / 1 of 7,
+0.3 s (window 25: 7 of 8, 1.5, 6.3, 14.8 s / 2 of 5, 1.4, 2.0, 2.8 s / 7 of 10, 1.7, 10.1, 26.3 s); `raiders killed by a
+fresh Guardian` 2 / 5 / 0 (window 25: 1 / 1 / 4, uld1's Uldxad and uld3's four being round 17's swap-starved cases). In
+this window no fresh Guardian met a swap: uld1 swapped three times from 10:43.2, after its last fresh kill, uld2 twice
+and uld3 once, after their first tank death. Every one of the seven fresh kills was out of reach: the killer 37-62 yd
+from both tanks, whose taunts reach 30.
+
+**Built: the user's answer** (`UldEncounter_YoggSaron.h/.cpp`, `UldActions_YoggSaron.cpp`). `YoggSaronTankSwapTake`
+splits into `YoggSaronTankSwapHolder` (whom this bot would take from, a live swap's or a new one's, starting nothing) and
+`YoggSaronTankSwapTake(botAI, holder)` (starts it). In guardian control, while the holder is over
+`ULDUAR_YOGG_SARON_TANK_SWAP_DEFER_PCT` (35), the taker first runs the loose loop over Guardians whose victim is a
+non-tank player at tier 1 (never a drag return or a hunter's Distracting Shot hold): taunt, else Righteous Defense on
+the victim; a cast notes `yogg.swapdefer` (`<holder> <health %>`) and ends the tick. Otherwise it takes as before. The
+code reads the victim, not the age: before a tank death, a Guardian on a raider is a fresh one or one that slipped,
+and both one-shot a healer. The swap now starts on its first take that lands, not when it falls due, so a deferral
+never leaves the holder shedding through the 8 s the taker's taunt cools (before, a taker with its taunt spent started
+the shed too). A warrior, druid or death knight taker has one taunt, so a deferral waits out its cooldown; a paladin
+takes with Righteous Defense next tick. Same at 10 and 25, normal and hard mode; a human holder is read the same way and
+only bot tanks defer.
+
+**Picked second, independent and small, a bug: phase 3 melee on Yogg are never held at the melee spot.** Melee samples
+on Yogg from +15 s to the first tank death (new `--phase3` `melee on Yogg`): over 30 yd from the melee spot 87 / 87 / 45%
+(window 25: 57 / 97 / 54%), within its 15 yd 6 / 12 / 25%, on Yogg's west side, his front, 12-22 yd from him and
+within reach of the Guardian spawn ring (38-48 yd from him). The tanks hold the melee spot and taunt 30 yd, so a fresh
+Guardian no tank took at stasis end walks away from them after the first player in the map's list, a fixed melee
+standing out there (uld1 Uldxay, uld2 Uldyay; `first victim` melee at +3.9-4.1 s 5 / 4 / 0 of 11 / 10 / 11, uld3's
+tanks taking theirs at stasis end): uld1 10:15-10:31 Uldxan and Uldxay stood 38-40 yd from the spot on Yogg when G371,
+woken at +0.3 s by Uldxal's Army of the Dead ghouls and held by them 34-56 yd out for 21 s, turned on them (both dead,
+the tanks 37-62 yd off); uld2's Uldyan (9:40.1) and Uldyaw (10:00.4) died the same way, 39-48 yd from the spot. Root
+cause:
+`YoggSaronTrigger::PhaseThreeStationReaches` (`UldTriggers_YoggSaron.cpp:71-79`) gave melee a reach of `MeleeDistance`
+(0.75) from Yogg's centre: 18.4 yd from the spot minus the 15 yd radius is 3.4, so it read Yogg out of the melee spot's
+reach and released them (`yogg.station` `released` as each picks Yogg, e.g. uld1 Uldxar 9:31.8, then `reach melee` to
+(1980.4, −47.1), 31 yd from the spot). Yogg's combat reach is 20, so the spot is 18.9 yd 3D inside his 22.25 `reach
+melee` range.
+
+Bug: the doc's station claims a bot while standing there costs nothing, and melee wait at the spot for guardian control.
+Fix (`UldTriggers_YoggSaron.cpp`): melee reach is `reach melee`'s, `MeleeDistance` plus both combat reaches; the station
+then walks melee on Yogg to the spot round the body and parks them. A Guardian counts likewise (reach 4: released past
+21.25 yd, was 15.75). Ranged keep `SpellDistance`; the resolver's station test reads only phase 3 ranged, unchanged.
+Same at 10 and 25, normal and hard mode, with or without a player. No shared code.
+
+**Next window should show:** for the swap, `swaps deferred for a Guardian on a raider` above 0 wherever a swap meets
+one, and `tank deaths within 10 s of one on them` 0 (one or two a pull at 35-50% means back to the old order);
+`fresh on a raider` time and `raiders killed by a fresh Guardian` under 30.3 / 18.3 / 0.3 s and 2 / 5 / 0. For the
+melee, `melee on Yogg` within 15 yd 80%+ and beyond 30 near 0; melee damage on Yogg no lower than 29.5 / 26.4 / 33.5k/s
+(the `damage split` melee rate times its Yogg share); `first off a tank` to melee fewer. Phase 3 still ends on the pile
+and the beacon heals.
+
+**Seen, not picked.**
+
+- The first beacon heal ended both tanks in two pulls: uld1's 10:27.7 heal (tank Uldxaa held up to 3 healed, took 256k,
+  healed 241k, died +16.0 s), uld3's 9:38.95 (+11.4 / +16.2 s). The stuck throughput race again.
+- Ranged on leftovers stand out of the tanks' reach too: ranged samples over 30 yd from the melee spot 17 / 87 / 90%,
+  and uld2's three ranged kills (Uldyau, Uldyaj, Uldyao, 9:56-9:59, 48-51 yd from both tanks) came from there, G363
+  on a ranged 0.2 s after it spawned, before its stasis ended. The far leftover walk is the user's choice; worth a question if fresh
+  kills of ranged persist once melee stand at the spot.
+- Army of the Dead in phase 3 (uld1 9:52.9; window 24 uld3 once): its ghouls woke two fresh Guardians in the spawn ring
+  (+3.2 s, +0.3 s) and held one out of every taunt for 21 s.
+- uld1's Uldxai, the enhancement shaman, died to a phase 1 nova twice again.

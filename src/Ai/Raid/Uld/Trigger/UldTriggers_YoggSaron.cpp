@@ -71,7 +71,9 @@ bool YoggSaronTrigger::IsInBrainLevel() { return YoggSaronOnBrainLevel(bot); }
 bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
 {
     Position const& spot = YoggSaronPhaseThreeSpot(bot);
-    float const reach = PlayerbotAI::IsMelee(bot) ? sPlayerbotAIConfig.MeleeDistance : sPlayerbotAIConfig.SpellDistance;
+    float const reach = PlayerbotAI::IsMelee(bot)
+                            ? sPlayerbotAIConfig.MeleeDistance + bot->GetCombatReach() + target->GetCombatReach()
+                            : sPlayerbotAIConfig.SpellDistance;
 
     return spot.GetExactDist2d(target->GetPositionX(), target->GetPositionY()) -
                ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS <=

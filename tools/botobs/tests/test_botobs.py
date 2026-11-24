@@ -2088,6 +2088,33 @@ class YoggPhases(unittest.TestCase):
         loose = {**rows, 9: [[1000, 9, 0.0, 0.0, 0, 0, 90.0, 0, 7], [3500, 9, 20.0, 0.0, 0, 0, 90.0, 0, 7]]}
         self.assertEqual(yogg_saron.taunts_run_short(taunts, loose, tanks, hits, []), (0, 0, 0, 0))
 
+    def test_fresh_on_raider_counts_raider_time_until_a_tank_first_holds_it(self):
+        tanks, raiders = {5, 6}, {7, 8}
+        rows = [[0, 9, 0, 0, 0, 0, 100.0, 0, 0], [4000, 9, 0, 0, 0, 0, 100.0, 0, 7],
+                [5000, 9, 0, 0, 0, 0, 100.0, 0, 30], [6000, 9, 0, 0, 0, 0, 100.0, 0, 8],
+                [7500, 9, 0, 0, 0, 0, 100.0, 0, 5], [9000, 9, 0, 0, 0, 0, 100.0, 0, 7]]
+        self.assertEqual(yogg_saron.fresh_on_raider(rows, tanks, raiders, 20000), (2500, True))
+        self.assertEqual(yogg_saron.fresh_on_raider(rows, tanks, raiders, 6500), (1500, False))
+        self.assertEqual(yogg_saron.fresh_on_raider(rows[:2], tanks, raiders, 20000), (0, False))
+
+    def test_killed_by_fresh_skips_a_guardian_a_tank_already_held(self):
+        tanks = {5, 6}
+        rows = {9: [[0, 9, 0, 0, 0, 0, 100.0, 0, 7]],
+                10: [[0, 10, 0, 0, 0, 0, 100.0, 0, 5], [3000, 10, 0, 0, 0, 0, 100.0, 0, 8]]}
+        deaths = [(2000, 7, 9), (4000, 8, 10), (4500, 5, 9), (9000, 8, 9), (2500, 7, 77)]
+        self.assertEqual(yogg_saron.killed_by_fresh(deaths, rows, tanks, 8000), [(2000, 7, 9)])
+
+    def test_deferred_tank_deaths_ties_a_death_to_the_last_deferral_on_that_tank(self):
+        defers = [(1000, "Tank", 48), (6000, "Tank", 41), (6500, "Other", 44)]
+        deaths = [(9000, "Tank"), (9500, "Other"), (30000, "Tank")]
+        self.assertEqual(yogg_saron.deferred_tank_deaths(defers, deaths),
+                         [(9000, "Tank", 6000, 41), (9500, "Other", 6500, 44)])
+        self.assertEqual(yogg_saron.deferred_tank_deaths([], deaths), [])
+
+    def test_spot_bands_split_inside_the_station_the_taunt_reach_and_beyond(self):
+        self.assertEqual(yogg_saron.spot_bands([5.0, 15.0, 20.0, 31.0]), (0.5, 0.25, 0.25))
+        self.assertEqual(yogg_saron.spot_bands([]), (0.0, 0.0, 0.0))
+
     def test_ray_hit_movers_names_the_last_walk_and_the_dodgers_that_tried(self):
         moves = [(500, "yogg-saron body detour action", True), (1500, "avoid aoe", False),
                  (2500, "yogg-saron phase 2 spacing action", False), (2600, "avoid aoe", True),
