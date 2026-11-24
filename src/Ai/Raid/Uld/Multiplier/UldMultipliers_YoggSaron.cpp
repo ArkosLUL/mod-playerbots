@@ -185,7 +185,7 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 
 float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
 {
-    if (!action || YoggSaronOnBrainLevel(bot) || !HitsNeighbours(botAI, action, _splash))
+    if (!action || PlayerbotAI::IsTank(bot) || YoggSaronOnBrainLevel(bot) || !HitsNeighbours(botAI, action, _splash))
         return 1.0f;
 
     bool const hold = YoggSaronInPhase1(botAI) ? YoggSaronPhase1AoeHold(botAI) : YoggSaronLeftoverAoeHold(botAI);

@@ -737,12 +737,16 @@ and ground AoE against the focus's 13.0. So:
   humans. The clock is `YoggSaronGuardianDeathListenerScript` on 65719, which only a Guardian's
   `JustDied` casts; it holds without a bot tank and through the handover, where the phase still reads 1.
   It cannot cover a simultaneous pair: two deaths 0.000 s apart killed four melee from full.
-- **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes area damage by the Crusher area hold's
-  test (`HitsNeighbours`, below), tanks included, while a Guardian other than the focus is below 30%
-  within 10 yd of the middle or of the focus (Death and Decay and Explosive Trap reach 10, Blizzard and
-  Consecration 8). Keyed on the `Aoe` threat type it held Seed, Volley and Blizzard but ran Maul, Swipe,
-  Consecration, Divine Storm and Whirlwind, about six a gap window. Its lead is only 2.6-5.3 s, so the
-  resolver also cancels an area channel already running: Blizzard, Hurricane, Volley, Rain of Fire.
+- **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes a non-tank's area damage by the Crusher
+  area hold's test (`HitsNeighbours`, below) while a Guardian other than the focus is below 30% within
+  10 yd of the middle or of the focus (Death and Decay and Explosive Trap reach 10, Blizzard and
+  Consecration 8). Keyed on the `Aoe` threat type it held Seed, Volley and Blizzard but ran Divine Storm,
+  Whirlwind and Multi-Shot. **Tanks are exempt**: their Consecration, Death and Decay, Swipe, Maul and
+  Thunder Clap hold every Guardian nobody aims at. Held too, for 30-68% of phase 1, they doubled the
+  Guardians on the stack turning off a tank (2.7-3.4 a minute to 5.7, 44% onto warlock DoTs), which
+  walked to the back line and parked; so tank area damage still leaks into the gap. Its lead is only
+  2.6-5.3 s, so the resolver also cancels an area channel already running: Blizzard, Hurricane, Volley,
+  Rain of Fire.
   Mind Sear fails `IsAffectingArea` (a single-target aura that triggers the area
   spell), and ground AoE already placed keeps ticking.
 - **Nova chain.** 65209's second effect hits every other Guardian within 15 yd for 25,000-27,501 (a
@@ -762,7 +766,8 @@ and ground AoE against the focus's 13.0. So:
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks were
 on it a second before, and lists pairs under the gap and deaths with another Guardian under 30% inside
 18 yd; `low Guardians in the gap` gives their loss rate inside it, the share of samples a tank was on one,
-and the area actions that ran.
+and the area actions that ran. `--threat` counts Guardians within 10 yd of the middle turning off a tank,
+by the new target's class (a pet under its owner's).
 
 ## Crush is a ±5° cone that tracks its victim
 
