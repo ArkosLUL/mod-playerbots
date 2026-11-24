@@ -672,6 +672,13 @@ phased, where no explosion reaches, and through phase 1 outside the swap pair. T
 at a cast, and two druids died to stars with it cooling. Shamanistic Rage is held too, costing an Enhancement
 shaman its mana.
 
+An Ice Block the node pressed is broken once its star is dead and none explodes on the bot within 4.5 s,
+unphased and outside the cast (`algalon.unblock`): no heal lands through it, and held its 10 s it took the
+star team's mage off the wave-3 under-stars from the explosion 12 s before Big Bang 2's cast (5 of 8 node
+Ice Blocks in 8 pulls were the team mage's). The class Deterrence node is held for unphased bots in phase 1,
+except one he is hitting (its parry stops his melee): it fires on low health after the hit, never ahead of
+one, and each press is 5 s without attacks (39 in 8 pulls, 20 on star team hunters).
+
 ## Node order
 
 A survival ranking (a missed Big Bang is 76-112 k or a reset, a meteor lands ~4.8 s after its marker, a bot
@@ -727,7 +734,8 @@ older traces say `collapsed`); the roster's hits on stars (pets under their owne
 (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.petsplash` (`off|on <spell id>`
 on the pet's owner, counted per owner by `--collateral`); `algalon.offtaunt` (the healer's guid, on the
 swap tank taunting a constellation off it, per Big Bang in `--constellations`); `algalon.personal` (the button's
-spell name, or `healthstone`/`healing potion`); `algalon.nitro` (`hide` on a bot using its boots on the
+spell name, or `healthstone`/`healing potion`); `algalon.unblock` (`Ice Block`, on the bot whose node Ice
+Block the tick broke); `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a holder
 handing him over for want of a defensive); `algalon.pull` (`inreach=N victim=GUID`) at the tick the
 intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`) per raid warning, sent only when a human
@@ -750,10 +758,12 @@ second (humans starred); `--help` lists the views. Its verdicts, beyond `--verdi
 eating or drinking while he is engaged, per star going off in the cast the bots it hit by hide state
 with a swap tank out on `noshelter` aside, per cast the hiders that used a gap closer):
 
-- `--defensives` lists fire resistance holders, their reach and the Cosmic Smash share resisted. Verdicts: a press or
+- `--defensives` lists fire resistance holders, their reach and the Cosmic Smash share resisted, and each Ice
+  Block and Deterrence a bot raised on itself unphased in phase 1, with the star team's share. Verdicts: a press or
   cover after its star's death; a held button a class node spent (phased,
   or in phase 1; judged on health after the last hit, not the snapshot); a cover cast with fewer than
-  2 under the line; a failed cover with another ready; `window` cutters on a holder at 80% or more.
+  2 under the line; a failed cover with another ready; `window` cutters on a holder at 80% or more; a star team
+  member in Ice Block or Deterrence over 2 s.
 - `--stars`: a release within 8 s of the cast; 1% or more of splash, off the focus, on an
   under-star released early within 20 s of its cast, in the 20 s before; an under-star above its band
   at the cast (h% dies h−1 to h s later); over one switch per star; 3 Shoot starts in 2 s.

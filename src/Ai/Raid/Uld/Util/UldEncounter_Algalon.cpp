@@ -3055,6 +3055,33 @@ void HoldPetSplash(Group* group, AlgalonEncounterState& state, bool active)
         state.petSplashHeld.erase(held);
     }
 }
+
+void BreakSpentIceBlocks(Group* group, AlgalonEncounterState& state)
+{
+    for (auto pressed = state.personalBlocks.begin(); pressed != state.personalBlocks.end();)
+    {
+        Player* member = FindGroupMember(group, pressed->first);
+        if (!member || !member->HasAura(SPELL_ALGALON_ICE_BLOCK))
+        {
+            pressed = state.personalBlocks.erase(pressed);
+            continue;
+        }
+
+        if (state.bigBangCasting || IsAlgalonPhased(member) || FindScanned(state.stars, pressed->second) ||
+            ExplodingStar(state, ULDUAR_ALGALON_EXPLOSION_PERSONAL_LEAD_MS + ULDUAR_ALGALON_EXPLOSION_STACK_MS,
+                          ULDUAR_ALGALON_EXPLOSION_LOW_PCT, member))
+        {
+            ++pressed;
+            continue;
+        }
+
+        member->RemoveAurasDueToSpell(SPELL_ALGALON_ICE_BLOCK);
+        if (RaidObs::Active())
+            RaidObs::Note(member, "algalon.unblock", "Ice Block");
+
+        pressed = state.personalBlocks.erase(pressed);
+    }
+}
 }
 
 void AlgalonTickEncounterState(PlayerbotAI* botAI)
@@ -3202,6 +3229,8 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         if (IsBot(member) && member->HasAura(SPELL_ALGALON_DIVINE_SACRIFICE, member->GetGUID()))
             member->RemoveOwnedAura(SPELL_ALGALON_DIVINE_SACRIFICE);
     }
+
+    BreakSpentIceBlocks(group, *state);
 
     state->urgent = phase == AlgalonPhase::One && state->holes.empty() &&
                     (casting || BigBangDueWithin(*state, ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS, now));
@@ -4045,6 +4074,9 @@ void ClaimAlgalonExplosionPersonal(Player* bot, AlgalonPersonalPick const& pick)
         return;
 
     state->personalStars[bot->GetGUID()] = star->guid;
+    if (pick.spellId == SPELL_ALGALON_ICE_BLOCK)
+        state->personalBlocks[bot->GetGUID()] = star->guid;
+
     if (!RaidObs::Active())
         return;
 

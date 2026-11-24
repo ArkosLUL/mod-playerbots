@@ -273,6 +273,9 @@ TANKDEF_NOTE_MS = 10000
 COVER_COOLDOWN_MS = 120000
 COVER_MS = 6000
 SACRIFICE_HELD_MS = 1000
+SPELL_DETERRENCE = 19263
+IDLE_BUTTONS = {SPELL_ICE_BLOCK: "Ice Block", SPELL_DETERRENCE: "Deterrence"}
+IDLE_HELD_MS = 2000
 
 SPELL_NITRO_BOOSTS = 54861
 NITRO_LEAD_MS = 3000
@@ -4859,6 +4862,28 @@ def held_sacrifices(trace: Trace) -> list[dict]:
     return out
 
 
+def idle_buttons(trace: Trace) -> list[dict]:
+    def build(trace: Trace) -> list[dict]:
+        spans = phases(trace)[0]
+        phased = hole_phases(trace)
+        team = holder_spans(trace, "algalon.starteam", pull_end(trace))
+        broken: dict[int, list[int]] = collections.defaultdict(list)
+        for rec in notes(trace, "algalon.unblock"):
+            broken[rec.get("g", 0)].append(rec["t"])
+        out = []
+        for guid, items in aura_spans(trace, tuple(IDLE_BUTTONS)).items():
+            if guid in trace.humans or guid not in trace.roles:
+                continue
+            for start, stop, spell, caster in items:
+                if caster != guid or phase_at(spans, start) != "P1" or phased_at(phased, guid, start):
+                    continue
+                out.append({"t": start, "guid": guid, "spell": IDLE_BUTTONS[spell], "held": stop - start,
+                            "team": value_at(team.get(guid, []), start) == "1",
+                            "broken": any(start <= when <= stop + ECHO_MS for when in broken.get(guid, ()))})
+        return sorted(out, key=lambda row: row["t"])
+    return cached(trace, "_algalon_idle_buttons", build)
+
+
 def personal_name(trace: Trace, spell) -> str:
     """The personal button a spell id is, in the table's lower-case spelling, else empty."""
     name = spell_name(trace, spell, PERSONAL_IDS).lower().replace("-", " ")
@@ -5218,6 +5243,13 @@ def show_defensives(trace: Trace) -> None:
     print(f"  explosion buttons a class node spent above {BUTTON_HOLD_PCT:.0f}%, phased or in P1: {len(spent)}")
     for row in spent:
         print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['label']} at {row['pct']:.0f}%, {row['where']}")
+    idle = idle_buttons(trace)
+    print(f"  Ice Block and Deterrence a bot raised on itself in P1, unphased: {len(idle)},"
+          f" {sum(row['held'] for row in idle) / 1000:.1f} s unable to attack,"
+          f" {sum(row['held'] for row in idle if row['team']) / 1000:.1f} s of it on the star team")
+    for row in idle:
+        print(f"    {clock(row['t']):>9} {trace.name(row['guid'])} {row['spell']} {row['held'] / 1000:.1f} s"
+              f"{', star team' if row['team'] else ''}{', broken by algalon.unblock' if row['broken'] else ''}")
 
     lost = explosion_deaths(trace)
     print(f"  deaths to a star explosion: {len(lost)}")
@@ -5263,6 +5295,10 @@ def defensive_faults(trace: Trace) -> list[tuple[int, str]]:
         where = "inside a hole's phase" if row["where"] == "phased" else "in phase 1, not on a star"
         out.append((row["t"], f"{trace.name(row['guid'])} spent {row['label']} @ {secs(row['t'])} {where},"
                               f" at {row['pct']:.0f}%"))
+    for row in idle_buttons(trace):
+        if row["team"] and row["held"] > IDLE_HELD_MS:
+            out.append((row["t"], f"{trace.name(row['guid'])} on the star team in {row['spell']}"
+                                  f" {row['held'] / 1000:.1f} s @ {secs(row['t'])}"))
     for row in thin_covers(trace):
         out.append((row["t"], f"{trace.name(row['guid'])} cast {row['cover']} @ {secs(row['t'])} with"
                               f" {row['under']} under the explosion's line"))
