@@ -519,8 +519,8 @@ for 12.8-21.9k and killed one.
 on the first** (the user's choice). The surge timer (63 s, shifted 12 s by the sixth vapor) ends its
 casts at +16 and +79 s of the Animus; the second, the late surge, comes with healers at 0-35% mana and
 ~38 Profound Darkness stacks. Icebound Fortitude and Shield Wall come back after 2 min, so the first gets
-them, and 8 of 24 DK and warrior main tanks died bare in the late one (windows 11-26); saving them for it
-would leave the first bare, where a replay put about a third under 25%. So:
+them, and 8 of 24 DK and warrior main tanks that reached the late one died in it without them (windows
+11-26); saving them for it would leave the first bare, where a replay put about a third under 25%. So:
 
 - the surge node also casts Vampiric Blood (60 s), back for each surge 63 s later unless the class node
   spends it at critical health between: in windows 11-27 it did, 2-8 s before 7 late surges, which the
