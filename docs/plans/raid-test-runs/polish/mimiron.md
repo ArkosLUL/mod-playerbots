@@ -142,7 +142,7 @@ Berserk, the 30 after it in uld2 and uld3 are Berserk.
 window 32: 2, window 30: 12); the user's answer, built as directed.
 
 - Baseline, `--bombbots` and the scratch: 28 bombs in window 34, 13 blew (chased 13, uld6's Uldwak dead;
-  collateral 10, none dead), 0-1 taunted a pull, none on purpose. The victim a bomb spawns with sat
+  collateral 10, none dead), 0-2 taunted a pull, none on purpose. The victim a bomb spawns with sat
   10-23 yd off the spawn in 25 of 28 (3.7-9.8 in the rest), a ranged or healer in 19; the spawn is the
   ACU's ground point, within 2 yd of the room centre in uld1, uld3 and uld5, up to 5-6 in uld4 and uld6,
   6.5-18 in uld2.
