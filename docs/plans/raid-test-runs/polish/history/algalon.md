@@ -887,3 +887,87 @@ launched before starting its next cast (no longer its current spell), and splash
 19's 23.1, 15.7, 21.2% of a star; `early` releases under window 19's 4, 0, 2. Watch: bulk speed (interrupted casts are
 lost time; window 19 +1.8 to +2.3 %/s), under-stars above their band at the cast (window 19: uld3 1631 at 12.5%),
 `late` releases.
+
+## Round 10 (2026-11-24, window 30 build 897faf0d8: round 9 and every shared change since)
+
+**Data.** Window 30, one valid pull per pool (`window30-algalon.md`), plus window 21 (build 90400b39c, round 9;
+`603_16/17/18_…_17954618xx`, unread by any lane) for the verdict. Scratch `alg10/`: `offfocus.py` (team damage on
+idle under-stars, `early` releases against the team's last switch), `undersplash.py` (hits on idle under-stars in
+the 25 s before each cast, by source), `castearly.py` (stars going off in a cast before hit − 4.6 s, all 37
+traces), `starhits.py`, `starnear.py`.
+
+| Pool | Run | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261124-171319-30` | `603_30_…_1795540502` | wipe 2:36, him 74% | 31: star 11, loose 7, on tank 6, Barrage 3, Dark Matter in Big Bang 2, Black Hole DoT 1, Big Bang 1 |
+| uld4 | `tr-20261124-171207-28` | `603_28_…_1795540431` | wipe 5:25, 38% | 33: loose 16, Barrage 6, star 5, on tank 3, Big Bang 2, Cosmic Smash 1 |
+| uld2 | `tr-20261124-171711-33` | `603_33_…_1795540734` | wipe 6:12, 26% | 32: star 11, loose 7, on tank 6, Barrage 5, Cosmic Smash 1, Dark Matter 1, Black Hole DoT 1 |
+| uld5 | `tr-20261124-171249-29` | `603_29_…_1795540471` | wipe 4:54, 43% | 31: loose 13, star 9, on tank 6, Barrage 3 |
+| uld3 | `tr-20261124-171339-31` | `603_31_…_1795540521` | wipe 6:03, 34% | 33: star 11, loose 10, Black Hole DoT 6, on tank 6 |
+| uld6 | `tr-20261124-171339-32` | `603_32_…_1795540522` | wipe 5:36, 42% | 32: Big Bang 13, star 7, loose 7, on tank 4, Barrage 1 |
+
+What started each wipe:
+
+- uld1: two stars at 1:57.58, 1.5 s into Big Bang 1's cast, on 22 runners: 11 dead, 4 healers (the pick). Tanks
+  died 2:07-2:23, then loose.
+- uld4: Big Bang 2's hide, holes 30-41 yd from the pair: Ulduaa ran through a meteor (7.6 yd) into an under-star,
+  Ulduaz on `noshelter` with no button died to the hit. 5th stack on the last tank at 4:28, loose 10.5 s.
+- uld2: the pair died to burst 5:27-5:54 with a tank healer alive; a `deadline` kill on 13 under the line, 8 dead.
+- uld5: under-star 1644 went off 0.8 s before its window with a meteor live (3 dead): the bulk's Arcane Missiles put
+  8.6% on it in 1.1 s at its line. Tank deaths 4:06-4:25, tank healer alive 15-26 yd off.
+- uld3: a `deadline` kill on 5 under (3:12.4, 4 dead); 1666 went off 0.6 s into Big Bang 3's cast (3 dead), 6 more to
+  the void's DoT after it; tank deaths from 5:32.
+- uld6: a constellation on the handler (4:40.5) and one diving on the healer Uldwad (4:56.7) ate the near holes;
+  Big Bang 3's only hole stood 44-73 yd out: 13 to the hit, 7 to two under-stars.
+
+**Stop rules.** Waived (user, 2026-11-22). The pick is round 9's family, under-stars cut below their band, a second
+round.
+
+**Verdict on round 9: held** (w21 and w30, 9 pulls). No `early` release within 3 s of a paced kill taking the team off
+(w19: 1); the 5 within 1 s of a switch all followed the bulk's own. No DoT on a star (w19: 2). Team damage on
+under-stars it wasn't on: 14.3, 13.1, 3.1 (w21); 12.6, 13.7, 12.8, 9.3, 10.8, 13.8% of a star (w30), against 23.1,
+15.7, 21.2. `early` releases 1, 2, 0 and 2, 1, 1, 0, 1, 0 (w19: 4, 0, 2). Watch items: bulk +1.6 to +3.0 %/s beyond the
+drain (w21 uld2 +0.4); w21 uld3 1642 at 12.1% at Big Bang 2's cast; `late` releases 6 in w30's 6 pulls.
+
+**Picked: stars going off in a Big Bang cast's first seconds, before anyone hid** (18 dead, 4 of 6 pulls; uld1's
+wipe). Since round 6, 8 such stars in 18 pulls killed 23, every one an under-star cut below its band, all but one
+within 16.4 s of the cast. For Big Bang 1 and 3 the meteor 8-10 s before the cast, its blackout and `smashrecovery`
+close the last ~14 s, so a late `early` release drains into the cast with the raid out. Bug: two splash sources
+reach stars past the hold.
+
+- uld1 1585, under, 14.6% at 1:48.1 (inside its band), then the holder Uldxaz's Revenge for 3775 and 3952 (1:50.8,
+  1:55.9), Living Bomb 2765, Wandering Plague 2178, Magma Totem 772: 1.6% at the cast against its 4.0-9.6% band, gone
+  on 1584's tick. Revenge (57823) is single-target in the DBC; Improved Revenge (12799) adds a melee chain jump, 10 yd
+  from him (`Spell::SearchChainTargets`) plus the star's size, and `revenge` was in no hold set.
+- Felguard Cleave (47994: weapon damage, chain 2) is a PetAI autocast, which no bot action or multiplier sees: 1.4%
+  of the 2.9% that took uld3's 1666 below its band at 4:41.7 (the bulk's last Arcane Blast had left it 1.4% above the
+  bottom), 0.7% of uld5's 1585.
+- Off-team hits on idle under-stars in the 25 s before a cast, 9 pulls, % of a star: pet Cleave 4.8, Revenge 4.5,
+  Living Bomb 4.1, Wandering Plague 3.5, Consecration 3.1, Maul 1.3.
+- uld1 1584 (`early` 38 s out, the bulk 8% past its line) had no slot: due from 1:31.9, but the 1:31.8 shelter kill's
+  gap, then the 1:48 meteor's blackout and `smashrecovery` ran into the prebang.
+
+**Fix** (Algalon files only):
+
+- `AlgalonSplashHoldMultiplier`: `revenge` joins the chains, held while a star is within 15 yd of the bot or 20 yd
+  of him. Revenge went out 0-22 times a pull, half with a star that near.
+- `HoldPetSplash` (tick): a bot's pet with a star within 15 yd of it, or the same reach of its victim (the star it
+  hits aside), has its non-positive area and chain autocasts switched off (`Pet::ToggleAutocast`), remembered per
+  owner and back on once none is near, outside phase 1, or before the wipe reset; `algalon.petsplash`
+  `off|on <spell>` on the owner. Humans' pets are left alone.
+- Reader: `--collateral` counts the holds per owner (test added).
+
+10 and 25-man alike. Replay: uld1's 1585 keeps 3.0%, 4.6% at the cast, inside its band, so 1584 goes off alone at
+cast + 1.5 s with 3 under the line; uld3's 1666 keeps 1.4%, landing on its band's bottom at 4:41.7. Cost: the
+Felguard's Cleave on him while a star is near (one within 20 yd of him 37-44% of the time stars lived), a few
+Revenges.
+
+**Not picked.** The leads in State: the bulk's overshoot at its line and in-band casts, the `gap` return, the
+remaining splash, w21 uld2's late under-star (14 dead), uld4's tanks far from holes, uld6's holes (Q4 (b)).
+
+**Questions for the user.** Q4 (b), carried in State, not yet asked.
+
+**Next window should show** (`algalon.py --collateral`, `--verdict`, `--stars`; scratch `undersplash.py`): no Revenge
+and no pet Cleave or Thunderstomp in "damage on stars, off the star team" (w30: Revenge 7.5-27.2 k in 4 pulls, pet
+Cleave 3.5-16.1 k in 6); `revenge` among the splash hold vetoes; a "pet splash autocast held" line for each Felguard
+warlock, with `on` rows after each `off`; fewer "fell below its band" verdicts (w30: 2) and stars going off in a cast
+before hit − 4.6 s (w30: 4, 18 dead). Watch: him loose by threat (w30: uld4 once), the Felguard's damage on him.

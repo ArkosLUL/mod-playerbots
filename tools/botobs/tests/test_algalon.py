@@ -2222,6 +2222,41 @@ class OlderStarsUnder(unittest.TestCase):
                           render(load(folder, bare), "bigbang"))
 
 
+def healer_held_pull() -> list[dict]:
+    """The under-star pull with the second constellation on the healer from 20 s through the cast start at 30 s,
+    and the swap tank outside the handler role taunting it off at 25 s."""
+    records = under_pull() + [note(25000, UN_TANK, "algalon.offtaunt", UN_HOLY)]
+    for rec in records:
+        if rec.get("e") == "snap" and 20000 <= rec["t"] <= 30000:
+            for unit in rec["u"]:
+                if unit[0] == UN_CON_B:
+                    unit[7] = UN_HOLY
+    return records
+
+
+class OffTankTaunts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, healer_held_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_big_bang_counts_healer_time_and_the_swap_tank_taunts_before_it(self):
+        (row,) = al.healer_holds_before_bang(self.trace)
+        self.assertEqual((row["n"], row["start"], row["healer_ms"], row["at_cast"], row["taunts"]),
+                         (1, 30000, 10000, 1, [(25000, UN_TANK, UN_HOLY)]))
+        self.assertIn("Big Bang 1 0:30.000: 10.0 s, 1 at the cast, 1 taunt(s) (Tanka 1)",
+                      render(self.trace, "constellations"))
+
+    def test_the_untouched_pull_has_no_healer_time_and_no_taunt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (row,) = al.healer_holds_before_bang(load(folder, under_pull()))
+        self.assertEqual((row["healer_ms"], row["at_cast"], row["taunts"]), (0, 0, []))
+
+
 CAT, ARCHER = 7301, 7302
 METEOR_SPOT = (0, 30)
 

@@ -185,6 +185,15 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonOffTankTauntTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon off tank taunt";
+
+    AlgalonOffTankTauntTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 1000) {}
+    bool IsActive() override;
+};
+
 class AlgalonDarkMatterTankTrigger : public Trigger
 {
 public:

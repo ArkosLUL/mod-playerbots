@@ -191,6 +191,11 @@ bool AlgalonConstellationTauntTrigger::IsActive()
     return constellation && constellation->GetVictim() != bot;
 }
 
+bool AlgalonOffTankTauntTrigger::IsActive()
+{
+    return AlgalonEngaged(botAI) && !AlgalonBigBangCasting(botAI) && GetAlgalonOffTankConstellation(bot) != nullptr;
+}
+
 bool AlgalonDarkMatterTankTrigger::IsActive()
 {
     if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))

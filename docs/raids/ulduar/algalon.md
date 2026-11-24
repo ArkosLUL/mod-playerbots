@@ -415,6 +415,14 @@ A pickup or swap due on it lifts the rule, the kite and its constellation taunts
 back to him: kiting 50-60 yd out, it never came back and the holder died at 4 stacks. Constellations are
 excluded from everyone else's pickers.
 
+**The swap tank not holding him is a second taunter** while the handler is a third tank: one diving on a
+healer ate the raid's last near hole before a cast (20 dead). In the 30 s before each Big Bang it taunts
+the nearest constellation on a healer within 28 yd (`algalon.offtaunt`), not the handler's target, and
+only when its straight path in clears every hole by 7.5 yd. Its taunt must be back (8 s) before any
+swap: the holder at 2 stacks or fewer and 70% or more, and with no disperser latched, nothing within 23 s
+of the cast (the early swap's and handover's 15 s plus that cooldown). It never damages one; at the cast
+it hides last like any chased bot.
+
 ## Phase 2
 
 The Worm Holes are the Big Bang shelter. Unleashed Dark Matter picks a random player; the handler
@@ -709,7 +717,8 @@ older traces say `collapsed`); the roster's hits on stars (pets under their owne
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces:
 `start|stop <star counter> <hp%>` on the wand); `algalon.underdrop`
 (`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.petsplash` (`off|on <spell id>`
-on the pet's owner, counted per owner by `--collateral`); `algalon.personal` (the button's
+on the pet's owner, counted per owner by `--collateral`); `algalon.offtaunt` (the healer's guid, on the
+swap tank taunting a constellation off it, per Big Bang in `--constellations`); `algalon.personal` (the button's
 spell name, or `healthstone`/`healing potion`); `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a holder
 handing him over for want of a defensive); `algalon.pull` (`inreach=N victim=GUID`) at the tick the

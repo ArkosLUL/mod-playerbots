@@ -86,6 +86,8 @@ inline constexpr float ULDUAR_ALGALON_CONSTELLATION_EAT_RADIUS = 6.5f;
 inline constexpr float ULDUAR_ALGALON_CONSTELLATION_LOW_Z = 7.5f;
 inline constexpr float ULDUAR_ALGALON_KITE_SWING = static_cast<float>(M_PI) / 6.0f;
 inline constexpr float ULDUAR_ALGALON_TAUNT_REACH = 28.0f;
+inline constexpr uint32 ULDUAR_ALGALON_TAUNT_COOLDOWN_MS = 8000;
+inline constexpr uint32 ULDUAR_ALGALON_OFFTANK_TAUNT_SECONDS = 30;
 inline constexpr float ULDUAR_ALGALON_TANK_SHELTER_REACH = 35.0f;
 inline constexpr float ULDUAR_ALGALON_ROOM_CLAMP = 44.0f;
 
@@ -486,6 +488,7 @@ bool AlgalonOffTankWorking(Player* bot);
 Player* GetAlgalonHandler(PlayerbotAI* botAI);
 bool IsAlgalonHandler(Player* bot);
 Unit* GetAlgalonHandlerConstellation(Player* bot);
+Unit* GetAlgalonOffTankConstellation(Player* bot);
 bool GetAlgalonKiteSpot(Player* bot, Unit* constellation, Position& spot, char const*& stage);
 bool AlgalonKiteBehind(Player* bot, Unit* constellation, Position& spot);
 bool AlgalonKitingBehind(Player* bot, Unit* constellation);
