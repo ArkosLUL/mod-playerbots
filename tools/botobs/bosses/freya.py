@@ -4,17 +4,19 @@
     freya.py <file>          every section
     freya.py <file> --tanks  who Freya and each Snaplasher were on, how long the add tank's own buttons and
                              the healers' externals covered him under it, every area taunt or Righteous
-                             Defense a tank cast, and each stretch a Snaplasher spent loose on a non-tank
+                             Defense a tank cast, each stretch a Snaplasher spent loose on a non-tank, and
+                             each lasher pile on the add tank with the buttons held and pressed under it
     freya.py <file> --beams  Unstable Sun Beam dodges per role, and how many healers had the
                              Snaplasher's holder in heal range
     freya.py <file> --ghouls while ghouls hold the lasher pack, where the ranged DPS stand and shoot
-    freya.py <file> --blasts per lasher wave, Detonate on the melee, their walks into a low lasher's blast and
-                             their bails from a low lasher chasing them
+    freya.py <file> --blasts per lasher wave, Detonate on the melee, their walks into a low lasher's blast,
+                             their bails from a low lasher chasing them, and the chases themselves
     freya.py <file> --lows   per lasher wave, lashers left under the bail line, what the ranged in reach of one
                              hitting a player shot (the Gift, while one was up), and the back line's bails from
                              one hitting them
     freya.py <file> --submerge  per lasher wave, the back line near the pack while it is submerged, the camp's
-                             orders then, and the lasher damage on the back line after it wakes
+                             orders then, the Army's ghouls on the lashers that woke onto the back line, and
+                             the lasher damage on the back line after it wakes
     freya.py <file> --bombs  Nature Bomb walks and charges into a live bomb per action, how soon a bot a bomb landed
                              on ordered its escape, and how each bot a bomb killed got there
 
@@ -56,7 +58,13 @@ What the generic views miss here:
 - **A walk into a blast is an order's destination.** `--blasts` counts a melee bot's `reach melee` or `set behind`
   order whose point lies inside the blast edge of a lasher under the bail line in the snapshot before it. Tanks
   are left out: they never bail. A bail is "from a low lasher chasing that bot" when such a lasher inside the
-  blast edge has the bailing bot as its target in the snapshot before the order.
+  blast edge has the bailing bot as its target in the snapshot before the order. A chase is the run of snapshots in
+  which one lasher under the bail line keeps the same melee bot as its target; the victim's walk sums its steps.
+- **A lasher pile is the add tank's, not the main tank's.** `--tanks` takes every tank but the one who held Freya
+  longest, runs a pile while lashers target him (gaps up to `HOLD_MIN_MS` bridged), and lists it when his health
+  went under the lasher last-resort line or a button was held (`freya add tank defensive hold` veto rows, first per
+  name) or pressed (an own button's aura) in it, or he died. Health is the nearest snapshot's, so a fast drop can
+  read one sample high or low.
 - **A bomb is live for its fuse from the snapshot that first shows it.** `--bombs` counts an order given from
   outside every live bomb's avoid radius whose straight walk passes inside one, and a charge whose landing (the
   snapshot `CHARGE_LAND_MS` after the cast) is inside one, once per cast: the triggered stun or leap carries the
@@ -66,7 +74,10 @@ What the generic views miss here:
   `freya move away nature bomb` order in the fuse, once per bot per volley.
 - **A pack is submerged for `SUBMERGE_MS` from its first snapshot.** `--submerge` measures the ranged and
   healers' nearest lasher in that snapshot and the last one before the wake, and the lashers' melee and Flame
-  Lash on them over `WAKE_WINDOW_MS` from the wake.
+  Lash on them over `WAKE_WINDOW_MS` from the wake. A lasher woke onto the back line when its first target within
+  `WAKE_PICK_MS` of the wake is a ranged DPS or healer. The wave's Army is the first cast from `ARMY_LEAD_MS`
+  before its spawn to its end; its caster's distance is read in the first snapshot of that window showing him, and
+  the ghouls' hold at `ARMY_OUT_MS` after the cast or `WAKE_CHECK_MS` after the wake, whichever is later.
 """
 from __future__ import annotations
 
@@ -135,6 +146,7 @@ OWN_DEFENSIVES = {22812: "Barkskin", 22842: "Frenzied Regeneration", 61336: "Sur
                   48792: "Icebound Fortitude", 55233: "Vampiric Blood", 871: "Shield Wall", 498: "Divine Protection",
                   12976: "Last Stand"}  # Last Stand's buff, its cast 12975 never shows up as an aura
 OWN_DAMAGE_CUTS = {22812, 48792, 871, 498}
+DEFENSIVE_HOLD = "freya add tank defensive hold"
 DEATH_AURA_SLACK_MS = 50
 EXTERNALS = {33206: "Pain Suppression", 47788: "Guardian Spirit", 6940: "Hand of Sacrifice"}
 # Hardened Bark's stack aura, 10- and 25-man: the Snaplasher casts one for every direct hit it takes.
@@ -149,6 +161,7 @@ DETONATE_REACH_YD = 15.5
 BLAST_TAIL_MS = 1000
 # A lasher under the bail line usually blows within about 4 s; one still up after this is being left alone.
 LINGER_MS = 8000
+CHASE_MS = 5000
 CAMP_ACTION = "freya ranged camp"
 GIFT_WALK_ACTION = "freya reach gift"
 DOT_SPREAD_SUFFIX = " on attacker"
@@ -160,6 +173,11 @@ ESCAPE_QUICK_MS = 1500
 ESCAPE_LATE_MS = 4500
 SUBMERGE_MS = 5000
 WAKE_WINDOW_MS = 30000
+WAKE_PICK_MS = 3000
+WAKE_CHECK_MS = 4000
+ARMY_OF_THE_DEAD = 42650
+ARMY_LEAD_MS = 3000
+ARMY_OUT_MS = 8500
 FLAME_LASH = 62608
 
 
@@ -307,6 +325,14 @@ def holder_label(trace: Trace, guid) -> str:
     return f"{trace.name(guid)}/{role}" if role != "?" else trace.name(guid)
 
 
+def main_tank(trace: Trace) -> int | None:
+    held: collections.Counter = collections.Counter()
+    for freya in sightings(trace, (NPC_FREYA,)).values():
+        for t0, t1, target in freya["spans"]:
+            held[target] += t1 - t0
+    return max((g for g in held if trace.role(g) == "tank"), key=held.get, default=None)
+
+
 def show_tanks(trace: Trace) -> None:
     print("TANKS")
     if not mine(trace):
@@ -353,6 +379,67 @@ def show_tanks(trace: Trace) -> None:
         if stretch["reads"]:
             line += f", slower than its victim in {stretch['slower']} of {stretch['reads']} speed read(s)"
         print(line)
+    for pile in lasher_piles(trace):
+        held = ", ".join(f"{name} at {pct:.0f}%" for name, pct in pile["held"]) or "nothing"
+        pressed = ", ".join(f"{name} at {pct:.0f}%" for name, pct in pile["pressed"]) or "nothing"
+        line = (f"  {clock(pile['t'])} .. {clock(pile['until'])} {holder_label(trace, pile['g'])} under lashers "
+                f"{(pile['until'] - pile['t']) / 1000:.1f}s, up to {pile['most']} on him, {pile['from']:.0f}% to "
+                f"{pile['low']:.0f}%: held {held}; pressed {pressed}")
+        if pile["died"] is not None:
+            line += f"; died {clock(pile['died'])}"
+        print(line)
+
+
+def health_at(series: list[tuple[int, float]], when: int) -> float:
+    index = bisect.bisect_right(series, (when, float("inf")))
+    near = [series[i] for i in (index - 1, index) if 0 <= i < len(series)]
+    return min(near, key=lambda sample: abs(sample[0] - when))[1] if near else 0.0
+
+
+def lasher_piles(trace: Trace) -> list[dict]:
+    line = radius("ULDUAR_FREYA_ADD_TANK_LASHER_LAST_RESORT_PCT")
+    main = main_tank(trace)
+    tanks = {guid for guid, role in trace.roles.items() if role == "tank" and guid != main}
+    health: dict[int, list[tuple[int, float]]] = {guid: [] for guid in tanks}
+    open_piles: dict[int, dict] = {}
+    piles: list[dict] = []
+    for snap in frames(trace):
+        rows = snap.get("u", [])
+        on = collections.Counter(row[7] for row in rows
+                                 if trace.entries.get(row[0]) == NPC_DETONATING_LASHER and row[5] > 0)
+        for row in rows:
+            if row[0] in tanks:
+                health[row[0]].append((snap["t"], row[5]))
+        for guid in tanks:
+            if not on[guid]:
+                continue
+            pile = open_piles.get(guid)
+            if pile is None or snap["t"] - pile["until"] > HOLD_MIN_MS:
+                pile = {"g": guid, "t": snap["t"], "most": 0}
+                open_piles[guid] = pile
+                piles.append(pile)
+            pile["until"] = snap["t"]
+            pile["most"] = max(pile["most"], on[guid])
+    deaths = combat_deaths(trace)
+    vetoes = [rec for rec in trace.of("veto") if rec.get("m") == DEFENSIVE_HOLD]
+    buttons = [rec for rec in trace.of("aura") if rec.get("sp") in OWN_DEFENSIVES and not rec.get("r")]
+    out: list[dict] = []
+    for pile in piles:
+        guid, t0, t1 = pile["g"], pile["t"], pile["until"] + HOLD_MIN_MS
+        series = health[guid]
+        held: dict[str, float] = {}
+        for rec in vetoes:
+            if rec.get("g") == guid and t0 <= rec["t"] <= t1:
+                held.setdefault(rec.get("a", "?"), health_at(series, rec["t"]))
+        pile["held"] = list(held.items())
+        pile["pressed"] = [(OWN_DEFENSIVES[rec["sp"]], health_at(series, rec["t"])) for rec in buttons
+                           if rec.get("d") == guid and t0 <= rec["t"] <= t1]
+        pile["died"] = next((d["t"] for d in deaths if d.get("g") == guid and t0 <= d["t"] <= t1), None)
+        pile["from"] = health_at(series, t0)
+        pile["low"] = min((pct for when, pct in series if t0 <= when <= pile["until"]), default=pile["from"])
+        if pile["low"] < line or pile["held"] or pile["pressed"] or pile["died"] is not None:
+            out.append(pile)
+    return out
 
 
 def aura_spans(trace: Trace, guid, spells: dict) -> list[tuple[int, int, int]]:
@@ -645,7 +732,37 @@ def blast_counts(trace: Trace, wave: dict) -> dict:
         chased += 1
         lone += not any(trace.entries.get(row[0]) in OUTRANK_LASHERS and row[5] > 0 for row in rows)
     return {"hits": len(hits), "deaths": deaths, "orders": orders, "into": into, "samples": samples,
-            "inside": inside, "bails": bails, "chased": chased, "lone": lone}
+            "inside": inside, "bails": bails, "chased": chased, "lone": lone,
+            "chases": chases(trace, wave, melee, low_pct)}
+
+
+def chases(trace: Trace, wave: dict, melee: set, low_pct: float) -> list[dict]:
+    members = {member["g"] for member in wave["members"]}
+    end = wave["end"] + BLAST_TAIL_MS
+    open_chases: dict[int, dict] = {}
+    out: list[dict] = []
+    for snap in frames(trace):
+        if not wave["t"] <= snap["t"] <= end:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        adds = any(trace.entries.get(row[0]) in OUTRANK_LASHERS and row[5] > 0 for row in rows.values())
+        for guid in members:
+            row = rows.get(guid)
+            victim = row[7] if row and 0 < row[5] < low_pct and row[7] in melee and row[7] in rows else None
+            chase = open_chases.get(guid)
+            if chase and chase["v"] == victim:
+                spot = rows[victim][1:3]
+                chase["walk"] += dist2(chase["at"], spot)
+                chase["at"], chase["until"] = spot, snap["t"]
+                chase["adds"] = chase["adds"] or adds
+                continue
+            open_chases.pop(guid, None)
+            if victim:
+                chase = {"v": victim, "t": snap["t"], "until": snap["t"], "at": rows[victim][1:3], "walk": 0.0,
+                         "adds": adds}
+                open_chases[guid] = chase
+                out.append(chase)
+    return out
 
 
 def show_blasts(trace: Trace) -> None:
@@ -659,10 +776,15 @@ def show_blasts(trace: Trace) -> None:
         found = True
         c = blast_counts(trace, wave)
         share = 100.0 * c["inside"] / c["samples"] if c["samples"] else 0.0
+        long = [chase for chase in c["chases"] if chase["until"] - chase["t"] >= CHASE_MS]
+        walk = max((chase["walk"] for chase in c["chases"]), default=0.0)
         print(f"  {clock(wave['t'])} lashers: melee took {c['hits']} Detonate hit(s), {c['deaths']} death(s); "
               f"{c['into']} of {c['orders']} approach order(s) into a low lasher's blast; melee inside one "
               f"{share:.0f}% of samples; {c['chased']} of {c['bails']} melee bail order(s) away from a low lasher "
-              f"chasing that bot, {c['lone']} with no trio or Conservator up")
+              f"chasing that bot, {c['lone']} with no trio or Conservator up; {len(c['chases'])} chase(s) of a "
+              f"melee bot by a low lasher, {len(long)} of them {CHASE_MS // 1000}s+ "
+              f"({sum(1 for chase in long if chase['adds'])} with a trio or Conservator up), its victim walking up "
+              f"to {walk:.0f} yd")
     if not found:
         print("  no lasher wave")
 
@@ -788,7 +910,37 @@ def submerge_counts(trace: Trace, wave: dict) -> dict:
                  if rec.get("s") in members and rec.get("sp", 0) in (0, FLAME_LASH)
                  and trace.role(rec.get("d")) in ("ranged", "heal") and wake <= rec["t"] < wake + WAKE_WINDOW_MS)
     return {"standoff": standoff, "spawn": spawn, "wake": woke, "orders": orders, "clear": clear,
-            "damage": damage}
+            "damage": damage, **army_pickup(trace, wave, members, wake)}
+
+
+def army_pickup(trace: Trace, wave: dict, members: set, wake: int) -> dict:
+    army = next((rec for rec in trace.of("cast") if rec.get("sp") == ARMY_OF_THE_DEAD and not rec.get("tr")
+                 and trace.role(rec.get("s")) != "?" and wave["t"] - ARMY_LEAD_MS <= rec["t"] <= wave["end"]), None)
+    ghouls = {guid for guid, entry in trace.entries.items() if entry == NPC_ARMY_GHOUL}
+    first: dict[int, int] = {}
+    gaps: list[float] = []
+    for snap in frames(trace):
+        if not wake <= snap["t"] <= wake + WAKE_PICK_MS:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        for guid in members:
+            row = rows.get(guid)
+            if row and row[5] > 0 and row[7] and guid not in first:
+                first[guid] = row[7]
+        caster = rows.get(army["s"]) if army else None
+        if caster and not gaps:
+            gaps = [dist2(row[1:3], caster[1:3]) for row in rows.values()
+                    if row[5] > 0 and trace.role(row[0]) in ("ranged", "heal")]
+    woke_on = [guid for guid, target in first.items() if trace.role(target) in ("ranged", "heal")]
+    up = held = 0
+    if army:
+        check = max(army["t"] + ARMY_OUT_MS, wake + WAKE_CHECK_MS)
+        snap = next((snap for snap in frames(trace) if snap["t"] >= check), None)
+        rows = {row[0]: row for row in snap.get("u", [])} if snap else {}
+        alive = [rows[guid] for guid in woke_on if guid in rows and rows[guid][5] > 0]
+        up, held = len(alive), sum(1 for row in alive if row[7] in ghouls)
+    return {"army": army["t"] - wave["t"] if army else None, "dk_gap": statistics.median(gaps) if gaps else None,
+            "picked": len(first), "woke_on": len(woke_on), "up": up, "held": held}
 
 
 def show_submerge(trace: Trace) -> None:
@@ -803,11 +955,17 @@ def show_submerge(trace: Trace) -> None:
         c = submerge_counts(trace, wave)
         near = [sum(1 for gap in gaps if gap < c["standoff"]) for gaps in (c["spawn"], c["wake"])]
         medians = " then ".join(f"{statistics.median(gaps):.1f}" if gaps else "-" for gaps in (c["spawn"], c["wake"]))
+        if c["army"] is None:
+            army = "no Army"
+        else:
+            gap = "-" if c["dk_gap"] is None else f"{c['dk_gap']:.0f}"
+            army = (f"Army {c['army'] / 1000:+.1f}s, the back line a median {gap} yd from its caster at the wake, "
+                    f"ghouls on {c['held']} of the {c['up']} still up once they were out")
         print(f"  {clock(wave['t'])} lashers: back line within {c['standoff']:g} yd of a lasher {near[0]} of "
               f"{len(c['spawn'])} at the spawn, {near[1]} of {len(c['wake'])} at the wake (nearest, median {medians} "
               f"yd); {c['orders']} '{CAMP_ACTION}' order(s) in the submerge, {c['clear']} ending {c['standoff']:g} yd "
-              f"clear; {c['damage'] / 1000:.0f}k lasher melee and Flame Lash on the back line in the "
-              f"{WAKE_WINDOW_MS // 1000}s after the wake")
+              f"clear; {c['woke_on']} of {c['picked']} woke onto the back line; {army}; {c['damage'] / 1000:.0f}k "
+              f"lasher melee and Flame Lash on the back line in the {WAKE_WINDOW_MS // 1000}s after the wake")
     if not found:
         print("  no lasher wave")
 
@@ -950,15 +1108,15 @@ def show_deaths(trace: Trace) -> None:
 SECTIONS = (
     ("waves", "each add wave and Eonar's Gift: when it came, when it ended, raid deaths meanwhile", show_waves),
     ("tanks", "who held Freya and each Snaplasher, the add tank's cover under it, every area taunt or Righteous "
-     "Defense, each loose Snaplasher", show_tanks),
+     "Defense, each loose Snaplasher, each lasher pile on the add tank", show_tanks),
     ("beams", "Unstable Sun Beam dodges per role, and healers in range of the Snaplasher's holder", show_beams),
     ("ghouls", "while ghouls hold the lasher pack, ranged DPS out of reach, on Freya, or too close", show_ghouls),
-    ("blasts", "per lasher wave, Detonate on the melee, their approach orders into a low lasher's blast and their "
-     "bails from one chasing them", show_blasts),
+    ("blasts", "per lasher wave, Detonate on the melee, their approach orders into a low lasher's blast, their "
+     "bails from one chasing them and the chases", show_blasts),
     ("lows", "per lasher wave, lashers left under the bail line, what the ranged in reach shot, back-line bails",
      show_lows),
     ("submerge", "per lasher wave, the back line near the pack at its spawn and wake, the camp's orders meanwhile, "
-     "and lasher damage on it after the wake", show_submerge),
+     "the Army's ghouls on the lashers that woke onto it, and lasher damage on it after the wake", show_submerge),
     ("bombs", "Nature Bomb walks and charges into a live bomb per action, and how each bomb death got there",
      show_bombs),
     ("deaths", "deaths by killer and spell", show_deaths),

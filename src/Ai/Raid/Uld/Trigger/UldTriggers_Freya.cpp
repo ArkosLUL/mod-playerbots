@@ -222,19 +222,7 @@ bool FreyaRangedCampTrigger::IsActive()
         if (bot->GetExactDist2d(blast.GetPositionX(), blast.GetPositionY()) <= ULDUAR_FREYA_DETONATE_RADIUS)
             return true;
 
-    bool submerged = false;
-    for (Unit* lasher : state.detonatingLashers)
-    {
-        if (!IsFreyaLasherSubmerged(lasher))
-            continue;
-
-        if (bot->GetExactDist2d(lasher) < ULDUAR_FREYA_LASHER_CAMP_STANDOFF)
-            return true;
-
-        submerged = true;
-    }
-
-    if (!blasts.empty() || submerged)
+    if (!blasts.empty())
         return false;
 
     if (PlayerbotAI::IsRangedDps(bot) && IsFreyaLasherHeldByGhoul(botAI, GetFreyaRangedLasherAim(state)))

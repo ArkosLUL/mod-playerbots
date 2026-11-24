@@ -2153,3 +2153,65 @@ Fixed:
   filler walked to the Gift with the lasher following unhit and unbailed, and the other fillers bailed off the Gift
   from it. Melee fill the Gift whenever fewer than 5 ranged DPS live: always at 10-man, at 25 once ranged die. The
   chaser now heads a melee bot's priority, ahead of the Gift.
+
+**User answers (2026-11-24):** Q17 yes, option (c): drop the submerged-pack walk-out trial and go back to round 13's
+behaviour. Q16 option (c): the add tank uses his defensive cooldowns as a last resort once under 50% health while
+lashers hit him. Q18 option (b): with a trio member or the Conservator up, a melee bot chased by a sub-15% lasher kills
+it first and stops bailing from it (round 17's lashers-only rule extended). Round 17's kill order (that chasing lasher
+before Eonar's Gift, melee only) is kept: the user did not veto it.
+
+## Round 18 (on Custom 6486414fc, no new pulls)
+
+**Data:** none new. Round 17 is merged but not pulled, so no verdict, stop rule or ranking. Window 24 (`report --boss
+freya --raid uld --head baf47824b --pulls 10`) is round 17's data and table. Built the user's Q16, Q17 and Q18, with
+baselines from the reader's new reads over windows 14-24 (the 30 25-man traces of `scratchpad/freya-r17/w14-24.txt`).
+Ad hoc scripts: `scratchpad/freya-r18/baseline.py`.
+
+**Built** (Freya files only, any size or difficulty, no player branch: a human add tank or chased melee reads the same
+health and attackers):
+
+- Q17 (c): the submerge walk-out and the gather's wait are gone; `freya ranged camp`'s trigger and walk are round 13's
+  again. Kept for Q11's Gift walk: `IsFreyaLasherSubmerged` and `GetFreyaSubmergedLasherPositions`, so a Gift taker's
+  walk still keeps 18 yd off a submerged lasher and never crosses the pack.
+- Q16 (c): `IsFreyaAddTankDefensiveHeld` releases the class tank cooldowns under
+  `ULDUAR_FREYA_ADD_TANK_LASHER_LAST_RESORT_PCT` (50%) while a living Detonating Lasher attacks him (`getAttackers`), at
+  25% otherwise as before. The Snaplasher chain (`freya add tank defensive`) and the healers' externals are unchanged.
+- Q18 (b): `IsFreyaLowLasherChasing(bot, lasher)` drops its no-trio-or-Conservator condition and the wave state it read.
+  Its callers follow: the melee bail spares the bot's own chaser, the blast guards leave it out for him, and
+  `GetFreyaLowLasherChasing` heads his priority, ahead of the Gift, the Conservator and the trio slot.
+- Reader (tested): `--tanks` lists each lasher pile on a tank other than Freya's in which he fell under the 50% line, a
+  button was held (`freya add tank defensive hold` veto, first per name) or pressed (own button aura), or he died, with
+  his health at each (nearest snapshot); `--blasts` adds per lasher wave the chases (one low lasher keeping one melee bot
+  its target), those of 5s+ and with a trio or Conservator up, and the longest walk; `--submerge` adds the lashers whose
+  first target after the wake was a ranged DPS or healer, the Army's cast against the spawn, its caster's median
+  distance from the back line at the wake, and the ghouls' hold on those lashers once out (`wake_pick.py` ported; it
+  reproduces that script on window 24).
+
+**Baselines** (windows 14-24, 30 pulls):
+
+- Q16: 67 add-tank lasher piles took him under 50%; in 39 a class button was vetoed under 50%, and 8 of those ended in
+  his death (w24 uld2 0:37.1 Survival Instincts held at 37%, dead 0:40.2; w24 uld3 0:15.3 at 33%, dead 0:20.1; w24a
+  uld3 4:53.3 at 38%, dead 4:58.3).
+- Q18: 405 melee bails from the bot's own chaser, 134 of them with a trio or Conservator up; 180 chases, 19 of 5s+ (8
+  with a trio or Conservator up), the longest walk 73 yd.
+- Q17, round 13's camp (windows 14-21, 42 lasher waves, 41 with an Army): 118 lashers woke onto the back line, ghouls on
+  72 of them once out; the back line a median 21 yd from the Army's caster at the wake; its lasher melee and Flame Lash
+  over the 30s after the wake a median 20k, 9 waves at 100k+. The trial (windows 22, 24a, 24; 17 waves, 16 with an
+  Army): 36, 12, 28 yd, 28k, 4.
+
+**Next window should show** (`freya.py --tanks`, `--blasts`, `--submerge`; `postmortem.py --vetoes`):
+
+- Q16: no add-tank pile with a button held under 50%; his class buttons pressed under 50% while lashers hit him; no
+  add-tank death to a lasher pile with a button ready. The cost: buttons spent on lashers are not back for the next trio
+  wave, so watch the cover line's `none` in a trio wave after such a pile and add-tank deaths to the Snaplasher.
+- Q17: camp orders in the submerge back to bails only, the back line within 18 yd at the wake back to 10-14 of 14, a
+  median near 21 yd from the Army's caster, ghouls on about 60% of the lashers that woke onto it, back-line lasher
+  damage a median near 20k.
+- Q18: bails from a chasing lasher near 0 in every wave, the trio and Conservator ones too; no chase of 5s+, the longest
+  walk under 20 yd; one more Detonate on the chased bot per chase and no melee Detonate death from one; trio waves still
+  dying together.
+- Rounds 15-17's checks as written there; rounds 1-14 still holding.
+
+**Questions:** none new.
+
+**Shared code:** none changed; `Unit::getAttackers` is read.
