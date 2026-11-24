@@ -73,7 +73,7 @@ bool ThorimTauntWouldSteal(PlayerbotAI* botAI)
     if (holder && PlayerbotAI::IsTank(holder))
         return true;
 
-    return !ThorimAtTankSpots(bot);
+    return !ThorimAtTankSpots(bot) && !IsThorimAnchorTank(bot);
 }
 
 bool ThorimBalconyWalk(PlayerbotAI* botAI)

@@ -2128,3 +2128,15 @@ different code paths (the swap action, then the class taunt); round 18's half he
 **Questions for the user:** none new. The waiting tank's step is not re-asked (above).
 
 **Shared code touched:** none (Thorim files only).
+
+**Review (round 19).** The cause holds. Uldxam's uld1 rows: generic `dark command` `OK` at +6.28 s (rel 23, `BloodDKStrategy.cpp:134`),
+56222 on Thorim, Thorim on the mage, no Thorim node; the other four balcony casts are class taunts too (w24 uld1's a generic `dark command`
+0.24 s after a `thorim dps priority action` row). Fixed: **the anchor tank keeps its class taunts past 8 yd.** The pickup's
+`DoSpecificAction("taunt spell")` runs no alternative, so with that spell on cooldown the class fallback is the anchor's only answer. w13
+uld1 (`603_4_thorim_1795381228`): Thorim sat on two melee from the landing to +3.9 s; the pickup ran at +0.04 s and `FAILED` at +0.26 s and
+not again ("where its pickup ran as well" above is not borne out); Hand of Reckoning and Righteous Defense were `IMPOSSIBLE` at +2.3 s; the
+anchor's Righteous Defense at +3.87 s, target Thorim, 10.0-11.4 yd off the tank spot, took him back. Round 19's rule held that cast until the
+anchor was inside 8 yd (+4.4 s); anchors walk in at ~4.4 yd/s (26.4 → 7.7 yd in 4.3 s there), so from a 20-31 yd pickup the hold could
+last 3-5 s. The anchor is a bot on the floor and keeps the role while eligible, so the five balcony casters (corridor tanks, never anchor
+there) stay held; replayed on the 40 phase 2s the rule now holds those five and nothing else. One code path for every size, mode and raid.
+Next window: no `thorim taunt guard` veto row from the anchor tank. `pb-check` passes.

@@ -643,11 +643,13 @@ fires every ~2 s at `rel 27.0`, so a bot paladin rips the boss off a human tank:
 changes a phase** against 16 Dark Commands. The `thorim taunt guard` rule silences them, a `Block` on
 the `Taunt` family gated on the bot's **current target** being Thorim, so taunting an add off a healer
 still works. It holds every taunt while another tank has him, and **one from past
-`ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` of the tank spot (`ThorimAtTankSpots`) while a non-tank does**: in
-5 of 40 phase 2s the corridor tank's `lose aggro` Dark Command or Growl answered his opening flick onto a
-non-tank from the balcony or mid-jump, 38-45 yd out, and dragged him 14-41 yd off the spot. The pickup
-and the swap taunt through `DoSpecificAction`, which no `Block` stops. **`righteous defense` must be in
-any name-match list**: it is half the taunts in the trace.
+`ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` of the tank spot (`ThorimAtTankSpots`) while a non-tank or nobody
+does**: in 5 of 40 phase 2s the corridor tank's `lose aggro` Dark Command or Growl answered his opening
+flick onto a non-tank from the balcony or mid-jump, 38-45 yd out, and dragged him 14-41 yd off the spot.
+**The anchor tank is exempt**: the pickup and the swap taunt through `DoSpecificAction`, which no `Block`
+stops but which runs no alternative, so with the pickup's `taunt spell` on cooldown the anchor's class
+fallback is its only answer (Righteous Defense from 10-11 yd took him off two melee he had held since the
+landing). **`righteous defense` must be in any name-match list**: it is half the taunts in the trace.
 
 **Both tank spots are absolute**, because an anchor measured off the thing you are dragging has no
 fixed point: an off-tank spot off the boss's live position walked the pair **256 and 92 yd** in phase
