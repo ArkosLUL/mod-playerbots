@@ -1966,3 +1966,11 @@ race), plus the melee it killed. Alone it would not have saved uld1 (23.1% at th
 **Seen, not picked:** the corridor guards' cannot-reach evade (uld3, above; a candidate if it recurs: the bot a corridor mob cannot reach
 steps so the chase re-paths, as round 15's Thorim step does); Chain Lightning through a ring slot point 8.0 yd from the holder (uld1 +87 s, 3
 deaths); two healers and two ranged stacked on single camp spots (uld1 +163 s); priests spending Divine Hymn on the start pack (shared).
+
+**Review (round 18).** The cause holds. The `opening` line reproduces the three w25 figures; Uldxam's swap action rows in uld1 are `OK` at
++8.1 / +9.2 / +10.4 s. Over the on-disk phase 2s, 33 of 37 opening trades had the taker past 8 yd (w24 uld1's threat take among them). Of the
+280 `OK` swap action rows in phase 2, 223 came from within 8 yd of the tank spot (149 on the off-tank spot) and 57 from past 10, none from
+8-10, so the radius has no near miss. The corridor tank landed at +5.6-13.2 s against the first strike at +6.4-8.0 s, leaving ~30 yd to walk
+inside the strike's 15 s. One code path for every size, mode and raid: the waiting tank stands on the fixed off-tank spot, under a human holder
+too. Fixed: the boss doc's "~1.4x less health per point of damage" in hard mode is 62565's −30% maximum health on the normal-mode Thorim
+(1/0.7 = 1.43), already under "Hard mode changes what a trace means", so the clause is dropped. `pb-check` passes.

@@ -626,8 +626,8 @@ none, since Thorim chases his victim.
 **A swap taunt fires only within `ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS` (8 yd) of the tank spot.**
 Ungated, the corridor tank answered the first Unbalancing Strike (+7-14 s) from the balcony or mid-jump,
 37-44 yd out, in 32 of 37 phase 2s: Thorim followed it 16-36 yd off the tank spot and lost 0.10-0.39 %/s
-until walked back, against 0.46-0.92 over the next 30 s, and melee chasing him died to the cone and Chain
-Lightning. The struck holder now keeps him until the corridor tank comes in, inside the strike's 15 s.
+until walked back, against 0.46-0.92 over the next 30 s, and melee chasing him died to Lightning Charge and
+Chain Lightning. The struck holder now keeps him until the corridor tank comes in, inside the strike's 15 s.
 8 yd still covers the waiting tank's reach step and a tank taking him back toward the spots from 6-7 yd.
 
 **Thorim's threat table is empty at the phase change**, because he sits at 100% untouched through
@@ -1036,8 +1036,7 @@ On the ilvl 226 test rosters (four healers, bot-led gauntlet) hard-mode phase 2 
 Sif **52-55%** of it (Volley alone 1.3-1.9 M) and the tanks taking **160-289k** of Blizzard on the tank
 spot. Healers entered at 43-100% mana; in two pulls they ran dry by +100-120 s and the tanks fell there,
 and the third reached the ceiling at +190 s with Thorim at 15%. The traces read his `mhp` as **27.19 M**,
-not 25.101 M, and the hard-mode Thorim loses **~1.4x less health per point of damage** than the normal
-one: 0.46-0.59 %/s against 0.70-0.99 at the same 119-181k/s of DPS output.
+not 25.101 M.
 
 **A human tank holding him in phase 2 is called**
 ([calls to human tanks](../README.md#calls-to-human-tanks)): once per hold turn from 6 Lightning Charge
