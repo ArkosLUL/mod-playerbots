@@ -1077,6 +1077,53 @@ bool YoggSaronDiminishPowerJudgementAction::Execute(Event /*event*/)
     return false;
 }
 
+bool YoggSaronDiminishPowerBreakAction::Execute(Event /*event*/)
+{
+    Unit* crusher = nullptr;
+    Position spot;
+    YoggSaronPowerBreakStep const step = YoggSaronPowerBreakPlan(botAI, crusher, spot);
+    if (step == YOGG_SARON_POWER_BREAK_NONE || !crusher)
+        return false;
+
+    if (step == YOGG_SARON_POWER_BREAK_OUT)
+    {
+        if (bot->GetVictim() == crusher)
+            bot->AttackStop();
+
+        if (AI_VALUE(Unit*, "current target") == crusher)
+        {
+            bot->SetTarget(ObjectGuid::Empty);
+            bot->SetSelection(ObjectGuid());
+            context->GetValue<Unit*>("current target")->Set(nullptr);
+        }
+
+        MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+               true, MovementPriority::MOVEMENT_FORCED, true, false);
+        return true;
+    }
+
+    bool walking = false;
+    if (step == YOGG_SARON_POWER_BREAK_WALK && YoggSaronWalkMakingProgress(botAI, "powerbreak", spot))
+    {
+        Position const destination = YoggSaronBodyRoute(bot, spot);
+        MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
+               false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+        walking = true;
+    }
+
+    if (!bot->IsWithinMeleeRange(crusher))
+        return walking;
+
+    if (AI_VALUE(Unit*, "current target") != crusher || bot->GetVictim() != crusher)
+        Attack(crusher);
+
+    for (char const* strike : YoggSaronPowerBreakStrikes(bot))
+        if (botAI->CanCastSpell(strike, crusher) && botAI->CastSpell(strike, crusher))
+            break;
+
+    return true;
+}
+
 bool YoggSaronMortalStrikeAction::Execute(Event /*event*/)
 {
     char const* reason = nullptr;

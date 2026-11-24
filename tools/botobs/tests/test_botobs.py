@@ -1880,6 +1880,19 @@ class YoggPhases(unittest.TestCase):
         self.assertAlmostEqual(yogg_saron.diminished_damage(windows[7], 2000, 4000, 1000), (0.8 ** 2 + 0.8) / 2)
         self.assertIsNone(yogg_saron.diminished_damage(windows[7], 4000, 4000))
 
+    def test_carried_ms_reads_until_the_last_stack_drops(self):
+        windows = [(1000, 3000), (2000, 5200)]
+        self.assertEqual(yogg_saron.carried_ms(windows, 1500, 9000), 4000)
+        self.assertEqual(yogg_saron.carried_ms(windows, 1500, 4000), 2500)
+        self.assertEqual(yogg_saron.carried_ms([], 1500, 4000), 0)
+
+    def test_power_break_episodes_split_on_crusher_and_a_new_claim_after_out(self):
+        spans = {7: [("none", 0, 1000), ("walk 101", 1000, 3000), ("hit 101", 3000, 4000), ("out 101", 4000, 5000),
+                     ("walk 101", 5000, 6000), ("out 101", 6000, 7000), ("hit 202", 7000, 8000), ("none", 8000, 9000)]}
+        self.assertEqual(yogg_saron.power_break_episodes(spans),
+                         [(7, 101, 1000, 5000, {"walk", "hit", "out"}), (7, 101, 5000, 7000, {"walk", "out"}),
+                          (7, 202, 7000, 8000, {"hit"})])
+
     def test_spread_line_reads_median_p10_p90_and_extremes(self):
         self.assertEqual(yogg_saron.spread_line([3.0, 1.0, 2.0]), "median 2.0 (p10 1.0, p90 2.0, 1.0-3.0)")
         self.assertEqual(yogg_saron.spread_line([4.0]), "median 4.0 (p10 4.0, p90 4.0, 4.0-4.0)")

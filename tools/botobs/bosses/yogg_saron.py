@@ -61,6 +61,8 @@ SPELL_BRAIN_CHARGES = (11578, 20252)
 SPELL_DIMINISH_POWER = 64145
 DIMINISH_POWER_DAMAGE = 0.80
 DIMINISH_POWER_STEP_MS = 500
+POWER_BREAK_CRUSH_AFTER_MS = 3000
+POWER_BREAK_RECAST_MS = 10000
 
 # A step under this between samples is standing still, and a turn past this while standing is a spin.
 WALK_STILL_YD = 0.3
@@ -2609,20 +2611,26 @@ def show_brain_waves(trace: Trace) -> None:
               f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%"
               f"{outside_note}")
 
-        carried, dealt = [], []
+        carried, left, held, dealt = [], [], [], []
         for guid in team:
-            below = next((row[0] for row in rows.get(guid, [])
-                          if start <= row[0] <= stop and row[4] < BRAIN_LEVEL_Z and row[6] > 0), None)
-            if below is None:
+            below = [row[0] for row in rows.get(guid, [])
+                     if start <= row[0] <= stop and row[4] < BRAIN_LEVEL_Z and row[6] > 0]
+            if not below:
                 continue
-            carried.append(stacks_at(diminish.get(guid, []), below))
-            share = diminished_damage(diminish.get(guid, []), below, fight_end) if guid not in healers else None
+            windows = diminish.get(guid, [])
+            carried.append(stacks_at(windows, below[0]))
+            left.append(stacks_at(windows, below[-1]))
+            if carried[-1]:
+                held.append(carried_ms(windows, below[0], below[-1]) / 1000)
+            share = diminished_damage(windows, below[0], fight_end) if guid not in healers else None
             if share is not None:
                 dealt.append(share)
-        if any(carried):
+        if any(carried) or any(left):
+            longest = format(max(held), ".1f") if held else "-"
             print(f"      Diminish Power carried below: {sum(1 for n in carried if n)} of {len(carried)},"
-                  f" stacks {sorted(carried, reverse=True)}, damage dealers x{median_or_dash(dealt, '.2f')}"
-                  f" until the door")
+                  f" stacks entering {sorted(carried, reverse=True)} leaving {sorted(left, reverse=True)},"
+                  f" carried a median {median_or_dash(held, '.1f')} s (max {longest}),"
+                  f" damage dealers x{median_or_dash(dealt, '.2f')} until the door")
 
         if door and brain:
             staged, joined, out, on_brain = 0, 0, [], []
@@ -2751,6 +2759,13 @@ def diminished_damage(windows: list[tuple[int, int]], start: int, stop: int,
                       step: int = DIMINISH_POWER_STEP_MS) -> float | None:
     samples = [DIMINISH_POWER_DAMAGE ** stacks_at(windows, when) for when in range(start, stop, step)]
     return sum(samples) / len(samples) if samples else None
+
+
+def carried_ms(windows: list[tuple[int, int]], start: int, stop: int, step: int = DIMINISH_POWER_STEP_MS) -> int:
+    for when in range(start, stop + 1, step):
+        if not stacks_at(windows, when):
+            return when - start
+    return stop - start
 
 
 def melee_constrictor_split(rows: dict[int, list[list]], start: int, stop: int,
@@ -3156,6 +3171,7 @@ def show_crush(trace: Trace) -> None:
     show_crush_hits(trace)
     show_crusher_reach(trace)
     show_diminish_power(trace)
+    show_power_breaks(trace)
     show_death_rays(trace)
 
 
@@ -3889,6 +3905,72 @@ def show_diminish_power(trace: Trace) -> None:
     who = collections.Counter(trace.name(rec["s"]) for rec in judgements)
     print(f"  Judgements at a Crusher: {len(judgements)} ({dict(who)}), {mid} while it was channelling,"
           f" {broke} followed by the channel dropping within {JUDGEMENT_BREAK_MS} ms")
+
+
+def power_break_episodes(spans: dict[int, list[tuple[str, int, int]]]) -> list[tuple[int, int, int, int, set]]:
+    out = []
+    for tank, track in spans.items():
+        current = None
+        for text, start, stop in track:
+            stage, _, key = text.partition(" ")
+            crusher = int(key) if key.isdigit() else None
+            if current and (crusher != current[1] or (stage != "out" and "out" in current[4])):
+                out.append(tuple(current))
+                current = None
+            if crusher is None:
+                continue
+            if current is None:
+                current = [tank, crusher, start, stop, {stage}]
+            else:
+                current[3] = stop
+                current[4].add(stage)
+        if current:
+            out.append(tuple(current))
+    return sorted(out, key=lambda episode: episode[2])
+
+
+def inside_any(windows: list[tuple[int, int]], when: int) -> bool:
+    return any(start <= when < stop for start, stop in windows)
+
+
+def show_power_breaks(trace: Trace) -> None:
+    end = trace.records[-1].get("t", 0) if trace.records else 0
+    episodes = power_break_episodes(holder_spans(trace, "yogg.powerbreak", end))
+    if not episodes:
+        print("  Diminish Power breaks: no yogg.powerbreak claim")
+        return
+
+    below: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, applied, removed in aura_windows(trace, SPELL_ILLUSION_ROOM):
+        below[guid].append((applied, removed))
+    power = sorted((rec for rec in trace.of("aura") if rec.get("sp") == SPELL_DIMINISH_POWER), key=lambda r: r["t"])
+    crushes = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_CRUSH_CONE]
+
+    lines, taken, broke_after, caught = [], [], [], 0
+    for tank, crusher, start, stop, stages in episodes:
+        drop = next((rec["t"] for rec in power if rec.get("r") and rec.get("s") == crusher
+                     and start <= rec["t"] <= stop and inside_any(below.get(rec.get("d"), []), rec["t"])), None)
+        hits = [rec for rec in crushes if rec.get("s") == crusher and rec.get("d") == tank
+                and start <= rec["t"] <= stop + POWER_BREAK_CRUSH_AFTER_MS]
+        back = {rec.get("d") for rec in power if not rec.get("r") and rec.get("s") == crusher and drop is not None
+                and drop < rec["t"] <= stop + POWER_BREAK_RECAST_MS and inside_any(below.get(rec.get("d"), []), rec["t"])}
+        taken.append(len(hits))
+        caught += bool(back)
+        if drop is not None:
+            broke_after.append((drop - start) / 1000)
+        seen = "/".join(stage for stage in ("walk", "hit", "out") if stage in stages)
+        broke = f"broke +{(drop - start) / 1000:4.1f} s" if drop is not None else "never broke "
+        lines.append(f"    {clock(start):>10}  {trace.name(tank):14} Crusher {crusher % 100000:<6} {seen:13} {broke}"
+                     f"  Crushes on the tank {len(hits)} ({sum(rec.get('a', 0) for rec in hits):,})"
+                     f"  caught below again {len(back)}")
+
+    tanks = collections.Counter(trace.name(tank) for tank, *_ in episodes)
+    print(f"  Diminish Power breaks: {len(episodes)} claims ({dict(tanks)}), {len(broke_after)} dropped the channel"
+          f" off the team a median {statistics.median(broke_after) if broke_after else 0:.1f} s after the claim")
+    print(f"    Crushes on the breaking tank per Crusher: median {statistics.median(taken):.0f}, max {max(taken)},"
+          f" total {sum(taken)}; the re-cast caught someone below in {caught} of {len(episodes)}")
+    for line in lines:
+        print(line)
 
 
 def closest_approach(start: tuple, end: tuple, point: tuple) -> float:

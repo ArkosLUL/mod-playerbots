@@ -67,6 +67,7 @@ enum UlduarYoggSaronIds
     SPELL_TELEPORT_TO_CHAMBER = 63997,
     SPELL_TELEPORT_TO_ICECROWN = 63998,
     SPELL_TELEPORT_TO_STORMWIND = 63989,
+    SPELL_ILLUSION_ROOM = 63988,
     SPELL_TELEPORT_BACK = 63992,
     SPELL_CANCEL_ILLUSION_AURA = 63993,
     SPELL_INDUCE_MADNESS = 64059,
@@ -216,6 +217,13 @@ inline constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
 inline constexpr float ULDUAR_YOGG_SARON_CRUSHER_AREA_HOLD_SLACK = 2.0f;
+
+inline constexpr float ULDUAR_YOGG_SARON_POWER_BREAK_SEARCH_RADIUS = 120.0f;
+inline constexpr float ULDUAR_YOGG_SARON_POWER_BREAK_MELEE_SLACK = 2.5f;
+inline constexpr float ULDUAR_YOGG_SARON_POWER_BREAK_ARRIVED_RADIUS = 1.5f;
+inline constexpr float ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS = 14.5f;
+inline constexpr uint32 ULDUAR_YOGG_SARON_POWER_BREAK_OUT_MS = 5000;
+inline constexpr uint32 ULDUAR_YOGG_SARON_POWER_BREAK_BEARINGS = 16;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
 inline constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
@@ -580,6 +588,18 @@ void ClaimYoggSaronInterrupt(Player* bot, Unit* caster);
 std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI);
 
 std::vector<char const*> YoggSaronJudgementSpells(Player* bot);
+
+enum YoggSaronPowerBreakStep : uint32
+{
+    YOGG_SARON_POWER_BREAK_NONE = 0,
+    YOGG_SARON_POWER_BREAK_WALK = 1,
+    YOGG_SARON_POWER_BREAK_HIT = 2,
+    YOGG_SARON_POWER_BREAK_OUT = 3,
+};
+
+YoggSaronPowerBreakStep YoggSaronPowerBreakPlan(PlayerbotAI* botAI, Unit*& crusher, Position& spot);
+
+std::vector<char const*> YoggSaronPowerBreakStrikes(Player* bot);
 
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius);
 
