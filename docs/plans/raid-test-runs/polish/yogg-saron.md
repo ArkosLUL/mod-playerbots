@@ -90,7 +90,9 @@ casts finishing on a Guardian gone unkillable and pets left on it (round 20); ta
 Shock included) on Yogg; a bot tank taunts a fresh Guardian on a non-tank before a swap while the holder is over
 35%. Phase 2 goal: start phase 3 with at most one Crusher. Brain team melee first, exactly one healer; a finished bot
 waits at the stage unless a live tentacle stands within 40 yd of it; the room healer heals a reprisal-held bot first;
-exit lead 1.2×; Diminish Power broken by a bot tank after the team clicks. Left alone by choice: the shaman's
+exit lead 1.2×; Diminish Power broken by a bot tank after the team clicks; the swap deferral covers any Guardian on
+a raider, fresh or slipped (2026-11-24, judged by tank deaths within 10 s of a deferral; window 29: 3 deferrals, no
+tank death). Left alone by choice: the shaman's
 Reincarnation onto the stack, late Guardians woken by the back line, the raid working the next Guardian while a low
 one waits out its gap.
 
@@ -103,8 +105,6 @@ one waits out its gap.
 - **Q2 (r19), break per carrier.** The Diminish Power break fires once every team member is below, so a straggler
   held it to +19-25 s and the team carried ×0.85-0.51 for 26-40 s. Fire it once the bots carrying that Crusher's
   stack are below? Recommended: yes, for one window.
-- **r18, deferral scope.** The build defers a swap for any Guardian on a raider, fresh or slipped, about twice what
-  the answer named. Recommended: keep; no answer recorded.
 
 ## Round 20 (2026-11-24, window 29 build 897faf0d8: rounds 17-19)
 
