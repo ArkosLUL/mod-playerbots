@@ -65,6 +65,12 @@ public:
             return;
         }
 
+        if (spellInfo->Id == SPELL_VEZAX_SURGE_OF_DARKNESS && caster->GetEntry() == NPC_VEZAX)
+        {
+            VezaxNoteSurge(caster);
+            return;
+        }
+
         if (spellInfo->Id != SPELL_VEZAX_SHADOW_CRASH_CAST)
             return;
 

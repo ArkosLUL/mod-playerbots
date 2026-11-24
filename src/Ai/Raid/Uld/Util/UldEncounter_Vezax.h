@@ -35,6 +35,8 @@ enum UlduarVezaxIds
     SPELL_VEZAX_SUMMON_SARONITE_ANIMUS = 63145,
     SPELL_VEZAX_SUMMON_SARONITE_VAPORS = 63081,
     SPELL_VEZAX_PROFOUND_DARKNESS = 63420,
+    SPELL_VEZAX_PAIN_SUPPRESSION = 33206,
+    SPELL_VEZAX_GUARDIAN_SPIRIT = 47788,
 
     NPC_VEZAX = 33271,
     NPC_VEZAX_SARONITE_ANIMUS = 33524,
@@ -47,6 +49,7 @@ inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 inline constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
 inline constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
 inline constexpr uint32 ULDUAR_VEZAX_WALK_STALL_MS = 500;
+inline constexpr uint8 ULDUAR_VEZAX_LATE_SURGE = 2;
 
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
 inline constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
@@ -123,6 +126,7 @@ struct VezaxEncounterState
     bool animusSummoned = false;
     uint32 animusSummonMs = 0;
     uint8 vaporSummons = 0;
+    uint8 animusSurges = 0;
 };
 
 Unit* GetVezax(PlayerbotAI* botAI);
@@ -164,6 +168,7 @@ bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI);
 
 Player* VezaxTankBuffHolder(PlayerbotAI* botAI);
 bool VezaxHolderTakesTankBuffs(PlayerbotAI* botAI);
+Player* VezaxMainTankHolder(PlayerbotAI* botAI);
 Player* VezaxTankBuffTarget(PlayerbotAI* botAI, std::string const& spell);
 
 bool VezaxHardModePending(PlayerbotAI* botAI);
@@ -196,5 +201,10 @@ bool VezaxHasEncounterState(Player* bot);
 char const* VezaxReadyInterrupt(Player* bot, Unit* target);
 
 bool VezaxIsSearingFlamesInterrupter(Player* bot, Unit* boss);
+
+void VezaxNoteSurge(Unit* vezax);
+bool VezaxLateSurgeRunning(PlayerbotAI* botAI);
+bool VezaxHoldsExternalsForLateSurge(PlayerbotAI* botAI);
+char const* VezaxLateSurgeExternal(PlayerbotAI* botAI, Player*& holder);
 
 #endif

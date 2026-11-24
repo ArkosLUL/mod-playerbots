@@ -77,6 +77,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class VezaxLateSurgeExternalAction : public Action
+{
+public:
+    static constexpr char const* Name = "vezax late surge external action";
+
+    VezaxLateSurgeExternalAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class VezaxSaroniteAnimusAction : public AttackAction
 {
 public:

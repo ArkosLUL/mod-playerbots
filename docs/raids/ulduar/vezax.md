@@ -344,10 +344,11 @@ the avoid list is empty and the hazard sweep returns fields only.
 **No ties**, because a tie falls to vector insertion order. The dodge leads at `EMERGENCY + 9`, the only
 hazard here with a deadline. The interrupt is `+8`: a missed kick lands Searing Flames on the whole raid.
 Then the two halves of Mark of the Faceless, **break at `+7`, carry at `+6`**, in that order,
-because the bot holding the mark is never the one taking damage. Surge of Darkness closes the EMERGENCY
-band at `+5`: only the bot he is hitting answers it, with a tank cooldown (Shield Wall, Icebound Fortitude,
-Survival Instincts, Divine Protection, Last Stand, Barkskin, Shield Block), never Divine Shield and the like,
-which would shed him; the raid needs him held still more than the tank untouchable. The RAID band is the
+because the bot holding the mark is never the one taking damage. Surge of Darkness is `+5`: only the bot
+he is hitting answers it, with every tank cooldown it has ready, one a tick (Shield Wall, Icebound
+Fortitude, Vampiric Blood, Survival Instincts, Divine Protection, Last Stand, Barkskin, Shield Block),
+never Divine Shield and the like, which would shed him; the raid needs him held still more than the tank
+untouchable. The late surge's external on him closes the EMERGENCY band at `+4`. The RAID band is the
 reward half and numbers separately: damage hold `+8` (it never claims the tick, it only has to run before
 hold-target), animus redirect `+7` (the bot is already on the Animus, so it never competes with the
 switch), animus `+6`, hold-target `+5`, animus bring-back `+4`, animus melee spot `+3`, field soak `+2`, resistance `+1`,
@@ -489,7 +490,11 @@ cast on too), whether the marked bot's first dodge in the flight (a `dup` row to
 arc spot, and how many blockmates' first dodges went toward its arc side or the other way; a search
 can go either way, so read `vezax.dodge` beside it. `--tank` takes the tank he hit longest as the
 main tank: to his first death, Beacon of Light's share on him and on another tank before the
-Animus and after it and the copies landing on him; Sacred Shield casts by target.
+Animus and after it and the copies landing on him; Sacred Shield casts by target. `--surge` takes
+each Surge of Darkness from its cast's end, `late` the second after the spawn: that main tank's health
+at its start and lowest in it, his own cooldowns and the externals on him up during it, each with when
+it went up, and the healers' median mana; then every Pain Suppression and Guardian Spirit with caster,
+target and phase, the hold's vetoes and the late external node's verdicts.
 
 **Of the generic views, `--vetoes` covers every multiplier and rule here and `--idle` counts the cast
 hold as idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp is
@@ -509,6 +514,24 @@ answer is killing the Animus faster.
 **Shadow Word: Death holds while the bot carries Profound Darkness** (`vezax shadow word: death hold`):
 the backlash is shadow, so at ~40 stacks, right after the Animus died, it hit 22k-health shadow priests
 for 12.8-21.9k and killed one.
+
+**The late Surge of Darkness gets Vampiric Blood and the priests' externals; the 2-minute button stays
+on the first** (the user's choice). The surge timer (63 s, shifted 12 s by the sixth vapor) ends its
+casts at +16 and +79 s of the Animus; the second, the late surge, comes with healers at 0-35% mana and
+~38 Profound Darkness stacks. Icebound Fortitude and Shield Wall come back after 2 min, so the first gets
+them, and 8 of 24 DK and warrior main tanks died bare in the late one (windows 11-26); saving them for it
+would leave the first bare, where a replay put about a third under 25%. So:
+
+- the surge node also casts Vampiric Blood (60 s), back for each surge 63 s later unless the class node
+  spends it at critical health between: in windows 11-27 it did, 2-8 s before 7 late surges, which the
+  surge node's use now narrows to the last 3 s;
+- from the Animus summon to the late surge's end, while the main tank (else the tank he hits) lives,
+  healers' class Pain Suppression and Guardian Spirit nodes hold (`vezax late surge externals hold`),
+  and `vezax late surge external` casts each priest's own on him once that surge's aura is up, in line
+  of sight and reach, its cost paid, the same one not on him already, so a disc and a holy priest put
+  on both. In windows 11-27's Animus phases they went to healers and ranged 38 times, to him 4.
+  Before the summon nothing holds: the 3 uses there came by 0:26, back by the late surge; one after
+  ~1:27 would not be. `VezaxHazardListenerScript` counts the surges cast after the summon.
 
 **Only threat holds the Animus**, and it spawns on the main tank's anchor. From outside its melee range a
 new victim needs 130% of the current one's threat, 110% inside (`ThreatManager::ReselectVictim`). The
@@ -606,13 +629,10 @@ walk) lost it, all three normal ones with the main tank holding the Animus kille
 in the ball; only the melee break and the escape walk answer it. Stepping the rows 4.4 yd out would
 take row 0 out of heal reach of the main tank while he hits twice as hard.
 
-**Hard mode's late Surge of Darkness meets the main tank without his long cooldown.** The surge timer
-(63 s, shifted 12 s by the sixth vapor) lands at +13 and +76 s of the Animus, the second with healers
-at 0-35% mana and ~38 Profound Darkness stacks. Icebound Fortitude and Shield Wall come back after
-2 min, so the surge node spends them on the first, at 51-100% health, or a class low-health node just
-before it: 8 of 24 DK and warrior main tanks that reached the late one died in it, the rest bottomed
-at 17-71%. Saving it leaves the first uncovered: replayed without it, about a third would have dropped
-under 25%.
+**The late surge's externals can miss him.** Nothing walks a priest to the main tank: from row 0 they
+stood a median 31-45 yd off him through that surge (windows 11-27), a few up to 71, against the 43 yd
+3D reach (40 plus both combat reaches), and nothing keeps the mana for the cast (Pain Suppression 8%,
+Guardian Spirit 6% of base mana) from priests at 0-52%.
 
 **Outside the Animus phase a crash inside a mark still walks the marked bot's block along its arc**
 (the turn above is the Animus phase's only). Before the spawn the crash comes 2.3-8.9 s into the

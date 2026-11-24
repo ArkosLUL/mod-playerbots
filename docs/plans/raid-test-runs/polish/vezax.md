@@ -2006,3 +2006,133 @@ flip the pick each GCD. No size, mode or player branch, no shared code, no comme
   range. It now mirrors the core.
 - Review fix: the duty paragraph in `docs/raids/ulduar/vezax.md` named only cost and range as what
   `CanCastSpell` skips (stance too), and stated the test rosters' GUID order as general.
+
+**User answer (2026-11-24):** Q5: (b). The main tank's 2-minute cooldown stays on the first Surge of
+Darkness, a DK main tank also uses Vampiric Blood at every Surge, and a priest holds Pain Suppression
+or Guardian Spirit for the main tank at the late Surge.
+
+## Round 16 (2026-11-24, build 0687fa6a4)
+
+**Data.** Window 27 at 25n hard mode (`raidtest.py report --boss vezax --raid uld --head 0687fa6a4
+--pulls 10`, saved as the session scratchpad's `window27/window27-vezax.md`), one valid pull per pool,
+hard mode held in all three (`animus` at 3:08.4, no vapor hit), against windows 25-26. Analysis
+scripts: session scratchpad `vezax-r16/` (`timeline.py`, `duty.py`, `animusbins.py`, `rangedphase.py`,
+`rbins.py`, `geom.py`, `swing.py`, `surges.py`, `bigcds.py`, `externals.py`, `priestreach.py`,
+`sfkicks.py`, `kickfails.py`, `sflanded.py`).
+
+| Pool | Run | Trace | Result |
+|---|---|---|---|
+| uld1 | `tr-20261124-133803-4` | `603_4_general-vezax_1795527532` | wipe 8:35, 29 deaths, the Animus dead in 81.2 s, the DK main tank 6.6 s later |
+| uld2 | `tr-20261124-133823-6` | `603_6_general-vezax_1795527545` | wipe 7:57, 30 deaths, collapse at +79.9 s with the Animus at 3.9%, Vezax to 7.1% |
+| uld3 | `tr-20261124-133803-5` | `603_5_general-vezax_1795527535` | wipe 6:51, 31 deaths, collapse at +94.0 s with the Animus at 0.1% |
+
+**Stop rules.** Not polished: three wipes. Round 15's pick did not recur; this round builds the Q5
+answer, so no repeat count.
+
+**Deaths by mechanic** (last hit; re-raised bots die twice). No death before the collapse or the main
+tank's death in any pull.
+
+| Pull | Deaths |
+|---|---|
+| uld1 | 25 Vezax melee (the main tank in the late surge at 4:36.4, then 16 as he went down the threat list to 5:42, the rest re-raised bots), 3 Searing Flames (8:21-8:29), 1 Shadow Crash |
+| uld2 | collapse from 4:28.4: 13 Profound Darkness, 1 Mark; then 13 Vezax melee (the main tank 5:37.6), 3 Searing Flames (7:49-7:57) |
+| uld3 | collapse from 4:34.5: 8 Profound Darkness, 19 Vezax melee (the main tank 4:40.9, 3.7 s after the late surge), 3 Shadow Crash, 1 Searing Flames (6:51) |
+
+**Animus and Vezax per pull** (`timeline.py`; settle is Vezax from the anchor before the spawn).
+
+| Pull | Settle | Vezax at spawn | Animus +30 / +45 / +60 / +75 s | Animus | Raid / ranged / melee k/s | Vezax at its death | End |
+|---|---|---|---|---|---|---|---|
+| uld1 (DK) | 9.9 | 25.0% | 66.2 / 47.8 / 29.1 / 10.1 | dead +81.2 s, 1.23 %/s | 152 / 86 / 62 | 30.2% | wipe 8:35.0, Vezax 19.9% |
+| uld2 (warrior) | 9.9 | 22.2% | 66.0 / 48.6 / 31.8 / 11.5 | dead +85.5 s, 1.17 %/s | 145 / 74 / 64 | 30.1% | wipe 7:57.2, Vezax 7.1% |
+| uld3 (DK) | 9.9 | 15.3% | 67.6 / 49.4 / 34.5 / 18.3 | dead +94.0 s, 1.06 %/s | 132 / 55 / 73 | 17.6% | wipe 6:50.8, Vezax 10.7% |
+| w26 | 9.9 | 14.8-21.5% | at +60: 27.3 / 17.9 / 22.4 | dead +72.4-79.2 s | 155-169 / 78-93 / 65-74 | 18.3-25.8% | kills uld1, uld2 |
+| w25 | 9.9-12.9 | 19.2-20.7% | at +60: 31.2 / 19.8 / 29.3 | dead +71.0-87.3 s | 143-172 / 69-101 / 65-70 | 23.4-25.3% | kills uld1, uld2 |
+
+Tanks held the Animus 95.8-98.8% (w25-26: 96.9-98.8%), first on a tank at +1.0-1.9 s, Heroism at
+-0.1 to +0.2 s.
+
+**Did round 15 or another merge cause the regression? No: chance.**
+
+- *Round 15 cannot reach the Animus race.* `VezaxSearingFlamesInterruptTrigger` (`UldTriggers_Vezax.cpp:89`)
+  only runs while Vezax casts Searing Flames, and the script skips that cast under the Barrier: the
+  first after the spawn came at 4:35-4:44 in all nine pulls of windows 25-27, after the Animus died or
+  the collapse. Before the spawn the duty sat on the same bots as in windows 25-26 (uld1 the resto shaman
+  Uldxad, uld2 the warrior main tank Uldyaa then healer Uldyae, uld3 the resto shaman Uldzad) and all 57
+  casts were kicked, as in windows 25-26. The duty action only casts, so it moves nobody.
+- *The other merges are other bosses' files.* `git log e834a2708..0687fa6a4 -- src`: Thorim's definition,
+  trigger and encounter files and Yogg-Saron's actions, trigger and encounter files, each wired only in
+  its own encounter; Mimiron's round was docs only.
+- *What moved: ranged on the Animus, in uld2 and uld3.* Ranged did 74k and 55k/s against 93-101k and
+  69-79k for the same rosters in windows 25-26; melee did not drop (`rangedphase.py`). In both, Vezax
+  swung far round the main tank at the spawn (uld2 13.4 yd west, w26 uld2 5.2; uld3 east 12.7 yd, then
+  west 16.8 yd at +20-30 s, as w25 uld3, which also lost) and the boss-relative camp walked after him:
+  ranged moved 47% of the phase (31-40% and 33-45% before), stood in a field 47% and 39% (53-65% and
+  55-57%), and in uld2 during Heroism (+10-20 s) 64% moving, 23% in a field, 73k/s against 117-123k
+  (`rbins.py`). The swing is not new and does not decide alone (`swing.py`, windows 11-27: w24 uld1 and
+  w25 uld2 swung 13+ yd and did 93-99k/s), and the Animus at +60 s (29.1 / 31.8 / 34.5%) sits inside
+  windows 21-26's spread (17.1-40.5%). uld1 won the race at window 25-26 pace and lost its DK main
+  tank in the late surge: Q5's failure, built below.
+
+**Verdict on round 15 (the Searing Flames duty only to a bot that can cast its kick): it worked.** No
+`vezax searing flames interrupt action` FAILED (39 OK; windows 11-26: 9 failed), and the duty moved to
+melee kickers late in long pulls (Uldxaf, Uldxal, Uldxap, Uldxai; Uldyak, Uldyai; Uldzaj). 5 of 119
+casts landed, all after the main tank's death: 3 with every living kicker dry or short (healer shamans
+at 0%, the re-raised warrior at 9 rage), 2 after a Wind Shear that went out and did not stop the cast
+(uld1 8:19.7 by Uldxai at 94% mana, uld3 6:49.0 by Uldzad), most likely resisted.
+
+**The late surge in windows 25-27** (`surges.py`, `bigcds.py`; the surge's 10 s from its cast's end at
+4:27.1-4:27.3). DK main tanks (6 pulls): Icebound Fortitude at 1:06 and 3:24 (w26 uld1: 3:11 at 61%
+from the class node), nothing of their own at 4:27 but a Vampiric Blood the class node spent at 14-24%
+health 3-7 s before it (w25 uld3, w26 uld3, w27 uld1) or 3.5 and 9 s into it (w27 uld3, w26 uld1); 3
+died in it, w27 uld1 from 70%, and w27 uld3 went 54% → 1% and died 3.7 s after it. Warrior Uldyaa (Shield Wall at 1:06 and 3:24, Last Stand at 1:06): 66% → 1% at w27's, alive.
+Pain Suppression and Guardian Spirit (`externals.py`, windows 11-27): 38 went to healers and ranged in
+the Animus phases, 4 to the main tank; the 3 before the spawn came by 0:26. Priests at the late
+surge (`priestreach.py`): a median 31-45 yd off the main tank, a few up to 71, at 0-52% mana.
+
+**Built: user answer Q5 (b)** (Vezax files only, plus the Vezax hook in `UldBotScripts.cpp`):
+
+- `VezaxSurgeOfDarknessAction` (`UldActions_Vezax.cpp:127`) adds `vampiric blood` after Icebound
+  Fortitude. The node casts every listed button it has ready, one a tick, so a DK main tank answers each
+  surge with Icebound Fortitude when it is back and Vampiric Blood (60 s) at every one; the 2-minute
+  buttons stay where they were, the first surge after the spawn.
+- `VezaxNoteSurge` (`UldEncounter_Vezax.cpp:1316`, fed by `VezaxHazardListenerScript` at each surge's
+  cast, `UldBotScripts.cpp:70`) counts the surges cast after the Animus summon; the second is the late
+  surge (`ULDUAR_VEZAX_LATE_SURGE`, `VezaxLateSurgeRunning` `:1326` while its aura is up).
+- Rule `vezax late surge externals hold` (`UldDefinition_Vezax.cpp:68`, predicate
+  `VezaxHoldsExternalsForLateSurge` `:1334`): healers' `pain suppression`, `pain suppression on party` and
+  `guardian spirit on party` hold from the summon to the late surge's end while the holder lives:
+  `VezaxMainTankHolder` (`:817`, the living main tank, else the tank he hits; split out of round 12's
+  `VezaxTankBuffHolder`, which keeps its paladin test and now calls it).
+- Node `vezax late surge external` (`ACTION_EMERGENCY + 4`, `UldDefinition_Vezax.cpp:32`;
+  `VezaxLateSurgeExternal` `:1346`): while the late surge's aura is up, a healer casts Pain Suppression or
+  Guardian Spirit on the holder when he lacks that aura, the bot sees him, and the spell is off
+  cooldown, paid for and in reach (`VezaxSpellInReach`, round 15's kick test renamed, `:1247`).
+  Every priest holds and casts its own, so a disc and a holy priest put both on him.
+
+Reader: `general_vezax.py --surge` (`surge_rows`, `external_casts`, `show_surge`, `:1315-1391`; tests
+added): per surge from its cast's end, `pre` / `animus` / `late` / `after`, the main tank's health at its
+start and lowest in it, whether he died in it, his own cooldowns and the externals on him up during it
+with when each went up (the caster for externals), healer median mana; every Pain Suppression and
+Guardian Spirit with caster, target and phase; the hold's vetoes and the node's verdicts. Docs:
+`docs/raids/ulduar/vezax.md` (node ladder, a hard-mode paragraph for the answer, trace section, the old
+late-surge gap replaced by the externals' reach and mana gap).
+
+10/25 and normal/hard: Vampiric Blood joins the surge node in every mode; the late surge needs the
+Animus summon, so normal mode holds and casts nothing new; nothing keys on raid size. Real players run
+no rule or node, and the holder is the group's main tank whether a bot or a player, so the same with
+or without one in the raid. Shared code: none.
+
+**Next window should show** (`--surge`).
+
+- DK main tanks: `VB` up at every surge (`+0.x`), `IBF` at 1:06 and 3:24 as before; at the late one
+  `VB` from the surge node (or from the class node in the last 3 s before it), and fewer main tank
+  deaths inside it than w25-27's 3 of 6 DK pulls.
+- `PS:` and `GS:` on the main tank at the late surge, from each priest alive in reach; `vezax late surge
+  externals hold` vetoes on priests only, between the spawn and 4:37; Pain Suppression and Guardian
+  Spirit on others only before the spawn or after the late surge.
+- The cost to watch: a healer or ranged that died between the spawn and the late surge with the hold
+  vetoing an external on it.
+- If the node never runs or FAILS: the priest's distance to him and its mana at 4:27 (the doc's gap).
+
+**Questions.** None new. Beyond the wording, every priest holds its external, not one, so with a disc
+and a holy priest both Pain Suppression and Guardian Spirit go on the main tank at the late surge.

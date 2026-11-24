@@ -30,6 +30,7 @@
 #include <array>
 #include <list>
 #include <unordered_map>
+#include <utility>
 
 using namespace EncounterHelpers;
 
@@ -807,7 +808,16 @@ bool VezaxCarriesProfoundDarkness(PlayerbotAI* botAI)
 Player* VezaxTankBuffHolder(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (bot->getClass() != CLASS_PALADIN || !PlayerbotAI::IsHeal(bot) || !VezaxEncounterActive(botAI))
+    if (bot->getClass() != CLASS_PALADIN || !PlayerbotAI::IsHeal(bot))
+        return nullptr;
+
+    return VezaxMainTankHolder(botAI);
+}
+
+Player* VezaxMainTankHolder(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!VezaxEncounterActive(botAI))
         return nullptr;
 
     Player* holder = GetGroupMainTank(bot);
@@ -1234,9 +1244,9 @@ bool VezaxHasEncounterState(Player* bot)
 
 namespace
 {
-bool VezaxKickInReach(PlayerbotAI* botAI, Player* bot, char const* interrupt, Unit* target)
+bool VezaxSpellInReach(PlayerbotAI* botAI, Player* bot, char const* spell, Unit* target)
 {
-    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", interrupt)->Get();
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
     SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
     if (!info || bot->HasSpellCooldown(spellId) || info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
         return false;
@@ -1270,7 +1280,7 @@ char const* VezaxReadyInterrupt(Player* bot, Unit* target)
                                              "silencing shot", "spell lock"};
 
     for (char const* interrupt : interrupts)
-        if (VezaxKickInReach(botAI, bot, interrupt, target) && botAI->CanCastSpell(interrupt, target))
+        if (VezaxSpellInReach(botAI, bot, interrupt, target) && botAI->CanCastSpell(interrupt, target))
             return interrupt;
 
     return nullptr;
@@ -1301,4 +1311,60 @@ bool VezaxIsSearingFlamesInterrupter(Player* bot, Unit* boss)
 
     RaidObs::NoteDerived(bot, "vezax.interrupter", interrupter ? "1" : "0");
     return interrupter;
+}
+
+void VezaxNoteSurge(Unit* vezax)
+{
+    if (!vezax)
+        return;
+
+    VezaxEncounterState& state = vezaxEncounterStates.For(vezax->GetInstanceId());
+    if (state.animusSummoned)
+        ++state.animusSurges;
+}
+
+bool VezaxLateSurgeRunning(PlayerbotAI* botAI)
+{
+    Unit* vezax = GetVezax(botAI);
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    return vezax && state && state->animusSurges == ULDUAR_VEZAX_LATE_SURGE &&
+           vezax->HasAura(SPELL_VEZAX_SURGE_OF_DARKNESS);
+}
+
+bool VezaxHoldsExternalsForLateSurge(PlayerbotAI* botAI)
+{
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    if (!state || !state->animusSummoned || state->animusSurges > ULDUAR_VEZAX_LATE_SURGE)
+        return false;
+
+    if (state->animusSurges == ULDUAR_VEZAX_LATE_SURGE && !VezaxLateSurgeRunning(botAI))
+        return false;
+
+    return VezaxMainTankHolder(botAI) != nullptr;
+}
+
+char const* VezaxLateSurgeExternal(PlayerbotAI* botAI, Player*& holder)
+{
+    static constexpr std::pair<char const*, uint32> externals[] = {
+        {"pain suppression", SPELL_VEZAX_PAIN_SUPPRESSION}, {"guardian spirit", SPELL_VEZAX_GUARDIAN_SPIRIT}};
+
+    holder = nullptr;
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsHeal(bot) || !VezaxLateSurgeRunning(botAI))
+        return nullptr;
+
+    Player* tank = VezaxMainTankHolder(botAI);
+    if (!tank || !bot->IsWithinLOSInMap(tank))
+        return nullptr;
+
+    for (auto const& [spell, aura] : externals)
+    {
+        if (tank->HasAura(aura) || !VezaxSpellInReach(botAI, bot, spell, tank) || !botAI->CanCastSpell(spell, tank))
+            continue;
+
+        holder = tank;
+        return spell;
+    }
+
+    return nullptr;
 }

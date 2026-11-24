@@ -29,6 +29,7 @@ void DefineVezax(EncounterBuilder& e)
                                                                                  EncounterRow::Mover);
     e.Node<VezaxMarkOfTheFacelessTrigger, VezaxMarkOfTheFacelessAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<VezaxSurgeOfDarknessTrigger, VezaxSurgeOfDarknessAction>(ACTION_EMERGENCY + 5);
+    e.Node<VezaxLateSurgeExternalTrigger, VezaxLateSurgeExternalAction>(ACTION_EMERGENCY + 4);
     e.Node<VezaxDamageHoldTrigger, VezaxDamageHoldAction>(ACTION_RAID + 8);
     e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 7);
     e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 6);
@@ -63,6 +64,9 @@ void DefineVezax(EncounterBuilder& e)
     e.Block("vezax tank buffs on the holder", Role::Heal, VezaxHolderTakesTankBuffs, 0,
             {"beacon of light on tank", "beacon of light on main tank", "sacred shield on tank",
              "sacred shield on main tank"});
+
+    e.Block("vezax late surge externals hold", Role::Heal, VezaxHoldsExternalsForLateSurge, 0,
+            {"pain suppression", "pain suppression on party", "guardian spirit on party"});
 
     e.OwnMovement("vezax control movement multiplier", Role::Ranged | Role::MainTank, VezaxFormationActive,
                   Family::Attack | Family::Reach | Family::ReachHeal);

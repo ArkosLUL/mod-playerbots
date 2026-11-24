@@ -124,16 +124,22 @@ bool VezaxSearingFlamesInterruptAction::Execute(Event /*event*/)
 
 bool VezaxSurgeOfDarknessAction::Execute(Event /*event*/)
 {
-    static char const* const defensives[] = {"shield wall",      "icebound fortitude",
-                                             "survival instincts", "divine protection",
-                                             "last stand",       "barkskin",
-                                             "shield block"};
+    static char const* const defensives[] = {"shield wall",        "icebound fortitude", "vampiric blood",
+                                             "survival instincts", "divine protection",  "last stand",
+                                             "barkskin",           "shield block"};
 
     for (char const* defensive : defensives)
         if (botAI->CanCastSpell(defensive, bot) && botAI->CastSpell(defensive, bot))
             return true;
 
     return false;
+}
+
+bool VezaxLateSurgeExternalAction::Execute(Event /*event*/)
+{
+    Player* holder = nullptr;
+    char const* external = VezaxLateSurgeExternal(botAI, holder);
+    return external && botAI->CastSpell(external, holder);
 }
 
 bool VezaxSaroniteAnimusAction::Execute(Event /*event*/)
