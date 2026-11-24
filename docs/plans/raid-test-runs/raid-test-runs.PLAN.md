@@ -8,30 +8,23 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Done** (polished at 25 plus the 10-man check): Jaraxxus, Twin Val'kyr, Northrend Beasts, Faction Champions, Kologarn, Ignis, Razorscale, Auriaya, Iron Assembly, XT-002, Hodir, Freya, Vezax ("Bosses" below).
 
-**Groups:** group 1 = Yogg-Saron (r21 running) and Thorim (r22 running); group 2 = Mimiron (round 21 next) and Algalon (r11 next). Vezax is done. Rebalance when a boss is done.
+**Groups:** group 1 = Yogg-Saron (r22 running) and Thorim (r23 running); group 2 = Mimiron (r21 running) and Algalon (r11 running). Vezax is done. Rebalance when a boss is done.
 
-**Window 32** (rebuild of the commit recording this, started 2026-11-24 ~20:25): group 2 on Mimiron r20 and Algalon r10; jobs `scratchpad/window32-jobs.json`, log `scratchpad/window32/window32.out`, reports `scratchpad/window32/window32/window32-<boss>.md`. Windows 29-31 and fillers 31b-31c (Jaraxxus, Twin Val'kyr on toc1-toc6: no regressions): `windows.md`.
+**Window 33** (rebuild of `9ad197722`, ended 2026-11-24 ~21:05): group 1, reports `scratchpad/window33/window33/window33-<boss>.md`. **Filler 33c** (one more Thorim and Yogg-Saron pull per pool on the same build) is running: log `scratchpad/window33c.out`, reports `scratchpad/window33c/`. Windows 29-33: `windows.md`.
 
 **Next:**
-- Launch each group 2 lane (Mimiron r21, Algalon r11) as its report file appears.
-- Merge Yogg-Saron r21 and Thorim r22 as they finish; once window 32 has ended and both have merged: rebuild, window 33 = group 1 while group 2's lanes code; filler pulls while the server waits (section D): done bosses whose shared code changed, e.g. the other ToC and Ulduar done bosses.
-- Report each window in chat; one numbered question batch per full cycle, after both groups reported.
+- Merge Mimiron r21 and Algalon r11 as they finish. Review DC lane V's report (roster professions, `v-dc-roster-professions.PLAN.md`, worktree `build-toc-wt/rt-dc-w4`, branch `rt/dc-v`) and merge it `--no-ff` into DC's `local/wrath-raid-tests`.
+- Once all three have merged and filler 33c has ended: rebuild; before window 34's pulls run lane V's console command over SOAP on all twelve pools and check from the database: `character_skills` at 450, the perk spells in `character_spell`, enchant 3606 on engineers' boots once maintenance or the enchant step ran. Mark the step in `windows.md`: trends across it compare unlike rosters. Then window 34 = group 2 while group 1's lanes code.
+- Mimiron r22 builds the user's answer 4: the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast.
+- Report each window in chat; one numbered question batch after window 34 (the cycle's end).
 
-**Answered 2026-11-24 ~20:45 (the batch sent after windows 29-30):**
-1. Yogg-Saron phase 1 positions from the measured cloud orbits, two steps: yes. Build step 1 (the reader's orbit labels and a per-orbit cost at the station) in Yogg-Saron r22, then one navprobed position change per round, melee core first.
-2. Yogg-Saron Diminish Power break once the bots carrying that Crusher's stacks are below: yes, one window; build in r22.
-3. Thorim: **keep polishing**, no end condition (the stop rules stay waived for him, as for Algalon); not closed on mechanics.
-4. Mimiron Q10, the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb Bot and takes the blast: yes; build in Mimiron r22 (r21 was already running).
-5. Algalon Q4 (b), in the 30 s before each Big Bang the tank not holding Algalon taunts constellations off healers: yes; build in Algalon r11.
-6. Algalon Q5, tank druids in bear form in every boss fight: **keep as is for now** (Algalon's own hold stays).
-
-**Roster professions (user, 2026-11-24):** the user asked whether the test rosters have professions, since some give options (Nitro Boosts) and passive perks, and to make sure the bots have the perks. Found: all 324 roster characters hold every profession at 1 of 75 (nothing learned); random bots get two (`PlayerbotFactory::InitTradeSkills` returns early for any non-random bot, `PlayerbotFactory.cpp:3301`); the user's own level-80 characters hold almost all eleven at 450 (`AC_MAX_PRIMARY_TRADE_SKILL=11`, `mod-shared-professions` installed). Profession enchants (tinkers, ring enchants, sockets, embroidery, fur lining) pass a gate on the bot's own skill, so rosters get none; maintenance's `InitSkills` leaves primary professions alone. Plan: a DC lane gives every roster member all primary professions at 450 with their perks, like the user's characters; the orchestrator runs it on all twelve pools between windows. Pulls after it are a step up in roster power: trends across that build compare unlike rosters. **Nitro Boosts (user, same day):** Ulduar and ToC strategies press it (e.g. Yogg-Saron's Dragon Soul illusion room, Anub'arak's kite); no roster bot wears it only because none has Engineering. Maintenance's enchant routine gives it by score: 35 of the user's 56 level-80 engineers wear it, the rest another boot enchant. So lane V is enough; no gearing change (a lane forcing Nitro on every engineer was stopped unbuilt). After lane V, check the rosters' boots for enchant 3606. DC lane V is `v-dc-roster-professions.PLAN.md`.
+**Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 step 1 and Q2 in r22; Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Algalon Q4 (b) in r11; tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score once lane V gives the rosters Engineering.
 
 **Not asked yet:** Iron Assembly self Lay on Hands.
 
 **Mechanics:**
 - Lanes: create the branch (`git -C build-toc-wt/rt-polish-<slug> switch -q -c rt/polish-<slug>-r<n> Custom`), then `Workflow({scriptPath: "G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/raid-polish-lane.js", args: {kind: "polish", tag, wt, branch, boss, slug, raid, round, reports: [<report file>], note}})` with no `agentType` (`~/.claude/agents/raid-lane.md` is untested). The note ends: "<Boss> only; every change must run the same with or without a real player in the raid. Raid code comments were stripped on Custom (c163ec11a): write no code comments." A lane returns `{status, commits, summary, review: {commits, summary}}`. Other kinds (`dc`, `strategy`, `research`, `runner`) take a `brief`; the old script is `raid-polish-lane.prev.js`.
-- Windows: with a rebuild `bash docs/plans/raid-test-runs/window.sh <jobs.json> <head> <out> <label>`; without one `python tools/raidtest/raidtest.py window --jobs <file> --head <sha> --max-raids 6 --skip-rebuild --report-dir <out>/<label> --owner "raid polish loop orchestrator: <label>"`. Every window gets a new label (a report folder already holding reports is refused). Jobs leave `pools` out (all six). `--head` is never newer than the commit the running binary was built from: a pull counts only if its binary was built after the head's commit time, so a newer head fails every job as a stale build.
+- Windows: with a rebuild `bash docs/plans/raid-test-runs/window.sh <jobs.json> <head> <out> <label>`; without one `python tools/raidtest/raidtest.py window --jobs <file> --head <sha> --max-raids 6 --skip-rebuild --report-dir <out>/<label> --owner "raid polish loop orchestrator: <label>"`. Every window gets a new label (a report folder already holding reports is refused). Jobs leave `pools` out (all six). `--head` is never newer than the commit the running binary was built from: a pull counts only if its binary was built after the head's commit time, so a newer head fails every job as a stale build. A job's `pulls` (default 1) counts valid pulls per pool since its head, so extra pulls on the same build need `"pulls": 2` or more.
 - Merges: `git merge-tree --write-tree Custom <branch>`, then `git merge --no-ff -q -F <file> <branch>`; `git diff HEAD^1 HEAD -- src | grep -cE '^\+\s*(//|/\*)'` must print 0. A lane appending to a polish log the orchestrator also changed conflicts at the file's end: merge Custom into the lane branch and keep both.
 - Any view of past pulls: `raidtest.py report --boss <slug> --raid <raid> --head <sha> --pulls <n>`. Combat reach audit: `reach-audit.FINDINGS.md`.
 
@@ -52,11 +45,11 @@ Earlier per-boss detail: the old table in `windows.md`.
 | XT-002 | done: 25n hard-mode kills with 0/1/1 (window 14, r11), 10n 0/1/0 (window 13b) |
 | Hodir | done: polished at 25 without the cache (the user's call), window 16 on r9: kills with 0/1/0; 10n kills with 0/1/2 |
 | Freya | done: 25n hard-mode kills with 1/2/2 (window 25, r17-r18), 10n hard-mode kills with 0/0/0 (window 25b) |
-| Yogg-Saron | group 1, round 21 running |
-| Thorim | group 1, round 22 running |
-| Mimiron | group 2, round 21 next |
+| Yogg-Saron | group 1, round 22 running; window 33: every pool reached phase 3 |
+| Thorim | group 1, round 23 running; the user: keep polishing, no end condition, stop rules waived |
+| Mimiron | group 2, round 21 running; A met the done rule in window 32 (uld4, 2 deaths) |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
-| Algalon | group 2, round 11 next (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
+| Algalon | group 2, round 11 running (back since window 30); the user: polish mechanics on the 226 rosters, no kill expected, the stop rule waived |
 | Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
 | Flame Leviathan | parked by the user |
 
