@@ -1208,6 +1208,7 @@ struct MimironFightState
 
     float wedgeBearing = 0.0f;
     uint32 wedgeAimedMs = 0;
+    uint32 wedgeSettledAimMs = 0;
 
     uint32 shiftFocusEntry = 0;
     float shiftX = 0.0f;
@@ -2232,6 +2233,100 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
     outOffset = size <= 1 ? 0.0f : -halfAngle + 2.0f * halfAngle * slot / (size - 1);
 }
 
+uint32 MimironRangedWedgeRows(uint32 count)
+{
+    float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
+                                           ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
+                                       0.0f);
+    return MimironWedgeRows(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
+                            1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
+                            ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
+}
+
+bool IsMimironWedgeMember(Player* member)
+{
+    return member && member->IsAlive() && PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsMainTank(member);
+}
+
+uint32 CountMimironWedgeMembers(Group* group)
+{
+    uint32 count = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        if (IsMimironWedgeMember(ref->GetSource()))
+            ++count;
+
+    return count;
+}
+
+uint32 MimironPhase4WedgeIndex(Group* group, Player* bot, uint32 rows, uint32 count)
+{
+    uint32 healers = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        if (IsMimironWedgeMember(ref->GetSource()) && PlayerbotAI::IsHeal(ref->GetSource()))
+            ++healers;
+
+    uint32 const frontRow = count / rows + (count % rows ? 1 : 0);
+    uint32 const spread = std::min(healers, frontRow);
+
+    std::vector<bool> reserved(count, false);
+    for (uint32 k = 0; k < spread; ++k)
+        reserved[(2 * k + 1) * frontRow / (2 * spread)] = true;
+
+    uint32 healer = 0;
+    uint32 next = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!IsMimironWedgeMember(member))
+            continue;
+
+        uint32 index = 0;
+        if (PlayerbotAI::IsHeal(member) && healer < spread)
+        {
+            index = (2 * healer + 1) * frontRow / (2 * spread);
+            ++healer;
+        }
+        else
+        {
+            while (next < count && reserved[next])
+                ++next;
+
+            index = std::min(next, count - 1);
+            ++next;
+        }
+
+        if (member == bot)
+            return index;
+    }
+
+    return 0;
+}
+
+uint32 MimironWedgeFire(MimironFirefighterHazards const& hazards, Position const& anchor, float centreline,
+                        float outerRow)
+{
+    uint32 fire = 0;
+    for (Position const& flame : hazards.flames)
+    {
+        float const dist = anchor.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY());
+        if (dist < ULDUAR_MIMIRON_PHASE3_MIN_RADIUS - ULDUAR_MIMIRON_FLAMES_RADIUS ||
+            dist > outerRow + ULDUAR_MIMIRON_FLAMES_RADIUS)
+            continue;
+
+        float off = Position::NormalizeOrientation(anchor.GetAngle(flame.GetPositionX(), flame.GetPositionY()) -
+                                                   centreline);
+        if (off > static_cast<float>(M_PI))
+            off -= 2.0f * static_cast<float>(M_PI);
+
+        float const grow =
+            std::asin(std::min(1.0f, ULDUAR_MIMIRON_FLAMES_RADIUS / std::max(dist, ULDUAR_MIMIRON_FLAMES_RADIUS)));
+        if (std::fabs(off) <= ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE + grow)
+            ++fire;
+    }
+
+    return fire;
+}
+
 float MimironWedgeReach(Unit* focus)
 {
     return std::max(sPlayerbotAIConfig.SpellDistance + focus->GetCombatReach() + DEFAULT_COMBAT_REACH -
@@ -2442,14 +2537,7 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     if (count == 0)
         return false;
 
-    float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance -
-                                           ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
-                                           ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-                                       0.0f);
-    uint32 const rows = MimironWedgeRows(
-        ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-        1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
-        ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
+    uint32 const rows = MimironRangedWedgeRows(count);
 
     Position const& anchor = ULDUAR_MIMIRON_ROOM_CENTER;
     float const centreline = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
@@ -2483,6 +2571,67 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     return true;
 }
 
+float SettleMimironWedgeOffFire(PlayerbotAI* botAI, Player* bot, Unit* vx001, MimironFightState& state,
+                                float current)
+{
+    if (!state.wedgeAimedMs || state.wedgeSettledAimMs == state.wedgeAimedMs ||
+        static_cast<float>(GetMSTimeDiffToNow(state.wedgeAimedMs)) <
+            ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS * IN_MILLISECONDS)
+        return current;
+
+    state.wedgeSettledAimMs = state.wedgeAimedMs;
+    if (!IsMimironPhase2(botAI))
+        return current;
+
+    Group* group = bot->GetGroup();
+    uint32 const count = group ? CountMimironWedgeMembers(group) : 0;
+    if (count == 0)
+        return current;
+
+    float const outerRow = ULDUAR_MIMIRON_PHASE3_MIN_RADIUS +
+                           static_cast<float>(MimironRangedWedgeRows(count) - 1) * ULDUAR_MIMIRON_PHASE3_SPACING;
+    Position const anchor = ClampMimironAnchorToRoom(
+        Position(vx001->GetPositionX(), vx001->GetPositionY(), ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+
+    uint32 const liveFire = MimironWedgeFire(hazards, anchor, current, outerRow);
+    float best = current;
+    uint32 bestFire = liveFire;
+    float bestTurn = 0.0f;
+    for (uint32 i = 0; i < ULDUAR_MIMIRON_WEDGE_FIRE_BEARINGS; ++i)
+    {
+        float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
+                              static_cast<float>(ULDUAR_MIMIRON_WEDGE_FIRE_BEARINGS);
+        uint32 const fire = MimironWedgeFire(hazards, anchor, bearing, outerRow);
+
+        float turn = Position::NormalizeOrientation(bearing - current);
+        if (turn > static_cast<float>(M_PI))
+            turn = 2.0f * static_cast<float>(M_PI) - turn;
+
+        if (fire < bestFire || (fire == bestFire && turn < bestTurn))
+        {
+            best = bearing;
+            bestFire = fire;
+            bestTurn = turn;
+        }
+    }
+
+    bool const move =
+        liveFire > ULDUAR_MIMIRON_WEDGE_FIRE_LIMIT && bestFire + ULDUAR_MIMIRON_WEDGE_FIRE_MARGIN <= liveFire;
+    if (move)
+        state.wedgeBearing = best;
+
+    if (RaidObs::Active())
+    {
+        char line[32];
+        snprintf(line, sizeof(line), "%s %.0f %u>%u", move ? "fire" : "keep",
+                 state.wedgeBearing * 180.0f / static_cast<float>(M_PI), liveFire, bestFire);
+        RaidObs::NoteDerived(bot, "mimiron.wedge", line);
+    }
+
+    return state.wedgeBearing;
+}
+
 float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
 {
     float const east = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
@@ -2496,7 +2645,10 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
         return current;
 
     MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
-    if (!window.valid || window.untilLive <= 0.0f)
+    if (!window.valid)
+        return SettleMimironWedgeOffFire(botAI, bot, vx001, state, current);
+
+    if (window.untilLive <= 0.0f)
         return current;
 
     if (state.wedgeAimedMs && GetMSTimeDiffToNow(state.wedgeAimedMs) < ULDUAR_MIMIRON_WEDGE_REAIM_MS)
@@ -2796,14 +2948,9 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     {
         branch = "hmwedge";
 
-        float const rangedDepth = std::max(sPlayerbotAIConfig.SpellDistance -
-                                               ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
-                                               ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-                                           0.0f);
-        uint32 const rows = MimironWedgeRows(
-            ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-            1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
-            ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
+        uint32 const rows = MimironRangedWedgeRows(count);
+        if (phase4)
+            index = MimironPhase4WedgeIndex(group, bot, rows, count);
 
         float radius = 0.0f;
         float offset = 0.0f;
