@@ -2486,13 +2486,11 @@ class UnderBulk(unittest.TestCase):
             self.assertNotIn("under-stars per Big Bang", render(bare, "stars"))
 
     def test_the_stars_section_counts_under_stars_against_their_band_at_the_cast(self):
-        self.assertIn("    at the cast: 0 below their band, 0 in it, 3 above\n", render(self.trace, "stars"))
+        self.assertIn("    at the cast, released early or not at all: 0 below their band, 0 in it, 2 above\n",
+                      render(self.trace, "stars"))
 
 
 class UnderFinish(unittest.TestCase):
-    """The warlock finishes star 1 alone from 0:28 to 0:32 while the mage's hits on it count as the rest of the
-    team's."""
-
     @classmethod
     def setUpClass(cls):
         cls.folder = tempfile.TemporaryDirectory()

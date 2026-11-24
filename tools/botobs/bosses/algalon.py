@@ -3212,15 +3212,15 @@ def show_under_cycles(trace: Trace) -> None:
     for cycle in cycles:
         if cycle["band"]:
             low, high = cycle["band"]
-            for health in cycle["at_cast"].values():
-                sides["below" if health <= low else "above" if health > high else "in"] += 1
+            for counter, health in cycle["at_cast"].items():
+                if cycle["releases"].get(counter, {}).get("why", "early") == "early":
+                    sides["below" if health <= low else "above" if health > high else "in"] += 1
     if sides:
-        print(f"    at the cast: {sides['below']} below their band, {sides['in']} in it, {sides['above']} above")
+        print(f"    at the cast, released early or not at all: {sides['below']} below their band, {sides['in']} in it,"
+              f" {sides['above']} above")
 
 
 def bulk_finishes(trace: Trace) -> list[dict]:
-    """Per `algalon.finishstar` span: the star, its finisher, its health at the span's ends, `others` the % of it the
-    rest of the star team landed meanwhile, and its health at the next cast against that cast's band."""
     def build(trace: Trace) -> list[dict]:
         samples = samples_of(trace)
         end = pull_end(trace)
@@ -3483,8 +3483,6 @@ STAR_GROUPS = ("star team on the focus star", "star team on another star", "off 
 
 
 def finishing(trace: Trace, star: int, when: int, owner: int | None = None) -> bool:
-    """Whether `star` was the bulk's finish star at `when` (`algalon.finishstar`), and `owner`, when given, its
-    finisher (`algalon.finisher`)."""
     end = pull_end(trace)
     finish = cached(trace, "_algalon_finish_spans", lambda trace: latch_spans(trace, "algalon.finishstar", end))
     if not star or as_guid(value_at(finish, when)) != star:
@@ -3496,8 +3494,7 @@ def finishing(trace: Trace, star: int, when: int, owner: int | None = None) -> b
 
 
 def star_grouper(trace: Trace):
-    """`group(owner, star, when)`: which of STAR_GROUPS a hit or cast on a star falls in; the finisher on its
-    finish star counts as on the focus star."""
+    """`group(owner, star, when)`: which of STAR_GROUPS a hit or cast on a star falls in."""
     end = pull_end(trace)
     team = holder_spans(trace, "algalon.starteam", end)
     focus = latch_spans(trace, "algalon.focusstar", end)

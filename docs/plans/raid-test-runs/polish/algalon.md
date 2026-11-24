@@ -126,9 +126,8 @@ uld5 2, uld3 2, uld6 3); constellations on a healer when a cast began 3 in 17 (w
 the pair dead. No offtaunter was caught out at a cast; the two pair tanks hit unphased while holding a
 constellation got theirs by threat.
 
-**Picked: under-stars reaching the cast below their band** (`--stars` "at the cast": w34 9 of 35, 22 dead; w32 5
-of 32). Bug: the bulk stops at half a tick under the band's top (`StopLineHp`, `UldEncounter_Algalon.cpp:2561`)
-on the doc's premise that a spell landing after the stop is 1-2%, but the whole team's crossing volley landed 4-7%,
+**Picked: under-stars reaching the cast below their band** (`--stars` "at the cast": w34 9 of 31, 22 dead; w32 5).
+Bug: the bulk stops at half a tick under the band's top (`StopLineHp`, `UldEncounter_Algalon.cpp:2561`) on the doc's premise that a spell landing after the stop is 1-2%, but the whole team's crossing volley landed 4-7%,
 against 3.5-4.5 ticks of band under the line. `line.py` over the 32 bulk leaves: 30 were that volley (hits cast
 before the star crossed), 2 a nibble inside the top half tick; 9 ended below the band, 8 of them volleys.
 
@@ -164,6 +163,7 @@ before the star crossed), 2 a nibble inside the top half tick; 9 ended below the
 **Questions for the user.** None.
 
 **Next window should show** (`algalon.py --stars`, `--verdict`): "bulk finishes" rows with a hunter finisher in
-every pull; "at the cast: N below their band" well under w34's 9 of 35; no under-star going off in a cast
-before hit − 4 s (w34: uld3 Big Bang 2 15 dead, uld6 Big Bang 1 4). Watch: wave-3 `late` releases (w34: 4 of 6),
-under-stars `above` their band at the cast, a finisher that never reaches its star, the bulk's median speed.
+every pull; "at the cast, released early or not at all: N below their band" well under w34's 9 of 31; no
+under-star going off in a cast before hit − 4 s (w34: uld3 Big Bang 2 15 dead, uld6 Big Bang 1 4). Watch: wave-3
+`late` releases (w34: 4 of 6, left out of that count), under-stars `above` their band at the cast (w34: 0), a
+finisher that never reaches its star, the bulk's median speed.
