@@ -1974,3 +1974,131 @@ cones.
   healer reach on escaped melee (221 → 198 of 272 pairs, one escape unreached). Recommendation: no, keep 18 yd.
 
 **Shared code:** none (Mimiron encounter, trigger and action, findings doc, reader and its test, this log).
+
+**User answer (2026-11-24).** Q8: no, keep the phase 4 healer row at 18 yd. Nothing to build.
+
+## Round 18 (build e834a2708, round 17 built)
+
+**Data:** window 26, `raidtest.py report --boss mimiron --raid uld --head e834a2708 --pulls 10`: one valid pull per pool,
+no DC veto inside any. Baselines: window 25 (`603_13/14/15_…_17955169xx`, `…_1795517146`) and windows 13-24a for phase 2.
+Scripts in the lane scratchpad (`mim18/`: `p2mines.py`, `wedgepick2.py`, `capstats.py`, `settlewalk.py`, `bombclear.py`,
+`botlog.py`; round 14's `rhscene.py`, `clock.py`, `alive.py`, `revcasts.py`; round 17's `microlegs.py`, `minehitdist.py`,
+`minecost.py`, `p4heal.py`, `movers.py`, `healwin.py`).
+
+| Pool | Run | Trace | Out | Deaths by mechanic |
+|---|---|---|---|---|
+| uld1 | `tr-20261124-122833-11` | `603_11_…_1795523357` | wipe 7:59.7 in P3, raid dead | 32: P2 Rapid Burst 8, Heat Wave 7, Flames 2, Frost Bomb 2 (two mages whose Ice Block ran out before the blast); P3 (10 alive, three healers) Assault Bot 7, Bomb Bot 3, Junk Bot 2, ACU Plasma Ball 1 |
+| uld2 | `tr-20261124-122711-10` | `603_10_…_1795523273` | wipe 10:24.2 at Berserk (10:00.3) | 31: P1 Plasma Blast 1 (main tank); P2 Rapid Burst 2, Flames 2, Heat Wave 1; P3 Bomb Bot 2, Water Spray 2; P4 Hand Pulse 1 (healer, 9:48.4); Berserk 20 |
+| uld3 | `tr-20261124-122834-12` | `603_12_…_1795523365` | **kill** 9:11.9, hard mode, no Berserk cast | 4: P2 Flames 1 (melee); P3 Bomb Bot 1 (chased ranged); P4 mine 1 (melee on a barrage leg); P3b Hand Pulse 1 (melee) |
+
+67 deaths, 47 before Berserk: Rapid Burst 10, Heat Wave 8, Assault Bot 7, Bomb Bot 6, Flames 5, Frost Bomb 2, Junk Bot 2,
+Water Spray 2, Hand Pulse 2, ACU Plasma Ball 1, Plasma Blast 1, mine 1. Phase 2 lost 19/5/1 (window 25: none). Hard mode
+in all three: Flames from phase 1 on (527k/325k/324k in P1).
+
+**The clock** (Berserk at 10:00):
+
+| Pull | P1 | Z2+H1 | P2 | H2 | P3 | H3 | P4 reached | P4 |
+|---|---|---|---|---|---|---|---|---|
+| uld1 | 96.3 | 48.2 | **172.4**, 19 dead | 24.1 | 125.3 from 10 alive, raid dead | | | |
+| uld2 | 85.7 | 48.4 | 99.2, 5 dead | 24.3 | 153.9 | 32.0 | 7:36.8 | 167.4 s at 63k/s, 18 alive; Berserk 10:00.3, wipe 10:24.2 |
+| uld3 | 81.6 | 48.0 | 90.3 | 24.3 | 118.2 | 32.1 | 6:47.9 | 124.3 s at 118k/s, 25 alive; kill 9:11.9 |
+
+**Stop rules:** one kill of three: not polished. No failure picked three times (round 14's phase 2 pile was a plan change;
+the settle walk is new).
+
+**Round 17 or chance: chance in the fire, not a code change.**
+
+- `3ce456519..e834a2708 -- src` changes Mimiron through round 17 alone. The rest is Thorim, Vezax and Yogg-Saron nodes,
+  live only in their encounters, and `BurstAllowedOnAdd`, which lifts the burst hold only on 33988, 36064, 33966, 33985
+  and 33983 (Yogg-Saron's Guardians and tentacles). No core `src` commit; DC's two are Freya and Yogg-Saron logistics.
+- Round 17 cannot reach phase 2: `GetMimironCloseMine` returns false with no live mine within 3 yd, as the old
+  `TooCloseToCreature` did, and no mine is alive in any P2 or H2 of windows 25-26 (`p2mines.py`; the last dies in H1 by
+  1:59). Phase 2 opened alike: 24-25 bots on slots, healer mana 59-100% (window 25: 59-97%).
+- What differed is the settle's turn: window 25 102/98/69°, window 26 140° (uld1), 131° (uld2) and a keep (uld3). Over 50
+  replayed moves (windows 13-26, `wedgepick2.py`) the fewest-fire pick turns a median 102°, past 120° in 17: window 25
+  drew the low half.
+- Phase 2 deaths a pull: windows 16-24a 3.75 (8 of 32 pulls lost 5 or more), windows 25-26 4.2.
+
+**Verdict on round 17 (mine trigger and step at 3 yd ground distance): held.**
+
+- Mine steps from 3 yd or farther: P1 0/3/0 of 1/4/2 (window 25: 57/6/45 of 72/7/53), P4 1/0 of 1/3 (98/75/37 of
+  102/78/40).
+- Switches within 1.5 s: healer P4 `arc spread <-> proximity mine` 0/0 (34/51/4); ranged P1 `combat formation move <->
+  proximity mine` 0/0/1 and `flee <-> proximity mine` 0 (uld1: 17 and 13). Healer P4 legs 13.7/14.1 a bot-minute
+  (25.2/24.5/11.8), mine legs under 3 yd 0/1 (45/41/11).
+- Mine hits: P1 19/7/7 (11/19/11), P4 7/25 (9/18/15); every standing hit within 3 yd of its mine (`minehitdist.py`).
+  uld1's P1 rise is 14 hits on `mimiron approach target action` legs (30 of 79 crossed a mine; the node screens
+  destinations only, by design), a fire-heavy phase 1 where window 25 had none of those legs; uld3's P4 rise is 15 on
+  barrage dodge legs (23 of 126 passed a mine, windows 24a-25 7-13 of 100-161), where the mine trigger stands down.
+  Neither is round 17's mover.
+- Healer P4 mine time 0/0.7% (2.8/2.4/0.8), moving 48/32% (47/46/42), casting 21/28% (27/22/27); uld2's phase 4 ran on 18
+  alive with VX-001 walked 191 yd.
+- Rounds 14 and 16: no `revive pet` cast; a settle note for every phase 2 barrage that ended in phase 2 (3, 1, 1);
+  escaped melee with a healer in reach 1.69 of 2.19 healers (uld2, 7 of 26 with none) and 3.09 of 3.38 (uld3, none of
+  32). Phase 2 deaths near 0: no (below).
+
+**Ranking.** The phase 2 storm after a barrage killed 25 and set up most of the rest: uld1 entered P3 with 10 alive and
+lost them (13), uld2 entered P4 with 18 at 63k/s (uld3: 25 at 118k/s) and met Berserk (20). Then Bomb Bots 6, Water
+Spray 2, Hand Pulse 2.
+
+**Failure picked: the settle walk lands in the post-barrage storm, and its cost grows with the turn** (`settlewalk.py`;
+healers moving and healing in the 15 s after the `mimiron.wedge` settle note):
+
+| Pull | Note | Turn | Healers moving | Healed | Walk median ranged/healer | Dead in 25 s |
+|---|---|---|---|---|---|---|
+| w25 uld1 | `fire 90 11>0` | 102° | 55% | 332k | 42/47 yd | 0 |
+| w25 uld2 | `fire 60 9>0` | 98° | 45% | 441k | 53/39 | 0 |
+| w25 uld3 | `fire 60 4>1` | 69° | 23% | 488k | 30/24 | 0 |
+| w26 uld1 | `fire 90 18>3` | 140° | 80% | 305k | 60/86 | 12 |
+| w26 uld1, 2nd | `fire 15 14>5` | 94° | 63% | 191k (13 alive) | 30/66 | 7 |
+| w26 uld2 | `fire 225 13>4` | 131° | 54% | 302k | 74/51 | 2 |
+| w26 uld3 | `keep 309 0>0` | 0° | 4% | 505k | 0/0 | 1 |
+
+`--spin`'s 15 s after the first barrage healed 314k and 316k in uld1/uld2, the lowest of every first barrage on disk
+(windows 13-24a median ~460k).
+
+- uld1, 3:22.2, 230 → 90: the ranged and healers stood at 242-277°, 16-28 yd off VX-001. The new wedge (30-150°) covers
+  the old melee sector, so they walked across VX-001 (three healers 3-4 yd off it at 3:25-3:27) while the melee crossed
+  to 225-315°. Healers moved 85-95% and cast 0-8% from 3:22.9 to 3:30.5 while 3:22.9's Heat Wave, Rapid Burst and Flames
+  took 233k in 2.5 s (Uldxab 100 → 22%, Divine Shield; Uldxac Pain Suppression on himself). The storm's Frost Bomb, seen
+  at 3:28.4 4 yd off VX-001, sent everyone 30+ yd out mid-walk; 12 died 3:27-3:47 and raid health fell 85 → 45.
+- Uldxag and Uldxaq (mages) cast Ice Block at 31-33% (3:25.5, 3:26.6), before any bot saw the bomb, stood 10 s inside its
+  30 yd and died to the blast at 3:38.4, 2.9 and 1.8 s after their blocks ran out (Uldxaq 9.5 yd from it).
+- uld1's second settle (4:25.3, 281 → 15, 94°) with 13 alive: healers 100%/72% moving at 4:28-4:30 under a bomb 8 yd off
+  VX-001, 7 dead 4:33-4:42.
+- uld2, 3:11.8, 356 → 225: the same crossing (bots 1-10 yd off VX-001 at 3:13-3:19); the bomb from 3:18.5 at 29°/22 yd
+  split the walk, six ranged and healers stood 35-57 yd out, two ranged died to Rapid Burst at 3:24-3:28.
+- Window 25's settles crossed VX-001 too (1-3 ranged within 8 yd), at no more than 102°, and nobody died in the 25 s after.
+
+**Classification: plan change.** The settle does what Q6's answer reads: the fewest burning nodes, ties nearest. Q6 counted
+on a ~20 yd walk; its own replay turned a median 102°. Bounding the turn changes the user's rule: Q9.
+
+**Fix:** none. Findings doc: the walk's cost by turn, as an open item under "Once the beams stop, a phase 2 re-aim leaves
+fire".
+
+**Next window should show** (`--spin`, `--wedge`, `mim18/settlewalk.py`): no strategy change, so phase 2 follows the turn
+the fire hands out: a settle past ~120° with healers moving 50-80% and ~300k healed in the 15 s after, deaths likely; at
+69-102° as in window 25. Round 17's checks as above.
+
+**Not picked.**
+
+- Bomb Bots (6, mostly chased ranged; uld1's three in a 10-alive P3, one bomb at 100% after 7.7 s): kill speed, as before.
+- Water Spray (uld2, 2): Uldyap stood 2.4 s in a lane with all 11 bearings refused (`spray none`/`unsafe`, spray11) before
+  the fallback, Life Tap having put it at 74%.
+- Ice Block in a Frost Bomb fuse (uld1, 2): shared class code, and the blocks began before any bot saw the bomb.
+- uld2's main tank at 1:17.4: window 3's Hand of Sacrifice took four ticks, then 22.6k and 25.1k landed unshared from 37%.
+- uld3's P4 barrage-leg mine hits (15, one kill): watch.
+
+**Questions for the user.**
+
+- **Q9 (plan change): cap how far the phase 2 wedge turns when it moves off fire, at 90°.** When the beams stop, the wedge
+  moves to the 120° arc with the fewest fire nodes, however far away. In window 26 it turned 131° and 140°: the ranged
+  and healers walked across VX-001 to where the melee stood, during the Heat Wave, Rapid Burst and Frost Bomb that follow
+  every barrage. Healers spent 54-80% of the next 15 s walking, healing fell to ~300k (488-505k when the wedge turned 69°
+  or stayed), and 14 died in the 25 s after; window 25's turns of 69-102° cost nobody. Options: (a) the fewest-fire arc
+  within 90° of where the barrage put the wedge: of 50 replayed moves, the 30 that turn past 90° would turn a median 77°
+  and leave a median 4 burning nodes under the wedge instead of 0 (window 26: uld1 85° to 4 nodes instead of 140° to 3,
+  uld2 26° to 10 instead of 131° to 3-4); (b) keep today's rule; (c) skip a move past 120°, leaving the wedge on its fire
+  as before Q6. Recommendation: (a).
+
+**Shared code:** none (findings doc, this log).
