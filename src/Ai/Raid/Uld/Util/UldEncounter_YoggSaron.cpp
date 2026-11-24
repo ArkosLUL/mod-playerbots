@@ -2338,7 +2338,9 @@ Player* YoggSaronVigilanceTarget(PlayerbotAI* botAI)
         if (member->HasAura(SPELL_WARRIOR_VIGILANCE, bot->GetGUID()))
             return nullptr;
 
-        if (member->HasAura(SPELL_WARRIOR_VIGILANCE) || !botAI->CanCastSpell("vigilance", member))
+        if (member->HasAura(SPELL_WARRIOR_VIGILANCE) ||
+            !bot->IsWithinDistInMap(member, ULDUAR_YOGG_SARON_VIGILANCE_RANGE) ||
+            !botAI->CanCastSpell("vigilance", member))
             continue;
 
         if (!best || member->getAttackers().size() > best->getAttackers().size())

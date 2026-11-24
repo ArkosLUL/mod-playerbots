@@ -1972,9 +1972,10 @@ one, each costing the 8 s cooldown the next spawn needed. `--phase3`: `tank taun
 dps, whom Guardians rarely swing at. Taunt and Growl are 30 yd single-target taunts with nothing longer behind them,
 so design B's prot warrior and bear had every taunt cooling at 25-50% of Guardian swings on non-tanks before the
 first tank death (A 21-36% on Dark Command, Hand of Reckoning and Righteous Defense), and fresh Guardians sat on a
-raider a median 1.1-2.7 s (A 0.3-1.8). It takes the tank with the most attackers, never one carrying another
-warrior's. `--phase3`: each bot tank's `every taunt it has cooling`, `no bot tank with a taunt ready` (Vigilance
-resets counted; a death knight's kit includes Death Grip, which the control never casts).
+raider a median 1.1-2.7 s (A 0.3-1.8). It takes the tank within 30 yd with the most attackers, never one carrying
+another warrior's, and so draws 10% of that tank's threat (59665, 15% glyphed). `--phase3`: each bot tank's `every
+taunt it has cooling`, `no bot tank with a taunt ready` (Vigilance resets counted; a death knight's kit includes
+Death Grip, which the control never casts).
 
 **A fresh Guardian leaves stasis on zero threat**: at 4 s or its first hit, `DoZoneInCombat` adds every player at 0
 and the first in the map's player list becomes its victim (`--phase3` `first victim`: one fixed melee at +4.0 s), so

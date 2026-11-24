@@ -420,7 +420,7 @@ SPELL_HAND_OF_RECKONING = 62124
 TAUNT_COOLDOWN_MS = 8000
 TANK_TAUNT_KITS = {1: {355: TAUNT_COOLDOWN_MS},
                    2: {SPELL_HAND_OF_RECKONING: TAUNT_COOLDOWN_MS, 31789: TAUNT_COOLDOWN_MS},
-                   6: {56222: TAUNT_COOLDOWN_MS, 49576: 25000},
+                   6: {56222: TAUNT_COOLDOWN_MS, 49576: 35000},
                    11: {6795: TAUNT_COOLDOWN_MS}}
 SPELL_VIGILANCE_TAUNT_RESET = 50725
 # What a tank can turn a Guardian back with: the class taunts, Growl 6795 and Righteous Defense 31789,
@@ -4746,12 +4746,6 @@ def deferred_tank_deaths(defers: list[tuple[int, str, int]], tank_deaths: list[t
     return out
 
 
-def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
-    """Whether the last of these sorted cast times before `when` is still inside the cooldown."""
-    index = bisect.bisect_right(casts, when)
-    return bool(index) and when - casts[index - 1] < cooldown_ms
-
-
 def cooling_since(casts: list[int], resets: list[int], when: int, cooldown_ms: int) -> bool:
     index = bisect.bisect_right(casts, when)
     if not index or when - casts[index - 1] >= cooldown_ms:
@@ -5487,14 +5481,14 @@ def show_phase3(trace: Trace) -> None:
     swings = [rec for rec in melee_hits if trace.role(rec.get("d")) != "tank"]
     classes = {member["g"]: member.get("c") for member in trace.header.get("roster", [])}
     bot_tanks = sorted(tanks - set(trace.humans), key=trace.name)
-    taunt_casts: dict[int, dict[int, list[int]]] = {guid: collections.defaultdict(list) for guid in bot_tanks}
+    kit_casts: dict[int, dict[int, list[int]]] = {guid: collections.defaultdict(list) for guid in bot_tanks}
     resets: dict[int, dict[int, list[int]]] = {guid: collections.defaultdict(list) for guid in bot_tanks}
     for rec in trace.of("cast"):
-        if rec.get("s") in taunt_casts:
-            taunt_casts[rec["s"]][rec.get("sp")].append(rec["t"])
+        if rec.get("s") in kit_casts:
+            kit_casts[rec["s"]][rec.get("sp")].append(rec["t"])
         if rec.get("sp") == SPELL_VIGILANCE_TAUNT_RESET and rec.get("tgt") in resets:
             resets[rec["tgt"]][355].append(rec["t"])
-    cooling = {guid: [taunts_cooling(taunt_casts[guid], TANK_TAUNT_KITS.get(classes.get(guid), {}), rec["t"],
+    cooling = {guid: [taunts_cooling(kit_casts[guid], TANK_TAUNT_KITS.get(classes.get(guid), {}), rec["t"],
                                      resets[guid])
                       for rec in swings] for guid in bot_tanks}
     for guid in bot_tanks:

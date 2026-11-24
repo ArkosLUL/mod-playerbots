@@ -390,6 +390,7 @@ inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_SWAP_MS = 8000;
 inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_PCT = 20.0f;
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_LOH_CLAIM_MS = 3000;
 inline constexpr float ULDUAR_YOGG_SARON_TANK_LOH_RANGE = 40.0f;
+inline constexpr float ULDUAR_YOGG_SARON_VIGILANCE_RANGE = 30.0f;
 
 inline constexpr uint32 ULDUAR_YOGG_SARON_TANK_WRATH_LOCK_MS = 30000;
 

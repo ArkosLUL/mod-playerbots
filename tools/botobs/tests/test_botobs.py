@@ -2263,10 +2263,10 @@ class YoggPhases(unittest.TestCase):
 
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
-        self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))
-        self.assertTrue(yogg_saron.on_cooldown(casts, 8999, 8000))
-        self.assertFalse(yogg_saron.on_cooldown(casts, 9000, 8000))
-        self.assertTrue(yogg_saron.on_cooldown(casts, 20000, 8000))
+        self.assertFalse(yogg_saron.cooling_since(casts, [], 500, 8000))
+        self.assertTrue(yogg_saron.cooling_since(casts, [], 8999, 8000))
+        self.assertFalse(yogg_saron.cooling_since(casts, [], 9000, 8000))
+        self.assertTrue(yogg_saron.cooling_since(casts, [], 20000, 8000))
 
     def test_a_tank_is_out_of_taunts_only_when_its_whole_kit_cools(self):
         paladin = yogg_saron.TANK_TAUNT_KITS[2]

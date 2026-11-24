@@ -48,7 +48,7 @@ fields 2 tanks, 4 healers, all 19 DPS):
    bars are the largest (rogues 26k, A's 23k), healing in the 8 s after a nova is alike, pets on held Guardians alike.
 2. **B's tanks (prot warrior + bear) are the weakest phase 3 pair.** Two 30 yd single taunts, no Righteous Defense
    or Death Grip: every taunt cooling at 25-50% of Guardian swings on non-tanks before the first tank death (C 24-45%,
-   A 21-36% on the control's own casts, 0% counting the DK's unused Death Grip); fresh Guardians on a raider a median
+   A 21-36% on the control's own casts, 0-2% counting the DK's unused Death Grip); fresh Guardians on a raider a median
    1.1-2.7 s (A 0.3-1.8, C 0.3-1.5); raiders killed by a fresh one before the first tank death B 18, A 6, C 3. They
    deal 8-10k/s to the pile (A's prot paladin + blood DK 11-16k/s), so fewer Guardians reach Weakened (50-61%, A
    59-78%) and the tanks fall sooner. r24 picks the taunts.
@@ -178,7 +178,7 @@ root cause. Nova pairs were picked in r20 and r23, so not a third time. Q1 step 
 **Picked: B's tanks run out of taunts in phase 3** (Immortal Guardian, 131, and the design gap the brief asks for).
 uld5 (B) phase 3: 9 of 17 Guardians opened on a melee at +4.0 s, 9 of 15 sat on a raider before a tank held them
 (median 1.1 s, max 6.5), three raiders killed by fresh Guardians before the first tank death, when 17 of 36 swings on
-non-tanks came with no bot tank's taunt off cooldown (A's uld4 0 of 55 counting Death Grip, 18 without). Root cause:
+non-tanks came with no bot tank's taunt off cooldown (A's uld4 1 of 55 counting Death Grip, 18 without). Root cause:
 the warrior's Taunt and the bear's Growl are B's only phase 3 taunts (the control owns all of them,
 `UldActions_YoggSaron.cpp:88-103`), and the warrior's Vigilance, whose every hit resets Taunt (50725,
 `spell_warr_vigilance_trigger`), sits where `CastVigilanceAction::GetTarget` (`WarriorActions.cpp:101-139`) puts it:
@@ -187,7 +187,7 @@ rogue (16). A bug: the control intends every loose Guardian taunted, and the war
 the tank being hit.
 
 **Fix.** `yogg-saron vigilance` (`ACTION_RAID + 2.5`, `YoggSaronVigilanceTarget`): in phase 3 a bot warrior tank
-casts Vigilance on the living tank with the most attackers within cast range, unless its own Vigilance is already on
+casts Vigilance on the living tank with the most attackers within 30 yd, unless its own Vigilance is already on
 a tank or that tank carries another warrior's; `yogg.vigilance` names the tank. Only B fields a warrior tank at 25 and
 10; a human tank is a valid target, a human warrior runs nothing. Same code at 10 and 25, normal and hard mode. No
 shared code: the generic picker stays as is and stands down once the bot's Vigilance is on a group member. Reader:
@@ -197,7 +197,8 @@ non-paladins) with Vigilance resets, plus `no bot tank with a taunt ready` befor
 **Next window should show** in B (uld2, uld5): `yogg.vigilance` on the bear early in phase 3; the warrior's `every
 taunt it has cooling` far under the bear's, `no bot tank with a taunt ready` under 20% of swings (25-50%); fresh
 Guardians on a raider a median under 1 s (1.1-2.7) and raiders killed by a fresh one before the first tank death under
-1 a pull (2.25). A and C unchanged. Back out if B's tanks die sooner or `first off a tank` turns onto the warrior.
+1 a pull (2.25). A and C unchanged. Back out if B's tanks die sooner or `first off a tank` turns onto the warrior
+or the raid more often: Vigilance moves 10% of the bear's threat to the warrior (59665).
 
 **Seen, not picked.** A's DK tank had Death Grip ready at every swing on a non-tank while the control never casts it;
 B's warrior and bear hold Challenging Shout and Roar all phase 3; uld6 lost its paladin tank to Deafening Roar at
