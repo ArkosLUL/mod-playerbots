@@ -281,6 +281,9 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
     if (!partnerIsSwapTank)
         return false;
 
+    if (bot->GetExactDist2d(&ULDUAR_THORIM_PHASE2_TANK_SPOT) > ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS)
+        return false;
+
     if (bot->HasAura(SPELL_UNBALANCING_STRIKE))
         return false;
 

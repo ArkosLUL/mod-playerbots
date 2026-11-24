@@ -122,6 +122,10 @@ class Phase2(unittest.TestCase):
         self.assertIn("1 tank-to-tank, Thorim moved p50 0.0 p90 0.0 yd across one; strike to swap p50 1.0 max 1.0 s, "
                       "0 unanswered; on a non-tank with a tank up 0.0 s", self.text)
 
+    def test_opening_trade_from_the_off_tank_spot(self):
+        self.assertIn("opening           first trade +19.0 s, the taker 3.5 yd off the tank spot, Thorim up to 6.1 yd "
+                      "off it in the next 8 s; 1.00 %/s over the first 30 s", self.text)
+
     def test_waiting_tank_on_the_off_tank_spot(self):
         self.assertIn("offset from the tank spot (-3.5, +0.0) yd, on the holder 0.0%, from Thorim p50 9.1 p90 9.1 yd, "
                       "past 9.0 yd 100.0%; moves: thorim phase 2 positioning action 1, reach melee 1", self.text)
