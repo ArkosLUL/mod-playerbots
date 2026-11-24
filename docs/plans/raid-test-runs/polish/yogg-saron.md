@@ -1754,8 +1754,8 @@ melee` range.
 
 Bug: the doc's station claims a bot while standing there costs nothing, and melee wait at the spot for guardian control.
 Fix (`UldTriggers_YoggSaron.cpp`): melee reach is `reach melee`'s, `MeleeDistance` plus both combat reaches; the station
-then walks melee on Yogg to the spot round the body and parks them. A Guardian counts likewise (reach 4: released past
-21.25 yd, was 15.75). Ranged keep `SpellDistance`; the resolver's station test reads only phase 3 ranged, unchanged.
+then walks melee on Yogg to the spot round the body and parks them. A Guardian counts likewise by its live reach (display
+29024: 1, grown by Empowered's scale): released past 17.25 yd plus that reach, was 15.75. Ranged keep `SpellDistance`; the resolver's station test reads only phase 3 ranged, unchanged.
 Same at 10 and 25, normal and hard mode, with or without a player. No shared code.
 
 **Next window should show:** for the swap, `swaps deferred for a Guardian on a raider` above 0 wherever a swap meets
@@ -1771,8 +1771,24 @@ and the beacon heals.
   healed 241k, died +16.0 s), uld3's 9:38.95 (+11.4 / +16.2 s). The stuck throughput race again.
 - Ranged on leftovers stand out of the tanks' reach too: ranged samples over 30 yd from the melee spot 17 / 87 / 90%,
   and uld2's three ranged kills (Uldyau, Uldyaj, Uldyao, 9:56-9:59, 48-51 yd from both tanks) came from there, G363
-  on a ranged 0.2 s after it spawned, before its stasis ended. The far leftover walk is the user's choice; worth a question if fresh
-  kills of ranged persist once melee stand at the spot.
+  on a ranged 0.2 s after it spawned, before its stasis ended. The far leftover walk is the user's choice; worth a
+  question if fresh kills of ranged persist once melee stand at the spot.
 - Army of the Dead in phase 3 (uld1 9:52.9; window 24 uld3 once): its ghouls woke two fresh Guardians in the spawn ring
   (+3.2 s, +0.3 s) and held one out of every taunt for 21 s.
 - uld1's Uldxai, the enhancement shaman, died to a phase 1 nova twice again.
+
+**Review.** Both root causes hold. The reader reread gives the log's `melee on Yogg`, `fresh on a raider` and
+fresh-kill lines for all three pulls. uld1's melee went `yogg.station` `released` at 9:31.6-9:35.5 and `reach melee`
+walked them in on Yogg's west side, Uldxar stopping at (1980.4, −47.1), 22.0 yd from him in 3D: Yogg's reach is 20
+(display 28817 since core `2026_11_06_01`), so the findings doc's 30 (melee range ≈ 34 yd) and the reader's
+`COMBAT_REACH` entry now read 20. The Guardian reach above is the Immortal Guardian's (display 29024), not the phase 1
+Guardian's 4. A paladin taker in a live swap defers its second button too: Righteous Defense takes up to 3, then Hand
+of Reckoning goes to a Guardian on a raider before the holder's fourth. Left: the reader and the doc give a Crusher
+reach of 8, where `2026_11_06_01` sets display 28814 to 4.5 unscaled; not checked at runtime.
+
+**Question for the user (the deferral's scope).** The answer was for a fresh Guardian; the build defers for any
+Guardian on a raider, fresh or one a tank already held that slipped. Over the 17 swaps of windows 25-26, at the moment
+a swap fell due 2 met a fresh Guardian on a raider and 3 a slipped one, and over the next 8 s slipped ones sat on
+raiders about as often as fresh ones (177 against 161 snapshot rows), so the build defers about twice as often as the
+answer asked. **Recommended: keep it for this window**: the reason given, a full-power Guardian one-shots a healer,
+holds for a slipped one too, and `tank deaths within 10 s of one on them` counts the cost either way.

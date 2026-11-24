@@ -1356,7 +1356,7 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.area_worth((0.0, 0.0), held), (4, False))
         loose = units + [(guardian, 1.0, 1.0, 100.0, False), (guardian, 30.0, 0.0, 100.0, False)]
         self.assertEqual(yogg_saron.area_worth((0.0, 0.0), loose), (2, True))
-        # Yogg's middle 40 yd off is past his 30 yd reach plus the 8 yd area.
+        # Yogg's middle 40 yd off is past his 20 yd reach plus the 8 yd area.
         self.assertEqual(yogg_saron.area_worth((0.0, 0.0), [(yogg_saron.NPC_YOGG_SARON, 40.0, 0.0, 25.0, False)]),
                          (0, False))
 

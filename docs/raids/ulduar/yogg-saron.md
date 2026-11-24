@@ -941,13 +941,14 @@ floor of 324.89-325.19, so it is a **13.26 yd horizontal ring that never goes aw
 as a `haz` circle and `yogg.knockback`. Measured, launches started 7.8-12.9 yd out; read the last grounded
 sample, since the first airborne one is a third of a second into the flight and 6 yd too far.
 
-**It costs melee nothing; crossing it is what costs.** Yogg's `CombatReach` is **30** (display 28817,
-`BoundingRadius` 0), so melee range on him is ≈ **34 yd**, and the P3 melee spot is 18.4 yd out. But 42%
-of portal walks routed within 12 yd of the body. So P2 and P3 spacing carry the ring as a standing hazard
-circle, the trigger reads it, and the spacing walk and walks to a fixed spot filter the route; a bot
-already inside is exempt, since every short step out passes close to the middle. A blocked crossing gets
-one waypoint at `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter arc: each leg
-halves the next turn, so one is enough, and a half-turn passes 24 × cos 45° = 17.0 yd from the middle.
+**It costs melee nothing; crossing it is what costs.** Yogg's `CombatReach` is **20** (display 28817,
+`BoundingRadius` 0; 30 before core `2026_11_06_01`), so melee range on him is ≈ **22.8 yd**, and the P3 melee
+spot is 18.4 yd out. But 42% of portal walks routed within 12 yd of the body. So P2 and P3 spacing carry the
+ring as a standing hazard circle, the trigger reads it, and the spacing walk and walks to a fixed spot filter
+the route; a bot already inside is exempt, since every short step out passes close to the middle. A blocked
+crossing gets one waypoint at `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter
+arc: each leg halves the next turn, so one is enough, and a half-turn passes 24 × cos 45° = 17.0 yd from the
+middle.
 
 **The walk at a target across Yogg ends on top of him.** A reach leg stops half way
 ([pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops)); half the way across the room is
@@ -1882,7 +1883,7 @@ first.
 hits on ranged or healers. The ceiling there: Yogg lost 2.5% a minute, ~13 minutes for his last 30%.
 
 **The bot tank has to hit the Guardians, not only taunt them.** `FindTankTargetSmartStrategy` ranks by not
-attacking the tank, then nearest by `GetDistance`, which takes off Yogg's 30 yd combat reach: he always
+attacking the tank, then nearest by `GetDistance`, which takes off Yogg's 20 yd combat reach: he always
 reads nearest and never attacks anyone, so a bot tank held Yogg all phase and each taunt wore off with
 nothing behind it. So in phase 3 `yogg-saron guardian control` (`ACTION_RAID + 3`), in order:
 

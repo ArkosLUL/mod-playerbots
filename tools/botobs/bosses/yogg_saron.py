@@ -382,7 +382,7 @@ LUST_POSITION_SHARE = 0.8
 SPELL_DISTANCE = 28.5
 PLAYER_COMBAT_REACH = 1.5
 MELEE_REACH = 5.0
-COMBAT_REACH = {NPC_YOGG_SARON: 30.0, NPC_CRUSHER_TENTACLE: 8.0}
+COMBAT_REACH = {NPC_YOGG_SARON: 20.0, NPC_CRUSHER_TENTACLE: 8.0}
 SPELL_LUSTS = {32182: "Heroism", 2825: "Bloodlust"}
 # An Immortal Guardian's 5 s channel, 10 and 25. A kick that lands inside the first 1.5 s keeps most of
 # its 166,650 heal off.
