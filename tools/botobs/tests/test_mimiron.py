@@ -1216,8 +1216,9 @@ def wedge_snap(when: int) -> dict:
     for guid, (x, y) in WEDGE_FLAMES.items():
         rows.append([guid, x, y, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
     for guid, (x, y) in WEDGE_HOME.items():
-        dead = guid == TREE and when >= 30000
-        rows.append([guid, x, y, 364.0, 0.0, 0.0 if dead else 100.0, 80.0, VX, 0, 0, 0, 0, 0, 0.0])
+        dead = (guid == TREE and when >= 30000) or (guid == SHADOW and when >= 40000)
+        walking = int(guid == TREE and 24000 <= when < 27000)
+        rows.append([guid, x, y, 364.0, 0.0, 0.0 if dead else 100.0, 80.0, VX, walking, 0, 0, 0, 0, 0.0])
     return {"t": when, "e": "snap", "u": rows, "hz": []}
 
 
@@ -1237,7 +1238,10 @@ def wedge_pull() -> list[dict]:
           for when in range(14000, 24000, 250)),
         {"t": 24100, "e": "note", "g": TREE, "k": "mimiron.wedge", "txt": "fire 0 4>0"},
         {"t": 25000, "e": "dmg", "s": 4294971001, "d": AGONY, "sp": mm.SPELL_FLAMES, "a": 3000},
+        {"t": 26000, "e": "heal", "s": TREE, "d": AGONY, "sp": 48378, "a": 5000, "oh": 1000},
         {"t": 30000, "e": "death", "g": TREE, "killer": VX, "blow": [VX, 2000], "x": 22.0, "y": 5.0},
+        {"t": 40000, "e": "death", "g": SHADOW, "killer": VX, "blow": [VX, 2000], "x": -9.0, "y": 0.0},
+        {"t": 50000, "e": "heal", "s": AGONY, "d": AGONY, "sp": 47875, "a": 4000, "oh": 0},
         {"t": 60000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
         {"t": 61000, "e": "end", "out": "wipe"},
     ]
@@ -1275,12 +1279,19 @@ class WedgePull(unittest.TestCase):
         row = self.rows[0]
         self.assertEqual((row["mates"], row["flames"], row["dead"]), (1.0, 3000, 1))
 
+    def test_healers_moving_effective_healing_and_every_death_in_the_25_s_after(self):
+        row = self.rows[0]
+        self.assertEqual(row["heal_moving"], 0.5)
+        self.assertEqual(row["healed"], 4000)
+        self.assertEqual(dict(row["raid_dead"]), {"heal": 1, "melee": 1})
+
     def test_the_view_prints_the_move_and_the_fire_under_both(self):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             mm.show_wedge(self.trace)
         self.assertIn("reaim 180; fire 0 at 0:24.100 (4>0 burning in its footprint); turn 180", out.getvalue())
         self.assertIn("live Flames under 180 4 -> 4, under 0 0 -> 0", out.getvalue())
+        self.assertIn("healers moving 50%, healed 4k, raid dead 2 (heal 1, melee 1)", out.getvalue())
 
 
 class EveryView(unittest.TestCase):
