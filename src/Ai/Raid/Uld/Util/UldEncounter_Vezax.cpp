@@ -787,8 +787,8 @@ bool VezaxEscapeUnderway(PlayerbotAI* botAI)
     if (!vezax || !vezax->IsInCombat())
         return false;
 
-    if (bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
-        return vezax->GetVictim() != bot;
+    if (bot->HasAura(SPELL_MARK_OF_THE_FACELESS) && vezax->GetVictim() != bot)
+        return true;
 
     if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsMainTank(bot) && GetVezaxMarkedAlly(bot))
         return true;

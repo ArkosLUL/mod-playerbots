@@ -345,13 +345,13 @@ def far_at(samples: Samples, roster, boss: int, when: int, floor: float = BAND_F
     return sum(1 for row in rows if row and row[5] > 0 and math.dist(row[1:4], centre[1:4]) > floor)
 
 
-def surge_casts(trace: Trace, boss: int | None) -> list[int]:
-    return sorted(rec["t"] for rec in trace.of("cast")
+def surge_starts(trace: Trace, boss: int | None) -> list[int]:
+    return sorted(rec["t"] + rec.get("ct", 0) for rec in trace.of("cast")
                   if boss is not None and rec.get("s") == boss and rec.get("sp") == SPELL_SURGE_OF_DARKNESS)
 
 
-def in_surge(surges: list[int], when: int) -> bool:
-    return any(cast <= when <= cast + SURGE_MS for cast in surges)
+def in_surge(starts: list[int], when: int) -> bool:
+    return any(start <= when <= start + SURGE_MS for start in starts)
 
 
 def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
@@ -362,7 +362,7 @@ def mark_windows(trace: Trace, samples: Samples | None = None) -> list[dict]:
     marks = notes(trace, "vezax.mark")
     dodges = [rec for rec in trace.of("move") if rec.get("by") == DODGE]
     leech = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_MARK_LEECH]
-    surges = surge_casts(trace, boss)
+    surges = surge_starts(trace, boss)
 
     windows = []
     for guid, spans in sorted(aura_spans(trace, SPELL_MARK_OF_THE_FACELESS).items()):

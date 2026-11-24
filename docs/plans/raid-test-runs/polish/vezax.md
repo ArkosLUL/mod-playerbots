@@ -1762,13 +1762,14 @@ stopped.
 - Rule `vezax escape healthstone hold` (`UldDefinition_Vezax.cpp:80`, predicate `VezaxEscapeUnderway`,
   `UldEncounter_Vezax.cpp:780`): `healthstone` holds while the bot is moving and is marked (not his
   victim), breaking off a marked ally (the break trigger's own test) or within 11 yd of a pending crash
-  impact. Potions are usable on the move and stay.
+  impact. A potion is usable on the move, but the veto pushes the node's `healing potion` fallback at
+  relevance 0.003, so it waits out the walk too.
 - `VezaxMarkOfTheFacelessAction` and `VezaxMarkOfTheFacelessBreakAction` call `ReleaseStalledWalk`
   (the dodge's `ReleaseStalledDodge`, renamed; `ULDUAR_VEZAX_WALK_STALL_MS` 500): a bot standing still
   500 ms past its last move gets `last movement` cleared, so the walk is re-sent instead of `dup` or
   `wait`.
 - Reader: `--mark` counts `far` past 33.5 for a mark inside Surge of Darkness and prints `surge`
-  (`surge_casts`, `in_surge`; test added); uld1's 4:32 mark now reads 8/9 `yes`.
+  (`surge_starts`, `in_surge`; test added); uld1's 4:32 mark now reads 8/9 `yes`.
 
 Docs: `docs/raids/ulduar/vezax.md` (Surge row, floor bullet, escape paragraph, trace keys, two known
 gaps). 10/25 and normal/hard: the mark, break and crash run in every mode and nothing keys on size or
@@ -1813,3 +1814,19 @@ unturned Animus-phase ones a median 24. *Recommended: (c)*, keep the turn to the
   must stay inside the Animus's 37 yd ceiling, so it misses most 4:32 marks. (b) The whole camp steps
   out: row 0 then stands 44+ yd from the main tank while Surge doubles his melee. (c) Keep: with this
   round's fix a melee mark costs the first tick on the melee next to it. *Recommended: (c).*
+
+**Review.** The cause holds (`vezax-r14-review/walkstall.py`, `gemstop.py`): w25 uld1 Uldxah's mark
+walk went out at 4:32.522, its `healthstone` FAILED at 4:32.745 with the bot moving, and every mark
+walk read `dup` until the 4:37.426 re-issue. In the 45 newest traces a healthstone stopped a mark or
+dodge walk short four times (31.1, 10.4, 3.2, 1.2 yd). No size, mode or player branch, no shared code,
+no comments. `pb-check` passes.
+
+- Review fix: Surge of Darkness has a 3 s cast and his events wait it out, so its scale holds from the
+  cast's end; `--mark` took it from the cast start (`surge_starts` adds the row's `ct`; test added).
+  Window 25 reads the same.
+- Review fix: a marked bot that is his victim but not the main tank skipped the crash test in
+  `VezaxEscapeUnderway`; it falls through to it now.
+- Review fix: the fix list said potions stay; the veto takes the potion fallback down with it.
+- Left: `mana sapphire` (relevance 90 on `high mana`, no cooldown test in `UseManaGemAction`) stops a
+  walking mage the same way, but in those traces it never left a mark or dodge walk short (17 with
+  the mage still after it, all on its spot); not held.
