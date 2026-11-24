@@ -14,7 +14,7 @@ The polish loop runs on the user's standing go ("Polish loop" below), scheduled 
 
 **Next:**
 - As each window 37 report lands: Algalon done if a C pool killed with at most 5 deaths, else launch Algalon r13 from `window36-algalon.md` plus the C report; launch Yogg-Saron r24 and Thorim r25; Mimiron done if each composition killed 10n hard mode with at most 5 deaths, else a Mimiron round for 10n.
-- Merge lanes as they finish (never while a rebuild reads the source tree); rebuild once a group's lanes have all merged.
+- Merge lanes as they finish (never while a rebuild reads the source tree); rebuild once a group's lanes have all merged. DC lanes X and Z merge into DC's `local/wrath-raid-tests` after review (both touch the registry: merge one, then the other, resolving by keeping both rows); lane Y into Custom.
 - Next question batch (after window 37): Yogg-Saron Q3, ranged leave the Guardians and burn Yogg once under 12% (lane: yes, one window); Thorim Q1, camp shelter walks for orbs 1 and 2 held until a Chain Lightning lands ((a)); Mimiron Q11 (a) dropped now that Mimiron met the done rule (yes).
 
 **Answers in force** (2026-11-24, full text in `windows.md`): Yogg-Saron Q1 (step 1 built in r22; step 2, one navprobed position change per round, melee core first) and Q2 (r22); Thorim keeps polishing with no end condition, stop rules waived; Mimiron Q10 in r22; Mimiron Q11 (a): under Firefighter bot priests hold Hymn of Hope and their second Shadowfiend until phase 4 opens, then (b) a fifth healer at 25 if two healers still drop out before ~9:15 (not built: Mimiron met the done rule first); Algalon under the normal done rule (each of A, B, C a kill with at most 5 deaths, no hard mode to check), the earlier "no kill expected, stop rule waived" ends; Iron Assembly stays as it is (self Lay on Hands closed); tank druids' bear form kept as is. Nitro Boosts need no gearing change: maintenance's enchant routine picks it by score now that the rosters have Engineering.
@@ -47,8 +47,8 @@ Earlier per-boss detail: the old table in `windows.md`.
 | Mimiron | polished at 25n: hard-mode kills with 2/2/3 deaths (window 36, r22); 10n check in window 37 |
 | Vezax | done: 25n hard-mode kills with 0/0/0/0/1 and one wipe (window 30, r17), 10n hard-mode kills with 0/0/0/0/0/1 (window 31) |
 | Algalon | group 2, round 12 in windows 36-37: kills for A (4) and B (3), C short; under the normal done rule since the user's answer of 2026-11-24 |
-| Anub'arak | needs a way to bring him back after a wipe (only a player entering the map respawns him; see DC's `totc-twins` row comment); brief a DC lane |
-| Flame Leviathan | parked by the user |
+| Anub'arak | DC lane X (`x-dc-anubarak.PLAN.md`, `rt/dc-x` in `build-toc-wt/rt-dc-w4`) running: scenario `totc-anubarak` and his return after a wipe; then a one-pull check and group 2 |
+| Flame Leviathan | unparked by the user 2026-11-25, hard mode with all four towers: lane Y (`y-fl-boarding.PLAN.md`, bots board without a real player, `rt/fl-boarding`) and DC lane Z (`z-dc-flame-leviathan.PLAN.md`, scenario `uld-leviathan`, DC teleports the seated vehicles into the arena, `rt/dc-z` in `build-toc-wt/rt-dc-w5`) running; then navprobe, a one-pull check and a group |
 
 ## Status
 
