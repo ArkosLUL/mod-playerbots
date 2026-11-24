@@ -60,6 +60,9 @@ IMPACT_RADIUS = radius("ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS")
 WALK_CLEARANCE = radius("ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE")
 LEECH_RADIUS = radius("ULDUAR_VEZAX_MARK_LEECH_RADIUS")
 ARENA_RADIUS = radius("ULDUAR_VEZAX_ARENA_RADIUS")
+ARC_ORIENTATION = radius("ULDUAR_VEZAX_ARC_ORIENTATION")
+MARK_SIDE_OFFSET = radius("ULDUAR_VEZAX_MARK_SIDE_OFFSET")
+MARK_SPOT_TOLERANCE = radius("ULDUAR_VEZAX_MARK_SPOT_TOLERANCE")
 ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 
 # Engine figures, not source constants: the mark's 15 yd of GetDistance and reach spell's 28.5, each
@@ -587,6 +590,111 @@ def show_crash(trace: Trace) -> None:
     issued, left = evictions(trace, samples)
     if issued:
         print(f"  {left} of {issued} dodges issued from inside a field were aimed outside every field")
+
+
+def block_sign(block: str) -> int:
+    return 1 if block == "R" else -1
+
+
+def across(start, dest) -> float:
+    bearing = ARC_ORIENTATION + math.pi / 2
+    return (dest[0] - start[0]) * math.cos(bearing) + (dest[1] - start[1]) * math.sin(bearing)
+
+
+def arc_spot(boss, block: str) -> tuple[float, float]:
+    bearing = ARC_ORIENTATION + block_sign(block) * MARK_SIDE_OFFSET / CAMP_RADIUS
+    return boss[0] + math.cos(bearing) * CAMP_RADIUS, boss[1] + math.sin(bearing) * CAMP_RADIUS
+
+
+def crash_phase(samples: Samples, animus: int | None, spawn: int | None, when: int) -> str:
+    if animus is None or spawn is None or when < spawn:
+        return "pre"
+    rows = samples.between(animus, when - MAX_STEP_MS, when)
+    return "animus" if rows and rows[-1][5] > 0 else "post"
+
+
+def mark_crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    samples = samples or Samples(trace)
+    boss = boss_guid(trace)
+    if boss is None:
+        return []
+    block = blocks(trace)
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    rows = crashes(trace, samples)
+    leech = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_MARK_LEECH]
+    dodges = [rec for rec in trace.of("move")
+              if rec.get("by") == DODGE and rec.get("ok") and not rec.get("r") and rec.get("x") is not None]
+
+    def first_dodge(guid: int, low: int, high: int):
+        return next((rec for rec in dodges if rec["g"] == guid and low <= rec["t"] <= high), None)
+
+    out = []
+    for window in mark_windows(trace, samples):
+        marked, side = window["guid"], window["block"]
+        crash = next((row for row in rows if window["start"] <= row["cast"] < window["stop"]), None)
+        if side not in ("L", "R") or crash is None:
+            continue
+        cast, impact = crash["cast"], crash["impact"]
+        ticks = [rec for rec in leech if window["start"] <= rec["t"] <= window["stop"] + LEECH_SLACK_MS]
+        group = [rec for rec in ticks if block.get(rec.get("d")) == side]
+
+        walk = None
+        own = first_dodge(marked, cast, impact)
+        him = samples.row(boss, own["t"]) if own else None
+        if him:
+            spot = arc_spot(him[1:3], side)
+            walk = "spot" if dist2((own["x"], own["y"]), spot) <= 2 * MARK_SPOT_TOLERANCE else "off spot"
+
+        ways: collections.Counter = collections.Counter()
+        for guid, mate in block.items():
+            if mate != side or guid == marked:
+                continue
+            rec = first_dodge(guid, cast, impact)
+            here = samples.row(guid, rec["t"]) if rec else None
+            if here:
+                step = across(here[1:3], (rec["x"], rec["y"]))
+                ways["with" if step * block_sign(side) > 0 else "away"] += 1
+
+        out.append({
+            "start": window["start"],
+            "guid": marked,
+            "block": side,
+            "phase": crash_phase(samples, animus, spawn, cast),
+            "cast": cast,
+            "on": "it" if crash["target"] == marked else crash["block"],
+            "ticks": len(ticks),
+            "group": len(group),
+            "group_after": sum(1 for rec in group if rec["t"] >= cast),
+            "walk": walk,
+            "with": ways["with"],
+            "away": ways["away"],
+            "rate": window["rate"],
+        })
+    return out
+
+
+def show_mark_crash(trace: Trace) -> None:
+    print("MARK AND CRASH")
+    rows = mark_crashes(trace)
+    if not rows:
+        print("  no crash cast inside a camp member's mark")
+        return
+
+    print(f"  {'mark':>9} {'marked':14} {'blk':4} {'phase':6} {'crash':>6} {'on':3} {'ticks':>5} {'group':>5}"
+          f" {'after':>5} {'marked walk':12} {'group with/away':>15} {'boss %/s':>8}")
+    for row in rows:
+        rate = "-" if row["rate"] is None else f"{row['rate']:+.3f}"
+        print(f"  {clock(row['start']):>9} {trace.name(row['guid'])[:14]:14} {row['block']:4} {row['phase']:6}"
+              f" {(row['cast'] - row['start']) / 1000:+5.1f}s {row['on']:3} {row['ticks']:5} {row['group']:5}"
+              f" {row['group_after']:5} {row['walk'] or 'no dodge':12} {row['with']:>9}/{row['away']:<5} {rate:>8}")
+
+    print("\n  crash is its cast after the mark, on the block it was aimed at or `it` for the marked bot")
+    print("  group is the leech ticks on the marked bot's block, after those from the cast on")
+    print("  marked walk is its first dodge in the flight, `spot` when it ends within"
+          f" {2 * MARK_SPOT_TOLERANCE:.0f} yd of its arc spot")
+    print("  with/away count its blockmates whose first dodge in the flight went toward its arc side or the"
+          " other way")
 
 
 def field_rows(trace: Trace, samples: Samples | None = None) -> list[dict]:
@@ -1255,6 +1363,8 @@ SECTIONS = (
     ("boss", "what he cast, Searing Flames, interrupters", show_boss),
     ("mark", "Mark of the Faceless windows", show_mark),
     ("crash", "Shadow Crash impacts, who dodged, his cast in flight, walks toward it", show_crash),
+    ("markcrash", "a crash cast inside a camp mark: leech on the marked bot's block, which way it and the"
+     " block dodged", show_mark_crash),
     ("field", "field uptime, in-field casts, soak, cast hold", show_field),
     ("mana", "mana, Life Tap and what it returned", show_mana),
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),

@@ -116,6 +116,7 @@ struct VezaxEncounterState
     Position crashImpact;
     uint32 crashCastMs = 0;
     uint32 crashWindowMs = 0;
+    ObjectGuid crashMarked;
 
     bool vaporKilled = false;
     bool animusSummoned = false;

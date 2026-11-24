@@ -1544,3 +1544,84 @@ mode or player branch, no shared code, no comments. `pb-check` passes.
 
 - Review fix: `--tank`'s Beacon shares stop at his first death like its copies; its output and the
   trace section now say so.
+
+**User answers (2026-11-24):** Q1: yes, (a): when a Shadow Crash lands right after the Animus-phase
+Mark of the Faceless, the marked bot walks straight to its spot and its group strafes the other way.
+Q2: **no**, no shared `PaladinTankToBeaconValue` fix: round 12's Vezax-only Beacon holder stays and
+shared paladin code is not touched.
+
+## Round 13 (2026-11-24, branch from `6486414fc`)
+
+**Data.** No new pull: round 12 merged (`1433ef25c`) after window 24, so `raidtest.py report --boss
+vezax --raid uld --head baf47824b --pulls 10` still shows window 24's three (round 12's table: uld1
+kill 5:35 and uld3 kill 5:32 with 0 deaths, uld2 wipe 4:52 with 30). No stop rule, verdict or ranking
+this round: it builds the answer to Q1, and round 12 is unjudged. Deaths by mechanic: round 12's
+table stands. Analysis scripts: session scratchpad `vezax-r13/` (`replay.py`, `cases.py`).
+
+**Built: user answer Q1 (a), the crash after the Animus-phase mark.** Round 11's write-up holds on the
+new reader (`--markcrash`, below) over windows 11-24: 28 Animus-phase marks had a crash cast inside
+them, a median 1.5 s in (1.3-4.8), and leeched a median 29 ticks, 22 on the marked bot's own block,
+Vezax +0.77 %/s over the window; the 107 pre-spawn ones, crash 2.3-8.9 s in, 14 and 11, −0.26 %/s.
+Window 24's three 3:52 marks:
+
+| Pull | Marked | Crash on | Ticks / on its block | Marked bot's dodge | Blockmates with / away |
+|---|---|---|---|---|---|
+| uld1 | Uldxag (R) | R, +1.5 s | 49 / 34 | off its spot (the group strafe) | 6 / 0 |
+| uld2 | Uldyaf (L) | L, +1.6 s | 40 / 27 | off its spot | 6 / 0 |
+| uld3 | Uldzae (R) | L, +1.5 s | 22 / 15 | none | 4 / 0 |
+
+**Fix** (`UldEncounter_Vezax.{h,cpp}` only):
+
+- `VezaxEncounterState::crashMarked`: at each crash's cast `VezaxNoteShadowCrash` (`:659`) records the
+  slotted camp member carrying 63276, not Vezax's victim, while he carries the Barrier
+  (`VezaxMarkedCamper`, `:638`); the next crash overwrites it.
+- `TryGetVezaxDodgeSpot` (`:1104`): the recorded bot dodges to its mark spot (`TryGetVezaxMarkedDodgeSpot`,
+  `:1077`, the side arc spot from `TryGetVezaxMarkSpot`) when that stands 11 yd
+  (`ULDUAR_VEZAX_SHADOW_CRASH_WALK_CLEARANCE`) off the impact and `VezaxDodgeClearsInTime` passes,
+  `vezax.dodge = mark`; else the old cascade. Its blockmates (`VezaxStrafesAwayFromMark`, `:1093`) take
+  the strafe the other way, pulled into the Animus's reach as before (`pulled away`) or plain (`away`),
+  each kept only 11 yd off the impact (the plain strafe's own test is 10) and in time; else the search
+  (`search`, `late`), never the old strafe.
+- Recorded at the cast, so a blockmate's direction holds for the flight; the dodge re-picks its spot
+  every tick and would otherwise turn if the marked bot died mid-flight.
+
+Replay (`replay.py`, windows 11-24, positions as traced, a blockmate's reversed strafe taken as its
+traced strafe mirrored 30 yd across): the marked bot's walk to its spot clears 11 yd and leaves the
+blast in time in 15 of 15 dodges; blockmates' reversed strafe in 81 of 131, the other 50 mostly where
+the crash was aimed at the other block, whose impact the reversed strafe would cross, so they search;
+6 already went the other way (a crash aimed at the marked bot itself). Round 11's leech model put
+both halves together at about a third fewer leech targets a window.
+
+Reader: `general_vezax.py --markcrash` (`mark_crashes`, `:616`): per crash cast inside a camp member's
+mark, its phase (`pre`/`animus`/`post`), the cast's offset, the block it was aimed at (`it` for the
+marked bot), the leech ticks, those on the marked bot's block and those from the cast on, the marked
+bot's first dodge in the flight (`spot` within 6 yd of its arc spot, else `off spot`), and its
+blockmates' first dodges toward its arc side or the other way; tests added. `--animus` already prints
+the new `vezax.dodge` values. Docs: `docs/raids/ulduar/vezax.md` (Shadow Crash section, trace keys,
+`--markcrash`; the known gap now covers the pre-spawn and post-kill cases only).
+
+10/25 and normal/hard: the record needs the Barrier, so only hard mode's Animus phase sees it, and
+nothing keys on raid size (a 10-man camp has two blocks in rows 0-1). The record takes any slotted camp
+member, a real player too, so a block turns away from a marked human as from a bot; the marked bot's
+own dodge runs for bots only, as every dodge does. Shared code: none.
+
+**Next window should show** (`--markcrash`, the 3:52 marks):
+
+- the marked bot `spot` where it dodged, `vezax.dodge = mark` on it; blockmates 0 with when the crash
+  hits its own block (`away`/`pulled away`), a few yards `with` by the search when it hits the other;
+- leech on the marked bot's block from the cast on well under window 24's 34 / 27 / 15, the window
+  under ~20 ticks, Vezax's heal-back under +0.5 %/s;
+- `--crash`: no hit on a blockmate that turned, `late` still 0-1 a pull;
+- cost to watch: the turned block lands past the other block, ~12-18 yd from the new field as a
+  strafe does, but among the other block's dodgers; a crash hit, a field share drop or a healer out
+  of reach of the main tank right after the 3:52 mark is this change's cost;
+- pre-spawn and post-kill cases unchanged (blockmates `with`, the marked bot `off spot`).
+
+**Questions (user).**
+
+- *Q3. Turn the block in every phase too?* Before the spawn the crash comes 2.3-8.9 s into a mark
+  (median 5.6), mostly once the marked bot is clear: those 107 cases leeched a median 14 ticks, but
+  the 9 whose marked bot dodged the crash a median 24, and one aimed at the marked bot itself (w24
+  uld1 0:20) 53, 38 on its block. (a) Extend the turn to any crash cast inside a mark; (b) only to
+  crashes aimed at the marked bot or its block in the first ~4 s; (c) keep the Animus phase only.
+  *Recommended: (c) until window 25 reads the Animus-phase turn, then (b) if it works.*

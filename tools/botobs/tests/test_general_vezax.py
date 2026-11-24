@@ -424,6 +424,81 @@ class TankBuffs(unittest.TestCase):
         self.assertEqual((buffs["beacons"], buffs["holds"]), (2, 1))
 
 
+MARKED = 8001
+MATE = 8002
+LEFTIE = 8003
+MARK_ANIMUS = 4294969500
+
+
+def mark_crash_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 603, "inst": 7, "diff": 1,
+         "boss": "general-vezax", "roster": [
+             {"g": MARKED, "n": "Marked", "r": "ranged", "c": "mage", "h": 0},
+             {"g": MATE, "n": "Mate", "r": "heal", "c": "priest", "h": 0},
+             {"g": LEFTIE, "n": "Leftie", "r": "ranged", "c": "hunter", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
+        {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
+        {"t": 1, "e": "unit", "g": MARK_ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
+        {"t": 10, "e": "note", "g": MARKED, "k": "vezax.block", "txt": "R"},
+        {"t": 10, "e": "note", "g": MATE, "k": "vezax.block", "txt": "R"},
+        {"t": 10, "e": "note", "g": LEFTIE, "k": "vezax.block", "txt": "L"},
+        {"t": 1000, "e": "aura", "d": MARKED, "s": BOSS, "sp": gv.SPELL_MARK_OF_THE_FACELESS, "r": 0},
+        {"t": 11000, "e": "aura", "d": MARKED, "s": BOSS, "sp": gv.SPELL_MARK_OF_THE_FACELESS, "r": 1},
+        {"t": 2000, "e": "dmg", "s": BOSS, "d": MATE, "sp": gv.SPELL_MARK_LEECH, "a": 5000},
+        {"t": 3000, "e": "dmg", "s": BOSS, "d": LEFTIE, "sp": gv.SPELL_MARK_LEECH, "a": 5000},
+        {"t": 4000, "e": "dmg", "s": BOSS, "d": MATE, "sp": gv.SPELL_MARK_LEECH, "a": 5000},
+        {"t": 2500, "e": "haz", "sp": gv.SPELL_SHADOW_CRASH_IMPACT, "shape": "circle",
+         "x": -7.5, "y": 33.0, "z": 0.0, "ttl": 3000, "rad": 10.0},
+        {"t": 12000, "e": "haz", "sp": gv.SPELL_SHADOW_CRASH_IMPACT, "shape": "circle",
+         "x": -7.5, "y": 33.0, "z": 0.0, "ttl": 3000, "rad": 10.0},
+        {"t": 2800, "e": "move", "g": MARKED, "k": "point", "x": -31.0, "y": 15.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.DODGE},
+        {"t": 2900, "e": "move", "g": MATE, "k": "point", "x": 8.0, "y": 32.75, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.DODGE},
+        {"t": 3000, "e": "move", "g": LEFTIE, "k": "point", "x": 19.0, "y": 35.0, "z": 0.0,
+         "ok": 1, "r": "", "by": gv.DODGE},
+        {"t": 15000, "e": "end", "out": "wipe"},
+    ]
+    for when in range(0, 16000, 1000):
+        records.append({"t": when, "e": "snap", "u": [
+            [BOSS, 0.0, 0.0, 0.0, 0.0, 20.0, 0.0, 0, 0, 0, 0, 0],
+            [MARKED, -4.0, 35.0, 0.0, 0.0, 100.0, 50.0, MARK_ANIMUS, 0, 0, 0, 0],
+            [MATE, -7.0, 32.75, 0.0, 0.0, 100.0, 50.0, MARK_ANIMUS, 0, 0, 0, 0],
+            [LEFTIE, 4.0, 35.0, 0.0, 0.0, 100.0, 50.0, MARK_ANIMUS, 0, 0, 0, 0],
+            [MARK_ANIMUS, 1.0, 1.0, 0.0, 0.0, 90.0, 0.0, 0, 0, 0, 0, 0]]})
+    return records
+
+
+class MarkCrash(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        path = pathlib.Path(folder.name) / "603_7_general-vezax_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in mark_crash_pull()) + "\n", encoding="utf-8")
+        self.trace = Trace(path)
+
+    def test_only_a_crash_cast_inside_the_mark_is_a_case(self):
+        rows = gv.mark_crashes(self.trace)
+        self.assertEqual([(row["guid"], row["cast"], row["phase"], row["on"]) for row in rows],
+                         [(MARKED, 2500, "animus", "R")])
+
+    def test_group_ticks_are_the_leech_on_the_marked_bots_block(self):
+        row = gv.mark_crashes(self.trace)[0]
+        self.assertEqual((row["ticks"], row["group"], row["group_after"]), (3, 2, 1))
+
+    def test_the_marked_bot_heads_for_its_arc_spot_and_its_blockmate_goes_the_other_way(self):
+        row = gv.mark_crashes(self.trace)[0]
+        self.assertEqual(row["walk"], "spot")
+        self.assertEqual((row["with"], row["away"]), (0, 1))
+
+    def test_a_crash_before_the_spawn_or_after_the_animus_left_is_not_its_phase(self):
+        samples = gv.Samples(self.trace)
+        self.assertEqual(gv.crash_phase(samples, MARK_ANIMUS, 2000, 1000), "pre")
+        self.assertEqual(gv.crash_phase(samples, MARK_ANIMUS, 0, 30000), "post")
+        self.assertEqual(gv.crash_phase(samples, None, None, 2500), "pre")
+
+
 class EveryView(unittest.TestCase):
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
