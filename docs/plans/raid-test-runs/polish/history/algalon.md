@@ -971,3 +971,78 @@ and no pet Cleave or Thunderstomp in "damage on stars, off the star team" (w30: 
 Cleave 3.5-16.1 k in 6); `revenge` among the splash hold vetoes; a "pet splash autocast held" line for each Felguard
 warlock, with `on` rows after each `off`; fewer "fell below its band" verdicts (w30: 2) and stars going off in a cast
 before hit − 4.6 s (w30: 4, 18 dead). Watch: him loose by threat (w30: uld4 once), the Felguard's damage on him.
+
+## Round 11 (2026-11-24, window 32 build 36d7f19b9: round 10)
+
+**Data.** Window 32, one valid pull per pool (`window32-algalon.md`); every pull's `--verdict`, `--deaths`,
+`--collateral`, `--constellations`, `--holes`, `--bigbang`, `--stars`, `--loose`. Scratch `alg11/`: `gate.py`
+(replays the r11 taunt gate on the 30 s before each cast), `bosshp.py` (his lowest health).
+
+| Pool | Trace `603_*_algalon-the-observer_*` | Out | Deaths by mechanic |
+|---|---|---|---|
+| uld1 | `603_12_…_1795545156` | wipe 5:14, him 44% | 34: loose 12, on tank 8, star 8, Big Bang 4, Black Hole DoT 1, Cosmic Smash 1 |
+| uld4 | `603_7_…_1795545050` | wipe 5:27, 38% | 33: loose 14, star 7, on tank 6, Black Hole DoT 3, Cosmic Smash 2, Big Bang 1 |
+| uld2 | `603_10_…_1795545151` | wipe 5:24, 38% | 31: star 12, loose 10, on tank 6, Barrage 2, Big Bang 1 |
+| uld5 | `603_11_…_1795545151` | wipe 5:26, 45% | 30: star 8, Barrage 8, loose 8, on tank 5, Cosmic Smash 1 |
+| uld3 | `603_9_…_1795545141` | wipe 4:16, 52% | 32: star 13, loose 7, on tank 6, Black Hole DoT 3, Cosmic Smash 2, Barrage 1 |
+| uld6 | `603_8_…_1795545110` | wipe 4:10, 53% | 32: loose 20, on tank 4, star 3, Cosmic Smash 2, Barrage 2, Big Bang 1 |
+
+What started each wipe:
+
+- uld1: the pair died 3:26-3:57 (healed 42.8 k of 96.7 k in 6 s, both tank healers up), loose 9 s; stars on the
+  drained raid 4:17 and 4:28 (8 dead); Big Bang 3 with the pair dead: the warrior soaker died, nobody unphased.
+- uld4: a chewed star 4 s after Big Bang 2's hit on 16 under (2), a deadline kill 31 s after it on 11 under (4),
+  tanks 4:09-4:10; Big Bang 3 with him loose 26.4 s, 17 dead.
+- uld2: deathless to 4:09; star 6 (chewed, 3.0 s after 4:06.6's) on 15 under (5), an open kill at 4:26 on 15
+  under (7), then the pair 4:31-4:44 and him loose 20.5 s.
+- uld5: Barrage 2:18, 2:54, 4:08; a chewed star 9 s after 4:06.6's deadline kill on 17 under (5); the pair
+  4:33-5:18.
+- uld3: a deadline kill chewed at 3:21.7 and star 1611 drained 1.9 s later, 11-13 s before Big Bang 2: 17 dead.
+- uld6: Big Bang 1's only hole 49-66 yd from all three tanks (`noshelter`); Uldwaz hit, both pair tanks dead
+  2:07-2:11 (healed 14-15 k of 56-68 k); Uldwaa phased by a 5th Phase Punch at 3:26 (loose 11.8 s), then loose
+  24.8 s from 3:41.8 (21 dead).
+
+**Stop rules.** Waived (user, 2026-11-22).
+
+**Verdict on round 10: held** in all three designs. Off the star team, no Revenge on a star in 6 pulls (w30:
+7.5-27.2 k in 4); pet Cleave 1.8 k in uld5 only (w30: 3.5-16.1 k in 6), no Thunderstomp. A "pet splash autocast
+held" line for every Felguard warlock (uld1 5, uld4 9 + a Thunderstomp 15, uld2 5, uld5 18, uld3 8, uld6 11),
+`revenge` 5-10 vetoes a pull. Stars going off in a cast before hit − 4.6 s: 1 (uld2 1:57.5, nobody under the
+line, 0 dead; w30: 4, 18 dead). Under-stars below their band 3 (w30: 2): Wandering Plague / Fire Nova / Magma
+Totem (uld2), and two from the team's own casts (uld5 Shadow Bolt 5.1%, uld3 Arcane Missiles 2.4%).
+
+**Picked: the user's Q4 (b)**, answered 2026-11-24 (build it this round). Constellations held healers through
+the 30 s before 16 casts: 0.7-133.4 s of constellation time each (median 34.5 s), and 10 were on a healer when a
+cast began (uld5 Big Bang 2: 4 on Uldvae; uld6 Big Bang 2: 3 on Uldwad, 2 on Uldwae; uld3 Big Bang 2: 1). A
+healer holding one hides last and its dive can take the raid's near hole (w30 uld6, 20 dead); the handler's one
+taunt per 8 s can't take three at once. The ranked worst, tank burst and him loose, is Q2's healing limit; the
+star pairs are leads.
+
+**Built** (Algalon files only):
+
+- `GetAlgalonOffTankConstellation`: a swap tank that is not the handler, in the 30 s before a cast, picks the
+  nearest active constellation on a healer within 28 yd, skipping the handler's selected target, whose straight
+  path to it clears every hole by 7.5 yd (so the pull eats none). Only while its class taunt is ready and no swap
+  can need it before its 8 s cooldown ends: the holder a pair tank, unphased, at 70% or more and 2 stacks or
+  fewer; with no disperser latched, not within 23 s of the cast (the early swap's and handover's 15 s); not the
+  soaker or backup, no swap or pickup due.
+- `AlgalonOffTankTaunt` node at `ACTION_RAID + 6`, under the swap and pickup: casts the class taunt, notes
+  `algalon.offtaunt` (the healer's guid). It never damages the constellation (target guard unchanged); at the
+  cast the existing chased-bot hold sends it in last.
+- Reader: `--constellations` prints, per Big Bang, constellation time on healers in the 30 s before, those on a
+  healer at the cast, and the swap tank's taunts (test added).
+- Doc: `docs/raids/ulduar/algalon.md` (constellations, the trace).
+
+10 and 25-man alike; a human holder or healer changes nothing, and a human off-tank simply doesn't taunt.
+Replay (`gate.py`, the gate without the path and range checks): with a healer holding one, the gate stood open
+19.2 of 30.1 s before uld5's Big Bang 2, 23.5 of 25.5 s in uld2's, 19.0 of 29.7 s in uld3's, mostly shut by the
+holder under 70%; shut in uld6's and uld1's Big Bang 3 with the pair dead.
+
+**Questions for the user.** None.
+
+**Next window should show** (`algalon.py --constellations`, `--verdict`): `algalon.offtaunt` taunts in the 30 s
+before casts with a third tank handling; constellation time on healers there below w32's median 34.5 s per cast,
+and "on a healer at the cast" near 0 (w32: 10 in 16 casts); fewer "a constellation loose on <healer>, not the
+handler" verdicts. Watch: swaps late or a 5th Phase Punch (`--swaps`), pickups with the off-tank's taunt cooling
+(`--loose`), a swap tank `noshelter` or hit at a cast while holding a constellation (`--bigbang`), holes lost in
+the 30 s before casts (`--holes`).

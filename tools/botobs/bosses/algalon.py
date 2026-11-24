@@ -2688,9 +2688,10 @@ def star_team(trace: Trace) -> dict:
                 if listed or (everyone_ranged and trace.role(guid) == "ranged"):
                     if not listed:
                         drafted.add(guid)
-                    if star:
+                    own = target_of(row) if finishing(trace, target_of(row), when, guid) else star
+                    if own:
                         open_ms[guid] += weight
-                        on[guid] += weight if target_of(row) == star else 0
+                        on[guid] += weight if target_of(row) == own else 0
                 elif target_of(row) in stars and trace.role(guid) in ("melee", "ranged"):
                     off[guid] += weight
                     off_from.setdefault(guid, when)
@@ -3166,7 +3167,7 @@ def under_splash(trace: Trace) -> list[dict]:
                 taken: collections.Counter = collections.Counter()
                 for rec in victim_hits(trace).get(guid, []) if guid else []:
                     if (drop["t"] - UNDER_SPLASH_MS <= rec["t"] <= drop["t"] and rec.get("s") != guid
-                            and as_guid(value_at(focus, rec["t"])) != guid):
+                            and as_guid(value_at(focus, rec["t"])) != guid and not finishing(trace, guid, rec["t"])):
                         taken[(rec.get("s"), rec.get("sp"))] += rec.get("a", 0)
                 if not taken:
                     continue
@@ -3207,6 +3208,62 @@ def show_under_cycles(trace: Trace) -> None:
                     print(f"        before the release: {splash_label(trace, row)}")
     if "algalon.underdrop" not in emitted(trace):
         print("    no algalon.underdrop row: nothing released, or a trace from before the probe")
+    sides: collections.Counter = collections.Counter()
+    for cycle in cycles:
+        if cycle["band"]:
+            low, high = cycle["band"]
+            for health in cycle["at_cast"].values():
+                sides["below" if health <= low else "above" if health > high else "in"] += 1
+    if sides:
+        print(f"    at the cast: {sides['below']} below their band, {sides['in']} in it, {sides['above']} above")
+
+
+def bulk_finishes(trace: Trace) -> list[dict]:
+    """Per `algalon.finishstar` span: the star, its finisher, its health at the span's ends, `others` the % of it the
+    rest of the star team landed meanwhile, and its health at the next cast against that cast's band."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        end = pull_end(trace)
+        finisher = latch_spans(trace, "algalon.finisher", end)
+        team = holder_spans(trace, "algalon.starteam", end)
+        out = []
+        for value, start, stop in latch_spans(trace, "algalon.finishstar", end):
+            star = as_guid(value)
+            if not star:
+                continue
+            owner = as_guid(value_at(finisher, start))
+            first, last = samples.row(star, start), samples.row(star, stop)
+            full = trace.maxhp.get(star)
+            landed = sum(rec.get("a", 0) for rec in victim_hits(trace).get(star, [])
+                         if start <= rec["t"] < stop and trace.owners.get(rec.get("s"), rec.get("s")) != owner
+                         and value_at(team.get(trace.owners.get(rec.get("s"), rec.get("s")), []), rec["t"]) == "1")
+            cast = next((cast for cast in big_bang_casts(trace) if cast["start"] >= start), None)
+            at_cast = samples.row(star, cast["start"]) if cast else None
+            alive_then = at_cast is not None and alive(at_cast) and samples.present(star, cast["start"])
+            out.append({"star": star, "finisher": owner, "start": start, "stop": stop,
+                        "first": first[5] if first else None, "last": last[5] if last else None,
+                        "others": 100.0 * landed / full if full else None,
+                        "at_cast": at_cast[5] if alive_then else None,
+                        "band": ((cast["end"] - UNDER_LEAD_MS - cast["start"]) / 1000.0,
+                                 (cast["end"] + UNDER_TAIL_MS - cast["start"]) / 1000.0 + 1.0) if cast else None})
+        return out
+    return cached(trace, "_algalon_bulk_finishes", build)
+
+
+def show_finishes(trace: Trace) -> None:
+    rows = bulk_finishes(trace)
+    if not rows:
+        return
+    print("  bulk finishes (algalon.finishstar), one team member taking an under-star the rest of the way to its line:")
+    for row in rows:
+        health = ("not sampled" if row["first"] is None or row["last"] is None
+                  else f"{row['first']:5.1f}% > {row['last']:5.1f}%")
+        others = "-" if row["others"] is None else f"{row['others']:.1f}%"
+        cast = ("" if row["at_cast"] is None or not row["band"]
+                else f"; at the cast {row['at_cast']:.1f}%, band {row['band'][0]:.1f}..{row['band'][1]:.1f}%")
+        print(f"    {clock(row['start']):>9} .. {clock(row['stop']):>9}  {counter_label(trace, row['star'] & 0xFFFFFFFF):16}"
+              f" {trace.name(row['finisher']) if row['finisher'] else '-'}: {health}, the rest of the team"
+              f" {others}{cast}")
 
 
 def show_focus_rates(trace: Trace) -> None:
@@ -3300,6 +3357,7 @@ def show_stars(trace: Trace) -> None:
                 for row in rows))
     show_under_cycles(trace)
     show_focus_rates(trace)
+    show_finishes(trace)
     for opened in window_opens(trace):
         print(f"  window {opened['kind']} {clock(opened['t'])}: focus star {opened['middle']:.1f} yd from the team's"
               f" mean position, {opened['mean']:.1f} yd from its {opened['members']} member(s) on average")
@@ -3409,7 +3467,8 @@ def star_excess(trace: Trace) -> list[dict]:
             crossed = None
             for index in range(1, len(stamps)):
                 excess = rows[index - 1][5] - rows[index][5] - (stamps[index] - stamps[index - 1]) / 1000.0
-                unfocused = as_guid(value_at(focus, stamps[index - 1])) != star
+                unfocused = (as_guid(value_at(focus, stamps[index - 1])) != star
+                             and not finishing(trace, star, stamps[index - 1]))
                 total.append(total[-1] + (excess if unfocused else 0.0))
                 if crossed is None and total[-1] >= CHEWED_PCT:
                     crossed = stamps[index]
@@ -3423,8 +3482,22 @@ def star_excess(trace: Trace) -> list[dict]:
 STAR_GROUPS = ("star team on the focus star", "star team on another star", "off the star team")
 
 
+def finishing(trace: Trace, star: int, when: int, owner: int | None = None) -> bool:
+    """Whether `star` was the bulk's finish star at `when` (`algalon.finishstar`), and `owner`, when given, its
+    finisher (`algalon.finisher`)."""
+    end = pull_end(trace)
+    finish = cached(trace, "_algalon_finish_spans", lambda trace: latch_spans(trace, "algalon.finishstar", end))
+    if not star or as_guid(value_at(finish, when)) != star:
+        return False
+    if owner is None:
+        return True
+    finisher = cached(trace, "_algalon_finisher_spans", lambda trace: latch_spans(trace, "algalon.finisher", end))
+    return as_guid(value_at(finisher, when)) == owner
+
+
 def star_grouper(trace: Trace):
-    """`group(owner, star, when)`: which of STAR_GROUPS a hit or cast on a star falls in."""
+    """`group(owner, star, when)`: which of STAR_GROUPS a hit or cast on a star falls in; the finisher on its
+    finish star counts as on the focus star."""
     end = pull_end(trace)
     team = holder_spans(trace, "algalon.starteam", end)
     focus = latch_spans(trace, "algalon.focusstar", end)
@@ -3435,7 +3508,8 @@ def star_grouper(trace: Trace):
                   or (value_at(urgent, when) == "1" and trace.role(owner) == "ranged"))
         if not listed:
             return STAR_GROUPS[2]
-        return STAR_GROUPS[0] if star == as_guid(value_at(focus, when)) else STAR_GROUPS[1]
+        on = star == as_guid(value_at(focus, when)) or finishing(trace, star, when, owner)
+        return STAR_GROUPS[0] if on else STAR_GROUPS[1]
     return group
 
 
@@ -5737,7 +5811,7 @@ SECTIONS = (
     ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
     ("stars", "star deaths, health against the drain, the kill window, the star plan against the death and the Big"
               " Bang hit, wand trims and shots (older traces), under-star switches, releases and health at the cast,"
-              " focus span loss and the bulk's median, the star team",
+              " focus span loss and the bulk's median, bulk finishes, the star team",
      show_stars),
     ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),

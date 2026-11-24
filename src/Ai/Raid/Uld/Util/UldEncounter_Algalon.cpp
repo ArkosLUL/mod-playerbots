@@ -163,6 +163,12 @@ bool IsRangedDps(Player* member) { return PlayerbotAI::IsRanged(member) && IsDam
 
 bool IsBot(Player* member) { return member && GET_PLAYERBOT_AI(member); }
 
+ObjectGuid StarFocusOf(AlgalonEncounterState const& state, ObjectGuid const& member)
+{
+    ObjectGuid const finish = state.finishStar.Get();
+    return !finish.IsEmpty() && state.finisher.Get() == member ? finish : state.focusStar.Get();
+}
+
 float NearestRaidMember(Group* group, Position const& spot)
 {
     float nearest = std::numeric_limits<float>::max();
@@ -1878,7 +1884,7 @@ char const* StarTeamSpot(Player* bot, Unit* boss, AlgalonEncounterState const& s
     if (!IsAlgalonStarTeam(bot))
         return nullptr;
 
-    AlgalonScanUnit const* star = FindScanned(state.stars, state.focusStar.Get());
+    AlgalonScanUnit const* star = FindScanned(state.stars, StarFocusOf(state, bot->GetGUID()));
     if (!star)
         return nullptr;
 
@@ -2653,6 +2659,8 @@ void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
         state.underReleased.clear();
         state.underLateMs.clear();
         state.bulkStar = ObjectGuid::Empty;
+        state.finishLatch = ObjectGuid::Empty;
+        state.finisherLatch = ObjectGuid::Empty;
     }
 
     PlanShelterStar(state);
@@ -2725,8 +2733,10 @@ void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
 
     std::sort(kept.begin(), kept.end(), [&state](AlgalonScanUnit const* a, AlgalonScanUnit const* b)
               {
-                  if ((a->guid == state.bulkStar) != (b->guid == state.bulkStar))
-                      return a->guid == state.bulkStar;
+                  bool const aTaken = a->guid == state.bulkStar || a->guid == state.finishLatch;
+                  bool const bTaken = b->guid == state.bulkStar || b->guid == state.finishLatch;
+                  if (aTaken != bTaken)
+                      return aTaken;
 
                   return BulkLeftHp(*a) > BulkLeftHp(*b);
               });
@@ -2768,8 +2778,89 @@ void PlanUnderStars(Group* group, AlgalonEncounterState& state, uint32 now)
     MarkUnder(state, now);
 }
 
-AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState& state, uint32 now)
+uint8 FinisherRank(Player* member)
 {
+    switch (member->getClass())
+    {
+        case CLASS_HUNTER:
+            return 0;
+        case CLASS_PRIEST:
+            return 1;
+        case CLASS_SHAMAN:
+            return 2;
+        case CLASS_DRUID:
+            return 3;
+        case CLASS_WARLOCK:
+            return 4;
+        case CLASS_MAGE:
+            return 5;
+        default:
+            return 6;
+    }
+}
+
+Player* ElectFinisher(Group* group, AlgalonEncounterState const& state)
+{
+    Player* best = nullptr;
+    uint32 able = 0;
+    for (ObjectGuid const& guid : state.starTeam)
+    {
+        Player* member = FindGroupMember(group, guid);
+        if (!IsBot(member) || !CanStayOut(member))
+            continue;
+
+        ++able;
+        if (!best || FinisherRank(member) < FinisherRank(best) ||
+            (FinisherRank(member) == FinisherRank(best) && member->GetGUID() < best->GetGUID()))
+            best = member;
+    }
+
+    return able >= 2 ? best : nullptr;
+}
+
+void ValidateUnderFinish(Group* group, AlgalonEncounterState& state)
+{
+    AlgalonScanUnit const* finish = FindScanned(state.stars, state.finishLatch);
+    if (finish && finish->under && BulkLeftHp(*finish) && state.starTeam.count(state.finisherLatch) &&
+        CanStayOut(FindGroupMember(group, state.finisherLatch)))
+        return;
+
+    state.finishLatch = ObjectGuid::Empty;
+    state.finisherLatch = ObjectGuid::Empty;
+}
+
+bool HandOverFinish(Group* group, AlgalonEncounterState& state, AlgalonScanUnit const& star)
+{
+    uint32 const left = BulkLeftHp(star);
+    if (!state.finishLatch.IsEmpty() || !left || left > star.tickHp * ULDUAR_ALGALON_UNDER_FINISH_TICKS)
+        return false;
+
+    Player* finisher = ElectFinisher(group, state);
+    if (!finisher)
+        return false;
+
+    state.finishLatch = star.guid;
+    state.finisherLatch = finisher->GetGUID();
+    if (state.bulkStar == star.guid)
+        state.bulkStar = ObjectGuid::Empty;
+
+    return true;
+}
+
+AlgalonScanUnit const* PickBulkStar(AlgalonEncounterState const& state)
+{
+    AlgalonScanUnit const* next = nullptr;
+    for (AlgalonScanUnit const& star : state.stars)
+        if (star.under && star.guid != state.finishLatch && BulkLeftHp(star) &&
+            (!next || BulkLeftHp(star) > BulkLeftHp(*next)))
+            next = &star;
+
+    return next;
+}
+
+AlgalonScanUnit const* UnderBulkStar(Group* group, AlgalonEncounterState& state, uint32 now)
+{
+    ValidateUnderFinish(group, state);
     AlgalonScanUnit const* latched = FindScanned(state.stars, state.bulkStar);
     if (!latched || !latched->under || !BulkLeftHp(*latched))
     {
@@ -2780,22 +2871,22 @@ AlgalonScanUnit const* UnderBulkStar(AlgalonEncounterState& state, uint32 now)
     if (state.bigBangCasting || !state.nextBigBangMs)
         return nullptr;
 
-    if (latched)
+    if (latched && !HandOverFinish(group, state, *latched))
         return latched;
 
-    AlgalonScanUnit const* next = nullptr;
     int32 work = 0;
     for (AlgalonScanUnit const& star : state.stars)
-    {
-        if (!star.under || !BulkLeftHp(star))
-            continue;
+        if (star.under && BulkLeftHp(star))
+            work += BulkWorkMs(state, star);
 
-        work += BulkWorkMs(state, star);
-        if (!next || BulkLeftHp(star) > BulkLeftHp(*next))
-            next = &star;
-    }
+    if (!latched && MsUntil(state.nextBigBangMs, now) > work + ULDUAR_ALGALON_UNDER_BULK_SLACK_MS)
+        return nullptr;
 
-    if (!next || MsUntil(state.nextBigBangMs, now) > work + ULDUAR_ALGALON_UNDER_BULK_SLACK_MS)
+    AlgalonScanUnit const* next = PickBulkStar(state);
+    if (next && HandOverFinish(group, state, *next))
+        next = PickBulkStar(state);
+
+    if (!next)
         return nullptr;
 
     state.bulkStar = next->guid;
@@ -2811,15 +2902,17 @@ void StopCastsAtLine(Player* bot, Group* group, AlgalonEncounterState const& sta
         if (!IsBot(member))
             continue;
 
+        ObjectGuid const focus = StarFocusOf(state, member->GetGUID());
         for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL, CURRENT_AUTOREPEAT_SPELL})
         {
             Spell* spell = member->GetCurrentSpell(type);
             ObjectGuid const target = spell ? spell->m_targets.GetUnitTargetGUID() : ObjectGuid::Empty;
             AlgalonScanUnit const* scanned = target.IsEmpty() ? nullptr : FindScanned(state.stars, target);
-            if (!scanned || !scanned->under || (target == state.focusStar.Get() && std::strcmp(window, "under")))
+            if (!scanned || !scanned->under ||
+                (target == focus && target == state.focusStar.Get() && std::strcmp(window, "under")))
                 continue;
 
-            bool const left = target != state.focusStar.Get() && target != skull;
+            bool const left = target != focus && target != skull;
             Creature* star = Resolve(bot, target);
             if (star && (left || star->GetHealth() <= StopLineHp(*scanned) + scanned->pendingHp))
                 member->InterruptSpell(type);
@@ -3130,6 +3223,10 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     if (phase != AlgalonPhase::One)
     {
         state->focusStar = ObjectGuid::Empty;
+        state->finishStar = ObjectGuid::Empty;
+        state->finisher = ObjectGuid::Empty;
+        state->finishLatch = ObjectGuid::Empty;
+        state->finisherLatch = ObjectGuid::Empty;
         state->shadowAuraPaladin = ObjectGuid::Empty;
         return;
     }
@@ -3146,13 +3243,16 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
 
     AlgalonScanUnit const* star = nullptr;
     char const* window = StarWindow(bot, boss, *state, now, star);
+    AlgalonScanUnit const* finish = nullptr;
     if (!star && !state->bigBangCasting)
     {
-        if (AlgalonScanUnit const* bulk = UnderBulkStar(*state, now))
+        if (AlgalonScanUnit const* bulk = UnderBulkStar(group, *state, now))
         {
             star = bulk;
             window = "under";
         }
+
+        finish = FindScanned(state->stars, state->finishLatch);
     }
     ObjectGuid const previous = state->focusStar.Get();
     ObjectGuid const next = star ? star->guid : ObjectGuid::Empty;
@@ -3175,6 +3275,8 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         state->focusByDeadline = true;
 
     state->focusStar = next;
+    state->finishStar = finish ? finish->guid : ObjectGuid::Empty;
+    state->finisher = finish ? state->finisherLatch : ObjectGuid::Empty;
     StopCastsAtLine(bot, group, *state, window);
 
     if (star && !std::strcmp(window, "under") && state->bulkFrom.IsEmpty() &&
@@ -5047,6 +5149,13 @@ Unit* GetAlgalonFocusStar(PlayerbotAI* botAI)
     return state ? Resolve(bot, state->focusStar.Get()) : nullptr;
 }
 
+Unit* GetAlgalonStarTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    AlgalonEncounterState const* state = FindState(bot);
+    return state ? Resolve(bot, StarFocusOf(*state, bot->GetGUID())) : nullptr;
+}
+
 uint8 AlgalonAliveStarCount(PlayerbotAI* botAI)
 {
     AlgalonEncounterState const* state = FindState(botAI ? botAI->GetBot() : nullptr);
@@ -5261,8 +5370,9 @@ void AppendAlgalonTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions)
         exclusions.insert(state->boss);
 
     bool const starTeam = IsAlgalonStarTeam(bot);
+    ObjectGuid const focus = StarFocusOf(*state, bot->GetGUID());
     for (AlgalonScanUnit const& unit : state->stars)
-        if (!starTeam || unit.guid != state->focusStar.Get())
+        if (!starTeam || unit.guid != focus)
             exclusions.insert(unit.guid);
 
     bool const handler = state->handler.Get() == bot->GetGUID();
@@ -5293,7 +5403,7 @@ bool AlgalonMayDamage(Player* bot, Unit* target)
     switch (target->GetEntry())
     {
         case PB_NPC_COLLAPSING_STAR:
-            return guid == state->focusStar.Get() && IsAlgalonStarTeam(bot);
+            return guid == StarFocusOf(*state, bot->GetGUID()) && IsAlgalonStarTeam(bot);
         case PB_NPC_LIVING_CONSTELLATION:
             return handler;
         case PB_NPC_UNLEASHED_DARK_MATTER:

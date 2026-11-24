@@ -476,7 +476,7 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
 
 bool AlgalonStarTeamAction::Execute(Event /*event*/)
 {
-    Unit* star = GetAlgalonFocusStar(botAI);
+    Unit* star = GetAlgalonStarTarget(botAI);
     return star && Attack(star);
 }
 
