@@ -275,6 +275,7 @@ struct ThorimEncounterState
     uint32 lightningOrbLitMs = 0;
 
     std::vector<Position> blizzardSpots;
+    std::vector<Position> blizzardBunnies;
     uint32 blizzardScanMs = 0;
 
     RaidObs::ObsGuidMap<Position> orbEscapes{"thorim.orbescape"};

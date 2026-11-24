@@ -588,13 +588,15 @@ std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
         return state.blizzardSpots;
 
     state.blizzardScanMs = getMSTime();
-    state.blizzardSpots.clear();
+    state.blizzardBunnies.clear();
 
     std::list<Creature*> bunnies;
     bot->GetCreatureListWithEntryInGrid(bunnies, NPC_SIF_BLIZZARD, ULDUAR_THORIM_BLIZZARD_SCAN_RANGE);
     for (Creature* bunny : bunnies)
         if (bunny && bunny->IsAlive())
-            state.blizzardSpots.emplace_back(bunny->GetPositionX(), bunny->GetPositionY(), bunny->GetPositionZ());
+            state.blizzardBunnies.emplace_back(bunny->GetPositionX(), bunny->GetPositionY(), bunny->GetPositionZ());
+
+    state.blizzardSpots = state.blizzardBunnies;
 
     for (uint32 const zoneSpell : {SPELL_SIF_BLIZZARD_ZONE_10, SPELL_SIF_BLIZZARD_ZONE_25})
         for (Position const& zone : GetDynamicObjectPositions(bot, ULDUAR_THORIM_BLIZZARD_SCAN_RANGE, zoneSpell))
@@ -3020,6 +3022,39 @@ static float ThorimSegmentDistance2d(Position const& point, Position const& from
                      (point.GetPositionY() - nearestY) * (point.GetPositionY() - nearestY));
 }
 
+static std::array<Position, 9> const ULDUAR_THORIM_SIF_BLIZZARD_PATH = {
+    Position(2108.7f, -280.04f, 419.42f), Position(2104.6f, -268.5f, 419.4f), Position(2104.3f, -256.3f, 419.4f),
+    Position(2109.3f, -246.4f, 419.4f),   Position(2117.9f, -238.6f, 419.4f), Position(2128.8f, -232.1f, 419.4f),
+    Position(2151.9f, -237.5f, 419.4f),   Position(2164.9f, -256.3f, 419.4f), Position(2161.5f, -280.0f, 419.4f)};
+
+static std::vector<std::pair<Position, Position>> ThorimBlizzardPathAhead(Player* bot)
+{
+    ThorimBlizzardSpots(bot);
+
+    std::vector<std::pair<Position, Position>> legs;
+    for (Position const& bunny : ThorimStateFor(bot).blizzardBunnies)
+    {
+        size_t from = 0;
+        float nearest = std::numeric_limits<float>::max();
+        for (size_t leg = 0; leg + 1 < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size(); ++leg)
+        {
+            float const distance = ThorimSegmentDistance2d(bunny, ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg],
+                                                           ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg + 1]);
+            if (distance < nearest)
+            {
+                nearest = distance;
+                from = leg;
+            }
+        }
+
+        legs.emplace_back(bunny, ULDUAR_THORIM_SIF_BLIZZARD_PATH[from + 1]);
+        for (size_t leg = from + 1; leg + 1 < ULDUAR_THORIM_SIF_BLIZZARD_PATH.size(); ++leg)
+            legs.emplace_back(ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg], ULDUAR_THORIM_SIF_BLIZZARD_PATH[leg + 1]);
+    }
+
+    return legs;
+}
+
 bool ThorimWalkUnderBlizzard(Player* bot, Position const& from, Position const& to)
 {
     if (!bot)
@@ -3164,6 +3199,7 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
     std::vector<HazardCircle> otherSlots;
     std::vector<HazardCircle> camp;
     RingStepChainBodies(bot, boss, otherSlots, camp);
+    std::vector<std::pair<Position, Position>> const pathAhead = ThorimBlizzardPathAhead(bot);
 
     struct StepPass
     {
@@ -3172,6 +3208,7 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         bool clearOfTanks;
         bool clearOfSlots;
         bool clearOfCamp;
+        bool clearOfPath;
     };
 
     auto const clearOf = [](std::vector<HazardCircle> const& bodies, float x, float y)
@@ -3183,17 +3220,35 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         return true;
     };
 
-    HazardSweepCache cache;
-    for (StepPass const pass : {StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, true, true},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, true, false},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, true, false, false},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS, true, false, false, false},
-                                StepPass{ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS, false, false, false, false}})
+    auto const clearOfPath = [&pathAhead](float x, float y)
     {
-        if ((pass.clearOfCamp && camp.empty()) || (pass.clearOfSlots && !pass.clearOfCamp && otherSlots.empty()))
+        Position const spot(x, y, 0.0f);
+        for (std::pair<Position, Position> const& leg : pathAhead)
+            if (ThorimSegmentDistance2d(spot, leg.first, leg.second) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+                return false;
+
+        return true;
+    };
+
+    float const stepRadius = ULDUAR_THORIM_RING_BLIZZARD_STEP_RADIUS;
+    float const lastRadius = ULDUAR_THORIM_RING_BLIZZARD_LAST_STEP_RADIUS;
+    HazardSweepCache cache;
+    for (StepPass const pass : {StepPass{lastRadius, true, true, true, true, true},
+                                StepPass{lastRadius, true, true, true, false, true},
+                                StepPass{lastRadius, true, true, false, false, true},
+                                StepPass{lastRadius, true, false, false, false, true},
+                                StepPass{stepRadius, true, true, true, true, false},
+                                StepPass{stepRadius, true, true, true, false, false},
+                                StepPass{stepRadius, true, true, false, false, false},
+                                StepPass{stepRadius, true, false, false, false, false},
+                                StepPass{lastRadius, false, false, false, false, false}})
+    {
+        if ((pass.clearOfCamp && camp.empty()) || (pass.clearOfSlots && !pass.clearOfCamp && otherSlots.empty()) ||
+            (pass.clearOfPath && pathAhead.empty()))
             continue;
 
-        auto const accept = [boss, pass, tankClearance, &outOfCone, &clearOf, &otherSlots, &camp](float x, float y)
+        auto const accept = [boss, pass, tankClearance, &outOfCone, &clearOf, &clearOfPath, &otherSlots,
+                             &camp](float x, float y)
         {
             if (x < ULDUAR_THORIM_ARENA_BOX_MIN_X || x > ULDUAR_THORIM_ARENA_BOX_MAX_X ||
                 y < ULDUAR_THORIM_ARENA_BOX_MIN_Y || y > ULDUAR_THORIM_ARENA_BOX_MAX_Y || !outOfCone(x, y))
@@ -3202,7 +3257,8 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
             if (pass.pastRing && boss->GetExactDist2d(x, y) < ULDUAR_THORIM_MELEE_RING_RADIUS)
                 return false;
 
-            if ((pass.clearOfSlots && !clearOf(otherSlots, x, y)) || (pass.clearOfCamp && !clearOf(camp, x, y)))
+            if ((pass.clearOfSlots && !clearOf(otherSlots, x, y)) || (pass.clearOfCamp && !clearOf(camp, x, y)) ||
+                (pass.clearOfPath && !clearOfPath(x, y)))
                 return false;
 
             return !pass.clearOfTanks ||
@@ -3504,6 +3560,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->ringSolveMs = 0;
     state->rangedShelters.clear();
     state->blizzardSpots.clear();
+    state->blizzardBunnies.clear();
     state->blizzardScanMs = 0;
     state->bossGuid.Clear();
     state->colossusGuid.Clear();

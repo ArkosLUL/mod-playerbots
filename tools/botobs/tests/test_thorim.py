@@ -211,10 +211,24 @@ class RingBlizzard(unittest.TestCase):
     def test_one_blizzard_on_slot_2(self):
         text = printed(thorim.show_blizzard, load(blizzard_pull()))
         self.assertIn("blizzard 1 +19.0..+34.0 s: slot points covered 2 7.0 s; in it Cleaver 7.0 s (1x, longest "
-                      "7.0 s, 3 ticks 13k); deaths 0; steps 1, stepped 7.0 bot-s, out of reach 7.0 of them; walk back "
-                      "p50 0.5 max 0.5 s, 0 ticks on the way", text)
-        self.assertIn("all: ring melee in a zone 7.0 bot-s, stays p50 7.0 max 7.0 s, 3 ticks 13k, deaths 0; steps 1, "
-                      "stepped 7.0 bot-s, out of reach 7.0; walk back p50 0.5 max 0.5 s, 0 ticks on the way", text)
+                      "7.0 s, 3 ticks 13k); deaths 0; steps 1 (0 onto the bunny's path ahead, 0 under a zone within "
+                      "8 s), stepped 7.0 bot-s, out of reach 7.0 of them; walk back p50 0.5 max 0.5 s, 0 ticks on the "
+                      "way", text)
+        self.assertIn("all: ring melee in a zone 7.0 bot-s, stays p50 7.0 max 7.0 s, 3 ticks 13k, deaths 0; steps 1 "
+                      "(0 onto the bunny's path ahead, 0 under a zone within 8 s), stepped 7.0 bot-s, out of reach "
+                      "7.0; walk back p50 0.5 max 0.5 s, 0 ticks on the way", text)
+
+    def test_step_points_on_the_bunny_path_and_under_a_zone(self):
+        records = blizzard_pull()
+        for rec in records:
+            if rec.get("e") == "snap" and 20000 <= rec["t"] <= 25000:
+                rec["u"][-1][1:3] = [2123.35, -235.35]
+            if rec.get("by") == "thorim sif blizzard action":
+                rec.update(x=2135.0, y=-234.0)
+        records.append({"t": 22100, "e": "move", "g": MELEE, "k": "point", "ok": 1, "x": 2120.0, "y": -247.0,
+                        "by": "thorim sif blizzard action"})
+        text = printed(thorim.show_blizzard, load(sorted(records, key=lambda rec: rec.get("t", 0))))
+        self.assertIn("steps 2 (1 onto the bunny's path ahead, 1 under a zone within 8 s)", text)
 
     def test_without_the_probe(self):
         records = [rec for rec in blizzard_pull() if rec.get("k") != "thorim.ringstep"]
