@@ -2094,11 +2094,36 @@ the fire hands out: a settle past ~120° with healers moving 50-80% and ~300k he
 - **Q9 (plan change): cap how far the phase 2 wedge turns when it moves off fire, at 90°.** When the beams stop, the wedge
   moves to the 120° arc with the fewest fire nodes, however far away. In window 26 it turned 131° and 140°: the ranged
   and healers walked across VX-001 to where the melee stood, during the Heat Wave, Rapid Burst and Frost Bomb that follow
-  every barrage. Healers spent 54-80% of the next 15 s walking, healing fell to ~300k (488-505k when the wedge turned 69°
-  or stayed), and 14 died in the 25 s after; window 25's turns of 69-102° cost nobody. Options: (a) the fewest-fire arc
-  within 90° of where the barrage put the wedge: of 50 replayed moves, the 30 that turn past 90° would turn a median 77°
-  and leave a median 4 burning nodes under the wedge instead of 0 (window 26: uld1 85° to 4 nodes instead of 140° to 3,
-  uld2 26° to 10 instead of 131° to 3-4); (b) keep today's rule; (c) skip a move past 120°, leaving the wedge on its fire
-  as before Q6. Recommendation: (a).
+  every barrage. At 140° healers spent 80% of the next 15 s walking, healed 305k and 12 died in the 25 s after; at 131°
+  54%, 302k and 2 dead. Window 25's turns of 69-102° cost nobody at 23-55% and 332-488k (505k when the wedge stayed), and
+  a 94° turn later in the 140° pull, on 13 alive, lost 7. Options: (a) the fewest-fire arc within 90° of where the
+  barrage put the wedge: of 50 replayed moves (counting every live Flames), 28 of the 30 that turn past 90° would still
+  move, a median 77°, and leave a median 4 under the wedge instead of 0, 18 of the 30 still over the limit of 3 (window
+  26: uld1 85° to 4 instead of 140° to 3, uld2 26° to 10 instead of 131° to 3-4); (b) keep today's rule; (c) skip a
+  move past 120°, leaving the wedge on its fire as before Q6. Recommendation: (a).
 
 **Shared code:** none (findings doc, this log).
+
+**Review.**
+
+- Checked and holding: `settlewalk.py` rerun over windows 25-26 reproduces every row of the settle table; the deaths
+  table sums to 67 (47 before Berserk, P2 19/5/1); `ReadMimironMarkers` keeps living mines only and none lives in a P2 or
+  H2 of windows 25-26, so round 17 cannot reach phase 2; `3ce456519..e834a2708 -- src` is as listed. uld1: healers 2-4 yd
+  off VX-001 at 3:25-3:27, 92% moving and 2% casting over 3:22.9-3:30.5, 233k taken in 2.5 s from 3:22.9, the bomb first
+  sampled at 3:28.5 4 yd off VX-001, Ice Block 3:25.5 and 3:26.6 against the first bomb action at 3:28.4, blocks out
+  2.9 and 1.8 s before the 3:38.4 blast. uld2: bomb at 3:18.6, 29°/22 yd; ranged deaths at 3:24.0 and 3:28.2. `--spin`'s
+  first-barrage 314k and 316k are the lowest of all 44 traces. Plan change holds: the user's Q6 answer names the
+  fewest-fire arc with no bound on the turn, and nothing was implemented.
+- Weaker than written: the turn's cost rests on one pull. At 131° (uld2) healers moved 54% and healed 302k, at 102°
+  (window 25 uld1) 55% and 332k, the same walk with 2 dead against 0; uld1's 140° stands alone, with 18 burning nodes
+  under the re-aimed wedge, 233k in 2.5 s and the bomb on the crossing. Window 25's 69° settle also put 3 ranged within
+  8 yd of VX-001, and its uld1/uld2 bombs landed 12-13 yd off VX-001 with 19-23 inside 30 yd, so neither the crossing
+  nor the bomb alone tells the windows apart.
+- Fixed: Q9 and the findings doc's open item left out uld1's 94° settle (7 dead on 13 alive) and the 332k healed at 102°,
+  and called the replay's counts burning nodes: the replay counts every living Flames, the settle only those with the
+  aura (uld1 5:27: replay 9 under 338°, note `keep 338 1>0`). Both now carry those, plus 28 of the 30 still moving under
+  a 90° cap and 18 of them left over the limit; the open item's title no longer asserts the turn as the cost.
+- Not weighed in Q9: the post-barrage Frost Bomb lands 6-7 s after the beams in 5 of the 6 window 25-26 first barrages
+  and blows 10 s later, so a settle held until the blast walks outside the storm at the price of ~17 s more on fire, the
+  pile Q6 removed.
+- pb-check: nothing to check (docs only).
