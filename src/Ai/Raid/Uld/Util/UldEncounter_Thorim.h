@@ -510,6 +510,7 @@ ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot);
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position);
 
 bool ThorimTankSpotNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
+bool ThorimAtTankSpots(Player const* bot);
 
 bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 

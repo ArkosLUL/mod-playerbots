@@ -2837,6 +2837,11 @@ bool ThorimTankSpotNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& sp
     return bot->GetDistance(spot) > ULDUAR_THORIM_PHASE2_SPOT_TOLERANCE;
 }
 
+bool ThorimAtTankSpots(Player const* bot)
+{
+    return bot && bot->GetExactDist2d(&ULDUAR_THORIM_PHASE2_TANK_SPOT) <= ULDUAR_THORIM_SWAP_TANK_SPOT_RADIUS;
+}
+
 namespace
 {
 
