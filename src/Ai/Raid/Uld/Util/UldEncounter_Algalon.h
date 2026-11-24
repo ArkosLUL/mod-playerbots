@@ -381,6 +381,7 @@ struct AlgalonEncounterState
     bool focusByDeadline = false;
     std::unordered_map<ObjectGuid, AlgalonKite> kites;
     std::unordered_set<ObjectGuid> kiteRefusedHoles;
+    std::unordered_map<ObjectGuid, std::vector<uint32>> petSplashHeld;
     bool wormHolesSeen = false;
 
     uint32 lastStarDeathMs = 0;

@@ -376,9 +376,12 @@ What lands on a raid add is not what PvP experience predicts.
   trap declare something else. Read the spell: `SpellSplashes` (`RaidSplash.h`) tests
   `IsTargetingArea() || IsAffectingArea()` on its id, and names the totem and trap summons, whose area
   lives on the summoned unit. Starfall, Blade Flurry, Sweeping Strikes, Cleave, Bladestorm, HotR,
-  Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even that test.
-  A hold on "don't hit the add next to the boss" adds the named list in `RaidSplash.h`, and holds self
-  auras outright: they hit whatever comes near for their whole duration.
+  Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even that test,
+  and so do Revenge and Maul, which a talent (Improved Revenge) or glyph turns into a chain. A hold on
+  "don't hit the add next to the boss" adds the named list in `RaidSplash.h`, and holds self auras
+  outright: they hit whatever comes near for their whole duration. A pet's autocast (the Felguard's
+  Cleave) is no bot action, so only `Pet::ToggleAutocast` holds it
+  ([Algalon](../raids/ulduar/algalon.md#stars-under-big-bang-else-paced)).
 - **A draining add's lifetime is its health over its measured loss**, splash included, so trace drain
   and splash deaths apart before tuning, and plan each death against the others: killing a substitute
   when the soonest-dying one can't be touched stacks two explosions anyway, and dropping one a few %

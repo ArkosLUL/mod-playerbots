@@ -22,6 +22,7 @@
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "PaladinHelper.h"
+#include "Pet.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -2871,6 +2872,96 @@ int32 UnderHideExtraMs(AlgalonEncounterState const& state, int32 remaining, uint
                  remaining - earliest + ULDUAR_ALGALON_UNDER_DEATH_LEAD_MS - ULDUAR_ALGALON_HIDE_MARGIN_MS);
     return std::min(extra, ULDUAR_ALGALON_UNDER_HIDE_STRETCH_MS);
 }
+
+bool PetSpellSplashes(SpellInfo const* info)
+{
+    if (!info || info->IsPositive())
+        return false;
+
+    if (info->IsTargetingArea() || info->IsAffectingArea())
+        return true;
+
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+        if (info->Effects[i].ChainTarget > 1)
+            return true;
+
+    return false;
+}
+
+bool StarNearPet(AlgalonEncounterState const& state, Pet* pet)
+{
+    Unit* victim = pet->GetVictim();
+    ObjectGuid const except = victim ? victim->GetGUID() : ObjectGuid::Empty;
+    float const aroundVictim =
+        victim ? std::max(ULDUAR_ALGALON_SPLASH_RADIUS, ULDUAR_ALGALON_SPLASH_PAST_REACH + victim->GetCombatReach())
+               : 0.0f;
+    for (AlgalonScanUnit const& star : state.stars)
+    {
+        if (star.guid == except)
+            continue;
+
+        if (pet->GetExactDist2d(star.position) <= ULDUAR_ALGALON_SPLASH_RADIUS ||
+            (victim && victim->GetExactDist2d(star.position) <= aroundVictim))
+            return true;
+    }
+
+    return false;
+}
+
+void HoldPetSplash(Group* group, AlgalonEncounterState& state, bool active)
+{
+    if (!group)
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        Pet* pet = IsBot(member) && InFight(member) ? member->GetPet() : nullptr;
+        if (!pet || !pet->IsAlive())
+            continue;
+
+        auto held = state.petSplashHeld.find(member->GetGUID());
+        if (active && StarNearPet(state, pet))
+        {
+            std::vector<uint32> splash;
+            for (uint8 pos = 0; pos < pet->GetPetAutoSpellSize(); ++pos)
+            {
+                uint32 const spellId = pet->GetPetAutoSpellOnPos(pos);
+                if (pet->HasSpell(spellId) && PetSpellSplashes(sSpellMgr->GetSpellInfo(spellId)))
+                    splash.push_back(spellId);
+            }
+
+            for (uint32 const spellId : splash)
+            {
+                pet->ToggleAutocast(sSpellMgr->GetSpellInfo(spellId), false);
+                std::vector<uint32>& list = state.petSplashHeld[member->GetGUID()];
+                if (std::find(list.begin(), list.end(), spellId) == list.end())
+                    list.push_back(spellId);
+
+                if (RaidObs::Active())
+                    RaidObs::Note(member, "algalon.petsplash", "off " + std::to_string(spellId));
+            }
+
+            continue;
+        }
+
+        if (held == state.petSplashHeld.end())
+            continue;
+
+        for (uint32 const spellId : held->second)
+        {
+            SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
+            if (!info || !pet->HasSpell(spellId))
+                continue;
+
+            pet->ToggleAutocast(info, true);
+            if (RaidObs::Active())
+                RaidObs::Note(member, "algalon.petsplash", "on " + std::to_string(spellId));
+        }
+
+        state.petSplashHeld.erase(held);
+    }
+}
 }
 
 void AlgalonTickEncounterState(PlayerbotAI* botAI)
@@ -2893,6 +2984,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
                        (!boss || boss->GetGUID() != state->boss || (state->engagedSeen && !boss->IsInCombat()));
     if (wiped)
     {
+        HoldPetSplash(bot->GetGroup(), *state, false);
         algalonEncounterStates.Reset(instanceId);
         state = &algalonEncounterStates.For(instanceId);
         state->lastTickMs = now;
@@ -2929,6 +3021,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     AlgalonPhase const phase = ReadPhase(boss, *state);
     state->phase = phase;
     state->engaged = phase == AlgalonPhase::Intro || phase == AlgalonPhase::One || phase == AlgalonPhase::Two;
+    HoldPetSplash(group, *state, phase == AlgalonPhase::One);
     if (!state->engaged)
         return;
 
