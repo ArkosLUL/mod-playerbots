@@ -2278,3 +2278,17 @@ each); Divine Hymn on the start pack (rounds 18-19).
    choice of class triggers only. (d) Keep polishing mechanics with no end condition (today). Recommended: (a).
 
 **Shared code touched:** none (Thorim files and the Thorim reader; `ClassTauntReady` is called, not changed).
+
+**Review (round 20).** The cause holds. w27 uld1's anchor Uldxaa cast Hand of Reckoning on a Commoner at −1.87 s; Thorim
+landed 1.4 yd from it (+0.5 s); the pickup `Attack`ed at +0.12 s and `FAILED` at +0.34 s, and positioning moves to (2110.75, −252.65)
+had it 28.8 yd off him at +4.0 s, when its Righteous Defense took him; `pickup.py` reproduces 37 of 43 cooling, median 1.7 s, 16 at
+2.2-5.6 s, the 6 ready ones within 0.74 s, and the 3 deaths all came before the pickup (+1.1 / +3.2 / +2.1 s). Corrected above and in
+the boss doc: the 366k is the 37 cooling pulls' melee on non-tanks over the first 10 s; before a tank had him it was 348k (292k in the
+16 slow ones), the reader's `pickup` measure; the anchor stood 14-39 yd off in 14 of the 16 (3.2 yd in w14 uld2
+`603_5_thorim_1795427695`, 10.7 in w24 uld2 `603_2_thorim_1795471611`). The race (`hmall.py` and a +30 s-to-first-tank-death rate over
+the 15): the raid took him 0.41-0.55 %/s (0.39 in w24 uld1's collapsed raid), the first tank fell at +82-196 s with him at 26-65%, sooner
+only in w19 uld3 (+57 s, 76%, a Chain Lightning since fixed) and w24 uld1 (+48 s, 85%); the "+82-196 s at 26-76%" and "0.46-0.55" above
+mixed those in. Code: no bug. The branch fires only for the anchor while he is on a non-tank or nobody and its class taunt cools (8 s at
+most); `ThorimTankOnAnchor` and the positioning trigger stand down with it, the arena anchor is off in phase 2, and the pickup (62)
+still taunts before positioning (60) once the taunt is back. One path for 10/25, both modes and a raid with a human (a human holder
+counts as a tank, a human is never anchor). `pb-check` passes.
