@@ -359,8 +359,13 @@ leads it into the camp, and above the melee spot, since it already ends inside h
 `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every interrupt
 that tick, and Searing Flames is the one cast in Ulduar that genuinely rewards interrupting. Duty is
 GUID-ranked among bots that are both *capable and ready*, recomputed per cast so cooldowns rotate it: one
-kick per cast, or three bots spend theirs on one and miss the next. The trigger keys on Searing Flames' own
-id, since Shadow Crash and Surge of Darkness aren't worth a kick, and stuns are left out: he is immune.
+kick per cast, or three bots spend theirs on one and miss the next. Ready means the kick's cost, stance,
+cooldown and range pass, tested directly since
+[`CanCastSpell` skips cost, stance and range](../../engine/action-selection.md#casting): the test
+rosters' healers rank first by GUID, and a resto shaman reincarnated at 0 mana held the duty, failed its
+Wind Shear and let a cast land with five melee kickers in reach, killing 10. The trigger keys on Searing
+Flames' own id, since Shadow Crash and Surge of Darkness aren't worth a kick, and stuns are left out: he
+is immune.
 
 **Life Tap is suppressed outright**, by a Vezax-local multiplier rather than the warlock rotation, and not
 above a mana threshold: its mana half is 31818, a bare `SPELL_EFFECT_ENERGIZE`, so no amount of missing
@@ -601,6 +606,14 @@ walk) lost it, all three normal ones with the main tank holding the Animus kille
 in the ball; only the melee break and the escape walk answer it. Stepping the rows 4.4 yd out would
 take row 0 out of heal reach of the main tank while he hits twice as hard.
 
+**Hard mode's late Surge of Darkness meets the main tank without his long cooldown.** The surge timer
+(63 s, shifted 12 s by the sixth vapor) lands at +13 and +76 s of the Animus, the second with healers
+at 0-35% mana and ~38 Profound Darkness stacks. Icebound Fortitude and Shield Wall come back after
+2 min, so the surge node spends them on the first, at 51-100% health, or a class low-health node just
+before it: 8 of 24 DK and warrior main tanks that reached the late one died in it, the rest bottomed
+at 17-71%. Saving it leaves the first uncovered: replayed without it, about a third would have dropped
+under 25%.
+
 **Outside the Animus phase a crash inside a mark still walks the marked bot's block along its arc**
 (the turn above is the Animus phase's only). Before the spawn the crash comes 2.3-8.9 s into the
 mark, mostly once its bot is clear: in windows 11-24 the 9 such marks whose bot dodged it leeched a
@@ -621,6 +634,12 @@ resource that cannot be replaced. Class-side, not Vezax-side.
 at 1:12, lost threat, and a warlock pulled Vezax into the camp at 1:26, where a bear held him 83.5% of the
 next pull. As off-tank it adds nothing to the Animus either: 0.6% mana from 2:30 and a first hit at
 +19s. Nothing here treats it.
+
+**A main tank death loses the pull.** Vezax is taunt-immune too (immunity set −427 keeps −287's
+`ATTACK_ME` and `MOD_TAUNT`), so only threat moves him, and the threat cap stands down with the main
+tank: he walks down the threat list through ranged and melee, up to 54 yd off the anchor. A dry
+protection paladin off-tank has dealt him about a tenth of any dps's damage, and its Righteous Defense
+does nothing; a soulstoned main tank comes back with no threat.
 
 **Backstab and Shred go unused on the Animus**, since the melee spot blocks `set behind`.
 

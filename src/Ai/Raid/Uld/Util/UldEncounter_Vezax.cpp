@@ -1232,6 +1232,30 @@ bool VezaxHasEncounterState(Player* bot)
     return bot && vezaxEncounterStates.Find(bot->GetInstanceId());
 }
 
+namespace
+{
+bool VezaxKickInReach(PlayerbotAI* botAI, Player* bot, char const* interrupt, Unit* target)
+{
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", interrupt)->Get();
+    SpellInfo const* info = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    if (!info || bot->HasSpellCooldown(spellId) || info->CheckShapeshift(bot->GetShapeshiftForm()) != SPELL_CAST_OK)
+        return false;
+
+    if (info->PowerType < MAX_POWERS &&
+        info->CalcPowerCost(bot, info->GetSchoolMask()) > static_cast<int32>(bot->GetPower(Powers(info->PowerType))))
+        return false;
+
+    float const maxRange = bot->GetSpellMaxRangeForTarget(target, info);
+    if (info->RangeEntry && (info->RangeEntry->Flags & SPELL_RANGE_MELEE))
+    {
+        float const reach = bot->GetLeewayBonusRange(target) > 0.0f ? MIN_MELEE_REACH : 2.0f * MIN_MELEE_REACH;
+        return bot->IsWithinMeleeRange(target, std::max(maxRange - reach, 0.0f));
+    }
+
+    return bot->IsWithinCombatRange(target, maxRange);
+}
+}
+
 char const* VezaxReadyInterrupt(Player* bot, Unit* target)
 {
     if (!bot || !target)
@@ -1246,7 +1270,7 @@ char const* VezaxReadyInterrupt(Player* bot, Unit* target)
                                              "silencing shot", "spell lock"};
 
     for (char const* interrupt : interrupts)
-        if (botAI->CanCastSpell(interrupt, target))
+        if (VezaxKickInReach(botAI, bot, interrupt, target) && botAI->CanCastSpell(interrupt, target))
             return interrupt;
 
     return nullptr;
