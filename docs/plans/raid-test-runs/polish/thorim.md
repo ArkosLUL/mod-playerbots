@@ -1795,3 +1795,15 @@ question priced); walk back p50 0.7-2.5 s, max 4.5 s; 16-50 step orders a pull.
 - Normal-mode pulls: no `thorim.ringstep` row, `--blizzard` reads "no Sif Blizzard in phase 2", the ring unchanged.
 
 **Questions for the user:** none new.
+
+**Review (round 17).** The cause holds. In w24 uld1 slot 0's solved bearing went 203 → 177 → 153 → 281° from 3:38.7 to 3:40.4;
+from 3:40.5 every positioning walk of Uldxai and Uldxaf came back `wait` behind `avoid aoe` combat bookings while both took 5.0-5.3k
+ticks, and Uldxai died at 3:45.3. `--blizzard` gives the before table and a rerun of `stepsim2.py` the built replay figures. The
+replay's steps by pass: past the ring and off the tanks 17-44 bot-s a pull, past the ring 1.5-6.9, anywhere 0-1.6. The answer's
+wording alone (the first two passes) leaves 10 and 21 bot-s in zones in w21 uld3 and w23 uld1, so the third pass is the one step
+beyond the user's yes; it is logged under "Why the fallbacks". No size, mode or player branch; Thorim files only; no comments. Left:
+a ring bot holding Thorim takes no step and no longer has `avoid aoe`, but ring melee held him inside a zone 0-0.2 bot-s over the
+six pulls. Fixed: the Blizzard trigger ran `TryGetThorimPhase2Spot` (the slot pass over the group, the `thorim.ringspot` note, a
+`RingPoint` raycast) every tick for every ring bot in phase 2, normal mode included, where it used to return at once.
+`ThorimRingBlizzardStep` now asks whether the bot stands in a zone or the lit cone first; while it holds, the positioning trigger,
+which reads the slot every tick anyway, keeps `thorim.ringstep` current. `pb-check` passes.

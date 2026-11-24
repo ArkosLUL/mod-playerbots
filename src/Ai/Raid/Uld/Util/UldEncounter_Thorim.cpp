@@ -3087,9 +3087,7 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
         return false;
 
     Unit* boss = GetThorim(botAI);
-    Position ring;
-    if (!boss || !TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, ring) ||
-        !ThorimRingBlizzardCovered(bot, ring))
+    if (!boss)
         return false;
 
     Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
@@ -3098,6 +3096,10 @@ bool ThorimRingBlizzardStep(PlayerbotAI* botAI, Player* bot, Position& out)
     { return !orb || !InLightningChargeCone(BearingFromBoss(boss, x, y), coneBearing); };
 
     if (!ThorimSpotUnderBlizzard(bot, *bot) && outOfCone(bot->GetPositionX(), bot->GetPositionY()))
+        return false;
+
+    Position ring;
+    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, ring) || !ThorimRingBlizzardCovered(bot, ring))
         return false;
 
     std::vector<Position> const zones = ThorimBlizzardSpots(bot);
