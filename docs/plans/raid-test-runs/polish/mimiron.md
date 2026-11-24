@@ -1817,3 +1817,22 @@ counting.
 **Questions for the user:** none.
 
 **Shared code:** none (Mimiron encounter, findings doc, reader and its test, this log).
+
+**Review.**
+
+- Checked and holding: a 24-bearing replay at each window 24a beams' end reproduces every pick above. The settle runs
+  once per re-aim per instance, with the beams off and 10 s after the aim, in phase 2 and hard mode only (no wedge or
+  Flames otherwise); 10 and 25 share the footprint (one 18 yd row up to 6 members). Only bot engines call it, so a real
+  player changes nothing. `MimironPhase4WedgeIndex` always yields a permutation (healer slots n/k ≥ 1 apart); `IsHeal`
+  reads a real player's spec, so a real healer keeps a front-row slot nobody fills. The rows refactor is identical; no
+  comments.
+- Fixed: `DeriveMimironSpreadSlot`'s ranged count uses `IsMimironWedgeMember`, the predicate
+  `MimironPhase4WedgeIndex` recounts with, so the two cannot drift apart.
+- Watch: uld3's 159° re-aim held 4 nodes and the rule turns it 156° to 315° (0), though 150° held 3: it takes the
+  fewest, not the nearest bearing under the limit, as the answer reads.
+- Watch: the phase 4 front row sits at `ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST` (18) off VX-001 and a bot holds its slot
+  within 5 yd, so front-row members flee Shock Blast. Window 24a: 12 and 16 ranged DPS inside 18 yd of the MK II at
+  the casts (uld2 5 casts, uld3 4) and 19 and 18 ranged escape legs, against 1 and 1 healers and 2 and 1 legs. Healers
+  now inherit that. The escape ends 20 yd out, at most 40 yd from any melee escape point, so reach holds; the cost is
+  healer casts lost in the cast window. Next window: healer `shock` legs per cast. If they climb and Hand Pulse on
+  escaped melee does not fall, the question is a 20 yd phase 4 front row (plan change).

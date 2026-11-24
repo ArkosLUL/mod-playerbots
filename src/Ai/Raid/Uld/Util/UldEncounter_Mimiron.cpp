@@ -2921,8 +2921,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !PlayerbotAI::IsRanged(member) ||
-            PlayerbotAI::IsMainTank(member))
+        if (!IsMimironWedgeMember(member))
             continue;
 
         if (member == bot)
