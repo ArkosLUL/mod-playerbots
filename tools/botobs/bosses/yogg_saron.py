@@ -81,8 +81,7 @@ NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 P1_LEASH = 6.5
 
-# Inside this no orbit reaches: the only ground a melee bot can stand on without farming a Guardian.
-# The tank is held here and the melee dodge aims here.
+# the code's leash on the old orbits, not the clear circle any more: that's PILE_LEASH
 P1_CLOUD_FREE_RADIUS = 2.8
 
 # Back line band tolerance and stack radius around the station. The band keeps a bot off the inner
@@ -136,9 +135,7 @@ REZ_AGAIN_MS = 60000
 INFORM_CLOUD_MIN_RANGE = 20.0
 INFORM_CLOUD_REACH = 2.5
 
-# Past the outer orbit's reach no cloud touches a bot, and the dodge and control movers wait until a bot is
-# inside, so one of theirs starting further out means the gate failed, or an old build. The station and the
-# leash walk the raid in from Sara's 90 yd start radius.
+# the movers' room gate, still on the code's old orbits: don't derive it from CLOUD_ORBITS
 P1_ROOM_RADIUS = 69.3
 # The gate reads GetDistance2d(x, y), which takes the bot's own 1.5 yd combat reach off, and the move
 # lands up to a bot tick after that read: another ~1 yd at run speed.
@@ -1455,7 +1452,7 @@ def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
 
 def dodge_zone(distance: float) -> str:
     """Which of phase 1's three bands a spot this far from the middle sits in: cloud-free circle, inner orbit's own
-    reach, or past it on the back line's ring. "An orbit reaches" cannot tell, the station always has one."""
+    reach, or past it. "An orbit reaches" cannot tell, the station always has one."""
     if distance <= PILE_LEASH:
         return "core"
 
@@ -1752,8 +1749,8 @@ def show_cloud_spawns(trace: Trace) -> None:
         ring = f"orbit{orbit}" if orbit else "no cloud"
         print(f"  {clock(when):>9}  {ring:<9}  {names}")
 
-    # The innermost orbit is the load-bearing one: InformCloud skips every cloud within 20 yd of Sara,
-    # so Sara's timer can never pick it and every Guardian off it was summoned by a player.
+    # The inner orbits are the load-bearing ones: InformCloud skips every cloud within 20 yd of Sara,
+    # so Sara's timer can never pick them and every Guardian off them was summoned by a player.
     inner = inner_orbits()
     ours = sum(count for orbit, count in per_orbit.items() if orbit in inner)
     ours += sum(count for orbit, count in contact.items() if orbit not in inner)
