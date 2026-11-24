@@ -170,6 +170,9 @@ passes (syntax, pblint, codestyle, botobs).
   phase 2 still within Sif's clock in the hard-mode pulls (w37 5 of 6).
 - Watch: Stomp and Rune Detonation on healers at the Giant hold (they now stop 15 yd short of the leader there too);
   first tank deaths no earlier than +100 s where no healer died in phase 1.
+- Watch: corridor Runic Smash (62465) on gauntlet healers, who also stop 15 yd short of a leader walking between
+  waypoint radii, where the dodge reaches them only inside a radius of their own (`ThorimResolveGauntletIndex`; w37 11
+  hits, 0 dead; 160 hits, 1 dead over the 107 pulls on disk).
 
 **Seen, not picked:** the A pulls losing the race by 4% with nothing dying before the tanks; the opening chain under
 lust (uld6); uld6's healers in Blizzard; Smash on melee standing inside the Colossus (survived); question 1.
