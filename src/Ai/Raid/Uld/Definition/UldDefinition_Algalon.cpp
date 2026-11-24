@@ -40,7 +40,7 @@ bool AlgalonHiderCasting(PlayerbotAI* botAI) { return AlgalonHiderInCast(botAI->
 
 bool AlgalonStarTeamFocused(PlayerbotAI* botAI)
 {
-    return IsAlgalonStarTeam(botAI->GetBot()) && GetAlgalonFocusStar(botAI) && AlgalonEngaged(botAI);
+    return IsAlgalonStarTeam(botAI->GetBot()) && GetAlgalonStarTarget(botAI) && AlgalonEngaged(botAI);
 }
 
 bool AlgalonYielding(PlayerbotAI* botAI) { return AlgalonYieldsBoss(botAI->GetBot()); }

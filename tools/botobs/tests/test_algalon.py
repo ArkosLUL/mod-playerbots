@@ -2485,6 +2485,49 @@ class UnderBulk(unittest.TestCase):
             self.assertEqual(al.under_faults(bare), [])
             self.assertNotIn("under-stars per Big Bang", render(bare, "stars"))
 
+    def test_the_stars_section_counts_under_stars_against_their_band_at_the_cast(self):
+        self.assertIn("    at the cast, released early or not at all: 0 below their band, 0 in it, 2 above\n",
+                      render(self.trace, "stars"))
+
+
+class UnderFinish(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        records = underdrop_pull() + [
+            {"t": 1, "e": "unit", "g": UD_STAR_A, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star", "mhp": 200000},
+            note(8000, UD_LOCK, "algalon.starteam", 1), note(8000, UD_MAGE, "algalon.starteam", 1),
+            note(8000, UD_TRACKER, "algalon.finishstar", 0), note(8000, UD_TRACKER, "algalon.finisher", 0),
+            note(28000, UD_TRACKER, "algalon.finishstar", UD_STAR_A), note(28000, UD_TRACKER, "algalon.finisher", UD_LOCK),
+            note(32000, UD_TRACKER, "algalon.finishstar", 0), note(32000, UD_TRACKER, "algalon.finisher", 0),
+            dmg(28500, UD_MAGE, UD_STAR_A, 686, 4000), dmg(29000, UD_LOCK, UD_STAR_A, 686, 3000),
+            dmg(29500, UD_TRACKER, UD_STAR_A, 6343, 2000), dmg(33000, UD_MAGE, UD_STAR_A, 686, 1000),
+            cast(29000, UD_LOCK, 686, UD_STAR_A), cast(29000, UD_MAGE, 686, UD_STAR_A),
+        ]
+        cls.trace = load(cls.folder.name, records)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_finish_reads_its_star_finisher_health_and_what_the_rest_of_the_team_landed(self):
+        (row,) = al.bulk_finishes(self.trace)
+        self.assertEqual((row["star"], row["finisher"], row["start"], row["stop"], row["first"], row["last"]),
+                         (UD_STAR_A, UD_LOCK, 28000, 32000, 56.0, 52.0))
+        self.assertAlmostEqual(row["others"], 2.0)
+        self.assertEqual((row["at_cast"], row["band"]), (44.0, (4.0, 9.6)))
+        self.assertIn("     0:28.000 ..  0:32.000  star 1 (501)     Lock:  56.0% >  52.0%, the rest of the team 2.0%;"
+                      " at the cast 44.0%, band 4.0..9.6%\n", render(self.trace, "stars"))
+
+    def test_the_finisher_on_its_finish_star_counts_as_on_the_focus_star(self):
+        group = al.star_grouper(self.trace)
+        self.assertEqual((group(UD_LOCK, UD_STAR_A, 29000), group(UD_MAGE, UD_STAR_A, 29000),
+                          group(UD_LOCK, UD_STAR_A, 33000)),
+                         (al.STAR_GROUPS[0], al.STAR_GROUPS[1], al.STAR_GROUPS[1]))
+        self.assertTrue(al.finishing(self.trace, UD_STAR_A, 30000))
+        self.assertFalse(al.finishing(self.trace, UD_STAR_A, 30000, UD_MAGE))
+        self.assertFalse(al.finishing(self.trace, UD_STAR_B, 30000))
+
 
 PX_TANK, PX_PARTNER, PX_HOLY, PX_RET, PX_LOCK, PX_ROGUE, PX_TREE, PX_MAGE, PX_FROST = range(8401, 8410)
 PX_STAR_A, PX_STAR_B, PX_HOLE_A, PX_HOLE_B = (CREATURE | n for n in (601, 602, 621, 622))

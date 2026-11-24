@@ -202,7 +202,14 @@ released `late` at 38-70%), so its speed (median +1.9 %/s beyond the drain; both
   the one with most left next; a bulk starts once the work left plus 35 s reaches the cast and then stays latched
   (gated each tick, a fast team flipped on and off it). What lands after the team leaves a star (median
   1.3-2.2%, p75 4-4.5%, up to 19%, 28 pulls) can overshoot its 4-5 tick band; one below it is released `early`
-  (31 in 28 pulls, 55 dead). No wands: they took
+  (31 in 28 pulls, 55 dead). The whole team's last hits are the worst of it: the one crossing the line plus those
+  already cast or flying (Shadow Bolt 2-6%, Arcane Blast 2-4.5%, hunter shots 1-3%) landed 4-7%, and 9 of 35
+  under-stars reached the cast below their band (window 34, 22 dead). So with 5 ticks or less above its line, a
+  star goes to one **finisher** (`algalon.finishstar`, `algalon.finisher`), the team bot with the smallest hits
+  (hunter, priest, shaman, druid, warlock, mage, then the rest), and the others' casts on it are cut as they
+  move to the next under-star. One finish at a time (a second star reaching its 5 ticks meanwhile stays the
+  team's), only with two members able; a paced kill takes the finisher along, and the finish resumes after
+  it. No wands: they took
   0.2-0.3 %/s each, a damage dealer off him against the enrage, and a far star nobody could wand died after the
   strip and killed 5. At the line the tick interrupts any bot cast, channel or wand on the star, a paced kill's
   focus excepted, and on an under-star that isn't the focus at once (a paced kill took the team, or the cast
@@ -682,7 +689,8 @@ Pulls file under `algalon-the-observer`, aliased to `algalon` in `BOSS_ALIASES`.
 - **Raid-wide, written by the instance tick:** `algalon.phase` (0 idle, 1 intro, 2 phase 1, 3 phase 2,
   4 won), `algalon.bigbang` (the cast's ordinal while latched, else 0), `algalon.soaker`,
   `algalon.backup`, `algalon.disperser`, `algalon.shadowaura`, `algalon.firetotem`, `algalon.urgent`, `algalon.holes`,
-  `algalon.focusstar`, `algalon.handler`, `algalon.tankhealslots`.
+  `algalon.focusstar`, `algalon.finishstar` and `algalon.finisher` (0 while no finish runs), `algalon.handler`,
+  `algalon.tankhealslots`.
 - **Per guid:** `algalon.slot`, `algalon.shelter`, `algalon.kitehole`, `algalon.starteam` (urgent
   recruits aren't recorded), `algalon.swappair`, `algalon.tankhealer`.
 - **Derived per bot, each inside the helper that derives it:** `algalon.tankheal`
@@ -749,8 +757,8 @@ with a swap tank out on `noshelter` aside, per cast the hiders that used a gap c
 - `--stars`: a release within 8 s of the cast; 1% or more of splash, off the focus, on an
   under-star released early within 20 s of its cast, in the 20 s before; an under-star above its band
   at the cast (h% dies h−1 to h s later); over one switch per star; 3 Shoot starts in 2 s.
-- `--collateral`: each bot DoT on a star. `--constellations`: a kite blocked 5 s or more, kite stats
-  from the elected handler alone.
+- `--collateral`: each bot DoT on a star; the finisher on its finish star counts as on the focus there and in
+  `--stars`. `--constellations`: a kite blocked 5 s or more, kite stats from the elected handler alone.
 - `--phasing`: a stray phase within 1.5 s of a gap closer reads `charged in (<spell>)`, `jumped in` for
   Blink, Disengage, Shadowstep and Killing Spree; a hole spawning on the bot still reads `new hole`.
 

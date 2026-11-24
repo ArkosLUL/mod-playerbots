@@ -218,7 +218,7 @@ bool AlgalonStarTeamTrigger::IsActive()
     if (IsAlgalonPhased(bot) || !IsAlgalonStarTeam(bot) || !AlgalonEngaged(botAI))
         return false;
 
-    Unit* star = GetAlgalonFocusStar(botAI);
+    Unit* star = GetAlgalonStarTarget(botAI);
     return star && AI_VALUE(Unit*, "current target") != star;
 }
 

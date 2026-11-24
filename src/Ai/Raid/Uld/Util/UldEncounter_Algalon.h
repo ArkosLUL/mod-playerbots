@@ -165,6 +165,7 @@ inline constexpr int32 ULDUAR_ALGALON_UNDER_DYING_MS = 3000;
 inline constexpr float ULDUAR_ALGALON_UNDER_TEAM_PCT_PER_SEC = 6.0f;
 inline constexpr int32 ULDUAR_ALGALON_UNDER_SWITCH_MS = 3000;
 inline constexpr int32 ULDUAR_ALGALON_UNDER_BULK_SLACK_MS = 35000;
+inline constexpr uint32 ULDUAR_ALGALON_UNDER_FINISH_TICKS = 5;
 inline constexpr float ULDUAR_ALGALON_UNDER_HOLE_REACH = 22.0f;
 
 inline constexpr uint32 ULDUAR_ALGALON_STAR_PACING_GAP_MS = 8000;
@@ -322,6 +323,8 @@ struct AlgalonEncounterState
     RaidObs::ObsValue<bool> urgent{"algalon.urgent"};
     RaidObs::ObsValue<uint32> holeCount{"algalon.holes"};
     RaidObs::ObsValue<ObjectGuid> focusStar{"algalon.focusstar"};
+    RaidObs::ObsValue<ObjectGuid> finishStar{"algalon.finishstar"};
+    RaidObs::ObsValue<ObjectGuid> finisher{"algalon.finisher"};
     RaidObs::ObsGuidSet starTeam{"algalon.starteam"};
     RaidObs::ObsValue<ObjectGuid> handler{"algalon.handler"};
     RaidObs::ObsGuidSet swapPair{"algalon.swappair"};
@@ -359,6 +362,8 @@ struct AlgalonEncounterState
     std::unordered_map<ObjectGuid, uint32> underLateMs;
     uint32 underNoSoakMs = 0;
     ObjectGuid bulkStar;
+    ObjectGuid finishLatch;
+    ObjectGuid finisherLatch;
     ObjectGuid shelterStar;
     float bulkPctPerSec = 0.0f;
     uint32 bulkMeasuredCycle = 0;
@@ -496,6 +501,7 @@ Unit* GetAlgalonLooseDarkMatter(Player* bot);
 
 bool IsAlgalonStarTeam(Player* bot);
 Unit* GetAlgalonFocusStar(PlayerbotAI* botAI);
+Unit* GetAlgalonStarTarget(PlayerbotAI* botAI);
 uint8 AlgalonAliveStarCount(PlayerbotAI* botAI);
 
 bool AlgalonCosmicSmashThreatens(Player* bot);
