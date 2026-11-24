@@ -237,6 +237,16 @@ public:
     bool Execute(Event event) override;
 };
 
+class YoggSaronDiminishPowerBreakAction : public AttackAction
+{
+public:
+    static constexpr char const* Name = "yogg-saron diminish power break action";
+
+    YoggSaronDiminishPowerBreakAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronMortalStrikeAction : public Action
 {
 public:

@@ -777,8 +777,8 @@ whoever is swung at, so a clear bot becomes collinear without moving. `IsAllowed
   (`YoggSaronTankTargetOwned`), dropping it to the Guardian, Constrictor and Corruptor tiers, and the
   movement guard covers what it does not hand out. That rule's window (phase 2, or phase 3 with a
   holdable Guardian within 70 yd) must match what the resolver and guardian control cover, or a tank has
-  no target source. The Crusher loses the tank's Diminish Power breaks, and Judgement no longer replaces
-  them ([below](#diminish-power-is-why-the-crusher-dies-first)).
+  no target source. The Crusher loses the tank's Diminish Power breaks, all but the brain team's
+  ([below](#diminish-power-is-why-the-crusher-dies-first)).
 
 **The tentacle cannot be tanked or steered**: `DamageTaken` does `DoResetThreatList(); AddThreat(who,
 100000); AttackStart(who)` on any white swing (`DIRECT_DAMAGE`), so it re-faces whoever hit it last.
@@ -883,8 +883,8 @@ ignores LOS and immunities. **A cast skips anyone underground**: `ExcludeTargetA
 Room `63988`, which every portal teleport (63989 / 63997 / 63998) force-casts and only `63993` on the way
 out removes. **So the brain team carries its stacks below** until each channel breaks, and its room clear
 pays: one pull's last team went down under four (×0.41) and never cleared, and Induce Madness ended the
-pull. `--brain`'s `Diminish Power carried below` gives, per wave, each bot's stacks at its first sample
-below and the damage dealers' median multiplier until the door.
+pull. `--brain`'s `Diminish Power carried below` gives, per wave, each bot's stacks at its first and last
+sample below, how long it carried any, and the damage dealers' median multiplier until the door.
 
 Three things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `64148` on the tentacle has
 `ProcTypeMask 0x28` (taken melee swing, taken melee-class spell), `spell_yogg_saron_diminish_power_aura`
@@ -898,11 +898,29 @@ stand there: every ranged and healer.
 **Judgement no longer breaks it** (core `fe0e00d8e`): the aura script returns before the break for a
 paladin Judgement damage spell (`SpellFamilyFlags[0] & 0x800000`). So `yogg-saron diminish power judgement`
 (`ACTION_RAID − 0.5`: any paladin with a Crusher channelling, `SPELL_STATE_CASTING`, in its ~19.5 yd judges
-it, wisdom, light or justice, no walk, no target change) breaks nothing by its own hit: 33 plain Judgements mid-channel in one window dropped none. Only a
-seal hit landing with it still breaks: a prot paladin's Judgement with Judgements of the Just and Seal of
-Vengeance casts 42463, melee-class and outside that mask, and broke it both times. **Open: with melee,
-tanks and pets kept off live Crushers (above), nothing else breaks it outside the stun**, so the channel ran
-52-78% of Crusher-alive time.
+it, wisdom, light or justice, no walk, no target change) breaks nothing by its own hit: 33 plain
+Judgements mid-channel in one window dropped none. Only a seal hit landing with it still breaks: a prot
+paladin's Judgement with Judgements of the Just and Seal of Vengeance casts 42463, melee-class and outside
+that mask, and broke it both times. With melee, tanks and pets kept off live Crushers (above), nothing else
+broke it outside the stun: the channel ran 52-78% of Crusher-alive time, and a brain team carried its
+stacks below for its whole room clear, 20-40 s.
+
+**So a bot tank breaks each channel the team carried down, once, and steps out**: the re-cast skips the
+team, the platform stays debuffed. `yogg-saron diminish power break` (`ACTION_RAID + 2.5`, under phase 2
+spacing) fires in phase 2 once the team is down (no portal open, or every live, uncharmed planned member
+under Illusion Room) for each channelling Crusher whose `64145` someone under Illusion Room carries; a late
+entrant who caught the re-cast makes it fire again. The nearest unclaimed bot tank claims it (ties by GUID):
+on the platform, alive, unseated, uncharmed, not stunned, feared or confused. It walks to `GetMeleeRange`
+− 2.5 yd from the Crusher on whichever of 16 bearings has the fewest raiders in the Crush cone (±14°,
+25 yd), then the shortest walk, spot and exit 15-55 yd from the middle. There it swings and casts one
+instant melee-class strike (Shield Slam / Revenge / Devastate, Shield of Righteousness, Plague / Death /
+Blood Strike, Mangle / Lacerate). Once the stack is off the team it stops attacking, drops the target and
+walks to 14.5 yd on its own bearing (turned up to 90° to stay in 15-55 yd), for at most 5 s. A white hit
+makes it the victim (`DamageTaken`), a Crush or two; a strike alone leaves the victim to threat, usually a
+ranged out of reach, so the tentacle re-casts at once. The claim ends early if the Crusher dies, the stun
+lands or phase 2 ends. With no bot tank nobody breaks it. `--crush`'s `Diminish Power breaks` gives each
+claim's tank, steps, the drop off the team, the Crushes that Crusher landed on the tank (to 3 s after) and
+anyone below its re-cast caught (to 10 s after).
 
 **Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only once
 its victim is out of melee range, and otherwise swings, so a break followed by Crushes leaves no cast
@@ -2024,13 +2042,13 @@ that the thing never happened. Two hazards go to the timeline only because nothi
 the body's knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by
 hand.
 
-**74 `yogg.` probe keys**, by topic:
+**75 `yogg.` probe keys**, by topic:
 
 | Topic | Keys (values) |
 |---|---|
 | Phase and pull | `phase`, `engaged` (`engaged` / `idle`), `handover`, `leftover` (`spaced` / `chain` / `lower`) |
 | Phase 1 | `p1dodge`, `p1station` (`door` / `band` / `stack`), `p1leash` (`door` / `returning` / `held`), `p1pull` (`pull` / `held`), `p1focus` (above), `p1taunt` (`counts` / `beyond`: whether the fetched Guardian's death would still count for Sara), `cloudreach`, `novaraid`, `novadef`, `novaext`, `humancall` |
-| Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `walk` (node and branch), `walkstep` |
+| Platform hazards | `knockback` (`inside` / `clear`), `crush` (incl. `reach`), `deathray`, `castcut` (spell), `detour` (`around` / `spot`), `stunned` (`engage` / `clear`), `petguard` (`pulled` / `held` / `clear` / `leftover`), `judgement`, `powerbreak` (`none` / `walk` / `hit` / `out`, then the Crusher), `walk` (node and branch), `walkstep` |
 | Portals and Sanity | `wave`, `portal` (`notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`), `portalslot`, `brainteam`, `benched`, `portalcancel`, `brainlink` (`none` / `closing` / `clear`), `sanity` (`low` / `topping` / `refill` / `idle`: the walk's reason, not a level), `squeeze` |
 | Brain level | `room`, `roomstate` (`walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain` / `reprisal` / `staged`), `tentacle`, `spread` (`free` / `shared` / `kept`), `share` (group name / `orphan` / `first` / `helper` / `done` / `joined` / `staged` / `lifted`), `reprisal`, `reprisalheal` (spell), `regroup` (`range` / `sight`), `skull`, `skullturn` (`angled` / `free`), `brainspot`, `brainhold` (`open` / `dots` / `hold` / `finish` / `clear`), `charge`, `dash` (`used` / `cooldown`), `nitro` (`used` / `cooldown` / `station`), `exit`, `exitcancel` |
 | Phase 3 | `station` (`walking` / `shifted` / `parked` / `released` / `unreachable`), `gaze` (above), `tankhold` (`taunt` / `defense` / `leash` / `attack` / `return taunt` / `return defense` / `swap taunt` / `swap defense`), `tankswap`, `tankshed`, `tankloh`, `beacondrag` (`claim` / `taunt` / `missed` / `hold` / `shot` / `feign` / `release` / `return`), `beaconspot`, `beaconstage` (`pick` / `walk` / `ready` / `stuck` / `timeout`), `beaconbear`, `dragdef`, `dragext`, `roar` (`preswitch` / `noconc` / `claimed` / `press`), `p3area` (`few` / `fresh` / `allowed`), `p3dot` (spell), `kicknudge`, `markkick`, `mortalstrike`, `healcut`, `warlockpet`, `lust`, `lustready`, `healerengine` |

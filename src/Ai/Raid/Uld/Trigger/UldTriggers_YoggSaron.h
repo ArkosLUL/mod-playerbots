@@ -69,6 +69,15 @@ public:
     bool IsActive() override;
 };
 
+class YoggSaronDiminishPowerBreakTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron diminish power break trigger";
+
+    YoggSaronDiminishPowerBreakTrigger(PlayerbotAI* botAI) : YoggSaronTrigger(botAI, Name) {}
+    bool IsActive() override;
+};
+
 class YoggSaronMortalStrikeTrigger : public YoggSaronTrigger
 {
 public:

@@ -1446,3 +1446,68 @@ uld2's warrior tank. No size, mode or player branch; other phases and bosses unt
   breaks the channel outside the stun, right after the prot paladin's seal hit that does.
 - Left: the hold gates the cast only, so a Sweeping Strikes or Blade Flurry cast outside the reach still splashes a
   Crusher once the bot walks in beside one.
+
+**User answer (2026-11-24) to round 15's question (who breaks Diminish Power):** yes, (b), for one window: after the
+brain team clicks its portals, a bot tank hits each channelling Crusher Tentacle once and steps out of its reach, so
+the channel restarts without the brain team in it (round 16 builds it). The healer-mana question stays withdrawn:
+not built.
+
+## Round 16 (2026-11-24, no pulls on round 15: merged, not built)
+
+**Data.** No Yogg-Saron trace since window 24 (`--head baf47824b`). Stop rules, verdict and ranking skipped: round 15
+has no pulls yet. Window 24's three pulls (`603_13_yogg-saron_1795472953`, `603_14_…_1795472994`,
+`603_15_…_1795473055`) reread with the new `--brain` line below and `scratchpad/yogg-r16/entries.py` (each team's
+Illusion Room entries, the Crushers whose stack each bot carried in, the tanks' distance to each Crusher at the
+team's last entry) are the baseline.
+
+**Built: the user's answer** (`UldEncounter_YoggSaron.h/.cpp`, `UldTriggers_YoggSaron.h/.cpp`,
+`UldActions_YoggSaron.h/.cpp`, `UldDefinition_YoggSaron.cpp`). `yogg-saron diminish power break` at `ACTION_RAID +
+2.5` (over the resolver and Brain Link, under phase 2 spacing), all through `YoggSaronPowerBreakPlan`:
+
+- **When:** phase 2, the team down (no portal still open, or every live, uncharmed member of `brainTeam` under
+  Illusion Room 63988, the aura the re-cast skips), and a Crusher channelling 64145 (`SPELL_STATE_CASTING`) whose
+  stack a group member under Illusion Room carries (aura caster = that Crusher). A late entrant who caught the
+  re-cast makes it fire again for that Crusher.
+- **Who:** per Crusher, the nearest bot tank (headless) with no claim, on the platform, alive, not in a seat, not
+  charmed, stunned, feared or confused; ties by GUID. Claims sit in `state.powerBreaks` by tank; a claim whose
+  owner stops qualifying stops counting, so the other tank takes the Crusher.
+- **Walk:** to `GetMeleeRange − 2.5` (8.3 yd) from the Crusher on whichever of 16 bearings has the fewest raiders
+  in the Crush cone (±14°, 25 yd), then the shortest walk; spot and exit both 15-55 yd from the middle; routed by
+  `YoggSaronBodyRoute`, released by `YoggSaronWalkMakingProgress` (`powerbreak`).
+- **Hit:** in melee range, `Attack` plus the first castable of Shield Slam / Revenge / Devastate, Shield of
+  Righteousness, Plague / Death / Blood Strike, Mangle (Bear) / Lacerate, all melee-class (64148's 0x28). A strike
+  alone does not make the tank the victim (only a white swing does, `DamageTaken`), so a strike that lands first can
+  cost no Crush at all.
+- **Out:** once no one below carries that Crusher's stack, `AttackStop`, drop the target, walk to 14.5 yd from it on
+  the tank's own bearing (turned up to 90° to stay 15-55 yd out), at most 5 s.
+- The claim drops on the Crusher's death, Shattered Illusion on it, or phase 2's end. Probe `yogg.powerbreak`
+  (`none` / `walk` / `hit` / `out`, then the Crusher's key). `GetYoggSaronChannellingCrushers` now shares
+  `YoggSaronPowerChannelling`.
+
+Same at 10 and 25, normal and hard mode. A real player changes only who goes below and who carries a stack, read
+off auras on any group member; a human tank never claims, so with human tanks only nobody breaks. No shared code;
+no code comments.
+
+**Reader.** `--brain` `Diminish Power carried below` now gives stacks `entering` (first sample below) and `leaving`
+(last), and `carried a median / max` s until the bot's last stack dropped (`carried_ms`, tested). `--crush`
+`Diminish Power breaks` (`power_break_episodes`, tested; `show_power_breaks`): claims by tank, how many dropped the
+channel off the team and a median how long after the claim, Crushes that Crusher landed on the claiming tank per
+claim (to 3 s after) with median, max and total, and how often its re-cast caught someone below again (to 10 s
+after); then one line per claim.
+
+**Baseline (window 24, no break).** `carried a median` per wave: uld1 13.5 / 6.5 / – / 15.0 / 25.5 s; uld2 17.5 / 30.2
+/ 39.5 / 58.5 (wave 4 never opened its door, leaving at 4 stacks); uld3 24.5 / 23.0 / 2.5 / 30.8 / 31.5 / 19.5;
+`leaving` 0 everywhere else, the stun having dropped them; damage dealers ×0.80-1.00 until the door under one stack,
+×0.64 under two, ×0.41 under four. At the team's last entry the nearest tank stood a median 45 yd from each Crusher
+carried down (5-89 yd, 23 Crushers), about 6 s at run speed; both tanks usually stood together.
+
+**Next window should show:** `--crush` `Diminish Power breaks` with a claim in most waves that carried a stack down,
+most of them dropping the channel off the team within ~10 s of the claim; Crushes on the claiming tank a median 1-2
+per Crusher and no tank death to Crush; `caught someone below` 0 or near it. `--brain` `carried a median` well under
+the 20-30 s above (the team's entry spread plus a walk and a swing, ~10-15 s) and damage dealers ×0.90 or better until
+the door; room clears and Brain per cycle are too noisy to read in one window. Back it out if a claiming tank dies to
+Crush, a Crush cone kills a bot after a break, or claims never drop the channel. Round 15's checks (`area buffs held
+by role` with melee rows, no Crush death after a Bladestorm) land in the same window.
+
+**Left:** the judgement node still costs a holy paladin a GCD on a channelling Crusher for nothing (round 15); a prot
+paladin's seal hit still breaks the channel, harmlessly now.

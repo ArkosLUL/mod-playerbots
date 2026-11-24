@@ -203,6 +203,16 @@ struct YoggSaronEncounterState
     uint32 humanCallScanMs = 0;
     uint32 castCutScanMs = 0;
 
+    struct PowerBreak
+    {
+        ObjectGuid crusher;
+        Position spot;
+        Position exit;
+        bool out = false;
+        uint32 outMs = 0;
+    };
+    std::unordered_map<ObjectGuid, PowerBreak> powerBreaks;
+
     bool roarExpected = false;
     uint32 lastRoarMs = 0;
     uint32 roarClaimKey = 0;
@@ -2840,6 +2850,16 @@ void ClaimYoggSaronInterrupt(Player* bot, Unit* caster)
     state.interruptClaims[caster->GetGUID()] = {bot->GetGUID(), now};
 }
 
+namespace
+{
+bool YoggSaronPowerChannelling(Unit* crusher)
+{
+    Spell const* channel = crusher->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    return channel && channel->GetSpellInfo()->Id == SPELL_DIMINISH_POWER &&
+           channel->getState() == SPELL_STATE_CASTING;
+}
+}
+
 std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -2849,15 +2869,8 @@ std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI)
 
     std::vector<Unit*> channelling;
     for (Creature* crusher : crushers)
-    {
-        if (!crusher->IsAlive())
-            continue;
-
-        Spell const* channel = crusher->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (channel && channel->GetSpellInfo()->Id == SPELL_DIMINISH_POWER &&
-            channel->getState() == SPELL_STATE_CASTING)
+        if (crusher->IsAlive() && YoggSaronPowerChannelling(crusher))
             channelling.push_back(crusher);
-    }
 
     return channelling;
 }
@@ -2868,6 +2881,295 @@ std::vector<char const*> YoggSaronJudgementSpells(Player* bot)
         return {};
 
     return {"judgement of wisdom", "judgement of light", "judgement of justice"};
+}
+
+namespace
+{
+bool YoggSaronPowerBreaker(Player* member, Player* bot)
+{
+    return IsYoggSaronBot(member) && member->IsAlive() && member->GetMap() == bot->GetMap() &&
+           PlayerbotAI::IsTank(member) && YoggSaronRoomOf(member) == YOGG_SARON_ROOM_ARENA &&
+           !member->GetVehicle() && !member->IsCharmed() &&
+           !member->HasUnitState(UNIT_STATE_STUNNED | UNIT_STATE_FLEEING | UNIT_STATE_CONFUSED);
+}
+
+bool YoggSaronBrainTeamDown(Player* bot)
+{
+    std::list<Creature*> portals;
+    bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS);
+    if (std::none_of(portals.begin(), portals.end(), [](Creature* portal) { return YoggSaronPortalOpen(portal); }))
+        return true;
+
+    for (ObjectGuid const& guid : YoggSaronStateFor(bot).brainTeam)
+    {
+        Player* member = ObjectAccessor::GetPlayer(*bot, guid);
+        if (member && member->IsAlive() && member->GetMap() == bot->GetMap() && !member->IsCharmed() &&
+            !member->HasAura(SPELL_ILLUSION_ROOM))
+            return false;
+    }
+
+    return true;
+}
+
+bool YoggSaronPowerCarriedBelow(Player* bot, Unit* crusher)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && member->GetMap() == bot->GetMap() &&
+            member->HasAura(SPELL_ILLUSION_ROOM) && member->HasAura(SPELL_DIMINISH_POWER, crusher->GetGUID()))
+            return true;
+    }
+
+    return false;
+}
+
+bool YoggSaronPowerSpotOnPlatform(float x, float y)
+{
+    float const fromMiddle = ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(x, y);
+    return fromMiddle >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS &&
+           fromMiddle <= ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE;
+}
+
+Position YoggSaronPowerBreakSpot(Player* bot, Creature* crusher)
+{
+    float const standoff = crusher->GetMeleeRange(bot) - ULDUAR_YOGG_SARON_POWER_BREAK_MELEE_SLACK;
+    float const arc = ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC * static_cast<float>(M_PI) / 180.0f;
+
+    std::vector<Position> raid;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member != bot && member->IsAlive() && member->GetMap() == bot->GetMap() &&
+                YoggSaronRoomOf(member) == YOGG_SARON_ROOM_ARENA &&
+                crusher->GetExactDist2d(member) <= ULDUAR_YOGG_SARON_CRUSH_RANGE)
+                raid.push_back(member->GetPosition());
+        }
+    }
+
+    auto const at = [crusher](float bearing, float distance)
+    {
+        return Position(crusher->GetPositionX() + std::cos(bearing) * distance,
+                        crusher->GetPositionY() + std::sin(bearing) * distance, crusher->GetPositionZ());
+    };
+
+    bool found = false;
+    Position best = at(crusher->GetAngle(bot), standoff);
+    std::size_t bestInCone = 0;
+    float bestWalk = 0.0f;
+    for (uint32 step = 0; step < ULDUAR_YOGG_SARON_POWER_BREAK_BEARINGS; ++step)
+    {
+        float const bearing = 2.0f * static_cast<float>(M_PI) * step / ULDUAR_YOGG_SARON_POWER_BREAK_BEARINGS;
+        Position const spot = at(bearing, standoff);
+        Position const exit = at(bearing, ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS);
+        if (!YoggSaronPowerSpotOnPlatform(spot.GetPositionX(), spot.GetPositionY()) ||
+            !YoggSaronPowerSpotOnPlatform(exit.GetPositionX(), exit.GetPositionY()))
+            continue;
+
+        std::size_t const inCone = static_cast<std::size_t>(std::count_if(
+            raid.begin(), raid.end(),
+            [crusher, bearing, arc](Position const& member)
+            {
+                float offset = Position::NormalizeOrientation(crusher->GetAngle(&member) - bearing);
+                if (offset > static_cast<float>(M_PI))
+                    offset = 2.0f * static_cast<float>(M_PI) - offset;
+
+                return offset <= arc;
+            }));
+        float const walk = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
+        if (!found || inCone < bestInCone || (inCone == bestInCone && walk < bestWalk))
+        {
+            found = true;
+            best = spot;
+            bestInCone = inCone;
+            bestWalk = walk;
+        }
+    }
+
+    return best;
+}
+
+Position YoggSaronPowerBreakExit(Player* bot, Creature* crusher)
+{
+    float const toward = crusher->GetAngle(bot);
+    constexpr float turns[] = {0.0f, 0.5236f, -0.5236f, 1.0472f, -1.0472f, 1.5708f, -1.5708f};
+
+    for (float const turn : turns)
+    {
+        float const bearing = toward + turn;
+        float const x = crusher->GetPositionX() + std::cos(bearing) * ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS;
+        float const y = crusher->GetPositionY() + std::sin(bearing) * ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS;
+        if (YoggSaronPowerSpotOnPlatform(x, y))
+            return Position(x, y, bot->GetPositionZ());
+    }
+
+    return Position(crusher->GetPositionX() + std::cos(toward) * ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS,
+                    crusher->GetPositionY() + std::sin(toward) * ULDUAR_YOGG_SARON_POWER_BREAK_OUT_RADIUS,
+                    bot->GetPositionZ());
+}
+
+Creature* YoggSaronPowerBreakClaim(Player* bot, YoggSaronEncounterState& state)
+{
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_POWER_BREAK_SEARCH_RADIUS);
+    crushers.remove_if([](Creature* crusher) { return !crusher->IsAlive() || !YoggSaronPowerChannelling(crusher); });
+    if (crushers.empty() || !YoggSaronBrainTeamDown(bot))
+        return nullptr;
+
+    std::vector<Player*> unclaimed{bot};
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member != bot && YoggSaronPowerBreaker(member, bot) &&
+                !state.powerBreaks.count(member->GetGUID()))
+                unclaimed.push_back(member);
+        }
+    }
+
+    auto const taken = [bot, &state](Creature* crusher)
+    {
+        for (auto const& [owner, held] : state.powerBreaks)
+        {
+            if (held.out || held.crusher != crusher->GetGUID() || owner == bot->GetGUID())
+                continue;
+
+            Player* tank = ObjectAccessor::GetPlayer(*bot, owner);
+            if (tank && YoggSaronPowerBreaker(tank, bot))
+                return true;
+        }
+
+        return false;
+    };
+
+    Creature* pick = nullptr;
+    for (Creature* crusher : crushers)
+    {
+        if (taken(crusher) || !YoggSaronPowerCarriedBelow(bot, crusher))
+            continue;
+
+        Player* nearest = nullptr;
+        for (Player* tank : unclaimed)
+        {
+            float const gap = tank->GetExactDist2d(crusher);
+            float const best = nearest ? nearest->GetExactDist2d(crusher) : 0.0f;
+            if (!nearest || gap < best || (!(best < gap) && tank->GetGUID() < nearest->GetGUID()))
+                nearest = tank;
+        }
+
+        if (nearest == bot && (!pick || bot->GetExactDist2d(crusher) < bot->GetExactDist2d(pick)))
+            pick = crusher;
+    }
+
+    if (!pick)
+        return nullptr;
+
+    YoggSaronEncounterState::PowerBreak& claim = state.powerBreaks[bot->GetGUID()];
+    claim = YoggSaronEncounterState::PowerBreak();
+    claim.crusher = pick->GetGUID();
+    claim.spot = YoggSaronPowerBreakSpot(bot, pick);
+
+    return pick;
+}
+}
+
+YoggSaronPowerBreakStep YoggSaronPowerBreakPlan(PlayerbotAI* botAI, Unit*& target, Position& spot)
+{
+    Player* bot = botAI->GetBot();
+    target = nullptr;
+    if (!PlayerbotAI::IsTank(bot))
+        return YOGG_SARON_POWER_BREAK_NONE;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    bool const live = YoggSaronInPhase2(botAI) && YoggSaronPowerBreaker(bot, bot);
+
+    YoggSaronPowerBreakStep step = YOGG_SARON_POWER_BREAK_NONE;
+    Creature* crusher = nullptr;
+
+    auto const own = state.powerBreaks.find(bot->GetGUID());
+    if (own != state.powerBreaks.end())
+    {
+        YoggSaronEncounterState::PowerBreak& held = own->second;
+        crusher = ObjectAccessor::GetCreature(*bot, held.crusher);
+        bool const usable = live && crusher && crusher->IsAlive() && !crusher->HasAura(SPELL_SHATTERED_ILLUSION);
+        bool const inReach =
+            usable && bot->GetExactDist2d(crusher) < ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS;
+
+        if (!usable)
+            step = YOGG_SARON_POWER_BREAK_NONE;
+        else if (held.out)
+            step = inReach && getMSTimeDiff(held.outMs, getMSTime()) < ULDUAR_YOGG_SARON_POWER_BREAK_OUT_MS
+                       ? YOGG_SARON_POWER_BREAK_OUT
+                       : YOGG_SARON_POWER_BREAK_NONE;
+        else if (YoggSaronPowerChannelling(crusher) && YoggSaronPowerCarriedBelow(bot, crusher))
+            step = bot->GetExactDist2d(held.spot) <= ULDUAR_YOGG_SARON_POWER_BREAK_ARRIVED_RADIUS
+                       ? YOGG_SARON_POWER_BREAK_HIT
+                       : YOGG_SARON_POWER_BREAK_WALK;
+        else if (inReach)
+        {
+            held.out = true;
+            held.outMs = getMSTime();
+            held.exit = YoggSaronPowerBreakExit(bot, crusher);
+            step = YOGG_SARON_POWER_BREAK_OUT;
+        }
+
+        if (step == YOGG_SARON_POWER_BREAK_NONE)
+        {
+            state.powerBreaks.erase(own);
+            crusher = nullptr;
+        }
+        else
+            spot = step == YOGG_SARON_POWER_BREAK_OUT ? held.exit : held.spot;
+    }
+
+    if (step == YOGG_SARON_POWER_BREAK_NONE && live)
+    {
+        crusher = YoggSaronPowerBreakClaim(bot, state);
+        if (crusher)
+        {
+            spot = state.powerBreaks[bot->GetGUID()].spot;
+            step = bot->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_POWER_BREAK_ARRIVED_RADIUS
+                       ? YOGG_SARON_POWER_BREAK_HIT
+                       : YOGG_SARON_POWER_BREAK_WALK;
+        }
+    }
+
+    if (RaidObs::Active())
+    {
+        char const* names[] = {"none", "walk", "hit", "out"};
+        std::string text = names[step];
+        if (crusher)
+            text += " " + RaidObs::DescribeAssignment(crusher->GetGUID());
+
+        RaidObs::NoteDerived(bot, "yogg.powerbreak", text);
+    }
+
+    target = crusher;
+    return step;
+}
+
+std::vector<char const*> YoggSaronPowerBreakStrikes(Player* bot)
+{
+    switch (bot->getClass())
+    {
+        case CLASS_WARRIOR:
+            return {"shield slam", "revenge", "devastate"};
+        case CLASS_PALADIN:
+            return {"shield of righteousness"};
+        case CLASS_DEATH_KNIGHT:
+            return {"plague strike", "death strike", "blood strike"};
+        case CLASS_DRUID:
+            return {"mangle (bear)", "lacerate"};
+        default:
+            return {};
+    }
 }
 
 namespace

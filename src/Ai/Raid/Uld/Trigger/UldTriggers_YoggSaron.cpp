@@ -334,6 +334,16 @@ bool YoggSaronDiminishPowerJudgementTrigger::IsActive()
     return false;
 }
 
+bool YoggSaronDiminishPowerBreakTrigger::IsActive()
+{
+    if (!PlayerbotAI::IsTank(bot) || !botAI->CanMove())
+        return false;
+
+    Unit* crusher = nullptr;
+    Position spot;
+    return YoggSaronPowerBreakPlan(botAI, crusher, spot) != YOGG_SARON_POWER_BREAK_NONE;
+}
+
 bool YoggSaronMortalStrikeTrigger::IsActive()
 {
     if (bot->getClass() != CLASS_WARRIOR)
