@@ -1143,6 +1143,20 @@ class EdgeHold(unittest.TestCase):
         self.assertIn("Dragon (tank)*", text)
         self.assertIn("algalon splash hold vetoes: Assasin blade flurry 2", text)
 
+    def test_pet_splash_holds_count_the_switches_off_per_owner(self):
+        self.assertIn("no pet splash autocast held", render(self.trace, "collateral"))
+        with tempfile.TemporaryDirectory() as folder:
+            trace = load(folder, edge_pull() + [
+                {"t": 1, "e": "spell", "sp": 63900, "n": "Thunderstomp"},
+                note(16000, HUNTER, "algalon.petsplash", "off 63900"),
+                note(17000, HUNTER, "algalon.petsplash", "on 63900"),
+                note(18000, HUNTER, "algalon.petsplash", "off 63900"),
+                note(18000, HUNTER, "algalon.petsplash", "off 47994")])
+            self.assertEqual(dict(al.pet_splash_holds(trace)),
+                             {(HUNTER, "Thunderstomp"): 2, (HUNTER, "spell 47994"): 1})
+            self.assertIn("pet splash autocast held: Trueshot's pet Thunderstomp 2, Trueshot's pet spell 47994 1",
+                          render(trace, "collateral"))
+
     def test_phasing_counts_walk_guard_vetoes_per_bot(self):
         text = render(self.trace, "phasing")
         self.assertRegex(text, r"Assasin \(melee\) +3  reach melee 3")

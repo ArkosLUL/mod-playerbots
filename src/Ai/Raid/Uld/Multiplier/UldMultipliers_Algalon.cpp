@@ -290,7 +290,7 @@ float AlgalonSplashHoldMultiplier::GetValue(Action* action)
         static std::set<std::string> const groundAtTarget = {
             "death and decay", "blizzard", "flamestrike", "hurricane", "rain of fire", "volley", "living bomb",
             "living bomb on attackers"};
-        static std::set<std::string> const chains = {"hammer of the righteous", "avenger's shield",
+        static std::set<std::string> const chains = {"hammer of the righteous", "avenger's shield", "revenge",
                                                      "seed of corruption", "mind sear", "corpse explosion"};
         std::string const& name = action->getName();
         Splash splash = Splash::None;

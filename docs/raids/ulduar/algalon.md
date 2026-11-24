@@ -295,13 +295,20 @@ Shield; the Aoe threat type covers almost none of them. `AlgalonSplashHoldMultip
 Flurry, Sweeping Strikes, Bladestorm, Explosive Trap (Trap Launcher's too) and Fire Elemental Totem all of
 phase 1 (they hit whatever comes near, the trap for 30 s; one started before a wave spawns still runs when it lands; the trap and the
 elemental's Fire Nova and Fire Shield took 8.6% off an under-star in the 20 s before Big Bang). While a star
-lives, other splash (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of Corruption, Mind
-Sear, Corpse Explosion, the Aoe threat type) is held while a star is within 15 yd of the bot (glyphed
+lives, other splash (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Revenge, Seed of
+Corruption, Mind Sear, Corpse Explosion, the Aoe threat type) is held while a star is within 15 yd of the bot (glyphed
 Pestilence; diseases landed on one 12.5 yd out) or within its target's combat reach plus 11, at least 15, of
 its target (20 yd round him: Pestilence and HotR landed 19.5 yd from his centre), and ground AoE that sits
 8-10 s while stars wander in (~1.7 yd/s) within 25 yd of where it lands: Consecration and Magma Totem round
 the bot; Death and Decay, Blizzard, Flamestrike, Hurricane, Rain of Fire, Volley and Living Bomb (12 s fuse)
-round its target. The star the bot is hitting doesn't count; friendly spells are never held. Humans' Consecration, HotR and Death and Decay still chew them.
+round its target. Revenge is single-target in the DBC, but Improved Revenge adds a melee chain jump (10 yd
+from him plus the star's size): two of them took 3% off an under-star in the 6 s before Big Bang 1, and it
+went off on the raid 1.5 s into the cast with a second star (11 dead). A bot's pet gets the same test round
+itself and its victim, its area and chain autocasts (the Felguard's Cleave, Thunderstomp) switched off
+meanwhile and back on once no star is near, outside phase 1, or before the wipe reset (`algalon.petsplash`):
+the Felguard's Cleave was the largest splash on idle under-stars. The star the bot is hitting doesn't count;
+friendly spells are never held. Wandering Plague (a disease crit on him) can't be held. Humans' Consecration,
+HotR and Death and Decay, and their pets, still chew them.
 
 **The team works a far star from a spot of its own**: from its ring slot, `reach spell` walks half the gap and
 the slot node walks it back, so a deadline star 35-68 yd out drained untouched. A ranged team member holds where
@@ -701,7 +708,8 @@ older traces say `collapsed`); the roster's hits on stars (pets under their owne
 (`<window|low|loh> <tank health %> <tank guid> <spell name>` on the caster); `algalon.cover`
 (`aura mastery`/`divine sacrifice` on the caster); `algalon.trim` (older traces:
 `start|stop <star counter> <hp%>` on the wand); `algalon.underdrop`
-(`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.personal` (the button's
+(`early|late|nosoak <star counter> <hp%> <ms to cast>` on the tracker); `algalon.petsplash` (`off|on <spell id>`
+on the pet's owner, counted per owner by `--collateral`); `algalon.personal` (the button's
 spell name, or `healthstone`/`healing potion`); `algalon.nitro` (`hide` on a bot using its boots on the
 run); `algalon.speed` (the class speed spell on a late run); `algalon.handover` (`nodef` on a holder
 handing him over for want of a defensive); `algalon.pull` (`inreach=N victim=GUID`) at the tick the

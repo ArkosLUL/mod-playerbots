@@ -3545,6 +3545,26 @@ def show_collateral(trace: Trace) -> None:
         print("  no cast on a star")
     print("  * human")
     show_vetoes(trace, "algalon splash hold")
+    show_pet_splash(trace)
+
+
+def pet_splash_holds(trace: Trace) -> collections.Counter:
+    """`(owner, spell name)` counts of the times a bot's pet had a splash autocast switched off near a star."""
+    counted: collections.Counter = collections.Counter()
+    for rec in notes(trace, "algalon.petsplash"):
+        state, _, spell = (rec.get("txt") or "").partition(" ")
+        if state == "off" and spell.isdigit():
+            counted[(rec.get("g", 0), trace.spells.get(int(spell)) or trace.spell(int(spell)))] += 1
+    return counted
+
+
+def show_pet_splash(trace: Trace) -> None:
+    counted = pet_splash_holds(trace)
+    if not counted:
+        print("  no pet splash autocast held (algalon.petsplash)")
+        return
+    print("  pet splash autocast held: " + ", ".join(f"{trace.name(guid)}'s pet {spell} {n}"
+                                                    for (guid, spell), n in counted.most_common()))
 
 
 def collateral_faults(trace: Trace) -> list[tuple[int, str]]:
