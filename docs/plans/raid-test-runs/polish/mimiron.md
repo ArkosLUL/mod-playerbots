@@ -40,7 +40,7 @@ Frost Bomb, P3 Bomb Bots.
 1. P4 mines 8, in every pull; mixed movers (Watch: the P4 disperse).
 2. P2 storm 7: uld3's melee sector lost 5 bots in 5 s after barrage 1; uld4 Heat Wave 1.
 3. Water Spray 4 (uld6 P3 2, uld3 P4 2); Frost Bomb 4 (uld2, one bomb at 9:53).
-4. P4 Hand Pulse 3 (window 32: 43 on the old rosters). Q11 (a) answered, round 23.
+4. P4 Hand Pulse 3 (window 32: 43 on the old rosters). Q11 dropped (user, 2026-11-25).
 5. Plasma Ball 2; Bomb Bot 1 (Q10 built round 22); Flames, Shock Blast, Assault Bot 1 each.
 
 **Fixes in place** (round: what; verdict).
@@ -96,9 +96,8 @@ Frost Bomb, P3 Bomb Bots.
 - Q7 (a): P4 healers on the wedge's front row; Q8: that row stays at 18 yd.
 - Q10 (a) (2026-11-24): the off-tank stands 10-12 yd off the ACU's ground spot, taunts every phase 3 Bomb
   Bot and takes the blast; built in round 22.
-- Q11 (a) (2026-11-24): under Firefighter, bot priests hold Hymn of Hope and their second Shadowfiend until
-  phase 4 opens; then (b), a fifth healer at 25, if two healers still drop out before ~9:15. Build in round
-  23.
+- Q11 (2026-11-24 yes, dropped 2026-11-25): the phase 4 healer mana change is not built; Mimiron met the done rule
+  at 25 in window 36 (round 22) first.
 
 **Open questions.** None.
 
